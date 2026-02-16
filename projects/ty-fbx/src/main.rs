@@ -1,5 +1,5 @@
 use clap::Parser;
-use ty_fbx::TyFbx;
+use ty_fbx::{DependenciesImpl, TyFbx};
 
 #[derive(Clone, Debug, Parser)]
 pub struct Cli {
@@ -8,5 +8,8 @@ pub struct Cli {
 }
 
 fn main() {
-    Cli::parse().command.execute();
+    if let Err(e) = Cli::parse().command.execute(DependenciesImpl) {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
 }

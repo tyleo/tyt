@@ -1,6 +1,5 @@
-use clap::Subcommand;
-
 use crate::commands::Extract;
+use clap::Subcommand;
 
 /// Operations on FBX files.
 #[derive(Clone, Debug, Subcommand)]
@@ -10,11 +9,9 @@ pub enum TyFbx {
 }
 
 impl TyFbx {
-    pub fn execute(self) {
+    pub fn execute(self, dependencies: impl crate::Dependencies) -> crate::Result<()> {
         match self {
-            TyFbx::Extract(extract) => {
-                extract.execute();
-            }
+            TyFbx::Extract(extract) => extract.execute(dependencies),
         }
     }
 }

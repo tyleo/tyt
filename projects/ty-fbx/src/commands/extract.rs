@@ -1,5 +1,10 @@
+use crate::{Dependencies, Result, blender};
 use clap::Parser;
 
+/// Extracts the first direct child mesh under `parent_mesh_name` from the input
+/// FBX file, unparents it, keeping the world transform, and deletes everything
+/// else so the file only contains the extracted mesh. Finally, renames the mesh
+/// object and its datablock to `output-mesh-name`.
 #[derive(Clone, Debug, Parser)]
 pub struct Extract {
     /// The input FBX file to extract from.
@@ -18,21 +23,24 @@ pub struct Extract {
     /// The name of the output mesh to write. If not provided, the original
     /// mesh name will be used.
     #[arg(
-        short = 'm',
-        long = "mesh-name",
-        value_name = "mesh-name",
+        short = 'o',
+        long = "output-mesh-name",
+        value_name = "output-mesh-name",
         conflicts_with = "output_mesh_name_arg"
     )]
     output_mesh_name_flag: Option<String>,
 
     /// The name of the output mesh to write. If not provided, the original
     /// mesh name will be used.
-    #[arg(value_name = "mesh-name", conflicts_with = "output_mesh_name_flag")]
+    #[arg(
+        value_name = "output-mesh-name",
+        conflicts_with = "output_mesh_name_flag"
+    )]
     output_mesh_name_arg: Option<String>,
 }
 
 impl Extract {
-    pub fn execute(self) {
+    pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let Extract {
             input_fbx,
             parent_mesh_name,
@@ -41,16 +49,22 @@ impl Extract {
             output_mesh_name_arg,
         } = self;
 
+        let output_fbx = output_fbx.as_ref().unwrap_or(&input_fbx);
+
         let output_mesh_name = output_mesh_name_flag
             .as_ref()
             .or(output_mesh_name_arg.as_ref())
             .unwrap_or(&parent_mesh_name);
 
-        let output_fbx = output_fbx.as_ref().unwrap_or(&input_fbx);
+        let args = [
+            input_fbx.as_str(),
+            parent_mesh_name.as_str(),
+            output_fbx.as_str(),
+            output_mesh_name.as_str(),
+        ];
 
-        println!("input_fbx: {}", input_fbx);
-        println!("parent_mesh_name: {}", parent_mesh_name);
-        println!("output_fbx: {}", output_fbx);
-        println!("output_mesh_name: {}", output_mesh_name);
+        dependencies.exec_temp_blender_script(&blender::FBX_EXTRACT_MESH_PY, args)?;
+
+        Ok(())
     }
 }
