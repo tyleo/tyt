@@ -1,6 +1,7 @@
 use crate::{Dependencies, Result};
 use clap::Subcommand;
 use tyt_fbx::TytFbx;
+use tyt_material::TytMaterial;
 
 /// The main command for `tyt`, which ties all my command-line tools together.
 #[derive(Clone, Debug, Subcommand)]
@@ -10,12 +11,17 @@ pub enum Tyt {
         #[clap(subcommand)]
         fbx: TytFbx,
     },
+    Material {
+        #[clap(subcommand)]
+        material: TytMaterial,
+    },
 }
 
 impl Tyt {
     pub fn execute(self, deps: impl Dependencies) -> Result<()> {
         match self {
             Tyt::Fbx { fbx } => fbx.execute(deps.tyt_fbx_dependencies())?,
+            Tyt::Material { material } => material.execute(deps.tyt_material_dependencies())?,
         }
 
         Ok(())
