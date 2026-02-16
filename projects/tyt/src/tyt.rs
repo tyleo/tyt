@@ -1,5 +1,6 @@
 use crate::{Dependencies, Result};
 use clap::Subcommand;
+use tyt_cubemap::TytCubemap;
 use tyt_fbx::TytFbx;
 use tyt_material::TytMaterial;
 
@@ -7,6 +8,10 @@ use tyt_material::TytMaterial;
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
 pub enum Tyt {
+    Cubemap {
+        #[clap(subcommand)]
+        cubemap: TytCubemap,
+    },
     Fbx {
         #[clap(subcommand)]
         fbx: TytFbx,
@@ -20,6 +25,7 @@ pub enum Tyt {
 impl Tyt {
     pub fn execute(self, deps: impl Dependencies) -> Result<()> {
         match self {
+            Tyt::Cubemap { cubemap } => cubemap.execute(deps.tyt_cubemap_dependencies())?,
             Tyt::Fbx { fbx } => fbx.execute(deps.tyt_fbx_dependencies())?,
             Tyt::Material { material } => material.execute(deps.tyt_material_dependencies())?,
         }

@@ -16,31 +16,35 @@ pub struct CreateMse {
 
     /// Search prefix for texture files. When set, searches for
     /// `{prefix}-metalness.png`, `{prefix}-emission.png`, `{prefix}-albedo.png`.
-    #[arg(long)]
+    #[arg(value_name = "prefix", long)]
     prefix: Option<String>,
 
     /// Explicit path to the metal_rough texture.
-    #[arg(long)]
+    #[arg(value_name = "metal-rough", long)]
     metal_rough: Option<PathBuf>,
 
     /// Explicit path to the emissive texture.
-    #[arg(long)]
+    #[arg(value_name = "emissive", long)]
     emissive: Option<PathBuf>,
 
     /// Explicit path to the albedo texture.
-    #[arg(long)]
+    #[arg(value_name = "albedo", long)]
     albedo: Option<PathBuf>,
 
     /// Skip the metal_rough channel (metalness and smoothness will be black).
-    #[arg(long, conflicts_with = "metal_rough")]
+    #[arg(
+        value_name = "ignore-metal-rough",
+        long,
+        conflicts_with = "metal_rough"
+    )]
     ignore_metal_rough: bool,
 
     /// Skip the emissive channel (emission will be black).
-    #[arg(long, conflicts_with = "emissive")]
+    #[arg(value_name = "ignore-emissive", long, conflicts_with = "emissive")]
     ignore_emissive: bool,
 
     /// Skip the albedo pass-through copy.
-    #[arg(long, conflicts_with = "albedo")]
+    #[arg(value_name = "ignore-albedo", long, conflicts_with = "albedo")]
     ignore_albedo: bool,
 }
 

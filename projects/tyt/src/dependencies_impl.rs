@@ -1,4 +1,5 @@
 use crate::Dependencies;
+use tyt_cubemap::DependenciesImpl as TytCubemapDependenciesImpl;
 use tyt_fbx::DependenciesImpl as TytFbxDependenciesImpl;
 use tyt_material::DependenciesImpl as TytMaterialDependenciesImpl;
 
@@ -6,8 +7,13 @@ use tyt_material::DependenciesImpl as TytMaterialDependenciesImpl;
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
+    type TytCubemapDependencies = TytCubemapDependenciesImpl;
     type TytFbxDependencies = TytFbxDependenciesImpl;
     type TytMaterialDependencies = TytMaterialDependenciesImpl;
+
+    fn tyt_cubemap_dependencies(&self) -> Self::TytCubemapDependencies {
+        TytCubemapDependenciesImpl
+    }
 
     fn tyt_fbx_dependencies(&self) -> Self::TytFbxDependencies {
         TytFbxDependenciesImpl

@@ -1,9 +1,10 @@
 [workspace]
-members = ["projects/tyt", "projects/tyt-common", "projects/tyt-fbx", "projects/tyt-material"]
+members = ["projects/tyt", "projects/tyt-common", "projects/tyt-cubemap", "projects/tyt-fbx", "projects/tyt-material"]
 resolver = "2"
 
 [patch.crates-io]
 tyt = { path = "projects/tyt" }
 tyt-common = { path = "projects/tyt-common" }
+tyt-cubemap = { path = "projects/tyt-cubemap" }
 tyt-fbx = { path = "projects/tyt-fbx" }
 tyt-material = { path = "projects/tyt-material" }

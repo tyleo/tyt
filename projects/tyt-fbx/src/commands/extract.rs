@@ -24,9 +24,9 @@ pub struct Extract {
     /// The name of the output mesh to write. If not provided, the original
     /// mesh name will be used.
     #[arg(
+        value_name = "output-mesh-name",
         short = 'o',
         long = "output-mesh-name",
-        value_name = "output-mesh-name",
         conflicts_with = "output_mesh_name_arg"
     )]
     output_mesh_name_flag: Option<String>,

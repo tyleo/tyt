@@ -162,6 +162,7 @@ name = "tyt"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "tyt-cubemap",
  "tyt-fbx",
  "tyt-material",
 ]
@@ -169,6 +170,14 @@ dependencies = [
 [[package]]
 name = "tyt-common"
 version = "0.1.0"
+
+[[package]]
+name = "tyt-cubemap"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "tyt-common",
+]
 
 [[package]]
 name = "tyt-fbx"
