@@ -19,9 +19,7 @@ pub struct Pixelate {
 
 impl Pixelate {
     pub fn execute(self, deps: impl Dependencies) -> Result<()> {
-        let out_base = self
-            .out_base
-            .unwrap_or_else(|| format!("{}-px", self.base));
+        let out_base = self.out_base.unwrap_or_else(|| format!("{}-px", self.base));
         let in_path = format!("{}.png", self.base);
         let out_path = format!("{out_base}.png");
         deps.exec_magick([

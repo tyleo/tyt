@@ -167,6 +167,7 @@ dependencies = [
  "tyt-fbx",
  "tyt-image",
  "tyt-material",
+ "tyt-meta",
 ]
 
 [[package]]
@@ -213,6 +214,15 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "glob",
+ "tyt-common",
+ "tyt-injection",
+]
+
+[[package]]
+name = "tyt-meta"
+version = "0.1.0"
+dependencies = [
+ "clap",
  "tyt-common",
  "tyt-injection",
 ]
