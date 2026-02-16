@@ -1,7 +1,5 @@
-use crate::{Dependencies, Result};
+use crate::{Dependencies, Result, utilities};
 use clap::Parser;
-
-const FACES: &[&str] = &["left", "right", "up", "down", "front", "back"];
 
 /// Pixelates (point-resizes) six cube face images.
 #[derive(Clone, Debug, Parser)]
@@ -22,29 +20,8 @@ pub struct PixelateFaces {
 impl PixelateFaces {
     pub fn execute(self, deps: impl Dependencies) -> Result<()> {
         let out_base = self.out_base.unwrap_or_else(|| format!("{}-px", self.base));
-        pixelate_faces(&deps, &self.base, &out_base, self.size)?;
+        utilities::pixelate_faces(&deps, &self.base, &out_base, self.size)?;
         deps.write_stdout(format!("Wrote resized faces: {out_base}-*.png\n").as_bytes())?;
         Ok(())
     }
-}
-
-pub(crate) fn pixelate_faces(
-    deps: &impl Dependencies,
-    base: &str,
-    out_base: &str,
-    size: u32,
-) -> Result<()> {
-    for face in FACES {
-        let in_path = format!("{base}-{face}.png");
-        let out_path = format!("{out_base}-{face}.png");
-        deps.exec_magick([
-            in_path.as_str(),
-            "-filter",
-            "point",
-            "-resize",
-            &format!("x{size}"),
-            &out_path,
-        ])?;
-    }
-    Ok(())
 }

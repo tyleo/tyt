@@ -1,4 +1,4 @@
-use crate::{Dependencies, Result, commands::square_image::square};
+use crate::{Dependencies, Result, utilities};
 use clap::Parser;
 use std::path::Path;
 
@@ -139,7 +139,7 @@ fn build_cube_net(
 
     let out_path = format!("{out_base}.png");
     if do_square {
-        square(deps, &cube_net_str, &out_path)?;
+        utilities::square(deps, &cube_net_str, &out_path)?;
     } else {
         deps.rename_file(&cube_net_path, &out_path)?;
     }

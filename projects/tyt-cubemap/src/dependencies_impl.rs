@@ -3,7 +3,6 @@ use std::{
     ffi::OsStr,
     fs,
     path::{Path, PathBuf},
-    process,
 };
 
 /// Concrete implementation of [`Dependencies`].
@@ -20,17 +19,18 @@ impl Dependencies for DependenciesImpl {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let output = process::Command::new("ffmpeg").args(args).output()?;
-
-        if !output.status.success() {
-            return Err(Error::Ffmpeg {
-                exit_code: output.status.code(),
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            });
-        }
-
-        Ok(output.stdout)
+        tyt_common::exec("ffmpeg", args).map_err(|e| match e {
+            tyt_common::ExecError::IO(e) => Error::IO(e),
+            tyt_common::ExecError::Failed {
+                exit_code,
+                stdout,
+                stderr,
+            } => Error::Ffmpeg {
+                exit_code,
+                stdout,
+                stderr,
+            },
+        })
     }
 
     fn exec_magick<I, S>(&self, args: I) -> Result<Vec<u8>>
@@ -38,17 +38,18 @@ impl Dependencies for DependenciesImpl {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        let output = process::Command::new("magick").args(args).output()?;
-
-        if !output.status.success() {
-            return Err(Error::Magick {
-                exit_code: output.status.code(),
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            });
-        }
-
-        Ok(output.stdout)
+        tyt_common::exec("magick", args).map_err(|e| match e {
+            tyt_common::ExecError::IO(e) => Error::IO(e),
+            tyt_common::ExecError::Failed {
+                exit_code,
+                stdout,
+                stderr,
+            } => Error::Magick {
+                exit_code,
+                stdout,
+                stderr,
+            },
+        })
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {

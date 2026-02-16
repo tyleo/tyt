@@ -1,7 +1,4 @@
-use crate::{
-    Dependencies, Result,
-    commands::{faces_to_equirect::faces_to_equirect, pixelate_faces::pixelate_faces},
-};
+use crate::{Dependencies, Result, utilities};
 use clap::Parser;
 
 /// Pixelates cube face images and then converts them to an equirectangular panorama.
@@ -32,8 +29,8 @@ impl FacesToPixelatedEquirect {
         let tmp_base_str = tmp_base.to_string_lossy().into_owned();
 
         let result = (|| {
-            pixelate_faces(&deps, &self.base, &tmp_base_str, half_size)?;
-            faces_to_equirect(&deps, &tmp_base_str, &out_base, &tmp_dir)
+            utilities::pixelate_faces(&deps, &self.base, &tmp_base_str, half_size)?;
+            utilities::faces_to_equirect(&deps, &tmp_base_str, &out_base, &tmp_dir)
         })();
 
         deps.remove_dir_all(&tmp_dir)?;

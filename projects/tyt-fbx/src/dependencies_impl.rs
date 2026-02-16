@@ -1,10 +1,8 @@
 use crate::{Dependencies, Error, Result};
 use std::{
-    ffi::OsStr,
     fs,
     io::{ErrorKind, Write},
     path::{Path, PathBuf},
-    process,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -19,14 +17,14 @@ impl Dependencies for DependenciesImpl {
         P1: AsRef<Path>,
         P2: AsRef<Path>,
         I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
+        S: AsRef<std::ffi::OsStr>,
     >(
         &self,
         script_dir: P1,
         script_py_path: P2,
         args: I,
     ) -> Result<Vec<u8>> {
-        let output = process::Command::new("blender")
+        let blender_args = tyt_common::Args::new()
             .arg("--background")
             .arg("--python-expr")
             .arg(format!(
@@ -36,26 +34,20 @@ impl Dependencies for DependenciesImpl {
             .arg("--python")
             .arg(script_py_path.as_ref())
             .arg("--")
-            .args(args)
-            .output()?;
+            .args(args);
 
-        if !output.status.success() {
-            return Err(Error::Blender {
-                exit_code: output.status.code(),
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            });
-        }
-
-        if !output.stderr.is_empty() {
-            return Err(Error::Blender {
-                exit_code: output.status.code(),
-                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            });
-        }
-
-        Ok(output.stdout)
+        tyt_common::exec("blender", blender_args).map_err(|e| match e {
+            tyt_common::ExecError::IO(e) => Error::IO(e),
+            tyt_common::ExecError::Failed {
+                exit_code,
+                stdout,
+                stderr,
+            } => Error::Blender {
+                exit_code,
+                stdout,
+                stderr,
+            },
+        })
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {
