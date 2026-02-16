@@ -1,6 +1,6 @@
-use crate::Result;
+use crate::{Dependencies, Result};
 use clap::Subcommand;
-use ty_fbx::{DependenciesImpl as TyFbxDependencies, TyFbx};
+use ty_fbx::TyFbx;
 
 /// The main command for `tyt`, which ties all my command-line tools together.
 #[derive(Clone, Debug, Subcommand)]
@@ -13,9 +13,9 @@ pub enum Tyt {
 }
 
 impl Tyt {
-    pub fn execute(self) -> Result<()> {
+    pub fn execute(self, deps: impl Dependencies) -> Result<()> {
         match self {
-            Tyt::Fbx { fbx } => fbx.execute(TyFbxDependencies)?,
+            Tyt::Fbx { fbx } => fbx.execute(deps.ty_fbx_dependencies())?,
         }
 
         Ok(())
