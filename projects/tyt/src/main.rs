@@ -8,5 +8,8 @@ pub struct Cli {
 }
 
 fn main() {
-    Cli::parse().command.execute();
+    if let Err(e) = Cli::parse().command.execute() {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
 }
