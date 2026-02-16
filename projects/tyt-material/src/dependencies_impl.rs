@@ -23,18 +23,7 @@ impl Dependencies for DependenciesImpl {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        tyt_injection::exec("magick", args).map_err(|e| match e {
-            tyt_injection::ExecError::IO(e) => Error::IO(e),
-            tyt_injection::ExecError::Failed {
-                exit_code,
-                stdout,
-                stderr,
-            } => Error::Magick {
-                exit_code,
-                stdout,
-                stderr,
-            },
-        })
+        tyt_injection::exec_map("magick", args, Error::IO, Error::Magick)
     }
 
     fn glob_single_match(&self, pattern: &str) -> Result<PathBuf> {

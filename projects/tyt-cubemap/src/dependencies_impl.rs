@@ -19,18 +19,7 @@ impl Dependencies for DependenciesImpl {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        tyt_injection::exec("ffmpeg", args).map_err(|e| match e {
-            tyt_injection::ExecError::IO(e) => Error::IO(e),
-            tyt_injection::ExecError::Failed {
-                exit_code,
-                stdout,
-                stderr,
-            } => Error::Ffmpeg {
-                exit_code,
-                stdout,
-                stderr,
-            },
-        })
+        tyt_injection::exec_map("ffmpeg", args, Error::IO, Error::Ffmpeg)
     }
 
     fn exec_magick<I, S>(&self, args: I) -> Result<Vec<u8>>
@@ -38,18 +27,7 @@ impl Dependencies for DependenciesImpl {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        tyt_injection::exec("magick", args).map_err(|e| match e {
-            tyt_injection::ExecError::IO(e) => Error::IO(e),
-            tyt_injection::ExecError::Failed {
-                exit_code,
-                stdout,
-                stderr,
-            } => Error::Magick {
-                exit_code,
-                stdout,
-                stderr,
-            },
-        })
+        tyt_injection::exec_map("magick", args, Error::IO, Error::Magick)
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {

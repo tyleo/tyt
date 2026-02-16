@@ -3,15 +3,13 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     io::Error as IOError,
 };
+use tyt_common::ExecFailed;
 
+/// An error from a material operation.
 #[derive(Debug)]
 pub enum Error {
     Glob(String),
-    Magick {
-        exit_code: Option<i32>,
-        stdout: String,
-        stderr: String,
-    },
+    Magick(ExecFailed),
     IO(IOError),
 }
 
@@ -19,11 +17,11 @@ impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Error::Glob(msg) => write!(f, "{msg}"),
-            Error::Magick {
+            Error::Magick(ExecFailed {
                 exit_code,
                 stdout,
                 stderr,
-            } => {
+            }) => {
                 match exit_code {
                     Some(code) => write!(f, "magick exited with code {code}")?,
                     None => write!(f, "magick killed by signal")?,
@@ -44,8 +42,7 @@ impl Display for Error {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
-            Error::Glob(_) => None,
-            Error::Magick { .. } => None,
+            Error::Glob(_) | Error::Magick(_) => None,
             Error::IO(e) => Some(e),
         }
     }

@@ -7,6 +7,7 @@ description = "A single app, `tyt`, which ties all my command-line tools togethe
 
 [dependencies]
 clap = { version = "4.5.58", features = ["derive"] }
+tyt-common = { version = "0.1.0" }
 tyt-cubemap = { version = "0.1.0" }
 tyt-fbx = { version = "0.1.0" }
 tyt-material = { version = "0.1.0" }

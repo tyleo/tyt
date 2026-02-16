@@ -3,31 +3,24 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
     io::Error as IOError,
 };
+use tyt_common::ExecFailed;
 
 /// An error from a cubemap operation.
 #[derive(Debug)]
 pub enum Error {
-    Ffmpeg {
-        exit_code: Option<i32>,
-        stdout: String,
-        stderr: String,
-    },
-    Magick {
-        exit_code: Option<i32>,
-        stdout: String,
-        stderr: String,
-    },
+    Ffmpeg(ExecFailed),
+    Magick(ExecFailed),
     IO(IOError),
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Error::Ffmpeg {
+            Error::Ffmpeg(ExecFailed {
                 exit_code,
                 stdout,
                 stderr,
-            } => {
+            }) => {
                 match exit_code {
                     Some(code) => write!(f, "ffmpeg exited with code {code}")?,
                     None => write!(f, "ffmpeg killed by signal")?,
@@ -40,11 +33,11 @@ impl Display for Error {
                 }
                 Ok(())
             }
-            Error::Magick {
+            Error::Magick(ExecFailed {
                 exit_code,
                 stdout,
                 stderr,
-            } => {
+            }) => {
                 match exit_code {
                     Some(code) => write!(f, "magick exited with code {code}")?,
                     None => write!(f, "magick killed by signal")?,
@@ -65,7 +58,7 @@ impl Display for Error {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
-            Error::Ffmpeg { .. } | Error::Magick { .. } => None,
+            Error::Ffmpeg(_) | Error::Magick(_) => None,
             Error::IO(e) => Some(e),
         }
     }

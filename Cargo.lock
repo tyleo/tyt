@@ -162,16 +162,22 @@ name = "tyt"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "tyt-common",
  "tyt-cubemap",
  "tyt-fbx",
  "tyt-material",
 ]
 
 [[package]]
+name = "tyt-common"
+version = "0.1.0"
+
+[[package]]
 name = "tyt-cubemap"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "tyt-common",
  "tyt-injection",
 ]
 
@@ -180,12 +186,16 @@ name = "tyt-fbx"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "tyt-common",
  "tyt-injection",
 ]
 
 [[package]]
 name = "tyt-injection"
 version = "0.1.0"
+dependencies = [
+ "tyt-common",
+]
 
 [[package]]
 name = "tyt-material"
@@ -193,6 +203,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "glob",
+ "tyt-common",
  "tyt-injection",
 ]
 

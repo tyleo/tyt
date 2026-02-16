@@ -36,18 +36,7 @@ impl Dependencies for DependenciesImpl {
             .arg("--")
             .args(args);
 
-        tyt_injection::exec("blender", blender_args).map_err(|e| match e {
-            tyt_injection::ExecError::IO(e) => Error::IO(e),
-            tyt_injection::ExecError::Failed {
-                exit_code,
-                stdout,
-                stderr,
-            } => Error::Blender {
-                exit_code,
-                stdout,
-                stderr,
-            },
-        })
+        tyt_injection::exec_map("blender", blender_args, Error::IO, Error::Blender)
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {
