@@ -8,9 +8,15 @@ use std::{
 pub trait Dependencies {
     fn create_temp_dir(&self) -> Result<PathBuf>;
 
-    fn exec_blender_script<P: AsRef<Path>, I: IntoIterator<Item = S>, S: AsRef<OsStr>>(
+    fn exec_blender_script<
+        P1: AsRef<Path>,
+        P2: AsRef<Path>,
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    >(
         &self,
-        script_py_path: P,
+        script_dir: P1,
+        script_py_path: P2,
         args: I,
     ) -> Result<Vec<u8>>;
 
@@ -45,7 +51,7 @@ pub trait Dependencies {
                 )?;
             }
 
-            self.exec_blender_script(script_py_path, args)
+            self.exec_blender_script(&temp_dir, script_py_path, args)
         })();
 
         let output = result?;

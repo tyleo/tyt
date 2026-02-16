@@ -1,18 +1,8 @@
 import bpy
 import sys
 
-def strip_all_materials():
-    """
-    Remove all materials from mesh material slots, then delete orphaned material datablocks.
-    """
-    for obj in bpy.data.objects:
-        if obj.type != "MESH":
-            continue
-        obj.data.materials.clear()
+from common import strip_all_materials, deselect_all, export_fbx
 
-    for mat in list(bpy.data.materials):
-        if mat.users == 0:
-            bpy.data.materials.remove(mat)
 
 def extract_single_mesh(parent_mesh_name: str, output_mesh_name: str):
     # Ensure we're in Object mode for ops
@@ -29,8 +19,7 @@ def extract_single_mesh(parent_mesh_name: str, output_mesh_name: str):
         raise ValueError(f"No direct child mesh found under '{parent_mesh_name}'.")
 
     # Deselect all
-    for o in bpy.context.view_layer.objects:
-        o.select_set(False)
+    deselect_all()
 
     # Unparent target (keep world transform)
     target.select_set(True)
@@ -87,14 +76,7 @@ def main():
     strip_all_materials()
     extract_single_mesh(parent_mesh_name, output_mesh_name)
 
-    bpy.ops.export_scene.fbx(
-        filepath=output_fbx,
-        path_mode="STRIP",
-        embed_textures=False,
-        add_leaf_bones=False,
-        bake_space_transform=False,
-        use_space_transform=True,
-    )
+    export_fbx(output_fbx)
 
 if __name__ == "__main__":
     try:

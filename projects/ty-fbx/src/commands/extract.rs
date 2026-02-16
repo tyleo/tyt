@@ -63,7 +63,11 @@ impl Extract {
             output_mesh_name.as_str(),
         ];
 
-        dependencies.exec_temp_blender_script_with_stdout(&blender::FBX_EXTRACT_MESH_PY, args)?;
+        dependencies.exec_temp_blender_scripts_with_stdout(
+            &blender::FBX_EXTRACT_MESH_PY,
+            [&blender::COMMON_PY],
+            args,
+        )?;
 
         Ok(())
     }

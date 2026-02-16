@@ -33,13 +33,24 @@ impl Dependencies for DependenciesImpl {
         .into())
     }
 
-    fn exec_blender_script<P: AsRef<Path>, I: IntoIterator<Item = S>, S: AsRef<OsStr>>(
+    fn exec_blender_script<
+        P1: AsRef<Path>,
+        P2: AsRef<Path>,
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    >(
         &self,
-        script_py_path: P,
+        script_dir: P1,
+        script_py_path: P2,
         args: I,
     ) -> Result<Vec<u8>> {
         let output = process::Command::new("blender")
             .arg("--background")
+            .arg("--python-expr")
+            .arg(format!(
+                "import sys; sys.path.insert(0, r'{}')",
+                script_dir.as_ref().display(),
+            ))
             .arg("--python")
             .arg(script_py_path.as_ref())
             .arg("--")
@@ -47,6 +58,14 @@ impl Dependencies for DependenciesImpl {
             .output()?;
 
         if !output.status.success() {
+            return Err(Error::Blender {
+                exit_code: output.status.code(),
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+            });
+        }
+
+        if !output.stderr.is_empty() {
             return Err(Error::Blender {
                 exit_code: output.status.code(),
                 stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
