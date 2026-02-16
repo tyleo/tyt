@@ -152,18 +152,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "ty-fbx"
-version = "0.1.0"
-dependencies = [
- "clap",
-]
-
-[[package]]
 name = "tyt"
 version = "0.1.0"
 dependencies = [
  "clap",
- "ty-fbx",
+ "tyt-fbx",
+]
+
+[[package]]
+name = "tyt-fbx"
+version = "0.1.0"
+dependencies = [
+ "clap",
 ]
 
 [[package]]

@@ -1,7 +1,7 @@
-use ty_fbx::Dependencies as TyFbxDependencies;
+use tyt_fbx::Dependencies as TytFbxDependencies;
 
 pub trait Dependencies {
-    type TyFbxDependencies: TyFbxDependencies;
+    type TytFbxDependencies: TytFbxDependencies;
 
-    fn ty_fbx_dependencies(&self) -> Self::TyFbxDependencies;
+    fn tyt_fbx_dependencies(&self) -> Self::TytFbxDependencies;
 }

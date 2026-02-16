@@ -1,5 +1,5 @@
 use std::fmt;
-use ty_fbx::Error as FbxError;
+use tyt_fbx::Error as FbxError;
 
 #[derive(Debug)]
 pub enum Error {

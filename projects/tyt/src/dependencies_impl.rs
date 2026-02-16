@@ -1,13 +1,13 @@
 use crate::Dependencies;
-use ty_fbx::DependenciesImpl as TyFbxDependenciesImpl;
+use tyt_fbx::DependenciesImpl as TytFbxDependenciesImpl;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
-    type TyFbxDependencies = TyFbxDependenciesImpl;
+    type TytFbxDependencies = TytFbxDependenciesImpl;
 
-    fn ty_fbx_dependencies(&self) -> Self::TyFbxDependencies {
-        TyFbxDependenciesImpl
+    fn tyt_fbx_dependencies(&self) -> Self::TytFbxDependencies {
+        TytFbxDependenciesImpl
     }
 }
