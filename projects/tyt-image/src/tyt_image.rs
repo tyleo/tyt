@@ -5,7 +5,10 @@ use clap::Subcommand;
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
 pub enum TytImage {
+    #[command(name = "pixelate")]
     Pixelate(Pixelate),
+
+    #[command(name = "square-image")]
     SquareImage(SquareImage),
 }
 

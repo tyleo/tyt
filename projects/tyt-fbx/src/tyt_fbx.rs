@@ -5,9 +5,16 @@ use clap::Subcommand;
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
 pub enum TytFbx {
+    #[command(name = "extract")]
     Extract(Extract),
+
+    #[command(name = "hierarchy")]
     Hierarchy(Hierarchy),
+
+    #[command(name = "reduce")]
     Reduce(Reduce),
+
+    #[command(name = "rename")]
     Rename(Rename),
 }
 

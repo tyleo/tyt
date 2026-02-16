@@ -10,22 +10,31 @@ use tyt_meta::TytMeta;
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
 pub enum Tyt {
+    #[command(name = "cubemap")]
     Cubemap {
         #[clap(subcommand)]
         cubemap: TytCubemap,
     },
+
+    #[command(name = "fbx")]
     Fbx {
         #[clap(subcommand)]
         fbx: TytFbx,
     },
+
+    #[command(name = "image")]
     Image {
         #[clap(subcommand)]
         image: TytImage,
     },
+
+    #[command(name = "material")]
     Material {
         #[clap(subcommand)]
         material: TytMaterial,
     },
+
+    #[command(name = "meta")]
     Meta {
         #[clap(subcommand)]
         meta: TytMeta,

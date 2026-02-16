@@ -5,6 +5,7 @@ use clap::Subcommand;
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
 pub enum TytMeta {
+    #[command(name = "create-command")]
     CreateCommand(CreateCommand),
 }
 

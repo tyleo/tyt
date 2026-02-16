@@ -7,10 +7,19 @@ use clap::Subcommand;
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
 pub enum TytCubemap {
+    #[command(name = "faces-to-equirect")]
     FacesToEquirect(FacesToEquirect),
+
+    #[command(name = "faces-to-pixelated-equirect")]
     FacesToPixelatedEquirect(FacesToPixelatedEquirect),
+
+    #[command(name = "equirect-to-net")]
     EquirectToNet(EquirectToNet),
+
+    #[command(name = "equirect-to-faces")]
     EquirectToFaces(EquirectToFaces),
+
+    #[command(name = "pixelate-faces")]
     PixelateFaces(PixelateFaces),
 }
 
