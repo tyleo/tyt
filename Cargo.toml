@@ -1,6 +1,7 @@
-[package]
-name = "tlt"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+members = ["projects/tl-fbx", "projects/tlt"]
+resolver = "2"
 
-[dependencies]
+[patch.crates-io]
+tl-fbx = { path = "projects/tl-fbx" }
+tlt = { path = "projects/tlt" }

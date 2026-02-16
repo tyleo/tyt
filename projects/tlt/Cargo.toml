@@ -1,0 +1,10 @@
+[package]
+name = "tlt"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+description = "A single app, `tlt`, which ties all my command-line tools together."
+
+[dependencies]
+clap = { version = "4.5.58", features = ["derive"] }
+tl-fbx = { version = "0.1.0" }
