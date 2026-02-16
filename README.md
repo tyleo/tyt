@@ -1,3 +1,3 @@
-# tlt - Tyleo's Tools
+# tyt - Tyleo's Tools
 
-My command-line tools and a single app, `tlt`, that ties them all together.
+My command-line tools and a single app, `tyt`, that ties them all together.

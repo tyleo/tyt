@@ -152,18 +152,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "tl-fbx"
+name = "ty-fbx"
 version = "0.1.0"
 dependencies = [
  "clap",
 ]
 
 [[package]]
-name = "tlt"
+name = "tyt"
 version = "0.1.0"
 dependencies = [
  "clap",
- "tl-fbx",
+ "ty-fbx",
 ]
 
 [[package]]

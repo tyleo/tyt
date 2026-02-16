@@ -5,14 +5,14 @@ use crate::commands::Extract;
 /// Operations on FBX files.
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
-pub enum TlFbx {
+pub enum TyFbx {
     Extract(Extract),
 }
 
-impl TlFbx {
+impl TyFbx {
     pub fn execute(self) {
         match self {
-            TlFbx::Extract(extract) => {
+            TyFbx::Extract(extract) => {
                 extract.execute();
             }
         }

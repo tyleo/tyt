@@ -1,10 +1,10 @@
 use clap::Parser;
-use tl_fbx::TlFbx;
+use ty_fbx::TyFbx;
 
 #[derive(Clone, Debug, Parser)]
 pub struct Cli {
     #[clap(subcommand)]
-    pub command: TlFbx,
+    pub command: TyFbx,
 }
 
 fn main() {

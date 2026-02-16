@@ -1,10 +1,10 @@
 use clap::Parser;
-use tlt::Tlt;
+use tyt::Tyt;
 
 #[derive(Clone, Debug, Parser)]
 pub struct Cli {
     #[clap(subcommand)]
-    pub command: Tlt,
+    pub command: Tyt,
 }
 
 fn main() {

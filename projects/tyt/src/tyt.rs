@@ -1,20 +1,20 @@
 use clap::Subcommand;
-use tl_fbx::TlFbx;
+use ty_fbx::TyFbx;
 
-/// The main command for `tlt`, which ties all my command-line tools together.
+/// The main command for `tyt`, which ties all my command-line tools together.
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
-pub enum Tlt {
+pub enum Tyt {
     Fbx {
         #[clap(subcommand)]
-        fbx: TlFbx,
+        fbx: TyFbx,
     },
 }
 
-impl Tlt {
+impl Tyt {
     pub fn execute(self) {
         match self {
-            Tlt::Fbx { fbx } => fbx.execute(),
+            Tyt::Fbx { fbx } => fbx.execute(),
         }
     }
 }
