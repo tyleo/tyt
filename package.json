@@ -1,0 +1,12 @@
+{
+    "name": "tyt",
+    "version": "0.1.0",
+    "author": "tyleo",
+    "license": "MIT",
+    "type": "module",
+    "sideEffects": false,
+    "scripts": {
+        "build:release-wasm": "cargo build",
+        "install:tyt": "cargo install --path ./projects/tyt"
+    }
+}
