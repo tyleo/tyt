@@ -10,7 +10,7 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn create_temp_dir(&self) -> Result<PathBuf> {
-        Ok(tyt_common::create_temp_dir()?)
+        Ok(tyt_injection::create_temp_dir()?)
     }
 
     fn exec_blender_script<
@@ -24,7 +24,7 @@ impl Dependencies for DependenciesImpl {
         script_py_path: P2,
         args: I,
     ) -> Result<Vec<u8>> {
-        let blender_args = tyt_common::Args::new()
+        let blender_args = tyt_injection::Args::new()
             .arg("--background")
             .arg("--python-expr")
             .arg(format!(
@@ -36,9 +36,9 @@ impl Dependencies for DependenciesImpl {
             .arg("--")
             .args(args);
 
-        tyt_common::exec("blender", blender_args).map_err(|e| match e {
-            tyt_common::ExecError::IO(e) => Error::IO(e),
-            tyt_common::ExecError::Failed {
+        tyt_injection::exec("blender", blender_args).map_err(|e| match e {
+            tyt_injection::ExecError::IO(e) => Error::IO(e),
+            tyt_injection::ExecError::Failed {
                 exit_code,
                 stdout,
                 stderr,
@@ -51,11 +51,11 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        Ok(tyt_common::remove_dir_all(path.as_ref())?)
+        Ok(tyt_injection::remove_dir_all(path.as_ref())?)
     }
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
-        Ok(tyt_common::write_stdout(contents)?)
+        Ok(tyt_injection::write_stdout(contents)?)
     }
 
     fn write_file<P: AsRef<Path>>(&self, path: P, contents: &[u8]) -> Result<()> {
@@ -71,7 +71,7 @@ impl Dependencies for DependenciesImpl {
         // Write to a sibling temp file, then rename over destination.
         // This avoids leaving partial files on crash and is generally atomic on
         // the same filesystem.
-        let tmp = tyt_common::unique_sibling_temp_path(path)?;
+        let tmp = tyt_injection::unique_sibling_temp_path(path)?;
 
         // Use a scope so the file handle is closed before rename (important on
         // Windows).

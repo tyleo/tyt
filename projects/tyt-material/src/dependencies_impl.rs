@@ -15,7 +15,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn create_temp_dir(&self) -> Result<PathBuf> {
-        Ok(tyt_common::create_temp_dir()?)
+        Ok(tyt_injection::create_temp_dir()?)
     }
 
     fn exec_magick<I, S>(&self, args: I) -> Result<Vec<u8>>
@@ -23,9 +23,9 @@ impl Dependencies for DependenciesImpl {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        tyt_common::exec("magick", args).map_err(|e| match e {
-            tyt_common::ExecError::IO(e) => Error::IO(e),
-            tyt_common::ExecError::Failed {
+        tyt_injection::exec("magick", args).map_err(|e| match e {
+            tyt_injection::ExecError::IO(e) => Error::IO(e),
+            tyt_injection::ExecError::Failed {
                 exit_code,
                 stdout,
                 stderr,
@@ -60,10 +60,10 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        Ok(tyt_common::remove_dir_all(path.as_ref())?)
+        Ok(tyt_injection::remove_dir_all(path.as_ref())?)
     }
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
-        Ok(tyt_common::write_stdout(contents)?)
+        Ok(tyt_injection::write_stdout(contents)?)
     }
 }

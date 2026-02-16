@@ -25,13 +25,13 @@ cargo check
 
 ## Feature gates
 
-- Each library crate has a default `impl` feature that gates the concrete `DependenciesImpl` and any deps it needs (e.g., `glob`, `tyt-common`)
+- Each library crate has a default `impl` feature that gates the concrete `DependenciesImpl` and any deps it needs (e.g., `glob`, `tyt-injection`)
 - `#[cfg(feature = "impl")]` guards `mod dependencies_impl` and its `pub use` in `lib.rs`
 - The parent `tyt` crate's `impl` feature transitively enables sub-crate `impl` features
 
 ## Architecture
 
 - `tyt` is the top-level binary that ties sub-crates together via `clap` subcommands
-- `tyt-common` provides shared implementation helpers (free functions) used by sub-crate `DependenciesImpl`s
+- `tyt-injection` provides shared implementation helpers (free functions) used by sub-crate `DependenciesImpl`s
 - Each sub-crate (`tyt-fbx`, `tyt-material`) has a `Dependencies` trait for dependency injection and a feature-gated `DependenciesImpl`
 - The `tyt` crate bridges sub-crate dependencies through associated types on its own `Dependencies` trait
