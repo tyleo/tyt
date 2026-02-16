@@ -63,9 +63,7 @@ impl Extract {
             output_mesh_name.as_str(),
         ];
 
-        let output = dependencies.exec_temp_blender_script(&blender::FBX_EXTRACT_MESH_PY, args)?;
-
-        dependencies.write_stdout(&output)?;
+        dependencies.exec_temp_blender_script_with_stdout(&blender::FBX_EXTRACT_MESH_PY, args)?;
 
         Ok(())
     }

@@ -54,11 +54,34 @@ pub trait Dependencies {
         Ok(output)
     }
 
+    fn exec_temp_blender_scripts_with_stdout<
+        'a,
+        I: IntoIterator<Item = &'a Script<'a>>,
+        S: AsRef<OsStr>,
+    >(
+        &self,
+        script_py: &'a Script<'a>,
+        additional_scripts: I,
+        args: impl IntoIterator<Item = S>,
+    ) -> Result<()> {
+        let stdout = self.exec_temp_blender_scripts(script_py, additional_scripts, args)?;
+        self.write_stdout(&stdout)?;
+        Ok(())
+    }
+
     fn exec_temp_blender_script<'a, I: IntoIterator<Item = S>, S: AsRef<OsStr>>(
         &self,
         script_py: &'a Script<'a>,
         args: I,
     ) -> Result<Vec<u8>> {
         self.exec_temp_blender_scripts(script_py, iter::empty(), args)
+    }
+
+    fn exec_temp_blender_script_with_stdout<'a, I: IntoIterator<Item = S>, S: AsRef<OsStr>>(
+        &self,
+        script_py: &'a Script<'a>,
+        args: I,
+    ) -> Result<()> {
+        self.exec_temp_blender_scripts_with_stdout(script_py, iter::empty(), args)
     }
 }
