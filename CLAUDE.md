@@ -32,6 +32,7 @@ cargo check
 ## Architecture
 
 - `tyt` is the top-level binary that ties sub-crates together via `clap` subcommands
-- `tyt-injection` provides shared implementation helpers (free functions) used by sub-crate `DependenciesImpl`s
+- `tyt-common` provides shared types (e.g., `ExecFailed`) used across all tyt crates — every crate depends on it non-optionally
+- `tyt-injection` provides shared implementation helpers (free functions) used by sub-crate `DependenciesImpl`s — depended on optionally behind the `impl` feature
 - Each sub-crate (`tyt-fbx`, `tyt-material`) has a `Dependencies` trait for dependency injection and a feature-gated `DependenciesImpl`
 - The `tyt` crate bridges sub-crate dependencies through associated types on its own `Dependencies` trait
