@@ -1,6 +1,5 @@
 use crate::commands::{
     EquirectToFaces, EquirectToNet, FacesToEquirect, FacesToPixelatedEquirect, PixelateFaces,
-    SquareImage,
 };
 use clap::Subcommand;
 
@@ -13,7 +12,6 @@ pub enum TytCubemap {
     EquirectToNet(EquirectToNet),
     EquirectToFaces(EquirectToFaces),
     PixelateFaces(PixelateFaces),
-    SquareImage(SquareImage),
 }
 
 impl TytCubemap {
@@ -24,7 +22,6 @@ impl TytCubemap {
             TytCubemap::EquirectToNet(cmd) => cmd.execute(dependencies),
             TytCubemap::EquirectToFaces(cmd) => cmd.execute(dependencies),
             TytCubemap::PixelateFaces(cmd) => cmd.execute(dependencies),
-            TytCubemap::SquareImage(cmd) => cmd.execute(dependencies),
         }
     }
 }
