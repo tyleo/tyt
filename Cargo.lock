@@ -167,10 +167,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tyt-common"
+version = "0.1.0"
+
+[[package]]
 name = "tyt-fbx"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "tyt-common",
 ]
 
 [[package]]
@@ -179,6 +184,7 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "glob",
+ "tyt-common",
 ]
 
 [[package]]

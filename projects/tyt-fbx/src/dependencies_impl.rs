@@ -2,35 +2,17 @@ use crate::{Dependencies, Error, Result};
 use std::{
     ffi::OsStr,
     fs,
-    io::{Error as IOError, ErrorKind, Result as IOResult, Write},
+    io::{ErrorKind, Write},
     path::{Path, PathBuf},
     process,
-    sync::atomic::{AtomicU64, Ordering},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
-static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
-
 impl Dependencies for DependenciesImpl {
     fn create_temp_dir(&self) -> Result<PathBuf> {
-        // Try a handful of times in the unlikely event of a name collision.
-        for _ in 0..16 {
-            let path = self.unique_temp_path()?;
-            match fs::create_dir(&path) {
-                Ok(()) => return Ok(path),
-                Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,
-                Err(e) => return Err(e.into()),
-            }
-        }
-
-        Err(IOError::new(
-            ErrorKind::AlreadyExists,
-            "failed to create a unique temp dir after multiple attempts",
-        )
-        .into())
+        Ok(tyt_common::create_temp_dir()?)
     }
 
     fn exec_blender_script<
@@ -77,19 +59,11 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let path = path.as_ref();
-
-        // If it's already gone, treat as success.
-        match fs::remove_dir_all(path) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(e.into()),
-        }
+        Ok(tyt_common::remove_dir_all(path.as_ref())?)
     }
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
-        std::io::stdout().write_all(contents)?;
-        Ok(())
+        Ok(tyt_common::write_stdout(contents)?)
     }
 
     fn write_file<P: AsRef<Path>>(&self, path: P, contents: &[u8]) -> Result<()> {
@@ -105,7 +79,7 @@ impl Dependencies for DependenciesImpl {
         // Write to a sibling temp file, then rename over destination.
         // This avoids leaving partial files on crash and is generally atomic on
         // the same filesystem.
-        let tmp = self.unique_sibling_temp_path(path)?;
+        let tmp = tyt_common::unique_sibling_temp_path(path)?;
 
         // Use a scope so the file handle is closed before rename (important on
         // Windows).
@@ -141,39 +115,5 @@ impl Dependencies for DependenciesImpl {
                 }
             }
         }
-    }
-}
-
-impl DependenciesImpl {
-    fn unique_temp_path(&self) -> IOResult<PathBuf> {
-        let mut base = std::env::temp_dir();
-
-        let now_ns = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(IOError::other)?
-            .as_nanos();
-
-        let pid = process::id();
-        let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-
-        base.push(format!("tyt-{}-{}-{}", pid, now_ns, n));
-        Ok(base)
-    }
-
-    fn unique_sibling_temp_path(&self, dst: &Path) -> IOResult<PathBuf> {
-        let parent = dst.parent().unwrap_or_else(|| Path::new("."));
-        let file_name = dst.file_name().and_then(|s| s.to_str()).unwrap_or("file");
-
-        let now_ns = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(IOError::other)?
-            .as_nanos();
-
-        let pid = process::id();
-        let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
-
-        let mut tmp = parent.to_path_buf();
-        tmp.push(format!(".{}.tmp-{}-{}-{}", file_name, pid, now_ns, n));
-        Ok(tmp)
     }
 }
