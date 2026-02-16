@@ -8,6 +8,7 @@ use std::{
 pub enum Error {
     Blender {
         exit_code: Option<i32>,
+        stdout: String,
         stderr: String,
     },
     IO(IOError),
@@ -16,7 +17,23 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            Error::Blender { stderr, .. } => write!(f, "blender: {stderr}"),
+            Error::Blender {
+                exit_code,
+                stdout,
+                stderr,
+            } => {
+                match exit_code {
+                    Some(code) => write!(f, "blender exited with code {code}")?,
+                    None => write!(f, "blender killed by signal")?,
+                }
+                if !stdout.is_empty() {
+                    write!(f, "\nstdout:\n{stdout}")?;
+                }
+                if !stderr.is_empty() {
+                    write!(f, "\nstderr:\n{stderr}")?;
+                }
+                Ok(())
+            }
             Error::IO(e) => e.fmt(f),
         }
     }

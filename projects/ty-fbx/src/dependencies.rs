@@ -18,6 +18,8 @@ pub trait Dependencies {
 
     fn write_file<P: AsRef<Path>>(&self, path: P, contents: &[u8]) -> Result<()>;
 
+    fn write_stdout(&self, contents: &[u8]) -> Result<()>;
+
     fn exec_temp_blender_scripts<
         'a,
         I1: IntoIterator<Item = &'a Script<'a>>,

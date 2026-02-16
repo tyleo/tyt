@@ -96,6 +96,11 @@ def main():
         use_space_transform=True,
     )
 
-
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)

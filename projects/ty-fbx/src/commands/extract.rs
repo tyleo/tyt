@@ -57,13 +57,15 @@ impl Extract {
             .unwrap_or(&parent_mesh_name);
 
         let args = [
-            input_fbx.as_str(),
+            input_fbx.as_ref(),
             parent_mesh_name.as_str(),
-            output_fbx.as_str(),
+            output_fbx.as_ref(),
             output_mesh_name.as_str(),
         ];
 
-        dependencies.exec_temp_blender_script(&blender::FBX_EXTRACT_MESH_PY, args)?;
+        let output = dependencies.exec_temp_blender_script(&blender::FBX_EXTRACT_MESH_PY, args)?;
+
+        dependencies.write_stdout(&output)?;
 
         Ok(())
     }

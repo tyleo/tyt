@@ -1,8 +1,8 @@
-use crate::{Dependencies, Result};
+use crate::{Dependencies, Error, Result};
 use std::{
     ffi::OsStr,
     fs,
-    io::{self, ErrorKind, Write},
+    io::{Error as IOError, ErrorKind, Result as IOResult, Write},
     path::{Path, PathBuf},
     process,
     sync::atomic::{AtomicU64, Ordering},
@@ -26,7 +26,7 @@ impl Dependencies for DependenciesImpl {
             }
         }
 
-        Err(io::Error::new(
+        Err(IOError::new(
             ErrorKind::AlreadyExists,
             "failed to create a unique temp dir after multiple attempts",
         )
@@ -47,8 +47,9 @@ impl Dependencies for DependenciesImpl {
             .output()?;
 
         if !output.status.success() {
-            return Err(crate::Error::Blender {
+            return Err(Error::Blender {
                 exit_code: output.status.code(),
+                stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
                 stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
             });
         }
@@ -65,6 +66,11 @@ impl Dependencies for DependenciesImpl {
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
             Err(e) => Err(e.into()),
         }
+    }
+
+    fn write_stdout(&self, contents: &[u8]) -> Result<()> {
+        std::io::stdout().write_all(contents)?;
+        Ok(())
     }
 
     fn write_file<P: AsRef<Path>>(&self, path: P, contents: &[u8]) -> Result<()> {
@@ -120,28 +126,28 @@ impl Dependencies for DependenciesImpl {
 }
 
 impl DependenciesImpl {
-    fn unique_temp_path(&self) -> io::Result<PathBuf> {
+    fn unique_temp_path(&self) -> IOResult<PathBuf> {
         let mut base = std::env::temp_dir();
 
         let now_ns = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(io::Error::other)?
+            .map_err(IOError::other)?
             .as_nanos();
 
         let pid = process::id();
         let n = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
 
-        base.push(format!("tlt-{}-{}-{}", pid, now_ns, n));
+        base.push(format!("tyt-{}-{}-{}", pid, now_ns, n));
         Ok(base)
     }
 
-    fn unique_sibling_temp_path(&self, dst: &Path) -> io::Result<PathBuf> {
+    fn unique_sibling_temp_path(&self, dst: &Path) -> IOResult<PathBuf> {
         let parent = dst.parent().unwrap_or_else(|| Path::new("."));
         let file_name = dst.file_name().and_then(|s| s.to_str()).unwrap_or("file");
 
         let now_ns = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .map_err(io::Error::other)?
+            .map_err(IOError::other)?
             .as_nanos();
 
         let pid = process::id();
