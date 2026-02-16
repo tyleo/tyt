@@ -1,5 +1,6 @@
 use crate::{Dependencies, Result, blender};
 use clap::Parser;
+use std::{ffi::OsStr, path::PathBuf};
 
 /// Extracts the first direct child mesh under `parent_mesh_name` from the input
 /// FBX file, unparents it, keeping the world transform, and deletes everything
@@ -9,7 +10,7 @@ use clap::Parser;
 pub struct Extract {
     /// The input FBX file to extract from.
     #[arg(value_name = "input-fbx")]
-    input_fbx: String,
+    input_fbx: PathBuf,
 
     /// The name of the mesh's parent.
     #[arg(value_name = "parent-mesh-name")]
@@ -18,7 +19,7 @@ pub struct Extract {
     /// The output FBX file to write the extracted data to. If not provided,
     /// the input file will be overwritten.
     #[arg(value_name = "output-fbx")]
-    output_fbx: Option<String>,
+    output_fbx: Option<PathBuf>,
 
     /// The name of the output mesh to write. If not provided, the original
     /// mesh name will be used.
@@ -56,11 +57,11 @@ impl Extract {
             .or(output_mesh_name_arg.as_ref())
             .unwrap_or(&parent_mesh_name);
 
-        let args = [
+        let args: [&OsStr; 4] = [
             input_fbx.as_ref(),
-            parent_mesh_name.as_str(),
+            parent_mesh_name.as_ref(),
             output_fbx.as_ref(),
-            output_mesh_name.as_str(),
+            output_mesh_name.as_ref(),
         ];
 
         dependencies.exec_temp_blender_scripts_with_stdout(

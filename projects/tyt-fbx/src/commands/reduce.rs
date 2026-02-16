@@ -1,5 +1,6 @@
 use crate::{Dependencies, Result, blender};
 use clap::Parser;
+use std::{ffi::OsStr, path::PathBuf};
 
 /// Collapses all mesh objects in the input FBX into a single joined mesh.
 /// Clears parenting while keeping world transforms, deletes now-unused empties,
@@ -8,7 +9,7 @@ use clap::Parser;
 pub struct Reduce {
     /// The input FBX file.
     #[arg(value_name = "input-fbx")]
-    input_fbx: String,
+    input_fbx: PathBuf,
 
     /// The name for the output mesh object and datablock.
     #[arg(value_name = "output-mesh-name")]
@@ -17,7 +18,7 @@ pub struct Reduce {
     /// The output FBX file to write. If not provided, the input file will be
     /// overwritten.
     #[arg(value_name = "output-fbx")]
-    output_fbx: Option<String>,
+    output_fbx: Option<PathBuf>,
 }
 
 impl Reduce {
@@ -30,10 +31,10 @@ impl Reduce {
 
         let output_fbx = output_fbx.as_ref().unwrap_or(&input_fbx);
 
-        let args = [
+        let args: [&OsStr; 3] = [
             input_fbx.as_ref(),
             output_fbx.as_ref(),
-            output_mesh_name.as_str(),
+            output_mesh_name.as_ref(),
         ];
 
         dependencies.exec_temp_blender_scripts_with_stdout(
