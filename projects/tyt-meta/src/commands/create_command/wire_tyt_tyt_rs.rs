@@ -14,8 +14,9 @@ pub fn wire_tyt_tyt_rs(
 
     let snake = create_command::kebab_to_snake_case(command);
     let use_line = format!("use tyt_{snake}::Tyt{name};");
-    let variant_block =
-        format!("    {name} {{\n        #[clap(subcommand)]\n        {snake}: Tyt{name},\n    }},");
+    let variant_block = format!(
+        "    #[command(name = \"{command}\")]\n    {name} {{\n        #[clap(subcommand)]\n        {snake}: Tyt{name},\n    }},"
+    );
     let match_arm = format!(
         "            Tyt::{name} {{ {snake} }} => {snake}.execute(deps.tyt_{snake}_dependencies())?,",
     );
@@ -27,6 +28,7 @@ pub fn wire_tyt_tyt_rs(
     let mut in_match = false;
     let mut enum_depth: i32 = 0;
     let mut match_depth: i32 = 0;
+    let mut pending_attrs: Vec<String> = Vec::new();
 
     for line in &lines {
         let trimmed = line.trim();
@@ -59,20 +61,31 @@ pub fn wire_tyt_tyt_rs(
             continue;
         }
         if in_enum {
-            // Only compare variant names at enum top-level (depth 1)
-            if enum_depth == 1
-                && !variant_inserted
-                && !trimmed.is_empty()
-                && !trimmed.starts_with('#')
-            {
-                let variant_name = trimmed
-                    .split(['{', ',', '('])
-                    .next()
-                    .unwrap_or(trimmed)
-                    .trim();
-                if variant_name > name {
-                    result.push(variant_block.clone());
-                    variant_inserted = true;
+            if enum_depth == 1 && !variant_inserted {
+                // Buffer attribute lines so we can insert before them
+                if !trimmed.is_empty() && trimmed.starts_with('#') {
+                    pending_attrs.push(line.to_string());
+                    enum_depth += brace_delta;
+                    continue;
+                }
+
+                // Compare variant names (skip empty lines and closing brace)
+                if !trimmed.is_empty() && trimmed != "}" {
+                    let variant_name = trimmed
+                        .split(['{', ',', '('])
+                        .next()
+                        .unwrap_or(trimmed)
+                        .trim();
+                    if variant_name > name {
+                        result.push(variant_block.clone());
+                        result.push(String::new());
+                        variant_inserted = true;
+                    }
+                }
+
+                // Flush buffered attributes
+                for attr in pending_attrs.drain(..) {
+                    result.push(attr);
                 }
             }
 
@@ -80,6 +93,10 @@ pub fn wire_tyt_tyt_rs(
 
             if enum_depth == 0 {
                 if !variant_inserted {
+                    for attr in pending_attrs.drain(..) {
+                        result.push(attr);
+                    }
+                    result.push(String::new());
                     result.push(variant_block.clone());
                     variant_inserted = true;
                 }
