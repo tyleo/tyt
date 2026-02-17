@@ -4,9 +4,16 @@ version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"
 description = "A single app, `tyt`, which ties all my command-line tools together."
+autobins = false
+
+[[bin]]
+name = "tyt"
+path = "src/main.rs"
+required-features = ["bin"]
 
 [dependencies]
 clap = { version = "4.5.58", features = ["derive"] }
+clap_complete = { version = "4.5", optional = true }
 tyt-common = { version = "0.1.0" }
 tyt-cubemap = { version = "0.1.0" }
 tyt-fbx = { version = "0.1.0" }
@@ -17,3 +24,4 @@ tyt-meta = { version = "0.1.0" }
 [features]
 default = ["impl"]
 impl = ["tyt-cubemap/impl", "tyt-fbx/impl", "tyt-image/impl", "tyt-material/impl", "tyt-meta/impl"]
+bin = ["impl", "dep:clap_complete"]

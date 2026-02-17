@@ -1,15 +1,38 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::Shell;
 use tyt::{DependenciesImpl, Tyt};
 
 #[derive(Clone, Debug, Parser)]
-pub struct Cli {
+struct Cli {
     #[clap(subcommand)]
-    pub command: Tyt,
+    command: Command,
+}
+
+/// Top-level command dispatcher.
+#[derive(Clone, Debug, Subcommand)]
+enum Command {
+    /// Generate shell completions.
+    #[command(name = "completion")]
+    Completion {
+        /// The shell to generate completions for.
+        shell: Shell,
+    },
+
+    #[command(flatten)]
+    Tyt(Tyt),
 }
 
 fn main() {
-    if let Err(e) = Cli::parse().command.execute(DependenciesImpl) {
-        eprintln!("error: {e}");
-        std::process::exit(1);
+    let cli = Cli::parse();
+    match cli.command {
+        Command::Completion { shell } => {
+            clap_complete::generate(shell, &mut Cli::command(), "tyt", &mut std::io::stdout());
+        }
+        Command::Tyt(tyt) => {
+            if let Err(e) = tyt.execute(DependenciesImpl) {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
     }
 }
