@@ -8,6 +8,7 @@ members = [
     "projects/tyt-injection",
     "projects/tyt-material",
     "projects/ty-math",
+    "projects/ty-math-serde",
     "projects/tyt-meta",
 ]
 resolver = "2"
@@ -21,4 +22,5 @@ tyt-image = { path = "projects/tyt-image" }
 tyt-injection = { path = "projects/tyt-injection" }
 tyt-material = { path = "projects/tyt-material" }
 ty-math = { path = "projects/ty-math" }
+ty-math-serde = { path = "projects/ty-math-serde" }
 tyt-meta = { path = "projects/tyt-meta" }
