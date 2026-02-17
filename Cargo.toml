@@ -4,6 +4,7 @@ members = [
     "projects/tyt-common",
     "projects/tyt-cubemap",
     "projects/tyt-fbx",
+    "projects/tyt-fs",
     "projects/tyt-image",
     "projects/tyt-injection",
     "projects/tyt-material",
@@ -19,6 +20,7 @@ tyt = { path = "projects/tyt" }
 tyt-common = { path = "projects/tyt-common" }
 tyt-cubemap = { path = "projects/tyt-cubemap" }
 tyt-fbx = { path = "projects/tyt-fbx" }
+tyt-fs = { path = "projects/tyt-fs" }
 tyt-image = { path = "projects/tyt-image" }
 tyt-injection = { path = "projects/tyt-injection" }
 tyt-material = { path = "projects/tyt-material" }
