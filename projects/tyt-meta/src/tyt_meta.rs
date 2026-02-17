@@ -1,4 +1,4 @@
-use crate::commands::CreateCommand;
+use crate::commands;
 use clap::Subcommand;
 
 /// Meta-tools for scaffolding new tyt sub-crates and commands.
@@ -6,7 +6,7 @@ use clap::Subcommand;
 #[command(subcommand_value_name = "command")]
 pub enum TytMeta {
     #[command(name = "create-command")]
-    CreateCommand(CreateCommand),
+    CreateCommand(commands::CreateCommand),
 }
 
 impl TytMeta {

@@ -1,6 +1,4 @@
-use crate::commands::{
-    EquirectToFaces, EquirectToNet, FacesToEquirect, FacesToPixelatedEquirect, PixelateFaces,
-};
+use crate::commands;
 use clap::Subcommand;
 
 /// Operations on cubemap images.
@@ -8,19 +6,19 @@ use clap::Subcommand;
 #[command(subcommand_value_name = "command")]
 pub enum TytCubemap {
     #[command(name = "faces-to-equirect")]
-    FacesToEquirect(FacesToEquirect),
+    FacesToEquirect(commands::FacesToEquirect),
 
     #[command(name = "faces-to-pixelated-equirect")]
-    FacesToPixelatedEquirect(FacesToPixelatedEquirect),
+    FacesToPixelatedEquirect(commands::FacesToPixelatedEquirect),
 
     #[command(name = "equirect-to-net")]
-    EquirectToNet(EquirectToNet),
+    EquirectToNet(commands::EquirectToNet),
 
     #[command(name = "equirect-to-faces")]
-    EquirectToFaces(EquirectToFaces),
+    EquirectToFaces(commands::EquirectToFaces),
 
     #[command(name = "pixelate-faces")]
-    PixelateFaces(PixelateFaces),
+    PixelateFaces(commands::PixelateFaces),
 }
 
 impl TytCubemap {

@@ -1,4 +1,4 @@
-use crate::commands::{Extract, Hierarchy, Reduce, Rename};
+use crate::commands;
 use clap::Subcommand;
 
 /// Operations on FBX files.
@@ -6,16 +6,16 @@ use clap::Subcommand;
 #[command(subcommand_value_name = "command")]
 pub enum TytFbx {
     #[command(name = "extract")]
-    Extract(Extract),
+    Extract(commands::Extract),
 
     #[command(name = "hierarchy")]
-    Hierarchy(Hierarchy),
+    Hierarchy(commands::Hierarchy),
 
     #[command(name = "reduce")]
-    Reduce(Reduce),
+    Reduce(commands::Reduce),
 
     #[command(name = "rename")]
-    Rename(Rename),
+    Rename(commands::Rename),
 }
 
 impl TytFbx {

@@ -1,4 +1,4 @@
-use crate::commands::{Pixelate, SquareImage};
+use crate::commands;
 use clap::Subcommand;
 
 /// Operations on images.
@@ -6,10 +6,10 @@ use clap::Subcommand;
 #[command(subcommand_value_name = "command")]
 pub enum TytImage {
     #[command(name = "pixelate")]
-    Pixelate(Pixelate),
+    Pixelate(commands::Pixelate),
 
     #[command(name = "square-image")]
-    SquareImage(SquareImage),
+    SquareImage(commands::SquareImage),
 }
 
 impl TytImage {

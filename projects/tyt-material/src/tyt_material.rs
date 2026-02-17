@@ -1,4 +1,4 @@
-use crate::commands::CreateMse;
+use crate::commands;
 use clap::Subcommand;
 
 /// Operations on material textures.
@@ -6,7 +6,7 @@ use clap::Subcommand;
 #[command(subcommand_value_name = "command")]
 pub enum TytMaterial {
     #[command(name = "create-mse")]
-    CreateMse(CreateMse),
+    CreateMse(commands::CreateMse),
 }
 
 impl TytMaterial {
