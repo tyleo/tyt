@@ -4,6 +4,7 @@ use std::{
     iter,
     path::{Path, PathBuf},
 };
+use ty_math::TyVector3;
 
 pub trait Dependencies {
     fn create_temp_dir(&self) -> Result<PathBuf>;
@@ -23,6 +24,10 @@ pub trait Dependencies {
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()>;
 
     fn write_file<P: AsRef<Path>>(&self, path: P, contents: &[u8]) -> Result<()>;
+
+    fn parse_mesh_json(&self, json: &[u8]) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>)>;
+
+    fn serialize_points_json(&self, points: &[TyVector3]) -> Result<Vec<u8>>;
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()>;
 

@@ -32,7 +32,7 @@ def main():
     bm.from_mesh(obj.data)
     bmesh.ops.triangulate(bm, faces=bm.faces[:])
 
-    vertices = [{"X": v.co.x, "Y": v.co.y, "Z": v.co.z} for v in bm.verts]
+    vertices = [{"x": v.co.x, "y": v.co.y, "z": v.co.z} for v in bm.verts]
     triangles = [[v.index for v in f.verts] for f in bm.faces]
 
     bm.free()

@@ -4,6 +4,7 @@ use std::{
     io::{ErrorKind, Write},
     path::{Path, PathBuf},
 };
+use ty_math::TyVector3;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -37,6 +38,14 @@ impl Dependencies for DependenciesImpl {
             .args(args);
 
         tyt_injection::exec_map("blender", blender_args, Error::IO, Error::Blender)
+    }
+
+    fn parse_mesh_json(&self, json: &[u8]) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>)> {
+        Ok(tyt_injection::parse_mesh_json(json)?)
+    }
+
+    fn serialize_points_json(&self, points: &[TyVector3]) -> Result<Vec<u8>> {
+        Ok(tyt_injection::serialize_points_json(points)?)
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {

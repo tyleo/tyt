@@ -6,4 +6,8 @@ license-file = "LICENSE"
 description = "Dependency injection implementations for tyt sub-crates."
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+ty-math = { version = "0.1.0" }
+ty-math-serde = { version = "0.1.0" }
 tyt-common = { version = "0.1.0" }
