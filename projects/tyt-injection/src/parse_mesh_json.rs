@@ -14,11 +14,7 @@ pub fn parse_mesh_json(json: &[u8]) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>)>
     let data: MeshData =
         serde_json::from_slice(json).map_err(|e| std::io::Error::new(ErrorKind::InvalidData, e))?;
 
-    let vertices = data
-        .vertices
-        .into_iter()
-        .map(TyVector3::from)
-        .collect();
+    let vertices = data.vertices.into_iter().map(TyVector3::from).collect();
 
     Ok((vertices, data.triangles))
 }

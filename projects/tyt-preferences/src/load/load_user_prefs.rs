@@ -1,12 +1,11 @@
-use crate::{Dependencies, load_prefs_from_dir};
-use serde::de::DeserializeOwned;
-use std::io;
+use crate::{Dependencies, DeserializePrefs, load::load_prefs_from_dir};
+use std::io::Result as IOResult;
 
 /// Loads preferences for the given key from `~/.tytconfig`.
-pub fn load_user_prefs<T: DeserializeOwned>(
+pub fn load_user_prefs<T: DeserializePrefs>(
     dependencies: &impl Dependencies,
     key: &str,
-) -> io::Result<Option<T>> {
+) -> IOResult<Option<T>> {
     let Some(dir) = dependencies.user_home_dir()? else {
         return Ok(None);
     };

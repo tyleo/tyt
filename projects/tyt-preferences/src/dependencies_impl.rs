@@ -1,6 +1,6 @@
 use crate::Dependencies;
 use std::{
-    io::{self, ErrorKind},
+    io::{Error as IOError, ErrorKind, Result as IOResult},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -10,11 +10,11 @@ use std::{
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
-    fn user_home_dir(&self) -> io::Result<Option<PathBuf>> {
+    fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
         Ok(std::env::var_os("HOME").map(PathBuf::from))
     }
 
-    fn git_root_dir(&self) -> io::Result<Option<PathBuf>> {
+    fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
         let output = match Command::new("git")
             .args(["rev-parse", "--show-toplevel"])
             .output()
@@ -29,11 +29,11 @@ impl Dependencies for DependenciesImpl {
         }
 
         let path = String::from_utf8(output.stdout)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
+            .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
         Ok(Some(PathBuf::from(path.trim())))
     }
 
-    fn read_file(&self, path: &Path) -> io::Result<Option<Vec<u8>>> {
+    fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
         match std::fs::read(path) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
