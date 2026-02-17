@@ -1,0 +1,6 @@
+[package]
+name = "ty-math"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+description = "Math types and utilities shared across all tyt crates."
