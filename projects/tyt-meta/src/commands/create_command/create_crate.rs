@@ -1,19 +1,13 @@
 use crate::{
     Dependencies, Error, Result,
-    commands::create_command::{
-        CreateCommand, DEPENDENCIES_IMPL_RS_TEMPLATE, DEPENDENCIES_RS_TEMPLATE, ERROR_RS_TEMPLATE,
-        LICENSE_TEMPLATE, RESULT_RS_TEMPLATE, cargo_toml_template, kebab_to_snake_case,
-        lib_rs_template, main_rs_template, readme_template, tyt_enum_template_empty,
-        wire_tyt_cargo_toml, wire_tyt_dependencies, wire_tyt_dependencies_impl, wire_tyt_error,
-        wire_tyt_tyt_rs, wire_workspace_cargo_toml,
-    },
+    commands::{CreateCommand, create_command},
 };
 
 pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()> {
     let command = &cmd.command;
     let name = &cmd.name;
     let description = &cmd.description;
-    let snake = kebab_to_snake_case(command);
+    let snake = create_command::kebab_to_snake_case(command);
     let root = deps.workspace_root()?;
     let crate_dir = root.join(format!("projects/tyt-{command}"));
 
@@ -31,43 +25,49 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     // 1. Cargo.toml
     deps.write(
         crate_dir.join("Cargo.toml"),
-        &cargo_toml_template(command, description),
+        &create_command::cargo_toml_template(command, description),
     )?;
 
     // 2. LICENSE
-    deps.write(crate_dir.join("LICENSE"), LICENSE_TEMPLATE)?;
+    deps.write(crate_dir.join("LICENSE"), create_command::LICENSE_TEMPLATE)?;
 
     // 3. README.md
     deps.write(
         crate_dir.join("README.md"),
-        &readme_template(command, name, description),
+        &create_command::readme_template(command, name, description),
     )?;
 
     // 4. src/lib.rs
-    deps.write(src.join("lib.rs"), &lib_rs_template(&snake))?;
+    deps.write(src.join("lib.rs"), &create_command::lib_rs_template(&snake))?;
 
     // 5. src/main.rs
-    deps.write(src.join("main.rs"), &main_rs_template(command, name))?;
+    deps.write(
+        src.join("main.rs"),
+        &create_command::main_rs_template(command, name),
+    )?;
 
     // 6. src/dependencies.rs
-    deps.write(src.join("dependencies.rs"), DEPENDENCIES_RS_TEMPLATE)?;
+    deps.write(
+        src.join("dependencies.rs"),
+        create_command::DEPENDENCIES_RS_TEMPLATE,
+    )?;
 
     // 7. src/dependencies_impl.rs
     deps.write(
         src.join("dependencies_impl.rs"),
-        DEPENDENCIES_IMPL_RS_TEMPLATE,
+        create_command::DEPENDENCIES_IMPL_RS_TEMPLATE,
     )?;
 
     // 8. src/error.rs
-    deps.write(src.join("error.rs"), ERROR_RS_TEMPLATE)?;
+    deps.write(src.join("error.rs"), create_command::ERROR_RS_TEMPLATE)?;
 
     // 9. src/result.rs
-    deps.write(src.join("result.rs"), RESULT_RS_TEMPLATE)?;
+    deps.write(src.join("result.rs"), create_command::RESULT_RS_TEMPLATE)?;
 
     // 10. src/tyt_{snake}.rs
     deps.write(
         src.join(format!("tyt_{snake}.rs")),
-        &tyt_enum_template_empty(name, description),
+        &create_command::tyt_enum_template_empty(name, description),
     )?;
 
     // 11. src/commands/mod.rs
@@ -76,22 +76,22 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     // -- Wire into existing files --
 
     // Workspace Cargo.toml
-    wire_workspace_cargo_toml(deps, &root, command)?;
+    create_command::wire_workspace_cargo_toml(deps, &root, command)?;
 
     // projects/tyt/Cargo.toml
-    wire_tyt_cargo_toml(deps, &root, command)?;
+    create_command::wire_tyt_cargo_toml(deps, &root, command)?;
 
     // projects/tyt/src/dependencies.rs
-    wire_tyt_dependencies(deps, &root, command, name)?;
+    create_command::wire_tyt_dependencies(deps, &root, command, name)?;
 
     // projects/tyt/src/dependencies_impl.rs
-    wire_tyt_dependencies_impl(deps, &root, command, name)?;
+    create_command::wire_tyt_dependencies_impl(deps, &root, command, name)?;
 
     // projects/tyt/src/error.rs
-    wire_tyt_error(deps, &root, command, name)?;
+    create_command::wire_tyt_error(deps, &root, command, name)?;
 
     // projects/tyt/src/tyt.rs
-    wire_tyt_tyt_rs(deps, &root, command, name)?;
+    create_command::wire_tyt_tyt_rs(deps, &root, command, name)?;
 
     deps.write_stdout(
         format!(

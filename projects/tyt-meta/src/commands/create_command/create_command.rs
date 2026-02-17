@@ -1,7 +1,4 @@
-use crate::{
-    Dependencies, Result,
-    commands::create_command::{add_command_to_crate, create_crate},
-};
+use crate::{Dependencies, Result, commands::create_command};
 use clap::Parser;
 
 /// Scaffolds a new tyt sub-crate or adds a command to an existing one.
@@ -33,8 +30,8 @@ pub struct CreateCommand {
 impl CreateCommand {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         match &self.parent {
-            Some(parent) => add_command_to_crate(&self, &dependencies, parent),
-            None => create_crate(&self, &dependencies),
+            Some(parent) => create_command::add_command_to_crate(&self, &dependencies, parent),
+            None => create_command::create_crate(&self, &dependencies),
         }
     }
 }

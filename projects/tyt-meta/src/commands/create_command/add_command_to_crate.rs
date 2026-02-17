@@ -1,9 +1,6 @@
 use crate::{
     Dependencies, Error, Result,
-    commands::create_command::{
-        CreateCommand, command_file_template, insert_command_mod, insert_enum_variant,
-        kebab_to_snake_case,
-    },
+    commands::{CreateCommand, create_command},
 };
 
 pub fn add_command_to_crate(
@@ -14,8 +11,8 @@ pub fn add_command_to_crate(
     let command = &cmd.command;
     let name = &cmd.name;
     let description = &cmd.description;
-    let command_snake = kebab_to_snake_case(command);
-    let parent_snake = kebab_to_snake_case(parent);
+    let command_snake = create_command::kebab_to_snake_case(command);
+    let parent_snake = create_command::kebab_to_snake_case(parent);
     let root = deps.workspace_root()?;
     let parent_dir = root.join(format!("projects/tyt-{parent}"));
 
@@ -36,19 +33,19 @@ pub fn add_command_to_crate(
     }
     deps.write(
         &cmd_file,
-        &command_file_template(name, command, description),
+        &create_command::command_file_template(name, command, description),
     )?;
 
     // 2. Update commands/mod.rs
     let mod_path = parent_dir.join("src/commands/mod.rs");
     let mod_contents = deps.read_to_string(&mod_path)?;
-    let new_mod = insert_command_mod(&mod_contents, &command_snake);
+    let new_mod = create_command::insert_command_mod(&mod_contents, &command_snake);
     deps.write(&mod_path, &new_mod)?;
 
     // 3. Update tyt_{parent_snake}.rs
     let enum_path = parent_dir.join(format!("src/tyt_{parent_snake}.rs"));
     let enum_contents = deps.read_to_string(&enum_path)?;
-    let new_enum = insert_enum_variant(&enum_contents, name, command)?;
+    let new_enum = create_command::insert_enum_variant(&enum_contents, name, command)?;
     deps.write(&enum_path, &new_enum)?;
 
     deps.write_stdout(
