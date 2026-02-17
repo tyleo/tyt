@@ -1,0 +1,14 @@
+[package]
+name = "tyt-preferences"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+description = "Preference loading from .tytconfig files for tyt sub-crates."
+
+[dependencies]
+serde = { version = "1", optional = true }
+serde_json = { version = "1", optional = true }
+
+[features]
+default = ["impl"]
+impl = ["dep:serde", "dep:serde_json"]

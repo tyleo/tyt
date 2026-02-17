@@ -10,6 +10,7 @@ members = [
     "projects/ty-math",
     "projects/ty-math-serde",
     "projects/tyt-meta",
+    "projects/tyt-preferences",
 ]
 resolver = "2"
 
@@ -24,3 +25,4 @@ tyt-material = { path = "projects/tyt-material" }
 ty-math = { path = "projects/ty-math" }
 ty-math-serde = { path = "projects/ty-math-serde" }
 tyt-meta = { path = "projects/tyt-meta" }
+tyt-preferences = { path = "projects/tyt-preferences" }
