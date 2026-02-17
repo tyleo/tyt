@@ -27,12 +27,7 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(
-                shell,
-                &mut Cli::command(),
-                "tyt-fs",
-                &mut std::io::stdout(),
-            );
+            clap_complete::generate(shell, &mut Cli::command(), "tyt-fs", &mut std::io::stdout());
         }
         Command::TytFS(cmd) => {
             if let Err(e) = cmd.execute(DependenciesImpl) {
