@@ -1,4 +1,4 @@
-use crate::{Dependencies, Error, Result};
+use crate::{Dependencies, Result};
 use clap::Parser;
 
 /// Finds files using .gitignore style syntax
@@ -11,16 +11,10 @@ pub struct Find {
 
 impl Find {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let mut args = vec!["--files".to_owned()];
-        for pattern in self.patterns {
-            args.push("-g".to_owned());
-            args.push(pattern);
+        let stdout = crate::utilities::find_files(&dependencies, &self.patterns)?;
+        if !stdout.is_empty() {
+            dependencies.write_stdout(&stdout)?;
         }
-
-        match dependencies.exec_rg(args) {
-            Ok(stdout) => dependencies.write_stdout(&stdout),
-            Err(Error::Rg(ref e)) if e.exit_code == Some(1) => Ok(()),
-            Err(e) => Err(e),
-        }
+        Ok(())
     }
 }

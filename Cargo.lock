@@ -279,8 +279,10 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "clap_complete",
+ "serde",
  "tyt-common",
  "tyt-injection",
+ "tyt-preferences",
 ]
 
 [[package]]

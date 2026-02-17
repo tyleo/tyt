@@ -10,12 +10,17 @@ use tyt_common::ExecFailed;
 pub enum Error {
     IO(IOError),
     Rg(ExecFailed),
+    ScratchDirNotConfigured,
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Error::IO(e) => e.fmt(f),
+            Error::ScratchDirNotConfigured => write!(
+                f,
+                "scratch_dir is not configured; add {{\"fs\": {{\"scratch_dir\": \"<path>\"}}}} to .tytconfig"
+            ),
             Error::Rg(ExecFailed {
                 exit_code,
                 stdout,
@@ -41,7 +46,7 @@ impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             Error::IO(e) => Some(e),
-            Error::Rg(_) => None,
+            Error::Rg(_) | Error::ScratchDirNotConfigured => None,
         }
     }
 }
