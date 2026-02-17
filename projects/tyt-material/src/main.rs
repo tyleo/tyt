@@ -15,6 +15,7 @@ enum Command {
     #[command(name = "completion")]
     Completion {
         /// The shell to generate completions for.
+        #[arg(value_name = "shell")]
         shell: Shell,
     },
 

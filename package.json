@@ -7,6 +7,6 @@
     "sideEffects": false,
     "scripts": {
         "build:release-wasm": "cargo build",
-        "install:tyt": "cargo install --path ./projects/tyt"
+        "install:tyt": "cargo install --path ./projects/tyt --features=\"bin\""
     }
 }
