@@ -3,6 +3,7 @@ use crate::Result;
 pub fn insert_enum_variant(contents: &str, name: &str, command: &str) -> Result<String> {
     let lines: Vec<&str> = contents.lines().collect();
     let mut result = Vec::new();
+    let snake_command = command.replace('-', "_");
 
     // 1. Add use import — find the `use crate::commands::{...}` line and add the new name
     let mut i = 0;
@@ -71,9 +72,26 @@ pub fn insert_enum_variant(contents: &str, name: &str, command: &str) -> Result<
         result.insert(insert_pos, format!("use crate::commands::{name};"));
     }
 
-    // 2. Add enum variant — find the closing `}` of the enum and insert before it
-    let mut output = String::new();
+    // 2. Add enum variant and match arm
     let result_lines: Vec<&str> = result.iter().map(|s| s.as_str()).collect();
+
+    // Extract the execute parameter name from the function signature
+    let deps_param = result_lines
+        .iter()
+        .find_map(|l| {
+            let t = l.trim();
+            t.strip_prefix("pub fn execute(self,").map(|after| {
+                after
+                    .split(':')
+                    .next()
+                    .unwrap_or("dependencies")
+                    .trim()
+                    .to_string()
+            })
+        })
+        .unwrap_or_else(|| "dependencies".to_string());
+
+    let mut output = String::new();
     let mut j = 0;
     let mut in_enum = false;
     let mut enum_variant_added = false;
@@ -87,13 +105,28 @@ pub fn insert_enum_variant(contents: &str, name: &str, command: &str) -> Result<
 
         // Detect enum declaration
         if trimmed.starts_with("pub enum ") {
-            in_enum = true;
             enum_name = trimmed
                 .trim_start_matches("pub enum ")
                 .split_whitespace()
                 .next()
                 .unwrap_or("")
                 .to_string();
+
+            // Handle empty enum on one line: `pub enum Foo {}`
+            if trimmed.ends_with("{}") {
+                let prefix = &line[..line.rfind("{}").unwrap()];
+                output.push_str(prefix);
+                output.push_str("{\n");
+                output.push_str(&format!(
+                    "    #[command(name = \"{command}\")]\n    {name}({name}),\n"
+                ));
+                output.push_str("}\n");
+                enum_variant_added = true;
+                j += 1;
+                continue;
+            }
+
+            in_enum = true;
             output.push_str(line);
             output.push('\n');
             j += 1;
@@ -115,9 +148,7 @@ pub fn insert_enum_variant(contents: &str, name: &str, command: &str) -> Result<
                 j += 1;
                 continue;
             }
-            // Check if this line is a variant or attribute
-            // Collect variants to sort
-            // Actually, let's collect all variant blocks (attribute + variant line), sort, insert
+            // Collect all variant blocks (attribute + variant line), sort, insert
             let mut variant_blocks: Vec<(String, String)> = Vec::new(); // (sort_key, block_text)
             let mut current_block = String::new();
             while j < result_lines.len() && result_lines[j].trim() != "}" {
@@ -162,7 +193,23 @@ pub fn insert_enum_variant(contents: &str, name: &str, command: &str) -> Result<
         }
 
         // Detect match self
-        if trimmed.starts_with("match self") || trimmed.starts_with("match self {") {
+        if trimmed.starts_with("match self") {
+            // Handle empty match on one line: `match self {}`
+            if trimmed.ends_with("{}") {
+                let indent = &line[..line.len() - line.trim_start().len()];
+                let prefix = &line[..line.rfind("{}").unwrap()];
+                output.push_str(prefix);
+                output.push_str("{\n");
+                output.push_str(&format!(
+                    "{indent}    {enum_name}::{name}({snake_command}) => {snake_command}.execute({deps_param}),\n"
+                ));
+                output.push_str(indent);
+                output.push_str("}\n");
+                match_arm_added = true;
+                j += 1;
+                continue;
+            }
+
             in_match = true;
             output.push_str(line);
             output.push('\n');
@@ -174,8 +221,9 @@ pub fn insert_enum_variant(contents: &str, name: &str, command: &str) -> Result<
         if in_match && !match_arm_added {
             if trimmed == "}" {
                 // Insert before closing brace
-                let arm =
-                    format!("            {enum_name}::{name}(cmd) => cmd.execute(dependencies),");
+                let arm = format!(
+                    "            {enum_name}::{name}({snake_command}) => {snake_command}.execute({deps_param}),"
+                );
                 output.push_str(&arm);
                 output.push('\n');
                 match_arm_added = true;
@@ -211,7 +259,9 @@ pub fn insert_enum_variant(contents: &str, name: &str, command: &str) -> Result<
             };
             arms.push((
                 name.to_string(),
-                format!("{indent}{enum_name}::{name}(cmd) => cmd.execute(dependencies),"),
+                format!(
+                    "{indent}{enum_name}::{name}({snake_command}) => {snake_command}.execute({deps_param}),"
+                ),
             ));
             arms.sort_by(|a, b| a.0.cmp(&b.0));
             for (_, arm) in &arms {
