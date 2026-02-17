@@ -1,7 +1,7 @@
-use crate::commands::create_command::snake;
+use crate::commands::create_command::kebab_to_snake_case;
 
 pub fn main_rs_template(command: &str, name: &str) -> String {
-    let snake = snake(command);
+    let snake = kebab_to_snake_case(command);
     format!(
         r#"use clap::Parser;
 use tyt_{snake}::{{DependenciesImpl, Tyt{name}}};

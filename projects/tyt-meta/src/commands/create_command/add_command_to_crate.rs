@@ -1,7 +1,8 @@
 use crate::{
     Dependencies, Error, Result,
     commands::create_command::{
-        CreateCommand, command_file_template, insert_command_mod, insert_enum_variant, snake,
+        CreateCommand, command_file_template, insert_command_mod, insert_enum_variant,
+        kebab_to_snake_case,
     },
 };
 
@@ -13,8 +14,8 @@ pub fn add_command_to_crate(
     let command = &cmd.command;
     let name = &cmd.name;
     let description = &cmd.description;
-    let command_snake = snake(command);
-    let parent_snake = snake(parent);
+    let command_snake = kebab_to_snake_case(command);
+    let parent_snake = kebab_to_snake_case(parent);
     let root = deps.workspace_root()?;
     let parent_dir = root.join(format!("projects/tyt-{parent}"));
 

@@ -2,10 +2,10 @@ use crate::{
     Dependencies, Error, Result,
     commands::create_command::{
         CreateCommand, DEPENDENCIES_IMPL_RS_TEMPLATE, DEPENDENCIES_RS_TEMPLATE, ERROR_RS_TEMPLATE,
-        LICENSE_TEMPLATE, RESULT_RS_TEMPLATE, cargo_toml_template, lib_rs_template,
-        main_rs_template, readme_template, snake, tyt_enum_template_empty, wire_tyt_cargo_toml,
-        wire_tyt_dependencies, wire_tyt_dependencies_impl, wire_tyt_error, wire_tyt_tyt_rs,
-        wire_workspace_cargo_toml,
+        LICENSE_TEMPLATE, RESULT_RS_TEMPLATE, cargo_toml_template, kebab_to_snake_case,
+        lib_rs_template, main_rs_template, readme_template, tyt_enum_template_empty,
+        wire_tyt_cargo_toml, wire_tyt_dependencies, wire_tyt_dependencies_impl, wire_tyt_error,
+        wire_tyt_tyt_rs, wire_workspace_cargo_toml,
     },
 };
 
@@ -13,7 +13,7 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     let command = &cmd.command;
     let name = &cmd.name;
     let description = &cmd.description;
-    let snake = snake(command);
+    let snake = kebab_to_snake_case(command);
     let root = deps.workspace_root()?;
     let crate_dir = root.join(format!("projects/tyt-{command}"));
 

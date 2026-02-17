@@ -1,4 +1,4 @@
-use crate::{Dependencies, Result, commands::create_command::snake};
+use crate::{Dependencies, Result, commands::create_command::kebab_to_snake_case};
 use std::path::Path;
 
 pub fn wire_tyt_dependencies(
@@ -12,7 +12,7 @@ pub fn wire_tyt_dependencies(
     let lines: Vec<&str> = contents.lines().collect();
     let mut result: Vec<String> = Vec::new();
 
-    let snake = snake(command);
+    let snake = kebab_to_snake_case(command);
     let use_line = format!("use tyt_{snake}::Dependencies as Tyt{name}Dependencies;");
     let type_line = format!("    type Tyt{name}Dependencies: Tyt{name}Dependencies;");
     let method_line =
