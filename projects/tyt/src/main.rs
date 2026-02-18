@@ -2,13 +2,12 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use tyt::{DependenciesImpl, Tyt};
 
+/// Tyleo's tools — a collection of command-line utilities for working with files, images, materials, and more.
 #[derive(Clone, Debug, Parser)]
 struct Cli {
     #[clap(subcommand)]
     command: Command,
 }
-
-/// Top-level command dispatcher.
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
     /// Generate shell completions.
