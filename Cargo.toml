@@ -1,6 +1,7 @@
 [workspace]
 members = [
-    "projects/tyt",
+    "projects/ty-math-serde",
+    "projects/ty-math",
     "projects/tyt-common",
     "projects/tyt-cubemap",
     "projects/tyt-fbx",
@@ -8,14 +9,15 @@ members = [
     "projects/tyt-image",
     "projects/tyt-injection",
     "projects/tyt-material",
-    "projects/ty-math",
-    "projects/ty-math-serde",
     "projects/tyt-meta",
     "projects/tyt-preferences",
+    "projects/tyt",
 ]
 resolver = "2"
 
 [patch.crates-io]
+ty-math = { path = "projects/ty-math" }
+ty-math-serde = { path = "projects/ty-math-serde" }
 tyt = { path = "projects/tyt" }
 tyt-common = { path = "projects/tyt-common" }
 tyt-cubemap = { path = "projects/tyt-cubemap" }
@@ -24,7 +26,5 @@ tyt-fs = { path = "projects/tyt-fs" }
 tyt-image = { path = "projects/tyt-image" }
 tyt-injection = { path = "projects/tyt-injection" }
 tyt-material = { path = "projects/tyt-material" }
-ty-math = { path = "projects/ty-math" }
-ty-math-serde = { path = "projects/ty-math-serde" }
 tyt-meta = { path = "projects/tyt-meta" }
 tyt-preferences = { path = "projects/tyt-preferences" }
