@@ -3,6 +3,7 @@ name = "ty-math-serde"
 version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
 description = "Serde-compatible parity types for ty-math."
 
 [dependencies]

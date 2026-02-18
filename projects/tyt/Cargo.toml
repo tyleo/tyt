@@ -3,6 +3,7 @@ name = "tyt"
 version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
 description = "A single app, `tyt`, which ties all my command-line tools together."
 autobins = false
 
