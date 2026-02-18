@@ -134,7 +134,7 @@ tyt meta create-command Normalize normalize "Normalize audio levels." --parent a
 ## Building from source
 
 ```sh
-cargo check                     # Type-check the workspace
+cargo check                         # Type-check the workspace
 cargo build -p tyt --features bin   # Build the binary
 ```
 
