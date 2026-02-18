@@ -1,6 +1,7 @@
-use crate::{Dependencies, Error, FsPrefs, Result};
+use crate::{Dependencies, Error, Prefs, Result};
 use std::{
     ffi::OsStr,
+    fs::{self},
     path::{Path, PathBuf},
 };
 use tyt_preferences::Dependencies as _;
@@ -11,7 +12,7 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn create_dir_all(&self, path: &Path) -> Result<()> {
-        Ok(std::fs::create_dir_all(path)?)
+        Ok(fs::create_dir_all(path)?)
     }
 
     fn exec_rg<I, S>(&self, args: I) -> Result<Vec<u8>>
@@ -22,23 +23,25 @@ impl Dependencies for DependenciesImpl {
         tyt_injection::exec_map("rg", args, Error::IO, Error::Rg)
     }
 
-    fn rename(&self, from: &Path, to: &Path) -> Result<()> {
-        Ok(std::fs::rename(from, to)?)
+    fn fs_prefs(&self) -> Result<Prefs> {
+        let prefs_deps = tyt_preferences::DependenciesImpl;
+        let mut prefs: Prefs = tyt_preferences::load_git_prefs(&prefs_deps, "fs")
+            .map_err(Error::IO)?
+            .unwrap_or_default();
+        if let Some(ref scratch_dir) = prefs.scratch_dir {
+            let scratch_path = PathBuf::from(scratch_dir);
+            if !scratch_path.is_absolute()
+                && let Some(git_root) = prefs_deps.git_root_dir().map_err(Error::IO)?
+            {
+                prefs.scratch_dir =
+                    Some(git_root.join(scratch_path).to_string_lossy().into_owned());
+            }
+        }
+        Ok(prefs)
     }
 
-    fn scratch_dir(&self) -> Result<Option<PathBuf>> {
-        let prefs_deps = tyt_preferences::DependenciesImpl;
-        let prefs: Option<FsPrefs> =
-            tyt_preferences::load_git_prefs(&prefs_deps, "fs").map_err(Error::IO)?;
-        let Some(scratch_dir) = prefs.and_then(|p| p.scratch_dir) else {
-            return Ok(None);
-        };
-        let scratch_path = PathBuf::from(&scratch_dir);
-        if scratch_path.is_absolute() {
-            return Ok(Some(scratch_path));
-        }
-        let git_root = prefs_deps.git_root_dir().map_err(Error::IO)?;
-        Ok(git_root.map(|root| root.join(scratch_path)))
+    fn rename(&self, from: &Path, to: &Path) -> Result<()> {
+        Ok(fs::rename(from, to)?)
     }
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {

@@ -1,8 +1,5 @@
-use crate::Result;
-use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
-};
+use crate::{Prefs, Result};
+use std::{ffi::OsStr, path::Path};
 
 /// Dependencies for this crate's operations.
 pub trait Dependencies {
@@ -15,11 +12,11 @@ pub trait Dependencies {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>;
 
+    /// Returns the preferences for this crate.
+    fn fs_prefs(&self) -> Result<Prefs>;
+
     /// Moves a file from one path to another.
     fn rename(&self, from: &Path, to: &Path) -> Result<()>;
-
-    /// Returns the configured scratch directory, or `None` if not configured.
-    fn scratch_dir(&self) -> Result<Option<PathBuf>>;
 
     /// Writes bytes to stdout.
     fn write_stdout(&self, contents: &[u8]) -> Result<()>;

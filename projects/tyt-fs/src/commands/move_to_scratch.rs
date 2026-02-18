@@ -12,9 +12,12 @@ pub struct MoveToScratch {
 
 impl MoveToScratch {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let scratch_dir = dependencies
-            .scratch_dir()?
-            .ok_or(Error::ScratchDirNotConfigured)?;
+        let scratch_dir = PathBuf::from(
+            dependencies
+                .fs_prefs()?
+                .scratch_dir
+                .ok_or(Error::ScratchDirNotConfigured)?,
+        );
 
         let stdout = utilities::find_files(&dependencies, &self.patterns)?;
         if stdout.is_empty() {
