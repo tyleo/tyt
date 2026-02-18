@@ -65,7 +65,7 @@ Options:
 mkdir -p ~/.local/share/bash-completion/completions
 tyt completion bash > ~/.local/share/bash-completion/completions/tyt
 
-# Zsh (user-local site-functions)
+# Zsh
 mkdir -p ~/.zsh/completions
 tyt completion zsh > ~/.zsh/completions/_tyt
 # Then ensure this is in your .zshrc *before* compinit:
