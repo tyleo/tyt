@@ -25,6 +25,8 @@ Some commands shell out to external tools. Install the ones you need:
 tyt <command> <subcommand> [options]
 ```
 
+Some examples:
+
 ```sh
 tyt cubemap faces-to-equirect skybox          # Stitch cube faces into a panorama
 tyt fbx hierarchy model.fbx                   # Print the object hierarchy of an FBX file
@@ -34,7 +36,25 @@ tyt material create-mse out --prefix my-tex   # Pack an MSE texture from materia
 tyt completion zsh                            # Generate shell completions
 ```
 
-Run `tyt <command> --help` for full details on any subcommand.
+Run `tyt <command> --help` for full details on any subcommand:
+
+```
+> tyt fbx --help
+Operations on FBX files
+
+Usage: tyt fbx <command>
+
+Commands:
+  create-point-cloud  Creates a cloud of random points on a mesh surface within an FBX file
+  extract             Extracts the first direct child mesh under `parent_mesh_name` from the input FBX file, unparents it, keeping the world transform, and deletes everything else so the file only contains the extracted mesh. Finally, renames the mesh object and its datablock to `output-mesh-name`
+  hierarchy           Prints the FBX object hierarchy as a tree with box-drawing glyphs, showing each object's name and type
+  reduce              Collapses all mesh objects in the input FBX into a single joined mesh. Clears parenting while keeping world transforms, deletes now-unused empties, joins all meshes, and renames the result to `output-mesh-name`
+  rename              Renames mesh objects and their datablocks in the input FBX file. If exactly one mesh exists it is renamed to `output-mesh-name`; if multiple exist they are renamed to `output-mesh-name`-001, -002, etc
+  help                Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help
+```
 
 ### Shell completions
 
