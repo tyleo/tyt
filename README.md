@@ -41,17 +41,38 @@ Run `tyt <command> --help` for full details on any subcommand.
 `tyt completion <shell>` prints completions to stdout. Install them for your shell:
 
 ```sh
-# Bash
+# Bash (bash-completion v2 user-local)
+mkdir -p ~/.local/share/bash-completion/completions
 tyt completion bash > ~/.local/share/bash-completion/completions/tyt
 
-# Zsh (add the completions directory to your fpath in .zshrc if needed)
-tyt completion zsh > ~/.zfunc/_tyt
+# Zsh (user-local site-functions)
+mkdir -p ~/.zsh/completions
+tyt completion zsh > ~/.zsh/completions/_tyt
+# Then ensure this is in your .zshrc *before* compinit:
+#   fpath=("$HOME/.zsh/completions" $fpath)
+
+# Zsh (Oh My Zsh)
+mkdir -p ~/.oh-my-zsh/custom/completions
+tyt completion zsh > ~/.oh-my-zsh/custom/completions/_tyt
+# If completions don't show up, ensure this is in your .zshrc *before* compinit:
+#   fpath=("$HOME/.oh-my-zsh/custom/completions" $fpath)
 
 # Fish
+mkdir -p ~/.config/fish/completions
 tyt completion fish > ~/.config/fish/completions/tyt.fish
 
-# PowerShell (add to your $PROFILE)
-tyt completion powershell >> $PROFILE
+# PowerShell
+# recommended: keep completions in a separate file and dot-source it from your $PROFILE
+$dir = Join-Path $HOME ".config\powershell"
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+
+tyt completion powershell | Set-Content -Encoding UTF8 (Join-Path $dir "tyt-completions.ps1")
+
+if (!(Test-Path $PROFILE)) { New-Item -ItemType File -Force -Path $PROFILE | Out-Null }
+$line = ". `"$dir\tyt-completions.ps1`""
+if (-not (Select-String -Quiet -Path $PROFILE -Pattern [regex]::Escape($line))) {
+  Add-Content -Path $PROFILE -Value $line
+}
 ```
 
 ## Configuration
