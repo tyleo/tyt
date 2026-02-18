@@ -223,11 +223,11 @@ dependencies = [
 
 [[package]]
 name = "ty-math"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "ty-math-serde"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "ty-math",
@@ -235,7 +235,7 @@ dependencies = [
 
 [[package]]
 name = "tyt"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -250,11 +250,11 @@ dependencies = [
 
 [[package]]
 name = "tyt-common"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "tyt-cubemap"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-fbx"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -275,7 +275,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-fs"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-image"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -297,7 +297,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-injection"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-material"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -319,7 +319,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-meta"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "clap_complete",
@@ -329,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-preferences"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
