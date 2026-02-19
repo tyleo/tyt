@@ -8,7 +8,7 @@ description = "Meta-tools for scaffolding new tyt sub-crates and commands."
 autobins = false
 
 [[bin]]
-name = "tyt-meta"
+name = "meta"
 path = "src/main.rs"
 required-features = ["bin"]
 

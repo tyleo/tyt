@@ -1,4 +1,4 @@
-# vmax
+# tyt-vmax
 
 Commands for working with [Voxel Max](https://www.voxelmax.com/) `.vmax` directories.
 

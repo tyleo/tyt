@@ -8,7 +8,7 @@ description = "Command-line tools for working with cubemaps."
 autobins = false
 
 [[bin]]
-name = "tyt-cubemap"
+name = "cubemap"
 path = "src/main.rs"
 required-features = ["bin"]
 

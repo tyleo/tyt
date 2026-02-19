@@ -30,7 +30,7 @@ fn main() {
             clap_complete::generate(
                 shell,
                 &mut Cli::command(),
-                "tyt-vmax",
+                "vmax",
                 &mut std::io::stdout(),
             );
         }

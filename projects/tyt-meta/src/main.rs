@@ -30,7 +30,7 @@ fn main() {
             clap_complete::generate(
                 shell,
                 &mut Cli::command(),
-                "tyt-meta",
+                "meta",
                 &mut std::io::stdout(),
             );
         }

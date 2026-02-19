@@ -8,7 +8,7 @@ description = "Command-line tools for working with FBX files."
 autobins = false
 
 [[bin]]
-name = "tyt-fbx"
+name = "fbx"
 path = "src/main.rs"
 required-features = ["bin"]
 

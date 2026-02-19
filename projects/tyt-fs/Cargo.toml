@@ -8,7 +8,7 @@ description = "Operations on the filesystem"
 autobins = false
 
 [[bin]]
-name = "tyt-fs"
+name = "fs"
 path = "src/main.rs"
 required-features = ["bin"]
 

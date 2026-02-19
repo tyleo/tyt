@@ -8,7 +8,7 @@ description = "Command-line tools for working with materials."
 autobins = false
 
 [[bin]]
-name = "tyt-material"
+name = "material"
 path = "src/main.rs"
 required-features = ["bin"]
 

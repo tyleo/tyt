@@ -7,7 +7,7 @@ description = "Commands for working with Voxel Max."
 autobins = false
 
 [[bin]]
-name = "tyt-vmax"
+name = "vmax"
 path = "src/main.rs"
 required-features = ["bin"]
 

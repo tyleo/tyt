@@ -35,7 +35,7 @@ fn main() {{
             clap_complete::generate(
                 shell,
                 &mut Cli::command(),
-                "tyt-{command}",
+                "{command}",
                 &mut std::io::stdout(),
             );
         }}

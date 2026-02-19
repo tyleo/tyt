@@ -9,7 +9,7 @@ description = "{description}"
 autobins = false
 
 [[bin]]
-name = "tyt-{command}"
+name = "{command}"
 path = "src/main.rs"
 required-features = ["bin"]
 

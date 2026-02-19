@@ -8,7 +8,7 @@ description = "Command-line tools for working with images."
 autobins = false
 
 [[bin]]
-name = "tyt-image"
+name = "image"
 path = "src/main.rs"
 required-features = ["bin"]
 

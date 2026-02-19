@@ -30,7 +30,7 @@ fn main() {
             clap_complete::generate(
                 shell,
                 &mut Cli::command(),
-                "tyt-cubemap",
+                "cubemap",
                 &mut std::io::stdout(),
             );
         }
