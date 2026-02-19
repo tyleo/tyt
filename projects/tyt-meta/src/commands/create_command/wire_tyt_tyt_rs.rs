@@ -46,7 +46,6 @@ pub fn wire_tyt_tyt_rs(
         }
         if !use_inserted
             && !trimmed.starts_with("use ")
-            && !trimmed.is_empty()
             && result.iter().any(|l| l.starts_with("use "))
         {
             result.push(use_line.clone());

@@ -61,6 +61,10 @@ pub fn wire_tyt_dependencies(
 
             // Transition from types to methods
             if !type_inserted && trimmed.starts_with("fn ") {
+                // The blank line separator is already in result; insert type before it.
+                if result.last().map_or(false, |l| l.trim().is_empty()) {
+                    result.pop();
+                }
                 result.push(type_line.clone());
                 result.push(String::new());
                 type_inserted = true;
