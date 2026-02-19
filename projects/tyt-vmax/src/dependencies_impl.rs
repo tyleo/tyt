@@ -12,7 +12,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxScene> {
-        let scene_serde: VMaxSceneSerde = serde_json::from_slice(bytes)?;
+        let scene_serde: VMaxSceneSerde = tyt_injection::parse_json(bytes)?;
         Ok(scene_serde.into())
     }
 
@@ -27,14 +27,14 @@ impl Dependencies for DependenciesImpl {
         object_ids: &[&str],
         new_name: &str,
     ) -> Result<Vec<u8>> {
-        let mut value: serde_json::Value = serde_json::from_slice(scene_bytes)?;
+        let mut value: tyt_injection::serde_json::Value = tyt_injection::parse_json(scene_bytes)?;
 
         if let Some(groups) = value.get_mut("groups").and_then(|v| v.as_array_mut()) {
             for group_val in groups {
                 if let Some(id) = group_val.get("id").and_then(|v| v.as_str())
                     && group_ids.contains(&id)
                 {
-                    group_val["name"] = serde_json::Value::String(new_name.to_owned());
+                    group_val["name"] = tyt_injection::serde_json::Value::String(new_name.to_owned());
                 }
             }
         }
@@ -44,12 +44,12 @@ impl Dependencies for DependenciesImpl {
                 if let Some(id) = object_val.get("id").and_then(|v| v.as_str())
                     && object_ids.contains(&id)
                 {
-                    object_val["n"] = serde_json::Value::String(new_name.to_owned());
+                    object_val["n"] = tyt_injection::serde_json::Value::String(new_name.to_owned());
                 }
             }
         }
 
-        Ok(serde_json::to_vec_pretty(&value)?)
+        Ok(tyt_injection::serialize_json_pretty(&value)?)
     }
 
     fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()> {
