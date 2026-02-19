@@ -3,6 +3,7 @@ name = "tyt-vmax"
 version = "0.1.2"
 edition = "2024"
 license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
 description = "Commands for working with Voxel Max."
 autobins = false
 
