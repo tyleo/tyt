@@ -13,6 +13,7 @@ cargo check
 - Prefer `#[derive(Default)]` over manual `impl Default` when all field defaults match the type's inherent default
 - One public struct/trait/enum per file, file named to match the type in snake_case
 - Doc comments (`///`) on all public items
+- `#[arg]` attributes always start with `value_name` (e.g., `#[arg(value_name = "input-fbx")]`, `#[arg(value_name = "max-iterations", long)]`)
 
 ## Module structure
 
