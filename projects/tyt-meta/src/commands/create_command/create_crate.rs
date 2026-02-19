@@ -96,7 +96,7 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     deps.write_stdout(
         format!(
             "Created tyt-{command} crate and wired into workspace.\n\
-             Next: add commands with `tyt-meta create-command <Name> <command> <desc> --parent {command}`\n"
+             Next: add commands with `tyt meta create-command <Name> <command> <desc> --parent {command}`\n"
         )
         .as_bytes(),
     )?;
