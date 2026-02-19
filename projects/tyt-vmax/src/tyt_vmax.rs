@@ -1,4 +1,4 @@
-use crate::commands::{Hierarchy, RenameNode};
+use crate::commands::{Hierarchy, Pack, RenameNode};
 use clap::Subcommand;
 
 /// Commands for working with Voxel Max.
@@ -7,6 +7,8 @@ use clap::Subcommand;
 pub enum TytVMax {
     #[command(name = "hierarchy")]
     Hierarchy(Hierarchy),
+    #[command(name = "pack")]
+    Pack(Pack),
     #[command(name = "rename-node")]
     RenameNode(RenameNode),
 }
@@ -15,6 +17,7 @@ impl TytVMax {
     pub fn execute(self, _dependencies: impl crate::Dependencies) -> crate::Result<()> {
         match self {
             TytVMax::Hierarchy(hierarchy) => hierarchy.execute(_dependencies),
+            TytVMax::Pack(pack) => pack.execute(_dependencies),
             TytVMax::RenameNode(rename_node) => rename_node.execute(_dependencies),
         }
     }

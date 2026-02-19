@@ -1,5 +1,5 @@
 use crate::{Dependencies, Result};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use vmax::VMaxScene;
 use vmax_serde::VMaxSceneSerde;
 
@@ -7,8 +7,28 @@ use vmax_serde::VMaxSceneSerde;
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
+    fn copy_dir(&self, src: &Path, dst: &Path) -> Result<()> {
+        Ok(tyt_injection::copy_dir(src, dst)?)
+    }
+
+    fn list_dir(&self, path: &Path) -> Result<Vec<PathBuf>> {
+        Ok(tyt_injection::list_dir(path)?)
+    }
+
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
         Ok(tyt_injection::match_glob(pattern, candidates)?)
+    }
+
+    fn pack_scene_json(&self, scene_bytes: &[u8]) -> Result<Vec<u8>> {
+        let mut value: tyt_injection::serde_json::Value = tyt_injection::parse_json(scene_bytes)?;
+
+        if let Some(objects) = value.get_mut("objects").and_then(|v| v.as_array_mut()) {
+            for object_val in objects {
+                object_val["hist"] = tyt_injection::serde_json::Value::String(String::new());
+            }
+        }
+
+        Ok(tyt_injection::serialize_json_pretty(&value)?)
     }
 
     fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxScene> {
@@ -18,6 +38,10 @@ impl Dependencies for DependenciesImpl {
 
     fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
         Ok(tyt_injection::read_file(path)?)
+    }
+
+    fn remove_file(&self, path: &Path) -> Result<()> {
+        Ok(tyt_injection::remove_file(path)?)
     }
 
     fn rename_scene_nodes_json(
@@ -34,7 +58,8 @@ impl Dependencies for DependenciesImpl {
                 if let Some(id) = group_val.get("id").and_then(|v| v.as_str())
                     && group_ids.contains(&id)
                 {
-                    group_val["name"] = tyt_injection::serde_json::Value::String(new_name.to_owned());
+                    group_val["name"] =
+                        tyt_injection::serde_json::Value::String(new_name.to_owned());
                 }
             }
         }
