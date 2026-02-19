@@ -47,7 +47,20 @@ impl CreatePointCloud {
         let stdout =
             dependencies.exec_temp_blender_script(&blender::EXTRACT_FACES_AND_VERTICES_PY, args)?;
 
-        let (vertices, triangles) = dependencies.parse_mesh_json(&stdout)?;
+        // Blender may emit non-JSON lines to stdout (e.g. "FBX version: 7400",
+        // "Blender quit"). Extract the JSON object spanning the first '{' to the
+        // last '}'.
+        let json_start = stdout
+            .iter()
+            .position(|&b| b == b'{')
+            .ok_or_else(|| parse_error("no '{' found in Blender output"))?;
+        let json_end = stdout
+            .iter()
+            .rposition(|&b| b == b'}')
+            .ok_or_else(|| parse_error("no '}' found in Blender output"))?;
+        let json = &stdout[json_start..=json_end];
+
+        let (vertices, triangles) = dependencies.parse_mesh_json(json)?;
         let points = if surface {
             sample_surface_points(&vertices, &triangles, num_points)?
         } else {

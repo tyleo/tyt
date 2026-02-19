@@ -10,20 +10,7 @@ struct MeshData {
 }
 
 /// Parses JSON mesh data (vertices + triangles) from raw bytes.
-///
-/// Blender may emit non-JSON lines to stdout before and after the JSON object.
-/// This function extracts the substring from the first `{` to the last `}` before parsing.
-pub fn parse_mesh_json(bytes: &[u8]) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>)> {
-    let start = bytes
-        .iter()
-        .position(|&b| b == b'{')
-        .ok_or_else(|| std::io::Error::new(ErrorKind::InvalidData, "no '{' found in output"))?;
-    let end = bytes
-        .iter()
-        .rposition(|&b| b == b'}')
-        .ok_or_else(|| std::io::Error::new(ErrorKind::InvalidData, "no '}' found in output"))?;
-    let json = &bytes[start..=end];
-
+pub fn parse_mesh_json(json: &[u8]) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>)> {
     let data: MeshData =
         serde_json::from_slice(json).map_err(|e| std::io::Error::new(ErrorKind::InvalidData, e))?;
 
