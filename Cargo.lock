@@ -355,6 +355,7 @@ dependencies = [
 name = "tyt-injection"
 version = "0.1.1"
 dependencies = [
+ "globset",
  "serde",
  "serde_json",
  "ty-math",
@@ -397,7 +398,6 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "clap_complete",
- "globset",
  "serde_json",
  "tyt-common",
  "tyt-injection",

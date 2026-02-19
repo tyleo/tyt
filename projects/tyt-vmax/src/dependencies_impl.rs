@@ -8,8 +8,7 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
-        let glob = globset::Glob::new(pattern)?.compile_matcher();
-        Ok(candidates.iter().map(|c| glob.is_match(c)).collect())
+        Ok(tyt_injection::match_glob(pattern, candidates)?)
     }
 
     fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxScene> {
@@ -32,20 +31,20 @@ impl Dependencies for DependenciesImpl {
 
         if let Some(groups) = value.get_mut("groups").and_then(|v| v.as_array_mut()) {
             for group_val in groups {
-                if let Some(id) = group_val.get("id").and_then(|v| v.as_str()) {
-                    if group_ids.contains(&id) {
-                        group_val["name"] = serde_json::Value::String(new_name.to_owned());
-                    }
+                if let Some(id) = group_val.get("id").and_then(|v| v.as_str())
+                    && group_ids.contains(&id)
+                {
+                    group_val["name"] = serde_json::Value::String(new_name.to_owned());
                 }
             }
         }
 
         if let Some(objects) = value.get_mut("objects").and_then(|v| v.as_array_mut()) {
             for object_val in objects {
-                if let Some(id) = object_val.get("id").and_then(|v| v.as_str()) {
-                    if object_ids.contains(&id) {
-                        object_val["n"] = serde_json::Value::String(new_name.to_owned());
-                    }
+                if let Some(id) = object_val.get("id").and_then(|v| v.as_str())
+                    && object_ids.contains(&id)
+                {
+                    object_val["n"] = serde_json::Value::String(new_name.to_owned());
                 }
             }
         }
