@@ -23,6 +23,11 @@ impl TyVector3 {
         }
     }
 
+    /// Returns the dot product of `self` and `other`.
+    pub fn dot(&self, other: &Self) -> f64 {
+        self.x * other.x + self.y * other.y + self.z * other.z
+    }
+
     /// Returns the Euclidean length of this vector.
     pub fn magnitude(&self) -> f64 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
