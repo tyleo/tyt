@@ -12,10 +12,10 @@ pub enum TytFS {
 }
 
 impl TytFS {
-    pub fn execute(self, _dependencies: impl crate::Dependencies) -> crate::Result<()> {
+    pub fn execute(self, dependencies: impl crate::Dependencies) -> crate::Result<()> {
         match self {
-            TytFS::Find(find) => find.execute(_dependencies),
-            TytFS::MoveToScratch(move_to_scratch) => move_to_scratch.execute(_dependencies),
+            TytFS::Find(find) => find.execute(dependencies),
+            TytFS::MoveToScratch(move_to_scratch) => move_to_scratch.execute(dependencies),
         }
     }
 }

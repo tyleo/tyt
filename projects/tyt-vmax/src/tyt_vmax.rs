@@ -14,11 +14,11 @@ pub enum TytVMax {
 }
 
 impl TytVMax {
-    pub fn execute(self, _dependencies: impl crate::Dependencies) -> crate::Result<()> {
+    pub fn execute(self, dependencies: impl crate::Dependencies) -> crate::Result<()> {
         match self {
-            TytVMax::Hierarchy(hierarchy) => hierarchy.execute(_dependencies),
-            TytVMax::Pack(pack) => pack.execute(_dependencies),
-            TytVMax::RenameNode(rename_node) => rename_node.execute(_dependencies),
+            TytVMax::Hierarchy(hierarchy) => hierarchy.execute(dependencies),
+            TytVMax::Pack(pack) => pack.execute(dependencies),
+            TytVMax::RenameNode(rename_node) => rename_node.execute(dependencies),
         }
     }
 }
