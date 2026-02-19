@@ -2,13 +2,13 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use tyt_fs::{DependenciesImpl, TytFS};
 
+/// Operations on the filesystem.
 #[derive(Clone, Debug, Parser)]
 struct Cli {
     #[clap(subcommand)]
     command: Command,
 }
 
-/// Top-level command dispatcher.
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
     /// Generate shell completions.

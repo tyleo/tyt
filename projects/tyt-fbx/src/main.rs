@@ -2,13 +2,13 @@ use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use tyt_fbx::{DependenciesImpl, TytFbx};
 
+/// Operations on FBX files.
 #[derive(Clone, Debug, Parser)]
 struct Cli {
     #[clap(subcommand)]
     command: Command,
 }
 
-/// Top-level command dispatcher.
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
     /// Generate shell completions.

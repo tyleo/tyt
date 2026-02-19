@@ -1,19 +1,19 @@
 use crate::commands::create_command;
 
-pub fn main_rs_template(command: &str, name: &str) -> String {
+pub fn main_rs_template(command: &str, name: &str, description: &str) -> String {
     let snake = create_command::kebab_to_snake_case(command);
     format!(
         r#"use clap::{{CommandFactory, Parser, Subcommand}};
 use clap_complete::Shell;
 use tyt_{snake}::{{DependenciesImpl, Tyt{name}}};
 
+/// {description}
 #[derive(Clone, Debug, Parser)]
 struct Cli {{
     #[clap(subcommand)]
     command: Command,
 }}
 
-/// Top-level command dispatcher.
 #[derive(Clone, Debug, Subcommand)]
 enum Command {{
     /// Generate shell completions.

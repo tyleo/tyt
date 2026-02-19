@@ -43,7 +43,7 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     // 5. src/main.rs
     deps.write(
         src.join("main.rs"),
-        &create_command::main_rs_template(command, name),
+        &create_command::main_rs_template(command, name, description),
     )?;
 
     // 6. src/dependencies.rs
