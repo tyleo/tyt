@@ -6,6 +6,7 @@ use tyt_fs::TytFS;
 use tyt_image::TytImage;
 use tyt_material::TytMaterial;
 use tyt_meta::TytMeta;
+use tyt_vmax::TytVMax;
 
 /// The main command for `tyt`, which ties all my command-line tools together.
 #[derive(Clone, Debug, Subcommand)]
@@ -46,6 +47,12 @@ pub enum Tyt {
         #[clap(subcommand)]
         meta: TytMeta,
     },
+
+    #[command(name = "vmax")]
+    VMax {
+        #[clap(subcommand)]
+        vmax: TytVMax,
+    },
 }
 
 impl Tyt {
@@ -57,6 +64,7 @@ impl Tyt {
             Tyt::Image { image } => image.execute(deps.tyt_image_dependencies())?,
             Tyt::Material { material } => material.execute(deps.tyt_material_dependencies())?,
             Tyt::Meta { meta } => meta.execute(deps.tyt_meta_dependencies())?,
+            Tyt::VMax { vmax } => vmax.execute(deps.tyt_vmax_dependencies())?,
         }
 
         Ok(())

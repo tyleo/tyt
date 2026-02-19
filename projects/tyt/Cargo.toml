@@ -22,8 +22,9 @@ tyt-fs = { version = "0.1.0" }
 tyt-image = { version = "0.1.0" }
 tyt-material = { version = "0.1.0" }
 tyt-meta = { version = "0.1.0" }
+tyt-vmax = { version = "0.1.0" }
 
 [features]
 default = ["impl"]
-impl = ["tyt-cubemap/impl", "tyt-fbx/impl", "tyt-fs/impl", "tyt-image/impl", "tyt-material/impl", "tyt-meta/impl"]
+impl = ["tyt-cubemap/impl", "tyt-fbx/impl", "tyt-fs/impl", "tyt-image/impl", "tyt-material/impl", "tyt-meta/impl", "tyt-vmax/impl"]
 bin = ["impl", "dep:clap_complete"]

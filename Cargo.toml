@@ -12,6 +12,9 @@ members = [
     "projects/tyt-meta",
     "projects/tyt-preferences",
     "projects/tyt",
+    "projects/tyt-vmax",
+    "projects/vmax-serde",
+    "projects/vmax",
 ]
 resolver = "2"
 
@@ -28,3 +31,6 @@ tyt-injection = { path = "projects/tyt-injection" }
 tyt-material = { path = "projects/tyt-material" }
 tyt-meta = { path = "projects/tyt-meta" }
 tyt-preferences = { path = "projects/tyt-preferences" }
+tyt-vmax = { path = "projects/tyt-vmax" }
+vmax = { path = "projects/vmax" }
+vmax-serde = { path = "projects/vmax-serde" }

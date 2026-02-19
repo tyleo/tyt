@@ -6,6 +6,7 @@ use tyt_image::Error as ImageError;
 use tyt_material::Error as MaterialError;
 use tyt_meta::Error as MetaError;
 
+use tyt_vmax::Error as VMaxError;
 #[derive(Debug)]
 pub enum Error {
     Cubemap(CubemapError),
@@ -14,6 +15,7 @@ pub enum Error {
     Image(ImageError),
     Material(MaterialError),
     Meta(MetaError),
+    VMax(VMaxError),
 }
 
 impl fmt::Display for Error {
@@ -25,6 +27,7 @@ impl fmt::Display for Error {
             Error::Image(e) => e.fmt(f),
             Error::Material(e) => e.fmt(f),
             Error::Meta(e) => e.fmt(f),
+            Error::VMax(e) => e.fmt(f),
         }
     }
 }
@@ -38,6 +41,7 @@ impl std::error::Error for Error {
             Error::Image(e) => Some(e),
             Error::Material(e) => Some(e),
             Error::Meta(e) => Some(e),
+            Error::VMax(e) => Some(e),
         }
     }
 }
@@ -75,5 +79,11 @@ impl From<MaterialError> for Error {
 impl From<MetaError> for Error {
     fn from(e: MetaError) -> Self {
         Error::Meta(e)
+    }
+}
+
+impl From<VMaxError> for Error {
+    fn from(e: VMaxError) -> Self {
+        Error::VMax(e)
     }
 }

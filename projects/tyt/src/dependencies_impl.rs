@@ -5,6 +5,7 @@ use tyt_fs::DependenciesImpl as TytFSDependenciesImpl;
 use tyt_image::DependenciesImpl as TytImageDependenciesImpl;
 use tyt_material::DependenciesImpl as TytMaterialDependenciesImpl;
 use tyt_meta::DependenciesImpl as TytMetaDependenciesImpl;
+use tyt_vmax::DependenciesImpl as TytVMaxDependenciesImpl;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -16,6 +17,7 @@ impl Dependencies for DependenciesImpl {
     type TytImageDependencies = TytImageDependenciesImpl;
     type TytMaterialDependencies = TytMaterialDependenciesImpl;
     type TytMetaDependencies = TytMetaDependenciesImpl;
+    type TytVMaxDependencies = TytVMaxDependenciesImpl;
 
     fn tyt_cubemap_dependencies(&self) -> Self::TytCubemapDependencies {
         TytCubemapDependenciesImpl
@@ -39,5 +41,9 @@ impl Dependencies for DependenciesImpl {
 
     fn tyt_meta_dependencies(&self) -> Self::TytMetaDependencies {
         TytMetaDependenciesImpl
+    }
+
+    fn tyt_vmax_dependencies(&self) -> Self::TytVMaxDependencies {
+        TytVMaxDependenciesImpl
     }
 }
