@@ -63,7 +63,11 @@ fn print_tree(
     for (i, &(name, group_id)) in nodes.iter().enumerate() {
         let is_last = i + 1 == len;
         let connector = if is_last { "\u{2514}" } else { "\u{251C}" };
-        let kind = if group_id.is_some() { "Group" } else { "Object" };
+        let kind = if group_id.is_some() {
+            "Group"
+        } else {
+            "Object"
+        };
         output.push_str(&format!("{prefix}{connector} {name} ({kind})\n"));
 
         if let Some(id) = group_id {

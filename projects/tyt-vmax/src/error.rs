@@ -7,6 +7,7 @@ use std::{
 /// An error from this crate.
 #[derive(Debug)]
 pub enum Error {
+    Glob(globset::Error),
     IO(IOError),
     Json(serde_json::Error),
 }
@@ -14,6 +15,7 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
+            Error::Glob(e) => e.fmt(f),
             Error::IO(e) => e.fmt(f),
             Error::Json(e) => e.fmt(f),
         }
@@ -23,9 +25,16 @@ impl Display for Error {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
+            Error::Glob(e) => Some(e),
             Error::IO(e) => Some(e),
             Error::Json(e) => Some(e),
         }
+    }
+}
+
+impl From<globset::Error> for Error {
+    fn from(e: globset::Error) -> Self {
+        Error::Glob(e)
     }
 }
 
