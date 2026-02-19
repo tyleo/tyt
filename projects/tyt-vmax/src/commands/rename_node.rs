@@ -1,8 +1,6 @@
 use crate::{Dependencies, Result};
 use clap::Parser;
 use std::{collections::HashMap, path::PathBuf};
-use vmax::VMaxScene;
-use vmax_serde::VMaxSceneSerde;
 
 /// Renames nodes in the Voxel Max scene hierarchy matching a glob pattern.
 #[derive(Clone, Debug, Parser)]
@@ -25,13 +23,7 @@ impl RenameNode {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let scene_path = self.input_vmax.join("scene.json");
         let bytes = dependencies.read_file(&scene_path)?;
-
-        // Parse as typed scene for hierarchy path building.
-        let scene_serde: VMaxSceneSerde = serde_json::from_slice(&bytes)?;
-        let scene: VMaxScene = scene_serde.into();
-
-        // Parse as Value for lossless round-trip mutation.
-        let mut value: serde_json::Value = serde_json::from_slice(&bytes)?;
+        let scene = dependencies.parse_scene(&bytes)?;
 
         // Build a map from group id -> (name, parent_id) for path construction.
         let group_info: HashMap<&str, (&str, Option<&str>)> = scene
@@ -62,59 +54,50 @@ impl RenameNode {
         } else {
             format!("**/{}", self.pattern)
         };
-        let glob = globset::Glob::new(&pattern)?.compile_matcher();
 
-        // Collect matches: (node_path, id, is_group).
-        let mut matches: Vec<(String, &str, bool)> = Vec::new();
-
+        // Build all candidate paths.
+        let mut candidates: Vec<(String, &str, bool)> = Vec::new();
         for group in &scene.groups {
             let path = build_path(&group.name, group.parent_id.as_deref());
-            if glob.is_match(&path) {
-                matches.push((path, &group.id, true));
-            }
+            candidates.push((path, &group.id, true));
         }
-
         for object in &scene.objects {
             let path = build_path(&object.name, object.parent_id.as_deref());
-            if glob.is_match(&path) {
-                matches.push((path, &object.id, false));
-            }
+            candidates.push((path, &object.id, false));
         }
 
-        // Apply renames to the serde_json::Value.
-        if let Some(groups) = value.get_mut("groups").and_then(|v| v.as_array_mut()) {
-            for group_val in groups {
-                if let Some(id) = group_val.get("id").and_then(|v| v.as_str()) {
-                    if matches
-                        .iter()
-                        .any(|(_, mid, is_group)| *is_group && *mid == id)
-                    {
-                        group_val["name"] = serde_json::Value::String(self.new_name.clone());
-                    }
+        let candidate_paths: Vec<&str> = candidates.iter().map(|(p, _, _)| p.as_str()).collect();
+        let matched = dependencies.match_glob(&pattern, &candidate_paths)?;
+
+        // Collect matched group/object IDs.
+        let mut group_ids: Vec<&str> = Vec::new();
+        let mut object_ids: Vec<&str> = Vec::new();
+        let mut renamed: Vec<(&str, bool)> = Vec::new();
+
+        for (i, &is_match) in matched.iter().enumerate() {
+            if is_match {
+                let (_, id, is_group) = &candidates[i];
+                if *is_group {
+                    group_ids.push(id);
+                } else {
+                    object_ids.push(id);
                 }
+                renamed.push((candidate_paths[i], *is_group));
             }
         }
 
-        if let Some(objects) = value.get_mut("objects").and_then(|v| v.as_array_mut()) {
-            for object_val in objects {
-                if let Some(id) = object_val.get("id").and_then(|v| v.as_str()) {
-                    if matches
-                        .iter()
-                        .any(|(_, mid, is_group)| !*is_group && *mid == id)
-                    {
-                        object_val["n"] = serde_json::Value::String(self.new_name.clone());
-                    }
-                }
-            }
-        }
-
-        // Write back.
-        let output = serde_json::to_vec_pretty(&value)?;
+        // Apply renames via lossless JSON round-trip.
+        let output = dependencies.rename_scene_nodes_json(
+            &bytes,
+            &group_ids,
+            &object_ids,
+            &self.new_name,
+        )?;
         dependencies.write_file(&scene_path, &output)?;
 
         // Print renames.
         let mut stdout_buf = String::new();
-        for (path, _, _) in &matches {
+        for (path, _) in &renamed {
             stdout_buf.push_str(&format!("Renamed: {path} -> {}\n", self.new_name));
         }
         dependencies.write_stdout(stdout_buf.as_bytes())?;

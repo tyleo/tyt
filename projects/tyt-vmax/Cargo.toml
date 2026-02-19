@@ -14,14 +14,14 @@ required-features = ["bin"]
 [dependencies]
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
-globset = "0.4"
-serde_json = "1"
+globset = { version = "0.4", optional = true }
+serde_json = { version = "1", optional = true }
 tyt-common = { version = "0.1.0" }
 tyt-injection = { version = "0.1.0", optional = true }
 vmax = { version = "0.1.0" }
-vmax-serde = { version = "0.1.0" }
+vmax-serde = { version = "0.1.0", optional = true }
 
 [features]
 default = ["impl"]
-impl = ["dep:tyt-injection"]
+impl = ["dep:globset", "dep:serde_json", "dep:tyt-injection", "dep:vmax-serde"]
 bin = ["impl", "dep:clap_complete"]

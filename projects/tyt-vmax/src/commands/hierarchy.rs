@@ -1,8 +1,6 @@
 use crate::{Dependencies, Result};
 use clap::Parser;
 use std::{collections::HashMap, path::PathBuf};
-use vmax::VMaxScene;
-use vmax_serde::VMaxSceneSerde;
 
 /// Prints the Voxel Max hierarchy.
 #[derive(Clone, Debug, Parser)]
@@ -17,8 +15,7 @@ impl Hierarchy {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let scene_path = self.input_vmax.join("scene.json");
         let bytes = dependencies.read_file(&scene_path)?;
-        let scene_serde: VMaxSceneSerde = serde_json::from_slice(&bytes)?;
-        let scene: VMaxScene = scene_serde.into();
+        let scene = dependencies.parse_scene(&bytes)?;
 
         // Collect children (group IDs and object names) keyed by parent ID.
         // None key = root level.
