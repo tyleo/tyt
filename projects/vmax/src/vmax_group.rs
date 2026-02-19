@@ -1,10 +1,7 @@
-/// A single object in a Voxel Max scene.
+/// A group node in a Voxel Max scene hierarchy.
 #[derive(Clone, Debug, PartialEq)]
-pub struct VMaxObject {
+pub struct VMaxGroup {
     pub name: String,
-    pub data: String,
-    pub palette: String,
-    pub history: String,
     pub id: String,
     pub parent_id: Option<String>,
     pub position: [f64; 3],

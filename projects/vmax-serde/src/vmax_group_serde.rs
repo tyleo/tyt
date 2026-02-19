@@ -1,16 +1,10 @@
 use serde::{Deserialize, Serialize};
-use vmax::VMaxObject;
+use vmax::VMaxGroup;
 
-/// Serde-compatible parity type for [`VMaxObject`].
+/// Serde-compatible parity type for [`VMaxGroup`].
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct VMaxObjectSerde {
-    #[serde(rename = "n")]
+pub struct VMaxGroupSerde {
     pub name: String,
-    pub data: String,
-    #[serde(rename = "pal")]
-    pub palette: String,
-    #[serde(rename = "hist")]
-    pub history: String,
     pub id: String,
     #[serde(rename = "pid", skip_serializing_if = "Option::is_none", default)]
     pub parent_id: Option<String>,
@@ -22,13 +16,10 @@ pub struct VMaxObjectSerde {
     pub scale: [f64; 3],
 }
 
-impl From<VMaxObject> for VMaxObjectSerde {
-    fn from(v: VMaxObject) -> Self {
+impl From<VMaxGroup> for VMaxGroupSerde {
+    fn from(v: VMaxGroup) -> Self {
         Self {
             name: v.name,
-            data: v.data,
-            palette: v.palette,
-            history: v.history,
             id: v.id,
             parent_id: v.parent_id,
             position: v.position,
@@ -38,13 +29,10 @@ impl From<VMaxObject> for VMaxObjectSerde {
     }
 }
 
-impl From<VMaxObjectSerde> for VMaxObject {
-    fn from(v: VMaxObjectSerde) -> Self {
+impl From<VMaxGroupSerde> for VMaxGroup {
+    fn from(v: VMaxGroupSerde) -> Self {
         Self {
             name: v.name,
-            data: v.data,
-            palette: v.palette,
-            history: v.history,
             id: v.id,
             parent_id: v.parent_id,
             position: v.position,
