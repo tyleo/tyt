@@ -27,12 +27,7 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(
-                shell,
-                &mut Cli::command(),
-                "vmax",
-                &mut std::io::stdout(),
-            );
+            clap_complete::generate(shell, &mut Cli::command(), "vmax", &mut std::io::stdout());
         }
         Command::TytVMax(cmd) => {
             if let Err(e) = cmd.execute(DependenciesImpl) {

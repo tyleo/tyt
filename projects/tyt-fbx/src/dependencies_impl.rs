@@ -60,7 +60,9 @@ impl Dependencies for DependenciesImpl {
         points: &[TyVector3],
         colors: &[TyRgbaColor],
     ) -> Result<Vec<u8>> {
-        Ok(tyt_injection::serialize_points_and_colors_json(points, colors)?)
+        Ok(tyt_injection::serialize_points_and_colors_json(
+            points, colors,
+        )?)
     }
 
     fn load_image_rgba(&self, path: &Path) -> Result<(Vec<u8>, u32, u32)> {

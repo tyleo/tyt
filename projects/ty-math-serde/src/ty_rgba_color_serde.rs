@@ -12,7 +12,12 @@ pub struct TyRgbaColorSerde {
 
 impl From<TyRgbaColor> for TyRgbaColorSerde {
     fn from(c: TyRgbaColor) -> Self {
-        Self { r: c.r, g: c.g, b: c.b, a: c.a }
+        Self {
+            r: c.r,
+            g: c.g,
+            b: c.b,
+            a: c.a,
+        }
     }
 }
 

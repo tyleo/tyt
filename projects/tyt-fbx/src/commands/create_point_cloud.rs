@@ -78,16 +78,23 @@ impl CreatePointCloud {
                 sample_surface_points_with_barycentrics(&vertices, &triangles, num_points)?
             } else {
                 let max_iter = max_iterations.unwrap_or(num_points * 1000);
-                sample_volume_points_with_barycentrics(
-                    &vertices, &triangles, num_points, max_iter,
-                )?
+                sample_volume_points_with_barycentrics(&vertices, &triangles, num_points, max_iter)?
             };
 
             let points: Vec<TyVector3> = sampled.iter().map(|s| s.position).collect();
             let colors: Vec<TyRgbaColor> = sampled
                 .iter()
                 .map(|s| {
-                    sample_texture(&uvs, &pixels, img_w, img_h, s.triangle_index, s.bary_u, s.bary_v, s.bary_w)
+                    sample_texture(
+                        &uvs,
+                        &pixels,
+                        img_w,
+                        img_h,
+                        s.triangle_index,
+                        s.bary_u,
+                        s.bary_v,
+                        s.bary_w,
+                    )
                 })
                 .collect();
 
@@ -414,8 +421,12 @@ fn closest_point_on_mesh(
     let mut best_w = 0.0;
 
     for (i, tri) in triangles.iter().enumerate() {
-        let (closest, u, v, w) =
-            closest_point_on_triangle(point, &vertices[tri[0]], &vertices[tri[1]], &vertices[tri[2]]);
+        let (closest, u, v, w) = closest_point_on_triangle(
+            point,
+            &vertices[tri[0]],
+            &vertices[tri[1]],
+            &vertices[tri[2]],
+        );
         let diff = closest - *point;
         let dist_sq = diff.dot(&diff);
         if dist_sq < best_dist_sq {

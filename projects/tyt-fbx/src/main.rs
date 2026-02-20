@@ -27,12 +27,7 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(
-                shell,
-                &mut Cli::command(),
-                "fbx",
-                &mut std::io::stdout(),
-            );
+            clap_complete::generate(shell, &mut Cli::command(), "fbx", &mut std::io::stdout());
         }
         Command::TytFbx(fbx) => {
             if let Err(e) = fbx.execute(DependenciesImpl) {
