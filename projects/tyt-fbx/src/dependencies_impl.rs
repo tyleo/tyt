@@ -4,7 +4,7 @@ use std::{
     io::{ErrorKind, Write},
     path::{Path, PathBuf},
 };
-use ty_math::TyVector3;
+use ty_math::{TyRgbaColor, TyVector3};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -46,6 +46,25 @@ impl Dependencies for DependenciesImpl {
 
     fn serialize_points_json(&self, points: &[TyVector3]) -> Result<Vec<u8>> {
         Ok(tyt_injection::serialize_points_json(points)?)
+    }
+
+    fn parse_mesh_with_uvs_json(
+        &self,
+        json: &[u8],
+    ) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>, Vec<[[f64; 2]; 3]>)> {
+        Ok(tyt_injection::parse_mesh_with_uvs_json(json)?)
+    }
+
+    fn serialize_points_and_colors_json(
+        &self,
+        points: &[TyVector3],
+        colors: &[TyRgbaColor],
+    ) -> Result<Vec<u8>> {
+        Ok(tyt_injection::serialize_points_and_colors_json(points, colors)?)
+    }
+
+    fn load_image_rgba(&self, path: &Path) -> Result<(Vec<u8>, u32, u32)> {
+        Ok(tyt_injection::load_image_rgba(path)?)
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {

@@ -8,6 +8,7 @@ description = "Dependency injection implementations for tyt sub-crates."
 
 [dependencies]
 globset = "0.4"
+image = "0.25"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
 ty-math = { version = "0.1.0" }

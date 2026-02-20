@@ -4,7 +4,7 @@ use std::{
     iter,
     path::{Path, PathBuf},
 };
-use ty_math::TyVector3;
+use ty_math::{TyRgbaColor, TyVector3};
 
 pub trait Dependencies {
     fn create_temp_dir(&self) -> Result<PathBuf>;
@@ -30,6 +30,21 @@ pub trait Dependencies {
     fn serialize_points_json(&self, points: &[TyVector3]) -> Result<Vec<u8>>;
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()>;
+
+    fn parse_mesh_with_uvs_json(
+        &self,
+        json: &[u8],
+    ) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>, Vec<[[f64; 2]; 3]>)>;
+
+    fn serialize_points_and_colors_json(
+        &self,
+        points: &[TyVector3],
+        colors: &[TyRgbaColor],
+    ) -> Result<Vec<u8>>;
+
+    fn load_image_rgba(&self, path: &Path) -> Result<(Vec<u8>, u32, u32)>;
+
+    // --- Provided methods ---
 
     fn exec_temp_blender_scripts<
         'a,

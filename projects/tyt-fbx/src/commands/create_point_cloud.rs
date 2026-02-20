@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
-use ty_math::TyVector3;
+use ty_math::{TyRgbaColor, TyVector3};
 
 /// Creates a cloud of random points inside a mesh volume (or on the surface with `--surface`) within an FBX file.
 #[derive(Clone, Debug, Parser)]
@@ -31,6 +31,18 @@ pub struct CreatePointCloud {
     /// Maximum iterations for volume rejection sampling (default: num_points * 1000).
     #[arg(value_name = "max-iterations", long)]
     max_iterations: Option<usize>,
+
+    /// Path to an albedo texture image. When provided, each point is colored by sampling the texture at the nearest surface UV.
+    #[arg(value_name = "albedo", long)]
+    albedo: Option<PathBuf>,
+}
+
+struct SampledPoint {
+    position: TyVector3,
+    triangle_index: usize,
+    bary_u: f64,
+    bary_v: f64,
+    bary_w: f64,
 }
 
 impl CreatePointCloud {
@@ -41,15 +53,13 @@ impl CreatePointCloud {
             num_points,
             surface,
             max_iterations,
+            albedo,
         } = self;
 
         let args: [&OsStr; 2] = [input_fbx.as_ref(), mesh_name.as_ref()];
         let stdout =
             dependencies.exec_temp_blender_script(&blender::EXTRACT_FACES_AND_VERTICES_PY, args)?;
 
-        // Blender may emit non-JSON lines to stdout (e.g. "FBX version: 7400",
-        // "Blender quit"). Extract the JSON object spanning the first '{' to the
-        // last '}'.
         let json_start = stdout
             .iter()
             .position(|&b| b == b'{')
@@ -60,16 +70,42 @@ impl CreatePointCloud {
             .ok_or_else(|| parse_error("no '}' found in Blender output"))?;
         let json = &stdout[json_start..=json_end];
 
-        let (vertices, triangles) = dependencies.parse_mesh_json(json)?;
-        let points = if surface {
-            sample_surface_points(&vertices, &triangles, num_points)?
-        } else {
-            let max_iter = max_iterations.unwrap_or(num_points * 1000);
-            sample_volume_points(&vertices, &triangles, num_points, max_iter)?
-        };
+        if let Some(albedo_path) = albedo {
+            let (vertices, triangles, uvs) = dependencies.parse_mesh_with_uvs_json(json)?;
+            let (pixels, img_w, img_h) = dependencies.load_image_rgba(&albedo_path)?;
 
-        let json = dependencies.serialize_points_json(&points)?;
-        dependencies.write_stdout(&json)?;
+            let sampled = if surface {
+                sample_surface_points_with_barycentrics(&vertices, &triangles, num_points)?
+            } else {
+                let max_iter = max_iterations.unwrap_or(num_points * 1000);
+                sample_volume_points_with_barycentrics(
+                    &vertices, &triangles, num_points, max_iter,
+                )?
+            };
+
+            let points: Vec<TyVector3> = sampled.iter().map(|s| s.position).collect();
+            let colors: Vec<TyRgbaColor> = sampled
+                .iter()
+                .map(|s| {
+                    sample_texture(&uvs, &pixels, img_w, img_h, s.triangle_index, s.bary_u, s.bary_v, s.bary_w)
+                })
+                .collect();
+
+            let out = dependencies.serialize_points_and_colors_json(&points, &colors)?;
+            dependencies.write_stdout(&out)?;
+        } else {
+            let (vertices, triangles) = dependencies.parse_mesh_json(json)?;
+            let points = if surface {
+                sample_surface_points(&vertices, &triangles, num_points)?
+            } else {
+                let max_iter = max_iterations.unwrap_or(num_points * 1000);
+                sample_volume_points(&vertices, &triangles, num_points, max_iter)?
+            };
+
+            let out = dependencies.serialize_points_json(&points)?;
+            dependencies.write_stdout(&out)?;
+        }
+
         Ok(())
     }
 }
@@ -95,6 +131,24 @@ fn random_f64(state: &mut u64) -> f64 {
     (xorshift64(state) >> 11) as f64 / ((1u64 << 53) as f64)
 }
 
+fn make_rng() -> u64 {
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(1);
+    if seed == 0 { 1 } else { seed }
+}
+
+fn random_barycentric(rng: &mut u64) -> (f64, f64, f64) {
+    let r1 = random_f64(rng);
+    let r2 = random_f64(rng);
+    let s = r1.sqrt();
+    let u = 1.0 - s;
+    let v = r2 * s;
+    let w = 1.0 - u - v;
+    (u, v, w)
+}
+
 fn sample_surface_points(
     vertices: &[TyVector3],
     triangles: &[[usize; 3]],
@@ -116,11 +170,7 @@ fn sample_surface_points(
         return Err(parse_error("mesh has zero surface area"));
     }
 
-    let seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(1);
-    let mut rng = if seed == 0 { 1 } else { seed };
+    let mut rng = make_rng();
 
     let mut points = Vec::with_capacity(num_points);
     for _ in 0..num_points {
@@ -130,21 +180,59 @@ fn sample_surface_points(
             .min(triangles.len() - 1);
 
         let [ai, bi, ci] = triangles[idx];
-        let a = vertices[ai];
-        let b = vertices[bi];
-        let c = vertices[ci];
-
-        let r1 = random_f64(&mut rng);
-        let r2 = random_f64(&mut rng);
-        let s = r1.sqrt();
-        let u = 1.0 - s;
-        let v = r2 * s;
-        let w = 1.0 - u - v;
+        let (a, b, c) = (vertices[ai], vertices[bi], vertices[ci]);
+        let (u, v, w) = random_barycentric(&mut rng);
 
         points.push(a * u + b * v + c * w);
     }
 
     Ok(points)
+}
+
+fn sample_surface_points_with_barycentrics(
+    vertices: &[TyVector3],
+    triangles: &[[usize; 3]],
+    num_points: usize,
+) -> Result<Vec<SampledPoint>> {
+    if triangles.is_empty() {
+        return Err(parse_error("mesh has no triangles"));
+    }
+
+    let mut cumulative = Vec::with_capacity(triangles.len());
+    let mut total = 0.0;
+    for tri in triangles {
+        let area = triangle_area(vertices[tri[0]], vertices[tri[1]], vertices[tri[2]]);
+        total += area;
+        cumulative.push(total);
+    }
+
+    if total <= 0.0 {
+        return Err(parse_error("mesh has zero surface area"));
+    }
+
+    let mut rng = make_rng();
+
+    let mut sampled = Vec::with_capacity(num_points);
+    for _ in 0..num_points {
+        let target = random_f64(&mut rng) * total;
+        let idx = cumulative
+            .partition_point(|&a| a < target)
+            .min(triangles.len() - 1);
+
+        let [ai, bi, ci] = triangles[idx];
+        let (a, b, c) = (vertices[ai], vertices[bi], vertices[ci]);
+        let (u, v, w) = random_barycentric(&mut rng);
+
+        sampled.push(SampledPoint {
+            position: a * u + b * v + c * w,
+            triangle_index: idx,
+            bary_u: u,
+            bary_v: v,
+            bary_w: w,
+        });
+    }
+
+    Ok(sampled)
 }
 
 fn compute_aabb(vertices: &[TyVector3]) -> (TyVector3, TyVector3) {
@@ -234,12 +322,7 @@ fn sample_volume_points(
     }
 
     let (min, max) = compute_aabb(vertices);
-
-    let seed = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(1);
-    let mut rng = if seed == 0 { 1 } else { seed };
+    let mut rng = make_rng();
 
     let mut points = Vec::with_capacity(num_points);
     let mut iterations = 0usize;
@@ -265,4 +348,170 @@ fn sample_volume_points(
     }
 
     Ok(points)
+}
+
+fn sample_volume_points_with_barycentrics(
+    vertices: &[TyVector3],
+    triangles: &[[usize; 3]],
+    num_points: usize,
+    max_iterations: usize,
+) -> Result<Vec<SampledPoint>> {
+    if triangles.is_empty() {
+        return Err(parse_error("mesh has no triangles"));
+    }
+    if vertices.is_empty() {
+        return Err(parse_error("mesh has no vertices"));
+    }
+
+    let (min, max) = compute_aabb(vertices);
+    let mut rng = make_rng();
+
+    let mut sampled = Vec::with_capacity(num_points);
+    let mut iterations = 0usize;
+    while sampled.len() < num_points && iterations < max_iterations {
+        iterations += 1;
+        let candidate = TyVector3::new(
+            min.x + random_f64(&mut rng) * (max.x - min.x),
+            min.y + random_f64(&mut rng) * (max.y - min.y),
+            min.z + random_f64(&mut rng) * (max.z - min.z),
+        );
+        if is_inside_mesh(&candidate, vertices, triangles) {
+            let (closest, tri_idx, u, v, w) =
+                closest_point_on_mesh(&candidate, vertices, triangles);
+            let _ = closest;
+            sampled.push(SampledPoint {
+                position: candidate,
+                triangle_index: tri_idx,
+                bary_u: u,
+                bary_v: v,
+                bary_w: w,
+            });
+        }
+    }
+
+    if sampled.len() < num_points {
+        return Err(parse_error(format!(
+            "reached max iterations ({}) with only {}/{} points placed",
+            max_iterations,
+            sampled.len(),
+            num_points,
+        )));
+    }
+
+    Ok(sampled)
+}
+
+fn closest_point_on_mesh(
+    point: &TyVector3,
+    vertices: &[TyVector3],
+    triangles: &[[usize; 3]],
+) -> (TyVector3, usize, f64, f64, f64) {
+    let mut best_dist_sq = f64::MAX;
+    let mut best_pos = *point;
+    let mut best_idx = 0;
+    let mut best_u = 0.0;
+    let mut best_v = 0.0;
+    let mut best_w = 0.0;
+
+    for (i, tri) in triangles.iter().enumerate() {
+        let (closest, u, v, w) =
+            closest_point_on_triangle(point, &vertices[tri[0]], &vertices[tri[1]], &vertices[tri[2]]);
+        let diff = closest - *point;
+        let dist_sq = diff.dot(&diff);
+        if dist_sq < best_dist_sq {
+            best_dist_sq = dist_sq;
+            best_pos = closest;
+            best_idx = i;
+            best_u = u;
+            best_v = v;
+            best_w = w;
+        }
+    }
+
+    (best_pos, best_idx, best_u, best_v, best_w)
+}
+
+fn closest_point_on_triangle(
+    p: &TyVector3,
+    a: &TyVector3,
+    b: &TyVector3,
+    c: &TyVector3,
+) -> (TyVector3, f64, f64, f64) {
+    let ab = *b - *a;
+    let ac = *c - *a;
+    let ap = *p - *a;
+
+    let d1 = ab.dot(&ap);
+    let d2 = ac.dot(&ap);
+    if d1 <= 0.0 && d2 <= 0.0 {
+        return (*a, 1.0, 0.0, 0.0);
+    }
+
+    let bp = *p - *b;
+    let d3 = ab.dot(&bp);
+    let d4 = ac.dot(&bp);
+    if d3 >= 0.0 && d4 <= d3 {
+        return (*b, 0.0, 1.0, 0.0);
+    }
+
+    let vc = d1 * d4 - d3 * d2;
+    if vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0 {
+        let v = d1 / (d1 - d3);
+        return (*a + ab * v, 1.0 - v, v, 0.0);
+    }
+
+    let cp = *p - *c;
+    let d5 = ab.dot(&cp);
+    let d6 = ac.dot(&cp);
+    if d6 >= 0.0 && d5 <= d6 {
+        return (*c, 0.0, 0.0, 1.0);
+    }
+
+    let vb = d5 * d2 - d1 * d6;
+    if vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0 {
+        let w = d2 / (d2 - d6);
+        return (*a + ac * w, 1.0 - w, 0.0, w);
+    }
+
+    let va = d3 * d6 - d5 * d4;
+    if va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0 {
+        let w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+        return (*b + (*c - *b) * w, 0.0, 1.0 - w, w);
+    }
+
+    let denom = 1.0 / (va + vb + vc);
+    let v = vb * denom;
+    let w = vc * denom;
+    let u = 1.0 - v - w;
+
+    (*a + ab * v + ac * w, u, v, w)
+}
+
+fn sample_texture(
+    uvs: &[[[f64; 2]; 3]],
+    pixels: &[u8],
+    img_w: u32,
+    img_h: u32,
+    tri_idx: usize,
+    bary_u: f64,
+    bary_v: f64,
+    bary_w: f64,
+) -> TyRgbaColor {
+    let tri_uvs = &uvs[tri_idx];
+    let tex_u = tri_uvs[0][0] * bary_u + tri_uvs[1][0] * bary_v + tri_uvs[2][0] * bary_w;
+    let tex_v = tri_uvs[0][1] * bary_u + tri_uvs[1][1] * bary_v + tri_uvs[2][1] * bary_w;
+
+    let tex_u = tex_u.rem_euclid(1.0);
+    let tex_v = 1.0 - tex_v.rem_euclid(1.0);
+
+    let px = ((tex_u * img_w as f64) as u32).min(img_w - 1);
+    let py = ((tex_v * img_h as f64) as u32).min(img_h - 1);
+
+    let idx = ((py * img_w + px) * 4) as usize;
+    let r = pixels[idx] as f32 / 255.0;
+    let g = pixels[idx + 1] as f32 / 255.0;
+    let b = pixels[idx + 2] as f32 / 255.0;
+    let a = pixels[idx + 3] as f32 / 255.0;
+
+    TyRgbaColor::new(r, g, b, a)
 }

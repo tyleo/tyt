@@ -35,9 +35,19 @@ def main():
     vertices = [{"x": v.co.x, "y": v.co.y, "z": v.co.z} for v in bm.verts]
     triangles = [[v.index for v in f.verts] for f in bm.faces]
 
+    result = {"vertices": vertices, "triangles": triangles}
+
+    uv_layer = bm.loops.layers.uv.active
+    if uv_layer is not None:
+        uvs = []
+        for face in bm.faces:
+            face_uvs = [[loop[uv_layer].uv.x, loop[uv_layer].uv.y] for loop in face.loops]
+            uvs.append(face_uvs)
+        result["uvs"] = uvs
+
     bm.free()
 
-    print(json.dumps({"vertices": vertices, "triangles": triangles}))
+    print(json.dumps(result))
 
 
 if __name__ == "__main__":
