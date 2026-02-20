@@ -32,6 +32,10 @@ pub struct CreatePointCloud {
     #[arg(value_name = "max-iterations", long)]
     max_iterations: Option<usize>,
 
+    /// Uniform scale factor applied to every output point position (e.g. 0.01 to convert centimeters to meters).
+    #[arg(value_name = "scale", long)]
+    scale: Option<f64>,
+
     /// Paths to texture images. Each texture produces a color layer by sampling at the surface UV of each point.
     #[arg(value_name = "texture", long)]
     texture: Vec<PathBuf>,
@@ -53,6 +57,7 @@ impl CreatePointCloud {
             num_points,
             surface,
             max_iterations,
+            scale,
             texture,
         } = self;
 
@@ -79,7 +84,11 @@ impl CreatePointCloud {
             sample_volume_points_with_barycentrics(&vertices, &triangles, num_points, max_iter)?
         };
 
-        let points: Vec<TyVector3> = sampled.iter().map(|s| s.position).collect();
+        let points: Vec<TyVector3> = if let Some(s) = scale {
+            sampled.iter().map(|sp| sp.position * s).collect()
+        } else {
+            sampled.iter().map(|sp| sp.position).collect()
+        };
 
         let color_layers: Vec<Vec<TyRgbaColor>> = texture
             .iter()
