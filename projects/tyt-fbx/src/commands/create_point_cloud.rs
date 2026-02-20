@@ -32,9 +32,9 @@ pub struct CreatePointCloud {
     #[arg(value_name = "max-iterations", long)]
     max_iterations: Option<usize>,
 
-    /// Path to an albedo texture image. When provided, each point is colored by sampling the texture at the nearest surface UV.
-    #[arg(value_name = "albedo", long)]
-    albedo: Option<PathBuf>,
+    /// Paths to texture images. Each texture produces a color layer by sampling at the surface UV of each point.
+    #[arg(value_name = "texture", long)]
+    texture: Vec<PathBuf>,
 }
 
 struct SampledPoint {
@@ -53,7 +53,7 @@ impl CreatePointCloud {
             num_points,
             surface,
             max_iterations,
-            albedo,
+            texture,
         } = self;
 
         let args: [&OsStr; 2] = [input_fbx.as_ref(), mesh_name.as_ref()];
@@ -70,48 +70,30 @@ impl CreatePointCloud {
             .ok_or_else(|| parse_error("no '}' found in Blender output"))?;
         let json = &stdout[json_start..=json_end];
 
-        if let Some(albedo_path) = albedo {
-            let (vertices, triangles, uvs) = dependencies.parse_mesh_with_uvs_json(json)?;
-            let (pixels, img_w, img_h) = dependencies.load_image_rgba(&albedo_path)?;
+        let (vertices, triangles, uvs) = dependencies.parse_mesh_with_uvs_json(json)?;
 
-            let sampled = if surface {
-                sample_surface_points_with_barycentrics(&vertices, &triangles, num_points)?
-            } else {
-                let max_iter = max_iterations.unwrap_or(num_points * 1000);
-                sample_volume_points_with_barycentrics(&vertices, &triangles, num_points, max_iter)?
-            };
-
-            let points: Vec<TyVector3> = sampled.iter().map(|s| s.position).collect();
-            let colors: Vec<TyRgbaColor> = sampled
-                .iter()
-                .map(|s| {
-                    sample_texture(
-                        &uvs,
-                        &pixels,
-                        img_w,
-                        img_h,
-                        s.triangle_index,
-                        s.bary_u,
-                        s.bary_v,
-                        s.bary_w,
-                    )
-                })
-                .collect();
-
-            let out = dependencies.serialize_points_and_colors_json(&points, &colors)?;
-            dependencies.write_stdout(&out)?;
+        let sampled = if surface {
+            sample_surface_points_with_barycentrics(&vertices, &triangles, num_points)?
         } else {
-            let (vertices, triangles) = dependencies.parse_mesh_json(json)?;
-            let points = if surface {
-                sample_surface_points(&vertices, &triangles, num_points)?
-            } else {
-                let max_iter = max_iterations.unwrap_or(num_points * 1000);
-                sample_volume_points(&vertices, &triangles, num_points, max_iter)?
-            };
+            let max_iter = max_iterations.unwrap_or(num_points * 1000);
+            sample_volume_points_with_barycentrics(&vertices, &triangles, num_points, max_iter)?
+        };
 
-            let out = dependencies.serialize_points_json(&points)?;
-            dependencies.write_stdout(&out)?;
-        }
+        let points: Vec<TyVector3> = sampled.iter().map(|s| s.position).collect();
+
+        let color_layers: Vec<Vec<TyRgbaColor>> = texture
+            .iter()
+            .map(|texture_path| {
+                let (pixels, img_w, img_h) = dependencies.load_image_rgba(texture_path)?;
+                Ok(sampled
+                    .iter()
+                    .map(|s| sample_texture(&uvs, &pixels, img_w, img_h, s))
+                    .collect())
+            })
+            .collect::<Result<_>>()?;
+
+        let out = dependencies.serialize_points_and_colors_json(&points, &color_layers)?;
+        dependencies.write_stdout(&out)?;
 
         Ok(())
     }
@@ -154,46 +136,6 @@ fn random_barycentric(rng: &mut u64) -> (f64, f64, f64) {
     let v = r2 * s;
     let w = 1.0 - u - v;
     (u, v, w)
-}
-
-fn sample_surface_points(
-    vertices: &[TyVector3],
-    triangles: &[[usize; 3]],
-    num_points: usize,
-) -> Result<Vec<TyVector3>> {
-    if triangles.is_empty() {
-        return Err(parse_error("mesh has no triangles"));
-    }
-
-    let mut cumulative = Vec::with_capacity(triangles.len());
-    let mut total = 0.0;
-    for tri in triangles {
-        let area = triangle_area(vertices[tri[0]], vertices[tri[1]], vertices[tri[2]]);
-        total += area;
-        cumulative.push(total);
-    }
-
-    if total <= 0.0 {
-        return Err(parse_error("mesh has zero surface area"));
-    }
-
-    let mut rng = make_rng();
-
-    let mut points = Vec::with_capacity(num_points);
-    for _ in 0..num_points {
-        let target = random_f64(&mut rng) * total;
-        let idx = cumulative
-            .partition_point(|&a| a < target)
-            .min(triangles.len() - 1);
-
-        let [ai, bi, ci] = triangles[idx];
-        let (a, b, c) = (vertices[ai], vertices[bi], vertices[ci]);
-        let (u, v, w) = random_barycentric(&mut rng);
-
-        points.push(a * u + b * v + c * w);
-    }
-
-    Ok(points)
 }
 
 fn sample_surface_points_with_barycentrics(
@@ -313,48 +255,6 @@ fn is_inside_mesh(point: &TyVector3, vertices: &[TyVector3], triangles: &[[usize
         }
     }
     count % 2 == 1
-}
-
-fn sample_volume_points(
-    vertices: &[TyVector3],
-    triangles: &[[usize; 3]],
-    num_points: usize,
-    max_iterations: usize,
-) -> Result<Vec<TyVector3>> {
-    if triangles.is_empty() {
-        return Err(parse_error("mesh has no triangles"));
-    }
-    if vertices.is_empty() {
-        return Err(parse_error("mesh has no vertices"));
-    }
-
-    let (min, max) = compute_aabb(vertices);
-    let mut rng = make_rng();
-
-    let mut points = Vec::with_capacity(num_points);
-    let mut iterations = 0usize;
-    while points.len() < num_points && iterations < max_iterations {
-        iterations += 1;
-        let candidate = TyVector3::new(
-            min.x + random_f64(&mut rng) * (max.x - min.x),
-            min.y + random_f64(&mut rng) * (max.y - min.y),
-            min.z + random_f64(&mut rng) * (max.z - min.z),
-        );
-        if is_inside_mesh(&candidate, vertices, triangles) {
-            points.push(candidate);
-        }
-    }
-
-    if points.len() < num_points {
-        return Err(parse_error(format!(
-            "reached max iterations ({}) with only {}/{} points placed",
-            max_iterations,
-            points.len(),
-            num_points,
-        )));
-    }
-
-    Ok(points)
 }
 
 fn sample_volume_points_with_barycentrics(
@@ -503,14 +403,15 @@ fn sample_texture(
     pixels: &[u8],
     img_w: u32,
     img_h: u32,
-    tri_idx: usize,
-    bary_u: f64,
-    bary_v: f64,
-    bary_w: f64,
+    sample: &SampledPoint,
 ) -> TyRgbaColor {
-    let tri_uvs = &uvs[tri_idx];
-    let tex_u = tri_uvs[0][0] * bary_u + tri_uvs[1][0] * bary_v + tri_uvs[2][0] * bary_w;
-    let tex_v = tri_uvs[0][1] * bary_u + tri_uvs[1][1] * bary_v + tri_uvs[2][1] * bary_w;
+    let tri_uvs = &uvs[sample.triangle_index];
+    let tex_u = tri_uvs[0][0] * sample.bary_u
+        + tri_uvs[1][0] * sample.bary_v
+        + tri_uvs[2][0] * sample.bary_w;
+    let tex_v = tri_uvs[0][1] * sample.bary_u
+        + tri_uvs[1][1] * sample.bary_v
+        + tri_uvs[2][1] * sample.bary_w;
 
     let tex_u = tex_u.rem_euclid(1.0);
     let tex_v = 1.0 - tex_v.rem_euclid(1.0);

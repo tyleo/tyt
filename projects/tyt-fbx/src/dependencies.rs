@@ -1,4 +1,4 @@
-use crate::{Result, Script};
+use crate::{MeshWithUvs, Result, Script};
 use std::{
     ffi::OsStr,
     iter,
@@ -25,21 +25,14 @@ pub trait Dependencies {
 
     fn write_file<P: AsRef<Path>>(&self, path: P, contents: &[u8]) -> Result<()>;
 
-    fn parse_mesh_json(&self, json: &[u8]) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>)>;
-
-    fn serialize_points_json(&self, points: &[TyVector3]) -> Result<Vec<u8>>;
-
     fn write_stdout(&self, contents: &[u8]) -> Result<()>;
 
-    fn parse_mesh_with_uvs_json(
-        &self,
-        json: &[u8],
-    ) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>, Vec<[[f64; 2]; 3]>)>;
+    fn parse_mesh_with_uvs_json(&self, json: &[u8]) -> Result<MeshWithUvs>;
 
     fn serialize_points_and_colors_json(
         &self,
         points: &[TyVector3],
-        colors: &[TyRgbaColor],
+        colors: &[Vec<TyRgbaColor>],
     ) -> Result<Vec<u8>>;
 
     fn load_image_rgba(&self, path: &Path) -> Result<(Vec<u8>, u32, u32)>;

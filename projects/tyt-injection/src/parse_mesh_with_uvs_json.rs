@@ -1,3 +1,4 @@
+use crate::MeshWithUvs;
 use serde::Deserialize;
 use std::io::{ErrorKind, Result};
 use ty_math::TyVector3;
@@ -11,9 +12,7 @@ struct MeshDataWithUvs {
 }
 
 /// Parses JSON mesh data (vertices + triangles + per-triangle UVs) from raw bytes.
-pub fn parse_mesh_with_uvs_json(
-    json: &[u8],
-) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>, Vec<[[f64; 2]; 3]>)> {
+pub fn parse_mesh_with_uvs_json(json: &[u8]) -> Result<MeshWithUvs> {
     let data: MeshDataWithUvs =
         serde_json::from_slice(json).map_err(|e| std::io::Error::new(ErrorKind::InvalidData, e))?;
 

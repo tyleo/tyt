@@ -1,4 +1,4 @@
-use crate::{Dependencies, Error, Result};
+use crate::{Dependencies, Error, MeshWithUvs, Result};
 use std::{
     fs,
     io::{ErrorKind, Write},
@@ -40,25 +40,14 @@ impl Dependencies for DependenciesImpl {
         tyt_injection::exec_map("blender", blender_args, Error::IO, Error::Blender)
     }
 
-    fn parse_mesh_json(&self, json: &[u8]) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>)> {
-        Ok(tyt_injection::parse_mesh_json(json)?)
-    }
-
-    fn serialize_points_json(&self, points: &[TyVector3]) -> Result<Vec<u8>> {
-        Ok(tyt_injection::serialize_points_json(points)?)
-    }
-
-    fn parse_mesh_with_uvs_json(
-        &self,
-        json: &[u8],
-    ) -> Result<(Vec<TyVector3>, Vec<[usize; 3]>, Vec<[[f64; 2]; 3]>)> {
+    fn parse_mesh_with_uvs_json(&self, json: &[u8]) -> Result<MeshWithUvs> {
         Ok(tyt_injection::parse_mesh_with_uvs_json(json)?)
     }
 
     fn serialize_points_and_colors_json(
         &self,
         points: &[TyVector3],
-        colors: &[TyRgbaColor],
+        colors: &[Vec<TyRgbaColor>],
     ) -> Result<Vec<u8>> {
         Ok(tyt_injection::serialize_points_and_colors_json(
             points, colors,
