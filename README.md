@@ -5,6 +5,12 @@ My command-line tools and a single app, `tyt`, that ties them all together. It a
 ## Install
 
 ```sh
+cargo install tyt --features bin
+```
+
+For local development:
+
+```sh
 npm run install:tyt
 ```
 
