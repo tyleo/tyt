@@ -4,19 +4,17 @@ import sys
 from common import strip_all_materials, deselect_all, export_fbx
 
 
-def extract_single_mesh(parent_mesh_name: str, output_mesh_name: str):
+def extract_single_mesh(mesh_name: str, output_mesh_name: str):
     # Ensure we're in Object mode for ops
     if bpy.ops.object.mode_set.poll():
         bpy.ops.object.mode_set(mode="OBJECT")
 
-    root = bpy.data.objects.get(parent_mesh_name)
-    if root is None:
-        raise ValueError(f"Parent '{parent_mesh_name}' not found.")
-
-    # First direct child mesh (no recursion)
-    target = next((c for c in root.children if c.type == "MESH"), None)
+    target = bpy.data.objects.get(mesh_name)
     if target is None:
-        raise ValueError(f"No direct child mesh found under '{parent_mesh_name}'.")
+        raise ValueError(f"Mesh '{mesh_name}' not found.")
+
+    if target.type != "MESH":
+        raise ValueError(f"Object '{mesh_name}' is type '{target.type}', expected 'MESH'.")
 
     # Deselect all
     deselect_all()
@@ -24,9 +22,10 @@ def extract_single_mesh(parent_mesh_name: str, output_mesh_name: str):
     # Unparent target (keep world transform)
     target.select_set(True)
     bpy.context.view_layer.objects.active = target
-    if bpy.ops.object.parent_clear.poll():
-        bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM")
-    target.parent = None  # extra safety
+    if target.parent is not None:
+        if bpy.ops.object.parent_clear.poll():
+            bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM")
+        target.parent = None  # extra safety
 
     # Delete everything else
     others = [o for o in bpy.data.objects if o != target]
@@ -54,27 +53,27 @@ def parse_args():
     argv = sys.argv
     if "--" not in argv:
         raise SystemExit(
-            "Usage: blender -b --python script.py -- <input_fbx> <parent_mesh_name> <output_fbx> <output_mesh_name>"
+            "Usage: blender -b --python script.py -- <input_fbx> <mesh_name> <output_fbx> <output_mesh_name>"
         )
 
     tokens = argv[argv.index("--") + 1 :]
     if len(tokens) != 4:
         raise SystemExit(
-            "Expected 4 args: <input_fbx> <parent_mesh_name> <output_fbx> <output_mesh_name>"
+            "Expected 4 args: <input_fbx> <mesh_name> <output_fbx> <output_mesh_name>"
         )
 
-    input_fbx, parent_mesh_name, output_fbx, output_mesh_name = tokens
-    return input_fbx, parent_mesh_name, output_fbx, output_mesh_name
+    input_fbx, mesh_name, output_fbx, output_mesh_name = tokens
+    return input_fbx, mesh_name, output_fbx, output_mesh_name
 
 
 def main():
-    input_fbx, parent_mesh_name, output_fbx, output_mesh_name = parse_args()
+    input_fbx, mesh_name, output_fbx, output_mesh_name = parse_args()
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.fbx(filepath=input_fbx)
 
     strip_all_materials()
-    extract_single_mesh(parent_mesh_name, output_mesh_name)
+    extract_single_mesh(mesh_name, output_mesh_name)
 
     export_fbx(output_fbx)
 

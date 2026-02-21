@@ -1,4 +1,4 @@
-use crate::{Dependencies, Result, blender};
+use crate::{Dependencies, Result, utilities};
 use clap::Parser;
 use std::{ffi::OsStr, path::PathBuf};
 
@@ -38,8 +38,8 @@ impl Rename {
         ];
 
         dependencies.exec_temp_blender_scripts_with_stdout(
-            &blender::FBX_RENAME_MESHES_PY,
-            [&blender::COMMON_PY],
+            &utilities::FBX_RENAME_MESHES_PY,
+            [&utilities::COMMON_PY],
             args,
         )?;
 

@@ -1,4 +1,4 @@
-use crate::{Dependencies, Error, Result, blender};
+use crate::{Dependencies, Error, Result, utilities};
 use clap::Parser;
 use std::{
     ffi::OsStr,
@@ -62,18 +62,10 @@ impl CreatePointCloud {
         } = self;
 
         let args: [&OsStr; 2] = [input_fbx.as_ref(), mesh_name.as_ref()];
-        let stdout =
-            dependencies.exec_temp_blender_script(&blender::EXTRACT_FACES_AND_VERTICES_PY, args)?;
+        let stdout = dependencies
+            .exec_temp_blender_script(&utilities::EXTRACT_FACES_AND_VERTICES_PY, args)?;
 
-        let json_start = stdout
-            .iter()
-            .position(|&b| b == b'{')
-            .ok_or_else(|| parse_error("no '{' found in Blender output"))?;
-        let json_end = stdout
-            .iter()
-            .rposition(|&b| b == b'}')
-            .ok_or_else(|| parse_error("no '}' found in Blender output"))?;
-        let json = &stdout[json_start..=json_end];
+        let json = utilities::extract_json(&stdout, b'{', b'}')?;
 
         let (vertices, triangles, uvs) = dependencies.parse_mesh_with_uvs_json(json)?;
 

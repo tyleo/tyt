@@ -58,6 +58,39 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::load_image_rgba(path)?)
     }
 
+    fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
+        Ok(tyt_injection::match_glob(pattern, candidates)?)
+    }
+
+    fn parse_hierarchy_json(&self, json: &[u8]) -> Result<Vec<(String, String, String)>> {
+        let entries: Vec<tyt_injection::serde_json::Value> = tyt_injection::parse_json(json)?;
+        entries
+            .into_iter()
+            .map(|v| {
+                let name = v["name"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, "missing 'name'")
+                    })?
+                    .to_owned();
+                let path = v["path"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, "missing 'path'")
+                    })?
+                    .to_owned();
+                let obj_type = v["type"]
+                    .as_str()
+                    .ok_or_else(|| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, "missing 'type'")
+                    })?
+                    .to_owned();
+                Ok((name, path, obj_type))
+            })
+            .collect::<std::result::Result<Vec<_>, std::io::Error>>()
+            .map_err(Error::from)
+    }
+
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         Ok(tyt_injection::remove_dir_all(path.as_ref())?)
     }

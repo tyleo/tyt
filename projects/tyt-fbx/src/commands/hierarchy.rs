@@ -1,4 +1,4 @@
-use crate::{Dependencies, Result, blender};
+use crate::{Dependencies, Result, utilities};
 use clap::Parser;
 use std::{ffi::OsStr, path::PathBuf};
 
@@ -15,7 +15,7 @@ impl Hierarchy {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let args: [&OsStr; 1] = [self.input_fbx.as_ref()];
 
-        dependencies.exec_temp_blender_script_with_stdout(&blender::FBX_HIERARCHY_PY, args)?;
+        dependencies.exec_temp_blender_script_with_stdout(&utilities::FBX_HIERARCHY_PY, args)?;
 
         Ok(())
     }
