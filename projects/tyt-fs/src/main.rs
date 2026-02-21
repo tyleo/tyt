@@ -1,5 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
+use std::{io, process};
 use tyt_fs::{DependenciesImpl, TytFS};
 
 /// Operations on the filesystem.
@@ -27,12 +28,12 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(shell, &mut Cli::command(), "fs", &mut std::io::stdout());
+            clap_complete::generate(shell, &mut Cli::command(), "fs", &mut io::stdout());
         }
         Command::TytFS(cmd) => {
             if let Err(e) = cmd.execute(DependenciesImpl) {
                 eprintln!("error: {e}");
-                std::process::exit(1);
+                process::exit(1);
             }
         }
     }

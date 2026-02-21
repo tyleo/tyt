@@ -5,6 +5,7 @@ pub fn main_rs_template(command: &str, name: &str, description: &str) -> String 
     format!(
         r#"use clap::{{CommandFactory, Parser, Subcommand}};
 use clap_complete::Shell;
+use std::{{io, process}};
 use tyt_{snake}::{{DependenciesImpl, Tyt{name}}};
 
 /// {description}
@@ -36,13 +37,13 @@ fn main() {{
                 shell,
                 &mut Cli::command(),
                 "{command}",
-                &mut std::io::stdout(),
+                &mut io::stdout(),
             );
         }}
         Command::Tyt{name}(cmd) => {{
             if let Err(e) = cmd.execute(DependenciesImpl) {{
                 eprintln!("error: {{e}}");
-                std::process::exit(1);
+                process::exit(1);
             }}
         }}
     }}

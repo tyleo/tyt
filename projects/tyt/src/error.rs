@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{error::Error as StdError, fmt};
 use tyt_cubemap::Error as CubemapError;
 use tyt_fbx::Error as FbxError;
 use tyt_fs::Error as FSError;
@@ -32,8 +32,8 @@ impl fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             Error::Cubemap(e) => Some(e),
             Error::FS(e) => Some(e),

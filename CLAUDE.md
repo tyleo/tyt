@@ -10,6 +10,9 @@ cargo check
 
 - Rust edition 2024
 - Consolidate imports into minimal nested `use` statements — no duplicate path prefixes (e.g., `use std::{fs, io::{ErrorKind, Write}, path::{Path, PathBuf}}` not separate `use std::fs; use std::io::Write;`)
+- No fully-qualified paths in code bodies — import all referenced items in `use` blocks
+- Import types/traits/enums as leaf items, with aliases to avoid collisions (e.g., `Error as IOError`, `Result as StdResult`, `Error as StdError`)
+- Import modules for free functions and keep the module prefix in calls (e.g., `use std::{env, fs, io, process};` then `fs::read()`, `env::temp_dir()`, `io::stdout()`, `process::exit(1)`)
 - Prefer `#[derive(Default)]` over manual `impl Default` when all field defaults match the type's inherent default
 - One public struct/trait/enum per file, file named to match the type in snake_case
 - Doc comments (`///`) on all public items

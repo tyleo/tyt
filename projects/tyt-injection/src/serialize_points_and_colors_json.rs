@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::io::{ErrorKind, Result};
+use std::io::{Error as IOError, ErrorKind, Result};
 use ty_math::{TyRgbaColor, TyVector3};
 use ty_math_serde::{TyRgbaColorSerde, TyVector3Serde};
 
@@ -23,7 +23,7 @@ pub fn serialize_points_and_colors_json(
     };
 
     let mut bytes =
-        serde_json::to_vec(&data).map_err(|e| std::io::Error::new(ErrorKind::InvalidData, e))?;
+        serde_json::to_vec(&data).map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
     bytes.push(b'\n');
 
     Ok(bytes)

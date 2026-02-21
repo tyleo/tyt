@@ -1,5 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
+use std::{io, process};
 use tyt_material::{DependenciesImpl, TytMaterial};
 
 /// Operations on material textures.
@@ -27,17 +28,12 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(
-                shell,
-                &mut Cli::command(),
-                "material",
-                &mut std::io::stdout(),
-            );
+            clap_complete::generate(shell, &mut Cli::command(), "material", &mut io::stdout());
         }
         Command::TytMaterial(material) => {
             if let Err(e) = material.execute(DependenciesImpl) {
                 eprintln!("error: {e}");
-                std::process::exit(1);
+                process::exit(1);
             }
         }
     }

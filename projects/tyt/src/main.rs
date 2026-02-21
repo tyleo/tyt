@@ -1,5 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
+use std::{io, process};
 use tyt::{DependenciesImpl, Tyt};
 
 /// Tyleo's tools — a collection of command-line utilities for working with files, images, materials, and more.
@@ -26,12 +27,12 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(shell, &mut Cli::command(), "tyt", &mut std::io::stdout());
+            clap_complete::generate(shell, &mut Cli::command(), "tyt", &mut io::stdout());
         }
         Command::Tyt(tyt) => {
             if let Err(e) = tyt.execute(DependenciesImpl) {
                 eprintln!("error: {e}");
-                std::process::exit(1);
+                process::exit(1);
             }
         }
     }

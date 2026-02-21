@@ -1,6 +1,6 @@
 use crate::{Dependencies, Result};
 use std::{
-    fs,
+    env, fs,
     path::{Path, PathBuf},
 };
 
@@ -25,7 +25,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn workspace_root(&self) -> Result<PathBuf> {
-        let mut dir = std::env::current_dir()?;
+        let mut dir = env::current_dir()?;
         loop {
             let cargo_toml = dir.join("Cargo.toml");
             if cargo_toml.is_file() {

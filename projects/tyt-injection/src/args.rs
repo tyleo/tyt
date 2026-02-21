@@ -1,4 +1,7 @@
-use std::ffi::{OsStr, OsString};
+use std::{
+    ffi::{OsStr, OsString},
+    vec::IntoIter,
+};
 
 /// A builder for command arguments, accepting mixed `AsRef<OsStr>` types.
 #[derive(Clone, Debug, Default)]
@@ -29,7 +32,7 @@ impl Args {
 
 impl IntoIterator for Args {
     type Item = OsString;
-    type IntoIter = std::vec::IntoIter<OsString>;
+    type IntoIter = IntoIter<OsString>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.inner.into_iter()

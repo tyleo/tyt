@@ -1,5 +1,6 @@
 use crate::temp_counter_next;
 use std::{
+    env,
     io::{Error as IOError, Result},
     path::PathBuf,
     process,
@@ -7,7 +8,7 @@ use std::{
 };
 
 pub fn unique_temp_path() -> Result<PathBuf> {
-    let mut base = std::env::temp_dir();
+    let mut base = env::temp_dir();
 
     let now_ns = SystemTime::now()
         .duration_since(UNIX_EPOCH)

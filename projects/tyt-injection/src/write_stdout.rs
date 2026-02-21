@@ -1,5 +1,5 @@
-use std::io::{Result, Write};
+use std::io::{self, Result, Write};
 
 pub fn write_stdout(contents: &[u8]) -> Result<()> {
-    std::io::stdout().write_all(contents)
+    io::stdout().write_all(contents)
 }

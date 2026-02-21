@@ -1,14 +1,14 @@
 use crate::{ExecError, exec};
-use std::ffi::OsStr;
+use std::{ffi::OsStr, io::Error as IOError, result::Result as StdResult};
 use tyt_common::ExecFailed;
 
 /// Executes an external command, mapping errors through the provided constructors.
 pub fn exec_map<I, S, E>(
     program: &str,
     args: I,
-    map_io: impl FnOnce(std::io::Error) -> E,
+    map_io: impl FnOnce(IOError) -> E,
     map_failed: impl FnOnce(ExecFailed) -> E,
-) -> std::result::Result<Vec<u8>, E>
+) -> StdResult<Vec<u8>, E>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,

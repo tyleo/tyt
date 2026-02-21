@@ -1,5 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
+use std::{io, process};
 use tyt_image::{DependenciesImpl, TytImage};
 
 /// Operations on images.
@@ -27,12 +28,12 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(shell, &mut Cli::command(), "image", &mut std::io::stdout());
+            clap_complete::generate(shell, &mut Cli::command(), "image", &mut io::stdout());
         }
         Command::TytImage(image) => {
             if let Err(e) = image.execute(DependenciesImpl) {
                 eprintln!("error: {e}");
-                std::process::exit(1);
+                process::exit(1);
             }
         }
     }

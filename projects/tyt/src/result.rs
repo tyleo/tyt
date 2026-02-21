@@ -1,3 +1,4 @@
 use crate::Error;
+use std::result::Result as StdResult;
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = StdResult<T, Error>;

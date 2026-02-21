@@ -1,5 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
+use std::{io, process};
 use tyt_meta::{DependenciesImpl, TytMeta};
 
 /// Meta-tools for scaffolding new tyt sub-crates and commands.
@@ -27,12 +28,12 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(shell, &mut Cli::command(), "meta", &mut std::io::stdout());
+            clap_complete::generate(shell, &mut Cli::command(), "meta", &mut io::stdout());
         }
         Command::TytMeta(meta) => {
             if let Err(e) = meta.execute(DependenciesImpl) {
                 eprintln!("error: {e}");
-                std::process::exit(1);
+                process::exit(1);
             }
         }
     }

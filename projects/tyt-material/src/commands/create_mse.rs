@@ -1,6 +1,6 @@
 use crate::{Dependencies, Error, Result};
 use clap::Parser;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Creates an MSE png from material texture maps. The output png packs:
 ///   R = metalness (metal_rough red channel)
@@ -149,7 +149,7 @@ fn create_mse_inner(
     albedo_path: &Option<PathBuf>,
     out_base: &str,
     size: &str,
-    tmpdir: &std::path::Path,
+    tmpdir: &Path,
 ) -> Result<()> {
     let r_img = tmpdir.join("r.png");
     let g_img = tmpdir.join("g.png");

@@ -1,5 +1,6 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
+use std::{io, process};
 use tyt_fbx::{DependenciesImpl, TytFbx};
 
 /// Operations on FBX files.
@@ -27,12 +28,12 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(shell, &mut Cli::command(), "fbx", &mut std::io::stdout());
+            clap_complete::generate(shell, &mut Cli::command(), "fbx", &mut io::stdout());
         }
         Command::TytFbx(fbx) => {
             if let Err(e) = fbx.execute(DependenciesImpl) {
                 eprintln!("error: {e}");
-                std::process::exit(1);
+                process::exit(1);
             }
         }
     }

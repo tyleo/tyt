@@ -1,5 +1,6 @@
 use crate::Dependencies;
 use std::{
+    env, fs,
     io::{Error as IOError, ErrorKind, Result as IOResult},
     path::{Path, PathBuf},
     process::Command,
@@ -11,7 +12,7 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
-        Ok(std::env::var_os("HOME").map(PathBuf::from))
+        Ok(env::var_os("HOME").map(PathBuf::from))
     }
 
     fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
@@ -34,7 +35,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
-        match std::fs::read(path) {
+        match fs::read(path) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
             Err(e) => Err(e),

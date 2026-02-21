@@ -1,9 +1,9 @@
 use crate::ExecError;
-use std::{ffi::OsStr, process};
+use std::{ffi::OsStr, process, result::Result as StdResult};
 use tyt_common::ExecFailed;
 
 /// Executes an external command and returns its stdout on success.
-pub fn exec<I, S>(program: &str, args: I) -> std::result::Result<Vec<u8>, ExecError>
+pub fn exec<I, S>(program: &str, args: I) -> StdResult<Vec<u8>, ExecError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,

@@ -1,8 +1,10 @@
 use crate::{Dependencies, Error, MeshWithUvs, Result};
 use std::{
-    fs,
-    io::{ErrorKind, Write},
+    ffi::OsStr,
+    fs::{self, OpenOptions},
+    io::{Error as IOError, ErrorKind, Write},
     path::{Path, PathBuf},
+    result::Result as StdResult,
 };
 use ty_math::{TyRgbaColor, TyVector3};
 
@@ -18,7 +20,7 @@ impl Dependencies for DependenciesImpl {
         P1: AsRef<Path>,
         P2: AsRef<Path>,
         I: IntoIterator<Item = S>,
-        S: AsRef<std::ffi::OsStr>,
+        S: AsRef<OsStr>,
     >(
         &self,
         script_dir: P1,
@@ -69,25 +71,19 @@ impl Dependencies for DependenciesImpl {
             .map(|v| {
                 let name = v["name"]
                     .as_str()
-                    .ok_or_else(|| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, "missing 'name'")
-                    })?
+                    .ok_or_else(|| IOError::new(ErrorKind::InvalidData, "missing 'name'"))?
                     .to_owned();
                 let path = v["path"]
                     .as_str()
-                    .ok_or_else(|| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, "missing 'path'")
-                    })?
+                    .ok_or_else(|| IOError::new(ErrorKind::InvalidData, "missing 'path'"))?
                     .to_owned();
                 let obj_type = v["type"]
                     .as_str()
-                    .ok_or_else(|| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, "missing 'type'")
-                    })?
+                    .ok_or_else(|| IOError::new(ErrorKind::InvalidData, "missing 'type'"))?
                     .to_owned();
                 Ok((name, path, obj_type))
             })
-            .collect::<std::result::Result<Vec<_>, std::io::Error>>()
+            .collect::<StdResult<Vec<_>, IOError>>()
             .map_err(Error::from)
     }
 
@@ -117,10 +113,7 @@ impl Dependencies for DependenciesImpl {
         // Use a scope so the file handle is closed before rename (important on
         // Windows).
         {
-            let mut f = fs::OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&tmp)?;
+            let mut f = OpenOptions::new().create_new(true).write(true).open(&tmp)?;
 
             f.write_all(contents)?;
             f.sync_all()?; // durability best-effort
