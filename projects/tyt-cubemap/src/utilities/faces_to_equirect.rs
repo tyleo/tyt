@@ -1,7 +1,5 @@
-use crate::{Dependencies, Result};
+use crate::{Dependencies, Result, utilities};
 use std::path::Path;
-
-const FACES: &[&str] = &["left", "right", "up", "down", "front", "back"];
 
 /// Appends six cube face images into a horizontal strip and converts to equirectangular.
 pub fn faces_to_equirect(
@@ -15,7 +13,7 @@ pub fn faces_to_equirect(
     let strip_str = strip_path.to_string_lossy().into_owned();
     let out_path = format!("{out_base}.png");
 
-    let mut magick_args: Vec<String> = FACES
+    let mut magick_args: Vec<String> = utilities::C6X1_FACES
         .iter()
         .map(|face| format!("{base}-{face}.png"))
         .collect();

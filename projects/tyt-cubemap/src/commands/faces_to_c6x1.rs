@@ -1,14 +1,14 @@
-use crate::{Dependencies, Result};
+use crate::{Dependencies, Result, utilities};
 use clap::Parser;
 
 /// Combines six cube face images into a c6x1 horizontal strip.
 #[derive(Clone, Debug, Parser)]
-pub struct FacesTo6x1 {
+pub struct FacesToC6x1 {
     /// Base name for input face files (`{base}-left.png`, etc.).
     #[arg(value_name = "base")]
     base: String,
 
-    /// Output base name. Defaults to `{base}-6x1`.
+    /// Output base name. Defaults to `{base}-c6x1`.
     #[arg(value_name = "out-base")]
     out_base: Option<String>,
 
@@ -23,17 +23,14 @@ pub struct FacesTo6x1 {
     output_size: Option<u32>,
 }
 
-/// Face order for the c6x1 strip (matches `faces_to_equirect`).
-const C6X1_FACES: &[&str] = &["left", "right", "up", "down", "front", "back"];
-
-impl FacesTo6x1 {
+impl FacesToC6x1 {
     pub fn execute(self, deps: impl Dependencies) -> Result<()> {
         let out_base = self
             .out_base
-            .unwrap_or_else(|| format!("{}-6x1", self.base));
+            .unwrap_or_else(|| format!("{}-c6x1", self.base));
         let out_path = format!("{out_base}.png");
 
-        let mut magick_args: Vec<String> = C6X1_FACES
+        let mut magick_args: Vec<String> = utilities::C6X1_FACES
             .iter()
             .map(|face| format!("{}-{face}.png", self.base))
             .collect();

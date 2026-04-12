@@ -1,6 +1,4 @@
-use crate::{Dependencies, Result};
-
-const FACES: &[&str] = &["left", "right", "up", "down", "front", "back"];
+use crate::{Dependencies, Result, utilities};
 
 /// Point-resizes six cube face images to the given height, optionally upscaling to
 /// `output_size` afterwards to preserve hard edges at a larger resolution.
@@ -11,7 +9,7 @@ pub fn pixelate_faces(
     size: u32,
     output_size: Option<u32>,
 ) -> Result<()> {
-    for face in FACES {
+    for face in utilities::C6X1_FACES {
         let in_path = format!("{base}-{face}.png");
         let out_path = format!("{out_base}-{face}.png");
         let size_arg = format!("x{size}");

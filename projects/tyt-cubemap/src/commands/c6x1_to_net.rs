@@ -2,46 +2,42 @@ use crate::{Dependencies, Result, utilities};
 use clap::Parser;
 use std::path::Path;
 
-/// Converts an equirectangular panorama into a cube net cross layout.
+/// Converts a c6x1 cube strip into a cube net cross layout.
 #[derive(Clone, Debug, Parser)]
-pub struct EquirectToNet {
-    /// Base name for the input equirectangular image (`{base}.png`).
+pub struct C6x1ToNet {
+    /// Base name for the input strip (`{base}.png`).
     #[arg(value_name = "base")]
     base: String,
 
-    /// Output base name. Defaults to `{base}-cube-net`.
+    /// Output base name. Defaults to `{base}-net`.
     #[arg(value_name = "out-base")]
     out_base: Option<String>,
-
-    /// Side length in pixels for each cube face.
-    #[arg(value_name = "size", short, long, default_value_t = 512)]
-    size: u32,
 
     /// Pad the output to a square canvas.
     #[arg(value_name = "square", long)]
     square: bool,
 
-    /// Use point (nearest-neighbor) interpolation for v360 reprojection.
+    /// Use point (nearest-neighbor) interpolation when resizing to `--output-size`.
     #[arg(value_name = "point", long)]
     point: bool,
 
     /// Final side length for each face in the output net. When set, the net is
-    /// point-resized up, preserving hard edges at a larger resolution.
+    /// resized to this resolution. Combine with `--point` for nearest-neighbor
+    /// filtering that preserves hard edges.
     #[arg(value_name = "output-size", long)]
     output_size: Option<u32>,
 }
 
-impl EquirectToNet {
+impl C6x1ToNet {
     pub fn execute(self, deps: impl Dependencies) -> Result<()> {
         let out_base = self
             .out_base
-            .unwrap_or_else(|| format!("{}-cube-net", self.base));
+            .unwrap_or_else(|| format!("{}-net", self.base));
         let tmp_dir = deps.create_temp_dir()?;
         let result = build_cube_net(
             &deps,
             &self.base,
             &out_base,
-            self.size,
             self.square,
             self.point,
             self.output_size,
@@ -58,34 +54,16 @@ fn build_cube_net(
     deps: &impl Dependencies,
     base: &str,
     out_base: &str,
-    size: u32,
     do_square: bool,
     point: bool,
     output_size: Option<u32>,
     tmp_dir: &Path,
 ) -> Result<()> {
-    let c3x2_path = tmp_dir.join("c3x2.png");
-    let c3x2_str = c3x2_path.to_string_lossy().into_owned();
+    let strip_path = format!("{base}.png");
+    let size = utilities::identify_u32(deps, &strip_path, "%h")?;
 
-    let vf = if point {
-        format!(
-            "v360=input=equirect:output=c3x2,scale={}:{}:flags=neighbor",
-            3 * size,
-            2 * size,
-        )
-    } else {
-        format!(
-            "v360=input=equirect:output=c3x2,scale={}:{}",
-            3 * size,
-            2 * size,
-        )
-    };
-    deps.exec_ffmpeg(["-y", "-i", &format!("{base}.png"), "-vf", &vf, &c3x2_str])?;
-
-    // Force the cube-net output-size resize to always use point filtering here,
-    // preserving this command's pre-refactor behavior (docstring says "point-resized up").
     let cube_net_path =
-        utilities::c3x2_to_cube_net(deps, &c3x2_str, size, tmp_dir, true, output_size)?;
+        utilities::c6x1_to_cube_net(deps, &strip_path, size, tmp_dir, point, output_size)?;
     let cube_net_str = cube_net_path.to_string_lossy().into_owned();
 
     let out_path = format!("{out_base}.png");

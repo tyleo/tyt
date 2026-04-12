@@ -3,12 +3,12 @@ use clap::Parser;
 
 /// Converts an equirectangular panorama into a c6x1 horizontal strip.
 #[derive(Clone, Debug, Parser)]
-pub struct EquirectTo6x1 {
+pub struct EquirectToC6x1 {
     /// Base name for the input equirectangular image (`{base}.png`).
     #[arg(value_name = "base")]
     base: String,
 
-    /// Output base name. Defaults to `{base}-6x1`.
+    /// Output base name. Defaults to `{base}-c6x1`.
     #[arg(value_name = "out-base")]
     out_base: Option<String>,
 
@@ -26,11 +26,11 @@ pub struct EquirectTo6x1 {
     output_size: Option<u32>,
 }
 
-impl EquirectTo6x1 {
+impl EquirectToC6x1 {
     pub fn execute(self, deps: impl Dependencies) -> Result<()> {
         let out_base = self
             .out_base
-            .unwrap_or_else(|| format!("{}-6x1", self.base));
+            .unwrap_or_else(|| format!("{}-c6x1", self.base));
         let out_path = format!("{out_base}.png");
 
         let vf = if self.point {
