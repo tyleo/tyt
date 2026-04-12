@@ -3,10 +3,14 @@ use clap::Parser;
 use std::path::{Path, PathBuf};
 
 /// Creates an MSE png from material texture maps. The output png packs:
-///   R = metalness (metal_rough red channel)
-///   G = smoothness (1 - metal_rough alpha)
+///   R = metalness
+///   G = smoothness (1 - roughness), or roughness when `--output-rough` is set
 ///   B = emissive (emissive alpha)
 /// Optionally copies the albedo texture alongside.
+///
+/// By default, metalness and roughness are read from separate textures
+/// (`*metalness.png` and `*roughness.png`). Pass `--combine-metal-rough` to
+/// read both from a single legacy texture (R = metal, A = roughness).
 #[derive(Clone, Debug, Parser)]
 pub struct CreateMse {
     /// The output base path. Output files will be `{out_base}-mse.png` and
@@ -15,12 +19,29 @@ pub struct CreateMse {
     out_base: String,
 
     /// Search prefix for texture files. When set, searches for
-    /// `{prefix}-metalness.png`, `{prefix}-emission.png`, `{prefix}-albedo.png`.
+    /// `{prefix}-metalness.png`, `{prefix}-roughness.png`,
+    /// `{prefix}-emission.png`, `{prefix}-albedo.png`.
     #[arg(value_name = "prefix", long)]
     prefix: Option<String>,
 
-    /// Explicit path to the metal_rough texture.
-    #[arg(value_name = "metal-rough", long)]
+    /// Explicit path to the metal texture. Cannot be used with
+    /// `--combine-metal-rough`.
+    #[arg(value_name = "metal", long, conflicts_with = "combine_metal_rough")]
+    metal: Option<PathBuf>,
+
+    /// Explicit path to the rough texture. Cannot be used with
+    /// `--combine-metal-rough`.
+    #[arg(value_name = "rough", long, conflicts_with = "combine_metal_rough")]
+    rough: Option<PathBuf>,
+
+    /// Read metalness and roughness from a single combined texture
+    /// (legacy mode: R = metal, A = roughness).
+    #[arg(value_name = "combine-metal-rough", long)]
+    combine_metal_rough: bool,
+
+    /// Explicit path to the combined metal_rough texture. Only valid with
+    /// `--combine-metal-rough`.
+    #[arg(value_name = "metal-rough", long, requires = "combine_metal_rough")]
     metal_rough: Option<PathBuf>,
 
     /// Explicit path to the emissive texture.
@@ -31,21 +52,26 @@ pub struct CreateMse {
     #[arg(value_name = "albedo", long)]
     albedo: Option<PathBuf>,
 
-    /// Skip the metal_rough channel (metalness and smoothness will be black).
-    #[arg(
-        value_name = "ignore-metal-rough",
-        long,
-        conflicts_with = "metal_rough"
-    )]
-    ignore_metal_rough: bool,
+    /// Skip the metalness channel (R will be black).
+    #[arg(value_name = "ignore-metal", long)]
+    ignore_metal: bool,
 
-    /// Skip the emissive channel (emission will be black).
-    #[arg(value_name = "ignore-emissive", long, conflicts_with = "emissive")]
+    /// Skip the roughness channel (G will be black).
+    #[arg(value_name = "ignore-rough", long)]
+    ignore_rough: bool,
+
+    /// Skip the emissive channel (B will be black).
+    #[arg(value_name = "ignore-emissive", long)]
     ignore_emissive: bool,
 
     /// Skip the albedo pass-through copy.
-    #[arg(value_name = "ignore-albedo", long, conflicts_with = "albedo")]
+    #[arg(value_name = "ignore-albedo", long)]
     ignore_albedo: bool,
+
+    /// Output roughness directly into the G channel instead of converting it
+    /// to smoothness (1 - roughness).
+    #[arg(value_name = "output-rough", long)]
+    output_rough: bool,
 }
 
 impl CreateMse {
@@ -53,18 +79,23 @@ impl CreateMse {
         let CreateMse {
             out_base,
             prefix,
+            metal,
+            rough,
+            combine_metal_rough,
             metal_rough,
             emissive,
             albedo,
-            ignore_metal_rough,
+            ignore_metal,
+            ignore_rough,
             ignore_emissive,
             ignore_albedo,
+            output_rough,
         } = self;
 
         // ----------------------------------------------------------------
         // Resolve texture paths
         // ----------------------------------------------------------------
-        let metal_rough_path = if ignore_metal_rough {
+        let metal_rough_path = if !combine_metal_rough || (ignore_metal && ignore_rough) {
             None
         } else {
             Some(match metal_rough {
@@ -72,6 +103,30 @@ impl CreateMse {
                 None => match &prefix {
                     Some(pfx) => dependencies.glob_single_match(&format!("{pfx}-metalness.png"))?,
                     None => dependencies.glob_single_match("*metalness.png")?,
+                },
+            })
+        };
+
+        let metal_path = if combine_metal_rough || ignore_metal {
+            None
+        } else {
+            Some(match metal {
+                Some(p) => coerce_png(p),
+                None => match &prefix {
+                    Some(pfx) => dependencies.glob_single_match(&format!("{pfx}-metalness.png"))?,
+                    None => dependencies.glob_single_match("*metalness.png")?,
+                },
+            })
+        };
+
+        let rough_path = if combine_metal_rough || ignore_rough {
+            None
+        } else {
+            Some(match rough {
+                Some(p) => coerce_png(p),
+                None => match &prefix {
+                    Some(pfx) => dependencies.glob_single_match(&format!("{pfx}-roughness.png"))?,
+                    None => dependencies.glob_single_match("*roughness.png")?,
                 },
             })
         };
@@ -105,6 +160,8 @@ impl CreateMse {
         // ----------------------------------------------------------------
         let base_img = metal_rough_path
             .as_ref()
+            .or(metal_path.as_ref())
+            .or(rough_path.as_ref())
             .or(emissive_path.as_ref())
             .or(albedo_path.as_ref())
             .ok_or_else(|| Error::Glob("all channels are ignored; nothing to do".into()))?;
@@ -131,8 +188,11 @@ impl CreateMse {
         let result = self::create_mse_inner(
             &dependencies,
             &metal_rough_path,
+            &metal_path,
+            &rough_path,
             &emissive_path,
             &albedo_path,
+            output_rough,
             &out_base,
             &size,
             &tmpdir,
@@ -145,8 +205,11 @@ impl CreateMse {
 fn create_mse_inner(
     dependencies: &impl Dependencies,
     metal_rough_path: &Option<PathBuf>,
+    metal_path: &Option<PathBuf>,
+    rough_path: &Option<PathBuf>,
     emissive_path: &Option<PathBuf>,
     albedo_path: &Option<PathBuf>,
+    output_rough: bool,
     out_base: &str,
     size: &str,
     tmpdir: &Path,
@@ -159,12 +222,9 @@ fn create_mse_inner(
     let g_str = g_img.to_string_lossy().into_owned();
     let b_str = b_img.to_string_lossy().into_owned();
 
-    // R channel: metalness (red channel of metal_rough)
-    match metal_rough_path {
-        None => {
-            dependencies.exec_magick(["-size", size, "xc:black", &r_str])?;
-        }
-        Some(mr) => {
+    // R channel: metalness
+    match (metal_rough_path, metal_path) {
+        (Some(mr), _) => {
             let mr_str = mr.to_string_lossy().into_owned();
             dependencies.exec_magick([
                 &mr_str,
@@ -181,29 +241,94 @@ fn create_mse_inner(
                 &r_str,
             ])?;
         }
-    }
-
-    // G channel: smoothness = 1 - roughness (alpha channel of metal_rough, inverted)
-    match metal_rough_path {
-        None => {
-            dependencies.exec_magick(["-size", size, "xc:black", &g_str])?;
-        }
-        Some(mr) => {
-            let mr_str = mr.to_string_lossy().into_owned();
+        (None, Some(m)) => {
+            let metal_str = m.to_string_lossy().into_owned();
             dependencies.exec_magick([
-                &mr_str,
+                &metal_str,
                 "-colorspace",
                 "sRGB",
-                "-alpha",
-                "on",
-                "-alpha",
-                "extract",
-                "-fx",
-                "u==0 ? 0 : 1-u",
+                "-channel",
+                "R",
+                "-separate",
+                "+channel",
                 "-resize",
                 &format!("{size}!"),
-                &g_str,
+                &r_str,
             ])?;
+        }
+        (None, None) => {
+            dependencies.exec_magick(["-size", size, "xc:black", &r_str])?;
+        }
+    }
+
+    // G channel: smoothness = 1 - roughness, or roughness if output_rough
+    match (metal_rough_path, rough_path) {
+        (Some(mr), _) => {
+            let mr_str = mr.to_string_lossy().into_owned();
+            if output_rough {
+                dependencies.exec_magick([
+                    &mr_str,
+                    "-colorspace",
+                    "sRGB",
+                    "-alpha",
+                    "on",
+                    "-alpha",
+                    "extract",
+                    "-resize",
+                    &format!("{size}!"),
+                    &g_str,
+                ])?;
+            } else {
+                dependencies.exec_magick([
+                    &mr_str,
+                    "-colorspace",
+                    "sRGB",
+                    "-alpha",
+                    "on",
+                    "-alpha",
+                    "extract",
+                    "-fx",
+                    "u==0 ? 0 : 1-u",
+                    "-resize",
+                    &format!("{size}!"),
+                    &g_str,
+                ])?;
+            }
+        }
+        (None, Some(r)) => {
+            let rough_str = r.to_string_lossy().into_owned();
+            if output_rough {
+                dependencies.exec_magick([
+                    &rough_str,
+                    "-colorspace",
+                    "sRGB",
+                    "-channel",
+                    "R",
+                    "-separate",
+                    "+channel",
+                    "-resize",
+                    &format!("{size}!"),
+                    &g_str,
+                ])?;
+            } else {
+                dependencies.exec_magick([
+                    &rough_str,
+                    "-colorspace",
+                    "sRGB",
+                    "-channel",
+                    "R",
+                    "-separate",
+                    "+channel",
+                    "-fx",
+                    "1-u",
+                    "-resize",
+                    &format!("{size}!"),
+                    &g_str,
+                ])?;
+            }
+        }
+        (None, None) => {
+            dependencies.exec_magick(["-size", size, "xc:black", &g_str])?;
         }
     }
 
