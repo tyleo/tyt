@@ -17,9 +17,9 @@ pub struct EquirectToFaces {
     #[arg(value_name = "size", short, long, default_value_t = 512)]
     size: u32,
 
-    /// Use nearest-neighbor interpolation for v360 reprojection.
-    #[arg(value_name = "nearest", long)]
-    nearest: bool,
+    /// Use point (nearest-neighbor) interpolation for v360 reprojection.
+    #[arg(value_name = "point", long)]
+    point: bool,
 }
 
 /// Face crop positions in the c3x2 layout: `(col, row, face_name)`.
@@ -39,12 +39,7 @@ impl EquirectToFaces {
             .unwrap_or_else(|| format!("{}-cube", self.base));
         let tmp_dir = deps.create_temp_dir()?;
         let result = equirect_to_faces(
-            &deps,
-            &self.base,
-            &out_base,
-            self.size,
-            self.nearest,
-            &tmp_dir,
+            &deps, &self.base, &out_base, self.size, self.point, &tmp_dir,
         );
         deps.remove_dir_all(&tmp_dir)?;
         result?;
@@ -58,13 +53,13 @@ fn equirect_to_faces(
     base: &str,
     out_base: &str,
     size: u32,
-    nearest: bool,
+    point: bool,
     tmp_dir: &Path,
 ) -> Result<()> {
     let c3x2_path = tmp_dir.join("c3x2.png");
     let c3x2_str = c3x2_path.to_string_lossy().into_owned();
 
-    let vf = if nearest {
+    let vf = if point {
         format!(
             "v360=input=equirect:output=c3x2,scale={}:{}:flags=neighbor",
             3 * size,

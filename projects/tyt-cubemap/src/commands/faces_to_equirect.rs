@@ -12,12 +12,12 @@ pub struct FacesToEquirect {
     #[arg(value_name = "out-base")]
     out_base: Option<String>,
 
-    /// Use nearest-neighbor interpolation for v360 reprojection.
-    #[arg(value_name = "nearest", long)]
-    nearest: bool,
+    /// Use point (nearest-neighbor) interpolation for v360 reprojection.
+    #[arg(value_name = "point", long)]
+    point: bool,
 
     /// Pixelate (point-resize) the faces to the given height before converting.
-    /// Implies `--nearest`.
+    /// Implies `--point`.
     #[arg(value_name = "pixelate", long)]
     pixelate: Option<u32>,
 }
@@ -27,7 +27,7 @@ impl FacesToEquirect {
         let out_base = self
             .out_base
             .unwrap_or_else(|| format!("{}-equirect", self.base));
-        let nearest = self.nearest || self.pixelate.is_some();
+        let point = self.point || self.pixelate.is_some();
         let tmp_dir = deps.create_temp_dir()?;
 
         let result = (|| {
@@ -39,7 +39,7 @@ impl FacesToEquirect {
             } else {
                 self.base.clone()
             };
-            utilities::faces_to_equirect(&deps, &equirect_base, &out_base, &tmp_dir, nearest)
+            utilities::faces_to_equirect(&deps, &equirect_base, &out_base, &tmp_dir, point)
         })();
 
         deps.remove_dir_all(&tmp_dir)?;

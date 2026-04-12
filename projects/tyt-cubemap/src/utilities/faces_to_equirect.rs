@@ -9,7 +9,7 @@ pub fn faces_to_equirect(
     base: &str,
     out_base: &str,
     tmp_dir: &Path,
-    nearest: bool,
+    point: bool,
 ) -> Result<String> {
     let strip_path = tmp_dir.join("strip.png");
     let strip_str = strip_path.to_string_lossy().into_owned();
@@ -23,7 +23,7 @@ pub fn faces_to_equirect(
     magick_args.push(strip_str.clone());
     deps.exec_magick(magick_args)?;
 
-    let vf = if nearest {
+    let vf = if point {
         "v360=c6x1:e:flags=neighbor"
     } else {
         "v360=c6x1:e"
