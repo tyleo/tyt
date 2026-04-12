@@ -19,7 +19,7 @@ impl Dependencies for DependenciesImpl {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        tyt_injection::exec_map("ffmpeg", args, Error::IO, Error::Ffmpeg)
+        tyt_injection::exec_map_ignore_stderr("ffmpeg", args, Error::IO, Error::Ffmpeg)
     }
 
     fn exec_magick<I, S>(&self, args: I) -> Result<Vec<u8>>
