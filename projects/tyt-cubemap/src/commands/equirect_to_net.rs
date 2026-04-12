@@ -21,12 +21,17 @@ pub struct EquirectToNet {
     #[arg(value_name = "square", long)]
     square: bool,
 
-    /// Use point (nearest-neighbor) interpolation for v360 reprojection.
+    /// Use nearest-neighbor filtering on the final `--output-size` resize.
     #[arg(value_name = "point", long)]
     point: bool,
 
+    /// Use nearest-neighbor (`interp=near`) on the v360 reprojection itself.
+    #[arg(value_name = "point-reprojection", long)]
+    point_reprojection: bool,
+
     /// Final side length for each face in the output net. When set, the net is
-    /// point-resized up, preserving hard edges at a larger resolution.
+    /// resized to this resolution. Combine with `--point` for nearest-neighbor
+    /// filtering that preserves hard edges.
     #[arg(value_name = "output-size", long)]
     output_size: Option<u32>,
 }
@@ -44,6 +49,7 @@ impl EquirectToNet {
             self.size,
             self.square,
             self.point,
+            self.point_reprojection,
             self.output_size,
             &tmp_dir,
         );
@@ -61,15 +67,16 @@ fn build_cube_net(
     size: u32,
     do_square: bool,
     point: bool,
+    point_reprojection: bool,
     output_size: Option<u32>,
     tmp_dir: &Path,
 ) -> Result<()> {
     let c3x2_path = tmp_dir.join("c3x2.png");
     let c3x2_str = c3x2_path.to_string_lossy().into_owned();
 
-    let vf = if point {
+    let vf = if point_reprojection {
         format!(
-            "v360=input=equirect:output=c3x2,scale={}:{}:flags=neighbor",
+            "v360=input=equirect:output=c3x2:interp=near,scale={}:{}",
             3 * size,
             2 * size,
         )
@@ -82,10 +89,8 @@ fn build_cube_net(
     };
     deps.exec_ffmpeg(["-y", "-i", &format!("{base}.png"), "-vf", &vf, &c3x2_str])?;
 
-    // Force the cube-net output-size resize to always use point filtering here,
-    // preserving this command's pre-refactor behavior (docstring says "point-resized up").
     let cube_net_path =
-        utilities::c3x2_to_cube_net(deps, &c3x2_str, size, tmp_dir, true, output_size)?;
+        utilities::c3x2_to_cube_net(deps, &c3x2_str, size, tmp_dir, point, output_size)?;
     let cube_net_str = cube_net_path.to_string_lossy().into_owned();
 
     let out_path = format!("{out_base}.png");

@@ -14,8 +14,11 @@ pub fn c6x1_to_cube_net(
     // Convert c6x1 → c3x2 via ffmpeg v360.
     let c3x2_path = tmp_dir.join("c3x2.png");
     let c3x2_str = c3x2_path.to_string_lossy().into_owned();
+    // `interp=near` ensures the nominally-lossless cube→cube rearrangement
+    // stays pixel-perfect at face-boundary seams. `flags=neighbor` on the scale
+    // is redundant: with equal-area cubemap layouts the scale is a no-op.
     let vf = format!(
-        "v360=input=c6x1:output=c3x2,scale={}:{}:flags=neighbor",
+        "v360=input=c6x1:output=c3x2:interp=near,scale={}:{}",
         3 * size,
         2 * size,
     );

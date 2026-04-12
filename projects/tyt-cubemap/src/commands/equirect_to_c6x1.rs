@@ -16,12 +16,17 @@ pub struct EquirectToC6x1 {
     #[arg(value_name = "size", short, long, default_value_t = 512)]
     size: u32,
 
-    /// Use point (nearest-neighbor) interpolation for v360 reprojection.
+    /// Use nearest-neighbor filtering on the final `--output-size` resize.
     #[arg(value_name = "point", long)]
     point: bool,
 
-    /// Final side length for each face. When set, the strip is point-resized from
-    /// `--size` to this dimension, preserving hard edges at a larger resolution.
+    /// Use nearest-neighbor (`interp=near`) on the v360 reprojection itself.
+    #[arg(value_name = "point-reprojection", long)]
+    point_reprojection: bool,
+
+    /// Final side length for each face. When set, the strip is resized from
+    /// `--size` to this dimension. Combine with `--point` for nearest-neighbor
+    /// filtering that preserves hard edges.
     #[arg(value_name = "output-size", long)]
     output_size: Option<u32>,
 }
@@ -33,9 +38,9 @@ impl EquirectToC6x1 {
             .unwrap_or_else(|| format!("{}-c6x1", self.base));
         let out_path = format!("{out_base}.png");
 
-        let vf = if self.point {
+        let vf = if self.point_reprojection {
             format!(
-                "v360=input=equirect:output=c6x1,scale={}:{}:flags=neighbor",
+                "v360=input=equirect:output=c6x1:interp=near,scale={}:{}",
                 6 * self.size,
                 self.size,
             )
@@ -57,14 +62,18 @@ impl EquirectToC6x1 {
 
         if let Some(out_size) = self.output_size {
             let dimensions = format!("{}x{}", 6 * out_size, out_size);
-            deps.exec_magick([
-                out_path.as_str(),
-                "-filter",
-                "point",
-                "-resize",
-                &dimensions,
-                &out_path,
-            ])?;
+            if self.point {
+                deps.exec_magick([
+                    out_path.as_str(),
+                    "-filter",
+                    "point",
+                    "-resize",
+                    &dimensions,
+                    &out_path,
+                ])?;
+            } else {
+                deps.exec_magick([out_path.as_str(), "-resize", &dimensions, &out_path])?;
+            }
         }
 
         deps.write_stdout(format!("Wrote: {out_path}\n").as_bytes())?;

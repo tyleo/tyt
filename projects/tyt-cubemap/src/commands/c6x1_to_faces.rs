@@ -12,8 +12,13 @@ pub struct C6x1ToFaces {
     #[arg(value_name = "out-base")]
     out_base: Option<String>,
 
-    /// Final side length for each output face. When set, faces are point-resized to this dimension,
-    /// preserving hard edges at a larger resolution.
+    /// Use nearest-neighbor filtering on the final `--output-size` resize.
+    #[arg(value_name = "point", long)]
+    point: bool,
+
+    /// Final side length for each output face. When set, faces are resized to this
+    /// dimension. Combine with `--point` for nearest-neighbor filtering that
+    /// preserves hard edges.
     #[arg(value_name = "output-size", long)]
     output_size: Option<u32>,
 }
@@ -29,7 +34,11 @@ impl C6x1ToFaces {
         for (i, face) in utilities::C6X1_FACES.iter().enumerate() {
             let x = i as u32 * size;
             let vf = if let Some(out_size) = self.output_size {
-                format!("crop={size}:{size}:{x}:0,scale={out_size}:{out_size}:flags=neighbor")
+                if self.point {
+                    format!("crop={size}:{size}:{x}:0,scale={out_size}:{out_size}:flags=neighbor")
+                } else {
+                    format!("crop={size}:{size}:{x}:0,scale={out_size}:{out_size}")
+                }
             } else {
                 format!("crop={size}:{size}:{x}:0")
             };

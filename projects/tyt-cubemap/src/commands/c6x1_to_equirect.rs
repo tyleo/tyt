@@ -12,12 +12,17 @@ pub struct C6x1ToEquirect {
     #[arg(value_name = "out-base")]
     out_base: Option<String>,
 
-    /// Use point (nearest-neighbor) interpolation for v360 reprojection.
+    /// Use nearest-neighbor filtering on the final `--output-size` resize.
     #[arg(value_name = "point", long)]
     point: bool,
 
+    /// Use nearest-neighbor (`interp=near`) on the v360 reprojection itself.
+    #[arg(value_name = "point-reprojection", long)]
+    point_reprojection: bool,
+
     /// Final output height in pixels. When set, the equirectangular image is
-    /// point-resized up to this height, preserving hard edges at a larger resolution.
+    /// resized to this height. Combine with `--point` for nearest-neighbor
+    /// filtering that preserves hard edges.
     #[arg(value_name = "output-size", long)]
     output_size: Option<u32>,
 }
@@ -29,8 +34,8 @@ impl C6x1ToEquirect {
             .unwrap_or_else(|| format!("{}-equirect", self.base));
         let out_path = format!("{out_base}.png");
 
-        let vf = if self.point {
-            "v360=c6x1:e:flags=neighbor"
+        let vf = if self.point_reprojection {
+            "v360=c6x1:e:interp=near"
         } else {
             "v360=c6x1:e"
         };
@@ -46,14 +51,19 @@ impl C6x1ToEquirect {
         ])?;
 
         if let Some(output_size) = self.output_size {
-            deps.exec_magick([
-                out_path.as_str(),
-                "-filter",
-                "point",
-                "-resize",
-                &format!("x{output_size}"),
-                &out_path,
-            ])?;
+            let resize = format!("x{output_size}");
+            if self.point {
+                deps.exec_magick([
+                    out_path.as_str(),
+                    "-filter",
+                    "point",
+                    "-resize",
+                    &resize,
+                    &out_path,
+                ])?;
+            } else {
+                deps.exec_magick([out_path.as_str(), "-resize", &resize, &out_path])?;
+            }
         }
 
         deps.write_stdout(format!("Wrote: {out_path}\n").as_bytes())?;

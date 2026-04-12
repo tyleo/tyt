@@ -17,12 +17,17 @@ pub struct EquirectToFaces {
     #[arg(value_name = "size", short, long, default_value_t = 512)]
     size: u32,
 
-    /// Use point (nearest-neighbor) interpolation for v360 reprojection.
+    /// Use nearest-neighbor filtering on the final per-face `--output-size` resize.
     #[arg(value_name = "point", long)]
     point: bool,
 
-    /// Final side length for each output face. When set, faces are point-resized from
-    /// `--size` to this dimension, preserving hard edges at a larger resolution.
+    /// Use nearest-neighbor (`interp=near`) on the v360 reprojection itself.
+    #[arg(value_name = "point-reprojection", long)]
+    point_reprojection: bool,
+
+    /// Final side length for each output face. When set, faces are resized from
+    /// `--size` to this dimension. Combine with `--point` for nearest-neighbor
+    /// filtering that preserves hard edges.
     #[arg(value_name = "output-size", long)]
     output_size: Option<u32>,
 }
@@ -49,6 +54,7 @@ impl EquirectToFaces {
             &out_base,
             self.size,
             self.point,
+            self.point_reprojection,
             self.output_size,
             &tmp_dir,
         );
@@ -65,15 +71,16 @@ fn equirect_to_faces(
     out_base: &str,
     size: u32,
     point: bool,
+    point_reprojection: bool,
     output_size: Option<u32>,
     tmp_dir: &Path,
 ) -> Result<()> {
     let c3x2_path = tmp_dir.join("c3x2.png");
     let c3x2_str = c3x2_path.to_string_lossy().into_owned();
 
-    let vf = if point {
+    let vf = if point_reprojection {
         format!(
-            "v360=input=equirect:output=c3x2,scale={}:{}:flags=neighbor",
+            "v360=input=equirect:output=c3x2:interp=near,scale={}:{}",
             3 * size,
             2 * size,
         )
@@ -88,11 +95,19 @@ fn equirect_to_faces(
 
     for &(col, row, face) in C3X2_FACES {
         let vf = if let Some(out_size) = output_size {
-            format!(
-                "crop={size}:{size}:{}:{},scale={out_size}:{out_size}:flags=neighbor",
-                col * size,
-                row * size,
-            )
+            if point {
+                format!(
+                    "crop={size}:{size}:{}:{},scale={out_size}:{out_size}:flags=neighbor",
+                    col * size,
+                    row * size,
+                )
+            } else {
+                format!(
+                    "crop={size}:{size}:{}:{},scale={out_size}:{out_size}",
+                    col * size,
+                    row * size,
+                )
+            }
         } else {
             format!("crop={size}:{size}:{}:{}", col * size, row * size)
         };
