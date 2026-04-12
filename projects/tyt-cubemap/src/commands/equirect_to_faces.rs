@@ -20,6 +20,11 @@ pub struct EquirectToFaces {
     /// Use point (nearest-neighbor) interpolation for v360 reprojection.
     #[arg(value_name = "point", long)]
     point: bool,
+
+    /// Final side length for each output face. When set, faces are point-resized from
+    /// `--size` to this dimension, preserving hard edges at a larger resolution.
+    #[arg(value_name = "output-size", long)]
+    output_size: Option<u32>,
 }
 
 /// Face crop positions in the c3x2 layout: `(col, row, face_name)`.
@@ -39,7 +44,13 @@ impl EquirectToFaces {
             .unwrap_or_else(|| format!("{}-cube", self.base));
         let tmp_dir = deps.create_temp_dir()?;
         let result = equirect_to_faces(
-            &deps, &self.base, &out_base, self.size, self.point, &tmp_dir,
+            &deps,
+            &self.base,
+            &out_base,
+            self.size,
+            self.point,
+            self.output_size,
+            &tmp_dir,
         );
         deps.remove_dir_all(&tmp_dir)?;
         result?;
@@ -54,6 +65,7 @@ fn equirect_to_faces(
     out_base: &str,
     size: u32,
     point: bool,
+    output_size: Option<u32>,
     tmp_dir: &Path,
 ) -> Result<()> {
     let c3x2_path = tmp_dir.join("c3x2.png");
@@ -75,14 +87,22 @@ fn equirect_to_faces(
     deps.exec_ffmpeg(["-y", "-i", &format!("{base}.png"), "-vf", &vf, &c3x2_str])?;
 
     for &(col, row, face) in C3X2_FACES {
-        let crop = format!("crop={size}:{size}:{}:{}", col * size, row * size);
+        let vf = if let Some(out_size) = output_size {
+            format!(
+                "crop={size}:{size}:{}:{},scale={out_size}:{out_size}:flags=neighbor",
+                col * size,
+                row * size,
+            )
+        } else {
+            format!("crop={size}:{size}:{}:{}", col * size, row * size)
+        };
         let out_path = format!("{out_base}-{face}.png");
         deps.exec_ffmpeg([
             "-y",
             "-i",
             &c3x2_str,
             "-vf",
-            &crop,
+            &vf,
             "-frames:v",
             "1",
             &out_path,

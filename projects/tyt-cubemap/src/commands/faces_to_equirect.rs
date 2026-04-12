@@ -20,6 +20,11 @@ pub struct FacesToEquirect {
     /// Implies `--point`.
     #[arg(value_name = "pixelate", long)]
     pixelate: Option<u32>,
+
+    /// Final output height in pixels. When set, the equirectangular image is
+    /// point-resized up to this height, preserving hard edges at a larger resolution.
+    #[arg(value_name = "output-size", long)]
+    output_size: Option<u32>,
 }
 
 impl FacesToEquirect {
@@ -30,16 +35,28 @@ impl FacesToEquirect {
         let point = self.point || self.pixelate.is_some();
         let tmp_dir = deps.create_temp_dir()?;
 
-        let result = (|| {
+        let result: Result<String> = (|| {
             let equirect_base = if let Some(size) = self.pixelate {
                 let tmp_base = tmp_dir.join("face");
                 let tmp_base_str = tmp_base.to_string_lossy().into_owned();
-                utilities::pixelate_faces(&deps, &self.base, &tmp_base_str, size)?;
+                utilities::pixelate_faces(&deps, &self.base, &tmp_base_str, size, None)?;
                 tmp_base_str
             } else {
                 self.base.clone()
             };
-            utilities::faces_to_equirect(&deps, &equirect_base, &out_base, &tmp_dir, point)
+            let out_path =
+                utilities::faces_to_equirect(&deps, &equirect_base, &out_base, &tmp_dir, point)?;
+            if let Some(output_size) = self.output_size {
+                deps.exec_magick([
+                    out_path.as_str(),
+                    "-filter",
+                    "point",
+                    "-resize",
+                    &format!("x{output_size}"),
+                    &out_path,
+                ])?;
+            }
+            Ok(out_path)
         })();
 
         deps.remove_dir_all(&tmp_dir)?;

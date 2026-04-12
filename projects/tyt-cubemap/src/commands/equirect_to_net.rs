@@ -24,6 +24,11 @@ pub struct EquirectToNet {
     /// Use point (nearest-neighbor) interpolation for v360 reprojection.
     #[arg(value_name = "point", long)]
     point: bool,
+
+    /// Final side length for each face in the output net. When set, the net is
+    /// point-resized up, preserving hard edges at a larger resolution.
+    #[arg(value_name = "output-size", long)]
+    output_size: Option<u32>,
 }
 
 /// Face crop positions in the c3x2 layout used by the cube net: `(col, row, face_name)`.
@@ -49,6 +54,7 @@ impl EquirectToNet {
             self.size,
             self.square,
             self.point,
+            self.output_size,
             &tmp_dir,
         );
         deps.remove_dir_all(&tmp_dir)?;
@@ -65,6 +71,7 @@ fn build_cube_net(
     size: u32,
     do_square: bool,
     point: bool,
+    output_size: Option<u32>,
     tmp_dir: &Path,
 ) -> Result<()> {
     let c3x2_path = tmp_dir.join("c3x2.png");
@@ -150,6 +157,21 @@ fn build_cube_net(
         "-composite",
         &cube_net_str,
     ])?;
+
+    if let Some(out_size) = output_size {
+        let resized = tmp_dir.join("cube-net-resized.png");
+        let resized_str = resized.to_string_lossy().into_owned();
+        deps.exec_magick([
+            cube_net_str.as_str(),
+            "-filter",
+            "point",
+            "-resize",
+            &format!("{}x{}", 4 * out_size, 3 * out_size),
+            &resized_str,
+        ])?;
+        // Replace the original with the resized version for subsequent steps.
+        deps.rename_file(&resized, &cube_net_str)?;
+    }
 
     let out_path = format!("{out_base}.png");
     if do_square {
