@@ -24,9 +24,7 @@ impl Pixelate {
         let out_path = format!("{out_base}.png");
         deps.exec_magick([
             in_path.as_str(),
-            "-filter",
-            "point",
-            "-resize",
+            "-sample",
             &format!("x{}", self.size),
             &out_path,
         ])?;
