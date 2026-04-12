@@ -12,14 +12,7 @@ pub fn pixelate_faces(
     for face in FACES {
         let in_path = format!("{base}-{face}.png");
         let out_path = format!("{out_base}-{face}.png");
-        deps.exec_magick([
-            in_path.as_str(),
-            "-filter",
-            "point",
-            "-resize",
-            &format!("x{size}"),
-            &out_path,
-        ])?;
+        deps.exec_magick([in_path.as_str(), "-sample", &format!("x{size}"), &out_path])?;
     }
     Ok(())
 }

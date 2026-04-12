@@ -20,6 +20,10 @@ pub struct EquirectToNet {
     /// Pad the output to a square canvas.
     #[arg(value_name = "square", long)]
     square: bool,
+
+    /// Use nearest-neighbor interpolation for v360 reprojection.
+    #[arg(value_name = "nearest", long)]
+    nearest: bool,
 }
 
 /// Face crop positions in the c3x2 layout used by the cube net: `(col, row, face_name)`.
@@ -44,6 +48,7 @@ impl EquirectToNet {
             &out_base,
             self.size,
             self.square,
+            self.nearest,
             &tmp_dir,
         );
         deps.remove_dir_all(&tmp_dir)?;
@@ -59,16 +64,25 @@ fn build_cube_net(
     out_base: &str,
     size: u32,
     do_square: bool,
+    nearest: bool,
     tmp_dir: &Path,
 ) -> Result<()> {
     let c3x2_path = tmp_dir.join("c3x2.png");
     let c3x2_str = c3x2_path.to_string_lossy().into_owned();
 
-    let vf = format!(
-        "v360=input=equirect:output=c3x2,scale={}:{}:flags=neighbor",
-        3 * size,
-        2 * size
-    );
+    let vf = if nearest {
+        format!(
+            "v360=input=equirect:output=c3x2,scale={}:{}:flags=neighbor",
+            3 * size,
+            2 * size,
+        )
+    } else {
+        format!(
+            "v360=input=equirect:output=c3x2,scale={}:{}",
+            3 * size,
+            2 * size,
+        )
+    };
     deps.exec_ffmpeg(["-y", "-i", &format!("{base}.png"), "-vf", &vf, &c3x2_str])?;
 
     for &(col, row, face) in C3X2_NET_FACES {
