@@ -144,6 +144,16 @@ cargo check                         # Type-check the workspace
 cargo build -p tyt --features bin   # Build the binary
 ```
 
+## Releasing
+
+All crates in the workspace are versioned and published together with [`cargo-workspaces`](https://github.com/pksunkara/cargo-workspaces):
+
+```sh
+cargo install cargo-workspaces   # one-time setup
+cargo workspaces version         # bump every crate, update Cargo.lock, commit, tag
+cargo workspaces publish         # publish each crate to crates.io in dependency order
+```
+
 ## License
 
 [MIT](LICENSE)
