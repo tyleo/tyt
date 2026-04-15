@@ -24,29 +24,39 @@ def parse_args():
         "<input_fbx> "
         "<show_xfm> <xfm_prec> <xfm_world> <xfm_deg> "
         "<show_bnd> <bnd_prec> <bnd_world> <bnd_scale> "
-        "<show_ext> <ext_prec> <ext_world> <ext_scale>"
+        "<show_ext> <ext_prec> <ext_world> <ext_scale> "
+        "<collapse_ancestors> <collapse_descendants> "
+        "<num_paths> <path_1> ... <path_n>"
     )
     if "--" not in argv:
         raise SystemExit(f"Usage: blender -b --python script.py -- {schema}")
 
     tokens = argv[argv.index("--") + 1 :]
-    if len(tokens) != 13:
-        raise SystemExit(f"Expected 13 args ({schema}), got {len(tokens)}")
+    if len(tokens) < 16:
+        raise SystemExit(f"Expected at least 16 args ({schema}), got {len(tokens)}")
+
+    num_paths = int(tokens[15])
+    expected = 16 + num_paths
+    if len(tokens) != expected:
+        raise SystemExit(f"Expected {expected} args ({schema}), got {len(tokens)}")
 
     return {
-        "input_fbx":       tokens[0],
-        "show_transforms": parse_bool(tokens[1]),
-        "xfm_prec":        int(tokens[2]),
-        "xfm_world":       parse_bool(tokens[3]),
-        "xfm_degrees":     parse_bool(tokens[4]),
-        "show_bounds":     parse_bool(tokens[5]),
-        "bnd_prec":        int(tokens[6]),
-        "bnd_world":       parse_bool(tokens[7]),
-        "bnd_scale":       parse_bool(tokens[8]),
-        "show_extents":    parse_bool(tokens[9]),
-        "ext_prec":        int(tokens[10]),
-        "ext_world":       parse_bool(tokens[11]),
-        "ext_scale":       parse_bool(tokens[12]),
+        "input_fbx":            tokens[0],
+        "show_transforms":      parse_bool(tokens[1]),
+        "xfm_prec":             int(tokens[2]),
+        "xfm_world":            parse_bool(tokens[3]),
+        "xfm_degrees":          parse_bool(tokens[4]),
+        "show_bounds":          parse_bool(tokens[5]),
+        "bnd_prec":             int(tokens[6]),
+        "bnd_world":            parse_bool(tokens[7]),
+        "bnd_scale":            parse_bool(tokens[8]),
+        "show_extents":         parse_bool(tokens[9]),
+        "ext_prec":             int(tokens[10]),
+        "ext_world":            parse_bool(tokens[11]),
+        "ext_scale":            parse_bool(tokens[12]),
+        "collapse_ancestors":   parse_bool(tokens[13]),
+        "collapse_descendants": parse_bool(tokens[14]),
+        "matched_paths":        list(tokens[16 : 16 + num_paths]),
     }
 
 
@@ -156,12 +166,29 @@ def object_has_geometry(obj):
     return False
 
 
-def print_hierarchy(obj, prefix, is_last, opts):
+def print_hierarchy(obj, path, prefix, is_last, opts,
+                    matched_set, ancestor_set, in_match):
     connector = "\u2514 " if is_last else "\u251c "
     print(f"{prefix}{connector}{obj.name} ({obj.type})")
     extension = "  " if is_last else "\u2502 "
     child_prefix = prefix + extension
-    children = sorted(obj.children, key=lambda c: c.name)
+
+    is_matched = matched_set is not None and path in matched_set
+    now_in_match = in_match or is_matched
+
+    if now_in_match and opts["collapse_descendants"] and obj.children:
+        children = []
+        show_descendants_marker = True
+    elif matched_set is None or now_in_match:
+        children = sorted(obj.children, key=lambda c: c.name)
+        show_descendants_marker = False
+    else:
+        allowed = matched_set | ancestor_set
+        children = sorted(
+            [c for c in obj.children if f"{path}/{c.name}" in allowed],
+            key=lambda c: c.name,
+        )
+        show_descendants_marker = False
 
     has_geom = object_has_geometry(obj)
     subtrees = []
@@ -171,12 +198,17 @@ def print_hierarchy(obj, prefix, is_last, opts):
         subtrees.append("extents")
     if opts["show_bounds"] and has_geom:
         subtrees.append("bounds")
+    if show_descendants_marker:
+        subtrees.append("descendants")
 
     total = len(subtrees) + len(children)
 
     for i, kind in enumerate(subtrees):
         is_sub_last = i == total - 1
-        if kind == "transform":
+        if kind == "descendants":
+            sub_connector = "\u2514 " if is_sub_last else "\u251c "
+            print(f"{child_prefix}{sub_connector}(DESCENDANTS)")
+        elif kind == "transform":
             print_transform(
                 obj, child_prefix, is_sub_last,
                 opts["xfm_prec"], opts["xfm_world"], opts["xfm_degrees"],
@@ -194,7 +226,52 @@ def print_hierarchy(obj, prefix, is_last, opts):
 
     for i, child in enumerate(children):
         is_child_last = (len(subtrees) + i) == total - 1
-        print_hierarchy(child, child_prefix, is_child_last, opts)
+        child_path = f"{path}/{child.name}"
+        print_hierarchy(
+            child, child_path, child_prefix, is_child_last, opts,
+            matched_set, ancestor_set, now_in_match,
+        )
+
+
+def print_collapsed_match(path, obj, prefix, is_last, opts):
+    has_ancestors = "/" in path
+    if has_ancestors:
+        connector = "\u2514 " if is_last else "\u251c "
+        print(f"{prefix}{connector}(ANCESTORS)")
+        extension = "  " if is_last else "\u2502 "
+        child_prefix = prefix + extension
+        print_hierarchy(
+            obj, path, child_prefix, True, opts,
+            None, None, True,
+        )
+    else:
+        print_hierarchy(
+            obj, path, prefix, is_last, opts,
+            None, None, True,
+        )
+
+
+def collect_ancestor_paths(paths):
+    ancestors = set()
+    for p in paths:
+        parts = p.split("/")
+        for i in range(1, len(parts)):
+            ancestors.add("/".join(parts[:i]))
+    return ancestors
+
+
+def build_path_map(roots):
+    pmap = {}
+
+    def visit(obj, parent_path):
+        path = f"{parent_path}/{obj.name}" if parent_path else obj.name
+        pmap[path] = obj
+        for child in sorted(obj.children, key=lambda c: c.name):
+            visit(child, path)
+
+    for root in roots:
+        visit(root, "")
+    return pmap
 
 
 def main():
@@ -208,8 +285,31 @@ def main():
         key=lambda o: o.name,
     )
 
-    for i, root in enumerate(roots):
-        print_hierarchy(root, "", i == len(roots) - 1, opts)
+    matched_paths = opts["matched_paths"]
+
+    if not matched_paths:
+        for i, root in enumerate(roots):
+            print_hierarchy(
+                root, root.name, "", i == len(roots) - 1, opts,
+                None, None, False,
+            )
+        return
+
+    if opts["collapse_ancestors"]:
+        pmap = build_path_map(roots)
+        visible = [(p, pmap[p]) for p in matched_paths if p in pmap]
+        for i, (p, obj) in enumerate(visible):
+            print_collapsed_match(p, obj, "", i == len(visible) - 1, opts)
+    else:
+        matched_set = set(matched_paths)
+        ancestor_set = collect_ancestor_paths(matched_paths)
+        allowed_roots = matched_set | ancestor_set
+        visible_roots = [r for r in roots if r.name in allowed_roots]
+        for i, root in enumerate(visible_roots):
+            print_hierarchy(
+                root, root.name, "", i == len(visible_roots) - 1, opts,
+                matched_set, ancestor_set, False,
+            )
 
 
 if __name__ == "__main__":
