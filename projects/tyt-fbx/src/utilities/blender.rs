@@ -22,3 +22,4 @@ pub const FBX_REDUCE_TO_SINGLE_MESH_PY: Script =
 pub const EXTRACT_FACES_AND_VERTICES_PY: Script =
     embed_blender_script!("extract_faces_and_vertices.py");
 pub const FBX_RENAME_MESHES_PY: Script = embed_blender_script!("fbx_rename_meshes.py");
+pub const FBX_TRANSFORM_PY: Script = embed_blender_script!("fbx_transform.py");

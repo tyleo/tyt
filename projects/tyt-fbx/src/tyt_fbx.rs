@@ -16,6 +16,8 @@ pub enum TytFbx {
     Reduce(commands::Reduce),
     #[command(name = "rename")]
     Rename(commands::Rename),
+    #[command(name = "transform")]
+    Transform(commands::Transform),
 }
 
 impl TytFbx {
@@ -28,6 +30,7 @@ impl TytFbx {
             TytFbx::Hierarchy(hierarchy) => hierarchy.execute(dependencies),
             TytFbx::Reduce(reduce) => reduce.execute(dependencies),
             TytFbx::Rename(rename) => rename.execute(dependencies),
+            TytFbx::Transform(transform) => transform.execute(dependencies),
         }
     }
 }
