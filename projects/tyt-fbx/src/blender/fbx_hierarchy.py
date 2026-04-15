@@ -1,4 +1,5 @@
 import bpy
+import math
 import sys
 
 
@@ -9,7 +10,7 @@ def format_vec(vec, precision):
     return f'{{ "X": {x}, "Y": {y}, "Z": {z} }}'
 
 
-def print_transform(obj, prefix, is_last, precision, is_world):
+def print_transform(obj, prefix, is_last, precision, is_world, is_degrees):
     connector = "\u2514 " if is_last else "\u251c "
     print(f"{prefix}{connector}(TRANSFORM)")
     extension = "  " if is_last else "\u2502 "
@@ -23,6 +24,8 @@ def print_transform(obj, prefix, is_last, precision, is_world):
         location = obj.location
         rotation = obj.rotation_euler
         scale = obj.scale
+    if is_degrees:
+        rotation = [math.degrees(c) for c in rotation]
     lines = [
         (format_vec(location, precision), "POSITION"),
         (format_vec(rotation, precision), "ROTATION"),
@@ -33,7 +36,7 @@ def print_transform(obj, prefix, is_last, precision, is_world):
         print(f"{child_prefix}{child_connector}{vec_json} ({label})")
 
 
-def print_hierarchy(obj, prefix, is_last, precision, is_world):
+def print_hierarchy(obj, prefix, is_last, precision, is_world, is_degrees):
     connector = "\u2514 " if is_last else "\u251c "
     print(f"{prefix}{connector}{obj.name} ({obj.type})")
     extension = "  " if is_last else "\u2502 "
@@ -41,9 +44,13 @@ def print_hierarchy(obj, prefix, is_last, precision, is_world):
     children = sorted(obj.children, key=lambda c: c.name)
     if precision is not None:
         transform_is_last = len(children) == 0
-        print_transform(obj, child_prefix, transform_is_last, precision, is_world)
+        print_transform(
+            obj, child_prefix, transform_is_last, precision, is_world, is_degrees
+        )
     for i, child in enumerate(children):
-        print_hierarchy(child, child_prefix, i == len(children) - 1, precision, is_world)
+        print_hierarchy(
+            child, child_prefix, i == len(children) - 1, precision, is_world, is_degrees
+        )
 
 
 def parse_bool(token):
@@ -58,19 +65,27 @@ def parse_args():
     argv = sys.argv
     if "--" not in argv:
         raise SystemExit(
-            "Usage: blender -b --python script.py -- <input_fbx> [<precision> <is_world>]"
+            "Usage: blender -b --python script.py -- "
+            "<input_fbx> [<precision> <is_world> <is_degrees>]"
         )
 
     tokens = argv[argv.index("--") + 1 :]
     if len(tokens) == 1:
-        return tokens[0], None, False
-    if len(tokens) == 3:
-        return tokens[0], int(tokens[1]), parse_bool(tokens[2])
-    raise SystemExit("Expected 1 or 3 args: <input_fbx> [<precision> <is_world>]")
+        return tokens[0], None, False, False
+    if len(tokens) == 4:
+        return (
+            tokens[0],
+            int(tokens[1]),
+            parse_bool(tokens[2]),
+            parse_bool(tokens[3]),
+        )
+    raise SystemExit(
+        "Expected 1 or 4 args: <input_fbx> [<precision> <is_world> <is_degrees>]"
+    )
 
 
 def main():
-    input_fbx, precision, is_world = parse_args()
+    input_fbx, precision, is_world, is_degrees = parse_args()
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.fbx(filepath=input_fbx)
@@ -81,7 +96,7 @@ def main():
     )
 
     for i, root in enumerate(roots):
-        print_hierarchy(root, "", i == len(roots) - 1, precision, is_world)
+        print_hierarchy(root, "", i == len(roots) - 1, precision, is_world, is_degrees)
 
 
 if __name__ == "__main__":
