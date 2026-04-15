@@ -67,9 +67,38 @@ pub struct Render {
     #[arg(value_name = "resolution-y", long, default_value_t = 1080)]
     resolution_y: u32,
 
-    /// Camera focal length in millimeters.
-    #[arg(value_name = "focal-length", long, default_value_t = 50.0)]
-    focal_length: f64,
+    /// Camera focal length in millimeters. Only valid with
+    /// `--projection perspective`. Mutually exclusive with `--fov`.
+    #[arg(value_name = "focal-length", long, conflicts_with = "fov")]
+    focal_length: Option<f64>,
+
+    /// Horizontal field of view in degrees. Only valid with
+    /// `--projection perspective`. Mutually exclusive with `--focal-length`.
+    #[arg(value_name = "fov", long)]
+    fov: Option<f64>,
+
+    /// Camera projection.
+    #[arg(
+        value_name = "projection",
+        long,
+        value_enum,
+        default_value_t = utilities::Projection::Perspective,
+    )]
+    projection: utilities::Projection,
+
+    /// Orthographic scale (world-units visible across the frame). Only valid
+    /// with `--projection orthographic`. Defaults to the scene-bounds diagonal
+    /// when omitted.
+    #[arg(value_name = "ortho-scale", long)]
+    ortho_scale: Option<f64>,
+
+    /// Near clipping plane distance.
+    #[arg(value_name = "near", long, default_value_t = 0.1)]
+    near: f64,
+
+    /// Far clipping plane distance.
+    #[arg(value_name = "far", long, default_value_t = 1000.0)]
+    far: f64,
 
     /// Render engine.
     #[arg(value_name = "renderer", long, value_enum, default_value_t = utilities::Renderer::Eevee)]
@@ -93,6 +122,11 @@ impl Render {
             resolution_x,
             resolution_y,
             focal_length,
+            fov,
+            projection,
+            ortho_scale,
+            near,
+            far,
             renderer,
             samples,
         } = self;
@@ -115,8 +149,44 @@ impl Render {
             camera_position
         };
 
+        // Validate projection-specific flags.
+        match projection {
+            utilities::Projection::Perspective => {
+                if ortho_scale.is_some() {
+                    return Err(Error::IO(IOError::new(
+                        ErrorKind::InvalidInput,
+                        "--ortho-scale is only valid with --projection orthographic",
+                    )));
+                }
+            }
+            utilities::Projection::Orthographic => {
+                if focal_length.is_some() {
+                    return Err(Error::IO(IOError::new(
+                        ErrorKind::InvalidInput,
+                        "--focal-length is only valid with --projection perspective",
+                    )));
+                }
+                if fov.is_some() {
+                    return Err(Error::IO(IOError::new(
+                        ErrorKind::InvalidInput,
+                        "--fov is only valid with --projection perspective",
+                    )));
+                }
+            }
+        }
+
+        // Resolve lens mode/value. Defaults to 50mm focal length when no
+        // perspective lens flag is given.
+        let (lens_mode, lens_value) = match (focal_length, fov) {
+            (_, Some(fov)) => ("fov", fov),
+            (Some(focal), _) => ("focal", focal),
+            (None, None) => ("focal", 50.0),
+        };
+        // Ortho scale: 0.0 signals "auto" on the Python side.
+        let ortho_scale_value = ortho_scale.unwrap_or(0.0);
+
         let result = (|| -> Result<()> {
-            let args: [OsString; 17] = [
+            let args: [OsString; 22] = [
                 input_fbx.clone().into_os_string(),
                 render_path.clone().into_os_string(),
                 vec_float(&camera_position, 0)?,
@@ -130,7 +200,12 @@ impl Render {
                 vec_float(&camera_up, 2)?,
                 resolution_x.to_string().into(),
                 resolution_y.to_string().into(),
-                focal_length.to_string().into(),
+                projection.as_blender_type().into(),
+                lens_mode.into(),
+                lens_value.to_string().into(),
+                ortho_scale_value.to_string().into(),
+                near.to_string().into(),
+                far.to_string().into(),
                 renderer.as_blender_engine().into(),
                 samples.to_string().into(),
                 if auto_frame { "1" } else { "0" }.into(),

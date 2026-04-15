@@ -16,12 +16,14 @@ def parse_args():
             "<cam_target_x> <cam_target_y> <cam_target_z> "
             "<cam_up_x> <cam_up_y> <cam_up_z> "
             "<resolution_x> <resolution_y> "
-            "<focal_length> <renderer> <samples>"
+            "<projection> <lens_mode> <lens_value> <ortho_scale> "
+            "<near> <far> "
+            "<renderer> <samples> <auto_frame>"
         )
 
     tokens = argv[argv.index("--") + 1 :]
-    if len(tokens) != 17:
-        raise SystemExit(f"Expected 17 args, got {len(tokens)}")
+    if len(tokens) != 22:
+        raise SystemExit(f"Expected 22 args, got {len(tokens)}")
 
     input_fbx = tokens[0]
     output_png = tokens[1]
@@ -30,15 +32,22 @@ def parse_args():
     cam_up = Vector((float(tokens[8]), float(tokens[9]), float(tokens[10])))
     resolution_x = int(tokens[11])
     resolution_y = int(tokens[12])
-    focal_length = float(tokens[13])
-    renderer = tokens[14]
-    samples = int(tokens[15])
-    auto_frame = tokens[16] == "1"
+    projection = tokens[13]
+    lens_mode = tokens[14]
+    lens_value = float(tokens[15])
+    ortho_scale = float(tokens[16])
+    near = float(tokens[17])
+    far = float(tokens[18])
+    renderer = tokens[19]
+    samples = int(tokens[20])
+    auto_frame = tokens[21] == "1"
     return (
         input_fbx, output_png,
         cam_pos, cam_target, cam_up,
         resolution_x, resolution_y,
-        focal_length, renderer, samples,
+        projection, lens_mode, lens_value, ortho_scale,
+        near, far,
+        renderer, samples,
         auto_frame,
     )
 
@@ -84,9 +93,32 @@ def look_at_quaternion(location, target, up):
     return rot.to_quaternion()
 
 
-def add_camera(cam_pos, cam_target, cam_up, focal_length):
+def add_camera(
+    cam_pos, cam_target, cam_up,
+    projection, lens_mode, lens_value, ortho_scale,
+    near, far,
+):
     cam_data = bpy.data.cameras.new("RenderCamera")
-    cam_data.lens = focal_length
+    cam_data.type = projection
+    cam_data.clip_start = near
+    cam_data.clip_end = far
+
+    if projection == "PERSP":
+        if lens_mode == "fov":
+            cam_data.lens_unit = "FOV"
+            cam_data.angle = math.radians(lens_value)
+        else:
+            cam_data.lens_unit = "MILLIMETERS"
+            cam_data.lens = lens_value
+    else:
+        # Orthographic. `ortho_scale` <= 0 means auto-size from bounds.
+        if ortho_scale > 0.0:
+            cam_data.ortho_scale = ortho_scale
+        else:
+            min_c, max_c = scene_bounds()
+            diagonal = (max_c - min_c).length
+            cam_data.ortho_scale = max(diagonal, 1.0)
+
     cam_obj = bpy.data.objects.new("RenderCamera", cam_data)
     bpy.context.scene.collection.objects.link(cam_obj)
     cam_obj.location = cam_pos
@@ -158,17 +190,27 @@ def configure_render(renderer, resolution_x, resolution_y, samples, output_png):
                 eevee.taa_render_samples = samples
 
 
-def auto_frame_camera(focal_length, resolution_x, resolution_y):
+def auto_frame_camera(projection, lens_mode, lens_value, resolution_x, resolution_y):
     """Computes a camera position and target that frames the scene bounds."""
     min_c, max_c = scene_bounds()
     center = (min_c + max_c) * 0.5
     diagonal = (max_c - min_c).length
-    # Camera sensor width defaults to 36mm in Blender.
-    sensor_width = 36.0
     aspect = max(resolution_x, 1) / max(resolution_y, 1)
     fit_size = diagonal / max(min(1.0, aspect), 1.0e-6)
-    # Distance such that `fit_size` roughly fits horizontally in frame.
-    distance = max((fit_size * focal_length) / sensor_width, diagonal * 1.5, 2.0)
+
+    if projection == "PERSP":
+        if lens_mode == "fov":
+            half_fov = math.radians(lens_value) * 0.5
+            distance = (fit_size * 0.5) / max(math.tan(half_fov), 1.0e-6)
+        else:
+            # Perspective via focal length; sensor defaults to 36mm wide.
+            sensor_width = 36.0
+            distance = (fit_size * lens_value) / sensor_width
+        distance = max(distance, diagonal * 1.5, 2.0)
+    else:
+        # Orthographic: distance only affects clipping.
+        distance = max(diagonal * 1.5, 2.0)
+
     direction = Vector((1.0, -1.0, 0.7)).normalized()
     cam_pos = center + direction * distance
     cam_target = center
@@ -181,7 +223,9 @@ def main():
         input_fbx, output_png,
         cam_pos, cam_target, cam_up,
         resolution_x, resolution_y,
-        focal_length, renderer, samples,
+        projection, lens_mode, lens_value, ortho_scale,
+        near, far,
+        renderer, samples,
         auto_frame,
     ) = parse_args()
 
@@ -190,10 +234,14 @@ def main():
 
     if auto_frame:
         cam_pos, cam_target, cam_up = auto_frame_camera(
-            focal_length, resolution_x, resolution_y
+            projection, lens_mode, lens_value, resolution_x, resolution_y
         )
 
-    add_camera(cam_pos, cam_target, cam_up, focal_length)
+    add_camera(
+        cam_pos, cam_target, cam_up,
+        projection, lens_mode, lens_value, ortho_scale,
+        near, far,
+    )
     add_three_point_lights(cam_pos, cam_target)
     configure_render(renderer, resolution_x, resolution_y, samples, output_png)
 
