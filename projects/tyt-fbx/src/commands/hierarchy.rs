@@ -17,7 +17,7 @@ pub struct Hierarchy {
     /// If set, prepend each object's transform (position, rotation, scale)
     /// as a nested subtree. Accepts up to three positional values:
     /// `[<space>] [<rot-unit>] [<precision>]`. `space` is `local` (default)
-    /// or `world`. `rot-unit` is `radians` (default) or `degrees`.
+    /// or `world`. `rot-unit` is `rad` (default) or `deg`.
     /// `precision` is the decimal precision used to align vector components
     /// (default 2).
     #[arg(
@@ -68,13 +68,13 @@ fn parse_transform_args(
         }
     };
 
-    let rot_unit = values.get(1).map(String::as_str).unwrap_or("radians");
+    let rot_unit = values.get(1).map(String::as_str).unwrap_or("rad");
     let is_degrees: &'static OsStr = match rot_unit {
-        "radians" => OsStr::new("false"),
-        "degrees" => OsStr::new("true"),
+        "rad" => OsStr::new("false"),
+        "deg" => OsStr::new("true"),
         other => {
             return Err(IOError::other(format!(
-                "rot-unit must be 'radians' or 'degrees', got '{other}'"
+                "rot-unit must be 'rad' or 'deg', got '{other}'"
             ))
             .into());
         }

@@ -8,8 +8,8 @@ use std::{
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
 enum RotUnit {
-    Radians,
-    Degrees,
+    Rad,
+    Deg,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -48,7 +48,7 @@ pub struct Transform {
     space: Option<Space>,
 
     /// The unit used for the set-rot-* and mod-rot-* values.
-    #[arg(value_name = "rot-unit", long = "rot-unit", default_value = "radians")]
+    #[arg(value_name = "rot-unit", long = "rot-unit", default_value = "rad")]
     rot_unit: RotUnit,
 
     /// Sets the x position of the matched objects.
@@ -441,8 +441,8 @@ impl Transform {
         }
 
         let to_radians = |v: f64| match rot_unit {
-            RotUnit::Radians => v,
-            RotUnit::Degrees => v.to_radians(),
+            RotUnit::Rad => v,
+            RotUnit::Deg => v.to_radians(),
         };
 
         let transform_slots = [
