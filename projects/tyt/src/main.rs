@@ -9,6 +9,7 @@ struct Cli {
     #[clap(subcommand)]
     command: Command,
 }
+
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
     /// Generate shell completions.
