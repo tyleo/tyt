@@ -125,9 +125,7 @@ impl Rename {
         }
 
         let width = match suffix_num {
-            Some((start, true)) => {
-                (start + matched_names.len() as u32 - 1).to_string().len()
-            }
+            Some((start, true)) => (start + matched_names.len() as u32 - 1).to_string().len(),
             _ => 0,
         };
 

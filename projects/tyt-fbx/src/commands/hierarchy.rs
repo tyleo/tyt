@@ -102,10 +102,21 @@ impl Hierarchy {
         let mut args: Vec<&OsStr> = Vec::with_capacity(16 + matched_paths.len());
         args.extend_from_slice(&[
             input_fbx.as_ref(),
-            show_xfm, xfm_prec.as_ref(), xfm_world, xfm_deg,
-            show_bnd, bnd_prec.as_ref(), bnd_world, bnd_scale,
-            show_ext, ext_prec.as_ref(), ext_world, ext_scale,
-            collapse_anc_arg, collapse_desc_arg, num_paths_arg.as_ref(),
+            show_xfm,
+            xfm_prec.as_ref(),
+            xfm_world,
+            xfm_deg,
+            show_bnd,
+            bnd_prec.as_ref(),
+            bnd_world,
+            bnd_scale,
+            show_ext,
+            ext_prec.as_ref(),
+            ext_world,
+            ext_scale,
+            collapse_anc_arg,
+            collapse_desc_arg,
+            num_paths_arg.as_ref(),
         ]);
         for p in &matched_paths {
             args.push(OsStr::new(p.as_str()));
@@ -195,9 +206,7 @@ fn pack_bounds(
     }
 }
 
-fn parse_transform_args(
-    values: Vec<String>,
-) -> Result<(OsString, &'static OsStr, &'static OsStr)> {
+fn parse_transform_args(values: Vec<String>) -> Result<(OsString, &'static OsStr, &'static OsStr)> {
     let space = values.first().map(String::as_str).unwrap_or("local");
     let is_world = parse_space(space)?;
 
@@ -206,10 +215,9 @@ fn parse_transform_args(
         "rad" => OsStr::new("false"),
         "deg" => OsStr::new("true"),
         other => {
-            return Err(IOError::other(format!(
-                "rot-unit must be 'rad' or 'deg', got '{other}'"
-            ))
-            .into());
+            return Err(
+                IOError::other(format!("rot-unit must be 'rad' or 'deg', got '{other}'")).into(),
+            );
         }
     };
 
@@ -219,9 +227,7 @@ fn parse_transform_args(
     Ok((OsString::from(precision_str), is_world, is_degrees))
 }
 
-fn parse_bounds_args(
-    values: Vec<String>,
-) -> Result<(OsString, &'static OsStr, &'static OsStr)> {
+fn parse_bounds_args(values: Vec<String>) -> Result<(OsString, &'static OsStr, &'static OsStr)> {
     let space = values.first().map(String::as_str).unwrap_or("local");
     let is_world = parse_space(space)?;
 
@@ -247,10 +253,9 @@ fn parse_space(space: &str) -> Result<&'static OsStr> {
     match space {
         "local" => Ok(OsStr::new("false")),
         "world" => Ok(OsStr::new("true")),
-        other => Err(IOError::other(format!(
-            "space must be 'local' or 'world', got '{other}'"
-        ))
-        .into()),
+        other => {
+            Err(IOError::other(format!("space must be 'local' or 'world', got '{other}'")).into())
+        }
     }
 }
 
