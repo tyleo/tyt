@@ -42,6 +42,51 @@ pub struct Transform {
     #[arg(value_name = "output-fbx")]
     output_fbx: Option<PathBuf>,
 
+    /// The transform space used for the set-* and mod-* values. When not set,
+    /// Blender's default (local) is used.
+    #[arg(value_name = "space", long = "space")]
+    space: Option<Space>,
+
+    /// The unit used for the set-rot-* and mod-rot-* values.
+    #[arg(value_name = "rot-unit", long = "rot-unit", default_value = "radians")]
+    rot_unit: RotUnit,
+
+    /// Sets the x position of the matched objects.
+    #[arg(value_name = "x", long = "set-pos-x", group = "set_args")]
+    set_pos_x: Option<f64>,
+
+    /// Sets the y position of the matched objects.
+    #[arg(value_name = "y", long = "set-pos-y", group = "set_args")]
+    set_pos_y: Option<f64>,
+
+    /// Sets the z position of the matched objects.
+    #[arg(value_name = "z", long = "set-pos-z", group = "set_args")]
+    set_pos_z: Option<f64>,
+
+    /// Sets the rotation of the matched objects around the x-axis.
+    #[arg(value_name = "x", long = "set-rot-x", group = "set_args")]
+    set_rot_x: Option<f64>,
+
+    /// Sets the rotation of the matched objects around the y-axis.
+    #[arg(value_name = "y", long = "set-rot-y", group = "set_args")]
+    set_rot_y: Option<f64>,
+
+    /// Sets the rotation of the matched objects around the z-axis.
+    #[arg(value_name = "z", long = "set-rot-z", group = "set_args")]
+    set_rot_z: Option<f64>,
+
+    /// Sets the scale of the matched objects in the x-axis.
+    #[arg(value_name = "x", long = "set-scl-x", group = "set_args")]
+    set_scl_x: Option<f64>,
+
+    /// Sets the scale of the matched objects in the y-axis.
+    #[arg(value_name = "y", long = "set-scl-y", group = "set_args")]
+    set_scl_y: Option<f64>,
+
+    /// Sets the scale of the matched objects in the z-axis.
+    #[arg(value_name = "z", long = "set-scl-z", group = "set_args")]
+    set_scl_z: Option<f64>,
+
     /// Sets all components of position on the matched objects.
     #[arg(
         value_names = ["x", "y", "z"],
@@ -86,6 +131,42 @@ pub struct Transform {
         ],
     )]
     set_xfm: Option<Vec<f64>>,
+
+    /// Adds to the x position of the matched objects.
+    #[arg(value_name = "x", long = "mod-pos-x", group = "mod_args")]
+    mod_pos_x: Option<f64>,
+
+    /// Adds to the y position of the matched objects.
+    #[arg(value_name = "y", long = "mod-pos-y", group = "mod_args")]
+    mod_pos_y: Option<f64>,
+
+    /// Adds to the z position of the matched objects.
+    #[arg(value_name = "z", long = "mod-pos-z", group = "mod_args")]
+    mod_pos_z: Option<f64>,
+
+    /// Adds to the rotation of the matched objects around the x-axis.
+    #[arg(value_name = "x", long = "mod-rot-x", group = "mod_args")]
+    mod_rot_x: Option<f64>,
+
+    /// Adds to the rotation of the matched objects around the y-axis.
+    #[arg(value_name = "y", long = "mod-rot-y", group = "mod_args")]
+    mod_rot_y: Option<f64>,
+
+    /// Adds to the rotation of the matched objects around the z-axis.
+    #[arg(value_name = "z", long = "mod-rot-z", group = "mod_args")]
+    mod_rot_z: Option<f64>,
+
+    /// Adds to the scale of the matched objects in the x-axis.
+    #[arg(value_name = "x", long = "mod-scl-x", group = "mod_args")]
+    mod_scl_x: Option<f64>,
+
+    /// Adds to the scale of the matched objects in the y-axis.
+    #[arg(value_name = "y", long = "mod-scl-y", group = "mod_args")]
+    mod_scl_y: Option<f64>,
+
+    /// Adds to the scale of the matched objects in the z-axis.
+    #[arg(value_name = "z", long = "mod-scl-z", group = "mod_args")]
+    mod_scl_z: Option<f64>,
 
     /// Adds to all components of position on the matched objects.
     #[arg(
@@ -132,77 +213,42 @@ pub struct Transform {
     )]
     mod_xfm: Option<Vec<f64>>,
 
-    /// Sets the x position of the matched objects.
-    #[arg(value_name = "x", long = "set-pos-x", group = "set_args")]
-    set_pos_x: Option<f64>,
+    /// Bakes the x position of the matched objects: zeros pos x on the final
+    /// transform and displaces mesh verts so the object appears unmoved.
+    #[arg(value_name = "bak-pos-x", long = "bak-pos-x")]
+    bak_pos_x: bool,
 
-    /// Sets the y position of the matched objects.
-    #[arg(value_name = "y", long = "set-pos-y", group = "set_args")]
-    set_pos_y: Option<f64>,
+    /// Bakes the y position of the matched objects.
+    #[arg(value_name = "bak-pos-y", long = "bak-pos-y")]
+    bak_pos_y: bool,
 
-    /// Sets the z position of the matched objects.
-    #[arg(value_name = "z", long = "set-pos-z", group = "set_args")]
-    set_pos_z: Option<f64>,
+    /// Bakes the z position of the matched objects.
+    #[arg(value_name = "bak-pos-z", long = "bak-pos-z")]
+    bak_pos_z: bool,
 
-    /// Sets the rotation of the matched objects around the x-axis.
-    #[arg(value_name = "x", long = "set-rot-x", group = "set_args")]
-    set_rot_x: Option<f64>,
+    /// Bakes the rotation of the matched objects around the x-axis.
+    #[arg(value_name = "bak-rot-x", long = "bak-rot-x")]
+    bak_rot_x: bool,
 
-    /// Sets the rotation of the matched objects around the y-axis.
-    #[arg(value_name = "y", long = "set-rot-y", group = "set_args")]
-    set_rot_y: Option<f64>,
+    /// Bakes the rotation of the matched objects around the y-axis.
+    #[arg(value_name = "bak-rot-y", long = "bak-rot-y")]
+    bak_rot_y: bool,
 
-    /// Sets the rotation of the matched objects around the z-axis.
-    #[arg(value_name = "z", long = "set-rot-z", group = "set_args")]
-    set_rot_z: Option<f64>,
+    /// Bakes the rotation of the matched objects around the z-axis.
+    #[arg(value_name = "bak-rot-z", long = "bak-rot-z")]
+    bak_rot_z: bool,
 
-    /// Sets the scale of the matched objects in the x-axis.
-    #[arg(value_name = "x", long = "set-scl-x", group = "set_args")]
-    set_scl_x: Option<f64>,
+    /// Bakes the scale of the matched objects in the x-axis.
+    #[arg(value_name = "bak-scl-x", long = "bak-scl-x")]
+    bak_scl_x: bool,
 
-    /// Sets the scale of the matched objects in the y-axis.
-    #[arg(value_name = "y", long = "set-scl-y", group = "set_args")]
-    set_scl_y: Option<f64>,
+    /// Bakes the scale of the matched objects in the y-axis.
+    #[arg(value_name = "bak-scl-y", long = "bak-scl-y")]
+    bak_scl_y: bool,
 
-    /// Sets the scale of the matched objects in the z-axis.
-    #[arg(value_name = "z", long = "set-scl-z", group = "set_args")]
-    set_scl_z: Option<f64>,
-
-    /// Adds to the x position of the matched objects.
-    #[arg(value_name = "x", long = "mod-pos-x", group = "mod_args")]
-    mod_pos_x: Option<f64>,
-
-    /// Adds to the y position of the matched objects.
-    #[arg(value_name = "y", long = "mod-pos-y", group = "mod_args")]
-    mod_pos_y: Option<f64>,
-
-    /// Adds to the z position of the matched objects.
-    #[arg(value_name = "z", long = "mod-pos-z", group = "mod_args")]
-    mod_pos_z: Option<f64>,
-
-    /// Adds to the rotation of the matched objects around the x-axis.
-    #[arg(value_name = "x", long = "mod-rot-x", group = "mod_args")]
-    mod_rot_x: Option<f64>,
-
-    /// Adds to the rotation of the matched objects around the y-axis.
-    #[arg(value_name = "y", long = "mod-rot-y", group = "mod_args")]
-    mod_rot_y: Option<f64>,
-
-    /// Adds to the rotation of the matched objects around the z-axis.
-    #[arg(value_name = "z", long = "mod-rot-z", group = "mod_args")]
-    mod_rot_z: Option<f64>,
-
-    /// Adds to the scale of the matched objects in the x-axis.
-    #[arg(value_name = "x", long = "mod-scl-x", group = "mod_args")]
-    mod_scl_x: Option<f64>,
-
-    /// Adds to the scale of the matched objects in the y-axis.
-    #[arg(value_name = "y", long = "mod-scl-y", group = "mod_args")]
-    mod_scl_y: Option<f64>,
-
-    /// Adds to the scale of the matched objects in the z-axis.
-    #[arg(value_name = "z", long = "mod-scl-z", group = "mod_args")]
-    mod_scl_z: Option<f64>,
+    /// Bakes the scale of the matched objects in the z-axis.
+    #[arg(value_name = "bak-scl-z", long = "bak-scl-z")]
+    bak_scl_z: bool,
 
     /// Bakes all components of position on the matched objects to 0,
     /// displacing mesh verts so the object appears unmoved.
@@ -241,52 +287,6 @@ pub struct Transform {
         ],
     )]
     bak_xfm: bool,
-
-    /// Bakes the x position of the matched objects: zeros pos x on the final
-    /// transform and displaces mesh verts so the object appears unmoved.
-    #[arg(value_name = "bak-pos-x", long = "bak-pos-x")]
-    bak_pos_x: bool,
-
-    /// Bakes the y position of the matched objects.
-    #[arg(value_name = "bak-pos-y", long = "bak-pos-y")]
-    bak_pos_y: bool,
-
-    /// Bakes the z position of the matched objects.
-    #[arg(value_name = "bak-pos-z", long = "bak-pos-z")]
-    bak_pos_z: bool,
-
-    /// Bakes the rotation of the matched objects around the x-axis.
-    #[arg(value_name = "bak-rot-x", long = "bak-rot-x")]
-    bak_rot_x: bool,
-
-    /// Bakes the rotation of the matched objects around the y-axis.
-    #[arg(value_name = "bak-rot-y", long = "bak-rot-y")]
-    bak_rot_y: bool,
-
-    /// Bakes the rotation of the matched objects around the z-axis.
-    #[arg(value_name = "bak-rot-z", long = "bak-rot-z")]
-    bak_rot_z: bool,
-
-    /// Bakes the scale of the matched objects in the x-axis.
-    #[arg(value_name = "bak-scl-x", long = "bak-scl-x")]
-    bak_scl_x: bool,
-
-    /// Bakes the scale of the matched objects in the y-axis.
-    #[arg(value_name = "bak-scl-y", long = "bak-scl-y")]
-    bak_scl_y: bool,
-
-    /// Bakes the scale of the matched objects in the z-axis.
-    #[arg(value_name = "bak-scl-z", long = "bak-scl-z")]
-    bak_scl_z: bool,
-
-    /// The unit used for the set-rot-* and mod-rot-* values.
-    #[arg(value_name = "rot-unit", long = "rot-unit", default_value = "radians")]
-    rot_unit: RotUnit,
-
-    /// The transform space used for the set-* and mod-* values. When not set,
-    /// Blender's default (local) is used.
-    #[arg(value_name = "space", long = "space")]
-    space: Option<Space>,
 }
 
 impl Transform {
@@ -295,14 +295,8 @@ impl Transform {
             input_fbx,
             pattern,
             output_fbx,
-            set_pos,
-            set_rot,
-            set_scl,
-            set_xfm,
-            mod_pos,
-            mod_rot,
-            mod_scl,
-            mod_xfm,
+            space,
+            rot_unit,
             set_pos_x,
             set_pos_y,
             set_pos_z,
@@ -312,6 +306,10 @@ impl Transform {
             set_scl_x,
             set_scl_y,
             set_scl_z,
+            set_pos,
+            set_rot,
+            set_scl,
+            set_xfm,
             mod_pos_x,
             mod_pos_y,
             mod_pos_z,
@@ -321,10 +319,10 @@ impl Transform {
             mod_scl_x,
             mod_scl_y,
             mod_scl_z,
-            bak_pos,
-            bak_rot,
-            bak_scl,
-            bak_xfm,
+            mod_pos,
+            mod_rot,
+            mod_scl,
+            mod_xfm,
             bak_pos_x,
             bak_pos_y,
             bak_pos_z,
@@ -334,8 +332,10 @@ impl Transform {
             bak_scl_x,
             bak_scl_y,
             bak_scl_z,
-            rot_unit,
-            space,
+            bak_pos,
+            bak_rot,
+            bak_scl,
+            bak_xfm,
         } = self;
 
         let bake_all_pos = bak_pos || bak_xfm;
