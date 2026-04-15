@@ -37,6 +37,8 @@ pub trait Dependencies {
 
     fn load_image_rgba(&self, path: &Path) -> Result<(Vec<u8>, u32, u32)>;
 
+    fn display_image_in_terminal(&self, path: &Path) -> Result<()>;
+
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>>;
 
     fn parse_hierarchy_json(&self, json: &[u8]) -> Result<Vec<(String, String, String)>>;

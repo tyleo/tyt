@@ -60,6 +60,10 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::load_image_rgba(path)?)
     }
 
+    fn display_image_in_terminal(&self, path: &Path) -> Result<()> {
+        Ok(tyt_injection::display_image_in_terminal(path)?)
+    }
+
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
         Ok(tyt_injection::match_glob(pattern, candidates)?)
     }

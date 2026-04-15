@@ -1,6 +1,7 @@
 mod args;
 mod copy_dir;
 mod create_temp_dir;
+mod display_image_in_terminal;
 mod exec;
 mod exec_error;
 mod exec_ignore_stderr;
@@ -28,6 +29,7 @@ pub use ::serde_json;
 pub use args::*;
 pub use copy_dir::*;
 pub use create_temp_dir::*;
+pub use display_image_in_terminal::*;
 pub use exec::*;
 pub use exec_error::*;
 pub use exec_ignore_stderr::*;
