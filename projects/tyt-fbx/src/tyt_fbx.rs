@@ -12,6 +12,8 @@ pub enum TytFbx {
     Extract(commands::Extract),
     #[command(name = "hierarchy")]
     Hierarchy(commands::Hierarchy),
+    #[command(name = "modify")]
+    Modify(commands::Modify),
     #[command(name = "reduce")]
     Reduce(commands::Reduce),
     #[command(name = "rename")]
@@ -30,6 +32,7 @@ impl TytFbx {
             }
             TytFbx::Extract(extract) => extract.execute(dependencies),
             TytFbx::Hierarchy(hierarchy) => hierarchy.execute(dependencies),
+            TytFbx::Modify(modify) => modify.execute(dependencies),
             TytFbx::Reduce(reduce) => reduce.execute(dependencies),
             TytFbx::Rename(rename) => rename.execute(dependencies),
             TytFbx::Render(render) => render.execute(dependencies),

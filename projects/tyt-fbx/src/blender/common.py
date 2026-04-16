@@ -59,20 +59,6 @@ def import_fbx(filepath):
     bpy.ops.import_scene.fbx(filepath=filepath)
 
 
-def strip_all_materials():
-    """
-    Remove all materials from mesh material slots, then delete orphaned material datablocks.
-    """
-    for obj in bpy.data.objects:
-        if obj.type != "MESH":
-            continue
-        obj.data.materials.clear()
-
-    for mat in list(bpy.data.materials):
-        if mat.users == 0:
-            bpy.data.materials.remove(mat)
-
-
 def deselect_all():
     for o in bpy.context.view_layer.objects:
         o.select_set(False)

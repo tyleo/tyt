@@ -1,7 +1,7 @@
 import bpy
 import sys
 
-from common import strip_all_materials, export_fbx, import_fbx
+from common import export_fbx, import_fbx
 
 
 def rename_objects(pairs):
@@ -49,7 +49,6 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     import_fbx(input_fbx)
 
-    strip_all_materials()
     rename_objects(pairs)
 
     export_fbx(output_fbx)

@@ -1,7 +1,7 @@
 import bpy
 import sys
 
-from common import strip_all_materials, deselect_all, export_fbx, import_fbx
+from common import deselect_all, export_fbx, import_fbx
 
 
 def extract_single_mesh(mesh_name: str, output_mesh_name: str):
@@ -72,7 +72,6 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     import_fbx(input_fbx)
 
-    strip_all_materials()
     extract_single_mesh(mesh_name, output_mesh_name)
 
     export_fbx(output_fbx)

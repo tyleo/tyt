@@ -3,7 +3,7 @@ import sys
 
 from mathutils import Matrix
 
-from common import strip_all_materials, export_fbx, import_fbx
+from common import export_fbx, import_fbx
 
 
 def parse_optional_float(token):
@@ -205,7 +205,6 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     import_fbx(input_fbx)
 
-    strip_all_materials()
     apply_transforms(
         object_names,
         set_pos, set_rot, set_scl,
