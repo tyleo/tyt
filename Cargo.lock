@@ -1361,7 +1361,7 @@ dependencies = [
 
 [[package]]
 name = "tyt"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1424,7 +1424,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-injection"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "crossterm",
  "globset",
