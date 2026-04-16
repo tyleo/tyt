@@ -202,6 +202,7 @@ impl CreateMse {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn create_mse_inner(
     dependencies: &impl Dependencies,
     metal_rough_path: &Option<PathBuf>,

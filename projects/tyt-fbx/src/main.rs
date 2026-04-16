@@ -10,6 +10,7 @@ struct Cli {
     command: Command,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Subcommand)]
 enum Command {
     /// Generate shell completions.

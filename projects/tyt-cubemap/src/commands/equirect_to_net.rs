@@ -60,6 +60,7 @@ impl EquirectToNet {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_cube_net(
     deps: &impl Dependencies,
     base: &str,

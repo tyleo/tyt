@@ -159,19 +159,20 @@ impl Render {
         };
 
         let result = (|| -> Result<()> {
-            let mut args: Vec<OsString> = Vec::new();
-            args.push(input_fbx.clone().into_os_string());
-            args.push(render_path.clone().into_os_string());
-            args.push(resolution_x.to_string().into());
-            args.push(resolution_y.to_string().into());
-            args.push(projection.as_blender_type().into());
-            args.push(lens_mode.into());
-            args.push(lens_value.to_string().into());
-            args.push(ortho_scale_value.to_string().into());
-            args.push(near.to_string().into());
-            args.push(far.to_string().into());
-            args.push(renderer.as_blender_engine().into());
-            args.push(samples.to_string().into());
+            let mut args: Vec<OsString> = vec![
+                input_fbx.clone().into_os_string(),
+                render_path.clone().into_os_string(),
+                resolution_x.to_string().into(),
+                resolution_y.to_string().into(),
+                projection.as_blender_type().into(),
+                lens_mode.into(),
+                lens_value.to_string().into(),
+                ortho_scale_value.to_string().into(),
+                near.to_string().into(),
+                far.to_string().into(),
+                renderer.as_blender_engine().into(),
+                samples.to_string().into(),
+            ];
             args.extend(camera.to_python_args(&subject_names));
 
             let stdout = dependencies.exec_temp_blender_scripts(

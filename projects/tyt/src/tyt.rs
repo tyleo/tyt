@@ -9,6 +9,7 @@ use tyt_meta::TytMeta;
 use tyt_vmax::TytVMax;
 
 /// The main command for `tyt`, which ties all my command-line tools together.
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
 pub enum Tyt {

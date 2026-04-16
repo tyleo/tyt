@@ -65,6 +65,7 @@ impl EquirectToFaces {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn equirect_to_faces(
     deps: &impl Dependencies,
     base: &str,
