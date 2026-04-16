@@ -6,9 +6,9 @@ use std::{
     path::PathBuf,
 };
 
-/// Renders the meshes in an FBX file from a specified camera position with
-/// default 3-point lighting. The result is written to an image file, displayed
-/// inline in the terminal (Kitty / iTerm2 / Sixel / ANSI fallback), or both.
+/// Renders the meshes in an FBX file from a specified camera position. The
+/// result is written to an image file, displayed inline in the terminal (Kitty
+/// / iTerm2 / Sixel / ANSI fallback), or both.
 #[derive(Clone, Debug, Parser)]
 pub struct Render {
     /// The input FBX file to render.
@@ -84,6 +84,18 @@ pub struct Render {
     #[arg(value_name = "samples", long, default_value_t = 64)]
     samples: u32,
 
+    /// Lighting preset. `environment` (default) uses even world-background
+    /// illumination; `three-point` / `studio` add key/fill/rim area lights;
+    /// `flat` adds a single camera-aligned sun; `none` leaves the scene's
+    /// existing lights untouched.
+    #[arg(
+        value_name = "lighting",
+        long,
+        value_enum,
+        default_value_t = utilities::Lighting::Environment,
+    )]
+    lighting: utilities::Lighting,
+
     #[command(flatten)]
     camera: utilities::CameraArgs,
 }
@@ -105,6 +117,7 @@ impl Render {
             far,
             renderer,
             samples,
+            lighting,
             camera,
         } = self;
 
@@ -172,6 +185,7 @@ impl Render {
                 far.to_string().into(),
                 renderer.as_blender_engine().into(),
                 samples.to_string().into(),
+                lighting.as_blender_mode().into(),
             ];
             args.extend(camera.to_python_args(&subject_names));
 
