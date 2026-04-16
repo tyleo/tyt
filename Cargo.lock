@@ -1284,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "tyt"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1304,7 +1304,7 @@ version = "0.1.6"
 
 [[package]]
 name = "tyt-cubemap"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1314,7 +1314,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-fbx"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1337,7 +1337,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-image"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "clap",
  "clap_complete",
@@ -1347,7 +1347,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-injection"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "globset",
  "image",
@@ -1361,7 +1361,7 @@ dependencies = [
 
 [[package]]
 name = "tyt-material"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "clap",
  "clap_complete",
