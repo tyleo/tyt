@@ -1,15 +1,13 @@
 use crate::{Dependencies, Error, Result, utilities};
-use clap::{ArgGroup, Parser};
+use clap::Parser;
 use std::{
     ffi::{OsStr, OsString},
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
 };
 
-/// Applies mutating operations to matched objects in an FBX. At least one
-/// operation flag must be supplied.
+/// Applies mutating operations to matched objects in an FBX.
 #[derive(Clone, Debug, Parser)]
-#[command(group(ArgGroup::new("ops").required(true).multiple(true)))]
 pub struct Modify {
     /// The input FBX file.
     #[arg(value_name = "input-fbx")]
@@ -26,11 +24,7 @@ pub struct Modify {
 
     /// Removes all materials from matched mesh objects and deletes any
     /// material datablocks left with no users.
-    #[arg(
-        value_name = "clear-materials",
-        long = "clear-materials",
-        group = "ops"
-    )]
+    #[arg(value_name = "clear-materials", long)]
     clear_materials: bool,
 }
 
