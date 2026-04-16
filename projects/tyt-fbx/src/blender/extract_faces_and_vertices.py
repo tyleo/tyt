@@ -3,6 +3,8 @@ import bpy
 import json
 import sys
 
+from common import import_fbx
+
 
 def parse_args():
     argv = sys.argv
@@ -22,7 +24,7 @@ def main():
     input_fbx, mesh_name = parse_args()
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.fbx(filepath=input_fbx)
+    import_fbx(input_fbx)
 
     obj = bpy.data.objects.get(mesh_name)
     if obj is None or obj.type != "MESH":

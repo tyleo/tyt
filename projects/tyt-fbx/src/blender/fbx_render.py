@@ -5,6 +5,7 @@ import sys
 from mathutils import Vector
 
 from common import (
+    import_fbx,
     look_at_quaternion,
     reset_scene,
     resolve_camera,
@@ -224,7 +225,7 @@ def main():
     ) = parse_args()
 
     reset_scene()
-    bpy.ops.import_scene.fbx(filepath=input_fbx)
+    import_fbx(input_fbx)
 
     cam_pos, cam_quat = resolve_camera(
         projection,

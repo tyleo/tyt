@@ -1,7 +1,6 @@
-use crate::{MeshWithUvs, Result, Script};
+use crate::{MeshWithUvs, Result, Script, utilities::COMMON_PY};
 use std::{
     ffi::OsStr,
-    iter,
     path::{Path, PathBuf},
 };
 use ty_math::{TyRgbaColor, TyVector3};
@@ -99,7 +98,7 @@ pub trait Dependencies {
         script_py: &'a Script<'a>,
         args: I,
     ) -> Result<Vec<u8>> {
-        self.exec_temp_blender_scripts(script_py, iter::empty(), args)
+        self.exec_temp_blender_scripts(script_py, [&COMMON_PY], args)
     }
 
     fn exec_temp_blender_script_with_stdout<'a, I: IntoIterator<Item = S>, S: AsRef<OsStr>>(
@@ -107,6 +106,6 @@ pub trait Dependencies {
         script_py: &'a Script<'a>,
         args: I,
     ) -> Result<()> {
-        self.exec_temp_blender_scripts_with_stdout(script_py, iter::empty(), args)
+        self.exec_temp_blender_scripts_with_stdout(script_py, [&COMMON_PY], args)
     }
 }

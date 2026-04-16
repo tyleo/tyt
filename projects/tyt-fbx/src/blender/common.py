@@ -8,6 +8,57 @@ def reset_scene():
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
+def _apply_fbx_import_compat():
+    """Blender 5.0.1 ships an FBX importer whose `blen_read_light` unconditionally
+    executes `lamp.cycles.cast_shadow = lamp.use_shadow`, but `cast_shadow` was
+    removed from `CyclesLightSettings`, so any FBX containing a light fails to
+    import. Rewrite the function source in-place, turning the offending line
+    into a no-op. Silently skips when the bug is absent so newer Blender
+    releases keep working."""
+    import addon_utils
+    import importlib
+    import inspect
+    import os
+    import sys
+    import textwrap
+
+    addon = next(
+        (m for m in addon_utils.modules()
+         if getattr(m, "__name__", "") == "io_scene_fbx"),
+        None,
+    )
+    if addon is None or not getattr(addon, "__file__", None):
+        return
+    addons_parent = os.path.dirname(os.path.dirname(addon.__file__))
+    if addons_parent not in sys.path:
+        sys.path.insert(0, addons_parent)
+    try:
+        mod = importlib.import_module("io_scene_fbx.import_fbx")
+    except ImportError:
+        return
+    fn = getattr(mod, "blen_read_light", None)
+    if fn is None:
+        return
+    original = inspect.getsource(fn)
+    patched = original.replace(
+        "lamp.cycles.cast_shadow = lamp.use_shadow",
+        "pass  # tyt-compat: cast_shadow removed from CyclesLightSettings in Blender 5.0",
+    )
+    if patched == original:
+        return
+    exec(
+        compile(textwrap.dedent(patched), "<tyt-fbx-import-compat>", "exec"),
+        mod.__dict__,
+    )
+
+
+def import_fbx(filepath):
+    """Imports an FBX via `bpy.ops.import_scene.fbx` after applying any
+    Blender version-compatibility shims required by the project."""
+    _apply_fbx_import_compat()
+    bpy.ops.import_scene.fbx(filepath=filepath)
+
+
 def strip_all_materials():
     """
     Remove all materials from mesh material slots, then delete orphaned material datablocks.

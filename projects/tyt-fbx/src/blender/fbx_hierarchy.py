@@ -2,6 +2,7 @@ import bpy
 import math
 import sys
 
+from common import import_fbx
 from mathutils import Vector
 
 
@@ -278,7 +279,7 @@ def main():
     opts = parse_args()
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.fbx(filepath=opts["input_fbx"])
+    import_fbx(opts["input_fbx"])
 
     roots = sorted(
         [o for o in bpy.data.objects if o.parent is None],

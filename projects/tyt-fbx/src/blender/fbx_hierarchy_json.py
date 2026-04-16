@@ -2,6 +2,8 @@ import bpy
 import json
 import sys
 
+from common import import_fbx
+
 
 def build_hierarchy_json():
     result = []
@@ -44,7 +46,7 @@ def main():
     input_fbx = parse_args()
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
-    bpy.ops.import_scene.fbx(filepath=input_fbx)
+    import_fbx(input_fbx)
 
     hierarchy = build_hierarchy_json()
     print(json.dumps(hierarchy))
