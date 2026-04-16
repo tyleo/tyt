@@ -153,7 +153,7 @@ cargo workspaces version --force tyt patch --yes   # bump changed crates + force
 cargo workspaces publish --from-git                # publish to crates.io in dependency order
 ```
 
-Use `minor` instead of `patch` for new features, or `custom <version>` for an explicit version.
+In practice every release so far has been a `patch` bump regardless of what changed. Use `minor` if you want to mark a larger change, or `custom <version>` for an explicit version.
 
 ## License
 
