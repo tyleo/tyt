@@ -1,7 +1,7 @@
 use crate::{Dependencies, Error, Result, utilities};
 use clap::Parser;
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
 };
@@ -34,30 +34,6 @@ pub struct Render {
     /// `output-image` is omitted.
     #[arg(value_name = "terminal", long)]
     terminal: bool,
-
-    /// Camera position in world space (three space-separated floats). If
-    /// omitted, a position is auto-computed from the scene bounds to frame the
-    /// imported meshes.
-    #[arg(value_name = "camera-position", long, num_args = 3)]
-    camera_position: Vec<f64>,
-
-    /// Point the camera looks at in world space (three space-separated floats).
-    #[arg(
-        value_name = "camera-target",
-        long,
-        num_args = 3,
-        default_values_t = [0.0_f64, 0.0, 0.0],
-    )]
-    camera_target: Vec<f64>,
-
-    /// Camera up direction hint (three space-separated floats).
-    #[arg(
-        value_name = "camera-up",
-        long,
-        num_args = 3,
-        default_values_t = [0.0_f64, 0.0, 1.0],
-    )]
-    camera_up: Vec<f64>,
 
     /// Render width in pixels.
     #[arg(value_name = "resolution-x", long, default_value_t = 1920)]
@@ -107,6 +83,9 @@ pub struct Render {
     /// Render samples (AA / path-tracing samples depending on renderer).
     #[arg(value_name = "samples", long, default_value_t = 64)]
     samples: u32,
+
+    #[command(flatten)]
+    camera: utilities::CameraArgs,
 }
 
 impl Render {
@@ -116,9 +95,6 @@ impl Render {
             output_image_arg,
             output_image_flag,
             terminal,
-            camera_position,
-            camera_target,
-            camera_up,
             resolution_x,
             resolution_y,
             focal_length,
@@ -129,7 +105,10 @@ impl Render {
             far,
             renderer,
             samples,
+            camera,
         } = self;
+
+        camera.validate()?;
 
         let output_image = output_image_arg.or(output_image_flag);
         let display_in_terminal = terminal || output_image.is_none();
@@ -142,14 +121,6 @@ impl Render {
             }
         };
 
-        let auto_frame = camera_position.is_empty();
-        let camera_position = if auto_frame {
-            vec![0.0, 0.0, 0.0]
-        } else {
-            camera_position
-        };
-
-        // Validate projection-specific flags.
         match projection {
             utilities::Projection::Perspective => {
                 if ortho_scale.is_some() {
@@ -175,51 +146,45 @@ impl Render {
             }
         }
 
-        // Resolve lens mode/value. Defaults to 50mm focal length when no
-        // perspective lens flag is given.
         let (lens_mode, lens_value) = match (focal_length, fov) {
             (_, Some(fov)) => ("fov", fov),
             (Some(focal), _) => ("focal", focal),
             (None, None) => ("focal", 50.0),
         };
-        // Ortho scale: 0.0 signals "auto" on the Python side.
         let ortho_scale_value = ortho_scale.unwrap_or(0.0);
 
-        let result = (|| -> Result<()> {
-            let args: [OsString; 22] = [
-                input_fbx.clone().into_os_string(),
-                render_path.clone().into_os_string(),
-                vec_float(&camera_position, 0)?,
-                vec_float(&camera_position, 1)?,
-                vec_float(&camera_position, 2)?,
-                vec_float(&camera_target, 0)?,
-                vec_float(&camera_target, 1)?,
-                vec_float(&camera_target, 2)?,
-                vec_float(&camera_up, 0)?,
-                vec_float(&camera_up, 1)?,
-                vec_float(&camera_up, 2)?,
-                resolution_x.to_string().into(),
-                resolution_y.to_string().into(),
-                projection.as_blender_type().into(),
-                lens_mode.into(),
-                lens_value.to_string().into(),
-                ortho_scale_value.to_string().into(),
-                near.to_string().into(),
-                far.to_string().into(),
-                renderer.as_blender_engine().into(),
-                samples.to_string().into(),
-                if auto_frame { "1" } else { "0" }.into(),
-            ];
+        let subject_names = match &camera.subject {
+            Some(pattern) => resolve_subject_names(&dependencies, &input_fbx, pattern)?,
+            None => Vec::new(),
+        };
 
-            dependencies.exec_temp_blender_scripts(
+        let result = (|| -> Result<()> {
+            let mut args: Vec<OsString> = Vec::new();
+            args.push(input_fbx.clone().into_os_string());
+            args.push(render_path.clone().into_os_string());
+            args.push(resolution_x.to_string().into());
+            args.push(resolution_y.to_string().into());
+            args.push(projection.as_blender_type().into());
+            args.push(lens_mode.into());
+            args.push(lens_value.to_string().into());
+            args.push(ortho_scale_value.to_string().into());
+            args.push(near.to_string().into());
+            args.push(far.to_string().into());
+            args.push(renderer.as_blender_engine().into());
+            args.push(samples.to_string().into());
+            args.extend(camera.to_python_args(&subject_names));
+
+            let stdout = dependencies.exec_temp_blender_scripts(
                 &utilities::FBX_RENDER_PY,
                 [&utilities::COMMON_PY],
-                args,
+                &args,
             )?;
 
             if display_in_terminal {
                 dependencies.display_image_in_terminal(&render_path)?;
             }
+
+            camera.emit_print_camera(&dependencies, &stdout)?;
 
             Ok(())
         })();
@@ -232,14 +197,38 @@ impl Render {
     }
 }
 
-fn vec_float(values: &[f64], index: usize) -> Result<OsString> {
-    values
-        .get(index)
-        .map(|v| OsString::from(v.to_string()))
-        .ok_or_else(|| {
-            Error::IO(IOError::new(
-                ErrorKind::InvalidInput,
-                format!("expected 3 floats, got {}", values.len()),
-            ))
-        })
+fn resolve_subject_names(
+    dependencies: &impl Dependencies,
+    input_fbx: &PathBuf,
+    pattern: &str,
+) -> Result<Vec<String>> {
+    let args: [&OsStr; 1] = [input_fbx.as_ref()];
+    let stdout = dependencies.exec_temp_blender_script(&utilities::FBX_HIERARCHY_JSON_PY, args)?;
+    let json = utilities::extract_json(&stdout, b'[', b']')?;
+    let entries = dependencies.parse_hierarchy_json(json)?;
+
+    let pattern = if pattern.starts_with("**/") {
+        pattern.to_owned()
+    } else {
+        format!("**/{pattern}")
+    };
+
+    let candidate_paths: Vec<&str> = entries.iter().map(|(_, path, _)| path.as_str()).collect();
+    let matched = dependencies.match_glob(&pattern, &candidate_paths)?;
+
+    let matched_names: Vec<String> = entries
+        .iter()
+        .zip(matched.iter())
+        .filter(|&(_, &m)| m)
+        .map(|((name, _, _), _)| name.clone())
+        .collect();
+
+    if matched_names.is_empty() {
+        return Err(Error::IO(IOError::new(
+            ErrorKind::NotFound,
+            format!("no object matched pattern '{pattern}'"),
+        )));
+    }
+
+    Ok(matched_names)
 }
