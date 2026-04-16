@@ -1,6 +1,7 @@
 use crate::{Dependencies, Error, Result, utilities};
 use clap::Parser;
 use std::{
+    env,
     ffi::{OsStr, OsString},
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
@@ -127,7 +128,14 @@ impl Render {
         let display_in_terminal = terminal || output_image.is_none();
 
         let (render_path, temp_dir) = match &output_image {
-            Some(path) => (path.clone(), None),
+            Some(path) => {
+                let absolute = if path.is_absolute() {
+                    path.clone()
+                } else {
+                    env::current_dir()?.join(path)
+                };
+                (absolute, None)
+            }
             None => {
                 let dir = dependencies.create_temp_dir()?;
                 (dir.join("render.png"), Some(dir))

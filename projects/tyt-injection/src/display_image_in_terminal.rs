@@ -14,6 +14,15 @@ use viuer::{Config, print_from_file};
 pub fn display_image_in_terminal(path: &Path) -> Result<()> {
     let cfg = Config {
         absolute_offset: false,
+        // No Windows terminal supports the Kitty graphics or iTerm2 inline-image
+        // protocols, but viuer still probes for them by writing escape sequences
+        // and blocking on `read_key` for the reply. Windows Terminal never
+        // answers, so the probe hangs until the user presses a key. Skip the
+        // probes on Windows; Sixel and the ANSI fallback are still tried.
+        #[cfg(windows)]
+        use_kitty: false,
+        #[cfg(windows)]
+        use_iterm: false,
         ..Default::default()
     };
 
