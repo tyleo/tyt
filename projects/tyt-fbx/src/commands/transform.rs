@@ -52,45 +52,46 @@ pub struct Transform {
     rot_unit: RotUnit,
 
     /// Sets the x position of the matched objects.
-    #[arg(value_name = "x", long = "set-pos-x", group = "set_args")]
+    #[arg(value_name = "x", long = "set-pos-x", allow_negative_numbers = true, group = "set_args")]
     set_pos_x: Option<f64>,
 
     /// Sets the y position of the matched objects.
-    #[arg(value_name = "y", long = "set-pos-y", group = "set_args")]
+    #[arg(value_name = "y", long = "set-pos-y", allow_negative_numbers = true, group = "set_args")]
     set_pos_y: Option<f64>,
 
     /// Sets the z position of the matched objects.
-    #[arg(value_name = "z", long = "set-pos-z", group = "set_args")]
+    #[arg(value_name = "z", long = "set-pos-z", allow_negative_numbers = true, group = "set_args")]
     set_pos_z: Option<f64>,
 
     /// Sets the rotation of the matched objects around the x-axis.
-    #[arg(value_name = "x", long = "set-rot-x", group = "set_args")]
+    #[arg(value_name = "x", long = "set-rot-x", allow_negative_numbers = true, group = "set_args")]
     set_rot_x: Option<f64>,
 
     /// Sets the rotation of the matched objects around the y-axis.
-    #[arg(value_name = "y", long = "set-rot-y", group = "set_args")]
+    #[arg(value_name = "y", long = "set-rot-y", allow_negative_numbers = true, group = "set_args")]
     set_rot_y: Option<f64>,
 
     /// Sets the rotation of the matched objects around the z-axis.
-    #[arg(value_name = "z", long = "set-rot-z", group = "set_args")]
+    #[arg(value_name = "z", long = "set-rot-z", allow_negative_numbers = true, group = "set_args")]
     set_rot_z: Option<f64>,
 
     /// Sets the scale of the matched objects in the x-axis.
-    #[arg(value_name = "x", long = "set-scl-x", group = "set_args")]
+    #[arg(value_name = "x", long = "set-scl-x", allow_negative_numbers = true, group = "set_args")]
     set_scl_x: Option<f64>,
 
     /// Sets the scale of the matched objects in the y-axis.
-    #[arg(value_name = "y", long = "set-scl-y", group = "set_args")]
+    #[arg(value_name = "y", long = "set-scl-y", allow_negative_numbers = true, group = "set_args")]
     set_scl_y: Option<f64>,
 
     /// Sets the scale of the matched objects in the z-axis.
-    #[arg(value_name = "z", long = "set-scl-z", group = "set_args")]
+    #[arg(value_name = "z", long = "set-scl-z", allow_negative_numbers = true, group = "set_args")]
     set_scl_z: Option<f64>,
 
     /// Sets all components of position on the matched objects.
     #[arg(
         value_names = ["x", "y", "z"],
         long = "set-pos",
+        allow_negative_numbers = true,
         num_args = 3,
         group = "set_args",
         conflicts_with_all = ["set_pos_x", "set_pos_y", "set_pos_z", "set_xfm"],
@@ -101,6 +102,7 @@ pub struct Transform {
     #[arg(
         value_names = ["x", "y", "z"],
         long = "set-rot",
+        allow_negative_numbers = true,
         num_args = 3,
         group = "set_args",
         conflicts_with_all = ["set_rot_x", "set_rot_y", "set_rot_z", "set_xfm"],
@@ -111,6 +113,7 @@ pub struct Transform {
     #[arg(
         value_names = ["x", "y", "z"],
         long = "set-scl",
+        allow_negative_numbers = true,
         num_args = 3,
         group = "set_args",
         conflicts_with_all = ["set_scl_x", "set_scl_y", "set_scl_z", "set_xfm"],
@@ -122,6 +125,7 @@ pub struct Transform {
     #[arg(
         value_names = ["px", "py", "pz", "rx", "ry", "rz", "sx", "sy", "sz"],
         long = "set-xfm",
+        allow_negative_numbers = true,
         num_args = 9,
         group = "set_args",
         conflicts_with_all = [
@@ -133,45 +137,46 @@ pub struct Transform {
     set_xfm: Option<Vec<f64>>,
 
     /// Adds to the x position of the matched objects.
-    #[arg(value_name = "x", long = "mod-pos-x", group = "mod_args")]
+    #[arg(value_name = "x", long = "mod-pos-x", allow_negative_numbers = true, group = "mod_args")]
     mod_pos_x: Option<f64>,
 
     /// Adds to the y position of the matched objects.
-    #[arg(value_name = "y", long = "mod-pos-y", group = "mod_args")]
+    #[arg(value_name = "y", long = "mod-pos-y", allow_negative_numbers = true, group = "mod_args")]
     mod_pos_y: Option<f64>,
 
     /// Adds to the z position of the matched objects.
-    #[arg(value_name = "z", long = "mod-pos-z", group = "mod_args")]
+    #[arg(value_name = "z", long = "mod-pos-z", allow_negative_numbers = true, group = "mod_args")]
     mod_pos_z: Option<f64>,
 
     /// Adds to the rotation of the matched objects around the x-axis.
-    #[arg(value_name = "x", long = "mod-rot-x", group = "mod_args")]
+    #[arg(value_name = "x", long = "mod-rot-x", allow_negative_numbers = true, group = "mod_args")]
     mod_rot_x: Option<f64>,
 
     /// Adds to the rotation of the matched objects around the y-axis.
-    #[arg(value_name = "y", long = "mod-rot-y", group = "mod_args")]
+    #[arg(value_name = "y", long = "mod-rot-y", allow_negative_numbers = true, group = "mod_args")]
     mod_rot_y: Option<f64>,
 
     /// Adds to the rotation of the matched objects around the z-axis.
-    #[arg(value_name = "z", long = "mod-rot-z", group = "mod_args")]
+    #[arg(value_name = "z", long = "mod-rot-z", allow_negative_numbers = true, group = "mod_args")]
     mod_rot_z: Option<f64>,
 
     /// Adds to the scale of the matched objects in the x-axis.
-    #[arg(value_name = "x", long = "mod-scl-x", group = "mod_args")]
+    #[arg(value_name = "x", long = "mod-scl-x", allow_negative_numbers = true, group = "mod_args")]
     mod_scl_x: Option<f64>,
 
     /// Adds to the scale of the matched objects in the y-axis.
-    #[arg(value_name = "y", long = "mod-scl-y", group = "mod_args")]
+    #[arg(value_name = "y", long = "mod-scl-y", allow_negative_numbers = true, group = "mod_args")]
     mod_scl_y: Option<f64>,
 
     /// Adds to the scale of the matched objects in the z-axis.
-    #[arg(value_name = "z", long = "mod-scl-z", group = "mod_args")]
+    #[arg(value_name = "z", long = "mod-scl-z", allow_negative_numbers = true, group = "mod_args")]
     mod_scl_z: Option<f64>,
 
     /// Adds to all components of position on the matched objects.
     #[arg(
         value_names = ["x", "y", "z"],
         long = "mod-pos",
+        allow_negative_numbers = true,
         num_args = 3,
         group = "mod_args",
         conflicts_with_all = ["mod_pos_x", "mod_pos_y", "mod_pos_z", "mod_xfm"],
@@ -182,6 +187,7 @@ pub struct Transform {
     #[arg(
         value_names = ["x", "y", "z"],
         long = "mod-rot",
+        allow_negative_numbers = true,
         num_args = 3,
         group = "mod_args",
         conflicts_with_all = ["mod_rot_x", "mod_rot_y", "mod_rot_z", "mod_xfm"],
@@ -192,6 +198,7 @@ pub struct Transform {
     #[arg(
         value_names = ["x", "y", "z"],
         long = "mod-scl",
+        allow_negative_numbers = true,
         num_args = 3,
         group = "mod_args",
         conflicts_with_all = ["mod_scl_x", "mod_scl_y", "mod_scl_z", "mod_xfm"],
@@ -203,6 +210,7 @@ pub struct Transform {
     #[arg(
         value_names = ["px", "py", "pz", "rx", "ry", "rz", "sx", "sy", "sz"],
         long = "mod-xfm",
+        allow_negative_numbers = true,
         num_args = 9,
         group = "mod_args",
         conflicts_with_all = [

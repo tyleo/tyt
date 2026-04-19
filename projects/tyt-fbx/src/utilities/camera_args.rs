@@ -34,12 +34,12 @@ pub struct CameraArgs {
     pub subject: Option<String>,
 
     /// Horizontal orbit around the subject up axis. Unit from `--rot-unit`.
-    #[arg(value_name = "orbit-h", long, group = "auto_frame")]
+    #[arg(value_name = "orbit-h", long, allow_negative_numbers = true, group = "auto_frame")]
     pub orbit_h: Option<f64>,
 
     /// Vertical orbit (elevates/lowers the camera while still facing the
     /// subject). Unit from `--rot-unit`.
-    #[arg(value_name = "orbit-v", long, group = "auto_frame")]
+    #[arg(value_name = "orbit-v", long, allow_negative_numbers = true, group = "auto_frame")]
     pub orbit_v: Option<f64>,
 
     /// Distance multiplier applied to the auto-computed camera distance.
@@ -49,50 +49,51 @@ pub struct CameraArgs {
 
     /// Camera-local rotation about the camera's up axis, applied after the
     /// look-at base rotation. Unit from `--rot-unit`.
-    #[arg(value_name = "yaw", long, group = "auto_frame")]
+    #[arg(value_name = "yaw", long, allow_negative_numbers = true, group = "auto_frame")]
     pub yaw: Option<f64>,
 
     /// Camera-local rotation about the camera's right axis, applied after
     /// the look-at base rotation. Unit from `--rot-unit`.
-    #[arg(value_name = "pitch", long, group = "auto_frame")]
+    #[arg(value_name = "pitch", long, allow_negative_numbers = true, group = "auto_frame")]
     pub pitch: Option<f64>,
 
     /// Camera-local rotation about the camera's forward axis, applied after
     /// the look-at base rotation. Unit from `--rot-unit`.
-    #[arg(value_name = "roll", long, group = "auto_frame")]
+    #[arg(value_name = "roll", long, allow_negative_numbers = true, group = "auto_frame")]
     pub roll: Option<f64>,
 
     /// Sets the x position of the camera.
-    #[arg(value_name = "x", long = "cam-pos-x", group = "explicit_pose")]
+    #[arg(value_name = "x", long = "cam-pos-x", allow_negative_numbers = true, group = "explicit_pose")]
     pub cam_pos_x: Option<f64>,
 
     /// Sets the y position of the camera.
-    #[arg(value_name = "y", long = "cam-pos-y", group = "explicit_pose")]
+    #[arg(value_name = "y", long = "cam-pos-y", allow_negative_numbers = true, group = "explicit_pose")]
     pub cam_pos_y: Option<f64>,
 
     /// Sets the z position of the camera.
-    #[arg(value_name = "z", long = "cam-pos-z", group = "explicit_pose")]
+    #[arg(value_name = "z", long = "cam-pos-z", allow_negative_numbers = true, group = "explicit_pose")]
     pub cam_pos_z: Option<f64>,
 
     /// Sets the euler rotation of the camera around the x-axis. Unit from
     /// `--rot-unit`.
-    #[arg(value_name = "x", long = "cam-rot-x", group = "explicit_pose")]
+    #[arg(value_name = "x", long = "cam-rot-x", allow_negative_numbers = true, group = "explicit_pose")]
     pub cam_rot_x: Option<f64>,
 
     /// Sets the euler rotation of the camera around the y-axis. Unit from
     /// `--rot-unit`.
-    #[arg(value_name = "y", long = "cam-rot-y", group = "explicit_pose")]
+    #[arg(value_name = "y", long = "cam-rot-y", allow_negative_numbers = true, group = "explicit_pose")]
     pub cam_rot_y: Option<f64>,
 
     /// Sets the euler rotation of the camera around the z-axis. Unit from
     /// `--rot-unit`.
-    #[arg(value_name = "z", long = "cam-rot-z", group = "explicit_pose")]
+    #[arg(value_name = "z", long = "cam-rot-z", allow_negative_numbers = true, group = "explicit_pose")]
     pub cam_rot_z: Option<f64>,
 
     /// Sets all three components of the camera's position.
     #[arg(
         value_names = ["x", "y", "z"],
         long = "cam-pos",
+        allow_negative_numbers = true,
         num_args = 3,
         group = "explicit_pose",
         conflicts_with_all = ["cam_pos_x", "cam_pos_y", "cam_pos_z", "cam_xfm"],
@@ -104,6 +105,7 @@ pub struct CameraArgs {
     #[arg(
         value_names = ["x", "y", "z"],
         long = "cam-rot",
+        allow_negative_numbers = true,
         num_args = 3,
         group = "explicit_pose",
         conflicts_with_all = ["cam_rot_x", "cam_rot_y", "cam_rot_z", "cam_xfm"],
@@ -116,6 +118,7 @@ pub struct CameraArgs {
     #[arg(
         value_names = ["px", "py", "pz", "rx", "ry", "rz"],
         long = "cam-xfm",
+        allow_negative_numbers = true,
         num_args = 6,
         group = "explicit_pose",
         conflicts_with_all = [
