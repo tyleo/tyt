@@ -41,4 +41,8 @@ impl Dependencies for DependenciesImpl {
             Err(e) => Err(e),
         }
     }
+
+    fn write_file(&self, path: &Path, contents: &[u8]) -> IOResult<()> {
+        tyt_injection::write_file_atomic(path, contents)
+    }
 }

@@ -1,4 +1,5 @@
 use std::{error::Error as StdError, fmt};
+use tyt_claude::Error as ClaudeError;
 use tyt_cubemap::Error as CubemapError;
 use tyt_fbx::Error as FbxError;
 use tyt_fs::Error as FSError;
@@ -9,6 +10,7 @@ use tyt_meta::Error as MetaError;
 use tyt_vmax::Error as VMaxError;
 #[derive(Debug)]
 pub enum Error {
+    Claude(ClaudeError),
     Cubemap(CubemapError),
     FS(FSError),
     Fbx(FbxError),
@@ -21,6 +23,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Error::Claude(e) => e.fmt(f),
             Error::Cubemap(e) => e.fmt(f),
             Error::FS(e) => e.fmt(f),
             Error::Fbx(e) => e.fmt(f),
@@ -35,6 +38,7 @@ impl fmt::Display for Error {
 impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
+            Error::Claude(e) => Some(e),
             Error::Cubemap(e) => Some(e),
             Error::FS(e) => Some(e),
             Error::Fbx(e) => Some(e),
@@ -43,6 +47,12 @@ impl StdError for Error {
             Error::Meta(e) => Some(e),
             Error::VMax(e) => Some(e),
         }
+    }
+}
+
+impl From<ClaudeError> for Error {
+    fn from(e: ClaudeError) -> Self {
+        Error::Claude(e)
     }
 }
 

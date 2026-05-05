@@ -1,8 +1,7 @@
 use crate::{Dependencies, Error, MeshWithUvs, Result};
 use std::{
     ffi::OsStr,
-    fs::{self, OpenOptions},
-    io::{Error as IOError, ErrorKind, Write},
+    io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
     result::Result as StdResult,
 };
@@ -100,50 +99,6 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn write_file<P: AsRef<Path>>(&self, path: P, contents: &[u8]) -> Result<()> {
-        let path = path.as_ref();
-
-        // Ensure parent exists (mimics common "write file" ergonomics).
-        if let Some(parent) = path.parent()
-            && !parent.as_os_str().is_empty()
-        {
-            fs::create_dir_all(parent)?;
-        }
-
-        // Write to a sibling temp file, then rename over destination.
-        // This avoids leaving partial files on crash and is generally atomic on
-        // the same filesystem.
-        let tmp = tyt_injection::unique_sibling_temp_path(path)?;
-
-        // Use a scope so the file handle is closed before rename (important on
-        // Windows).
-        {
-            let mut f = OpenOptions::new().create_new(true).write(true).open(&tmp)?;
-
-            f.write_all(contents)?;
-            f.sync_all()?; // durability best-effort
-        }
-
-        // On Unix, rename over existing is atomic. On Windows, rename fails if
-        // dest exists.
-        // So: remove dest first on Windows-like behavior, then rename.
-        match fs::rename(&tmp, path) {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                // If destination exists, try remove then rename.
-                if e.kind() == ErrorKind::AlreadyExists || e.kind() == ErrorKind::PermissionDenied {
-                    // PermissionDenied is commonly observed on Windows when
-                    // target exists.
-                    let _ = fs::remove_file(path);
-                    fs::rename(&tmp, path).inspect_err(|_rename_err| {
-                        // Cleanup temp if we still failed.
-                        let _ = fs::remove_file(&tmp);
-                    })?;
-                    Ok(())
-                } else {
-                    let _ = fs::remove_file(&tmp);
-                    Err(e.into())
-                }
-            }
-        }
+        Ok(tyt_injection::write_file_atomic(path.as_ref(), contents)?)
     }
 }

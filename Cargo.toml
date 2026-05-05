@@ -2,6 +2,7 @@
 members = [
     "projects/ty-math-serde",
     "projects/ty-math",
+    "projects/tyt-claude",
     "projects/tyt-common",
     "projects/tyt-cubemap",
     "projects/tyt-fbx",
@@ -22,6 +23,7 @@ resolver = "2"
 ty-math = { path = "projects/ty-math" }
 ty-math-serde = { path = "projects/ty-math-serde" }
 tyt = { path = "projects/tyt" }
+tyt-claude = { path = "projects/tyt-claude" }
 tyt-common = { path = "projects/tyt-common" }
 tyt-cubemap = { path = "projects/tyt-cubemap" }
 tyt-fbx = { path = "projects/tyt-fbx" }

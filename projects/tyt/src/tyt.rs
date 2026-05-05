@@ -1,5 +1,6 @@
 use crate::{Dependencies, Result};
 use clap::Subcommand;
+use tyt_claude::TytClaude;
 use tyt_cubemap::TytCubemap;
 use tyt_fbx::TytFbx;
 use tyt_fs::TytFS;
@@ -13,6 +14,12 @@ use tyt_vmax::TytVMax;
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
 pub enum Tyt {
+    #[command(name = "claude")]
+    Claude {
+        #[clap(subcommand)]
+        claude: TytClaude,
+    },
+
     #[command(name = "cubemap")]
     Cubemap {
         #[clap(subcommand)]
@@ -59,6 +66,7 @@ pub enum Tyt {
 impl Tyt {
     pub fn execute(self, deps: impl Dependencies) -> Result<()> {
         match self {
+            Tyt::Claude { claude } => claude.execute(deps.tyt_claude_dependencies())?,
             Tyt::Cubemap { cubemap } => cubemap.execute(deps.tyt_cubemap_dependencies())?,
             Tyt::FS { fs } => fs.execute(deps.tyt_fs_dependencies())?,
             Tyt::Fbx { fbx } => fbx.execute(deps.tyt_fbx_dependencies())?,

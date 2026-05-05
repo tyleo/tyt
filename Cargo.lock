@@ -1365,6 +1365,7 @@ version = "0.1.8"
 dependencies = [
  "clap",
  "clap_complete",
+ "tyt-claude",
  "tyt-common",
  "tyt-cubemap",
  "tyt-fbx",
@@ -1373,6 +1374,18 @@ dependencies = [
  "tyt-material",
  "tyt-meta",
  "tyt-vmax",
+]
+
+[[package]]
+name = "tyt-claude"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "serde",
+ "tyt-common",
+ "tyt-injection",
+ "tyt-preferences",
 ]
 
 [[package]]
@@ -1463,7 +1476,7 @@ name = "tyt-preferences"
 version = "0.1.6"
 dependencies = [
  "serde",
- "serde_json",
+ "tyt-injection",
 ]
 
 [[package]]

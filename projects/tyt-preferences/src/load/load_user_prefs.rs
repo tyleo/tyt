@@ -9,5 +9,5 @@ pub fn load_user_prefs<T: DeserializePrefs>(
     let Some(dir) = dependencies.user_home_dir()? else {
         return Ok(None);
     };
-    load_prefs_from_dir(dependencies, &dir, key)
+    load_prefs_from_dir(dependencies, &dir, ".tytconfig", key)
 }

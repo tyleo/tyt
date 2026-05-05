@@ -15,6 +15,7 @@ required-features = ["bin"]
 [dependencies]
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
+tyt-claude = { version = "0.1.0" }
 tyt-common = { version = "0.1.0" }
 tyt-cubemap = { version = "0.1.0" }
 tyt-fbx = { version = "0.1.0" }
@@ -26,5 +27,5 @@ tyt-vmax = { version = "0.1.0" }
 
 [features]
 default = ["impl"]
-impl = ["tyt-cubemap/impl", "tyt-fbx/impl", "tyt-fs/impl", "tyt-image/impl", "tyt-material/impl", "tyt-meta/impl", "tyt-vmax/impl"]
+impl = ["tyt-claude/impl", "tyt-cubemap/impl", "tyt-fbx/impl", "tyt-fs/impl", "tyt-image/impl", "tyt-material/impl", "tyt-meta/impl", "tyt-vmax/impl"]
 bin = ["impl", "dep:clap_complete"]

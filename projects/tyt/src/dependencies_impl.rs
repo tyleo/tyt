@@ -1,4 +1,5 @@
 use crate::Dependencies;
+use tyt_claude::DependenciesImpl as TytClaudeDependenciesImpl;
 use tyt_cubemap::DependenciesImpl as TytCubemapDependenciesImpl;
 use tyt_fbx::DependenciesImpl as TytFbxDependenciesImpl;
 use tyt_fs::DependenciesImpl as TytFSDependenciesImpl;
@@ -11,6 +12,7 @@ use tyt_vmax::DependenciesImpl as TytVMaxDependenciesImpl;
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
+    type TytClaudeDependencies = TytClaudeDependenciesImpl;
     type TytCubemapDependencies = TytCubemapDependenciesImpl;
     type TytFSDependencies = TytFSDependenciesImpl;
     type TytFbxDependencies = TytFbxDependenciesImpl;
@@ -18,6 +20,10 @@ impl Dependencies for DependenciesImpl {
     type TytMaterialDependencies = TytMaterialDependenciesImpl;
     type TytMetaDependencies = TytMetaDependenciesImpl;
     type TytVMaxDependencies = TytVMaxDependenciesImpl;
+
+    fn tyt_claude_dependencies(&self) -> Self::TytClaudeDependencies {
+        TytClaudeDependenciesImpl
+    }
 
     fn tyt_cubemap_dependencies(&self) -> Self::TytCubemapDependencies {
         TytCubemapDependenciesImpl
