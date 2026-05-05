@@ -12,7 +12,9 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
-        Ok(env::var_os("HOME").map(PathBuf::from))
+        Ok(env::var_os("HOME")
+            .or_else(|| env::var_os("USERPROFILE"))
+            .map(PathBuf::from))
     }
 
     fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
