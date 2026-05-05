@@ -2,7 +2,7 @@ use crate::{Dependencies, Error, Result};
 use clap::ValueEnum;
 use std::path::PathBuf;
 
-/// Which config file `create-profile` / `set-profile` should write to.
+/// Which config file `add-profile` / `set-profile` should write to.
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
 pub enum Scope {
     /// `~/.tytconfig`

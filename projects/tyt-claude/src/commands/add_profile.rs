@@ -5,8 +5,8 @@ use clap::Parser;
 /// `.tytusrconfig` file. Does not create the directory; Claude Code will
 /// create it on first launch.
 #[derive(Clone, Debug, Parser)]
-#[command(name = "create-profile")]
-pub struct CreateProfile {
+#[command(name = "add-profile")]
+pub struct AddProfile {
     /// Profile name (e.g., `work`, `personal`).
     #[arg(value_name = "name")]
     pub name: String,
@@ -29,7 +29,7 @@ pub struct CreateProfile {
     pub scope_flag: Option<Scope>,
 }
 
-impl CreateProfile {
+impl AddProfile {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let scope = self.scope_arg.or(self.scope_flag).unwrap_or(Scope::User);
         let target = scope.resolve_target_path(&dependencies)?;
