@@ -1,4 +1,4 @@
-use crate::{Dependencies, Error, Result, Scope};
+use crate::{Dependencies, Error, Result, Scope, normalize_separators};
 use clap::Parser;
 
 /// Marks `<name>` as the active claude profile in the chosen `.tytconfig` /
@@ -44,7 +44,7 @@ impl SetProfile {
         dependencies.write_claude_section(&target, &existing)?;
         let msg = format!(
             "active claude profile in {} is now '{}'\n",
-            target.display(),
+            normalize_separators(&target.to_string_lossy()),
             self.name
         );
         dependencies.write_stdout(msg.as_bytes())?;

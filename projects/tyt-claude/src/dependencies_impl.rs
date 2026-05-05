@@ -1,6 +1,10 @@
-use crate::{CLAUDE_PREFS_KEY, ClaudePrefs, Dependencies, Error, ResolvedClaudePrefs, Result};
+use crate::{
+    CLAUDE_PREFS_KEY, ClaudePrefs, Dependencies, Error, ResolvedClaudePrefs, Result,
+    normalize_separators,
+};
 use std::{
     ffi::OsString,
+    fs,
     io::ErrorKind,
     path::{Path, PathBuf},
 };
@@ -84,15 +88,16 @@ impl Dependencies for DependenciesImpl {
             Err(e) => Err(Error::IO(e)),
         }
     }
-}
 
-/// Rewrites path separators to the platform-native form. On Windows, `/` is
-/// converted to `\`. On Unix this is a no-op (backslash is a legal filename
-/// character).
-fn normalize_separators(s: &str) -> String {
-    if cfg!(windows) {
-        s.replace('/', "\\")
-    } else {
-        s.to_string()
+    fn read_file(&self, path: &Path) -> Result<Option<Vec<u8>>> {
+        Ok(self.prefs_deps().read_file(path)?)
+    }
+
+    fn copy_file(&self, src: &Path, dst: &Path) -> Result<()> {
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::copy(src, dst)?;
+        Ok(())
     }
 }

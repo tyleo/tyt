@@ -1,4 +1,4 @@
-use crate::{Dependencies, Error, Result, Scope};
+use crate::{Dependencies, Error, Result, Scope, normalize_separators};
 use clap::Parser;
 
 /// Adds a profile entry (name and directory) to the chosen `.tytconfig` /
@@ -44,7 +44,11 @@ impl AddProfile {
         }
         existing.profiles.insert(self.name.clone(), self.path);
         dependencies.write_claude_section(&target, &existing)?;
-        let msg = format!("added profile '{}' to {}\n", self.name, target.display());
+        let msg = format!(
+            "added profile '{}' to {}\n",
+            self.name,
+            normalize_separators(&target.to_string_lossy())
+        );
         dependencies.write_stdout(msg.as_bytes())?;
         Ok(())
     }

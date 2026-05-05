@@ -31,4 +31,11 @@ pub trait Dependencies {
     /// Spawns `claude` with the supplied env vars and arguments, inheriting
     /// stdio. Returns the child's exit code.
     fn exec_claude_with_env(&self, env: &[(OsString, OsString)], args: &[OsString]) -> Result<i32>;
+
+    /// Reads bytes from `path`. Returns `None` if the file does not exist.
+    fn read_file(&self, path: &Path) -> Result<Option<Vec<u8>>>;
+
+    /// Copies the file at `src` to `dst`, creating parent directories of
+    /// `dst` as needed. Overwrites if `dst` already exists.
+    fn copy_file(&self, src: &Path, dst: &Path) -> Result<()>;
 }

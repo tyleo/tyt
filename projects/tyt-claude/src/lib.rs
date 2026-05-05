@@ -5,6 +5,7 @@ mod dependencies;
 #[cfg(feature = "impl")]
 mod dependencies_impl;
 mod error;
+mod normalize_separators;
 mod resolved_claude_prefs;
 mod result;
 mod scope;
@@ -15,6 +16,7 @@ pub use dependencies::*;
 #[cfg(feature = "impl")]
 pub use dependencies_impl::*;
 pub use error::*;
+pub(crate) use normalize_separators::*;
 pub use resolved_claude_prefs::*;
 pub use result::*;
 pub use scope::*;
