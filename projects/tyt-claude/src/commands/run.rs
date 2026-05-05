@@ -12,7 +12,7 @@ use std::{ffi::OsString, process};
 #[command(name = "run", trailing_var_arg = true)]
 pub struct Run {
     /// Override the active profile for this invocation only.
-    #[arg(value_name = "name", long = "profile")]
+    #[arg(value_name = "name", short = 'p', long = "profile")]
     pub profile: Option<String>,
 
     /// Arguments forwarded verbatim to `claude`.
