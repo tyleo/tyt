@@ -27,25 +27,8 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn glob_single_match(&self, pattern: &str) -> Result<PathBuf> {
-        let mut matches = Vec::new();
-        for entry in glob::glob(pattern)
-            .map_err(|e| Error::Glob(format!("invalid glob pattern '{pattern}': {e}")))?
-        {
-            matches
-                .push(entry.map_err(|e| Error::Glob(format!("error reading glob result: {e}")))?);
-        }
-
-        match matches.len() {
-            0 => Err(Error::Glob(format!("missing file matching: {pattern}"))),
-            1 => Ok(matches.into_iter().next().unwrap()),
-            n => {
-                let mut msg = format!("multiple files ({n}) match '{pattern}':");
-                for f in &matches {
-                    msg.push_str(&format!("\n  {}", f.display()));
-                }
-                Err(Error::Glob(msg))
-            }
-        }
+        tyt_injection::glob_single_match(pattern)
+            .map_err(|e| Error::Glob(format!("{e}")))
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {

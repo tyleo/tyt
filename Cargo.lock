@@ -1440,6 +1440,7 @@ name = "tyt-injection"
 version = "0.1.8"
 dependencies = [
  "crossterm",
+ "glob",
  "globset",
  "image",
  "serde",
@@ -1456,7 +1457,6 @@ version = "0.1.7"
 dependencies = [
  "clap",
  "clap_complete",
- "glob",
  "tyt-common",
  "tyt-injection",
 ]

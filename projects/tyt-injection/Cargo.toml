@@ -8,6 +8,7 @@ description = "Dependency injection implementations for tyt sub-crates."
 
 [dependencies]
 crossterm = "0.29"
+glob = "0.3"
 globset = "0.4"
 image = "0.25"
 serde = { version = "1", features = ["derive"] }
