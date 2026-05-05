@@ -5,8 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use tyt_preferences::{
-    Dependencies as PrefsDependencies, DependenciesImpl as PrefsDependenciesImpl, load_git_prefs,
-    load_user_git_prefs, load_user_prefs, read_section, write_section,
+    Dependencies as PrefsDependencies, DependenciesImpl as PrefsDependenciesImpl, read_section,
+    write_section,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -33,14 +33,29 @@ impl Dependencies for DependenciesImpl {
 
     fn claude_prefs(&self) -> Result<ResolvedClaudePrefs> {
         let prefs_deps = self.prefs_deps();
-        let user: Option<ClaudePrefs> = load_user_prefs(&prefs_deps, CLAUDE_PREFS_KEY)?;
-        let git_root: Option<ClaudePrefs> = load_git_prefs(&prefs_deps, CLAUDE_PREFS_KEY)?;
-        let git_user: Option<ClaudePrefs> = load_user_git_prefs(&prefs_deps, CLAUDE_PREFS_KEY)?;
+        let user_path = prefs_deps.user_home_dir()?.map(|d| d.join(".tytconfig"));
+        let git_root = prefs_deps.git_root_dir()?;
+        let git_root_path = git_root.as_ref().map(|d| d.join(".tytconfig"));
+        let git_user_path = git_root.as_ref().map(|d| d.join(".tytusrconfig"));
 
         let mut resolved = ResolvedClaudePrefs::default();
-        for layer in [user, git_root, git_user].into_iter().flatten() {
+        for source in [user_path, git_root_path, git_user_path]
+            .into_iter()
+            .flatten()
+        {
+            let Some(layer): Option<ClaudePrefs> =
+                read_section(&prefs_deps, &source, CLAUDE_PREFS_KEY)?
+            else {
+                continue;
+            };
             for (k, v) in layer.profiles {
-                resolved.profiles.insert(k, v);
+                let resolved_path = match source.parent() {
+                    Some(base) if !Path::new(&v).is_absolute() => {
+                        normalize_separators(&base.join(&v).to_string_lossy())
+                    }
+                    _ => normalize_separators(&v),
+                };
+                resolved.profiles.insert(k, resolved_path);
             }
             if let Some(active) = layer.active {
                 resolved.active = Some(active);
@@ -68,5 +83,16 @@ impl Dependencies for DependenciesImpl {
             Err(e) if e.kind() == ErrorKind::NotFound => Err(Error::ClaudeNotFound),
             Err(e) => Err(Error::IO(e)),
         }
+    }
+}
+
+/// Rewrites path separators to the platform-native form. On Windows, `/` is
+/// converted to `\`. On Unix this is a no-op (backslash is a legal filename
+/// character).
+fn normalize_separators(s: &str) -> String {
+    if cfg!(windows) {
+        s.replace('/', "\\")
+    } else {
+        s.to_string()
     }
 }
