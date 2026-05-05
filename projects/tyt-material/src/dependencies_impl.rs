@@ -27,8 +27,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn glob_single_match(&self, pattern: &str) -> Result<PathBuf> {
-        tyt_injection::glob_single_match(pattern)
-            .map_err(|e| Error::Glob(format!("{e}")))
+        tyt_injection::glob_single_match(pattern).map_err(|e| Error::Glob(format!("{e}")))
     }
 
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {

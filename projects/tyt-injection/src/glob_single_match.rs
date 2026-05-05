@@ -14,11 +14,7 @@ pub fn glob_single_match(pattern: &str) -> Result<PathBuf> {
             format!("invalid glob pattern '{pattern}': {e}"),
         )
     })? {
-        matches.push(
-            entry.map_err(|e| {
-                Error::other(format!("error reading glob result: {e}"))
-            })?,
-        );
+        matches.push(entry.map_err(|e| Error::other(format!("error reading glob result: {e}")))?);
     }
 
     match matches.len() {
