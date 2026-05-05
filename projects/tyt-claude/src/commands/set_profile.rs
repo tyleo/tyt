@@ -10,18 +10,33 @@ pub struct SetProfile {
     #[arg(value_name = "name")]
     pub name: String,
 
-    /// Which config file to write to.
-    #[arg(value_name = "scope", long, value_enum, default_value_t = Scope::default())]
-    pub scope: Scope,
+    /// Which config file to write to. Defaults to `repo-user`
+    /// (`<git-root>/.tytusrconfig`).
+    #[arg(value_name = "scope", value_enum, conflicts_with = "scope_flag")]
+    pub scope_arg: Option<Scope>,
+
+    /// Which config file to write to. Defaults to `repo-user`
+    /// (`<git-root>/.tytusrconfig`).
+    #[arg(
+        value_name = "scope",
+        long = "scope",
+        value_enum,
+        conflicts_with = "scope_arg"
+    )]
+    pub scope_flag: Option<Scope>,
 }
 
 impl SetProfile {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
+        let scope = self
+            .scope_arg
+            .or(self.scope_flag)
+            .unwrap_or(Scope::RepoUser);
         let resolved = dependencies.claude_prefs()?;
         if !resolved.profiles.contains_key(&self.name) {
             return Err(Error::ProfileNotFound { name: self.name });
         }
-        let target = self.scope.resolve_target_path(&dependencies)?;
+        let target = scope.resolve_target_path(&dependencies)?;
         let mut existing = dependencies
             .read_claude_section(&target)?
             .unwrap_or_default();

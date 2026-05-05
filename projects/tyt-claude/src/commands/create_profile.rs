@@ -15,21 +15,31 @@ pub struct CreateProfile {
     #[arg(value_name = "path")]
     pub path: String,
 
-    /// Which config file to write to.
-    #[arg(value_name = "scope", long, value_enum, default_value_t = Scope::default())]
-    pub scope: Scope,
+    /// Which config file to write to. Defaults to `user` (`~/.tytconfig`).
+    #[arg(value_name = "scope", value_enum, conflicts_with = "scope_flag")]
+    pub scope_arg: Option<Scope>,
+
+    /// Which config file to write to. Defaults to `user` (`~/.tytconfig`).
+    #[arg(
+        value_name = "scope",
+        long = "scope",
+        value_enum,
+        conflicts_with = "scope_arg"
+    )]
+    pub scope_flag: Option<Scope>,
 }
 
 impl CreateProfile {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let target = self.scope.resolve_target_path(&dependencies)?;
+        let scope = self.scope_arg.or(self.scope_flag).unwrap_or(Scope::User);
+        let target = scope.resolve_target_path(&dependencies)?;
         let mut existing = dependencies
             .read_claude_section(&target)?
             .unwrap_or_default();
         if existing.profiles.contains_key(&self.name) {
             return Err(Error::ProfileAlreadyExists {
                 name: self.name,
-                scope: self.scope,
+                scope,
             });
         }
         existing.profiles.insert(self.name.clone(), self.path);
