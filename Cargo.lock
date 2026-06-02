@@ -1373,6 +1373,7 @@ dependencies = [
  "tyt-image",
  "tyt-material",
  "tyt-meta",
+ "tyt-oai",
  "tyt-vmax",
 ]
 
@@ -1464,6 +1465,16 @@ dependencies = [
 [[package]]
 name = "tyt-meta"
 version = "0.1.6"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "tyt-common",
+ "tyt-injection",
+]
+
+[[package]]
+name = "tyt-oai"
+version = "0.1.0"
 dependencies = [
  "clap",
  "clap_complete",

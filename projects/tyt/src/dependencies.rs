@@ -5,6 +5,7 @@ use tyt_fs::Dependencies as TytFSDependencies;
 use tyt_image::Dependencies as TytImageDependencies;
 use tyt_material::Dependencies as TytMaterialDependencies;
 use tyt_meta::Dependencies as TytMetaDependencies;
+use tyt_oai::Dependencies as TytOAIDependencies;
 use tyt_vmax::Dependencies as TytVMaxDependencies;
 
 pub trait Dependencies {
@@ -15,6 +16,7 @@ pub trait Dependencies {
     type TytImageDependencies: TytImageDependencies;
     type TytMaterialDependencies: TytMaterialDependencies;
     type TytMetaDependencies: TytMetaDependencies;
+    type TytOAIDependencies: TytOAIDependencies;
     type TytVMaxDependencies: TytVMaxDependencies;
 
     fn tyt_claude_dependencies(&self) -> Self::TytClaudeDependencies;
@@ -24,5 +26,6 @@ pub trait Dependencies {
     fn tyt_image_dependencies(&self) -> Self::TytImageDependencies;
     fn tyt_material_dependencies(&self) -> Self::TytMaterialDependencies;
     fn tyt_meta_dependencies(&self) -> Self::TytMetaDependencies;
+    fn tyt_oai_dependencies(&self) -> Self::TytOAIDependencies;
     fn tyt_vmax_dependencies(&self) -> Self::TytVMaxDependencies;
 }

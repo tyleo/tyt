@@ -11,6 +11,7 @@ members = [
     "projects/tyt-injection",
     "projects/tyt-material",
     "projects/tyt-meta",
+    "projects/tyt-oai",
     "projects/tyt-preferences",
     "projects/tyt",
     "projects/tyt-vmax",
@@ -32,6 +33,7 @@ tyt-image = { path = "projects/tyt-image" }
 tyt-injection = { path = "projects/tyt-injection" }
 tyt-material = { path = "projects/tyt-material" }
 tyt-meta = { path = "projects/tyt-meta" }
+tyt-oai = { path = "projects/tyt-oai" }
 tyt-preferences = { path = "projects/tyt-preferences" }
 tyt-vmax = { path = "projects/tyt-vmax" }
 vmax = { path = "projects/vmax" }

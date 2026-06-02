@@ -6,6 +6,7 @@ use tyt_fs::DependenciesImpl as TytFSDependenciesImpl;
 use tyt_image::DependenciesImpl as TytImageDependenciesImpl;
 use tyt_material::DependenciesImpl as TytMaterialDependenciesImpl;
 use tyt_meta::DependenciesImpl as TytMetaDependenciesImpl;
+use tyt_oai::DependenciesImpl as TytOAIDependenciesImpl;
 use tyt_vmax::DependenciesImpl as TytVMaxDependenciesImpl;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -19,6 +20,7 @@ impl Dependencies for DependenciesImpl {
     type TytImageDependencies = TytImageDependenciesImpl;
     type TytMaterialDependencies = TytMaterialDependenciesImpl;
     type TytMetaDependencies = TytMetaDependenciesImpl;
+    type TytOAIDependencies = TytOAIDependenciesImpl;
     type TytVMaxDependencies = TytVMaxDependenciesImpl;
 
     fn tyt_claude_dependencies(&self) -> Self::TytClaudeDependencies {
@@ -47,6 +49,10 @@ impl Dependencies for DependenciesImpl {
 
     fn tyt_meta_dependencies(&self) -> Self::TytMetaDependencies {
         TytMetaDependenciesImpl
+    }
+
+    fn tyt_oai_dependencies(&self) -> Self::TytOAIDependencies {
+        TytOAIDependenciesImpl
     }
 
     fn tyt_vmax_dependencies(&self) -> Self::TytVMaxDependencies {
