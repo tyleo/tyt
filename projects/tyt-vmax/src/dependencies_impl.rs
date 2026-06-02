@@ -1,7 +1,39 @@
 use crate::{Dependencies, Result};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
+use tyt_injection::serde_json::Value;
 use vmax::VMaxScene;
 use vmax_serde::VMaxSceneSerde;
+
+/// Fallback `hist` reference for objects without a recognizable `contents`
+/// reference. Voxel Max refuses to open a scene whose objects have an empty
+/// `hist`, so every object must point at a history file name even though
+/// packing leaves none on disk.
+const PACKED_HIST: &str = "history.vmaxhb";
+
+/// Replaces a string `field` on `object_val` using `map`, if its current value is a key.
+fn rename_field(object_val: &mut Value, field: &str, map: &HashMap<&str, &str>) {
+    if let Some(current) = object_val.get(field).and_then(|v| v.as_str())
+        && let Some(&new) = map.get(current)
+    {
+        object_val[field] = Value::String(new.to_owned());
+    }
+}
+
+/// History file name for an object, mirroring the number of its (already
+/// renumbered) `contents{n}.vmaxb` reference so each object points at
+/// `history{n}.vmaxhb`. Objects without a recognizable `data` reference fall
+/// back to the blank history name.
+fn hist_for(object_val: &Value) -> String {
+    object_val
+        .get("data")
+        .and_then(|v| v.as_str())
+        .and_then(|data| data.strip_prefix("contents")?.strip_suffix(".vmaxb"))
+        .map(|suffix| format!("history{suffix}.vmaxhb"))
+        .unwrap_or_else(|| PACKED_HIST.to_owned())
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -19,12 +51,21 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::match_glob(pattern, candidates)?)
     }
 
-    fn pack_scene_json(&self, scene_bytes: &[u8]) -> Result<Vec<u8>> {
-        let mut value: tyt_injection::serde_json::Value = tyt_injection::parse_json(scene_bytes)?;
+    fn pack_scene_json(
+        &self,
+        scene_bytes: &[u8],
+        data_renames: &[(&str, &str)],
+        pal_renames: &[(&str, &str)],
+    ) -> Result<Vec<u8>> {
+        let data_map: HashMap<&str, &str> = data_renames.iter().copied().collect();
+        let pal_map: HashMap<&str, &str> = pal_renames.iter().copied().collect();
+        let mut value: Value = tyt_injection::parse_json(scene_bytes)?;
 
         if let Some(objects) = value.get_mut("objects").and_then(|v| v.as_array_mut()) {
             for object_val in objects {
-                object_val["hist"] = tyt_injection::serde_json::Value::String(String::new());
+                rename_field(object_val, "data", &data_map);
+                rename_field(object_val, "pal", &pal_map);
+                object_val["hist"] = Value::String(hist_for(object_val));
             }
         }
 
@@ -36,12 +77,37 @@ impl Dependencies for DependenciesImpl {
         Ok(scene_serde.into())
     }
 
+    fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>> {
+        let value: Value = tyt_injection::parse_json(scene_bytes)?;
+        let field = |object: &Value, key: &str| {
+            object
+                .get(key)
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_owned()
+        };
+        Ok(value
+            .get("objects")
+            .and_then(|v| v.as_array())
+            .map(|objects| {
+                objects
+                    .iter()
+                    .map(|object| (field(object, "data"), field(object, "pal")))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
     fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
         Ok(tyt_injection::read_file(path)?)
     }
 
     fn remove_file(&self, path: &Path) -> Result<()> {
         Ok(tyt_injection::remove_file(path)?)
+    }
+
+    fn rename_file(&self, from: &Path, to: &Path) -> Result<()> {
+        Ok(tyt_injection::rename_file(from, to)?)
     }
 
     fn rename_scene_nodes_json(
