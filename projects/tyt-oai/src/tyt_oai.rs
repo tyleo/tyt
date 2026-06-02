@@ -10,9 +10,9 @@ pub enum TytOAI {
 }
 
 impl TytOAI {
-    pub fn execute(self, _dependencies: impl crate::Dependencies) -> crate::Result<()> {
+    pub fn execute(self, dependencies: impl crate::Dependencies) -> crate::Result<()> {
         match self {
-            TytOAI::Img(img) => img.execute(_dependencies),
+            TytOAI::Img(img) => img.execute(dependencies),
         }
     }
 }

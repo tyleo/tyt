@@ -1,15 +1,17 @@
 pub mod commands;
 
 mod dependencies;
-#[cfg(feature = "impl")]
-mod dependencies_impl;
 mod error;
+#[cfg(feature = "impl")]
+mod implementation;
 mod result;
 mod tyt_oai;
+mod utilities;
 
 pub use dependencies::*;
-#[cfg(feature = "impl")]
-pub use dependencies_impl::*;
 pub use error::*;
+#[cfg(feature = "impl")]
+pub use implementation::*;
 pub use result::*;
 pub use tyt_oai::*;
+pub use utilities::{Conv, InputMessage, OaiRequest, OaiResponse, Role, Turn, UsrPrefs};

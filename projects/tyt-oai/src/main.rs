@@ -28,12 +28,7 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Completion { shell } => {
-            clap_complete::generate(
-                shell,
-                &mut Cli::command(),
-                "oai",
-                &mut io::stdout(),
-            );
+            clap_complete::generate(shell, &mut Cli::command(), "oai", &mut io::stdout());
         }
         Command::TytOAI(cmd) => {
             if let Err(e) = cmd.execute(DependenciesImpl) {
