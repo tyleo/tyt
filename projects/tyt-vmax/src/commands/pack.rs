@@ -88,13 +88,49 @@ impl Pack {
             }
 
             if let Some(suffix) = parse_suffix(name, "contents", ".selection.vmaxb") {
-                plan_file(&content_map, &target, entry, suffix, "contents", ".selection.vmaxb", &mut renames, &mut removals);
+                plan_file(
+                    &content_map,
+                    &target,
+                    entry,
+                    suffix,
+                    "contents",
+                    ".selection.vmaxb",
+                    &mut renames,
+                    &mut removals,
+                );
             } else if let Some(suffix) = parse_suffix(name, "contents", ".vmaxb") {
-                plan_file(&content_map, &target, entry, suffix, "contents", ".vmaxb", &mut renames, &mut removals);
+                plan_file(
+                    &content_map,
+                    &target,
+                    entry,
+                    suffix,
+                    "contents",
+                    ".vmaxb",
+                    &mut renames,
+                    &mut removals,
+                );
             } else if let Some(suffix) = parse_suffix(name, "palette", ".settings.vmaxpsb") {
-                plan_file(&palette_map, &target, entry, suffix, "palette", ".settings.vmaxpsb", &mut renames, &mut removals);
+                plan_file(
+                    &palette_map,
+                    &target,
+                    entry,
+                    suffix,
+                    "palette",
+                    ".settings.vmaxpsb",
+                    &mut renames,
+                    &mut removals,
+                );
             } else if let Some(suffix) = parse_suffix(name, "palette", ".png") {
-                plan_file(&palette_map, &target, entry, suffix, "palette", ".png", &mut renames, &mut removals);
+                plan_file(
+                    &palette_map,
+                    &target,
+                    entry,
+                    suffix,
+                    "palette",
+                    ".png",
+                    &mut renames,
+                    &mut removals,
+                );
             }
         }
 
@@ -104,7 +140,16 @@ impl Pack {
                     continue;
                 };
                 if let Some(suffix) = parse_suffix(name, "contents", ".vmaxb.png") {
-                    plan_file(&content_map, &quicklook_dir, &entry, suffix, "contents", ".vmaxb.png", &mut renames, &mut removals);
+                    plan_file(
+                        &content_map,
+                        &quicklook_dir,
+                        &entry,
+                        suffix,
+                        "contents",
+                        ".vmaxb.png",
+                        &mut renames,
+                        &mut removals,
+                    );
                 }
             }
         }
@@ -121,7 +166,11 @@ impl Pack {
         let mut renamed_msgs = String::new();
         for (_, from, to) in &renames {
             dependencies.rename_file(from, to)?;
-            renamed_msgs.push_str(&format!("Renamed: {} -> {}\n", from.display(), to.display()));
+            renamed_msgs.push_str(&format!(
+                "Renamed: {} -> {}\n",
+                from.display(),
+                to.display()
+            ));
         }
 
         let mut output_buf = format!("Edited: {}\n", scene_path.display());
@@ -147,11 +196,7 @@ fn suffix_order(suffix: &str) -> u64 {
 
 /// Collects the distinct, numerically sorted suffixes referenced by `values`,
 /// where each reference is a `{prefix}{suffix}{tail}` filename.
-fn referenced<'a>(
-    values: impl Iterator<Item = &'a str>,
-    prefix: &str,
-    tail: &str,
-) -> Vec<String> {
+fn referenced<'a>(values: impl Iterator<Item = &'a str>, prefix: &str, tail: &str) -> Vec<String> {
     let unique: HashSet<String> = values
         .filter_map(|value| parse_suffix(value, prefix, tail).map(str::to_owned))
         .collect();
@@ -176,13 +221,21 @@ fn renumber(suffixes: Vec<String>) -> HashMap<String, String> {
 /// `map`, for rewriting `scene.json` references.
 fn full_renames(map: &HashMap<String, String>, prefix: &str, tail: &str) -> Vec<(String, String)> {
     map.iter()
-        .map(|(old, new)| (format!("{prefix}{old}{tail}"), format!("{prefix}{new}{tail}")))
+        .map(|(old, new)| {
+            (
+                format!("{prefix}{old}{tail}"),
+                format!("{prefix}{new}{tail}"),
+            )
+        })
         .collect()
 }
 
 /// Borrows owned rename pairs as `&str` pairs for the dependency call.
 fn borrow_pairs(pairs: &[(String, String)]) -> Vec<(&str, &str)> {
-    pairs.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect()
+    pairs
+        .iter()
+        .map(|(a, b)| (a.as_str(), b.as_str()))
+        .collect()
 }
 
 /// Plans one content/palette file: rename it if its suffix survived
