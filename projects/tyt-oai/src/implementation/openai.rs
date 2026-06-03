@@ -36,7 +36,10 @@ fn build_request_body(request: &OaiRequest) -> Result<Value> {
     }
     body.insert("input".to_owned(), build_input(&request.input)?);
     if request.generate_image {
-        body.insert("tools".to_owned(), json!([{ "type": "image_generation" }]));
+        body.insert(
+            "tools".to_owned(),
+            json!([{ "type": "image_generation", "quality": request.quality.as_api_str() }]),
+        );
     }
     Ok(Value::Object(body))
 }

@@ -1,4 +1,4 @@
-use crate::InputMessage;
+use crate::{InputMessage, Quality};
 
 /// A request to the OpenAI Responses API to continue an image conversation.
 #[derive(Clone, Debug)]
@@ -14,4 +14,7 @@ pub struct OaiRequest {
 
     /// Whether to enable the `image_generation` tool.
     pub generate_image: bool,
+
+    /// The rendering quality of the generated image.
+    pub quality: Quality,
 }

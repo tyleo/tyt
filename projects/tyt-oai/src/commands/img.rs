@@ -1,5 +1,5 @@
 use crate::{
-    Conv, Dependencies, Error, InputMessage, OaiRequest, Result, Role, Turn,
+    Conv, Dependencies, Error, InputMessage, OaiRequest, Quality, Result, Role, Turn,
     utilities::ContinueKind,
 };
 use clap::Parser;
@@ -42,6 +42,15 @@ pub struct Img {
         default_value_t = ContinueKind::PreviousResponseId,
     )]
     continue_kind: ContinueKind,
+
+    /// The rendering quality of the generated image.
+    #[arg(
+        value_name = "quality",
+        long,
+        value_enum,
+        default_value_t = Quality::Auto,
+    )]
+    quality: Quality,
 }
 
 impl Img {
@@ -51,6 +60,7 @@ impl Img {
             conv,
             no_gen,
             continue_kind,
+            quality,
         } = self;
 
         let conv_path = conv.unwrap_or_else(|| PathBuf::from("conv.json"));
@@ -62,7 +72,8 @@ impl Img {
 
         let mut conv = dependencies.read_conv(&conv_path)?.unwrap_or_default();
 
-        let (request, append) = build_request(&conv, &conv_dir, continue_kind, &message, no_gen);
+        let (request, append) =
+            build_request(&conv, &conv_dir, continue_kind, &message, no_gen, quality);
 
         let response = dependencies.generate_image(&api_key, &request)?;
 
@@ -146,6 +157,7 @@ fn build_request(
     continue_kind: ContinueKind,
     message: &str,
     no_gen: bool,
+    quality: Quality,
 ) -> (OaiRequest, Append) {
     let generate_image = !no_gen;
     let last = conv.conversations.last();
@@ -155,6 +167,7 @@ fn build_request(
         previous_response_id,
         input,
         generate_image,
+        quality,
     };
 
     match continue_kind {
