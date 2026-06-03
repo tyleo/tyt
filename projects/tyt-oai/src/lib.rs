@@ -14,4 +14,6 @@ pub use error::*;
 pub use implementation::*;
 pub use result::*;
 pub use tyt_oai::*;
-pub use utilities::{Conv, InputMessage, OaiRequest, OaiResponse, Quality, Role, Turn, UsrPrefs};
+pub use utilities::{
+    Conv, ImgPrefs, InputMessage, OaiRequest, OaiResponse, Quality, Role, Turn, UsrPrefs,
+};

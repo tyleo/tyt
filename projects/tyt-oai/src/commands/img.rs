@@ -31,6 +31,12 @@ pub struct Img {
     #[arg(value_name = "conversation-file", long = "conv")]
     conv: Option<PathBuf>,
 
+    /// A system prompt file to prepend, resolved from the configured
+    /// `oai.img.systemPromptsDir`. Repeatable; the prompts are prepended in the
+    /// order given.
+    #[arg(value_name = "system-prompt", long = "system-prompt")]
+    system_prompt: Vec<String>,
+
     /// Respond conversationally without generating an image.
     #[arg(value_name = "no-gen", long = "no-gen")]
     no_gen: bool,
@@ -59,6 +65,7 @@ impl Img {
         let Img {
             message,
             conv,
+            system_prompt,
             no_gen,
             continue_kind,
             quality,
@@ -73,6 +80,8 @@ impl Img {
             return Err(Error::NoMessage);
         }
 
+        let system_prompts = load_system_prompts(&dependencies, &system_prompt)?;
+
         let conv_path = conv.unwrap_or_else(|| PathBuf::from("conv.json"));
         let conv_dir = conversation_dir(&conv_path);
 
@@ -82,8 +91,15 @@ impl Img {
 
         let mut conv = dependencies.read_conv(&conv_path)?.unwrap_or_default();
 
-        let (request, append) =
-            build_request(&conv, &conv_dir, continue_kind, &message, no_gen, quality);
+        let (request, append, system_turns) = build_request(
+            &conv,
+            &conv_dir,
+            continue_kind,
+            &message,
+            no_gen,
+            quality,
+            &system_prompts,
+        )?;
 
         let response = dependencies.generate_image(&api_key, &request)?;
 
@@ -112,16 +128,26 @@ impl Img {
             response_id: Some(response.response_id),
         };
 
+        // New conversations open with their `system` turns; continuing in place
+        // leaves the prompts already stored at the conversation's start.
         match append {
             Append::InPlace => match conv.conversations.last_mut() {
                 Some(conversation) => {
                     conversation.push(user_turn);
                     conversation.push(assistant_turn);
                 }
-                None => conv.conversations.push(vec![user_turn, assistant_turn]),
+                None => {
+                    let mut turns = system_turns;
+                    turns.push(user_turn);
+                    turns.push(assistant_turn);
+                    conv.conversations.push(turns);
+                }
             },
             Append::NewConversation => {
-                conv.conversations.push(vec![user_turn, assistant_turn]);
+                let mut turns = system_turns;
+                turns.push(user_turn);
+                turns.push(assistant_turn);
+                conv.conversations.push(turns);
             }
         }
 
@@ -159,8 +185,34 @@ fn conversation_dir(conv_path: &Path) -> PathBuf {
     }
 }
 
-/// Builds the API request and decides where its turns are appended, based on the
-/// requested continuation mode.
+/// Resolves each requested `--system-prompt` file against the configured
+/// `oai.img.systemPromptsDir` and reads its contents, preserving order.
+fn load_system_prompts(dependencies: &impl Dependencies, names: &[String]) -> Result<Vec<String>> {
+    if names.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let dir = dependencies
+        .system_prompts_dir()?
+        .ok_or(Error::SystemPromptsDirNotConfigured)?;
+
+    let mut prompts = Vec::with_capacity(names.len());
+    for name in names {
+        let path = dir.join(name);
+        let content = dependencies
+            .read_system_prompt(&path)?
+            .ok_or_else(|| Error::SystemPromptNotFound(path.display().to_string()))?;
+        prompts.push(content);
+    }
+    Ok(prompts)
+}
+
+/// Builds the API request, decides where its turns are appended, and returns the
+/// `system` turns to store at the start of a newly created conversation.
+///
+/// An explicit `--system-prompt` overrides; otherwise the prior conversation's
+/// stored system prompts are inherited so they persist across new conversation
+/// threads and `--continue-kind` reconstructions.
 fn build_request(
     conv: &Conv,
     conv_dir: &Path,
@@ -168,51 +220,116 @@ fn build_request(
     message: &str,
     no_gen: bool,
     quality: Quality,
-) -> (OaiRequest, Append) {
+    flag_prompts: &[String],
+) -> Result<(OaiRequest, Append, Vec<Turn>)> {
     let generate_image = !no_gen;
     let last = conv.conversations.last();
 
-    let new_request = |previous_response_id, input| OaiRequest {
-        model: MODEL.to_owned(),
-        previous_response_id,
-        input,
-        generate_image,
-        quality,
+    let system_prompts: Vec<String> = if flag_prompts.is_empty() {
+        last.map(|conversation| stored_system_prompts(conversation))
+            .unwrap_or_default()
+    } else {
+        flag_prompts.to_vec()
+    };
+
+    // System prompts are prepended ahead of the request input so they steer the
+    // model from the start of the conversation, in the order given.
+    let make_request = |previous_response_id, systems: &[String], input: Vec<InputMessage>| {
+        let mut full = Vec::with_capacity(systems.len() + input.len());
+        full.extend(
+            systems
+                .iter()
+                .map(|prompt| InputMessage::text(Role::System, prompt)),
+        );
+        full.extend(input);
+        OaiRequest {
+            model: MODEL.to_owned(),
+            previous_response_id,
+            input: full,
+            generate_image,
+            quality,
+        }
+    };
+
+    let system_turns = |systems: &[String]| {
+        systems
+            .iter()
+            .map(|content| Turn {
+                role: Role::System,
+                content: content.clone(),
+                image: None,
+                response_id: None,
+            })
+            .collect()
     };
 
     match continue_kind {
         ContinueKind::PreviousResponseId => match last.and_then(|c| last_response_id(c)) {
-            Some(previous_response_id) => (
-                new_request(
-                    Some(previous_response_id),
+            // Continuing in place; the server retains the system context. Passing
+            // --system-prompt here is a mistake, since those prompts are already
+            // applied and cannot be changed without rebuilding the conversation.
+            Some(previous_response_id) => {
+                if !flag_prompts.is_empty() {
+                    return Err(Error::SystemPromptOnContinuation);
+                }
+                Ok((
+                    make_request(
+                        Some(previous_response_id),
+                        &[],
+                        vec![InputMessage::user_text(message)],
+                    ),
+                    Append::InPlace,
+                    Vec::new(),
+                ))
+            }
+            None => Ok((
+                make_request(
+                    None,
+                    &system_prompts,
                     vec![InputMessage::user_text(message)],
                 ),
-                Append::InPlace,
-            ),
-            None => (
-                new_request(None, vec![InputMessage::user_text(message)]),
                 Append::NewConversation,
-            ),
+                system_turns(&system_prompts),
+            )),
         },
-        ContinueKind::LastImageAllText => (
-            new_request(
+        ContinueKind::LastImageAllText => Ok((
+            make_request(
                 None,
+                &system_prompts,
                 reconstruct_last_image_all_text(last, conv_dir, message),
             ),
             Append::NewConversation,
-        ),
-        ContinueKind::AllImagesAllText => (
-            new_request(
+            system_turns(&system_prompts),
+        )),
+        ContinueKind::AllImagesAllText => Ok((
+            make_request(
                 None,
+                &system_prompts,
                 reconstruct_all_images_all_text(last, conv_dir, message),
             ),
             Append::NewConversation,
-        ),
-        ContinueKind::LastImageOnly => (
-            new_request(None, reconstruct_last_image_only(last, conv_dir, message)),
+            system_turns(&system_prompts),
+        )),
+        ContinueKind::LastImageOnly => Ok((
+            make_request(
+                None,
+                &system_prompts,
+                reconstruct_last_image_only(last, conv_dir, message),
+            ),
             Append::NewConversation,
-        ),
+            system_turns(&system_prompts),
+        )),
     }
+}
+
+/// Returns the contents of the `system` turns stored at the start of a
+/// conversation, in order.
+fn stored_system_prompts(conversation: &[Turn]) -> Vec<String> {
+    conversation
+        .iter()
+        .filter(|turn| turn.role == Role::System)
+        .map(|turn| turn.content.clone())
+        .collect()
 }
 
 /// Returns the most recent assistant `responseId` in a conversation, if any.
@@ -243,8 +360,11 @@ fn reconstruct_last_image_all_text(
         return vec![InputMessage::user_text(message)];
     };
 
+    // System turns are replayed by the request builder, not here, to avoid
+    // sending them twice.
     let mut input: Vec<InputMessage> = conversation
         .iter()
+        .filter(|turn| turn.role != Role::System)
         .map(|turn| InputMessage::text(turn.role, &turn.content))
         .collect();
 
@@ -272,6 +392,10 @@ fn reconstruct_all_images_all_text(
 
     let mut input = Vec::new();
     for turn in conversation {
+        // System turns are replayed by the request builder, not here.
+        if turn.role == Role::System {
+            continue;
+        }
         input.push(InputMessage::text(turn.role, &turn.content));
         if let Some(image) = &turn.image {
             input.push(InputMessage::user_image(

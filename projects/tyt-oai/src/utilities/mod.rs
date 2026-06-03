@@ -1,5 +1,6 @@
 mod continue_kind;
 mod conv;
+mod img_prefs;
 mod input_message;
 mod oai_request;
 mod oai_response;
@@ -10,6 +11,7 @@ mod usr_prefs;
 
 pub use continue_kind::*;
 pub use conv::*;
+pub use img_prefs::*;
 pub use input_message::*;
 pub use oai_request::*;
 pub use oai_response::*;

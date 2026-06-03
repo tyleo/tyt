@@ -67,6 +67,7 @@ fn build_message(message: &InputMessage) -> Result<Value> {
     let role = match message.role {
         Role::User => "user",
         Role::Assistant => "assistant",
+        Role::System => "system",
     };
 
     let content = match &message.image {

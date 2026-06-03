@@ -7,4 +7,6 @@ pub enum Role {
     User,
     /// A message authored by the model.
     Assistant,
+    /// A system prompt steering the model, prepended ahead of the conversation.
+    System,
 }
