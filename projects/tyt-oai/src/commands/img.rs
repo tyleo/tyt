@@ -5,8 +5,9 @@ use crate::{
 use clap::Parser;
 use std::path::{Path, PathBuf};
 
-/// The model used to generate images. Any model supporting the
-/// `image_generation` tool works; `gpt-image-1` produces the image itself.
+/// The default model used to generate images, when `--model` is not given. Any
+/// model supporting the `image_generation` tool works; `gpt-image-1` produces
+/// the image itself.
 const MODEL: &str = "gpt-5.1";
 
 /// The label prefixing each prior image when reconstructing a conversation so
@@ -30,6 +31,11 @@ pub struct Img {
     /// Path to the conversation file to use.
     #[arg(value_name = "conversation-file", long = "conv")]
     conv: Option<PathBuf>,
+
+    /// The model used to generate images. Any model supporting the
+    /// `image_generation` tool works.
+    #[arg(value_name = "model", long, default_value_t = MODEL.to_owned())]
+    model: String,
 
     /// A system prompt file to prepend, resolved from the configured
     /// `oai.img.systemPromptsDir`. Repeatable; the prompts are prepended in the
@@ -65,6 +71,7 @@ impl Img {
         let Img {
             message,
             conv,
+            model,
             system_prompt,
             no_gen,
             continue_kind,
@@ -101,8 +108,11 @@ impl Img {
             &conv_dir,
             continue_kind,
             &message,
-            no_gen,
-            quality,
+            RequestConfig {
+                model: &model,
+                generate_image: !no_gen,
+                quality,
+            },
             &system_prompts,
         )?;
 
@@ -189,6 +199,17 @@ enum Append {
     NewConversation,
 }
 
+/// The model and tool settings shaping the outgoing request.
+#[derive(Clone, Copy)]
+struct RequestConfig<'a> {
+    /// The model to send the request to.
+    model: &'a str,
+    /// Whether to enable the image-generation tool.
+    generate_image: bool,
+    /// The rendering quality of the generated image.
+    quality: Quality,
+}
+
 /// The request to send and how it is recorded in `conv.json`.
 struct Plan {
     /// The request to send to OpenAI.
@@ -246,11 +267,9 @@ fn build_request(
     conv_dir: &Path,
     continue_kind: ContinueKind,
     message: &str,
-    no_gen: bool,
-    quality: Quality,
+    config: RequestConfig,
     flag_prompts: &[String],
 ) -> Result<Plan> {
-    let generate_image = !no_gen;
     let last = conv.conversations.last();
 
     let system_prompts: Vec<String> = if flag_prompts.is_empty() {
@@ -271,11 +290,11 @@ fn build_request(
         );
         full.extend(input);
         OaiRequest {
-            model: MODEL.to_owned(),
+            model: config.model.to_owned(),
             previous_response_id,
             input: full,
-            generate_image,
-            quality,
+            generate_image: config.generate_image,
+            quality: config.quality,
         }
     };
 
