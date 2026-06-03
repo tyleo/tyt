@@ -260,8 +260,8 @@ fn load_system_prompts(dependencies: &impl Dependencies, names: &[String]) -> Re
 /// exactly what the request replayed.
 ///
 /// An explicit `--system-prompt` overrides; otherwise the prior conversation's
-/// stored system prompts are inherited so they persist across new conversation
-/// threads and `--continue-kind` reconstructions.
+/// stored system prompts are inherited so they persist across reconstructions —
+/// except `new-conversation`, which deliberately starts fresh.
 fn build_request(
     conv: &Conv,
     conv_dir: &Path,
@@ -272,11 +272,14 @@ fn build_request(
 ) -> Result<Plan> {
     let last = conv.conversations.last();
 
-    let system_prompts: Vec<String> = if flag_prompts.is_empty() {
+    let system_prompts: Vec<String> = if !flag_prompts.is_empty() {
+        flag_prompts.to_vec()
+    } else if matches!(continue_kind, ContinueKind::NewConversation) {
+        // A new conversation deliberately starts fresh, inheriting nothing.
+        Vec::new()
+    } else {
         last.map(|conversation| stored_system_prompts(conversation))
             .unwrap_or_default()
-    } else {
-        flag_prompts.to_vec()
     };
 
     // System prompts are prepended ahead of the request input so they steer the
@@ -384,8 +387,9 @@ fn context_turns(
     let non_system = || conversation.iter().filter(|turn| turn.role != Role::System);
 
     match continue_kind {
-        // The server retains the context; nothing is replayed locally.
-        ContinueKind::PreviousResponseId => (Vec::new(), None),
+        // No prior context is replayed: previous-response-id leaves it with the
+        // server, and new-conversation deliberately starts fresh.
+        ContinueKind::PreviousResponseId | ContinueKind::NewConversation => (Vec::new(), None),
         // Every prior turn is re-sent: text as-is, each generated image as a
         // blob after the assistant turn that produced it; existing blobs and
         // other image-bearing user turns carry over unchanged.
