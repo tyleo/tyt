@@ -3,6 +3,7 @@ use crate::{
     utilities::UsrPrefs,
 };
 use std::{
+    env,
     io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
 };
@@ -18,6 +19,10 @@ impl Dependencies for DependenciesImpl {
         let prefs: Option<UsrPrefs> =
             tyt_preferences::load_user_git_prefs(&prefs_deps, "oai").map_err(Error::IO)?;
         Ok(prefs.and_then(|p| p.api_key))
+    }
+
+    fn current_dir(&self) -> Result<PathBuf> {
+        Ok(env::current_dir()?)
     }
 
     fn system_prompts_dir(&self) -> Result<Option<PathBuf>> {

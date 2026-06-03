@@ -18,9 +18,10 @@ pub struct Turn {
     /// The text content of the turn.
     pub content: String,
 
-    /// The file name of an image attached to this turn, relative to the
-    /// conversation directory: the image an assistant turn generated, or a prior
-    /// image carried onto a user turn by a reconstruction.
+    /// The path of an image attached to this turn, relative to the conversation
+    /// directory: the image an assistant turn generated, an `--input-image` sent
+    /// with a user turn, or a prior image carried onto a user turn by a
+    /// reconstruction.
     #[cfg_attr(
         feature = "impl",
         serde(default, skip_serializing_if = "Option::is_none")

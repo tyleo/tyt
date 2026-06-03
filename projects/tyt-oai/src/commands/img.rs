@@ -4,6 +4,7 @@ use crate::{
 };
 use clap::Parser;
 use std::path::{Path, PathBuf};
+use tyt_common::relativize;
 
 /// The default model used to generate images, when `--model` is not given. Any
 /// model supporting the `image_generation` tool works; `gpt-image-1` produces
@@ -36,6 +37,11 @@ pub struct Img {
     /// `image_generation` tool works.
     #[arg(value_name = "model", long, default_value_t = MODEL.to_owned())]
     model: String,
+
+    /// An image to send with the message, given relative to the current
+    /// directory. It is stored in the conversation relative to the conv file.
+    #[arg(value_name = "input-image", long = "input-image")]
+    input_image: Option<PathBuf>,
 
     /// A system prompt file to prepend, resolved from the configured
     /// `oai.img.systemPromptsDir`. Repeatable; the prompts are prepended in the
@@ -72,6 +78,7 @@ impl Img {
             message,
             conv,
             model,
+            input_image,
             system_prompt,
             no_gen,
             continue_kind,
@@ -89,8 +96,19 @@ impl Img {
 
         let system_prompts = load_system_prompts(&dependencies, &system_prompt)?;
 
-        let conv_path = conv.unwrap_or_else(|| PathBuf::from("conv.json"));
+        // Anchor the conversation directory absolutely so its images resolve to
+        // the same files regardless of the current working directory.
+        let cwd = dependencies.current_dir()?;
+        let conv_path = absolute(&cwd, conv.unwrap_or_else(|| PathBuf::from("conv.json")));
         let conv_dir = conversation_dir(&conv_path);
+
+        // The input image is given relative to the cwd but stored relative to the
+        // conv file so it travels with the conversation.
+        let input_image = input_image.map(|path| {
+            relativize(&conv_dir, &absolute(&cwd, path))
+                .to_string_lossy()
+                .into_owned()
+        });
 
         let api_key = dependencies
             .oai_api_key()?
@@ -113,6 +131,7 @@ impl Img {
                 generate_image: !no_gen,
                 quality,
             },
+            input_image,
             &system_prompts,
         )?;
 
@@ -133,8 +152,8 @@ impl Img {
         let user_turn = Turn {
             role: Role::User,
             content: message,
-            // An image-only reconstruction feeds the prior image back alongside
-            // this message, so it is recorded on the user turn.
+            // `--input-image`, or the image an image-only reconstruction feeds
+            // back, is recorded on the user turn (relative to the conv file).
             image: user_image,
             revised_prompt: None,
             response_id: None,
@@ -233,6 +252,25 @@ fn conversation_dir(conv_path: &Path) -> PathBuf {
     }
 }
 
+/// Resolves `path` against `base` when it is relative, leaving absolute paths
+/// unchanged.
+fn absolute(base: &Path, path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        path
+    } else {
+        base.join(path)
+    }
+}
+
+/// Builds the new user message, attaching `image` (a path relative to the
+/// conversation directory) ahead of the text when one is present.
+fn new_user_message(conv_dir: &Path, message: &str, image: &Option<String>) -> InputMessage {
+    match image {
+        Some(file) => InputMessage::user_image(conv_dir.join(file), Some(message.to_owned()), true),
+        None => InputMessage::user_text(message),
+    }
+}
+
 /// Resolves each requested `--system-prompt` file against the configured
 /// `oai.img.systemPromptsDir` and reads its contents, preserving order.
 fn load_system_prompts(dependencies: &impl Dependencies, names: &[String]) -> Result<Vec<String>> {
@@ -268,6 +306,7 @@ fn build_request(
     continue_kind: ContinueKind,
     message: &str,
     config: RequestConfig,
+    input_image: Option<String>,
     flag_prompts: &[String],
 ) -> Result<Plan> {
     let last = conv.conversations.last();
@@ -313,13 +352,13 @@ fn build_request(
         let request = make_request(
             Some(previous_response_id),
             &[],
-            vec![InputMessage::user_text(message)],
+            vec![new_user_message(conv_dir, message, &input_image)],
         );
         return Ok(Plan {
             request,
             append: Append::InPlace,
             prefix: Vec::new(),
-            user_image: None,
+            user_image: input_image,
         });
     }
 
@@ -337,17 +376,13 @@ fn build_request(
     // Otherwise a new conversation is built from the replayed context. The same
     // turns drive both the request and what is stored, so conv.json records
     // exactly what the model received.
-    let (carried, user_image) = context_turns(continue_kind, last);
+    let (carried, context_image) = context_turns(continue_kind, last);
+    // An explicit --input-image overrides the image a reconstruction would
+    // otherwise feed back on the new user turn.
+    let user_image = input_image.or(context_image);
 
     let mut input = context_to_input(&carried, conv_dir);
-    match &user_image {
-        Some(file) => input.push(InputMessage::user_image(
-            conv_dir.join(file),
-            Some(message.to_owned()),
-            true,
-        )),
-        None => input.push(InputMessage::user_text(message)),
-    }
+    input.push(new_user_message(conv_dir, message, &user_image));
     let request = make_request(None, &system_prompts, input);
 
     let mut prefix: Vec<Turn> = system_prompts

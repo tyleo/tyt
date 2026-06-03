@@ -1,9 +1,7 @@
-use crate::{
-    Dependencies, Error, Result,
-    utilities::{self, RelativeTo},
-};
+use crate::{Dependencies, Error, Result, utilities::RelativeTo};
 use clap::Parser;
 use std::path::PathBuf;
+use tyt_common::relativize;
 
 /// Constructs a path relative to a saved base path in `.tytconfig` or
 /// `.tytusrconfig`.
@@ -50,7 +48,7 @@ impl Rel {
             RelativeTo::Config => config.config_dir.clone(),
         };
 
-        let output = utilities::relativize(&reference, &joined);
+        let output = relativize(&reference, &joined);
         dependencies.write_stdout(output.as_os_str().as_encoded_bytes())?;
         dependencies.write_stdout(b"\n")?;
         Ok(())

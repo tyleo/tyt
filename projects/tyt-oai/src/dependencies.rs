@@ -13,6 +13,9 @@ pub trait Dependencies {
     /// Reads a system prompt file as text, or `None` if it does not exist.
     fn read_system_prompt(&self, path: &Path) -> Result<Option<String>>;
 
+    /// Returns the current working directory.
+    fn current_dir(&self) -> Result<PathBuf>;
+
     /// Reads the message from stdin, or an empty string if stdin is an
     /// interactive terminal.
     fn read_stdin(&self) -> Result<String>;
