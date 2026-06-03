@@ -362,6 +362,12 @@ fn build_request(
         });
     }
 
+    // last-image-only sends only the conversation's own last image, so it would
+    // shadow an explicit --input-image; the combination is rejected.
+    if input_image.is_some() && matches!(continue_kind, ContinueKind::LastImageOnly) {
+        return Err(Error::InputImageWithLastImageOnly);
+    }
+
     // The last-image modes can only continue from a previously generated image.
     if matches!(
         continue_kind,

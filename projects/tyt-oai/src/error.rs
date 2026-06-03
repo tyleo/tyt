@@ -31,6 +31,10 @@ pub enum Error {
     /// conversation has no generated image to continue from.
     NoLastImage,
 
+    /// `--input-image` was combined with `--continue-kind last-image-only`, which
+    /// sends only the conversation's own last image.
+    InputImageWithLastImageOnly,
+
     /// The request could not be sent or its response could not be received.
     Http(String),
 
@@ -74,6 +78,11 @@ impl Display for Error {
                 "--continue-kind last-image-all-text and last-image-only require a previously \
                  generated image to continue from, but the conversation has none",
             ),
+            Error::InputImageWithLastImageOnly => f.write_str(
+                "--input-image cannot be combined with --continue-kind last-image-only, which \
+                 sends only the conversation's last generated image; use a different \
+                 --continue-kind to send your own image",
+            ),
             Error::Http(e) => write!(f, "OpenAI request failed: {e}"),
             Error::Api(e) => write!(f, "OpenAI API error: {e}"),
             Error::PreviousResponseExpired => f.write_str(
@@ -96,6 +105,7 @@ impl StdError for Error {
             | Error::SystemPromptNotFound(_)
             | Error::SystemPromptOnContinuation
             | Error::NoLastImage
+            | Error::InputImageWithLastImageOnly
             | Error::Http(_)
             | Error::Api(_)
             | Error::PreviousResponseExpired
