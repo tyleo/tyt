@@ -91,7 +91,12 @@ impl Img {
 
         let mut conv = dependencies.read_conv(&conv_path)?.unwrap_or_default();
 
-        let (request, append, system_turns) = build_request(
+        let Plan {
+            request,
+            append,
+            prefix,
+            user_image,
+        } = build_request(
             &conv,
             &conv_dir,
             continue_kind,
@@ -118,7 +123,9 @@ impl Img {
         let user_turn = Turn {
             role: Role::User,
             content: message,
-            image: None,
+            // An image-only reconstruction feeds the prior image back alongside
+            // this message, so it is recorded on the user turn.
+            image: user_image,
             revised_prompt: None,
             response_id: None,
         };
@@ -132,8 +139,8 @@ impl Img {
             response_id: Some(response.response_id),
         };
 
-        // New conversations open with their `system` turns; continuing in place
-        // leaves the prompts already stored at the conversation's start.
+        // A new conversation opens with its prefix (system turns plus the prior
+        // context the request replayed); continuing in place just appends.
         match append {
             Append::InPlace => match conv.conversations.last_mut() {
                 Some(conversation) => {
@@ -141,14 +148,14 @@ impl Img {
                     conversation.push(assistant_turn);
                 }
                 None => {
-                    let mut turns = system_turns;
+                    let mut turns = prefix;
                     turns.push(user_turn);
                     turns.push(assistant_turn);
                     conv.conversations.push(turns);
                 }
             },
             Append::NewConversation => {
-                let mut turns = system_turns;
+                let mut turns = prefix;
                 turns.push(user_turn);
                 turns.push(assistant_turn);
                 conv.conversations.push(turns);
@@ -174,11 +181,27 @@ impl Img {
 }
 
 /// Where the new turns should be appended in `conv.json`.
+#[derive(Clone, Copy)]
 enum Append {
     /// Continue the most recent conversation in place.
     InPlace,
     /// Start a new conversation.
     NewConversation,
+}
+
+/// The request to send and how it is recorded in `conv.json`.
+struct Plan {
+    /// The request to send to OpenAI.
+    request: OaiRequest,
+    /// Where the new turns are appended.
+    append: Append,
+    /// Turns stored ahead of the new user turn when a new conversation is
+    /// created: the effective system turns followed by the prior context the
+    /// request replayed.
+    prefix: Vec<Turn>,
+    /// The prior image an image-only reconstruction feeds back alongside the new
+    /// user message, recorded on the new user turn, if any.
+    user_image: Option<String>,
 }
 
 /// Returns the directory holding the conversation file and its images.
@@ -211,8 +234,9 @@ fn load_system_prompts(dependencies: &impl Dependencies, names: &[String]) -> Re
     Ok(prompts)
 }
 
-/// Builds the API request, decides where its turns are appended, and returns the
-/// `system` turns to store at the start of a newly created conversation.
+/// Builds the API request, decides where its turns are appended, and records the
+/// turns to store ahead of the new user turn so a new conversation array mirrors
+/// exactly what the request replayed.
 ///
 /// An explicit `--system-prompt` overrides; otherwise the prior conversation's
 /// stored system prompts are inherited so they persist across new conversation
@@ -225,7 +249,7 @@ fn build_request(
     no_gen: bool,
     quality: Quality,
     flag_prompts: &[String],
-) -> Result<(OaiRequest, Append, Vec<Turn>)> {
+) -> Result<Plan> {
     let generate_image = !no_gen;
     let last = conv.conversations.last();
 
@@ -255,76 +279,167 @@ fn build_request(
         }
     };
 
-    let system_turns = |systems: &[String]| {
-        systems
-            .iter()
-            .map(|content| Turn {
-                role: Role::System,
-                content: content.clone(),
-                image: None,
-                revised_prompt: None,
-                response_id: None,
-            })
-            .collect()
+    // Continuing in place is the one case that does not rebuild context: the
+    // server retains it. Passing --system-prompt here is a mistake, since those
+    // prompts are already applied and cannot be changed without rebuilding.
+    if let (ContinueKind::PreviousResponseId, Some(previous_response_id)) =
+        (continue_kind, last.and_then(|c| last_response_id(c)))
+    {
+        if !flag_prompts.is_empty() {
+            return Err(Error::SystemPromptOnContinuation);
+        }
+        let request = make_request(
+            Some(previous_response_id),
+            &[],
+            vec![InputMessage::user_text(message)],
+        );
+        return Ok(Plan {
+            request,
+            append: Append::InPlace,
+            prefix: Vec::new(),
+            user_image: None,
+        });
+    }
+
+    // Otherwise a new conversation is built from the replayed context. The same
+    // turns drive both the request and what is stored, so conv.json records
+    // exactly what the model received.
+    let (carried, user_image) = context_turns(continue_kind, last);
+
+    let mut input = context_to_input(&carried, conv_dir);
+    match &user_image {
+        Some(file) => input.push(InputMessage::user_image(
+            conv_dir.join(file),
+            Some(message.to_owned()),
+            true,
+        )),
+        None => input.push(InputMessage::user_text(message)),
+    }
+    let request = make_request(None, &system_prompts, input);
+
+    let mut prefix: Vec<Turn> = system_prompts
+        .iter()
+        .map(|content| Turn {
+            role: Role::System,
+            content: content.clone(),
+            image: None,
+            revised_prompt: None,
+            response_id: None,
+        })
+        .collect();
+    prefix.extend(carried);
+
+    Ok(Plan {
+        request,
+        append: Append::NewConversation,
+        prefix,
+        user_image,
+    })
+}
+
+/// Returns the prior-conversation turns a reconstruction `--continue-kind`
+/// re-sends, plus an image fed back on the new user turn (image-only mode).
+///
+/// A generated image carried forward as context becomes a "previous
+/// conversation" image blob — a `user` turn labelled [`IMAGE_LABEL`] that keeps
+/// the image — and existing blobs pass through unchanged, so repeated
+/// reconstructions neither duplicate nor relabel them.
+fn context_turns(
+    continue_kind: ContinueKind,
+    last: Option<&Vec<Turn>>,
+) -> (Vec<Turn>, Option<String>) {
+    let Some(conversation) = last else {
+        return (Vec::new(), None);
     };
+    let non_system = || conversation.iter().filter(|turn| turn.role != Role::System);
 
     match continue_kind {
-        ContinueKind::PreviousResponseId => match last.and_then(|c| last_response_id(c)) {
-            // Continuing in place; the server retains the system context. Passing
-            // --system-prompt here is a mistake, since those prompts are already
-            // applied and cannot be changed without rebuilding the conversation.
-            Some(previous_response_id) => {
-                if !flag_prompts.is_empty() {
-                    return Err(Error::SystemPromptOnContinuation);
+        // The server retains the context; nothing is replayed locally.
+        ContinueKind::PreviousResponseId => (Vec::new(), None),
+        // Every prior turn is re-sent: text as-is, each generated image as a
+        // blob after the assistant turn that produced it; existing blobs and
+        // other image-bearing user turns carry over unchanged.
+        ContinueKind::AllImagesAllText => {
+            let mut turns = Vec::new();
+            for turn in non_system() {
+                match &turn.image {
+                    Some(file) if turn.role == Role::Assistant => {
+                        turns.push(text_turn(turn));
+                        turns.push(image_blob(file));
+                    }
+                    _ => turns.push(turn.clone()),
                 }
-                Ok((
-                    make_request(
-                        Some(previous_response_id),
-                        &[],
-                        vec![InputMessage::user_text(message)],
-                    ),
-                    Append::InPlace,
-                    Vec::new(),
-                ))
             }
-            None => Ok((
-                make_request(
-                    None,
-                    &system_prompts,
-                    vec![InputMessage::user_text(message)],
-                ),
-                Append::NewConversation,
-                system_turns(&system_prompts),
-            )),
-        },
-        ContinueKind::LastImageAllText => Ok((
-            make_request(
-                None,
-                &system_prompts,
-                reconstruct_last_image_all_text(last, conv_dir, message),
-            ),
-            Append::NewConversation,
-            system_turns(&system_prompts),
-        )),
-        ContinueKind::AllImagesAllText => Ok((
-            make_request(
-                None,
-                &system_prompts,
-                reconstruct_all_images_all_text(last, conv_dir, message),
-            ),
-            Append::NewConversation,
-            system_turns(&system_prompts),
-        )),
-        ContinueKind::LastImageOnly => Ok((
-            make_request(
-                None,
-                &system_prompts,
-                reconstruct_last_image_only(last, conv_dir, message),
-            ),
-            Append::NewConversation,
-            system_turns(&system_prompts),
-        )),
+            (turns, None)
+        }
+        // All prior text is re-sent, plus only the final image as a blob. Pure
+        // image blobs carry no text and are dropped; other turns keep their
+        // text; earlier images are not re-sent.
+        ContinueKind::LastImageAllText => {
+            let mut turns = Vec::new();
+            for turn in non_system() {
+                match &turn.image {
+                    Some(_) if turn.content == IMAGE_LABEL => {}
+                    Some(_) => turns.push(text_turn(turn)),
+                    None => turns.push(turn.clone()),
+                }
+            }
+            if let Some(file) = final_image_file(conversation) {
+                turns.push(image_blob(&file));
+            }
+            (turns, None)
+        }
+        // Only the final image is re-sent, with no prior text to frame it as the
+        // model's output, so it is fed back on the new user turn instead.
+        ContinueKind::LastImageOnly => (Vec::new(), final_image_file(conversation)),
     }
+}
+
+/// Maps stored context turns to request input. A turn carrying an image is sent
+/// as a `user` image part with its content as the accompanying text; every other
+/// turn is sent as plain text under its own role.
+fn context_to_input(turns: &[Turn], conv_dir: &Path) -> Vec<InputMessage> {
+    turns
+        .iter()
+        .map(|turn| match &turn.image {
+            Some(file) => {
+                InputMessage::user_image(conv_dir.join(file), Some(turn.content.clone()), false)
+            }
+            None => InputMessage::text(turn.role, &turn.content),
+        })
+        .collect()
+}
+
+/// A copy of `turn` keeping just its authored text, dropping the image and the
+/// metadata tied to it.
+fn text_turn(turn: &Turn) -> Turn {
+    Turn {
+        role: turn.role,
+        content: turn.content.clone(),
+        image: None,
+        revised_prompt: None,
+        response_id: None,
+    }
+}
+
+/// A "previous conversation" image blob: a `user` turn labelled [`IMAGE_LABEL`]
+/// carrying the image fed back to the model.
+fn image_blob(file: &str) -> Turn {
+    Turn {
+        role: Role::User,
+        content: IMAGE_LABEL.to_owned(),
+        image: Some(file.to_owned()),
+        revised_prompt: None,
+        response_id: None,
+    }
+}
+
+/// Returns the file name of the final generated image in a conversation.
+fn final_image_file(conversation: &[Turn]) -> Option<String> {
+    conversation
+        .iter()
+        .rev()
+        .find_map(|turn| turn.image.clone())
 }
 
 /// Returns the contents of the `system` turns stored at the start of a
@@ -343,89 +458,4 @@ fn last_response_id(conversation: &[Turn]) -> Option<String> {
         .iter()
         .rev()
         .find_map(|turn| turn.response_id.clone())
-}
-
-/// Resolves the absolute path of the final generated image in a conversation.
-fn final_image_path(conversation: &[Turn], conv_dir: &Path) -> Option<PathBuf> {
-    conversation
-        .iter()
-        .rev()
-        .find_map(|turn| turn.image.as_ref())
-        .map(|image| conv_dir.join(image))
-}
-
-/// Re-sends every prior text turn plus the final image, attaching the new
-/// message to that image in the closing user turn.
-fn reconstruct_last_image_all_text(
-    last: Option<&Vec<Turn>>,
-    conv_dir: &Path,
-    message: &str,
-) -> Vec<InputMessage> {
-    let Some(conversation) = last else {
-        return vec![InputMessage::user_text(message)];
-    };
-
-    // System turns are replayed by the request builder, not here, to avoid
-    // sending them twice.
-    let mut input: Vec<InputMessage> = conversation
-        .iter()
-        .filter(|turn| turn.role != Role::System)
-        .map(|turn| InputMessage::text(turn.role, &turn.content))
-        .collect();
-
-    match final_image_path(conversation, conv_dir) {
-        Some(image) => input.push(InputMessage::user_image(
-            image,
-            Some(message.to_owned()),
-            true,
-        )),
-        None => input.push(InputMessage::user_text(message)),
-    }
-    input
-}
-
-/// Re-sends the full prior history, re-injecting each generated image as a
-/// labeled user turn after the assistant turn that produced it.
-fn reconstruct_all_images_all_text(
-    last: Option<&Vec<Turn>>,
-    conv_dir: &Path,
-    message: &str,
-) -> Vec<InputMessage> {
-    let Some(conversation) = last else {
-        return vec![InputMessage::user_text(message)];
-    };
-
-    let mut input = Vec::new();
-    for turn in conversation {
-        // System turns are replayed by the request builder, not here.
-        if turn.role == Role::System {
-            continue;
-        }
-        input.push(InputMessage::text(turn.role, &turn.content));
-        if let Some(image) = &turn.image {
-            input.push(InputMessage::user_image(
-                conv_dir.join(image),
-                Some(IMAGE_LABEL.to_owned()),
-                false,
-            ));
-        }
-    }
-    input.push(InputMessage::user_text(message));
-    input
-}
-
-/// Sends only the final image and the new message; prior text is dropped.
-fn reconstruct_last_image_only(
-    last: Option<&Vec<Turn>>,
-    conv_dir: &Path,
-    message: &str,
-) -> Vec<InputMessage> {
-    match last.and_then(|conversation| final_image_path(conversation, conv_dir)) {
-        Some(image) => vec![InputMessage::user_image(
-            image,
-            Some(message.to_owned()),
-            true,
-        )],
-        None => vec![InputMessage::user_text(message)],
-    }
 }
