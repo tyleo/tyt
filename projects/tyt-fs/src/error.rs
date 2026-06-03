@@ -8,7 +8,9 @@ use tyt_common::ExecFailed;
 /// An error from this crate.
 #[derive(Debug)]
 pub enum Error {
+    ConfigNotFound,
     IO(IOError),
+    RelBaseNotFound(String),
     Rg(ExecFailed),
     ScratchDirNotConfigured,
 }
@@ -16,10 +18,17 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
+            Error::ConfigNotFound => {
+                write!(f, "no .tytconfig or .tytusrconfig found in the git root")
+            }
             Error::IO(e) => e.fmt(f),
+            Error::RelBaseNotFound(name) => write!(
+                f,
+                "no `fs.rel` entry named `{name}` found in .tytconfig or .tytusrconfig"
+            ),
             Error::ScratchDirNotConfigured => write!(
                 f,
-                "scratch_dir is not configured; add {{\"fs\": {{\"scratch_dir\": \"<path>\"}}}} to .tytconfig"
+                "scratchDir is not configured; add {{\"fs\": {{\"move-to-scratch\": {{\"scratchDir\": \"<path>\"}}}}}} to .tytconfig"
             ),
             Error::Rg(ExecFailed {
                 exit_code,
@@ -46,7 +55,10 @@ impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             Error::IO(e) => Some(e),
-            Error::Rg(_) | Error::ScratchDirNotConfigured => None,
+            Error::ConfigNotFound
+            | Error::RelBaseNotFound(_)
+            | Error::Rg(_)
+            | Error::ScratchDirNotConfigured => None,
         }
     }
 }

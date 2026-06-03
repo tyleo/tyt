@@ -1,10 +1,12 @@
-use crate::{Dependencies, Error, Prefs, Result};
+use crate::{Dependencies, Error, Prefs, RelConfig, Result};
 use std::{
+    collections::HashMap,
+    env,
     ffi::OsStr,
     fs::{self},
     path::{Path, PathBuf},
 };
-use tyt_preferences::Dependencies as _;
+use tyt_preferences::{Dependencies as _, DeserializePrefs as _};
 
 /// Concrete implementation of filesystem operations.
 #[derive(Clone, Copy, Debug, Default)]
@@ -13,6 +15,10 @@ pub struct DependenciesImpl;
 impl Dependencies for DependenciesImpl {
     fn create_dir_all(&self, path: &Path) -> Result<()> {
         Ok(fs::create_dir_all(path)?)
+    }
+
+    fn current_dir(&self) -> Result<PathBuf> {
+        Ok(env::current_dir()?)
     }
 
     fn exec_rg<I, S>(&self, args: I) -> Result<Vec<u8>>
@@ -28,16 +34,60 @@ impl Dependencies for DependenciesImpl {
         let mut prefs: Prefs = tyt_preferences::load_git_prefs(&prefs_deps, "fs")
             .map_err(Error::IO)?
             .unwrap_or_default();
-        if let Some(ref scratch_dir) = prefs.scratch_dir {
+        if let Some(move_to_scratch) = prefs.move_to_scratch.as_mut()
+            && let Some(scratch_dir) = move_to_scratch.scratch_dir.clone()
+        {
             let scratch_path = PathBuf::from(scratch_dir);
             if !scratch_path.is_absolute()
                 && let Some(git_root) = prefs_deps.git_root_dir().map_err(Error::IO)?
             {
-                prefs.scratch_dir =
+                move_to_scratch.scratch_dir =
                     Some(git_root.join(scratch_path).to_string_lossy().into_owned());
             }
         }
         Ok(prefs)
+    }
+
+    fn rel_config(&self) -> Result<Option<RelConfig>> {
+        let prefs_deps = tyt_preferences::DependenciesImpl;
+        let Some(git_root) = prefs_deps.git_root_dir().map_err(Error::IO)? else {
+            return Ok(None);
+        };
+
+        let config = prefs_deps
+            .read_file(&git_root.join(".tytconfig"))
+            .map_err(Error::IO)?;
+        let usr_config = prefs_deps
+            .read_file(&git_root.join(".tytusrconfig"))
+            .map_err(Error::IO)?;
+
+        if config.is_none() && usr_config.is_none() {
+            return Ok(None);
+        }
+
+        // `.tytconfig` is merged first so that any duplicate key in
+        // `.tytusrconfig` overwrites it.
+        let mut bases = HashMap::new();
+        for bytes in [config, usr_config].into_iter().flatten() {
+            let prefs: Option<Prefs> = Prefs::deserialize_prefs(&bytes, "fs").map_err(Error::IO)?;
+            let Some(rel) = prefs.and_then(|prefs| prefs.rel) else {
+                continue;
+            };
+            for (name, value) in rel {
+                let path = PathBuf::from(&value);
+                let resolved = if path.is_absolute() {
+                    path
+                } else {
+                    git_root.join(path)
+                };
+                bases.insert(name, resolved);
+            }
+        }
+
+        Ok(Some(RelConfig {
+            config_dir: git_root,
+            bases,
+        }))
     }
 
     fn rename(&self, from: &Path, to: &Path) -> Result<()> {

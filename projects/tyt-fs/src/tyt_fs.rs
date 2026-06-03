@@ -1,4 +1,4 @@
-use crate::commands::{Find, MoveToScratch};
+use crate::commands::{Find, MoveToScratch, Rel};
 use clap::Subcommand;
 
 /// Operations on the filesystem
@@ -9,6 +9,8 @@ pub enum TytFS {
     Find(Find),
     #[command(name = "move-to-scratch")]
     MoveToScratch(MoveToScratch),
+    #[command(name = "rel")]
+    Rel(Rel),
 }
 
 impl TytFS {
@@ -16,6 +18,7 @@ impl TytFS {
         match self {
             TytFS::Find(find) => find.execute(dependencies),
             TytFS::MoveToScratch(move_to_scratch) => move_to_scratch.execute(dependencies),
+            TytFS::Rel(rel) => rel.execute(dependencies),
         }
     }
 }

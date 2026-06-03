@@ -15,7 +15,8 @@ impl MoveToScratch {
         let scratch_dir = PathBuf::from(
             dependencies
                 .fs_prefs()?
-                .scratch_dir
+                .move_to_scratch
+                .and_then(|move_to_scratch| move_to_scratch.scratch_dir)
                 .ok_or(Error::ScratchDirNotConfigured)?,
         );
 
