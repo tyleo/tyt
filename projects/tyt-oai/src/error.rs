@@ -27,6 +27,10 @@ pub enum Error {
     /// where the previous response already carries its system prompts.
     SystemPromptOnContinuation,
 
+    /// A `--continue-kind` that reuses the previous image was requested, but the
+    /// conversation has no generated image to continue from.
+    NoLastImage,
+
     /// The request could not be sent or its response could not be received.
     Http(String),
 
@@ -66,6 +70,10 @@ impl Display for Error {
                  --system-prompt to continue, or pass a reconstruction --continue-kind \
                  (e.g. all-images-all-text) to apply different system prompts.",
             ),
+            Error::NoLastImage => f.write_str(
+                "--continue-kind last-image-all-text and last-image-only require a previously \
+                 generated image to continue from, but the conversation has none",
+            ),
             Error::Http(e) => write!(f, "OpenAI request failed: {e}"),
             Error::Api(e) => write!(f, "OpenAI API error: {e}"),
             Error::PreviousResponseExpired => f.write_str(
@@ -87,6 +95,7 @@ impl StdError for Error {
             | Error::SystemPromptsDirNotConfigured
             | Error::SystemPromptNotFound(_)
             | Error::SystemPromptOnContinuation
+            | Error::NoLastImage
             | Error::Http(_)
             | Error::Api(_)
             | Error::PreviousResponseExpired

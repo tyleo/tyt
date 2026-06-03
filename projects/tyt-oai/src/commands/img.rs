@@ -320,6 +320,17 @@ fn build_request(
         });
     }
 
+    // The last-image modes can only continue from a previously generated image.
+    if matches!(
+        continue_kind,
+        ContinueKind::LastImageAllText | ContinueKind::LastImageOnly
+    ) && last
+        .and_then(|conversation| final_image_file(conversation))
+        .is_none()
+    {
+        return Err(Error::NoLastImage);
+    }
+
     // Otherwise a new conversation is built from the replayed context. The same
     // turns drive both the request and what is stored, so conv.json records
     // exactly what the model received.
