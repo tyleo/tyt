@@ -16,14 +16,18 @@ pub trait Dependencies {
     /// Returns the current working directory.
     fn current_dir(&self) -> Result<PathBuf>;
 
+    /// Returns whether `path` is an existing directory.
+    fn is_dir(&self, path: &Path) -> Result<bool>;
+
     /// Reads the message from stdin, or an empty string if stdin is an
     /// interactive terminal.
     fn read_stdin(&self) -> Result<String>;
 
-    /// Reads and parses the conversation file, or `None` if it does not exist.
+    /// Reads and parses the OpenAI image conversation file, or `None` if it does
+    /// not exist.
     fn read_conv(&self, path: &Path) -> Result<Option<Conv>>;
 
-    /// Writes the conversation file atomically.
+    /// Writes the OpenAI image conversation file atomically.
     fn write_conv(&self, path: &Path, conv: &Conv) -> Result<()>;
 
     /// Writes raw image bytes to a file.

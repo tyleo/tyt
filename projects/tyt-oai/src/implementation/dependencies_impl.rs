@@ -25,6 +25,10 @@ impl Dependencies for DependenciesImpl {
         Ok(env::current_dir()?)
     }
 
+    fn is_dir(&self, path: &Path) -> Result<bool> {
+        Ok(path.is_dir())
+    }
+
     fn system_prompts_dir(&self) -> Result<Option<PathBuf>> {
         let prefs_deps = tyt_preferences::DependenciesImpl;
         let Some(git_root) = prefs_deps.git_root_dir().map_err(Error::IO)? else {

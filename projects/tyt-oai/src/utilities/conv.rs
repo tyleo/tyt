@@ -1,6 +1,6 @@
 use crate::Turn;
 
-/// The contents of a `conv.json` file.
+/// The contents of an `oai.img.json` (OpenAI image conversation) file.
 ///
 /// Each entry in `conversations` is an independent conversation, stored as an
 /// ordered list of [`Turn`]s. `next_image_id` is shared across all

@@ -15,9 +15,14 @@ const MODEL: &str = "gpt-5.1";
 /// the model recognizes them as its own earlier outputs.
 const IMAGE_LABEL: &str = "Your image from the previous conversation:";
 
+/// The canonical file name of the OpenAI image conversation file. It is the
+/// default when `--oai-img-file` is omitted, and the name looked up inside a
+/// directory passed to `--oai-img-file`.
+const CONV_FILE_NAME: &str = "oai.img.json";
+
 /// Generates images from conversations using the OpenAI API.
 ///
-/// Reads or creates a `conv.json` file and, by default, continues the most
+/// Reads or creates an `oai.img.json` file and, by default, continues the most
 /// recent conversation in place via its last `previous_response_id`. If that
 /// response is no longer cached by OpenAI, the run fails and asks you to re-run
 /// with a `--continue-kind` reconstruction mode that rebuilds context locally.
@@ -29,8 +34,9 @@ pub struct Img {
     #[arg(value_name = "message")]
     message: Option<String>,
 
-    /// Path to the conversation file to use.
-    #[arg(value_name = "conversation-file", long = "conv")]
+    /// Path to the OpenAI image conversation file to use, or a directory
+    /// containing it under the name `oai.img.json`.
+    #[arg(value_name = "oai-img-file", long = "oai-img-file")]
     conv: Option<PathBuf>,
 
     /// The model used to generate images. Any model supporting the
@@ -39,7 +45,8 @@ pub struct Img {
     model: String,
 
     /// An image to send with the message, given relative to the current
-    /// directory. It is stored in the conversation relative to the conv file.
+    /// directory. It is stored in the conversation relative to the OpenAI image
+    /// conversation file.
     #[arg(value_name = "input-image", long = "input-image")]
     input_image: Option<PathBuf>,
 
@@ -99,7 +106,14 @@ impl Img {
         // Anchor the conversation directory absolutely so its images resolve to
         // the same files regardless of the current working directory.
         let cwd = dependencies.current_dir()?;
-        let conv_path = absolute(&cwd, conv.unwrap_or_else(|| PathBuf::from("conv.json")));
+        let conv_arg = absolute(&cwd, conv.unwrap_or_else(|| PathBuf::from(CONV_FILE_NAME)));
+        // The argument may name the OpenAI image conversation file itself or a
+        // directory holding it under the canonical `oai.img.json` name.
+        let conv_path = if dependencies.is_dir(&conv_arg)? {
+            conv_arg.join(CONV_FILE_NAME)
+        } else {
+            conv_arg
+        };
         let conv_dir = conversation_dir(&conv_path);
 
         // The input image is given relative to the cwd but stored relative to the
@@ -137,7 +151,7 @@ impl Img {
 
         let response = dependencies.generate_image(&api_key, &request)?;
 
-        // Only mutate conv.json after a successful response so a failed run
+        // Only mutate oai.img.json after a successful response so a failed run
         // leaves the file untouched and can be retried safely.
         let image_file = match &response.image_png {
             Some(bytes) => {
@@ -209,7 +223,7 @@ impl Img {
     }
 }
 
-/// Where the new turns should be appended in `conv.json`.
+/// Where the new turns should be appended in `oai.img.json`.
 #[derive(Clone, Copy)]
 enum Append {
     /// Continue the most recent conversation in place.
@@ -229,7 +243,7 @@ struct RequestConfig<'a> {
     quality: Quality,
 }
 
-/// The request to send and how it is recorded in `conv.json`.
+/// The request to send and how it is recorded in `oai.img.json`.
 struct Plan {
     /// The request to send to OpenAI.
     request: OaiRequest,
@@ -244,7 +258,8 @@ struct Plan {
     user_image: Option<String>,
 }
 
-/// Returns the directory holding the conversation file and its images.
+/// Returns the directory holding the OpenAI image conversation file and its
+/// images.
 fn conversation_dir(conv_path: &Path) -> PathBuf {
     match conv_path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
@@ -380,7 +395,7 @@ fn build_request(
     }
 
     // Otherwise a new conversation is built from the replayed context. The same
-    // turns drive both the request and what is stored, so conv.json records
+    // turns drive both the request and what is stored, so oai.img.json records
     // exactly what the model received.
     let (carried, context_image) = context_turns(continue_kind, last);
     // An explicit --input-image overrides the image a reconstruction would
