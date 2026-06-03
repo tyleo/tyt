@@ -23,6 +23,14 @@ pub struct Turn {
     )]
     pub image: Option<String>,
 
+    /// The prompt OpenAI revised the generated image from, when it supplied
+    /// one. Present only on assistant turns that produced an image.
+    #[cfg_attr(
+        feature = "impl",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub revised_prompt: Option<String>,
+
     /// The OpenAI server-side response id of an assistant turn.
     #[cfg_attr(
         feature = "impl",

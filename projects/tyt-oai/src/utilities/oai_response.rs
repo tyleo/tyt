@@ -7,6 +7,10 @@ pub struct OaiResponse {
     /// The decoded bytes of the generated image, if one was produced.
     pub image_png: Option<Vec<u8>>,
 
+    /// The prompt the model revised an image generation from, when it supplied
+    /// one. Absent when no image was generated or OpenAI omitted it.
+    pub revised_prompt: Option<String>,
+
     /// The server-side response id, used to continue the conversation later.
     pub response_id: String,
 }

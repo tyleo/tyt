@@ -119,11 +119,15 @@ impl Img {
             role: Role::User,
             content: message,
             image: None,
+            revised_prompt: None,
             response_id: None,
         };
         let assistant_turn = Turn {
             role: Role::Assistant,
             content: response.text.clone(),
+            // The revised prompt only pertains to a generated image, so it is
+            // dropped on a text-only (`--no-gen`) turn.
+            revised_prompt: image_file.as_ref().and(response.revised_prompt),
             image: image_file.clone(),
             response_id: Some(response.response_id),
         };
@@ -258,6 +262,7 @@ fn build_request(
                 role: Role::System,
                 content: content.clone(),
                 image: None,
+                revised_prompt: None,
                 response_id: None,
             })
             .collect()

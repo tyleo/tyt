@@ -147,6 +147,7 @@ fn parse_response(status: u16, bytes: &[u8]) -> Result<OaiResponse> {
 
     let mut text = String::new();
     let mut image_png = None;
+    let mut revised_prompt = None;
     for item in output {
         match item.get("type").and_then(Value::as_str) {
             Some("message") => collect_message_text(item, &mut text),
@@ -156,6 +157,12 @@ fn parse_response(status: u16, bytes: &[u8]) -> Result<OaiResponse> {
                         Error::InvalidResponse(format!("could not decode image: {e}"))
                     })?;
                     image_png = Some(decoded);
+                    // `revised_prompt` may be absent or null; `as_str` maps both
+                    // to None.
+                    revised_prompt = item
+                        .get("revised_prompt")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned);
                 }
             }
             _ => {}
@@ -165,6 +172,7 @@ fn parse_response(status: u16, bytes: &[u8]) -> Result<OaiResponse> {
     Ok(OaiResponse {
         text,
         image_png,
+        revised_prompt,
         response_id,
     })
 }
