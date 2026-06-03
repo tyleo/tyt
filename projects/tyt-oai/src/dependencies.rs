@@ -6,6 +6,10 @@ pub trait Dependencies {
     /// Loads the OpenAI API key from `.tytusrconfig`, or `None` if it is not set.
     fn oai_api_key(&self) -> Result<Option<String>>;
 
+    /// Reads the message from stdin, or an empty string if stdin is an
+    /// interactive terminal.
+    fn read_stdin(&self) -> Result<String>;
+
     /// Reads and parses the conversation file, or `None` if it does not exist.
     fn read_conv(&self, path: &Path) -> Result<Option<Conv>>;
 

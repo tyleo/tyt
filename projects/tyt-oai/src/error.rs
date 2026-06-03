@@ -13,6 +13,9 @@ pub enum Error {
     /// No OpenAI API key was configured.
     ApiKeyNotConfigured,
 
+    /// No message was provided, on the command line or via stdin.
+    NoMessage,
+
     /// The request could not be sent or its response could not be received.
     Http(String),
 
@@ -35,6 +38,9 @@ impl Display for Error {
                 "no OpenAI API key configured; add an \"oai\" section with an \"apiKey\" \
                  to a .tytusrconfig file at your git root",
             ),
+            Error::NoMessage => {
+                f.write_str("no message provided; pass a message argument or pipe one via stdin")
+            }
             Error::Http(e) => write!(f, "OpenAI request failed: {e}"),
             Error::Api(e) => write!(f, "OpenAI API error: {e}"),
             Error::PreviousResponseExpired => f.write_str(
@@ -52,6 +58,7 @@ impl StdError for Error {
         match self {
             Error::IO(e) => Some(e),
             Error::ApiKeyNotConfigured
+            | Error::NoMessage
             | Error::Http(_)
             | Error::Api(_)
             | Error::PreviousResponseExpired

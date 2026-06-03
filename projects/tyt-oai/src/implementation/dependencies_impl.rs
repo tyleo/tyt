@@ -20,6 +20,10 @@ impl Dependencies for DependenciesImpl {
         Ok(prefs.and_then(|p| p.api_key))
     }
 
+    fn read_stdin(&self) -> Result<String> {
+        Ok(tyt_injection::read_stdin()?)
+    }
+
     fn read_conv(&self, path: &Path) -> Result<Option<Conv>> {
         let prefs_deps = tyt_preferences::DependenciesImpl;
         let Some(bytes) = prefs_deps.read_file(path).map_err(Error::IO)? else {

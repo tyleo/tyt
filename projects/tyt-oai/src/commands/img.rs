@@ -22,9 +22,10 @@ const IMAGE_LABEL: &str = "Your image from the previous conversation:";
 #[derive(Clone, Debug, Parser)]
 #[command(name = "img")]
 pub struct Img {
-    /// The next user message in the conversation.
+    /// The next user message in the conversation. If omitted, it is read from
+    /// stdin (e.g. `cat prompt.md | tyt oai img`).
     #[arg(value_name = "message")]
-    message: String,
+    message: Option<String>,
 
     /// Path to the conversation file to use.
     #[arg(value_name = "conversation-file", long = "conv")]
@@ -62,6 +63,15 @@ impl Img {
             continue_kind,
             quality,
         } = self;
+
+        let message = match message {
+            Some(message) => message,
+            None => dependencies.read_stdin()?,
+        };
+        let message = message.trim_end().to_owned();
+        if message.is_empty() {
+            return Err(Error::NoMessage);
+        }
 
         let conv_path = conv.unwrap_or_else(|| PathBuf::from("conv.json"));
         let conv_dir = conversation_dir(&conv_path);
