@@ -2,7 +2,7 @@ use crate::{
     Conv, Dependencies, Error, InputMessage, OaiRequest, Quality, Result, Role, Turn,
     utilities::ContinueKind,
 };
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use std::path::{Path, PathBuf};
 use tyt_common::relativize;
 
@@ -57,7 +57,15 @@ pub struct Img {
     system_prompt: Vec<String>,
 
     /// Respond conversationally without generating an image.
-    #[arg(value_name = "no-gen", long = "no-gen")]
+    #[arg(
+        value_name = "no-gen",
+        long = "no-gen",
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_value_t = false,
+        default_missing_value = "true",
+    )]
     no_gen: bool,
 
     /// How to continue the conversation.
