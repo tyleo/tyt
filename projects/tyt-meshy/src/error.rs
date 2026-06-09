@@ -24,6 +24,12 @@ pub enum Error {
     /// `--texture-image` was given.
     TexturePromptConflict,
 
+    /// No texture style was given to `tyt meshy texture`.
+    TextureStyleRequired,
+
+    /// A source task file could not be read or parsed. Holds the reason.
+    InvalidTaskFile(String),
+
     /// The texture prompt exceeded the 600-character maximum. Holds its length.
     TexturePromptTooLong(usize),
 
@@ -82,6 +88,11 @@ impl Display for Error {
                 "--texture-prompt, --texture-prompt-file, and --texture-image are mutually \
                  exclusive; pass at most one",
             ),
+            Error::TextureStyleRequired => f.write_str(
+                "a texture style is required; pass one of --texture-prompt, \
+                 --texture-prompt-file, or --texture-image",
+            ),
+            Error::InvalidTaskFile(reason) => write!(f, "invalid task file: {reason}"),
             Error::TexturePromptTooLong(len) => {
                 write!(
                     f,
@@ -133,6 +144,8 @@ impl StdError for Error {
             | Error::LowpolyConflict(_)
             | Error::TextureOptionWithoutTexture(_)
             | Error::TexturePromptConflict
+            | Error::TextureStyleRequired
+            | Error::InvalidTaskFile(_)
             | Error::TexturePromptTooLong(_)
             | Error::RemeshOptionWithoutRemesh(_)
             | Error::PolycountDecimationConflict

@@ -1,4 +1,7 @@
-use crate::{Error, MeshOutput, MeshProcessed, MeshRequest, MeshTask, MeshTaskFile, Result};
+use crate::{
+    Error, MeshOutput, MeshProcessed, MeshRequest, MeshTask, MeshTaskFile, Result, TextureRequest,
+    TextureTaskFile,
+};
 use std::{
     fs,
     io::{Error as IOError, ErrorKind},
@@ -8,12 +11,27 @@ use tyt_injection::serde_json::{self, Map, Value, json};
 
 /// The Meshy image-to-3D endpoint, used to create tasks (POST) and retrieve them
 /// (GET `/{id}`).
-const URL: &str = "https://api.meshy.ai/openapi/v1/image-to-3d";
+const IMAGE_TO_3D_URL: &str = "https://api.meshy.ai/openapi/v1/image-to-3d";
+
+/// The Meshy retexture endpoint, used to create tasks (POST) and retrieve them
+/// (GET `/{id}`).
+const RETEXTURE_URL: &str = "https://api.meshy.ai/openapi/v1/retexture";
 
 /// Creates an image-to-3D task and returns its id.
 pub(crate) fn create_task(api_key: &str, request: &MeshRequest) -> Result<String> {
     let body = build_create_body(request)?;
-    let body_bytes = serde_json::to_vec(&body).map_err(|e| Error::Http(e.to_string()))?;
+    create(IMAGE_TO_3D_URL, api_key, &body)
+}
+
+/// Creates a retexture task and returns its id.
+pub(crate) fn create_texture_task(api_key: &str, request: &TextureRequest) -> Result<String> {
+    let body = build_texture_body(request)?;
+    create(RETEXTURE_URL, api_key, &body)
+}
+
+/// Posts a create request body to an endpoint and returns the task id.
+fn create(url: &str, api_key: &str, body: &Value) -> Result<String> {
+    let body_bytes = serde_json::to_vec(body).map_err(|e| Error::Http(e.to_string()))?;
 
     let authorization = format!("Bearer {api_key}");
     let headers = [
@@ -21,7 +39,7 @@ pub(crate) fn create_task(api_key: &str, request: &MeshRequest) -> Result<String
         ("Content-Type", "application/json"),
     ];
 
-    let (status, response_bytes) = tyt_injection::http_post(URL, &headers, &body_bytes)
+    let (status, response_bytes) = tyt_injection::http_post(url, &headers, &body_bytes)
         .map_err(|e| Error::Http(e.to_string()))?;
 
     parse_create_response(status, &response_bytes)
@@ -54,6 +72,39 @@ fn build_create_body(request: &MeshRequest) -> Result<Value> {
     }
 
     Ok(body)
+}
+
+/// Builds the retexture create request body, swapping the local
+/// `image_style_url` path for the API's base64 data URI.
+fn build_texture_body(request: &TextureRequest) -> Result<Value> {
+    let mut body = serde_json::to_value(&request.input).map_err(|e| Error::Http(e.to_string()))?;
+    let object = body
+        .as_object_mut()
+        .ok_or_else(|| Error::Http("input did not serialize to an object".to_owned()))?;
+
+    if object.remove("image_style_url").is_some() {
+        let path = request
+            .image_style_path
+            .as_ref()
+            .ok_or_else(|| Error::Http("missing style image path".to_owned()))?;
+        object.insert(
+            "image_style_url".to_owned(),
+            Value::String(image_data_uri(path)?),
+        );
+    }
+
+    Ok(body)
+}
+
+/// Reads the `taskId` from a `*.meshy.mesh.json` (or sibling) task file's bytes.
+pub(crate) fn read_task_id(bytes: &[u8]) -> Result<String> {
+    let value: Value = serde_json::from_slice(bytes)
+        .map_err(|e| Error::InvalidTaskFile(format!("could not parse task file: {e}")))?;
+    value
+        .get("taskId")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| Error::InvalidTaskFile("task file is missing 'taskId'".to_owned()))
 }
 
 /// Reads an image file and encodes it as a base64 `data:` URI, choosing the MIME
@@ -100,9 +151,19 @@ fn parse_create_response(status: u16, bytes: &[u8]) -> Result<String> {
     Ok(result.to_owned())
 }
 
-/// Retrieves a task by id.
+/// Retrieves an image-to-3D task by id.
 pub(crate) fn get_task(api_key: &str, task_id: &str) -> Result<MeshTask> {
-    let url = format!("{URL}/{task_id}");
+    get(IMAGE_TO_3D_URL, api_key, task_id)
+}
+
+/// Retrieves a retexture task by id.
+pub(crate) fn get_texture_task(api_key: &str, task_id: &str) -> Result<MeshTask> {
+    get(RETEXTURE_URL, api_key, task_id)
+}
+
+/// Retrieves a task by id from the given endpoint.
+fn get(base_url: &str, api_key: &str, task_id: &str) -> Result<MeshTask> {
+    let url = format!("{base_url}/{task_id}");
     let authorization = format!("Bearer {api_key}");
     let headers = [("Authorization", authorization.as_str())];
 
@@ -199,10 +260,26 @@ pub(crate) fn download(url: &str) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-/// Serializes a task file to pretty JSON bytes.
-pub(crate) fn task_file_bytes(file: &MeshTaskFile) -> Result<Vec<u8>> {
+/// Serializes an image-to-3D task file to pretty JSON bytes.
+pub(crate) fn mesh_task_file_bytes(file: &MeshTaskFile) -> Result<Vec<u8>> {
     let input = serde_json::to_value(&file.input).map_err(invalid_data)?;
-    let output = match &file.output {
+    build_task_file(&file.task_id, "image-to-3d", input, &file.output)
+}
+
+/// Serializes a retexture task file to pretty JSON bytes.
+pub(crate) fn texture_task_file_bytes(file: &TextureTaskFile) -> Result<Vec<u8>> {
+    let input = serde_json::to_value(&file.input).map_err(invalid_data)?;
+    build_task_file(&file.task_id, "retexture", input, &file.output)
+}
+
+/// Builds a task file's pretty JSON bytes from its id, kind, input, and output.
+fn build_task_file(
+    task_id: &str,
+    task_kind: &str,
+    input: Value,
+    output: &MeshOutput,
+) -> Result<Vec<u8>> {
+    let output = match output {
         MeshOutput::Pending => Value::String("pending".to_owned()),
         MeshOutput::Done(done) => {
             let raw: Value = serde_json::from_slice(&done.raw_json).map_err(invalid_data)?;
@@ -211,8 +288,8 @@ pub(crate) fn task_file_bytes(file: &MeshTaskFile) -> Result<Vec<u8>> {
     };
 
     let root = json!({
-        "taskId": file.task_id,
-        "taskKind": "image-to-3d",
+        "taskId": task_id,
+        "taskKind": task_kind,
         "payload": { "input": input, "output": output },
     });
     serde_json::to_vec_pretty(&root).map_err(invalid_data)

@@ -1,6 +1,6 @@
 use crate::{
-    Dependencies, Error, MeshRequest, MeshTask, MeshTaskFile, Result, UsrPrefs,
-    implementation::meshy,
+    Dependencies, Error, MeshRequest, MeshTask, MeshTaskFile, Result, TextureRequest,
+    TextureTaskFile, UsrPrefs, implementation::meshy,
 };
 use std::{
     env, fs,
@@ -31,12 +31,25 @@ impl Dependencies for DependenciesImpl {
         String::from_utf8(bytes).map_err(|e| Error::IO(IOError::new(ErrorKind::InvalidData, e)))
     }
 
+    fn read_input_task_id(&self, path: &Path) -> Result<String> {
+        let bytes = fs::read(path).map_err(Error::IO)?;
+        meshy::read_task_id(&bytes)
+    }
+
     fn create_task(&self, api_key: &str, request: &MeshRequest) -> Result<String> {
         meshy::create_task(api_key, request)
     }
 
+    fn create_texture_task(&self, api_key: &str, request: &TextureRequest) -> Result<String> {
+        meshy::create_texture_task(api_key, request)
+    }
+
     fn get_task(&self, api_key: &str, task_id: &str) -> Result<MeshTask> {
         meshy::get_task(api_key, task_id)
+    }
+
+    fn get_texture_task(&self, api_key: &str, task_id: &str) -> Result<MeshTask> {
+        meshy::get_texture_task(api_key, task_id)
     }
 
     fn download(&self, url: &str) -> Result<Vec<u8>> {
@@ -48,7 +61,12 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn write_task_file(&self, path: &Path, file: &MeshTaskFile) -> Result<()> {
-        let bytes = meshy::task_file_bytes(file)?;
+        let bytes = meshy::mesh_task_file_bytes(file)?;
+        Ok(tyt_injection::write_file_atomic(path, &bytes)?)
+    }
+
+    fn write_texture_task_file(&self, path: &Path, file: &TextureTaskFile) -> Result<()> {
+        let bytes = meshy::texture_task_file_bytes(file)?;
         Ok(tyt_injection::write_file_atomic(path, &bytes)?)
     }
 
