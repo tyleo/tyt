@@ -1,6 +1,6 @@
 use crate::{
-    Error, MeshOutput, MeshProcessed, MeshRequest, MeshTask, MeshTaskFile, Result, TextureRequest,
-    TextureTaskFile,
+    Error, MeshOutput, MeshProcessed, MeshRequest, MeshTask, MeshTaskFile, Result, TaskFileHead,
+    TextureRequest, TextureTaskFile,
 };
 use std::{
     fs,
@@ -105,6 +105,33 @@ pub(crate) fn read_task_id(bytes: &[u8]) -> Result<String> {
         .and_then(Value::as_str)
         .map(str::to_owned)
         .ok_or_else(|| Error::InvalidTaskFile("task file is missing 'taskId'".to_owned()))
+}
+
+/// Reads the `taskId`, `taskKind`, and verbatim `payload.input` from a task
+/// file's bytes, for polling and rewriting it in place.
+pub(crate) fn read_task_file_head(bytes: &[u8]) -> Result<TaskFileHead> {
+    let value: Value = serde_json::from_slice(bytes)
+        .map_err(|e| Error::InvalidTaskFile(format!("could not parse task file: {e}")))?;
+    let task_id = field_str(&value, "taskId")?.to_owned();
+    let task_kind = field_str(&value, "taskKind")?.to_owned();
+    let input = value
+        .get("payload")
+        .and_then(|payload| payload.get("input"))
+        .ok_or_else(|| Error::InvalidTaskFile("task file is missing 'payload.input'".to_owned()))?;
+    let input_json = serde_json::to_vec(input).map_err(invalid_data)?;
+    Ok(TaskFileHead {
+        task_id,
+        task_kind,
+        input_json,
+    })
+}
+
+/// Returns a required top-level string field, erroring if it is absent.
+fn field_str<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| Error::InvalidTaskFile(format!("task file is missing '{key}'")))
 }
 
 /// Reads an image file and encodes it as a base64 `data:` URI, choosing the MIME
@@ -270,6 +297,13 @@ pub(crate) fn mesh_task_file_bytes(file: &MeshTaskFile) -> Result<Vec<u8>> {
 pub(crate) fn texture_task_file_bytes(file: &TextureTaskFile) -> Result<Vec<u8>> {
     let input = serde_json::to_value(&file.input).map_err(invalid_data)?;
     build_task_file(&file.task_id, "retexture", input, &file.output)
+}
+
+/// Serializes a polled task file to pretty JSON bytes, preserving the file's
+/// original `payload.input` and `taskKind`.
+pub(crate) fn polled_task_file_bytes(head: &TaskFileHead, output: &MeshOutput) -> Result<Vec<u8>> {
+    let input = serde_json::from_slice(&head.input_json).map_err(invalid_data)?;
+    build_task_file(&head.task_id, &head.task_kind, input, output)
 }
 
 /// Builds a task file's pretty JSON bytes from its id, kind, input, and output.

@@ -1,4 +1,7 @@
-use crate::{MeshRequest, MeshTask, MeshTaskFile, Result, TextureRequest, TextureTaskFile};
+use crate::{
+    MeshOutput, MeshRequest, MeshTask, MeshTaskFile, Result, TaskFileHead, TextureRequest,
+    TextureTaskFile,
+};
 use std::path::{Path, PathBuf};
 
 /// Dependencies for this crate's operations.
@@ -15,6 +18,10 @@ pub trait Dependencies {
 
     /// Reads the `taskId` from a source `*.meshy.mesh.json` task file.
     fn read_input_task_id(&self, path: &Path) -> Result<String>;
+
+    /// Reads the head (`taskId`, `taskKind`, and verbatim `payload.input`) of a
+    /// task file, for polling and rewriting it in place.
+    fn read_task_file(&self, path: &Path) -> Result<TaskFileHead>;
 
     /// Creates an image-to-3D task and returns its id.
     fn create_task(&self, api_key: &str, request: &MeshRequest) -> Result<String>;
@@ -39,6 +46,15 @@ pub trait Dependencies {
 
     /// Writes the `*.meshy.texture.json` task file atomically.
     fn write_texture_task_file(&self, path: &Path, file: &TextureTaskFile) -> Result<()>;
+
+    /// Rewrites a polled task file in place, preserving its `payload.input` and
+    /// `taskKind` and replacing its `output`.
+    fn write_polled_task_file(
+        &self,
+        path: &Path,
+        head: &TaskFileHead,
+        output: &MeshOutput,
+    ) -> Result<()>;
 
     /// Sleeps for the given number of seconds, between poll attempts.
     fn sleep(&self, seconds: u64) -> Result<()>;

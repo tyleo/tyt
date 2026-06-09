@@ -1,6 +1,6 @@
 use crate::{
-    Dependencies, Error, MeshRequest, MeshTask, MeshTaskFile, Result, TextureRequest,
-    TextureTaskFile, UsrPrefs, implementation::meshy,
+    Dependencies, Error, MeshOutput, MeshRequest, MeshTask, MeshTaskFile, Result, TaskFileHead,
+    TextureRequest, TextureTaskFile, UsrPrefs, implementation::meshy,
 };
 use std::{
     env, fs,
@@ -36,6 +36,11 @@ impl Dependencies for DependenciesImpl {
         meshy::read_task_id(&bytes)
     }
 
+    fn read_task_file(&self, path: &Path) -> Result<TaskFileHead> {
+        let bytes = fs::read(path).map_err(Error::IO)?;
+        meshy::read_task_file_head(&bytes)
+    }
+
     fn create_task(&self, api_key: &str, request: &MeshRequest) -> Result<String> {
         meshy::create_task(api_key, request)
     }
@@ -67,6 +72,16 @@ impl Dependencies for DependenciesImpl {
 
     fn write_texture_task_file(&self, path: &Path, file: &TextureTaskFile) -> Result<()> {
         let bytes = meshy::texture_task_file_bytes(file)?;
+        Ok(tyt_injection::write_file_atomic(path, &bytes)?)
+    }
+
+    fn write_polled_task_file(
+        &self,
+        path: &Path,
+        head: &TaskFileHead,
+        output: &MeshOutput,
+    ) -> Result<()> {
+        let bytes = meshy::polled_task_file_bytes(head, output)?;
         Ok(tyt_injection::write_file_atomic(path, &bytes)?)
     }
 

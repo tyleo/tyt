@@ -1,4 +1,4 @@
-use crate::commands::{Mesh, Texture};
+use crate::commands::{Mesh, Poll, Texture};
 use clap::Subcommand;
 
 /// Commands for working with the Meshy API
@@ -7,6 +7,8 @@ use clap::Subcommand;
 pub enum TytMeshy {
     #[command(name = "mesh")]
     Mesh(Mesh),
+    #[command(name = "poll")]
+    Poll(Poll),
     #[command(name = "texture")]
     Texture(Texture),
 }
@@ -15,6 +17,7 @@ impl TytMeshy {
     pub fn execute(self, dependencies: impl crate::Dependencies) -> crate::Result<()> {
         match self {
             TytMeshy::Mesh(mesh) => mesh.execute(dependencies),
+            TytMeshy::Poll(poll) => poll.execute(dependencies),
             TytMeshy::Texture(texture) => texture.execute(dependencies),
         }
     }
