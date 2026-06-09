@@ -5,6 +5,7 @@ use tyt_fbx::DependenciesImpl as TytFbxDependenciesImpl;
 use tyt_fs::DependenciesImpl as TytFSDependenciesImpl;
 use tyt_image::DependenciesImpl as TytImageDependenciesImpl;
 use tyt_material::DependenciesImpl as TytMaterialDependenciesImpl;
+use tyt_meshy::DependenciesImpl as TytMeshyDependenciesImpl;
 use tyt_meta::DependenciesImpl as TytMetaDependenciesImpl;
 use tyt_oai::DependenciesImpl as TytOAIDependenciesImpl;
 use tyt_vmax::DependenciesImpl as TytVMaxDependenciesImpl;
@@ -19,6 +20,7 @@ impl Dependencies for DependenciesImpl {
     type TytFbxDependencies = TytFbxDependenciesImpl;
     type TytImageDependencies = TytImageDependenciesImpl;
     type TytMaterialDependencies = TytMaterialDependenciesImpl;
+    type TytMeshyDependencies = TytMeshyDependenciesImpl;
     type TytMetaDependencies = TytMetaDependenciesImpl;
     type TytOAIDependencies = TytOAIDependenciesImpl;
     type TytVMaxDependencies = TytVMaxDependenciesImpl;
@@ -45,6 +47,10 @@ impl Dependencies for DependenciesImpl {
 
     fn tyt_material_dependencies(&self) -> Self::TytMaterialDependencies {
         TytMaterialDependenciesImpl
+    }
+
+    fn tyt_meshy_dependencies(&self) -> Self::TytMeshyDependencies {
+        TytMeshyDependenciesImpl
     }
 
     fn tyt_meta_dependencies(&self) -> Self::TytMetaDependencies {

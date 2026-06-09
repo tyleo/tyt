@@ -6,6 +6,7 @@ use tyt_fbx::TytFbx;
 use tyt_fs::TytFS;
 use tyt_image::TytImage;
 use tyt_material::TytMaterial;
+use tyt_meshy::TytMeshy;
 use tyt_meta::TytMeta;
 use tyt_oai::TytOAI;
 use tyt_vmax::TytVMax;
@@ -51,6 +52,12 @@ pub enum Tyt {
         material: TytMaterial,
     },
 
+    #[command(name = "meshy")]
+    Meshy {
+        #[clap(subcommand)]
+        meshy: TytMeshy,
+    },
+
     #[command(name = "meta")]
     Meta {
         #[clap(subcommand)]
@@ -79,6 +86,7 @@ impl Tyt {
             Tyt::Fbx { fbx } => fbx.execute(deps.tyt_fbx_dependencies())?,
             Tyt::Image { image } => image.execute(deps.tyt_image_dependencies())?,
             Tyt::Material { material } => material.execute(deps.tyt_material_dependencies())?,
+            Tyt::Meshy { meshy } => meshy.execute(deps.tyt_meshy_dependencies())?,
             Tyt::Meta { meta } => meta.execute(deps.tyt_meta_dependencies())?,
             Tyt::OAI { oai } => oai.execute(deps.tyt_oai_dependencies())?,
             Tyt::VMax { vmax } => vmax.execute(deps.tyt_vmax_dependencies())?,

@@ -5,6 +5,7 @@ use tyt_fbx::Error as FbxError;
 use tyt_fs::Error as FSError;
 use tyt_image::Error as ImageError;
 use tyt_material::Error as MaterialError;
+use tyt_meshy::Error as MeshyError;
 use tyt_meta::Error as MetaError;
 
 use tyt_oai::Error as OAIError;
@@ -17,6 +18,7 @@ pub enum Error {
     Fbx(FbxError),
     Image(ImageError),
     Material(MaterialError),
+    Meshy(MeshyError),
     Meta(MetaError),
     OAI(OAIError),
     VMax(VMaxError),
@@ -31,6 +33,7 @@ impl fmt::Display for Error {
             Error::Fbx(e) => e.fmt(f),
             Error::Image(e) => e.fmt(f),
             Error::Material(e) => e.fmt(f),
+            Error::Meshy(e) => e.fmt(f),
             Error::Meta(e) => e.fmt(f),
             Error::OAI(e) => e.fmt(f),
             Error::VMax(e) => e.fmt(f),
@@ -47,6 +50,7 @@ impl StdError for Error {
             Error::Fbx(e) => Some(e),
             Error::Image(e) => Some(e),
             Error::Material(e) => Some(e),
+            Error::Meshy(e) => Some(e),
             Error::Meta(e) => Some(e),
             Error::OAI(e) => Some(e),
             Error::VMax(e) => Some(e),
@@ -87,6 +91,12 @@ impl From<ImageError> for Error {
 impl From<MaterialError> for Error {
     fn from(e: MaterialError) -> Self {
         Error::Material(e)
+    }
+}
+
+impl From<MeshyError> for Error {
+    fn from(e: MeshyError) -> Self {
+        Error::Meshy(e)
     }
 }
 

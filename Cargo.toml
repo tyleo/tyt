@@ -10,6 +10,7 @@ members = [
     "projects/tyt-image",
     "projects/tyt-injection",
     "projects/tyt-material",
+    "projects/tyt-meshy",
     "projects/tyt-meta",
     "projects/tyt-oai",
     "projects/tyt-preferences",
@@ -32,6 +33,7 @@ tyt-fs = { path = "projects/tyt-fs" }
 tyt-image = { path = "projects/tyt-image" }
 tyt-injection = { path = "projects/tyt-injection" }
 tyt-material = { path = "projects/tyt-material" }
+tyt-meshy = { path = "projects/tyt-meshy" }
 tyt-meta = { path = "projects/tyt-meta" }
 tyt-oai = { path = "projects/tyt-oai" }
 tyt-preferences = { path = "projects/tyt-preferences" }

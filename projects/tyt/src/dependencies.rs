@@ -4,6 +4,7 @@ use tyt_fbx::Dependencies as TytFbxDependencies;
 use tyt_fs::Dependencies as TytFSDependencies;
 use tyt_image::Dependencies as TytImageDependencies;
 use tyt_material::Dependencies as TytMaterialDependencies;
+use tyt_meshy::Dependencies as TytMeshyDependencies;
 use tyt_meta::Dependencies as TytMetaDependencies;
 use tyt_oai::Dependencies as TytOAIDependencies;
 use tyt_vmax::Dependencies as TytVMaxDependencies;
@@ -15,6 +16,7 @@ pub trait Dependencies {
     type TytFbxDependencies: TytFbxDependencies;
     type TytImageDependencies: TytImageDependencies;
     type TytMaterialDependencies: TytMaterialDependencies;
+    type TytMeshyDependencies: TytMeshyDependencies;
     type TytMetaDependencies: TytMetaDependencies;
     type TytOAIDependencies: TytOAIDependencies;
     type TytVMaxDependencies: TytVMaxDependencies;
@@ -25,6 +27,7 @@ pub trait Dependencies {
     fn tyt_fs_dependencies(&self) -> Self::TytFSDependencies;
     fn tyt_image_dependencies(&self) -> Self::TytImageDependencies;
     fn tyt_material_dependencies(&self) -> Self::TytMaterialDependencies;
+    fn tyt_meshy_dependencies(&self) -> Self::TytMeshyDependencies;
     fn tyt_meta_dependencies(&self) -> Self::TytMetaDependencies;
     fn tyt_oai_dependencies(&self) -> Self::TytOAIDependencies;
     fn tyt_vmax_dependencies(&self) -> Self::TytVMaxDependencies;
