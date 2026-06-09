@@ -10,9 +10,9 @@ pub enum TytMeshy {
 }
 
 impl TytMeshy {
-    pub fn execute(self, _dependencies: impl crate::Dependencies) -> crate::Result<()> {
+    pub fn execute(self, dependencies: impl crate::Dependencies) -> crate::Result<()> {
         match self {
-            TytMeshy::Mesh(mesh) => mesh.execute(_dependencies),
+            TytMeshy::Mesh(mesh) => mesh.execute(dependencies),
         }
     }
 }
