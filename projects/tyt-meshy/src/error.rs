@@ -48,9 +48,6 @@ pub enum Error {
     /// `--texture-quality hd` was given for a model that does not support it.
     HdTextureUnavailable,
 
-    /// A polling option was given without `--poll`. Holds the flag's name.
-    PollOptionWithoutPoll(&'static str),
-
     /// An input image used an extension Meshy does not accept. Holds the
     /// extension.
     UnsupportedImageFormat(String),
@@ -112,7 +109,6 @@ impl Display for Error {
             Error::HdTextureUnavailable => f.write_str(
                 "--texture-quality hd is only supported when --model is meshy-6 or latest",
             ),
-            Error::PollOptionWithoutPoll(flag) => write!(f, "{flag} requires --poll"),
             Error::UnsupportedImageFormat(ext) => write!(
                 f,
                 "unsupported image format \"{ext}\"; Meshy accepts png, jpg, and jpeg"
@@ -152,7 +148,6 @@ impl StdError for Error {
             | Error::ImageEnhancementUnavailable
             | Error::KeepLightingUnavailable
             | Error::HdTextureUnavailable
-            | Error::PollOptionWithoutPoll(_)
             | Error::UnsupportedImageFormat(_)
             | Error::Http(_)
             | Error::Api(_)

@@ -1,12 +1,12 @@
 use crate::{
-    Dependencies, Error, MeshOutput, MeshOutputDone, MeshProcessed, Result,
-    commands::shared::{absolute, download_outputs, parent_dir},
+    Dependencies, Error, Result,
+    commands::{
+        WaitArgs,
+        shared::{absolute, finish_task, is_terminal, parent_dir, wait_for_task},
+    },
 };
-use clap::{ArgAction, Parser};
+use clap::Parser;
 use std::path::{Path, PathBuf};
-
-/// Seconds between poll attempts when `--wait` is set.
-const POLL_INTERVAL: u64 = 10;
 
 /// Polls a previously created Meshy task and, once it has completed, writes its result files.
 ///
@@ -23,18 +23,8 @@ pub struct Poll {
     #[arg(value_name = "meshy-json-path")]
     meshy_json_path: PathBuf,
 
-    /// Block and keep polling until the task completes, instead of checking
-    /// once.
-    #[arg(
-        value_name = "wait",
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_value_t = false,
-        default_missing_value = "true",
-    )]
-    wait: bool,
+    #[command(flatten)]
+    wait: WaitArgs,
 }
 
 impl Poll {
@@ -57,55 +47,30 @@ impl Poll {
             .meshy_api_key()?
             .ok_or(Error::ApiKeyNotConfigured)?;
 
-        let task = loop {
-            let task = match head.task_kind.as_str() {
-                "image-to-3d" => dependencies.get_task(&api_key, &head.task_id)?,
-                "retexture" => dependencies.get_texture_task(&api_key, &head.task_id)?,
-                other => {
-                    return Err(Error::InvalidTaskFile(format!(
-                        "unsupported taskKind \"{other}\""
-                    )));
+        let get = || match head.task_kind.as_str() {
+            "image-to-3d" => dependencies.get_task(&api_key, &head.task_id),
+            "retexture" => dependencies.get_texture_task(&api_key, &head.task_id),
+            other => Err(Error::InvalidTaskFile(format!(
+                "unsupported taskKind \"{other}\""
+            ))),
+        };
+        let task = match wait.interval_timeout() {
+            Some((interval, timeout)) => wait_for_task(&dependencies, get, interval, timeout)?,
+            None => {
+                // Check once: report and stop when still in progress.
+                let task = get()?;
+                if !is_terminal(&task) {
+                    let line = format!("{} ({}%)\n", task.status, task.progress);
+                    dependencies.write_stdout(line.as_bytes())?;
+                    return Ok(());
                 }
-            };
-            match task.status.as_str() {
-                "SUCCEEDED" | "FAILED" | "CANCELED" => break task,
-                _ => {
-                    // Still in progress: report and stop unless asked to wait.
-                    if !wait {
-                        let line = format!("{} ({}%)\n", task.status, task.progress);
-                        dependencies.write_stdout(line.as_bytes())?;
-                        return Ok(());
-                    }
-                    dependencies.sleep(POLL_INTERVAL)?;
-                }
+                task
             }
         };
 
-        // The task finished. Download its files on success; on failure the
-        // recorded output still captures the raw response (with its task_error).
-        let succeeded = task.status == "SUCCEEDED";
-        let status = task.status.clone();
-        let error_message = task.error_message.clone();
-        let processed = if succeeded {
-            download_outputs(&dependencies, &task, &output_base_abs, &json_dir)?
-        } else {
-            MeshProcessed::default()
-        };
-
-        dependencies.write_polled_task_file(
-            &json_path,
-            &head,
-            &MeshOutput::Done(MeshOutputDone {
-                raw_json: task.raw_json,
-                processed,
-            }),
-        )?;
-
-        if !succeeded {
-            return Err(Error::TaskFailed(status, error_message.unwrap_or_default()));
-        }
-
-        Ok(())
+        finish_task(&dependencies, task, &output_base_abs, &json_dir, |output| {
+            dependencies.write_polled_task_file(&json_path, &head, &output)
+        })
     }
 }
 

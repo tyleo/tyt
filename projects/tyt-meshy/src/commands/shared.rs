@@ -1,10 +1,15 @@
-use crate::{Dependencies, Error, MeshProcessed, MeshTask, Result};
+use crate::{Dependencies, Error, MeshOutput, MeshOutputDone, MeshProcessed, MeshTask, Result};
 use std::path::{Path, PathBuf};
 use tyt_common::relativize;
 
-/// Polls a task until it succeeds, fails, or the timeout elapses. `get` fetches
-/// the task from its endpoint.
-pub(crate) fn poll_task(
+/// Whether a task has reached a terminal status (successfully or not).
+pub(crate) fn is_terminal(task: &MeshTask) -> bool {
+    matches!(task.status.as_str(), "SUCCEEDED" | "FAILED" | "CANCELED")
+}
+
+/// Polls a task until it reaches a terminal status or the timeout elapses.
+/// `get` fetches the task from its endpoint.
+pub(crate) fn wait_for_task(
     dependencies: &impl Dependencies,
     get: impl Fn() -> Result<MeshTask>,
     interval: u64,
@@ -13,21 +18,44 @@ pub(crate) fn poll_task(
     let mut waited = 0u64;
     loop {
         let task = get()?;
-        match task.status.as_str() {
-            "SUCCEEDED" => return Ok(task),
-            "FAILED" | "CANCELED" => {
-                return Err(Error::TaskFailed(
-                    task.status,
-                    task.error_message.unwrap_or_default(),
-                ));
-            }
-            _ => {}
+        if is_terminal(&task) {
+            return Ok(task);
         }
         if waited >= timeout {
             return Err(Error::PollTimeout(timeout));
         }
         dependencies.sleep(interval)?;
         waited += interval;
+    }
+}
+
+/// Downloads a terminal task's files (when it succeeded), records the final
+/// output with `write`, and fails when the task did not succeed. The recorded
+/// output of a failed task still captures the raw response, with its
+/// `task_error`.
+pub(crate) fn finish_task(
+    dependencies: &impl Dependencies,
+    task: MeshTask,
+    output_base_abs: &Path,
+    json_dir: &Path,
+    write: impl FnOnce(MeshOutput) -> Result<()>,
+) -> Result<()> {
+    let succeeded = task.status == "SUCCEEDED";
+    let status = task.status.clone();
+    let error_message = task.error_message.clone();
+    let processed = if succeeded {
+        download_outputs(dependencies, &task, output_base_abs, json_dir)?
+    } else {
+        MeshProcessed::default()
+    };
+    write(MeshOutput::Done(MeshOutputDone {
+        raw_json: task.raw_json,
+        processed,
+    }))?;
+    if succeeded {
+        Ok(())
+    } else {
+        Err(Error::TaskFailed(status, error_message.unwrap_or_default()))
     }
 }
 

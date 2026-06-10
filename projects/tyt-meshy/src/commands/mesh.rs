@@ -1,7 +1,10 @@
 use crate::{
-    Dependencies, Error, MeshInput, MeshOutput, MeshOutputDone, MeshRequest, MeshTaskFile, Model,
-    ModelType, Result, TargetFormat, TextureQuality, Topology,
-    commands::shared::{absolute, download_outputs, parent_dir, poll_task, relative, with_suffix},
+    Dependencies, Error, MeshInput, MeshOutput, MeshRequest, MeshTaskFile, Model, ModelType,
+    Result, TargetFormat, TextureQuality, Topology,
+    commands::{
+        WaitArgs,
+        shared::{absolute, finish_task, parent_dir, relative, wait_for_task, with_suffix},
+    },
 };
 use clap::{ArgAction, Parser};
 use std::path::PathBuf;
@@ -9,8 +12,8 @@ use std::path::PathBuf;
 /// Generates a 3D mesh from an image using the Meshy [Image to 3D](https://docs.meshy.ai/en/api/image-to-3d) API.
 ///
 /// On a successful create, writes `<output-base>.meshy.mesh.json` and prints the
-/// task id. With `--poll` (the default), waits for the task to finish, downloads
-/// its files into the same directory, and records them in the task file.
+/// task id. With `--wait`, blocks until the task completes and downloads its
+/// files; otherwise fetch them later with `tyt meshy poll`.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "mesh")]
 pub struct Mesh {
@@ -140,26 +143,8 @@ pub struct Mesh {
     #[arg(value_name = "target-format", long = "target-format", value_enum)]
     target_format: Vec<TargetFormat>,
 
-    /// Poll the task until it completes and write the result files.
-    #[arg(
-        value_name = "poll",
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_value_t = true,
-        default_missing_value = "true",
-    )]
-    poll: bool,
-
-    /// Seconds between poll attempts. Requires `--poll`; defaults to 10.
-    #[arg(value_name = "poll-interval", long = "poll-interval", value_parser = clap::value_parser!(u64).range(1..))]
-    poll_interval: Option<u64>,
-
-    /// Seconds to wait before giving up on polling. Requires `--poll`; defaults
-    /// to 300.
-    #[arg(value_name = "poll-timeout", long = "poll-timeout")]
-    poll_timeout: Option<u64>,
+    #[command(flatten)]
+    wait: WaitArgs,
 }
 
 impl Mesh {
@@ -183,9 +168,7 @@ impl Mesh {
             image_enhancement,
             keep_lighting,
             target_format,
-            poll,
-            poll_interval,
-            poll_timeout,
+            wait,
         } = self;
 
         let lowpoly = model_type == ModelType::Lowpoly;
@@ -278,18 +261,6 @@ impl Mesh {
                 return Err(Error::KeepLightingUnavailable);
             }
         }
-
-        // Polling options require --poll.
-        if !poll {
-            if poll_interval.is_some() {
-                return Err(Error::PollOptionWithoutPoll("--poll-interval"));
-            }
-            if poll_timeout.is_some() {
-                return Err(Error::PollOptionWithoutPoll("--poll-timeout"));
-            }
-        }
-        let poll_interval = poll_interval.unwrap_or(10);
-        let poll_timeout = poll_timeout.unwrap_or(300);
 
         // Paths are anchored to the cwd but stored relative to the task file so
         // the file and its outputs travel together.
@@ -410,7 +381,7 @@ impl Mesh {
         };
         let task_id = dependencies.create_task(&api_key, &request)?;
 
-        // Record the task before polling so its id is never lost on a later
+        // Record the task before any wait so its id is never lost on a later
         // failure.
         dependencies.write_task_file(
             &json_path,
@@ -422,30 +393,25 @@ impl Mesh {
         )?;
         dependencies.write_stdout(format!("{task_id}\n").as_bytes())?;
 
-        if !poll {
+        let Some((interval, timeout)) = wait.interval_timeout() else {
             return Ok(());
-        }
+        };
 
-        let task = poll_task(
+        let task = wait_for_task(
             &dependencies,
             || dependencies.get_task(&api_key, &task_id),
-            poll_interval,
-            poll_timeout,
+            interval,
+            timeout,
         )?;
-        let processed = download_outputs(&dependencies, &task, &output_base_abs, &json_dir)?;
-
-        dependencies.write_task_file(
-            &json_path,
-            &MeshTaskFile {
-                task_id,
-                input,
-                output: MeshOutput::Done(MeshOutputDone {
-                    raw_json: task.raw_json,
-                    processed,
-                }),
-            },
-        )?;
-
-        Ok(())
+        finish_task(&dependencies, task, &output_base_abs, &json_dir, |output| {
+            dependencies.write_task_file(
+                &json_path,
+                &MeshTaskFile {
+                    task_id,
+                    input,
+                    output,
+                },
+            )
+        })
     }
 }
