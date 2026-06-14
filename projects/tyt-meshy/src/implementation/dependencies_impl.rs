@@ -61,6 +61,10 @@ impl Dependencies for DependenciesImpl {
         meshy::download(url)
     }
 
+    fn display_image_in_terminal(&self, path: &Path) -> Result<()> {
+        Ok(tyt_injection::display_image_in_terminal(path)?)
+    }
+
     fn write_file(&self, path: &Path, bytes: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_file_atomic(path, bytes)?)
     }

@@ -226,6 +226,7 @@ fn parse_task_response(status: u16, bytes: Vec<u8>) -> Result<MeshTask> {
     let thumbnail_url = value
         .get("thumbnail_url")
         .and_then(Value::as_str)
+        .filter(|url| !url.is_empty())
         .map(str::to_owned);
     let error_message = value
         .get("task_error")
@@ -246,7 +247,8 @@ fn parse_task_response(status: u16, bytes: Vec<u8>) -> Result<MeshTask> {
 }
 
 /// Collects the string-valued entries of a JSON object as `(key, value)` pairs,
-/// preserving their order.
+/// preserving their order. Meshy reports assets it did not generate as empty
+/// strings, so empty values are treated as absent.
 fn string_pairs(value: Option<&Value>) -> Vec<(String, String)> {
     value
         .and_then(Value::as_object)
@@ -254,7 +256,10 @@ fn string_pairs(value: Option<&Value>) -> Vec<(String, String)> {
             object
                 .iter()
                 .filter_map(|(key, value)| {
-                    value.as_str().map(|value| (key.clone(), value.to_owned()))
+                    value
+                        .as_str()
+                        .filter(|url| !url.is_empty())
+                        .map(|url| (key.clone(), url.to_owned()))
                 })
                 .collect()
         })
@@ -262,6 +267,8 @@ fn string_pairs(value: Option<&Value>) -> Vec<(String, String)> {
 }
 
 /// Collects a texture set's map URLs as `(map, url)` pairs in a stable order.
+/// Meshy reports maps it did not generate as empty strings, so empty values are
+/// treated as absent.
 fn texture_pairs(set: &Value) -> Vec<(String, String)> {
     const MAPS: [&str; 5] = ["base_color", "metallic", "normal", "roughness", "emission"];
     let Some(object) = set.as_object() else {
@@ -272,6 +279,7 @@ fn texture_pairs(set: &Value) -> Vec<(String, String)> {
             object
                 .get(*map)
                 .and_then(Value::as_str)
+                .filter(|url| !url.is_empty())
                 .map(|url| ((*map).to_owned(), url.to_owned()))
         })
         .collect()

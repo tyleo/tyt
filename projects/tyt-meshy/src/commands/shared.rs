@@ -1,6 +1,11 @@
-use crate::{Dependencies, Error, MeshOutput, MeshOutputDone, MeshProcessed, MeshTask, Result};
+use crate::{
+    Dependencies, Error, MeshOutput, MeshOutputDone, MeshProcessed, MeshTask, OutputMode, Result,
+};
 use std::path::{Path, PathBuf};
 use tyt_common::relativize;
+
+/// Suffix appended to the output base for the downloaded default thumbnail.
+const THUMBNAIL_SUFFIX: &str = ".thumbnail-default.png";
 
 /// Whether a task has reached a terminal status (successfully or not).
 pub(crate) fn is_terminal(task: &MeshTask) -> bool {
@@ -38,6 +43,7 @@ pub(crate) fn finish_task(
     task: MeshTask,
     output_base_abs: &Path,
     json_dir: &Path,
+    output: OutputMode,
     write: impl FnOnce(MeshOutput) -> Result<()>,
 ) -> Result<()> {
     let succeeded = task.status == "SUCCEEDED";
@@ -48,15 +54,22 @@ pub(crate) fn finish_task(
     } else {
         MeshProcessed::default()
     };
+    let thumbnail = (output.shows_image() && !processed.thumbnail_files.is_empty())
+        .then(|| with_suffix(output_base_abs, THUMBNAIL_SUFFIX));
     write(MeshOutput::Done(MeshOutputDone {
         raw_json: task.raw_json,
         processed,
     }))?;
-    if succeeded {
-        Ok(())
-    } else {
-        Err(Error::TaskFailed(status, error_message.unwrap_or_default()))
+    if !succeeded {
+        return Err(Error::TaskFailed(status, error_message.unwrap_or_default()));
     }
+    if let Some(path) = thumbnail {
+        dependencies.display_image_in_terminal(&path)?;
+        // viuer leaves the cursor directly below the image without a trailing
+        // newline, so emit one to end on a fresh line.
+        dependencies.write_stdout(b"\n")?;
+    }
+    Ok(())
 }
 
 /// Downloads a completed task's files into the task file's directory and records
@@ -91,7 +104,7 @@ pub(crate) fn download_outputs(
     }
 
     if let Some(url) = &task.thumbnail_url {
-        let path = write_download(dependencies, url, output_base_abs, ".thumbnail-default.png")?;
+        let path = write_download(dependencies, url, output_base_abs, THUMBNAIL_SUFFIX)?;
         processed
             .thumbnail_files
             .push(("default".to_owned(), relative(json_dir, &path)));

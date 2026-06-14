@@ -1,5 +1,5 @@
 use crate::{
-    Dependencies, Error, Result,
+    Dependencies, Error, OutputMode, Result,
     commands::{
         WaitArgs,
         shared::{absolute, finish_task, is_terminal, parent_dir, wait_for_task},
@@ -23,6 +23,10 @@ pub struct Poll {
     #[arg(value_name = "meshy-json-path")]
     meshy_json_path: PathBuf,
 
+    /// How much to print.
+    #[arg(value_name = "output", long, value_enum, default_value_t = OutputMode::Full)]
+    output: OutputMode,
+
     #[command(flatten)]
     wait: WaitArgs,
 }
@@ -31,6 +35,7 @@ impl Poll {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let Poll {
             meshy_json_path,
+            output,
             wait,
         } = self;
 
@@ -60,17 +65,23 @@ impl Poll {
                 // Check once: report and stop when still in progress.
                 let task = get()?;
                 if !is_terminal(&task) {
-                    let line = format!("{} ({}%)\n", task.status, task.progress);
-                    dependencies.write_stdout(line.as_bytes())?;
+                    if let Some(line) = output.status_line(&task.status, task.progress) {
+                        dependencies.write_stdout(line.as_bytes())?;
+                    }
                     return Ok(());
                 }
                 task
             }
         };
 
-        finish_task(&dependencies, task, &output_base_abs, &json_dir, |output| {
-            dependencies.write_polled_task_file(&json_path, &head, &output)
-        })
+        finish_task(
+            &dependencies,
+            task,
+            &output_base_abs,
+            &json_dir,
+            output,
+            |output| dependencies.write_polled_task_file(&json_path, &head, &output),
+        )
     }
 }
 

@@ -38,6 +38,9 @@ pub trait Dependencies {
     /// Downloads the bytes at a (pre-signed) URL.
     fn download(&self, url: &str) -> Result<Vec<u8>>;
 
+    /// Renders an image file inline in the terminal.
+    fn display_image_in_terminal(&self, path: &Path) -> Result<()>;
+
     /// Writes raw bytes to a file atomically.
     fn write_file(&self, path: &Path, bytes: &[u8]) -> Result<()>;
 

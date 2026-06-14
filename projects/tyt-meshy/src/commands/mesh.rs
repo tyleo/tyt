@@ -1,6 +1,6 @@
 use crate::{
     Dependencies, Error, MeshInput, MeshOutput, MeshRequest, MeshTaskFile, Model, ModelType,
-    Result, TargetFormat, TextureQuality, Topology,
+    OutputMode, Result, TargetFormat, TextureQuality, Topology,
     commands::{
         WaitArgs,
         shared::{absolute, finish_task, parent_dir, relative, wait_for_task, with_suffix},
@@ -143,6 +143,10 @@ pub struct Mesh {
     #[arg(value_name = "target-format", long = "target-format", value_enum)]
     target_format: Vec<TargetFormat>,
 
+    /// How much to print.
+    #[arg(value_name = "output", long, value_enum, default_value_t = OutputMode::Full)]
+    output: OutputMode,
+
     #[command(flatten)]
     wait: WaitArgs,
 }
@@ -168,6 +172,7 @@ impl Mesh {
             image_enhancement,
             keep_lighting,
             target_format,
+            output,
             wait,
         } = self;
 
@@ -391,7 +396,9 @@ impl Mesh {
                 output: MeshOutput::Pending,
             },
         )?;
-        dependencies.write_stdout(format!("{task_id}\n").as_bytes())?;
+        if let Some(line) = output.task_id_line(&task_id) {
+            dependencies.write_stdout(line.as_bytes())?;
+        }
 
         let Some((interval, timeout)) = wait.interval_timeout() else {
             return Ok(());
@@ -403,15 +410,22 @@ impl Mesh {
             interval,
             timeout,
         )?;
-        finish_task(&dependencies, task, &output_base_abs, &json_dir, |output| {
-            dependencies.write_task_file(
-                &json_path,
-                &MeshTaskFile {
-                    task_id,
-                    input,
-                    output,
-                },
-            )
-        })
+        finish_task(
+            &dependencies,
+            task,
+            &output_base_abs,
+            &json_dir,
+            output,
+            |output| {
+                dependencies.write_task_file(
+                    &json_path,
+                    &MeshTaskFile {
+                        task_id,
+                        input,
+                        output,
+                    },
+                )
+            },
+        )
     }
 }
