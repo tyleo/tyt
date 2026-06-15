@@ -65,6 +65,19 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::display_image_in_terminal(path)?)
     }
 
+    fn display_images_in_grid(
+        &self,
+        paths: &[&Path],
+        columns: u32,
+        side_percent: u32,
+    ) -> Result<()> {
+        Ok(tyt_injection::display_images_in_grid(
+            paths,
+            columns,
+            side_percent,
+        )?)
+    }
+
     fn write_file(&self, path: &Path, bytes: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_file_atomic(path, bytes)?)
     }

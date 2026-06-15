@@ -84,14 +84,31 @@ pub(crate) fn finish_task(
     if let Some(line) = output.report_line(task_id, &status, progress, true) {
         dependencies.write_stdout(line.as_bytes())?;
     }
-    for path in output.select_thumbnails(&thumbnails) {
-        dependencies.display_image_in_terminal(path)?;
-        // viuer leaves the cursor directly below the image without a trailing
-        // newline, so emit one to end on a fresh line.
-        dependencies.write_stdout(b"\n")?;
+    // viuer leaves the cursor directly below an image without a trailing
+    // newline, so each render emits one to end on a fresh line.
+    match output.select_thumbnails(&thumbnails) {
+        [] => {}
+        [single] => {
+            dependencies.display_image_in_terminal(single)?;
+            dependencies.write_stdout(b"\n")?;
+        }
+        many => {
+            let paths: Vec<&Path> = many.iter().map(PathBuf::as_path).collect();
+            dependencies.display_images_in_grid(&paths, GRID_COLUMNS, GRID_SIDE_PERCENT)?;
+            dependencies.write_stdout(b"\n")?;
+        }
     }
     Ok(())
 }
+
+/// The number of columns in a multi-thumbnail grid: the four cardinal views lay
+/// out two-by-two.
+const GRID_COLUMNS: u32 = 2;
+
+/// How much of the terminal's shorter side a multi-thumbnail grid spans, in
+/// percent. 100 fills the shorter side exactly; this leaves a small margin for
+/// the prompt while still using most of the screen.
+const GRID_SIDE_PERCENT: u32 = 90;
 
 /// Downloads a completed task's files into the task file's directory and records
 /// their paths, relative to the task file.

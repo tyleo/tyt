@@ -41,6 +41,15 @@ pub trait Dependencies {
     /// Renders an image file inline in the terminal.
     fn display_image_in_terminal(&self, path: &Path) -> Result<()>;
 
+    /// Renders the image files inline as a single `columns`-wide grid, scaled so
+    /// its width spans `side_percent` percent of the terminal's shorter side.
+    fn display_images_in_grid(
+        &self,
+        paths: &[&Path],
+        columns: u32,
+        side_percent: u32,
+    ) -> Result<()>;
+
     /// Writes raw bytes to a file atomically.
     fn write_file(&self, path: &Path, bytes: &[u8]) -> Result<()>;
 
