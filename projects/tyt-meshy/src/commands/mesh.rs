@@ -421,6 +421,8 @@ impl Mesh {
         let task = wait_for_task(
             &dependencies,
             || dependencies.get_task(&api_key, &task_id),
+            output,
+            &task_id,
             interval,
             timeout,
         )?;

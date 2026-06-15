@@ -60,7 +60,9 @@ impl Poll {
             ))),
         };
         let task = match wait.interval_timeout() {
-            Some((interval, timeout)) => wait_for_task(&dependencies, get, interval, timeout)?,
+            Some((interval, timeout)) => {
+                wait_for_task(&dependencies, get, output, &head.task_id, interval, timeout)?
+            }
             None => {
                 // Check once: report and stop when still in progress.
                 let task = get()?;

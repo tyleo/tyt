@@ -44,6 +44,18 @@ impl OutputMode {
         }
     }
 
+    /// The progress text to print on each poll while `--wait` blocks on a task,
+    /// given its id, current status, and percent progress. The modes that show a
+    /// human a live view — both thumbnail modes plus `status` and `text` —
+    /// report their in-progress line; `id` and `quiet` stay silent until the
+    /// task finishes.
+    pub fn poll_line(self, id: &str, status: &str, progress: u8) -> Option<String> {
+        match self {
+            OutputMode::Id | OutputMode::Quiet => None,
+            _ => self.report_line(id, status, progress, false),
+        }
+    }
+
     /// The text to print for a task that reached a terminal non-success status
     /// (`FAILED` or `CANCELED`), given its id, status, percent progress, and the
     /// API's error message, if any. A task failure is a reportable outcome
