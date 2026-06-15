@@ -5,12 +5,12 @@ use clap::ValueEnum;
 pub enum OutputMode {
     /// Render every thumbnail a finished task produced — the four cardinal
     /// views, or just the single default thumbnail when that is all there is —
-    /// or `pending` while the task is unfinished.
+    /// printing the task's `id:` and `status:` as text while it runs.
     #[default]
     AllThumbnails,
 
-    /// Render only the front (default) thumbnail of a finished task, or
-    /// `pending` while the task is unfinished.
+    /// Render only the front (default) thumbnail of a finished task, printing
+    /// the task's `id:` and `status:` as text while it runs.
     FrontThumbnail,
 
     /// Print just the task's id, for scripting.
@@ -22,37 +22,51 @@ pub enum OutputMode {
     /// Print just the task's status, for scripting.
     Status,
 
-    /// Print the task's `status:` and `id:` as labeled text, rendering no
+    /// Print the task's `id:` and `status:` as labeled text, rendering no
     /// images.
     Text,
 }
 
 impl OutputMode {
-    /// The text to print for a task with the given id, status, and percent
-    /// progress. `done` marks a successfully finished task: the thumbnail modes
-    /// then render images rather than text, so they print nothing here; while a
-    /// task is unfinished they print `pending` instead.
-    pub fn report_line(self, id: &str, status: &str, progress: u8, done: bool) -> Option<String> {
+    /// The `id:` line printed once, up front, by the human-facing modes — both
+    /// thumbnail modes and `text` — since a task's id is known before it runs,
+    /// so the `status:` lines that follow need not repeat it. The scripting
+    /// modes (`id`, `status`) and `quiet` print nothing here; `id` emits its
+    /// bare id alongside the task's outcome instead.
+    pub fn id_line(self, id: &str) -> Option<String> {
         match self {
-            OutputMode::AllThumbnails | OutputMode::FrontThumbnail => {
-                (!done).then(|| format!("pending ({progress}%)\n"))
+            OutputMode::AllThumbnails | OutputMode::FrontThumbnail | OutputMode::Text => {
+                Some(format!("id: {id}\n"))
+            }
+            OutputMode::Id | OutputMode::Quiet | OutputMode::Status => None,
+        }
+    }
+
+    /// The status line for an in-progress or successfully finished task, given
+    /// its id, status, and percent progress. The human-facing modes — both
+    /// thumbnail modes and `text` — print the status verbatim under a `status:`
+    /// label (their `id:` is emitted once by [`OutputMode::id_line`]); `status`
+    /// prints the bare status for scripting, `id` the bare id, and `quiet`
+    /// nothing.
+    pub fn report_line(self, id: &str, status: &str, progress: u8) -> Option<String> {
+        match self {
+            OutputMode::AllThumbnails | OutputMode::FrontThumbnail | OutputMode::Text => {
+                Some(format!("status: {status} ({progress}%)\n"))
             }
             OutputMode::Id => Some(format!("{id}\n")),
             OutputMode::Quiet => None,
             OutputMode::Status => Some(format!("{status} ({progress}%)\n")),
-            OutputMode::Text => Some(format!("status: {status} ({progress}%)\nid: {id}\n")),
         }
     }
 
-    /// The progress text to print on each poll while `--wait` blocks on a task,
-    /// given its id, current status, and percent progress. The modes that show a
-    /// human a live view — both thumbnail modes plus `status` and `text` —
-    /// report their in-progress line; `id` and `quiet` stay silent until the
-    /// task finishes.
+    /// The status text to print on each poll while `--wait` blocks on a task.
+    /// The modes that show a human a live view report their status line; `id`
+    /// and `quiet` stay silent while polling and print their id or nothing only
+    /// once the task finishes.
     pub fn poll_line(self, id: &str, status: &str, progress: u8) -> Option<String> {
         match self {
             OutputMode::Id | OutputMode::Quiet => None,
-            _ => self.report_line(id, status, progress, false),
+            _ => self.report_line(id, status, progress),
         }
     }
 
@@ -60,7 +74,8 @@ impl OutputMode {
     /// (`FAILED` or `CANCELED`), given its id, status, percent progress, and the
     /// API's error message, if any. A task failure is a reportable outcome
     /// rather than a program error, so every mode but `Quiet` prints it; the
-    /// modes that would otherwise render an image report it as labeled text.
+    /// human-facing modes report it as a `status:` line (their `id:` was already
+    /// emitted up front) with the error appended.
     pub fn failure_line(
         self,
         id: &str,
@@ -73,7 +88,7 @@ impl OutputMode {
             OutputMode::Id => Some(format!("{id}\n")),
             OutputMode::Status => Some(format!("{status} ({progress}%)\n")),
             OutputMode::AllThumbnails | OutputMode::FrontThumbnail | OutputMode::Text => {
-                let mut line = format!("status: {status} ({progress}%)\nid: {id}\n");
+                let mut line = format!("status: {status} ({progress}%)\n");
                 if let Some(error) = error.filter(|error| !error.is_empty()) {
                     line.push_str(&format!("error: {error}\n"));
                 }

@@ -81,7 +81,7 @@ pub(crate) fn finish_task(
         }
         return Ok(());
     }
-    if let Some(line) = output.report_line(task_id, &status, progress, true) {
+    if let Some(line) = output.report_line(task_id, &status, progress) {
         dependencies.write_stdout(line.as_bytes())?;
     }
     // viuer leaves the cursor directly below an image without a trailing

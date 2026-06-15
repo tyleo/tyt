@@ -209,9 +209,14 @@ impl Texture {
                 output: MeshOutput::Pending,
             },
         )?;
+        // The id is known up front, so print it once; the status lines that
+        // follow need not repeat it.
+        if let Some(line) = output.id_line(&task_id) {
+            dependencies.write_stdout(line.as_bytes())?;
+        }
         let Some((interval, timeout)) = wait.interval_timeout() else {
             // Not waiting: report the freshly created, still-pending task.
-            if let Some(line) = output.report_line(&task_id, "PENDING", 0, false) {
+            if let Some(line) = output.report_line(&task_id, "PENDING", 0) {
                 dependencies.write_stdout(line.as_bytes())?;
             }
             return Ok(());

@@ -59,6 +59,12 @@ impl Poll {
                 "unsupported taskKind \"{other}\""
             ))),
         };
+        // The id is known up front, so print it once; the status lines that
+        // follow need not repeat it.
+        if let Some(line) = output.id_line(&head.task_id) {
+            dependencies.write_stdout(line.as_bytes())?;
+        }
+
         let task = match wait.interval_timeout() {
             Some((interval, timeout)) => {
                 wait_for_task(&dependencies, get, output, &head.task_id, interval, timeout)?
@@ -67,7 +73,8 @@ impl Poll {
                 // Check once: report and stop when still in progress.
                 let task = get()?;
                 if !is_terminal(&task) {
-                    if let Some(line) = output.report_line(&head.task_id, &task.status, task.progress, false) {
+                    if let Some(line) = output.report_line(&head.task_id, &task.status, task.progress)
+                    {
                         dependencies.write_stdout(line.as_bytes())?;
                     }
                     return Ok(());
