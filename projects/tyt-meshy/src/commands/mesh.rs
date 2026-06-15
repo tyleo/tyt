@@ -143,8 +143,21 @@ pub struct Mesh {
     #[arg(value_name = "target-format", long = "target-format", value_enum)]
     target_format: Vec<TargetFormat>,
 
+    /// Render the four cardinal-view thumbnails (front, right, back, left)
+    /// instead of just one. Adds roughly 3 seconds of latency.
+    #[arg(
+        value_name = "multi-view-thumbnails",
+        long = "multi-view-thumbnails",
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_value_t = true,
+        default_missing_value = "true",
+    )]
+    multi_view_thumbnails: bool,
+
     /// How much to print.
-    #[arg(value_name = "output", long, value_enum, default_value_t = OutputMode::Full)]
+    #[arg(value_name = "output", long, value_enum, default_value_t = OutputMode::AllThumbnails)]
     output: OutputMode,
 
     #[command(flatten)]
@@ -172,6 +185,7 @@ impl Mesh {
             image_enhancement,
             keep_lighting,
             target_format,
+            multi_view_thumbnails,
             output,
             wait,
         } = self;
@@ -372,7 +386,7 @@ impl Mesh {
             pose_mode: String::new(),
             moderation: false,
             auto_size: false,
-            multi_view_thumbnails: false,
+            multi_view_thumbnails,
         };
 
         let api_key = dependencies
@@ -396,11 +410,11 @@ impl Mesh {
                 output: MeshOutput::Pending,
             },
         )?;
-        if let Some(line) = output.task_id_line(&task_id) {
-            dependencies.write_stdout(line.as_bytes())?;
-        }
-
         let Some((interval, timeout)) = wait.interval_timeout() else {
+            // Not waiting: report the freshly created, still-pending task.
+            if let Some(line) = output.report_line(&task_id, "PENDING", 0, false) {
+                dependencies.write_stdout(line.as_bytes())?;
+            }
             return Ok(());
         };
 
@@ -416,11 +430,12 @@ impl Mesh {
             &output_base_abs,
             &json_dir,
             output,
+            &task_id,
             |output| {
                 dependencies.write_task_file(
                     &json_path,
                     &MeshTaskFile {
-                        task_id,
+                        task_id: task_id.clone(),
                         input,
                         output,
                     },

@@ -17,8 +17,10 @@ pub struct MeshTask {
     /// texture set.
     pub texture_urls: Vec<(String, String)>,
 
-    /// The preview thumbnail URL, if any.
-    pub thumbnail_url: Option<String>,
+    /// Preview thumbnail URLs as ordered `(name, url)` pairs. Multi-view tasks
+    /// yield `front`/`right`/`back`/`left`; otherwise a single `default` entry,
+    /// or none.
+    pub thumbnail_urls: Vec<(String, String)>,
 
     /// The `task_error.message`, when the task carries a non-empty one.
     pub error_message: Option<String>,

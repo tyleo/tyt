@@ -223,11 +223,7 @@ fn parse_task_response(status: u16, bytes: Vec<u8>) -> Result<MeshTask> {
         .and_then(|sets| sets.first())
         .map(texture_pairs)
         .unwrap_or_default();
-    let thumbnail_url = value
-        .get("thumbnail_url")
-        .and_then(Value::as_str)
-        .filter(|url| !url.is_empty())
-        .map(str::to_owned);
+    let thumbnail_urls = thumbnail_pairs(&value);
     let error_message = value
         .get("task_error")
         .and_then(|error| error.get("message"))
@@ -240,7 +236,7 @@ fn parse_task_response(status: u16, bytes: Vec<u8>) -> Result<MeshTask> {
         progress,
         model_urls,
         texture_urls,
-        thumbnail_url,
+        thumbnail_urls,
         error_message,
         raw_json: bytes,
     })
@@ -263,6 +259,36 @@ fn string_pairs(value: Option<&Value>) -> Vec<(String, String)> {
                 })
                 .collect()
         })
+        .unwrap_or_default()
+}
+
+/// Collects a task's thumbnails as ordered `(name, url)` pairs. A task created
+/// with `multi_view_thumbnails` returns a `thumbnail_urls` object holding the
+/// `front`/`right`/`back`/`left` cardinal views; otherwise Meshy returns a
+/// single `thumbnail_url`, recorded as `default`. Empty URLs are treated as
+/// absent.
+fn thumbnail_pairs(value: &Value) -> Vec<(String, String)> {
+    const VIEWS: [&str; 4] = ["front", "right", "back", "left"];
+    if let Some(object) = value.get("thumbnail_urls").and_then(Value::as_object) {
+        let views: Vec<(String, String)> = VIEWS
+            .iter()
+            .filter_map(|view| {
+                object
+                    .get(*view)
+                    .and_then(Value::as_str)
+                    .filter(|url| !url.is_empty())
+                    .map(|url| ((*view).to_owned(), url.to_owned()))
+            })
+            .collect();
+        if !views.is_empty() {
+            return views;
+        }
+    }
+    value
+        .get("thumbnail_url")
+        .and_then(Value::as_str)
+        .filter(|url| !url.is_empty())
+        .map(|url| vec![("default".to_owned(), url.to_owned())])
         .unwrap_or_default()
 }
 

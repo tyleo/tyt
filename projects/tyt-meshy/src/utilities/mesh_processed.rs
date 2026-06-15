@@ -9,6 +9,7 @@ pub struct MeshProcessed {
     /// `roughness`, `emission`).
     pub texture_files: Vec<(String, String)>,
 
-    /// Thumbnails as `(name, path)` pairs (`default`).
+    /// Thumbnails as `(name, path)` pairs — `front`/`right`/`back`/`left` for a
+    /// multi-view task, otherwise a single `default`.
     pub thumbnail_files: Vec<(String, String)>,
 }

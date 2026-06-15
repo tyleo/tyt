@@ -87,7 +87,7 @@ pub struct Texture {
     target_format: Vec<TargetFormat>,
 
     /// How much to print.
-    #[arg(value_name = "output", long, value_enum, default_value_t = OutputMode::Full)]
+    #[arg(value_name = "output", long, value_enum, default_value_t = OutputMode::AllThumbnails)]
     output: OutputMode,
 
     #[command(flatten)]
@@ -209,11 +209,11 @@ impl Texture {
                 output: MeshOutput::Pending,
             },
         )?;
-        if let Some(line) = output.task_id_line(&task_id) {
-            dependencies.write_stdout(line.as_bytes())?;
-        }
-
         let Some((interval, timeout)) = wait.interval_timeout() else {
+            // Not waiting: report the freshly created, still-pending task.
+            if let Some(line) = output.report_line(&task_id, "PENDING", 0, false) {
+                dependencies.write_stdout(line.as_bytes())?;
+            }
             return Ok(());
         };
 
@@ -229,11 +229,12 @@ impl Texture {
             &output_base_abs,
             &json_dir,
             output,
+            &task_id,
             |output| {
                 dependencies.write_texture_task_file(
                     &json_path,
                     &TextureTaskFile {
-                        task_id,
+                        task_id: task_id.clone(),
                         input,
                         output,
                     },

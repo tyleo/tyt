@@ -4,9 +4,6 @@ use crate::{
 use std::path::{Path, PathBuf};
 use tyt_common::relativize;
 
-/// Suffix appended to the output base for the downloaded default thumbnail.
-const THUMBNAIL_SUFFIX: &str = ".thumbnail-default.png";
-
 /// Whether a task has reached a terminal status (successfully or not).
 pub(crate) fn is_terminal(task: &MeshTask) -> bool {
     matches!(task.status.as_str(), "SUCCEEDED" | "FAILED" | "CANCELED")
@@ -44,27 +41,44 @@ pub(crate) fn finish_task(
     output_base_abs: &Path,
     json_dir: &Path,
     output: OutputMode,
+    task_id: &str,
     write: impl FnOnce(MeshOutput) -> Result<()>,
 ) -> Result<()> {
     let succeeded = task.status == "SUCCEEDED";
     let status = task.status.clone();
+    let progress = task.progress;
     let error_message = task.error_message.clone();
     let processed = if succeeded {
         download_outputs(dependencies, &task, output_base_abs, json_dir)?
     } else {
         MeshProcessed::default()
     };
-    let thumbnail = (output.shows_image() && !processed.thumbnail_files.is_empty())
-        .then(|| with_suffix(output_base_abs, THUMBNAIL_SUFFIX));
+    // The downloaded thumbnails' absolute paths, front first, recovered from
+    // their task-file-relative paths before `processed` is consumed below.
+    let thumbnails: Vec<PathBuf> = processed
+        .thumbnail_files
+        .iter()
+        .map(|(_, rel)| absolute(json_dir, PathBuf::from(rel)))
+        .collect();
     write(MeshOutput::Done(MeshOutputDone {
         raw_json: task.raw_json,
         processed,
     }))?;
     if !succeeded {
-        return Err(Error::TaskFailed(status, error_message.unwrap_or_default()));
+        // A terminal non-success is the API's outcome to report, not a misuse of
+        // this program, so print it and exit cleanly rather than erroring out.
+        if let Some(line) =
+            output.failure_line(task_id, &status, progress, error_message.as_deref())
+        {
+            dependencies.write_stdout(line.as_bytes())?;
+        }
+        return Ok(());
     }
-    if let Some(path) = thumbnail {
-        dependencies.display_image_in_terminal(&path)?;
+    if let Some(line) = output.report_line(task_id, &status, progress, true) {
+        dependencies.write_stdout(line.as_bytes())?;
+    }
+    for path in output.select_thumbnails(&thumbnails) {
+        dependencies.display_image_in_terminal(path)?;
         // viuer leaves the cursor directly below the image without a trailing
         // newline, so emit one to end on a fresh line.
         dependencies.write_stdout(b"\n")?;
@@ -103,11 +117,16 @@ pub(crate) fn download_outputs(
             .push((name.to_owned(), relative(json_dir, &path)));
     }
 
-    if let Some(url) = &task.thumbnail_url {
-        let path = write_download(dependencies, url, output_base_abs, THUMBNAIL_SUFFIX)?;
+    for (name, url) in &task.thumbnail_urls {
+        let path = write_download(
+            dependencies,
+            url,
+            output_base_abs,
+            &format!(".thumbnail-{name}.png"),
+        )?;
         processed
             .thumbnail_files
-            .push(("default".to_owned(), relative(json_dir, &path)));
+            .push((name.clone(), relative(json_dir, &path)));
     }
 
     Ok(processed)

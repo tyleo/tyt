@@ -24,7 +24,7 @@ pub struct Poll {
     meshy_json_path: PathBuf,
 
     /// How much to print.
-    #[arg(value_name = "output", long, value_enum, default_value_t = OutputMode::Full)]
+    #[arg(value_name = "output", long, value_enum, default_value_t = OutputMode::AllThumbnails)]
     output: OutputMode,
 
     #[command(flatten)]
@@ -65,7 +65,7 @@ impl Poll {
                 // Check once: report and stop when still in progress.
                 let task = get()?;
                 if !is_terminal(&task) {
-                    if let Some(line) = output.status_line(&task.status, task.progress) {
+                    if let Some(line) = output.report_line(&head.task_id, &task.status, task.progress, false) {
                         dependencies.write_stdout(line.as_bytes())?;
                     }
                     return Ok(());
@@ -80,6 +80,7 @@ impl Poll {
             &output_base_abs,
             &json_dir,
             output,
+            &head.task_id,
             |output| dependencies.write_polled_task_file(&json_path, &head, &output),
         )
     }

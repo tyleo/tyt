@@ -82,6 +82,7 @@ pub struct MeshInput {
     /// Whether to auto-size the model (always false).
     pub auto_size: bool,
 
-    /// Whether to render cardinal-view thumbnails (always false).
+    /// Whether to render the four cardinal-view thumbnails (front, right, back,
+    /// left) in addition to the default one.
     pub multi_view_thumbnails: bool,
 }

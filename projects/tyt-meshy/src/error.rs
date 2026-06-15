@@ -61,9 +61,6 @@ pub enum Error {
     /// The Meshy response could not be interpreted.
     InvalidResponse(String),
 
-    /// The Meshy task did not succeed. Holds its status and error message.
-    TaskFailed(String, String),
-
     /// Polling timed out before the task completed. Holds the timeout, in
     /// seconds.
     PollTimeout(u64),
@@ -116,13 +113,6 @@ impl Display for Error {
             Error::Http(e) => write!(f, "Meshy request failed: {e}"),
             Error::Api(e) => write!(f, "Meshy API error: {e}"),
             Error::InvalidResponse(e) => write!(f, "unexpected Meshy response: {e}"),
-            Error::TaskFailed(status, message) => {
-                write!(f, "the Meshy task failed with status {status}")?;
-                if !message.is_empty() {
-                    write!(f, ": {message}")?;
-                }
-                Ok(())
-            }
             Error::PollTimeout(seconds) => write!(
                 f,
                 "timed out after {seconds}s waiting for the Meshy task to complete; its output \
@@ -152,7 +142,6 @@ impl StdError for Error {
             | Error::Http(_)
             | Error::Api(_)
             | Error::InvalidResponse(_)
-            | Error::TaskFailed(..)
             | Error::PollTimeout(_) => None,
         }
     }
