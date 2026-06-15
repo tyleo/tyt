@@ -35,14 +35,15 @@ pub struct Mesh {
     #[arg(value_name = "model", long, value_enum)]
     model: Option<Model>,
 
-    /// Whether to texture the model.
+    /// Whether to texture the model. Defaults to true; pass `--texture=false`
+    /// to skip texturing.
     #[arg(
         value_name = "texture",
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
         require_equals = true,
-        default_value_t = false,
+        default_value_t = true,
         default_missing_value = "true",
     )]
     texture: bool,
