@@ -26,6 +26,11 @@ pub trait Dependencies {
     /// Returns each object's `(data, pal)` reference strings, read leniently
     /// from raw JSON so objects missing optional fields still parse.
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>>;
+    /// Builds the `voxel-max` extension payload for `from-voxj` reconstruction
+    /// and returns it as UTF-8 JSON bytes ready to embed at the voxj document's
+    /// `main.ext`. Captures the Voxel Max scene/node state that has no native
+    /// voxj home; unmodeled keys are preserved verbatim.
+    fn voxel_max_ext(&self, scene_bytes: &[u8]) -> Result<Vec<u8>>;
     fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
     fn remove_file(&self, path: &Path) -> Result<()>;
     fn rename_file(&self, from: &Path, to: &Path) -> Result<()>;

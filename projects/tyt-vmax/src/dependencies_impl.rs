@@ -1,9 +1,10 @@
-use crate::{Dependencies, Result};
+use crate::{Dependencies, Result, VoxelMaxExt, VoxelMaxNode};
 use std::{
     collections::HashMap,
+    io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
 };
-use tyt_injection::serde_json::Value;
+use tyt_injection::serde_json::{self, Map, Value};
 use vmax::{VMaxMaterial, VMaxScene, VMaxVoxel};
 use vmax_codec::{VXMaterialPaletteSerde, VXObjectDataSerde};
 
@@ -115,6 +116,30 @@ impl Dependencies for DependenciesImpl {
                     .collect()
             })
             .unwrap_or_default())
+    }
+
+    fn voxel_max_ext(&self, scene_bytes: &[u8]) -> Result<Vec<u8>> {
+        let invalid = |e| IOError::new(ErrorKind::InvalidData, e);
+        let mut value: Value = tyt_injection::parse_json(scene_bytes)?;
+        let nodes = |value: &mut Value, key: &str| -> Result<Vec<VoxelMaxNode>> {
+            match value.as_object_mut().and_then(|map| map.remove(key)) {
+                Some(array) => Ok(serde_json::from_value(array).map_err(invalid)?),
+                None => Ok(Vec::new()),
+            }
+        };
+        // Aligned with `main.hierarchyNodes`: groups first, then objects.
+        let mut hierarchy_nodes = nodes(&mut value, "groups")?;
+        hierarchy_nodes.extend(nodes(&mut value, "objects")?);
+        let scene = serde_json::from_value(value).map_err(invalid)?;
+
+        let voxel_max = serde_json::to_value(VoxelMaxExt {
+            scene,
+            hierarchy_nodes,
+        })
+        .map_err(invalid)?;
+        let mut ext = Map::new();
+        ext.insert("voxel-max".to_owned(), voxel_max);
+        Ok(serde_json::to_vec(&Value::Object(ext)).map_err(invalid)?)
     }
 
     fn read_file(&self, path: &Path) -> Result<Vec<u8>> {

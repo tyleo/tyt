@@ -10,7 +10,7 @@ use voxj::{
     AttrValue, PositionEncoding, SampleEncoding, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
     VoxjPalette, VoxjTransform,
 };
-use voxj_codec::VoxelData;
+use voxj_codec::{VoxelData, VoxjEncoder};
 
 /// Number of cells in a color palette; a `palette*.png` is 256×1 RGBA, and a
 /// placeholder palette covers every possible color index.
@@ -195,10 +195,15 @@ impl ToVoxj {
             },
         };
 
+        // Stash the vmax-specific state that has no native voxj home under the
+        // generic `ext` namespace so `from-voxj` can rebuild the package exactly.
+        // The voxj codec treats `ext` as opaque; the `voxel-max` shape lives here.
+        let ext = dependencies.voxel_max_ext(&scene_bytes)?;
+        let encoder = VoxjEncoder::new(&file).ext(&ext);
         let bytes = match self.format {
-            Format::Json => voxj_codec::to_voxj_bytes(&file, false),
-            Format::PrettyJson => voxj_codec::to_voxj_bytes(&file, true),
-            Format::Zip => voxj_codec::to_voxjz_bytes(&file),
+            Format::Json => encoder.json(),
+            Format::PrettyJson => encoder.pretty(),
+            Format::Zip => encoder.zip(),
         }
         .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
 
@@ -223,23 +228,29 @@ impl ToVoxj {
             dependencies.parse_voxels(&data_bytes)?
         };
 
-        let Some(box_min) = min_corner(&voxels) else {
-            // Empty object: no geometry to place or color.
+        // Always use the authored box (`e_c + e_mi` .. `e_c + e_ma`) when the
+        // object has Voxel Max bounds, so the encoded bounds match vmax exactly
+        // (even for empty objects); only objects without authored bounds use the
+        // tight extent of their voxels.
+        let (box_min, bounds) = object_box(object, &voxels, min_corner(&voxels))?;
+        let box_min_f = [box_min[0] as f64, box_min[1] as f64, box_min[2] as f64];
+
+        if voxels.is_empty() {
+            // No geometry to place or color, but keep the authored bounds.
             let empty = encode_voxj_object(
                 object.name.clone(),
                 Vec::new(),
                 VoxelData {
                     positions: Vec::new(),
                     samples: Vec::new(),
-                    bounds: [0, 0, 0],
+                    bounds,
                     palette_cell_counts: Vec::new(),
                 },
                 encoding,
             );
-            return Ok((empty, object_transform(object, [0.0; 3])));
-        };
+            return Ok((empty, object_transform(object, box_min_f)));
+        }
 
-        let bounds = object_bounds(&voxels, box_min);
         let positions: Vec<[u32; 3]> = voxels
             .iter()
             .map(|v| {
@@ -285,7 +296,6 @@ impl ToVoxj {
             },
             encoding,
         );
-        let box_min_f = [box_min[0] as f64, box_min[1] as f64, box_min[2] as f64];
         Ok((voxj_object, object_transform(object, box_min_f)))
     }
 
@@ -410,6 +420,57 @@ fn object_bounds(voxels: &[VMaxVoxel], box_min: [i32; 3]) -> [u32; 3] {
         bounds[2] = bounds[2].max((v.z - box_min[2] + 1) as u32);
     }
     bounds
+}
+
+/// The re-basing origin and `[X, Y, Z]` size for an object. Always uses the
+/// object's Voxel Max bounds (`center + bounds_min` .. `center + bounds_max`)
+/// when present, so the encoded bounds match vmax exactly and are never
+/// recomputed; only objects with no authored bounds fall back to the tight
+/// extent of their voxels. Errors if authored bounds do not enclose every voxel.
+fn object_box(
+    object: &VMaxObject,
+    voxels: &[VMaxVoxel],
+    tight_min: Option<[i32; 3]>,
+) -> Result<([i32; 3], [u32; 3])> {
+    let (Some(min), Some(max)) = (object.bounds_min, object.bounds_max) else {
+        // No authored bounds: derive a tight box, or origin for an empty object.
+        return Ok(match tight_min {
+            Some(tight) => (tight, object_bounds(voxels, tight)),
+            None => ([0, 0, 0], [0, 0, 0]),
+        });
+    };
+    let box_min = [
+        (object.center[0] + min[0]).round() as i32,
+        (object.center[1] + min[1]).round() as i32,
+        (object.center[2] + min[2]).round() as i32,
+    ];
+    let size = [
+        (max[0] - min[0]).round() as i64,
+        (max[1] - min[1]).round() as i64,
+        (max[2] - min[2]).round() as i64,
+    ];
+    for v in voxels {
+        let local = [v.x - box_min[0], v.y - box_min[1], v.z - box_min[2]];
+        if (0..3).any(|k| local[k] < 0 || i64::from(local[k]) >= size[k]) {
+            return Err(IOError::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "object '{}' has voxel ({}, {}, {}) outside its Voxel Max bounds \
+                     (origin {box_min:?}, size {size:?}); refusing to change the authored bounds",
+                    object.name, v.x, v.y, v.z
+                ),
+            )
+            .into());
+        }
+    }
+    Ok((
+        box_min,
+        [
+            size[0].max(0) as u32,
+            size[1].max(0) as u32,
+            size[2].max(0) as u32,
+        ],
+    ))
 }
 
 /// The node transform that places an object whose voxels are authored from the

@@ -29,4 +29,20 @@ pub struct VMaxObject {
     /// Center of the object's voxel bounds in model space (Voxel Max `e_c`).
     #[cfg_attr(feature = "serde", serde(rename = "e_c", default))]
     pub center: [f64; 3],
+    /// Min corner of the object's voxel bounds, relative to `center`
+    /// (Voxel Max `e_mi`), when present. The absolute authored box minimum is
+    /// `center + bounds_min`.
+    #[cfg_attr(
+        feature = "serde",
+        serde(rename = "e_mi", skip_serializing_if = "Option::is_none", default)
+    )]
+    pub bounds_min: Option<[f64; 3]>,
+    /// Max corner of the object's voxel bounds, relative to `center`
+    /// (Voxel Max `e_ma`), when present. The absolute authored box maximum is
+    /// `center + bounds_max`.
+    #[cfg_attr(
+        feature = "serde",
+        serde(rename = "e_ma", skip_serializing_if = "Option::is_none", default)
+    )]
+    pub bounds_max: Option<[f64; 3]>,
 }
