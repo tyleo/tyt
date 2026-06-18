@@ -1,0 +1,100 @@
+use crate::{VoxelData, encode_object, hilbert_bits};
+use flate2::{Compression, write::DeflateEncoder};
+use std::io::Write;
+use voxj::{PositionEncoding, SampleEncoding, VoxjObject};
+
+/// Skip the dense bitmap candidate above this many cells to bound memory.
+const MAX_BITMAP_CELLS: u64 = 8_000_000;
+
+/// Hilbert positions are only valid for `bits <= 17` (every bounds dimension
+/// `<= 131072`); above that the format requires bitmap or raw instead.
+const MAX_HILBERT_BITS: u32 = 17;
+
+/// Encodes one object's geometry into a [`VoxjObject`], trying every applicable
+/// non-raw encoding pairing, deflating each, and keeping the smallest. The
+/// canonical shipping form.
+pub fn encode_object_smallest(
+    name: String,
+    palette_refs: Vec<usize>,
+    data: VoxelData,
+) -> VoxjObject {
+    if data.positions.is_empty() {
+        return encode_object(
+            name,
+            palette_refs,
+            data,
+            PositionEncoding::RawJson,
+            SampleEncoding::RawJson,
+        );
+    }
+    let mut best: Option<(usize, VoxjObject)> = None;
+    for position in candidate_positions(data.bounds) {
+        for sample in [SampleEncoding::RleJson, SampleEncoding::PackedBase64] {
+            let object = encode_object(
+                name.clone(),
+                palette_refs.clone(),
+                data.clone(),
+                position,
+                sample,
+            );
+            let size = deflated_len(&object);
+            if best.as_ref().is_none_or(|(best, _)| size < *best) {
+                best = Some((size, object));
+            }
+        }
+    }
+    best.expect("at least one candidate").1
+}
+
+/// The applicable non-raw position encodings for `bounds`, falling back to raw
+/// only when neither bitmap nor Hilbert applies.
+fn candidate_positions(bounds: [u32; 3]) -> Vec<PositionEncoding> {
+    let cells = bounds[0] as u64 * bounds[1] as u64 * bounds[2] as u64;
+    let mut positions = Vec::new();
+    if cells <= MAX_BITMAP_CELLS {
+        positions.push(PositionEncoding::BitmapBase64);
+    }
+    if hilbert_bits(bounds) <= MAX_HILBERT_BITS {
+        positions.push(PositionEncoding::Hilbert);
+    }
+    if positions.is_empty() {
+        positions.push(PositionEncoding::RawJson);
+    }
+    positions
+}
+
+/// Deflated byte length of an object's two blocks serialized together.
+fn deflated_len(object: &VoxjObject) -> usize {
+    let json =
+        serde_json::to_vec(&(&object.voxel_positions, &object.voxel_samples)).unwrap_or_default();
+    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
+    let _ = encoder.write_all(&json);
+    encoder.finish().map_or(json.len(), |v| v.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{VoxelData, encode_object_smallest};
+    use voxj::SampleBlock;
+
+    /// An object with voxels but zero palettes still emits sample channels whose
+    /// arity matches the position block (rle/packed carry zero channels).
+    #[test]
+    fn zero_palette_object_keeps_sample_arity() {
+        let object = encode_object_smallest(
+            "o".to_owned(),
+            Vec::new(),
+            VoxelData {
+                positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
+                samples: vec![Vec::new(), Vec::new(), Vec::new()],
+                bounds: [3, 1, 1],
+                palette_cell_counts: Vec::new(),
+            },
+        );
+        match &object.voxel_samples {
+            SampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
+            SampleBlock::RleJson(channels) => assert!(channels.is_empty()),
+            SampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
+        }
+    }
+}

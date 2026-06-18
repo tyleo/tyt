@@ -1,15 +1,6 @@
 use crate::{VoxelData, hilbert_bits, hilbert_encode, pack_bits, packed_width, varint_encode};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use flate2::{Compression, write::DeflateEncoder};
-use std::io::Write;
 use voxj::{PositionBlock, PositionEncoding, SampleBlock, SampleEncoding, VoxjObject};
-
-/// Skip the dense bitmap candidate above this many cells to bound memory.
-const MAX_BITMAP_CELLS: u64 = 8_000_000;
-
-/// Hilbert positions are only valid for `bits <= 17` (every bounds dimension
-/// `<= 131072`); above that the format requires bitmap or raw instead.
-const MAX_HILBERT_BITS: u32 = 17;
 
 /// Encodes one object's geometry into a [`VoxjObject`] with the given fixed
 /// position and sample encodings.
@@ -29,28 +20,6 @@ pub fn encode_object(
         let sample_block =
             encode_samples(&channels, sample, &data.palette_cell_counts, order.len());
         (position_block, sample_block)
-    };
-    object(
-        name,
-        palette_refs,
-        data.bounds,
-        voxel_positions,
-        voxel_samples,
-    )
-}
-
-/// Encodes one object's geometry into a [`VoxjObject`], building the matrix of
-/// applicable non-raw encodings, deflating each pairing, and keeping the
-/// smallest. The canonical shipping form.
-pub fn encode_object_smallest(
-    name: String,
-    palette_refs: Vec<usize>,
-    data: VoxelData,
-) -> VoxjObject {
-    let (voxel_positions, voxel_samples) = if data.positions.is_empty() {
-        empty_blocks()
-    } else {
-        choose_smallest(&data, palette_refs.len())
     };
     object(
         name,
@@ -84,40 +53,6 @@ fn empty_blocks() -> (PositionBlock, SampleBlock) {
         PositionBlock::RawJson(Vec::new()),
         SampleBlock::RawJson(Vec::new()),
     )
-}
-
-/// Builds the matrix of non-raw encodings, deflates each pairing, and returns the
-/// smallest. Falls back to raw positions only if no non-raw position encoding is
-/// applicable (bounds too large for bitmap and Hilbert alike).
-fn choose_smallest(data: &VoxelData, num_palettes: usize) -> (PositionBlock, SampleBlock) {
-    let cells = data.bounds[0] as u64 * data.bounds[1] as u64 * data.bounds[2] as u64;
-
-    let mut position_candidates: Vec<(Vec<usize>, PositionBlock)> = Vec::new();
-    if cells <= MAX_BITMAP_CELLS {
-        position_candidates.push(encode_positions(data, PositionEncoding::BitmapBase64));
-    }
-    if hilbert_bits(data.bounds) <= MAX_HILBERT_BITS {
-        position_candidates.push(encode_positions(data, PositionEncoding::Hilbert));
-    }
-    if position_candidates.is_empty() {
-        position_candidates.push(encode_positions(data, PositionEncoding::RawJson));
-    }
-
-    let mut best: Option<(usize, PositionBlock, SampleBlock)> = None;
-    for (order, position_block) in &position_candidates {
-        let channels = channels_in_order(&data.samples, order, num_palettes);
-        for sample in [SampleEncoding::RleJson, SampleEncoding::PackedBase64] {
-            let sample_block =
-                encode_samples(&channels, sample, &data.palette_cell_counts, order.len());
-            let size = deflated_len(position_block, &sample_block);
-            if best.as_ref().is_none_or(|(b, _, _)| size < *b) {
-                best = Some((size, position_block.clone(), sample_block));
-            }
-        }
-    }
-
-    let (_, position_block, sample_block) = best.expect("at least one candidate");
-    (position_block, sample_block)
 }
 
 /// Encodes the voxel positions with `encoding`, returning the canonical voxel
@@ -275,27 +210,10 @@ fn rle_encode(channel: &[u32]) -> Vec<u32> {
     out
 }
 
-/// Deflated byte length of a candidate's two blocks serialized together.
-fn deflated_len(positions: &PositionBlock, samples: &SampleBlock) -> usize {
-    let json = serde_json::to_vec(&(positions, samples)).unwrap_or_default();
-    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
-    let _ = encoder.write_all(&json);
-    encoder.finish().map_or(json.len(), |v| v.len())
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{VoxelData, encode_object, encode_object_smallest};
+    use crate::encode_object;
     use voxj::{PositionBlock, PositionEncoding, SampleBlock, SampleEncoding, VoxjObject};
-
-    fn voxel_data() -> VoxelData {
-        VoxelData {
-            positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
-            samples: vec![Vec::new(), Vec::new(), Vec::new()],
-            bounds: [3, 1, 1],
-            palette_cell_counts: Vec::new(),
-        }
-    }
 
     /// An object with voxels but zero palettes must still emit a sample block
     /// whose arity matches the position block: raw-json carries one (empty) row
@@ -310,15 +228,15 @@ mod tests {
 
     #[test]
     fn zero_palette_object_keeps_sample_arity() {
-        assert_zero_palette_arity(&encode_object_smallest(
-            "o".to_owned(),
-            Vec::new(),
-            voxel_data(),
-        ));
         assert_zero_palette_arity(&encode_object(
             "o".to_owned(),
             Vec::new(),
-            voxel_data(),
+            super::VoxelData {
+                positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
+                samples: vec![Vec::new(), Vec::new(), Vec::new()],
+                bounds: [3, 1, 1],
+                palette_cell_counts: Vec::new(),
+            },
             PositionEncoding::RawJson,
             SampleEncoding::RawJson,
         ));
@@ -327,7 +245,7 @@ mod tests {
     /// A fixed encoding produces exactly the requested blocks.
     #[test]
     fn fixed_encoding_uses_requested_blocks() {
-        let data = VoxelData {
+        let data = super::VoxelData {
             positions: vec![[0, 0, 0], [1, 0, 0]],
             samples: vec![vec![1], vec![2]],
             bounds: [2, 1, 1],

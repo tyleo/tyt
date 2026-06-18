@@ -16,24 +16,6 @@ pub fn pack_bits(values: &[u32], width: u32) -> Vec<u8> {
     out
 }
 
-/// Inverse of [`pack_bits`]: reads `count` values of `width` bits each,
-/// MSB-first, 8 per byte. Bytes past the end of `bytes` read as zero.
-pub fn unpack_bits(bytes: &[u8], width: u32, count: usize) -> Vec<u32> {
-    let mut out = Vec::with_capacity(count);
-    let mut bit_pos = 0usize;
-    for _ in 0..count {
-        let mut value = 0u32;
-        for _ in 0..width {
-            let byte = bytes.get(bit_pos / 8).copied().unwrap_or(0);
-            let bit = (byte >> (7 - bit_pos % 8)) & 1;
-            value = (value << 1) | bit as u32;
-            bit_pos += 1;
-        }
-        out.push(value);
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use crate::pack_bits;
