@@ -13,6 +13,9 @@ pub struct VXMaterialSerde {
     /// Self-illumination (emission) coefficient.
     #[serde(default)]
     pub sic: f64,
+    /// Whether the material casts shadows.
+    #[serde(default)]
+    pub sh: bool,
 }
 
 impl From<VXMaterialSerde> for VMaxMaterial {
@@ -21,6 +24,7 @@ impl From<VXMaterialSerde> for VMaxMaterial {
             metalness: v.mc,
             roughness: v.rc,
             emission: v.sic,
+            enable_shadows: v.sh,
         }
     }
 }

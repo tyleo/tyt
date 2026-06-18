@@ -1,11 +1,11 @@
-use crate::{Dependencies, Error, Result, VoxelMaxExt, VoxelMaxNode};
+use crate::{Dependencies, Error, Result, VoxelMaxExt, VoxelMaxNode, VoxelMaxPalette};
 use std::{
     collections::HashMap,
     io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
 };
 use tyt_injection::serde_json::{self, Map, Value};
-use vmax::{VMaxMaterial, VMaxScene, VMaxVoxel};
+use vmax::{VMaxMaterialPalette, VMaxScene, VMaxVoxel};
 use vmax_codec::{VXMaterialPaletteSerde, VXObjectDataSerde};
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
@@ -66,9 +66,9 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::match_glob(pattern, candidates)?)
     }
 
-    fn parse_materials(&self, vmaxpsb_bytes: &[u8]) -> Result<Vec<VMaxMaterial>> {
+    fn parse_material_palette(&self, vmaxpsb_bytes: &[u8]) -> Result<VMaxMaterialPalette> {
         let palette: VXMaterialPaletteSerde = tyt_injection::parse_bplist(vmaxpsb_bytes)?;
-        Ok(palette.materials())
+        Ok(palette.palette())
     }
 
     fn pack_scene_json(
@@ -124,7 +124,11 @@ impl Dependencies for DependenciesImpl {
             .unwrap_or_default())
     }
 
-    fn voxel_max_ext(&self, scene_bytes: &[u8]) -> Result<Vec<u8>> {
+    fn voxel_max_ext(
+        &self,
+        scene_bytes: &[u8],
+        palette_names: &[Option<String>],
+    ) -> Result<Vec<u8>> {
         let invalid = |e| -> Error { IOError::new(ErrorKind::InvalidData, e).into() };
         let mut value: Value = tyt_injection::parse_json(scene_bytes)?;
         let nodes = |value: &mut Value, key: &str| -> Result<Vec<VoxelMaxNode>> {
@@ -151,9 +155,14 @@ impl Dependencies for DependenciesImpl {
         hierarchy_nodes.extend(nodes(&mut value, "objects")?);
         let scene = serde_json::from_value(value).map_err(invalid)?;
 
+        let palettes = palette_names
+            .iter()
+            .map(|name| name.clone().map(|name| VoxelMaxPalette { name }))
+            .collect();
         let voxel_max = serde_json::to_value(VoxelMaxExt {
             scene,
             hierarchy_nodes,
+            palettes,
         })
         .map_err(invalid)?;
         let mut ext = Map::new();

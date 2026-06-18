@@ -11,6 +11,8 @@ mod voxel_max_ext;
 #[cfg(feature = "impl")]
 mod voxel_max_node;
 #[cfg(feature = "impl")]
+mod voxel_max_palette;
+#[cfg(feature = "impl")]
 mod voxel_max_scene;
 
 pub use dependencies::*;
@@ -23,5 +25,7 @@ pub use tyt_vmax::*;
 pub use voxel_max_ext::*;
 #[cfg(feature = "impl")]
 pub use voxel_max_node::*;
+#[cfg(feature = "impl")]
+pub use voxel_max_palette::*;
 #[cfg(feature = "impl")]
 pub use voxel_max_scene::*;

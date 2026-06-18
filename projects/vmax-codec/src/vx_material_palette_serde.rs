@@ -1,17 +1,22 @@
 use crate::VXMaterialSerde;
 use serde::Deserialize;
-use vmax::VMaxMaterial;
+use vmax::VMaxMaterialPalette;
 
 /// Material palette decoded from a `palette*.settings.vmaxpsb` plist.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
 pub struct VXMaterialPaletteSerde {
     #[serde(default)]
+    pub name: String,
+    #[serde(default)]
     pub materials: Vec<VXMaterialSerde>,
 }
 
 impl VXMaterialPaletteSerde {
-    /// Returns the material slots as core [`VMaxMaterial`] values.
-    pub fn materials(&self) -> Vec<VMaxMaterial> {
-        self.materials.iter().copied().map(Into::into).collect()
+    /// Returns the decoded palette as a core [`VMaxMaterialPalette`].
+    pub fn palette(&self) -> VMaxMaterialPalette {
+        VMaxMaterialPalette {
+            name: self.name.clone(),
+            materials: self.materials.iter().copied().map(Into::into).collect(),
+        }
     }
 }

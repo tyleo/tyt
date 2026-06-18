@@ -1,4 +1,4 @@
-use crate::{VoxelMaxNode, VoxelMaxScene};
+use crate::{VoxelMaxNode, VoxelMaxPalette, VoxelMaxScene};
 use serde::{Deserialize, Serialize};
 
 /// The `voxel-max` payload stored under the voxj document's generic `main.ext`
@@ -13,4 +13,7 @@ pub struct VoxelMaxExt {
     /// (groups first, then objects, matching the converter's node order).
     #[serde(rename = "hierarchy-nodes")]
     pub hierarchy_nodes: Vec<VoxelMaxNode>,
+    /// Per-palette provenance, aligned by index with the voxj `palettes`
+    /// (`None` for color palettes, which need no extra data).
+    pub palettes: Vec<Option<VoxelMaxPalette>>,
 }

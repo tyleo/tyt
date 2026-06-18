@@ -167,6 +167,8 @@ impl ToVoxj {
         // Palettes are shared across objects and deduped by source filename.
         let mut palettes: Vec<VoxjPalette> = Vec::new();
         let mut palette_index: HashMap<String, usize> = HashMap::new();
+        // Display name of each material palette, keyed by its `palettes` index.
+        let mut palette_name_by_index: HashMap<usize, String> = HashMap::new();
 
         // One geometry object and one wrapping-node transform per vmax object.
         let mut objects: Vec<VoxjObject> = Vec::new();
@@ -178,12 +180,18 @@ impl ToVoxj {
                 encoding,
                 &mut palettes,
                 &mut palette_index,
+                &mut palette_name_by_index,
             )?;
             objects.push(voxj_object);
             object_transforms.push(transform);
         }
 
         let (hierarchy_nodes, root_hierarchy_nodes) = build_hierarchy(&scene, &object_transforms);
+
+        // Material-palette names aligned by index with `main.palettes` for the ext.
+        let palette_names: Vec<Option<String>> = (0..palettes.len())
+            .map(|i| palette_name_by_index.get(&i).cloned())
+            .collect();
 
         let file = VoxjFile {
             version: 1,
@@ -198,7 +206,7 @@ impl ToVoxj {
         // Stash the vmax-specific state that has no native voxj home under the
         // generic `ext` namespace so `from-voxj` can rebuild the package exactly.
         // The voxj codec treats `ext` as opaque; the `voxel-max` shape lives here.
-        let ext = dependencies.voxel_max_ext(&scene_bytes)?;
+        let ext = dependencies.voxel_max_ext(&scene_bytes, &palette_names)?;
         let encoder = VoxjEncoder::new(&file).ext(&ext);
         let bytes = match self.format {
             Format::Json => encoder.json(),
@@ -220,6 +228,7 @@ impl ToVoxj {
         encoding: Encoding,
         palettes: &mut Vec<VoxjPalette>,
         palette_index: &mut HashMap<String, usize>,
+        palette_name_by_index: &mut HashMap<usize, String>,
     ) -> Result<(VoxjObject, VoxjTransform)> {
         let voxels = if object.data.is_empty() {
             Vec::new()
@@ -264,8 +273,13 @@ impl ToVoxj {
 
         // Objects normally reference a palette; tolerate one that is absent.
         let color_palette = self.color_palette(dependencies, object, palettes, palette_index)?;
-        let material_palette =
-            self.material_palette(dependencies, object, palettes, palette_index)?;
+        let material_palette = self.material_palette(
+            dependencies,
+            object,
+            palettes,
+            palette_index,
+            palette_name_by_index,
+        )?;
 
         let mut palette_refs = Vec::new();
         let mut palette_cell_counts = Vec::new();
@@ -342,35 +356,41 @@ impl ToVoxj {
     }
 
     /// Returns the shared material palette `(index, cell count)` for an object's
-    /// `palette*.settings.vmaxpsb`, or `None` when that sidecar is absent.
+    /// `palette*.settings.vmaxpsb`, or `None` when that sidecar is absent. The
+    /// per-slot material properties (metalness/roughness/emission/shadows) become
+    /// native palette cells; the palette's display name is recorded in
+    /// `palette_name_by_index` for the `voxel-max` ext.
     fn material_palette(
         &self,
         dependencies: &impl Dependencies,
         object: &VMaxObject,
         palettes: &mut Vec<VoxjPalette>,
         palette_index: &mut HashMap<String, usize>,
+        palette_name_by_index: &mut HashMap<usize, String>,
     ) -> Result<Option<(usize, usize)>> {
         let Some(stem) = object.palette.strip_suffix(".png") else {
             return Ok(None);
         };
-        let name = format!("{stem}.settings.vmaxpsb");
-        if let Some(&index) = palette_index.get(&name) {
+        let sidecar = format!("{stem}.settings.vmaxpsb");
+        if let Some(&index) = palette_index.get(&sidecar) {
             return Ok(Some((index, palettes[index].data.len())));
         }
-        let Ok(bytes) = dependencies.read_file(&self.input_vmax.join(&name)) else {
+        let Ok(bytes) = dependencies.read_file(&self.input_vmax.join(&sidecar)) else {
             return Ok(None);
         };
-        let materials = dependencies.parse_materials(&bytes)?;
-        if materials.is_empty() {
+        let palette = dependencies.parse_material_palette(&bytes)?;
+        if palette.materials.is_empty() {
             return Ok(None);
         }
-        let data = materials
+        let data = palette
+            .materials
             .iter()
             .map(|m| {
                 vec![
                     AttrValue::Number(m.metalness),
                     AttrValue::Number(m.roughness),
                     AttrValue::Number(m.emission),
+                    AttrValue::Bool(m.enable_shadows),
                 ]
             })
             .collect();
@@ -380,11 +400,13 @@ impl ToVoxj {
                 "metallic".to_owned(),
                 "roughness".to_owned(),
                 "emissive".to_owned(),
+                "shadows".to_owned(),
             ],
             data,
         });
-        palette_index.insert(name, index);
-        Ok(Some((index, materials.len())))
+        palette_index.insert(sidecar, index);
+        palette_name_by_index.insert(index, palette.name);
+        Ok(Some((index, palette.materials.len())))
     }
 }
 

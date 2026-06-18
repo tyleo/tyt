@@ -11,4 +11,6 @@ pub struct VMaxMaterial {
     pub roughness: f64,
     /// Emission strength (Voxel Max `sic`).
     pub emission: f64,
+    /// Whether the material casts shadows (Voxel Max `sh`).
+    pub enable_shadows: bool,
 }
