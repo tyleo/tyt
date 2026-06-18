@@ -1,14 +1,24 @@
+mod decode_object;
 mod encode_object;
+mod from_voxj_bytes;
+mod from_voxj_or_voxjz_bytes;
+mod from_voxjz_bytes;
 mod hilbert;
 mod pack_bits;
+mod unwrap_voxjz;
 mod varint;
 mod voxel_data;
 mod voxj_encoder;
 mod wrap_voxjz;
 
+pub use decode_object::*;
 pub use encode_object::*;
+pub use from_voxj_bytes::*;
+pub use from_voxj_or_voxjz_bytes::*;
+pub use from_voxjz_bytes::*;
 pub use hilbert::*;
 pub use pack_bits::*;
+pub(crate) use unwrap_voxjz::*;
 pub use varint::*;
 pub use voxel_data::*;
 pub use voxj_encoder::*;
