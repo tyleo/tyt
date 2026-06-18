@@ -7,9 +7,10 @@ use std::{
 };
 use vmax::{VMaxObject, VMaxScene, VMaxVoxel};
 use voxj::{
-    AttrValue, EncodingChoice, PositionEncoding, SampleEncoding, VoxelData, VoxjFile,
-    VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjTransform,
+    AttrValue, PositionEncoding, SampleEncoding, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
+    VoxjPalette, VoxjTransform,
 };
+use voxj_codec::VoxelData;
 
 /// Number of cells in a color palette; a `palette*.png` is 256×1 RGBA, and a
 /// placeholder palette covers every possible color index.
@@ -90,6 +91,17 @@ impl From<SampleEncodingArg> for SampleEncoding {
     }
 }
 
+/// The resolved encoding strategy for an object: either fixed block encodings or
+/// the smallest-deflated search.
+#[derive(Clone, Copy)]
+enum Encoding {
+    Fixed {
+        position: PositionEncoding,
+        sample: SampleEncoding,
+    },
+    Smallest,
+}
+
 /// Converts a `.vmax` package to a Voxel Json document, written to stdout.
 ///
 /// `--format` chooses the output form (compact `.voxj`, `.voxjz` zip, or
@@ -136,17 +148,17 @@ impl ToVoxj {
         let scene_bytes = dependencies.read_file(&self.input_vmax.join("scene.json"))?;
         let scene = dependencies.parse_scene(&scene_bytes)?;
 
-        let choice = match self.optimize {
-            Some(Optimize::Size) => EncodingChoice::Smallest,
-            Some(Optimize::Fast) => EncodingChoice::Fixed {
+        let encoding = match self.optimize {
+            Some(Optimize::Size) => Encoding::Smallest,
+            Some(Optimize::Fast) => Encoding::Fixed {
                 position: PositionEncoding::BitmapBase64,
                 sample: SampleEncoding::PackedBase64,
             },
-            Some(Optimize::Pretty) => EncodingChoice::Fixed {
+            Some(Optimize::Pretty) => Encoding::Fixed {
                 position: PositionEncoding::RawJson,
                 sample: SampleEncoding::RawJson,
             },
-            None => EncodingChoice::Fixed {
+            None => Encoding::Fixed {
                 position: self.position_encoding.into(),
                 sample: self.sample_encoding.into(),
             },
@@ -163,7 +175,7 @@ impl ToVoxj {
             let (voxj_object, transform) = self.build_object(
                 &dependencies,
                 object,
-                choice,
+                encoding,
                 &mut palettes,
                 &mut palette_index,
             )?;
@@ -184,9 +196,9 @@ impl ToVoxj {
         };
 
         let bytes = match self.format {
-            Format::Json => voxj_serde::to_voxj_bytes(&file, false),
-            Format::PrettyJson => voxj_serde::to_voxj_bytes(&file, true),
-            Format::Zip => voxj_serde::to_voxjz_bytes(&file),
+            Format::Json => voxj_codec::to_voxj_bytes(&file, false),
+            Format::PrettyJson => voxj_codec::to_voxj_bytes(&file, true),
+            Format::Zip => voxj_codec::to_voxjz_bytes(&file),
         }
         .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
 
@@ -200,7 +212,7 @@ impl ToVoxj {
         &self,
         dependencies: &impl Dependencies,
         object: &VMaxObject,
-        choice: EncodingChoice,
+        encoding: Encoding,
         palettes: &mut Vec<VoxjPalette>,
         palette_index: &mut HashMap<String, usize>,
     ) -> Result<(VoxjObject, VoxjTransform)> {
@@ -213,7 +225,7 @@ impl ToVoxj {
 
         let Some(box_min) = min_corner(&voxels) else {
             // Empty object: no geometry to place or color.
-            let empty = voxj_serde::encode_object(
+            let empty = encode_voxj_object(
                 object.name.clone(),
                 Vec::new(),
                 VoxelData {
@@ -222,7 +234,7 @@ impl ToVoxj {
                     bounds: [0, 0, 0],
                     palette_cell_counts: Vec::new(),
                 },
-                choice,
+                encoding,
             );
             return Ok((empty, object_transform(object, [0.0; 3])));
         };
@@ -262,7 +274,7 @@ impl ToVoxj {
             }
         }
 
-        let voxj_object = voxj_serde::encode_object(
+        let voxj_object = encode_voxj_object(
             object.name.clone(),
             palette_refs,
             VoxelData {
@@ -271,7 +283,7 @@ impl ToVoxj {
                 bounds,
                 palette_cell_counts,
             },
-            choice,
+            encoding,
         );
         let box_min_f = [box_min[0] as f64, box_min[1] as f64, box_min[2] as f64];
         Ok((voxj_object, object_transform(object, box_min_f)))
@@ -363,6 +375,21 @@ impl ToVoxj {
         });
         palette_index.insert(name, index);
         Ok(Some((index, materials.len())))
+    }
+}
+
+/// Dispatches to the codec's fixed or smallest-search encoder per `encoding`.
+fn encode_voxj_object(
+    name: String,
+    palette_refs: Vec<usize>,
+    data: VoxelData,
+    encoding: Encoding,
+) -> VoxjObject {
+    match encoding {
+        Encoding::Fixed { position, sample } => {
+            voxj_codec::encode_object(name, palette_refs, data, position, sample)
+        }
+        Encoding::Smallest => voxj_codec::encode_object_smallest(name, palette_refs, data),
     }
 }
 

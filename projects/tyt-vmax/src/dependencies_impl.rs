@@ -5,7 +5,7 @@ use std::{
 };
 use tyt_injection::serde_json::Value;
 use vmax::{VMaxMaterial, VMaxScene, VMaxVoxel};
-use vmax_serde::{VMaxSceneSerde, VXMaterialPaletteSerde, VXObjectDataSerde};
+use vmax_codec::{VXMaterialPaletteSerde, VXObjectDataSerde};
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
 /// reference. Voxel Max refuses to open a scene whose objects have an empty
@@ -86,8 +86,8 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxScene> {
-        let scene_serde: VMaxSceneSerde = tyt_injection::parse_json(bytes)?;
-        Ok(scene_serde.into())
+        let scene: VMaxScene = tyt_injection::parse_json(bytes)?;
+        Ok(scene)
     }
 
     fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxVoxel>> {

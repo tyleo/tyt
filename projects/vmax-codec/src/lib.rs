@@ -1,6 +1,4 @@
-mod vmax_group_serde;
-mod vmax_object_serde;
-mod vmax_scene_serde;
+mod decode_morton_3d;
 mod vx_material_palette_serde;
 mod vx_material_serde;
 mod vx_object_data_serde;
@@ -9,9 +7,7 @@ mod vx_snapshot_serde;
 mod vx_stats_serde;
 mod vx_storage_serde;
 
-pub use vmax_group_serde::*;
-pub use vmax_object_serde::*;
-pub use vmax_scene_serde::*;
+pub use decode_morton_3d::*;
 pub use vx_material_palette_serde::*;
 pub use vx_material_serde::*;
 pub use vx_object_data_serde::*;

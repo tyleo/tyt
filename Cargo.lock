@@ -1733,9 +1733,9 @@ dependencies = [
  "tyt-common",
  "tyt-injection",
  "vmax",
- "vmax-serde",
+ "vmax-codec",
  "voxj",
- "voxj-serde",
+ "voxj-codec",
 ]
 
 [[package]]
@@ -1826,9 +1826,12 @@ dependencies = [
 [[package]]
 name = "vmax"
 version = "0.1.6"
+dependencies = [
+ "serde",
+]
 
 [[package]]
-name = "vmax-serde"
+name = "vmax-codec"
 version = "0.1.6"
 dependencies = [
  "serde",
@@ -1839,14 +1842,16 @@ dependencies = [
 [[package]]
 name = "voxj"
 version = "0.1.6"
+dependencies = [
+ "serde",
+]
 
 [[package]]
-name = "voxj-serde"
+name = "voxj-codec"
 version = "0.1.6"
 dependencies = [
  "base64",
  "flate2",
- "serde",
  "serde_json",
  "voxj",
 ]

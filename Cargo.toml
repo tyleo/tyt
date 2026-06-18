@@ -16,9 +16,9 @@ members = [
     "projects/tyt-preferences",
     "projects/tyt",
     "projects/tyt-vmax",
-    "projects/voxj-serde",
+    "projects/voxj-codec",
     "projects/voxj",
-    "projects/vmax-serde",
+    "projects/vmax-codec",
     "projects/vmax",
 ]
 resolver = "2"
@@ -41,6 +41,6 @@ tyt-oai = { path = "projects/tyt-oai" }
 tyt-preferences = { path = "projects/tyt-preferences" }
 tyt-vmax = { path = "projects/tyt-vmax" }
 voxj = { path = "projects/voxj" }
-voxj-serde = { path = "projects/voxj-serde" }
+voxj-codec = { path = "projects/voxj-codec" }
 vmax = { path = "projects/vmax" }
-vmax-serde = { path = "projects/vmax-serde" }
+vmax-codec = { path = "projects/vmax-codec" }

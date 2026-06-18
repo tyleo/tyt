@@ -1,10 +1,10 @@
 [package]
-name = "vmax-serde"
+name = "vmax-codec"
 version = "0.1.6"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "Serde-compatible parity types for vmax."
+description = "Parses Voxel Max binary payloads (.vmaxb / .vmaxpsb) into vmax types."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

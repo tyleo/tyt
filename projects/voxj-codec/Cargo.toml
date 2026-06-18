@@ -1,14 +1,13 @@
 [package]
-name = "voxj-serde"
+name = "voxj-codec"
 version = "0.1.6"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "Serde-compatible parity types and codecs for voxj."
+description = "Encodes voxj types into .voxj / .voxjz documents."
 
 [dependencies]
 base64 = "0.22"
 flate2 = "1"
-serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-voxj = { version = "0.1.0" }
+voxj = { version = "0.1.0", features = ["serde"] }

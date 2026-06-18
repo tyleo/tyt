@@ -1,7 +1,7 @@
-use crate::VXSnapshotSerde;
+use crate::{VXSnapshotSerde, decode_morton_3d};
 use serde::Deserialize;
 use std::collections::BTreeMap;
-use vmax::{self, VMaxVoxel};
+use vmax::VMaxVoxel;
 
 /// Voxel object payload decoded from a `contents*.vmaxb` binary plist.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
@@ -27,7 +27,7 @@ impl VXObjectDataSerde {
         let mut voxels: BTreeMap<(i32, i32, i32), (u8, u8)> = BTreeMap::new();
         for (chunk_id, snapshot) in latest {
             let storage = &snapshot.s;
-            let grid = vmax::decode_morton_3d(chunk_id);
+            let grid = decode_morton_3d(chunk_id);
             let base = [
                 grid[0] as i32 * CHUNK_PITCH,
                 grid[1] as i32 * CHUNK_PITCH,
@@ -40,7 +40,7 @@ impl VXObjectDataSerde {
                 if color == 0 {
                     continue;
                 }
-                let local = vmax::decode_morton_3d(morton_offset + slot as u32);
+                let local = decode_morton_3d(morton_offset + slot as u32);
                 let position = (
                     base[0] + local[0] as i32,
                     base[1] + local[1] as i32,

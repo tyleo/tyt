@@ -1,5 +1,9 @@
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
 /// A single decoded voxel in a Voxel Max object's model space (0..256 per axis).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VMaxVoxel {
     pub x: i32,
     pub y: i32,

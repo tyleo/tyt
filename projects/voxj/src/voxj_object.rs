@@ -1,7 +1,11 @@
 use crate::{PositionBlock, SampleBlock};
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
 
 /// One voxel volume: pure geometry, placed only by a hierarchy node.
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
 pub struct VoxjObject {
     pub name: String,
     /// Indices into `VoxjMain::palettes`, in resolution order.
