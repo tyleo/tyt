@@ -1,4 +1,4 @@
-use crate::{Dependencies, Result, VoxelMaxExt, VoxelMaxNode};
+use crate::{Dependencies, Error, Result, VoxelMaxExt, VoxelMaxNode};
 use std::{
     collections::HashMap,
     io::{Error as IOError, ErrorKind},
@@ -13,6 +13,12 @@ use vmax_codec::{VXMaterialPaletteSerde, VXObjectDataSerde};
 /// `hist`, so every object must point at a history file name even though
 /// packing leaves none on disk.
 const PACKED_HIST: &str = "history.vmaxhb";
+
+/// `scene.json` node keys the voxj document already represents natively, dropped
+/// from the `voxel-max` provenance so they aren't duplicated in each node's
+/// `extra`: name (`n` / group `name`), position (`t_p`), scale (`t_s`), and the
+/// `data` / `pal` / `hist` filenames (regenerated on reconstruction).
+const NATIVE_NODE_KEYS: [&str; 7] = ["n", "name", "t_p", "t_s", "data", "pal", "hist"];
 
 /// Replaces a string `field` on `object_val` using `map`, if its current value is a key.
 fn rename_field(object_val: &mut Value, field: &str, map: &HashMap<&str, &str>) {
@@ -119,13 +125,26 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn voxel_max_ext(&self, scene_bytes: &[u8]) -> Result<Vec<u8>> {
-        let invalid = |e| IOError::new(ErrorKind::InvalidData, e);
+        let invalid = |e| -> Error { IOError::new(ErrorKind::InvalidData, e).into() };
         let mut value: Value = tyt_injection::parse_json(scene_bytes)?;
         let nodes = |value: &mut Value, key: &str| -> Result<Vec<VoxelMaxNode>> {
-            match value.as_object_mut().and_then(|map| map.remove(key)) {
-                Some(array) => Ok(serde_json::from_value(array).map_err(invalid)?),
-                None => Ok(Vec::new()),
-            }
+            let Some(Value::Array(array)) = value.as_object_mut().and_then(|map| map.remove(key))
+            else {
+                return Ok(Vec::new());
+            };
+            array
+                .into_iter()
+                .map(|mut node| {
+                    // Drop fields the voxj document already carries natively so they
+                    // don't fall through into `VoxelMaxNode::extra`.
+                    if let Some(map) = node.as_object_mut() {
+                        for key in NATIVE_NODE_KEYS {
+                            map.remove(key);
+                        }
+                    }
+                    serde_json::from_value(node).map_err(invalid)
+                })
+                .collect()
         };
         // Aligned with `main.hierarchyNodes`: groups first, then objects.
         let mut hierarchy_nodes = nodes(&mut value, "groups")?;

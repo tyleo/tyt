@@ -2,13 +2,15 @@ use serde::{Deserialize, Serialize};
 use tyt_injection::serde_json::{Map, Value};
 
 /// Provenance for one Voxel Max scene node (object or group), aligned by index
-/// with the voxj `hierarchyNodes`. Captures the `scene.json` fields that have no
-/// native voxj representation so `from-voxj` can rebuild the node exactly.
+/// with the voxj `hierarchyNodes`. Holds only the `scene.json` fields with no
+/// native voxj representation, so `from-voxj` can rebuild the node exactly;
+/// everything recoverable from the voxj document (name, scale, position,
+/// `data`/`pal`/`hist` filenames) is intentionally omitted.
 ///
-/// Numbers that can be fractional (positions, rotation, bounds) are stored as
-/// `f64`; index triplets stay integers. Any key not modeled here — legacy `t_a`,
-/// `t_po`, or future additions — is preserved verbatim in [`extra`](Self::extra),
-/// keeping its exact JSON form.
+/// Numbers that can be fractional (rotation, bounds) are stored as `f64`; index
+/// triplets stay integers. Any key not modeled here — legacy `t_a`, the pivot
+/// offset `t_po`, or future additions — is preserved verbatim in
+/// [`extra`](Self::extra), keeping its exact JSON form.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VoxelMaxNode {
     /// Node UUID (`id`).
@@ -20,15 +22,10 @@ pub struct VoxelMaxNode {
     /// Index triplet (`ind`).
     #[serde(rename = "ind", default, skip_serializing_if = "Option::is_none")]
     pub index: Option<[i64; 3]>,
-    /// Position `[x, y, z]` (`t_p`).
-    #[serde(rename = "t_p", default, skip_serializing_if = "Option::is_none")]
-    pub position: Option<[f64; 3]>,
-    /// Axis-angle rotation `[x, y, z, angle]` (`t_r`).
+    /// Axis-angle rotation `[x, y, z, angle]` (`t_r`); kept because the voxj
+    /// quaternion cannot be inverted back to the original axis-angle exactly.
     #[serde(rename = "t_r", default, skip_serializing_if = "Option::is_none")]
     pub rotation: Option<[f64; 4]>,
-    /// Scale `[x, y, z]` (`t_s`).
-    #[serde(rename = "t_s", default, skip_serializing_if = "Option::is_none")]
-    pub scale: Option<[f64; 3]>,
     /// Bounds center in model space (`e_c`).
     #[serde(rename = "e_c", default, skip_serializing_if = "Option::is_none")]
     pub center: Option<[f64; 3]>,
@@ -53,22 +50,8 @@ pub struct VoxelMaxNode {
     /// Hidden UI flag (`h`).
     #[serde(rename = "h", default, skip_serializing_if = "Option::is_none")]
     pub hidden: Option<bool>,
-    /// Voxel data filename (`data`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data: Option<String>,
-    /// Palette image filename (`pal`).
-    #[serde(rename = "pal", default, skip_serializing_if = "Option::is_none")]
-    pub palette: Option<String>,
-    /// History filename (`hist`).
-    #[serde(rename = "hist", default, skip_serializing_if = "Option::is_none")]
-    pub history: Option<String>,
-    /// Object name (`n`).
-    #[serde(rename = "n", default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    /// Group name (`name`).
-    #[serde(rename = "name", default, skip_serializing_if = "Option::is_none")]
-    pub group_name: Option<String>,
-    /// Any other `scene.json` keys on this node, preserved verbatim.
+    /// Any other `scene.json` keys on this node with no native home (e.g. the
+    /// pivot offset `t_po` or legacy Euler `t_a`), preserved verbatim.
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
