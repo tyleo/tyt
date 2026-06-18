@@ -22,7 +22,7 @@ vmax completion zsh                                            # Generate shell 
 ```
 
 `to-voxj` writes the document to stdout. `--format` selects the form (`json`,
-`zip`, or `pretty-json`); `--optimize` (`size`/`fast`/`pretty`) picks the block
+`zip`, or `pretty`); `--optimize` (`size`/`fast`/`pretty`) picks the block
 encodings automatically, or set them explicitly with `--position-encoding` and
 `--sample-encoding`.
 

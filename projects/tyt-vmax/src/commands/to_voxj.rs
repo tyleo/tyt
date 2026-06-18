@@ -31,7 +31,7 @@ enum Format {
     #[value(name = "zip")]
     Zip,
     /// Pretty-printed `.voxj` JSON.
-    #[value(name = "pretty-json")]
+    #[value(name = "pretty")]
     PrettyJson,
 }
 
@@ -115,7 +115,7 @@ pub struct ToVoxj {
     #[arg(value_name = "input-vmax")]
     input_vmax: PathBuf,
 
-    /// Output form: `json` (compact), `zip` (`.voxjz`), or `pretty-json`.
+    /// Output form: `json` (compact), `zip` (`.voxjz`), or `pretty`.
     #[arg(value_name = "format", long, default_value = "json")]
     format: Format,
 
