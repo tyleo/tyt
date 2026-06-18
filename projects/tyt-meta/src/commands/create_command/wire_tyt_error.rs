@@ -86,6 +86,10 @@ pub fn wire_tyt_error(
             continue;
         }
         if in_display_match && trimmed == "}" {
+            if !display_inserted {
+                result.push(display_arm.clone());
+                display_inserted = true;
+            }
             in_display_match = false;
             result.push(line.to_string());
             continue;
@@ -106,6 +110,10 @@ pub fn wire_tyt_error(
             continue;
         }
         if in_source_match && trimmed == "}" {
+            if !source_inserted {
+                result.push(source_arm.clone());
+                source_inserted = true;
+            }
             in_source_match = false;
             result.push(line.to_string());
             continue;
