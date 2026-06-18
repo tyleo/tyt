@@ -16,6 +16,8 @@ members = [
     "projects/tyt-preferences",
     "projects/tyt",
     "projects/tyt-vmax",
+    "projects/voxj-serde",
+    "projects/voxj",
     "projects/vmax-serde",
     "projects/vmax",
 ]
@@ -38,5 +40,7 @@ tyt-meta = { path = "projects/tyt-meta" }
 tyt-oai = { path = "projects/tyt-oai" }
 tyt-preferences = { path = "projects/tyt-preferences" }
 tyt-vmax = { path = "projects/tyt-vmax" }
+voxj = { path = "projects/voxj" }
+voxj-serde = { path = "projects/voxj-serde" }
 vmax = { path = "projects/vmax" }
 vmax-serde = { path = "projects/vmax-serde" }

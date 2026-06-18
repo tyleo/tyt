@@ -4,8 +4,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use tyt_injection::serde_json::Value;
-use vmax::VMaxScene;
-use vmax_serde::VMaxSceneSerde;
+use vmax::{VMaxMaterial, VMaxScene, VMaxVoxel};
+use vmax_serde::{VMaxSceneSerde, VXMaterialPaletteSerde, VXObjectDataSerde};
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
 /// reference. Voxel Max refuses to open a scene whose objects have an empty
@@ -47,8 +47,21 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::list_dir(path)?)
     }
 
+    fn load_palette(&self, png_bytes: &[u8]) -> Result<Vec<[u8; 4]>> {
+        let (rgba, _w, _h) = tyt_injection::decode_image_rgba(png_bytes)?;
+        Ok(rgba
+            .chunks_exact(4)
+            .map(|c| [c[0], c[1], c[2], c[3]])
+            .collect())
+    }
+
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
         Ok(tyt_injection::match_glob(pattern, candidates)?)
+    }
+
+    fn parse_materials(&self, vmaxpsb_bytes: &[u8]) -> Result<Vec<VMaxMaterial>> {
+        let palette: VXMaterialPaletteSerde = tyt_injection::parse_bplist(vmaxpsb_bytes)?;
+        Ok(palette.materials())
     }
 
     fn pack_scene_json(
@@ -75,6 +88,12 @@ impl Dependencies for DependenciesImpl {
     fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxScene> {
         let scene_serde: VMaxSceneSerde = tyt_injection::parse_json(bytes)?;
         Ok(scene_serde.into())
+    }
+
+    fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxVoxel>> {
+        let decompressed = tyt_injection::lzfse_decompress(vmaxb_bytes);
+        let data: VXObjectDataSerde = tyt_injection::parse_bplist(&decompressed)?;
+        Ok(data.voxels())
     }
 
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>> {

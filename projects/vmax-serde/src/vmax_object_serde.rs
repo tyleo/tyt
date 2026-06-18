@@ -4,13 +4,15 @@ use vmax::VMaxObject;
 /// Serde-compatible parity type for [`VMaxObject`].
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct VMaxObjectSerde {
-    #[serde(rename = "n")]
+    #[serde(rename = "n", default)]
     pub name: String,
+    #[serde(default)]
     pub data: String,
-    #[serde(rename = "pal")]
+    #[serde(rename = "pal", default)]
     pub palette: String,
-    #[serde(rename = "hist")]
+    #[serde(rename = "hist", default)]
     pub history: String,
+    #[serde(default)]
     pub id: String,
     #[serde(rename = "pid", skip_serializing_if = "Option::is_none", default)]
     pub parent_id: Option<String>,
@@ -20,6 +22,8 @@ pub struct VMaxObjectSerde {
     pub rotation: [f64; 4],
     #[serde(rename = "t_s")]
     pub scale: [f64; 3],
+    #[serde(rename = "e_c", default)]
+    pub center: [f64; 3],
 }
 
 impl From<VMaxObject> for VMaxObjectSerde {
@@ -34,6 +38,7 @@ impl From<VMaxObject> for VMaxObjectSerde {
             position: v.position,
             rotation: v.rotation,
             scale: v.scale,
+            center: v.center,
         }
     }
 }
@@ -50,6 +55,7 @@ impl From<VMaxObjectSerde> for VMaxObject {
             position: v.position,
             rotation: v.rotation,
             scale: v.scale,
+            center: v.center,
         }
     }
 }

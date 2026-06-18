@@ -4,7 +4,9 @@ use vmax::VMaxGroup;
 /// Serde-compatible parity type for [`VMaxGroup`].
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct VMaxGroupSerde {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub id: String,
     #[serde(rename = "pid", skip_serializing_if = "Option::is_none", default)]
     pub parent_id: Option<String>,

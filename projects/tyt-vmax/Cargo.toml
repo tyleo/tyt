@@ -19,6 +19,8 @@ tyt-common = { version = "0.1.0" }
 tyt-injection = { version = "0.1.0", optional = true }
 vmax = { version = "0.1.0" }
 vmax-serde = { version = "0.1.0", optional = true }
+voxj = { version = "0.1.0" }
+voxj-serde = { version = "0.1.0" }
 
 [features]
 default = ["impl"]

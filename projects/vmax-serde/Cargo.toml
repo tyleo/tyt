@@ -8,4 +8,5 @@ description = "Serde-compatible parity types for vmax."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+serde_bytes = "0.11"
 vmax = { version = "0.1.0" }

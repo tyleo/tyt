@@ -1,0 +1,318 @@
+use crate::{PositionBlockSerde, SampleBlockSerde};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use flate2::{Compression, write::DeflateEncoder};
+use std::io::Write;
+use voxj::{
+    EncodingChoice, PositionBlock, PositionEncoding, SampleBlock, SampleEncoding, VoxelData,
+    VoxjObject, hilbert_bits, hilbert_encode, pack_bits, packed_width, varint_encode,
+};
+
+/// Skip the dense bitmap candidate above this many cells to bound memory.
+const MAX_BITMAP_CELLS: u64 = 8_000_000;
+
+/// Hilbert positions are only valid for `bits <= 17` (every bounds dimension
+/// `<= 131072`); above that the format requires bitmap or raw instead.
+const MAX_HILBERT_BITS: u32 = 17;
+
+/// Encodes one object's geometry into a [`VoxjObject`], choosing block
+/// encodings per `choice`.
+pub fn encode_object(
+    name: String,
+    palette_refs: Vec<usize>,
+    data: VoxelData,
+    choice: EncodingChoice,
+) -> VoxjObject {
+    let num_palettes = palette_refs.len();
+
+    let (voxel_positions, voxel_samples) = if data.positions.is_empty() {
+        // Empty object: raw-json empties for both blocks (0 voxels -> 0 rows).
+        (
+            PositionBlock::RawJson(Vec::new()),
+            SampleBlock::RawJson(Vec::new()),
+        )
+    } else {
+        match choice {
+            EncodingChoice::Fixed { position, sample } => {
+                let (order, position_block) = encode_positions(&data, position);
+                let channels = channels_in_order(&data.samples, &order, num_palettes);
+                let sample_block =
+                    encode_samples(&channels, sample, &data.palette_cell_counts, order.len());
+                (position_block, sample_block)
+            }
+            EncodingChoice::Smallest => choose_smallest(&data, num_palettes),
+        }
+    };
+
+    VoxjObject {
+        name,
+        palette_refs,
+        bounds: data.bounds,
+        voxel_positions,
+        voxel_samples,
+    }
+}
+
+/// Builds the matrix of non-raw encodings, deflates each pairing, and returns the
+/// smallest. Falls back to raw positions only if no non-raw position encoding is
+/// applicable (bounds too large for bitmap and Hilbert alike).
+fn choose_smallest(data: &VoxelData, num_palettes: usize) -> (PositionBlock, SampleBlock) {
+    let cells = data.bounds[0] as u64 * data.bounds[1] as u64 * data.bounds[2] as u64;
+
+    let mut position_candidates: Vec<(Vec<usize>, PositionBlock)> = Vec::new();
+    if cells <= MAX_BITMAP_CELLS {
+        position_candidates.push(encode_positions(data, PositionEncoding::BitmapBase64));
+    }
+    if hilbert_bits(data.bounds) <= MAX_HILBERT_BITS {
+        position_candidates.push(encode_positions(data, PositionEncoding::Hilbert));
+    }
+    if position_candidates.is_empty() {
+        position_candidates.push(encode_positions(data, PositionEncoding::RawJson));
+    }
+
+    let mut best: Option<(usize, PositionBlock, SampleBlock)> = None;
+    for (order, position_block) in &position_candidates {
+        let channels = channels_in_order(&data.samples, order, num_palettes);
+        for sample in [SampleEncoding::RleJson, SampleEncoding::PackedBase64] {
+            let sample_block =
+                encode_samples(&channels, sample, &data.palette_cell_counts, order.len());
+            let size = deflated_len(position_block, &sample_block);
+            if best.as_ref().is_none_or(|(b, _, _)| size < *b) {
+                best = Some((size, position_block.clone(), sample_block));
+            }
+        }
+    }
+
+    let (_, position_block, sample_block) = best.expect("at least one candidate");
+    (position_block, sample_block)
+}
+
+/// Encodes the voxel positions with `encoding`, returning the canonical voxel
+/// order (so sample channels can be reordered to match) and the block.
+fn encode_positions(data: &VoxelData, encoding: PositionEncoding) -> (Vec<usize>, PositionBlock) {
+    match encoding {
+        PositionEncoding::RawJson => {
+            let order = order_raw(data.positions.len());
+            let block = positions_raw(&data.positions, &order);
+            (order, block)
+        }
+        PositionEncoding::BitmapBase64 => (
+            order_bitmap(&data.positions, data.bounds),
+            positions_bitmap(&data.positions, data.bounds),
+        ),
+        PositionEncoding::Hilbert => {
+            let bits = hilbert_bits(data.bounds);
+            (
+                order_hilbert(&data.positions, bits),
+                positions_hilbert(&data.positions, bits),
+            )
+        }
+    }
+}
+
+/// Encodes the per-palette sample `channels` (already in the position block's
+/// voxel order) with `encoding`. `n` is the voxel count.
+fn encode_samples(
+    channels: &[Vec<u32>],
+    encoding: SampleEncoding,
+    cell_counts: &[usize],
+    n: usize,
+) -> SampleBlock {
+    match encoding {
+        SampleEncoding::RawJson => samples_raw(channels, n),
+        SampleEncoding::RleJson => samples_rle(channels),
+        SampleEncoding::PackedBase64 => samples_packed(channels, cell_counts),
+    }
+}
+
+/// Listing order: `0..n`.
+fn order_raw(n: usize) -> Vec<usize> {
+    (0..n).collect()
+}
+
+/// Raster cell index `k = x*Y*Z + y*Z + z`.
+fn cell_index(pos: [u32; 3], bounds: [u32; 3]) -> u64 {
+    let [x, y, z] = pos;
+    x as u64 * bounds[1] as u64 * bounds[2] as u64 + y as u64 * bounds[2] as u64 + z as u64
+}
+
+/// Voxel order ascending by raster cell index.
+fn order_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> Vec<usize> {
+    let mut order = order_raw(positions.len());
+    order.sort_by_key(|&i| cell_index(positions[i], bounds));
+    order
+}
+
+/// Voxel order ascending by Hilbert index.
+fn order_hilbert(positions: &[[u32; 3]], bits: u32) -> Vec<usize> {
+    let mut order = order_raw(positions.len());
+    order.sort_by_key(|&i| {
+        let [x, y, z] = positions[i];
+        hilbert_encode(x, y, z, bits)
+    });
+    order
+}
+
+fn positions_raw(positions: &[[u32; 3]], order: &[usize]) -> PositionBlock {
+    PositionBlock::RawJson(order.iter().map(|&i| positions[i]).collect())
+}
+
+fn positions_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> PositionBlock {
+    let cells = (bounds[0] as usize) * (bounds[1] as usize) * (bounds[2] as usize);
+    let mut occupancy = vec![0u32; cells];
+    for &pos in positions {
+        occupancy[cell_index(pos, bounds) as usize] = 1;
+    }
+    PositionBlock::BitmapBase64(BASE64.encode(pack_bits(&occupancy, 1)))
+}
+
+fn positions_hilbert(positions: &[[u32; 3]], bits: u32) -> PositionBlock {
+    let mut indices: Vec<u64> = positions
+        .iter()
+        .map(|&[x, y, z]| hilbert_encode(x, y, z, bits))
+        .collect();
+    indices.sort_unstable();
+    let mut prev = 0u64;
+    let deltas: Vec<u64> = indices
+        .iter()
+        .map(|&i| {
+            let d = i - prev;
+            prev = i;
+            d
+        })
+        .collect();
+    PositionBlock::HilbertIndexDeltaVarintBase64(BASE64.encode(varint_encode(&deltas)))
+}
+
+/// Reorders `samples[voxel][palette]` into one channel per palette, in the
+/// position block's voxel order.
+fn channels_in_order(samples: &[Vec<u32>], order: &[usize], num_palettes: usize) -> Vec<Vec<u32>> {
+    (0..num_palettes)
+        .map(|p| order.iter().map(|&i| samples[i][p]).collect())
+        .collect()
+}
+
+/// Builds one row per voxel, each holding that voxel's cell index per palette.
+/// `n` is the voxel count, sourced independently of `channels` so an object with
+/// voxels but zero palettes still emits `n` empty rows (matching the position
+/// block's voxel count).
+fn samples_raw(channels: &[Vec<u32>], n: usize) -> SampleBlock {
+    let rows = (0..n)
+        .map(|k| channels.iter().map(|ch| ch[k]).collect())
+        .collect();
+    SampleBlock::RawJson(rows)
+}
+
+fn samples_rle(channels: &[Vec<u32>]) -> SampleBlock {
+    SampleBlock::RleJson(channels.iter().map(|ch| rle_encode(ch)).collect())
+}
+
+fn samples_packed(channels: &[Vec<u32>], cell_counts: &[usize]) -> SampleBlock {
+    let packed = channels
+        .iter()
+        .enumerate()
+        .map(|(p, ch)| {
+            let width = packed_width(cell_counts.get(p).copied().unwrap_or(1));
+            BASE64.encode(pack_bits(ch, width))
+        })
+        .collect();
+    SampleBlock::PackedBase64(packed)
+}
+
+/// Flat run-length encoding: `[value1, count1, value2, count2, ...]`.
+fn rle_encode(channel: &[u32]) -> Vec<u32> {
+    let mut out = Vec::new();
+    let mut iter = channel.iter().copied();
+    let Some(mut value) = iter.next() else {
+        return out;
+    };
+    let mut count = 1u32;
+    for v in iter {
+        if v == value {
+            count += 1;
+        } else {
+            out.push(value);
+            out.push(count);
+            value = v;
+            count = 1;
+        }
+    }
+    out.push(value);
+    out.push(count);
+    out
+}
+
+/// Deflated byte length of a candidate's two blocks serialized together.
+fn deflated_len(positions: &PositionBlock, samples: &SampleBlock) -> usize {
+    let serde = (
+        PositionBlockSerde::from(positions.clone()),
+        SampleBlockSerde::from(samples.clone()),
+    );
+    let json = serde_json::to_vec(&serde).unwrap_or_default();
+    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
+    let _ = encoder.write_all(&json);
+    encoder.finish().map_or(json.len(), |v| v.len())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::encode_object;
+    use voxj::{
+        EncodingChoice, PositionBlock, PositionEncoding, SampleBlock, SampleEncoding, VoxelData,
+    };
+
+    fn voxel_data() -> VoxelData {
+        VoxelData {
+            positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
+            samples: vec![Vec::new(), Vec::new(), Vec::new()],
+            bounds: [3, 1, 1],
+            palette_cell_counts: Vec::new(),
+        }
+    }
+
+    /// An object with voxels but zero palettes must still emit a sample block
+    /// whose arity matches the position block: raw-json carries one (empty) row
+    /// per voxel, and rle/packed carry zero channels.
+    #[test]
+    fn zero_palette_object_keeps_sample_arity() {
+        let choices = [
+            EncodingChoice::Smallest,
+            EncodingChoice::Fixed {
+                position: PositionEncoding::RawJson,
+                sample: SampleEncoding::RawJson,
+            },
+        ];
+        for choice in choices {
+            let object = encode_object("o".to_owned(), Vec::new(), voxel_data(), choice);
+            match &object.voxel_samples {
+                SampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3, "{choice:?}"),
+                SampleBlock::RleJson(channels) => assert!(channels.is_empty(), "{choice:?}"),
+                SampleBlock::PackedBase64(channels) => assert!(channels.is_empty(), "{choice:?}"),
+            }
+        }
+    }
+
+    /// A fixed choice produces exactly the requested encodings.
+    #[test]
+    fn fixed_choice_uses_requested_encodings() {
+        let data = VoxelData {
+            positions: vec![[0, 0, 0], [1, 0, 0]],
+            samples: vec![vec![1], vec![2]],
+            bounds: [2, 1, 1],
+            palette_cell_counts: vec![4],
+        };
+        let object = encode_object(
+            "o".to_owned(),
+            vec![0],
+            data,
+            EncodingChoice::Fixed {
+                position: PositionEncoding::BitmapBase64,
+                sample: SampleEncoding::PackedBase64,
+            },
+        );
+        assert!(matches!(
+            object.voxel_positions,
+            PositionBlock::BitmapBase64(_)
+        ));
+        assert!(matches!(object.voxel_samples, SampleBlock::PackedBase64(_)));
+    }
+}

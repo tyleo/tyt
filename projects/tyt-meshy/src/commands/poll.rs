@@ -73,7 +73,8 @@ impl Poll {
                 // Check once: report and stop when still in progress.
                 let task = get()?;
                 if !is_terminal(&task) {
-                    if let Some(line) = output.report_line(&head.task_id, &task.status, task.progress)
+                    if let Some(line) =
+                        output.report_line(&head.task_id, &task.status, task.progress)
                     {
                         dependencies.write_stdout(line.as_bytes())?;
                     }

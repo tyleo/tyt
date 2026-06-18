@@ -9,5 +9,9 @@ use viuer::print_from_file;
 /// protocol when supported, falling back to ANSI half-blocks otherwise.
 pub fn display_image_in_terminal(path: &Path) -> Result<()> {
     let cfg = base_config();
-    with_capability_probe_guard(|| print_from_file(path, &cfg).map(|_| ()).map_err(IOError::other))
+    with_capability_probe_guard(|| {
+        print_from_file(path, &cfg)
+            .map(|_| ())
+            .map_err(IOError::other)
+    })
 }

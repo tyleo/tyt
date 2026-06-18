@@ -1,12 +1,16 @@
 use crate::Result;
 use std::path::{Path, PathBuf};
-use vmax::VMaxScene;
+use vmax::{VMaxMaterial, VMaxScene, VMaxVoxel};
 
 /// Dependencies for this crate's operations.
 pub trait Dependencies {
     fn copy_dir(&self, src: &Path, dst: &Path) -> Result<()>;
     fn list_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
+    /// Decodes the RGBA cells of a `palette*.png` (one `[r, g, b, a]` per pixel).
+    fn load_palette(&self, png_bytes: &[u8]) -> Result<Vec<[u8; 4]>>;
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>>;
+    /// Decodes the material slots of a `palette*.settings.vmaxpsb` plist.
+    fn parse_materials(&self, vmaxpsb_bytes: &[u8]) -> Result<Vec<VMaxMaterial>>;
     /// Rewrites `data`/`pal` references according to the supplied `(old, new)`
     /// rename pairs and repoints each object's `hist` at `history{n}.vmaxhb`
     /// matching its renumbered `contents{n}` reference.
@@ -17,6 +21,8 @@ pub trait Dependencies {
         pal_renames: &[(&str, &str)],
     ) -> Result<Vec<u8>>;
     fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxScene>;
+    /// Decodes the voxels of a `contents*.vmaxb` payload (LZFSE-framed binary plist).
+    fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxVoxel>>;
     /// Returns each object's `(data, pal)` reference strings, read leniently
     /// from raw JSON so objects missing optional fields still parse.
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>>;

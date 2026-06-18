@@ -10,4 +10,6 @@ pub struct VMaxObject {
     pub position: [f64; 3],
     pub rotation: [f64; 4],
     pub scale: [f64; 3],
+    /// Center of the object's voxel bounds in model space (Voxel Max `e_c`).
+    pub center: [f64; 3],
 }
