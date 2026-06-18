@@ -1,4 +1,4 @@
-use crate::commands::{Hierarchy, Pack, RenameNode};
+use crate::commands::{Hierarchy, Pack, RenameNode, ToVoxelJson};
 use clap::Subcommand;
 
 /// Commands for working with Voxel Max.
@@ -11,6 +11,8 @@ pub enum TytVMax {
     Pack(Pack),
     #[command(name = "rename-node")]
     RenameNode(RenameNode),
+    #[command(name = "to-voxel-json")]
+    ToVoxelJson(ToVoxelJson),
 }
 
 impl TytVMax {
@@ -19,6 +21,7 @@ impl TytVMax {
             TytVMax::Hierarchy(hierarchy) => hierarchy.execute(dependencies),
             TytVMax::Pack(pack) => pack.execute(dependencies),
             TytVMax::RenameNode(rename_node) => rename_node.execute(dependencies),
+            TytVMax::ToVoxelJson(to_voxel_json) => to_voxel_json.execute(dependencies),
         }
     }
 }
