@@ -1,8 +1,10 @@
+mod from_voxj;
 mod hierarchy;
 mod pack;
 mod rename_node;
 mod to_voxj;
 
+pub use from_voxj::*;
 pub use hierarchy::*;
 pub use pack::*;
 pub use rename_node::*;
