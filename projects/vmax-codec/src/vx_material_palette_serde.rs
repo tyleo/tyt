@@ -1,9 +1,9 @@
 use crate::VXMaterialSerde;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use vmax::VMaxMaterialPalette;
 
 /// Material palette decoded from a `palette*.settings.vmaxpsb` plist.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VXMaterialPaletteSerde {
     #[serde(default)]
     pub name: String,

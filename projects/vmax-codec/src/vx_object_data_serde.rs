@@ -1,10 +1,10 @@
 use crate::{VXSnapshotSerde, decode_morton_3d};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use vmax::VMaxVoxel;
 
 /// Voxel object payload decoded from a `contents*.vmaxb` binary plist.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VXObjectDataSerde {
     #[serde(default)]
     pub snapshots: Vec<VXSnapshotSerde>,
