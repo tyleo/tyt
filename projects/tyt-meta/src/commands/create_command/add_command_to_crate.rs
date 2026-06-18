@@ -3,28 +3,50 @@ use crate::{
     commands::{CreateCommand, create_command},
 };
 
+/// Adds a command to an existing crate, nesting it under zero or more parent
+/// command groups.
+///
+/// `parents[0]` is the crate suffix (e.g. `voxj` for `tyt-voxj`); any remaining
+/// entries are parent command groups, created or extended as needed so the new
+/// command lands that many levels deep (e.g. `tyt voxj from vmax`).
 pub fn add_command_to_crate(
     cmd: &CreateCommand,
     deps: &impl Dependencies,
-    parent: &str,
+    parents: &[String],
 ) -> Result<()> {
     let command = &cmd.command;
     let name = &cmd.name;
     let description = &cmd.description;
     let command_snake = create_command::kebab_to_snake_case(command);
-    let parent_snake = create_command::kebab_to_snake_case(parent);
-    let root = deps.workspace_root()?;
-    let parent_dir = root.join(format!("projects/tyt-{parent}"));
 
-    if !parent_dir.exists() {
+    let (crate_suffix, groups) = parents
+        .split_first()
+        .ok_or_else(|| Error::Meta("at least one parent is required".to_string()))?;
+    let crate_snake = create_command::kebab_to_snake_case(crate_suffix);
+
+    let root = deps.workspace_root()?;
+    let crate_dir = root.join(format!("projects/tyt-{crate_suffix}"));
+    if !crate_dir.exists() {
         return Err(Error::Meta(format!(
             "parent crate not found: {}",
-            parent_dir.display()
+            crate_dir.display()
         )));
     }
 
-    // 1. Create command file
-    let cmd_file = parent_dir.join(format!("src/commands/{command_snake}.rs"));
+    let commands_dir = crate_dir.join("src/commands");
+    let mod_path = commands_dir.join("mod.rs");
+
+    // Walk the parent groups from the crate root inward, ensuring each exists, and
+    // track the enum the new command will be wired into (the crate root enum when
+    // there are no groups, otherwise the innermost group's subcommand enum).
+    let mut enum_path = crate_dir.join(format!("src/tyt_{crate_snake}.rs"));
+    for group in groups {
+        enum_path =
+            create_command::ensure_group(deps, &commands_dir, &mod_path, &enum_path, group)?;
+    }
+
+    // 1. Create the leaf command file.
+    let cmd_file = commands_dir.join(format!("{command_snake}.rs"));
     if cmd_file.exists() {
         return Err(Error::Meta(format!(
             "command file already exists: {}",
@@ -36,20 +58,13 @@ pub fn add_command_to_crate(
         &create_command::command_file_template(name, command, description),
     )?;
 
-    // 2. Update commands/mod.rs
-    let mod_path = parent_dir.join("src/commands/mod.rs");
-    let mod_contents = deps.read_to_string(&mod_path)?;
-    let new_mod = create_command::insert_command_mod(&mod_contents, &command_snake);
-    deps.write(&mod_path, &new_mod)?;
+    // 2. Register the module and wire the variant into the target enum.
+    create_command::register_command_mod(deps, &mod_path, &command_snake)?;
+    create_command::wire_enum_variant(deps, &enum_path, name, command)?;
 
-    // 3. Update tyt_{parent_snake}.rs
-    let enum_path = parent_dir.join(format!("src/tyt_{parent_snake}.rs"));
-    let enum_contents = deps.read_to_string(&enum_path)?;
-    let new_enum = create_command::insert_enum_variant(&enum_contents, name, command)?;
-    deps.write(&enum_path, &new_enum)?;
-
+    let path = parents.join(" ");
     deps.write_stdout(
-        format!("Added `{name}` command (`{command}`) to tyt-{parent}.\n").as_bytes(),
+        format!("Added `{name}` command. Run it with `tyt {path} {command}`.\n").as_bytes(),
     )?;
 
     Ok(())

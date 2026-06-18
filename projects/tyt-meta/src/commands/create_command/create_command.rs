@@ -6,7 +6,10 @@ use clap::Parser;
 /// Without `--parent`, creates a brand-new `tyt-{command}` sub-crate with all
 /// boilerplate and wires it into the workspace and top-level `tyt` binary.
 ///
-/// With `--parent`, adds a command to an existing sub-crate.
+/// With `--parent`, adds a command to an existing sub-crate. The first `--parent`
+/// is the crate suffix; repeat it to nest the command under parent command groups,
+/// which are created on demand (e.g. `--parent voxj --parent from` adds a command
+/// at `tyt voxj from <command>`).
 #[derive(Clone, Debug, Parser)]
 #[command(name = "create-command")]
 pub struct CreateCommand {
@@ -22,16 +25,17 @@ pub struct CreateCommand {
     #[arg(value_name = "description")]
     pub description: String,
 
-    /// Existing crate suffix to add the command to (e.g., `fbx` for `tyt-fbx`).
+    /// Parent command path, from crate suffix inward (e.g. `fbx` for `tyt-fbx`).
+    /// Repeat to nest under command groups (e.g. `-p voxj -p from`).
     #[arg(value_name = "parent", short, long)]
-    pub parent: Option<String>,
+    pub parent: Vec<String>,
 }
 
 impl CreateCommand {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        match &self.parent {
-            Some(parent) => create_command::add_command_to_crate(&self, &dependencies, parent),
-            None => create_command::create_crate(&self, &dependencies),
+        match self.parent.as_slice() {
+            [] => create_command::create_crate(&self, &dependencies),
+            parents => create_command::add_command_to_crate(&self, &dependencies, parents),
         }
     }
 }
