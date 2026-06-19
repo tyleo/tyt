@@ -219,6 +219,10 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::write_file(path, contents)?)
     }
 
+    fn write_vmax_package(&self, voxj_bytes: &[u8], output: &Path) -> Result<()> {
+        super::write_vmax_package::write_vmax_package(voxj_bytes, output)
+    }
+
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_stdout(contents)?)
     }

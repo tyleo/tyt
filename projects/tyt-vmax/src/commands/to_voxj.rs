@@ -1,4 +1,4 @@
-use crate::{Dependencies, Result};
+use crate::{Dependencies, Result, axis_angle_to_quat, quat_rotate};
 use clap::{Parser, ValueEnum};
 use std::{
     collections::HashMap,
@@ -516,33 +516,6 @@ fn object_transform(object: &VMaxObject, box_min: [f64; 3]) -> VoxjTransform {
         rotation,
         scale,
     }
-}
-
-/// Converts a Voxel Max axis-angle rotation `[x, y, z, angle]` to a unit
-/// quaternion `[x, y, z, w]`.
-fn axis_angle_to_quat(axis_angle: [f64; 4]) -> [f64; 4] {
-    let [ax, ay, az, angle] = axis_angle;
-    let length = (ax * ax + ay * ay + az * az).sqrt();
-    if length < 1e-12 || angle == 0.0 {
-        return [0.0, 0.0, 0.0, 1.0];
-    }
-    let half = angle / 2.0;
-    let s = half.sin() / length;
-    [ax * s, ay * s, az * s, half.cos()]
-}
-
-/// Rotates `v` by the unit quaternion `q = [x, y, z, w]`.
-fn quat_rotate(q: [f64; 4], v: [f64; 3]) -> [f64; 3] {
-    let [qx, qy, qz, qw] = q;
-    let [vx, vy, vz] = v;
-    let tx = 2.0 * (qy * vz - qz * vy);
-    let ty = 2.0 * (qz * vx - qx * vz);
-    let tz = 2.0 * (qx * vy - qy * vx);
-    [
-        vx + qw * tx + (qy * tz - qz * ty),
-        vy + qw * ty + (qz * tx - qx * tz),
-        vz + qw * tz + (qx * ty - qy * tx),
-    ]
 }
 
 /// Builds the voxj hierarchy: one node per group and one per object (the latter

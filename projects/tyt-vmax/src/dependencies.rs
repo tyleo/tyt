@@ -49,5 +49,8 @@ pub trait Dependencies {
         new_name: &str,
     ) -> Result<Vec<u8>>;
     fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
+    /// Reconstructs a `.vmax` package directory at `output` from `.voxj` /
+    /// `.voxjz` document bytes (the inverse of the `to-voxj` pipeline).
+    fn write_vmax_package(&self, voxj_bytes: &[u8], output: &Path) -> Result<()>;
     fn write_stdout(&self, contents: &[u8]) -> Result<()>;
 }
