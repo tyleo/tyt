@@ -1837,6 +1837,7 @@ version = "0.1.6"
 dependencies = [
  "serde",
  "serde_bytes",
+ "serde_json",
  "vmax",
 ]
 

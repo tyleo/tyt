@@ -10,7 +10,7 @@ use tyt_injection::{
     serialize_bplist, serialize_json_pretty, write_file,
 };
 use vmax::VMaxVoxel;
-use vmax_codec::{VXMaterialPaletteSerde, VXMaterialSerde, encode_object_data};
+use vmax_codec::{VXMaterialPaletteSerde, VXMaterialSerde, encode_object_data, encode_snapshots};
 use voxj::{AttrValue, VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette};
 use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes};
 
@@ -65,8 +65,18 @@ pub(crate) fn write_vmax_package(voxj_bytes: &[u8], output: &Path) -> Result<()>
             &ext_node,
         )?;
         let data = format!("contents{suffix}.vmaxb");
-        let payload =
-            lzfse_compress(&serialize_bplist(&encode_object_data(&voxels)).map_err(invalid)?);
+        // Restore the object's preserved editor state (tools/brush/cam, content
+        // uuid/version) around the rebuilt geometry; fall back to a minimal
+        // payload when the voxj document carries no Voxel Max object state.
+        let object_data = match voxel_max
+            .object_states
+            .get(object_index)
+            .and_then(|s| s.clone())
+        {
+            Some(state) => state.into_object_data(encode_snapshots(&voxels)),
+            None => encode_object_data(&voxels, &ext_node.id),
+        };
+        let payload = lzfse_compress(&serialize_bplist(&object_data).map_err(invalid)?);
         write_file(&output.join(&data), &payload)?;
 
         let pal = write_palette(
@@ -183,7 +193,8 @@ fn write_palette(
             .map(|palette| palette.name)
             .unwrap_or_default();
         let sidecar = output.join(format!("palette{stem}.settings.vmaxpsb"));
-        write_material_palette(&file.main.palettes[material_index], name, &sidecar)?;
+        let colors = palette_rgba(&file.main.palettes[color_index]);
+        write_material_palette(&file.main.palettes[material_index], name, colors, &sidecar)?;
     }
     palette_files.insert(color_index, pal.clone());
     Ok(pal)
@@ -191,22 +202,53 @@ fn write_palette(
 
 /// Writes a color palette's `rgba` cells as a `width × 1` RGBA PNG.
 fn write_color_palette(palette: &VoxjPalette, path: &Path) -> Result<()> {
-    let mut rgba = Vec::with_capacity(palette.data.len() * 4);
-    for cell in &palette.data {
-        rgba.extend_from_slice(&parse_rgba(cell));
-    }
+    let rgba = palette_rgba(palette);
     write_file(path, &encode_png_rgba(&rgba, palette.data.len() as u32, 1)?)?;
     Ok(())
 }
 
-/// Writes a material palette's slots and display name as a `.vmaxpsb` bplist.
-fn write_material_palette(palette: &VoxjPalette, name: String, path: &Path) -> Result<()> {
+/// Flattens a color palette's `rgba` cells into RGBA bytes.
+fn palette_rgba(palette: &VoxjPalette) -> Vec<u8> {
+    let mut rgba = Vec::with_capacity(palette.data.len() * 4);
+    for cell in &palette.data {
+        rgba.extend_from_slice(&parse_rgba(cell));
+    }
+    rgba
+}
+
+/// Writes a material palette as a `.vmaxpsb` bplist: the per-slot materials
+/// (with `mi`), the display name, the `colors` bytes, and the editor-state keys
+/// Voxel Max expects (mostly defaults, since voxj drops them).
+fn write_material_palette(
+    palette: &VoxjPalette,
+    name: String,
+    colors: Vec<u8>,
+    path: &Path,
+) -> Result<()> {
     let materials = palette
         .data
         .iter()
-        .map(|cell| parse_material(cell))
+        .enumerate()
+        .map(|(slot, cell)| {
+            let mut material = parse_material(cell);
+            material.mi = (slot + 1).to_string();
+            material
+        })
         .collect();
-    let psb = VXMaterialPaletteSerde { name, materials };
+    let psb = VXMaterialPaletteSerde {
+        name,
+        materials,
+        indices: Vec::new(),
+        lc: vec![0u8; 256],
+        colors,
+        palette_type: 0,
+        transparency: 1.0,
+        r: 0,
+        rt: "n".to_owned(),
+        cmt: "ng".to_owned(),
+        current: 0,
+        ali: "1".to_owned(),
+    };
     write_file(path, &serialize_bplist(&psb).map_err(invalid)?)?;
     Ok(())
 }
@@ -232,6 +274,7 @@ fn parse_material(cell: &[AttrValue]) -> VXMaterialSerde {
         _ => 0.0,
     };
     VXMaterialSerde {
+        mi: String::new(),
         mc: number(0),
         rc: number(1),
         sic: number(2),

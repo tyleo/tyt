@@ -170,11 +170,13 @@ impl ToVoxj {
         // Display name of each material palette, keyed by its `palettes` index.
         let mut palette_name_by_index: HashMap<usize, String> = HashMap::new();
 
-        // One geometry object and one wrapping-node transform per vmax object.
+        // One geometry object and one wrapping-node transform per vmax object,
+        // plus the object's raw `.vmaxb` bytes (for the `voxel-max` ext).
         let mut objects: Vec<VoxjObject> = Vec::new();
         let mut object_transforms: Vec<VoxjTransform> = Vec::new();
+        let mut object_vmaxb: Vec<Option<Vec<u8>>> = Vec::new();
         for object in &scene.objects {
-            let (voxj_object, transform) = self.build_object(
+            let (voxj_object, transform, vmaxb) = self.build_object(
                 &dependencies,
                 object,
                 encoding,
@@ -184,6 +186,7 @@ impl ToVoxj {
             )?;
             objects.push(voxj_object);
             object_transforms.push(transform);
+            object_vmaxb.push(vmaxb);
         }
 
         let (hierarchy_nodes, root_hierarchy_nodes) = build_hierarchy(&scene, &object_transforms);
@@ -206,7 +209,7 @@ impl ToVoxj {
         // Stash the vmax-specific state that has no native voxj home under the
         // generic `ext` namespace so `from-voxj` can rebuild the package exactly.
         // The voxj codec treats `ext` as opaque; the `voxel-max` shape lives here.
-        let ext = dependencies.voxel_max_ext(&scene_bytes, &palette_names)?;
+        let ext = dependencies.voxel_max_ext(&scene_bytes, &palette_names, &object_vmaxb)?;
         let encoder = VoxjEncoder::new(&file).ext(&ext);
         let bytes = match self.format {
             Format::Json => encoder.json(),
@@ -229,12 +232,13 @@ impl ToVoxj {
         palettes: &mut Vec<VoxjPalette>,
         palette_index: &mut HashMap<String, usize>,
         palette_name_by_index: &mut HashMap<usize, String>,
-    ) -> Result<(VoxjObject, VoxjTransform)> {
-        let voxels = if object.data.is_empty() {
-            Vec::new()
+    ) -> Result<(VoxjObject, VoxjTransform, Option<Vec<u8>>)> {
+        let (voxels, vmaxb) = if object.data.is_empty() {
+            (Vec::new(), None)
         } else {
             let data_bytes = dependencies.read_file(&self.input_vmax.join(&object.data))?;
-            dependencies.parse_voxels(&data_bytes)?
+            let voxels = dependencies.parse_voxels(&data_bytes)?;
+            (voxels, Some(data_bytes))
         };
 
         // Always use the authored box (`e_c + e_mi` .. `e_c + e_ma`) when the
@@ -257,7 +261,7 @@ impl ToVoxj {
                 },
                 encoding,
             );
-            return Ok((empty, object_transform(object, box_min_f)));
+            return Ok((empty, object_transform(object, box_min_f), vmaxb));
         }
 
         let positions: Vec<[u32; 3]> = voxels
@@ -310,7 +314,7 @@ impl ToVoxj {
             },
             encoding,
         );
-        Ok((voxj_object, object_transform(object, box_min_f)))
+        Ok((voxj_object, object_transform(object, box_min_f), vmaxb))
     }
 
     /// Returns the shared color palette `(index, cell count)` for `object.palette`.

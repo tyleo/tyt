@@ -9,4 +9,5 @@ description = "Parses Voxel Max binary payloads (.vmaxb / .vmaxpsb) into vmax ty
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_bytes = "0.11"
+serde_json = { version = "1", features = ["preserve_order"] }
 vmax = { version = "0.1.0" }

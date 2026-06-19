@@ -2,8 +2,11 @@ use serde::{Deserialize, Serialize};
 use vmax::VMaxMaterial;
 
 /// A single material slot decoded from a `palette*.settings.vmaxpsb` plist.
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VXMaterialSerde {
+    /// Material slot index as a string `"1"`..`"8"` (written only).
+    #[serde(skip_deserializing)]
+    pub mi: String,
     /// Metalness coefficient.
     #[serde(default)]
     pub mc: f64,

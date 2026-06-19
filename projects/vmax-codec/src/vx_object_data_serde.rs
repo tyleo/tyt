@@ -1,13 +1,33 @@
-use crate::{VXSnapshotSerde, decode_morton_3d};
+use crate::{VXBrushSerde, VXCameraSerde, VXSnapshotSerde, VXToolsSerde, decode_morton_3d};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use vmax::VMaxVoxel;
 
-/// Voxel object payload decoded from a `contents*.vmaxb` binary plist.
+/// Voxel object payload decoded from a `contents*.vmaxb` binary plist. Beyond the
+/// voxel `snapshots`, the top level carries the editor state Voxel Max requires to
+/// open and import the object (the content `uuid`/version and `tools`/`brush`/`cam`);
+/// these are read and written so `from-voxj` can restore them via
+/// [`VXObjectStateSerde`](crate::VXObjectStateSerde).
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VXObjectDataSerde {
+    /// Per-chunk voxel snapshots — the baked geometry edit log.
     #[serde(default)]
     pub snapshots: Vec<VXSnapshotSerde>,
+    /// Object content UUID (`uuid`).
+    #[serde(default)]
+    pub uuid: String,
+    /// Codable version (`v`).
+    #[serde(default)]
+    pub v: i64,
+    /// Tool state (`tools`); preserved for Voxel Max, absent from the voxj geometry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<VXToolsSerde>,
+    /// Brush palette (`brush`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brush: Option<VXBrushSerde>,
+    /// Per-object camera (`cam`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cam: Option<VXCameraSerde>,
 }
 
 /// Voxel pitch of a chunk along each axis; chunks tile an 8×8×8 grid into a

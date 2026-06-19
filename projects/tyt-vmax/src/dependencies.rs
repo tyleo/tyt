@@ -32,11 +32,16 @@ pub trait Dependencies {
     /// `main.ext`. Captures the Voxel Max scene/node state that has no native
     /// voxj home; unmodeled keys are preserved verbatim. `palette_names[i]` is
     /// the display name of `main.palettes[i]` when that palette is a material
-    /// palette, aligned by index (`None` for color palettes).
+    /// palette, aligned by index (`None` for color palettes). `object_vmaxb[i]`
+    /// is the raw `contents*.vmaxb` bytes for `main.objects[i]` (`None` when the
+    /// object had none); their editor state (`tools`/`brush`/`cam`,
+    /// `uuid`/version) is captured so `from-voxj` can rebuild an importable
+    /// package.
     fn voxel_max_ext(
         &self,
         scene_bytes: &[u8],
         palette_names: &[Option<String>],
+        object_vmaxb: &[Option<Vec<u8>>],
     ) -> Result<Vec<u8>>;
     fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
     fn remove_file(&self, path: &Path) -> Result<()>;

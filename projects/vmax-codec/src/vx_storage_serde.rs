@@ -11,4 +11,10 @@ pub struct VXStorageSerde {
     pub ds: Vec<u8>,
     #[serde(default)]
     pub st: VXStatsSerde,
+    /// Layer-color usage mask, written only (256 bytes).
+    #[serde(skip_deserializing, serialize_with = "serde_bytes::serialize")]
+    pub lc: Vec<u8>,
+    /// Deleted layer-color usage mask, written only (256 bytes).
+    #[serde(skip_deserializing, serialize_with = "serde_bytes::serialize")]
+    pub dlc: Vec<u8>,
 }
