@@ -5,12 +5,12 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
 };
-use vmax::{VMaxObject, VMaxScene, VMaxVoxel};
+use vmax::{VMaxObject, VMaxScene};
+use vmax_codec::VMaxVoxel;
 use voxj::{
-    AttrValue, PositionEncoding, SampleEncoding, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
-    VoxjPalette, VoxjTransform,
+    VoxjAttrValue, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjTransform,
 };
-use voxj_codec::{VoxelData, VoxjEncoder};
+use voxj_codec::{PositionEncoding, SampleEncoding, VoxelData, VoxjEncoder};
 
 /// Number of cells in a color palette; a `palette*.png` is 256×1 RGBA, and a
 /// placeholder palette covers every possible color index.
@@ -336,17 +336,19 @@ impl ToVoxj {
         if let Some(&index) = palette_index.get(&object.palette) {
             return Ok(Some((index, palettes[index].data.len())));
         }
-        let data: Vec<Vec<AttrValue>> =
+        let data: Vec<Vec<VoxjAttrValue>> =
             match dependencies.read_file(&self.input_vmax.join(&object.palette)) {
                 Ok(png_bytes) => dependencies
                     .load_palette(&png_bytes)?
                     .iter()
                     .map(|&[r, g, b, a]| {
-                        vec![AttrValue::Text(format!("#{r:02X}{g:02X}{b:02X}{a:02X}"))]
+                        vec![VoxjAttrValue::Text(format!(
+                            "#{r:02X}{g:02X}{b:02X}{a:02X}"
+                        ))]
                     })
                     .collect(),
                 Err(_) => (0..COLOR_CELLS)
-                    .map(|_| vec![AttrValue::Text(PLACEHOLDER_COLOR.to_owned())])
+                    .map(|_| vec![VoxjAttrValue::Text(PLACEHOLDER_COLOR.to_owned())])
                     .collect(),
             };
         let cell_count = data.len();
@@ -391,10 +393,10 @@ impl ToVoxj {
             .iter()
             .map(|m| {
                 vec![
-                    AttrValue::Number(m.metalness),
-                    AttrValue::Number(m.roughness),
-                    AttrValue::Number(m.emission),
-                    AttrValue::Bool(m.enable_shadows),
+                    VoxjAttrValue::Number(m.metalness),
+                    VoxjAttrValue::Number(m.roughness),
+                    VoxjAttrValue::Number(m.emission),
+                    VoxjAttrValue::Bool(m.enable_shadows),
                 ]
             })
             .collect();

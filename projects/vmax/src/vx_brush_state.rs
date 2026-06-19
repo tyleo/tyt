@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// files, so both are optional.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
-pub struct VXBrushStateSerde {
+pub struct VXBrushState {
     /// Color mode (`cm`).
     pub cm: String,
     /// Color position (`cp`).

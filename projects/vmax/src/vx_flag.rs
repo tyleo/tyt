@@ -6,7 +6,7 @@ use serde_json::Value;
 /// [`Value`] so the one struct round-trips either kind without coercion.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
-pub struct VXFlagSerde {
+pub struct VXFlag {
     /// The flag value (`x`), a boolean or integer depending on the flag.
     pub x: Value,
 }

@@ -1,4 +1,4 @@
-use crate::VXModeSerde;
+use crate::VXMode;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -8,4 +8,4 @@ use std::collections::BTreeMap;
 /// without enumerating Voxel Max's cryptic, version-varying key names.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
-pub struct VXToolModeSerde(pub BTreeMap<String, VXModeSerde>);
+pub struct VXToolMode(pub BTreeMap<String, VXMode>);

@@ -1,9 +1,6 @@
-use crate::{
-    VXSnapshotIdSerde, VXSnapshotSerde, VXStatsSerde, VXStorageSerde, decode_morton_3d,
-    encode_morton_3d,
-};
+use crate::{VMaxVoxel, decode_morton_3d, encode_morton_3d};
 use std::collections::BTreeMap;
-use vmax::VMaxVoxel;
+use vmax::{VXSnapshot, VXSnapshotId, VXStats, VXStorage};
 
 /// Voxel pitch of a chunk along each axis; chunks tile an 8×8×8 grid into a
 /// 256³ model.
@@ -13,12 +10,12 @@ const CHUNK_PITCH: i32 = 32;
 const CHECKPOINT: i64 = 4;
 
 /// Encodes voxels into a `VXObjectData`'s `snapshots` array — the inverse of
-/// [`VXObjectDataSerde::voxels`](crate::VXObjectDataSerde::voxels). Groups voxels
+/// [`decode_snapshots`](crate::decode_snapshots). Groups voxels
 /// into the 32-pitch 8×8×8 chunk grid, lays each chunk's voxels out by in-chunk
 /// Morton code into a dense 2-bytes-per-slot `(material, color)` stream (gaps left
 /// as `color == 0` empty), and emits one checkpoint snapshot per occupied chunk
 /// with the per-chunk statistics Voxel Max expects.
-pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshotSerde> {
+pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshot> {
     let mut chunks: BTreeMap<u32, BTreeMap<u32, (u8, u8)>> = BTreeMap::new();
     for voxel in voxels {
         let grid = [
@@ -75,15 +72,15 @@ pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshotSerde> {
                 max_morton as i64,
             ];
             let extent = (0..3).map(|a| (high[a] - low[a] + 1) as i64).collect();
-            VXSnapshotSerde {
-                s: VXStorageSerde {
-                    id: VXSnapshotIdSerde {
+            VXSnapshot {
+                s: VXStorage {
+                    id: VXSnapshotId {
                         c: chunk_id,
                         s: 0,
                         t: CHECKPOINT,
                     },
                     ds,
-                    st: VXStatsSerde {
+                    st: VXStats {
                         min: min.clone(),
                         max: max.clone(),
                         extent,

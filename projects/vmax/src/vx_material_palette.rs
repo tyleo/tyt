@@ -1,16 +1,15 @@
-use crate::VXMaterialSerde;
+use crate::VXMaterial;
 use serde::{Deserialize, Serialize};
-use vmax::VMaxMaterialPalette;
 
 /// Material palette decoded from a `palette*.settings.vmaxpsb` plist. Decode
 /// reads only `name` + `materials`; the remaining fields are written so Voxel
 /// Max accepts a rebuilt palette.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct VXMaterialPaletteSerde {
+pub struct VXMaterialPalette {
     #[serde(default)]
     pub name: String,
     #[serde(default)]
-    pub materials: Vec<VXMaterialSerde>,
+    pub materials: Vec<VXMaterial>,
     // Written for Voxel Max but never read back (voxj drops them).
     #[serde(skip_deserializing)]
     pub indices: Vec<i64>,
@@ -32,14 +31,4 @@ pub struct VXMaterialPaletteSerde {
     pub current: i64,
     #[serde(skip_deserializing)]
     pub ali: String,
-}
-
-impl VXMaterialPaletteSerde {
-    /// Returns the decoded palette as a core [`VMaxMaterialPalette`].
-    pub fn palette(&self) -> VMaxMaterialPalette {
-        VMaxMaterialPalette {
-            name: self.name.clone(),
-            materials: self.materials.iter().cloned().map(Into::into).collect(),
-        }
-    }
 }

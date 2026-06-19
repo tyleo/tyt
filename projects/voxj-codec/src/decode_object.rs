@@ -1,7 +1,7 @@
-use crate::{VoxelData, hilbert_bits, hilbert_decode, packed_width, unpack_bits, varint_decode};
+use crate::{VoxelData, decode_hilbert, decode_varint, hilbert_bits, packed_width, unpack_bits};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use std::io;
-use voxj::{PositionBlock, SampleBlock, VoxjObject};
+use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
 /// Decodes one [`VoxjObject`] back into [`VoxelData`], the inverse of
 /// [`encode_object`](crate::encode_object). `cell_counts[p]` is the cell count
@@ -31,10 +31,10 @@ fn invalid(error: base64::DecodeError) -> io::Error {
 }
 
 /// Decodes the position block into `[x, y, z]` positions.
-fn decode_positions(block: &PositionBlock, bounds: [u32; 3]) -> io::Result<Vec<[u32; 3]>> {
+fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> io::Result<Vec<[u32; 3]>> {
     Ok(match block {
-        PositionBlock::RawJson(positions) => positions.clone(),
-        PositionBlock::BitmapBase64(base64) => {
+        VoxjPositionBlock::RawJson(positions) => positions.clone(),
+        VoxjPositionBlock::BitmapBase64(base64) => {
             let cells = bounds[0] as usize * bounds[1] as usize * bounds[2] as usize;
             let occupancy = unpack_bits(&BASE64.decode(base64).map_err(invalid)?, 1, cells);
             occupancy
@@ -44,14 +44,14 @@ fn decode_positions(block: &PositionBlock, bounds: [u32; 3]) -> io::Result<Vec<[
                 .map(|(cell, _)| cell_to_position(cell as u64, bounds))
                 .collect()
         }
-        PositionBlock::HilbertIndexDeltaVarintBase64(base64) => {
+        VoxjPositionBlock::HilbertIndexDeltaVarintBase64(base64) => {
             let bits = hilbert_bits(bounds);
             let mut index = 0u64;
-            varint_decode(&BASE64.decode(base64).map_err(invalid)?)
+            decode_varint(&BASE64.decode(base64).map_err(invalid)?)
                 .iter()
                 .map(|&delta| {
                     index += delta;
-                    hilbert_decode(index, bits)
+                    decode_hilbert(index, bits)
                 })
                 .collect()
         }
@@ -61,18 +61,18 @@ fn decode_positions(block: &PositionBlock, bounds: [u32; 3]) -> io::Result<Vec<[
 /// Decodes the sample block into one channel (`Vec<u32>` of length `n`) per
 /// referenced palette, in the position block's voxel order.
 fn decode_samples(
-    block: &SampleBlock,
+    block: &VoxjSampleBlock,
     cell_counts: &[usize],
     n: usize,
 ) -> io::Result<Vec<Vec<u32>>> {
     Ok(match block {
-        SampleBlock::RawJson(rows) => (0..cell_counts.len())
+        VoxjSampleBlock::RawJson(rows) => (0..cell_counts.len())
             .map(|p| rows.iter().map(|row| row[p]).collect())
             .collect(),
-        SampleBlock::RleJson(channels) => {
+        VoxjSampleBlock::RleJson(channels) => {
             channels.iter().map(|channel| rle_decode(channel)).collect()
         }
-        SampleBlock::PackedBase64(channels) => channels
+        VoxjSampleBlock::PackedBase64(channels) => channels
             .iter()
             .enumerate()
             .map(|(p, base64)| {
@@ -109,9 +109,8 @@ fn rle_decode(rle: &[u32]) -> Vec<u32> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VoxelData, decode_object, encode_object};
+    use crate::{PositionEncoding, SampleEncoding, VoxelData, decode_object, encode_object};
     use std::collections::BTreeSet;
-    use voxj::{PositionEncoding, SampleEncoding};
 
     const POSITIONS: [PositionEncoding; 3] = [
         PositionEncoding::RawJson,

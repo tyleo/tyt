@@ -5,8 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use tyt_injection::serde_json::{self, Map, Value};
-use vmax::{VMaxMaterialPalette, VMaxScene, VMaxVoxel};
-use vmax_codec::{VXMaterialPaletteSerde, VXObjectDataSerde, VXObjectStateSerde};
+use vmax::{VMaxScene, VXMaterialPalette, VXObjectData, VXObjectState};
+use vmax_codec::{VMaxMaterialPalette, VMaxVoxel, decode_material_palette, decode_snapshots};
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
 /// reference. Voxel Max refuses to open a scene whose objects have an empty
@@ -67,8 +67,8 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn parse_material_palette(&self, vmaxpsb_bytes: &[u8]) -> Result<VMaxMaterialPalette> {
-        let palette: VXMaterialPaletteSerde = tyt_injection::parse_bplist(vmaxpsb_bytes)?;
-        Ok(palette.palette())
+        let palette: VXMaterialPalette = tyt_injection::parse_bplist(vmaxpsb_bytes)?;
+        Ok(decode_material_palette(&palette))
     }
 
     fn pack_scene_json(
@@ -98,9 +98,9 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxVoxel>> {
-        let decompressed = tyt_injection::lzfse_decompress(vmaxb_bytes);
-        let data: VXObjectDataSerde = tyt_injection::parse_bplist(&decompressed)?;
-        Ok(data.voxels())
+        let decompressed = tyt_injection::decompress_lzfse(vmaxb_bytes);
+        let data: VXObjectData = tyt_injection::parse_bplist(&decompressed)?;
+        Ok(decode_snapshots(&data.snapshots))
     }
 
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>> {
@@ -165,9 +165,9 @@ impl Dependencies for DependenciesImpl {
             .iter()
             .map(|vmaxb| match vmaxb {
                 Some(bytes) => {
-                    let decompressed = tyt_injection::lzfse_decompress(bytes);
-                    let data: VXObjectDataSerde = tyt_injection::parse_bplist(&decompressed)?;
-                    Ok(Some(VXObjectStateSerde::from_object_data(&data)))
+                    let decompressed = tyt_injection::decompress_lzfse(bytes);
+                    let data: VXObjectData = tyt_injection::parse_bplist(&decompressed)?;
+                    Ok(Some(VXObjectState::from_object_data(&data)))
                 }
                 None => Ok(None),
             })

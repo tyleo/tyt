@@ -1,9 +1,8 @@
 use serde::{Deserialize, Serialize};
-use vmax::VMaxMaterial;
 
 /// A single material slot decoded from a `palette*.settings.vmaxpsb` plist.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct VXMaterialSerde {
+pub struct VXMaterial {
     /// Material slot index as a string `"1"`..`"8"` (written only).
     #[serde(skip_deserializing)]
     pub mi: String,
@@ -19,15 +18,4 @@ pub struct VXMaterialSerde {
     /// Whether the material casts shadows.
     #[serde(default)]
     pub sh: bool,
-}
-
-impl From<VXMaterialSerde> for VMaxMaterial {
-    fn from(v: VXMaterialSerde) -> Self {
-        Self {
-            metalness: v.mc,
-            roughness: v.rc,
-            emission: v.sic,
-            enable_shadows: v.sh,
-        }
-    }
 }

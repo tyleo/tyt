@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Identifier of a voxel snapshot inside a `VXObjectData` (`s.id`).
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct VXSnapshotIdSerde {
+pub struct VXSnapshotId {
     /// Chunk id (0–511); Morton-decodes to the 8×8×8 chunk-grid coordinate.
     pub c: u32,
     /// Session id (written only).

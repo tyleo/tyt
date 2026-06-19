@@ -1,6 +1,6 @@
 /// Encodes a position to its 3D Hilbert-curve index (Skilling's transform),
 /// `bits` bits per axis. `bits` must be `<= 17` so the index stays exact.
-pub fn hilbert_encode(x: u32, y: u32, z: u32, bits: u32) -> u64 {
+pub fn encode_hilbert(x: u32, y: u32, z: u32, bits: u32) -> u64 {
     let mut axes = [x, y, z];
     let top_bit = 1u32 << (bits - 1);
 
@@ -46,15 +46,15 @@ pub fn hilbert_encode(x: u32, y: u32, z: u32, bits: u32) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::hilbert_encode;
+    use crate::encode_hilbert;
 
     #[test]
     fn matches_spec_example() {
         // 2 x 2 x 1 square, bits = 1; encode order from the format spec.
-        assert_eq!(hilbert_encode(0, 0, 0, 1), 0);
-        assert_eq!(hilbert_encode(0, 1, 0, 1), 3);
-        assert_eq!(hilbert_encode(1, 1, 0, 1), 4);
-        assert_eq!(hilbert_encode(1, 0, 0, 1), 7);
+        assert_eq!(encode_hilbert(0, 0, 0, 1), 0);
+        assert_eq!(encode_hilbert(0, 1, 0, 1), 3);
+        assert_eq!(encode_hilbert(1, 1, 0, 1), 4);
+        assert_eq!(encode_hilbert(1, 0, 0, 1), 7);
     }
 
     #[test]
@@ -64,7 +64,7 @@ mod tests {
         for x in 0..16 {
             for y in 0..16 {
                 for z in 0..16 {
-                    assert!(seen.insert(hilbert_encode(x, y, z, bits)));
+                    assert!(seen.insert(encode_hilbert(x, y, z, bits)));
                 }
             }
         }

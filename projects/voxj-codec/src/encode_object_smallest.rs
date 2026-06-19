@@ -1,7 +1,7 @@
-use crate::{VoxelData, encode_object, hilbert_bits};
+use crate::{PositionEncoding, SampleEncoding, VoxelData, encode_object, hilbert_bits};
 use flate2::{Compression, write::DeflateEncoder};
 use std::io::Write;
-use voxj::{PositionEncoding, SampleEncoding, VoxjObject};
+use voxj::VoxjObject;
 
 /// Skip the dense bitmap candidate above this many cells to bound memory.
 const MAX_BITMAP_CELLS: u64 = 8_000_000;
@@ -75,7 +75,7 @@ fn deflated_len(object: &VoxjObject) -> usize {
 #[cfg(test)]
 mod tests {
     use crate::{VoxelData, encode_object_smallest};
-    use voxj::SampleBlock;
+    use voxj::VoxjSampleBlock;
 
     /// An object with voxels but zero palettes still emits sample channels whose
     /// arity matches the position block (rle/packed carry zero channels).
@@ -92,9 +92,9 @@ mod tests {
             },
         );
         match &object.voxel_samples {
-            SampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
-            SampleBlock::RleJson(channels) => assert!(channels.is_empty()),
-            SampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
+            VoxjSampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
+            VoxjSampleBlock::RleJson(channels) => assert!(channels.is_empty()),
+            VoxjSampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
         }
     }
 }

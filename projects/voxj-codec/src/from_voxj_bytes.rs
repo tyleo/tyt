@@ -22,7 +22,7 @@ mod tests {
     use crate::{VoxjEncoder, from_voxj_bytes, from_voxj_or_voxjz_bytes, from_voxjz_bytes};
     use serde_json::json;
     use voxj::{
-        PositionBlock, SampleBlock, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
+        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPositionBlock, VoxjSampleBlock,
         VoxjTransform,
     };
 
@@ -34,8 +34,8 @@ mod tests {
                     name: "o".to_owned(),
                     palette_refs: vec![0],
                     bounds: [2, 1, 1],
-                    voxel_positions: PositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
-                    voxel_samples: SampleBlock::RawJson(vec![vec![1], vec![2]]),
+                    voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
+                    voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![2]]),
                 }],
                 palettes: Vec::new(),
                 hierarchy_nodes: vec![VoxjHierarchyNode {

@@ -1,6 +1,7 @@
 use crate::Result;
 use std::path::{Path, PathBuf};
-use vmax::{VMaxMaterialPalette, VMaxScene, VMaxVoxel};
+use vmax::VMaxScene;
+use vmax_codec::{VMaxMaterialPalette, VMaxVoxel};
 
 /// Dependencies for this crate's operations.
 pub trait Dependencies {

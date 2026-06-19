@@ -5,13 +5,13 @@ use std::{
     path::Path,
 };
 use tyt_injection::{
-    encode_png_rgba, lzfse_compress,
+    compress_lzfse, encode_png_rgba,
     serde_json::{self, Value},
     serialize_bplist, serialize_json_pretty, write_file,
 };
-use vmax::VMaxVoxel;
-use vmax_codec::{VXMaterialPaletteSerde, VXMaterialSerde, encode_object_data, encode_snapshots};
-use voxj::{AttrValue, VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette};
+use vmax::{VXMaterial, VXMaterialPalette};
+use vmax_codec::{VMaxVoxel, encode_object_data, encode_snapshots};
+use voxj::{VoxjAttrValue, VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette};
 use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes};
 
 /// Reconstructs a `.vmax` package directory at `output` from `.voxj`/`.voxjz`
@@ -76,7 +76,7 @@ pub(crate) fn write_vmax_package(voxj_bytes: &[u8], output: &Path) -> Result<()>
             Some(state) => state.into_object_data(encode_snapshots(&voxels)),
             None => encode_object_data(&voxels, &ext_node.id),
         };
-        let payload = lzfse_compress(&serialize_bplist(&object_data).map_err(invalid)?);
+        let payload = compress_lzfse(&serialize_bplist(&object_data).map_err(invalid)?);
         write_file(&output.join(&data), &payload)?;
 
         let pal = write_palette(
@@ -235,7 +235,7 @@ fn write_material_palette(
             material
         })
         .collect();
-    let psb = VXMaterialPaletteSerde {
+    let psb = VXMaterialPalette {
         name,
         materials,
         indices: Vec::new(),
@@ -254,8 +254,8 @@ fn write_material_palette(
 }
 
 /// Parses a `#RRGGBBAA` color cell into RGBA bytes.
-fn parse_rgba(cell: &[AttrValue]) -> [u8; 4] {
-    let Some(AttrValue::Text(hex)) = cell.first() else {
+fn parse_rgba(cell: &[VoxjAttrValue]) -> [u8; 4] {
+    let Some(VoxjAttrValue::Text(hex)) = cell.first() else {
         return [0, 0, 0, 0];
     };
     let hex = hex.strip_prefix('#').unwrap_or(hex);
@@ -268,17 +268,17 @@ fn parse_rgba(cell: &[AttrValue]) -> [u8; 4] {
 }
 
 /// Parses a `[metallic, roughness, emissive, shadows]` material cell.
-fn parse_material(cell: &[AttrValue]) -> VXMaterialSerde {
+fn parse_material(cell: &[VoxjAttrValue]) -> VXMaterial {
     let number = |i: usize| match cell.get(i) {
-        Some(AttrValue::Number(n)) => *n,
+        Some(VoxjAttrValue::Number(n)) => *n,
         _ => 0.0,
     };
-    VXMaterialSerde {
+    VXMaterial {
         mi: String::new(),
         mc: number(0),
         rc: number(1),
         sic: number(2),
-        sh: matches!(cell.get(3), Some(AttrValue::Bool(true))),
+        sh: matches!(cell.get(3), Some(VoxjAttrValue::Bool(true))),
     }
 }
 

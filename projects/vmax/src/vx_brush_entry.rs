@@ -1,4 +1,4 @@
-use crate::VXBrushColorSerde;
+use crate::VXBrushColor;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -8,4 +8,4 @@ use std::collections::BTreeMap;
 /// round-trips without enumerating Voxel Max's key names.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(transparent)]
-pub struct VXBrushEntrySerde(pub BTreeMap<String, VXBrushColorSerde>);
+pub struct VXBrushEntry(pub BTreeMap<String, VXBrushColor>);

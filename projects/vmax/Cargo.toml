@@ -4,10 +4,12 @@ version = "0.1.6"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "Core types for Voxel Max scenes."
+description = "Core data types for Voxel Max scenes and .vmaxb/.vmaxpsb payloads."
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
+serde_bytes = { version = "0.11", optional = true }
+serde_json = { version = "1", features = ["preserve_order"], optional = true }
 
 [features]
-serde = ["dep:serde"]
+serde = ["dep:serde", "dep:serde_bytes", "dep:serde_json"]

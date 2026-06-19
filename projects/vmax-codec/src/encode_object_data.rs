@@ -1,14 +1,14 @@
-use crate::{VXObjectDataSerde, encode_snapshots};
-use vmax::VMaxVoxel;
+use crate::{VMaxVoxel, encode_snapshots};
+use vmax::VXObjectData;
 
 /// Encodes voxels into a minimal `VXObjectData` payload — voxel `snapshots` (via
 /// [`encode_snapshots`]) plus the content `uuid` and current version, with no
 /// editor state. Used as the fallback when no preserved
-/// [`VXObjectStateSerde`](crate::VXObjectStateSerde) is available (e.g. a voxj
+/// [`VXObjectState`](vmax::VXObjectState) is available (e.g. a voxj
 /// document authored outside Voxel Max); a round-tripped document instead rebuilds
 /// the payload from its preserved state.
-pub fn encode_object_data(voxels: &[VMaxVoxel], uuid: &str) -> VXObjectDataSerde {
-    VXObjectDataSerde {
+pub fn encode_object_data(voxels: &[VMaxVoxel], uuid: &str) -> VXObjectData {
+    VXObjectData {
         snapshots: encode_snapshots(voxels),
         uuid: uuid.to_owned(),
         v: 4,
@@ -18,8 +18,7 @@ pub fn encode_object_data(voxels: &[VMaxVoxel], uuid: &str) -> VXObjectDataSerde
 
 #[cfg(test)]
 mod tests {
-    use crate::encode_object_data;
-    use vmax::VMaxVoxel;
+    use crate::{VMaxVoxel, decode_snapshots, encode_object_data};
 
     fn voxel(x: i32, y: i32, z: i32, material: u8, color: u8) -> VMaxVoxel {
         VMaxVoxel {
@@ -41,7 +40,7 @@ mod tests {
             voxel(5, 5, 5, 7, 1),
             voxel(255, 255, 255, 3, 9),
         ];
-        let decoded = encode_object_data(&voxels, "uuid").voxels();
+        let decoded = decode_snapshots(&encode_object_data(&voxels, "uuid").snapshots);
         voxels.sort_by_key(|v| (v.x, v.y, v.z));
         assert_eq!(decoded, voxels);
     }

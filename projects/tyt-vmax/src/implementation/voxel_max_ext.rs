@@ -1,6 +1,6 @@
 use crate::{VoxelMaxNode, VoxelMaxPalette, VoxelMaxScene};
 use serde::{Deserialize, Serialize};
-use vmax_codec::VXObjectStateSerde;
+use vmax::VXObjectState;
 
 /// The `voxel-max` payload stored under the voxj document's generic `main.ext`
 /// namespace. Holds the Voxel Max state with no native voxj representation so
@@ -26,5 +26,5 @@ pub struct VoxelMaxExt {
         default,
         skip_serializing_if = "Vec::is_empty"
     )]
-    pub object_states: Vec<Option<VXObjectStateSerde>>,
+    pub object_states: Vec<Option<VXObjectState>>,
 }

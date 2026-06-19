@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// the object.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
-pub struct VXCameraSerde {
+pub struct VXCamera {
     /// Camera width angle (`wa`).
     pub wa: f64,
     /// Camera height angle (`ha`).

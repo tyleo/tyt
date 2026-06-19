@@ -1,4 +1,4 @@
-use crate::{PositionBlock, SampleBlock};
+use crate::{VoxjPositionBlock, VoxjSampleBlock};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -12,6 +12,6 @@ pub struct VoxjObject {
     pub palette_refs: Vec<usize>,
     /// `[X, Y, Z]` size in voxels; every voxel lies in `[0, X) x [0, Y) x [0, Z)`.
     pub bounds: [u32; 3],
-    pub voxel_positions: PositionBlock,
-    pub voxel_samples: SampleBlock,
+    pub voxel_positions: VoxjPositionBlock,
+    pub voxel_samples: VoxjSampleBlock,
 }

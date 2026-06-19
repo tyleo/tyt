@@ -1,5 +1,5 @@
 /// Encodes unsigned integers as an unsigned-LEB128 varint byte stream.
-pub fn varint_encode(values: &[u64]) -> Vec<u8> {
+pub fn encode_varint(values: &[u64]) -> Vec<u8> {
     let mut out = Vec::new();
     for &value in values {
         let mut v = value;
@@ -14,11 +14,11 @@ pub fn varint_encode(values: &[u64]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::varint_encode;
+    use crate::encode_varint;
 
     #[test]
     fn matches_spec_example() {
         // Deltas [0, 3, 1, 3] from the format spec's Hilbert example.
-        assert_eq!(varint_encode(&[0, 3, 1, 3]), vec![0x00, 0x03, 0x01, 0x03]);
+        assert_eq!(encode_varint(&[0, 3, 1, 3]), vec![0x00, 0x03, 0x01, 0x03]);
     }
 }

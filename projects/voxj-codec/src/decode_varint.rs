@@ -1,5 +1,5 @@
 /// Decodes an unsigned-LEB128 varint byte stream back into integers.
-pub fn varint_decode(bytes: &[u8]) -> Vec<u64> {
+pub fn decode_varint(bytes: &[u8]) -> Vec<u64> {
     let mut out = Vec::new();
     let mut i = 0;
     while i < bytes.len() {
@@ -21,11 +21,11 @@ pub fn varint_decode(bytes: &[u8]) -> Vec<u64> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{varint_decode, varint_encode};
+    use crate::{decode_varint, encode_varint};
 
     #[test]
     fn round_trips_multibyte() {
         let values = [0, 1, 127, 128, 300, 16384, 1_000_000, u32::MAX as u64];
-        assert_eq!(varint_decode(&varint_encode(&values)), values);
+        assert_eq!(decode_varint(&encode_varint(&values)), values);
     }
 }

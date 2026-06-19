@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 /// Per-snapshot statistics (`s.st`). On decode only `min[3]` (the Morton code of
 /// the snapshot's first `ds` slot) is read; the rest is written for Voxel Max.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub struct VXStatsSerde {
+pub struct VXStats {
     #[serde(default)]
     pub min: Vec<i64>,
     // The remaining stats are written for Voxel Max but never read back.

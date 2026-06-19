@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// triple Voxel Max stores per slot.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
-pub struct VXBrushColorSerde {
+pub struct VXBrushColor {
     /// The `_dm` triple (observed as `[1, 1, 1]`).
     #[serde(rename = "_dm")]
     pub dm: Vec<i64>,

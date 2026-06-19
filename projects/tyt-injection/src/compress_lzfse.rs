@@ -1,7 +1,7 @@
 /// Compresses `bytes` into an LZFSE block stream — the inverse of
-/// [`lzfse_decompress`](crate::lzfse_decompress). Grows the output buffer until
+/// [`decompress_lzfse`](crate::decompress_lzfse). Grows the output buffer until
 /// the encode succeeds (LZFSE always succeeds given a large enough buffer).
-pub fn lzfse_compress(bytes: &[u8]) -> Vec<u8> {
+pub fn compress_lzfse(bytes: &[u8]) -> Vec<u8> {
     let mut capacity = bytes
         .len()
         .saturating_add(bytes.len() / 16)
@@ -18,7 +18,7 @@ pub fn lzfse_compress(bytes: &[u8]) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{lzfse_compress, lzfse_decompress};
+    use crate::{compress_lzfse, decompress_lzfse};
 
     #[test]
     fn round_trips() {
@@ -27,8 +27,8 @@ mod tests {
             .map(|i| (i.wrapping_mul(2654435761) >> 24) as u8)
             .collect();
         for data in [vec![1, 2, 3, 4, 5], highly_compressible, incompressible] {
-            let compressed = lzfse_compress(&data);
-            assert_eq!(lzfse_decompress(&compressed), data);
+            let compressed = compress_lzfse(&data);
+            assert_eq!(decompress_lzfse(&compressed), data);
         }
     }
 }

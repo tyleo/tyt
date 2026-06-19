@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "encoding", content = "data"))]
-pub enum SampleBlock {
+pub enum VoxjSampleBlock {
     /// One row per voxel: that voxel's cell index per palette, in order.
     #[cfg_attr(feature = "serde", serde(rename = "raw-json"))]
     RawJson(Vec<Vec<u32>>),

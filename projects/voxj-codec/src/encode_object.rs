@@ -1,6 +1,9 @@
-use crate::{VoxelData, hilbert_bits, hilbert_encode, pack_bits, packed_width, varint_encode};
+use crate::{
+    PositionEncoding, SampleEncoding, VoxelData, encode_hilbert, encode_varint, hilbert_bits,
+    pack_bits, packed_width,
+};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use voxj::{PositionBlock, PositionEncoding, SampleBlock, SampleEncoding, VoxjObject};
+use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
 /// Encodes one object's geometry into a [`VoxjObject`] with the given fixed
 /// position and sample encodings.
@@ -35,8 +38,8 @@ fn object(
     name: String,
     palette_refs: Vec<usize>,
     bounds: [u32; 3],
-    voxel_positions: PositionBlock,
-    voxel_samples: SampleBlock,
+    voxel_positions: VoxjPositionBlock,
+    voxel_samples: VoxjSampleBlock,
 ) -> VoxjObject {
     VoxjObject {
         name,
@@ -48,16 +51,19 @@ fn object(
 }
 
 /// Empty object: raw-json empties for both blocks (0 voxels -> 0 rows).
-fn empty_blocks() -> (PositionBlock, SampleBlock) {
+fn empty_blocks() -> (VoxjPositionBlock, VoxjSampleBlock) {
     (
-        PositionBlock::RawJson(Vec::new()),
-        SampleBlock::RawJson(Vec::new()),
+        VoxjPositionBlock::RawJson(Vec::new()),
+        VoxjSampleBlock::RawJson(Vec::new()),
     )
 }
 
 /// Encodes the voxel positions with `encoding`, returning the canonical voxel
 /// order (so sample channels can be reordered to match) and the block.
-fn encode_positions(data: &VoxelData, encoding: PositionEncoding) -> (Vec<usize>, PositionBlock) {
+fn encode_positions(
+    data: &VoxelData,
+    encoding: PositionEncoding,
+) -> (Vec<usize>, VoxjPositionBlock) {
     match encoding {
         PositionEncoding::RawJson => {
             let order = order_raw(data.positions.len());
@@ -85,7 +91,7 @@ fn encode_samples(
     encoding: SampleEncoding,
     cell_counts: &[usize],
     n: usize,
-) -> SampleBlock {
+) -> VoxjSampleBlock {
     match encoding {
         SampleEncoding::RawJson => samples_raw(channels, n),
         SampleEncoding::RleJson => samples_rle(channels),
@@ -116,28 +122,28 @@ fn order_hilbert(positions: &[[u32; 3]], bits: u32) -> Vec<usize> {
     let mut order = order_raw(positions.len());
     order.sort_by_key(|&i| {
         let [x, y, z] = positions[i];
-        hilbert_encode(x, y, z, bits)
+        encode_hilbert(x, y, z, bits)
     });
     order
 }
 
-fn positions_raw(positions: &[[u32; 3]], order: &[usize]) -> PositionBlock {
-    PositionBlock::RawJson(order.iter().map(|&i| positions[i]).collect())
+fn positions_raw(positions: &[[u32; 3]], order: &[usize]) -> VoxjPositionBlock {
+    VoxjPositionBlock::RawJson(order.iter().map(|&i| positions[i]).collect())
 }
 
-fn positions_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> PositionBlock {
+fn positions_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> VoxjPositionBlock {
     let cells = (bounds[0] as usize) * (bounds[1] as usize) * (bounds[2] as usize);
     let mut occupancy = vec![0u32; cells];
     for &pos in positions {
         occupancy[cell_index(pos, bounds) as usize] = 1;
     }
-    PositionBlock::BitmapBase64(BASE64.encode(pack_bits(&occupancy, 1)))
+    VoxjPositionBlock::BitmapBase64(BASE64.encode(pack_bits(&occupancy, 1)))
 }
 
-fn positions_hilbert(positions: &[[u32; 3]], bits: u32) -> PositionBlock {
+fn positions_hilbert(positions: &[[u32; 3]], bits: u32) -> VoxjPositionBlock {
     let mut indices: Vec<u64> = positions
         .iter()
-        .map(|&[x, y, z]| hilbert_encode(x, y, z, bits))
+        .map(|&[x, y, z]| encode_hilbert(x, y, z, bits))
         .collect();
     indices.sort_unstable();
     let mut prev = 0u64;
@@ -149,7 +155,7 @@ fn positions_hilbert(positions: &[[u32; 3]], bits: u32) -> PositionBlock {
             d
         })
         .collect();
-    PositionBlock::HilbertIndexDeltaVarintBase64(BASE64.encode(varint_encode(&deltas)))
+    VoxjPositionBlock::HilbertIndexDeltaVarintBase64(BASE64.encode(encode_varint(&deltas)))
 }
 
 /// Reorders `samples[voxel][palette]` into one channel per palette, in the
@@ -164,18 +170,18 @@ fn channels_in_order(samples: &[Vec<u32>], order: &[usize], num_palettes: usize)
 /// `n` is the voxel count, sourced independently of `channels` so an object with
 /// voxels but zero palettes still emits `n` empty rows (matching the position
 /// block's voxel count).
-fn samples_raw(channels: &[Vec<u32>], n: usize) -> SampleBlock {
+fn samples_raw(channels: &[Vec<u32>], n: usize) -> VoxjSampleBlock {
     let rows = (0..n)
         .map(|k| channels.iter().map(|ch| ch[k]).collect())
         .collect();
-    SampleBlock::RawJson(rows)
+    VoxjSampleBlock::RawJson(rows)
 }
 
-fn samples_rle(channels: &[Vec<u32>]) -> SampleBlock {
-    SampleBlock::RleJson(channels.iter().map(|ch| rle_encode(ch)).collect())
+fn samples_rle(channels: &[Vec<u32>]) -> VoxjSampleBlock {
+    VoxjSampleBlock::RleJson(channels.iter().map(|ch| rle_encode(ch)).collect())
 }
 
-fn samples_packed(channels: &[Vec<u32>], cell_counts: &[usize]) -> SampleBlock {
+fn samples_packed(channels: &[Vec<u32>], cell_counts: &[usize]) -> VoxjSampleBlock {
     let packed = channels
         .iter()
         .enumerate()
@@ -184,7 +190,7 @@ fn samples_packed(channels: &[Vec<u32>], cell_counts: &[usize]) -> SampleBlock {
             BASE64.encode(pack_bits(ch, width))
         })
         .collect();
-    SampleBlock::PackedBase64(packed)
+    VoxjSampleBlock::PackedBase64(packed)
 }
 
 /// Flat run-length encoding: `[value1, count1, value2, count2, ...]`.
@@ -213,16 +219,17 @@ fn rle_encode(channel: &[u32]) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use crate::encode_object;
-    use voxj::{PositionBlock, PositionEncoding, SampleBlock, SampleEncoding, VoxjObject};
+    use crate::{PositionEncoding, SampleEncoding};
+    use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
     /// An object with voxels but zero palettes must still emit a sample block
     /// whose arity matches the position block: raw-json carries one (empty) row
     /// per voxel, and rle/packed carry zero channels.
     fn assert_zero_palette_arity(object: &VoxjObject) {
         match &object.voxel_samples {
-            SampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
-            SampleBlock::RleJson(channels) => assert!(channels.is_empty()),
-            SampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
+            VoxjSampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
+            VoxjSampleBlock::RleJson(channels) => assert!(channels.is_empty()),
+            VoxjSampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
         }
     }
 
@@ -260,8 +267,11 @@ mod tests {
         );
         assert!(matches!(
             object.voxel_positions,
-            PositionBlock::BitmapBase64(_)
+            VoxjPositionBlock::BitmapBase64(_)
         ));
-        assert!(matches!(object.voxel_samples, SampleBlock::PackedBase64(_)));
+        assert!(matches!(
+            object.voxel_samples,
+            VoxjSampleBlock::PackedBase64(_)
+        ));
     }
 }
