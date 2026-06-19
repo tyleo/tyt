@@ -1,13 +1,30 @@
 use crate::{VMaxVoxel, decode_morton_3d, encode_morton_3d};
 use std::collections::BTreeMap;
-use vmax::{VXSnapshot, VXSnapshotId, VXStats, VXStorage};
+use vmax::{VXExtent, VXSnapshot, VXSnapshotId, VXStats, VXStorage};
 
 /// Voxel pitch of a chunk along each axis; chunks tile an 8×8×8 grid into a
 /// 256³ model.
 const CHUNK_PITCH: i32 = 32;
 
+/// Highest local coordinate within a chunk (32 voxels per axis).
+const CHUNK_MAX: u32 = 31;
+
+/// `st.extent.o` order tag Voxel Max writes for the 32³ chunk grid (2⁵ = 32).
+const CHUNK_ORDER: i64 = 5;
+
 /// Snapshot type written for every rebuilt chunk (4 = checkpoint).
 const CHECKPOINT: i64 = 4;
+
+/// The 4-component Morton stat Voxel Max stores for a corner in `st`: the per-axis
+/// spread of the corner's local coords plus their sum (the Morton code itself, so
+/// `stat[3] == stat[0] + stat[1] + stat[2]`).
+fn morton_stat(morton: u32) -> Vec<i64> {
+    let c = decode_morton_3d(morton);
+    let x = encode_morton_3d([c[0], 0, 0]) as i64;
+    let y = encode_morton_3d([0, c[1], 0]) as i64;
+    let z = encode_morton_3d([0, 0, c[2]]) as i64;
+    vec![x, y, z, x + y + z]
+}
 
 /// Encodes voxels into a `VXObjectData`'s `snapshots` array — the inverse of
 /// [`decode_snapshots`](crate::decode_snapshots). Groups voxels
@@ -41,17 +58,6 @@ pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshot> {
             let max_morton = *slots.keys().next_back().expect("non-empty chunk");
             let count = slots.len() as i64;
 
-            // In-chunk bounding box of the occupied voxels.
-            let mut low = [u32::MAX; 3];
-            let mut high = [0u32; 3];
-            for &morton in slots.keys() {
-                let local = decode_morton_3d(morton);
-                for axis in 0..3 {
-                    low[axis] = low[axis].min(local[axis]);
-                    high[axis] = high[axis].max(local[axis]);
-                }
-            }
-
             let mut ds = vec![0u8; 2 * (max_morton - min_morton + 1) as usize];
             for (morton, (material, color)) in slots {
                 let slot = (morton - min_morton) as usize;
@@ -59,19 +65,6 @@ pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshot> {
                 ds[2 * slot + 1] = color;
             }
 
-            let min = vec![
-                low[0] as i64,
-                low[1] as i64,
-                low[2] as i64,
-                min_morton as i64,
-            ];
-            let max = vec![
-                high[0] as i64,
-                high[1] as i64,
-                high[2] as i64,
-                max_morton as i64,
-            ];
-            let extent = (0..3).map(|a| (high[a] - low[a] + 1) as i64).collect();
             VXSnapshot {
                 s: VXStorage {
                     id: VXSnapshotId {
@@ -81,13 +74,15 @@ pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshot> {
                     },
                     ds,
                     st: VXStats {
-                        min: min.clone(),
-                        max: max.clone(),
-                        extent,
+                        // Occupied Morton range; min[3]/max[3] are the `ds` bounds.
+                        min: morton_stat(min_morton),
+                        max: morton_stat(max_morton),
+                        extent: VXExtent { o: CHUNK_ORDER },
                         count,
-                        smin: min,
-                        smax: max,
-                        scount: count,
+                        // Selection bounds span the whole 32³ chunk.
+                        smin: vec![0; 4],
+                        smax: morton_stat(encode_morton_3d([CHUNK_MAX; 3])),
+                        scount: 0,
                     },
                     lc: vec![0u8; 256],
                     dlc: vec![0u8; 256],

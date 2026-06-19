@@ -16,6 +16,8 @@ mod vx_brush_state;
 #[cfg(feature = "serde")]
 mod vx_camera;
 #[cfg(feature = "serde")]
+mod vx_extent;
+#[cfg(feature = "serde")]
 mod vx_flag;
 #[cfg(feature = "serde")]
 mod vx_material;
@@ -56,6 +58,8 @@ pub use vx_brush_entry::*;
 pub use vx_brush_state::*;
 #[cfg(feature = "serde")]
 pub use vx_camera::*;
+#[cfg(feature = "serde")]
+pub use vx_extent::*;
 #[cfg(feature = "serde")]
 pub use vx_flag::*;
 #[cfg(feature = "serde")]

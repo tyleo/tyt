@@ -1,3 +1,4 @@
+use crate::VXExtent;
 use serde::{Deserialize, Serialize};
 
 /// Per-snapshot statistics (`s.st`). On decode only `min[3]` (the Morton code of
@@ -10,7 +11,7 @@ pub struct VXStats {
     #[serde(skip_deserializing)]
     pub max: Vec<i64>,
     #[serde(skip_deserializing)]
-    pub extent: Vec<i64>,
+    pub extent: VXExtent,
     #[serde(skip_deserializing)]
     pub count: i64,
     #[serde(skip_deserializing)]
