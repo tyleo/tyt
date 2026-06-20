@@ -59,10 +59,18 @@ pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshot> {
             let count = slots.len() as i64;
 
             let mut ds = vec![0u8; 2 * (max_morton - min_morton + 1) as usize];
+            // Layer-color usage mask: one byte per palette index, set for every
+            // color a voxel in this chunk uses. Voxel Max indexes it at
+            // `color - 1` (color byte 0 is the empty slot) and reads it to flag
+            // which palette cells are in use in the color picker.
+            let mut lc = vec![0u8; 256];
             for (morton, (material, color)) in slots {
                 let slot = (morton - min_morton) as usize;
                 ds[2 * slot] = material;
                 ds[2 * slot + 1] = color;
+                if color != 0 {
+                    lc[(color - 1) as usize] = 1;
+                }
             }
 
             VXSnapshot {
@@ -84,7 +92,7 @@ pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshot> {
                         smax: morton_stat(encode_morton_3d([CHUNK_MAX; 3])),
                         scount: 0,
                     },
-                    lc: vec![0u8; 256],
+                    lc,
                     dlc: vec![0u8; 256],
                 },
             }
