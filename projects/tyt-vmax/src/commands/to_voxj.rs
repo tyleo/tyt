@@ -318,11 +318,11 @@ impl ToVoxj {
     }
 
     /// Returns the shared color palette `(index, cell count)` for `object.palette`.
-    /// When the `palette*.png` is present its pixels become the `rgba` cells; when
-    /// it is absent (some Voxel Max packages keep colors only in the settings
-    /// sidecar, which this converter does not read) a uniform placeholder palette
-    /// is emitted so color indices are still preserved. Returns `None` only when
-    /// the object names no palette at all.
+    /// The `rgba` cells come from the `palette*.png` image when present, otherwise
+    /// from the `colors` table of the `palette*.settings.vmaxpsb` sidecar (where
+    /// Voxel Max keeps colors when no image is written); a uniform placeholder is
+    /// emitted only when neither source carries color, so color indices are still
+    /// preserved. Returns `None` only when the object names no palette at all.
     fn color_palette(
         &self,
         dependencies: &impl Dependencies,
@@ -336,21 +336,7 @@ impl ToVoxj {
         if let Some(&index) = palette_index.get(&object.palette) {
             return Ok(Some((index, palettes[index].data.len())));
         }
-        let data: Vec<Vec<VoxjAttrValue>> =
-            match dependencies.read_file(&self.input_vmax.join(&object.palette)) {
-                Ok(png_bytes) => dependencies
-                    .load_palette(&png_bytes)?
-                    .iter()
-                    .map(|&[r, g, b, a]| {
-                        vec![VoxjAttrValue::Text(format!(
-                            "#{r:02X}{g:02X}{b:02X}{a:02X}"
-                        ))]
-                    })
-                    .collect(),
-                Err(_) => (0..COLOR_CELLS)
-                    .map(|_| vec![VoxjAttrValue::Text(PLACEHOLDER_COLOR.to_owned())])
-                    .collect(),
-            };
+        let data = self.color_cells(dependencies, object)?;
         let cell_count = data.len();
         let index = palettes.len();
         palettes.push(VoxjPalette {
@@ -359,6 +345,32 @@ impl ToVoxj {
         });
         palette_index.insert(object.palette.clone(), index);
         Ok(Some((index, cell_count)))
+    }
+
+    /// The `rgba` cells for an object's color palette: the `palette*.png` pixels
+    /// when that image is present, else the RGBA `colors` table of the
+    /// `palette*.settings.vmaxpsb` sidecar, and finally a uniform placeholder
+    /// when neither source carries color.
+    fn color_cells(
+        &self,
+        dependencies: &impl Dependencies,
+        object: &VMaxObject,
+    ) -> Result<Vec<Vec<VoxjAttrValue>>> {
+        if let Ok(png_bytes) = dependencies.read_file(&self.input_vmax.join(&object.palette)) {
+            return Ok(rgba_cells(&dependencies.load_palette(&png_bytes)?));
+        }
+        if let Some(stem) = object.palette.strip_suffix(".png") {
+            let sidecar = format!("{stem}.settings.vmaxpsb");
+            if let Ok(bytes) = dependencies.read_file(&self.input_vmax.join(&sidecar)) {
+                let palette = dependencies.parse_material_palette(&bytes)?;
+                if !palette.colors.is_empty() {
+                    return Ok(rgba_cells(&palette.colors));
+                }
+            }
+        }
+        Ok((0..COLOR_CELLS)
+            .map(|_| vec![VoxjAttrValue::Text(PLACEHOLDER_COLOR.to_owned())])
+            .collect())
     }
 
     /// Returns the shared material palette `(index, cell count)` for an object's
@@ -414,6 +426,18 @@ impl ToVoxj {
         palette_name_by_index.insert(index, palette.name);
         Ok(Some((index, palette.materials.len())))
     }
+}
+
+/// One `#RRGGBBAA` text cell per RGBA color.
+fn rgba_cells(colors: &[[u8; 4]]) -> Vec<Vec<VoxjAttrValue>> {
+    colors
+        .iter()
+        .map(|&[r, g, b, a]| {
+            vec![VoxjAttrValue::Text(format!(
+                "#{r:02X}{g:02X}{b:02X}{a:02X}"
+            ))]
+        })
+        .collect()
 }
 
 /// Dispatches to the codec's fixed or smallest-search encoder per `encoding`.

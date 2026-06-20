@@ -10,7 +10,7 @@ pub trait Dependencies {
     /// Decodes the RGBA cells of a `palette*.png` (one `[r, g, b, a]` per pixel).
     fn load_palette(&self, png_bytes: &[u8]) -> Result<Vec<[u8; 4]>>;
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>>;
-    /// Decodes the material palette (name + slots) of a
+    /// Decodes the material palette (name, slots, and RGBA color table) of a
     /// `palette*.settings.vmaxpsb` plist.
     fn parse_material_palette(&self, vmaxpsb_bytes: &[u8]) -> Result<VMaxMaterialPalette>;
     /// Rewrites `data`/`pal` references according to the supplied `(old, new)`
