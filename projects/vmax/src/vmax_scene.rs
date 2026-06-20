@@ -30,6 +30,9 @@ pub struct VMaxScene {
     /// Antialiasing flag (`af`), e.g. `"t"`.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub af: Option<String>,
+    /// Antialiasing quality level (`ag`), e.g. `2`.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub ag: Option<i64>,
     /// Ambient-light intensity (`aint`).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub aint: Option<f64>,
