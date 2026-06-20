@@ -1,3 +1,5 @@
+#![deny(rustdoc::broken_intra_doc_links)]
+
 mod voxj_attr_value;
 mod voxj_file;
 mod voxj_hierarchy_node;
