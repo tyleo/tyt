@@ -67,7 +67,7 @@ fn encode_positions(
     match encoding {
         PositionEncoding::RawJson => {
             let order = order_raw(data.positions.len());
-            let block = positions_raw(&data.positions, &order);
+            let block = positions_raw(&data.positions);
             (order, block)
         }
         PositionEncoding::BitmapBase64 => (
@@ -143,8 +143,12 @@ fn hilbert_positions(positions: &[[u32; 3]], bits: u32) -> (Vec<usize>, VoxjPosi
     (order, block)
 }
 
-fn positions_raw(positions: &[[u32; 3]], order: &[usize]) -> VoxjPositionBlock {
-    VoxjPositionBlock::RawJson(order.iter().map(|&i| positions[i]).collect())
+/// Raw block in listing order: the raw encoding never reorders voxels, so the
+/// positions pass through unchanged. The paired `order` (see [`order_raw`]) is
+/// the identity permutation; it still drives sample-channel reordering, a no-op
+/// here.
+fn positions_raw(positions: &[[u32; 3]]) -> VoxjPositionBlock {
+    VoxjPositionBlock::RawJson(positions.to_vec())
 }
 
 fn positions_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> VoxjPositionBlock {
