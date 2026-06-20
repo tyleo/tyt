@@ -107,11 +107,17 @@ fn cell_index(pos: [u32; 3], bounds: [u32; 3]) -> u64 {
     x as u64 * bounds[1] as u64 * bounds[2] as u64 + y as u64 * bounds[2] as u64 + z as u64
 }
 
-/// Voxel order ascending by raster cell index.
+/// Voxel order ascending by raster cell index. Each cell index is computed once
+/// by sorting `(cell, voxel)` pairs; `sort_by_key(cell_index)` would instead
+/// recompute it on every comparison (O(n log n) evaluations).
 fn order_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> Vec<usize> {
-    let mut order = order_raw(positions.len());
-    order.sort_by_key(|&i| cell_index(positions[i], bounds));
-    order
+    let mut indexed: Vec<(u64, usize)> = positions
+        .iter()
+        .enumerate()
+        .map(|(i, &pos)| (cell_index(pos, bounds), i))
+        .collect();
+    indexed.sort_unstable();
+    indexed.iter().map(|&(_, i)| i).collect()
 }
 
 /// Voxel order ascending by Hilbert index, paired with the delta-varint
@@ -151,13 +157,20 @@ fn positions_raw(positions: &[[u32; 3]]) -> VoxjPositionBlock {
     VoxjPositionBlock::RawJson(positions.to_vec())
 }
 
+/// Dense occupancy bitmap: bit `k` (MSB-first, 8 per byte) is set when raster
+/// cell `k` holds a voxel. Every position must lie within `bounds`, so its cell
+/// index is `< cells`. Packs the bits directly instead of filling a
+/// one-`u32`-per-cell occupancy buffer and packing it afterward — the buffer
+/// would be 32x larger than the result and force a full pass over every cell.
 fn positions_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> VoxjPositionBlock {
     let cells = (bounds[0] as usize) * (bounds[1] as usize) * (bounds[2] as usize);
-    let mut occupancy = vec![0u32; cells];
+    let mut bytes = vec![0u8; cells.div_ceil(8)];
     for &pos in positions {
-        occupancy[cell_index(pos, bounds) as usize] = 1;
+        let c = cell_index(pos, bounds) as usize;
+        debug_assert!(c < cells, "voxel cell {c} outside {cells}-cell bounds");
+        bytes[c / 8] |= 1 << (7 - (c % 8));
     }
-    VoxjPositionBlock::BitmapBase64(BASE64.encode(pack_bits(&occupancy, 1)))
+    VoxjPositionBlock::BitmapBase64(BASE64.encode(bytes))
 }
 
 /// Reorders `samples[voxel][palette]` into one channel per palette, in the
