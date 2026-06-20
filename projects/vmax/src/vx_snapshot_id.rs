@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 pub struct VXSnapshotId {
     /// Chunk id (0–511); Morton-decodes to the 8×8×8 chunk-grid coordinate.
     pub c: u32,
-    /// Session id (written only).
-    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
+    /// Session id.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub s: i64,
-    /// Snapshot type, 4 = checkpoint (written only).
-    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
+    /// Snapshot type (4 = checkpoint).
+    #[cfg_attr(feature = "serde", serde(default))]
     pub t: i64,
 }

@@ -2,24 +2,26 @@ use crate::VXExtent;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Per-snapshot statistics (`s.st`). On decode only `min[3]` (the Morton code of
-/// the snapshot's first `ds` slot) is read; the rest is written for Voxel Max.
+/// Per-snapshot statistics (`s.st`): the Morton-coded occupied/selection bounds
+/// and counts Voxel Max records for each snapshot. `min[3]` (the Morton code of
+/// the snapshot's first `ds` slot) also anchors voxel decoding.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct VXStats {
-    #[cfg_attr(feature = "serde", serde(default))]
+    /// Occupied-range minimum corner; `min[3]` is the Morton code of the first
+    /// `ds` slot.
     pub min: Vec<i64>,
-    // The remaining stats are written for Voxel Max but never read back.
-    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
+    /// Occupied-range maximum corner.
     pub max: Vec<i64>,
-    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
+    /// Snapshot extent (`{o: <order>}`).
     pub extent: VXExtent,
-    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
+    /// Occupied voxel count.
     pub count: i64,
-    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
+    /// Selection-range minimum corner.
     pub smin: Vec<i64>,
-    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
+    /// Selection-range maximum corner.
     pub smax: Vec<i64>,
-    #[cfg_attr(feature = "serde", serde(skip_deserializing))]
+    /// Selected voxel count.
     pub scount: i64,
 }

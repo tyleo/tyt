@@ -13,16 +13,10 @@ pub struct VXStorage {
     pub ds: Vec<u8>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub st: VXStats,
-    /// Layer-color usage mask, written only (256 bytes).
-    #[cfg_attr(
-        feature = "serde",
-        serde(skip_deserializing, serialize_with = "serde_bytes::serialize")
-    )]
+    /// Layer-color usage mask (256 bytes).
+    #[cfg_attr(feature = "serde", serde(default, with = "serde_bytes"))]
     pub lc: Vec<u8>,
-    /// Deleted layer-color usage mask, written only (256 bytes).
-    #[cfg_attr(
-        feature = "serde",
-        serde(skip_deserializing, serialize_with = "serde_bytes::serialize")
-    )]
+    /// Deleted layer-color usage mask (256 bytes).
+    #[cfg_attr(feature = "serde", serde(default, with = "serde_bytes"))]
     pub dlc: Vec<u8>,
 }
