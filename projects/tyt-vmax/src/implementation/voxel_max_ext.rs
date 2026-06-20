@@ -1,6 +1,6 @@
-use crate::{VoxelMaxNode, VoxelMaxPalette};
+use crate::{VXObjectState, VoxelMaxNode, VoxelMaxPalette};
 use serde::{Deserialize, Serialize};
-use vmax::{VMaxScene, VXObjectState};
+use vmax::VMaxScene;
 
 /// The `voxel-max` payload stored under the voxj document's generic `main.ext`
 /// namespace. Holds the Voxel Max state with no native voxj representation so

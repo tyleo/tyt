@@ -3,8 +3,9 @@ use crate::{VMaxGroup, VMaxObject, VMaxSceneCamera};
 use serde::{Deserialize, Serialize};
 
 /// A complete Voxel Max scene parsed from `scene.json`: the `groups`/`objects`
-/// hierarchy plus the scene-level state Voxel Max records around it — the codable
-/// version, the camera/light rig, and the renderer / post-grading / UI settings.
+/// hierarchy plus the scene-level state Voxel Max records around it: the
+/// codable version, the camera/light rig, and the renderer / post-grading / UI
+/// settings.
 ///
 /// Every scene-level setting except the required version `v` is `Option` and
 /// skipped when `None`, so a scene that omits a key round-trips without it being
@@ -25,78 +26,76 @@ pub struct VMaxScene {
     /// Object nodes (voxel models).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub objects: Vec<VMaxObject>,
-    /// Codable scene version (`v`). Required by Voxel Max — a scene written
-    /// without it will not open — so it is always emitted, and a decoded scene
-    /// that omits it falls back to the current version.
+    /// Codable scene version.
     #[cfg_attr(feature = "serde", serde(default = "default_scene_version"))]
     pub v: i64,
-    /// Scene camera / light rig (`cam`).
+    /// Scene camera / light rig.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub cam: Option<VMaxSceneCamera>,
-    /// Antialiasing flag (`af`), e.g. `"t"`.
+    /// Antialiasing flag, e.g. `"t"`.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub af: Option<String>,
-    /// Antialiasing quality level (`ag`), e.g. `2`.
+    /// Antialiasing quality level, e.g. `2`.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub ag: Option<i64>,
-    /// Ambient-light intensity (`aint`).
+    /// Ambient-light intensity.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub aint: Option<f64>,
-    /// Ambient-occlusion amount (`ao`).
+    /// Ambient-occlusion amount.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub ao: Option<f64>,
-    /// Background color (`background`), e.g. `"#151313FF"`.
+    /// Background color, e.g. `"#151313FF"`.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub background: Option<String>,
-    /// Bloom blur radius (`bloombrad`).
+    /// Bloom blur radius.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub bloombrad: Option<f64>,
-    /// Bloom intensity (`bloomint`).
+    /// Bloom intensity.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub bloomint: Option<f64>,
-    /// Bloom threshold (`bloomthr`).
+    /// Bloom threshold.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub bloomthr: Option<f64>,
-    /// Contrast (`cont`).
+    /// Contrast.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub cont: Option<f64>,
-    /// Exposure / environment intensity (`eint`).
+    /// Exposure / environment intensity.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub eint: Option<f64>,
-    /// Film-grain intensity (`graint`).
+    /// Film-grain intensity.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub graint: Option<f64>,
-    /// Key-light color (`lcolor`), e.g. `"#FFFFFFFF"`.
+    /// Key-light color, e.g. `"#FFFFFFFF"`.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub lcolor: Option<String>,
-    /// Key-light intensity (`lint`).
+    /// Key-light intensity.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub lint: Option<f64>,
-    /// Outline intensity (`outlineint`).
+    /// Outline intensity.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub outlineint: Option<f64>,
-    /// Outline size (`outlinesz`).
+    /// Outline size.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub outlinesz: Option<f64>,
-    /// Saturation (`sat`).
+    /// Saturation.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub sat: Option<f64>,
-    /// Shadow intensity (`shadowint`).
+    /// Shadow intensity.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub shadowint: Option<f64>,
-    /// Screen-space reflections enabled (`ssr`).
+    /// Screen-space reflections enabled.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub ssr: Option<bool>,
-    /// Color temperature (`temp`).
+    /// Color temperature.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub temp: Option<f64>,
-    /// Color tint (`tint`).
+    /// Color tint.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub tint: Option<f64>,
-    /// Vignette intensity (`vigint`).
+    /// Vignette intensity.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub vigint: Option<f64>,
-    /// Vignette falloff power (`vigpow`).
+    /// Vignette falloff power.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub vigpow: Option<f64>,
 }

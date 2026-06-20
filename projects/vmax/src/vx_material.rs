@@ -17,8 +17,7 @@ pub struct VXMaterial {
     pub sic: f64,
     /// Whether the material casts shadows.
     pub sh: bool,
-    /// Extended dispersion parameters (`md`); present on Voxel Max-authored
-    /// materials, absent from slots `from-voxj` rebuilds.
+    /// Extended dispersion parameters [`VXMaterialMd`](crate::VXMaterialMd).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub md: Option<VXMaterialMd>,
 }

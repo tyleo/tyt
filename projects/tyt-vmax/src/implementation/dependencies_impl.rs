@@ -1,4 +1,6 @@
-use crate::{Dependencies, Error, Result, VoxelMaxExt, VoxelMaxNode, VoxelMaxPalette};
+use crate::{
+    Dependencies, Error, Result, VoxelMaxExt, VoxelMaxNode, VoxelMaxPalette, object_state_from_data,
+};
 use std::{
     collections::HashMap,
     io::{Error as IOError, ErrorKind},
@@ -6,10 +8,7 @@ use std::{
 };
 use tyt_injection::serde_json::{self, Map, Value};
 use vmax::{VMaxScene, VXMaterialPalette, VXObjectData};
-use vmax_codec::{
-    VMaxMaterialPalette, VMaxVoxel, decode_material_palette, decode_snapshots,
-    object_state_from_data,
-};
+use vmax_codec::{VMaxMaterialPalette, VMaxVoxel, decode_material_palette, decode_snapshots};
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
 /// reference. Voxel Max refuses to open a scene whose objects have an empty

@@ -3,10 +3,9 @@ use vmax::VXObjectData;
 
 /// Encodes voxels into a minimal `VXObjectData` payload — voxel `snapshots` (via
 /// [`encode_snapshots`]) plus the content `uuid` and current version, with no
-/// editor state. Used as the fallback when no preserved
-/// [`VXObjectState`](vmax::VXObjectState) is available (e.g. a voxj
-/// document authored outside Voxel Max); a round-tripped document instead rebuilds
-/// the payload from its preserved state.
+/// editor state. Used as the fallback when no preserved object state is
+/// available (e.g. a voxj document authored outside Voxel Max); a round-tripped
+/// document instead rebuilds the payload from its preserved state.
 pub fn encode_object_data(voxels: &[VMaxVoxel], uuid: &str) -> VXObjectData {
     VXObjectData {
         snapshots: encode_snapshots(voxels),

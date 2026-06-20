@@ -1,32 +1,32 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The scene-level camera / light-rig state (`scene.json` `cam`) — the viewport
-/// camera and key-light angles Voxel Max records for the whole scene. Distinct
-/// from a per-object [`VXCamera`](crate::VXCamera). All values are preserved
-/// verbatim; sub-keys are written together so they are modeled as plain fields.
+/// The scene-level camera / light-rig state. The viewport camera and key-light
+/// angles Voxel Max records for the whole scene. Distinct from a per-object
+/// [`VXCamera`](crate::VXCamera). Sub-keys are written together so they are
+/// modeled as plain fields.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
 pub struct VMaxSceneCamera {
-    /// Camera declination/pitch angle (`da`).
+    /// Camera declination/pitch angle.
     pub da: f64,
-    /// Camera azimuth/heading angle (`ha`).
+    /// Camera azimuth/heading angle.
     pub ha: f64,
-    /// Light declination/pitch angle (`lda`).
+    /// Light declination/pitch angle.
     pub lda: f64,
-    /// Light azimuth/heading angle (`lha`).
+    /// Light azimuth/heading angle.
     pub lha: f64,
-    /// Light "world" angle (`lwa`).
+    /// Light "world" angle.
     pub lwa: f64,
-    /// Camera target/origin position (`o`).
+    /// Camera target/origin position.
     pub o: [f64; 3],
-    /// Camera pan X (`px`).
+    /// Camera pan X.
     pub px: f64,
-    /// Camera pan Y (`py`).
+    /// Camera pan Y.
     pub py: f64,
-    /// Camera "world" angle (`wa`).
+    /// Camera "world" angle.
     pub wa: f64,
-    /// Camera distance/zoom (`z`).
+    /// Camera distance/zoom.
     pub z: f64,
 }

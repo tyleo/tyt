@@ -3,8 +3,9 @@ use crate::VXMaterial;
 use serde::{Deserialize, Serialize};
 
 /// Material palette mirroring a `palette*.settings.vmaxpsb` plist: the display
-/// `name`, the `materials`, the `colors` RGBA table, and the palette-level
-/// settings Voxel Max records alongside them.
+/// [`name`](Self::name), the [`materials`](Self::materials), the
+/// [`colors`](Self::colors) RGBA table, and the palette-level settings Voxel Max
+/// records alongside them.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
@@ -14,9 +15,8 @@ pub struct VXMaterialPalette {
     /// Selectable material slots.
     pub materials: Vec<VXMaterial>,
     /// Packed RGBA color table (4 bytes per entry). This is Voxel Max's color
-    /// source when an object's `palette*.png` image is absent; Voxel Max-authored
-    /// palettes that ship a `.png` omit this key entirely, so an empty table is
-    /// not serialized.
+    /// source when an object's `palette*.png` image is absent; palettes that ship
+    /// a `.png` omit this key entirely, so an empty table is not serialized.
     #[cfg_attr(
         feature = "serde",
         serde(with = "serde_bytes", skip_serializing_if = "Vec::is_empty")
@@ -28,7 +28,7 @@ pub struct VXMaterialPalette {
     /// Layer-color usage mask.
     #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
     pub lc: Vec<u8>,
-    /// Palette type tag (`type`).
+    /// Palette type tag.
     #[cfg_attr(feature = "serde", serde(rename = "type"))]
     pub palette_type: i64,
     /// Global transparency.

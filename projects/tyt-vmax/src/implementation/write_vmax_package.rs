@@ -1,4 +1,4 @@
-use crate::{Error, Result, VoxelMaxExt, VoxelMaxNode, quat_rotate};
+use crate::{Error, Result, VoxelMaxExt, VoxelMaxNode, object_data_from_state, quat_rotate};
 use std::{
     collections::HashMap,
     io::{Error as IOError, ErrorKind},
@@ -10,7 +10,7 @@ use tyt_injection::{
     serialize_bplist, serialize_json_pretty, write_file,
 };
 use vmax::{VXMaterial, VXMaterialPalette};
-use vmax_codec::{VMaxVoxel, encode_object_data, encode_snapshots, object_data_from_state};
+use vmax_codec::{VMaxVoxel, encode_object_data, encode_snapshots};
 use voxj::{VoxjAttrValue, VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette};
 use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes};
 
@@ -124,7 +124,10 @@ type PaletteRef = (usize, usize);
 
 /// `(color, material)` palette references for an object — each a [`PaletteRef`]
 /// — identified by the `rgba` / `metallic` attributes.
-fn object_palettes(file: &VoxjFile, object: &VoxjObject) -> (Option<PaletteRef>, Option<PaletteRef>) {
+fn object_palettes(
+    file: &VoxjFile,
+    object: &VoxjObject,
+) -> (Option<PaletteRef>, Option<PaletteRef>) {
     let mut color = None;
     let mut material = None;
     for (channel, &index) in object.palette_refs.iter().enumerate() {

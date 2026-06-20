@@ -4,7 +4,7 @@ version = "0.1.6"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "Decode/encode logic (Morton, voxel snapshots) over Voxel Max payload types."
+description = "Encodes voxj types into Voxel Max (.vmax) documents."
 
 [dependencies]
 vmax = { version = "0.1.0", features = ["serde"] }

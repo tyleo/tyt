@@ -15,8 +15,8 @@ pub enum VXFlagValue {
 }
 
 impl Default for VXFlagValue {
-    /// Defaults to `Bool(false)`; a flag's value is overwritten on decode and the
-    /// field is never read directly.
+    /// Defaults to [`Bool(false)`](Self::Bool); a flag's value is overwritten
+    /// on decode and the field is never read directly.
     fn default() -> Self {
         VXFlagValue::Bool(false)
     }

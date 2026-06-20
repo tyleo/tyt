@@ -2,7 +2,7 @@ use crate::VXExtent;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Per-snapshot statistics (`s.st`): the Morton-coded occupied/selection bounds
+/// Per-snapshot statistics: the Morton-coded occupied/selection bounds
 /// and counts Voxel Max records for each snapshot. `min[3]` (the Morton code of
 /// the snapshot's first `ds` slot) also anchors voxel decoding.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -14,7 +14,7 @@ pub struct VXStats {
     pub min: Vec<i64>,
     /// Occupied-range maximum corner.
     pub max: Vec<i64>,
-    /// Snapshot extent (`{o: <order>}`).
+    /// Snapshot [`VXExtent`](crate::VXExtent) (`{o: <order>}`).
     pub extent: VXExtent,
     /// Occupied voxel count.
     pub count: i64,

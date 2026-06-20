@@ -1,12 +1,14 @@
+#![deny(rustdoc::broken_intra_doc_links)]
+
 mod vmax_group;
 mod vmax_object;
 mod vmax_scene;
 mod vmax_scene_camera;
 
-// Raw `.vmaxb` / `.vmaxpsb` data types — pure structs mirroring the on-disk
-// binary plists; the decode/encode algorithms live in `vmax-codec`. Their serde
-// impls are additive (the optional `serde` feature), so the types always exist —
-// with serde off they simply carry no (de)serialization.
+// Raw `.vmaxb` / `.vmaxpsb` data types. These are pure structs mirroring the
+// on-disk binary plists; the decode/encode algorithms live in `vmax-codec`.
+// Their serde impls are additive (the optional `serde` feature), so the types
+// always exist. With serde off they simply carry no (de)serialization.
 mod vx_brush;
 mod vx_brush_color;
 mod vx_brush_entry;
@@ -21,7 +23,6 @@ mod vx_material_md;
 mod vx_material_palette;
 mod vx_mode;
 mod vx_object_data;
-mod vx_object_state;
 mod vx_snapshot;
 mod vx_snapshot_id;
 mod vx_stats;
@@ -49,7 +50,6 @@ pub use vx_material_md::*;
 pub use vx_material_palette::*;
 pub use vx_mode::*;
 pub use vx_object_data::*;
-pub use vx_object_state::*;
 pub use vx_snapshot::*;
 pub use vx_snapshot_id::*;
 pub use vx_stats::*;

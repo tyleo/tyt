@@ -2,7 +2,7 @@ use crate::{VXSnapshotId, VXStats};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Voxel snapshot storage (`s`) holding one chunk's dense voxel byte stream.
+/// Voxel snapshot storage holding one chunk's dense voxel byte stream.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VXStorage {
