@@ -291,6 +291,7 @@ fn parse_material(cell: &[VoxjAttrValue]) -> VXMaterial {
         rc: number(1),
         sic: number(2),
         sh: matches!(cell.get(3), Some(VoxjAttrValue::Bool(true))),
+        md: None,
     }
 }
 

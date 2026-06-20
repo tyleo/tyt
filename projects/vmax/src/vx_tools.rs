@@ -22,6 +22,12 @@ pub struct VXTools {
     /// Active layer token (`al`).
     #[cfg_attr(feature = "serde", serde(default))]
     pub al: String,
+    /// Active-tool/source index (`src`); present on some Voxel Max objects.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub src: Option<i64>,
     /// Selection-tool flag (`stf`).
     #[cfg_attr(
         feature = "serde",

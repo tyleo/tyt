@@ -20,4 +20,39 @@ pub struct VMaxGroup {
     pub rotation: [f64; 4],
     #[cfg_attr(feature = "serde", serde(rename = "t_s"))]
     pub scale: [f64; 3],
+    /// Hierarchy sort/path triple (`ind`), preserved verbatim for Voxel Max.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub ind: [i64; 3],
+    /// Selection/visibility flag (`s`); present on some nodes.
+    #[cfg_attr(
+        feature = "serde",
+        serde(skip_serializing_if = "Option::is_none", default)
+    )]
+    pub s: Option<bool>,
+    /// Transform-anchor token (`t_al`), preserved verbatim for Voxel Max.
+    #[cfg_attr(feature = "serde", serde(rename = "t_al", default))]
+    pub t_al: String,
+    /// Transform pivot-axis token (`t_pa`), preserved verbatim for Voxel Max.
+    #[cfg_attr(feature = "serde", serde(rename = "t_pa", default))]
+    pub t_pa: String,
+    /// Transform pivot-face token (`t_pf`), preserved verbatim for Voxel Max.
+    #[cfg_attr(feature = "serde", serde(rename = "t_pf", default))]
+    pub t_pf: String,
+    /// Center of the group's voxel bounds in model space (Voxel Max `e_c`).
+    #[cfg_attr(feature = "serde", serde(rename = "e_c", default))]
+    pub center: [f64; 3],
+    /// Min corner of the group's voxel bounds, relative to `center`
+    /// (Voxel Max `e_mi`), when present.
+    #[cfg_attr(
+        feature = "serde",
+        serde(rename = "e_mi", skip_serializing_if = "Option::is_none", default)
+    )]
+    pub bounds_min: Option<[f64; 3]>,
+    /// Max corner of the group's voxel bounds, relative to `center`
+    /// (Voxel Max `e_ma`), when present.
+    #[cfg_attr(
+        feature = "serde",
+        serde(rename = "e_ma", skip_serializing_if = "Option::is_none", default)
+    )]
+    pub bounds_max: Option<[f64; 3]>,
 }

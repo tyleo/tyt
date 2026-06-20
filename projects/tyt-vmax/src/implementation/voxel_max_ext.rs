@@ -1,6 +1,6 @@
-use crate::{VoxelMaxNode, VoxelMaxPalette, VoxelMaxScene};
+use crate::{VoxelMaxNode, VoxelMaxPalette};
 use serde::{Deserialize, Serialize};
-use vmax::VXObjectState;
+use vmax::{VMaxScene, VXObjectState};
 
 /// The `voxel-max` payload stored under the voxj document's generic `main.ext`
 /// namespace. Holds the Voxel Max state with no native voxj representation so
@@ -8,8 +8,11 @@ use vmax::VXObjectState;
 /// knows nothing of this shape; only this converter does.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VoxelMaxExt {
-    /// Scene-level state (version, camera, renderer/UI settings).
-    pub scene: VoxelMaxScene,
+    /// The full Voxel Max scene (`scene.json`) with its `groups`/`objects`
+    /// hierarchy empty — only the scene-level state (version, camera,
+    /// renderer/UI settings) Voxel Max records around the hierarchy. The voxj
+    /// document already represents the hierarchy natively.
+    pub scene: VMaxScene,
     /// Per-node provenance, aligned by index with the voxj `hierarchyNodes`
     /// (groups first, then objects, matching the converter's node order).
     #[serde(rename = "hierarchy-nodes")]

@@ -85,7 +85,10 @@ pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshot> {
                         // Occupied Morton range; min[3]/max[3] are the `ds` bounds.
                         min: morton_stat(min_morton),
                         max: morton_stat(max_morton),
-                        extent: VXExtent { o: CHUNK_ORDER },
+                        extent: VXExtent {
+                            o: CHUNK_ORDER,
+                            r: None,
+                        },
                         count,
                         // Selection bounds span the whole 32³ chunk.
                         smin: vec![0; 4],
