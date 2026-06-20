@@ -1,11 +1,6 @@
 /// Number of binary digits in `n`, with `bit_length(0) == 0`.
-pub fn bit_length(mut n: u32) -> u32 {
-    let mut len = 0;
-    while n > 0 {
-        n /= 2;
-        len += 1;
-    }
-    len
+pub fn bit_length(n: u32) -> u32 {
+    u32::BITS - n.leading_zeros()
 }
 
 #[cfg(test)]
