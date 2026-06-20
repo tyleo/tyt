@@ -1,5 +1,5 @@
 /// One object's voxel geometry and per-palette samples, in listing order, ready
-/// to be encoded into a [`VoxjObject`](crate::VoxjObject) by
+/// to be encoded into a [`VoxjObject`](voxj::VoxjObject) by
 /// [`encode_object`](crate::encode_object).
 #[derive(Clone)]
 pub struct VoxelData {
