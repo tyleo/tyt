@@ -1,9 +1,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A palette attribute value. The recommended attributes are colors
-/// (`#RRGGBBAA` strings) and numbers; booleans are accepted for custom keys.
-/// Serializes as a bare number, string, or boolean.
+/// A palette attribute value.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
