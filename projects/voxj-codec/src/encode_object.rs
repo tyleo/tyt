@@ -76,10 +76,7 @@ fn encode_positions(
         ),
         PositionEncoding::Hilbert => {
             let bits = hilbert_bits(data.bounds);
-            (
-                order_hilbert(&data.positions, bits),
-                positions_hilbert(&data.positions, bits),
-            )
+            hilbert_positions(&data.positions, bits)
         }
     }
 }
@@ -117,14 +114,33 @@ fn order_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> Vec<usize> {
     order
 }
 
-/// Voxel order ascending by Hilbert index.
-fn order_hilbert(positions: &[[u32; 3]], bits: u32) -> Vec<usize> {
-    let mut order = order_raw(positions.len());
-    order.sort_by_key(|&i| {
-        let [x, y, z] = positions[i];
-        encode_hilbert(x, y, z, bits)
-    });
-    order
+/// Voxel order ascending by Hilbert index, paired with the delta-varint
+/// position block. Each voxel's Hilbert index is computed exactly once and
+/// shared between the order permutation and the encoded deltas — sorting
+/// `(index, original_voxel)` pairs yields both in a single pass. (Computing the
+/// order via `sort_by_key(encode_hilbert)` would re-encode on every comparison,
+/// an O(n log n) blow-up, and then re-encode again to build the deltas.)
+fn hilbert_positions(positions: &[[u32; 3]], bits: u32) -> (Vec<usize>, VoxjPositionBlock) {
+    let mut indexed: Vec<(u64, usize)> = positions
+        .iter()
+        .enumerate()
+        .map(|(i, &[x, y, z])| (encode_hilbert(x, y, z, bits), i))
+        .collect();
+    indexed.sort_unstable();
+
+    let order = indexed.iter().map(|&(_, i)| i).collect();
+    let mut prev = 0u64;
+    let deltas: Vec<u64> = indexed
+        .iter()
+        .map(|&(index, _)| {
+            let d = index - prev;
+            prev = index;
+            d
+        })
+        .collect();
+    let block =
+        VoxjPositionBlock::HilbertIndexDeltaVarintBase64(BASE64.encode(encode_varint(&deltas)));
+    (order, block)
 }
 
 fn positions_raw(positions: &[[u32; 3]], order: &[usize]) -> VoxjPositionBlock {
@@ -138,24 +154,6 @@ fn positions_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> VoxjPositionBlo
         occupancy[cell_index(pos, bounds) as usize] = 1;
     }
     VoxjPositionBlock::BitmapBase64(BASE64.encode(pack_bits(&occupancy, 1)))
-}
-
-fn positions_hilbert(positions: &[[u32; 3]], bits: u32) -> VoxjPositionBlock {
-    let mut indices: Vec<u64> = positions
-        .iter()
-        .map(|&[x, y, z]| encode_hilbert(x, y, z, bits))
-        .collect();
-    indices.sort_unstable();
-    let mut prev = 0u64;
-    let deltas: Vec<u64> = indices
-        .iter()
-        .map(|&i| {
-            let d = i - prev;
-            prev = i;
-            d
-        })
-        .collect();
-    VoxjPositionBlock::HilbertIndexDeltaVarintBase64(BASE64.encode(encode_varint(&deltas)))
 }
 
 /// Reorders `samples[voxel][palette]` into one channel per palette, in the
