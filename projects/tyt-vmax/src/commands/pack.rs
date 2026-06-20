@@ -66,8 +66,7 @@ impl Pack {
         let has_quicklook = root_entries
             .iter()
             .any(|p| p.file_name().is_some_and(|n| n == "QuickLook"));
-        let mut renames: Vec<(u64, PathBuf, PathBuf)> = Vec::new();
-        let mut removals: Vec<PathBuf> = Vec::new();
+        let mut plan = Plan::default();
 
         for entry in &root_entries {
             let Some(name) = entry.file_name().and_then(|n| n.to_str()) else {
@@ -79,7 +78,7 @@ impl Pack {
                 .and_then(|ext| ext.to_str())
                 .is_some_and(|ext| HISTORY_EXTENSIONS.contains(&ext));
             if is_history {
-                removals.push(entry.clone());
+                plan.removals.push(entry.clone());
                 continue;
             }
 
@@ -95,8 +94,7 @@ impl Pack {
                     suffix,
                     "contents",
                     ".selection.vmaxb",
-                    &mut renames,
-                    &mut removals,
+                    &mut plan,
                 );
             } else if let Some(suffix) = parse_suffix(name, "contents", ".vmaxb") {
                 plan_file(
@@ -106,8 +104,7 @@ impl Pack {
                     suffix,
                     "contents",
                     ".vmaxb",
-                    &mut renames,
-                    &mut removals,
+                    &mut plan,
                 );
             } else if let Some(suffix) = parse_suffix(name, "palette", ".settings.vmaxpsb") {
                 plan_file(
@@ -117,8 +114,7 @@ impl Pack {
                     suffix,
                     "palette",
                     ".settings.vmaxpsb",
-                    &mut renames,
-                    &mut removals,
+                    &mut plan,
                 );
             } else if let Some(suffix) = parse_suffix(name, "palette", ".png") {
                 plan_file(
@@ -128,8 +124,7 @@ impl Pack {
                     suffix,
                     "palette",
                     ".png",
-                    &mut renames,
-                    &mut removals,
+                    &mut plan,
                 );
             }
         }
@@ -147,8 +142,7 @@ impl Pack {
                         suffix,
                         "contents",
                         ".vmaxb.png",
-                        &mut renames,
-                        &mut removals,
+                        &mut plan,
                     );
                 }
             }
@@ -157,14 +151,14 @@ impl Pack {
         // Remove orphans first so freed names can't collide with renames, then
         // rename survivors ascending by original suffix so each target is free.
         let mut removed_msgs = String::new();
-        for path in &removals {
+        for path in &plan.removals {
             dependencies.remove_file(path)?;
             removed_msgs.push_str(&format!("Removed: {}\n", path.display()));
         }
 
-        renames.sort_by_key(|(order, _, _)| *order);
+        plan.renames.sort_by_key(|(order, _, _)| *order);
         let mut renamed_msgs = String::new();
-        for (_, from, to) in &renames {
+        for (_, from, to) in &plan.renames {
             dependencies.rename_file(from, to)?;
             renamed_msgs.push_str(&format!(
                 "Renamed: {} -> {}\n",
@@ -238,6 +232,14 @@ fn borrow_pairs(pairs: &[(String, String)]) -> Vec<(&str, &str)> {
         .collect()
 }
 
+/// The file operations planned during a pack: `renames` keyed by original
+/// suffix order (so survivors apply ascending), and outright `removals`.
+#[derive(Default)]
+struct Plan {
+    renames: Vec<(u64, PathBuf, PathBuf)>,
+    removals: Vec<PathBuf>,
+}
+
 /// Plans one content/palette file: rename it if its suffix survived
 /// renumbering, otherwise mark it for removal.
 fn plan_file(
@@ -247,15 +249,15 @@ fn plan_file(
     suffix: &str,
     prefix: &str,
     tail: &str,
-    renames: &mut Vec<(u64, PathBuf, PathBuf)>,
-    removals: &mut Vec<PathBuf>,
+    plan: &mut Plan,
 ) {
     match map.get(suffix) {
         Some(new) if new != suffix => {
             let new_path = dir.join(format!("{prefix}{new}{tail}"));
-            renames.push((suffix_order(suffix), entry.to_path_buf(), new_path));
+            plan.renames
+                .push((suffix_order(suffix), entry.to_path_buf(), new_path));
         }
         Some(_) => {}
-        None => removals.push(entry.to_path_buf()),
+        None => plan.removals.push(entry.to_path_buf()),
     }
 }

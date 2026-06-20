@@ -112,12 +112,12 @@ pub(crate) fn write_vmax_package(voxj_bytes: &[u8], output: &Path) -> Result<()>
     Ok(())
 }
 
-/// `(color, material)` palette references for an object — each a `(sample
-/// channel, palette index)` — identified by the `rgba` / `metallic` attributes.
-fn object_palettes(
-    file: &VoxjFile,
-    object: &VoxjObject,
-) -> (Option<(usize, usize)>, Option<(usize, usize)>) {
+/// A `(sample channel, palette index)` reference into an object's palettes.
+type PaletteRef = (usize, usize);
+
+/// `(color, material)` palette references for an object — each a [`PaletteRef`]
+/// — identified by the `rgba` / `metallic` attributes.
+fn object_palettes(file: &VoxjFile, object: &VoxjObject) -> (Option<PaletteRef>, Option<PaletteRef>) {
     let mut color = None;
     let mut material = None;
     for (channel, &index) in object.palette_refs.iter().enumerate() {

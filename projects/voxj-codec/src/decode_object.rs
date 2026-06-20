@@ -1,6 +1,6 @@
 use crate::{VoxelData, decode_hilbert, decode_varint, hilbert_bits, packed_width, unpack_bits};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use std::io;
+use std::{io, iter};
 use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
 /// Decodes one [`VoxjObject`] back into [`VoxelData`], the inverse of
@@ -102,7 +102,7 @@ fn cell_to_position(cell: u64, bounds: [u32; 3]) -> [u32; 3] {
 fn rle_decode(rle: &[u32]) -> Vec<u32> {
     let mut out = Vec::new();
     for pair in rle.chunks_exact(2) {
-        out.extend(std::iter::repeat(pair[0]).take(pair[1] as usize));
+        out.extend(iter::repeat_n(pair[0], pair[1] as usize));
     }
     out
 }

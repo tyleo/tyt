@@ -184,7 +184,7 @@ impl Dependencies for DependenciesImpl {
         .map_err(invalid)?;
         let mut ext = Map::new();
         ext.insert("voxel-max".to_owned(), voxel_max);
-        Ok(serde_json::to_vec(&Value::Object(ext)).map_err(invalid)?)
+        serde_json::to_vec(&Value::Object(ext)).map_err(invalid)
     }
 
     fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
