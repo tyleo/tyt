@@ -1,10 +1,12 @@
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// The per-object Voxel Max camera (`.vmaxb` `cam`): orbit/light angles, pan,
 /// zoom, and orbit origin. Stored so `from-voxj` restores the saved viewpoint for
 /// the object.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(default)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct VXCamera {
     /// Camera width angle (`wa`).
     pub wa: f64,

@@ -10,7 +10,7 @@ use tyt_injection::{
     serialize_bplist, serialize_json_pretty, write_file,
 };
 use vmax::{VXMaterial, VXMaterialPalette};
-use vmax_codec::{VMaxVoxel, encode_object_data, encode_snapshots};
+use vmax_codec::{VMaxVoxel, encode_object_data, encode_snapshots, object_data_from_state};
 use voxj::{VoxjAttrValue, VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette};
 use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes};
 
@@ -73,7 +73,7 @@ pub(crate) fn write_vmax_package(voxj_bytes: &[u8], output: &Path) -> Result<()>
             .get(object_index)
             .and_then(|s| s.clone())
         {
-            Some(state) => state.into_object_data(encode_snapshots(&voxels)),
+            Some(state) => object_data_from_state(state, encode_snapshots(&voxels)),
             None => encode_object_data(&voxels, &ext_node.id),
         };
         let payload = compress_lzfse(&serialize_bplist(&object_data).map_err(invalid)?);

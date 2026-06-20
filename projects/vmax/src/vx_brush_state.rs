@@ -1,10 +1,12 @@
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Voxel Max brush-state tokens (`tools.bst`): the color- and gradient-mode
 /// strings plus optional offset cursor indices. `ocx`/`ocn` are absent in some
 /// files, so both are optional.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(default)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct VXBrushState {
     /// Color mode (`cm`).
     pub cm: String,
@@ -15,9 +17,15 @@ pub struct VXBrushState {
     /// Gradient position (`gp`).
     pub gp: String,
     /// Offset cursor max (`ocx`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub ocx: Option<i64>,
     /// Offset cursor min (`ocn`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub ocn: Option<i64>,
 }

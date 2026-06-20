@@ -5,8 +5,11 @@ use std::{
     path::{Path, PathBuf},
 };
 use tyt_injection::serde_json::{self, Map, Value};
-use vmax::{VMaxScene, VXMaterialPalette, VXObjectData, VXObjectState};
-use vmax_codec::{VMaxMaterialPalette, VMaxVoxel, decode_material_palette, decode_snapshots};
+use vmax::{VMaxScene, VXMaterialPalette, VXObjectData};
+use vmax_codec::{
+    VMaxMaterialPalette, VMaxVoxel, decode_material_palette, decode_snapshots,
+    object_state_from_data,
+};
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
 /// reference. Voxel Max refuses to open a scene whose objects have an empty
@@ -167,7 +170,7 @@ impl Dependencies for DependenciesImpl {
                 Some(bytes) => {
                     let decompressed = tyt_injection::decompress_lzfse(bytes);
                     let data: VXObjectData = tyt_injection::parse_bplist(&decompressed)?;
-                    Ok(Some(VXObjectState::from_object_data(&data)))
+                    Ok(Some(object_state_from_data(&data)))
                 }
                 None => Ok(None),
             })

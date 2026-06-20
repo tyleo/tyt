@@ -1,4 +1,5 @@
-use crate::{VXBrush, VXCamera, VXObjectData, VXSnapshot, VXTools};
+use crate::{VXBrush, VXCamera, VXTools};
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// The per-object Voxel Max editor state preserved in the `voxel-max` ext so
@@ -6,47 +7,30 @@ use serde::{Deserialize, Serialize};
 /// object: the content `uuid`/version plus the `tools`/`brush`/`cam` state. The
 /// geometry lives in the voxj document, so the voxel `snapshots` are regenerated
 /// on reconstruction rather than stored here.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-#[serde(default)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(default))]
 pub struct VXObjectState {
     /// Object content UUID (`uuid`).
     pub uuid: String,
     /// Codable version (`v`).
     pub v: i64,
     /// Tool state (`tools`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub tools: Option<VXTools>,
     /// Brush palette (`brush`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub brush: Option<VXBrush>,
     /// Per-object camera (`cam`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub cam: Option<VXCamera>,
-}
-
-impl VXObjectState {
-    /// Captures the editor state of a decoded `.vmaxb` — everything but its voxel
-    /// `snapshots` — for storage in the `voxel-max` ext.
-    pub fn from_object_data(data: &VXObjectData) -> Self {
-        Self {
-            uuid: data.uuid.clone(),
-            v: data.v,
-            tools: data.tools.clone(),
-            brush: data.brush.clone(),
-            cam: data.cam.clone(),
-        }
-    }
-
-    /// Rebuilds a full `.vmaxb` payload from this state plus regenerated voxel
-    /// `snapshots`.
-    pub fn into_object_data(self, snapshots: Vec<VXSnapshot>) -> VXObjectData {
-        VXObjectData {
-            snapshots,
-            uuid: self.uuid,
-            v: self.v,
-            tools: self.tools,
-            brush: self.brush,
-            cam: self.cam,
-        }
-    }
 }
