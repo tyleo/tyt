@@ -56,7 +56,15 @@ pub trait Dependencies {
     ) -> Result<Vec<u8>>;
     fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
     /// Reconstructs a `.vmax` package directory at `output` from `.voxj` /
-    /// `.voxjz` document bytes (the inverse of the `to-voxj` pipeline).
-    fn write_vmax_package(&self, voxj_bytes: &[u8], output: &Path) -> Result<()>;
+    /// `.voxjz` document bytes (the inverse of the `to-voxj` pipeline). When
+    /// `emit_palette_pngs` is false, the color `palette*.png` sidecars are
+    /// skipped (their data can be stored elsewhere); the `pal` references and
+    /// material `palette*.settings.vmaxpsb` sidecars are still written.
+    fn write_vmax_package(
+        &self,
+        voxj_bytes: &[u8],
+        output: &Path,
+        emit_palette_pngs: bool,
+    ) -> Result<()>;
     fn write_stdout(&self, contents: &[u8]) -> Result<()>;
 }

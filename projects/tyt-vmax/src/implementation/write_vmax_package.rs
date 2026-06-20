@@ -18,8 +18,14 @@ use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes};
 /// bytes: rebuilds `scene.json` from the `voxel-max` ext plus the voxj
 /// hierarchy, and writes one `contents*.vmaxb` per object (voxels re-based by
 /// `round(e_c + e_mi)`) plus the color `palette*.png` / material
-/// `palette*.settings.vmaxpsb` sidecars (one set per distinct palette).
-pub(crate) fn write_vmax_package(voxj_bytes: &[u8], output: &Path) -> Result<()> {
+/// `palette*.settings.vmaxpsb` sidecars (one set per distinct palette). When
+/// `emit_palette_pngs` is false the color `palette*.png` files are skipped,
+/// while their `pal` references and the material sidecars are still written.
+pub(crate) fn write_vmax_package(
+    voxj_bytes: &[u8],
+    output: &Path,
+    emit_palette_pngs: bool,
+) -> Result<()> {
     let (file, ext) = from_voxj_or_voxjz_bytes(voxj_bytes)?;
     let voxel_max_value = ext.get("voxel-max").cloned().ok_or_else(|| {
         invalid("voxj document has no ext.voxel-max; cannot rebuild a .vmax package")
@@ -86,6 +92,7 @@ pub(crate) fn write_vmax_package(voxj_bytes: &[u8], output: &Path) -> Result<()>
             material.map(|(_, index)| index),
             &mut palette_files,
             output,
+            emit_palette_pngs,
         )?;
 
         map.insert("n".to_owned(), Value::String(node.name.clone()));
@@ -164,7 +171,9 @@ fn reconstruct_voxels(
 }
 
 /// Writes the color `.png` and material `.vmaxpsb` for a color palette the first
-/// time it is seen and returns the `pal` filename to share across objects.
+/// time it is seen and returns the `pal` filename to share across objects. When
+/// `emit_palette_pngs` is false the `.png` write is skipped while the `.vmaxpsb`
+/// sidecar and returned `pal` reference are unchanged.
 fn write_palette(
     file: &VoxjFile,
     voxel_max: &VoxelMaxExt,
@@ -172,6 +181,7 @@ fn write_palette(
     material: Option<usize>,
     palette_files: &mut HashMap<usize, String>,
     output: &Path,
+    emit_palette_pngs: bool,
 ) -> Result<String> {
     let Some(color_index) = color else {
         return Ok("palette.png".to_owned());
@@ -184,7 +194,9 @@ fn write_palette(
         n => n.to_string(),
     };
     let pal = format!("palette{stem}.png");
-    write_color_palette(&file.main.palettes[color_index], &output.join(&pal))?;
+    if emit_palette_pngs {
+        write_color_palette(&file.main.palettes[color_index], &output.join(&pal))?;
+    }
     if let Some(material_index) = material {
         let name = voxel_max
             .palettes
