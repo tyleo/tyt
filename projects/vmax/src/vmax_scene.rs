@@ -6,11 +6,15 @@ use serde::{Deserialize, Serialize};
 /// hierarchy plus the scene-level state Voxel Max records around it — the codable
 /// version, the camera/light rig, and the renderer / post-grading / UI settings.
 ///
-/// Every scene-level setting is `Option` and skipped when `None`, so a scene that
-/// omits a key round-trips without it being re-introduced, and a key Voxel Max
-/// stores as either an integer or a real (the grading sliders) is accepted as a
-/// real either way. Whole-number sliders therefore re-serialize as reals (`0.0`),
-/// which Voxel Max's JSON decoder reads back into its numeric type unchanged.
+/// Every scene-level setting except the required version `v` is `Option` and
+/// skipped when `None`, so a scene that omits a key round-trips without it being
+/// re-introduced (Voxel Max tolerates the absence and backfills its own default
+/// on open). `v` is the one exception: Voxel Max will not open a scene that lacks
+/// it, so `v` is never skipped and always emitted, defaulting to the current
+/// codable version when a decoded scene omits it. A key Voxel Max stores as
+/// either an integer or a real (the grading sliders) is accepted as a real either
+/// way. Whole-number sliders therefore re-serialize as reals (`0.0`), which Voxel
+/// Max's JSON decoder reads back into its numeric type unchanged.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
@@ -21,9 +25,11 @@ pub struct VMaxScene {
     /// Object nodes (voxel models).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub objects: Vec<VMaxObject>,
-    /// Codable scene version (`v`).
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub v: Option<i64>,
+    /// Codable scene version (`v`). Required by Voxel Max — a scene written
+    /// without it will not open — so it is always emitted, and a decoded scene
+    /// that omits it falls back to the current version.
+    #[cfg_attr(feature = "serde", serde(default = "default_scene_version"))]
+    pub v: i64,
     /// Scene camera / light rig (`cam`).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub cam: Option<VMaxSceneCamera>,
@@ -93,4 +99,11 @@ pub struct VMaxScene {
     /// Vignette falloff power (`vigpow`).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub vigpow: Option<f64>,
+}
+
+/// The current Voxel Max codable scene version, used as the `v` fallback when a
+/// decoded scene omits the key Voxel Max requires.
+#[cfg(feature = "serde")]
+fn default_scene_version() -> i64 {
+    4
 }
