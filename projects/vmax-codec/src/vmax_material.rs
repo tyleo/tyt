@@ -1,3 +1,4 @@
+use crate::VMaxDispersion;
 use vmax::VXMaterial;
 
 /// A Voxel Max material slot (one of the eight selectable per palette).
@@ -11,6 +12,9 @@ pub struct VMaxMaterial {
     pub emission: f64,
     /// Whether the material casts shadows (Voxel Max `sh`).
     pub enable_shadows: bool,
+    /// Optional dispersion parameters (Voxel Max `md`); `None` when the slot
+    /// carries no `md` block.
+    pub dispersion: Option<VMaxDispersion>,
 }
 
 impl From<VXMaterial> for VMaxMaterial {
@@ -20,6 +24,50 @@ impl From<VXMaterial> for VMaxMaterial {
             roughness: v.rc,
             emission: v.sic,
             enable_shadows: v.sh,
+            dispersion: v.md.map(Into::into),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{VMaxDispersion, VMaxMaterial};
+    use vmax::{VXMaterial, VXMaterialMd};
+
+    #[test]
+    fn maps_md_to_dispersion() {
+        let v = VXMaterial {
+            mi: "1".to_owned(),
+            mc: 0.66,
+            rc: 0.58,
+            sic: 4.2,
+            sh: true,
+            md: Some(VXMaterialMd {
+                a: 0.0,
+                i: 1.5,
+                t: 0.83,
+            }),
+        };
+        assert_eq!(
+            VMaxMaterial::from(v).dispersion,
+            Some(VMaxDispersion {
+                absorption: 0.0,
+                ior: 1.5,
+                transmission: 0.83,
+            })
+        );
+    }
+
+    #[test]
+    fn absent_md_is_no_dispersion() {
+        let v = VXMaterial {
+            mi: "1".to_owned(),
+            mc: 0.1,
+            rc: 0.9,
+            sic: 0.0,
+            sh: true,
+            md: None,
+        };
+        assert_eq!(VMaxMaterial::from(v).dispersion, None);
     }
 }

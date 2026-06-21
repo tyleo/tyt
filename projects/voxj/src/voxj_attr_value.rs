@@ -9,6 +9,7 @@ pub enum VoxjAttrValue {
     Number(f64),
     Text(String),
     Bool(bool),
+    Null,
 }
 
 impl From<f64> for VoxjAttrValue {

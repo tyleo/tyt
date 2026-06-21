@@ -400,28 +400,51 @@ impl ToVoxj {
         if palette.materials.is_empty() {
             return Ok(None);
         }
+        // Dispersion columns (`ior`/`transmission`/`absorption`) are added only
+        // when some slot carries an `md` block, so palettes without dispersion
+        // stay exactly as before. Slots lacking `md` then fill those columns
+        // with `null` so every row spans every attribute.
+        let has_dispersion = palette.materials.iter().any(|m| m.dispersion.is_some());
+        let mut attributes = vec![
+            "metallic".to_owned(),
+            "roughness".to_owned(),
+            "emissive".to_owned(),
+            "shadows".to_owned(),
+        ];
+        if has_dispersion {
+            attributes.extend([
+                "ior".to_owned(),
+                "transmission".to_owned(),
+                "absorption".to_owned(),
+            ]);
+        }
         let data = palette
             .materials
             .iter()
             .map(|m| {
-                vec![
+                let mut row = vec![
                     VoxjAttrValue::Number(m.metalness),
                     VoxjAttrValue::Number(m.roughness),
                     VoxjAttrValue::Number(m.emission),
                     VoxjAttrValue::Bool(m.enable_shadows),
-                ]
+                ];
+                if has_dispersion {
+                    match m.dispersion {
+                        Some(d) => row.extend([
+                            VoxjAttrValue::Number(d.ior),
+                            VoxjAttrValue::Number(d.transmission),
+                            VoxjAttrValue::Number(d.absorption),
+                        ]),
+                        None => {
+                            row.extend([VoxjAttrValue::Null, VoxjAttrValue::Null, VoxjAttrValue::Null])
+                        }
+                    }
+                }
+                row
             })
             .collect();
         let index = palettes.len();
-        palettes.push(VoxjPalette {
-            attributes: vec![
-                "metallic".to_owned(),
-                "roughness".to_owned(),
-                "emissive".to_owned(),
-                "shadows".to_owned(),
-            ],
-            data,
-        });
+        palettes.push(VoxjPalette { attributes, data });
         palette_index.insert(sidecar, index);
         palette_name_by_index.insert(index, palette.name);
         Ok(Some((index, palette.materials.len())))

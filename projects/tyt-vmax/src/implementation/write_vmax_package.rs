@@ -9,7 +9,7 @@ use tyt_injection::{
     serde_json::{self, Value},
     serialize_bplist, serialize_json_pretty, write_file,
 };
-use vmax::{VXMaterial, VXMaterialPalette};
+use vmax::{VXMaterial, VXMaterialMd, VXMaterialPalette};
 use vmax_codec::{VMaxVoxel, encode_object_data, encode_snapshots};
 use voxj::{VoxjAttrValue, VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette};
 use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes};
@@ -245,7 +245,7 @@ fn write_material_palette(
         .iter()
         .enumerate()
         .map(|(slot, cell)| {
-            let mut material = parse_material(cell);
+            let mut material = parse_material(&palette.attributes, cell);
             material.mi = (slot + 1).to_string();
             material
         })
@@ -282,19 +282,36 @@ fn parse_rgba(cell: &[VoxjAttrValue]) -> [u8; 4] {
     [byte(0), byte(1), byte(2), byte(3)]
 }
 
-/// Parses a `[metallic, roughness, emissive, shadows]` material cell.
-fn parse_material(cell: &[VoxjAttrValue]) -> VXMaterial {
-    let number = |i: usize| match cell.get(i) {
-        Some(VoxjAttrValue::Number(n)) => *n,
-        _ => 0.0,
+/// Parses a material cell, reading `metallic`/`roughness`/`emissive`/`shadows`
+/// by attribute name and reconstructing the optional `md` dispersion block from
+/// the `ior`/`transmission`/`absorption` columns. `md` is restored only when at
+/// least one of those columns holds a number for this slot (slots without
+/// dispersion carry `null` there), so the per-slot presence round-trips.
+fn parse_material(attributes: &[String], cell: &[VoxjAttrValue]) -> VXMaterial {
+    let value = |name: &str| {
+        attributes
+            .iter()
+            .position(|a| a == name)
+            .and_then(|i| cell.get(i))
     };
+    let number = |name: &str, default: f64| match value(name) {
+        Some(VoxjAttrValue::Number(n)) => *n,
+        _ => default,
+    };
+    let dispersed = ["ior", "transmission", "absorption"]
+        .iter()
+        .any(|name| matches!(value(name), Some(VoxjAttrValue::Number(_))));
     VXMaterial {
         mi: String::new(),
-        mc: number(0),
-        rc: number(1),
-        sic: number(2),
-        sh: matches!(cell.get(3), Some(VoxjAttrValue::Bool(true))),
-        md: None,
+        mc: number("metallic", 0.0),
+        rc: number("roughness", 0.0),
+        sic: number("emissive", 0.0),
+        sh: matches!(value("shadows"), Some(VoxjAttrValue::Bool(true))),
+        md: dispersed.then(|| VXMaterialMd {
+            a: number("absorption", 0.0),
+            i: number("ior", 1.5),
+            t: number("transmission", 0.0),
+        }),
     }
 }
 
@@ -346,4 +363,86 @@ fn array3(values: [f64; 3]) -> Value {
 /// Wraps any error as invalid data.
 fn invalid(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error {
     IOError::new(ErrorKind::InvalidData, error).into()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_material;
+    use vmax::VXMaterialMd;
+    use voxj::VoxjAttrValue;
+
+    fn names(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn reconstructs_md_from_dispersion_columns() {
+        let attributes = names(&[
+            "metallic",
+            "roughness",
+            "emissive",
+            "shadows",
+            "ior",
+            "transmission",
+            "absorption",
+        ]);
+        let cell = vec![
+            VoxjAttrValue::Number(0.66),
+            VoxjAttrValue::Number(0.58),
+            VoxjAttrValue::Number(4.2),
+            VoxjAttrValue::Bool(false),
+            VoxjAttrValue::Number(1.5),
+            VoxjAttrValue::Number(0.83),
+            VoxjAttrValue::Number(0.0),
+        ];
+        let material = parse_material(&attributes, &cell);
+        assert_eq!(material.mc, 0.66);
+        assert_eq!(material.sic, 4.2);
+        assert!(!material.sh);
+        assert_eq!(
+            material.md,
+            Some(VXMaterialMd {
+                a: 0.0,
+                i: 1.5,
+                t: 0.83,
+            })
+        );
+    }
+
+    #[test]
+    fn null_dispersion_columns_leave_md_none() {
+        let attributes = names(&[
+            "metallic",
+            "roughness",
+            "emissive",
+            "shadows",
+            "ior",
+            "transmission",
+            "absorption",
+        ]);
+        let cell = vec![
+            VoxjAttrValue::Number(0.1),
+            VoxjAttrValue::Number(0.9),
+            VoxjAttrValue::Number(0.0),
+            VoxjAttrValue::Bool(true),
+            VoxjAttrValue::Null,
+            VoxjAttrValue::Null,
+            VoxjAttrValue::Null,
+        ];
+        let material = parse_material(&attributes, &cell);
+        assert!(material.sh);
+        assert_eq!(material.md, None);
+    }
+
+    #[test]
+    fn missing_dispersion_columns_leave_md_none() {
+        let attributes = names(&["metallic", "roughness", "emissive", "shadows"]);
+        let cell = vec![
+            VoxjAttrValue::Number(0.1),
+            VoxjAttrValue::Number(0.9),
+            VoxjAttrValue::Number(0.0),
+            VoxjAttrValue::Bool(true),
+        ];
+        assert_eq!(parse_material(&attributes, &cell).md, None);
+    }
 }
