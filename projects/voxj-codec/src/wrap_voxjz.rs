@@ -48,6 +48,7 @@ pub(crate) fn wrap_voxjz(member: &[u8]) -> Vec<u8> {
     out.extend_from_slice(&(compressed.len() as u32).to_le_bytes());
     out.extend_from_slice(&(member.len() as u32).to_le_bytes());
     out.extend_from_slice(&name_len.to_le_bytes());
+    out.extend_from_slice(&0u16.to_le_bytes()); // extra length
     out.extend_from_slice(&0u16.to_le_bytes()); // comment length
     out.extend_from_slice(&0u16.to_le_bytes()); // disk number start
     out.extend_from_slice(&0u16.to_le_bytes()); // internal attributes
