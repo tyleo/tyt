@@ -1,29 +1,21 @@
-use serde_json::Value;
 use std::io;
 use voxj::VoxjFile;
 
-/// Decodes `.voxj` JSON bytes into the document and its opaque `main.ext`
-/// namespace (JSON null when absent). The codec ascribes no meaning to `ext`;
-/// tools read their own format-specific data from under named keys.
-pub fn from_voxj_bytes(bytes: &[u8]) -> io::Result<(VoxjFile, Value)> {
-    let invalid = |error| io::Error::new(io::ErrorKind::InvalidData, error);
-    let mut value: Value = serde_json::from_slice(bytes).map_err(invalid)?;
-    let ext = value
-        .get_mut("main")
-        .and_then(Value::as_object_mut)
-        .and_then(|main| main.remove("ext"))
-        .unwrap_or(Value::Null);
-    let file = serde_json::from_value(value).map_err(invalid)?;
-    Ok((file, ext))
+/// Decodes `.voxj` JSON bytes into a [`VoxjFile`]. Any `main.ext` extension
+/// namespace is carried on [`VoxjMain::ext`](voxj::VoxjMain::ext).
+pub fn from_voxj_bytes(bytes: &[u8]) -> io::Result<VoxjFile> {
+    serde_json::from_slice(bytes).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{VoxjEncoder, from_voxj_bytes, from_voxj_or_voxjz_bytes, from_voxjz_bytes};
-    use serde_json::json;
+    use crate::{
+        from_voxj_bytes, from_voxj_or_voxjz_bytes, from_voxjz_bytes, to_voxj_bytes, to_voxjz_bytes,
+    };
+    use serde_json::{Value, json};
     use voxj::{
         VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPositionBlock, VoxjSampleBlock,
-        VoxjTransform,
+        VoxjTransform, VoxjValue,
     };
 
     fn document() -> VoxjFile {
@@ -49,47 +41,47 @@ mod tests {
                     },
                 }],
                 root_hierarchy_nodes: vec![0],
+                ext: None,
             },
         }
     }
 
-    #[test]
-    fn voxj_round_trips_document_and_ext() {
-        let file = document();
-        let ext = json!({ "voxel-max": { "scene": { "v": 4 } } });
-        let bytes = VoxjEncoder::new(&file)
-            .ext(&serde_json::to_vec(&ext).unwrap())
-            .json()
-            .unwrap();
-        let (decoded, decoded_ext) = from_voxj_bytes(&bytes).unwrap();
-        assert_eq!(decoded, file);
-        assert_eq!(decoded_ext, ext);
+    fn document_with_ext(ext: Value) -> VoxjFile {
+        let mut file = document();
+        file.main.ext = Some(serde_json::from_value::<VoxjValue>(ext).unwrap());
+        file
     }
 
     #[test]
-    fn voxj_without_ext_decodes_to_null() {
+    fn voxj_round_trips_document_and_ext() {
+        let file = document_with_ext(json!({ "voxel-max": { "scene": { "v": 4 } } }));
+        let bytes = to_voxj_bytes(&file).unwrap();
+        assert_eq!(from_voxj_bytes(&bytes).unwrap(), file);
+    }
+
+    #[test]
+    fn voxj_without_ext_omits_the_field() {
         let file = document();
-        let bytes = VoxjEncoder::new(&file).json().unwrap();
-        let (decoded, ext) = from_voxj_bytes(&bytes).unwrap();
+        let bytes = to_voxj_bytes(&file).unwrap();
+        assert!(
+            !String::from_utf8(bytes.clone())
+                .unwrap()
+                .contains("\"ext\"")
+        );
+        let decoded = from_voxj_bytes(&bytes).unwrap();
         assert_eq!(decoded, file);
-        assert!(ext.is_null());
+        assert!(decoded.main.ext.is_none());
     }
 
     #[test]
     fn voxjz_round_trips_and_detection_dispatches() {
-        let file = document();
-        let ext = json!({ "k": 1 });
-        let zip = VoxjEncoder::new(&file)
-            .ext(&serde_json::to_vec(&ext).unwrap())
-            .zip()
-            .unwrap();
-        let (decoded, decoded_ext) = from_voxjz_bytes(&zip).unwrap();
-        assert_eq!(decoded, file);
-        assert_eq!(decoded_ext, ext);
+        let file = document_with_ext(json!({ "k": 1 }));
+        let zip = to_voxjz_bytes(&file).unwrap();
+        assert_eq!(from_voxjz_bytes(&zip).unwrap(), file);
 
         // Detection: leading PK -> voxjz, leading { -> voxj.
-        assert_eq!(from_voxj_or_voxjz_bytes(&zip).unwrap().0, file);
-        let json = VoxjEncoder::new(&file).json().unwrap();
-        assert_eq!(from_voxj_or_voxjz_bytes(&json).unwrap().0, file);
+        assert_eq!(from_voxj_or_voxjz_bytes(&zip).unwrap(), file);
+        let json = to_voxj_bytes(&file).unwrap();
+        assert_eq!(from_voxj_or_voxjz_bytes(&json).unwrap(), file);
     }
 }

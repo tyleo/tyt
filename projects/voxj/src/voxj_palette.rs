@@ -1,4 +1,4 @@
-use crate::VoxjAttrValue;
+use crate::VoxjValue;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -11,5 +11,5 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VoxjPalette {
     pub attributes: Vec<String>,
-    pub data: Vec<Vec<VoxjAttrValue>>,
+    pub data: Vec<Vec<VoxjValue>>,
 }

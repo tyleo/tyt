@@ -8,9 +8,12 @@ use std::{
 use vmax::{VMaxObject, VMaxScene};
 use vmax_codec::VMaxVoxel;
 use voxj::{
-    VoxjAttrValue, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjTransform,
+    VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjTransform, VoxjValue,
 };
-use voxj_codec::{PositionEncoding, SampleEncoding, VoxelData, VoxjEncoder};
+use voxj_codec::{
+    PositionEncoding, SampleEncoding, VoxelData, to_voxj_bytes, to_voxj_pretty_bytes,
+    to_voxjz_bytes,
+};
 
 /// Number of cells in a color palette; a `palette*.png` is 256×1 RGBA, and a
 /// placeholder palette covers every possible color index.
@@ -215,6 +218,11 @@ impl ToVoxj {
             .map(|i| palette_name_by_index.get(&i).cloned())
             .collect();
 
+        // Stash the vmax-specific state that has no native voxj home under the
+        // generic `ext` namespace so `from-voxj` can rebuild the package exactly.
+        // The voxj codec treats `ext` as opaque; the `voxel-max` shape lives here.
+        let ext = dependencies.voxel_max_ext(&scene_bytes, &palette_names, &object_vmaxb)?;
+
         let file = VoxjFile {
             version: 1,
             main: VoxjMain {
@@ -222,18 +230,14 @@ impl ToVoxj {
                 palettes,
                 hierarchy_nodes,
                 root_hierarchy_nodes,
+                ext: Some(ext),
             },
         };
 
-        // Stash the vmax-specific state that has no native voxj home under the
-        // generic `ext` namespace so `from-voxj` can rebuild the package exactly.
-        // The voxj codec treats `ext` as opaque; the `voxel-max` shape lives here.
-        let ext = dependencies.voxel_max_ext(&scene_bytes, &palette_names, &object_vmaxb)?;
-        let encoder = VoxjEncoder::new(&file).ext(&ext);
         let bytes = match self.format {
-            Format::Json => encoder.json(),
-            Format::PrettyJson => encoder.pretty(),
-            Format::Zip => encoder.zip(),
+            Format::Json => to_voxj_bytes(&file),
+            Format::PrettyJson => to_voxj_pretty_bytes(&file),
+            Format::Zip => to_voxjz_bytes(&file),
         }
         .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
 
@@ -374,7 +378,7 @@ impl ToVoxj {
         &self,
         dependencies: &impl Dependencies,
         object: &VMaxObject,
-    ) -> Result<Vec<Vec<VoxjAttrValue>>> {
+    ) -> Result<Vec<Vec<VoxjValue>>> {
         if let Ok(png_bytes) = dependencies.read_file(&self.input_vmax.join(&object.palette)) {
             return Ok(rgba_cells(&dependencies.load_palette(&png_bytes)?));
         }
@@ -388,7 +392,7 @@ impl ToVoxj {
             }
         }
         Ok((0..COLOR_CELLS)
-            .map(|_| vec![VoxjAttrValue::Text(PLACEHOLDER_COLOR.to_owned())])
+            .map(|_| vec![VoxjValue::Text(PLACEHOLDER_COLOR.to_owned())])
             .collect())
     }
 
@@ -442,23 +446,19 @@ impl ToVoxj {
             .iter()
             .map(|m| {
                 let mut row = vec![
-                    VoxjAttrValue::Number(m.metalness),
-                    VoxjAttrValue::Number(m.roughness),
-                    VoxjAttrValue::Number(m.emission),
-                    VoxjAttrValue::Bool(m.enable_shadows),
+                    VoxjValue::Number(m.metalness),
+                    VoxjValue::Number(m.roughness),
+                    VoxjValue::Number(m.emission),
+                    VoxjValue::Bool(m.enable_shadows),
                 ];
                 if has_dispersion {
                     match m.dispersion {
                         Some(d) => row.extend([
-                            VoxjAttrValue::Number(d.ior),
-                            VoxjAttrValue::Number(d.transmission),
-                            VoxjAttrValue::Number(d.absorption),
+                            VoxjValue::Number(d.ior),
+                            VoxjValue::Number(d.transmission),
+                            VoxjValue::Number(d.absorption),
                         ]),
-                        None => row.extend([
-                            VoxjAttrValue::Null,
-                            VoxjAttrValue::Null,
-                            VoxjAttrValue::Null,
-                        ]),
+                        None => row.extend([VoxjValue::Null, VoxjValue::Null, VoxjValue::Null]),
                     }
                 }
                 row
@@ -473,14 +473,10 @@ impl ToVoxj {
 }
 
 /// One `#RRGGBBAA` text cell per RGBA color.
-fn rgba_cells(colors: &[[u8; 4]]) -> Vec<Vec<VoxjAttrValue>> {
+fn rgba_cells(colors: &[[u8; 4]]) -> Vec<Vec<VoxjValue>> {
     colors
         .iter()
-        .map(|&[r, g, b, a]| {
-            vec![VoxjAttrValue::Text(format!(
-                "#{r:02X}{g:02X}{b:02X}{a:02X}"
-            ))]
-        })
+        .map(|&[r, g, b, a]| vec![VoxjValue::Text(format!("#{r:02X}{g:02X}{b:02X}{a:02X}"))])
         .collect()
 }
 

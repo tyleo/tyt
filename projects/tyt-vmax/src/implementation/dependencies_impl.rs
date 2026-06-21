@@ -10,6 +10,7 @@ use std::{
 use tyt_injection::serde_json::{self, Map, Value};
 use vmax::{VMaxScene, VXMaterialPalette, VXObjectData};
 use vmax_codec::{VMaxMaterialPalette, VMaxVoxel, decode_material_palette, decode_snapshots};
+use voxj::VoxjValue;
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
 /// reference. Voxel Max refuses to open a scene whose objects have an empty
@@ -132,7 +133,7 @@ impl Dependencies for DependenciesImpl {
         scene_bytes: &[u8],
         palette_names: &[Option<String>],
         object_vmaxb: &[Option<Vec<u8>>],
-    ) -> Result<Vec<u8>> {
+    ) -> Result<VoxjValue> {
         let invalid = |e| -> Error { IOError::new(ErrorKind::InvalidData, e).into() };
         let mut value: Value = tyt_injection::parse_json(scene_bytes)?;
         let nodes = |value: &mut Value, key: &str| -> Result<Vec<VoxelMaxNode>> {
@@ -184,7 +185,7 @@ impl Dependencies for DependenciesImpl {
         .map_err(invalid)?;
         let mut ext = Map::new();
         ext.insert("voxel-max".to_owned(), voxel_max);
-        serde_json::to_vec(&Value::Object(ext)).map_err(invalid)
+        serde_json::from_value(Value::Object(ext)).map_err(invalid)
     }
 
     fn read_file(&self, path: &Path) -> Result<Vec<u8>> {

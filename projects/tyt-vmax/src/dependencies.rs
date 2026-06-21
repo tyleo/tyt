@@ -2,6 +2,7 @@ use crate::{ColorFormat, Result};
 use std::path::{Path, PathBuf};
 use vmax::VMaxScene;
 use vmax_codec::{VMaxMaterialPalette, VMaxVoxel};
+use voxj::VoxjValue;
 
 /// Dependencies for this crate's operations.
 pub trait Dependencies {
@@ -43,7 +44,7 @@ pub trait Dependencies {
         scene_bytes: &[u8],
         palette_names: &[Option<String>],
         object_vmaxb: &[Option<Vec<u8>>],
-    ) -> Result<Vec<u8>>;
+    ) -> Result<VoxjValue>;
     fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
     fn remove_file(&self, path: &Path) -> Result<()>;
     fn rename_file(&self, from: &Path, to: &Path) -> Result<()>;
