@@ -380,14 +380,16 @@ impl ToVoxj {
         object: &VMaxObject,
     ) -> Result<Vec<Vec<VoxjValue>>> {
         if let Ok(png_bytes) = dependencies.read_file(&self.input_vmax.join(&object.palette)) {
-            return Ok(rgba_cells(&dependencies.load_palette(&png_bytes)?));
+            return Ok(rgba_cells(&strip_color_terminator(
+                dependencies.load_palette(&png_bytes)?,
+            )));
         }
         if let Some(stem) = object.palette.strip_suffix(".png") {
             let sidecar = format!("{stem}.settings.vmaxpsb");
             if let Ok(bytes) = dependencies.read_file(&self.input_vmax.join(&sidecar)) {
                 let palette = dependencies.parse_material_palette(&bytes)?;
                 if !palette.colors.is_empty() {
-                    return Ok(rgba_cells(&palette.colors));
+                    return Ok(rgba_cells(&strip_color_terminator(palette.colors)));
                 }
             }
         }
@@ -470,6 +472,18 @@ impl ToVoxj {
         palette_name_by_index.insert(index, palette.name);
         Ok(Some((index, palette.materials.len())))
     }
+}
+
+/// Drops the trailing transparent terminator Voxel Max appends to fill a color
+/// table to [`COLOR_CELLS`]. That last index is a reserved `#00000000` slot no
+/// voxel references, so keeping it would pad the model with a non-color and make
+/// a `palette*.png`-sourced palette disagree in length with one read from the
+/// material sidecar's already-terminator-free `colors` table.
+fn strip_color_terminator(mut colors: Vec<[u8; 4]>) -> Vec<[u8; 4]> {
+    if colors.len() == COLOR_CELLS && colors.last() == Some(&[0, 0, 0, 0]) {
+        colors.pop();
+    }
+    colors
 }
 
 /// One `#RRGGBBAA` text cell per RGBA color.
