@@ -2,12 +2,12 @@ use crate::wrap_voxjz;
 use serde_json::Value;
 use voxj::VoxjFile;
 
-/// Builds `.voxj` / `.voxjz` bytes for a document, optionally embedding an opaque
-/// extension blob at `main.ext`.
+/// Builds `.voxj` / `.voxjz` bytes for a document, optionally embedding an
+/// opaque extension blob at `main.ext`.
 ///
 /// ```ignore
-/// let json = VoxjEncoder::new(&file).json()?;            // no extension data
-/// let zip = VoxjEncoder::new(&file).ext(&ext).zip()?;   // with extension data
+/// let json = VoxjEncoder::new(&file).json()?;          // no extension data
+/// let zip = VoxjEncoder::new(&file).ext(&ext).zip()?;  // with extension data
 /// ```
 pub struct VoxjEncoder<'a> {
     file: &'a VoxjFile,
