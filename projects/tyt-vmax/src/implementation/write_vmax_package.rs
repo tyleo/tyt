@@ -42,6 +42,9 @@ pub(crate) fn write_vmax_package(
     // Color palette index -> the `pal` filename written for it (shared by every
     // object that references the same palette).
     let mut palette_files: HashMap<usize, String> = HashMap::new();
+    // Voxj object index -> its `data` filename, shared by every node that places
+    // the same object (an instance).
+    let mut contents_files: HashMap<usize, String> = HashMap::new();
 
     for (index, node) in file.main.hierarchy_nodes.iter().enumerate() {
         let ext_node = voxel_max
@@ -66,27 +69,36 @@ pub(crate) fn write_vmax_package(
         let (color, material) = object_palettes(&file, object);
         let suffix = suffix(object_index);
 
-        let voxels = reconstruct_voxels(
-            &file,
-            object,
-            color.map(|(channel, _)| channel),
-            material.map(|(channel, _)| channel),
-            &ext_node,
-        )?;
-        let data = format!("contents{suffix}.vmaxb");
-        // Restore the object's preserved editor state (tools/brush/cam, content
-        // uuid/version) around the rebuilt geometry; fall back to a minimal
-        // payload when the voxj document carries no Voxel Max object state.
-        let object_data = match voxel_max
-            .object_states
-            .get(object_index)
-            .and_then(|s| s.clone())
-        {
-            Some(state) => object_data_from_state(state, encode_snapshots(&voxels)),
-            None => encode_object_data(&voxels, &ext_node.id),
+        // Instances share one `contents*.vmaxb`: encode and write it once.
+        let data = match contents_files.get(&object_index) {
+            Some(data) => data.clone(),
+            None => {
+                let voxels = reconstruct_voxels(
+                    &file,
+                    object,
+                    color.map(|(channel, _)| channel),
+                    material.map(|(channel, _)| channel),
+                    &ext_node,
+                )?;
+                let data = format!("contents{suffix}.vmaxb");
+                // Restore the object's preserved editor state (tools/brush/cam,
+                // content uuid/version) around the rebuilt geometry; fall back to
+                // a minimal payload when the voxj document carries no Voxel Max
+                // object state.
+                let object_data = match voxel_max
+                    .object_states
+                    .get(object_index)
+                    .and_then(|s| s.clone())
+                {
+                    Some(state) => object_data_from_state(state, encode_snapshots(&voxels)),
+                    None => encode_object_data(&voxels, &ext_node.id),
+                };
+                let payload = compress_lzfse(&serialize_bplist(&object_data).map_err(invalid)?);
+                write_file(&output.join(&data), &payload)?;
+                contents_files.insert(object_index, data.clone());
+                data
+            }
         };
-        let payload = compress_lzfse(&serialize_bplist(&object_data).map_err(invalid)?);
-        write_file(&output.join(&data), &payload)?;
 
         let pal = write_palette(
             &file,

@@ -170,12 +170,25 @@ impl ToVoxj {
         // Display name of each material palette, keyed by its `palettes` index.
         let mut palette_name_by_index: HashMap<usize, String> = HashMap::new();
 
-        // One geometry object and one wrapping-node transform per vmax object,
-        // plus the object's raw `.vmaxb` bytes (for the `voxel-max` ext).
+        // One voxj object (and its `.vmaxb` bytes for the ext) per distinct
+        // geometry; instances of one geometry collapse to a single object.
         let mut objects: Vec<VoxjObject> = Vec::new();
-        let mut object_transforms: Vec<VoxjTransform> = Vec::new();
         let mut object_vmaxb: Vec<Option<Vec<u8>>> = Vec::new();
+        // Per scene object: its node transform and the voxj object it places.
+        let mut object_transforms: Vec<VoxjTransform> = Vec::new();
+        let mut object_refs: Vec<usize> = Vec::new();
+        let mut instances: HashMap<InstanceKey, usize> = HashMap::new();
         for object in &scene.objects {
+            let key = instance_key(object);
+            if let Some(&existing) = key.as_ref().and_then(|key| instances.get(key)) {
+                // Reuse the built geometry; keep this placement, skip re-decoding.
+                let (box_min, _) =
+                    authored_box(object).expect("instance key implies authored bounds");
+                let box_min_f = [box_min[0] as f64, box_min[1] as f64, box_min[2] as f64];
+                object_transforms.push(object_transform(object, box_min_f));
+                object_refs.push(existing);
+                continue;
+            }
             let (voxj_object, transform, vmaxb) = self.build_object(
                 &dependencies,
                 object,
@@ -184,12 +197,18 @@ impl ToVoxj {
                 &mut palette_index,
                 &mut palette_name_by_index,
             )?;
+            let index = objects.len();
             objects.push(voxj_object);
-            object_transforms.push(transform);
             object_vmaxb.push(vmaxb);
+            object_transforms.push(transform);
+            object_refs.push(index);
+            if let Some(key) = key {
+                instances.insert(key, index);
+            }
         }
 
-        let (hierarchy_nodes, root_hierarchy_nodes) = build_hierarchy(&scene, &object_transforms);
+        let (hierarchy_nodes, root_hierarchy_nodes) =
+            build_hierarchy(&scene, &object_transforms, &object_refs);
 
         // Material-palette names aligned by index with `main.palettes` for the ext.
         let palette_names: Vec<Option<String>> = (0..palettes.len())
@@ -435,9 +454,11 @@ impl ToVoxj {
                             VoxjAttrValue::Number(d.transmission),
                             VoxjAttrValue::Number(d.absorption),
                         ]),
-                        None => {
-                            row.extend([VoxjAttrValue::Null, VoxjAttrValue::Null, VoxjAttrValue::Null])
-                        }
+                        None => row.extend([
+                            VoxjAttrValue::Null,
+                            VoxjAttrValue::Null,
+                            VoxjAttrValue::Null,
+                        ]),
                     }
                 }
                 row
@@ -497,6 +518,42 @@ fn object_bounds(voxels: &[VMaxVoxel], box_min: [i32; 3]) -> [u32; 3] {
     bounds
 }
 
+/// Identifies voxj objects that are the same geometry placed more than once.
+/// Voxel Max instances a model by reusing a `contents*.vmaxb` and its `palette`
+/// across scene objects, so objects sharing the `data`/`palette` filenames and
+/// the same authored box decode to one identical voxj object (differing only in
+/// the placement carried by their wrapping nodes).
+type InstanceKey = (String, String, [i32; 3], [u32; 3]);
+
+/// The [`InstanceKey`] for an object, or `None` when it cannot be instanced: it
+/// names no `data` file, or has no authored bounds to fix a shared box (such
+/// objects always become their own voxj object).
+fn instance_key(object: &VMaxObject) -> Option<InstanceKey> {
+    if object.data.is_empty() {
+        return None;
+    }
+    let (box_min, size) = authored_box(object)?;
+    Some((object.data.clone(), object.palette.clone(), box_min, size))
+}
+
+/// The re-basing origin `round(center + bounds_min)` and `[X, Y, Z]` size from
+/// an object's authored Voxel Max bounds, or `None` when it has none. Reads only
+/// the bounds fields (no voxels), so it can key instancing without decoding.
+fn authored_box(object: &VMaxObject) -> Option<([i32; 3], [u32; 3])> {
+    let (min, max) = (object.bounds_min?, object.bounds_max?);
+    let box_min = [
+        (object.center[0] + min[0]).round() as i32,
+        (object.center[1] + min[1]).round() as i32,
+        (object.center[2] + min[2]).round() as i32,
+    ];
+    let size = [
+        (max[0] - min[0]).round().max(0.0) as u32,
+        (max[1] - min[1]).round().max(0.0) as u32,
+        (max[2] - min[2]).round().max(0.0) as u32,
+    ];
+    Some((box_min, size))
+}
+
 /// The re-basing origin and `[X, Y, Z]` size for an object. Always uses the
 /// object's Voxel Max bounds (`center + bounds_min` .. `center + bounds_max`)
 /// when present, so the encoded bounds match vmax exactly and are never
@@ -507,26 +564,16 @@ fn object_box(
     voxels: &[VMaxVoxel],
     tight_min: Option<[i32; 3]>,
 ) -> Result<([i32; 3], [u32; 3])> {
-    let (Some(min), Some(max)) = (object.bounds_min, object.bounds_max) else {
+    let Some((box_min, size)) = authored_box(object) else {
         // No authored bounds: derive a tight box, or origin for an empty object.
         return Ok(match tight_min {
             Some(tight) => (tight, object_bounds(voxels, tight)),
             None => ([0, 0, 0], [0, 0, 0]),
         });
     };
-    let box_min = [
-        (object.center[0] + min[0]).round() as i32,
-        (object.center[1] + min[1]).round() as i32,
-        (object.center[2] + min[2]).round() as i32,
-    ];
-    let size = [
-        (max[0] - min[0]).round() as i64,
-        (max[1] - min[1]).round() as i64,
-        (max[2] - min[2]).round() as i64,
-    ];
     for v in voxels {
         let local = [v.x - box_min[0], v.y - box_min[1], v.z - box_min[2]];
-        if (0..3).any(|k| local[k] < 0 || i64::from(local[k]) >= size[k]) {
+        if (0..3).any(|k| local[k] < 0 || local[k] as i64 >= i64::from(size[k])) {
             return Err(IOError::new(
                 ErrorKind::InvalidData,
                 format!(
@@ -538,14 +585,7 @@ fn object_box(
             .into());
         }
     }
-    Ok((
-        box_min,
-        [
-            size[0].max(0) as u32,
-            size[1].max(0) as u32,
-            size[2].max(0) as u32,
-        ],
-    ))
+    Ok((box_min, size))
 }
 
 /// The node transform that places an object whose voxels are authored from the
@@ -572,10 +612,13 @@ fn object_transform(object: &VMaxObject, box_min: [f64; 3]) -> VoxjTransform {
 }
 
 /// Builds the voxj hierarchy: one node per group and one per object (the latter
-/// wrapping its geometry). Returns the nodes and the indices of the roots.
+/// wrapping its geometry). `object_refs[i]` is the voxj object that scene object
+/// `i` places, so instances of one geometry share a `child_objects` index.
+/// Returns the nodes and the indices of the roots.
 fn build_hierarchy(
     scene: &VMaxScene,
     object_transforms: &[VoxjTransform],
+    object_refs: &[usize],
 ) -> (Vec<VoxjHierarchyNode>, Vec<usize>) {
     let mut nodes: Vec<VoxjHierarchyNode> = Vec::new();
     let mut node_of_id: HashMap<&str, usize> = HashMap::new();
@@ -601,7 +644,7 @@ fn build_hierarchy(
         nodes.push(VoxjHierarchyNode {
             name: object.name.clone(),
             child_nodes: Vec::new(),
-            child_objects: vec![object_index],
+            child_objects: vec![object_refs[object_index]],
             transform: object_transforms[object_index],
         });
     }
