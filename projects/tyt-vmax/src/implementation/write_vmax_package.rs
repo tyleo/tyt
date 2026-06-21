@@ -14,7 +14,7 @@ use tyt_injection::{
 use vmax::{VXMaterial, VXMaterialMd, VXMaterialPalette};
 use vmax_codec::{VMaxVoxel, encode_object_data, encode_snapshots};
 use voxj::{VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette, VoxjValue};
-use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes};
+use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes, palette_cell_counts};
 
 /// Reconstructs a `.vmax` package directory at `output` from `.voxj`/`.voxjz`
 /// bytes: rebuilds `scene.json` from the `voxel-max` ext plus the voxj
@@ -167,11 +167,7 @@ fn reconstruct_voxels(
     material_channel: Option<usize>,
     ext_node: &VoxelMaxNode,
 ) -> Result<Vec<VMaxVoxel>> {
-    let cell_counts: Vec<usize> = object
-        .palette_refs
-        .iter()
-        .map(|&r| file.main.palettes.get(r).map_or(0, |p| p.data.len()))
-        .collect();
+    let cell_counts = palette_cell_counts(object, &file.main.palettes);
     let data = decode_object(object, &cell_counts)?;
     let box_min = box_min(ext_node);
     Ok(data

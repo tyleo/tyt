@@ -6,7 +6,9 @@ use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 /// Decodes one [`VoxjObject`] back into [`ObjectData`], the inverse of
 /// [`encode_object`](crate::encode_object). `cell_counts[p]` is the cell count
 /// of the palette referenced by `object.palette_refs[p]`, needed to recover the
-/// bit width of `packed-base64` samples.
+/// bit width of `packed-base64` samples;
+/// [`palette_cell_counts`](crate::palette_cell_counts) computes it from the
+/// document's palettes.
 ///
 /// Bitmap and Hilbert positions decode in ascending cell / Hilbert-index order;
 /// the sample channels share that same order, so each returned `positions[k]`
