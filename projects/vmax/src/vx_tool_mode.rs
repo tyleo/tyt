@@ -15,24 +15,31 @@ pub struct VXToolMode {
     /// Add surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub a: Option<VXMode>,
+
     /// Brush surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub b: Option<VXMode>,
+
     /// Color/cube surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub c: Option<VXMode>,
+
     /// Erase/edge surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub e: Option<VXMode>,
+
     /// Layer surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub l: Option<VXMode>,
+
     /// Material surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub m: Option<VXMode>,
+
     /// Paint surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub p: Option<VXMode>,
+
     /// Select surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub s: Option<VXMode>,

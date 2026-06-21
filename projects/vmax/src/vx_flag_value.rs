@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub enum VXFlagValue {
     /// A boolean flag (`tools.mr`, `tools.st`).
     Bool(bool),
+
     /// An integer flag (`tools.stf`).
     Int(i64),
 }

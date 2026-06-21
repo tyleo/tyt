@@ -6,12 +6,16 @@ use vmax::VXMaterial;
 pub struct VMaxMaterial {
     /// Metalness in `0..=1` (Voxel Max `mc`).
     pub metalness: f64,
+
     /// Roughness in `0..=1` (Voxel Max `rc`).
     pub roughness: f64,
+
     /// Emission strength (Voxel Max `sic`).
     pub emission: f64,
+
     /// Whether the material casts shadows (Voxel Max `sh`).
     pub enable_shadows: bool,
+
     /// Optional dispersion parameters (Voxel Max `md`); `None` when the slot
     /// carries no `md` block.
     pub dispersion: Option<VMaxDispersion>,

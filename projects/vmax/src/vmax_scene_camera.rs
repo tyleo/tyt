@@ -11,22 +11,31 @@ use serde::{Deserialize, Serialize};
 pub struct VMaxSceneCamera {
     /// Camera declination/pitch angle.
     pub da: f64,
+
     /// Camera azimuth/heading angle.
     pub ha: f64,
+
     /// Light declination/pitch angle.
     pub lda: f64,
+
     /// Light azimuth/heading angle.
     pub lha: f64,
+
     /// Light "world" angle.
     pub lwa: f64,
+
     /// Camera target/origin position.
     pub o: [f64; 3],
+
     /// Camera pan X.
     pub px: f64,
+
     /// Camera pan Y.
     pub py: f64,
+
     /// Camera "world" angle.
     pub wa: f64,
+
     /// Camera distance/zoom.
     pub z: f64,
 }

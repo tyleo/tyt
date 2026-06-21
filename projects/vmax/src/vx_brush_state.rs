@@ -11,18 +11,23 @@ use serde::{Deserialize, Serialize};
 pub struct VXBrushState {
     /// Color mode.
     pub cm: String,
+
     /// Color position.
     pub cp: String,
+
     /// Gradient mode.
     pub gm: String,
+
     /// Gradient position.
     pub gp: String,
+
     /// Offset cursor max.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub ocx: Option<i64>,
+
     /// Offset cursor min.
     #[cfg_attr(
         feature = "serde",

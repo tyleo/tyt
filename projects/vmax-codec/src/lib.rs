@@ -1,16 +1,14 @@
+mod internal;
+pub(crate) use internal::*;
+
 mod decode_material_palette;
-mod decode_morton_3d;
 mod decode_snapshots;
-mod encode_morton_3d;
 mod encode_object_data;
 mod encode_snapshots;
 mod vmax_dispersion;
 mod vmax_material;
 mod vmax_material_palette;
 mod vmax_voxel;
-
-pub(crate) use decode_morton_3d::*;
-pub(crate) use encode_morton_3d::*;
 
 pub use decode_material_palette::*;
 pub use decode_snapshots::*;

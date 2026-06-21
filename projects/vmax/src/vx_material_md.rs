@@ -8,8 +8,10 @@ use serde::{Deserialize, Serialize};
 pub struct VXMaterialMd {
     /// Absorption.
     pub a: f64,
+
     /// Index of refraction.
     pub i: f64,
+
     /// Transmission.
     pub t: f64,
 }

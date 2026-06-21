@@ -12,8 +12,10 @@ use serde::{Deserialize, Serialize};
 pub struct VXMaterialPalette {
     /// Palette display name.
     pub name: String,
+
     /// Selectable material slots.
     pub materials: Vec<VXMaterial>,
+
     /// Packed RGBA color table (4 bytes per entry). This is Voxel Max's color
     /// source when an object's `palette*.png` image is absent; palettes that
     /// ship a `.png` omit this key entirely, so an empty table is not
@@ -27,22 +29,30 @@ pub struct VXMaterialPalette {
     // Palette-level settings Voxel Max records alongside the colors.
     /// Color indices.
     pub indices: Vec<i64>,
+
     /// Layer-color usage mask.
     #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
     pub lc: Vec<u8>,
+
     /// Palette type tag.
     #[cfg_attr(feature = "serde", serde(rename = "type"))]
     pub palette_type: i64,
+
     /// Global transparency.
     pub transparency: f64,
+
     /// Reserved counter.
     pub r: i64,
+
     /// Reserved token.
     pub rt: String,
+
     /// Comment string.
     pub cmt: String,
+
     /// Currently selected index.
     pub current: i64,
+
     /// Alias token.
     pub ali: String,
 }

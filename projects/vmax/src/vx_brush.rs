@@ -10,9 +10,11 @@ use serde::{Deserialize, Serialize};
 pub struct VXBrush {
     /// Palette display name.
     pub name: String,
+
     /// Brush slots.
     #[cfg_attr(feature = "serde", serde(default))]
     pub brushes: Vec<VXBrushEntry>,
+
     /// Index of the selected slot.
     pub current: i64,
 }

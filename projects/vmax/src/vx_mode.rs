@@ -14,18 +14,21 @@ pub struct VXMode {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub mo: Option<String>,
+
     /// Secondary mode token.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub m: Option<String>,
+
     /// Mode flag token.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub mf: Option<String>,
+
     /// Type token.
     #[cfg_attr(
         feature = "serde",

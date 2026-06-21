@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 pub struct VXExtent {
     /// Order tag; observed constant `5` (2^5 = 32, the chunk edge length).
     pub o: i64,
+
     /// Occupied-voxel range.
     #[cfg_attr(
         feature = "serde",

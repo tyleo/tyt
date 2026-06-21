@@ -12,20 +12,28 @@ use serde::{Deserialize, Serialize};
 pub enum VXBrushEntry {
     /// Cube/voxel brush slot.
     C(VXBrushColor),
+
     /// `ch` brush slot.
     Ch(VXBrushColor),
+
     /// Ellipsoid/erase brush slot.
     E(VXBrushColor),
+
     /// `eh` brush slot.
     Eh(VXBrushColor),
+
     /// `bb` brush slot.
     Bb(VXBrushColor),
+
     /// `db` brush slot.
     Db(VXBrushColor),
+
     /// Prism brush slot.
     Pr(VXBrushColor),
+
     /// Pyramid brush slot.
     Py(VXBrushColor),
+
     /// `et` brush slot.
     Et(VXBrushColor),
 }

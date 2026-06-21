@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct VXExtentRange {
     /// Occupied-range minimum corner (chunk-local).
     pub min: Vec<i64>,
+
     /// Occupied-range maximum corner (chunk-local).
     pub max: Vec<i64>,
 }

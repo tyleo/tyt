@@ -7,8 +7,10 @@ use vmax::VXMaterialMd;
 pub struct VMaxDispersion {
     /// Absorption (Voxel Max `md.a`).
     pub absorption: f64,
+
     /// Index of refraction (Voxel Max `md.i`).
     pub ior: f64,
+
     /// Light transmission through the surface (Voxel Max `md.t`).
     pub transmission: f64,
 }

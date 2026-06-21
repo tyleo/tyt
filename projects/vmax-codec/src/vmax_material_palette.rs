@@ -7,8 +7,10 @@ use crate::VMaxMaterial;
 pub struct VMaxMaterialPalette {
     /// Display name (Voxel Max `name`).
     pub name: String,
+
     /// The selectable material slots.
     pub materials: Vec<VMaxMaterial>,
+
     /// One `[r, g, b, a]` per color index. This is Voxel Max's color source
     /// when an object's `palette*.png` image is absent; empty when the palette
     /// carries no color table.

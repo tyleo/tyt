@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct VXViewBox {
     /// Minimum `[x, y, z]` corner.
     pub min: [i64; 3],
+
     /// Maximum `[x, y, z]` corner.
     pub max: [i64; 3],
 }
