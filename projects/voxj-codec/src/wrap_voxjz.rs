@@ -15,6 +15,15 @@ const ZIP64_VERSION: u16 = 45;
 /// "Version needed to extract" advertised by classic, non-zip64 records (2.0).
 const BASE_VERSION: u16 = 20;
 
+/// Fixed DOS modification time and date stamped on the member so archives stay
+/// reproducible (byte-identical for identical input) rather than varying with
+/// wall-clock time. `1980-01-01 00:00:00` is the earliest the DOS format can
+/// represent: date = (year - 1980) << 9 | month << 5 | day = (1 << 5) | 1 =
+/// 0x0021, time = 0. An all-zero date is the invalid `day 0, month 0` that some
+/// tools flag.
+const DOS_TIME: u16 = 0x0000;
+const DOS_DATE: u16 = 0x0021;
+
 /// Wraps a `.voxj` byte payload in a single-member, deflate-compressed `.voxjz`
 /// zip archive. The common case uses classic 32-bit framing; the writer
 /// transparently switches to zip64 when the member's compressed or uncompressed
@@ -75,8 +84,8 @@ fn wrap_voxjz_with(member: &[u8], zip64_at: u64) -> Vec<u8> {
     out.extend_from_slice(&version_needed.to_le_bytes()); // version needed
     out.extend_from_slice(&0u16.to_le_bytes()); // flags
     out.extend_from_slice(&8u16.to_le_bytes()); // method: deflate
-    out.extend_from_slice(&0u16.to_le_bytes()); // mod time
-    out.extend_from_slice(&0u16.to_le_bytes()); // mod date
+    out.extend_from_slice(&DOS_TIME.to_le_bytes()); // mod time
+    out.extend_from_slice(&DOS_DATE.to_le_bytes()); // mod date
     out.extend_from_slice(&crc.to_le_bytes());
     out.extend_from_slice(&stored_csize.to_le_bytes());
     out.extend_from_slice(&stored_usize.to_le_bytes());
@@ -93,8 +102,8 @@ fn wrap_voxjz_with(member: &[u8], zip64_at: u64) -> Vec<u8> {
     out.extend_from_slice(&version_needed.to_le_bytes()); // version needed
     out.extend_from_slice(&0u16.to_le_bytes()); // flags
     out.extend_from_slice(&8u16.to_le_bytes()); // method
-    out.extend_from_slice(&0u16.to_le_bytes()); // mod time
-    out.extend_from_slice(&0u16.to_le_bytes()); // mod date
+    out.extend_from_slice(&DOS_TIME.to_le_bytes()); // mod time
+    out.extend_from_slice(&DOS_DATE.to_le_bytes()); // mod date
     out.extend_from_slice(&crc.to_le_bytes());
     out.extend_from_slice(&stored_csize.to_le_bytes());
     out.extend_from_slice(&stored_usize.to_le_bytes());
@@ -168,7 +177,9 @@ fn zip64_size_extra(uncompressed_size: u64, compressed_size: u64) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{MEMBER_NAME, ZIP64_SENTINEL, ZIP64_VERSION, wrap_voxjz, wrap_voxjz_with};
+    use super::{
+        DOS_DATE, MEMBER_NAME, ZIP64_SENTINEL, ZIP64_VERSION, wrap_voxjz, wrap_voxjz_with,
+    };
     use crate::unwrap_voxjz;
 
     const EOCD_SIG: [u8; 4] = [0x50, 0x4b, 0x05, 0x06];
@@ -195,6 +206,7 @@ mod tests {
         assert_eq!(bytes[eocd..eocd + 4], EOCD_SIG);
         assert_ne!(bytes[eocd - 20..eocd - 16], ZIP64_LOCATOR_SIG);
         assert_eq!(u16_at(&bytes, 28), 0); // local extra length: none
+        assert_eq!(u16_at(&bytes, 12), DOS_DATE); // valid 1980-01-01 mod date
 
         assert_eq!(unwrap_voxjz(&bytes).unwrap(), member);
     }
