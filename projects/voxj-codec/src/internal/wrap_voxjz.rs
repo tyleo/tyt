@@ -35,9 +35,9 @@ pub(crate) fn wrap_voxjz(member: &[u8]) -> Vec<u8> {
 }
 
 /// Builds the archive, routing any size or offset that reaches `zip64_at`
-/// through zip64 framing. Production passes `0xFFFFFFFF` (the one value a 32-bit
-/// field can never store inline); tests pass a small value to drive the zip64
-/// path with a tiny payload.
+/// through zip64 framing. Production passes `0xFFFFFFFF` (the one value a
+/// 32-bit field can never store inline); tests pass a small value to drive the
+/// zip64 path with a tiny payload.
 fn wrap_voxjz_with(member: &[u8], zip64_at: u64) -> Vec<u8> {
     let mut crc = Crc::new();
     crc.update(member);

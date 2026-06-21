@@ -2,7 +2,7 @@ use flate2::read::DeflateDecoder;
 use std::io::{self, Read};
 
 /// Inflates the single deflate member of a `.voxjz` archive back to its `.voxj`
-/// bytes — the inverse of [`wrap_voxjz`](crate::wrap_voxjz). The deflate stream
+/// bytes: the inverse of [`wrap_voxjz`](crate::wrap_voxjz). The deflate stream
 /// ends itself, so any trailing zip central-directory bytes are ignored.
 pub(crate) fn unwrap_voxjz(bytes: &[u8]) -> io::Result<Vec<u8>> {
     let invalid = || io::Error::new(io::ErrorKind::InvalidData, "malformed .voxjz archive");

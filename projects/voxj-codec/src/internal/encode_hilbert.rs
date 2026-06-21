@@ -3,10 +3,10 @@
 pub fn encode_hilbert(x: u32, y: u32, z: u32, bits: u32) -> u64 {
     let mut axes = [x, y, z];
 
-    // Skilling's forward transform, branchless. For each axis: a set control bit
-    // flips the low bits of axes[0]; a clear one swaps the low bits of axes[0]
-    // and axes[i]. `m` is the control bit smeared to a full mask so both cases
-    // collapse to the same XORs with no data-dependent branch.
+    // Skilling's forward transform, branchless. For each axis: a set control
+    // bit flips the low bits of axes[0]; a clear one swaps the low bits of
+    // axes[0] and axes[i]. `m` is the control bit smeared to a full mask so
+    // both cases collapse to the same XORs with no data-dependent branch.
     for shift in (1..bits).rev() {
         let lower = (1u32 << shift) - 1;
         for i in 0..3 {
