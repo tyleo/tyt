@@ -1,7 +1,8 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Identifier of a voxel snapshot inside a [`VXObjectData`](crate::VXObjectData) (`s.id`).
+/// Identifier of a voxel snapshot inside a [`VXObjectData`](crate::VXObjectData)
+/// (`s.id`).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VXSnapshotId {

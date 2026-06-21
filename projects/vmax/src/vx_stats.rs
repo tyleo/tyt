@@ -2,9 +2,9 @@ use crate::VXExtent;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Per-snapshot statistics: the Morton-coded occupied/selection bounds
-/// and counts Voxel Max records for each snapshot. `min[3]` (the Morton code of
-/// the snapshot's first `ds` slot) also anchors voxel decoding.
+/// Per-snapshot statistics: the Morton-coded occupied/selection bounds and
+/// counts Voxel Max records for each snapshot. `min[3]` (the Morton code of the
+/// snapshot's first `ds` slot) also anchors voxel decoding.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]

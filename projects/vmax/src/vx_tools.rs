@@ -2,10 +2,10 @@ use crate::{VXBrushState, VXFlag, VXToolMode, VXViewBox};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The Voxel Max tool state (`.vmaxb` `tools`): the active brush/material indices
-/// plus the per-tool mode dictionaries that record how each editor surface is
-/// configured. Voxel Max requires this key to import the object. Modes vary by
-/// tool but share the same wrapper shape ([`VXToolMode`]).
+/// The Voxel Max tool state (`.vmaxb` `tools`): the active brush/material
+/// indices plus the per-tool mode dictionaries that record how each editor
+/// surface is configured. Voxel Max requires this key to import the object.
+/// Modes vary by tool but share the same wrapper shape ([`VXToolMode`]).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VXTools {

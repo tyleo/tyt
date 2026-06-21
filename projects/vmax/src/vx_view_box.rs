@@ -1,8 +1,8 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The Voxel Max view/edit partition box (`tools.vp`): the inclusive `[x, y, z]`
-/// min and max voxel bounds the editor's tools are scoped to.
+/// The Voxel Max view/edit partition box (`tools.vp`): the inclusive
+/// `[x, y, z]` min and max voxel bounds the editor's tools are scoped to.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]

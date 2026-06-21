@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VXStorage {
     pub id: VXSnapshotId,
-    /// Dense voxel bytes: two per slot (material, color), indexed by Morton code
-    /// offset from `st.min[3]`.
+    /// Dense voxel bytes: two per slot (material, color), indexed by Morton
+    /// code offset from `st.min[3]`.
     #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
     pub ds: Vec<u8>,
     #[cfg_attr(feature = "serde", serde(default))]

@@ -15,13 +15,15 @@ pub struct VXMaterialPalette {
     /// Selectable material slots.
     pub materials: Vec<VXMaterial>,
     /// Packed RGBA color table (4 bytes per entry). This is Voxel Max's color
-    /// source when an object's `palette*.png` image is absent; palettes that ship
-    /// a `.png` omit this key entirely, so an empty table is not serialized.
+    /// source when an object's `palette*.png` image is absent; palettes that
+    /// ship a `.png` omit this key entirely, so an empty table is not
+    /// serialized.
     #[cfg_attr(
         feature = "serde",
         serde(with = "serde_bytes", skip_serializing_if = "Vec::is_empty")
     )]
     pub colors: Vec<u8>,
+
     // Palette-level settings Voxel Max records alongside the colors.
     /// Color indices.
     pub indices: Vec<i64>,

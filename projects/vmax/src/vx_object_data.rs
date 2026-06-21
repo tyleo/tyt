@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 /// Voxel object payload of a `contents*.vmaxb` binary plist. Beyond the voxel
 /// [`snapshots`](Self::snapshots), the top level carries the editor state Voxel
-/// Max requires to open and import the object (the content [`uuid`](Self::uuid)/version
-/// and [`tools`](Self::tools)/[`brush`](Self::brush)/[`cam`](Self::cam)).
+/// Max requires to open and import the object (the content
+/// [`uuid`](Self::uuid)/version and
+/// [`tools`](Self::tools)/[`brush`](Self::brush)/[`cam`](Self::cam)).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VXObjectData {
@@ -18,7 +19,7 @@ pub struct VXObjectData {
     /// Codable version.
     #[cfg_attr(feature = "serde", serde(default))]
     pub v: i64,
-    /// Tool state; preserved for Voxel Max, separate from the voxel geometry.
+    /// Tool state; separate from the voxel geometry.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
