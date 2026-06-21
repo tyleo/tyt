@@ -57,6 +57,7 @@ fn split3(mut x: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use crate::encode_hilbert;
+    use std::collections::HashSet;
 
     #[test]
     fn matches_spec_example() {
@@ -70,7 +71,7 @@ mod tests {
     #[test]
     fn index_is_a_bijection_over_a_cube() {
         let bits = 4;
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = HashSet::new();
         for x in 0..16 {
             for y in 0..16 {
                 for z in 0..16 {

@@ -1,9 +1,9 @@
 use crate::{ObjectData, decode_hilbert, decode_varint, hilbert_bits, packed_width, unpack_bits};
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use base64::{DecodeError, Engine, engine::general_purpose::STANDARD as BASE64};
 use std::{io, iter};
 use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
-/// Decodes one [`VoxjObject`] back into [`VoxelData`], the inverse of
+/// Decodes one [`VoxjObject`] back into [`ObjectData`], the inverse of
 /// [`encode_object`](crate::encode_object). `cell_counts[p]` is the cell count
 /// of the palette referenced by `object.palette_refs[p]`, needed to recover the
 /// bit width of `packed-base64` samples.
@@ -26,7 +26,7 @@ pub fn decode_object(object: &VoxjObject, cell_counts: &[usize]) -> io::Result<O
 }
 
 /// Wraps a base64 decode error as invalid data.
-fn invalid(error: base64::DecodeError) -> io::Error {
+fn invalid(error: DecodeError) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, error)
 }
 

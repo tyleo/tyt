@@ -197,8 +197,7 @@ fn samples_packed(channels: &[Vec<u32>], cell_counts: &[usize]) -> VoxjSampleBlo
 
 #[cfg(test)]
 mod tests {
-    use crate::encode_object;
-    use crate::{PositionEncoding, SampleEncoding};
+    use crate::{PositionEncoding, SampleEncoding, encode_object};
     use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
     /// An object with voxels but zero palettes must still emit a sample block
