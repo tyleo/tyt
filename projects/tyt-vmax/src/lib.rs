@@ -1,6 +1,7 @@
 pub mod commands;
 
 mod axis_angle_to_quat;
+mod color_format;
 mod dependencies;
 mod error;
 #[cfg(feature = "impl")]
@@ -10,6 +11,7 @@ mod result;
 mod tyt_vmax;
 
 pub(crate) use axis_angle_to_quat::*;
+pub use color_format::*;
 pub use dependencies::*;
 pub use error::*;
 #[cfg(feature = "impl")]

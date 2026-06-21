@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{ColorFormat, Result};
 use std::path::{Path, PathBuf};
 use vmax::VMaxScene;
 use vmax_codec::{VMaxMaterialPalette, VMaxVoxel};
@@ -56,15 +56,17 @@ pub trait Dependencies {
     ) -> Result<Vec<u8>>;
     fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
     /// Reconstructs a `.vmax` package directory at `output` from `.voxj` /
-    /// `.voxjz` document bytes (the inverse of the `to-voxj` pipeline). When
-    /// `emit_palette_pngs` is false, the color `palette*.png` sidecars are
-    /// skipped (their data can be stored elsewhere); the `pal` references and
-    /// material `palette*.settings.vmaxpsb` sidecars are still written.
+    /// `.voxjz` document bytes (the inverse of the `to-voxj` pipeline).
+    /// `color_format` selects where each object's colors are stored: a
+    /// `palette*.png` image ([`ColorFormat::Png`]), the material
+    /// `palette*.settings.vmaxpsb` `colors` table ([`ColorFormat::Plist`]), or
+    /// both ([`ColorFormat::All`]). The `pal` references and material sidecars
+    /// are written in every case.
     fn write_vmax_package(
         &self,
         voxj_bytes: &[u8],
         output: &Path,
-        emit_palette_pngs: bool,
+        color_format: ColorFormat,
     ) -> Result<()>;
     fn write_stdout(&self, contents: &[u8]) -> Result<()>;
 }

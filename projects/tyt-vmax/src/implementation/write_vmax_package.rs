@@ -1,4 +1,6 @@
-use crate::{Error, Result, VoxelMaxExt, VoxelMaxNode, object_data_from_state, quat_rotate};
+use crate::{
+    ColorFormat, Error, Result, VoxelMaxExt, VoxelMaxNode, object_data_from_state, quat_rotate,
+};
 use std::{
     collections::HashMap,
     io::{Error as IOError, ErrorKind},
@@ -17,14 +19,15 @@ use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes};
 /// Reconstructs a `.vmax` package directory at `output` from `.voxj`/`.voxjz`
 /// bytes: rebuilds `scene.json` from the `voxel-max` ext plus the voxj
 /// hierarchy, and writes one `contents*.vmaxb` per object (voxels re-based by
-/// `round(e_c + e_mi)`) plus the color `palette*.png` / material
-/// `palette*.settings.vmaxpsb` sidecars (one set per distinct palette). When
-/// `emit_palette_pngs` is false the color `palette*.png` files are skipped,
-/// while their `pal` references and the material sidecars are still written.
+/// `round(e_c + e_mi)`) plus the material `palette*.settings.vmaxpsb` sidecar
+/// (one set per distinct palette). `color_format` selects where each palette's
+/// colors live: a 256x1 `palette*.png` image ([`ColorFormat::Png`]), the
+/// material sidecar's `colors` table ([`ColorFormat::Plist`]), or both
+/// ([`ColorFormat::All`]). The `pal` references are written in every case.
 pub(crate) fn write_vmax_package(
     voxj_bytes: &[u8],
     output: &Path,
-    emit_palette_pngs: bool,
+    color_format: ColorFormat,
 ) -> Result<()> {
     let (file, ext) = from_voxj_or_voxjz_bytes(voxj_bytes)?;
     let voxel_max_value = ext.get("voxel-max").cloned().ok_or_else(|| {
@@ -92,7 +95,7 @@ pub(crate) fn write_vmax_package(
             material.map(|(_, index)| index),
             &mut palette_files,
             output,
-            emit_palette_pngs,
+            color_format,
         )?;
 
         map.insert("n".to_owned(), Value::String(node.name.clone()));
@@ -173,10 +176,18 @@ fn reconstruct_voxels(
         .collect())
 }
 
-/// Writes the color `.png` and material `.vmaxpsb` for a color palette the first
-/// time it is seen and returns the `pal` filename to share across objects. When
-/// `emit_palette_pngs` is false the `.png` write is skipped while the `.vmaxpsb`
-/// sidecar and returned `pal` reference are unchanged.
+/// Usable colors in a Voxel Max palette: indices 0..254. Index 255 is a
+/// reserved transparent terminator that voxels never reference, so the color
+/// table holds exactly this many entries. The `palette*.png` pads to 256x1 by
+/// appending the terminator; the material sidecar's `colors` table stores these
+/// 255 verbatim (Voxel Max ignores any 256th entry).
+const PALETTE_COLORS: usize = 255;
+
+/// Writes a palette's color image and/or material `.vmaxpsb` the first time the
+/// color palette is seen and returns the `pal` filename to share across objects.
+/// `color_format` selects whether the colors land in the `palette*.png` image or
+/// the material sidecar's `colors` table; the returned `pal` reference names the
+/// image either way.
 fn write_palette(
     file: &VoxjFile,
     voxel_max: &VoxelMaxExt,
@@ -184,7 +195,7 @@ fn write_palette(
     material: Option<usize>,
     palette_files: &mut HashMap<usize, String>,
     output: &Path,
-    emit_palette_pngs: bool,
+    color_format: ColorFormat,
 ) -> Result<String> {
     let Some(color_index) = color else {
         return Ok("palette.png".to_owned());
@@ -197,8 +208,12 @@ fn write_palette(
         n => n.to_string(),
     };
     let pal = format!("palette{stem}.png");
-    if emit_palette_pngs {
-        write_color_palette(&file.main.palettes[color_index], &output.join(&pal))?;
+
+    // The canonical color table is PALETTE_COLORS entries; the png and the
+    // sidecar's `colors` key are two interchangeable homes for it.
+    let colors = palette_colors(&file.main.palettes[color_index]);
+    if matches!(color_format, ColorFormat::Png | ColorFormat::All) {
+        write_color_palette(&colors, &output.join(&pal))?;
     }
     if let Some(material_index) = material {
         let name = voxel_max
@@ -208,26 +223,45 @@ fn write_palette(
             .map(|palette| palette.name)
             .unwrap_or_default();
         let sidecar = output.join(format!("palette{stem}.settings.vmaxpsb"));
-        let colors = palette_rgba(&file.main.palettes[color_index]);
-        write_material_palette(&file.main.palettes[material_index], name, colors, &sidecar)?;
+        // In png mode the colors live in the image, so the sidecar omits its
+        // `colors` table (matching a Voxel Max package that ships a png); plist
+        // and all modes carry them in the sidecar.
+        let psb_colors = match color_format {
+            ColorFormat::Png => Vec::new(),
+            ColorFormat::Plist | ColorFormat::All => colors,
+        };
+        write_material_palette(
+            &file.main.palettes[material_index],
+            name,
+            psb_colors,
+            &sidecar,
+        )?;
     }
     palette_files.insert(color_index, pal.clone());
     Ok(pal)
 }
 
-/// Writes a color palette's `rgba` cells as a `width × 1` RGBA PNG.
-fn write_color_palette(palette: &VoxjPalette, path: &Path) -> Result<()> {
-    let rgba = palette_rgba(palette);
-    write_file(path, &encode_png_rgba(&rgba, palette.data.len() as u32, 1)?)?;
+/// Writes a [`PALETTE_COLORS`]-entry color table as the 256x1 RGBA `palette*.png`
+/// Voxel Max expects, appending the trailing transparent terminator at index
+/// 255.
+fn write_color_palette(colors: &[u8], path: &Path) -> Result<()> {
+    let mut pixels = colors.to_vec();
+    pixels.resize((PALETTE_COLORS + 1) * 4, 0);
+    write_file(
+        path,
+        &encode_png_rgba(&pixels, (PALETTE_COLORS + 1) as u32, 1)?,
+    )?;
     Ok(())
 }
 
-/// Flattens a color palette's `rgba` cells into RGBA bytes.
-fn palette_rgba(palette: &VoxjPalette) -> Vec<u8> {
-    let mut rgba = Vec::with_capacity(palette.data.len() * 4);
-    for cell in &palette.data {
+/// A color palette's `rgba` cells as exactly [`PALETTE_COLORS`] RGBA entries,
+/// padded with transparent cells or truncated so the count is fixed.
+fn palette_colors(palette: &VoxjPalette) -> Vec<u8> {
+    let mut rgba = Vec::with_capacity(PALETTE_COLORS * 4);
+    for cell in palette.data.iter().take(PALETTE_COLORS) {
         rgba.extend_from_slice(&parse_rgba(cell));
     }
+    rgba.resize(PALETTE_COLORS * 4, 0);
     rgba
 }
 

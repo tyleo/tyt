@@ -1,5 +1,5 @@
-use crate::{Dependencies, Result};
-use clap::{ArgAction, Parser};
+use crate::{ColorFormat, Dependencies, Result};
+use clap::Parser;
 use std::path::PathBuf;
 
 /// Converts a Voxel Json document into a `.vmax` package directory.
@@ -14,18 +14,19 @@ pub struct FromVoxj {
     #[arg(value_name = "output-vmax")]
     output_vmax: PathBuf,
 
-    /// Whether to emit the color `palette*.png` sidecars. Pass
-    /// `--emit-palette-pngs=false` to skip them (they are large and the palette
-    /// data can be stored elsewhere); the `pal` references and material
-    /// `palette*.settings.vmaxpsb` sidecars are still written.
-    #[arg(value_name = "emit-palette-pngs", long, action = ArgAction::Set, default_value_t = true)]
-    emit_palette_pngs: bool,
+    /// Where to store object colors: `png` (default) writes a 256x1
+    /// `palette*.png` image and leaves the material `palette*.settings.vmaxpsb`
+    /// without a `colors` table; `plist` writes the colors into that sidecar's
+    /// `colors` table and emits no image (the `pal` reference still names the
+    /// absent png); `all` writes both.
+    #[arg(value_name = "color-format", long, default_value = "png")]
+    color_format: ColorFormat,
 }
 
 impl FromVoxj {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let voxj_bytes = dependencies.read_file(&self.input_voxj)?;
-        dependencies.write_vmax_package(&voxj_bytes, &self.output_vmax, self.emit_palette_pngs)?;
+        dependencies.write_vmax_package(&voxj_bytes, &self.output_vmax, self.color_format)?;
         Ok(())
     }
 }

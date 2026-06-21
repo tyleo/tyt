@@ -1,5 +1,6 @@
 use crate::{
-    Dependencies, Error, Result, VoxelMaxExt, VoxelMaxNode, VoxelMaxPalette, object_state_from_data,
+    ColorFormat, Dependencies, Error, Result, VoxelMaxExt, VoxelMaxNode, VoxelMaxPalette,
+    object_state_from_data,
 };
 use std::{
     collections::HashMap,
@@ -239,9 +240,9 @@ impl Dependencies for DependenciesImpl {
         &self,
         voxj_bytes: &[u8],
         output: &Path,
-        emit_palette_pngs: bool,
+        color_format: ColorFormat,
     ) -> Result<()> {
-        super::write_vmax_package::write_vmax_package(voxj_bytes, output, emit_palette_pngs)
+        super::write_vmax_package::write_vmax_package(voxj_bytes, output, color_format)
     }
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
