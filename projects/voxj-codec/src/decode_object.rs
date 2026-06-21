@@ -30,10 +30,22 @@ fn invalid(error: base64::DecodeError) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, error)
 }
 
+/// Inverse of the raster `cell_index`: `x = k / (Y*Z)`, `y = (k / Z) % Y`,
+/// `z = k % Z`.
+fn cell_to_position(cell: u64, bounds: [u32; 3]) -> [u32; 3] {
+    let plane = bounds[1] as u64 * bounds[2] as u64;
+    [
+        (cell / plane) as u32,
+        ((cell % plane) / bounds[2] as u64) as u32,
+        (cell % bounds[2] as u64) as u32,
+    ]
+}
+
 /// Decodes the position block into `[x, y, z]` positions.
 fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> io::Result<Vec<[u32; 3]>> {
     Ok(match block {
         VoxjPositionBlock::RawJson(positions) => positions.clone(),
+
         VoxjPositionBlock::BitmapBase64(base64) => {
             let cells = bounds[0] as usize * bounds[1] as usize * bounds[2] as usize;
             let occupancy = unpack_bits(&BASE64.decode(base64).map_err(invalid)?, 1, cells);
@@ -44,6 +56,7 @@ fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> io::Result<V
                 .map(|(cell, _)| cell_to_position(cell as u64, bounds))
                 .collect()
         }
+
         VoxjPositionBlock::HilbertIndexDeltaVarintBase64(base64) => {
             let bits = hilbert_bits(bounds);
             let mut index = 0u64;
@@ -69,9 +82,11 @@ fn decode_samples(
         VoxjSampleBlock::RawJson(rows) => (0..cell_counts.len())
             .map(|p| rows.iter().map(|row| row[p]).collect())
             .collect(),
+
         VoxjSampleBlock::RleJson(channels) => {
             channels.iter().map(|channel| rle_decode(channel)).collect()
         }
+
         VoxjSampleBlock::PackedBase64(channels) => channels
             .iter()
             .enumerate()
@@ -85,17 +100,6 @@ fn decode_samples(
             })
             .collect::<io::Result<Vec<_>>>()?,
     })
-}
-
-/// Inverse of the raster `cell_index`: `x = k / (Y*Z)`, `y = (k / Z) % Y`,
-/// `z = k % Z`.
-fn cell_to_position(cell: u64, bounds: [u32; 3]) -> [u32; 3] {
-    let plane = bounds[1] as u64 * bounds[2] as u64;
-    [
-        (cell / plane) as u32,
-        ((cell % plane) / bounds[2] as u64) as u32,
-        (cell % bounds[2] as u64) as u32,
-    ]
 }
 
 /// Expands flat run-length encoding `[value, count, value, count, ...]`.

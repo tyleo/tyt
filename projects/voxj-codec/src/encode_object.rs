@@ -45,42 +45,19 @@ fn encode_positions(
     encoding: PositionEncoding,
 ) -> (Vec<usize>, VoxjPositionBlock) {
     match encoding {
-        PositionEncoding::RawJson => {
-            let order = order_raw(object.positions.len());
-            let block = positions_raw(&object.positions);
-            (order, block)
-        }
-
-        PositionEncoding::BitmapBase64 => (
-            order_bitmap(&object.positions, object.bounds),
-            positions_bitmap(&object.positions, object.bounds),
-        ),
-
-        PositionEncoding::Hilbert => {
-            let bits = hilbert_bits(object.bounds);
-            hilbert_positions(&object.positions, bits)
-        }
+        PositionEncoding::RawJson => raw_positions(&object.positions),
+        PositionEncoding::BitmapBase64 => bitmap_positions(&object.positions, object.bounds),
+        PositionEncoding::Hilbert => hilbert_positions(&object.positions, object.bounds),
     }
 }
 
-/// Encodes the per-palette sample `channels` (already in the position block's
-/// voxel order) with `encoding`. `n` is the voxel count.
-fn encode_samples(
-    channels: &[Vec<u32>],
-    encoding: SampleEncoding,
-    cell_counts: &[usize],
-    n: usize,
-) -> VoxjSampleBlock {
-    match encoding {
-        SampleEncoding::RawJson => samples_raw(channels, n),
-        SampleEncoding::RleJson => samples_rle(channels),
-        SampleEncoding::PackedBase64 => samples_packed(channels, cell_counts),
-    }
-}
-
-/// Listing order: `0..n`.
-fn order_raw(n: usize) -> Vec<usize> {
-    (0..n).collect()
+/// Listing order `0..n` paired with the raw block. The raw encoding never
+/// reorders voxels, so positions pass through unchanged and the order is the
+/// identity permutation.
+fn raw_positions(positions: &[[u32; 3]]) -> (Vec<usize>, VoxjPositionBlock) {
+    let order = (0..positions.len()).collect();
+    let block = VoxjPositionBlock::RawJson(positions.to_vec());
+    (order, block)
 }
 
 /// Raster cell index `k = x*Y*Z + y*Z + z`.
@@ -89,23 +66,40 @@ fn cell_index(pos: [u32; 3], bounds: [u32; 3]) -> u64 {
     x as u64 * bounds[1] as u64 * bounds[2] as u64 + y as u64 * bounds[2] as u64 + z as u64
 }
 
-/// Voxel order ascending by raster cell index. Each cell index is computed once
-/// by sorting `(cell, voxel)` pairs.
-fn order_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> Vec<usize> {
+/// Voxel order ascending by raster cell index, paired with a dense occupancy
+/// bitmap: bit `k` (MSB-first, 8 per byte) is set when raster cell `k` holds a
+/// voxel. Each cell index is computed exactly once, by sorting `(cell, voxel)`
+/// pairs, and shared between the order permutation and the packed bits.
+fn bitmap_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, VoxjPositionBlock) {
     let mut indexed: Vec<(u64, usize)> = positions
         .iter()
         .enumerate()
         .map(|(i, &pos)| (cell_index(pos, bounds), i))
         .collect();
     indexed.sort_unstable();
-    indexed.iter().map(|&(_, i)| i).collect()
+
+    let order = indexed.iter().map(|&(_, i)| i).collect();
+
+    // Pack the bits directly instead of filling a one-u32-per-cell occupancy
+    // buffer and packing it afterward. Every position lies within bounds, so
+    // its cell index is < cells.
+    let cells = (bounds[0] as usize) * (bounds[1] as usize) * (bounds[2] as usize);
+    let mut bytes = vec![0u8; cells.div_ceil(8)];
+    for &(cell, _) in &indexed {
+        let c = cell as usize;
+        debug_assert!(c < cells, "voxel cell {c} outside {cells}-cell bounds");
+        bytes[c / 8] |= 1 << (7 - (c % 8));
+    }
+    let block = VoxjPositionBlock::BitmapBase64(BASE64.encode(bytes));
+    (order, block)
 }
 
 /// Voxel order ascending by Hilbert index, paired with the delta-varint
 /// position block. Each voxel's Hilbert index is computed exactly once and
 /// shared between the order permutation and the encoded deltas. Sorting
 /// `(index, original_voxel)` pairs yields both in a single pass.
-fn hilbert_positions(positions: &[[u32; 3]], bits: u32) -> (Vec<usize>, VoxjPositionBlock) {
+fn hilbert_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, VoxjPositionBlock) {
+    let bits = hilbert_bits(bounds);
     let mut indexed: Vec<(u64, usize)> = positions
         .iter()
         .enumerate()
@@ -128,35 +122,27 @@ fn hilbert_positions(positions: &[[u32; 3]], bits: u32) -> (Vec<usize>, VoxjPosi
     (order, block)
 }
 
-/// Raw block in listing order: the raw encoding never reorders voxels, so the
-/// positions pass through unchanged. The paired `order` (see [`order_raw`]) is
-/// the identity permutation; it still drives sample-channel reordering, a no-op
-/// here.
-fn positions_raw(positions: &[[u32; 3]]) -> VoxjPositionBlock {
-    VoxjPositionBlock::RawJson(positions.to_vec())
-}
-
-/// Dense occupancy bitmap: bit `k` (MSB-first, 8 per byte) is set when raster
-/// cell `k` holds a voxel. Every position must lie within `bounds`, so its cell
-/// index is `< cells`. Packs the bits directly instead of filling a
-/// one-`u32`-per-cell occupancy buffer and packing it afterward.
-fn positions_bitmap(positions: &[[u32; 3]], bounds: [u32; 3]) -> VoxjPositionBlock {
-    let cells = (bounds[0] as usize) * (bounds[1] as usize) * (bounds[2] as usize);
-    let mut bytes = vec![0u8; cells.div_ceil(8)];
-    for &pos in positions {
-        let c = cell_index(pos, bounds) as usize;
-        debug_assert!(c < cells, "voxel cell {c} outside {cells}-cell bounds");
-        bytes[c / 8] |= 1 << (7 - (c % 8));
-    }
-    VoxjPositionBlock::BitmapBase64(BASE64.encode(bytes))
-}
-
 /// Reorders `samples[voxel][palette]` into one channel per palette, in the
 /// position block's voxel order.
 fn channels_in_order(samples: &[Vec<u32>], order: &[usize], num_palettes: usize) -> Vec<Vec<u32>> {
     (0..num_palettes)
         .map(|p| order.iter().map(|&i| samples[i][p]).collect())
         .collect()
+}
+
+/// Encodes the per-palette sample `channels` (already in the position block's
+/// voxel order) with `encoding`. `n` is the voxel count.
+fn encode_samples(
+    channels: &[Vec<u32>],
+    encoding: SampleEncoding,
+    cell_counts: &[usize],
+    n: usize,
+) -> VoxjSampleBlock {
+    match encoding {
+        SampleEncoding::RawJson => samples_raw(channels, n),
+        SampleEncoding::RleJson => samples_rle(channels),
+        SampleEncoding::PackedBase64 => samples_packed(channels, cell_counts),
+    }
 }
 
 /// Builds one row per voxel, each holding that voxel's cell index per palette.
@@ -168,22 +154,6 @@ fn samples_raw(channels: &[Vec<u32>], n: usize) -> VoxjSampleBlock {
         .map(|k| channels.iter().map(|ch| ch[k]).collect())
         .collect();
     VoxjSampleBlock::RawJson(rows)
-}
-
-fn samples_rle(channels: &[Vec<u32>]) -> VoxjSampleBlock {
-    VoxjSampleBlock::RleJson(channels.iter().map(|ch| rle_encode(ch)).collect())
-}
-
-fn samples_packed(channels: &[Vec<u32>], cell_counts: &[usize]) -> VoxjSampleBlock {
-    let packed = channels
-        .iter()
-        .enumerate()
-        .map(|(p, ch)| {
-            let width = packed_width(cell_counts.get(p).copied().unwrap_or(1));
-            BASE64.encode(pack_bits(ch, width))
-        })
-        .collect();
-    VoxjSampleBlock::PackedBase64(packed)
 }
 
 /// Flat run-length encoding: `[value1, count1, value2, count2, ...]`.
@@ -207,6 +177,22 @@ fn rle_encode(channel: &[u32]) -> Vec<u32> {
     out.push(value);
     out.push(count);
     out
+}
+
+fn samples_rle(channels: &[Vec<u32>]) -> VoxjSampleBlock {
+    VoxjSampleBlock::RleJson(channels.iter().map(|ch| rle_encode(ch)).collect())
+}
+
+fn samples_packed(channels: &[Vec<u32>], cell_counts: &[usize]) -> VoxjSampleBlock {
+    let packed = channels
+        .iter()
+        .enumerate()
+        .map(|(p, ch)| {
+            let width = packed_width(cell_counts.get(p).copied().unwrap_or(1));
+            BASE64.encode(pack_bits(ch, width))
+        })
+        .collect();
+    VoxjSampleBlock::PackedBase64(packed)
 }
 
 #[cfg(test)]

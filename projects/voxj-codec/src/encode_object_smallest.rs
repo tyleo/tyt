@@ -27,49 +27,53 @@ pub fn encode_object_smallest(
             SampleEncoding::RawJson,
         );
     }
-    let mut best: Option<(usize, VoxjObject)> = None;
-    for position in candidate_positions(data.bounds) {
-        for sample in [SampleEncoding::RleJson, SampleEncoding::PackedBase64] {
-            let object = encode_object(
+    candidate_positions(data.bounds)
+        .into_iter()
+        .flat_map(|position| {
+            [SampleEncoding::RleJson, SampleEncoding::PackedBase64].map(|sample| (position, sample))
+        })
+        .map(|(position, sample)| {
+            encode_object(
                 name.clone(),
                 palette_refs.clone(),
                 data.clone(),
                 position,
                 sample,
-            );
-            let size = deflated_len(&object);
-            if best.as_ref().is_none_or(|(best, _)| size < *best) {
-                best = Some((size, object));
-            }
-        }
-    }
-    best.expect("at least one candidate").1
+            )
+        })
+        .min_by_key(deflated_len)
+        .expect("at least one candidate")
 }
 
 /// The applicable non-raw position encodings for `bounds`, falling back to raw
 /// only when neither bitmap nor Hilbert applies.
 fn candidate_positions(bounds: [u32; 3]) -> Vec<PositionEncoding> {
-    let cells = bounds[0] as u64 * bounds[1] as u64 * bounds[2] as u64;
     let mut positions = Vec::new();
+
+    let cells = bounds[0] as u64 * bounds[1] as u64 * bounds[2] as u64;
     if cells <= MAX_BITMAP_CELLS {
         positions.push(PositionEncoding::BitmapBase64);
     }
+
     if hilbert_bits(bounds) <= MAX_HILBERT_BITS {
         positions.push(PositionEncoding::Hilbert);
     }
+
     if positions.is_empty() {
         positions.push(PositionEncoding::RawJson);
     }
+
     positions
 }
 
 /// Deflated byte length of an object's two blocks serialized together.
 fn deflated_len(object: &VoxjObject) -> usize {
-    let json =
-        serde_json::to_vec(&(&object.voxel_positions, &object.voxel_samples)).unwrap_or_default();
+    let Ok(json) = serde_json::to_vec(&(&object.voxel_positions, &object.voxel_samples)) else {
+        return usize::MAX;
+    };
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::default());
     let _ = encoder.write_all(&json);
-    encoder.finish().map_or(json.len(), |v| v.len())
+    encoder.finish().map_or(usize::MAX, |v| v.len())
 }
 
 #[cfg(test)]
