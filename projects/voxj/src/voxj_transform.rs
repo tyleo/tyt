@@ -7,8 +7,10 @@ use serde::{Deserialize, Serialize};
 pub struct VoxjTransform {
     /// `[x, y, z]`, may be fractional.
     pub position: [f64; 3],
+
     /// Unit quaternion `[x, y, z, w]`.
     pub rotation: [f64; 4],
+
     /// Per-axis `[x, y, z]`.
     pub scale: [f64; 3],
 }

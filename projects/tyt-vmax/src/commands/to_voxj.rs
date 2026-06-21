@@ -11,7 +11,7 @@ use voxj::{
     VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjTransform, VoxjValue,
 };
 use voxj_codec::{
-    PositionEncoding, SampleEncoding, VoxelData, to_voxj_bytes, to_voxj_pretty_bytes,
+    ObjectData, PositionEncoding, SampleEncoding, to_voxj_bytes, to_voxj_pretty_bytes,
     to_voxjz_bytes,
 };
 
@@ -276,7 +276,7 @@ impl ToVoxj {
             let empty = encode_voxj_object(
                 object.name.clone(),
                 Vec::new(),
-                VoxelData {
+                ObjectData {
                     positions: Vec::new(),
                     samples: Vec::new(),
                     bounds,
@@ -329,7 +329,7 @@ impl ToVoxj {
         let voxj_object = encode_voxj_object(
             object.name.clone(),
             palette_refs,
-            VoxelData {
+            ObjectData {
                 positions,
                 samples,
                 bounds,
@@ -498,7 +498,7 @@ fn rgba_cells(colors: &[[u8; 4]]) -> Vec<Vec<VoxjValue>> {
 fn encode_voxj_object(
     name: String,
     palette_refs: Vec<usize>,
-    data: VoxelData,
+    data: ObjectData,
     encoding: Encoding,
 ) -> VoxjObject {
     match encoding {

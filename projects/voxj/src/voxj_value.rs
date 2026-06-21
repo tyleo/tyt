@@ -14,14 +14,19 @@ use serde::{Deserialize, Serialize, Serializer};
 pub enum VoxjValue {
     /// A number; integers and floats alike are held as `f64`.
     Number(f64),
+
     /// A string.
     Text(String),
+
     /// A boolean.
     Bool(bool),
+
     /// An ordered list of values.
     Array(Vec<VoxjValue>),
+
     /// An ordered set of key/value pairs.
     Object(VoxjMap),
+
     /// JSON `null`.
     Null,
 }
@@ -40,11 +45,17 @@ impl Serialize for VoxjValue {
             {
                 serializer.serialize_i64(*n as i64)
             }
+
             VoxjValue::Number(n) => serializer.serialize_f64(*n),
+
             VoxjValue::Text(text) => serializer.serialize_str(text),
+
             VoxjValue::Bool(bool) => serializer.serialize_bool(*bool),
+
             VoxjValue::Array(array) => array.serialize(serializer),
+
             VoxjValue::Object(object) => object.serialize(serializer),
+
             VoxjValue::Null => serializer.serialize_unit(),
         }
     }

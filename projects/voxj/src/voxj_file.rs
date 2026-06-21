@@ -7,5 +7,6 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VoxjFile {
     pub version: u32,
+
     pub main: VoxjMain,
 }

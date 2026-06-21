@@ -10,10 +10,13 @@ use serde::{Deserialize, Serialize};
 pub struct VoxjHierarchyNode {
     /// Display name of the node.
     pub name: String,
+
     /// Indices into [`VoxjMain::hierarchy_nodes`](crate::VoxjMain::hierarchy_nodes).
     pub child_nodes: Vec<usize>,
+
     /// Indices into [`VoxjMain::objects`](crate::VoxjMain::objects).
     pub child_objects: Vec<usize>,
+
     /// Transform applied to this node and everything beneath it.
     pub transform: VoxjTransform,
 }

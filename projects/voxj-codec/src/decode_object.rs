@@ -1,4 +1,4 @@
-use crate::{VoxelData, decode_hilbert, decode_varint, hilbert_bits, packed_width, unpack_bits};
+use crate::{ObjectData, decode_hilbert, decode_varint, hilbert_bits, packed_width, unpack_bits};
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use std::{io, iter};
 use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
@@ -8,16 +8,16 @@ use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 /// of the palette referenced by `object.palette_refs[p]`, needed to recover the
 /// bit width of `packed-base64` samples.
 ///
-/// Bitmap and Hilbert positions decode in ascending cell / Hilbert-index order
-/// (the original listing order is not recoverable); the sample channels share
-/// that same order, so each returned `positions[k]` pairs with `samples[k]`.
-pub fn decode_object(object: &VoxjObject, cell_counts: &[usize]) -> io::Result<VoxelData> {
+/// Bitmap and Hilbert positions decode in ascending cell / Hilbert-index order;
+/// the sample channels share that same order, so each returned `positions[k]`
+/// pairs with `samples[k]`.
+pub fn decode_object(object: &VoxjObject, cell_counts: &[usize]) -> io::Result<ObjectData> {
     let positions = decode_positions(&object.voxel_positions, object.bounds)?;
     let channels = decode_samples(&object.voxel_samples, cell_counts, positions.len())?;
     let samples = (0..positions.len())
         .map(|k| channels.iter().map(|channel| channel[k]).collect())
         .collect();
-    Ok(VoxelData {
+    Ok(ObjectData {
         positions,
         samples,
         bounds: object.bounds,
@@ -109,7 +109,7 @@ fn rle_decode(rle: &[u32]) -> Vec<u32> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{PositionEncoding, SampleEncoding, VoxelData, decode_object, encode_object};
+    use crate::{ObjectData, PositionEncoding, SampleEncoding, decode_object, encode_object};
     use std::collections::BTreeSet;
 
     const POSITIONS: [PositionEncoding; 3] = [
@@ -123,8 +123,8 @@ mod tests {
         SampleEncoding::PackedBase64,
     ];
 
-    fn sample_data() -> VoxelData {
-        VoxelData {
+    fn sample_data() -> ObjectData {
+        ObjectData {
             positions: vec![[0, 0, 0], [2, 1, 0], [1, 3, 4], [3, 3, 3]],
             samples: vec![vec![1, 0], vec![5, 2], vec![200, 7], vec![0, 1]],
             bounds: [4, 4, 5],
@@ -134,7 +134,7 @@ mod tests {
 
     /// The set of `(position, samples)` pairs — order-independent, so it also
     /// proves positions and samples stay aligned through any reordering.
-    fn voxel_set(data: &VoxelData) -> BTreeSet<([u32; 3], Vec<u32>)> {
+    fn voxel_set(data: &ObjectData) -> BTreeSet<([u32; 3], Vec<u32>)> {
         data.positions
             .iter()
             .copied()
@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn round_trips_empty_object() {
-        let data = VoxelData {
+        let data = ObjectData {
             positions: Vec::new(),
             samples: Vec::new(),
             bounds: [0, 0, 0],
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn round_trips_zero_palette_object() {
         for sample in SAMPLES {
-            let data = VoxelData {
+            let data = ObjectData {
                 positions: vec![[0, 0, 0], [1, 0, 0]],
                 samples: vec![Vec::new(), Vec::new()],
                 bounds: [2, 1, 1],

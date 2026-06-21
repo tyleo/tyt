@@ -1,4 +1,4 @@
-use crate::{PositionEncoding, SampleEncoding, VoxelData, encode_object, hilbert_bits};
+use crate::{ObjectData, PositionEncoding, SampleEncoding, encode_object, hilbert_bits};
 use flate2::{Compression, write::DeflateEncoder};
 use std::io::Write;
 use voxj::VoxjObject;
@@ -16,7 +16,7 @@ const MAX_HILBERT_BITS: u32 = 17;
 pub fn encode_object_smallest(
     name: String,
     palette_refs: Vec<usize>,
-    data: VoxelData,
+    data: ObjectData,
 ) -> VoxjObject {
     if data.positions.is_empty() {
         return encode_object(
@@ -74,17 +74,17 @@ fn deflated_len(object: &VoxjObject) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VoxelData, encode_object_smallest};
+    use crate::{ObjectData, encode_object_smallest};
     use voxj::VoxjSampleBlock;
 
-    /// An object with voxels but zero palettes still emits sample channels whose
-    /// arity matches the position block (rle/packed carry zero channels).
+    /// An object with voxels but zero palettes still emits sample channels
+    /// whose arity matches the position block (rle/packed carry zero channels).
     #[test]
     fn zero_palette_object_keeps_sample_arity() {
         let object = encode_object_smallest(
             "o".to_owned(),
             Vec::new(),
-            VoxelData {
+            ObjectData {
                 positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
                 samples: vec![Vec::new(), Vec::new(), Vec::new()],
                 bounds: [3, 1, 1],
