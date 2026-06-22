@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// the order tag `o`.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct VXExtentRange {
+pub struct VMaxExtentRange {
     /// Occupied-range minimum corner (chunk-local).
     pub min: Vec<i64>,
 

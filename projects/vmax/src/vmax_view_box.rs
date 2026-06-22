@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct VXViewBox {
+pub struct VMaxViewBox {
     /// Minimum `[x, y, z]` corner.
     pub min: [i64; 3],
 

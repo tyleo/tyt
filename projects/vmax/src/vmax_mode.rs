@@ -2,12 +2,11 @@
 use serde::{Deserialize, Serialize};
 
 /// The innermost leaf of a Voxel Max tool-mode entry: the dictionary holding
-/// the mode tokens themselves (`{mo}`, `{m}`, `{mf, mo}`, or `{t, m}` depending
-/// on the tool). Each token is optional so one struct models every observed
-/// shape.
+/// the mode tokens themselves. Each token is optional so one struct models
+/// every observed shape.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct VXMode {
+pub struct VMaxMode {
     /// Primary mode token.
     #[cfg_attr(
         feature = "serde",

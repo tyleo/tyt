@@ -1,6 +1,6 @@
 use crate::{VMaxVoxel, decode_morton_3d, encode_morton_3d};
 use std::collections::BTreeMap;
-use vmax::{VXExtent, VXSnapshot, VXSnapshotId, VXStats, VXStorage};
+use vmax::{VMaxExtent, VMaxSnapshot, VMaxSnapshotId, VMaxStats, VMaxStorage};
 
 /// Chunk voxel pitch per axis; an 8x8x8 grid of chunks tiles a 256^3 model.
 const CHUNK_PITCH: i32 = 32;
@@ -24,12 +24,12 @@ fn morton_stat(morton: u32) -> Vec<i64> {
     vec![x, y, z, x + y + z]
 }
 
-/// Encodes voxels into a `VXObjectData`'s `snapshots` array, the inverse of
+/// Encodes voxels into a `VMaxContentsVmaxbFile`'s `snapshots` array, the inverse of
 /// [`decode_snapshots`](crate::decode_snapshots). Groups voxels into the 32-pitch
 /// chunk grid, lays each chunk out by in-chunk Morton code into a dense
 /// 2-bytes-per-slot `(material, color)` stream, and emits one checkpoint snapshot
 /// per occupied chunk.
-pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshot> {
+pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VMaxSnapshot> {
     let mut chunks: BTreeMap<u32, BTreeMap<u32, (u8, u8)>> = BTreeMap::new();
     for voxel in voxels {
         let grid = [
@@ -82,20 +82,20 @@ pub fn encode_snapshots(voxels: &[VMaxVoxel]) -> Vec<VXSnapshot> {
                 }
             }
 
-            VXSnapshot {
-                s: VXStorage {
-                    id: VXSnapshotId {
+            VMaxSnapshot {
+                s: VMaxStorage {
+                    id: VMaxSnapshotId {
                         c: chunk_id,
                         s: 0,
                         t: CHECKPOINT,
                     },
                     ds,
-                    st: VXStats {
+                    st: VMaxStats {
                         // Occupied bounding-box corners; min[3]/max[3] are the
                         // first/last `ds` slot's Morton code.
                         min: morton_stat(min_morton),
                         max: morton_stat(max_morton),
-                        extent: VXExtent {
+                        extent: VMaxExtent {
                             o: CHUNK_ORDER,
                             r: None,
                         },

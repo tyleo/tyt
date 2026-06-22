@@ -1,5 +1,5 @@
 use crate::VMaxDispersion;
-use vmax::VXMaterial;
+use vmax::VMaxMaterial as VMaxMaterialRaw;
 
 /// A Voxel Max material slot (one of the eight selectable per palette).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -21,8 +21,8 @@ pub struct VMaxMaterial {
     pub dispersion: Option<VMaxDispersion>,
 }
 
-impl From<VXMaterial> for VMaxMaterial {
-    fn from(v: VXMaterial) -> Self {
+impl From<VMaxMaterialRaw> for VMaxMaterial {
+    fn from(v: VMaxMaterialRaw) -> Self {
         Self {
             metalness: v.mc,
             roughness: v.rc,
@@ -36,17 +36,17 @@ impl From<VXMaterial> for VMaxMaterial {
 #[cfg(test)]
 mod tests {
     use crate::{VMaxDispersion, VMaxMaterial};
-    use vmax::{VXMaterial, VXMaterialMd};
+    use vmax::{VMaxMaterial as VMaxMaterialRaw, VMaxMaterialMd};
 
     #[test]
     fn maps_md_to_dispersion() {
-        let v = VXMaterial {
+        let v = VMaxMaterialRaw {
             mi: "1".to_owned(),
             mc: 0.66,
             rc: 0.58,
             sic: 4.2,
             sh: true,
-            md: Some(VXMaterialMd {
+            md: Some(VMaxMaterialMd {
                 a: 0.0,
                 i: 1.5,
                 t: 0.83,
@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn absent_md_is_no_dispersion() {
-        let v = VXMaterial {
+        let v = VMaxMaterialRaw {
             mi: "1".to_owned(),
             mc: 0.1,
             rc: 0.9,

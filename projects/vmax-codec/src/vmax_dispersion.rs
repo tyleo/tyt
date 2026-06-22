@@ -1,4 +1,4 @@
-use vmax::VXMaterialMd;
+use vmax::VMaxMaterialMd;
 
 /// Decoded dispersion parameters for a material slot — Voxel Max's optional `md`
 /// block: absorption, index of refraction, and transmission. Present only when
@@ -15,8 +15,8 @@ pub struct VMaxDispersion {
     pub transmission: f64,
 }
 
-impl From<VXMaterialMd> for VMaxDispersion {
-    fn from(v: VXMaterialMd) -> Self {
+impl From<VMaxMaterialMd> for VMaxDispersion {
+    fn from(v: VMaxMaterialMd) -> Self {
         Self {
             absorption: v.a,
             ior: v.i,

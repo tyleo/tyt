@@ -1,6 +1,6 @@
 use crate::{VMaxVoxel, decode_morton_3d};
 use std::collections::BTreeMap;
-use vmax::VXSnapshot;
+use vmax::VMaxSnapshot;
 
 /// Voxel pitch of a chunk along each axis; chunks tile an 8×8×8 grid into a
 /// 256³ model.
@@ -9,9 +9,9 @@ const CHUNK_PITCH: i32 = 32;
 /// Decodes voxel `snapshots` into model space — the inverse of
 /// [`encode_snapshots`](crate::encode_snapshots). Replays snapshots so the last
 /// snapshot of each chunk wins, and returns voxels sorted by `(x, y, z)`.
-pub fn decode_snapshots(snapshots: &[VXSnapshot]) -> Vec<VMaxVoxel> {
+pub fn decode_snapshots(snapshots: &[VMaxSnapshot]) -> Vec<VMaxVoxel> {
     // Keep the last snapshot per chunk (later entries overwrite earlier).
-    let mut latest: BTreeMap<u32, &VXSnapshot> = BTreeMap::new();
+    let mut latest: BTreeMap<u32, &VMaxSnapshot> = BTreeMap::new();
     for snapshot in snapshots {
         latest.insert(snapshot.s.id.c, snapshot);
     }

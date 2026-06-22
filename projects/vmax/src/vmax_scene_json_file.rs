@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct VMaxScene {
+pub struct VMaxSceneJsonFile {
     /// Group nodes (hierarchy folders).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub groups: Vec<VMaxGroup>,

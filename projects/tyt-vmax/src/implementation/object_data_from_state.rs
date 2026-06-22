@@ -1,10 +1,13 @@
-use crate::VXObjectState;
-use vmax::{VXObjectData, VXSnapshot};
+use crate::VMaxObjectState;
+use vmax::{VMaxContentsVmaxbFile, VMaxSnapshot};
 
-/// Rebuilds a full `.vmaxb` payload from a preserved [`VXObjectState`] plus
+/// Rebuilds a full `.vmaxb` payload from a preserved [`VMaxObjectState`] plus
 /// regenerated voxel `snapshots`.
-pub fn object_data_from_state(state: VXObjectState, snapshots: Vec<VXSnapshot>) -> VXObjectData {
-    VXObjectData {
+pub fn object_data_from_state(
+    state: VMaxObjectState,
+    snapshots: Vec<VMaxSnapshot>,
+) -> VMaxContentsVmaxbFile {
+    VMaxContentsVmaxbFile {
         snapshots,
         uuid: state.uuid,
         v: state.v,

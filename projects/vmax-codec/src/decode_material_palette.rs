@@ -1,9 +1,10 @@
 use crate::VMaxMaterialPalette;
-use vmax::VXMaterialPalette;
+use vmax::VMaxPaletteSettingsVmaxpsbFile;
 
-/// Decodes a `VXMaterialPalette` payload into a core [`VMaxMaterialPalette`] — the
-/// display name, the selectable material slots, and the RGBA color table.
-pub fn decode_material_palette(palette: &VXMaterialPalette) -> VMaxMaterialPalette {
+/// Decodes a `VMaxPaletteSettingsVmaxpsbFile` payload into a core
+/// [`VMaxMaterialPalette`] — the display name, the selectable material slots, and
+/// the RGBA color table.
+pub fn decode_material_palette(palette: &VMaxPaletteSettingsVmaxpsbFile) -> VMaxMaterialPalette {
     VMaxMaterialPalette {
         name: palette.name.clone(),
         materials: palette.materials.iter().cloned().map(Into::into).collect(),

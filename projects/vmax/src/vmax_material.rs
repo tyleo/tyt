@@ -1,4 +1,4 @@
-use crate::VXMaterialMd;
+use crate::VMaxMaterialMd;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct VXMaterial {
+pub struct VMaxMaterial {
     /// Material slot index as a string `"1"`..`"8"`.
     pub mi: String,
 
@@ -22,7 +22,8 @@ pub struct VXMaterial {
     /// Whether the material casts shadows.
     pub sh: bool,
 
-    /// Extended dispersion parameters [`VXMaterialMd`](crate::VXMaterialMd).
+    /// Extended dispersion parameters
+    /// [`VMaxMaterialMd`](crate::VMaxMaterialMd).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub md: Option<VXMaterialMd>,
+    pub md: Option<VMaxMaterialMd>,
 }

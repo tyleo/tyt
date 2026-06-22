@@ -1,14 +1,14 @@
-use crate::{VXBrushState, VXFlag, VXToolMode, VXViewBox};
+use crate::{VMaxBrushState, VMaxFlag, VMaxToolMode, VMaxViewBox};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// The Voxel Max tool state (`.vmaxb` `tools`): the active brush/material
 /// indices plus the per-tool mode dictionaries that record how each editor
 /// surface is configured. Voxel Max requires this key to import the object.
-/// Modes vary by tool but share the same wrapper shape ([`VXToolMode`]).
+/// Modes vary by tool but share the same wrapper shape ([`VMaxToolMode`]).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct VXTools {
+pub struct VMaxTools {
     /// Brush size.
     #[cfg_attr(feature = "serde", serde(default))]
     pub bs: i64,
@@ -32,129 +32,129 @@ pub struct VXTools {
     )]
     pub src: Option<i64>,
 
-    /// Selection-tool [`VXFlag`](crate::VXFlag).
+    /// Selection-tool [`VMaxFlag`](crate::VMaxFlag).
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub stf: Option<VXFlag>,
+    pub stf: Option<VMaxFlag>,
 
-    /// Mirror [`VXFlag`](crate::VXFlag).
+    /// Mirror [`VMaxFlag`](crate::VMaxFlag).
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub mr: Option<VXFlag>,
+    pub mr: Option<VMaxFlag>,
 
-    /// Symmetry [`VXFlag`](crate::VXFlag).
+    /// Symmetry [`VMaxFlag`](crate::VMaxFlag).
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub st: Option<VXFlag>,
+    pub st: Option<VMaxFlag>,
 
-    /// View/edit partition box ([`VXViewBox`](crate::VXViewBox)).
+    /// View/edit partition box ([`VMaxViewBox`](crate::VMaxViewBox)).
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub vp: Option<VXViewBox>,
+    pub vp: Option<VMaxViewBox>,
 
-    /// [`VXBrushState`](crate::VXBrushState).
+    /// [`VMaxBrushState`](crate::VMaxBrushState).
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub bst: Option<VXBrushState>,
+    pub bst: Option<VMaxBrushState>,
 
     /// Color tool.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub ct: Option<VXToolMode>,
+    pub ct: Option<VMaxToolMode>,
 
     /// Color-copy tool.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub ctc: Option<VXToolMode>,
+    pub ctc: Option<VMaxToolMode>,
 
     /// Color-erase tool.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub cte: Option<VXToolMode>,
+    pub cte: Option<VMaxToolMode>,
 
     /// Color-paint tool.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub ctp: Option<VXToolMode>,
+    pub ctp: Option<VMaxToolMode>,
 
     /// Color-select tool.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub cts: Option<VXToolMode>,
+    pub cts: Option<VMaxToolMode>,
 
     /// Color-material tool.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub ctm: Option<VXToolMode>,
+    pub ctm: Option<VMaxToolMode>,
 
     /// Paint color-material tool.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub pctm: Option<VXToolMode>,
+    pub pctm: Option<VMaxToolMode>,
 
     /// Color-add tool.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub cta: Option<VXToolMode>,
+    pub cta: Option<VMaxToolMode>,
 
     /// Draw-mode brush.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub dm: Option<VXToolMode>,
+    pub dm: Option<VMaxToolMode>,
 
     /// Draw-mode brush-b.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub dmb: Option<VXToolMode>,
+    pub dmb: Option<VMaxToolMode>,
 
     /// Draw-mode color.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub dmc: Option<VXToolMode>,
+    pub dmc: Option<VMaxToolMode>,
 
     /// Draw-mode layer.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub dml: Option<VXToolMode>,
+    pub dml: Option<VMaxToolMode>,
 
     /// Draw-mode select.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub dms: Option<VXToolMode>,
+    pub dms: Option<VMaxToolMode>,
 }

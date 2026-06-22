@@ -1,20 +1,20 @@
-use crate::VXMaterial;
+use crate::VMaxMaterial;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Material palette mirroring a `palette*.settings.vmaxpsb` plist: the display
 /// [`name`](Self::name), the [`materials`](Self::materials), the
-/// [`colors`](Self::colors) RGBA table, and the palette-level settings Voxel Max
-/// records alongside them.
+/// [`colors`](Self::colors) RGBA table, and the palette-level settings Voxel
+/// Max records alongside them.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct VXMaterialPalette {
+pub struct VMaxPaletteSettingsVmaxpsbFile {
     /// Palette display name.
     pub name: String,
 
     /// Selectable material slots.
-    pub materials: Vec<VXMaterial>,
+    pub materials: Vec<VMaxMaterial>,
 
     /// Packed RGBA color table (4 bytes per entry). This is Voxel Max's color
     /// source when an object's `palette*.png` image is absent; palettes that
@@ -26,7 +26,6 @@ pub struct VXMaterialPalette {
     )]
     pub colors: Vec<u8>,
 
-    // Palette-level settings Voxel Max records alongside the colors.
     /// Color indices.
     pub indices: Vec<i64>,
 

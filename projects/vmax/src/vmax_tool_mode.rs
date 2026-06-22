@@ -1,46 +1,45 @@
-use crate::VXMode;
+use crate::VMaxMode;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// A Voxel Max tool-mode entry (`tools.ct`, `tools.dms`, ...): a dictionary
 /// keyed by editor surface, each value configuring that surface's mode. The
-/// surface set is fixed (`a`, `b`, `c`, `e`, `l`, `m`, `p`, `s`), so each is an
-/// optional field; absent surfaces stay `None` and are skipped on serialize. A
-/// tool may carry more than one surface at once (Voxel Max history records up
-/// to four).
+/// surface set is fixed, so each is an optional field; absent surfaces stay
+/// `None` and are skipped on serialize. A tool may carry more than one surface
+/// at once (Voxel Max history records up to four).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct VXToolMode {
+pub struct VMaxToolMode {
     /// Add surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub a: Option<VXMode>,
+    pub a: Option<VMaxMode>,
 
     /// Brush surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub b: Option<VXMode>,
+    pub b: Option<VMaxMode>,
 
     /// Color/cube surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub c: Option<VXMode>,
+    pub c: Option<VMaxMode>,
 
     /// Erase/edge surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub e: Option<VXMode>,
+    pub e: Option<VMaxMode>,
 
     /// Layer surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub l: Option<VXMode>,
+    pub l: Option<VMaxMode>,
 
     /// Material surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub m: Option<VXMode>,
+    pub m: Option<VMaxMode>,
 
     /// Paint surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub p: Option<VXMode>,
+    pub p: Option<VMaxMode>,
 
     /// Select surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub s: Option<VXMode>,
+    pub s: Option<VMaxMode>,
 }

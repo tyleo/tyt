@@ -1,4 +1,4 @@
-use crate::VXExtent;
+use crate::VMaxExtent;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct VXStats {
+pub struct VMaxStats {
     /// Occupied-range minimum corner; `min[3]` is the Morton code of the first
     /// `ds` slot.
     pub min: Vec<i64>,
@@ -16,8 +16,8 @@ pub struct VXStats {
     /// Occupied-range maximum corner.
     pub max: Vec<i64>,
 
-    /// Snapshot [`VXExtent`](crate::VXExtent) (`{o: <order>}`).
-    pub extent: VXExtent,
+    /// Snapshot [`VMaxExtent`](crate::VMaxExtent) (`{o: <order>}`).
+    pub extent: VMaxExtent,
 
     /// Occupied voxel count.
     pub count: i64,

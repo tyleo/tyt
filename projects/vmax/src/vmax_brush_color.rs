@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct VXBrushColor {
+pub struct VMaxBrushColor {
     /// The triple (observed as `[1, 1, 1]`).
     #[cfg_attr(feature = "serde", serde(rename = "_dm"))]
     pub dm: Vec<i64>,

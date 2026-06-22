@@ -1,11 +1,10 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Extended material-dispersion parameters Voxel Max stores on a material slot:
-/// absorption, index of refraction, and transmission.
+/// Extended material-dispersion parameters Voxel Max stores on a material slot.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct VXMaterialMd {
+pub struct VMaxMaterialMd {
     /// Absorption.
     pub a: f64,
 

@@ -1,4 +1,4 @@
-use crate::VXBrushEntry;
+use crate::VMaxBrushEntry;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -7,13 +7,13 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct VXBrush {
+pub struct VMaxBrush {
     /// Palette display name.
     pub name: String,
 
     /// Brush slots.
     #[cfg_attr(feature = "serde", serde(default))]
-    pub brushes: Vec<VXBrushEntry>,
+    pub brushes: Vec<VMaxBrushEntry>,
 
     /// Index of the selected slot.
     pub current: i64,

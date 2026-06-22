@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 /// The scene-level camera / light-rig state. The viewport camera and key-light
 /// angles Voxel Max records for the whole scene. Distinct from a per-object
-/// [`VXCamera`](crate::VXCamera). Sub-keys are written together so they are
+/// [`VMaxCamera`](crate::VMaxCamera). Sub-keys are written together so they are
 /// modeled as plain fields.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]

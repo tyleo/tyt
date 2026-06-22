@@ -1,6 +1,6 @@
 use crate::{ColorFormat, Result};
 use std::path::{Path, PathBuf};
-use vmax::VMaxScene;
+use vmax::VMaxSceneJsonFile;
 use vmax_codec::{VMaxMaterialPalette, VMaxVoxel};
 use voxj::VoxjValue;
 
@@ -23,7 +23,7 @@ pub trait Dependencies {
         data_renames: &[(&str, &str)],
         pal_renames: &[(&str, &str)],
     ) -> Result<Vec<u8>>;
-    fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxScene>;
+    fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxSceneJsonFile>;
     /// Decodes the voxels of a `contents*.vmaxb` payload (LZFSE-framed binary plist).
     fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxVoxel>>;
     /// Returns each object's `(data, pal)` reference strings, read leniently

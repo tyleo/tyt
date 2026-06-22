@@ -5,7 +5,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
 };
-use vmax::{VMaxObject, VMaxScene};
+use vmax::{VMaxObject, VMaxSceneJsonFile};
 use vmax_codec::VMaxVoxel;
 use voxj::{
     VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjTransform, VoxjValue,
@@ -626,7 +626,7 @@ fn object_transform(object: &VMaxObject, box_min: [f64; 3]) -> VoxjTransform {
 /// `i` places, so instances of one geometry share a `child_objects` index.
 /// Returns the nodes and the indices of the roots.
 fn build_hierarchy(
-    scene: &VMaxScene,
+    scene: &VMaxSceneJsonFile,
     object_transforms: &[VoxjTransform],
     object_refs: &[usize],
 ) -> (Vec<VoxjHierarchyNode>, Vec<usize>) {

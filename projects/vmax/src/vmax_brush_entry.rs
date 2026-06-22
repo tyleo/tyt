@@ -1,4 +1,4 @@
-use crate::VXBrushColor;
+use crate::VMaxBrushColor;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -9,31 +9,31 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
-pub enum VXBrushEntry {
+pub enum VMaxBrushEntry {
     /// Cube/voxel brush slot.
-    C(VXBrushColor),
+    C(VMaxBrushColor),
 
     /// `ch` brush slot.
-    Ch(VXBrushColor),
+    Ch(VMaxBrushColor),
 
     /// Ellipsoid/erase brush slot.
-    E(VXBrushColor),
+    E(VMaxBrushColor),
 
     /// `eh` brush slot.
-    Eh(VXBrushColor),
+    Eh(VMaxBrushColor),
 
     /// `bb` brush slot.
-    Bb(VXBrushColor),
+    Bb(VMaxBrushColor),
 
     /// `db` brush slot.
-    Db(VXBrushColor),
+    Db(VMaxBrushColor),
 
     /// Prism brush slot.
-    Pr(VXBrushColor),
+    Pr(VMaxBrushColor),
 
     /// Pyramid brush slot.
-    Py(VXBrushColor),
+    Py(VMaxBrushColor),
 
     /// `et` brush slot.
-    Et(VXBrushColor),
+    Et(VMaxBrushColor),
 }

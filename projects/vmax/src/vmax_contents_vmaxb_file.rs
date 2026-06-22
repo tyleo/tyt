@@ -1,4 +1,4 @@
-use crate::{VXBrush, VXCamera, VXSnapshot, VXTools};
+use crate::{VMaxBrush, VMaxCamera, VMaxSnapshot, VMaxTools};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 /// [`tools`](Self::tools)/[`brush`](Self::brush)/[`cam`](Self::cam)).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct VXObjectData {
+pub struct VMaxContentsVmaxbFile {
     /// Per-chunk voxel snapshots: the baked geometry edit log.
     #[cfg_attr(feature = "serde", serde(default))]
-    pub snapshots: Vec<VXSnapshot>,
+    pub snapshots: Vec<VMaxSnapshot>,
 
     /// Object content UUID.
     #[cfg_attr(feature = "serde", serde(default))]
@@ -27,19 +27,19 @@ pub struct VXObjectData {
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub tools: Option<VXTools>,
+    pub tools: Option<VMaxTools>,
 
     /// Brush palette.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub brush: Option<VXBrush>,
+    pub brush: Option<VMaxBrush>,
 
     /// Per-object camera.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub cam: Option<VXCamera>,
+    pub cam: Option<VMaxCamera>,
 }

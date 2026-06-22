@@ -1837,6 +1837,10 @@ dependencies = [
 name = "vmax-codec"
 version = "0.1.6"
 dependencies = [
+ "image",
+ "lzfse",
+ "plist",
+ "serde_json",
  "vmax",
 ]
 

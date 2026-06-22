@@ -1,12 +1,12 @@
-use crate::{VXSnapshotId, VXStats};
+use crate::{VMaxSnapshotId, VMaxStats};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Voxel snapshot storage holding one chunk's dense voxel byte stream.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct VXStorage {
-    pub id: VXSnapshotId,
+pub struct VMaxStorage {
+    pub id: VMaxSnapshotId,
 
     /// Dense voxel bytes: two per slot (material, color), indexed by Morton
     /// code offset from `st.min[3]`.
@@ -14,7 +14,7 @@ pub struct VXStorage {
     pub ds: Vec<u8>,
 
     #[cfg_attr(feature = "serde", serde(default))]
-    pub st: VXStats,
+    pub st: VMaxStats,
 
     /// Layer-color usage mask (256 bytes).
     #[cfg_attr(feature = "serde", serde(default, with = "serde_bytes"))]

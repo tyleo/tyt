@@ -7,12 +7,14 @@ use std::{
     path::Path,
 };
 use tyt_injection::{
-    compress_lzfse, encode_png_rgba,
     serde_json::{self, Value},
-    serialize_bplist, serialize_json_pretty, write_file,
+    serialize_json_pretty, write_file,
 };
-use vmax::{VXMaterial, VXMaterialMd, VXMaterialPalette};
-use vmax_codec::{VMaxVoxel, encode_object_data, encode_snapshots};
+use vmax::{VMaxMaterial, VMaxMaterialMd, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile};
+use vmax_codec::{
+    VMaxVoxel, encode_object_data, encode_snapshots, to_palette_png_bytes, to_vmaxb_bytes,
+    to_vmaxpsb_bytes,
+};
 use voxj::{VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette, VoxjValue};
 use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes, palette_cell_counts};
 
@@ -93,7 +95,7 @@ pub(crate) fn write_vmax_package(
                     Some(state) => object_data_from_state(state, encode_snapshots(&voxels)),
                     None => encode_object_data(&voxels, &ext_node.id),
                 };
-                let payload = compress_lzfse(&serialize_bplist(&object_data).map_err(invalid)?);
+                let payload = to_vmaxb_bytes(&object_data)?;
                 write_file(&output.join(&data), &payload)?;
                 contents_files.insert(object_index, data.clone());
                 data
@@ -255,10 +257,11 @@ fn write_palette(
 fn write_color_palette(colors: &[u8], path: &Path) -> Result<()> {
     let mut pixels = colors.to_vec();
     pixels.resize((PALETTE_COLORS + 1) * 4, 0);
-    write_file(
-        path,
-        &encode_png_rgba(&pixels, (PALETTE_COLORS + 1) as u32, 1)?,
-    )?;
+    let cells: Vec<[u8; 4]> = pixels
+        .chunks_exact(4)
+        .map(|c| [c[0], c[1], c[2], c[3]])
+        .collect();
+    write_file(path, &to_palette_png_bytes(&VMaxPalettePngFile(cells))?)?;
     Ok(())
 }
 
@@ -292,7 +295,7 @@ fn write_material_palette(
             material
         })
         .collect();
-    let psb = VXMaterialPalette {
+    let psb = VMaxPaletteSettingsVmaxpsbFile {
         name,
         materials,
         indices: Vec::new(),
@@ -306,7 +309,7 @@ fn write_material_palette(
         current: 0,
         ali: "1".to_owned(),
     };
-    write_file(path, &serialize_bplist(&psb).map_err(invalid)?)?;
+    write_file(path, &to_vmaxpsb_bytes(&psb)?)?;
     Ok(())
 }
 
@@ -329,7 +332,7 @@ fn parse_rgba(cell: &[VoxjValue]) -> [u8; 4] {
 /// the `ior`/`transmission`/`absorption` columns. `md` is restored only when at
 /// least one of those columns holds a number for this slot (slots without
 /// dispersion carry `null` there), so the per-slot presence round-trips.
-fn parse_material(attributes: &[String], cell: &[VoxjValue]) -> VXMaterial {
+fn parse_material(attributes: &[String], cell: &[VoxjValue]) -> VMaxMaterial {
     let value = |name: &str| {
         attributes
             .iter()
@@ -343,13 +346,13 @@ fn parse_material(attributes: &[String], cell: &[VoxjValue]) -> VXMaterial {
     let dispersed = ["ior", "transmission", "absorption"]
         .iter()
         .any(|name| matches!(value(name), Some(VoxjValue::Number(_))));
-    VXMaterial {
+    VMaxMaterial {
         mi: String::new(),
         mc: number("metallic", 0.0),
         rc: number("roughness", 0.0),
         sic: number("emissive", 0.0),
         sh: matches!(value("shadows"), Some(VoxjValue::Bool(true))),
-        md: dispersed.then(|| VXMaterialMd {
+        md: dispersed.then(|| VMaxMaterialMd {
             a: number("absorption", 0.0),
             i: number("ior", 1.5),
             t: number("transmission", 0.0),
@@ -410,7 +413,7 @@ fn invalid(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error 
 #[cfg(test)]
 mod tests {
     use super::parse_material;
-    use vmax::VXMaterialMd;
+    use vmax::VMaxMaterialMd;
     use voxj::VoxjValue;
 
     fn names(list: &[&str]) -> Vec<String> {
@@ -443,7 +446,7 @@ mod tests {
         assert!(!material.sh);
         assert_eq!(
             material.md,
-            Some(VXMaterialMd {
+            Some(VMaxMaterialMd {
                 a: 0.0,
                 i: 1.5,
                 t: 0.83,

@@ -8,8 +8,11 @@ use std::{
     path::{Path, PathBuf},
 };
 use tyt_injection::serde_json::{self, Map, Value};
-use vmax::{VMaxScene, VXMaterialPalette, VXObjectData};
-use vmax_codec::{VMaxMaterialPalette, VMaxVoxel, decode_material_palette, decode_snapshots};
+use vmax::VMaxSceneJsonFile;
+use vmax_codec::{
+    VMaxMaterialPalette, VMaxVoxel, decode_material_palette, decode_snapshots,
+    from_palette_png_bytes, from_scene_json_bytes, from_vmaxb_bytes, from_vmaxpsb_bytes,
+};
 use voxj::VoxjValue;
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
@@ -59,11 +62,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn load_palette(&self, png_bytes: &[u8]) -> Result<Vec<[u8; 4]>> {
-        let (rgba, _w, _h) = tyt_injection::decode_image_rgba(png_bytes)?;
-        Ok(rgba
-            .chunks_exact(4)
-            .map(|c| [c[0], c[1], c[2], c[3]])
-            .collect())
+        Ok(from_palette_png_bytes(png_bytes)?.0)
     }
 
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
@@ -71,8 +70,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn parse_material_palette(&self, vmaxpsb_bytes: &[u8]) -> Result<VMaxMaterialPalette> {
-        let palette: VXMaterialPalette = tyt_injection::parse_bplist(vmaxpsb_bytes)?;
-        Ok(decode_material_palette(&palette))
+        Ok(decode_material_palette(&from_vmaxpsb_bytes(vmaxpsb_bytes)?))
     }
 
     fn pack_scene_json(
@@ -96,15 +94,12 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::serialize_json_pretty(&value)?)
     }
 
-    fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxScene> {
-        let scene: VMaxScene = tyt_injection::parse_json(bytes)?;
-        Ok(scene)
+    fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxSceneJsonFile> {
+        Ok(from_scene_json_bytes(bytes)?)
     }
 
     fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxVoxel>> {
-        let decompressed = tyt_injection::decompress_lzfse(vmaxb_bytes);
-        let data: VXObjectData = tyt_injection::parse_bplist(&decompressed)?;
-        Ok(decode_snapshots(&data.snapshots))
+        Ok(decode_snapshots(&from_vmaxb_bytes(vmaxb_bytes)?.snapshots))
     }
 
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>> {
@@ -168,11 +163,7 @@ impl Dependencies for DependenciesImpl {
         let object_states = object_vmaxb
             .iter()
             .map(|vmaxb| match vmaxb {
-                Some(bytes) => {
-                    let decompressed = tyt_injection::decompress_lzfse(bytes);
-                    let data: VXObjectData = tyt_injection::parse_bplist(&decompressed)?;
-                    Ok(Some(object_state_from_data(&data)))
-                }
+                Some(bytes) => Ok(Some(object_state_from_data(&from_vmaxb_bytes(bytes)?))),
                 None => Ok(None),
             })
             .collect::<Result<Vec<_>>>()?;
