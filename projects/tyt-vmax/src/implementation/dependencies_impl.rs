@@ -70,7 +70,9 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn parse_material_palette(&self, vmaxpsb_bytes: &[u8]) -> Result<MaterialPalette> {
-        Ok(decode_material_palette(&from_vmaxpsb_bytes(vmaxpsb_bytes)?))
+        Ok(decode_material_palette(&from_vmaxpsb_bytes(
+            vmaxpsb_bytes,
+        )?)?)
     }
 
     fn pack_scene_json(
