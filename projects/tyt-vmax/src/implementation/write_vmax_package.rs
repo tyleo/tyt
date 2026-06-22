@@ -179,11 +179,13 @@ fn reconstruct_voxels(
         .iter()
         .zip(&data.samples)
         .map(|(position, sample)| Voxel {
-            x: position[0] as i32 + box_min[0],
-            y: position[1] as i32 + box_min[1],
-            z: position[2] as i32 + box_min[2],
-            material: material_channel.map_or(0, |c| sample[c] as u8),
-            color: color_channel.map_or(0, |c| sample[c] as u8),
+            position: [
+                position[0] as i32 + box_min[0],
+                position[1] as i32 + box_min[1],
+                position[2] as i32 + box_min[2],
+            ],
+            material_idx: material_channel.map_or(0, |c| sample[c] as u8),
+            color_idx: color_channel.map_or(0, |c| sample[c] as u8),
         })
         .collect())
 }

@@ -44,12 +44,10 @@ pub fn decode_snapshots(snapshots: &[VMaxSnapshot]) -> Vec<Voxel> {
 
     voxels
         .into_iter()
-        .map(|((x, y, z), (material, color))| Voxel {
-            x,
-            y,
-            z,
-            material,
-            color,
+        .map(|((x, y, z), (material_idx, color_idx))| Voxel {
+            position: [x, y, z],
+            material_idx,
+            color_idx,
         })
         .collect()
 }

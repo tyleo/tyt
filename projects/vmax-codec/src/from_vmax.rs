@@ -109,18 +109,14 @@ mod tests {
         let contents = encode_object_data(
             &[
                 Voxel {
-                    x: 1,
-                    y: 2,
-                    z: 3,
-                    material: 1,
-                    color: 5,
+                    position: [1, 2, 3],
+                    material_idx: 1,
+                    color_idx: 5,
                 },
                 Voxel {
-                    x: 40,
-                    y: 5,
-                    z: 9,
-                    material: 2,
-                    color: 7,
+                    position: [40, 5, 9],
+                    material_idx: 2,
+                    color_idx: 7,
                 },
             ],
             "uuid-a",

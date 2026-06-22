@@ -33,19 +33,19 @@ pub fn encode_snapshots(voxels: &[Voxel]) -> Vec<VMaxSnapshot> {
     let mut chunks: BTreeMap<u32, BTreeMap<u32, (u8, u8)>> = BTreeMap::new();
     for voxel in voxels {
         let grid = [
-            (voxel.x / CHUNK_PITCH) as u32,
-            (voxel.y / CHUNK_PITCH) as u32,
-            (voxel.z / CHUNK_PITCH) as u32,
+            (voxel.position[0] / CHUNK_PITCH) as u32,
+            (voxel.position[1] / CHUNK_PITCH) as u32,
+            (voxel.position[2] / CHUNK_PITCH) as u32,
         ];
         let local = [
-            (voxel.x % CHUNK_PITCH) as u32,
-            (voxel.y % CHUNK_PITCH) as u32,
-            (voxel.z % CHUNK_PITCH) as u32,
+            (voxel.position[0] % CHUNK_PITCH) as u32,
+            (voxel.position[1] % CHUNK_PITCH) as u32,
+            (voxel.position[2] % CHUNK_PITCH) as u32,
         ];
-        chunks
-            .entry(encode_morton_3d(grid))
-            .or_default()
-            .insert(encode_morton_3d(local), (voxel.material, voxel.color));
+        chunks.entry(encode_morton_3d(grid)).or_default().insert(
+            encode_morton_3d(local),
+            (voxel.material_idx, voxel.color_idx),
+        );
     }
 
     chunks
@@ -117,13 +117,11 @@ pub fn encode_snapshots(voxels: &[Voxel]) -> Vec<VMaxSnapshot> {
 mod tests {
     use crate::{Voxel, encode_snapshots};
 
-    fn voxel(x: i32, y: i32, z: i32, color: u8) -> Voxel {
+    fn voxel(x: i32, y: i32, z: i32, color_idx: u8) -> Voxel {
         Voxel {
-            x,
-            y,
-            z,
-            material: 0,
-            color,
+            position: [x, y, z],
+            material_idx: 0,
+            color_idx,
         }
     }
 

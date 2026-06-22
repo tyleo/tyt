@@ -19,13 +19,11 @@ pub fn encode_object_data(voxels: &[Voxel], uuid: &str) -> VMaxContentsVmaxbFile
 mod tests {
     use crate::{Voxel, decode_snapshots, encode_object_data};
 
-    fn voxel(x: i32, y: i32, z: i32, material: u8, color: u8) -> Voxel {
+    fn voxel(x: i32, y: i32, z: i32, material_idx: u8, color_idx: u8) -> Voxel {
         Voxel {
-            x,
-            y,
-            z,
-            material,
-            color,
+            position: [x, y, z],
+            material_idx,
+            color_idx,
         }
     }
 
@@ -40,7 +38,7 @@ mod tests {
             voxel(255, 255, 255, 3, 9),
         ];
         let decoded = decode_snapshots(&encode_object_data(&voxels, "uuid").snapshots);
-        voxels.sort_by_key(|v| (v.x, v.y, v.z));
+        voxels.sort_by_key(|v| (v.position[0], v.position[1], v.position[2]));
         assert_eq!(decoded, voxels);
     }
 }

@@ -291,9 +291,9 @@ impl ToVoxj {
             .iter()
             .map(|v| {
                 [
-                    (v.x - box_min[0]) as u32,
-                    (v.y - box_min[1]) as u32,
-                    (v.z - box_min[2]) as u32,
+                    (v.position[0] - box_min[0]) as u32,
+                    (v.position[1] - box_min[1]) as u32,
+                    (v.position[2] - box_min[2]) as u32,
                 ]
             })
             .collect();
@@ -315,14 +315,14 @@ impl ToVoxj {
             palette_refs.push(index);
             palette_cell_counts.push(cell_count);
             for (sample, voxel) in samples.iter_mut().zip(&voxels) {
-                sample.push(voxel.color as u32);
+                sample.push(voxel.color_idx as u32);
             }
         }
         if let Some((index, cell_count)) = material_palette {
             palette_refs.push(index);
             palette_cell_counts.push(cell_count);
             for (sample, voxel) in samples.iter_mut().zip(&voxels) {
-                sample.push(voxel.material as u32);
+                sample.push(voxel.material_idx as u32);
             }
         }
 
@@ -512,8 +512,12 @@ fn encode_voxj_object(
 /// The minimum `[x, y, z]` corner over `voxels`, or `None` when empty.
 fn min_corner(voxels: &[Voxel]) -> Option<[i32; 3]> {
     voxels.iter().fold(None, |acc, v| {
-        let acc = acc.unwrap_or([v.x, v.y, v.z]);
-        Some([acc[0].min(v.x), acc[1].min(v.y), acc[2].min(v.z)])
+        let acc = acc.unwrap_or(v.position);
+        Some([
+            acc[0].min(v.position[0]),
+            acc[1].min(v.position[1]),
+            acc[2].min(v.position[2]),
+        ])
     })
 }
 
@@ -521,9 +525,9 @@ fn min_corner(voxels: &[Voxel]) -> Option<[i32; 3]> {
 fn object_bounds(voxels: &[Voxel], box_min: [i32; 3]) -> [u32; 3] {
     let mut bounds = [1u32; 3];
     for v in voxels {
-        bounds[0] = bounds[0].max((v.x - box_min[0] + 1) as u32);
-        bounds[1] = bounds[1].max((v.y - box_min[1] + 1) as u32);
-        bounds[2] = bounds[2].max((v.z - box_min[2] + 1) as u32);
+        bounds[0] = bounds[0].max((v.position[0] - box_min[0] + 1) as u32);
+        bounds[1] = bounds[1].max((v.position[1] - box_min[1] + 1) as u32);
+        bounds[2] = bounds[2].max((v.position[2] - box_min[2] + 1) as u32);
     }
     bounds
 }
@@ -582,14 +586,18 @@ fn object_box(
         });
     };
     for v in voxels {
-        let local = [v.x - box_min[0], v.y - box_min[1], v.z - box_min[2]];
+        let local = [
+            v.position[0] - box_min[0],
+            v.position[1] - box_min[1],
+            v.position[2] - box_min[2],
+        ];
         if (0..3).any(|k| local[k] < 0 || local[k] as i64 >= i64::from(size[k])) {
             return Err(IOError::new(
                 ErrorKind::InvalidData,
                 format!(
                     "object '{}' has voxel ({}, {}, {}) outside its Voxel Max bounds \
                      (origin {box_min:?}, size {size:?}); refusing to change the authored bounds",
-                    object.name, v.x, v.y, v.z
+                    object.name, v.position[0], v.position[1], v.position[2]
                 ),
             )
             .into());
