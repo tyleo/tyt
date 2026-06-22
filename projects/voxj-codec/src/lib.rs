@@ -1,13 +1,15 @@
 mod internal;
 pub(crate) use internal::*;
 
+mod decode_file;
 mod decode_object;
+mod encode_file;
+mod encode_file_smallest;
 mod encode_object;
 mod encode_object_smallest;
 mod from_voxj_bytes;
 mod from_voxj_or_voxjz_bytes;
 mod from_voxjz_bytes;
-mod object_data;
 mod palette_cell_counts;
 mod position_encoding;
 mod sample_encoding;
@@ -15,13 +17,15 @@ mod to_voxj_bytes;
 mod to_voxj_pretty_bytes;
 mod to_voxjz_bytes;
 
+pub use decode_file::*;
 pub use decode_object::*;
+pub use encode_file::*;
+pub use encode_file_smallest::*;
 pub use encode_object::*;
 pub use encode_object_smallest::*;
 pub use from_voxj_bytes::*;
 pub use from_voxj_or_voxjz_bytes::*;
 pub use from_voxjz_bytes::*;
-pub use object_data::*;
 pub use palette_cell_counts::*;
 pub use position_encoding::*;
 pub use sample_encoding::*;

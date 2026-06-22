@@ -1,13 +1,23 @@
-use crate::{VoxjHierarchyNode, VoxjObject, VoxjPalette, VoxjValue};
+use crate::{VoxjBackend, VoxjHierarchyNode, VoxjPalette, VoxjValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The body of a Voxel Json document.
+/// The body of a Voxel Json document, generic over the object representation
+/// (see [`VoxjBackend`]).
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-pub struct VoxjMain {
-    pub objects: Vec<VoxjObject>,
+#[cfg_attr(
+    feature = "serde",
+    serde(
+        rename_all = "camelCase",
+        bound(
+            serialize = "Backend::Object: Serialize",
+            deserialize = "Backend::Object: Deserialize<'de>"
+        )
+    )
+)]
+pub struct VoxjMain<Backend: VoxjBackend> {
+    pub objects: Vec<Backend::Object>,
 
     pub palettes: Vec<VoxjPalette>,
 

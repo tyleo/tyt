@@ -8,11 +8,12 @@ use std::{
 use vmax::{VMaxObject, VMaxSceneJsonFile};
 use vmax_codec::Voxel;
 use voxj::{
-    VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjTransform, VoxjValue,
+    VoxjCodecFile, VoxjCodecMain, VoxjCodecObject, VoxjHierarchyNode, VoxjPalette, VoxjTransform,
+    VoxjValue,
 };
 use voxj_codec::{
-    ObjectData, PositionEncoding, SampleEncoding, to_voxj_bytes, to_voxj_pretty_bytes,
-    to_voxjz_bytes,
+    PositionEncoding, SampleEncoding, encode_file, encode_file_smallest, to_voxj_bytes,
+    to_voxj_pretty_bytes, to_voxjz_bytes,
 };
 
 /// Number of cells in a color palette; a `palette*.png` is 256×1 RGBA, and a
@@ -174,8 +175,9 @@ impl ToVoxj {
         let mut palette_name_by_index: HashMap<usize, String> = HashMap::new();
 
         // One voxj object (and its `.vmaxb` bytes for the ext) per distinct
-        // geometry; instances of one geometry collapse to a single object.
-        let mut objects: Vec<VoxjObject> = Vec::new();
+        // geometry; instances of one geometry collapse to a single object. These
+        // carry decoded geometry; the whole file is block-encoded once below.
+        let mut objects: Vec<VoxjCodecObject> = Vec::new();
         let mut object_vmaxb: Vec<Option<Vec<u8>>> = Vec::new();
         // Per scene object: its node transform and the voxj object it places.
         let mut object_transforms: Vec<VoxjTransform> = Vec::new();
@@ -195,7 +197,6 @@ impl ToVoxj {
             let (voxj_object, transform, vmaxb) = self.build_object(
                 &dependencies,
                 object,
-                encoding,
                 &mut palettes,
                 &mut palette_index,
                 &mut palette_name_by_index,
@@ -223,15 +224,22 @@ impl ToVoxj {
         // The voxj codec treats `ext` as opaque; the `voxel-max` shape lives here.
         let ext = dependencies.voxel_max_ext(&scene_bytes, &palette_names, &object_vmaxb)?;
 
-        let file = VoxjFile {
+        let codec_file = VoxjCodecFile {
             version: 1,
-            main: VoxjMain {
+            main: VoxjCodecMain {
                 objects,
                 palettes,
                 hierarchy_nodes,
                 root_hierarchy_nodes,
                 ext: Some(ext),
             },
+        };
+
+        // Block-encode the whole document in one pass: the codec derives each
+        // object's palette cell counts from `main.palettes`.
+        let file = match encoding {
+            Encoding::Fixed { position, sample } => encode_file(&codec_file, position, sample),
+            Encoding::Smallest => encode_file_smallest(&codec_file),
         };
 
         let bytes = match self.format {
@@ -251,11 +259,10 @@ impl ToVoxj {
         &self,
         dependencies: &impl Dependencies,
         object: &VMaxObject,
-        encoding: Encoding,
         palettes: &mut Vec<VoxjPalette>,
         palette_index: &mut HashMap<String, usize>,
         palette_name_by_index: &mut HashMap<usize, String>,
-    ) -> Result<(VoxjObject, VoxjTransform, Option<Vec<u8>>)> {
+    ) -> Result<(VoxjCodecObject, VoxjTransform, Option<Vec<u8>>)> {
         let (voxels, vmaxb) = if object.data.is_empty() {
             (Vec::new(), None)
         } else {
@@ -273,17 +280,13 @@ impl ToVoxj {
 
         if voxels.is_empty() {
             // No geometry to place or color, but keep the authored bounds.
-            let empty = encode_voxj_object(
-                object.name.clone(),
-                Vec::new(),
-                ObjectData {
-                    positions: Vec::new(),
-                    samples: Vec::new(),
-                    bounds,
-                    palette_cell_counts: Vec::new(),
-                },
-                encoding,
-            );
+            let empty = VoxjCodecObject {
+                name: object.name.clone(),
+                palette_refs: Vec::new(),
+                bounds,
+                positions: Vec::new(),
+                samples: Vec::new(),
+            };
             return Ok((empty, object_transform(object, box_min_f), vmaxb));
         }
 
@@ -309,42 +312,35 @@ impl ToVoxj {
         )?;
 
         let mut palette_refs = Vec::new();
-        let mut palette_cell_counts = Vec::new();
         let mut samples: Vec<Vec<u32>> = vec![Vec::new(); voxels.len()];
-        if let Some((index, cell_count)) = color_palette {
+        if let Some(index) = color_palette {
             palette_refs.push(index);
-            palette_cell_counts.push(cell_count);
             for (sample, voxel) in samples.iter_mut().zip(&voxels) {
                 sample.push(voxel.color_idx as u32);
             }
         }
-        if let Some((index, cell_count)) = material_palette {
+        if let Some(index) = material_palette {
             palette_refs.push(index);
-            palette_cell_counts.push(cell_count);
             for (sample, voxel) in samples.iter_mut().zip(&voxels) {
                 sample.push(voxel.material_idx as u32);
             }
         }
 
-        let voxj_object = encode_voxj_object(
-            object.name.clone(),
+        let voxj_object = VoxjCodecObject {
+            name: object.name.clone(),
             palette_refs,
-            ObjectData {
-                positions,
-                samples,
-                bounds,
-                palette_cell_counts,
-            },
-            encoding,
-        );
+            bounds,
+            positions,
+            samples,
+        };
         Ok((voxj_object, object_transform(object, box_min_f), vmaxb))
     }
 
-    /// Returns the shared color palette `(index, cell count)` for `object.palette`.
-    /// The `rgba` cells come from the `palette*.png` image when present, otherwise
-    /// from the `colors` table of the `palette*.settings.vmaxpsb` sidecar (where
-    /// Voxel Max keeps colors when no image is written); a uniform placeholder is
-    /// emitted only when neither source carries color, so color indices are still
+    /// Returns the shared color palette index for `object.palette`. The `rgba`
+    /// cells come from the `palette*.png` image when present, otherwise from the
+    /// `colors` table of the `palette*.settings.vmaxpsb` sidecar (where Voxel Max
+    /// keeps colors when no image is written); a uniform placeholder is emitted
+    /// only when neither source carries color, so color indices are still
     /// preserved. Returns `None` only when the object names no palette at all.
     fn color_palette(
         &self,
@@ -352,22 +348,21 @@ impl ToVoxj {
         object: &VMaxObject,
         palettes: &mut Vec<VoxjPalette>,
         palette_index: &mut HashMap<String, usize>,
-    ) -> Result<Option<(usize, usize)>> {
+    ) -> Result<Option<usize>> {
         if object.palette.is_empty() {
             return Ok(None);
         }
         if let Some(&index) = palette_index.get(&object.palette) {
-            return Ok(Some((index, palettes[index].data.len())));
+            return Ok(Some(index));
         }
         let data = self.color_cells(dependencies, object)?;
-        let cell_count = data.len();
         let index = palettes.len();
         palettes.push(VoxjPalette {
             attributes: vec!["rgba".to_owned()],
             data,
         });
         palette_index.insert(object.palette.clone(), index);
-        Ok(Some((index, cell_count)))
+        Ok(Some(index))
     }
 
     /// The `rgba` cells for an object's color palette: the `palette*.png` pixels
@@ -398,7 +393,7 @@ impl ToVoxj {
             .collect())
     }
 
-    /// Returns the shared material palette `(index, cell count)` for an object's
+    /// Returns the shared material palette index for an object's
     /// `palette*.settings.vmaxpsb`, or `None` when that sidecar is absent. The
     /// per-slot material properties (metalness/roughness/emission/shadows) become
     /// native palette cells; the palette's display name is recorded in
@@ -410,13 +405,13 @@ impl ToVoxj {
         palettes: &mut Vec<VoxjPalette>,
         palette_index: &mut HashMap<String, usize>,
         palette_name_by_index: &mut HashMap<usize, String>,
-    ) -> Result<Option<(usize, usize)>> {
+    ) -> Result<Option<usize>> {
         let Some(stem) = object.palette.strip_suffix(".png") else {
             return Ok(None);
         };
         let sidecar = format!("{stem}.settings.vmaxpsb");
         if let Some(&index) = palette_index.get(&sidecar) {
-            return Ok(Some((index, palettes[index].data.len())));
+            return Ok(Some(index));
         }
         let Ok(bytes) = dependencies.read_file(&self.input_vmax.join(&sidecar)) else {
             return Ok(None);
@@ -470,7 +465,7 @@ impl ToVoxj {
         palettes.push(VoxjPalette { attributes, data });
         palette_index.insert(sidecar, index);
         palette_name_by_index.insert(index, palette.name);
-        Ok(Some((index, palette.materials.len())))
+        Ok(Some(index))
     }
 }
 
@@ -492,21 +487,6 @@ fn rgba_cells(colors: &[[u8; 4]]) -> Vec<Vec<VoxjValue>> {
         .iter()
         .map(|&[r, g, b, a]| vec![VoxjValue::Text(format!("#{r:02X}{g:02X}{b:02X}{a:02X}"))])
         .collect()
-}
-
-/// Dispatches to the codec's fixed or smallest-search encoder per `encoding`.
-fn encode_voxj_object(
-    name: String,
-    palette_refs: Vec<usize>,
-    data: ObjectData,
-    encoding: Encoding,
-) -> VoxjObject {
-    match encoding {
-        Encoding::Fixed { position, sample } => {
-            voxj_codec::encode_object(name, palette_refs, data, position, sample)
-        }
-        Encoding::Smallest => voxj_codec::encode_object_smallest(name, palette_refs, data),
-    }
 }
 
 /// The minimum `[x, y, z]` corner over `voxels`, or `None` when empty.

@@ -1,9 +1,9 @@
-use crate::{ObjectData, decode_hilbert, decode_varint, hilbert_bits, packed_width, unpack_bits};
+use crate::{decode_hilbert, decode_varint, hilbert_bits, packed_width, unpack_bits};
 use base64::{DecodeError, Engine, engine::general_purpose::STANDARD as BASE64};
 use std::{io, iter};
-use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
+use voxj::{VoxjCodecObject, VoxjSerdeObject, VoxjSerdePositionBlock, VoxjSerdeSampleBlock};
 
-/// Decodes one [`VoxjObject`] back into [`ObjectData`], the inverse of
+/// Decodes one [`VoxjSerdeObject`] back into a [`VoxjCodecObject`], the inverse of
 /// [`encode_object`](crate::encode_object). `cell_counts[p]` is the cell count
 /// of the palette referenced by `object.palette_refs[p]`, needed to recover the
 /// bit width of `packed-base64` samples;
@@ -13,17 +13,21 @@ use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 /// Bitmap and Hilbert positions decode in ascending cell / Hilbert-index order;
 /// the sample channels share that same order, so each returned `positions[k]`
 /// pairs with `samples[k]`.
-pub fn decode_object(object: &VoxjObject, cell_counts: &[usize]) -> io::Result<ObjectData> {
+pub fn decode_object(
+    object: &VoxjSerdeObject,
+    cell_counts: &[usize],
+) -> io::Result<VoxjCodecObject> {
     let positions = decode_positions(&object.voxel_positions, object.bounds)?;
     let channels = decode_samples(&object.voxel_samples, cell_counts, positions.len())?;
     let samples = (0..positions.len())
         .map(|k| channels.iter().map(|channel| channel[k]).collect())
         .collect();
-    Ok(ObjectData {
+    Ok(VoxjCodecObject {
+        name: object.name.clone(),
+        palette_refs: object.palette_refs.clone(),
+        bounds: object.bounds,
         positions,
         samples,
-        bounds: object.bounds,
-        palette_cell_counts: cell_counts.to_vec(),
     })
 }
 
@@ -44,11 +48,11 @@ fn cell_to_position(cell: u64, bounds: [u32; 3]) -> [u32; 3] {
 }
 
 /// Decodes the position block into `[x, y, z]` positions.
-fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> io::Result<Vec<[u32; 3]>> {
+fn decode_positions(block: &VoxjSerdePositionBlock, bounds: [u32; 3]) -> io::Result<Vec<[u32; 3]>> {
     Ok(match block {
-        VoxjPositionBlock::RawJson(positions) => positions.clone(),
+        VoxjSerdePositionBlock::RawJson(positions) => positions.clone(),
 
-        VoxjPositionBlock::BitmapBase64(base64) => {
+        VoxjSerdePositionBlock::BitmapBase64(base64) => {
             let cells = bounds[0] as usize * bounds[1] as usize * bounds[2] as usize;
             let occupancy = unpack_bits(&BASE64.decode(base64).map_err(invalid)?, 1, cells);
             occupancy
@@ -59,7 +63,7 @@ fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> io::Result<V
                 .collect()
         }
 
-        VoxjPositionBlock::HilbertIndexDeltaVarintBase64(base64) => {
+        VoxjSerdePositionBlock::HilbertIndexDeltaVarintBase64(base64) => {
             let bits = hilbert_bits(bounds);
             let mut index = 0u64;
             decode_varint(&BASE64.decode(base64).map_err(invalid)?)
@@ -76,20 +80,20 @@ fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> io::Result<V
 /// Decodes the sample block into one channel (`Vec<u32>` of length `n`) per
 /// referenced palette, in the position block's voxel order.
 fn decode_samples(
-    block: &VoxjSampleBlock,
+    block: &VoxjSerdeSampleBlock,
     cell_counts: &[usize],
     n: usize,
 ) -> io::Result<Vec<Vec<u32>>> {
     Ok(match block {
-        VoxjSampleBlock::RawJson(rows) => (0..cell_counts.len())
+        VoxjSerdeSampleBlock::RawJson(rows) => (0..cell_counts.len())
             .map(|p| rows.iter().map(|row| row[p]).collect())
             .collect(),
 
-        VoxjSampleBlock::RleJson(channels) => {
+        VoxjSerdeSampleBlock::RleJson(channels) => {
             channels.iter().map(|channel| rle_decode(channel)).collect()
         }
 
-        VoxjSampleBlock::PackedBase64(channels) => channels
+        VoxjSerdeSampleBlock::PackedBase64(channels) => channels
             .iter()
             .enumerate()
             .map(|(p, base64)| {
@@ -115,8 +119,9 @@ fn rle_decode(rle: &[u32]) -> Vec<u32> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ObjectData, PositionEncoding, SampleEncoding, decode_object, encode_object};
+    use crate::{PositionEncoding, SampleEncoding, decode_object, encode_object};
     use std::collections::BTreeSet;
+    use voxj::VoxjCodecObject;
 
     const POSITIONS: [PositionEncoding; 3] = [
         PositionEncoding::RawJson,
@@ -129,22 +134,27 @@ mod tests {
         SampleEncoding::PackedBase64,
     ];
 
-    fn sample_data() -> ObjectData {
-        ObjectData {
+    /// Cell counts of the two palettes `sample_object` references.
+    const CELL_COUNTS: [usize; 2] = [256, 8];
+
+    fn sample_object() -> VoxjCodecObject {
+        VoxjCodecObject {
+            name: "o".to_owned(),
+            palette_refs: vec![0, 1],
+            bounds: [4, 4, 5],
             positions: vec![[0, 0, 0], [2, 1, 0], [1, 3, 4], [3, 3, 3]],
             samples: vec![vec![1, 0], vec![5, 2], vec![200, 7], vec![0, 1]],
-            bounds: [4, 4, 5],
-            palette_cell_counts: vec![256, 8],
         }
     }
 
-    /// The set of `(position, samples)` pairs — order-independent, so it also
+    /// The set of `(position, samples)` pairs, order-independent, so it also
     /// proves positions and samples stay aligned through any reordering.
-    fn voxel_set(data: &ObjectData) -> BTreeSet<([u32; 3], Vec<u32>)> {
-        data.positions
+    fn voxel_set(object: &VoxjCodecObject) -> BTreeSet<([u32; 3], Vec<u32>)> {
+        object
+            .positions
             .iter()
             .copied()
-            .zip(data.samples.iter().cloned())
+            .zip(object.samples.iter().cloned())
             .collect()
     }
 
@@ -152,14 +162,10 @@ mod tests {
     fn round_trips_every_encoding_pair() {
         for position in POSITIONS {
             for sample in SAMPLES {
-                let data = sample_data();
-                let (expected, bounds, cell_counts) = (
-                    voxel_set(&data),
-                    data.bounds,
-                    data.palette_cell_counts.clone(),
-                );
-                let object = encode_object("o".to_owned(), vec![0, 1], data, position, sample);
-                let decoded = decode_object(&object, &cell_counts).unwrap();
+                let object = sample_object();
+                let (expected, bounds) = (voxel_set(&object), object.bounds);
+                let encoded = encode_object(&object, &CELL_COUNTS, position, sample);
+                let decoded = decode_object(&encoded, &CELL_COUNTS).unwrap();
                 assert_eq!(
                     voxel_set(&decoded),
                     expected,
@@ -172,20 +178,20 @@ mod tests {
 
     #[test]
     fn round_trips_empty_object() {
-        let data = ObjectData {
+        let object = VoxjCodecObject {
+            name: "o".to_owned(),
+            palette_refs: Vec::new(),
+            bounds: [0, 0, 0],
             positions: Vec::new(),
             samples: Vec::new(),
-            bounds: [0, 0, 0],
-            palette_cell_counts: Vec::new(),
         };
-        let object = encode_object(
-            "o".to_owned(),
-            Vec::new(),
-            data,
+        let encoded = encode_object(
+            &object,
+            &[],
             PositionEncoding::RawJson,
             SampleEncoding::RawJson,
         );
-        let decoded = decode_object(&object, &[]).unwrap();
+        let decoded = decode_object(&encoded, &[]).unwrap();
         assert!(decoded.positions.is_empty());
         assert!(decoded.samples.is_empty());
     }
@@ -193,20 +199,15 @@ mod tests {
     #[test]
     fn round_trips_zero_palette_object() {
         for sample in SAMPLES {
-            let data = ObjectData {
+            let object = VoxjCodecObject {
+                name: "o".to_owned(),
+                palette_refs: Vec::new(),
+                bounds: [2, 1, 1],
                 positions: vec![[0, 0, 0], [1, 0, 0]],
                 samples: vec![Vec::new(), Vec::new()],
-                bounds: [2, 1, 1],
-                palette_cell_counts: Vec::new(),
             };
-            let object = encode_object(
-                "o".to_owned(),
-                Vec::new(),
-                data,
-                PositionEncoding::BitmapBase64,
-                sample,
-            );
-            let decoded = decode_object(&object, &[]).unwrap();
+            let encoded = encode_object(&object, &[], PositionEncoding::BitmapBase64, sample);
+            let decoded = decode_object(&encoded, &[]).unwrap();
             assert_eq!(decoded.positions.len(), 2, "sample {sample:?}");
             assert!(
                 decoded.samples.iter().all(Vec::is_empty),

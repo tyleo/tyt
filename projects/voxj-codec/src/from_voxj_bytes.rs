@@ -1,9 +1,9 @@
 use std::io;
-use voxj::VoxjFile;
+use voxj::VoxjSerdeFile;
 
-/// Decodes `.voxj` JSON bytes into a [`VoxjFile`]. Any `main.ext` extension
+/// Decodes `.voxj` JSON bytes into a [`VoxjSerdeFile`]. Any `main.ext` extension
 /// namespace is carried on [`VoxjMain::ext`](voxj::VoxjMain::ext).
-pub fn from_voxj_bytes(bytes: &[u8]) -> io::Result<VoxjFile> {
+pub fn from_voxj_bytes(bytes: &[u8]) -> io::Result<VoxjSerdeFile> {
     serde_json::from_slice(bytes).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
 }
 
@@ -14,20 +14,20 @@ mod tests {
     };
     use serde_json::{Value, json};
     use voxj::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPositionBlock, VoxjSampleBlock,
-        VoxjTransform, VoxjValue,
+        VoxjHierarchyNode, VoxjMain, VoxjSerdeFile, VoxjSerdeObject, VoxjSerdePositionBlock,
+        VoxjSerdeSampleBlock, VoxjTransform, VoxjValue,
     };
 
-    fn document() -> VoxjFile {
-        VoxjFile {
+    fn document() -> VoxjSerdeFile {
+        VoxjSerdeFile {
             version: 1,
             main: VoxjMain {
-                objects: vec![VoxjObject {
+                objects: vec![VoxjSerdeObject {
                     name: "o".to_owned(),
                     palette_refs: vec![0],
                     bounds: [2, 1, 1],
-                    voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
-                    voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![2]]),
+                    voxel_positions: VoxjSerdePositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
+                    voxel_samples: VoxjSerdeSampleBlock::RawJson(vec![vec![1], vec![2]]),
                 }],
                 palettes: Vec::new(),
                 hierarchy_nodes: vec![VoxjHierarchyNode {
@@ -46,7 +46,7 @@ mod tests {
         }
     }
 
-    fn document_with_ext(ext: Value) -> VoxjFile {
+    fn document_with_ext(ext: Value) -> VoxjSerdeFile {
         let mut file = document();
         file.main.ext = Some(serde_json::from_value::<VoxjValue>(ext).unwrap());
         file

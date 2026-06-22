@@ -7,12 +7,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(tag = "encoding", content = "data"))]
-pub enum VoxjPositionBlock {
+pub enum VoxjSerdePositionBlock {
     /// One `[x, y, z]` triple per voxel, in listing order.
     #[cfg_attr(feature = "serde", serde(rename = "raw-json"))]
     RawJson(Vec<[u32; 3]>),
 
-    /// Dense occupancy bitmap over [`bounds`](crate::VoxjObject::bounds),
+    /// Dense occupancy bitmap over [`bounds`](crate::VoxjSerdeObject::bounds),
     /// packed 8 bits per byte MSB-first, base64-encoded; canonical order is
     /// ascending cell index.
     #[cfg_attr(feature = "serde", serde(rename = "bitmap-base64"))]

@@ -17,8 +17,8 @@ use vmax_codec::{
     Voxel, encode_object_data, encode_snapshots, to_palette_png_bytes, to_vmaxb_bytes,
     to_vmaxpsb_bytes,
 };
-use voxj::{VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette, VoxjValue};
-use voxj_codec::{decode_object, from_voxj_or_voxjz_bytes, palette_cell_counts};
+use voxj::{VoxjCodecFile, VoxjCodecObject, VoxjHierarchyNode, VoxjPalette, VoxjValue};
+use voxj_codec::{decode_file, from_voxj_or_voxjz_bytes};
 
 /// Reconstructs a `.vmax` package directory at `output` from `.voxj`/`.voxjz`
 /// bytes: rebuilds `scene.json` from the `voxel-max` ext plus the voxj
@@ -33,7 +33,9 @@ pub(crate) fn write_vmax_package(
     output: &Path,
     color_format: ColorFormat,
 ) -> Result<()> {
-    let file = from_voxj_or_voxjz_bytes(voxj_bytes)?;
+    // Decode the document once into raw geometry; each object's voxels are then
+    // read straight off the codec object below.
+    let file = decode_file(&from_voxj_or_voxjz_bytes(voxj_bytes)?)?;
     let missing = || invalid("voxj document has no ext.voxel-max; cannot rebuild a .vmax package");
     let ext = serde_json::to_value(file.main.ext.as_ref().ok_or_else(missing)?).map_err(invalid)?;
     let voxel_max_value = ext.get("voxel-max").cloned().ok_or_else(missing)?;
@@ -78,12 +80,11 @@ pub(crate) fn write_vmax_package(
             Some(data) => data.clone(),
             None => {
                 let voxels = reconstruct_voxels(
-                    &file,
                     object,
                     color.map(|(channel, _)| channel),
                     material.map(|(channel, _)| channel),
                     &ext_node,
-                )?;
+                );
                 let data = format!("contents{suffix}.vmaxb");
                 // Restore the object's preserved editor state (tools/brush/cam,
                 // content uuid/version) around the rebuilt geometry; fall back to
@@ -144,8 +145,8 @@ type PaletteRef = (usize, usize);
 /// `(color, material)` palette references for an object — each a [`PaletteRef`]
 /// — identified by the `rgba` / `metallic` attributes.
 fn object_palettes(
-    file: &VoxjFile,
-    object: &VoxjObject,
+    file: &VoxjCodecFile,
+    object: &VoxjCodecObject,
 ) -> (Option<PaletteRef>, Option<PaletteRef>) {
     let mut color = None;
     let mut material = None;
@@ -162,22 +163,19 @@ fn object_palettes(
     (color, material)
 }
 
-/// Decodes an object's voxels and re-bases them to absolute model space, reading
+/// Re-bases an already-decoded object's voxels to absolute model space, reading
 /// the color and material indices from their sample channels.
 fn reconstruct_voxels(
-    file: &VoxjFile,
-    object: &VoxjObject,
+    object: &VoxjCodecObject,
     color_channel: Option<usize>,
     material_channel: Option<usize>,
     ext_node: &VoxelMaxNode,
-) -> Result<Vec<Voxel>> {
-    let cell_counts = palette_cell_counts(object, &file.main.palettes);
-    let data = decode_object(object, &cell_counts)?;
+) -> Vec<Voxel> {
     let box_min = box_min(ext_node);
-    Ok(data
+    object
         .positions
         .iter()
-        .zip(&data.samples)
+        .zip(&object.samples)
         .map(|(position, sample)| Voxel {
             position: [
                 position[0] as i32 + box_min[0],
@@ -187,7 +185,7 @@ fn reconstruct_voxels(
             material_idx: material_channel.map_or(0, |c| sample[c] as u8),
             color_idx: color_channel.map_or(0, |c| sample[c] as u8),
         })
-        .collect())
+        .collect()
 }
 
 /// Usable colors in a Voxel Max palette: indices 0..254. Index 255 is a
@@ -203,7 +201,7 @@ const PALETTE_COLORS: usize = 255;
 /// the material sidecar's `colors` table; the returned `pal` reference names the
 /// image either way.
 fn write_palette(
-    file: &VoxjFile,
+    file: &VoxjCodecFile,
     voxel_max: &VoxelMaxExt,
     color: Option<usize>,
     material: Option<usize>,

@@ -1,12 +1,11 @@
-use voxj::{VoxjObject, VoxjPalette};
+use voxj::VoxjPalette;
 
-/// The cell count of each palette an object references, in
-/// [`palette_refs`](VoxjObject::palette_refs) order, ready to pass as
-/// [`decode_object`](crate::decode_object)'s `cell_counts` argument. A
-/// `palette_ref` that points outside `palettes` contributes `0`.
-pub fn palette_cell_counts(object: &VoxjObject, palettes: &[VoxjPalette]) -> Vec<usize> {
-    object
-        .palette_refs
+/// The cell count of each referenced palette, in `palette_refs` order, ready to
+/// pass as the `cell_counts` argument of [`encode_object`](crate::encode_object)
+/// and [`decode_object`](crate::decode_object). A ref that points outside
+/// `palettes` contributes `0`.
+pub fn palette_cell_counts(palette_refs: &[usize], palettes: &[VoxjPalette]) -> Vec<usize> {
+    palette_refs
         .iter()
         .map(|&r| palettes.get(r).map_or(0, |p| p.data.len()))
         .collect()

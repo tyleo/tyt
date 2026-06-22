@@ -1,7 +1,7 @@
-use crate::{ObjectData, PositionEncoding, SampleEncoding, encode_object, hilbert_bits};
+use crate::{PositionEncoding, SampleEncoding, encode_object, hilbert_bits};
 use flate2::{Compression, write::DeflateEncoder};
 use std::io::Write;
-use voxj::VoxjObject;
+use voxj::{VoxjCodecObject, VoxjSerdeObject};
 
 /// Skip the dense bitmap candidate above this many cells to bound memory.
 const MAX_BITMAP_CELLS: u64 = 8_000_000;
@@ -10,37 +10,27 @@ const MAX_BITMAP_CELLS: u64 = 8_000_000;
 /// `<= 131072`); above that the format requires bitmap or raw instead.
 const MAX_HILBERT_BITS: u32 = 17;
 
-/// Encodes one object's geometry into a [`VoxjObject`], trying every applicable
-/// non-raw encoding pairing, deflating each, and keeping the smallest. The
-/// canonical shipping form.
-pub fn encode_object_smallest(
-    name: String,
-    palette_refs: Vec<usize>,
-    data: ObjectData,
-) -> VoxjObject {
-    if data.positions.is_empty() {
+/// Encodes one [`VoxjCodecObject`]'s geometry into a [`VoxjSerdeObject`], trying every
+/// applicable non-raw encoding pairing, deflating each, and keeping the
+/// smallest. The canonical shipping form. `cell_counts[p]` is the cell count of
+/// the palette referenced by `object.palette_refs[p]`;
+/// [`palette_cell_counts`](crate::palette_cell_counts) computes it from the
+/// document's palettes.
+pub fn encode_object_smallest(object: &VoxjCodecObject, cell_counts: &[usize]) -> VoxjSerdeObject {
+    if object.positions.is_empty() {
         return encode_object(
-            name,
-            palette_refs,
-            data,
+            object,
+            cell_counts,
             PositionEncoding::RawJson,
             SampleEncoding::RawJson,
         );
     }
-    candidate_positions(data.bounds)
+    candidate_positions(object.bounds)
         .into_iter()
         .flat_map(|position| {
             [SampleEncoding::RleJson, SampleEncoding::PackedBase64].map(|sample| (position, sample))
         })
-        .map(|(position, sample)| {
-            encode_object(
-                name.clone(),
-                palette_refs.clone(),
-                data.clone(),
-                position,
-                sample,
-            )
-        })
+        .map(|(position, sample)| encode_object(object, cell_counts, position, sample))
         .min_by_key(deflated_len)
         .expect("at least one candidate")
 }
@@ -67,7 +57,7 @@ fn candidate_positions(bounds: [u32; 3]) -> Vec<PositionEncoding> {
 }
 
 /// Deflated byte length of an object's two blocks serialized together.
-fn deflated_len(object: &VoxjObject) -> usize {
+fn deflated_len(object: &VoxjSerdeObject) -> usize {
     let Ok(json) = serde_json::to_vec(&(&object.voxel_positions, &object.voxel_samples)) else {
         return usize::MAX;
     };
@@ -78,27 +68,27 @@ fn deflated_len(object: &VoxjObject) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ObjectData, encode_object_smallest};
-    use voxj::VoxjSampleBlock;
+    use crate::encode_object_smallest;
+    use voxj::{VoxjCodecObject, VoxjSerdeSampleBlock};
 
     /// An object with voxels but zero palettes still emits sample channels
     /// whose arity matches the position block (rle/packed carry zero channels).
     #[test]
     fn zero_palette_object_keeps_sample_arity() {
         let object = encode_object_smallest(
-            "o".to_owned(),
-            Vec::new(),
-            ObjectData {
+            &VoxjCodecObject {
+                name: "o".to_owned(),
+                palette_refs: Vec::new(),
+                bounds: [3, 1, 1],
                 positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
                 samples: vec![Vec::new(), Vec::new(), Vec::new()],
-                bounds: [3, 1, 1],
-                palette_cell_counts: Vec::new(),
             },
+            &[],
         );
         match &object.voxel_samples {
-            VoxjSampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
-            VoxjSampleBlock::RleJson(channels) => assert!(channels.is_empty()),
-            VoxjSampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
+            VoxjSerdeSampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
+            VoxjSerdeSampleBlock::RleJson(channels) => assert!(channels.is_empty()),
+            VoxjSerdeSampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
         }
     }
 }

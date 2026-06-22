@@ -1,8 +1,6 @@
 use crate::{
     VMaxContentsVmaxbFile, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
 };
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// The parsed contents of a `.vmax` package directory: the single `scene.json`
@@ -12,10 +10,10 @@ use std::collections::BTreeMap;
 /// Each file kind is its own `*File` type, named after the file it parses; the
 /// per-instance files are keyed by their on-disk filename.
 ///
-/// This container is assembled field by field by the codec from its parts, not
-/// usually decoded with serde.
+/// This container is assembled field by field by the codec from its parts and
+/// is never decoded with serde, so it carries no serde derives; its component
+/// `*File` fields keep theirs.
 #[derive(Clone, Debug, Default, PartialEq)]
-#[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VMaxFile {
     /// `scene.json`.
     pub scene_json_file: VMaxSceneJsonFile,

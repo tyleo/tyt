@@ -1,4 +1,4 @@
-use crate::{VoxjPositionBlock, VoxjSampleBlock};
+use crate::{VoxjSerdePositionBlock, VoxjSerdeSampleBlock};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-pub struct VoxjObject {
+pub struct VoxjSerdeObject {
+    /// Display name of the object.
     pub name: String,
 
     /// Indices into [`VoxjMain::palettes`](crate::VoxjMain::palettes), in
@@ -17,7 +18,11 @@ pub struct VoxjObject {
     /// `[0, X) x [0, Y) x [0, Z)`.
     pub bounds: [u32; 3],
 
-    pub voxel_positions: VoxjPositionBlock,
+    /// Encoded voxel positions; the chosen encoding fixes the object's canonical
+    /// voxel order.
+    pub voxel_positions: VoxjSerdePositionBlock,
 
-    pub voxel_samples: VoxjSampleBlock,
+    /// Encoded voxel samples, one cell index per referenced palette, in the
+    /// position block's voxel order.
+    pub voxel_samples: VoxjSerdeSampleBlock,
 }
