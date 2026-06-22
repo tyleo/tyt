@@ -14,7 +14,7 @@ use vmax::{
     VMaxMaterial, VMaxMaterialDispersion, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile,
 };
 use vmax_codec::{
-    VMaxVoxel, encode_object_data, encode_snapshots, to_palette_png_bytes, to_vmaxb_bytes,
+    Voxel, encode_object_data, encode_snapshots, to_palette_png_bytes, to_vmaxb_bytes,
     to_vmaxpsb_bytes,
 };
 use voxj::{VoxjFile, VoxjHierarchyNode, VoxjObject, VoxjPalette, VoxjValue};
@@ -170,7 +170,7 @@ fn reconstruct_voxels(
     color_channel: Option<usize>,
     material_channel: Option<usize>,
     ext_node: &VoxelMaxNode,
-) -> Result<Vec<VMaxVoxel>> {
+) -> Result<Vec<Voxel>> {
     let cell_counts = palette_cell_counts(object, &file.main.palettes);
     let data = decode_object(object, &cell_counts)?;
     let box_min = box_min(ext_node);
@@ -178,7 +178,7 @@ fn reconstruct_voxels(
         .positions
         .iter()
         .zip(&data.samples)
-        .map(|(position, sample)| VMaxVoxel {
+        .map(|(position, sample)| Voxel {
             x: position[0] as i32 + box_min[0],
             y: position[1] as i32 + box_min[1],
             z: position[2] as i32 + box_min[2],

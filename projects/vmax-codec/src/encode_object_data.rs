@@ -1,4 +1,4 @@
-use crate::{VMaxVoxel, encode_snapshots};
+use crate::{Voxel, encode_snapshots};
 use vmax::VMaxContentsVmaxbFile;
 
 /// Encodes voxels into a minimal `VMaxContentsVmaxbFile` payload — voxel `snapshots`
@@ -6,7 +6,7 @@ use vmax::VMaxContentsVmaxbFile;
 /// no editor state. Used as the fallback when no preserved object state is
 /// available (e.g. a voxj document authored outside Voxel Max); a round-tripped
 /// document instead rebuilds the payload from its preserved state.
-pub fn encode_object_data(voxels: &[VMaxVoxel], uuid: &str) -> VMaxContentsVmaxbFile {
+pub fn encode_object_data(voxels: &[Voxel], uuid: &str) -> VMaxContentsVmaxbFile {
     VMaxContentsVmaxbFile {
         snapshots: encode_snapshots(voxels),
         uuid: uuid.to_owned(),
@@ -17,10 +17,10 @@ pub fn encode_object_data(voxels: &[VMaxVoxel], uuid: &str) -> VMaxContentsVmaxb
 
 #[cfg(test)]
 mod tests {
-    use crate::{VMaxVoxel, decode_snapshots, encode_object_data};
+    use crate::{Voxel, decode_snapshots, encode_object_data};
 
-    fn voxel(x: i32, y: i32, z: i32, material: u8, color: u8) -> VMaxVoxel {
-        VMaxVoxel {
+    fn voxel(x: i32, y: i32, z: i32, material: u8, color: u8) -> Voxel {
+        Voxel {
             x,
             y,
             z,

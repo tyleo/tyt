@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
 };
 use vmax::{VMaxObject, VMaxSceneJsonFile};
-use vmax_codec::VMaxVoxel;
+use vmax_codec::Voxel;
 use voxj::{
     VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjTransform, VoxjValue,
 };
@@ -510,7 +510,7 @@ fn encode_voxj_object(
 }
 
 /// The minimum `[x, y, z]` corner over `voxels`, or `None` when empty.
-fn min_corner(voxels: &[VMaxVoxel]) -> Option<[i32; 3]> {
+fn min_corner(voxels: &[Voxel]) -> Option<[i32; 3]> {
     voxels.iter().fold(None, |acc, v| {
         let acc = acc.unwrap_or([v.x, v.y, v.z]);
         Some([acc[0].min(v.x), acc[1].min(v.y), acc[2].min(v.z)])
@@ -518,7 +518,7 @@ fn min_corner(voxels: &[VMaxVoxel]) -> Option<[i32; 3]> {
 }
 
 /// `[X, Y, Z]` bounds: the per-axis extent of `voxels` relative to `box_min`.
-fn object_bounds(voxels: &[VMaxVoxel], box_min: [i32; 3]) -> [u32; 3] {
+fn object_bounds(voxels: &[Voxel], box_min: [i32; 3]) -> [u32; 3] {
     let mut bounds = [1u32; 3];
     for v in voxels {
         bounds[0] = bounds[0].max((v.x - box_min[0] + 1) as u32);
@@ -571,7 +571,7 @@ fn authored_box(object: &VMaxObject) -> Option<([i32; 3], [u32; 3])> {
 /// extent of their voxels. Errors if authored bounds do not enclose every voxel.
 fn object_box(
     object: &VMaxObject,
-    voxels: &[VMaxVoxel],
+    voxels: &[Voxel],
     tight_min: Option<[i32; 3]>,
 ) -> Result<([i32; 3], [u32; 3])> {
     let Some((box_min, size)) = authored_box(object) else {

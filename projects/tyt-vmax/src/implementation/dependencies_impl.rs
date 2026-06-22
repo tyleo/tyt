@@ -10,8 +10,8 @@ use std::{
 use tyt_injection::serde_json::{self, Map, Value};
 use vmax::VMaxSceneJsonFile;
 use vmax_codec::{
-    VMaxMaterialPalette, VMaxVoxel, decode_material_palette, decode_snapshots,
-    from_palette_png_bytes, from_scene_json_bytes, from_vmaxb_bytes, from_vmaxpsb_bytes,
+    MaterialPalette, Voxel, decode_material_palette, decode_snapshots, from_palette_png_bytes,
+    from_scene_json_bytes, from_vmaxb_bytes, from_vmaxpsb_bytes,
 };
 use voxj::VoxjValue;
 
@@ -69,7 +69,7 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::match_glob(pattern, candidates)?)
     }
 
-    fn parse_material_palette(&self, vmaxpsb_bytes: &[u8]) -> Result<VMaxMaterialPalette> {
+    fn parse_material_palette(&self, vmaxpsb_bytes: &[u8]) -> Result<MaterialPalette> {
         Ok(decode_material_palette(&from_vmaxpsb_bytes(vmaxpsb_bytes)?))
     }
 
@@ -98,7 +98,7 @@ impl Dependencies for DependenciesImpl {
         Ok(from_scene_json_bytes(bytes)?)
     }
 
-    fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxVoxel>> {
+    fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<Voxel>> {
         Ok(decode_snapshots(&from_vmaxb_bytes(vmaxb_bytes)?.snapshots))
     }
 

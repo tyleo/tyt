@@ -71,7 +71,7 @@ fn settings_sidecar(png: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::from_vmax;
-    use crate::{VMaxVoxel, encode_object_data, to_vmax};
+    use crate::{Voxel, encode_object_data, to_vmax};
     use std::collections::{BTreeMap, HashMap};
     use vmax::{
         VMaxFile, VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
@@ -108,14 +108,14 @@ mod tests {
 
         let contents = encode_object_data(
             &[
-                VMaxVoxel {
+                Voxel {
                     x: 1,
                     y: 2,
                     z: 3,
                     material: 1,
                     color: 5,
                 },
-                VMaxVoxel {
+                Voxel {
                     x: 40,
                     y: 5,
                     z: 9,

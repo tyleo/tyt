@@ -1,6 +1,6 @@
 /// A single decoded voxel in a Voxel Max object's model space (0..256 per axis).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct VMaxVoxel {
+pub struct Voxel {
     pub x: i32,
 
     pub y: i32,

@@ -8,5 +8,5 @@ needs no filesystem of its own). Per-file helpers (`from_vmaxb_bytes`,
 `from_vmaxpsb_bytes`, `from_scene_json_bytes`, `from_palette_png_bytes`, and their
 `to_*` inverses) handle the LZFSE / binary-plist / PNG / JSON framing of each file
 kind, and `decode_snapshots` / `encode_snapshots` (plus the material-palette
-decode) convert between the raw payloads and the ergonomic `VMaxVoxel` /
-`VMaxMaterialPalette` views.
+decode) convert between the raw payloads and the ergonomic `Voxel` /
+`MaterialPalette` views.

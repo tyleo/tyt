@@ -1,8 +1,8 @@
-use vmax::{VMaxMaterial as VMaxMaterialRaw, VMaxMaterialDispersion};
+use vmax::{VMaxMaterial, VMaxMaterialDispersion};
 
 /// A Voxel Max material slot (one of the eight selectable per palette).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct VMaxMaterial {
+pub struct Material {
     /// Metalness in `0..=1` (Voxel Max `mc`).
     pub metalness: f64,
 
@@ -20,8 +20,8 @@ pub struct VMaxMaterial {
     pub dispersion: Option<VMaxMaterialDispersion>,
 }
 
-impl From<VMaxMaterialRaw> for VMaxMaterial {
-    fn from(v: VMaxMaterialRaw) -> Self {
+impl From<VMaxMaterial> for Material {
+    fn from(v: VMaxMaterial) -> Self {
         Self {
             metalness: v.mc,
             roughness: v.rc,
@@ -34,12 +34,12 @@ impl From<VMaxMaterialRaw> for VMaxMaterial {
 
 #[cfg(test)]
 mod tests {
-    use crate::VMaxMaterial;
-    use vmax::{VMaxMaterial as VMaxMaterialRaw, VMaxMaterialDispersion};
+    use crate::Material;
+    use vmax::{VMaxMaterial, VMaxMaterialDispersion};
 
     #[test]
     fn maps_md_to_dispersion() {
-        let v = VMaxMaterialRaw {
+        let v = VMaxMaterial {
             mi: "1".to_owned(),
             mc: 0.66,
             rc: 0.58,
@@ -52,7 +52,7 @@ mod tests {
             }),
         };
         assert_eq!(
-            VMaxMaterial::from(v).dispersion,
+            Material::from(v).dispersion,
             Some(VMaxMaterialDispersion {
                 absorption: 0.0,
                 ior: 1.5,
@@ -63,7 +63,7 @@ mod tests {
 
     #[test]
     fn absent_md_is_no_dispersion() {
-        let v = VMaxMaterialRaw {
+        let v = VMaxMaterial {
             mi: "1".to_owned(),
             mc: 0.1,
             rc: 0.9,
@@ -71,6 +71,6 @@ mod tests {
             sh: true,
             md: None,
         };
-        assert_eq!(VMaxMaterial::from(v).dispersion, None);
+        assert_eq!(Material::from(v).dispersion, None);
     }
 }
