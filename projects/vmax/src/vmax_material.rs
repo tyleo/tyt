@@ -1,4 +1,4 @@
-use crate::VMaxMaterialMd;
+use crate::VMaxMaterialDispersion;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +23,7 @@ pub struct VMaxMaterial {
     pub sh: bool,
 
     /// Extended dispersion parameters
-    /// [`VMaxMaterialMd`](crate::VMaxMaterialMd).
+    /// [`VMaxMaterialDispersion`](crate::VMaxMaterialDispersion).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
-    pub md: Option<VMaxMaterialMd>,
+    pub md: Option<VMaxMaterialDispersion>,
 }

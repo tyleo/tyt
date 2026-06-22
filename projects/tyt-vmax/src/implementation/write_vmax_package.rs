@@ -10,7 +10,9 @@ use tyt_injection::{
     serde_json::{self, Value},
     serialize_json_pretty, write_file,
 };
-use vmax::{VMaxMaterial, VMaxMaterialMd, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile};
+use vmax::{
+    VMaxMaterial, VMaxMaterialDispersion, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile,
+};
 use vmax_codec::{
     VMaxVoxel, encode_object_data, encode_snapshots, to_palette_png_bytes, to_vmaxb_bytes,
     to_vmaxpsb_bytes,
@@ -352,10 +354,10 @@ fn parse_material(attributes: &[String], cell: &[VoxjValue]) -> VMaxMaterial {
         rc: number("roughness", 0.0),
         sic: number("emissive", 0.0),
         sh: matches!(value("shadows"), Some(VoxjValue::Bool(true))),
-        md: dispersed.then(|| VMaxMaterialMd {
-            a: number("absorption", 0.0),
-            i: number("ior", 1.5),
-            t: number("transmission", 0.0),
+        md: dispersed.then(|| VMaxMaterialDispersion {
+            absorption: number("absorption", 0.0),
+            ior: number("ior", 1.5),
+            transmission: number("transmission", 0.0),
         }),
     }
 }
@@ -413,7 +415,7 @@ fn invalid(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> Error 
 #[cfg(test)]
 mod tests {
     use super::parse_material;
-    use vmax::VMaxMaterialMd;
+    use vmax::VMaxMaterialDispersion;
     use voxj::VoxjValue;
 
     fn names(list: &[&str]) -> Vec<String> {
@@ -446,10 +448,10 @@ mod tests {
         assert!(!material.sh);
         assert_eq!(
             material.md,
-            Some(VMaxMaterialMd {
-                a: 0.0,
-                i: 1.5,
-                t: 0.83,
+            Some(VMaxMaterialDispersion {
+                absorption: 0.0,
+                ior: 1.5,
+                transmission: 0.83,
             })
         );
     }

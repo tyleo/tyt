@@ -1,5 +1,4 @@
-use crate::VMaxDispersion;
-use vmax::VMaxMaterial as VMaxMaterialRaw;
+use vmax::{VMaxMaterial as VMaxMaterialRaw, VMaxMaterialDispersion};
 
 /// A Voxel Max material slot (one of the eight selectable per palette).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -18,7 +17,7 @@ pub struct VMaxMaterial {
 
     /// Optional dispersion parameters (Voxel Max `md`); `None` when the slot
     /// carries no `md` block.
-    pub dispersion: Option<VMaxDispersion>,
+    pub dispersion: Option<VMaxMaterialDispersion>,
 }
 
 impl From<VMaxMaterialRaw> for VMaxMaterial {
@@ -28,15 +27,15 @@ impl From<VMaxMaterialRaw> for VMaxMaterial {
             roughness: v.rc,
             emission: v.sic,
             enable_shadows: v.sh,
-            dispersion: v.md.map(Into::into),
+            dispersion: v.md,
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{VMaxDispersion, VMaxMaterial};
-    use vmax::{VMaxMaterial as VMaxMaterialRaw, VMaxMaterialMd};
+    use crate::VMaxMaterial;
+    use vmax::{VMaxMaterial as VMaxMaterialRaw, VMaxMaterialDispersion};
 
     #[test]
     fn maps_md_to_dispersion() {
@@ -46,15 +45,15 @@ mod tests {
             rc: 0.58,
             sic: 4.2,
             sh: true,
-            md: Some(VMaxMaterialMd {
-                a: 0.0,
-                i: 1.5,
-                t: 0.83,
+            md: Some(VMaxMaterialDispersion {
+                absorption: 0.0,
+                ior: 1.5,
+                transmission: 0.83,
             }),
         };
         assert_eq!(
             VMaxMaterial::from(v).dispersion,
-            Some(VMaxDispersion {
+            Some(VMaxMaterialDispersion {
                 absorption: 0.0,
                 ior: 1.5,
                 transmission: 0.83,
