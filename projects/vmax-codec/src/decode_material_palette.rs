@@ -9,7 +9,7 @@ use vmax::VMaxPaletteSettingsVmaxpsbFile;
 pub fn decode_material_palette(
     palette: &VMaxPaletteSettingsVmaxpsbFile,
 ) -> Result<MaterialPalette> {
-    if palette.colors.len() % 4 != 0 {
+    if !palette.colors.len().is_multiple_of(4) {
         return Err(IOError::new(
             ErrorKind::InvalidData,
             format!(
