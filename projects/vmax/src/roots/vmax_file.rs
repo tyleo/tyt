@@ -11,6 +11,9 @@ use std::collections::BTreeMap;
 ///
 /// Each file kind is its own `*File` type, named after the file it parses; the
 /// per-instance files are keyed by their on-disk filename.
+///
+/// This container is assembled field by field by the codec from its parts, not
+/// usually decoded with serde.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VMaxFile {
