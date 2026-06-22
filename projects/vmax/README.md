@@ -1,3 +1,3 @@
 # vmax
 
-Core types for Voxel Max scenes.
+Core types for the Voxel Max (`.vmax`) scene format: the on-disk data model for Voxel Max projects, covering the scene graph (objects, groups, snapshots), voxel storage, materials, palettes, brushes, camera, and tool state. This crate is the Rust data model with optional `serde` support; reading and writing `.vmax` packages and their `.vmaxb` / `.vmaxpsb` payloads lives in the companion `vmax-codec` crate.
