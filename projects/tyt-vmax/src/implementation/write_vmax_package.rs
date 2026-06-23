@@ -15,10 +15,11 @@ use vmax::{
     VMaxSerdePaletteSettingsVmaxpsbFile,
 };
 use vmax_codec::{
-    encode_object_data, encode_snapshots, to_palette_png_bytes, to_vmaxb_bytes, to_vmaxpsb_bytes,
+    encode_contents_vmaxb_file_from_voxels, encode_vmax_snapshots, to_contents_vmaxb_file_bytes,
+    to_palette_png_file_bytes, to_palette_settings_vmaxpsb_file_bytes,
 };
 use voxj::{VoxjCodecFile, VoxjCodecObject, VoxjHierarchyNode, VoxjPalette, VoxjValue};
-use voxj_codec::{decode_file, from_voxj_or_voxjz_bytes};
+use voxj_codec::{decode_voxj_file, from_voxj_or_voxjz_file_bytes};
 
 /// Reconstructs a `.vmax` package directory at `output` from `.voxj`/`.voxjz`
 /// bytes: rebuilds `scene.json` from the `voxel-max` ext plus the voxj
@@ -35,7 +36,7 @@ pub(crate) fn write_vmax_package(
 ) -> Result<()> {
     // Decode the document once into raw geometry; each object's voxels are then
     // read straight off the codec object below.
-    let file = decode_file(&from_voxj_or_voxjz_bytes(voxj_bytes)?)?;
+    let file = decode_voxj_file(&from_voxj_or_voxjz_file_bytes(voxj_bytes)?)?;
     let missing = || invalid("voxj document has no ext.voxel-max; cannot rebuild a .vmax package");
     let ext = serde_json::to_value(file.main.ext.as_ref().ok_or_else(missing)?).map_err(invalid)?;
     let voxel_max_value = ext.get("voxel-max").cloned().ok_or_else(missing)?;
@@ -95,10 +96,10 @@ pub(crate) fn write_vmax_package(
                     .get(object_index)
                     .and_then(|s| s.clone())
                 {
-                    Some(state) => object_data_from_state(state, encode_snapshots(&voxels)),
-                    None => encode_object_data(&voxels, &ext_node.id),
+                    Some(state) => object_data_from_state(state, encode_vmax_snapshots(&voxels)),
+                    None => encode_contents_vmaxb_file_from_voxels(&voxels, &ext_node.id),
                 };
-                let payload = to_vmaxb_bytes(&object_data)?;
+                let payload = to_contents_vmaxb_file_bytes(&object_data)?;
                 write_file(&output.join(&data), &payload)?;
                 contents_files.insert(object_index, data.clone());
                 data
@@ -263,7 +264,10 @@ fn write_color_palette(colors: &[u8], path: &Path) -> Result<()> {
         .chunks_exact(4)
         .map(|c| [c[0], c[1], c[2], c[3]])
         .collect();
-    write_file(path, &to_palette_png_bytes(&VMaxPalettePngFile(cells))?)?;
+    write_file(
+        path,
+        &to_palette_png_file_bytes(&VMaxPalettePngFile(cells))?,
+    )?;
     Ok(())
 }
 
@@ -307,7 +311,7 @@ fn write_material_palette(
         current: 0,
         ali: "1".to_owned(),
     };
-    write_file(path, &to_vmaxpsb_bytes(&psb)?)?;
+    write_file(path, &to_palette_settings_vmaxpsb_file_bytes(&psb)?)?;
     Ok(())
 }
 

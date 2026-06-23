@@ -11,8 +11,8 @@ use voxj::{
     VoxjValue,
 };
 use voxj_codec::{
-    PositionEncoding, SampleEncoding, encode_file, encode_file_smallest, to_voxj_bytes,
-    to_voxj_pretty_bytes, to_voxjz_bytes,
+    PositionEncoding, SampleEncoding, encode_voxj_file, encode_voxj_file_smallest,
+    to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes,
 };
 
 /// Number of cells in a color palette; a `palette*.png` is 256×1 RGBA, and a
@@ -237,14 +237,14 @@ impl ToVoxj {
         // Block-encode the whole document in one pass: the codec derives each
         // object's palette cell counts from `main.palettes`.
         let file = match encoding {
-            Encoding::Fixed { position, sample } => encode_file(&codec_file, position, sample),
-            Encoding::Smallest => encode_file_smallest(&codec_file),
+            Encoding::Fixed { position, sample } => encode_voxj_file(&codec_file, position, sample),
+            Encoding::Smallest => encode_voxj_file_smallest(&codec_file),
         };
 
         let bytes = match self.format {
-            Format::Json => to_voxj_bytes(&file),
-            Format::PrettyJson => to_voxj_pretty_bytes(&file),
-            Format::Zip => to_voxjz_bytes(&file),
+            Format::Json => to_voxj_file_bytes(&file),
+            Format::PrettyJson => to_voxj_pretty_file_bytes(&file),
+            Format::Zip => to_voxjz_file_bytes(&file),
         }
         .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
 

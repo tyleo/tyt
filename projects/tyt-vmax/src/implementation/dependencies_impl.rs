@@ -10,8 +10,9 @@ use std::{
 use tyt_injection::serde_json::{self, Map, Value};
 use vmax::{VMaxCodecPaletteSettingsVmaxpsbFile, VMaxCodecVoxel, VMaxSceneJsonFile};
 use vmax_codec::{
-    decode_palette_settings, decode_snapshots, from_palette_png_bytes, from_scene_json_bytes,
-    from_vmaxb_bytes, from_vmaxpsb_bytes,
+    decode_palette_settings_vmaxpsb_file, decode_vmax_snapshots, from_contents_vmaxb_file_bytes,
+    from_palette_png_file_bytes, from_palette_settings_vmaxpsb_file_bytes,
+    from_scene_json_file_bytes,
 };
 use voxj::VoxjValue;
 
@@ -62,7 +63,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn load_palette(&self, png_bytes: &[u8]) -> Result<Vec<[u8; 4]>> {
-        Ok(from_palette_png_bytes(png_bytes)?.0)
+        Ok(from_palette_png_file_bytes(png_bytes)?.0)
     }
 
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
@@ -73,9 +74,9 @@ impl Dependencies for DependenciesImpl {
         &self,
         vmaxpsb_bytes: &[u8],
     ) -> Result<VMaxCodecPaletteSettingsVmaxpsbFile> {
-        Ok(decode_palette_settings(&from_vmaxpsb_bytes(
-            vmaxpsb_bytes,
-        )?)?)
+        Ok(decode_palette_settings_vmaxpsb_file(
+            &from_palette_settings_vmaxpsb_file_bytes(vmaxpsb_bytes)?,
+        )?)
     }
 
     fn pack_scene_json(
@@ -100,11 +101,13 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxSceneJsonFile> {
-        Ok(from_scene_json_bytes(bytes)?)
+        Ok(from_scene_json_file_bytes(bytes)?)
     }
 
     fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxCodecVoxel>> {
-        Ok(decode_snapshots(&from_vmaxb_bytes(vmaxb_bytes)?.snapshots))
+        Ok(decode_vmax_snapshots(
+            &from_contents_vmaxb_file_bytes(vmaxb_bytes)?.snapshots,
+        ))
     }
 
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>> {
@@ -168,7 +171,9 @@ impl Dependencies for DependenciesImpl {
         let object_states = object_vmaxb
             .iter()
             .map(|vmaxb| match vmaxb {
-                Some(bytes) => Ok(Some(object_state_from_data(&from_vmaxb_bytes(bytes)?))),
+                Some(bytes) => Ok(Some(object_state_from_data(
+                    &from_contents_vmaxb_file_bytes(bytes)?,
+                ))),
                 None => Ok(None),
             })
             .collect::<Result<Vec<_>>>()?;

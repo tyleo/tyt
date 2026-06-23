@@ -2,8 +2,8 @@
 /// order: the codec backend's object representation (see
 /// [`VoxjCodecBackend`](crate::VoxjCodecBackend)). It mirrors
 /// [`VoxjSerdeObject`](crate::VoxjSerdeObject) but holds raw positions and samples instead
-/// of encoded blocks; `voxj-codec`'s `encode_object` turns it into a
-/// `VoxjSerdeObject` and `decode_object` recovers it. Palette cell counts are not
+/// of encoded blocks; `voxj-codec`'s `encode_voxj_object` turns it into a
+/// `VoxjSerdeObject` and `decode_voxj_object` recovers it. Palette cell counts are not
 /// stored: they are derived from `palette_refs` and the document's palettes
 /// where the codec needs them.
 #[derive(Clone, Debug, Default, PartialEq)]
