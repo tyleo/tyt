@@ -30,7 +30,7 @@ const DOS_DATE: u16 = 0x0021;
 /// size, or the central-directory offset, would overflow a 32-bit field
 /// (>= 4 GiB), so a large payload still yields a valid archive instead of one
 /// with silently truncated sizes.
-pub(crate) fn wrap_voxjz(member: &[u8]) -> Vec<u8> {
+pub fn wrap_voxjz(member: &[u8]) -> Vec<u8> {
     wrap_voxjz_with(member, u64::from(ZIP64_SENTINEL))
 }
 
