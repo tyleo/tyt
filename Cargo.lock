@@ -1845,6 +1845,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "voxcore"
+version = "0.1.0"
+
+[[package]]
 name = "voxj"
 version = "0.1.0"
 dependencies = [
@@ -1859,6 +1863,13 @@ dependencies = [
  "flate2",
  "serde_json",
  "voxj",
+]
+
+[[package]]
+name = "voxsmith"
+version = "0.1.0"
+dependencies = [
+ "voxcore",
 ]
 
 [[package]]

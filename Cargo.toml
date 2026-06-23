@@ -16,8 +16,10 @@ members = [
     "projects/tyt-preferences",
     "projects/tyt",
     "projects/tyt-vmax",
+    "projects/voxcore",
     "projects/voxj-codec",
     "projects/voxj",
+    "projects/voxsmith",
     "projects/vmax-codec",
     "projects/vmax",
 ]
@@ -40,7 +42,9 @@ tyt-meta = { path = "projects/tyt-meta" }
 tyt-oai = { path = "projects/tyt-oai" }
 tyt-preferences = { path = "projects/tyt-preferences" }
 tyt-vmax = { path = "projects/tyt-vmax" }
+voxcore = { path = "projects/voxcore" }
 voxj = { path = "projects/voxj" }
 voxj-codec = { path = "projects/voxj-codec" }
+voxsmith = { path = "projects/voxsmith" }
 vmax = { path = "projects/vmax" }
 vmax-codec = { path = "projects/vmax-codec" }
