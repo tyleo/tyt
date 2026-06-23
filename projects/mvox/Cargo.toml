@@ -5,5 +5,7 @@ edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Core data types for the MagicaVoxel (.vox) file format."
+keywords = ["magicavoxel", "vox", "voxel", "3d", "model"]
+categories = ["data-structures", "game-development", "graphics"]
 
 [dependencies]

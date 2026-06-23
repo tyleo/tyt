@@ -5,6 +5,8 @@ edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Encodes voxj types into .voxj / .voxjz documents."
+keywords = ["voxel", "voxj", "json", "3d", "codec"]
+categories = ["parser-implementations", "encoding", "game-development", "graphics"]
 
 [dependencies]
 base64 = "0.22"

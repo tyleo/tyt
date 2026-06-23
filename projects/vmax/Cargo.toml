@@ -5,6 +5,8 @@ edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Core data types for Voxel Max scenes and .vmaxb/.vmaxpsb payloads."
+keywords = ["voxelmax", "vmax", "voxel", "3d", "model"]
+categories = ["data-structures", "game-development", "graphics"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }

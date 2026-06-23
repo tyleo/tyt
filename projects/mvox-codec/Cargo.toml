@@ -5,6 +5,8 @@ edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Reads and writes MagicaVoxel (.vox) files."
+keywords = ["magicavoxel", "vox", "voxel", "3d", "codec"]
+categories = ["parser-implementations", "encoding", "game-development", "graphics"]
 
 [dependencies]
 mvox = "0.1.0"
