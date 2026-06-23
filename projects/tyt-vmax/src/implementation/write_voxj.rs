@@ -43,16 +43,38 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
     // Decode: read the whole package once (serving `scene.json` from the bytes
     // kept for the ext), then decode its geometry and materials.
     let scene_bytes = tyt_injection::read_file(&input.join("scene.json"))?;
-    let serde = from_vmax_file(|name| {
-        if name == "scene.json" {
-            return Ok(Some(scene_bytes.clone()));
-        }
-        match tyt_injection::read_file(&input.join(name)) {
-            Ok(bytes) => Ok(Some(bytes)),
-            Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(e),
-        }
-    })?;
+    let serde = from_vmax_file(
+        // List every package-relative file path, descending one level into
+        // subdirectories (only `QuickLook/`) so its thumbnails keep their prefix.
+        || {
+            let mut paths = Vec::new();
+            for entry in tyt_injection::list_dir(input)? {
+                let Some(name) = entry.file_name().and_then(|n| n.to_str()) else {
+                    continue;
+                };
+                if entry.is_dir() {
+                    for child in tyt_injection::list_dir(&entry)? {
+                        if let Some(child) = child.file_name().and_then(|n| n.to_str()) {
+                            paths.push(format!("{name}/{child}"));
+                        }
+                    }
+                } else {
+                    paths.push(name.to_owned());
+                }
+            }
+            Ok(paths)
+        },
+        |name| {
+            if name == "scene.json" {
+                return Ok(Some(scene_bytes.clone()));
+            }
+            match tyt_injection::read_file(&input.join(name)) {
+                Ok(bytes) => Ok(Some(bytes)),
+                Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+                Err(e) => Err(e),
+            }
+        },
+    )?;
     let codec = decode_vmax_file(&serde)?;
 
     // Translate: decoded vmax -> voxj codec document (geometry, palettes,

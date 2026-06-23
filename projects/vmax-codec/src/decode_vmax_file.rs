@@ -4,9 +4,9 @@ use vmax::{VMaxCodecFile, VMaxSerdeFile};
 
 /// Decodes a [`VMaxSerdeFile`] (raw parsed payloads) into a [`VMaxCodecFile`]
 /// (decoded voxels and materials), the inverse of
-/// [`encode_vmax_file`](crate::encode_vmax_file). The scene graph and `palette*.png` color
-/// tables carry over unchanged; each `contents*.vmaxb` and
-/// `palette*.settings.vmaxpsb` payload is decoded.
+/// [`encode_vmax_file`](crate::encode_vmax_file). The scene graph, `palette*.png` color
+/// tables, and the preserved history / selection / QuickLook files carry over
+/// unchanged; each `contents*.vmaxb` and `palette*.settings.vmaxpsb` payload is decoded.
 pub fn decode_vmax_file(file: &VMaxSerdeFile) -> Result<VMaxCodecFile> {
     let contents_files = file
         .contents_files
@@ -23,6 +23,11 @@ pub fn decode_vmax_file(file: &VMaxSerdeFile) -> Result<VMaxCodecFile> {
         contents_files,
         palette_settings_files,
         palette_png_files: file.palette_png_files.clone(),
+        history_vmaxhb_files: file.history_vmaxhb_files.clone(),
+        history_vmaxhvsb_files: file.history_vmaxhvsb_files.clone(),
+        history_vmaxhvsc_files: file.history_vmaxhvsc_files.clone(),
+        selection_vmaxb_files: file.selection_vmaxb_files.clone(),
+        quick_look_png_files: file.quick_look_png_files.clone(),
     })
 }
 
@@ -31,9 +36,9 @@ mod tests {
     use crate::{decode_vmax_file, encode_vmax_file, encode_vmax_snapshots};
     use std::collections::BTreeMap;
     use vmax::{
-        VMaxBrush, VMaxCamera, VMaxCodecVoxel, VMaxMaterialDispersion, VMaxPalettePngFile,
-        VMaxSceneJsonFile, VMaxSerdeContentsVmaxbFile, VMaxSerdeFile, VMaxSerdeMaterial,
-        VMaxSerdePaletteSettingsVmaxpsbFile, VMaxTools,
+        VMaxBrush, VMaxCamera, VMaxCodecVoxel, VMaxHistoryVmaxhbFile, VMaxMaterialDispersion,
+        VMaxPalettePngFile, VMaxQuickLookPngFile, VMaxSceneJsonFile, VMaxSerdeContentsVmaxbFile,
+        VMaxSerdeFile, VMaxSerdeMaterial, VMaxSerdePaletteSettingsVmaxpsbFile, VMaxTools,
     };
 
     fn voxel(x: i32, y: i32, z: i32, material_idx: u8, color_idx: u8) -> VMaxCodecVoxel {
@@ -129,6 +134,18 @@ mod tests {
             "palette.png".to_owned(),
             VMaxPalettePngFile(vec![[1, 2, 3, 255], [4, 5, 6, 0]]),
         );
+        // The opaque preserved file kinds (history + a QuickLook thumbnail):
+        // decoding then re-encoding must carry them through byte for byte.
+        let mut history_vmaxhb_files = BTreeMap::new();
+        history_vmaxhb_files.insert(
+            "history.vmaxhb".to_owned(),
+            VMaxHistoryVmaxhbFile(vec![0x62, 0x76, 0x78, 0x32, 9]),
+        );
+        let mut quick_look_png_files = BTreeMap::new();
+        quick_look_png_files.insert(
+            "QuickLook/Thumbnail.png".to_owned(),
+            VMaxQuickLookPngFile(vec![0x89, b'P', 1, 2]),
+        );
 
         VMaxSerdeFile {
             scene_json_file: VMaxSceneJsonFile {
@@ -138,6 +155,11 @@ mod tests {
             contents_files,
             palette_settings_files,
             palette_png_files,
+            history_vmaxhb_files,
+            history_vmaxhvsb_files: BTreeMap::new(),
+            history_vmaxhvsc_files: BTreeMap::new(),
+            selection_vmaxb_files: BTreeMap::new(),
+            quick_look_png_files,
         }
     }
 
