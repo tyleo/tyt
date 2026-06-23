@@ -10,12 +10,12 @@ const MAX_BITMAP_CELLS: u64 = 8_000_000;
 /// `<= 131072`); above that the format requires bitmap or raw instead.
 const MAX_HILBERT_BITS: u32 = 17;
 
-/// Encodes one [`VoxjCodecObject`]'s geometry into a [`VoxjSerdeObject`], trying every
-/// applicable non-raw encoding pairing, deflating each, and keeping the
-/// smallest. The canonical shipping form. `cell_counts[p]` is the cell count of
-/// the palette referenced by `object.palette_refs[p]`;
-/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts) computes it from the
-/// document's palettes.
+/// Encodes one [`VoxjCodecObject`]'s geometry into a [`VoxjSerdeObject`],
+/// trying every applicable non-raw encoding pairing, deflating each, and
+/// keeping the smallest. The canonical shipping form. `cell_counts[p]` is the
+/// cell count of the palette referenced by `object.palette_refs[p]`;
+/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts) computes it
+/// from the document's palettes.
 pub fn encode_voxj_object_smallest(
     object: &VoxjCodecObject,
     cell_counts: &[usize],

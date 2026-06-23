@@ -3,12 +3,12 @@ use base64::{DecodeError, Engine, engine::general_purpose::STANDARD as BASE64};
 use std::{io, iter};
 use voxj::{VoxjCodecObject, VoxjSerdeObject, VoxjSerdePositionBlock, VoxjSerdeSampleBlock};
 
-/// Decodes one [`VoxjSerdeObject`] back into a [`VoxjCodecObject`], the inverse of
-/// [`encode_voxj_object`](crate::encode_voxj_object). `cell_counts[p]` is the cell count
-/// of the palette referenced by `object.palette_refs[p]`, needed to recover the
-/// bit width of `packed-base64` samples;
-/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts) computes it from the
-/// document's palettes.
+/// Decodes one [`VoxjSerdeObject`] back into a [`VoxjCodecObject`], the inverse
+/// of [`encode_voxj_object`](crate::encode_voxj_object). `cell_counts[p]` is
+/// the cell count of the palette referenced by `object.palette_refs[p]`, needed
+/// to recover the bit width of `packed-base64` samples;
+/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts) computes it
+/// from the document's palettes.
 ///
 /// Bitmap and Hilbert positions decode in ascending cell / Hilbert-index order;
 /// the sample channels share that same order, so each returned `positions[k]`

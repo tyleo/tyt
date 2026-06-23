@@ -4,10 +4,10 @@ use voxj::{VoxjCodecFile, VoxjSerdeFile, VoxjSerdeMain};
 
 /// Encodes a [`VoxjCodecFile`] (decoded geometry) into a [`VoxjSerdeFile`]
 /// (encoded `.voxj` blocks) with fixed position and sample encodings, ready to
-/// serialize with [`to_voxj_file_bytes`](crate::to_voxj_file_bytes). Each object's palette
-/// cell counts come from the palettes it references; the palettes, hierarchy,
-/// roots, and `ext` carry over unchanged. Errors if an object references a
-/// palette outside the document's `palettes`.
+/// serialize with [`to_voxj_file_bytes`](crate::to_voxj_file_bytes). Each
+/// object's palette cell counts come from the palettes it references; the
+/// palettes, hierarchy, roots, and `ext` carry over unchanged. Errors if an
+/// object references a palette outside the document's `palettes`.
 pub fn encode_voxj_file(
     file: &VoxjCodecFile,
     position: PositionEncoding,

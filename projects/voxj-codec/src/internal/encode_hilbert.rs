@@ -23,8 +23,8 @@ pub fn encode_hilbert(x: u32, y: u32, z: u32, bits: u32) -> u64 {
 
     // Fold the tail correction into every axis. The per-bit loop XORed
     // `(1 << s) - 1` for each set bit `s` of axes[2]; the closed form below
-    // produces the same value, where bit `j` of `t` is the parity of the axes[2]
-    // bits strictly above `j`.
+    // produces the same value, where bit `j` of `t` is the parity of the
+    // axes[2] bits strictly above `j`.
     let mut g = axes[2];
     g ^= g >> 1;
     g ^= g >> 2;

@@ -4,8 +4,9 @@ use voxj::{VoxjCodecFile, VoxjSerdeFile, VoxjSerdeMain};
 
 /// Encodes a [`VoxjCodecFile`] (decoded geometry) into a [`VoxjSerdeFile`]
 /// (encoded `.voxj` blocks), choosing each object's block encodings by the
-/// smallest-deflated search ([`encode_voxj_object_smallest`](crate::encode_voxj_object_smallest)).
-/// The canonical shipping form. Each object's palette cell counts come from the
+/// smallest-deflated search
+/// ([`encode_voxj_object_smallest`](crate::encode_voxj_object_smallest)). The
+/// canonical shipping form. Each object's palette cell counts come from the
 /// palettes it references; the palettes, hierarchy, roots, and `ext` carry over
 /// unchanged. Errors if an object references a palette outside the document's
 /// `palettes`.

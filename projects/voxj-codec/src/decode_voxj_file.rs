@@ -3,9 +3,10 @@ use std::io;
 use voxj::{VoxjCodecFile, VoxjCodecMain, VoxjSerdeFile};
 
 /// Decodes a [`VoxjSerdeFile`] (encoded `.voxj` blocks) into a [`VoxjCodecFile`]
-/// (decoded geometry), the inverse of [`encode_voxj_file`](crate::encode_voxj_file). Each
-/// object's palette cell counts come from the palettes it references; the
-/// palettes, hierarchy, roots, and `ext` carry over unchanged.
+/// (decoded geometry), the inverse of
+/// [`encode_voxj_file`](crate::encode_voxj_file). Each object's palette cell
+/// counts come from the palettes it references; the palettes, hierarchy, roots,
+/// and `ext` carry over unchanged.
 pub fn decode_voxj_file(file: &VoxjSerdeFile) -> io::Result<VoxjCodecFile> {
     let palettes = &file.main.palettes;
     let objects = file
