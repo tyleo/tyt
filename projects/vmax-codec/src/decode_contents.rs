@@ -4,7 +4,7 @@ use vmax::{VMaxCodecContentsVmaxbFile, VMaxSerdeContentsVmaxbFile};
 /// Decodes a `VMaxSerdeContentsVmaxbFile` into a [`VMaxCodecContentsVmaxbFile`]: replays the
 /// snapshots into their final voxels (via
 /// [`decode_snapshots`](crate::decode_snapshots)) and carries the editor state
-/// (uuid / version / tools / brush / cam) through unchanged. The inverse of
+/// through unchanged. The inverse of
 /// [`encode_contents`](crate::encode_contents).
 pub fn decode_contents(contents: &VMaxSerdeContentsVmaxbFile) -> VMaxCodecContentsVmaxbFile {
     VMaxCodecContentsVmaxbFile {

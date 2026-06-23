@@ -88,7 +88,7 @@ fn bitmap_positions(
     // Pack the bits directly instead of filling a one-u32-per-cell occupancy
     // buffer and packing it afterward. Every position lies within bounds, so
     // its cell index is < cells.
-    let cells = (bounds[0] as usize) * (bounds[1] as usize) * (bounds[2] as usize);
+    let cells = bounds[0] as usize * bounds[1] as usize * bounds[2] as usize;
     let mut bytes = vec![0u8; cells.div_ceil(8)];
     for &(cell, _) in &indexed {
         let c = cell as usize;

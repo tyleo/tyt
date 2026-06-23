@@ -7,8 +7,7 @@ use std::fmt::Debug;
 pub trait VoxjBackend {
     /// The object representation: [`VoxjSerdeObject`](crate::VoxjSerdeObject) for the
     /// serde backend, [`VoxjCodecObject`](crate::VoxjCodecObject) for the codec
-    /// backend. The serde (de)serializability the encoded form needs is required
-    /// per-backend by [`VoxjMain`](crate::VoxjMain) / [`VoxjFile`](crate::VoxjFile),
-    /// not here, so the codec object stays free of serde.
+    /// backend. Serde bounds are required per-backend by
+    /// [`VoxjMain`](crate::VoxjMain) / [`VoxjFile`](crate::VoxjFile), not here.
     type Object: Clone + Debug + PartialEq;
 }

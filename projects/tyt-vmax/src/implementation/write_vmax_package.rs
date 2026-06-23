@@ -291,11 +291,7 @@ fn write_material_palette(
         .data
         .iter()
         .enumerate()
-        .map(|(slot, cell)| {
-            let mut material = parse_material(&palette.attributes, cell);
-            material.mi = (slot + 1).to_string();
-            material
-        })
+        .map(|(slot, cell)| parse_material(&palette.attributes, cell, slot))
         .collect();
     let psb = VMaxSerdePaletteSettingsVmaxpsbFile {
         name,
@@ -333,8 +329,9 @@ fn parse_rgba(cell: &[VoxjValue]) -> [u8; 4] {
 /// by attribute name and reconstructing the optional `md` dispersion block from
 /// the `ior`/`transmission`/`absorption` columns. `md` is restored only when at
 /// least one of those columns holds a number for this slot (slots without
-/// dispersion carry `null` there), so the per-slot presence round-trips.
-fn parse_material(attributes: &[String], cell: &[VoxjValue]) -> VMaxSerdeMaterial {
+/// dispersion carry `null` there), so the per-slot presence round-trips. The
+/// `mi` slot token is set from `slot` (Voxel Max numbers material slots from 1).
+fn parse_material(attributes: &[String], cell: &[VoxjValue], slot: usize) -> VMaxSerdeMaterial {
     let value = |name: &str| {
         attributes
             .iter()
@@ -349,7 +346,7 @@ fn parse_material(attributes: &[String], cell: &[VoxjValue]) -> VMaxSerdeMateria
         .iter()
         .any(|name| matches!(value(name), Some(VoxjValue::Number(_))));
     VMaxSerdeMaterial {
-        mi: String::new(),
+        mi: (slot + 1).to_string(),
         mc: number("metallic", 0.0),
         rc: number("roughness", 0.0),
         sic: number("emissive", 0.0),
@@ -442,7 +439,8 @@ mod tests {
             VoxjValue::Number(0.83),
             VoxjValue::Number(0.0),
         ];
-        let material = parse_material(&attributes, &cell);
+        let material = parse_material(&attributes, &cell, 2);
+        assert_eq!(material.mi, "3");
         assert_eq!(material.mc, 0.66);
         assert_eq!(material.sic, 4.2);
         assert!(!material.sh);
@@ -476,7 +474,7 @@ mod tests {
             VoxjValue::Null,
             VoxjValue::Null,
         ];
-        let material = parse_material(&attributes, &cell);
+        let material = parse_material(&attributes, &cell, 0);
         assert!(material.sh);
         assert_eq!(material.md, None);
     }
@@ -490,6 +488,6 @@ mod tests {
             VoxjValue::Number(0.0),
             VoxjValue::Bool(true),
         ];
-        assert_eq!(parse_material(&attributes, &cell).md, None);
+        assert_eq!(parse_material(&attributes, &cell, 0).md, None);
     }
 }

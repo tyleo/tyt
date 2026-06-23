@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize, Serializer};
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
 pub enum VoxjValue {
-    /// A number; integers and floats alike are held as `f64`.
+    /// A number.
     Number(f64),
 
     /// A string.
@@ -38,8 +38,7 @@ impl Serialize for VoxjValue {
         S: Serializer,
     {
         match self {
-            // Emit an integral number as a JSON integer so a field that expects
-            // one deserializes without tripping over a fractional `4.0`.
+            // Integral numbers serialize as a JSON integer, not a fractional `4.0`.
             VoxjValue::Number(n)
                 if n.fract() == 0.0 && *n >= i64::MIN as f64 && *n <= i64::MAX as f64 =>
             {

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 ///
 /// `scene_json_file` and the `palette*.png` color tables are the same in both
 /// representations; only the contents and palette-settings payloads switch
-/// between their raw and decoded forms (see [`VMaxBackend`]).
+/// between their raw and decoded forms.
 ///
 /// This container is assembled field by field by the codec from its parts and is
 /// never decoded with serde, so it carries no serde derives; its component

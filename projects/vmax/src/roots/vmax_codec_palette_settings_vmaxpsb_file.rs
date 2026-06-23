@@ -1,7 +1,7 @@
 use crate::VMaxCodecMaterial;
 
-/// The decoded form of a `palette*.settings.vmaxpsb`: the decoded material slots
-/// and unpacked RGBA color table plus the palette-level editor state Voxel Max
+/// The decoded form of a `palette*.settings.vmaxpsb`: the material slots and
+/// unpacked RGBA color table plus the palette-level editor state Voxel Max
 /// records. The codec backend's palette representation (see
 /// [`VMaxCodecBackend`](crate::VMaxCodecBackend)); `vmax-codec` decodes a
 /// [`VMaxSerdePaletteSettingsVmaxpsbFile`](crate::VMaxSerdePaletteSettingsVmaxpsbFile) into

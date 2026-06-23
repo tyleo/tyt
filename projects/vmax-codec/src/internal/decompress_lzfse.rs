@@ -17,8 +17,7 @@ pub fn decompress_lzfse(bytes: &[u8]) -> Vec<u8> {
     let ceiling = bytes.len().saturating_mul(8192).max(1 << 20);
     loop {
         let mut out = vec![0u8; capacity];
-        let decoded = lzfse::decode_buffer(bytes, &mut out);
-        match decoded {
+        match lzfse::decode_buffer(bytes, &mut out) {
             Ok(len) if len < capacity => {
                 out.truncate(len);
                 return out;
