@@ -22,6 +22,8 @@ members = [
     "projects/voxsmith",
     "projects/vmax-codec",
     "projects/vmax",
+    "projects/mvox-codec",
+    "projects/mvox",
 ]
 resolver = "2"
 
@@ -48,3 +50,5 @@ voxj-codec = { path = "projects/voxj-codec" }
 voxsmith = { path = "projects/voxsmith" }
 vmax = { path = "projects/vmax" }
 vmax-codec = { path = "projects/vmax-codec" }
+mvox = { path = "projects/mvox" }
+mvox-codec = { path = "projects/mvox-codec" }

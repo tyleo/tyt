@@ -1,0 +1,10 @@
+[package]
+name = "mvox-codec"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Reads and writes MagicaVoxel (.vox) files."
+
+[dependencies]
+mvox = "0.1.0"
