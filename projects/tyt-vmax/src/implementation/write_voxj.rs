@@ -85,9 +85,9 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
     // container.
     let serialized = match encoding {
         VoxjEncoding::Fixed { position, sample } => {
-            encode_voxj_file(&file, position_encoding(position), sample_encoding(sample))
+            encode_voxj_file(&file, position_encoding(position), sample_encoding(sample))?
         }
-        VoxjEncoding::Smallest => encode_voxj_file_smallest(&file),
+        VoxjEncoding::Smallest => encode_voxj_file_smallest(&file)?,
     };
     let bytes = match format {
         VoxjFormat::Json => to_voxj_file_bytes(&serialized),

@@ -13,7 +13,7 @@ pub fn decode_voxj_file(file: &VoxjSerdeFile) -> io::Result<VoxjCodecFile> {
         .objects
         .iter()
         .map(|object| {
-            let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes);
+            let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes)?;
             decode_voxj_object(object, &cell_counts)
         })
         .collect::<io::Result<Vec<_>>>()?;
@@ -115,13 +115,14 @@ mod tests {
             &codec_file(),
             PositionEncoding::BitmapBase64,
             SampleEncoding::PackedBase64,
-        );
+        )
+        .unwrap();
         assert_round_trip(&decode_voxj_file(&encoded).unwrap());
     }
 
     #[test]
     fn round_trips_file_through_smallest() {
-        let encoded = encode_voxj_file_smallest(&codec_file());
+        let encoded = encode_voxj_file_smallest(&codec_file()).unwrap();
         assert_round_trip(&decode_voxj_file(&encoded).unwrap());
     }
 }
