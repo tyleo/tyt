@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use vmax::{VMaxBrush, VMaxCamera, VMaxTools};
 
-/// A [`VMaxContentsVmaxbFile`](vmax::VMaxContentsVmaxbFile)'s editor state apart from its
-/// voxel [`snapshots`](vmax::VMaxContentsVmaxbFile::snapshots): the content `uuid`/version plus
+/// A [`VMaxSerdeContentsVmaxbFile`](vmax::VMaxSerdeContentsVmaxbFile)'s editor state apart from its
+/// voxel [`snapshots`](vmax::VMaxSerdeContentsVmaxbFile::snapshots): the content `uuid`/version plus
 /// the [`tools`](Self::tools)/[`brush`](Self::brush)/[`cam`](Self::cam) state.
 /// Stored in the `voxel-max` ext so a `.vmax` package can be rebuilt without
 /// re-storing the voxel geometry.

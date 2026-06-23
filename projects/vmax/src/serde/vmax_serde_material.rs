@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
-pub struct VMaxMaterial {
+pub struct VMaxSerdeMaterial {
     /// Material slot index as a string `"1"`..`"8"`.
     pub mi: String,
 

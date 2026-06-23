@@ -1,29 +1,29 @@
-use crate::{
-    VMaxContentsVmaxbFile, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
-};
+use crate::{VMaxBackend, VMaxPalettePngFile, VMaxSceneJsonFile};
 use std::collections::BTreeMap;
 
-/// The parsed contents of a `.vmax` package directory: the single `scene.json`
-/// plus the per-object `contents*.vmaxb` and per-palette
-/// `palette*.settings.vmaxpsb` / `palette*.png` files it references by name.
+/// The parsed contents of a `.vmax` package directory, generic over the payload
+/// representation (see [`VMaxBackend`]): the single `scene.json` plus the
+/// per-object `contents*.vmaxb` and per-palette `palette*.settings.vmaxpsb` /
+/// `palette*.png` files it references by name, keyed by their on-disk filename.
 ///
-/// Each file kind is its own `*File` type, named after the file it parses; the
-/// per-instance files are keyed by their on-disk filename.
+/// `scene_json_file` and the `palette*.png` color tables are the same in both
+/// representations; only the contents and palette-settings payloads switch
+/// between their raw and decoded forms (see [`VMaxBackend`]).
 ///
-/// This container is assembled field by field by the codec from its parts and
-/// is never decoded with serde, so it carries no serde derives; its component
+/// This container is assembled field by field by the codec from its parts and is
+/// never decoded with serde, so it carries no serde derives; its component
 /// `*File` fields keep theirs.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct VMaxFile {
+#[derive(Clone, Debug, PartialEq)]
+pub struct VMaxFile<Backend: VMaxBackend> {
     /// `scene.json`.
     pub scene_json_file: VMaxSceneJsonFile,
 
-    /// `contents*.vmaxb` files, keyed by filename.
-    pub contents_vmaxb_files: BTreeMap<String, VMaxContentsVmaxbFile>,
+    /// `contents*.vmaxb` objects, keyed by filename.
+    pub contents_files: BTreeMap<String, Backend::Contents>,
 
-    /// `palette*.settings.vmaxpsb` files, keyed by filename.
-    pub palette_settings_vmaxpsb_files: BTreeMap<String, VMaxPaletteSettingsVmaxpsbFile>,
+    /// `palette*.settings.vmaxpsb` palettes, keyed by filename.
+    pub palette_settings_files: BTreeMap<String, Backend::PaletteSettings>,
 
-    /// `palette*.png` files, keyed by filename.
+    /// `palette*.png` color tables, keyed by filename.
     pub palette_png_files: BTreeMap<String, VMaxPalettePngFile>,
 }

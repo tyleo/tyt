@@ -1,4 +1,4 @@
-use crate::VMaxExtentRange;
+use crate::VMaxSerdeExtentRange;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// chunk grid (2^5 = 32).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct VMaxExtent {
+pub struct VMaxSerdeExtent {
     /// Order tag; observed constant `5` (2^5 = 32, the chunk edge length).
     pub o: i64,
 
@@ -16,5 +16,5 @@ pub struct VMaxExtent {
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
-    pub r: Option<VMaxExtentRange>,
+    pub r: Option<VMaxSerdeExtentRange>,
 }

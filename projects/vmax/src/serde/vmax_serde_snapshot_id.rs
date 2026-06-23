@@ -2,10 +2,10 @@
 use serde::{Deserialize, Serialize};
 
 /// Identifier of a voxel snapshot inside a
-/// [`VMaxContentsVmaxbFile`](crate::VMaxContentsVmaxbFile) (`s.id`).
+/// [`VMaxSerdeContentsVmaxbFile`](crate::VMaxSerdeContentsVmaxbFile) (`s.id`).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct VMaxSnapshotId {
+pub struct VMaxSerdeSnapshotId {
     /// Chunk id (0-511); Morton-decodes to the 8x8x8 chunk-grid coordinate.
     pub c: u32,
 

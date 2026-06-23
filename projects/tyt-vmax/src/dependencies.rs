@@ -1,7 +1,6 @@
 use crate::{ColorFormat, Result};
 use std::path::{Path, PathBuf};
-use vmax::VMaxSceneJsonFile;
-use vmax_codec::{MaterialPalette, Voxel};
+use vmax::{VMaxCodecPaletteSettingsVmaxpsbFile, VMaxCodecVoxel, VMaxSceneJsonFile};
 use voxj::VoxjValue;
 
 /// Dependencies for this crate's operations.
@@ -11,9 +10,12 @@ pub trait Dependencies {
     /// Decodes the RGBA cells of a `palette*.png` (one `[r, g, b, a]` per pixel).
     fn load_palette(&self, png_bytes: &[u8]) -> Result<Vec<[u8; 4]>>;
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>>;
-    /// Decodes the material palette (name, slots, and RGBA color table) of a
-    /// `palette*.settings.vmaxpsb` plist.
-    fn parse_material_palette(&self, vmaxpsb_bytes: &[u8]) -> Result<MaterialPalette>;
+    /// Decodes the material palette (name, slots, RGBA color table, and the
+    /// palette-level editor state) of a `palette*.settings.vmaxpsb` plist.
+    fn parse_material_palette(
+        &self,
+        vmaxpsb_bytes: &[u8],
+    ) -> Result<VMaxCodecPaletteSettingsVmaxpsbFile>;
     /// Rewrites `data`/`pal` references according to the supplied `(old, new)`
     /// rename pairs and repoints each object's `hist` at `history{n}.vmaxhb`
     /// matching its renumbered `contents{n}` reference.
@@ -25,7 +27,7 @@ pub trait Dependencies {
     ) -> Result<Vec<u8>>;
     fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxSceneJsonFile>;
     /// Decodes the voxels of a `contents*.vmaxb` payload (LZFSE-framed binary plist).
-    fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<Voxel>>;
+    fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxCodecVoxel>>;
     /// Returns each object's `(data, pal)` reference strings, read leniently
     /// from raw JSON so objects missing optional fields still parse.
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>>;

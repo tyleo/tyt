@@ -11,11 +11,11 @@ use tyt_injection::{
     serialize_json_pretty, write_file,
 };
 use vmax::{
-    VMaxMaterial, VMaxMaterialDispersion, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile,
+    VMaxCodecVoxel, VMaxMaterialDispersion, VMaxPalettePngFile, VMaxSerdeMaterial,
+    VMaxSerdePaletteSettingsVmaxpsbFile,
 };
 use vmax_codec::{
-    Voxel, encode_object_data, encode_snapshots, to_palette_png_bytes, to_vmaxb_bytes,
-    to_vmaxpsb_bytes,
+    encode_object_data, encode_snapshots, to_palette_png_bytes, to_vmaxb_bytes, to_vmaxpsb_bytes,
 };
 use voxj::{VoxjCodecFile, VoxjCodecObject, VoxjHierarchyNode, VoxjPalette, VoxjValue};
 use voxj_codec::{decode_file, from_voxj_or_voxjz_bytes};
@@ -170,13 +170,13 @@ fn reconstruct_voxels(
     color_channel: Option<usize>,
     material_channel: Option<usize>,
     ext_node: &VoxelMaxNode,
-) -> Vec<Voxel> {
+) -> Vec<VMaxCodecVoxel> {
     let box_min = box_min(ext_node);
     object
         .positions
         .iter()
         .zip(&object.samples)
-        .map(|(position, sample)| Voxel {
+        .map(|(position, sample)| VMaxCodecVoxel {
             position: [
                 position[0] as i32 + box_min[0],
                 position[1] as i32 + box_min[1],
@@ -297,7 +297,7 @@ fn write_material_palette(
             material
         })
         .collect();
-    let psb = VMaxPaletteSettingsVmaxpsbFile {
+    let psb = VMaxSerdePaletteSettingsVmaxpsbFile {
         name,
         materials,
         indices: Vec::new(),
@@ -334,7 +334,7 @@ fn parse_rgba(cell: &[VoxjValue]) -> [u8; 4] {
 /// the `ior`/`transmission`/`absorption` columns. `md` is restored only when at
 /// least one of those columns holds a number for this slot (slots without
 /// dispersion carry `null` there), so the per-slot presence round-trips.
-fn parse_material(attributes: &[String], cell: &[VoxjValue]) -> VMaxMaterial {
+fn parse_material(attributes: &[String], cell: &[VoxjValue]) -> VMaxSerdeMaterial {
     let value = |name: &str| {
         attributes
             .iter()
@@ -348,7 +348,7 @@ fn parse_material(attributes: &[String], cell: &[VoxjValue]) -> VMaxMaterial {
     let dispersed = ["ior", "transmission", "absorption"]
         .iter()
         .any(|name| matches!(value(name), Some(VoxjValue::Number(_))));
-    VMaxMaterial {
+    VMaxSerdeMaterial {
         mi: String::new(),
         mc: number("metallic", 0.0),
         rc: number("roughness", 0.0),

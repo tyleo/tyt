@@ -3,16 +3,16 @@ use std::{
     collections::BTreeMap,
     io::{Error as IOError, ErrorKind, Result},
 };
-use vmax::VMaxFile;
+use vmax::VMaxSerdeFile;
 
-/// Reads a whole `.vmax` package into a [`VMaxFile`]. `resolve` returns the bytes
+/// Reads a whole `.vmax` package into a [`VMaxSerdeFile`]. `resolve` returns the bytes
 /// of a file in the package by name (`Ok(None)` when the file is absent), so
 /// `from_vmax` needs no filesystem of its own — the caller supplies the directory
 /// access. `scene.json` is required; each object's
 /// `contents*.vmaxb` / `palette*.png` / `palette*.settings.vmaxpsb` is loaded on
 /// demand and de-duplicated by filename, so instances that share a file load it
 /// once.
-pub fn from_vmax<R>(mut resolve: R) -> Result<VMaxFile>
+pub fn from_vmax<R>(mut resolve: R) -> Result<VMaxSerdeFile>
 where
     R: FnMut(&str) -> Result<Option<Vec<u8>>>,
 {
@@ -20,19 +20,19 @@ where
         .ok_or_else(|| IOError::new(ErrorKind::NotFound, "scene.json is missing"))?;
     let scene_json_file = from_scene_json_bytes(&scene_bytes)?;
 
-    let mut contents_vmaxb_files = BTreeMap::new();
-    let mut palette_settings_vmaxpsb_files = BTreeMap::new();
+    let mut contents_files = BTreeMap::new();
+    let mut palette_settings_files = BTreeMap::new();
     let mut palette_png_files = BTreeMap::new();
 
     for object in &scene_json_file.objects {
-        if !object.data.is_empty() && !contents_vmaxb_files.contains_key(&object.data) {
+        if !object.data.is_empty() && !contents_files.contains_key(&object.data) {
             let bytes = resolve(&object.data)?.ok_or_else(|| {
                 IOError::new(
                     ErrorKind::NotFound,
                     format!("referenced contents file {} is missing", object.data),
                 )
             })?;
-            contents_vmaxb_files.insert(object.data.clone(), from_vmaxb_bytes(&bytes)?);
+            contents_files.insert(object.data.clone(), from_vmaxb_bytes(&bytes)?);
         }
 
         if object.palette.is_empty() {
@@ -47,17 +47,17 @@ where
             palette_png_files.insert(object.palette.clone(), from_palette_png_bytes(&bytes)?);
         }
         if let Some(sidecar) = settings_sidecar(&object.palette)
-            && !palette_settings_vmaxpsb_files.contains_key(&sidecar)
+            && !palette_settings_files.contains_key(&sidecar)
             && let Some(bytes) = resolve(&sidecar)?
         {
-            palette_settings_vmaxpsb_files.insert(sidecar, from_vmaxpsb_bytes(&bytes)?);
+            palette_settings_files.insert(sidecar, from_vmaxpsb_bytes(&bytes)?);
         }
     }
 
-    Ok(VMaxFile {
+    Ok(VMaxSerdeFile {
         scene_json_file,
-        contents_vmaxb_files,
-        palette_settings_vmaxpsb_files,
+        contents_files,
+        palette_settings_files,
         palette_png_files,
     })
 }
@@ -71,10 +71,11 @@ fn settings_sidecar(png: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::from_vmax;
-    use crate::{Voxel, encode_object_data, to_vmax};
+    use crate::{encode_object_data, to_vmax};
     use std::collections::{BTreeMap, HashMap};
     use vmax::{
-        VMaxFile, VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile,
+        VMaxCodecVoxel, VMaxObject, VMaxPalettePngFile, VMaxSceneJsonFile, VMaxSerdeFile,
+        VMaxSerdePaletteSettingsVmaxpsbFile,
     };
 
     fn object(name: &str, data: &str, palette: &str) -> VMaxObject {
@@ -99,7 +100,7 @@ mod tests {
         }
     }
 
-    fn sample() -> VMaxFile {
+    fn sample() -> VMaxSerdeFile {
         let scene_json_file = VMaxSceneJsonFile {
             objects: vec![object("a", "contents.vmaxb", "palette.png")],
             v: 4,
@@ -108,12 +109,12 @@ mod tests {
 
         let contents = encode_object_data(
             &[
-                Voxel {
+                VMaxCodecVoxel {
                     position: [1, 2, 3],
                     material_idx: 1,
                     color_idx: 5,
                 },
-                Voxel {
+                VMaxCodecVoxel {
                     position: [40, 5, 9],
                     material_idx: 2,
                     color_idx: 7,
@@ -121,24 +122,24 @@ mod tests {
             ],
             "uuid-a",
         );
-        let settings = VMaxPaletteSettingsVmaxpsbFile {
+        let settings = VMaxSerdePaletteSettingsVmaxpsbFile {
             name: "pal".to_owned(),
             lc: vec![0u8; 256],
             ..Default::default()
         };
         let png = VMaxPalettePngFile(vec![[1, 2, 3, 255], [4, 5, 6, 255], [7, 8, 9, 0]]);
 
-        let mut contents_vmaxb_files = BTreeMap::new();
-        contents_vmaxb_files.insert("contents.vmaxb".to_owned(), contents);
-        let mut palette_settings_vmaxpsb_files = BTreeMap::new();
-        palette_settings_vmaxpsb_files.insert("palette.settings.vmaxpsb".to_owned(), settings);
+        let mut contents_files = BTreeMap::new();
+        contents_files.insert("contents.vmaxb".to_owned(), contents);
+        let mut palette_settings_files = BTreeMap::new();
+        palette_settings_files.insert("palette.settings.vmaxpsb".to_owned(), settings);
         let mut palette_png_files = BTreeMap::new();
         palette_png_files.insert("palette.png".to_owned(), png);
 
-        VMaxFile {
+        VMaxSerdeFile {
             scene_json_file,
-            contents_vmaxb_files,
-            palette_settings_vmaxpsb_files,
+            contents_files,
+            palette_settings_files,
             palette_png_files,
         }
     }

@@ -1,4 +1,4 @@
-use crate::{VMaxBrush, VMaxCamera, VMaxSnapshot, VMaxTools};
+use crate::{VMaxBrush, VMaxCamera, VMaxSerdeSnapshot, VMaxTools};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 /// [`tools`](Self::tools)/[`brush`](Self::brush)/[`cam`](Self::cam)).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-pub struct VMaxContentsVmaxbFile {
+pub struct VMaxSerdeContentsVmaxbFile {
     /// Per-chunk voxel snapshots: the baked geometry edit log.
     #[cfg_attr(feature = "serde", serde(default))]
-    pub snapshots: Vec<VMaxSnapshot>,
+    pub snapshots: Vec<VMaxSerdeSnapshot>,
 
     /// Object content UUID.
     #[cfg_attr(feature = "serde", serde(default))]
