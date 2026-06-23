@@ -5,23 +5,10 @@ use crate::{
 use std::collections::BTreeMap;
 
 /// The parsed contents of a `.vmax` package directory, generic over the payload
-/// representation (see [`VMaxBackend`]): the single `scene.json` plus every other
-/// file the package holds, each keyed by its package-relative path. The codec
-/// models every file kind Voxel Max writes, so a package round-trips through it
-/// without dropping anything — the per-object `contents*.vmaxb`, the per-palette
-/// `palette*.settings.vmaxpsb` / `palette*.png`, the undo history
-/// (`*.vmaxhb` / `*.vmaxhvsb` / `*.vmaxhvsc`), the saved `*.selection.vmaxb`, and
-/// the `QuickLook/*` thumbnails.
-///
-/// `scene_json_file`, the `palette*.png` color tables, and the history /
-/// selection / QuickLook files are the same in both representations; only the
-/// contents and palette-settings payloads switch between their raw and decoded
-/// forms. The history / selection / QuickLook payloads are opaque streams the
-/// codec preserves verbatim (byte for byte), not parsed structures.
-///
-/// This container is assembled field by field by the codec from its parts and is
-/// never decoded with serde, so it carries no serde derives; its component
-/// `*File` fields keep theirs.
+/// representation (see [`VMaxBackend`]): the single `scene.json` plus every
+/// other file the package holds, each keyed by its package-relative path. The
+/// codec models every file kind Voxel Max writes, so a package round-trips
+/// through it without dropping anything.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VMaxFile<Backend: VMaxBackend> {
     /// `scene.json`.

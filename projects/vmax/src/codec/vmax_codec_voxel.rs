@@ -7,6 +7,7 @@ pub struct VMaxCodecVoxel {
     /// Material slot index (0-7) into the object's material palette.
     pub material_idx: u8,
 
-    /// Color index (1-255) into the object's color palette; 0 is reserved as empty.
+    /// Color index (1-255) into the object's color palette; 0 is reserved as
+    /// empty.
     pub color_idx: u8,
 }

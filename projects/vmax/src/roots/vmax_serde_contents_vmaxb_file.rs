@@ -4,9 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Voxel object payload of a `contents*.vmaxb` binary plist. Beyond the voxel
 /// [`snapshots`](Self::snapshots), the top level carries the editor state Voxel
-/// Max requires to open and import the object (the content
-/// [`uuid`](Self::uuid)/version and
-/// [`tools`](Self::tools)/[`brush`](Self::brush)/[`cam`](Self::cam)).
+/// Max requires to open and import the object.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VMaxSerdeContentsVmaxbFile {

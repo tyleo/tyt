@@ -3,9 +3,9 @@ use crate::VMaxCodecMaterial;
 /// The decoded form of a `palette*.settings.vmaxpsb`: the material slots and
 /// unpacked RGBA color table plus the palette-level editor state Voxel Max
 /// records. The codec backend's palette representation (see
-/// [`VMaxCodecBackend`](crate::VMaxCodecBackend)); `vmax-codec` decodes a
-/// [`VMaxSerdePaletteSettingsVmaxpsbFile`](crate::VMaxSerdePaletteSettingsVmaxpsbFile) into
-/// this and encodes it back, round-tripping every field. The one value not
+/// [`VMaxCodecBackend`](crate::VMaxCodecBackend)), decoded from a
+/// [`VMaxSerdePaletteSettingsVmaxpsbFile`](crate::VMaxSerdePaletteSettingsVmaxpsbFile)
+/// and encoded back to it, round-tripping every field. The one value not
 /// carried is each material's `mi` slot token: it is reconstructed from the
 /// material's 1-based slot position on re-encode, the convention Voxel Max
 /// writes (`"1".."8"` in slot order).

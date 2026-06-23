@@ -1,8 +1,7 @@
 use crate::{VMaxBackend, VMaxCodecContentsVmaxbFile, VMaxCodecPaletteSettingsVmaxpsbFile};
 
-/// The codec [`VMaxBackend`]: payloads are the decoded forms
-/// ([`VMaxCodecContentsVmaxbFile`] / [`VMaxCodecPaletteSettingsVmaxpsbFile`]) the codec produces
-/// from and re-encodes into the serde form.
+/// The codec [`VMaxBackend`]: payloads are the decoded forms, produced from
+/// the serde form and encoded back to it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VMaxCodecBackend;
 

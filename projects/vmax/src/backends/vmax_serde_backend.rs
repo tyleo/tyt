@@ -1,8 +1,7 @@
 use crate::{VMaxBackend, VMaxSerdeContentsVmaxbFile, VMaxSerdePaletteSettingsVmaxpsbFile};
 
-/// The serde [`VMaxBackend`]: payloads are the raw parsed files
-/// ([`VMaxSerdeContentsVmaxbFile`] / [`VMaxSerdePaletteSettingsVmaxpsbFile`]), the form
-/// read from and written to a `.vmax` package on disk.
+/// The serde [`VMaxBackend`]: payloads are the raw parsed files, the form read
+/// from and written to a `.vmax` package on disk.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VMaxSerdeBackend;
 

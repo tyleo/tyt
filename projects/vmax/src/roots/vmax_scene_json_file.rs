@@ -6,17 +6,6 @@ use serde::{Deserialize, Serialize};
 /// hierarchy plus the scene-level state Voxel Max records around it: the
 /// codable version, the camera/light rig, and the renderer / post-grading / UI
 /// settings.
-///
-/// Every scene-level setting except the required version `v` is `Option` and
-/// skipped when `None`, so a scene that omits a key round-trips without it
-/// being re-introduced. Voxel Max tolerates the absence and backfills its own
-/// default on open. `v` is the one exception: Voxel Max will not open a scene
-/// that lacks it, so `v` is never skipped and always emitted, defaulting to the
-/// current codable version when a decoded scene omits it. A key Voxel Max
-/// stores as either an integer or a real (the grading sliders) is accepted as a
-/// real either way. Whole-number sliders therefore re-serialize as reals
-/// (`0.0`), which Voxel Max's JSON decoder reads back into its numeric type
-/// unchanged.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default))]
