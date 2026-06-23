@@ -1,6 +1,6 @@
 [package]
 name = "vmax-codec"
-version = "0.1.6"
+version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -11,4 +11,4 @@ lzfse = "0.2"
 plist = "1"
 png = "0.18"
 serde_json = { version = "1", features = ["preserve_order"] }
-vmax = { version = "0.1.0", features = ["serde"] }
+vmax = { version = "0.1.7", features = ["serde"] }

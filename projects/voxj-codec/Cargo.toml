@@ -1,6 +1,6 @@
 [package]
 name = "voxj-codec"
-version = "0.1.6"
+version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
