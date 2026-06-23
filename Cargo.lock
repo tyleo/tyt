@@ -209,6 +209,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "branded-id"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b85498802efc7ae8acf9cc4b5b982b82b687e86b66dd41f683b01bb8fcdc3bd4"
+
+[[package]]
 name = "bstr"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1858,6 +1864,10 @@ dependencies = [
 [[package]]
 name = "voxcore"
 version = "0.1.0"
+dependencies = [
+ "branded-id",
+ "ty-math",
+]
 
 [[package]]
 name = "voxj"

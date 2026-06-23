@@ -1,5 +1,27 @@
+mod ty_quaternion;
+mod ty_quaternion_f32;
+mod ty_quaternion_f64;
 mod ty_rgba_color;
+mod ty_rgba_color_f32;
+mod ty_rgba_color_f64;
+mod ty_transform;
+mod ty_transform_f32;
+mod ty_transform_f64;
 mod ty_vector3;
+mod ty_vector3_f32;
+mod ty_vector3_f64;
+mod ty_vector3_u32;
 
+pub use ty_quaternion::*;
+pub use ty_quaternion_f32::*;
+pub use ty_quaternion_f64::*;
 pub use ty_rgba_color::*;
+pub use ty_rgba_color_f32::*;
+pub use ty_rgba_color_f64::*;
+pub use ty_transform::*;
+pub use ty_transform_f32::*;
+pub use ty_transform_f64::*;
 pub use ty_vector3::*;
+pub use ty_vector3_f32::*;
+pub use ty_vector3_f64::*;
+pub use ty_vector3_u32::*;
