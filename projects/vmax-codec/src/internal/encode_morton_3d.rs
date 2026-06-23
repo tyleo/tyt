@@ -1,5 +1,5 @@
 /// Encodes `[x, y, z]` into a 3D Morton (Z-order) code by spreading each axis's
-/// bits to every third position — the inverse of
+/// bits to every third position, the inverse of
 /// [`decode_morton_3d`](crate::decode_morton_3d). Each component must fit in 10
 /// bits (`0..=1023`), far above the 32-per-axis chunk extent it is used for.
 pub fn encode_morton_3d(coords: [u32; 3]) -> u32 {

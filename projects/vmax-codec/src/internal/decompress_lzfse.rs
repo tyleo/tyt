@@ -2,8 +2,8 @@
 /// LZVN, and uncompressed blocks).
 const LZFSE_MAGICS: [&[u8; 4]; 4] = [b"bvx2", b"bvxn", b"bvx1", b"bvx-"];
 
-/// Decompresses an LZFSE stream, falling back to the raw bytes when the input is
-/// not LZFSE-framed or cannot be decoded (matching Voxel Max's own
+/// Decompresses an LZFSE stream, falling back to the raw bytes when the input
+/// is not LZFSE-framed or cannot be decoded (matching Voxel Max's own
 /// try-decompress-then-raw behavior).
 pub fn decompress_lzfse(bytes: &[u8]) -> Vec<u8> {
     let is_lzfse = bytes

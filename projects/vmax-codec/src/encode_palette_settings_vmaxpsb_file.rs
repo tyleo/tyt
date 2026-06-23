@@ -3,11 +3,9 @@ use vmax::{
     VMaxSerdePaletteSettingsVmaxpsbFile,
 };
 
-/// Encodes a [`VMaxCodecPaletteSettingsVmaxpsbFile`] into a `VMaxSerdePaletteSettingsVmaxpsbFile`,
-/// the inverse of [`decode_palette_settings_vmaxpsb_file`](crate::decode_palette_settings_vmaxpsb_file):
-/// re-encodes each material slot (reconstructing its 1-based `mi` token from the
-/// slot position) and packs the RGBA color table back into bytes, carrying the
-/// palette-level editor state through unchanged.
+/// Encodes a [`VMaxCodecPaletteSettingsVmaxpsbFile`] into a
+/// `VMaxSerdePaletteSettingsVmaxpsbFile`. The inverse of
+/// [`decode_palette_settings_vmaxpsb_file`](crate::decode_palette_settings_vmaxpsb_file).
 pub fn encode_palette_settings_vmaxpsb_file(
     palette: &VMaxCodecPaletteSettingsVmaxpsbFile,
 ) -> VMaxSerdePaletteSettingsVmaxpsbFile {
@@ -32,8 +30,9 @@ pub fn encode_palette_settings_vmaxpsb_file(
     }
 }
 
-/// Re-encodes one decoded [`Material`] into a `VMaxSerdeMaterial`, setting its `mi`
-/// slot token from the slot position (Voxel Max numbers material slots from 1).
+/// Re-encodes one decoded [`Material`] into a `VMaxSerdeMaterial`, setting its
+/// `mi` slot token from the slot position (Voxel Max numbers material slots
+/// from 1).
 fn encode_material(material: &VMaxCodecMaterial, slot: usize) -> VMaxSerdeMaterial {
     VMaxSerdeMaterial {
         mi: (slot + 1).to_string(),

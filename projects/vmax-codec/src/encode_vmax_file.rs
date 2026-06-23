@@ -1,12 +1,8 @@
 use crate::{encode_contents_vmaxb_file, encode_palette_settings_vmaxpsb_file};
 use vmax::{VMaxCodecFile, VMaxSerdeFile};
 
-/// Encodes a [`VMaxCodecFile`] (decoded payloads) into a [`VMaxSerdeFile`] (raw
-/// `.vmaxb` / `.vmaxpsb` parses), the inverse of
-/// [`decode_vmax_file`](crate::decode_vmax_file), ready to write with
-/// [`to_vmax_file`](crate::to_vmax_file). The scene graph, `palette*.png` color tables, and
-/// the preserved history / selection / QuickLook files carry over unchanged; each
-/// decoded object and palette is re-encoded.
+/// Encodes a [`VMaxCodecFile`] into a [`VMaxSerdeFile`], the inverse of
+/// [`decode_vmax_file`](crate::decode_vmax_file).
 pub fn encode_vmax_file(file: &VMaxCodecFile) -> VMaxSerdeFile {
     VMaxSerdeFile {
         scene_json_file: file.scene_json_file.clone(),

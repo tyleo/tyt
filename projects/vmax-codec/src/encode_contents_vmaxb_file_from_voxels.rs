@@ -1,11 +1,9 @@
 use crate::encode_vmax_snapshots;
 use vmax::{VMaxCodecVoxel, VMaxSerdeContentsVmaxbFile};
 
-/// Encodes voxels into a minimal `VMaxSerdeContentsVmaxbFile` payload — voxel `snapshots`
-/// (via [`encode_vmax_snapshots`]) plus the content `uuid` and current version, with
-/// no editor state. Used as the fallback when no preserved object state is
-/// available (e.g. a voxj document authored outside Voxel Max); a round-tripped
-/// document instead rebuilds the payload from its preserved state.
+/// Encodes voxels into a minimal `VMaxSerdeContentsVmaxbFile` payload. Used as
+/// the fallback when no preserved object state is available (e.g. a voxel
+/// document authored outside Voxel Max).
 pub fn encode_contents_vmaxb_file_from_voxels(
     voxels: &[VMaxCodecVoxel],
     uuid: &str,

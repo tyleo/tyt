@@ -18,7 +18,8 @@ const CHUNK_ORDER: i64 = 5;
 const CHECKPOINT: i64 = 4;
 
 /// The 4-component Morton stat for a corner in `st`: per-axis decomposition of
-/// the corner's local coords plus their sum (`stat[3] == stat[0]+stat[1]+stat[2]`).
+/// the corner's local coords plus their sum
+/// (`stat[3] == stat[0]+stat[1]+stat[2]`).
 fn morton_stat(morton: u32) -> Vec<i64> {
     let c = decode_morton_3d(morton);
     let x = encode_morton_3d([c[0], 0, 0]) as i64;
@@ -27,11 +28,9 @@ fn morton_stat(morton: u32) -> Vec<i64> {
     vec![x, y, z, x + y + z]
 }
 
-/// Encodes voxels into a `VMaxSerdeContentsVmaxbFile`'s `snapshots` array, the inverse of
-/// [`decode_vmax_snapshots`](crate::decode_vmax_snapshots). Groups voxels into the 32-pitch
-/// chunk grid, lays each chunk out by in-chunk Morton code into a dense
-/// 2-bytes-per-slot `(material, color)` stream, and emits one checkpoint snapshot
-/// per occupied chunk.
+/// Encodes voxels into a `VMaxSerdeContentsVmaxbFile`'s `snapshots` array, the
+/// inverse of [`decode_vmax_snapshots`](crate::decode_vmax_snapshots). Emits
+/// one checkpoint snapshot per occupied chunk.
 pub fn encode_vmax_snapshots(voxels: &[VMaxCodecVoxel]) -> Vec<VMaxSerdeSnapshot> {
     let mut chunks: BTreeMap<u32, BTreeMap<u32, (u8, u8)>> = BTreeMap::new();
     for voxel in voxels {

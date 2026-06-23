@@ -1,8 +1,8 @@
 use std::io::{Error as IOError, ErrorKind, Result};
 use vmax::VMaxSerdePaletteSettingsVmaxpsbFile;
 
-/// Decodes `palette*.settings.vmaxpsb` bytes (a binary plist; unlike
-/// `contents*.vmaxb` it is not LZFSE-framed) into a [`VMaxSerdePaletteSettingsVmaxpsbFile`].
+/// Decodes `palette*.settings.vmaxpsb` bytes (a binary plist) into a
+/// [`VMaxSerdePaletteSettingsVmaxpsbFile`].
 pub fn from_palette_settings_vmaxpsb_file_bytes(
     bytes: &[u8],
 ) -> Result<VMaxSerdePaletteSettingsVmaxpsbFile> {

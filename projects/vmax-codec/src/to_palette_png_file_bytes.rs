@@ -2,10 +2,11 @@ use png::{BitDepth, ColorType, Encoder, Filter, SrgbRenderingIntent, chunk};
 use std::io::{Error as IOError, ErrorKind, Result};
 use vmax::VMaxPalettePngFile;
 
-/// Static Exif block Voxel Max embeds in every `palette*.png`: a big-endian TIFF
-/// whose Exif IFD records the sRGB color space plus the image dimensions. Bytes
-/// `48..52` hold `PixelXDimension` and `60..64` hold `PixelYDimension`; the width
-/// is patched per image in [`to_palette_png_file_bytes`] (the height is always 1).
+/// Static Exif block Voxel Max embeds in every `palette*.png`: a big-endian
+/// TIFF whose Exif IFD records the sRGB color space plus the image dimensions.
+/// Bytes `48..52` hold `PixelXDimension` and `60..64` hold `PixelYDimension`;
+/// the width is patched per image in [`to_palette_png_file_bytes`] (the height
+/// is always 1).
 const EXIF: [u8; 68] = [
     0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08, 0x00, 0x01, 0x87, 0x69, 0x00, 0x04, 0x00, 0x00,
     0x00, 0x01, 0x00, 0x00, 0x00, 0x1a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xa0, 0x01, 0x00, 0x03,
@@ -14,8 +15,8 @@ const EXIF: [u8; 68] = [
     0x00, 0x00, 0x00, 0x00,
 ];
 
-/// Encodes a [`VMaxPalettePngFile`] into `palette*.png` bytes: a `len x 1` RGBA PNG,
-/// one pixel per color cell — the inverse of
+/// Encodes a [`VMaxPalettePngFile`] into `palette*.png` bytes: a `len x 1` RGBA
+/// PNG, one pixel per color cell, the inverse of
 /// [`from_palette_png_file_bytes`](crate::from_palette_png_file_bytes).
 pub fn to_palette_png_file_bytes(file: &VMaxPalettePngFile) -> Result<Vec<u8>> {
     let pixels: Vec<u8> = file.0.iter().flatten().copied().collect();

@@ -7,8 +7,9 @@ use vmax::{VMaxCodecVoxel, VMaxSerdeSnapshot};
 const CHUNK_PITCH: i32 = 32;
 
 /// Decodes voxel `snapshots` into model space, the inverse of
-/// [`encode_vmax_snapshots`](crate::encode_vmax_snapshots). Replays snapshots so the last
-/// snapshot of each chunk wins, and returns voxels sorted by `(x, y, z)`.
+/// [`encode_vmax_snapshots`](crate::encode_vmax_snapshots). Replays snapshots
+/// so the last snapshot of each chunk wins, and returns voxels sorted by
+/// `(x, y, z)`.
 pub fn decode_vmax_snapshots(snapshots: &[VMaxSerdeSnapshot]) -> io::Result<Vec<VMaxCodecVoxel>> {
     let mut latest: BTreeMap<u32, &VMaxSerdeSnapshot> = BTreeMap::new();
     for snapshot in snapshots {

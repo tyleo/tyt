@@ -1,8 +1,8 @@
 use std::io::{Error as IOError, ErrorKind, Result};
 use vmax::VMaxSerdePaletteSettingsVmaxpsbFile;
 
-/// Encodes a [`VMaxSerdePaletteSettingsVmaxpsbFile`] into `palette*.settings.vmaxpsb` bytes
-/// (a binary plist) — the inverse of
+/// Encodes a [`VMaxSerdePaletteSettingsVmaxpsbFile`] into
+/// `palette*.settings.vmaxpsb` bytes (a binary plist), the inverse of
 /// [`from_palette_settings_vmaxpsb_file_bytes`](crate::from_palette_settings_vmaxpsb_file_bytes).
 pub fn to_palette_settings_vmaxpsb_file_bytes(
     file: &VMaxSerdePaletteSettingsVmaxpsbFile,

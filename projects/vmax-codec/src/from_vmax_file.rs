@@ -11,17 +11,10 @@ use std::{
 use vmax::VMaxSerdeFile;
 
 /// Reads a whole `.vmax` package into a [`VMaxSerdeFile`]. `list` returns the
-/// package-relative path of every file in the package (so `QuickLook/` entries
-/// keep their subdirectory prefix) and `resolve` returns a file's bytes by that
-/// path (`Ok(None)` when it has since vanished); together they let `from_vmax_file`
-/// work without a filesystem of its own — the caller supplies the directory access.
-///
-/// `scene.json` is required. Every other listed file is classified by name into
-/// the matching part of the package — `contents*.vmaxb`, `palette*.png`,
-/// `palette*.settings.vmaxpsb`, the undo history
-/// (`*.vmaxhb` / `*.vmaxhvsb` / `*.vmaxhvsc`), `*.selection.vmaxb`, and
-/// `QuickLook/*` — so nothing the package holds is dropped. A file whose name
-/// matches no known kind is an error rather than a silent loss.
+/// package-relative path of every file (so `QuickLook/` entries keep their
+/// subdirectory prefix); `resolve` returns a file's bytes by that path, or
+/// `Ok(None)` if it has since vanished. `scene.json` is required, and a
+/// filename matching no known kind is an error rather than a silent loss.
 pub fn from_vmax_file<L, R>(list: L, mut resolve: R) -> Result<VMaxSerdeFile>
 where
     L: FnOnce() -> Result<Vec<String>>,

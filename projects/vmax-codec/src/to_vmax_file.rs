@@ -7,12 +7,10 @@ use crate::{
 use std::io::Result;
 use vmax::VMaxSerdeFile;
 
-/// Writes a [`VMaxSerdeFile`] back to a `.vmax` package. `write` receives each file's
-/// package-relative name and bytes; like [`from_vmax_file`](crate::from_vmax_file) this
-/// keeps the codec free of any filesystem dependency — the caller performs the actual
-/// writes (creating any subdirectory a `QuickLook/` name implies). Every file kind read
-/// is written back, the history / selection / QuickLook payloads verbatim, so the
-/// package round-trips without losing them.
+/// Writes a [`VMaxSerdeFile`] back to a `.vmax` package, the inverse of
+/// [`from_vmax_file`](crate::from_vmax_file). `write` receives each file's
+/// package-relative name and bytes and performs the actual writes (creating
+/// any subdirectory a `QuickLook/` name implies).
 pub fn to_vmax_file<W>(file: &VMaxSerdeFile, mut write: W) -> Result<()>
 where
     W: FnMut(&str, &[u8]) -> Result<()>,

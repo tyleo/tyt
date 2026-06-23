@@ -2,11 +2,8 @@ use crate::{decode_contents_vmaxb_file, decode_palette_settings_vmaxpsb_file};
 use std::{collections::BTreeMap, io::Result};
 use vmax::{VMaxCodecFile, VMaxSerdeFile};
 
-/// Decodes a [`VMaxSerdeFile`] (raw parsed payloads) into a [`VMaxCodecFile`]
-/// (decoded voxels and materials), the inverse of
-/// [`encode_vmax_file`](crate::encode_vmax_file). The scene graph, `palette*.png` color
-/// tables, and the preserved history / selection / QuickLook files carry over
-/// unchanged; each `contents*.vmaxb` and `palette*.settings.vmaxpsb` payload is decoded.
+/// Decodes a [`VMaxSerdeFile`] into a [`VMaxCodecFile`], the inverse of
+/// [`encode_vmax_file`](crate::encode_vmax_file).
 pub fn decode_vmax_file(file: &VMaxSerdeFile) -> Result<VMaxCodecFile> {
     let contents_files = file
         .contents_files
@@ -49,12 +46,13 @@ mod tests {
         }
     }
 
-    /// A raw serde package already in the canonical form `encode_vmax_file` produces:
-    /// one checkpoint snapshot per chunk (so the edit-log collapse is a no-op),
-    /// materials whose `mi` runs `1..N` in slot order, packed colors, and `Some`
-    /// editor state on the object. Decoding then re-encoding it must reproduce it
-    /// exactly, which pins the lossless promise across snapshot geometry, `mi`
-    /// reconstruction, color packing, and every preserved editor-state field.
+    /// A raw serde package already in the canonical form `encode_vmax_file`
+    /// produces: one checkpoint snapshot per chunk (so the edit-log collapse is
+    /// a no-op), materials whose `mi` runs `1..N` in slot order, packed colors,
+    /// and `Some` editor state on the object. Decoding then re-encoding it must
+    /// reproduce it exactly, which pins the lossless promise across snapshot
+    /// geometry, `mi` reconstruction, color packing, and every preserved
+    /// editor-state field.
     fn serde_file() -> VMaxSerdeFile {
         let contents = VMaxSerdeContentsVmaxbFile {
             // color_idx != 0 (0 is the format's empty marker); spans three chunks.
@@ -163,9 +161,9 @@ mod tests {
         }
     }
 
-    /// `decode_vmax_file` then `encode_vmax_file` reproduces the original serde package: the
-    /// promised lossless round trip (the snapshots are already canonical, so the
-    /// edit-log collapse is a no-op here).
+    /// `decode_vmax_file` then `encode_vmax_file` reproduces the original serde
+    /// package: the promised lossless round trip (the snapshots are already
+    /// canonical, so the edit-log collapse is a no-op here).
     #[test]
     fn round_trips_serde_file_through_codec() {
         let original = serde_file();

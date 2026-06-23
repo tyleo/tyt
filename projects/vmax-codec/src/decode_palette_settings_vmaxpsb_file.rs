@@ -3,12 +3,11 @@ use vmax::{
     VMaxCodecMaterial, VMaxCodecPaletteSettingsVmaxpsbFile, VMaxSerdePaletteSettingsVmaxpsbFile,
 };
 
-/// Decodes a `VMaxSerdePaletteSettingsVmaxpsbFile` into a [`VMaxCodecPaletteSettingsVmaxpsbFile`]:
-/// decodes each material slot and unpacks the RGBA color table, carrying the
-/// palette-level editor state through unchanged. The inverse of
-/// [`encode_palette_settings_vmaxpsb_file`](crate::encode_palette_settings_vmaxpsb_file). Errors when the
-/// packed color table's length is not a multiple of 4, since each `[r, g, b, a]`
-/// entry is exactly 4 bytes.
+/// Decodes a `VMaxSerdePaletteSettingsVmaxpsbFile` into a
+/// [`VMaxCodecPaletteSettingsVmaxpsbFile`]. The inverse of
+/// [`encode_palette_settings_vmaxpsb_file`](crate::encode_palette_settings_vmaxpsb_file).
+/// Errors when the packed color table's length is not a multiple of 4, since
+/// each `[r, g, b, a]` entry is exactly 4 bytes.
 pub fn decode_palette_settings_vmaxpsb_file(
     palette: &VMaxSerdePaletteSettingsVmaxpsbFile,
 ) -> Result<VMaxCodecPaletteSettingsVmaxpsbFile> {
