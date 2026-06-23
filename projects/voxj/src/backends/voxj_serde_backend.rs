@@ -1,7 +1,6 @@
 use crate::{VoxjBackend, VoxjSerdeObject};
 
-/// The serde [`VoxjBackend`]: objects are [`VoxjSerdeObject`]s carrying encoded
-/// position and sample blocks, the form read from and written to `.voxj` JSON.
+/// The serde [`VoxjBackend`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VoxjSerdeBackend;
 

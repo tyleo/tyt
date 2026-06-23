@@ -1,11 +1,4 @@
-/// One object's decoded voxel geometry and per-palette samples, in listing
-/// order: the codec backend's object representation (see
-/// [`VoxjCodecBackend`](crate::VoxjCodecBackend)). It mirrors
-/// [`VoxjSerdeObject`](crate::VoxjSerdeObject) but holds raw positions and samples instead
-/// of encoded blocks; `voxj-codec`'s `encode_voxj_object` turns it into a
-/// `VoxjSerdeObject` and `decode_voxj_object` recovers it. Palette cell counts are not
-/// stored: they are derived from `palette_refs` and the document's palettes
-/// where the codec needs them.
+/// One object's voxel geometry and per-palette samples, in listing order.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VoxjCodecObject {
     /// Display name of the object.
@@ -19,10 +12,9 @@ pub struct VoxjCodecObject {
     /// `[0, X) x [0, Y) x [0, Z)`.
     pub bounds: [u32; 3],
 
-    /// `[x, y, z]` positions in listing order.
+    /// Voxel positions as `[x, y, z]`, in listing order.
     pub positions: Vec<[u32; 3]>,
 
-    /// `samples[voxel][palette]` = the cell index that voxel samples in each
-    /// referenced palette, in listing order.
+    /// One cell index per referenced palette, per voxel, in listing order.
     pub samples: Vec<Vec<u32>>,
 }

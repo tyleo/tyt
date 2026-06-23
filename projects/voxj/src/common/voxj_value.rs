@@ -38,7 +38,8 @@ impl Serialize for VoxjValue {
         S: Serializer,
     {
         match self {
-            // Integral numbers serialize as a JSON integer, not a fractional `4.0`.
+            // Integral numbers serialize as a JSON integer, not a fractional
+            // `4.0`.
             VoxjValue::Number(n)
                 if n.fract() == 0.0 && *n >= i64::MIN as f64 && *n <= i64::MAX as f64 =>
             {
