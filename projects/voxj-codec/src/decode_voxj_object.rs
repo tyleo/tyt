@@ -36,6 +36,11 @@ fn invalid(error: DecodeError) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, error)
 }
 
+/// Wraps a message describing malformed input as invalid data.
+fn invalid_data(message: String) -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, message)
+}
+
 /// Inverse of the raster `cell_index`: `x = k / (Y*Z)`, `y = (k / Z) % Y`,
 /// `z = k % Z`.
 fn cell_to_position(cell: u64, bounds: [u32; 3]) -> [u32; 3] {
@@ -84,10 +89,25 @@ fn decode_samples(
     cell_counts: &[usize],
     n: usize,
 ) -> io::Result<Vec<Vec<u32>>> {
-    Ok(match block {
-        VoxjSerdeSampleBlock::RawJson(rows) => (0..cell_counts.len())
-            .map(|p| rows.iter().map(|row| row[p]).collect())
-            .collect(),
+    let channels: Vec<Vec<u32>> = match block {
+        VoxjSerdeSampleBlock::RawJson(rows) => {
+            if rows.len() != n {
+                return Err(invalid_data(format!(
+                    "raw-json sample block has {} rows, expected {n}",
+                    rows.len()
+                )));
+            }
+            if let Some(row) = rows.iter().find(|row| row.len() != cell_counts.len()) {
+                return Err(invalid_data(format!(
+                    "raw-json sample row has {} values, expected {}",
+                    row.len(),
+                    cell_counts.len()
+                )));
+            }
+            (0..cell_counts.len())
+                .map(|p| rows.iter().map(|row| row[p]).collect())
+                .collect()
+        }
 
         VoxjSerdeSampleBlock::RleJson(channels) => {
             channels.iter().map(|channel| rle_decode(channel)).collect()
@@ -98,14 +118,35 @@ fn decode_samples(
             .enumerate()
             .map(|(p, base64)| {
                 let width = packed_width(cell_counts.get(p).copied().unwrap_or(1));
-                Ok(unpack_bits(
-                    &BASE64.decode(base64).map_err(invalid)?,
-                    width,
-                    n,
-                ))
+                let bytes = BASE64.decode(base64).map_err(invalid)?;
+                let required = (n * width as usize).div_ceil(8);
+                if bytes.len() < required {
+                    return Err(invalid_data(format!(
+                        "packed sample channel {p} has {} bytes, need {required} for {n} values of width {width}",
+                        bytes.len()
+                    )));
+                }
+                Ok(unpack_bits(&bytes, width, n))
             })
             .collect::<io::Result<Vec<_>>>()?,
-    })
+    };
+
+    // Every encoding must yield one channel per referenced palette, each holding
+    // a value for every voxel; otherwise the object's samples are malformed.
+    if channels.len() != cell_counts.len() {
+        return Err(invalid_data(format!(
+            "sample block has {} channels, expected {} (one per referenced palette)",
+            channels.len(),
+            cell_counts.len()
+        )));
+    }
+    if let Some(channel) = channels.iter().find(|channel| channel.len() != n) {
+        return Err(invalid_data(format!(
+            "sample channel has {} values, expected {n}",
+            channel.len()
+        )));
+    }
+    Ok(channels)
 }
 
 /// Expands flat run-length encoding `[value, count, value, count, ...]`.
@@ -121,7 +162,7 @@ fn rle_decode(rle: &[u32]) -> Vec<u32> {
 mod tests {
     use crate::{PositionEncoding, SampleEncoding, decode_voxj_object, encode_voxj_object};
     use std::collections::BTreeSet;
-    use voxj::VoxjCodecObject;
+    use voxj::{VoxjCodecObject, VoxjSerdeObject, VoxjSerdePositionBlock, VoxjSerdeSampleBlock};
 
     const POSITIONS: [PositionEncoding; 3] = [
         PositionEncoding::RawJson,
@@ -164,7 +205,7 @@ mod tests {
             for sample in SAMPLES {
                 let object = sample_object();
                 let (expected, bounds) = (voxel_set(&object), object.bounds);
-                let encoded = encode_voxj_object(&object, &CELL_COUNTS, position, sample);
+                let encoded = encode_voxj_object(&object, &CELL_COUNTS, position, sample).unwrap();
                 let decoded = decode_voxj_object(&encoded, &CELL_COUNTS).unwrap();
                 assert_eq!(
                     voxel_set(&decoded),
@@ -190,7 +231,8 @@ mod tests {
             &[],
             PositionEncoding::RawJson,
             SampleEncoding::RawJson,
-        );
+        )
+        .unwrap();
         let decoded = decode_voxj_object(&encoded, &[]).unwrap();
         assert!(decoded.positions.is_empty());
         assert!(decoded.samples.is_empty());
@@ -206,7 +248,8 @@ mod tests {
                 positions: vec![[0, 0, 0], [1, 0, 0]],
                 samples: vec![Vec::new(), Vec::new()],
             };
-            let encoded = encode_voxj_object(&object, &[], PositionEncoding::BitmapBase64, sample);
+            let encoded =
+                encode_voxj_object(&object, &[], PositionEncoding::BitmapBase64, sample).unwrap();
             let decoded = decode_voxj_object(&encoded, &[]).unwrap();
             assert_eq!(decoded.positions.len(), 2, "sample {sample:?}");
             assert!(
@@ -214,5 +257,47 @@ mod tests {
                 "sample {sample:?}"
             );
         }
+    }
+
+    /// Two raw-json positions with a sample row that is too short for the
+    /// referenced palette count is malformed, not silently truncated.
+    #[test]
+    fn rejects_ragged_raw_json_samples() {
+        let object = VoxjSerdeObject {
+            name: "o".to_owned(),
+            palette_refs: vec![0],
+            bounds: [2, 1, 1],
+            voxel_positions: VoxjSerdePositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
+            voxel_samples: VoxjSerdeSampleBlock::RawJson(vec![vec![1], Vec::new()]),
+        };
+        assert!(decode_voxj_object(&object, &[4]).is_err());
+    }
+
+    /// A packed channel with fewer bytes than the voxel count and bit width
+    /// require is a truncated block, not zero-padded samples.
+    #[test]
+    fn rejects_truncated_packed_samples() {
+        let object = VoxjSerdeObject {
+            name: "o".to_owned(),
+            palette_refs: vec![0],
+            bounds: [2, 1, 1],
+            voxel_positions: VoxjSerdePositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
+            voxel_samples: VoxjSerdeSampleBlock::PackedBase64(vec![String::new()]),
+        };
+        assert!(decode_voxj_object(&object, &[4]).is_err());
+    }
+
+    /// A sample block carrying more channels than the object references palettes
+    /// is rejected rather than packing the extra channel at a guessed width.
+    #[test]
+    fn rejects_channel_count_mismatch() {
+        let object = VoxjSerdeObject {
+            name: "o".to_owned(),
+            palette_refs: vec![0],
+            bounds: [1, 1, 1],
+            voxel_positions: VoxjSerdePositionBlock::RawJson(vec![[0, 0, 0]]),
+            voxel_samples: VoxjSerdeSampleBlock::RleJson(vec![vec![0, 1], vec![0, 1]]),
+        };
+        assert!(decode_voxj_object(&object, &[4]).is_err());
     }
 }

@@ -1,6 +1,6 @@
 use crate::{PositionEncoding, SampleEncoding, encode_voxj_object, hilbert_bits};
 use flate2::{Compression, write::DeflateEncoder};
-use std::io::Write;
+use std::io::{self, Write};
 use voxj::{VoxjCodecObject, VoxjSerdeObject};
 
 /// Skip the dense bitmap candidate above this many cells to bound memory.
@@ -19,7 +19,7 @@ const MAX_HILBERT_BITS: u32 = 17;
 pub fn encode_voxj_object_smallest(
     object: &VoxjCodecObject,
     cell_counts: &[usize],
-) -> VoxjSerdeObject {
+) -> io::Result<VoxjSerdeObject> {
     if object.positions.is_empty() {
         return encode_voxj_object(
             object,
@@ -28,14 +28,17 @@ pub fn encode_voxj_object_smallest(
             SampleEncoding::RawJson,
         );
     }
-    candidate_positions(object.bounds)
+    let smallest = candidate_positions(object.bounds)
         .into_iter()
         .flat_map(|position| {
             [SampleEncoding::RleJson, SampleEncoding::PackedBase64].map(|sample| (position, sample))
         })
         .map(|(position, sample)| encode_voxj_object(object, cell_counts, position, sample))
+        .collect::<io::Result<Vec<_>>>()?
+        .into_iter()
         .min_by_key(deflated_len)
-        .expect("at least one candidate")
+        .expect("at least one candidate");
+    Ok(smallest)
 }
 
 /// The applicable non-raw position encodings for `bounds`, falling back to raw
@@ -87,7 +90,8 @@ mod tests {
                 samples: vec![Vec::new(), Vec::new(), Vec::new()],
             },
             &[],
-        );
+        )
+        .unwrap();
         match &object.voxel_samples {
             VoxjSerdeSampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
             VoxjSerdeSampleBlock::RleJson(channels) => assert!(channels.is_empty()),

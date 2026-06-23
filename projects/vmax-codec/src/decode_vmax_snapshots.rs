@@ -1,5 +1,5 @@
 use crate::decode_morton_3d;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, io};
 use vmax::{VMaxCodecVoxel, VMaxSerdeSnapshot};
 
 /// Voxel pitch of a chunk along each axis; chunks tile an 8x8x8 grid into a
@@ -9,7 +9,7 @@ const CHUNK_PITCH: i32 = 32;
 /// Decodes voxel `snapshots` into model space, the inverse of
 /// [`encode_vmax_snapshots`](crate::encode_vmax_snapshots). Replays snapshots so the last
 /// snapshot of each chunk wins, and returns voxels sorted by `(x, y, z)`.
-pub fn decode_vmax_snapshots(snapshots: &[VMaxSerdeSnapshot]) -> Vec<VMaxCodecVoxel> {
+pub fn decode_vmax_snapshots(snapshots: &[VMaxSerdeSnapshot]) -> io::Result<Vec<VMaxCodecVoxel>> {
     let mut latest: BTreeMap<u32, &VMaxSerdeSnapshot> = BTreeMap::new();
     for snapshot in snapshots {
         latest.insert(snapshot.s.id.c, snapshot);
@@ -24,7 +24,20 @@ pub fn decode_vmax_snapshots(snapshots: &[VMaxSerdeSnapshot]) -> Vec<VMaxCodecVo
             grid[1] as i32 * CHUNK_PITCH,
             grid[2] as i32 * CHUNK_PITCH,
         ];
-        let morton_offset = storage.st.min.get(3).copied().unwrap_or(0).max(0) as u32;
+        // `st.min[3]` is the Morton code of the chunk's first `ds` slot; it must
+        // be present and non-negative, or the chunk's voxels can't be placed.
+        let morton_offset = match storage.st.min.get(3) {
+            Some(&offset) if offset >= 0 => offset as u32,
+            _ => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!(
+                        "snapshot chunk {chunk_id} has invalid st.min {:?}; expected a 4-component Morton stat with a non-negative offset",
+                        storage.st.min
+                    ),
+                ));
+            }
+        };
 
         for (slot, pair) in storage.ds.chunks_exact(2).enumerate() {
             let (material, color) = (pair[0], pair[1]);
@@ -41,12 +54,43 @@ pub fn decode_vmax_snapshots(snapshots: &[VMaxSerdeSnapshot]) -> Vec<VMaxCodecVo
         }
     }
 
-    voxels
+    Ok(voxels
         .into_iter()
         .map(|((x, y, z), (material_idx, color_idx))| VMaxCodecVoxel {
             position: [x, y, z],
             material_idx,
             color_idx,
         })
-        .collect()
+        .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{decode_vmax_snapshots, encode_vmax_snapshots};
+    use vmax::VMaxCodecVoxel;
+
+    fn voxel(x: i32, y: i32, z: i32) -> VMaxCodecVoxel {
+        VMaxCodecVoxel {
+            position: [x, y, z],
+            material_idx: 0,
+            color_idx: 1,
+        }
+    }
+
+    /// A snapshot whose `st.min` lacks its 4th (Morton-offset) component can't
+    /// place the chunk's voxels, so decoding rejects it instead of assuming 0.
+    #[test]
+    fn rejects_missing_morton_offset() {
+        let mut snapshots = encode_vmax_snapshots(&[voxel(1, 2, 3)]);
+        snapshots[0].s.st.min.truncate(3);
+        assert!(decode_vmax_snapshots(&snapshots).is_err());
+    }
+
+    /// A negative Morton offset is likewise rejected rather than clamped to 0.
+    #[test]
+    fn rejects_negative_morton_offset() {
+        let mut snapshots = encode_vmax_snapshots(&[voxel(1, 2, 3)]);
+        snapshots[0].s.st.min[3] = -1;
+        assert!(decode_vmax_snapshots(&snapshots).is_err());
+    }
 }

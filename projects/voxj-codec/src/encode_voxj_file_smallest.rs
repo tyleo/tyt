@@ -17,7 +17,7 @@ pub fn encode_voxj_file_smallest(file: &VoxjCodecFile) -> io::Result<VoxjSerdeFi
         .iter()
         .map(|object| {
             let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes)?;
-            Ok(encode_voxj_object_smallest(object, &cell_counts))
+            encode_voxj_object_smallest(object, &cell_counts)
         })
         .collect::<io::Result<Vec<_>>>()?;
     Ok(VoxjSerdeFile {

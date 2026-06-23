@@ -20,7 +20,7 @@ pub fn encode_voxj_file(
         .iter()
         .map(|object| {
             let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes)?;
-            Ok(encode_voxj_object(object, &cell_counts, position, sample))
+            encode_voxj_object(object, &cell_counts, position, sample)
         })
         .collect::<io::Result<Vec<_>>>()?;
     Ok(VoxjSerdeFile {

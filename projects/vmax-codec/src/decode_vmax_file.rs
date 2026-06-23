@@ -11,8 +11,8 @@ pub fn decode_vmax_file(file: &VMaxSerdeFile) -> Result<VMaxCodecFile> {
     let contents_files = file
         .contents_files
         .iter()
-        .map(|(name, contents)| (name.clone(), decode_contents_vmaxb_file(contents)))
-        .collect();
+        .map(|(name, contents)| Ok((name.clone(), decode_contents_vmaxb_file(contents)?)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
     let palette_settings_files = file
         .palette_settings_files
         .iter()

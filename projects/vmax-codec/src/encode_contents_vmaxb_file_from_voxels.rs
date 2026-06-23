@@ -43,7 +43,8 @@ mod tests {
         ];
         let decoded = decode_vmax_snapshots(
             &encode_contents_vmaxb_file_from_voxels(&voxels, "uuid").snapshots,
-        );
+        )
+        .unwrap();
         voxels.sort_by_key(|v| (v.position[0], v.position[1], v.position[2]));
         assert_eq!(decoded, voxels);
     }

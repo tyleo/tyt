@@ -3,6 +3,7 @@ use crate::{
     packed_width,
 };
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use std::io;
 use voxj::{VoxjCodecObject, VoxjSerdeObject, VoxjSerdePositionBlock, VoxjSerdeSampleBlock};
 
 /// Encodes one [`VoxjCodecObject`]'s geometry into a [`VoxjSerdeObject`] with the
@@ -16,7 +17,8 @@ pub fn encode_voxj_object(
     cell_counts: &[usize],
     position: PositionEncoding,
     sample: SampleEncoding,
-) -> VoxjSerdeObject {
+) -> io::Result<VoxjSerdeObject> {
+    validate_object_shape(object)?;
     let num_palettes = object.palette_refs.len();
 
     let (voxel_positions, voxel_samples) = if object.positions.is_empty() {
@@ -31,13 +33,43 @@ pub fn encode_voxj_object(
         (position_block, sample_block)
     };
 
-    VoxjSerdeObject {
+    Ok(VoxjSerdeObject {
         name: object.name.clone(),
         palette_refs: object.palette_refs.clone(),
         bounds: object.bounds,
         voxel_positions,
         voxel_samples,
+    })
+}
+
+/// Validates that `object`'s samples are rectangular: one row per voxel, each
+/// holding one cell index per referenced palette. The encoders index
+/// `samples[voxel][palette]` directly, so a ragged object would otherwise panic
+/// or silently drop values.
+fn validate_object_shape(object: &VoxjCodecObject) -> io::Result<()> {
+    if object.samples.len() != object.positions.len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "object \"{}\" has {} sample rows but {} positions",
+                object.name,
+                object.samples.len(),
+                object.positions.len()
+            ),
+        ));
     }
+    let num_palettes = object.palette_refs.len();
+    if let Some(row) = object.samples.iter().find(|row| row.len() != num_palettes) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "object \"{}\" has a sample row of {} values but references {num_palettes} palettes",
+                object.name,
+                row.len()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Encodes the voxel positions with `encoding`, returning the canonical voxel
@@ -222,18 +254,21 @@ mod tests {
 
     #[test]
     fn zero_palette_object_keeps_sample_arity() {
-        assert_zero_palette_arity(&encode_voxj_object(
-            &VoxjCodecObject {
-                name: "o".to_owned(),
-                palette_refs: Vec::new(),
-                bounds: [3, 1, 1],
-                positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
-                samples: vec![Vec::new(), Vec::new(), Vec::new()],
-            },
-            &[],
-            PositionEncoding::RawJson,
-            SampleEncoding::RawJson,
-        ));
+        assert_zero_palette_arity(
+            &encode_voxj_object(
+                &VoxjCodecObject {
+                    name: "o".to_owned(),
+                    palette_refs: Vec::new(),
+                    bounds: [3, 1, 1],
+                    positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
+                    samples: vec![Vec::new(), Vec::new(), Vec::new()],
+                },
+                &[],
+                PositionEncoding::RawJson,
+                SampleEncoding::RawJson,
+            )
+            .unwrap(),
+        );
     }
 
     /// A fixed encoding produces exactly the requested blocks.
@@ -251,7 +286,8 @@ mod tests {
             &[4],
             PositionEncoding::BitmapBase64,
             SampleEncoding::PackedBase64,
-        );
+        )
+        .unwrap();
         assert!(matches!(
             object.voxel_positions,
             VoxjSerdePositionBlock::BitmapBase64(_)
@@ -260,5 +296,45 @@ mod tests {
             object.voxel_samples,
             VoxjSerdeSampleBlock::PackedBase64(_)
         ));
+    }
+
+    /// A ragged object (a sample row whose arity differs from the referenced
+    /// palette count, or a sample count that differs from the voxel count) is
+    /// rejected rather than panicking or dropping values mid-encode.
+    #[test]
+    fn rejects_ragged_object() {
+        let wrong_row_arity = VoxjCodecObject {
+            name: "o".to_owned(),
+            palette_refs: vec![0, 1],
+            bounds: [1, 1, 1],
+            positions: vec![[0, 0, 0]],
+            samples: vec![vec![1]],
+        };
+        assert!(
+            encode_voxj_object(
+                &wrong_row_arity,
+                &[4, 4],
+                PositionEncoding::RawJson,
+                SampleEncoding::RawJson,
+            )
+            .is_err()
+        );
+
+        let wrong_sample_count = VoxjCodecObject {
+            name: "o".to_owned(),
+            palette_refs: vec![0],
+            bounds: [2, 1, 1],
+            positions: vec![[0, 0, 0], [1, 0, 0]],
+            samples: vec![vec![1]],
+        };
+        assert!(
+            encode_voxj_object(
+                &wrong_sample_count,
+                &[4],
+                PositionEncoding::RawJson,
+                SampleEncoding::RawJson,
+            )
+            .is_err()
+        );
     }
 }
