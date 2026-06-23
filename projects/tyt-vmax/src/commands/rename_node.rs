@@ -23,13 +23,13 @@ impl RenameNode {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let scene_path = self.input_vmax.join("scene.json");
         let bytes = dependencies.read_file(&scene_path)?;
-        let scene = dependencies.parse_scene(&bytes)?;
+        let nodes = dependencies.scene_nodes(&bytes)?;
 
         // Build a map from group id -> (name, parent_id) for path construction.
-        let group_info: HashMap<&str, (&str, Option<&str>)> = scene
-            .groups
+        let group_info: HashMap<&str, (&str, Option<&str>)> = nodes
             .iter()
-            .map(|g| (g.id.as_str(), (g.name.as_str(), g.parent_id.as_deref())))
+            .filter(|n| n.is_group)
+            .map(|n| (n.id.as_str(), (n.name.as_str(), n.parent_id.as_deref())))
             .collect();
 
         // Build full hierarchy path for a node given its name and parent_id.
@@ -57,13 +57,9 @@ impl RenameNode {
 
         // Build all candidate paths.
         let mut candidates: Vec<(String, &str, bool)> = Vec::new();
-        for group in &scene.groups {
-            let path = build_path(&group.name, group.parent_id.as_deref());
-            candidates.push((path, &group.id, true));
-        }
-        for object in &scene.objects {
-            let path = build_path(&object.name, object.parent_id.as_deref());
-            candidates.push((path, &object.id, false));
+        for node in &nodes {
+            let path = build_path(&node.name, node.parent_id.as_deref());
+            candidates.push((path, &node.id, node.is_group));
         }
 
         let candidate_paths: Vec<&str> = candidates.iter().map(|(p, _, _)| p.as_str()).collect();

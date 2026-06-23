@@ -18,12 +18,20 @@ clap_complete = { version = "4.5", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 tyt-common = { version = "0.1.0" }
 tyt-injection = { version = "0.1.0", optional = true }
-vmax = { version = "0.1.0" }
-vmax-codec = { version = "0.1.0" }
-voxj = { version = "0.1.0" }
-voxj-codec = { version = "0.1.0" }
+vmax = { version = "0.1.0", optional = true }
+vmax-codec = { version = "0.1.0", optional = true }
+voxj = { version = "0.1.0", optional = true }
+voxj-codec = { version = "0.1.0", optional = true }
 
 [features]
 default = ["impl"]
-impl = ["dep:serde", "dep:tyt-injection", "vmax/serde"]
+impl = [
+    "dep:serde",
+    "dep:tyt-injection",
+    "dep:vmax",
+    "dep:vmax-codec",
+    "dep:voxj",
+    "dep:voxj-codec",
+    "vmax/serde",
+]
 bin = ["impl", "dep:clap_complete"]

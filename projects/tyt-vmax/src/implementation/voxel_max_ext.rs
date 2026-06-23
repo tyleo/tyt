@@ -1,4 +1,4 @@
-use crate::{VMaxObjectState, VoxelMaxNode, VoxelMaxPalette};
+use crate::{VoxelMaxNode, VoxelMaxObjectState, VoxelMaxPalette};
 use serde::{Deserialize, Serialize};
 use vmax::VMaxSceneJsonFile;
 
@@ -29,5 +29,5 @@ pub struct VoxelMaxExt {
         default,
         skip_serializing_if = "Vec::is_empty"
     )]
-    pub object_states: Vec<Option<VMaxObjectState>>,
+    pub object_states: Vec<Option<VoxelMaxObjectState>>,
 }

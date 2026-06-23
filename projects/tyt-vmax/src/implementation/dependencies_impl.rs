@@ -1,32 +1,16 @@
-use crate::{
-    ColorFormat, Dependencies, Error, Result, VoxelMaxExt, VoxelMaxNode, VoxelMaxPalette,
-    object_state_from_data,
-};
+use crate::{ColorFormat, Dependencies, Result, VoxelMaxSceneNode, VoxjEncoding, VoxjFormat};
 use std::{
     collections::HashMap,
-    io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
 };
-use tyt_injection::serde_json::{self, Map, Value};
-use vmax::{VMaxCodecPaletteSettingsVmaxpsbFile, VMaxCodecVoxel, VMaxSceneJsonFile};
-use vmax_codec::{
-    decode_palette_settings_vmaxpsb_file, decode_vmax_snapshots, from_contents_vmaxb_file_bytes,
-    from_palette_png_file_bytes, from_palette_settings_vmaxpsb_file_bytes,
-    from_scene_json_file_bytes,
-};
-use voxj::VoxjValue;
+use tyt_injection::serde_json::Value;
+use vmax_codec::from_scene_json_file_bytes;
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
 /// reference. Voxel Max refuses to open a scene whose objects have an empty
 /// `hist`, so every object must point at a history file name even though
 /// packing leaves none on disk.
 const PACKED_HIST: &str = "history.vmaxhb";
-
-/// `scene.json` node keys the voxj document already represents natively, dropped
-/// from the `voxel-max` provenance so they aren't duplicated in each node's
-/// `extra`: name (`n` / group `name`), position (`t_p`), scale (`t_s`), and the
-/// `data` / `pal` / `hist` filenames (regenerated on reconstruction).
-const NATIVE_NODE_KEYS: [&str; 7] = ["n", "name", "t_p", "t_s", "data", "pal", "hist"];
 
 /// Replaces a string `field` on `object_val` using `map`, if its current value is a key.
 fn rename_field(object_val: &mut Value, field: &str, map: &HashMap<&str, &str>) {
@@ -62,21 +46,8 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::list_dir(path)?)
     }
 
-    fn load_palette(&self, png_bytes: &[u8]) -> Result<Vec<[u8; 4]>> {
-        Ok(from_palette_png_file_bytes(png_bytes)?.0)
-    }
-
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
         Ok(tyt_injection::match_glob(pattern, candidates)?)
-    }
-
-    fn parse_material_palette(
-        &self,
-        vmaxpsb_bytes: &[u8],
-    ) -> Result<VMaxCodecPaletteSettingsVmaxpsbFile> {
-        Ok(decode_palette_settings_vmaxpsb_file(
-            &from_palette_settings_vmaxpsb_file_bytes(vmaxpsb_bytes)?,
-        )?)
     }
 
     fn pack_scene_json(
@@ -100,14 +71,26 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::serialize_json_pretty(&value)?)
     }
 
-    fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxSceneJsonFile> {
-        Ok(from_scene_json_file_bytes(bytes)?)
-    }
-
-    fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxCodecVoxel>> {
-        Ok(decode_vmax_snapshots(
-            &from_contents_vmaxb_file_bytes(vmaxb_bytes)?.snapshots,
-        ))
+    fn scene_nodes(&self, scene_bytes: &[u8]) -> Result<Vec<VoxelMaxSceneNode>> {
+        let scene = from_scene_json_file_bytes(scene_bytes)?;
+        let mut nodes = Vec::with_capacity(scene.groups.len() + scene.objects.len());
+        for group in &scene.groups {
+            nodes.push(VoxelMaxSceneNode {
+                id: group.id.clone(),
+                name: group.name.clone(),
+                parent_id: group.parent_id.clone(),
+                is_group: true,
+            });
+        }
+        for object in &scene.objects {
+            nodes.push(VoxelMaxSceneNode {
+                id: object.id.clone(),
+                name: object.name.clone(),
+                parent_id: object.parent_id.clone(),
+                is_group: false,
+            });
+        }
+        Ok(nodes)
     }
 
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>> {
@@ -129,64 +112,6 @@ impl Dependencies for DependenciesImpl {
                     .collect()
             })
             .unwrap_or_default())
-    }
-
-    fn voxel_max_ext(
-        &self,
-        scene_bytes: &[u8],
-        palette_names: &[Option<String>],
-        object_vmaxb: &[Option<Vec<u8>>],
-    ) -> Result<VoxjValue> {
-        let invalid = |e| -> Error { IOError::new(ErrorKind::InvalidData, e).into() };
-        let mut value: Value = tyt_injection::parse_json(scene_bytes)?;
-        let nodes = |value: &mut Value, key: &str| -> Result<Vec<VoxelMaxNode>> {
-            let Some(Value::Array(array)) = value.as_object_mut().and_then(|map| map.remove(key))
-            else {
-                return Ok(Vec::new());
-            };
-            array
-                .into_iter()
-                .map(|mut node| {
-                    // Drop fields the voxj document already carries natively so they
-                    // don't fall through into `VoxelMaxNode::extra`.
-                    if let Some(map) = node.as_object_mut() {
-                        for key in NATIVE_NODE_KEYS {
-                            map.remove(key);
-                        }
-                    }
-                    serde_json::from_value(node).map_err(invalid)
-                })
-                .collect()
-        };
-        // Aligned with `main.hierarchyNodes`: groups first, then objects.
-        let mut hierarchy_nodes = nodes(&mut value, "groups")?;
-        hierarchy_nodes.extend(nodes(&mut value, "objects")?);
-        let scene = serde_json::from_value(value).map_err(invalid)?;
-
-        let palettes = palette_names
-            .iter()
-            .map(|name| name.clone().map(|name| VoxelMaxPalette { name }))
-            .collect();
-        // Capture each object's `.vmaxb` editor state (everything but snapshots).
-        let object_states = object_vmaxb
-            .iter()
-            .map(|vmaxb| match vmaxb {
-                Some(bytes) => Ok(Some(object_state_from_data(
-                    &from_contents_vmaxb_file_bytes(bytes)?,
-                ))),
-                None => Ok(None),
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let voxel_max = serde_json::to_value(VoxelMaxExt {
-            scene,
-            hierarchy_nodes,
-            palettes,
-            object_states,
-        })
-        .map_err(invalid)?;
-        let mut ext = Map::new();
-        ext.insert("voxel-max".to_owned(), voxel_max);
-        serde_json::from_value(Value::Object(ext)).map_err(invalid)
     }
 
     fn read_file(&self, path: &Path) -> Result<Vec<u8>> {
@@ -236,6 +161,10 @@ impl Dependencies for DependenciesImpl {
 
     fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_file(path, contents)?)
+    }
+
+    fn write_voxj(&self, input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
+        super::write_voxj::write_voxj(input, encoding, format)
     }
 
     fn write_vmax_package(

@@ -8,7 +8,7 @@ use vmax::{VMaxBrush, VMaxCamera, VMaxTools};
 /// re-storing the voxel geometry.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
-pub struct VMaxObjectState {
+pub struct VoxelMaxObjectState {
     /// Object content UUID.
     pub uuid: String,
     /// Codable version.

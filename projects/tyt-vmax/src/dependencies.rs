@@ -1,21 +1,14 @@
-use crate::{ColorFormat, Result};
+use crate::{ColorFormat, Result, VoxelMaxSceneNode, VoxjEncoding, VoxjFormat};
 use std::path::{Path, PathBuf};
-use vmax::{VMaxCodecPaletteSettingsVmaxpsbFile, VMaxCodecVoxel, VMaxSceneJsonFile};
-use voxj::VoxjValue;
 
 /// Dependencies for this crate's operations.
 pub trait Dependencies {
     fn copy_dir(&self, src: &Path, dst: &Path) -> Result<()>;
+
     fn list_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
-    /// Decodes the RGBA cells of a `palette*.png` (one `[r, g, b, a]` per pixel).
-    fn load_palette(&self, png_bytes: &[u8]) -> Result<Vec<[u8; 4]>>;
+
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>>;
-    /// Decodes the material palette (name, slots, RGBA color table, and the
-    /// palette-level editor state) of a `palette*.settings.vmaxpsb` plist.
-    fn parse_material_palette(
-        &self,
-        vmaxpsb_bytes: &[u8],
-    ) -> Result<VMaxCodecPaletteSettingsVmaxpsbFile>;
+
     /// Rewrites `data`/`pal` references according to the supplied `(old, new)`
     /// rename pairs and repoints each object's `hist` at `history{n}.vmaxhb`
     /// matching its renumbered `contents{n}` reference.
@@ -25,31 +18,22 @@ pub trait Dependencies {
         data_renames: &[(&str, &str)],
         pal_renames: &[(&str, &str)],
     ) -> Result<Vec<u8>>;
-    fn parse_scene(&self, bytes: &[u8]) -> Result<VMaxSceneJsonFile>;
-    /// Decodes the voxels of a `contents*.vmaxb` payload (LZFSE-framed binary plist).
-    fn parse_voxels(&self, vmaxb_bytes: &[u8]) -> Result<Vec<VMaxCodecVoxel>>;
+
+    /// Flattens a `scene.json`'s hierarchy into one [`VoxelMaxSceneNode`] per
+    /// group and object (groups first), exposing only the identity and parentage
+    /// the `hierarchy` and `rename-node` commands need.
+    fn scene_nodes(&self, scene_bytes: &[u8]) -> Result<Vec<VoxelMaxSceneNode>>;
+
     /// Returns each object's `(data, pal)` reference strings, read leniently
     /// from raw JSON so objects missing optional fields still parse.
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>>;
-    /// Builds the `voxel-max` extension payload for `from-voxj` reconstruction
-    /// and returns it as UTF-8 JSON bytes ready to embed at the voxj document's
-    /// `main.ext`. Captures the Voxel Max scene/node state that has no native
-    /// voxj home; unmodeled keys are preserved verbatim. `palette_names[i]` is
-    /// the display name of `main.palettes[i]` when that palette is a material
-    /// palette, aligned by index (`None` for color palettes). `object_vmaxb[i]`
-    /// is the raw `contents*.vmaxb` bytes for `main.objects[i]` (`None` when the
-    /// object had none); their editor state (`tools`/`brush`/`cam`,
-    /// `uuid`/version) is captured so `from-voxj` can rebuild an importable
-    /// package.
-    fn voxel_max_ext(
-        &self,
-        scene_bytes: &[u8],
-        palette_names: &[Option<String>],
-        object_vmaxb: &[Option<Vec<u8>>],
-    ) -> Result<VoxjValue>;
+
     fn read_file(&self, path: &Path) -> Result<Vec<u8>>;
+
     fn remove_file(&self, path: &Path) -> Result<()>;
+
     fn rename_file(&self, from: &Path, to: &Path) -> Result<()>;
+
     fn rename_scene_nodes_json(
         &self,
         scene_bytes: &[u8],
@@ -57,7 +41,15 @@ pub trait Dependencies {
         object_ids: &[&str],
         new_name: &str,
     ) -> Result<Vec<u8>>;
+
     fn write_file(&self, path: &Path, contents: &[u8]) -> Result<()>;
+
+    /// Converts the `.vmax` package directory at `input` into a Voxel Json
+    /// document written to stdout: decodes the package, translates it to the
+    /// voxj model, then block-encodes it with `encoding` and serializes it in
+    /// the container `format` selects.
+    fn write_voxj(&self, input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()>;
+
     /// Reconstructs a `.vmax` package directory at `output` from `.voxj` /
     /// `.voxjz` document bytes (the inverse of the `to-voxj` pipeline).
     /// `color_format` selects where each object's colors are stored: a
@@ -71,5 +63,6 @@ pub trait Dependencies {
         output: &Path,
         color_format: ColorFormat,
     ) -> Result<()>;
+
     fn write_stdout(&self, contents: &[u8]) -> Result<()>;
 }

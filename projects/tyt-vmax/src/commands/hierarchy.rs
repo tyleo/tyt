@@ -15,23 +15,18 @@ impl Hierarchy {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let scene_path = self.input_vmax.join("scene.json");
         let bytes = dependencies.read_file(&scene_path)?;
-        let scene = dependencies.parse_scene(&bytes)?;
+        let nodes = dependencies.scene_nodes(&bytes)?;
 
-        // Collect children (group IDs and object names) keyed by parent ID.
+        // Collect children (name plus, for groups, their ID) keyed by parent ID.
         // None key = root level.
         let mut children: HashMap<Option<&str>, Vec<(&str, Option<&str>)>> = HashMap::new();
 
-        for group in &scene.groups {
+        for node in &nodes {
+            let group_id = node.is_group.then_some(node.id.as_str());
             children
-                .entry(group.parent_id.as_deref())
+                .entry(node.parent_id.as_deref())
                 .or_default()
-                .push((&group.name, Some(&group.id)));
-        }
-        for object in &scene.objects {
-            children
-                .entry(object.parent_id.as_deref())
-                .or_default()
-                .push((&object.name, None));
+                .push((&node.name, group_id));
         }
 
         // Sort children alphabetically at each level.
