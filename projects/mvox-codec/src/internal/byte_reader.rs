@@ -39,11 +39,6 @@ impl<'a> ByteReader<'a> {
         }
     }
 
-    /// Reads one byte.
-    pub fn read_u8(&mut self) -> Result<u8> {
-        Ok(self.read_array::<1>()?[0])
-    }
-
     /// Reads a little-endian `u32`.
     pub fn read_u32(&mut self) -> Result<u32> {
         Ok(u32::from_le_bytes(self.read_array()?))

@@ -11,6 +11,14 @@ impl ByteWriter {
         Self::default()
     }
 
+    /// An empty writer with `capacity` bytes reserved, so building a chunk of
+    /// known size does not reallocate.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            bytes: Vec::with_capacity(capacity),
+        }
+    }
+
     /// The accumulated bytes.
     pub fn into_bytes(self) -> Vec<u8> {
         self.bytes
@@ -26,6 +34,18 @@ impl ByteWriter {
         self.bytes.extend_from_slice(&value.to_le_bytes());
     }
 
+    /// Appends a length or count as a little-endian `u32`. The format stores
+    /// these in a `u32`, so a `usize` past `u32::MAX` cannot fit. No real file
+    /// reaches that; the `debug_assert!` catches a violation instead of
+    /// truncating.
+    pub fn write_len(&mut self, len: usize) {
+        debug_assert!(
+            len <= u32::MAX as usize,
+            "length {len} exceeds the u32 the .vox format stores it in"
+        );
+        self.write_u32(len as u32);
+    }
+
     /// Appends a little-endian `i32`.
     pub fn write_i32(&mut self, value: i32) {
         self.bytes.extend_from_slice(&value.to_le_bytes());
@@ -38,13 +58,13 @@ impl ByteWriter {
 
     /// Appends a `.vox` `STRING`: a `u32` byte length then the UTF-8 bytes.
     pub fn write_string(&mut self, value: &str) {
-        self.write_u32(value.len() as u32);
+        self.write_len(value.len());
         self.write_bytes(value.as_bytes());
     }
 
     /// Appends a `.vox` `DICT`: a `u32` pair count then each key/value `STRING`.
     pub fn write_dict(&mut self, pairs: &[(String, String)]) {
-        self.write_u32(pairs.len() as u32);
+        self.write_len(pairs.len());
         for (key, value) in pairs {
             self.write_string(key);
             self.write_string(value);
@@ -55,8 +75,8 @@ impl ByteWriter {
     /// length, then the `content` and `children` bytes.
     pub fn write_chunk(&mut self, id: &[u8; 4], content: &[u8], children: &[u8]) {
         self.write_bytes(id);
-        self.write_u32(content.len() as u32);
-        self.write_u32(children.len() as u32);
+        self.write_len(content.len());
+        self.write_len(children.len());
         self.write_bytes(content);
         self.write_bytes(children);
     }

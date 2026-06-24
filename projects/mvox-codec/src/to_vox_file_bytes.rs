@@ -64,7 +64,8 @@ pub fn to_vox_file_bytes(file: &MVoxFile) -> Vec<u8> {
 
 /// Writes a model's `SIZE` chunk.
 fn write_size(out: &mut ByteWriter, model: &MVoxModel) {
-    let mut content = ByteWriter::new();
+    // SIZE content is three `u32`s.
+    let mut content = ByteWriter::with_capacity(3 * 4);
     content.write_u32(model.size[0]);
     content.write_u32(model.size[1]);
     content.write_u32(model.size[2]);
@@ -73,8 +74,10 @@ fn write_size(out: &mut ByteWriter, model: &MVoxModel) {
 
 /// Writes a model's `XYZI` chunk.
 fn write_xyzi(out: &mut ByteWriter, model: &MVoxModel) {
-    let mut content = ByteWriter::new();
-    content.write_u32(model.voxels.len() as u32);
+    // XYZI content is a `u32` count then four bytes per voxel; size it exactly so
+    // a large model does not reallocate as its voxels are appended.
+    let mut content = ByteWriter::with_capacity(4 + model.voxels.len() * 4);
+    content.write_len(model.voxels.len());
     for voxel in &model.voxels {
         content.write_u8(voxel.x);
         content.write_u8(voxel.y);
@@ -88,7 +91,8 @@ fn write_xyzi(out: &mut ByteWriter, model: &MVoxModel) {
 /// `j + 1` becomes file color `j`, and the reserved index `0` is written as the
 /// unused final entry so the chunk carries the full 256 colors.
 fn write_rgba(out: &mut ByteWriter, palette: &MVoxPalette) {
-    let mut content = ByteWriter::new();
+    // RGBA content is exactly 256 colors of four bytes each.
+    let mut content = ByteWriter::with_capacity(256 * 4);
     for index in 1..=255usize {
         write_color(&mut content, palette.colors[index]);
     }
@@ -130,7 +134,7 @@ fn write_transform_node(out: &mut ByteWriter, node: &MVoxSceneNode, transform: &
     content.write_i32(transform.child);
     content.write_i32(-1);
     content.write_i32(transform.layer);
-    content.write_u32(transform.frames.len() as u32);
+    content.write_len(transform.frames.len());
     for frame in &transform.frames {
         content.write_dict(&frame_dict(frame));
     }
@@ -159,7 +163,7 @@ fn write_group_node(out: &mut ByteWriter, node: &MVoxSceneNode, group: &MVoxGrou
     let mut content = ByteWriter::new();
     content.write_i32(node.id);
     content.write_dict(&node_attributes_dict(&node.attributes));
-    content.write_u32(group.children.len() as u32);
+    content.write_len(group.children.len());
     for &child in &group.children {
         content.write_i32(child);
     }
@@ -171,7 +175,7 @@ fn write_shape_node(out: &mut ByteWriter, node: &MVoxSceneNode, shape: &MVoxShap
     let mut content = ByteWriter::new();
     content.write_i32(node.id);
     content.write_dict(&node_attributes_dict(&node.attributes));
-    content.write_u32(shape.models.len() as u32);
+    content.write_len(shape.models.len());
     for model in &shape.models {
         content.write_u32(model.model);
         let mut dict = Vec::new();
@@ -246,7 +250,7 @@ fn write_camera(out: &mut ByteWriter, camera: &MVoxCamera) {
 /// Writes a `NOTE` chunk's palette color names.
 fn write_note(out: &mut ByteWriter, notes: &[String]) {
     let mut content = ByteWriter::new();
-    content.write_u32(notes.len() as u32);
+    content.write_len(notes.len());
     for name in notes {
         content.write_string(name);
     }

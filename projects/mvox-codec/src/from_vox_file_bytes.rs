@@ -92,6 +92,9 @@ pub fn from_vox_file_bytes(bytes: &[u8]) -> Result<MVoxFile> {
                 file.index_map = Some(read_imap(chunk.content)?);
                 exhaustive = false;
             }
+            // Any other chunk is preserved verbatim so it survives the round
+            // trip. This includes the legacy MATT material chunk, which this
+            // crate does not model; MATL supersedes it.
             _ => {
                 file.unknown_chunks.push(MVoxUnknownChunk {
                     id: chunk.id,
@@ -130,15 +133,23 @@ pub fn from_vox_file_bytes(bytes: &[u8]) -> Result<MVoxFile> {
 /// Reads an `XYZI` chunk's voxels, paired with its `SIZE`.
 fn read_model(size: [u32; 3], content: &mut ByteReader) -> Result<MVoxModel> {
     let count = content.read_u32()? as usize;
-    let mut voxels = Vec::with_capacity(count.min(content.remaining().len() / 4));
-    for _ in 0..count {
-        voxels.push(MVoxVoxel {
-            x: content.read_u8()?,
-            y: content.read_u8()?,
-            z: content.read_u8()?,
-            color_index: content.read_u8()?,
-        });
-    }
+    // Read the whole voxel block with one bounds check, then split it into
+    // four-byte voxels. A bogus count overruns the slice, so read_bytes rejects it.
+    let byte_len = count.checked_mul(4).ok_or_else(|| {
+        invalid(format!(
+            "XYZI voxel count {count} overflows the addressable byte range"
+        ))
+    })?;
+    let voxels = content
+        .read_bytes(byte_len)?
+        .chunks_exact(4)
+        .map(|voxel| MVoxVoxel {
+            x: voxel[0],
+            y: voxel[1],
+            z: voxel[2],
+            color_index: voxel[3],
+        })
+        .collect();
     Ok(MVoxModel { size, voxels })
 }
 
