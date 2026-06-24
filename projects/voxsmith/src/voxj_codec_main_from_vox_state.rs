@@ -11,32 +11,27 @@ use voxj::VoxjCodecMain;
 /// Each object emits one voxel per live cell, in ascending raster order.
 pub fn voxj_codec_main_from_vox_state(state: &VoxState) -> VoxjCodecMain {
     let objects = state
-        .object_ids
-        .iter()
-        .map(|id| voxj_codec_object_from_vox_object(unsafe { state.objects.get(id) }))
+        .iter_objects()
+        .map(|(_, object)| voxj_codec_object_from_vox_object(object))
         .collect();
 
     let palettes = state
-        .palette_ids
-        .iter()
-        .map(|id| voxj_palette_from_vox_palette(unsafe { state.palettes.get(id) }))
+        .iter_palettes()
+        .map(|(_, palette)| voxj_palette_from_vox_palette(palette))
         .collect();
 
     let hierarchy_nodes = state
-        .hierarchy_node_ids
-        .iter()
-        .map(|id| {
-            voxj_hierarchy_node_from_vox_hierarchy_node(unsafe { state.hierarchy_nodes.get(id) })
-        })
+        .iter_hierarchy_nodes()
+        .map(|(_, node)| voxj_hierarchy_node_from_vox_hierarchy_node(node))
         .collect();
 
     let root_hierarchy_nodes = state
-        .root_hierarchy_nodes
+        .root_hierarchy_nodes()
         .iter()
         .map(|id| id.to_u32() as usize)
         .collect();
 
-    let ext = state.ext.as_ref().map(voxj_value_from_vox_value);
+    let ext = state.ext().map(voxj_value_from_vox_value);
 
     VoxjCodecMain {
         objects,

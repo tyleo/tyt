@@ -1,7 +1,51 @@
 # vmax-codec
 
-Reads and writes Voxel Max `.vmax` packages and their internal files.
+Reads and writes Voxel Max `.vmax` packages. The `vmax` crate defines the data
+types; this crate turns a package on disk into those types and back.
 
-`from_vmax_file` / `to_vmax_file` convert a whole `.vmax` directory to and from a `vmax::VMaxSerdeFile`: `from_vmax_file` takes a closure that lists the package's files and one that resolves their bytes, `to_vmax_file` takes one that writes them (so the crate needs no filesystem of its own). Every file kind a package holds is modeled, so a package round-trips without dropping anything; an unrecognized filename is reported rather than silently lost. Per-file helpers handle the framing of each kind: `from_contents_vmaxb_file_bytes` (LZFSE binary plist), `from_palette_settings_vmaxpsb_file_bytes` (binary plist), `from_scene_json_file_bytes` (JSON), and `from_palette_png_file_bytes` (PNG) decode their payloads, while `from_history_vmaxhb_file_bytes` / `from_history_vmaxhvsb_file_bytes` / `from_history_vmaxhvsc_file_bytes` (undo history), `from_selection_vmaxb_file_bytes` (saved selection), and `from_quick_look_png_file_bytes` (`QuickLook/` thumbnails) preserve their opaque streams verbatim, each with a `to_*` inverse. The verbatim kinds round-trip byte for byte; the decoded kinds round-trip every field.
+A `.vmax` package is a directory of files, but the codec never touches the
+filesystem itself. You give `from_vmax_file` a way to list and read the package's
+files and `to_vmax_file` a way to write them, so the same code works against a
+folder, a zip, or bytes already in memory. Reading parses every file the package
+can hold into a `vmax::VMaxSerdeFile`, and reports an unknown filename instead of
+dropping it, so nothing is lost on a round-trip.
 
-`decode_vmax_file` / `encode_vmax_file` convert a whole package between the serde form (`vmax::VMaxSerdeFile`, raw parsed payloads) and the codec form (`vmax::VMaxCodecFile`, decoded `vmax::VMaxCodecVoxel` geometry and `vmax::VMaxCodecMaterial` palettes), losslessly: the scene graph and `palette*.png` color tables carry over unchanged, and the per-object / per-palette payloads round-trip every field (the snapshot edit-log collapses to its final voxels, and each material's `mi` slot token is reconstructed from its slot position). The per-file building blocks underneath are `decode_contents_vmaxb_file` / `encode_contents_vmaxb_file` (voxel snapshots) and `decode_palette_settings_vmaxpsb_file` / `encode_palette_settings_vmaxpsb_file`, plus the lower-level `decode_vmax_snapshots` / `encode_vmax_snapshots`. See the `vmax` crate for the data types.
+To work with the model itself, `decode_vmax_file` turns that serde form into a
+`vmax::VMaxCodecFile` of real voxel geometry and materials, and `encode_vmax_file`
+turns it back. Both directions are lossless: decoded payloads round-trip every
+field, and the streams the format keeps opaque, like undo history and thumbnails,
+are preserved byte for byte.
+
+Per-file helpers cover the cases where you need a single file rather than a whole
+package. See the `vmax` crate for the data types.
+
+## Example
+
+Read a `.vmax` directory, decode it to the model, and write it back out. Only the
+closures know about the filesystem, so the same flow works against a zip or an
+in-memory package.
+
+```rust
+use std::{fs, io, path::Path};
+use vmax_codec::{decode_vmax_file, encode_vmax_file, from_vmax_file, to_vmax_file};
+
+fn round_trip(src: &Path, dst: &Path) -> io::Result<()> {
+    let serde = from_vmax_file(
+        || list_files(src), // your lister, returning package-relative paths
+        |name| match fs::read(src.join(name)) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            result => result.map(Some),
+        },
+    )?;
+
+    // Decode to voxel geometry and materials. Edit `codec` here, then re-encode.
+    let codec = decode_vmax_file(&serde)?;
+    let serde = encode_vmax_file(&codec);
+
+    to_vmax_file(&serde, |name, bytes| {
+        let path = dst.join(name);
+        fs::create_dir_all(path.parent().unwrap())?;
+        fs::write(path, bytes)
+    })
+}
+```

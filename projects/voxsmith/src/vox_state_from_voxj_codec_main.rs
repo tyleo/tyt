@@ -7,48 +7,45 @@ use std::io;
 use voxcore::VoxState;
 use voxj::VoxjCodecMain;
 
-/// Loads a [`VoxjCodecMain`] (decoded voxj geometry) into a [`VoxState`], the
-/// in-memory voxcore form. Objects, palettes, and hierarchy nodes take ids in
-/// listing order, so each id equals its voxj array index and the cross
-/// references (child nodes and objects, palette refs, roots) carry over
-/// unchanged.
+/// Loads a [`VoxjCodecMain`] into a [`VoxState`]. Entities take ids in listing
+/// order, so each id equals its voxj array index and cross-references carry over.
 ///
-/// Errors if an object's geometry or references are malformed: a grid too large
-/// for a `u32` raster index, a position outside its bounds, an out-of-range
-/// palette reference or sample cell, ragged sample rows, or a referenced palette
-/// with no cells.
+/// Errors on malformed object geometry (oversized grid, position out of bounds,
+/// ragged rows) or if [`VoxState::validate`](voxcore::VoxState::validate) rejects
+/// the assembled state.
 pub fn vox_state_from_voxj_codec_main(main: &VoxjCodecMain) -> io::Result<VoxState> {
     let mut state = VoxState::default();
 
-    // Each value is built before its id is retained so that a failed conversion
-    // leaves the state consistent: an id is never retained without a paired
-    // value, which `VoxState`'s drop would otherwise read uninitialized.
+    // Build each value before adding it so a failed conversion leaves the state
+    // untouched.
     for palette in &main.palettes {
-        let palette = vox_palette_from_voxj_palette(palette)?;
-        let id = state.palette_ids.retain();
-        state.palettes.retain(id, palette);
+        state.add_palette(vox_palette_from_voxj_palette(palette)?);
     }
 
     for object in &main.objects {
-        let object = vox_object_from_voxj_codec_object(object, &main.palettes)?;
-        let id = state.object_ids.retain();
-        state.objects.retain(id, object);
+        state.add_object(vox_object_from_voxj_codec_object(object)?);
     }
 
     for node in &main.hierarchy_nodes {
-        let id = state.hierarchy_node_ids.retain();
-        state
-            .hierarchy_nodes
-            .retain(id, vox_hierarchy_node_from_voxj_hierarchy_node(node));
+        state.add_hierarchy_node(vox_hierarchy_node_from_voxj_hierarchy_node(node)?);
     }
 
-    state.root_hierarchy_nodes = main
-        .root_hierarchy_nodes
-        .iter()
-        .map(|&index| U32Id::from_u32(index as u32))
-        .collect();
+    state.set_root_hierarchy_nodes(
+        main.root_hierarchy_nodes
+            .iter()
+            .map(|&index| U32Id::from_u32(index as u32))
+            .collect(),
+    );
 
-    state.ext = main.ext.as_ref().map(vox_value_from_voxj_value);
+    state.set_ext(
+        main.ext
+            .as_ref()
+            .map(vox_value_from_voxj_value)
+            .transpose()?,
+    );
+
+    // Check cross-references and acyclicity on the assembled state.
+    state.validate().map_err(io::Error::other)?;
 
     Ok(state)
 }

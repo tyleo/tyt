@@ -5,38 +5,40 @@ use voxj::VoxjCodecObject;
 /// sample row per live voxel in ascending raster order. Palette references map
 /// back to palette indices (each id equals its index).
 pub(crate) fn voxj_codec_object_from_vox_object(object: &VoxObject) -> VoxjCodecObject {
-    let bounds = [object.bounds.x, object.bounds.y, object.bounds.z];
-    let [_, size_y, size_z] = bounds;
+    let bounds = object.bounds();
 
+    // Reference ids, reused for each voxel's sample row.
+    let palette_ref_ids: Vec<_> = object.iter_palette_refs().map(|(id, _)| id).collect();
     let palette_refs: Vec<usize> = object
-        .palette_ref_ids
-        .iter()
-        .map(|id| unsafe { object.palette_refs.get(id) }.to_u32() as usize)
+        .iter_palette_refs()
+        .map(|(_, palette)| palette.to_u32() as usize)
         .collect();
 
-    let live_count = object.liveness.count_live();
+    let live_count = object.live_count();
     let mut positions = Vec::with_capacity(live_count);
     let mut samples = Vec::with_capacity(live_count);
     for voxel_id in object.iter_live() {
-        let raster = voxel_id.to_u32();
-        let plane = size_y * size_z;
-        positions.push([raster / plane, (raster % plane) / size_z, raster % size_z]);
+        let position = object
+            .voxel_position(voxel_id)
+            .expect("a live voxel id is within the grid");
+        positions.push([position.x, position.y, position.z]);
 
-        let row = object
-            .palette_ref_ids
+        let row = palette_ref_ids
             .iter()
-            .map(|palette_ref_id| {
-                let column = unsafe { object.samples.get(palette_ref_id) };
-                unsafe { column.get(voxel_id) }.to_u32()
+            .map(|&palette_ref_id| {
+                object
+                    .voxel_cell(voxel_id, palette_ref_id)
+                    .expect("a live voxel has a sample for every reference")
+                    .to_u32()
             })
             .collect();
         samples.push(row);
     }
 
     VoxjCodecObject {
-        name: object.name.clone(),
+        name: object.name().to_owned(),
         palette_refs,
-        bounds,
+        bounds: [bounds.x, bounds.y, bounds.z],
         positions,
         samples,
     }
