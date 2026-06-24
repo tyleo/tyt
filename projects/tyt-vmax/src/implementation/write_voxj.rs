@@ -71,7 +71,7 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
             match tyt_injection::read_file(&input.join(name)) {
                 Ok(bytes) => Ok(Some(bytes)),
                 Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
-                Err(e) => Err(e),
+                Err(e) => Err(e.into()),
             }
         },
     )?;

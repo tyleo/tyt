@@ -1,6 +1,6 @@
 use crate::{
-    ByteReader, invalid, parse_u32, read_chunk, take, take_bool, take_f32, take_i32, take_u32,
-    take_vec3f, take_vec3i,
+    ByteReader, Result, invalid, parse_u32, read_chunk, take, take_bool, take_f32, take_i32,
+    take_u32, take_vec3f, take_vec3i,
 };
 use mvox::{
     MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer, MVoxMaterial,
@@ -8,7 +8,6 @@ use mvox::{
     MVoxSceneNode, MVoxSceneNodeBody, MVoxShapeModel, MVoxShapeNode, MVoxTransformNode,
     MVoxUnknownChunk, MVoxVoxel,
 };
-use std::io::Result;
 
 /// The byte length of an `RGBA` chunk: 256 colors of four bytes each.
 const RGBA_BYTES: usize = 256 * 4;

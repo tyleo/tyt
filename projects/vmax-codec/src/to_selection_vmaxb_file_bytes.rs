@@ -1,4 +1,4 @@
-use std::io::Result;
+use crate::Result;
 use vmax::VMaxSelectionVmaxbFile;
 
 /// Writes a [`VMaxSelectionVmaxbFile`] back to `*.selection.vmaxb` bytes, the

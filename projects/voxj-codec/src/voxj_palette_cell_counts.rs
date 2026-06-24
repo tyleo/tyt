@@ -1,4 +1,4 @@
-use std::io;
+use crate::{Error, Result};
 use voxj::VoxjPalette;
 
 /// The cell count of each referenced palette, in `palette_refs` order, ready to
@@ -8,7 +8,7 @@ use voxj::VoxjPalette;
 pub fn voxj_palette_cell_counts(
     palette_refs: &[usize],
     palettes: &[VoxjPalette],
-) -> io::Result<Vec<usize>> {
+) -> Result<Vec<usize>> {
     palette_refs
         .iter()
         .map(|&idx| {
@@ -16,13 +16,10 @@ pub fn voxj_palette_cell_counts(
                 .get(idx)
                 .map(|palette| palette.data.len())
                 .ok_or_else(|| {
-                    io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!(
-                            "palette ref {idx} is out of bounds: the document has {} palettes",
-                            palettes.len()
-                        ),
-                    )
+                    Error::Invalid(format!(
+                        "palette ref {idx} is out of bounds: the document has {} palettes",
+                        palettes.len()
+                    ))
                 })
         })
         .collect()

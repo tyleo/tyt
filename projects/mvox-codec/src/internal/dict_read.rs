@@ -1,9 +1,9 @@
-use std::io::{Error as IOError, ErrorKind, Result};
+use crate::{Error, Result};
 
-/// An [`ErrorKind::InvalidData`] error carrying `message`, for input that is
+/// An [`Error::Invalid`] error carrying `message`, for input that is
 /// well-framed but semantically malformed.
-pub fn invalid(message: String) -> IOError {
-    IOError::new(ErrorKind::InvalidData, message)
+pub fn invalid(message: String) -> Error {
+    Error::Invalid(message)
 }
 
 /// Removes every pair whose key is `key`, returning the first such value. Taking

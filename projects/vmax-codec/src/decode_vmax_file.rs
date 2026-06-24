@@ -1,5 +1,5 @@
-use crate::{decode_contents_vmaxb_file, decode_palette_settings_vmaxpsb_file};
-use std::{collections::BTreeMap, io::Result};
+use crate::{Result, decode_contents_vmaxb_file, decode_palette_settings_vmaxpsb_file};
+use std::collections::BTreeMap;
 use vmax::{VMaxCodecFile, VMaxSerdeFile};
 
 /// Decodes a [`VMaxSerdeFile`] into a [`VMaxCodecFile`], the inverse of

@@ -1,10 +1,9 @@
 use crate::{
-    to_contents_vmaxb_file_bytes, to_history_vmaxhb_file_bytes, to_history_vmaxhvsb_file_bytes,
-    to_history_vmaxhvsc_file_bytes, to_palette_png_file_bytes,
+    Result, to_contents_vmaxb_file_bytes, to_history_vmaxhb_file_bytes,
+    to_history_vmaxhvsb_file_bytes, to_history_vmaxhvsc_file_bytes, to_palette_png_file_bytes,
     to_palette_settings_vmaxpsb_file_bytes, to_quick_look_png_file_bytes, to_scene_json_file_bytes,
     to_selection_vmaxb_file_bytes,
 };
-use std::io::Result;
 use vmax::VMaxSerdeFile;
 
 /// Writes a [`VMaxSerdeFile`] back to a `.vmax` package, the inverse of

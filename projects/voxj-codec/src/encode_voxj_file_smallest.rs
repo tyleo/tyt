@@ -1,5 +1,4 @@
-use crate::{encode_voxj_object_smallest, voxj_palette_cell_counts};
-use std::io;
+use crate::{Result, encode_voxj_object_smallest, voxj_palette_cell_counts};
 use voxj::{VoxjCodecFile, VoxjSerdeFile, VoxjSerdeMain};
 
 /// Encodes a [`VoxjCodecFile`] (decoded geometry) into a [`VoxjSerdeFile`]
@@ -10,7 +9,7 @@ use voxj::{VoxjCodecFile, VoxjSerdeFile, VoxjSerdeMain};
 /// palettes it references; the palettes, hierarchy, roots, and `ext` carry over
 /// unchanged. Errors if an object references a palette outside the document's
 /// `palettes`.
-pub fn encode_voxj_file_smallest(file: &VoxjCodecFile) -> io::Result<VoxjSerdeFile> {
+pub fn encode_voxj_file_smallest(file: &VoxjCodecFile) -> Result<VoxjSerdeFile> {
     let palettes = &file.main.palettes;
     let objects = file
         .main
@@ -20,7 +19,7 @@ pub fn encode_voxj_file_smallest(file: &VoxjCodecFile) -> io::Result<VoxjSerdeFi
             let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes)?;
             encode_voxj_object_smallest(object, &cell_counts)
         })
-        .collect::<io::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()?;
     Ok(VoxjSerdeFile {
         version: file.version,
         main: VoxjSerdeMain {

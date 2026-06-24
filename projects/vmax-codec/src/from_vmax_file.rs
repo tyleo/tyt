@@ -1,13 +1,10 @@
 use crate::{
-    from_contents_vmaxb_file_bytes, from_history_vmaxhb_file_bytes,
+    Error, Result, from_contents_vmaxb_file_bytes, from_history_vmaxhb_file_bytes,
     from_history_vmaxhvsb_file_bytes, from_history_vmaxhvsc_file_bytes,
     from_palette_png_file_bytes, from_palette_settings_vmaxpsb_file_bytes,
     from_quick_look_png_file_bytes, from_scene_json_file_bytes, from_selection_vmaxb_file_bytes,
 };
-use std::{
-    collections::BTreeMap,
-    io::{Error as IOError, ErrorKind, Result},
-};
+use std::collections::BTreeMap;
 use vmax::VMaxSerdeFile;
 
 /// Reads a whole `.vmax` package into a [`VMaxSerdeFile`]. `list` returns the
@@ -20,8 +17,8 @@ where
     L: FnOnce() -> Result<Vec<String>>,
     R: FnMut(&str) -> Result<Option<Vec<u8>>>,
 {
-    let scene_bytes = resolve("scene.json")?
-        .ok_or_else(|| IOError::new(ErrorKind::NotFound, "scene.json is missing"))?;
+    let scene_bytes =
+        resolve("scene.json")?.ok_or_else(|| Error::Invalid("scene.json is missing".to_owned()))?;
     let scene_json_file = from_scene_json_file_bytes(&scene_bytes)?;
 
     let mut contents_files = BTreeMap::new();
@@ -62,10 +59,9 @@ where
         } else if path.ends_with(".vmaxhvsc") {
             history_vmaxhvsc_files.insert(path, from_history_vmaxhvsc_file_bytes(&bytes)?);
         } else {
-            return Err(IOError::new(
-                ErrorKind::InvalidData,
-                format!("unrecognized file in .vmax package: {path}"),
-            ));
+            return Err(Error::Invalid(format!(
+                "unrecognized file in .vmax package: {path}"
+            )));
         }
     }
 

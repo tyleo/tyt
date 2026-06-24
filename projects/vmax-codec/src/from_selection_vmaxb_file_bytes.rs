@@ -1,4 +1,4 @@
-use std::io::Result;
+use crate::Result;
 use vmax::VMaxSelectionVmaxbFile;
 
 /// Reads `*.selection.vmaxb` saved-selection bytes into a

@@ -1,5 +1,6 @@
+use crate::{Error, Result};
 use png::{Decoder, Transformations};
-use std::io::{Cursor, Error as IOError, ErrorKind, Result};
+use std::io::Cursor;
 use vmax::VMaxPalettePngFile;
 
 /// Decodes `palette*.png` bytes into a [`VMaxPalettePngFile`] color table (one
@@ -9,16 +10,12 @@ pub fn from_palette_png_file_bytes(bytes: &[u8]) -> Result<VMaxPalettePngFile> {
     // Normalize paletted, sub-8-bit, and 16-bit inputs down to 8-bit channels so
     // each pixel reduces to a single `[r, g, b, a]` cell below.
     decoder.set_transformations(Transformations::EXPAND | Transformations::STRIP_16);
-    let mut reader = decoder
-        .read_info()
-        .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
+    let mut reader = decoder.read_info()?;
     let size = reader
         .output_buffer_size()
-        .ok_or_else(|| IOError::new(ErrorKind::InvalidData, "png dimensions too large"))?;
+        .ok_or_else(|| Error::Invalid("png dimensions too large".to_owned()))?;
     let mut buffer = vec![0; size];
-    let info = reader
-        .next_frame(&mut buffer)
-        .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
+    let info = reader.next_frame(&mut buffer)?;
     let colors = buffer[..info.buffer_size()]
         .chunks_exact(info.color_type.samples())
         .map(|cell| match cell {

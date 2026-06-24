@@ -1,7 +1,7 @@
-use std::io::{Error as IOError, ErrorKind, Result};
+use crate::{Error, Result};
 
 /// A bounds-checked little-endian cursor over a byte slice. Every read that
-/// would run past the end returns an [`ErrorKind::UnexpectedEof`] error rather
+/// would run past the end returns an [`Error::UnexpectedEof`] error rather
 /// than panicking, so truncated input is rejected instead of masked.
 pub struct ByteReader<'a> {
     bytes: &'a [u8],
@@ -66,8 +66,7 @@ impl<'a> ByteReader<'a> {
     pub fn read_string(&mut self) -> Result<String> {
         let len = self.read_u32()? as usize;
         let bytes = self.read_bytes(len)?;
-        String::from_utf8(bytes.to_vec())
-            .map_err(|error| IOError::new(ErrorKind::InvalidData, error))
+        String::from_utf8(bytes.to_vec()).map_err(|error| Error::Invalid(error.to_string()))
     }
 
     /// Reads a `.vox` `DICT`: a `u32` pair count then that many key/value
@@ -88,6 +87,6 @@ impl<'a> ByteReader<'a> {
 }
 
 /// An unexpected-end-of-input error carrying `message`.
-fn eof(message: String) -> IOError {
-    IOError::new(ErrorKind::UnexpectedEof, message)
+fn eof(message: String) -> Error {
+    Error::UnexpectedEof(message)
 }

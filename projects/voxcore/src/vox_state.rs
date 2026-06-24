@@ -1,6 +1,6 @@
 use crate::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxError, VoxGcRemap,
-    VoxHierarchyNode, VoxObject, VoxPalette, VoxResult, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, Error, Result, VoxGcRemap,
+    VoxHierarchyNode, VoxObject, VoxPalette, VoxValue,
 };
 use branded_id::{
     IdVec, U32Id,
@@ -340,7 +340,7 @@ impl VoxState {
     /// twice, and no root may repeat. The `child_nodes` graph must be acyclic. A
     /// node may still be shared by several parents (the hierarchy is a DAG); only
     /// dangling refs, duplicate ids within one list, and cycles fail.
-    pub fn validate(&self) -> VoxResult<()> {
+    pub fn validate(&self) -> Result<()> {
         // Object palette refs and live-voxel sample cells.
         // Checks are by id retention, not index range, so they hold whether or
         // not removals have left the pools with holes.
@@ -348,12 +348,12 @@ impl VoxState {
             let mut ref_palettes = Vec::with_capacity(object.palette_ref_count());
             let mut seen_palettes = HashSet::with_capacity(object.palette_ref_count());
             for (palette_ref_id, palette_id) in object.iter_palette_refs() {
-                let palette = self.palette(palette_id).ok_or(VoxError::PaletteRef {
+                let palette = self.palette(palette_id).ok_or(Error::PaletteRef {
                     object: object_id.to_u32(),
                     palette: palette_id.to_u32(),
                 })?;
                 if !seen_palettes.insert(palette_id.to_u32()) {
-                    return Err(VoxError::DuplicatePaletteRef {
+                    return Err(Error::DuplicatePaletteRef {
                         object: object_id.to_u32(),
                         palette: palette_id.to_u32(),
                     });
@@ -366,7 +366,7 @@ impl VoxState {
                         .voxel_cell(voxel_id, palette_ref_id)
                         .expect("live voxel has a sample for every reference");
                     if !palette.contains_cell(cell) {
-                        return Err(VoxError::SampleCell {
+                        return Err(Error::SampleCell {
                             object: object_id.to_u32(),
                             voxel: voxel_id.to_u32(),
                             cell: cell.to_u32(),
@@ -381,13 +381,13 @@ impl VoxState {
             let mut seen_child_nodes = HashSet::with_capacity(node.child_nodes.len());
             for &child in &node.child_nodes {
                 if self.hierarchy_node(child).is_none() {
-                    return Err(VoxError::ChildNode {
+                    return Err(Error::ChildNode {
                         node: node_id.to_u32(),
                         child: child.to_u32(),
                     });
                 }
                 if !seen_child_nodes.insert(child.to_u32()) {
-                    return Err(VoxError::DuplicateChildNode {
+                    return Err(Error::DuplicateChildNode {
                         node: node_id.to_u32(),
                         child: child.to_u32(),
                     });
@@ -396,13 +396,13 @@ impl VoxState {
             let mut seen_child_objects = HashSet::with_capacity(node.child_objects.len());
             for &object in &node.child_objects {
                 if self.object(object).is_none() {
-                    return Err(VoxError::ChildObject {
+                    return Err(Error::ChildObject {
                         node: node_id.to_u32(),
                         object: object.to_u32(),
                     });
                 }
                 if !seen_child_objects.insert(object.to_u32()) {
-                    return Err(VoxError::DuplicateChildObject {
+                    return Err(Error::DuplicateChildObject {
                         node: node_id.to_u32(),
                         object: object.to_u32(),
                     });
@@ -414,12 +414,12 @@ impl VoxState {
         let mut seen_roots = HashSet::with_capacity(self.root_hierarchy_nodes.len());
         for &root in &self.root_hierarchy_nodes {
             if self.hierarchy_node(root).is_none() {
-                return Err(VoxError::Root {
+                return Err(Error::Root {
                     root: root.to_u32(),
                 });
             }
             if !seen_roots.insert(root.to_u32()) {
-                return Err(VoxError::DuplicateRoot {
+                return Err(Error::DuplicateRoot {
                     root: root.to_u32(),
                 });
             }
@@ -427,7 +427,7 @@ impl VoxState {
 
         // Acyclicity; every child is now known live.
         if let Some(node) = self.first_cycle_node() {
-            return Err(VoxError::Cycle { node });
+            return Err(Error::Cycle { node });
         }
 
         Ok(())
@@ -543,7 +543,7 @@ impl Drop for VoxState {
 mod tests {
     use crate::{
         BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, BVoxPaletteRef,
-        VoxError, VoxHierarchyNode, VoxObject, VoxPalette, VoxState, VoxValue,
+        Error, VoxHierarchyNode, VoxObject, VoxPalette, VoxState, VoxValue,
     };
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
@@ -617,7 +617,7 @@ mod tests {
         let parent = state.add_hierarchy_node(node_with_children(vec![leaf, leaf]));
         assert_eq!(
             state.validate(),
-            Err(VoxError::DuplicateChildNode {
+            Err(Error::DuplicateChildNode {
                 node: parent.to_u32(),
                 child: leaf.to_u32(),
             })
@@ -631,7 +631,7 @@ mod tests {
         let node = state.add_hierarchy_node(node_with_objects(vec![object, object]));
         assert_eq!(
             state.validate(),
-            Err(VoxError::DuplicateChildObject {
+            Err(Error::DuplicateChildObject {
                 node: node.to_u32(),
                 object: object.to_u32(),
             })
@@ -645,7 +645,7 @@ mod tests {
         state.set_root_hierarchy_nodes(vec![node, node]);
         assert_eq!(
             state.validate(),
-            Err(VoxError::DuplicateRoot {
+            Err(Error::DuplicateRoot {
                 root: node.to_u32(),
             })
         );
@@ -662,7 +662,7 @@ mod tests {
         let object = state.add_object(object);
         assert_eq!(
             state.validate(),
-            Err(VoxError::DuplicatePaletteRef {
+            Err(Error::DuplicatePaletteRef {
                 object: object.to_u32(),
                 palette: palette.to_u32(),
             })
@@ -682,7 +682,7 @@ mod tests {
 
         assert_eq!(
             state.validate(),
-            Err(VoxError::PaletteRef {
+            Err(Error::PaletteRef {
                 object: id.to_u32(),
                 palette: 0,
             })
@@ -695,7 +695,7 @@ mod tests {
         state.add_hierarchy_node(node_with_children(vec![node_id(9)]));
         assert!(matches!(
             state.validate(),
-            Err(VoxError::ChildNode { child: 9, .. })
+            Err(Error::ChildNode { child: 9, .. })
         ));
     }
 
@@ -704,7 +704,7 @@ mod tests {
         let mut state = VoxState::default();
         state.add_hierarchy_node(VoxHierarchyNode::default());
         state.set_root_hierarchy_nodes(vec![node_id(7)]);
-        assert_eq!(state.validate(), Err(VoxError::Root { root: 7 }));
+        assert_eq!(state.validate(), Err(Error::Root { root: 7 }));
     }
 
     #[test]
@@ -713,7 +713,7 @@ mod tests {
         // node 0 -> child 1, node 1 -> child 0.
         state.add_hierarchy_node(node_with_children(vec![node_id(1)]));
         state.add_hierarchy_node(node_with_children(vec![node_id(0)]));
-        assert!(matches!(state.validate(), Err(VoxError::Cycle { .. })));
+        assert!(matches!(state.validate(), Err(Error::Cycle { .. })));
     }
 
     #[test]

@@ -1,10 +1,10 @@
-use std::io;
+use crate::{Error, Result};
 use voxj::VoxjSerdeFile;
 
 /// Decodes `.voxj` JSON bytes into a [`VoxjSerdeFile`]. Any `main.ext` extension
 /// namespace is carried on [`VoxjMain::ext`](voxj::VoxjMain::ext).
-pub fn from_voxj_file_bytes(bytes: &[u8]) -> io::Result<VoxjSerdeFile> {
-    serde_json::from_slice(bytes).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
+pub fn from_voxj_file_bytes(bytes: &[u8]) -> Result<VoxjSerdeFile> {
+    serde_json::from_slice(bytes).map_err(Error::Json)
 }
 
 #[cfg(test)]

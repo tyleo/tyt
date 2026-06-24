@@ -1,5 +1,4 @@
-use crate::decode_vmax_snapshots;
-use std::io;
+use crate::{Result, decode_vmax_snapshots};
 use vmax::{VMaxCodecContentsVmaxbFile, VMaxSerdeContentsVmaxbFile};
 
 /// Decodes a `VMaxSerdeContentsVmaxbFile` into a
@@ -8,7 +7,7 @@ use vmax::{VMaxCodecContentsVmaxbFile, VMaxSerdeContentsVmaxbFile};
 /// [`encode_contents_vmaxb_file`](crate::encode_contents_vmaxb_file).
 pub fn decode_contents_vmaxb_file(
     contents: &VMaxSerdeContentsVmaxbFile,
-) -> io::Result<VMaxCodecContentsVmaxbFile> {
+) -> Result<VMaxCodecContentsVmaxbFile> {
     Ok(VMaxCodecContentsVmaxbFile {
         voxels: decode_vmax_snapshots(&contents.snapshots)?,
         uuid: contents.uuid.clone(),

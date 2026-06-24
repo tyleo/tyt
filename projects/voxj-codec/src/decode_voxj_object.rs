@@ -1,6 +1,8 @@
-use crate::{decode_hilbert, decode_varint, hilbert_bits, packed_width, unpack_bits};
-use base64::{DecodeError, Engine, engine::general_purpose::STANDARD as BASE64};
-use std::{io, iter};
+use crate::{
+    Error, Result, decode_hilbert, decode_varint, hilbert_bits, packed_width, unpack_bits,
+};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use std::iter;
 use voxj::{VoxjCodecObject, VoxjSerdeObject, VoxjSerdePositionBlock, VoxjSerdeSampleBlock};
 
 /// Decodes one [`VoxjSerdeObject`] back into a [`VoxjCodecObject`], the inverse
@@ -16,7 +18,7 @@ use voxj::{VoxjCodecObject, VoxjSerdeObject, VoxjSerdePositionBlock, VoxjSerdeSa
 pub fn decode_voxj_object(
     object: &VoxjSerdeObject,
     cell_counts: &[usize],
-) -> io::Result<VoxjCodecObject> {
+) -> Result<VoxjCodecObject> {
     let positions = decode_positions(&object.voxel_positions, object.bounds)?;
     let channels = decode_samples(&object.voxel_samples, cell_counts, positions.len())?;
     let samples = (0..positions.len())
@@ -31,14 +33,9 @@ pub fn decode_voxj_object(
     })
 }
 
-/// Wraps a base64 decode error as invalid data.
-fn invalid(error: DecodeError) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, error)
-}
-
 /// Wraps a message describing malformed input as invalid data.
-fn invalid_data(message: String) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, message)
+fn invalid_data(message: String) -> Error {
+    Error::Invalid(message)
 }
 
 /// Inverse of the raster `cell_index`: `x = k / (Y*Z)`, `y = (k / Z) % Y`,
@@ -53,13 +50,13 @@ fn cell_to_position(cell: u64, bounds: [u32; 3]) -> [u32; 3] {
 }
 
 /// Decodes the position block into `[x, y, z]` positions.
-fn decode_positions(block: &VoxjSerdePositionBlock, bounds: [u32; 3]) -> io::Result<Vec<[u32; 3]>> {
+fn decode_positions(block: &VoxjSerdePositionBlock, bounds: [u32; 3]) -> Result<Vec<[u32; 3]>> {
     Ok(match block {
         VoxjSerdePositionBlock::RawJson(positions) => positions.clone(),
 
         VoxjSerdePositionBlock::BitmapBase64(base64) => {
             let cells = bounds[0] as usize * bounds[1] as usize * bounds[2] as usize;
-            let occupancy = unpack_bits(&BASE64.decode(base64).map_err(invalid)?, 1, cells);
+            let occupancy = unpack_bits(&BASE64.decode(base64).map_err(Error::Base64)?, 1, cells);
             occupancy
                 .iter()
                 .enumerate()
@@ -71,7 +68,7 @@ fn decode_positions(block: &VoxjSerdePositionBlock, bounds: [u32; 3]) -> io::Res
         VoxjSerdePositionBlock::HilbertIndexDeltaVarintBase64(base64) => {
             let bits = hilbert_bits(bounds);
             let mut index = 0u64;
-            decode_varint(&BASE64.decode(base64).map_err(invalid)?)
+            decode_varint(&BASE64.decode(base64).map_err(Error::Base64)?)
                 .iter()
                 .map(|&delta| {
                     index += delta;
@@ -88,7 +85,7 @@ fn decode_samples(
     block: &VoxjSerdeSampleBlock,
     cell_counts: &[usize],
     n: usize,
-) -> io::Result<Vec<Vec<u32>>> {
+) -> Result<Vec<Vec<u32>>> {
     let channels: Vec<Vec<u32>> = match block {
         VoxjSerdeSampleBlock::RawJson(rows) => {
             if rows.len() != n {
@@ -118,7 +115,7 @@ fn decode_samples(
             .enumerate()
             .map(|(p, base64)| {
                 let width = packed_width(cell_counts.get(p).copied().unwrap_or(1));
-                let bytes = BASE64.decode(base64).map_err(invalid)?;
+                let bytes = BASE64.decode(base64).map_err(Error::Base64)?;
                 let required = (n * width as usize).div_ceil(8);
                 if bytes.len() < required {
                     return Err(invalid_data(format!(
@@ -128,7 +125,7 @@ fn decode_samples(
                 }
                 Ok(unpack_bits(&bytes, width, n))
             })
-            .collect::<io::Result<Vec<_>>>()?,
+            .collect::<Result<Vec<_>>>()?,
     };
 
     // Every encoding must yield one channel per referenced palette, each holding

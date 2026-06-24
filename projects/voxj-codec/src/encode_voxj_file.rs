@@ -1,5 +1,6 @@
-use crate::{PositionEncoding, SampleEncoding, encode_voxj_object, voxj_palette_cell_counts};
-use std::io;
+use crate::{
+    PositionEncoding, Result, SampleEncoding, encode_voxj_object, voxj_palette_cell_counts,
+};
 use voxj::{VoxjCodecFile, VoxjSerdeFile, VoxjSerdeMain};
 
 /// Encodes a [`VoxjCodecFile`] (decoded geometry) into a [`VoxjSerdeFile`]
@@ -12,7 +13,7 @@ pub fn encode_voxj_file(
     file: &VoxjCodecFile,
     position: PositionEncoding,
     sample: SampleEncoding,
-) -> io::Result<VoxjSerdeFile> {
+) -> Result<VoxjSerdeFile> {
     let palettes = &file.main.palettes;
     let objects = file
         .main
@@ -22,7 +23,7 @@ pub fn encode_voxj_file(
             let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes)?;
             encode_voxj_object(object, &cell_counts, position, sample)
         })
-        .collect::<io::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()?;
     Ok(VoxjSerdeFile {
         version: file.version,
         main: VoxjSerdeMain {

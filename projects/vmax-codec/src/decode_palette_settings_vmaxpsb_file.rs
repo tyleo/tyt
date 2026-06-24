@@ -1,4 +1,4 @@
-use std::io::{Error as IOError, ErrorKind, Result};
+use crate::{Error, Result};
 use vmax::{
     VMaxCodecMaterial, VMaxCodecPaletteSettingsVmaxpsbFile, VMaxSerdePaletteSettingsVmaxpsbFile,
 };
@@ -12,13 +12,10 @@ pub fn decode_palette_settings_vmaxpsb_file(
     palette: &VMaxSerdePaletteSettingsVmaxpsbFile,
 ) -> Result<VMaxCodecPaletteSettingsVmaxpsbFile> {
     if !palette.colors.len().is_multiple_of(4) {
-        return Err(IOError::new(
-            ErrorKind::InvalidData,
-            format!(
-                "color table length {} is not a multiple of 4 (one RGBA entry is 4 bytes)",
-                palette.colors.len()
-            ),
-        ));
+        return Err(Error::Invalid(format!(
+            "color table length {} is not a multiple of 4 (one RGBA entry is 4 bytes)",
+            palette.colors.len()
+        )));
     }
     Ok(VMaxCodecPaletteSettingsVmaxpsbFile {
         name: palette.name.clone(),

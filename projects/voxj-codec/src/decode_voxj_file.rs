@@ -1,5 +1,4 @@
-use crate::{decode_voxj_object, voxj_palette_cell_counts};
-use std::io;
+use crate::{Result, decode_voxj_object, voxj_palette_cell_counts};
 use voxj::{VoxjCodecFile, VoxjCodecMain, VoxjSerdeFile};
 
 /// Decodes a [`VoxjSerdeFile`] (encoded `.voxj` blocks) into a [`VoxjCodecFile`]
@@ -7,7 +6,7 @@ use voxj::{VoxjCodecFile, VoxjCodecMain, VoxjSerdeFile};
 /// [`encode_voxj_file`](crate::encode_voxj_file). Each object's palette cell
 /// counts come from the palettes it references; the palettes, hierarchy, roots,
 /// and `ext` carry over unchanged.
-pub fn decode_voxj_file(file: &VoxjSerdeFile) -> io::Result<VoxjCodecFile> {
+pub fn decode_voxj_file(file: &VoxjSerdeFile) -> Result<VoxjCodecFile> {
     let palettes = &file.main.palettes;
     let objects = file
         .main
@@ -17,7 +16,7 @@ pub fn decode_voxj_file(file: &VoxjSerdeFile) -> io::Result<VoxjCodecFile> {
             let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes)?;
             decode_voxj_object(object, &cell_counts)
         })
-        .collect::<io::Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>>>()?;
     Ok(VoxjCodecFile {
         version: file.version,
         main: VoxjCodecMain {

@@ -1,6 +1,6 @@
-use crate::{PositionEncoding, SampleEncoding, encode_voxj_object, hilbert_bits};
+use crate::{PositionEncoding, Result, SampleEncoding, encode_voxj_object, hilbert_bits};
 use flate2::{Compression, write::DeflateEncoder};
-use std::io::{self, Write};
+use std::io::Write;
 use voxj::{VoxjCodecObject, VoxjSerdeObject};
 
 /// Skip the dense bitmap candidate above this many cells to bound memory.
@@ -19,7 +19,7 @@ const MAX_HILBERT_BITS: u32 = 17;
 pub fn encode_voxj_object_smallest(
     object: &VoxjCodecObject,
     cell_counts: &[usize],
-) -> io::Result<VoxjSerdeObject> {
+) -> Result<VoxjSerdeObject> {
     if object.positions.is_empty() {
         return encode_voxj_object(
             object,
@@ -34,7 +34,7 @@ pub fn encode_voxj_object_smallest(
             [SampleEncoding::RleJson, SampleEncoding::PackedBase64].map(|sample| (position, sample))
         })
         .map(|(position, sample)| encode_voxj_object(object, cell_counts, position, sample))
-        .collect::<io::Result<Vec<_>>>()?
+        .collect::<Result<Vec<_>>>()?
         .into_iter()
         .min_by_key(deflated_len)
         .expect("at least one candidate");

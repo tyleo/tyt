@@ -1,9 +1,8 @@
 use crate::{
-    PositionEncoding, SampleEncoding, encode_hilbert, encode_varint, hilbert_bits, pack_bits,
-    packed_width,
+    Error, PositionEncoding, Result, SampleEncoding, encode_hilbert, encode_varint, hilbert_bits,
+    pack_bits, packed_width,
 };
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use std::io;
 use voxj::{VoxjCodecObject, VoxjSerdeObject, VoxjSerdePositionBlock, VoxjSerdeSampleBlock};
 
 /// Encodes one [`VoxjCodecObject`]'s geometry into a [`VoxjSerdeObject`] with
@@ -17,7 +16,7 @@ pub fn encode_voxj_object(
     cell_counts: &[usize],
     position: PositionEncoding,
     sample: SampleEncoding,
-) -> io::Result<VoxjSerdeObject> {
+) -> Result<VoxjSerdeObject> {
     validate_object_shape(object)?;
     let num_palettes = object.palette_refs.len();
 
@@ -46,28 +45,22 @@ pub fn encode_voxj_object(
 /// holding one cell index per referenced palette. The encoders index
 /// `samples[voxel][palette]` directly, so a ragged object would otherwise panic
 /// or silently drop values.
-fn validate_object_shape(object: &VoxjCodecObject) -> io::Result<()> {
+fn validate_object_shape(object: &VoxjCodecObject) -> Result<()> {
     if object.samples.len() != object.positions.len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "object \"{}\" has {} sample rows but {} positions",
-                object.name,
-                object.samples.len(),
-                object.positions.len()
-            ),
-        ));
+        return Err(Error::Invalid(format!(
+            "object \"{}\" has {} sample rows but {} positions",
+            object.name,
+            object.samples.len(),
+            object.positions.len()
+        )));
     }
     let num_palettes = object.palette_refs.len();
     if let Some(row) = object.samples.iter().find(|row| row.len() != num_palettes) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "object \"{}\" has a sample row of {} values but references {num_palettes} palettes",
-                object.name,
-                row.len()
-            ),
-        ));
+        return Err(Error::Invalid(format!(
+            "object \"{}\" has a sample row of {} values but references {num_palettes} palettes",
+            object.name,
+            row.len()
+        )));
     }
     Ok(())
 }

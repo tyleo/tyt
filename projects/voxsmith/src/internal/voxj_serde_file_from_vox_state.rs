@@ -15,5 +15,5 @@ pub(crate) fn voxj_serde_file_from_vox_state(state: &VoxState) -> io::Result<Vox
         version: VOXJ_FORMAT_VERSION,
         main: voxj_codec_main_from_vox_state(state),
     };
-    encode_voxj_file_smallest(&file)
+    encode_voxj_file_smallest(&file).map_err(io::Error::other)
 }

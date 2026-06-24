@@ -1,4 +1,4 @@
-use std::io::{Error as IOError, ErrorKind, Result};
+use crate::{Error, Result};
 use vmax::VMaxSerdePaletteSettingsVmaxpsbFile;
 
 /// Encodes a [`VMaxSerdePaletteSettingsVmaxpsbFile`] into
@@ -8,6 +8,6 @@ pub fn to_palette_settings_vmaxpsb_file_bytes(
     file: &VMaxSerdePaletteSettingsVmaxpsbFile,
 ) -> Result<Vec<u8>> {
     let mut out = Vec::new();
-    plist::to_writer_binary(&mut out, file).map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
+    plist::to_writer_binary(&mut out, file).map_err(Error::Plist)?;
     Ok(out)
 }

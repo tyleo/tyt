@@ -1,4 +1,4 @@
-use std::io::Result;
+use crate::Result;
 use vmax::VMaxHistoryVmaxhbFile;
 
 /// Reads `*.vmaxhb` undo-history bytes into a [`VMaxHistoryVmaxhbFile`]. The

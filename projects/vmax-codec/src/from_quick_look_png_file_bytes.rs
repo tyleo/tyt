@@ -1,4 +1,4 @@
-use std::io::Result;
+use crate::Result;
 use vmax::VMaxQuickLookPngFile;
 
 /// Reads `QuickLook/*.png` thumbnail bytes into a [`VMaxQuickLookPngFile`]. The

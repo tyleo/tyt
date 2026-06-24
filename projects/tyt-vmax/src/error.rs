@@ -31,3 +31,17 @@ impl From<IOError> for Error {
         Error::IO(e)
     }
 }
+
+#[cfg(feature = "impl")]
+impl From<vmax_codec::Error> for Error {
+    fn from(e: vmax_codec::Error) -> Self {
+        Error::IO(IOError::other(e))
+    }
+}
+
+#[cfg(feature = "impl")]
+impl From<voxj_codec::Error> for Error {
+    fn from(e: voxj_codec::Error) -> Self {
+        Error::IO(IOError::other(e))
+    }
+}

@@ -1,4 +1,4 @@
-use std::io::Result;
+use crate::Result;
 use vmax::VMaxHistoryVmaxhbFile;
 
 /// Writes a [`VMaxHistoryVmaxhbFile`] back to `*.vmaxhb` bytes, the inverse of

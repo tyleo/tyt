@@ -1,4 +1,4 @@
-use std::io::Result;
+use crate::Result;
 use vmax::VMaxQuickLookPngFile;
 
 /// Writes a [`VMaxQuickLookPngFile`] back to `QuickLook/*.png` bytes, the

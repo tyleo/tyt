@@ -1,5 +1,4 @@
-use crate::ByteReader;
-use std::io::Result;
+use crate::{ByteReader, Result};
 
 /// One `.vox` chunk's framing: its id and the two byte regions that follow the
 /// `id` / content-length / child-length header.

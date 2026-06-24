@@ -1,6 +1,6 @@
 use std::{
-    error::Error,
-    fmt::{self, Display, Formatter},
+    error::Error as StdError,
+    fmt::{Display, Formatter, Result as FmtResult},
 };
 
 /// An error from voxcore: a [`VoxState`](crate::VoxState) whose cross-references
@@ -8,7 +8,7 @@ use std::{
 /// node children repeat an id (see [`validate`](crate::VoxState::validate)). Ids
 /// are reported as their `u32` listing index.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum VoxError {
+pub enum Error {
     /// An object references a palette that does not exist.
     PaletteRef { object: u32, palette: u32 },
 
@@ -40,14 +40,14 @@ pub enum VoxError {
     DuplicateRoot { root: u32 },
 }
 
-impl Display for VoxError {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            VoxError::PaletteRef { object, palette } => write!(
+            Error::PaletteRef { object, palette } => write!(
                 f,
                 "object {object} references palette {palette}, which does not exist"
             ),
-            VoxError::SampleCell {
+            Error::SampleCell {
                 object,
                 voxel,
                 cell,
@@ -55,40 +55,40 @@ impl Display for VoxError {
                 f,
                 "object {object} voxel {voxel} samples cell {cell}, out of range of its palette"
             ),
-            VoxError::ChildNode { node, child } => write!(
+            Error::ChildNode { node, child } => write!(
                 f,
                 "hierarchy node {node} lists child node {child}, which does not exist"
             ),
-            VoxError::ChildObject { node, object } => write!(
+            Error::ChildObject { node, object } => write!(
                 f,
                 "hierarchy node {node} places object {object}, which does not exist"
             ),
-            VoxError::Root { root } => {
+            Error::Root { root } => {
                 write!(
                     f,
                     "root references hierarchy node {root}, which does not exist"
                 )
             }
-            VoxError::Cycle { node } => {
+            Error::Cycle { node } => {
                 write!(f, "hierarchy is not acyclic: a cycle reaches node {node}")
             }
-            VoxError::DuplicatePaletteRef { object, palette } => write!(
+            Error::DuplicatePaletteRef { object, palette } => write!(
                 f,
                 "object {object} references palette {palette} more than once"
             ),
-            VoxError::DuplicateChildNode { node, child } => write!(
+            Error::DuplicateChildNode { node, child } => write!(
                 f,
                 "hierarchy node {node} lists child node {child} more than once"
             ),
-            VoxError::DuplicateChildObject { node, object } => write!(
+            Error::DuplicateChildObject { node, object } => write!(
                 f,
                 "hierarchy node {node} places object {object} more than once"
             ),
-            VoxError::DuplicateRoot { root } => {
+            Error::DuplicateRoot { root } => {
                 write!(f, "root lists hierarchy node {root} more than once")
             }
         }
     }
 }
 
-impl Error for VoxError {}
+impl StdError for Error {}

@@ -1,5 +1,5 @@
-use crate::decode_morton_3d;
-use std::{collections::BTreeMap, io};
+use crate::{Error, Result, decode_morton_3d};
+use std::collections::BTreeMap;
 use vmax::{VMaxCodecVoxel, VMaxSerdeSnapshot};
 
 /// Voxel pitch of a chunk along each axis; chunks tile an 8x8x8 grid into a
@@ -10,7 +10,7 @@ const CHUNK_PITCH: i32 = 32;
 /// [`encode_vmax_snapshots`](crate::encode_vmax_snapshots). Replays snapshots
 /// so the last snapshot of each chunk wins, and returns voxels sorted by
 /// `(x, y, z)`.
-pub fn decode_vmax_snapshots(snapshots: &[VMaxSerdeSnapshot]) -> io::Result<Vec<VMaxCodecVoxel>> {
+pub fn decode_vmax_snapshots(snapshots: &[VMaxSerdeSnapshot]) -> Result<Vec<VMaxCodecVoxel>> {
     let mut latest: BTreeMap<u32, &VMaxSerdeSnapshot> = BTreeMap::new();
     for snapshot in snapshots {
         latest.insert(snapshot.s.id.c, snapshot);
@@ -30,13 +30,10 @@ pub fn decode_vmax_snapshots(snapshots: &[VMaxSerdeSnapshot]) -> io::Result<Vec<
         let morton_offset = match storage.st.min.get(3) {
             Some(&offset) if offset >= 0 => offset as u32,
             _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "snapshot chunk {chunk_id} has invalid st.min {:?}; expected a 4-component Morton stat with a non-negative offset",
-                        storage.st.min
-                    ),
-                ));
+                return Err(Error::Invalid(format!(
+                    "snapshot chunk {chunk_id} has invalid st.min {:?}; expected a 4-component Morton stat with a non-negative offset",
+                    storage.st.min
+                )));
             }
         };
 

@@ -1,5 +1,5 @@
+use crate::Result;
 use png::{BitDepth, ColorType, Encoder, Filter, SrgbRenderingIntent, chunk};
-use std::io::{Error as IOError, ErrorKind, Result};
 use vmax::VMaxPalettePngFile;
 
 /// Static Exif block Voxel Max embeds in every `palette*.png`: a big-endian
@@ -28,19 +28,11 @@ pub fn to_palette_png_file_bytes(file: &VMaxPalettePngFile) -> Result<Vec<u8>> {
     // chunk, followed by the Exif block restating the color space and dimensions.
     encoder.set_filter(Filter::Sub);
     encoder.set_source_srgb(SrgbRenderingIntent::Perceptual);
-    let mut writer = encoder
-        .write_header()
-        .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
+    let mut writer = encoder.write_header()?;
     let mut exif = EXIF;
     exif[48..52].copy_from_slice(&(file.0.len() as u32).to_be_bytes());
-    writer
-        .write_chunk(chunk::eXIf, &exif)
-        .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
-    writer
-        .write_image_data(&pixels)
-        .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
-    writer
-        .finish()
-        .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
+    writer.write_chunk(chunk::eXIf, &exif)?;
+    writer.write_image_data(&pixels)?;
+    writer.finish()?;
     Ok(out)
 }

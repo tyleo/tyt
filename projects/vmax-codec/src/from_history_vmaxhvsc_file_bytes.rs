@@ -1,4 +1,4 @@
-use std::io::Result;
+use crate::Result;
 use vmax::VMaxHistoryVmaxhvscFile;
 
 /// Reads `*.vmaxhvsc` history voxel-snapshot-sidecar bytes into a
