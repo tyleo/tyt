@@ -12,9 +12,6 @@ use ty_math::TyVector3U32;
 /// Every grid cell has a voxel id equal to its raster index `x*Y*Z + y*Z + z`,
 /// so [`voxel_id`](Self::voxel_id) and [`voxel_position`](Self::voxel_position)
 /// interconvert. [`is_live`](Self::is_live) says which cells are filled.
-///
-/// Fields are private because the columns must stay in lockstep with their id
-/// pools.
 #[derive(Debug, Default)]
 pub struct VoxObject {
     /// Display name.
@@ -312,7 +309,7 @@ impl VoxObject {
     pub(crate) fn gc(
         &mut self,
         palette_remap: &IdRemap<BVoxPalette, u32>,
-        cell_remaps: &HashMap<u32, IdRemap<BVoxPaletteCell, u32>>,
+        cell_remaps: &HashMap<U32Id<BVoxPalette>, IdRemap<BVoxPaletteCell, u32>>,
     ) {
         let ref_ids: Vec<_> = self.palette_ref_ids.iter().collect();
         let live: Vec<_> = self.liveness.iter_live().collect();
@@ -329,7 +326,7 @@ impl VoxObject {
             // Translate each live voxel's sample cell through that palette's
             // relabeling; non-live filler is exempt and left untouched.
             let cell_remap = cell_remaps
-                .get(&old_palette.to_u32())
+                .get(&old_palette)
                 .expect("the referenced palette was compacted");
             // Safety: retained reference ids have a sample column.
             let column = unsafe { self.samples.get_mut(ref_id) };

@@ -1,6 +1,6 @@
 use crate::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxError, VoxHierarchyNode,
-    VoxObject, VoxPalette, VoxResult, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxError, VoxGcRemap,
+    VoxHierarchyNode, VoxObject, VoxPalette, VoxResult, VoxValue,
 };
 use branded_id::{
     U32Id,
@@ -16,9 +16,6 @@ use std::collections::HashMap;
 /// [`add_hierarchy_node`](Self::add_hierarchy_node), and read them back by id or
 /// through the `iter_*` methods. Ids are bare indices into this state, meaningful
 /// only within it. [`validate`](Self::validate) checks the cross-references.
-///
-/// Fields are private because the columns must stay in lockstep with their id
-/// pools.
 #[derive(Debug, Default)]
 pub struct VoxState {
     /// Object id pool.
@@ -263,7 +260,10 @@ impl VoxState {
     /// (each detaches what it removes) and [`validate`](Self::validate) checks.
     /// The voxel grids are dense and never compacted, so voxel ids keep equaling
     /// their raster index.
-    pub fn gc(&mut self) {
+    ///
+    /// Returns the [`VoxGcRemap`] recording where each id moved, so any ids held
+    /// outside the state can be translated to their compacted values.
+    pub fn gc(&mut self) -> VoxGcRemap {
         // Compact each palette's own attribute and cell pools first, keeping the
         // cell relabelings so object samples can be translated below.
         let palette_ids: Vec<_> = self.palette_ids.iter().collect();
@@ -271,7 +271,7 @@ impl VoxState {
         for palette_id in palette_ids {
             // Safety: retained palette ids have a value.
             let cell_remap = unsafe { self.palettes.get_mut(palette_id) }.gc();
-            cell_remaps.insert(palette_id.to_u32(), cell_remap);
+            cell_remaps.insert(palette_id, cell_remap);
         }
 
         // Compact the palette pool.
@@ -321,6 +321,13 @@ impl VoxState {
             *root = node_remap
                 .new_id(*root)
                 .expect("a root is live in a valid state");
+        }
+
+        VoxGcRemap {
+            objects: object_remap,
+            palettes: palette_remap,
+            hierarchy_nodes: node_remap,
+            cells: cell_remaps,
         }
     }
 
@@ -661,7 +668,7 @@ mod tests {
         assert_eq!(state.object_count(), 1);
         assert_eq!(state.palette_count(), 1);
 
-        state.gc();
+        let remap = state.gc();
         assert_eq!(state.validate(), Ok(()));
 
         // The survivors renumber to 0 and their cross-references follow.
@@ -701,6 +708,15 @@ mod tests {
             state.root_hierarchy_nodes(),
             [U32Id::<BVoxHierarchyNode>::from_u32(1)]
         );
+
+        // The returned remap translates the same renumbering for held ids:
+        // removed entities map to None, survivors to their compacted ids.
+        assert_eq!(remap.objects.new_id(object_a), None);
+        assert_eq!(remap.objects.new_id(object_b), Some(object));
+        assert_eq!(remap.palettes.new_id(palette_a), None);
+        assert_eq!(remap.palettes.new_id(palette_b), Some(palette));
+        assert!(!remap.cells.contains_key(&palette_a));
+        assert_eq!(remap.cells[&palette_b].new_id(cell_id(0)), Some(cell_id(0)));
     }
 
     #[test]

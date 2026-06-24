@@ -10,8 +10,7 @@ use branded_id::{
 /// [`VoxObject`](crate::VoxObject)).
 ///
 /// Build it with [`add_attribute`](Self::add_attribute) then
-/// [`add_cell`](Self::add_cell). Fields are private because the columns must stay
-/// in lockstep with their id pools.
+/// [`add_cell`](Self::add_cell).
 #[derive(Debug, Default)]
 pub struct VoxPalette {
     /// Attribute id pool.
