@@ -7,5 +7,5 @@ repository = "https://github.com/tyleo/tyt"
 description = "Core types for working with voxels."
 
 [dependencies]
-branded-id = "0.1"
+branded-id = "0.1.3"
 ty-math = "0.1.0"
