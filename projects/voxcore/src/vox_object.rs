@@ -39,7 +39,7 @@ impl VoxObject {
     /// Largest dense grid an object may allocate, in cells. The grid stores every
     /// cell whether live or not, so this caps memory. Always `<= u32::MAX`, so a
     /// voxel id is always a valid raster index.
-    pub const MAX_GRID_CELLS: u64 = 1 << 24;
+    pub const MAX_GRID_CELLS: u64 = 1 << 27;
 
     /// Creates an empty grid of size `bounds`: every cell has a voxel id, none is
     /// live, and no palettes are referenced yet. Then use
@@ -386,14 +386,14 @@ mod tests {
         assert_eq!(object.voxel_position(U32Id::from_u32(24)), None);
     }
 
-    // The at-cap case allocates 256^3 voxel ids, which Miri interprets far too
+    // The at-cap case allocates 512^3 voxel ids, which Miri interprets far too
     // slowly; the cap arithmetic exercises no unsafe, so skip it under Miri.
     #[test]
     #[cfg_attr(miri, ignore)]
     fn new_rejects_grid_past_the_cell_cap() {
-        // 2048^3 = 2^33 cells, well past MAX_GRID_CELLS (2^24).
+        // 2048^3 = 2^33 cells, well past MAX_GRID_CELLS (2^27).
         assert!(VoxObject::new("huge".to_owned(), TyVector3U32::new(2048, 2048, 2048)).is_none());
-        assert!(VoxObject::new("max".to_owned(), TyVector3U32::new(256, 256, 256)).is_some());
+        assert!(VoxObject::new("max".to_owned(), TyVector3U32::new(512, 512, 512)).is_some());
     }
 
     #[test]
