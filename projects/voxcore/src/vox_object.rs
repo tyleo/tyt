@@ -1,9 +1,8 @@
 use crate::{BVoxPalette, BVoxPaletteCell, BVoxPaletteRef, BVoxVoxel, VoxLiveness};
 use branded_id::{
-    U32Id,
+    IdVec, U32Id,
     soa::{IdField, IdRemap, IdStruct},
 };
-use std::collections::HashMap;
 use ty_math::TyVector3U32;
 
 /// One object's voxel volume: a dense grid, the palettes it references, and the
@@ -309,7 +308,7 @@ impl VoxObject {
     pub(crate) fn gc(
         &mut self,
         palette_remap: &IdRemap<BVoxPalette, u32>,
-        cell_remaps: &HashMap<U32Id<BVoxPalette>, IdRemap<BVoxPaletteCell, u32>>,
+        cell_remaps: &IdVec<BVoxPalette, IdRemap<BVoxPaletteCell, u32>>,
     ) {
         let ref_ids: Vec<_> = self.palette_ref_ids.iter().collect();
         let live: Vec<_> = self.liveness.iter_live().collect();
@@ -325,9 +324,7 @@ impl VoxObject {
 
             // Translate each live voxel's sample cell through that palette's
             // relabeling; non-live filler is exempt and left untouched.
-            let cell_remap = cell_remaps
-                .get(&old_palette)
-                .expect("the referenced palette was compacted");
+            let cell_remap = &cell_remaps[old_palette.to_usize_id()];
             // Safety: retained reference ids have a sample column.
             let column = unsafe { self.samples.get_mut(ref_id) };
             for &voxel_id in &live {

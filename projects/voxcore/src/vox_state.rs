@@ -3,8 +3,8 @@ use crate::{
     VoxHierarchyNode, VoxObject, VoxPalette, VoxResult, VoxValue,
 };
 use branded_id::{
-    U32Id,
-    soa::{IdField, IdStruct},
+    IdVec, U32Id,
+    soa::{IdField, IdRemap, IdStruct},
 };
 use std::collections::HashMap;
 
@@ -264,14 +264,16 @@ impl VoxState {
     /// Returns the [`VoxGcRemap`] recording where each id moved, so any ids held
     /// outside the state can be translated to their compacted values.
     pub fn gc(&mut self) -> VoxGcRemap {
-        // Compact each palette's own attribute and cell pools first, keeping the
-        // cell relabelings so object samples can be translated below.
-        let palette_ids: Vec<_> = self.palette_ids.iter().collect();
-        let mut cell_remaps = HashMap::with_capacity(palette_ids.len());
-        for palette_id in palette_ids {
+        // Compact each palette's own pools first, so the cell relabelings are
+        // ready when object samples are translated below. They are indexed by old
+        // palette id, so the column covers the palette pool's whole id space.
+        let palette_id_space = self.palette_ids.peek_next_fresh().to_u32() as usize;
+        let mut cell_remaps: IdVec<BVoxPalette, IdRemap<BVoxPaletteCell, u32>> =
+            IdVec::from_vec((0..palette_id_space).map(|_| IdRemap::default()).collect());
+        for palette_id in self.palette_ids.iter().collect::<Vec<_>>() {
             // Safety: retained palette ids have a value.
             let cell_remap = unsafe { self.palettes.get_mut(palette_id) }.gc();
-            cell_remaps.insert(palette_id, cell_remap);
+            cell_remaps[palette_id.to_usize_id()] = cell_remap;
         }
 
         // Compact the palette pool.
@@ -715,8 +717,11 @@ mod tests {
         assert_eq!(remap.objects.new_id(object_b), Some(object));
         assert_eq!(remap.palettes.new_id(palette_a), None);
         assert_eq!(remap.palettes.new_id(palette_b), Some(palette));
-        assert!(!remap.cells.contains_key(&palette_a));
-        assert_eq!(remap.cells[&palette_b].new_id(cell_id(0)), Some(cell_id(0)));
+        assert!(remap.cells[palette_a.to_usize_id()].is_empty());
+        assert_eq!(
+            remap.cells[palette_b.to_usize_id()].new_id(cell_id(0)),
+            Some(cell_id(0))
+        );
     }
 
     #[test]
