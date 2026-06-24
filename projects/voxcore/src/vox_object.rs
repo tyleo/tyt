@@ -165,7 +165,9 @@ impl VoxObject {
     /// Adds a palette reference after any existing ones and returns its id,
     /// back-filling every voxel with `default_sample`. Live voxels keep
     /// `default_sample` until [`retain_voxel`](Self::retain_voxel) overwrites it,
-    /// so widening the reference set never requires re-adding voxels.
+    /// so widening the reference set never requires re-adding voxels. Referencing
+    /// the same palette twice is rejected by
+    /// [`VoxState::validate`](crate::VoxState::validate), not here.
     pub fn add_palette_ref(
         &mut self,
         palette: U32Id<BVoxPalette>,
@@ -255,8 +257,9 @@ impl VoxObject {
         Some(())
     }
 
-    /// Removes every reference naming `palette` (an object may reference the same
-    /// palette more than once). Used by
+    /// Removes every reference naming `palette`. A validated object names a palette
+    /// at most once, but this removes every match regardless, so it is safe to call
+    /// on a state that has not been validated. Used by
     /// [`VoxState::remove_palette`](crate::VoxState::remove_palette) to detach an
     /// object from a palette being removed.
     pub(crate) fn remove_palette_refs_to(&mut self, palette: U32Id<BVoxPalette>) {

@@ -4,9 +4,9 @@ use std::{
 };
 
 /// An error from voxcore: a [`VoxState`](crate::VoxState) whose cross-references
-/// do not resolve or whose hierarchy has a cycle (see
-/// [`validate`](crate::VoxState::validate)). Ids are reported as their `u32`
-/// listing index.
+/// do not resolve, whose hierarchy has a cycle, or whose roots, palette refs, or
+/// node children repeat an id (see [`validate`](crate::VoxState::validate)). Ids
+/// are reported as their `u32` listing index.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VoxError {
     /// An object references a palette that does not exist.
@@ -26,6 +26,18 @@ pub enum VoxError {
 
     /// The hierarchy contains a cycle reaching this node.
     Cycle { node: u32 },
+
+    /// An object references the same palette through more than one reference.
+    DuplicatePaletteRef { object: u32, palette: u32 },
+
+    /// A node lists the same child node more than once.
+    DuplicateChildNode { node: u32, child: u32 },
+
+    /// A node places the same object more than once.
+    DuplicateChildObject { node: u32, object: u32 },
+
+    /// A root lists the same node more than once.
+    DuplicateRoot { root: u32 },
 }
 
 impl Display for VoxError {
@@ -59,6 +71,21 @@ impl Display for VoxError {
             }
             VoxError::Cycle { node } => {
                 write!(f, "hierarchy is not acyclic: a cycle reaches node {node}")
+            }
+            VoxError::DuplicatePaletteRef { object, palette } => write!(
+                f,
+                "object {object} references palette {palette} more than once"
+            ),
+            VoxError::DuplicateChildNode { node, child } => write!(
+                f,
+                "hierarchy node {node} lists child node {child} more than once"
+            ),
+            VoxError::DuplicateChildObject { node, object } => write!(
+                f,
+                "hierarchy node {node} places object {object} more than once"
+            ),
+            VoxError::DuplicateRoot { root } => {
+                write!(f, "root lists hierarchy node {root} more than once")
             }
         }
     }
