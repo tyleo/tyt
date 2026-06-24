@@ -1890,7 +1890,11 @@ dependencies = [
 name = "voxsmith"
 version = "0.1.0"
 dependencies = [
+ "branded-id",
+ "ty-math",
  "voxcore",
+ "voxj",
+ "voxj-codec",
 ]
 
 [[package]]
