@@ -46,7 +46,11 @@ impl VoxLiveness {
     /// Panics if `id` is outside the covered range (`>= len`).
     pub fn is_live(&self, id: U32Id<BVoxVoxel>) -> bool {
         let i = id.to_u32() as usize;
-        assert!(i < self.len, "voxel id {i} is outside the {}-cell grid", self.len);
+        assert!(
+            i < self.len,
+            "voxel id {i} is outside the {}-cell grid",
+            self.len
+        );
         (self.words[i / 64] >> (i % 64)) & 1 == 1
     }
 
@@ -59,7 +63,11 @@ impl VoxLiveness {
     /// on (the trailing bits of the final word are never part of the live set).
     pub fn set_live(&mut self, id: U32Id<BVoxVoxel>, live: bool) {
         let i = id.to_u32() as usize;
-        assert!(i < self.len, "voxel id {i} is outside the {}-cell grid", self.len);
+        assert!(
+            i < self.len,
+            "voxel id {i} is outside the {}-cell grid",
+            self.len
+        );
         let mask = 1u64 << (i % 64);
         if live {
             self.words[i / 64] |= mask;
@@ -70,7 +78,10 @@ impl VoxLiveness {
 
     /// The number of live cells.
     pub fn count_live(&self) -> usize {
-        self.words.iter().map(|word| word.count_ones() as usize).sum()
+        self.words
+            .iter()
+            .map(|word| word.count_ones() as usize)
+            .sum()
     }
 
     /// Iterates the ids of the live cells in ascending (raster index) order.

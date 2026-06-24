@@ -6,6 +6,7 @@ use voxj::VoxjCodecObject;
 /// back to palette indices (each id equals its index).
 pub(crate) fn voxj_codec_object_from_vox_object(object: &VoxObject) -> VoxjCodecObject {
     let bounds = [object.bounds.x, object.bounds.y, object.bounds.z];
+    let [_, size_y, size_z] = bounds;
 
     let palette_refs: Vec<usize> = object
         .palette_ref_ids
@@ -17,8 +18,9 @@ pub(crate) fn voxj_codec_object_from_vox_object(object: &VoxObject) -> VoxjCodec
     let mut positions = Vec::with_capacity(live_count);
     let mut samples = Vec::with_capacity(live_count);
     for voxel_id in object.iter_live() {
-        let position = object.voxel_position(voxel_id);
-        positions.push([position.x, position.y, position.z]);
+        let raster = voxel_id.to_u32();
+        let plane = size_y * size_z;
+        positions.push([raster / plane, (raster % plane) / size_z, raster % size_z]);
 
         let row = object
             .palette_ref_ids

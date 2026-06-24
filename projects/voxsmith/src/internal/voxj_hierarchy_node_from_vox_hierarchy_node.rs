@@ -9,7 +9,11 @@ pub(crate) fn voxj_hierarchy_node_from_vox_hierarchy_node(
 ) -> VoxjHierarchyNode {
     VoxjHierarchyNode {
         name: node.name.clone(),
-        child_nodes: node.child_nodes.iter().map(|id| id.to_u32() as usize).collect(),
+        child_nodes: node
+            .child_nodes
+            .iter()
+            .map(|id| id.to_u32() as usize)
+            .collect(),
         child_objects: node
             .child_objects
             .iter()
