@@ -1,8 +1,9 @@
 use crate::{BVoxPalette, BVoxPaletteCell, BVoxPaletteRef, BVoxVoxel, VoxLiveness};
 use branded_id::{
     U32Id,
-    soa::{IdField, IdStruct},
+    soa::{IdField, IdRemap, IdStruct},
 };
+use std::collections::HashMap;
 use ty_math::TyVector3U32;
 
 /// One object's voxel volume: a dense grid, the palettes it references, and the
@@ -240,6 +241,118 @@ impl VoxObject {
             samples,
         }
     }
+
+    /// Removes palette reference `id`, dropping its per-voxel sample column so
+    /// every voxel keeps one fewer sample. `None`, changing nothing, if `id` is
+    /// not one of this object's references. Leaves a hole until
+    /// [`VoxState::gc`](crate::VoxState::gc) renumbers.
+    pub fn remove_palette_ref(&mut self, id: U32Id<BVoxPaletteRef>) -> Option<()> {
+        if !self.palette_ref_ids.is_retained(id) {
+            return None;
+        }
+        // Safety: a retained reference id has a value in both columns. Sample
+        // cells are Copy, so dropping the inner column frees its storage with
+        // nothing to release per voxel.
+        unsafe { self.palette_refs.release(id) };
+        unsafe { self.samples.release(id) };
+        self.palette_ref_ids.release(id);
+        Some(())
+    }
+
+    /// Removes every reference naming `palette` (an object may reference the same
+    /// palette more than once). Used by
+    /// [`VoxState::remove_palette`](crate::VoxState::remove_palette) to detach an
+    /// object from a palette being removed.
+    pub(crate) fn remove_palette_refs_to(&mut self, palette: U32Id<BVoxPalette>) {
+        let doomed: Vec<_> = self
+            .iter_palette_refs()
+            .filter(|&(_, p)| p == palette)
+            .map(|(id, _)| id)
+            .collect();
+        for id in doomed {
+            self.remove_palette_ref(id);
+        }
+    }
+
+    /// Repoints every live voxel that samples `old` through a reference naming
+    /// `palette` to `new`. Used by
+    /// [`VoxState::remove_cell`](crate::VoxState::remove_cell) before the old cell
+    /// is dropped.
+    pub(crate) fn repaint_cell(
+        &mut self,
+        palette: U32Id<BVoxPalette>,
+        old: U32Id<BVoxPaletteCell>,
+        new: U32Id<BVoxPaletteCell>,
+    ) {
+        let ref_ids: Vec<_> = self.palette_ref_ids.iter().collect();
+        let live: Vec<_> = self.liveness.iter_live().collect();
+        for ref_id in ref_ids {
+            // Safety: retained reference ids have a `palette_refs` value.
+            if *unsafe { self.palette_refs.get(ref_id) } != palette {
+                continue;
+            }
+            // Safety: retained reference ids have a sample column.
+            let column = unsafe { self.samples.get_mut(ref_id) };
+            for &voxel_id in &live {
+                // Safety: the dense grid gives every reference a slot for every
+                // voxel id.
+                if *unsafe { column.get(voxel_id) } == old {
+                    *unsafe { column.get_mut(voxel_id) } = new;
+                }
+            }
+        }
+    }
+
+    /// Rewrites this object's cross-references to match pools a
+    /// [`VoxState`](crate::VoxState) is compacting, then compacts its own
+    /// reference pool. Each palette reference is translated through
+    /// `palette_remap`, and each live voxel's sample cell through the
+    /// `cell_remaps` entry for the referenced palette's pre-gc id. Requires a
+    /// referentially valid object, so every translation resolves.
+    pub(crate) fn gc(
+        &mut self,
+        palette_remap: &IdRemap<BVoxPalette, u32>,
+        cell_remaps: &HashMap<u32, IdRemap<BVoxPaletteCell, u32>>,
+    ) {
+        let ref_ids: Vec<_> = self.palette_ref_ids.iter().collect();
+        let live: Vec<_> = self.liveness.iter_live().collect();
+        for ref_id in ref_ids {
+            // Translate the referenced palette id to its relabeled value.
+            // Safety: retained reference ids have a `palette_refs` value.
+            let old_palette = *unsafe { self.palette_refs.get(ref_id) };
+            let new_palette = palette_remap
+                .new_id(old_palette)
+                .expect("a reference names a live palette in a valid state");
+            // Safety: same retained reference id.
+            *unsafe { self.palette_refs.get_mut(ref_id) } = new_palette;
+
+            // Translate each live voxel's sample cell through that palette's
+            // relabeling; non-live filler is exempt and left untouched.
+            let cell_remap = cell_remaps
+                .get(&old_palette.to_u32())
+                .expect("the referenced palette was compacted");
+            // Safety: retained reference ids have a sample column.
+            let column = unsafe { self.samples.get_mut(ref_id) };
+            for &voxel_id in &live {
+                // Safety: the dense grid gives every reference a slot for every
+                // voxel id.
+                let cell = *unsafe { column.get(voxel_id) };
+                let new_cell = cell_remap
+                    .new_id(cell)
+                    .expect("a live voxel samples a live cell in a valid state");
+                // Safety: same dense slot.
+                *unsafe { column.get_mut(voxel_id) } = new_cell;
+            }
+        }
+
+        // Compact the reference pool; the values above were already translated,
+        // so this only relabels reference keys.
+        let ref_remap = self.palette_ref_ids.gc();
+        // Safety: both columns were in sync with the pre-gc reference pool, and
+        // nothing has retained or released since.
+        unsafe { self.samples.gc(&ref_remap) };
+        unsafe { self.palette_refs.gc(&ref_remap) };
+    }
 }
 
 impl Drop for VoxObject {
@@ -364,5 +477,27 @@ mod tests {
         object.release_voxel(id).unwrap();
         assert_eq!(object.live_count(), 0);
         assert_eq!(copy.live_count(), 1);
+    }
+
+    #[test]
+    fn remove_palette_ref_drops_its_samples_leaving_others() {
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        let first = object.add_palette_ref(U32Id::<BVoxPalette>::from_u32(0), cell(0));
+        let second = object.add_palette_ref(U32Id::<BVoxPalette>::from_u32(1), cell(0));
+        let id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(id, &[cell(5), cell(6)]).unwrap();
+
+        assert_eq!(object.remove_palette_ref(first), Some(()));
+        assert_eq!(object.palette_ref_count(), 1);
+        assert_eq!(object.remove_palette_ref(first), None); // already gone
+
+        // The surviving reference still resolves to palette 1, cell 6, and a
+        // voxel now expects exactly one sample.
+        assert_eq!(object.voxel_cell(id, second), Some(cell(6)));
+        assert_eq!(
+            object.iter_palette_refs().collect::<Vec<_>>(),
+            [(second, U32Id::<BVoxPalette>::from_u32(1))]
+        );
+        assert_eq!(object.retain_voxel(id, &[cell(6)]), Some(()));
     }
 }

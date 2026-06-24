@@ -1,7 +1,7 @@
 use crate::{BVoxAttribute, BVoxPaletteCell, VoxValue};
 use branded_id::{
     U32Id,
-    soa::{IdField, IdStruct},
+    soa::{IdField, IdRemap, IdStruct},
 };
 
 /// A palette: a set of attributes and a set of cells, where every cell carries
@@ -86,6 +86,11 @@ impl VoxPalette {
         self.palette_cell_ids.len()
     }
 
+    /// Whether `id` is one of this palette's cells.
+    pub fn contains_cell(&self, id: U32Id<BVoxPaletteCell>) -> bool {
+        self.palette_cell_ids.is_retained(id)
+    }
+
     /// Value of `cell` for `attribute`, or `None` if either id is not this
     /// palette's.
     pub fn cell_value(
@@ -135,6 +140,71 @@ impl VoxPalette {
             palette_cells,
         }
     }
+
+    /// Removes attribute `id`, dropping its value from every cell so the palette
+    /// stays rectangular (each cell keeps one value per remaining attribute).
+    /// `None`, changing nothing, if `id` is not one of this palette's attributes.
+    /// Leaves a hole until [`VoxState::gc`](crate::VoxState::gc) renumbers.
+    pub fn remove_attribute(&mut self, id: U32Id<BVoxAttribute>) -> Option<()> {
+        if !self.attribute_ids.is_retained(id) {
+            return None;
+        }
+        let cell_ids: Vec<_> = self.palette_cell_ids.iter().collect();
+        for cell_id in cell_ids {
+            // Safety: a retained cell holds a value for every attribute, `id`
+            // included.
+            let cell = unsafe { self.palette_cells.get_mut(cell_id) };
+            unsafe { cell.release(id) };
+        }
+        // Safety: a retained attribute has a name.
+        unsafe { self.attributes.release(id) };
+        self.attribute_ids.release(id);
+        Some(())
+    }
+
+    /// Drops cell `id` and its per-attribute values. The caller must first ensure
+    /// no live voxel still samples it, which is why this is internal and reached
+    /// only through [`VoxState::remove_cell`](crate::VoxState::remove_cell).
+    /// Leaves a hole until [`gc`](Self::gc) renumbers.
+    pub(crate) fn remove_cell(&mut self, id: U32Id<BVoxPaletteCell>) -> Option<()> {
+        if !self.palette_cell_ids.is_retained(id) {
+            return None;
+        }
+        // Safety: a retained cell holds a value for every attribute; release each
+        // before the inner column so `VoxValue`'s heap data is freed.
+        let cell = unsafe { self.palette_cells.get_mut(id) };
+        unsafe { cell.release_all(&self.attribute_ids) };
+        // Safety: a retained cell has an inner column.
+        unsafe { self.palette_cells.release(id) };
+        self.palette_cell_ids.release(id);
+        Some(())
+    }
+
+    /// Compacts the attribute and cell pools back to a contiguous `0..len`,
+    /// moving every value to its relabeled id, and returns the cell relabeling so
+    /// a [`VoxState`](crate::VoxState) can translate the samples that point at
+    /// these cells. Attributes are referenced only within this palette, so their
+    /// relabeling stays internal.
+    pub(crate) fn gc(&mut self) -> IdRemap<BVoxPaletteCell, u32> {
+        let attribute_remap = self.attribute_ids.gc();
+        // Safety: the name column was in sync with the pre-gc attribute pool, and
+        // nothing has retained or released since.
+        unsafe { self.attributes.gc(&attribute_remap) };
+
+        let cell_ids: Vec<_> = self.palette_cell_ids.iter().collect();
+        for cell_id in cell_ids {
+            // Safety: a retained cell holds a value for every pre-gc attribute id,
+            // and the remap came from this palette's attribute pool.
+            let cell = unsafe { self.palette_cells.get_mut(cell_id) };
+            unsafe { cell.gc(&attribute_remap) };
+        }
+
+        let cell_remap = self.palette_cell_ids.gc();
+        // Safety: the cell column was in sync with the pre-gc cell pool, and
+        // nothing has retained or released since.
+        unsafe { self.palette_cells.gc(&cell_remap) };
+        cell_remap
+    }
 }
 
 impl Drop for VoxPalette {
@@ -157,7 +227,8 @@ impl Drop for VoxPalette {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VoxPalette, VoxValue};
+    use crate::{BVoxAttribute, BVoxPaletteCell, VoxPalette, VoxValue};
+    use branded_id::U32Id;
 
     #[test]
     fn builds_and_reads_a_rectangular_palette() {
@@ -226,5 +297,60 @@ mod tests {
             .unwrap();
         assert_eq!(palette.cell_count(), 2);
         assert_eq!(copy.cell_count(), 1);
+    }
+
+    #[test]
+    fn remove_attribute_keeps_cells_rectangular_then_gc_renumbers() {
+        let mut palette = VoxPalette::default();
+        let a = palette.add_attribute("a".to_owned());
+        let b = palette.add_attribute("b".to_owned());
+        let cell = palette
+            .add_cell(vec![VoxValue::Number(1.0), VoxValue::Number(2.0)])
+            .unwrap();
+
+        assert_eq!(palette.remove_attribute(a), Some(()));
+        assert_eq!(palette.attribute_count(), 1);
+        assert_eq!(palette.attribute(a), None); // a hole until gc
+        assert_eq!(palette.cell_value(cell, a), None);
+        assert_eq!(palette.cell_value(cell, b), Some(&VoxValue::Number(2.0)));
+        assert_eq!(palette.remove_attribute(a), None); // already gone
+
+        palette.gc();
+        // The surviving attribute and cell renumber to 0.
+        let attribute = U32Id::<BVoxAttribute>::from_u32(0);
+        let cell = U32Id::<BVoxPaletteCell>::from_u32(0);
+        assert_eq!(palette.attribute(attribute), Some("b"));
+        assert_eq!(
+            palette.cell_value(cell, attribute),
+            Some(&VoxValue::Number(2.0))
+        );
+    }
+
+    #[test]
+    fn remove_cell_then_gc_compacts_remaining_cells() {
+        let mut palette = VoxPalette::default();
+        palette.add_attribute("v".to_owned());
+        let keep = palette.add_cell(vec![VoxValue::Number(0.0)]).unwrap();
+        let drop = palette.add_cell(vec![VoxValue::Number(1.0)]).unwrap();
+        let last = palette.add_cell(vec![VoxValue::Number(2.0)]).unwrap();
+
+        assert_eq!(palette.remove_cell(drop), Some(()));
+        assert_eq!(palette.cell_count(), 2);
+        assert!(!palette.contains_cell(drop));
+        assert!(palette.contains_cell(keep) && palette.contains_cell(last));
+        assert_eq!(palette.remove_cell(drop), None); // already gone
+
+        palette.gc();
+        // The two survivors are contiguous; their values are intact.
+        let attribute = U32Id::<BVoxAttribute>::from_u32(0);
+        let values: Vec<f64> = palette
+            .iter_cells()
+            .map(|cell| match palette.cell_value(cell, attribute) {
+                Some(&VoxValue::Number(n)) => n,
+                other => panic!("unexpected value {other:?}"),
+            })
+            .collect();
+        assert_eq!(palette.cell_count(), 2);
+        assert_eq!(values, [0.0, 2.0]);
     }
 }

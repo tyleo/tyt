@@ -56,7 +56,9 @@ mod tests {
         vox_state_from_voxj_bytes, vox_state_from_voxj_codec_main, vox_state_to_voxj_bytes,
         vox_state_to_voxjz_bytes, voxj_codec_main_from_vox_state,
     };
+    use branded_id::U32Id;
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
+    use voxcore::{BVoxObject, BVoxPalette};
     use voxj::{
         VoxjCodecMain, VoxjCodecObject, VoxjHierarchyNode, VoxjMap, VoxjPalette, VoxjTransform,
         VoxjValue,
@@ -143,6 +145,27 @@ mod tests {
         }
     }
 
+    /// [`sample_main`] after removing the "tight" object (id 1) and the palette
+    /// only it referenced (id 1), then compacting: the two survivors renumber to
+    /// objects 0 and 1, the lone palette stays 0, and the "leaf" node loses its
+    /// reference to the removed object.
+    fn sample_main_without_tight() -> VoxjCodecMain {
+        let base = sample_main();
+        VoxjCodecMain {
+            objects: vec![base.objects[0].clone(), base.objects[2].clone()],
+            palettes: vec![base.palettes[0].clone()],
+            hierarchy_nodes: vec![
+                base.hierarchy_nodes[0].clone(),
+                VoxjHierarchyNode {
+                    child_objects: Vec::new(),
+                    ..base.hierarchy_nodes[1].clone()
+                },
+            ],
+            root_hierarchy_nodes: vec![0],
+            ext: base.ext.clone(),
+        }
+    }
+
     /// The `(position, samples)` pairs of an object, order-independent, since the
     /// dense grid re-emits voxels in raster order rather than listing order.
     fn voxel_set(object: &VoxjCodecObject) -> BTreeSet<([u32; 3], Vec<u32>)> {
@@ -191,6 +214,40 @@ mod tests {
         let bytes = vox_state_to_voxjz_bytes(&state).unwrap();
         let reloaded = vox_state_from_voxj_bytes(&bytes).unwrap();
         assert_main_eq(&voxj_codec_main_from_vox_state(&reloaded), &main);
+    }
+
+    #[test]
+    fn gc_on_a_loaded_state_preserves_the_round_trip() {
+        let main = sample_main();
+        let mut state = vox_state_from_voxj_codec_main(&main).unwrap();
+        // A freshly loaded state is already contiguous, so gc leaves the saved
+        // document unchanged.
+        state.gc();
+        assert_main_eq(&voxj_codec_main_from_vox_state(&state), &main);
+    }
+
+    #[test]
+    fn remove_then_gc_round_trips_through_bytes() {
+        let mut state = vox_state_from_voxj_codec_main(&sample_main()).unwrap();
+
+        // Remove the "tight" object and the palette only it referenced, then
+        // compact so the save numbers entities by listing index again.
+        assert_eq!(
+            state.remove_object(U32Id::<BVoxObject>::from_u32(1)),
+            Some(())
+        );
+        assert_eq!(
+            state.remove_palette(U32Id::<BVoxPalette>::from_u32(1)),
+            Some(())
+        );
+        state.gc();
+
+        let bytes = vox_state_to_voxj_bytes(&state).unwrap();
+        let reloaded = vox_state_from_voxj_bytes(&bytes).unwrap();
+        assert_main_eq(
+            &voxj_codec_main_from_vox_state(&reloaded),
+            &sample_main_without_tight(),
+        );
     }
 
     #[test]
