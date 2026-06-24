@@ -334,13 +334,39 @@ impl VoxState {
         }
     }
 
-    /// Checks the cross-references: every object palette ref, live-voxel sample
-    /// cell, node child, and root must resolve. No object may reference the same
-    /// palette twice, no node may list the same direct child node or child object
-    /// twice, and no root may repeat. The `child_nodes` graph must be acyclic. A
-    /// node may still be shared by several parents (the hierarchy is a DAG); only
-    /// dangling refs, duplicate ids within one list, and cycles fail.
+    /// Checks the cross-references and per-entity rules:
+    ///
+    /// 1. every object palette ref resolves, and no object references the same
+    ///    palette twice;
+    /// 2. every live-voxel sample cell is within its palette's cells;
+    /// 3. every node child node and child object resolves, and no node lists the
+    ///    same one twice;
+    /// 4. every root resolves, and no root repeats;
+    /// 5. no palette declares the same attribute key twice;
+    /// 6. every node transform has a non-zero scale on each axis and a unit-length
+    ///    rotation quaternion within `1e-6`;
+    /// 7. the `child_nodes` graph is acyclic.
+    ///
+    /// A node may have several parents, since the hierarchy is a DAG; that sharing
+    /// is not a cycle.
     pub fn validate(&self) -> Result<()> {
+        // How far a rotation quaternion's length-squared may stray from 1 and
+        // still count as a unit quaternion.
+        const ROTATION_TOLERANCE: f64 = 1e-6;
+
+        // Palette attribute keys are unique within a palette.
+        for (palette_id, palette) in self.iter_palettes() {
+            let mut seen_attributes = HashSet::with_capacity(palette.attribute_count());
+            for (attribute_id, name) in palette.iter_attributes() {
+                if !seen_attributes.insert(name) {
+                    return Err(Error::DuplicateAttribute {
+                        palette: palette_id.to_u32(),
+                        attribute: attribute_id.to_u32(),
+                    });
+                }
+            }
+        }
+
         // Object palette refs and live-voxel sample cells.
         // Checks are by id retention, not index range, so they hold whether or
         // not removals have left the pools with holes.
@@ -407,6 +433,24 @@ impl VoxState {
                         object: object.to_u32(),
                     });
                 }
+            }
+
+            // The node transform must be non-degenerate.
+            let scale = node.transform.scale;
+            if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
+                return Err(Error::ZeroScale {
+                    node: node_id.to_u32(),
+                });
+            }
+            let rotation = node.transform.rotation;
+            let length_squared = rotation.x * rotation.x
+                + rotation.y * rotation.y
+                + rotation.z * rotation.z
+                + rotation.w * rotation.w;
+            if (length_squared - 1.0).abs() > ROTATION_TOLERANCE {
+                return Err(Error::NonUnitRotation {
+                    node: node_id.to_u32(),
+                });
             }
         }
 
@@ -546,7 +590,7 @@ mod tests {
         Error, VoxHierarchyNode, VoxObject, VoxPalette, VoxState, VoxValue,
     };
     use branded_id::U32Id;
-    use ty_math::TyVector3U32;
+    use ty_math::{TyQuaternion, TyVector3, TyVector3U32};
 
     fn node_id(index: u32) -> U32Id<BVoxHierarchyNode> {
         U32Id::from_u32(index)
@@ -714,6 +758,47 @@ mod tests {
         state.add_hierarchy_node(node_with_children(vec![node_id(1)]));
         state.add_hierarchy_node(node_with_children(vec![node_id(0)]));
         assert!(matches!(state.validate(), Err(Error::Cycle { .. })));
+    }
+
+    #[test]
+    fn validate_rejects_a_duplicate_attribute_key() {
+        let mut state = VoxState::default();
+        let mut palette = VoxPalette::default();
+        palette.add_attribute("rgba".to_owned());
+        palette.add_attribute("rgba".to_owned());
+        state.add_palette(palette);
+        assert_eq!(
+            state.validate(),
+            Err(Error::DuplicateAttribute {
+                palette: 0,
+                attribute: 1,
+            })
+        );
+    }
+
+    #[test]
+    fn validate_rejects_a_zero_scale() {
+        let mut state = VoxState::default();
+        let mut node = VoxHierarchyNode::default();
+        node.transform.scale = TyVector3::new(1.0, 0.0, 1.0);
+        let id = state.add_hierarchy_node(node);
+        assert_eq!(
+            state.validate(),
+            Err(Error::ZeroScale { node: id.to_u32() })
+        );
+    }
+
+    #[test]
+    fn validate_rejects_a_non_unit_rotation() {
+        let mut state = VoxState::default();
+        let mut node = VoxHierarchyNode::default();
+        // Length squared 4, well outside the unit tolerance.
+        node.transform.rotation = TyQuaternion::new(0.0, 0.0, 0.0, 2.0);
+        let id = state.add_hierarchy_node(node);
+        assert_eq!(
+            state.validate(),
+            Err(Error::NonUnitRotation { node: id.to_u32() })
+        );
     }
 
     #[test]

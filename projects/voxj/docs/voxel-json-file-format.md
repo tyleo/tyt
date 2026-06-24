@@ -297,10 +297,10 @@ The scene's roots are exactly the nodes listed in `rootHierarchyNodes`. A node t
 
 1. `version` is recognized.
 2. All indices are in range:
-   1. object `paletteRefs` -> `main.palettes`
+   1. object `paletteRefs` -> `main.palettes`, and one object references each palette at most once
    2. each sample cell index -> the cell count of the palette it indexes
-   3. each `childNodes` entry -> `main.hierarchyNodes`; each `childObjects` entry -> `main.objects`
-   4. `rootHierarchyNodes` -> `main.hierarchyNodes`
+   3. each `childNodes` entry -> `main.hierarchyNodes` and each `childObjects` entry -> `main.objects`, and one hierarchy node lists each child node and each child object at most once
+   4. `rootHierarchyNodes` -> `main.hierarchyNodes`, and each node appears as a root at most once
 3. Position `data` is well-formed:
    1. `raw-json` is `[x, y, z]` triples
    2. `bitmap-base64` base64-decodes to exactly `ceil(X * Y * Z / 8)` bytes, its pad bits are zero, and the decoded number of voxels equals the number of set bits

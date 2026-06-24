@@ -4,9 +4,11 @@ use std::{
 };
 
 /// An error from voxcore: a [`VoxState`](crate::VoxState) whose cross-references
-/// do not resolve, whose hierarchy has a cycle, or whose roots, palette refs, or
-/// node children repeat an id (see [`validate`](crate::VoxState::validate)). Ids
-/// are reported as their `u32` listing index.
+/// do not resolve, whose hierarchy has a cycle, whose roots, palette refs, node
+/// children, or palette attribute keys repeat an id, or whose node transform has
+/// a zero scale component or a non-unit rotation. See
+/// [`validate`](crate::VoxState::validate). Ids are reported as their `u32`
+/// listing index.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     /// An object references a palette that does not exist.
@@ -38,6 +40,15 @@ pub enum Error {
 
     /// A root lists the same node more than once.
     DuplicateRoot { root: u32 },
+
+    /// A palette declares the same attribute key more than once.
+    DuplicateAttribute { palette: u32, attribute: u32 },
+
+    /// A node's transform has a zero scale component.
+    ZeroScale { node: u32 },
+
+    /// A node's transform rotation is not a unit quaternion.
+    NonUnitRotation { node: u32 },
 }
 
 impl Display for Error {
@@ -87,6 +98,18 @@ impl Display for Error {
             Error::DuplicateRoot { root } => {
                 write!(f, "root lists hierarchy node {root} more than once")
             }
+            Error::DuplicateAttribute { palette, attribute } => write!(
+                f,
+                "palette {palette} declares attribute {attribute} with a duplicate key"
+            ),
+            Error::ZeroScale { node } => write!(
+                f,
+                "hierarchy node {node} has a zero transform scale component"
+            ),
+            Error::NonUnitRotation { node } => write!(
+                f,
+                "hierarchy node {node} transform rotation is not a unit quaternion"
+            ),
         }
     }
 }
