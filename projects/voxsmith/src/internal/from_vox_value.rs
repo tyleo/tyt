@@ -12,7 +12,7 @@ use voxcore::{VoxMap, VoxValue};
 
 /// Deserializes a value out of a [`VoxValue`] tree, the inverse of
 /// [`to_vox_value`](crate::to_vox_value).
-pub(crate) fn from_vox_value<'de, T: Deserialize<'de>>(value: &'de VoxValue) -> Result<T, Error> {
+pub fn from_vox_value<'de, T: Deserialize<'de>>(value: &'de VoxValue) -> Result<T, Error> {
     T::deserialize(VoxValueDeserializer(value))
 }
 

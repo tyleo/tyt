@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 /// rest. The rotation is kept as the original axis-angle because the quaternion
 /// voxcore stores cannot be inverted back to it exactly.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub(crate) struct VoxelMaxNode {
+pub struct VoxelMaxNode {
     /// Node UUID (`id`).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub id: String,

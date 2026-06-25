@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// several frames round-trips even though the voxcore node lists each placed
 /// object only once.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub(crate) struct MagicaVoxelShapeModel {
+pub struct MagicaVoxelShapeModel {
     /// The index of the model this entry draws.
     pub model: u32,
 

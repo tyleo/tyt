@@ -4,9 +4,7 @@ use voxj::{VoxjHierarchyNode, VoxjTransform};
 
 /// Builds a [`VoxjHierarchyNode`] from a [`VoxHierarchyNode`], mapping branded
 /// child ids back to indices and the transform back to its voxj form.
-pub(crate) fn voxj_hierarchy_node_from_vox_hierarchy_node(
-    node: &VoxHierarchyNode,
-) -> VoxjHierarchyNode {
+pub fn voxj_hierarchy_node_from_vox_hierarchy_node(node: &VoxHierarchyNode) -> VoxjHierarchyNode {
     VoxjHierarchyNode {
         name: node.name.clone(),
         child_nodes: node

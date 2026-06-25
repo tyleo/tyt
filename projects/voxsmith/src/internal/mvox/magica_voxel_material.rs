@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// this records that the material exists, in its stored order, and keeps the
 /// arbitrary `extra` keys that do not fit a palette attribute.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub(crate) struct MagicaVoxelMaterial {
+pub struct MagicaVoxelMaterial {
     /// The material id, which is the palette index it folds into.
     pub id: i32,
 

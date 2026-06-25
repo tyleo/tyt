@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 /// `magica-voxel` ext so an unrecognized or future chunk survives the round
 /// trip.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub(crate) struct MagicaVoxelUnknownChunk {
+pub struct MagicaVoxelUnknownChunk {
     /// The four-byte chunk id, as stored.
     pub id: [u8; 4],
 

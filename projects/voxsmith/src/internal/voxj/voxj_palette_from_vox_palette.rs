@@ -4,7 +4,7 @@ use voxj::VoxjPalette;
 
 /// Builds a [`VoxjPalette`] from a [`VoxPalette`], emitting attributes and cells
 /// in id order so each lands at its original index.
-pub(crate) fn voxj_palette_from_vox_palette(palette: &VoxPalette) -> VoxjPalette {
+pub fn voxj_palette_from_vox_palette(palette: &VoxPalette) -> VoxjPalette {
     // Attribute ids, reused for each cell's values.
     let attribute_ids: Vec<_> = palette.iter_attributes().map(|(id, _)| id).collect();
     let attributes = palette

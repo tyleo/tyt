@@ -5,7 +5,7 @@ use voxj::VoxjPalette;
 /// Builds a [`VoxPalette`] from a [`VoxjPalette`], in listing order so each id
 /// equals its voxj index. Duplicate attribute names are deduped last-wins (JSON
 /// convention). Errors on a ragged cell row or a non-finite value.
-pub(crate) fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette> {
+pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette> {
     let mut out = VoxPalette::default();
 
     // Dedup attribute names last-wins; remember each survivor's source column.

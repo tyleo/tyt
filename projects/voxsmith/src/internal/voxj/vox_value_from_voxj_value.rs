@@ -5,7 +5,7 @@ use voxj::{VoxjMap, VoxjValue};
 /// Converts a [`VoxjValue`] into a [`VoxValue`], recursing into arrays and
 /// objects. Rejects non-finite numbers and dedups duplicate object keys
 /// last-wins (JSON convention).
-pub(crate) fn vox_value_from_voxj_value(value: &VoxjValue) -> Result<VoxValue> {
+pub fn vox_value_from_voxj_value(value: &VoxjValue) -> Result<VoxValue> {
     Ok(match value {
         VoxjValue::Number(number) => {
             if !number.is_finite() {

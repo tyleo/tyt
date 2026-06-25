@@ -12,7 +12,7 @@ use voxcore::{VoxMap, VoxValue};
 /// [`from_vox_value`](crate::from_vox_value). Numbers of any width become
 /// [`VoxValue::Number`], structs and maps become [`VoxValue::Object`], and
 /// sequences become [`VoxValue::Array`].
-pub(crate) fn to_vox_value<T: Serialize + ?Sized>(value: &T) -> Result<VoxValue, Error> {
+pub fn to_vox_value<T: Serialize + ?Sized>(value: &T) -> Result<VoxValue, Error> {
     value.serialize(VoxValueSerializer)
 }
 

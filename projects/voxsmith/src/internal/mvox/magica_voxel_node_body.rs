@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// the same references; this holds their exact, possibly repeated form so the
 /// scene graph rebuilds unchanged.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub(crate) enum MagicaVoxelNodeBody {
+pub enum MagicaVoxelNodeBody {
     /// An `nTRN` transform node: the id of the child it places, its layer, and
     /// its animation frames.
     Transform {

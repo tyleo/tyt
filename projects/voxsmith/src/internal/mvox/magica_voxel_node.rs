@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// projection; this holds the exact ids, attributes, references, and the frame
 /// data the voxcore node cannot represent.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub(crate) struct MagicaVoxelNode {
+pub struct MagicaVoxelNode {
     /// The scene-node id other nodes reference (`id`).
     pub id: i32,
 

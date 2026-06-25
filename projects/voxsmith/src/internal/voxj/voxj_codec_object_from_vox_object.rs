@@ -4,7 +4,7 @@ use voxj::VoxjCodecObject;
 /// Builds a [`VoxjCodecObject`] from a [`VoxObject`], emitting one position and
 /// sample row per live voxel in ascending raster order. Palette references map
 /// back to palette indices (each id equals its index).
-pub(crate) fn voxj_codec_object_from_vox_object(object: &VoxObject) -> VoxjCodecObject {
+pub fn voxj_codec_object_from_vox_object(object: &VoxObject) -> VoxjCodecObject {
     let bounds = object.bounds();
 
     // Reference ids, reused for each voxel's sample row.

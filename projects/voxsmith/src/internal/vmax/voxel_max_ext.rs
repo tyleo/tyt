@@ -6,7 +6,7 @@ use vmax::VMaxSceneJsonFile;
 /// Voxel Max state with no native voxcore home, kept so a document loaded from a
 /// Voxel Max package can be written back exactly.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub(crate) struct VoxelMaxExt {
+pub struct VoxelMaxExt {
     /// The Voxel Max scene with its hierarchy emptied, holding only the
     /// scene-level state recorded around the objects and groups that voxcore
     /// represents natively.

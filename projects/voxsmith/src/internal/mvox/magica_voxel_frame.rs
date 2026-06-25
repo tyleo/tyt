@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// inverted back to the packed rotation byte exactly, so the exact frame data is
 /// kept here.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub(crate) struct MagicaVoxelFrame {
+pub struct MagicaVoxelFrame {
     /// `_r`: the packed signed-permutation rotation byte.
     pub rotation: u8,
 

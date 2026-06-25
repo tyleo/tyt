@@ -10,7 +10,7 @@ use voxj::{VoxjHierarchyNode, VoxjTransform};
 ///
 /// Errors on a degenerate transform: non-finite position, non-finite or zero
 /// scale, or a non-finite / zero rotation.
-pub(crate) fn vox_hierarchy_node_from_voxj_hierarchy_node(
+pub fn vox_hierarchy_node_from_voxj_hierarchy_node(
     node: &VoxjHierarchyNode,
 ) -> Result<VoxHierarchyNode> {
     Ok(VoxHierarchyNode {

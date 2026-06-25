@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// holds the rest, with the per-node and per-material entries aligned by index
 /// with the hierarchy nodes and recorded materials so the file rebuilds exactly.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub(crate) struct MagicaVoxelExt {
+pub struct MagicaVoxelExt {
     /// The format version from the header (`version`).
     pub version: u32,
 

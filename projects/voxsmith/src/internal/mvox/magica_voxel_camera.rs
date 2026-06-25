@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// A render camera (`rCAM`) preserved verbatim in the `magica-voxel` ext.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
-pub(crate) struct MagicaVoxelCamera {
+pub struct MagicaVoxelCamera {
     /// The camera id.
     pub id: i32,
 

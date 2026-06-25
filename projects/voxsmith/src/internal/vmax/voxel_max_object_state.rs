@@ -6,7 +6,7 @@ use vmax::{VMaxBrush, VMaxCamera, VMaxTools};
 /// Voxel Max needs to import it.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
-pub(crate) struct VoxelMaxObjectState {
+pub struct VoxelMaxObjectState {
     /// Object content UUID.
     pub uuid: String,
 
