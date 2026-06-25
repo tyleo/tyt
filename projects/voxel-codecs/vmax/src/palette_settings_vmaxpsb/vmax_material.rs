@@ -23,12 +23,12 @@ pub struct VMaxMaterial {
     pub sh: bool,
 
     /// Transmission coefficient; present on some materials (e.g. MagicaVoxel
-    /// exports) and absent on others.
+    /// exports).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub tc: Option<f64>,
 
-    /// Extended dispersion parameters
-    /// [`VMaxMaterialDispersion`](crate::VMaxMaterialDispersion).
+    /// Dispersion parameters
+    /// ([`VMaxMaterialDispersion`](crate::VMaxMaterialDispersion)).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub md: Option<VMaxMaterialDispersion>,
 }

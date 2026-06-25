@@ -1,10 +1,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Voxel Max brush-state tokens (`tools.bst`): the color- and gradient-mode
-/// strings plus optional offset cursor indices.
-/// [`ocx`](Self::ocx)/[`ocn`](Self::ocn) are absent in some files, so both are
-/// optional.
+/// Voxel Max brush-state tokens (`tools.bst`).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]
@@ -35,14 +32,14 @@ pub struct VMaxBrushState {
     )]
     pub ocn: Option<i64>,
 
-    /// Soft-falloff azimuth; present on some brush states.
+    /// Soft-falloff azimuth.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub sfaz: Option<f64>,
 
-    /// Soft-falloff altitude; present on some brush states.
+    /// Soft-falloff altitude.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")

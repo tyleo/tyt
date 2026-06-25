@@ -5,12 +5,10 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
-/// The parsed contents of a `.vmax` package directory: the single `scene.json`
-/// plus every other file the package holds, each keyed by its package-relative
-/// path. This is the lossless on-disk model a package round-trips through; the
-/// codec reads a package into it and writes it back without dropping anything.
-/// Voxel geometry and palette colors stay in their stored form here (snapshots,
-/// packed bytes); decode them on demand with the codec's free functions.
+/// Parsed contents of a `.vmax` package directory: `scene.json` plus every other
+/// file the package holds. The lossless on-disk model a package round-trips
+/// through. Voxel geometry and palette colors stay in their stored form here
+/// (snapshots, packed bytes), decoded on demand.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VMaxFile {
     /// `scene.json`.
@@ -35,12 +33,11 @@ pub struct VMaxFile {
     /// `*.vmaxhvsc` history voxel-snapshot sidecars, keyed by filename.
     pub history_vmaxhvsc_files: BTreeMap<String, VMaxHistoryVmaxhvscFile>,
 
-    /// `*.selection.vmaxb` saved voxel selections, keyed by filename and
-    /// preserved verbatim.
+    /// `*.selection.vmaxb` saved voxel selections, keyed by filename.
     pub selection_vmaxb_files: BTreeMap<String, VMaxSelectionVmaxbFile>,
 
-    /// The package-level `QuickLook/Thumbnail.png` preview, decoded; absent when
-    /// the package ships no thumbnail.
+    /// Package-level `QuickLook/Thumbnail.png` preview, decoded. `None` when the
+    /// package ships no thumbnail.
     pub thumbnail_png: Option<VMaxImage>,
 
     /// Per-object `QuickLook/contents*.vmaxb.png` previews, decoded, keyed by

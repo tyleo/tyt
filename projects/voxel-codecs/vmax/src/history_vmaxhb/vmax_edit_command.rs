@@ -2,12 +2,8 @@ use crate::{VMaxBrushState, VMaxFlag, VMaxValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The edit-command record on a Voxel Max history step (`ec`): the editor state
-/// captured for one undo/redo entry. The scalar fields and brush/flag state are
-/// modeled; the command-transaction payloads ([`cs`](Self::cs), [`r`](Self::r),
-/// [`b`](Self::b), [`comt`](Self::comt), [`md`](Self::md)) are an undocumented,
-/// per-command grammar, so they are held as faithful [`VMaxValue`] trees that
-/// round-trip without being interpreted.
+/// The edit-command record on a history step (`ec`). Per-command payloads are
+/// kept as untyped `VMaxValue` (round-trips unchanged).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]

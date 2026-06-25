@@ -67,8 +67,8 @@ pub struct VMaxObject {
     #[cfg_attr(feature = "serde", serde(default))]
     pub t_pf: String,
 
-    /// Transform pivot-offset; shape varies, so it is held as a faithful
-    /// [`VMaxValue`](crate::VMaxValue) when present.
+    /// Transform pivot-offset; shape varies, kept as untyped
+    /// [`VMaxValue`](crate::VMaxValue) (round-trips unchanged).
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
@@ -80,8 +80,7 @@ pub struct VMaxObject {
     pub center: [f64; 3],
 
     /// Min corner of the object's voxel bounds, relative to
-    /// [`center`](Self::center), when present. The absolute authored box
-    /// minimum is `center + bounds_min`.
+    /// [`center`](Self::center). Absolute box min is `center + bounds_min`.
     #[cfg_attr(
         feature = "serde",
         serde(rename = "e_mi", skip_serializing_if = "Option::is_none", default)
@@ -89,8 +88,7 @@ pub struct VMaxObject {
     pub bounds_min: Option<[f64; 3]>,
 
     /// Max corner of the object's voxel bounds, relative to
-    /// [`center`](Self::center), when present. The absolute authored box
-    /// maximum is `center + bounds_max`.
+    /// [`center`](Self::center). Absolute box max is `center + bounds_max`.
     #[cfg_attr(
         feature = "serde",
         serde(rename = "e_ma", skip_serializing_if = "Option::is_none", default)

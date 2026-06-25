@@ -2,10 +2,7 @@ use crate::{VMaxMaterial, VMaxValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Material palette mirroring a `palette*.settings.vmaxpsb` plist: the display
-/// [`name`](Self::name), the [`materials`](Self::materials), the
-/// [`colors`](Self::colors) RGBA table, and the palette-level settings Voxel
-/// Max records alongside them.
+/// Material palette mirroring a `palette*.settings.vmaxpsb` plist.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]
@@ -16,10 +13,9 @@ pub struct VMaxPaletteSettingsVmaxpsbFile {
     /// Selectable material slots.
     pub materials: Vec<VMaxMaterial>,
 
-    /// Packed RGBA color table (4 bytes per entry). This is Voxel Max's color
-    /// source when an object's `palette*.png` image is absent; palettes that
-    /// ship a `.png` omit this key entirely, so an empty table is not
-    /// serialized.
+    /// Packed RGBA color table (4 bytes per entry). Voxel Max's color source
+    /// when an object's `palette*.png` is absent; palettes that ship a `.png`
+    /// omit this key.
     #[cfg_attr(
         feature = "serde",
         serde(with = "serde_bytes", skip_serializing_if = "Vec::is_empty")
@@ -56,13 +52,14 @@ pub struct VMaxPaletteSettingsVmaxpsbFile {
     pub ali: String,
 
     /// Per-voxel material assignments some palettes carry; element shape
-    /// varies, so each is a faithful [`VMaxValue`](crate::VMaxValue). Skipped
-    /// when empty.
+    /// varies, so each is kept as untyped [`VMaxValue`](crate::VMaxValue)
+    /// (round-trips unchanged).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub voxmats: Vec<VMaxValue>,
 
     /// Layer-settings list some palettes carry; element shape varies, so each
-    /// is a faithful [`VMaxValue`](crate::VMaxValue). Skipped when empty.
+    /// is kept as untyped [`VMaxValue`](crate::VMaxValue) (round-trips
+    /// unchanged).
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub ls: Vec<VMaxValue>,
 }

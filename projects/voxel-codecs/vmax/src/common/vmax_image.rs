@@ -1,11 +1,6 @@
-/// A decoded image from a `.vmax` package: a Voxel Max `QuickLook/` thumbnail,
-/// held as its pixel grid rather than raw PNG bytes. [`pixels`](Self::pixels)
-/// runs row-major, one `[r, g, b, a]` cell per pixel; the grid is
-/// [`width`](Self::width) by [`height`](Self::height).
-///
-/// It is decoded from and re-encoded to PNG rather than through serde, so it
-/// carries no serde derives. The round-trip is pixel-lossless for the 8-bit
-/// images Voxel Max writes (the bytes are re-encoded, not preserved verbatim).
+/// A decoded `.vmax` `QuickLook/` thumbnail, held as a pixel grid. Encoded to
+/// and from PNG, not serde. The round-trip is pixel-lossless for the 8-bit
+/// images Voxel Max writes; bytes are re-encoded, not preserved verbatim.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VMaxImage {
     /// Image width in pixels.

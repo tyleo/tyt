@@ -1,16 +1,14 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The occupied-voxel range within a snapshot's extent. Voxel Max records the
-/// chunk-local min/max corner of the snapshot's occupied voxels here, alongside
-/// the order tag `o`.
+/// Occupied-voxel range within a snapshot's extent (`r`), chunk-local.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct VMaxExtentRange {
-    /// Occupied-range minimum corner (chunk-local).
+    /// Minimum corner.
     pub min: Vec<i64>,
 
-    /// Occupied-range maximum corner (chunk-local).
+    /// Maximum corner.
     pub max: Vec<i64>,
 }

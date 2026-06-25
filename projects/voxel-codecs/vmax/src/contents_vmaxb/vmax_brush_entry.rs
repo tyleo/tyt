@@ -2,10 +2,9 @@ use crate::VMaxBrushColor;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// One slot in a Voxel Max brush palette (`brush.brushes[]`): a single-key
-/// dictionary tagging the slot type, whose value is that slot's color payload.
-/// Voxel Max emits exactly one key per entry, drawn from a fixed set, so the
-/// slot type is an externally-tagged enum: `C(_)` round-trips as `{"c": ...}`.
+/// One slot in a Voxel Max brush palette (`brush.brushes[]`). Externally-tagged
+/// enum: each entry is a single-key dict naming the slot type, e.g. `C(_)`
+/// round-trips as `{"c": ...}`.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]

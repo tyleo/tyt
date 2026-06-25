@@ -2,9 +2,7 @@ use crate::{VMaxBrush, VMaxCamera, VMaxSnapshot, VMaxTools, VMaxValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Voxel object payload of a `contents*.vmaxb` binary plist. Beyond the voxel
-/// [`snapshots`](Self::snapshots), the top level carries the editor state Voxel
-/// Max requires to open and import the object.
+/// Voxel object payload of a `contents*.vmaxb` binary plist.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
@@ -43,8 +41,8 @@ pub struct VMaxContentsVmaxbFile {
     pub cam: Option<VMaxCamera>,
 
     /// Embedded palette dictionary some objects carry (e.g. MagicaVoxel
-    /// exports); its shape differs from a `.vmaxpsb`, so it is held as a
-    /// faithful [`VMaxValue`](crate::VMaxValue).
+    /// exports); shape differs from a `.vmaxpsb`, so kept as untyped
+    /// [`VMaxValue`](crate::VMaxValue) (round-trips unchanged).
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")

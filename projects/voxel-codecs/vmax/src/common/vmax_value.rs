@@ -8,12 +8,10 @@ use std::collections::BTreeMap;
 #[cfg(feature = "serde")]
 use std::fmt;
 
-/// A faithful, schemaless plist value: a dictionary, array, string, integer,
-/// real, boolean, or data blob. Used to preserve the parts of a Voxel Max
-/// history file whose shape is an undocumented, per-command undo/redo payload
-/// (`ec.comt`, the `ssnapshots`/`osnapshots` bodies, the `task` transactions).
-/// Every value round-trips without naming each key, so nothing is dropped even
-/// though the command grammar is not modeled.
+/// Schemaless plist value: dictionary, array, string, integer, real, boolean,
+/// or data blob. Holds undocumented per-command undo/redo payloads (`ec.comt`,
+/// the `ssnapshots`/`osnapshots` bodies, the `task` transactions) as untyped
+/// `VMaxValue` (round-trips unchanged).
 #[derive(Clone, Debug, PartialEq)]
 pub enum VMaxValue {
     /// A keyed dictionary; keys are sorted for a deterministic round-trip.
@@ -39,8 +37,7 @@ pub enum VMaxValue {
 }
 
 impl Default for VMaxValue {
-    /// An empty dictionary; a payload is overwritten on decode and never read
-    /// directly.
+    /// Empty dictionary; overwritten on decode.
     fn default() -> Self {
         VMaxValue::Dictionary(BTreeMap::new())
     }
@@ -76,9 +73,8 @@ impl Serialize for VMaxValue {
 #[cfg(feature = "serde")]
 impl<'de> Deserialize<'de> for VMaxValue {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        /// Maps each plist primitive the deserializer reports to its
-        /// [`VMaxValue`] variant; `deserialize_any` drives this from the
-        /// underlying type rather than a fixed schema.
+        /// Maps each plist primitive to its [`VMaxValue`] variant via
+        /// `deserialize_any`.
         struct ValueVisitor;
 
         impl<'de> Visitor<'de> for ValueVisitor {

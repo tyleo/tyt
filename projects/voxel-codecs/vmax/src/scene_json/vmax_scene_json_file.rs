@@ -2,10 +2,7 @@ use crate::{VMaxGroup, VMaxObject, VMaxSceneCamera};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A complete Voxel Max scene parsed from `scene.json`: the `groups`/`objects`
-/// hierarchy plus the scene-level state Voxel Max records around it: the
-/// codable version, the camera/light rig, and the renderer / post-grading / UI
-/// settings.
+/// A complete Voxel Max scene parsed from `scene.json`.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]
@@ -119,8 +116,7 @@ pub struct VMaxSceneJsonFile {
     pub vigpow: Option<f64>,
 }
 
-/// The current Voxel Max codable scene version, used as the `v` fallback when a
-/// decoded scene omits the key Voxel Max requires.
+/// Current codable scene version; the `v` fallback when the key is absent.
 #[cfg(feature = "serde")]
 fn default_scene_version() -> i64 {
     4

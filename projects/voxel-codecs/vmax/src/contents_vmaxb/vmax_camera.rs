@@ -1,8 +1,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The per-object Voxel Max camera: orbit/light angles, pan, zoom, and orbit
-/// origin.
+/// Per-object Voxel Max camera (`cam`).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]

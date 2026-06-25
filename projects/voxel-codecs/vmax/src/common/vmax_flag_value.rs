@@ -1,9 +1,8 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The value carried by a [`VMaxFlag`](crate::VMaxFlag) (`x`): a boolean or
-/// integer depending on the flag. Serializes untagged as a bare `bool` or
-/// integer, so a flag round-trips either kind without coercion.
+/// Value carried by a [`VMaxFlag`](crate::VMaxFlag) (`x`). Serializes untagged
+/// as a bare `bool` or integer.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
@@ -16,8 +15,7 @@ pub enum VMaxFlagValue {
 }
 
 impl Default for VMaxFlagValue {
-    /// Defaults to [`Bool(false)`](Self::Bool); a flag's value is overwritten
-    /// on decode and the field is never read directly.
+    /// [`Bool(false)`](Self::Bool); overwritten on decode, never read directly.
     fn default() -> Self {
         VMaxFlagValue::Bool(false)
     }

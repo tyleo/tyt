@@ -58,8 +58,8 @@ pub struct VMaxGroup {
     #[cfg_attr(feature = "serde", serde(default))]
     pub t_pf: String,
 
-    /// Transform pivot-offset; shape varies, so it is held as a faithful
-    /// [`VMaxValue`](crate::VMaxValue) when present.
+    /// Transform pivot-offset; shape varies, kept as untyped
+    /// [`VMaxValue`](crate::VMaxValue) (round-trips unchanged).
     #[cfg_attr(
         feature = "serde",
         serde(skip_serializing_if = "Option::is_none", default)
@@ -71,7 +71,7 @@ pub struct VMaxGroup {
     pub center: [f64; 3],
 
     /// Min corner of the group's voxel bounds, relative to
-    /// [`center`](Self::center), when present.
+    /// [`center`](Self::center).
     #[cfg_attr(
         feature = "serde",
         serde(rename = "e_mi", skip_serializing_if = "Option::is_none", default)
@@ -79,7 +79,7 @@ pub struct VMaxGroup {
     pub bounds_min: Option<[f64; 3]>,
 
     /// Max corner of the group's voxel bounds, relative to
-    /// [`center`](Self::center), when present.
+    /// [`center`](Self::center).
     #[cfg_attr(
         feature = "serde",
         serde(rename = "e_ma", skip_serializing_if = "Option::is_none", default)

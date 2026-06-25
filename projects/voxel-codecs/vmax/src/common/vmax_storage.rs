@@ -26,7 +26,6 @@ pub struct VMaxStorage {
     pub dlc: Vec<u8>,
 
     /// Legacy usage mask: older files carry `is` in place of `lc`/`dlc`.
-    /// Skipped when empty so current files do not gain the legacy key.
     #[cfg_attr(
         feature = "serde",
         serde(default, with = "serde_bytes", skip_serializing_if = "Vec::is_empty")

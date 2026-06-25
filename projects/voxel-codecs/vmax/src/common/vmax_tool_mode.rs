@@ -3,10 +3,8 @@ use crate::VMaxMode;
 use serde::{Deserialize, Serialize};
 
 /// A Voxel Max tool-mode entry (`tools.ct`, `tools.dms`, ...): a dictionary
-/// keyed by editor surface, each value configuring that surface's mode. The
-/// surface set is fixed, so each is an optional field; absent surfaces stay
-/// `None` and are skipped on serialize. A tool may carry more than one surface
-/// at once (Voxel Max history records up to four).
+/// keyed by editor surface. A tool may carry more than one surface at once
+/// (history records up to four).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]

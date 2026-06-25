@@ -2,9 +2,7 @@ use crate::VMaxExtentRange;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The per-snapshot extent stat (`st.extent`). Voxel Max stores this as a
-/// dictionary keyed by an order tag `{o: <order>}`, a constant `5` for the 32^3
-/// chunk grid (2^5 = 32).
+/// Per-snapshot extent stat (`st.extent`).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]

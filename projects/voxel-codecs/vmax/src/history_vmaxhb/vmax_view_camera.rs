@@ -1,10 +1,8 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The viewport camera recorded on a Voxel Max history step (`vc` / `fvc`). A
-/// different, more compact shape than the per-object [`VMaxCamera`](crate::VMaxCamera):
-/// four `[x, y, z]` vectors plus an orthographic flag. `vc` is the step's
-/// camera; `fvc` is its focused/framed variant.
+/// The viewport camera on a history step (`vc` / `fvc`). A more compact shape
+/// than the per-object [`VMaxCamera`](crate::VMaxCamera).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
