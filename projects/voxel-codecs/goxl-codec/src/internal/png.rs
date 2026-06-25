@@ -1,5 +1,6 @@
 use crate::{Result, invalid};
 use png::{BitDepth, ColorType, Decoder, Encoder};
+use std::io::Cursor;
 
 /// The edge length, in pixels, of a `BL16` block's `64 x 64` PNG. A block holds
 /// [`GoxlBlock::SIZE`](goxl::GoxlBlock::SIZE)`^3 == 4096` voxels, one per pixel of
@@ -11,7 +12,7 @@ pub const BLOCK_IMAGE_SIZE: u32 = 64;
 /// PNGs, so a PNG of any other color type or bit depth is rejected. The returned
 /// bytes are `width * height * 4`, four per pixel in image (row-major) order.
 pub fn decode_png_rgba(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>)> {
-    let decoder = Decoder::new(bytes);
+    let decoder = Decoder::new(Cursor::new(bytes));
     let mut reader = decoder
         .read_info()
         .map_err(|error| invalid(format!("invalid PNG: {error}")))?;
@@ -24,7 +25,10 @@ pub fn decode_png_rgba(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>)> {
         )));
     }
 
-    let mut buffer = vec![0u8; reader.output_buffer_size()];
+    let buffer_size = reader
+        .output_buffer_size()
+        .ok_or_else(|| invalid("PNG dimensions too large".to_owned()))?;
+    let mut buffer = vec![0u8; buffer_size];
     let frame = reader
         .next_frame(&mut buffer)
         .map_err(|error| invalid(format!("invalid PNG: {error}")))?;

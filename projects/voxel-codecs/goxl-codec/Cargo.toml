@@ -6,8 +6,13 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Reads and writes Goxel (.gox) files."
 keywords = ["goxel", "gox", "voxel", "3d", "codec"]
-categories = ["parser-implementations", "encoding", "game-development", "graphics"]
+categories = [
+    "parser-implementations",
+    "encoding",
+    "game-development",
+    "graphics",
+]
 
 [dependencies]
 goxl = "0.1.0"
-png = "0.17"
+png = "0.18"
