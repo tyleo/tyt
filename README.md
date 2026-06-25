@@ -146,7 +146,7 @@ cargo build -p tyt --features bin   # Build the binary
 
 ## Releasing
 
-Releases use [`cargo-workspaces`](https://github.com/pksunkara/cargo-workspaces) (`cargo install cargo-workspaces` once). Only the crates that actually changed get bumped — `tyt` itself must always be force-bumped so its published `Cargo.lock` refreshes, otherwise `cargo install tyt` keeps pinning the old sub-crate versions.
+Releases use [`cargo-workspaces`](https://github.com/pksunkara/cargo-workspaces) (`cargo install cargo-workspaces` once). Only the crates that actually changed get bumped. `tyt` itself must always be force-bumped so its published `Cargo.lock` refreshes, otherwise `cargo install tyt` keeps pinning the old sub-crate versions.
 
 ```sh
 cargo workspaces version --force tyt patch --yes   # bump changed crates + force tyt, commit, tag, push
