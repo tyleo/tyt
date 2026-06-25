@@ -5,14 +5,14 @@ types; this crate turns a package on disk into a `vmax::VMaxFile` and back,
 losslessly.
 
 A `.vmax` package is a directory of files, but the codec never touches the
-filesystem itself. You give `from_vmax_file` a way to list and read the
-package's files and `to_vmax_file` a way to write them, so the same code works
+filesystem itself. You give `from_vmax_package` a way to list and read the
+package's files and `to_vmax_package` a way to write them, so the same code works
 against a folder, a zip, or bytes already in memory. Reading parses every file
 the package can hold into typed fields, and reports an unknown filename (or an
 unmodeled key) instead of dropping it, so nothing is lost on a round trip.
 
 The codec is a dumb load/save: a `VMaxFile` is the parsed package in its
-on-disk shape, and `from_vmax_file` then `to_vmax_file` reproduces it. Voxel
+on-disk shape, and `from_vmax_package` then `to_vmax_package` reproduces it. Voxel
 geometry stays as the per-chunk snapshot edit log and palette colors stay packed
 or in their PNG; decode them on demand with the free functions:
 
@@ -34,10 +34,10 @@ filesystem, so the same flow works against a zip or an in-memory package.
 
 ```rust
 use std::{fs, io, path::Path};
-use vmax_codec::{decode_vmax_snapshots, from_vmax_file, to_vmax_file};
+use vmax_codec::{decode_vmax_snapshots, from_vmax_package, to_vmax_package};
 
 fn round_trip(src: &Path, dst: &Path) -> io::Result<()> {
-    let file = from_vmax_file(
+    let file = from_vmax_package(
         || list_files(src), // your lister, returning package-relative paths
         |name| match fs::read(src.join(name)) {
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -50,7 +50,7 @@ fn round_trip(src: &Path, dst: &Path) -> io::Result<()> {
         let _voxels = decode_vmax_snapshots(&contents.snapshots)?;
     }
 
-    to_vmax_file(&file, |name, bytes| {
+    to_vmax_package(&file, |name, bytes| {
         let path = dst.join(name);
         fs::create_dir_all(path.parent().unwrap())?;
         fs::write(path, bytes)

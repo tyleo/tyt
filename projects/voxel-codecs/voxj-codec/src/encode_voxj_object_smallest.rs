@@ -1,7 +1,9 @@
-use crate::{PositionEncoding, Result, SampleEncoding, encode_voxj_object, hilbert_bits};
+use crate::{
+    PositionEncoding, Result, SampleEncoding, VoxjDecodedObject, encode_voxj_object, hilbert_bits,
+};
 use flate2::{Compression, write::DeflateEncoder};
 use std::io::Write;
-use voxj::{VoxjCodecObject, VoxjSerdeObject};
+use voxj::VoxjObject;
 
 /// Skip the dense bitmap candidate above this many cells to bound memory.
 const MAX_BITMAP_CELLS: u64 = 8_000_000;
@@ -10,16 +12,16 @@ const MAX_BITMAP_CELLS: u64 = 8_000_000;
 /// `<= 131072`); above that the format requires bitmap or raw instead.
 const MAX_HILBERT_BITS: u32 = 17;
 
-/// Encodes one [`VoxjCodecObject`]'s geometry into a [`VoxjSerdeObject`],
+/// Encodes one [`VoxjDecodedObject`]'s geometry into a [`VoxjObject`],
 /// trying every applicable non-raw encoding pairing, deflating each, and
 /// keeping the smallest. The canonical shipping form. `cell_counts[p]` is the
 /// cell count of the palette referenced by `object.palette_refs[p]`;
 /// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts) computes it
 /// from the document's palettes.
 pub fn encode_voxj_object_smallest(
-    object: &VoxjCodecObject,
+    object: &VoxjDecodedObject,
     cell_counts: &[usize],
-) -> Result<VoxjSerdeObject> {
+) -> Result<VoxjObject> {
     if object.positions.is_empty() {
         return encode_voxj_object(
             object,
@@ -63,7 +65,7 @@ fn candidate_positions(bounds: [u32; 3]) -> Vec<PositionEncoding> {
 }
 
 /// Deflated byte length of an object's two blocks serialized together.
-fn deflated_len(object: &VoxjSerdeObject) -> usize {
+fn deflated_len(object: &VoxjObject) -> usize {
     let Ok(json) = serde_json::to_vec(&(&object.voxel_positions, &object.voxel_samples)) else {
         return usize::MAX;
     };
@@ -74,15 +76,15 @@ fn deflated_len(object: &VoxjSerdeObject) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::encode_voxj_object_smallest;
-    use voxj::{VoxjCodecObject, VoxjSerdeSampleBlock};
+    use crate::{VoxjDecodedObject, encode_voxj_object_smallest};
+    use voxj::VoxjSampleBlock;
 
     /// An object with voxels but zero palettes still emits sample channels
     /// whose arity matches the position block (rle/packed carry zero channels).
     #[test]
     fn zero_palette_object_keeps_sample_arity() {
         let object = encode_voxj_object_smallest(
-            &VoxjCodecObject {
+            &VoxjDecodedObject {
                 name: "o".to_owned(),
                 palette_refs: Vec::new(),
                 bounds: [3, 1, 1],
@@ -93,9 +95,9 @@ mod tests {
         )
         .unwrap();
         match &object.voxel_samples {
-            VoxjSerdeSampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
-            VoxjSerdeSampleBlock::RleJson(channels) => assert!(channels.is_empty()),
-            VoxjSerdeSampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
+            VoxjSampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
+            VoxjSampleBlock::RleJson(channels) => assert!(channels.is_empty()),
+            VoxjSampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
         }
     }
 }

@@ -1,6 +1,6 @@
-use crate::{Error, Result};
+use crate::{Error, Result, decode_voxj_object, voxj_palette_cell_counts};
 use std::collections::HashSet;
-use voxj::{VoxjCodecFile, VoxjCodecMain, VoxjCodecObject, VoxjHierarchyNode, VoxjPalette};
+use voxj::{VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette};
 
 /// The only Voxel Json document version this codec understands.
 const SUPPORTED_VERSION: u32 = 1;
@@ -9,24 +9,24 @@ const SUPPORTED_VERSION: u32 = 1;
 /// count as a unit quaternion.
 const ROTATION_TOLERANCE: f64 = 1e-6;
 
-/// Checks a decoded [`VoxjCodecFile`] against the format's document rules:
+/// Checks a [`VoxjFile`] against the format's document rules:
 ///
 /// 1. the version is recognized;
 /// 2. palette refs, node children, and roots resolve and are each listed at most
 ///    once;
 /// 3. each sample cell indexes a cell of its palette;
 /// 4. voxel positions are unique and within their object's bounds;
-/// 5. sample arity matches the referenced palette count;
-/// 6. palettes are rectangular with distinct attribute keys;
-/// 7. node transforms have no zero scale component and a unit-length rotation
+/// 5. palettes are rectangular with distinct attribute keys;
+/// 6. node transforms have no zero scale component and a unit-length rotation
 ///    within `1e-6`;
-/// 8. the hierarchy is acyclic.
+/// 7. the hierarchy is acyclic.
 ///
-/// The companion to [`decode_voxj_file`](crate::decode_voxj_file): decode rejects
-/// block corruption, this rejects cross-reference and semantic faults. The `rgba`
-/// format is unchecked, as is whether sample channels follow the position block's
-/// voxel order, which no document can witness.
-pub fn validate_voxj_file(file: &VoxjCodecFile) -> Result<()> {
+/// Each object's position and sample blocks are decoded with
+/// [`decode_voxj_object`] to run the geometry checks, so a block that cannot be
+/// decoded is reported as invalid. The `rgba` format is unchecked, as is whether
+/// sample channels follow the position block's voxel order, which no document can
+/// witness.
+pub fn validate_voxj_file(file: &VoxjFile) -> Result<()> {
     if file.version != SUPPORTED_VERSION {
         return Err(invalid(format!(
             "unrecognized version {}, expected {SUPPORTED_VERSION}",
@@ -38,7 +38,7 @@ pub fn validate_voxj_file(file: &VoxjCodecFile) -> Result<()> {
 
 /// Checks everything below the version: palettes, objects, hierarchy nodes,
 /// roots, and acyclicity.
-fn validate_main(main: &VoxjCodecMain) -> Result<()> {
+fn validate_main(main: &VoxjMain) -> Result<()> {
     for (index, palette) in main.palettes.iter().enumerate() {
         validate_palette(index, palette)?;
     }
@@ -82,10 +82,11 @@ fn validate_palette(index: usize, palette: &VoxjPalette) -> Result<()> {
     Ok(())
 }
 
-/// An object's palette refs resolve and do not repeat, its samples match its
-/// voxels and palettes in count and stay within each palette's cells, and its
-/// positions are unique and lie within bounds.
-fn validate_object(index: usize, object: &VoxjCodecObject, palettes: &[VoxjPalette]) -> Result<()> {
+/// An object's palette refs resolve and do not repeat; its decoded samples stay
+/// within each palette's cells, and its decoded positions are unique and lie
+/// within bounds. Decoding also rejects a sample block whose arity or counts do
+/// not match the positions.
+fn validate_object(index: usize, object: &VoxjObject, palettes: &[VoxjPalette]) -> Result<()> {
     let mut seen_refs = HashSet::with_capacity(object.palette_refs.len());
     for &palette_ref in &object.palette_refs {
         if palette_ref >= palettes.len() {
@@ -101,22 +102,21 @@ fn validate_object(index: usize, object: &VoxjCodecObject, palettes: &[VoxjPalet
         }
     }
 
-    if object.samples.len() != object.positions.len() {
-        return Err(invalid(format!(
-            "object {index} has {} sample rows but {} voxel positions",
-            object.samples.len(),
-            object.positions.len()
-        )));
-    }
-    for (voxel, row) in object.samples.iter().enumerate() {
-        if row.len() != object.palette_refs.len() {
-            return Err(invalid(format!(
-                "object {index} voxel {voxel} has {} samples but references {} palettes",
-                row.len(),
-                object.palette_refs.len()
-            )));
-        }
-        // Palette refs were range-checked above, so indexing is safe.
+    // Refs are in range, so cell counts resolve; decoding the blocks both
+    // flattens the geometry and rejects a malformed or mismatched sample block
+    // (wrong channel count, a channel whose length differs from the voxel count,
+    // or a block that cannot be decoded). The object index is restored to the
+    // message, which the decoder cannot supply.
+    let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes)?;
+    let decoded = decode_voxj_object(object, &cell_counts).map_err(|e| {
+        invalid(format!(
+            "object {index} has a malformed position or sample block: {e}"
+        ))
+    })?;
+
+    for (voxel, row) in decoded.samples.iter().enumerate() {
+        // Decoding guarantees one sample per referenced palette, so each channel
+        // indexes the palette named at that position.
         for (channel, &cell) in row.iter().enumerate() {
             let palette = object.palette_refs[channel];
             let cell_count = palettes[palette].data.len();
@@ -130,8 +130,8 @@ fn validate_object(index: usize, object: &VoxjCodecObject, palettes: &[VoxjPalet
     }
 
     let [bound_x, bound_y, bound_z] = object.bounds;
-    let mut seen_positions = HashSet::with_capacity(object.positions.len());
-    for &[x, y, z] in &object.positions {
+    let mut seen_positions = HashSet::with_capacity(decoded.positions.len());
+    for &[x, y, z] in &decoded.positions {
         if x >= bound_x || y >= bound_y || z >= bound_z {
             return Err(invalid(format!(
                 "object {index} voxel position [{x}, {y}, {z}] lies outside \
@@ -149,7 +149,7 @@ fn validate_object(index: usize, object: &VoxjCodecObject, palettes: &[VoxjPalet
 
 /// A node's children resolve and do not repeat, and its transform is
 /// non-degenerate.
-fn validate_node(index: usize, node: &VoxjHierarchyNode, main: &VoxjCodecMain) -> Result<()> {
+fn validate_node(index: usize, node: &VoxjHierarchyNode, main: &VoxjMain) -> Result<()> {
     let mut seen_nodes = HashSet::with_capacity(node.child_nodes.len());
     for &child in &node.child_nodes {
         if child >= main.hierarchy_nodes.len() {
@@ -209,7 +209,7 @@ fn validate_transform(index: usize, node: &VoxjHierarchyNode) -> Result<()> {
 }
 
 /// Roots resolve and do not repeat.
-fn validate_roots(main: &VoxjCodecMain) -> Result<()> {
+fn validate_roots(main: &VoxjMain) -> Result<()> {
     let mut seen = HashSet::with_capacity(main.root_hierarchy_nodes.len());
     for &root in &main.root_hierarchy_nodes {
         if root >= main.hierarchy_nodes.len() {
@@ -275,8 +275,8 @@ fn invalid(message: String) -> Error {
 mod tests {
     use crate::validate_voxj_file;
     use voxj::{
-        VoxjCodecFile, VoxjCodecMain, VoxjCodecObject, VoxjHierarchyNode, VoxjPalette,
-        VoxjTransform, VoxjValue,
+        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjPositionBlock,
+        VoxjSampleBlock, VoxjTransform, VoxjValue,
     };
 
     /// A palette with `cells` rows, each carrying one value per named attribute.
@@ -309,17 +309,18 @@ mod tests {
     }
 
     /// A small but complete valid document: one four-cell palette, an object
-    /// sampling it across two in-bounds voxels, and a two-node DAG with a root.
-    fn valid_file() -> VoxjCodecFile {
-        VoxjCodecFile {
+    /// sampling it across two in-bounds voxels (raw-json blocks), and a two-node
+    /// DAG with a root.
+    fn valid_file() -> VoxjFile {
+        VoxjFile {
             version: 1,
-            main: VoxjCodecMain {
-                objects: vec![VoxjCodecObject {
+            main: VoxjMain {
+                objects: vec![VoxjObject {
                     name: "o".to_owned(),
                     palette_refs: vec![0],
                     bounds: [2, 1, 1],
-                    positions: vec![[0, 0, 0], [1, 0, 0]],
-                    samples: vec![vec![1], vec![3]],
+                    voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
+                    voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![3]]),
                 }],
                 palettes: vec![palette(&["rgba"], 4)],
                 hierarchy_nodes: vec![node(vec![1], vec![0]), node(vec![], vec![])],
@@ -368,21 +369,21 @@ mod tests {
     fn rejects_duplicate_palette_ref() {
         let mut file = valid_file();
         file.main.objects[0].palette_refs = vec![0, 0];
-        file.main.objects[0].samples = vec![vec![1, 1], vec![3, 3]];
+        file.main.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1, 1], vec![3, 3]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_sample_row_count_mismatch() {
         let mut file = valid_file();
-        file.main.objects[0].samples = vec![vec![1]];
+        file.main.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_sample_arity_mismatch() {
         let mut file = valid_file();
-        file.main.objects[0].samples = vec![vec![1, 0], vec![3]];
+        file.main.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1, 0], vec![3]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -390,21 +391,23 @@ mod tests {
     fn rejects_sample_cell_out_of_range() {
         let mut file = valid_file();
         // Palette 0 has four cells; cell 9 is out of range.
-        file.main.objects[0].samples = vec![vec![1], vec![9]];
+        file.main.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1], vec![9]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_position_out_of_bounds() {
         let mut file = valid_file();
-        file.main.objects[0].positions = vec![[0, 0, 0], [5, 0, 0]];
+        file.main.objects[0].voxel_positions =
+            VoxjPositionBlock::RawJson(vec![[0, 0, 0], [5, 0, 0]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_position() {
         let mut file = valid_file();
-        file.main.objects[0].positions = vec![[0, 0, 0], [0, 0, 0]];
+        file.main.objects[0].voxel_positions =
+            VoxjPositionBlock::RawJson(vec![[0, 0, 0], [0, 0, 0]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 

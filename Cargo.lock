@@ -1775,7 +1775,6 @@ dependencies = [
  "tyt-common",
  "tyt-injection",
  "vmax-codec",
- "voxj",
  "voxj-codec",
  "voxsmith",
 ]

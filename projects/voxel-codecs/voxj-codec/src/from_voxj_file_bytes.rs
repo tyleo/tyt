@@ -1,9 +1,9 @@
 use crate::{Error, Result};
-use voxj::VoxjSerdeFile;
+use voxj::VoxjFile;
 
-/// Decodes `.voxj` JSON bytes into a [`VoxjSerdeFile`]. Any `main.ext` extension
+/// Decodes `.voxj` JSON bytes into a [`VoxjFile`]. Any `main.ext` extension
 /// namespace is carried on [`VoxjMain::ext`](voxj::VoxjMain::ext).
-pub fn from_voxj_file_bytes(bytes: &[u8]) -> Result<VoxjSerdeFile> {
+pub fn from_voxj_file_bytes(bytes: &[u8]) -> Result<VoxjFile> {
     serde_json::from_slice(bytes).map_err(Error::Json)
 }
 
@@ -15,20 +15,20 @@ mod tests {
     };
     use serde_json::{Value, json};
     use voxj::{
-        VoxjHierarchyNode, VoxjMain, VoxjSerdeFile, VoxjSerdeObject, VoxjSerdePositionBlock,
-        VoxjSerdeSampleBlock, VoxjTransform, VoxjValue,
+        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPositionBlock, VoxjSampleBlock,
+        VoxjTransform, VoxjValue,
     };
 
-    fn document() -> VoxjSerdeFile {
-        VoxjSerdeFile {
+    fn document() -> VoxjFile {
+        VoxjFile {
             version: 1,
             main: VoxjMain {
-                objects: vec![VoxjSerdeObject {
+                objects: vec![VoxjObject {
                     name: "o".to_owned(),
                     palette_refs: vec![0],
                     bounds: [2, 1, 1],
-                    voxel_positions: VoxjSerdePositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
-                    voxel_samples: VoxjSerdeSampleBlock::RawJson(vec![vec![1], vec![2]]),
+                    voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
+                    voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![2]]),
                 }],
                 palettes: Vec::new(),
                 hierarchy_nodes: vec![VoxjHierarchyNode {
@@ -47,7 +47,7 @@ mod tests {
         }
     }
 
-    fn document_with_ext(ext: Value) -> VoxjSerdeFile {
+    fn document_with_ext(ext: Value) -> VoxjFile {
         let mut file = document();
         file.main.ext = Some(serde_json::from_value::<VoxjValue>(ext).unwrap());
         file

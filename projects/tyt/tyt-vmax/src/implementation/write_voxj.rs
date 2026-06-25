@@ -3,25 +3,20 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use vmax_codec::from_vmax_file;
-use voxj::VoxjCodecFile;
+use vmax_codec::from_vmax_package;
 use voxj_codec::{
-    PositionEncoding, SampleEncoding, encode_voxj_file, encode_voxj_file_smallest,
-    to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes,
+    PositionEncoding, SampleEncoding, to_voxj_file_bytes, to_voxj_pretty_file_bytes,
+    to_voxjz_file_bytes,
 };
-use voxsmith::{vox_state_from_vmax_file, voxj_codec_main_from_vox_state};
-
-/// The voxj format version stamped on the document. A `VoxState` carries no
-/// version of its own, so the writer stamps the current one.
-const VOXJ_FORMAT_VERSION: u32 = 1;
+use voxsmith::{from_vmax_file, to_voxj_file, to_voxj_file_with};
 
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
 /// stdout, round-tripping through voxcore: the package is loaded, voxsmith
-/// loads it into a [`VoxState`](voxcore::VoxState) and back out to the voxj
-/// model, and the voxj codec block-encodes and serializes it.
+/// loads it into a [`VoxState`](voxcore::VoxState) and encodes it back to a voxj
+/// document, which is then serialized.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
     // Load: read the whole package into the lossless Voxel Max model.
-    let serde = from_vmax_file(
+    let serde = from_vmax_package(
         // List every package-relative file path, descending one level into
         // subdirectories (only `QuickLook/`) so its thumbnails keep their prefix.
         || {
@@ -49,21 +44,15 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
         },
     )?;
 
-    // Translate through voxcore: vmax -> VoxState -> decoded voxj. The
-    // `voxel-max` ext carries the provenance with no native voxj home.
-    let state = vox_state_from_vmax_file(&serde)?;
-    let file = VoxjCodecFile {
-        version: VOXJ_FORMAT_VERSION,
-        main: voxj_codec_main_from_vox_state(&state),
-    };
-
-    // Encode: block-encode the document in one pass, then serialize the chosen
-    // container.
+    // Translate through voxcore: vmax -> VoxState, then encode the voxj document
+    // with the chosen block encodings. The `voxel-max` ext carries the
+    // provenance with no native voxj home.
+    let state = from_vmax_file(&serde)?;
     let serialized = match encoding {
         VoxjEncoding::Fixed { position, sample } => {
-            encode_voxj_file(&file, position_encoding(position), sample_encoding(sample))?
+            to_voxj_file_with(&state, position_encoding(position), sample_encoding(sample))?
         }
-        VoxjEncoding::Smallest => encode_voxj_file_smallest(&file)?,
+        VoxjEncoding::Smallest => to_voxj_file(&state)?,
     };
     let bytes = match format {
         VoxjFormat::Json => to_voxj_file_bytes(&serialized),

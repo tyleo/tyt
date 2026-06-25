@@ -2,13 +2,13 @@ mod internal;
 pub(crate) use internal::*;
 
 mod error;
-mod from_vox_file_bytes;
+mod from_mvox_file_bytes;
 mod result;
-mod to_vox_file_bytes;
-mod validate_vox_file;
+mod to_mvox_file_bytes;
+mod validate_mvox_file;
 
 pub use error::*;
-pub use from_vox_file_bytes::*;
+pub use from_mvox_file_bytes::*;
 pub use result::*;
-pub use to_vox_file_bytes::*;
-pub use validate_vox_file::*;
+pub use to_mvox_file_bytes::*;
+pub use validate_mvox_file::*;
