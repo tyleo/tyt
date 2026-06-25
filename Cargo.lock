@@ -1909,6 +1909,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "voxl"
+version = "0.1.0"
+
+[[package]]
 name = "voxsmith"
 version = "0.1.0"
 dependencies = [

@@ -18,6 +18,7 @@ members = [
     "projects/utilities/ty-math-serde",
     "projects/utilities/ty-math",
     "projects/utilities/voxcore",
+    "projects/utilities/voxl",
     "projects/utilities/voxsmith",
     "projects/voxel-codecs/goxl-codec",
     "projects/voxel-codecs/goxl",
