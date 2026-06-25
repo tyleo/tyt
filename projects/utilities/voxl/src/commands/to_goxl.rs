@@ -1,10 +1,23 @@
-use crate::{Dependencies, Result};
+use crate::{Dependencies, Format, Result};
 use clap::Parser;
+use std::path::PathBuf;
 
-/// Converts a voxel file to the goxl format.
+/// Converts a voxel file to the Goxel format.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "to-goxl")]
-pub struct ToGoxl {}
+pub struct ToGoxl {
+    /// The input voxel file, in any supported format.
+    #[arg(value_name = "input")]
+    input: PathBuf,
+
+    /// The output `.gox` file to write.
+    #[arg(value_name = "output")]
+    output: PathBuf,
+
+    /// Source format of the input. Inferred from its extension when omitted.
+    #[arg(value_name = "from", long)]
+    from: Option<Format>,
+}
 
 impl ToGoxl {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
