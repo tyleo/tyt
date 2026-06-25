@@ -19,6 +19,8 @@ members = [
     "projects/utilities/ty-math",
     "projects/utilities/voxcore",
     "projects/utilities/voxsmith",
+    "projects/voxel-codecs/goxl-codec",
+    "projects/voxel-codecs/goxl",
     "projects/voxel-codecs/mvox-codec",
     "projects/voxel-codecs/mvox",
     "projects/voxel-codecs/qbcl-codec",
@@ -59,5 +61,7 @@ vmax = { path = "projects/voxel-codecs/vmax" }
 vmax-codec = { path = "projects/voxel-codecs/vmax-codec" }
 mvox = { path = "projects/voxel-codecs/mvox" }
 mvox-codec = { path = "projects/voxel-codecs/mvox-codec" }
+goxl = { path = "projects/voxel-codecs/goxl" }
+goxl-codec = { path = "projects/voxel-codecs/goxl-codec" }
 qbcl = { path = "projects/voxel-codecs/qbcl" }
 qbcl-codec = { path = "projects/voxel-codecs/qbcl-codec" }

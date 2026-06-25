@@ -1,0 +1,12 @@
+[package]
+name = "goxl-codec"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Reads and writes Goxel (.gox) files."
+keywords = ["goxel", "gox", "voxel", "3d", "codec"]
+categories = ["parser-implementations", "encoding", "game-development", "graphics"]
+
+[dependencies]
+goxl = "0.1.0"

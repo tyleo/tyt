@@ -632,6 +632,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "goxl"
+version = "0.1.0"
+
+[[package]]
+name = "goxl-codec"
+version = "0.1.0"
+dependencies = [
+ "goxl",
+]
+
+[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
