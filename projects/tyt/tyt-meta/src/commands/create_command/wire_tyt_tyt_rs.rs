@@ -7,7 +7,9 @@ pub fn wire_tyt_tyt_rs(
     command: &str,
     name: &str,
 ) -> Result<()> {
-    let path = root.join("projects/tyt/src/tyt.rs");
+    let path = root
+        .join(create_command::TYT_PROJECT_DIR)
+        .join("tyt/src/tyt.rs");
     let contents = deps.read_to_string(&path)?;
     let lines: Vec<&str> = contents.lines().collect();
     let mut result: Vec<String> = Vec::new();

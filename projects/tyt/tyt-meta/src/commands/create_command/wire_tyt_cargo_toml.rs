@@ -1,8 +1,8 @@
-use crate::{Dependencies, Result};
+use crate::{Dependencies, Result, commands::create_command::TYT_PROJECT_DIR};
 use std::path::Path;
 
 pub fn wire_tyt_cargo_toml(deps: &impl Dependencies, root: &Path, command: &str) -> Result<()> {
-    let path = root.join("projects/tyt/Cargo.toml");
+    let path = root.join(TYT_PROJECT_DIR).join("tyt/Cargo.toml");
     let contents = deps.read_to_string(&path)?;
     let lines: Vec<&str> = contents.lines().collect();
     let mut result: Vec<String> = Vec::new();

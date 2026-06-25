@@ -9,7 +9,9 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     let description = &cmd.description;
     let snake = create_command::kebab_to_snake_case(command);
     let root = deps.workspace_root()?;
-    let crate_dir = root.join(format!("projects/tyt-{command}"));
+    let crate_dir = root
+        .join(create_command::TYT_PROJECT_DIR)
+        .join(format!("tyt-{command}"));
 
     if crate_dir.exists() {
         return Err(Error::Meta(format!(
@@ -78,19 +80,19 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     // Workspace Cargo.toml
     create_command::wire_workspace_cargo_toml(deps, &root, command)?;
 
-    // projects/tyt/Cargo.toml
+    // projects/tyt/tyt/Cargo.toml
     create_command::wire_tyt_cargo_toml(deps, &root, command)?;
 
-    // projects/tyt/src/dependencies.rs
+    // projects/tyt/tyt/src/dependencies.rs
     create_command::wire_tyt_dependencies(deps, &root, command, name)?;
 
-    // projects/tyt/src/dependencies_impl.rs
+    // projects/tyt/tyt/src/dependencies_impl.rs
     create_command::wire_tyt_dependencies_impl(deps, &root, command, name)?;
 
-    // projects/tyt/src/error.rs
+    // projects/tyt/tyt/src/error.rs
     create_command::wire_tyt_error(deps, &root, command, name)?;
 
-    // projects/tyt/src/tyt.rs
+    // projects/tyt/tyt/src/tyt.rs
     create_command::wire_tyt_tyt_rs(deps, &root, command, name)?;
 
     deps.write_stdout(

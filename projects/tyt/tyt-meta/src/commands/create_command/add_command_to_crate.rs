@@ -25,7 +25,9 @@ pub fn add_command_to_crate(
     let crate_snake = create_command::kebab_to_snake_case(crate_suffix);
 
     let root = deps.workspace_root()?;
-    let crate_dir = root.join(format!("projects/tyt-{crate_suffix}"));
+    let crate_dir = root
+        .join(create_command::TYT_PROJECT_DIR)
+        .join(format!("tyt-{crate_suffix}"));
     if !crate_dir.exists() {
         return Err(Error::Meta(format!(
             "parent crate not found: {}",

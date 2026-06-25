@@ -1,4 +1,4 @@
-use crate::{Dependencies, Result};
+use crate::{Dependencies, Result, commands::create_command::TYT_PROJECT_DIR};
 use std::path::Path;
 
 pub fn wire_workspace_cargo_toml(
@@ -11,8 +11,8 @@ pub fn wire_workspace_cargo_toml(
     let lines: Vec<&str> = contents.lines().collect();
     let mut result: Vec<String> = Vec::new();
 
-    let member_entry = format!("    \"projects/tyt-{command}\",");
-    let patch_entry = format!("tyt-{command} = {{ path = \"projects/tyt-{command}\" }}");
+    let member_entry = format!("    \"{TYT_PROJECT_DIR}/tyt-{command}\",");
+    let patch_entry = format!("tyt-{command} = {{ path = \"{TYT_PROJECT_DIR}/tyt-{command}\" }}");
 
     let mut member_inserted = false;
     let mut patch_inserted = false;
