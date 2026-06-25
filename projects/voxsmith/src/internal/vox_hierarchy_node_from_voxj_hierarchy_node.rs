@@ -1,5 +1,5 @@
+use crate::{Error, Result};
 use branded_id::U32Id;
-use std::io;
 use ty_math::{TyQuaternion, TyTransformF64, TyVector3};
 use voxcore::VoxHierarchyNode;
 use voxj::{VoxjHierarchyNode, VoxjTransform};
@@ -12,7 +12,7 @@ use voxj::{VoxjHierarchyNode, VoxjTransform};
 /// scale, or a non-finite / zero rotation.
 pub(crate) fn vox_hierarchy_node_from_voxj_hierarchy_node(
     node: &VoxjHierarchyNode,
-) -> io::Result<VoxHierarchyNode> {
+) -> Result<VoxHierarchyNode> {
     Ok(VoxHierarchyNode {
         name: node.name.clone(),
         child_nodes: node
@@ -32,7 +32,7 @@ pub(crate) fn vox_hierarchy_node_from_voxj_hierarchy_node(
 /// Converts a [`VoxjTransform`] into a [`TyTransformF64`], validating it:
 /// position finite, scale finite and non-zero, rotation finite and non-zero.
 /// The rotation is normalized (tolerating a unit quaternion's float error).
-fn vox_transform_from_voxj_transform(transform: &VoxjTransform) -> io::Result<TyTransformF64> {
+fn vox_transform_from_voxj_transform(transform: &VoxjTransform) -> Result<TyTransformF64> {
     let [position_x, position_y, position_z] = transform.position;
     let [rotation_x, rotation_y, rotation_z, rotation_w] = transform.rotation;
     let [scale_x, scale_y, scale_z] = transform.scale;
@@ -84,8 +84,8 @@ fn vox_transform_from_voxj_transform(transform: &VoxjTransform) -> io::Result<Ty
 }
 
 /// Invalid-data error from a message.
-fn invalid(message: String) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, message)
+fn invalid(message: String) -> Error {
+    Error::Invalid(message)
 }
 
 #[cfg(test)]

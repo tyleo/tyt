@@ -1,5 +1,5 @@
+use crate::{Error, Result};
 use branded_id::U32Id;
-use std::io;
 use ty_math::TyVector3U32;
 use voxcore::{BVoxPalette, BVoxPaletteCell, VoxObject};
 use voxj::VoxjCodecObject;
@@ -10,7 +10,7 @@ use voxj::VoxjCodecObject;
 /// Errors on an oversized grid, a position outside `bounds`, or ragged sample
 /// rows. Cross-references are checked later by
 /// [`VoxState::validate`](voxcore::VoxState::validate).
-pub(crate) fn vox_object_from_voxj_codec_object(object: &VoxjCodecObject) -> io::Result<VoxObject> {
+pub(crate) fn vox_object_from_voxj_codec_object(object: &VoxjCodecObject) -> Result<VoxObject> {
     let [size_x, size_y, size_z] = object.bounds;
     let bounds = TyVector3U32::new(size_x, size_y, size_z);
 
@@ -61,6 +61,6 @@ pub(crate) fn vox_object_from_voxj_codec_object(object: &VoxjCodecObject) -> io:
 }
 
 /// Invalid-data error from a message.
-fn invalid(message: String) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, message)
+fn invalid(message: String) -> Error {
+    Error::Invalid(message)
 }

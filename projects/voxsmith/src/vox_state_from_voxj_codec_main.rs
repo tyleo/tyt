@@ -1,19 +1,18 @@
 use crate::{
-    vox_hierarchy_node_from_voxj_hierarchy_node, vox_object_from_voxj_codec_object,
+    Result, vox_hierarchy_node_from_voxj_hierarchy_node, vox_object_from_voxj_codec_object,
     vox_palette_from_voxj_palette, vox_value_from_voxj_value,
 };
 use branded_id::U32Id;
-use std::io;
 use voxcore::VoxState;
 use voxj::VoxjCodecMain;
 
 /// Loads a [`VoxjCodecMain`] into a [`VoxState`]. Entities take ids in listing
 /// order, so each id equals its voxj array index and cross-references carry over.
 ///
-/// Errors on malformed object geometry (oversized grid, position out of bounds,
-/// ragged rows) or if [`VoxState::validate`](voxcore::VoxState::validate) rejects
-/// the assembled state.
-pub fn vox_state_from_voxj_codec_main(main: &VoxjCodecMain) -> io::Result<VoxState> {
+/// Errors on malformed object geometry or if
+/// [`VoxState::validate`](voxcore::VoxState::validate) rejects the assembled
+/// state.
+pub fn vox_state_from_voxj_codec_main(main: &VoxjCodecMain) -> Result<VoxState> {
     let mut state = VoxState::default();
 
     // Build each value before adding it so a failed conversion leaves the state
@@ -45,7 +44,7 @@ pub fn vox_state_from_voxj_codec_main(main: &VoxjCodecMain) -> io::Result<VoxSta
     );
 
     // Check cross-references and acyclicity on the assembled state.
-    state.validate().map_err(io::Error::other)?;
+    state.validate()?;
 
     Ok(state)
 }

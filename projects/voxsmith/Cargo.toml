@@ -8,7 +8,9 @@ description = "Utilities for working with voxels."
 
 [dependencies]
 branded-id = "0.1.3"
+serde = { version = "1", features = ["derive"] }
 ty-math = "0.1.7"
+vmax = { version = "0.1.7", features = ["serde"] }
 voxcore = "0.1.0"
-voxj = "0.1.1"
+voxj = { version = "0.1.1", features = ["serde"] }
 voxj-codec = "0.1.1"

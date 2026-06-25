@@ -1,12 +1,11 @@
-use crate::vox_value_from_voxj_value;
-use std::io;
+use crate::{Error, Result, vox_value_from_voxj_value};
 use voxcore::VoxPalette;
 use voxj::VoxjPalette;
 
 /// Builds a [`VoxPalette`] from a [`VoxjPalette`], in listing order so each id
 /// equals its voxj index. Duplicate attribute names are deduped last-wins (JSON
 /// convention). Errors on a ragged cell row or a non-finite value.
-pub(crate) fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> io::Result<VoxPalette> {
+pub(crate) fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette> {
     let mut out = VoxPalette::default();
 
     // Dedup attribute names last-wins; remember each survivor's source column.
@@ -23,19 +22,16 @@ pub(crate) fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> io::Result
 
     for (index, row) in palette.data.iter().enumerate() {
         if row.len() != palette.attributes.len() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!(
-                    "palette cell {index} has {} values but the palette has {} attributes",
-                    row.len(),
-                    palette.attributes.len()
-                ),
-            ));
+            return Err(Error::invalid(format!(
+                "palette cell {index} has {} values but the palette has {} attributes",
+                row.len(),
+                palette.attributes.len()
+            )));
         }
         let values = kept
             .iter()
             .map(|&(_, source)| vox_value_from_voxj_value(&row[source]))
-            .collect::<io::Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>>>()?;
         out.add_cell(values)
             .expect("one value per deduplicated attribute");
     }

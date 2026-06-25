@@ -1891,7 +1891,9 @@ name = "voxsmith"
 version = "0.1.0"
 dependencies = [
  "branded-id",
+ "serde",
  "ty-math",
+ "vmax",
  "voxcore",
  "voxj",
  "voxj-codec",

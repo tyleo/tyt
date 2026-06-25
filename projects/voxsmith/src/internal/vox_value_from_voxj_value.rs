@@ -1,15 +1,15 @@
-use std::io;
+use crate::{Error, Result};
 use voxcore::{VoxMap, VoxValue};
 use voxj::{VoxjMap, VoxjValue};
 
 /// Converts a [`VoxjValue`] into a [`VoxValue`], recursing into arrays and
 /// objects. Rejects non-finite numbers and dedups duplicate object keys
 /// last-wins (JSON convention).
-pub(crate) fn vox_value_from_voxj_value(value: &VoxjValue) -> io::Result<VoxValue> {
+pub(crate) fn vox_value_from_voxj_value(value: &VoxjValue) -> Result<VoxValue> {
     Ok(match value {
         VoxjValue::Number(number) => {
             if !number.is_finite() {
-                return Err(invalid(format!("number {number} must be finite")));
+                return Err(Error::invalid(format!("number {number} must be finite")));
             }
             VoxValue::Number(*number)
         }
@@ -19,7 +19,7 @@ pub(crate) fn vox_value_from_voxj_value(value: &VoxjValue) -> io::Result<VoxValu
             array
                 .iter()
                 .map(vox_value_from_voxj_value)
-                .collect::<io::Result<_>>()?,
+                .collect::<Result<_>>()?,
         ),
         VoxjValue::Object(VoxjMap(entries)) => {
             let mut map: Vec<(String, VoxValue)> = Vec::with_capacity(entries.len());
@@ -35,11 +35,6 @@ pub(crate) fn vox_value_from_voxj_value(value: &VoxjValue) -> io::Result<VoxValu
         }
         VoxjValue::Null => VoxValue::Null,
     })
-}
-
-/// Invalid-data error from a message.
-fn invalid(message: String) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, message)
 }
 
 #[cfg(test)]
