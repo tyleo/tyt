@@ -37,7 +37,7 @@ pub fn decode_hilbert(index: u64, bits: u32) -> [u32; 3] {
 }
 
 /// Gathers the bits of `x` at positions `3 * i` back down to position `i`,
-/// discarding the rest — the de-interleave half of a 3D Morton code. Inverse of
+/// discarding the rest: the de-interleave half of a 3D Morton code. Inverse of
 /// `split3` in `encode_hilbert`.
 fn compact3(mut x: u64) -> u64 {
     x &= 0x1249249249249249;

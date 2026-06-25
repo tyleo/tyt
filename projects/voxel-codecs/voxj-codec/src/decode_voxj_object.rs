@@ -6,16 +6,11 @@ use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use std::iter;
 use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
-/// Decodes one [`VoxjObject`] back into a [`VoxjDecodedObject`], the inverse
-/// of [`encode_voxj_object`](crate::encode_voxj_object). `cell_counts[p]` is
-/// the cell count of the palette referenced by `object.palette_refs[p]`, needed
-/// to recover the bit width of `packed-base64` samples;
-/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts) computes it
-/// from the document's palettes.
+/// Decodes one [`VoxjObject`] into a [`VoxjDecodedObject`], the inverse of
+/// [`encode_voxj_object`](crate::encode_voxj_object()). `cell_counts` comes from
+/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts()).
 ///
-/// Bitmap and Hilbert positions decode in ascending cell / Hilbert-index order;
-/// the sample channels share that same order, so each returned `positions[k]`
-/// pairs with `samples[k]`.
+/// Each returned `positions[k]` pairs with `samples[k]`.
 pub fn decode_voxj_object(object: &VoxjObject, cell_counts: &[usize]) -> Result<VoxjDecodedObject> {
     let positions = decode_positions(&object.voxel_positions, object.bounds)?;
     let channels = decode_samples(&object.voxel_samples, cell_counts, positions.len())?;

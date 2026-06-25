@@ -1,10 +1,11 @@
 use crate::{Error, Result};
 use voxj::VoxjPalette;
 
-/// The cell count of each referenced palette, in `palette_refs` order, ready to
-/// pass as the `cell_counts` argument of [`encode_voxj_object`](crate::encode_voxj_object)
-/// and [`decode_voxj_object`](crate::decode_voxj_object). A ref that points outside
-/// `palettes` is an error: the object would sample a palette that does not exist.
+/// The cell count of each referenced palette, in `palette_refs` order. This is
+/// the `cell_counts` argument that
+/// [`encode_voxj_object`](crate::encode_voxj_object()) and
+/// [`decode_voxj_object`](crate::decode_voxj_object()) need to derive the bit
+/// width of `packed-base64` samples. A ref outside `palettes` is an error.
 pub fn voxj_palette_cell_counts(
     palette_refs: &[usize],
     palettes: &[VoxjPalette],

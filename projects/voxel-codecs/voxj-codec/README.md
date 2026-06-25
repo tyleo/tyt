@@ -1,9 +1,35 @@
 # voxj-codec
 
-Reads and writes Voxel Json `.voxj` / `.voxjz` documents. The `voxj` crate defines the data types; this crate loads and saves them.
+Reads, writes, and validates Voxel Json `.voxj` / `.voxjz` documents. The `voxj`
+crate defines the data types; this crate is the logic over them.
 
-`from_voxj_file_bytes` / `to_voxj_file_bytes` parse and serialize a `voxj::VoxjFile` to and from the uncompressed `.voxj` JSON form; `from_voxjz_file_bytes` / `to_voxjz_file_bytes` handle the zip-packaged `.voxjz` form, and `from_voxj_or_voxjz_file_bytes` accepts either, detecting the form by its leading bytes. `to_voxj_pretty_file_bytes` writes the pretty-printed JSON.
+## Load and save
 
-The load/save path leaves each object's position and sample blocks encoded. Flatten them on demand: `decode_voxj_object` decodes one `voxj::VoxjObject` into a `VoxjDecodedObject` (flat per-voxel positions and per-palette samples), and `encode_voxj_object` / `encode_voxj_object_smallest` go back, the first with fixed block encodings and the second by trying every encoding pairing and keeping the smallest deflated. `voxj_palette_cell_counts` computes the cell count of each palette an object's `palette_refs` name, the widths `packed-base64` needs.
+Load and save leave each object's position and sample blocks encoded.
 
-`validate_voxj_file` checks a parsed `voxj::VoxjFile` against the format's document rules (palette and reference resolution, unique in-bounds voxels, acyclic hierarchy, non-degenerate transforms), decoding each object's blocks to run the geometry checks. See the `voxj` crate for the format specification.
+- `from_voxj_file_bytes` / `to_voxj_file_bytes`: the uncompressed `.voxj` JSON
+  form.
+- `from_voxjz_file_bytes` / `to_voxjz_file_bytes`: the zip-packaged `.voxjz`
+  form.
+- `from_voxj_or_voxjz_file_bytes`: either form, detected by its leading bytes.
+- `to_voxj_pretty_file_bytes`: pretty-printed `.voxj` JSON.
+
+## Decode and encode blocks
+
+Flatten the encoded blocks on demand, then re-encode.
+
+- `decode_voxj_object`: flatten one object into per-voxel positions and
+  per-palette samples.
+- `encode_voxj_object`: re-encode with fixed block encodings.
+- `encode_voxj_object_smallest`: try every encoding pairing and keep the
+  smallest deflated.
+- `voxj_palette_cell_counts`: the cell count per referenced palette, the widths
+  `packed-base64` needs.
+
+## Validate
+
+`validate_voxj_file` checks a parsed document against the format rules:
+reference resolution, unique in-bounds voxels, an acyclic hierarchy, and
+non-degenerate transforms, decoding each object to run the geometry checks.
+
+See the `voxj` crate for the format specification.

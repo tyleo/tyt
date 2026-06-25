@@ -21,11 +21,11 @@ const ROTATION_TOLERANCE: f64 = 1e-6;
 ///    within `1e-6`;
 /// 7. the hierarchy is acyclic.
 ///
-/// Each object's position and sample blocks are decoded with
-/// [`decode_voxj_object`] to run the geometry checks, so a block that cannot be
-/// decoded is reported as invalid. The `rgba` format is unchecked, as is whether
-/// sample channels follow the position block's voxel order, which no document can
-/// witness.
+/// Each object's blocks are decoded with
+/// [`decode_voxj_object`](crate::decode_voxj_object()) to run the geometry
+/// checks, so a block that cannot be decoded is reported as invalid. The `rgba`
+/// format is unchecked, as is whether the sample channels follow the position
+/// block's voxel order, which no document can witness.
 pub fn validate_voxj_file(file: &VoxjFile) -> Result<()> {
     if file.version != SUPPORTED_VERSION {
         return Err(invalid(format!(
@@ -102,11 +102,9 @@ fn validate_object(index: usize, object: &VoxjObject, palettes: &[VoxjPalette]) 
         }
     }
 
-    // Refs are in range, so cell counts resolve; decoding the blocks both
-    // flattens the geometry and rejects a malformed or mismatched sample block
-    // (wrong channel count, a channel whose length differs from the voxel count,
-    // or a block that cannot be decoded). The object index is restored to the
-    // message, which the decoder cannot supply.
+    // Refs are in range, so cell counts resolve. Decoding both flattens the
+    // geometry and rejects a malformed or mismatched sample block; the object
+    // index is added to the message the decoder cannot supply.
     let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes)?;
     let decoded = decode_voxj_object(object, &cell_counts).map_err(|e| {
         invalid(format!(

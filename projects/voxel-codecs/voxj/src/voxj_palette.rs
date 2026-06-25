@@ -2,15 +2,14 @@ use crate::VoxjValue;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A palette: an ordered attribute set plus one row of values per cell.
-///
-/// Cell `c`'s value for [`attributes`](Self::attributes)`[i]` is
-/// [`data`](Self::data)`[c][i]`; every row has exactly `attributes.len()`
-/// values, and a cell is referenced by its row index.
+/// A material palette: an attribute set with one row of values per cell.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 pub struct VoxjPalette {
+    /// Ordered attribute keys shared by every cell.
     pub attributes: Vec<String>,
 
+    /// One row per cell, each value aligned to [`attributes`](Self::attributes);
+    /// a cell is referenced by its row index.
     pub data: Vec<Vec<VoxjValue>>,
 }

@@ -5,12 +5,9 @@ use crate::{
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
-/// Encodes one [`VoxjDecodedObject`]'s geometry into a [`VoxjObject`] with
-/// the given fixed position and sample encodings. `cell_counts[p]` is the cell
-/// count of the palette referenced by `object.palette_refs[p]`, used to derive
-/// the bit width of `packed-base64` samples;
-/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts) computes it
-/// from the document's palettes.
+/// Encodes one [`VoxjDecodedObject`] into a [`VoxjObject`] with the given fixed
+/// position and sample encodings. `cell_counts` comes from
+/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts()).
 pub fn encode_voxj_object(
     object: &VoxjDecodedObject,
     cell_counts: &[usize],

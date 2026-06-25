@@ -2,8 +2,7 @@ use crate::VoxjTransform;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A hierarchy node: references child nodes and objects by index and carries a
-/// transform. Nodes form a DAG.
+/// A node in the scene hierarchy. Nodes form a DAG.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]

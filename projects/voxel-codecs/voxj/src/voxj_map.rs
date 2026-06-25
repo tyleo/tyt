@@ -10,8 +10,8 @@ use std::fmt::{Formatter, Result as FmtResult};
 
 /// An ordered set of key/value pairs: the object form of a [`VoxjValue`].
 ///
-/// Insertion order is preserved on both serialization and deserialization so an
-/// opaque `ext` namespace round-trips with its keys in their original order.
+/// Insertion order is preserved through serialization, so the `ext` namespace
+/// round-trips with its key order intact.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VoxjMap(pub Vec<(String, VoxjValue)>);
 

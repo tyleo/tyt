@@ -42,7 +42,7 @@ pub fn encode_hilbert(x: u32, y: u32, z: u32, bits: u32) -> u64 {
 }
 
 /// Spreads the low 21 bits of `x` so that input bit `i` lands at output bit
-/// `3 * i`, zeroing the two bits between each — the bit-interleave half of a 3D
+/// `3 * i`, zeroing the two bits between each: the bit-interleave half of a 3D
 /// Morton code. Inverse of `compact3` in `decode_hilbert`.
 fn split3(mut x: u64) -> u64 {
     x &= 0x1fffff;

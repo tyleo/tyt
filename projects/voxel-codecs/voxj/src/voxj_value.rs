@@ -2,17 +2,14 @@ use crate::VoxjMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize, Serializer};
 
-/// An arbitrary Voxel Json value.
-///
-/// This is the JSON data model shared by palette cell values and the opaque
-/// `main.ext` extension namespace. Numbers, integral or not, are held as `f64`;
-/// an integral value is serialized as a JSON integer so consumers that expect
-/// one round-trip without seeing a fractional `.0`.
+/// An arbitrary Voxel Json value: the data model shared by palette cell values
+/// and the opaque `main.ext` namespace.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
 pub enum VoxjValue {
-    /// A number.
+    /// A number, held as `f64` but serialized as a JSON integer when integral,
+    /// so a value like `4` does not round-trip as `4.0`.
     Number(f64),
 
     /// A string.
@@ -38,8 +35,7 @@ impl Serialize for VoxjValue {
         S: Serializer,
     {
         match self {
-            // Integral numbers serialize as a JSON integer, not a fractional
-            // `4.0`.
+            // Serialize an integral number as a JSON integer.
             VoxjValue::Number(n)
                 if n.fract() == 0.0 && *n >= i64::MIN as f64 && *n <= i64::MAX as f64 =>
             {

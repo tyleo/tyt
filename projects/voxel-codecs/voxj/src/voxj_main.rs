@@ -18,9 +18,7 @@ pub struct VoxjMain {
     pub root_hierarchy_nodes: Vec<usize>,
 
     /// Optional namespace for user-defined extensions, conventionally
-    /// vendor-keyed. The core format assigns it no meaning and guarantees
-    /// nothing about its contents; consumers ignore extensions they do not
-    /// recognize.
+    /// vendor-keyed. The core format assigns it no meaning.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")

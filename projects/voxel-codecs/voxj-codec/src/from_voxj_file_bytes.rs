@@ -1,8 +1,7 @@
 use crate::{Error, Result};
 use voxj::VoxjFile;
 
-/// Decodes `.voxj` JSON bytes into a [`VoxjFile`]. Any `main.ext` extension
-/// namespace is carried on [`VoxjMain::ext`](voxj::VoxjMain::ext).
+/// Decodes `.voxj` JSON bytes into a [`VoxjFile`].
 pub fn from_voxj_file_bytes(bytes: &[u8]) -> Result<VoxjFile> {
     serde_json::from_slice(bytes).map_err(Error::Json)
 }

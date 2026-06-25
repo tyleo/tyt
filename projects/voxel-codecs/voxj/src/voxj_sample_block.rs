@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 
 /// An encoded voxel-sample block, in the position block's voxel order. Each
-/// voxel carries one cell index per referenced palette. Serde renders this as
+/// voxel has one cell index per referenced palette. Serde renders this as
 /// `{ "encoding", "data" }`.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
@@ -12,12 +12,11 @@ pub enum VoxjSampleBlock {
     #[cfg_attr(feature = "serde", serde(rename = "raw-json"))]
     RawJson(Vec<Vec<u32>>),
 
-    /// One channel per palette: a flat run stream `[value1, count1, ...]`.
+    /// One run-length channel per palette: a flat `[value, count, ...]` stream.
     #[cfg_attr(feature = "serde", serde(rename = "rle-json"))]
     RleJson(Vec<Vec<u32>>),
 
-    /// One channel per palette: each voxel's cell index bit-packed at width
-    /// `max(1, bitLength(cellCount - 1))`, MSB-first, base64-encoded.
+    /// One base64 bit-packed channel per palette.
     #[cfg_attr(feature = "serde", serde(rename = "packed-base64"))]
     PackedBase64(Vec<String>),
 }
