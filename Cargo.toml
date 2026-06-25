@@ -1,58 +1,63 @@
 [workspace]
+
 members = [
-    "projects/ty-math-serde",
-    "projects/ty-math",
-    "projects/tyt-claude",
-    "projects/tyt-common",
-    "projects/tyt-cubemap",
-    "projects/tyt-fbx",
-    "projects/tyt-fs",
-    "projects/tyt-image",
-    "projects/tyt-injection",
-    "projects/tyt-material",
-    "projects/tyt-meshy",
-    "projects/tyt-meta",
-    "projects/tyt-oai",
-    "projects/tyt-preferences",
-    "projects/tyt",
-    "projects/tyt-vmax",
-    "projects/voxcore",
-    "projects/voxj-codec",
-    "projects/voxj",
-    "projects/voxsmith",
-    "projects/vmax-codec",
-    "projects/vmax",
-    "projects/mvox-codec",
-    "projects/mvox",
-    "projects/qbcl-codec",
-    "projects/qbcl",
+    "projects/tyt/tyt-claude",
+    "projects/tyt/tyt-common",
+    "projects/tyt/tyt-cubemap",
+    "projects/tyt/tyt-fbx",
+    "projects/tyt/tyt-fs",
+    "projects/tyt/tyt-image",
+    "projects/tyt/tyt-injection",
+    "projects/tyt/tyt-material",
+    "projects/tyt/tyt-meshy",
+    "projects/tyt/tyt-meta",
+    "projects/tyt/tyt-oai",
+    "projects/tyt/tyt-preferences",
+    "projects/tyt/tyt-vmax",
+    "projects/tyt/tyt",
+    "projects/utilities/ty-math-serde",
+    "projects/utilities/ty-math",
+    "projects/utilities/voxcore",
+    "projects/utilities/voxsmith",
+    "projects/voxel-codecs/mvox-codec",
+    "projects/voxel-codecs/mvox",
+    "projects/voxel-codecs/qbcl-codec",
+    "projects/voxel-codecs/qbcl",
+    "projects/voxel-codecs/vmax-codec",
+    "projects/voxel-codecs/vmax",
+    "projects/voxel-codecs/voxj-codec",
+    "projects/voxel-codecs/voxj",
 ]
+
 resolver = "2"
 
 [patch.crates-io]
-ty-math = { path = "projects/ty-math" }
-ty-math-serde = { path = "projects/ty-math-serde" }
-tyt = { path = "projects/tyt" }
-tyt-claude = { path = "projects/tyt-claude" }
-tyt-common = { path = "projects/tyt-common" }
-tyt-cubemap = { path = "projects/tyt-cubemap" }
-tyt-fbx = { path = "projects/tyt-fbx" }
-tyt-fs = { path = "projects/tyt-fs" }
-tyt-image = { path = "projects/tyt-image" }
-tyt-injection = { path = "projects/tyt-injection" }
-tyt-material = { path = "projects/tyt-material" }
-tyt-meshy = { path = "projects/tyt-meshy" }
-tyt-meta = { path = "projects/tyt-meta" }
-tyt-oai = { path = "projects/tyt-oai" }
-tyt-preferences = { path = "projects/tyt-preferences" }
-tyt-vmax = { path = "projects/tyt-vmax" }
-voxcore = { path = "projects/voxcore" }
-voxj = { path = "projects/voxj" }
-voxj-codec = { path = "projects/voxj-codec" }
-voxsmith = { path = "projects/voxsmith" }
-vmax = { path = "projects/vmax" }
-vmax-codec = { path = "projects/vmax-codec" }
-mvox = { path = "projects/mvox" }
-mvox-codec = { path = "projects/mvox-codec" }
-qbcl = { path = "projects/qbcl" }
-qbcl-codec = { path = "projects/qbcl-codec" }
+
+tyt = { path = "projects/tyt/tyt" }
+tyt-claude = { path = "projects/tyt/tyt-claude" }
+tyt-common = { path = "projects/tyt/tyt-common" }
+tyt-cubemap = { path = "projects/tyt/tyt-cubemap" }
+tyt-fbx = { path = "projects/tyt/tyt-fbx" }
+tyt-fs = { path = "projects/tyt/tyt-fs" }
+tyt-image = { path = "projects/tyt/tyt-image" }
+tyt-injection = { path = "projects/tyt/tyt-injection" }
+tyt-material = { path = "projects/tyt/tyt-material" }
+tyt-meshy = { path = "projects/tyt/tyt-meshy" }
+tyt-meta = { path = "projects/tyt/tyt-meta" }
+tyt-oai = { path = "projects/tyt/tyt-oai" }
+tyt-preferences = { path = "projects/tyt/tyt-preferences" }
+tyt-vmax = { path = "projects/tyt/tyt-vmax" }
+
+ty-math = { path = "projects/utilities/ty-math" }
+ty-math-serde = { path = "projects/utilities/ty-math-serde" }
+voxcore = { path = "projects/utilities/voxcore" }
+voxsmith = { path = "projects/utilities/voxsmith" }
+
+voxj = { path = "projects/voxel-codecs/voxj" }
+voxj-codec = { path = "projects/voxel-codecs/voxj-codec" }
+vmax = { path = "projects/voxel-codecs/vmax" }
+vmax-codec = { path = "projects/voxel-codecs/vmax-codec" }
+mvox = { path = "projects/voxel-codecs/mvox" }
+mvox-codec = { path = "projects/voxel-codecs/mvox-codec" }
+qbcl = { path = "projects/voxel-codecs/qbcl" }
+qbcl-codec = { path = "projects/voxel-codecs/qbcl-codec" }
