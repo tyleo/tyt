@@ -1,18 +1,24 @@
 use crate::{
     Error, Result, from_contents_vmaxb_file_bytes, from_history_vmaxhb_file_bytes,
-    from_history_vmaxhvsb_file_bytes, from_history_vmaxhvsc_file_bytes,
+    from_history_vmaxhvsb_file_bytes, from_history_vmaxhvsc_file_bytes, from_image_png_file_bytes,
     from_palette_png_file_bytes, from_palette_settings_vmaxpsb_file_bytes,
-    from_quick_look_png_file_bytes, from_scene_json_file_bytes, from_selection_vmaxb_file_bytes,
+    from_scene_json_file_bytes, from_selection_vmaxb_file_bytes,
 };
 use std::collections::BTreeMap;
-use vmax::VMaxSerdeFile;
+use vmax::VMaxFile;
 
-/// Reads a whole `.vmax` package into a [`VMaxSerdeFile`]. `list` returns the
+/// The package-level thumbnail's path within a `.vmax`.
+const THUMBNAIL_PATH: &str = "QuickLook/Thumbnail.png";
+
+/// Prefix every `QuickLook/` entry shares.
+const QUICK_LOOK_PREFIX: &str = "QuickLook/";
+
+/// Reads a whole `.vmax` package into a [`VMaxFile`]. `list` returns the
 /// package-relative path of every file (so `QuickLook/` entries keep their
 /// subdirectory prefix); `resolve` returns a file's bytes by that path, or
 /// `Ok(None)` if it has since vanished. `scene.json` is required, and a
 /// filename matching no known kind is an error rather than a silent loss.
-pub fn from_vmax_file<L, R>(list: L, mut resolve: R) -> Result<VMaxSerdeFile>
+pub fn from_vmax_file<L, R>(list: L, mut resolve: R) -> Result<VMaxFile>
 where
     L: FnOnce() -> Result<Vec<String>>,
     R: FnMut(&str) -> Result<Option<Vec<u8>>>,
@@ -28,13 +34,17 @@ where
     let mut history_vmaxhvsb_files = BTreeMap::new();
     let mut history_vmaxhvsc_files = BTreeMap::new();
     let mut selection_vmaxb_files = BTreeMap::new();
-    let mut quick_look_png_files = BTreeMap::new();
+    let mut thumbnail_png = None;
+    let mut contents_vmax_pngs = BTreeMap::new();
+    let mut group_pngs = BTreeMap::new();
 
     // Classify every listed file by name and parse it into the matching map.
-    // `scene.json` is already parsed above; `QuickLook/` thumbnails are matched by
-    // their path prefix, and `.selection.vmaxb` is checked before `.vmaxb` so a
-    // selection sidecar is not mistaken for an object. Every kind Voxel Max writes
-    // is modeled, so an unrecognized name is reported rather than dropped.
+    // `scene.json` is already parsed above. `QuickLook/` thumbnails split by
+    // role: the package `Thumbnail.png`, the per-object `contents*.vmaxb.png`,
+    // and the per-group `<id>.png` (everything else under `QuickLook/`).
+    // `.selection.vmaxb` is checked before `.vmaxb` so a selection sidecar is
+    // not mistaken for an object. Every kind Voxel Max writes is modeled, so an
+    // unrecognized name is reported rather than dropped.
     for path in list()? {
         if path == "scene.json" {
             continue;
@@ -42,8 +52,18 @@ where
         let Some(bytes) = resolve(&path)? else {
             continue;
         };
-        if path.starts_with("QuickLook/") {
-            quick_look_png_files.insert(path, from_quick_look_png_file_bytes(&bytes)?);
+        if let Some(name) = path.strip_prefix(QUICK_LOOK_PREFIX) {
+            if path == THUMBNAIL_PATH {
+                thumbnail_png = Some(from_image_png_file_bytes(&bytes)?);
+            } else if let Some(data) = name.strip_suffix(".png").and_then(strip_contents_suffix) {
+                contents_vmax_pngs.insert(data, from_image_png_file_bytes(&bytes)?);
+            } else if let Some(id) = name.strip_suffix(".png") {
+                group_pngs.insert(id.to_owned(), from_image_png_file_bytes(&bytes)?);
+            } else {
+                return Err(Error::Invalid(format!(
+                    "unrecognized QuickLook file in .vmax package: {path}"
+                )));
+            }
         } else if path.ends_with(".selection.vmaxb") {
             selection_vmaxb_files.insert(path, from_selection_vmaxb_file_bytes(&bytes)?);
         } else if path.ends_with(".vmaxb") {
@@ -65,7 +85,7 @@ where
         }
     }
 
-    Ok(VMaxSerdeFile {
+    Ok(VMaxFile {
         scene_json_file,
         contents_files,
         palette_settings_files,
@@ -74,19 +94,27 @@ where
         history_vmaxhvsb_files,
         history_vmaxhvsc_files,
         selection_vmaxb_files,
-        quick_look_png_files,
+        thumbnail_png,
+        contents_vmax_pngs,
+        group_pngs,
     })
+}
+
+/// Returns the object `data` filename a per-object thumbnail names (a
+/// `contents*.vmaxb` stem), or `None` when the name is not a contents preview.
+fn strip_contents_suffix(name: &str) -> Option<String> {
+    name.ends_with(".vmaxb").then(|| name.to_owned())
 }
 
 #[cfg(test)]
 mod tests {
     use super::from_vmax_file;
-    use crate::{encode_contents_vmaxb_file_from_voxels, to_vmax_file};
+    use crate::{VMaxVoxel, encode_contents_vmaxb_file_from_voxels, to_vmax_file};
     use std::collections::{BTreeMap, HashMap};
     use vmax::{
-        VMaxCodecVoxel, VMaxHistoryVmaxhbFile, VMaxHistoryVmaxhvsbFile, VMaxHistoryVmaxhvscFile,
-        VMaxObject, VMaxPalettePngFile, VMaxQuickLookPngFile, VMaxSceneJsonFile,
-        VMaxSelectionVmaxbFile, VMaxSerdeFile, VMaxSerdePaletteSettingsVmaxpsbFile,
+        VMaxFile, VMaxHistorySession, VMaxHistoryVmaxhbFile, VMaxHistoryVmaxhvsbFile,
+        VMaxHistoryVmaxhvscFile, VMaxImage, VMaxObject, VMaxPalettePngFile,
+        VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxSelectionVmaxbFile, VMaxValue,
     };
 
     fn object(name: &str, data: &str, palette: &str) -> VMaxObject {
@@ -97,6 +125,7 @@ mod tests {
             history: "history.vmaxhb".to_owned(),
             id: format!("id-{name}"),
             parent_id: None,
+            hidden: None,
             position: [0.0; 3],
             rotation: [0.0, 0.0, 0.0, 1.0],
             scale: [1.0; 3],
@@ -105,13 +134,22 @@ mod tests {
             t_al: String::new(),
             t_pa: String::new(),
             t_pf: String::new(),
+            t_po: None,
             center: [0.0; 3],
             bounds_min: None,
             bounds_max: None,
         }
     }
 
-    fn sample() -> VMaxSerdeFile {
+    fn image() -> VMaxImage {
+        VMaxImage {
+            width: 2,
+            height: 1,
+            pixels: vec![[1, 2, 3, 255], [4, 5, 6, 0]],
+        }
+    }
+
+    fn sample() -> VMaxFile {
         let scene_json_file = VMaxSceneJsonFile {
             objects: vec![object("a", "contents.vmaxb", "palette.png")],
             v: 4,
@@ -120,12 +158,12 @@ mod tests {
 
         let contents = encode_contents_vmaxb_file_from_voxels(
             &[
-                VMaxCodecVoxel {
+                VMaxVoxel {
                     position: [1, 2, 3],
                     material_idx: 1,
                     color_idx: 5,
                 },
-                VMaxCodecVoxel {
+                VMaxVoxel {
                     position: [40, 5, 9],
                     material_idx: 2,
                     color_idx: 7,
@@ -133,7 +171,7 @@ mod tests {
             ],
             "uuid-a",
         );
-        let settings = VMaxSerdePaletteSettingsVmaxpsbFile {
+        let settings = VMaxPaletteSettingsVmaxpsbFile {
             name: "pal".to_owned(),
             lc: vec![0u8; 256],
             ..Default::default()
@@ -148,42 +186,52 @@ mod tests {
         palette_png_files.insert("palette.png".to_owned(), png);
 
         // The optional file kinds the scene graph never references: enumeration,
-        // not reference-following, must find and preserve each of them verbatim.
+        // not reference-following, must find and preserve each of them. History
+        // now round-trips as typed plist; selection stays verbatim bytes.
         let mut history_vmaxhb_files = BTreeMap::new();
         history_vmaxhb_files.insert(
             "history.vmaxhb".to_owned(),
-            VMaxHistoryVmaxhbFile(vec![0x62, 0x76, 0x78, 0x32, 1, 2, 3]),
+            VMaxHistoryVmaxhbFile {
+                sessions: vec![VMaxHistorySession {
+                    sid: 0,
+                    steps: Vec::new(),
+                    snapshots: Vec::new(),
+                    ssnapshots: vec![VMaxValue::String("scene-snap".to_owned())],
+                    osnapshots: Vec::new(),
+                }],
+                asid: 0,
+            },
         );
         history_vmaxhb_files.insert(
             "scene.vmaxhb".to_owned(),
-            VMaxHistoryVmaxhbFile(vec![0x62, 0x76, 0x78, 0x32, 9]),
+            VMaxHistoryVmaxhbFile {
+                sessions: Vec::new(),
+                asid: 9,
+            },
         );
         let mut history_vmaxhvsb_files = BTreeMap::new();
         history_vmaxhvsb_files.insert(
             "history.vmaxhvsb".to_owned(),
-            VMaxHistoryVmaxhvsbFile(vec![0x62, 0x76, 0x78, 0x32, 4, 5]),
+            VMaxHistoryVmaxhvsbFile(Vec::new()),
         );
         let mut history_vmaxhvsc_files = BTreeMap::new();
         history_vmaxhvsc_files.insert(
             "history.vmaxhvsc".to_owned(),
-            VMaxHistoryVmaxhvscFile(vec![0x62, 0x70, 0x6c, 0x69, 0x73, 0x74]),
+            VMaxHistoryVmaxhvscFile(Vec::new()),
         );
         let mut selection_vmaxb_files = BTreeMap::new();
         selection_vmaxb_files.insert(
             "contents.selection.vmaxb".to_owned(),
             VMaxSelectionVmaxbFile(vec![10, 11, 12]),
         );
-        let mut quick_look_png_files = BTreeMap::new();
-        quick_look_png_files.insert(
-            "QuickLook/Thumbnail.png".to_owned(),
-            VMaxQuickLookPngFile(vec![0x89, b'P', b'N', b'G', 1, 2]),
-        );
-        quick_look_png_files.insert(
-            "QuickLook/contents.vmaxb.png".to_owned(),
-            VMaxQuickLookPngFile(vec![0x89, b'P', b'N', b'G', 7, 8]),
-        );
 
-        VMaxSerdeFile {
+        // One of each QuickLook role: package thumbnail, per-object, per-group.
+        let mut contents_vmax_pngs = BTreeMap::new();
+        contents_vmax_pngs.insert("contents.vmaxb".to_owned(), image());
+        let mut group_pngs = BTreeMap::new();
+        group_pngs.insert("group-id".to_owned(), image());
+
+        VMaxFile {
             scene_json_file,
             contents_files,
             palette_settings_files,
@@ -192,7 +240,9 @@ mod tests {
             history_vmaxhvsb_files,
             history_vmaxhvsc_files,
             selection_vmaxb_files,
-            quick_look_png_files,
+            thumbnail_png: Some(image()),
+            contents_vmax_pngs,
+            group_pngs,
         }
     }
 
@@ -208,13 +258,21 @@ mod tests {
         })
         .unwrap();
 
-        // Every kind, including the history / selection / QuickLook files no scene
-        // object names, is written and read back through the same map.
+        // Every kind, including the history / selection / QuickLook files no
+        // scene object names, is written and read back through the same map.
         let read = from_vmax_file(
             || Ok(dir.keys().cloned().collect()),
             |name| Ok(dir.get(name).cloned()),
         )
         .unwrap();
         assert_eq!(read, file);
+
+        // The three QuickLook roles land in their named maps under the right keys.
+        assert!(read.thumbnail_png.is_some());
+        assert!(read.contents_vmax_pngs.contains_key("contents.vmaxb"));
+        assert!(read.group_pngs.contains_key("group-id"));
+        assert!(dir.contains_key("QuickLook/Thumbnail.png"));
+        assert!(dir.contains_key("QuickLook/contents.vmaxb.png"));
+        assert!(dir.contains_key("QuickLook/group-id.png"));
     }
 }

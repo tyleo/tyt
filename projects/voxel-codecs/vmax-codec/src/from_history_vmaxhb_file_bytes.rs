@@ -1,8 +1,10 @@
-use crate::Result;
+use crate::{Error, Result, decompress_lzfse};
 use vmax::VMaxHistoryVmaxhbFile;
 
-/// Reads `*.vmaxhb` undo-history bytes into a [`VMaxHistoryVmaxhbFile`]. The
-/// history stream is opaque to this crate, so the bytes are kept verbatim.
+/// Decodes `*.vmaxhb` undo-history bytes (an LZFSE-framed binary plist) into a
+/// [`VMaxHistoryVmaxhbFile`]. The inverse of
+/// [`to_history_vmaxhb_file_bytes`](crate::to_history_vmaxhb_file_bytes).
 pub fn from_history_vmaxhb_file_bytes(bytes: &[u8]) -> Result<VMaxHistoryVmaxhbFile> {
-    Ok(VMaxHistoryVmaxhbFile(bytes.to_vec()))
+    let decompressed = decompress_lzfse(bytes);
+    plist::from_bytes(&decompressed).map_err(Error::Plist)
 }

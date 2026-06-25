@@ -4,12 +4,14 @@ use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
 };
+use vmax_codec::Error as VMaxError;
 use voxcore::Error as VoxError;
 use voxj_codec::Error as VoxjError;
 
 /// An error from voxsmith: voxel data that is malformed, a state that fails
-/// voxcore validation, a Voxel Json document that fails to encode or decode, or
-/// a MagicaVoxel `.vox` file that fails to decode.
+/// voxcore validation, a Voxel Json document that fails to encode or decode, a
+/// MagicaVoxel `.vox` file that fails to decode, or a Voxel Max payload that
+/// fails to decode or encode.
 #[derive(Debug)]
 pub enum Error {
     /// Voxel data was readable but semantically malformed.
@@ -23,6 +25,9 @@ pub enum Error {
 
     /// Decoding a MagicaVoxel `.vox` file failed.
     MVox(MVoxError),
+
+    /// Decoding or encoding a Voxel Max payload failed.
+    VMax(VMaxError),
 }
 
 impl Error {
@@ -39,6 +44,7 @@ impl Display for Error {
             Error::Vox(error) => error.fmt(f),
             Error::Voxj(error) => error.fmt(f),
             Error::MVox(error) => error.fmt(f),
+            Error::VMax(error) => error.fmt(f),
         }
     }
 }
@@ -50,6 +56,7 @@ impl StdError for Error {
             Error::Vox(error) => Some(error),
             Error::Voxj(error) => Some(error),
             Error::MVox(error) => Some(error),
+            Error::VMax(error) => Some(error),
         }
     }
 }
@@ -69,6 +76,12 @@ impl From<VoxjError> for Error {
 impl From<MVoxError> for Error {
     fn from(error: MVoxError) -> Self {
         Error::MVox(error)
+    }
+}
+
+impl From<VMaxError> for Error {
+    fn from(error: VMaxError) -> Self {
+        Error::VMax(error)
     }
 }
 

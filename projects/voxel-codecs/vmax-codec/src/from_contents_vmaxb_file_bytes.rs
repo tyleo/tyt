@@ -1,9 +1,9 @@
 use crate::{Error, Result, decompress_lzfse};
-use vmax::VMaxSerdeContentsVmaxbFile;
+use vmax::VMaxContentsVmaxbFile;
 
 /// Decodes `contents*.vmaxb` bytes (an LZFSE-framed binary plist) into a
-/// [`VMaxSerdeContentsVmaxbFile`].
-pub fn from_contents_vmaxb_file_bytes(bytes: &[u8]) -> Result<VMaxSerdeContentsVmaxbFile> {
+/// [`VMaxContentsVmaxbFile`].
+pub fn from_contents_vmaxb_file_bytes(bytes: &[u8]) -> Result<VMaxContentsVmaxbFile> {
     let decompressed = decompress_lzfse(bytes);
     plist::from_bytes(&decompressed).map_err(Error::Plist)
 }

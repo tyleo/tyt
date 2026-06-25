@@ -1,9 +1,10 @@
-use crate::Result;
+use crate::{Error, Result};
 use vmax::VMaxHistoryVmaxhvscFile;
 
-/// Reads `*.vmaxhvsc` history voxel-snapshot-sidecar bytes into a
-/// [`VMaxHistoryVmaxhvscFile`]. The sidecar plist is opaque to this crate, so
-/// the bytes are kept verbatim.
+/// Decodes `*.vmaxhvsc` history voxel-snapshot-sidecar bytes (a binary plist
+/// array, not outer-compressed) into a [`VMaxHistoryVmaxhvscFile`]. The inverse
+/// of
+/// [`to_history_vmaxhvsc_file_bytes`](crate::to_history_vmaxhvsc_file_bytes).
 pub fn from_history_vmaxhvsc_file_bytes(bytes: &[u8]) -> Result<VMaxHistoryVmaxhvscFile> {
-    Ok(VMaxHistoryVmaxhvscFile(bytes.to_vec()))
+    plist::from_bytes(bytes).map_err(Error::Plist)
 }

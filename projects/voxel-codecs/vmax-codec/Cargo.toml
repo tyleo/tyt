@@ -12,5 +12,5 @@ categories = ["parser-implementations", "encoding", "game-development", "graphic
 lzfse = "0.2"
 plist = "1"
 png = "0.18"
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 vmax = { version = "0.1.7", features = ["serde"] }

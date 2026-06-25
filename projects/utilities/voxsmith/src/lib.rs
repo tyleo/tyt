@@ -7,9 +7,9 @@
 //! ([`vox_state_from_voxj_codec_main`] / [`voxj_codec_main_from_vox_state`]) and
 //! straight to and from `.voxj` / `.voxjz` bytes
 //! ([`vox_state_from_voxj_bytes`], [`vox_state_to_voxj_bytes`],
-//! [`vox_state_to_voxjz_bytes`]). For Voxel Max it converts to and from a fully
-//! decoded `VMaxCodecFile` ([`vox_state_from_vmax_codec_file`] /
-//! [`vmax_codec_file_from_vox_state`]), stashing the Voxel Max state with no
+//! [`vox_state_to_voxjz_bytes`]). For Voxel Max it converts to and from the
+//! lossless `VMaxFile` ([`vox_state_from_vmax_file`] /
+//! [`vmax_file_from_vox_state`]), stashing the Voxel Max state with no
 //! native home under a `voxel-max` ext. For MagicaVoxel it converts to and from a
 //! decoded `MVoxFile` ([`vox_state_from_mvox_file`] / [`mvox_file_from_vox_state`])
 //! and straight to and from `.vox` bytes ([`vox_state_from_mvox_bytes`] /
@@ -23,10 +23,10 @@ mod error;
 mod mvox_bytes_from_vox_state;
 mod mvox_file_from_vox_state;
 mod result;
-mod vmax_codec_file_from_vox_state;
+mod vmax_file_from_vox_state;
 mod vox_state_from_mvox_bytes;
 mod vox_state_from_mvox_file;
-mod vox_state_from_vmax_codec_file;
+mod vox_state_from_vmax_file;
 mod vox_state_from_voxj_bytes;
 mod vox_state_from_voxj_codec_main;
 mod vox_state_to_voxj_bytes;
@@ -38,10 +38,10 @@ pub use error::*;
 pub use mvox_bytes_from_vox_state::*;
 pub use mvox_file_from_vox_state::*;
 pub use result::*;
-pub use vmax_codec_file_from_vox_state::*;
+pub use vmax_file_from_vox_state::*;
 pub use vox_state_from_mvox_bytes::*;
 pub use vox_state_from_mvox_file::*;
-pub use vox_state_from_vmax_codec_file::*;
+pub use vox_state_from_vmax_file::*;
 pub use vox_state_from_voxj_bytes::*;
 pub use vox_state_from_voxj_codec_main::*;
 pub use vox_state_to_voxj_bytes::*;

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// at once (Voxel Max history records up to four).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(feature = "serde", serde(default))]
+#[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]
 pub struct VMaxToolMode {
     /// Add surface.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]

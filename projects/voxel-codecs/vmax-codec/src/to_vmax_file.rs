@@ -1,16 +1,16 @@
 use crate::{
     Result, to_contents_vmaxb_file_bytes, to_history_vmaxhb_file_bytes,
-    to_history_vmaxhvsb_file_bytes, to_history_vmaxhvsc_file_bytes, to_palette_png_file_bytes,
-    to_palette_settings_vmaxpsb_file_bytes, to_quick_look_png_file_bytes, to_scene_json_file_bytes,
+    to_history_vmaxhvsb_file_bytes, to_history_vmaxhvsc_file_bytes, to_image_png_file_bytes,
+    to_palette_png_file_bytes, to_palette_settings_vmaxpsb_file_bytes, to_scene_json_file_bytes,
     to_selection_vmaxb_file_bytes,
 };
-use vmax::VMaxSerdeFile;
+use vmax::VMaxFile;
 
-/// Writes a [`VMaxSerdeFile`] back to a `.vmax` package, the inverse of
+/// Writes a [`VMaxFile`] back to a `.vmax` package, the inverse of
 /// [`from_vmax_file`](crate::from_vmax_file). `write` receives each file's
 /// package-relative name and bytes and performs the actual writes (creating
 /// any subdirectory a `QuickLook/` name implies).
-pub fn to_vmax_file<W>(file: &VMaxSerdeFile, mut write: W) -> Result<()>
+pub fn to_vmax_file<W>(file: &VMaxFile, mut write: W) -> Result<()>
 where
     W: FnMut(&str, &[u8]) -> Result<()>,
 {
@@ -39,8 +39,24 @@ where
     for (name, selection) in &file.selection_vmaxb_files {
         write(name, &to_selection_vmaxb_file_bytes(selection)?)?;
     }
-    for (name, png) in &file.quick_look_png_files {
-        write(name, &to_quick_look_png_file_bytes(png)?)?;
+    // QuickLook previews, reconstructing each role's `QuickLook/` path.
+    if let Some(thumbnail) = &file.thumbnail_png {
+        write(
+            "QuickLook/Thumbnail.png",
+            &to_image_png_file_bytes(thumbnail)?,
+        )?;
+    }
+    for (data, image) in &file.contents_vmax_pngs {
+        write(
+            &format!("QuickLook/{data}.png"),
+            &to_image_png_file_bytes(image)?,
+        )?;
+    }
+    for (id, image) in &file.group_pngs {
+        write(
+            &format!("QuickLook/{id}.png"),
+            &to_image_png_file_bytes(image)?,
+        )?;
     }
     Ok(())
 }

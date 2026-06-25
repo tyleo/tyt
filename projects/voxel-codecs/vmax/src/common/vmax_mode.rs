@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 /// every observed shape.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct VMaxMode {
     /// Primary mode token.
     #[cfg_attr(

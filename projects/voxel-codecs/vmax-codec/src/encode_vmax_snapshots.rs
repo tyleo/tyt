@@ -1,9 +1,6 @@
-use crate::{decode_morton_3d, encode_morton_3d};
+use crate::{VMaxVoxel, decode_morton_3d, encode_morton_3d};
 use std::collections::BTreeMap;
-use vmax::{
-    VMaxCodecVoxel, VMaxSerdeExtent, VMaxSerdeSnapshot, VMaxSerdeSnapshotId, VMaxSerdeStats,
-    VMaxSerdeStorage,
-};
+use vmax::{VMaxExtent, VMaxSnapshot, VMaxSnapshotId, VMaxStats, VMaxStorage};
 
 /// Chunk voxel pitch per axis; an 8x8x8 grid of chunks tiles a 256^3 model.
 const CHUNK_PITCH: i32 = 32;
@@ -28,10 +25,10 @@ fn morton_stat(morton: u32) -> Vec<i64> {
     vec![x, y, z, x + y + z]
 }
 
-/// Encodes voxels into a `VMaxSerdeContentsVmaxbFile`'s `snapshots` array, the
+/// Encodes voxels into a `VMaxContentsVmaxbFile`'s `snapshots` array, the
 /// inverse of [`decode_vmax_snapshots`](crate::decode_vmax_snapshots). Emits
 /// one checkpoint snapshot per occupied chunk.
-pub fn encode_vmax_snapshots(voxels: &[VMaxCodecVoxel]) -> Vec<VMaxSerdeSnapshot> {
+pub fn encode_vmax_snapshots(voxels: &[VMaxVoxel]) -> Vec<VMaxSnapshot> {
     let mut chunks: BTreeMap<u32, BTreeMap<u32, (u8, u8)>> = BTreeMap::new();
     for voxel in voxels {
         let grid = [
@@ -84,20 +81,20 @@ pub fn encode_vmax_snapshots(voxels: &[VMaxCodecVoxel]) -> Vec<VMaxSerdeSnapshot
                 }
             }
 
-            VMaxSerdeSnapshot {
-                s: VMaxSerdeStorage {
-                    id: VMaxSerdeSnapshotId {
+            VMaxSnapshot {
+                s: VMaxStorage {
+                    id: VMaxSnapshotId {
                         c: chunk_id,
                         s: 0,
                         t: CHECKPOINT,
                     },
                     ds,
-                    st: VMaxSerdeStats {
+                    st: VMaxStats {
                         // Occupied bounding-box corners; min[3]/max[3] are the
                         // first/last `ds` slot's Morton code.
                         min: morton_stat(min_morton),
                         max: morton_stat(max_morton),
-                        extent: VMaxSerdeExtent {
+                        extent: VMaxExtent {
                             o: CHUNK_ORDER,
                             r: None,
                         },
@@ -109,6 +106,9 @@ pub fn encode_vmax_snapshots(voxels: &[VMaxCodecVoxel]) -> Vec<VMaxSerdeSnapshot
                     },
                     lc,
                     dlc: vec![0u8; 256],
+                    // `is` is a legacy alternative to `lc`/`dlc`; rebuilt
+                    // snapshots use the current masks, so it stays empty.
+                    is: Vec::new(),
                 },
             }
         })
@@ -117,11 +117,10 @@ pub fn encode_vmax_snapshots(voxels: &[VMaxCodecVoxel]) -> Vec<VMaxSerdeSnapshot
 
 #[cfg(test)]
 mod tests {
-    use crate::encode_vmax_snapshots;
-    use vmax::VMaxCodecVoxel;
+    use crate::{VMaxVoxel, encode_vmax_snapshots};
 
-    fn voxel(x: i32, y: i32, z: i32, color_idx: u8) -> VMaxCodecVoxel {
-        VMaxCodecVoxel {
+    fn voxel(x: i32, y: i32, z: i32, color_idx: u8) -> VMaxVoxel {
+        VMaxVoxel {
             position: [x, y, z],
             material_idx: 0,
             color_idx,

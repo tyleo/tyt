@@ -1948,6 +1948,7 @@ dependencies = [
  "serde",
  "ty-math",
  "vmax",
+ "vmax-codec",
  "voxcore",
  "voxj",
  "voxj-codec",

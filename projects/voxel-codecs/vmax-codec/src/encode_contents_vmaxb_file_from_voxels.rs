@@ -1,14 +1,14 @@
-use crate::encode_vmax_snapshots;
-use vmax::{VMaxCodecVoxel, VMaxSerdeContentsVmaxbFile};
+use crate::{VMaxVoxel, encode_vmax_snapshots};
+use vmax::VMaxContentsVmaxbFile;
 
-/// Encodes voxels into a minimal `VMaxSerdeContentsVmaxbFile` payload. Used as
+/// Encodes voxels into a minimal `VMaxContentsVmaxbFile` payload. Used as
 /// the fallback when no preserved object state is available (e.g. a voxel
 /// document authored outside Voxel Max).
 pub fn encode_contents_vmaxb_file_from_voxels(
-    voxels: &[VMaxCodecVoxel],
+    voxels: &[VMaxVoxel],
     uuid: &str,
-) -> VMaxSerdeContentsVmaxbFile {
-    VMaxSerdeContentsVmaxbFile {
+) -> VMaxContentsVmaxbFile {
+    VMaxContentsVmaxbFile {
         snapshots: encode_vmax_snapshots(voxels),
         uuid: uuid.to_owned(),
         v: 4,
@@ -18,11 +18,10 @@ pub fn encode_contents_vmaxb_file_from_voxels(
 
 #[cfg(test)]
 mod tests {
-    use crate::{decode_vmax_snapshots, encode_contents_vmaxb_file_from_voxels};
-    use vmax::VMaxCodecVoxel;
+    use crate::{VMaxVoxel, decode_vmax_snapshots, encode_contents_vmaxb_file_from_voxels};
 
-    fn voxel(x: i32, y: i32, z: i32, material_idx: u8, color_idx: u8) -> VMaxCodecVoxel {
-        VMaxCodecVoxel {
+    fn voxel(x: i32, y: i32, z: i32, material_idx: u8, color_idx: u8) -> VMaxVoxel {
+        VMaxVoxel {
             position: [x, y, z],
             material_idx,
             color_idx,

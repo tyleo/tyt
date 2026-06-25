@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// optional.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(feature = "serde", serde(default))]
+#[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]
 pub struct VMaxBrushState {
     /// Color mode.
     pub cm: String,
@@ -34,4 +34,18 @@ pub struct VMaxBrushState {
         serde(default, skip_serializing_if = "Option::is_none")
     )]
     pub ocn: Option<i64>,
+
+    /// Soft-falloff azimuth; present on some brush states.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub sfaz: Option<f64>,
+
+    /// Soft-falloff altitude; present on some brush states.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub sfat: Option<f64>,
 }

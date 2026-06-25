@@ -3,24 +3,24 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use vmax_codec::{decode_vmax_file, from_vmax_file};
+use vmax_codec::from_vmax_file;
 use voxj::VoxjCodecFile;
 use voxj_codec::{
     PositionEncoding, SampleEncoding, encode_voxj_file, encode_voxj_file_smallest,
     to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes,
 };
-use voxsmith::{vox_state_from_vmax_codec_file, voxj_codec_main_from_vox_state};
+use voxsmith::{vox_state_from_vmax_file, voxj_codec_main_from_vox_state};
 
 /// The voxj format version stamped on the document. A `VoxState` carries no
 /// version of its own, so the writer stamps the current one.
 const VOXJ_FORMAT_VERSION: u32 = 1;
 
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
-/// stdout, round-tripping through voxcore: the package is decoded, voxsmith
+/// stdout, round-tripping through voxcore: the package is loaded, voxsmith
 /// loads it into a [`VoxState`](voxcore::VoxState) and back out to the voxj
 /// model, and the voxj codec block-encodes and serializes it.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
-    // Decode: read the whole package into a fully decoded Voxel Max document.
+    // Load: read the whole package into the lossless Voxel Max model.
     let serde = from_vmax_file(
         // List every package-relative file path, descending one level into
         // subdirectories (only `QuickLook/`) so its thumbnails keep their prefix.
@@ -48,11 +48,10 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
             Err(e) => Err(e.into()),
         },
     )?;
-    let codec = decode_vmax_file(&serde)?;
 
-    // Translate through voxcore: decoded vmax -> VoxState -> decoded voxj. The
+    // Translate through voxcore: vmax -> VoxState -> decoded voxj. The
     // `voxel-max` ext carries the provenance with no native voxj home.
-    let state = vox_state_from_vmax_codec_file(&codec)?;
+    let state = vox_state_from_vmax_file(&serde)?;
     let file = VoxjCodecFile {
         version: VOXJ_FORMAT_VERSION,
         main: voxj_codec_main_from_vox_state(&state),

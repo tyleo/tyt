@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// Modes vary by tool but share the same wrapper shape ([`VMaxToolMode`]).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct VMaxTools {
     /// Brush size.
     #[cfg_attr(feature = "serde", serde(default))]

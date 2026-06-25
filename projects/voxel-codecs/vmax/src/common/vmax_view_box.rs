@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// `[x, y, z]` min and max voxel bounds the editor's tools are scoped to.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(feature = "serde", serde(default))]
+#[cfg_attr(feature = "serde", serde(default, deny_unknown_fields))]
 pub struct VMaxViewBox {
     /// Minimum `[x, y, z]` corner.
     pub min: [i64; 3],

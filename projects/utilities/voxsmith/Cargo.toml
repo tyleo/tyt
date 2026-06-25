@@ -13,6 +13,7 @@ mvox-codec = "0.1.0"
 serde = { version = "1", features = ["derive"] }
 ty-math = "0.1.7"
 vmax = { version = "0.1.7", features = ["serde"] }
+vmax-codec = "0.1.0"
 voxcore = "0.1.0"
 voxj = { version = "0.1.1", features = ["serde"] }
 voxj-codec = "0.1.1"
