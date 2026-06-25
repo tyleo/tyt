@@ -1,4 +1,4 @@
-use crate::{ByteReader, Result, invalid, qbt::zlib_decompress};
+use crate::{ByteReader, Result, invalid, zlib_decompress};
 use qbcl::qbt::{
     QbtColor, QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtUnknownNode, QbtVoxel,
 };

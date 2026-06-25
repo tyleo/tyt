@@ -21,6 +21,12 @@ impl ByteWriter {
         self.bytes.push(value);
     }
 
+    /// Appends a little-endian `u16`.
+    #[allow(dead_code)]
+    pub fn write_u16(&mut self, value: u16) {
+        self.bytes.extend_from_slice(&value.to_le_bytes());
+    }
+
     /// Appends a little-endian `u32`.
     pub fn write_u32(&mut self, value: u32) {
         self.bytes.extend_from_slice(&value.to_le_bytes());
@@ -43,7 +49,7 @@ impl ByteWriter {
     }
 
     /// Appends a little-endian `f32`.
-    #[cfg(feature = "qbt")]
+    #[allow(dead_code)]
     pub fn write_f32(&mut self, value: f32) {
         self.bytes.extend_from_slice(&value.to_le_bytes());
     }

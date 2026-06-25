@@ -3,7 +3,7 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
-/// An error decoding `.qb` or `.qbt` bytes.
+/// An error decoding `.qb`, `.qbt`, or `.qbcl` bytes.
 #[derive(Debug)]
 pub enum Error {
     /// The input ended before a value could be read.

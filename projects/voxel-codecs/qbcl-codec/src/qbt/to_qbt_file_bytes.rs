@@ -1,4 +1,4 @@
-use crate::{ByteWriter, qbt::zlib_compress};
+use crate::{ByteWriter, zlib_compress};
 use qbcl::qbt::{QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode};
 
 /// The matrix node type id.

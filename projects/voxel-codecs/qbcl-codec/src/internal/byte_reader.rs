@@ -40,8 +40,15 @@ impl<'a> ByteReader<'a> {
     }
 
     /// Reads a single byte.
+    #[allow(dead_code)]
     pub fn read_u8(&mut self) -> Result<u8> {
         Ok(self.read_array::<1>()?[0])
+    }
+
+    /// Reads a little-endian `u16`.
+    #[allow(dead_code)]
+    pub fn read_u16(&mut self) -> Result<u16> {
+        Ok(u16::from_le_bytes(self.read_array()?))
     }
 
     /// Reads a little-endian `u32`.
@@ -55,7 +62,7 @@ impl<'a> ByteReader<'a> {
     }
 
     /// Reads a little-endian `f32`.
-    #[cfg(feature = "qbt")]
+    #[allow(dead_code)]
     pub fn read_f32(&mut self) -> Result<f32> {
         Ok(f32::from_le_bytes(self.read_array()?))
     }

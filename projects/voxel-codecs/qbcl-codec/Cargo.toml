@@ -4,14 +4,15 @@ version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "Reads and writes Qubicle (.qb / .qbt) files."
+description = "Reads and writes Qubicle (.qb / .qbt / .qbcl) files."
 keywords = ["qubicle", "qb", "qbt", "voxel", "codec"]
 categories = ["parser-implementations", "encoding", "game-development", "graphics"]
 
 [features]
-default = ["qb", "qbt"]
+default = ["qb", "qbt", "qbcl"]
 qb = ["qbcl/qb"]
 qbt = ["qbcl/qbt", "dep:flate2"]
+qbcl = ["qbcl/qbcl", "dep:flate2"]
 
 [dependencies]
 flate2 = { version = "1", optional = true }
