@@ -1,3 +1,5 @@
+pub mod commands;
+
 mod dependencies;
 mod error;
 #[cfg(feature = "impl")]

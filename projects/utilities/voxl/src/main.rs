@@ -5,13 +5,9 @@ use voxl::{DependenciesImpl, Voxl};
 
 /// A command-line tool for working with voxels.
 #[derive(Clone, Debug, Parser)]
-#[command(name = "voxl")]
 struct Cli {
     #[clap(subcommand)]
-    command: Option<Command>,
-
-    #[command(flatten)]
-    voxl: Voxl,
+    command: Command,
 }
 
 #[derive(Clone, Debug, Subcommand)]
@@ -23,16 +19,19 @@ enum Command {
         #[arg(value_name = "shell")]
         shell: Shell,
     },
+
+    #[command(flatten)]
+    Voxl(Voxl),
 }
 
 fn main() {
     let cli = Cli::parse();
     match cli.command {
-        Some(Command::Completion { shell }) => {
+        Command::Completion { shell } => {
             clap_complete::generate(shell, &mut Cli::command(), "voxl", &mut io::stdout());
         }
-        None => {
-            if let Err(e) = cli.voxl.execute(DependenciesImpl) {
+        Command::Voxl(cmd) => {
+            if let Err(e) = cmd.execute(DependenciesImpl) {
                 eprintln!("error: {e}");
                 process::exit(1);
             }

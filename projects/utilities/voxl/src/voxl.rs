@@ -1,12 +1,12 @@
-use crate::{Dependencies, Result};
-use clap::Args;
+use clap::Subcommand;
 
 /// A command-line tool for working with voxels.
-#[derive(Args, Clone, Debug)]
-pub struct Voxl {}
+#[derive(Clone, Debug, Subcommand)]
+#[command(subcommand_value_name = "command")]
+pub enum Voxl {}
 
 impl Voxl {
-    pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        dependencies.write_stdout(b"voxl: not yet implemented\n")
+    pub fn execute(self, _dependencies: impl crate::Dependencies) -> crate::Result<()> {
+        match self {}
     }
 }

@@ -78,7 +78,10 @@ pub enum Tyt {
     },
 
     #[command(name = "voxl")]
-    Voxl(Voxl),
+    Voxl {
+        #[clap(subcommand)]
+        voxl: Voxl,
+    },
 }
 
 impl Tyt {
@@ -94,7 +97,7 @@ impl Tyt {
             Tyt::Meta { meta } => meta.execute(deps.tyt_meta_dependencies())?,
             Tyt::OAI { oai } => oai.execute(deps.tyt_oai_dependencies())?,
             Tyt::VMax { vmax } => vmax.execute(deps.tyt_vmax_dependencies())?,
-            Tyt::Voxl(voxl) => voxl.execute(deps.voxl_dependencies())?,
+            Tyt::Voxl { voxl } => voxl.execute(deps.voxl_dependencies())?,
         }
 
         Ok(())
