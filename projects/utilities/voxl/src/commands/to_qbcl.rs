@@ -21,7 +21,6 @@ pub struct ToQbcl {
 
 impl ToQbcl {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        dependencies.write_stdout(b"Hello from to-qbcl!\n")?;
-        Ok(())
+        dependencies.to_qbcl(&self.input, self.from, &self.output)
     }
 }

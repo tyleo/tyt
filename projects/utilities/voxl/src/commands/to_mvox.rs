@@ -21,7 +21,6 @@ pub struct ToMvox {
 
 impl ToMvox {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        dependencies.write_stdout(b"Hello from to-mvox!\n")?;
-        Ok(())
+        dependencies.to_mvox(&self.input, self.from, &self.output)
     }
 }

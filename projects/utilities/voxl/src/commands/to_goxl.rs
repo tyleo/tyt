@@ -21,7 +21,6 @@ pub struct ToGoxl {
 
 impl ToGoxl {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        dependencies.write_stdout(b"Hello from to-goxl!\n")?;
-        Ok(())
+        dependencies.to_goxl(&self.input, self.from, &self.output)
     }
 }

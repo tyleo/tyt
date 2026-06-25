@@ -1,5 +1,5 @@
 use crate::{
-    Dependencies, Format, Result, VoxjFormat, VoxjOptimize, VoxjPositionEncoding,
+    Dependencies, Format, Result, VoxjEncoding, VoxjFormat, VoxjOptimize, VoxjPositionEncoding,
     VoxjSampleEncoding,
 };
 use clap::Parser;
@@ -51,7 +51,21 @@ pub struct ToVoxj {
 
 impl ToVoxj {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        dependencies.write_stdout(b"Hello from to-voxj!\n")?;
-        Ok(())
+        let encoding = match self.optimize {
+            Some(VoxjOptimize::Size) => VoxjEncoding::Smallest,
+            Some(VoxjOptimize::Fast) => VoxjEncoding::Fixed {
+                position: VoxjPositionEncoding::BitmapBase64,
+                sample: VoxjSampleEncoding::PackedBase64,
+            },
+            Some(VoxjOptimize::Pretty) => VoxjEncoding::Fixed {
+                position: VoxjPositionEncoding::RawJson,
+                sample: VoxjSampleEncoding::RawJson,
+            },
+            None => VoxjEncoding::Fixed {
+                position: self.position_encoding,
+                sample: self.sample_encoding,
+            },
+        };
+        dependencies.to_voxj(&self.input, self.from, &self.output, encoding, self.format)
     }
 }

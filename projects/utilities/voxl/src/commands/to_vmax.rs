@@ -25,7 +25,6 @@ pub struct ToVmax {
 
 impl ToVmax {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        dependencies.write_stdout(b"Hello from to-vmax!\n")?;
-        Ok(())
+        dependencies.to_vmax(&self.input, self.from, &self.output, self.color_format)
     }
 }

@@ -1916,6 +1916,11 @@ dependencies = [
  "clap",
  "clap_complete",
  "tyt-common",
+ "tyt-injection",
+ "vmax-codec",
+ "voxcore",
+ "voxj-codec",
+ "voxsmith",
 ]
 
 [[package]]
