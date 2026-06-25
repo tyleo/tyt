@@ -10,3 +10,4 @@ categories = ["parser-implementations", "encoding", "game-development", "graphic
 
 [dependencies]
 goxl = "0.1.0"
+png = "0.17"
