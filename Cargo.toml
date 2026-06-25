@@ -24,6 +24,8 @@ members = [
     "projects/vmax",
     "projects/mvox-codec",
     "projects/mvox",
+    "projects/qbcl-codec",
+    "projects/qbcl",
 ]
 resolver = "2"
 
@@ -52,3 +54,5 @@ vmax = { path = "projects/vmax" }
 vmax-codec = { path = "projects/vmax-codec" }
 mvox = { path = "projects/mvox" }
 mvox-codec = { path = "projects/mvox-codec" }
+qbcl = { path = "projects/qbcl" }
+qbcl-codec = { path = "projects/qbcl-codec" }

@@ -1,0 +1,16 @@
+[package]
+name = "qbcl"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Core data types for the Qubicle (.qb / .qbt) file formats."
+keywords = ["qubicle", "qb", "qbt", "voxel", "3d"]
+categories = ["data-structures", "game-development", "graphics"]
+
+[features]
+default = ["qb", "qbt"]
+qb = []
+qbt = []
+
+[dependencies]
