@@ -1923,8 +1923,12 @@ name = "voxsmith"
 version = "0.1.0"
 dependencies = [
  "branded-id",
+ "goxl",
+ "goxl-codec",
  "mvox",
  "mvox-codec",
+ "qbcl",
+ "qbcl-codec",
  "serde",
  "ty-math",
  "vmax",

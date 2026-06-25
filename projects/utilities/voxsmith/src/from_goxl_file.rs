@@ -1,0 +1,496 @@
+use crate::{
+    Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer, GoxelLight,
+    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, to_vox_value,
+};
+use branded_id::U32Id;
+use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
+use std::collections::{HashMap, HashSet};
+use ty_math::{TyTransformF64, TyVector3U32};
+use voxcore::{
+    BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxObject, VoxPalette, VoxState,
+    VoxValue,
+};
+
+/// Loads a decoded Goxel [`GoxlFile`] into a [`VoxState`].
+///
+/// The shared `BL16` voxel blocks become objects sharing one `rgba` palette, and
+/// the `LAYR` layers become the hierarchy nodes, each placing the blocks it
+/// stamps. The state with no native voxcore home, such as the image metadata,
+/// preview, materials, cameras, light, per-layer metadata, the clone and shape
+/// definitions, the exact block placements, and unknown chunks, rides in a
+/// `goxel` ext so the file can be written back exactly.
+///
+/// Errors on a layer placement that references a block outside the block list,
+/// or if [`VoxState::validate`](voxcore::VoxState::validate) rejects the result.
+pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxState> {
+    let mut state = VoxState::default();
+
+    let (palette, cells) = build_palette(file);
+    let palette_id = state.add_palette(palette);
+
+    for block in &file.blocks {
+        state.add_object(build_object(block, palette_id, &cells));
+    }
+
+    let nodes = build_layer_nodes(file, state.object_count())?;
+    let roots = (0..nodes.len())
+        .map(|index| U32Id::from_u32(index as u32))
+        .collect();
+    for node in nodes {
+        state.add_hierarchy_node(node);
+    }
+    state.set_root_hierarchy_nodes(roots);
+
+    let ext = GoxelExtWrapper {
+        goxel: goxel_ext(file),
+    };
+    state.set_ext(Some(to_vox_value(&ext)?));
+
+    state.validate()?;
+    Ok(state)
+}
+
+/// Builds the one shared palette: a `rgba` cell per distinct color across every
+/// block's solid voxels, plus a map from a color to its cell. A file with no
+/// solid voxels gets a single placeholder cell so objects have a default sample
+/// to reference.
+fn build_palette(file: &GoxlFile) -> (VoxPalette, HashMap<[u8; 4], U32Id<BVoxPaletteCell>>) {
+    let mut order: Vec<[u8; 4]> = Vec::new();
+    let mut seen: HashSet<[u8; 4]> = HashSet::new();
+    for block in &file.blocks {
+        for voxel in &block.voxels {
+            if voxel.is_empty() {
+                continue;
+            }
+            let color = [voxel.r, voxel.g, voxel.b, voxel.a];
+            if seen.insert(color) {
+                order.push(color);
+            }
+        }
+    }
+    if order.is_empty() {
+        order.push([0, 0, 0, 0]);
+    }
+
+    let mut palette = VoxPalette::default();
+    palette.add_attribute("rgba".to_owned());
+    let mut cells = HashMap::with_capacity(order.len());
+    for color in &order {
+        let cell = palette
+            .add_cell(vec![VoxValue::Text(hex(*color))])
+            .expect("one value per palette attribute");
+        cells.insert(*color, cell);
+    }
+
+    (palette, cells)
+}
+
+/// Builds an object from a block: a dense `16 x 16 x 16` grid referencing the
+/// shared palette, each solid voxel sampling its color cell.
+fn build_object(
+    block: &GoxlBlock,
+    palette: U32Id<BVoxPalette>,
+    cells: &HashMap<[u8; 4], U32Id<BVoxPaletteCell>>,
+) -> VoxObject {
+    let size = GoxlBlock::SIZE;
+    let mut object = VoxObject::new(String::new(), TyVector3U32::new(size, size, size))
+        .expect("a 16-cubed block fits the dense grid");
+
+    // The single reference is the color; solid voxels overwrite cell 0.
+    object.add_palette_ref(palette, U32Id::<BVoxPaletteCell>::from_u32(0));
+
+    for z in 0..size {
+        for y in 0..size {
+            for x in 0..size {
+                let Some(voxel) = block.voxel(x, y, z) else {
+                    continue;
+                };
+                if voxel.is_empty() {
+                    continue;
+                }
+                let color = [voxel.r, voxel.g, voxel.b, voxel.a];
+                let cell = cells
+                    .get(&color)
+                    .copied()
+                    .expect("every solid color is in the palette");
+                let id = object
+                    .voxel_id(TyVector3U32::new(x, y, z))
+                    .expect("a coordinate inside the block is inside the grid");
+                object
+                    .retain_voxel(id, &[cell])
+                    .expect("one sample for the one palette reference");
+            }
+        }
+    }
+
+    object
+}
+
+/// Builds the hierarchy nodes, one per layer in stored order. A layer node places
+/// the distinct blocks it stamps, deduplicated to satisfy voxcore's per-node
+/// uniqueness rule; the exact placement list rides in the ext. Errors on a
+/// placement that references a block outside the block list.
+fn build_layer_nodes(file: &GoxlFile, object_count: usize) -> Result<Vec<VoxHierarchyNode>> {
+    let mut nodes = Vec::with_capacity(file.layers.len());
+    for layer in &file.layers {
+        let mut child_objects = Vec::new();
+        let mut seen = HashSet::new();
+        for placement in &layer.blocks {
+            let index = placement.block_index;
+            if index < 0 || index as usize >= object_count {
+                return Err(Error::invalid(format!(
+                    "layer block placement references block {index}, which does not exist"
+                )));
+            }
+            if seen.insert(index) {
+                child_objects.push(U32Id::<BVoxObject>::from_u32(index as u32));
+            }
+        }
+        nodes.push(VoxHierarchyNode {
+            name: layer.name.clone(),
+            child_nodes: Vec::new(),
+            child_objects,
+            transform: TyTransformF64::default(),
+        });
+    }
+    Ok(nodes)
+}
+
+/// One `#RRGGBBAA` string for an `[r, g, b, a]` color.
+fn hex(color: [u8; 4]) -> String {
+    format!(
+        "#{:02X}{:02X}{:02X}{:02X}",
+        color[0], color[1], color[2], color[3]
+    )
+}
+
+/// Builds the `goxel` ext payload from the state with no native home.
+fn goxel_ext(file: &GoxlFile) -> GoxelExt {
+    GoxelExt {
+        version: file.version,
+        image: GoxelImage {
+            bounding_box: file.image.bounding_box,
+            extra: file.image.extra.0.clone(),
+        },
+        preview: file.preview.as_ref().map(|preview| GoxelPreview {
+            width: preview.width,
+            height: preview.height,
+            pixels: preview.pixels.clone(),
+        }),
+        materials: file.materials.iter().map(material_provenance).collect(),
+        layers: file.layers.iter().map(layer_provenance).collect(),
+        cameras: file.cameras.iter().map(camera_provenance).collect(),
+        light: file.light.as_ref().map(light_provenance),
+        unknown_chunks: file
+            .unknown_chunks
+            .iter()
+            .map(|chunk| GoxelUnknownChunk {
+                id: chunk.id,
+                data: chunk.data.clone(),
+            })
+            .collect(),
+    }
+}
+
+/// The ext provenance for one layer: its metadata, clone and shape definition,
+/// and the full placement list.
+fn layer_provenance(layer: &GoxlLayer) -> GoxelLayer {
+    GoxelLayer {
+        name: layer.name.clone(),
+        id: layer.id,
+        base_id: layer.base_id,
+        material: layer.material,
+        mode: layer.mode,
+        visible: layer.visible,
+        transform: layer.transform,
+        bounding_box: layer.bounding_box,
+        image_path: layer.image_path.clone(),
+        shape: layer.shape.map(shape_token),
+        color: layer.color,
+        placements: layer
+            .blocks
+            .iter()
+            .map(|block| (block.block_index, block.position))
+            .collect(),
+        extra: layer.extra.0.clone(),
+    }
+}
+
+/// The ext provenance for one material.
+fn material_provenance(material: &GoxlMaterial) -> GoxelMaterial {
+    GoxelMaterial {
+        name: material.name.clone(),
+        base_color: material.base_color,
+        metallic: material.metallic,
+        roughness: material.roughness,
+        emission: material.emission,
+        extra: material.extra.0.clone(),
+    }
+}
+
+/// The ext provenance for one camera.
+fn camera_provenance(camera: &GoxlCamera) -> GoxelCamera {
+    GoxelCamera {
+        name: camera.name.clone(),
+        distance: camera.distance,
+        orthographic: camera.orthographic,
+        transform: camera.transform,
+        active: camera.active,
+        extra: camera.extra.0.clone(),
+    }
+}
+
+/// The ext provenance for the light settings.
+fn light_provenance(light: &GoxlLight) -> GoxelLight {
+    GoxelLight {
+        pitch: light.pitch,
+        yaw: light.yaw,
+        intensity: light.intensity,
+        fixed: light.fixed,
+        ambient: light.ambient,
+        shadow: light.shadow,
+        extra: light.extra.0.clone(),
+    }
+}
+
+/// The on-disk shape name for a procedural shape.
+fn shape_token(shape: GoxlShape) -> String {
+    match shape {
+        GoxlShape::Sphere => "sphere".to_owned(),
+        GoxlShape::Cube => "cube".to_owned(),
+        GoxlShape::Cylinder => "cylinder".to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{from_goxl_bytes, from_goxl_file, to_goxl_bytes, to_goxl_file};
+    use goxl::{
+        GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
+        GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
+    };
+    use voxcore::VoxState;
+
+    /// A `4 x 4` matrix with distinct float cells, for transform and box fields.
+    fn matrix(base: f32) -> [[f32; 4]; 4] {
+        let mut matrix = [[0.0f32; 4]; 4];
+        for (index, cell) in matrix.iter_mut().flatten().enumerate() {
+            *cell = base + index as f32 * 0.5;
+        }
+        matrix
+    }
+
+    /// A full `16 x 16 x 16` block: mostly empty (all-zero cells), with a few
+    /// tagged voxels including one with a partial alpha.
+    fn block() -> GoxlBlock {
+        let mut voxels = vec![GoxlVoxel::default(); GoxlBlock::SIZE.pow(3) as usize];
+        voxels[0] = GoxlVoxel::new(10, 20, 30);
+        voxels[1] = GoxlVoxel::new(255, 0, 0);
+        voxels[100] = GoxlVoxel {
+            r: 1,
+            g: 2,
+            b: 3,
+            a: 128,
+        };
+        *voxels.last_mut().unwrap() = GoxlVoxel::new(7, 8, 9);
+        GoxlBlock { voxels }
+    }
+
+    /// A pair whose value is raw bytes, for `extra` dictionaries.
+    fn extra(key: &str, value: &[u8]) -> (String, Vec<u8>) {
+        (key.to_owned(), value.to_vec())
+    }
+
+    /// A file exercising every modeled chunk: two shared blocks, a normal layer
+    /// stamping both, a clone layer, a shape layer, materials, cameras, a light,
+    /// a preview, an image box, and an unknown chunk.
+    fn sample_file() -> GoxlFile {
+        GoxlFile {
+            version: 2,
+            image: GoxlImage {
+                bounding_box: Some(matrix(1.0)),
+                extra: GoxlDict(vec![extra("vendor", &[1, 2, 3, 4])]),
+            },
+            preview: Some(GoxlPreview {
+                width: 2,
+                height: 3,
+                pixels: vec![
+                    [0, 0, 0, 0],
+                    [255, 255, 255, 255],
+                    [1, 2, 3, 4],
+                    [5, 6, 7, 8],
+                    [9, 10, 11, 12],
+                    [13, 14, 15, 16],
+                ],
+            }),
+            blocks: vec![
+                block(),
+                GoxlBlock {
+                    voxels: vec![GoxlVoxel::new(50, 60, 70); GoxlBlock::SIZE.pow(3) as usize],
+                },
+            ],
+            materials: vec![
+                GoxlMaterial {
+                    name: "Default".to_owned(),
+                    base_color: [0.25, 0.5, 0.75, 1.0],
+                    metallic: 0.1,
+                    roughness: 0.9,
+                    emission: [0.0, 0.5, 1.0],
+                    extra: GoxlDict(vec![extra("_custom", &[9])]),
+                },
+                GoxlMaterial::default(),
+            ],
+            layers: vec![
+                GoxlLayer {
+                    name: "Layer 0".to_owned(),
+                    id: 1,
+                    base_id: 0,
+                    material: 0,
+                    mode: 0,
+                    visible: true,
+                    transform: matrix(2.0),
+                    blocks: vec![
+                        GoxlLayerBlock {
+                            block_index: 0,
+                            position: [0, 0, 0],
+                        },
+                        GoxlLayerBlock {
+                            block_index: 1,
+                            position: [-16, 16, -32],
+                        },
+                    ],
+                    bounding_box: Some(matrix(3.0)),
+                    image_path: Some("/tmp/ref.png".to_owned()),
+                    shape: None,
+                    color: None,
+                    extra: GoxlDict(vec![extra("_layer", &[7, 7])]),
+                },
+                GoxlLayer {
+                    name: "Clone".to_owned(),
+                    id: 2,
+                    base_id: 1,
+                    material: 1,
+                    mode: 1,
+                    visible: false,
+                    transform: matrix(4.0),
+                    blocks: Vec::new(),
+                    bounding_box: None,
+                    image_path: None,
+                    shape: None,
+                    color: None,
+                    extra: GoxlDict::default(),
+                },
+                GoxlLayer {
+                    name: "Shape".to_owned(),
+                    id: 3,
+                    base_id: 0,
+                    material: 0,
+                    mode: 0,
+                    visible: true,
+                    transform: matrix(5.0),
+                    blocks: Vec::new(),
+                    bounding_box: None,
+                    image_path: None,
+                    shape: Some(GoxlShape::Cylinder),
+                    color: Some([200, 150, 100, 255]),
+                    extra: GoxlDict::default(),
+                },
+            ],
+            cameras: vec![
+                GoxlCamera {
+                    name: "Camera".to_owned(),
+                    distance: 12.5,
+                    orthographic: true,
+                    transform: matrix(6.0),
+                    active: true,
+                    extra: GoxlDict(vec![extra("_cam", &[3, 3, 3])]),
+                },
+                GoxlCamera::default(),
+            ],
+            light: Some(GoxlLight {
+                pitch: 0.5,
+                yaw: -0.25,
+                intensity: 1.5,
+                fixed: true,
+                ambient: 0.2,
+                shadow: 0.8,
+                extra: GoxlDict(vec![extra("_light", &[1])]),
+            }),
+            unknown_chunks: vec![GoxlUnknownChunk {
+                id: *b"XTRA",
+                data: vec![9, 8, 7, 6, 5],
+            }],
+        }
+    }
+
+    #[test]
+    fn round_trips_through_vox_state() {
+        let file = sample_file();
+        let state = from_goxl_file(&file).unwrap();
+        assert_eq!(to_goxl_file(&state).unwrap(), file);
+    }
+
+    #[test]
+    fn round_trips_through_goxl_bytes() {
+        let file = sample_file();
+        let state = from_goxl_file(&file).unwrap();
+        let bytes = to_goxl_bytes(&state).unwrap();
+        let reloaded = from_goxl_bytes(&bytes).unwrap();
+        assert_eq!(to_goxl_file(&reloaded).unwrap(), file);
+    }
+
+    #[test]
+    fn round_trips_the_default_file() {
+        let file = GoxlFile::default();
+        let state = from_goxl_file(&file).unwrap();
+        assert_eq!(to_goxl_file(&state).unwrap(), file);
+    }
+
+    #[test]
+    fn errors_without_goxel_ext() {
+        let state = VoxState::default();
+        assert!(to_goxl_file(&state).is_err());
+    }
+
+    #[test]
+    fn rejects_a_dangling_layer_block_placement() {
+        let file = GoxlFile {
+            layers: vec![GoxlLayer {
+                blocks: vec![GoxlLayerBlock {
+                    block_index: 5,
+                    position: [0, 0, 0],
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert!(from_goxl_file(&file).is_err());
+    }
+
+    /// A layer may stamp the same block at several positions. The voxcore node
+    /// lists the placed object once, but the ext keeps the full placement list,
+    /// so the layer round-trips.
+    #[test]
+    fn round_trips_a_layer_stamping_one_block_twice() {
+        let file = GoxlFile {
+            blocks: vec![block()],
+            layers: vec![GoxlLayer {
+                name: "L".to_owned(),
+                blocks: vec![
+                    GoxlLayerBlock {
+                        block_index: 0,
+                        position: [0, 0, 0],
+                    },
+                    GoxlLayerBlock {
+                        block_index: 0,
+                        position: [16, 0, 0],
+                    },
+                ],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let state = from_goxl_file(&file).unwrap();
+        assert_eq!(to_goxl_file(&state).unwrap(), file);
+    }
+}
