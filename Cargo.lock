@@ -1890,6 +1890,8 @@ name = "voxsmith"
 version = "0.1.0"
 dependencies = [
  "branded-id",
+ "mvox",
+ "mvox-codec",
  "serde",
  "ty-math",
  "vmax",

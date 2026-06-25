@@ -8,6 +8,8 @@ description = "Utilities for working with voxels."
 
 [dependencies]
 branded-id = "0.1.3"
+mvox = "0.1.0"
+mvox-codec = "0.1.0"
 serde = { version = "1", features = ["derive"] }
 ty-math = "0.1.7"
 vmax = { version = "0.1.7", features = ["serde"] }

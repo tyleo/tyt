@@ -1,3 +1,4 @@
+use mvox_codec::Error as MVoxError;
 use serde::{de::Error as DeError, ser::Error as SerError};
 use std::{
     error::Error as StdError,
@@ -7,7 +8,8 @@ use voxcore::Error as VoxError;
 use voxj_codec::Error as VoxjError;
 
 /// An error from voxsmith: voxel data that is malformed, a state that fails
-/// voxcore validation, or a Voxel Json document that fails to encode or decode.
+/// voxcore validation, a Voxel Json document that fails to encode or decode, or
+/// a MagicaVoxel `.vox` file that fails to decode.
 #[derive(Debug)]
 pub enum Error {
     /// Voxel data was readable but semantically malformed.
@@ -18,6 +20,9 @@ pub enum Error {
 
     /// Encoding or decoding a Voxel Json document failed.
     Voxj(VoxjError),
+
+    /// Decoding a MagicaVoxel `.vox` file failed.
+    MVox(MVoxError),
 }
 
 impl Error {
@@ -33,6 +38,7 @@ impl Display for Error {
             Error::Invalid(message) => write!(f, "{message}"),
             Error::Vox(error) => error.fmt(f),
             Error::Voxj(error) => error.fmt(f),
+            Error::MVox(error) => error.fmt(f),
         }
     }
 }
@@ -43,6 +49,7 @@ impl StdError for Error {
             Error::Invalid(_) => None,
             Error::Vox(error) => Some(error),
             Error::Voxj(error) => Some(error),
+            Error::MVox(error) => Some(error),
         }
     }
 }
@@ -56,6 +63,12 @@ impl From<VoxError> for Error {
 impl From<VoxjError> for Error {
     fn from(error: VoxjError) -> Self {
         Error::Voxj(error)
+    }
+}
+
+impl From<MVoxError> for Error {
+    fn from(error: MVoxError) -> Self {
+        Error::MVox(error)
     }
 }
 

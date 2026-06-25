@@ -1,0 +1,21 @@
+use serde::{Deserialize, Serialize};
+
+/// A layer (`LAYR`) preserved verbatim in the `magica-voxel` ext: a named,
+/// optionally hidden grouping transform nodes assign themselves to by id.
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+pub(crate) struct MagicaVoxelLayer {
+    /// The layer id transform nodes reference.
+    pub id: i32,
+
+    /// `_name`: the layer's display name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+
+    /// `_hidden`: whether the layer is hidden.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+
+    /// Any further attribute keys, preserved verbatim.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra: Vec<(String, String)>,
+}
