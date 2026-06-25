@@ -45,3 +45,10 @@ impl From<voxj_codec::Error> for Error {
         Error::IO(IOError::other(e))
     }
 }
+
+#[cfg(feature = "impl")]
+impl From<voxsmith::Error> for Error {
+    fn from(e: voxsmith::Error) -> Self {
+        Error::IO(IOError::other(e))
+    }
+}

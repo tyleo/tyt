@@ -1747,13 +1747,12 @@ version = "0.1.6"
 dependencies = [
  "clap",
  "clap_complete",
- "serde",
  "tyt-common",
  "tyt-injection",
- "vmax",
  "vmax-codec",
  "voxj",
  "voxj-codec",
+ "voxsmith",
 ]
 
 [[package]]
