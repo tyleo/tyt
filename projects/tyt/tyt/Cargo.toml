@@ -26,8 +26,9 @@ tyt-meshy = { version = "0.1.0" }
 tyt-meta = { version = "0.1.0" }
 tyt-oai = { version = "0.1.0" }
 tyt-vmax = { version = "0.1.0" }
+voxl = { version = "0.1.0" }
 
 [features]
 default = ["impl"]
-impl = ["tyt-claude/impl", "tyt-cubemap/impl", "tyt-fbx/impl", "tyt-fs/impl", "tyt-image/impl", "tyt-material/impl", "tyt-meshy/impl", "tyt-meta/impl", "tyt-oai/impl", "tyt-vmax/impl"]
+impl = ["tyt-claude/impl", "tyt-cubemap/impl", "tyt-fbx/impl", "tyt-fs/impl", "tyt-image/impl", "tyt-material/impl", "tyt-meshy/impl", "tyt-meta/impl", "tyt-oai/impl", "tyt-vmax/impl", "voxl/impl"]
 bin = ["impl", "dep:clap_complete"]

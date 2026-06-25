@@ -8,6 +8,7 @@ use tyt_meshy::Dependencies as TytMeshyDependencies;
 use tyt_meta::Dependencies as TytMetaDependencies;
 use tyt_oai::Dependencies as TytOAIDependencies;
 use tyt_vmax::Dependencies as TytVMaxDependencies;
+use voxl::Dependencies as VoxlDependencies;
 
 pub trait Dependencies {
     type TytClaudeDependencies: TytClaudeDependencies;
@@ -20,6 +21,7 @@ pub trait Dependencies {
     type TytMetaDependencies: TytMetaDependencies;
     type TytOAIDependencies: TytOAIDependencies;
     type TytVMaxDependencies: TytVMaxDependencies;
+    type VoxlDependencies: VoxlDependencies;
 
     fn tyt_claude_dependencies(&self) -> Self::TytClaudeDependencies;
     fn tyt_cubemap_dependencies(&self) -> Self::TytCubemapDependencies;
@@ -31,4 +33,5 @@ pub trait Dependencies {
     fn tyt_meta_dependencies(&self) -> Self::TytMetaDependencies;
     fn tyt_oai_dependencies(&self) -> Self::TytOAIDependencies;
     fn tyt_vmax_dependencies(&self) -> Self::TytVMaxDependencies;
+    fn voxl_dependencies(&self) -> Self::VoxlDependencies;
 }

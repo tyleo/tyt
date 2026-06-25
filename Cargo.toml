@@ -54,6 +54,7 @@ tyt-vmax = { path = "projects/tyt/tyt-vmax" }
 ty-math = { path = "projects/utilities/ty-math" }
 ty-math-serde = { path = "projects/utilities/ty-math-serde" }
 voxcore = { path = "projects/utilities/voxcore" }
+voxl = { path = "projects/utilities/voxl" }
 voxsmith = { path = "projects/utilities/voxsmith" }
 
 voxj = { path = "projects/voxel-codecs/voxj" }

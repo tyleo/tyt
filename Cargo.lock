@@ -1651,6 +1651,7 @@ dependencies = [
  "tyt-meta",
  "tyt-oai",
  "tyt-vmax",
+ "voxl",
 ]
 
 [[package]]
@@ -1931,6 +1932,11 @@ dependencies = [
 [[package]]
 name = "voxl"
 version = "0.1.0"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "tyt-common",
+]
 
 [[package]]
 name = "voxsmith"

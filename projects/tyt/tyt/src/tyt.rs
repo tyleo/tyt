@@ -10,6 +10,7 @@ use tyt_meshy::TytMeshy;
 use tyt_meta::TytMeta;
 use tyt_oai::TytOAI;
 use tyt_vmax::TytVMax;
+use voxl::Voxl;
 
 /// The main command for `tyt`, which ties all my command-line tools together.
 #[allow(clippy::large_enum_variant)]
@@ -75,6 +76,9 @@ pub enum Tyt {
         #[clap(subcommand)]
         vmax: TytVMax,
     },
+
+    #[command(name = "voxl")]
+    Voxl(Voxl),
 }
 
 impl Tyt {
@@ -82,14 +86,15 @@ impl Tyt {
         match self {
             Tyt::Claude { claude } => claude.execute(deps.tyt_claude_dependencies())?,
             Tyt::Cubemap { cubemap } => cubemap.execute(deps.tyt_cubemap_dependencies())?,
-            Tyt::FS { fs } => fs.execute(deps.tyt_fs_dependencies())?,
             Tyt::Fbx { fbx } => fbx.execute(deps.tyt_fbx_dependencies())?,
+            Tyt::FS { fs } => fs.execute(deps.tyt_fs_dependencies())?,
             Tyt::Image { image } => image.execute(deps.tyt_image_dependencies())?,
             Tyt::Material { material } => material.execute(deps.tyt_material_dependencies())?,
             Tyt::Meshy { meshy } => meshy.execute(deps.tyt_meshy_dependencies())?,
             Tyt::Meta { meta } => meta.execute(deps.tyt_meta_dependencies())?,
             Tyt::OAI { oai } => oai.execute(deps.tyt_oai_dependencies())?,
             Tyt::VMax { vmax } => vmax.execute(deps.tyt_vmax_dependencies())?,
+            Tyt::Voxl(voxl) => voxl.execute(deps.voxl_dependencies())?,
         }
 
         Ok(())
