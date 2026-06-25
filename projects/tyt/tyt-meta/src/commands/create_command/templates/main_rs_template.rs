@@ -1,12 +1,9 @@
-use crate::commands::create_command;
-
-pub fn main_rs_template(command: &str, name: &str, description: &str) -> String {
-    let snake = create_command::kebab_to_snake_case(command);
+pub fn main_rs_template(module: &str, root_enum: &str, command: &str, description: &str) -> String {
     format!(
         r#"use clap::{{CommandFactory, Parser, Subcommand}};
 use clap_complete::Shell;
 use std::{{io, process}};
-use tyt_{snake}::{{DependenciesImpl, Tyt{name}}};
+use {module}::{{DependenciesImpl, {root_enum}}};
 
 /// {description}
 #[derive(Clone, Debug, Parser)]
@@ -26,7 +23,7 @@ enum Command {{
     }},
 
     #[command(flatten)]
-    Tyt{name}(Tyt{name}),
+    {root_enum}({root_enum}),
 }}
 
 fn main() {{
@@ -40,7 +37,7 @@ fn main() {{
                 &mut io::stdout(),
             );
         }}
-        Command::Tyt{name}(cmd) => {{
+        Command::{root_enum}(cmd) => {{
             if let Err(e) = cmd.execute(DependenciesImpl) {{
                 eprintln!("error: {{e}}");
                 process::exit(1);

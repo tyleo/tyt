@@ -1,4 +1,4 @@
-pub fn lib_rs_template(snake: &str) -> String {
+pub fn lib_rs_template(module: &str) -> String {
     format!(
         r#"pub mod commands;
 
@@ -7,14 +7,14 @@ mod dependencies;
 mod dependencies_impl;
 mod error;
 mod result;
-mod tyt_{snake};
+mod {module};
 
 pub use dependencies::*;
 #[cfg(feature = "impl")]
 pub use dependencies_impl::*;
 pub use error::*;
 pub use result::*;
-pub use tyt_{snake}::*;
+pub use {module}::*;
 "#
     )
 }

@@ -7,11 +7,15 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     let command = &cmd.command;
     let name = &cmd.name;
     let description = &cmd.description;
-    let snake = create_command::kebab_to_snake_case(command);
+    let dir = cmd.dir.as_deref().unwrap_or("tyt");
+    let prefix = cmd.prefix.unwrap_or(true);
+    let naming = create_command::CrateNaming::new(prefix, command);
+    let root_enum = naming.root_enum(name);
     let root = deps.workspace_root()?;
     let crate_dir = root
-        .join(create_command::TYT_PROJECT_DIR)
-        .join(format!("tyt-{command}"));
+        .join(create_command::PROJECTS_DIR)
+        .join(dir)
+        .join(&naming.package);
 
     if crate_dir.exists() {
         return Err(Error::Meta(format!(
@@ -27,7 +31,7 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     // 1. Cargo.toml
     deps.write(
         crate_dir.join("Cargo.toml"),
-        &create_command::cargo_toml_template(command, description),
+        &create_command::cargo_toml_template(&naming.package, command, description),
     )?;
 
     // 2. LICENSE
@@ -36,16 +40,19 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     // 3. README.md
     deps.write(
         crate_dir.join("README.md"),
-        &create_command::readme_template(command, name, description),
+        &create_command::readme_template(&naming.package, name, description),
     )?;
 
     // 4. src/lib.rs
-    deps.write(src.join("lib.rs"), &create_command::lib_rs_template(&snake))?;
+    deps.write(
+        src.join("lib.rs"),
+        &create_command::lib_rs_template(&naming.module),
+    )?;
 
     // 5. src/main.rs
     deps.write(
         src.join("main.rs"),
-        &create_command::main_rs_template(command, name, description),
+        &create_command::main_rs_template(&naming.module, &root_enum, command, description),
     )?;
 
     // 6. src/dependencies.rs
@@ -66,10 +73,10 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     // 9. src/result.rs
     deps.write(src.join("result.rs"), create_command::RESULT_RS_TEMPLATE)?;
 
-    // 10. src/tyt_{snake}.rs
+    // 10. src/{module}.rs
     deps.write(
-        src.join(format!("tyt_{snake}.rs")),
-        &create_command::tyt_enum_template_empty(name, description),
+        src.join(format!("{}.rs", naming.module)),
+        &create_command::tyt_enum_template_empty(&root_enum, description),
     )?;
 
     // 11. src/commands/mod.rs
@@ -78,27 +85,45 @@ pub fn create_crate(cmd: &CreateCommand, deps: &impl Dependencies) -> Result<()>
     // -- Wire into existing files --
 
     // Workspace Cargo.toml
-    create_command::wire_workspace_cargo_toml(deps, &root, command)?;
+    create_command::wire_workspace_cargo_toml(deps, &root, dir, &naming.package)?;
 
-    // projects/tyt/tyt/Cargo.toml
-    create_command::wire_tyt_cargo_toml(deps, &root, command)?;
+    // Prefixed crates are tyt subcommands and are wired into the tyt binary so
+    // `tyt {command}` runs them. Standalone (no-prefix) crates are left out.
+    if prefix {
+        // projects/tyt/tyt/Cargo.toml
+        create_command::wire_tyt_cargo_toml(deps, &root, command)?;
 
-    // projects/tyt/tyt/src/dependencies.rs
-    create_command::wire_tyt_dependencies(deps, &root, command, name)?;
+        // projects/tyt/tyt/src/dependencies.rs
+        create_command::wire_tyt_dependencies(deps, &root, command, name)?;
 
-    // projects/tyt/tyt/src/dependencies_impl.rs
-    create_command::wire_tyt_dependencies_impl(deps, &root, command, name)?;
+        // projects/tyt/tyt/src/dependencies_impl.rs
+        create_command::wire_tyt_dependencies_impl(deps, &root, command, name)?;
 
-    // projects/tyt/tyt/src/error.rs
-    create_command::wire_tyt_error(deps, &root, command, name)?;
+        // projects/tyt/tyt/src/error.rs
+        create_command::wire_tyt_error(deps, &root, command, name)?;
 
-    // projects/tyt/tyt/src/tyt.rs
-    create_command::wire_tyt_tyt_rs(deps, &root, command, name)?;
+        // projects/tyt/tyt/src/tyt.rs
+        create_command::wire_tyt_tyt_rs(deps, &root, command, name)?;
+    }
 
+    let location = format!("{}/{dir}/{}", create_command::PROJECTS_DIR, naming.package);
+    let mut parent_flags = String::new();
+    if dir != "tyt" {
+        parent_flags.push_str(&format!(" --dir {dir}"));
+    }
+    if !prefix {
+        parent_flags.push_str(" --prefix false");
+    }
+    let wiring = if prefix {
+        format!("the workspace and the tyt binary as `tyt {command}`")
+    } else {
+        "the workspace".to_string()
+    };
     deps.write_stdout(
         format!(
-            "Created tyt-{command} crate and wired into workspace.\n\
-             Next: add commands with `tyt meta create-command <Name> <command> <desc> --parent {command}`\n"
+            "Created {package} crate at {location} and wired it into {wiring}.\n\
+             Next: add commands with `tyt meta create-command <Name> <command> <desc> --parent {command}{parent_flags}`\n",
+            package = naming.package
         )
         .as_bytes(),
     )?;

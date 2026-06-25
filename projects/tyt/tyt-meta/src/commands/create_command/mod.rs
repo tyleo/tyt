@@ -1,12 +1,15 @@
 mod add_command_to_crate;
+mod crate_naming;
 #[allow(clippy::module_inception)]
 mod create_command;
 mod create_crate;
 mod ensure_group;
+mod find_parent_crate;
 mod insert_command_mod;
 mod insert_enum_variant;
 mod kebab_to_pascal_case;
 mod kebab_to_snake_case;
+mod projects_dir;
 mod register_command_mod;
 mod templates;
 mod tyt_project_dir;
@@ -19,13 +22,16 @@ mod wire_tyt_tyt_rs;
 mod wire_workspace_cargo_toml;
 
 pub(crate) use add_command_to_crate::*;
+pub(crate) use crate_naming::*;
 pub use create_command::*;
 pub(crate) use create_crate::*;
 pub(crate) use ensure_group::*;
+pub(crate) use find_parent_crate::*;
 pub(crate) use insert_command_mod::*;
 pub(crate) use insert_enum_variant::*;
 pub(crate) use kebab_to_pascal_case::*;
 pub(crate) use kebab_to_snake_case::*;
+pub(crate) use projects_dir::*;
 pub(crate) use register_command_mod::*;
 pub(crate) use templates::*;
 pub(crate) use tyt_project_dir::*;

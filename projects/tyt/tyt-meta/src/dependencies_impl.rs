@@ -12,6 +12,14 @@ impl Dependencies for DependenciesImpl {
         Ok(fs::create_dir_all(path)?)
     }
 
+    fn read_dir<P: AsRef<Path>>(&self, path: P) -> Result<Vec<PathBuf>> {
+        let mut entries = Vec::new();
+        for entry in fs::read_dir(path)? {
+            entries.push(entry?.path());
+        }
+        Ok(entries)
+    }
+
     fn read_to_string<P: AsRef<Path>>(&self, path: P) -> Result<String> {
         Ok(fs::read_to_string(path)?)
     }

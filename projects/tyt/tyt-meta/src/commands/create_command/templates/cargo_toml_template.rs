@@ -1,7 +1,7 @@
-pub fn cargo_toml_template(command: &str, description: &str) -> String {
+pub fn cargo_toml_template(package: &str, command: &str, description: &str) -> String {
     format!(
         r#"[package]
-name = "tyt-{command}"
+name = "{package}"
 version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"

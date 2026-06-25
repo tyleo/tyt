@@ -1,4 +1,3 @@
-/// Workspace-relative directory grouping the `tyt` binary crate and every
-/// `tyt-*` sub-crate. New crates are scaffolded under here, and wiring targets
-/// the binary crate at `{TYT_PROJECT_DIR}/tyt`.
+/// Workspace-relative group directory of the `tyt` binary crate, which lives at
+/// `{TYT_PROJECT_DIR}/tyt`. Prefixed sub-crates are wired into that binary.
 pub(crate) const TYT_PROJECT_DIR: &str = "projects/tyt";
