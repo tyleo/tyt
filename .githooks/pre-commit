@@ -1,0 +1,20 @@
+#!/bin/sh
+# Checked-in pre-commit hook, shared by humans and Claude.
+#
+# Activated via core.hooksPath=.githooks, which projects/tyt/tyt-common/build.rs
+# sets on the first `cargo check` after a clone. To activate by hand:
+#   git config core.hooksPath .githooks
+#
+# Bypass in an emergency with `git commit --no-verify`.
+
+if ! cargo fmt --all -- --check; then
+    echo >&2
+    echo "pre-commit: formatting check failed - run 'cargo fmt --all', then re-stage." >&2
+    exit 1
+fi
+
+if ! cargo clippy --workspace --all-targets -- -D warnings; then
+    echo >&2
+    echo "pre-commit: clippy reported lints - fix them, then re-commit." >&2
+    exit 1
+fi

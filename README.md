@@ -144,6 +144,23 @@ cargo check                         # Type-check the workspace
 cargo build -p tyt --features bin   # Build the binary
 ```
 
+## Development
+
+After cloning, enable the git hooks once:
+
+```sh
+npm run setup
+```
+
+This points `core.hooksPath` at `.githooks`, so a pre-commit hook runs `cargo fmt --all -- --check` and `cargo clippy --workspace --all-targets -- -D warnings` before each commit. Without npm, run `git config core.hooksPath .githooks`.
+
+Format and lint manually with:
+
+```sh
+cargo fmt --all
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
 ## Releasing
 
 Releases use [`cargo-workspaces`](https://github.com/pksunkara/cargo-workspaces) (`cargo install cargo-workspaces` once). Only the crates that actually changed get bumped. `tyt` itself must always be force-bumped so its published `Cargo.lock` refreshes, otherwise `cargo install tyt` keeps pinning the old sub-crate versions.

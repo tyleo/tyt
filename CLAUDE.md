@@ -6,6 +6,12 @@
 cargo check
 ```
 
+## Lint and format
+
+- `cargo fmt --all` formats; `cargo clippy --workspace --all-targets -- -D warnings` lints. Run both before committing.
+- A checked-in pre-commit hook (`.githooks/pre-commit`) runs the fmt check and clippy on every commit, so the same gate applies to humans and Claude.
+- Enable the hook once after cloning with `npm run setup` (or `git config core.hooksPath .githooks`); see the README Development section.
+
 ## Style
 
 - Rust edition 2024

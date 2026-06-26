@@ -6,6 +6,7 @@
     "type": "module",
     "sideEffects": false,
     "scripts": {
+        "setup": "git config core.hooksPath .githooks",
         "build:release-wasm": "cargo build",
         "install:tyt": "cargo install --path ./projects/tyt/tyt --features=\"bin\"",
         "install:vmax": "cargo install --path ./projects/tyt/tyt-vmax --features=\"bin\"",
