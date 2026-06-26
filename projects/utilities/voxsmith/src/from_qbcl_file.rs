@@ -295,11 +295,17 @@ fn hex(color: [u8; 3]) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{from_qbcl_bytes, from_qbcl_file, to_qbcl_bytes, to_qbcl_file};
+    use branded_id::U32Id;
     use qbcl::qbcl::{
         QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode,
         QbclNodeBody, QbclThumbnail, QbclVoxel,
     };
-    use voxcore::VoxState;
+    use std::collections::BTreeSet;
+    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+    use voxcore::{
+        BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxHierarchyNode, VoxMap, VoxObject,
+        VoxPalette, VoxState, VoxValue,
+    };
 
     /// A matrix node with two solid voxels in a `[2, 1, 1]` grid.
     fn matrix_node() -> QbclNode {
@@ -375,6 +381,136 @@ mod tests {
         }
     }
 
+    /// A state carrying no format ext, built straight from voxcore: a red-green
+    /// object and a blue object sharing one `rgb` palette, placed by a hierarchy of
+    /// a nested group and two roots. This is the cross-format synthesis input.
+    fn source_state() -> VoxState {
+        let mut state = VoxState::default();
+
+        // One rgb palette: red, green, blue.
+        let mut palette = VoxPalette::default();
+        palette.add_attribute("rgb".to_owned());
+        for hex in ["#FF0000", "#00FF00", "#0000FF"] {
+            palette
+                .add_cell(vec![VoxValue::Text(hex.to_owned())])
+                .expect("one value per attribute");
+        }
+        let palette_id = state.add_palette(palette);
+        let cell = |index: u32| U32Id::<BVoxPaletteCell>::from_u32(index);
+
+        // Object 0: a red then a green voxel along x.
+        let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
+            .expect("a 2x1x1 grid is within the dense limit");
+        wide.add_palette_ref(palette_id, cell(0));
+        for (x, color) in [(0u32, 0u32), (1, 1)] {
+            let voxel = wide
+                .voxel_id(TyVector3U32::new(x, 0, 0))
+                .expect("a position within the grid");
+            wide.retain_voxel(voxel, &[cell(color)])
+                .expect("one sample for the one reference");
+        }
+        state.add_object(wide);
+
+        // Object 1: a single blue voxel.
+        let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
+            .expect("a 1x1x1 grid is within the dense limit");
+        unit.add_palette_ref(palette_id, cell(0));
+        let voxel = unit
+            .voxel_id(TyVector3U32::new(0, 0, 0))
+            .expect("a position within the grid");
+        unit.retain_voxel(voxel, &[cell(2)])
+            .expect("one sample for the one reference");
+        state.add_object(unit);
+
+        let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);
+        let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
+        let placed_at = |x: f64, y: f64, z: f64| {
+            TyTransformF64::new(
+                TyVector3F64::new(x, y, z),
+                TyQuaternionF64::identity(),
+                TyVector3F64::new(1.0, 1.0, 1.0),
+            )
+        };
+
+        // node 0 groups node 1, which places object 0 at +5x; node 2 places
+        // object 1 at +3y. Nodes 0 and 2 are the roots.
+        state.add_hierarchy_node(VoxHierarchyNode {
+            name: "group".to_owned(),
+            child_nodes: vec![node(1)],
+            child_objects: Vec::new(),
+            transform: TyTransformF64::default(),
+        });
+        state.add_hierarchy_node(VoxHierarchyNode {
+            name: "wide".to_owned(),
+            child_nodes: Vec::new(),
+            child_objects: vec![object(0)],
+            transform: placed_at(5.0, 0.0, 0.0),
+        });
+        state.add_hierarchy_node(VoxHierarchyNode {
+            name: "unit".to_owned(),
+            child_nodes: Vec::new(),
+            child_objects: vec![object(1)],
+            transform: placed_at(0.0, 3.0, 0.0),
+        });
+        state.set_root_hierarchy_nodes(vec![node(0), node(2)]);
+
+        state.validate().expect("a well-formed source state");
+        state
+    }
+
+    /// The world voxels a file places: each matrix or compound grid's solid cells
+    /// decoded to world coordinates and color, order-independent. Synthesis bakes
+    /// the world position onto each matrix and leaves models at identity, so a
+    /// cell's world coordinate is its grid coordinate plus the matrix position.
+    fn world_voxels(file: &QbclFile) -> BTreeSet<(i32, i32, i32, (u8, u8, u8))> {
+        let mut set = BTreeSet::new();
+        collect_world_voxels(&file.root, &mut set);
+        set
+    }
+
+    /// Adds a node's solid world voxels to `set`, recursing into child nodes.
+    fn collect_world_voxels(node: &QbclNode, set: &mut BTreeSet<(i32, i32, i32, (u8, u8, u8))>) {
+        match &node.body {
+            QbclNodeBody::Matrix(matrix) => collect_matrix_voxels(matrix, set),
+            QbclNodeBody::Model(model) => {
+                for child in &model.children {
+                    collect_world_voxels(child, set);
+                }
+            }
+            QbclNodeBody::Compound(compound) => {
+                collect_matrix_voxels(&compound.matrix, set);
+                for child in &compound.children {
+                    collect_world_voxels(child, set);
+                }
+            }
+        }
+    }
+
+    /// Adds one matrix's solid world voxels to `set`, decoding the storage index
+    /// `y + size_y * (z + size_z * x)` back to a grid coordinate.
+    fn collect_matrix_voxels(
+        matrix: &QbclMatrix,
+        set: &mut BTreeSet<(i32, i32, i32, (u8, u8, u8))>,
+    ) {
+        let [_, size_y, size_z] = matrix.size;
+        for (index, voxel) in matrix.voxels.iter().enumerate() {
+            if voxel.is_empty() {
+                continue;
+            }
+            let index = index as u32;
+            let y = index % size_y;
+            let layer = index / size_y;
+            let z = layer % size_z;
+            let x = layer / size_z;
+            set.insert((
+                matrix.position[0] + x as i32,
+                matrix.position[1] + y as i32,
+                matrix.position[2] + z as i32,
+                (voxel.r, voxel.g, voxel.b),
+            ));
+        }
+    }
+
     #[test]
     fn round_trips_through_vox_state() {
         let file = sample_file();
@@ -409,10 +545,53 @@ mod tests {
         assert_eq!(to_qbcl_file(&state).unwrap(), file);
     }
 
+    /// A default state has no objects and no ext, so the writer synthesizes an
+    /// empty file rooted at a childless model rather than erroring on the missing
+    /// ext.
     #[test]
-    fn errors_without_qubicle_qbcl_ext() {
+    fn synthesizes_an_empty_state_without_an_ext() {
         let state = VoxState::default();
-        assert!(to_qbcl_file(&state).is_err());
+        let file = to_qbcl_file(&state).unwrap();
+        let QbclNodeBody::Model(model) = &file.root.body else {
+            panic!("synthesis roots under a model");
+        };
+        assert!(model.children.is_empty());
+    }
+
+    /// A state with no `qubicle-qbcl` ext, such as one cross-loaded from another
+    /// format, synthesizes a file: the hierarchy maps to a Qubicle scene tree whose
+    /// world voxels and colors match the source, and the file reads back into a
+    /// valid state with both objects.
+    #[test]
+    fn synthesizes_a_file_without_an_ext() {
+        let state = source_state();
+        let file = to_qbcl_file(&state).unwrap();
+
+        let red = (0xFF, 0, 0);
+        let green = (0, 0xFF, 0);
+        let blue = (0, 0, 0xFF);
+
+        // Object 0 is placed at +5x under a group, object 1 at +3y.
+        assert_eq!(
+            world_voxels(&file),
+            BTreeSet::from([(5, 0, 0, red), (6, 0, 0, green), (0, 3, 0, blue)])
+        );
+
+        let reloaded = from_qbcl_file(&file).unwrap();
+        assert_eq!(reloaded.object_count(), 2);
+    }
+
+    /// A foreign ext, here `voxel-max`, is ignored by the Qubicle writer: it
+    /// synthesizes from the scene rather than failing to parse the wrong ext.
+    #[test]
+    fn synthesizes_past_a_foreign_ext() {
+        let mut state = source_state();
+        state.set_ext(Some(VoxValue::Object(VoxMap(vec![(
+            "voxel-max".to_owned(),
+            VoxValue::Null,
+        )]))));
+        let file = to_qbcl_file(&state).unwrap();
+        assert_eq!(world_voxels(&file).len(), 3);
     }
 
     #[test]
