@@ -470,15 +470,23 @@ fn object_box(
     Ok((box_min, size))
 }
 
+/// Decodes a stored `[x, y, z, angle]` axis-angle rotation into a quaternion.
+fn axis_angle(rotation: [f64; 4]) -> TyQuaternionF64 {
+    let [x, y, z, angle] = rotation;
+    TyQuaternionF64::from_axis_angle(TyVector3F64::new(x, y, z), angle)
+}
+
+/// A [`TyVector3F64`] from a `[f64; 3]`.
+fn vec3(v: [f64; 3]) -> TyVector3F64 {
+    TyVector3F64::new(v[0], v[1], v[2])
+}
+
 /// The node transform that places an object's voxel-grid origin in model space.
 /// Voxel Max renders a voxel at `t_p + center + R*S*(voxel - center)`, pivoting the
 /// object about its bounds center, so the grid origin lands at
 /// `t_p + center + R*S*(box_min - center)`.
 fn object_transform(object: &VMaxObject, box_min: [i32; 3]) -> TyTransformF64 {
-    let rotation = TyQuaternionF64::from_axis_angle(
-        TyVector3F64::new(object.rotation[0], object.rotation[1], object.rotation[2]),
-        object.rotation[3],
-    );
+    let rotation = axis_angle(object.rotation);
     let scale = object.scale;
     let offset = TyVector3F64::new(
         (box_min[0] as f64 - object.center[0]) * scale[0],
@@ -493,20 +501,16 @@ fn object_transform(object: &VMaxObject, box_min: [i32; 3]) -> TyTransformF64 {
             object.position[2] + object.center[2] + rotated.z,
         ),
         rotation,
-        TyVector3F64::new(scale[0], scale[1], scale[2]),
+        vec3(scale),
     )
 }
 
 /// The transform for a scene group, placed directly at its authored position.
 fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
-    let rotation = TyQuaternionF64::from_axis_angle(
-        TyVector3F64::new(group.rotation[0], group.rotation[1], group.rotation[2]),
-        group.rotation[3],
-    );
     TyTransformF64::new(
-        TyVector3F64::new(group.position[0], group.position[1], group.position[2]),
-        rotation,
-        TyVector3F64::new(group.scale[0], group.scale[1], group.scale[2]),
+        vec3(group.position),
+        axis_angle(group.rotation),
+        vec3(group.scale),
     )
 }
 

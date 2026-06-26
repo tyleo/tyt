@@ -41,18 +41,19 @@ const DEFAULT_PIVOT_FACE: &str = "8";
 /// shares the first color palette's name and writes no file of its own.
 const FALLBACK_PALETTE: &str = "palette.png";
 
-/// A neutral camera for a synthesized scene. Voxel Max needs a valid rig to present
-/// an imported document; the framing is cosmetic.
+/// The scene camera a synthesized document opens with, mirroring a fresh Voxel Max
+/// document's neutral rig. Voxel Max needs a valid rig to present an imported
+/// document; the framing is cosmetic.
 const SYNTH_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
     da: 0.0,
-    ha: 0.1515506207942962,
+    ha: 0.25,
     lda: 0.0,
-    lha: 1.8209130764007568,
-    lwa: 0.2500000298023224,
+    lha: 1.875,
+    lwa: 0.25,
     o: [0.0, 0.0, 0.0],
     px: 0.0,
     py: 0.0,
-    wa: 0.1906125247478485,
+    wa: 0.0,
     z: 512.0,
 };
 
@@ -75,6 +76,12 @@ fn default_tools() -> VMaxTools {
             z: None,
         })
     };
+    // A tool with a single active surface; the closure picks the surface field.
+    fn tool(set: impl FnOnce(&mut VMaxToolMode)) -> Option<VMaxToolMode> {
+        let mut mode = VMaxToolMode::default();
+        set(&mut mode);
+        Some(mode)
+    }
     VMaxTools {
         bs: 1,
         mi: 0,
@@ -98,65 +105,30 @@ fn default_tools() -> VMaxTools {
             sfaz: None,
             sfat: None,
         }),
-        ct: Some(VMaxToolMode {
-            c: Some(mo("v")),
-            ..Default::default()
-        }),
-        ctc: Some(VMaxToolMode {
-            c: Some(mo("v")),
-            ..Default::default()
-        }),
-        cte: Some(VMaxToolMode {
-            e: Some(mo("v")),
-            ..Default::default()
-        }),
-        ctp: Some(VMaxToolMode {
-            p: Some(mo("v")),
-            ..Default::default()
-        }),
-        cts: Some(VMaxToolMode {
-            s: Some(VMaxMode {
+        ct: tool(|t| t.c = Some(mo("v"))),
+        ctc: tool(|t| t.c = Some(mo("v"))),
+        cte: tool(|t| t.e = Some(mo("v"))),
+        ctp: tool(|t| t.p = Some(mo("v"))),
+        cts: tool(|t| {
+            t.s = Some(VMaxMode {
                 mo: Some("v".to_owned()),
                 mf: Some("nw".to_owned()),
                 ..Default::default()
-            }),
-            ..Default::default()
+            })
         }),
-        ctm: Some(VMaxToolMode {
-            m: Some(mo("d")),
-            ..Default::default()
-        }),
-        pctm: Some(VMaxToolMode {
-            m: Some(mo("d")),
-            ..Default::default()
-        }),
-        cta: Some(VMaxToolMode {
-            a: Some(mo("ma")),
-            ..Default::default()
-        }),
-        dm: Some(VMaxToolMode {
-            b: Some(m("d")),
-            ..Default::default()
-        }),
-        dmb: Some(VMaxToolMode {
-            b: Some(m("d")),
-            ..Default::default()
-        }),
-        dmc: Some(VMaxToolMode {
-            c: Some(m("e")),
-            ..Default::default()
-        }),
-        dml: Some(VMaxToolMode {
-            l: Some(m("d")),
-            ..Default::default()
-        }),
-        dms: Some(VMaxToolMode {
-            s: Some(VMaxMode {
+        ctm: tool(|t| t.m = Some(mo("d"))),
+        pctm: tool(|t| t.m = Some(mo("d"))),
+        cta: tool(|t| t.a = Some(mo("ma"))),
+        dm: tool(|t| t.b = Some(m("d"))),
+        dmb: tool(|t| t.b = Some(m("d"))),
+        dmc: tool(|t| t.c = Some(m("e"))),
+        dml: tool(|t| t.l = Some(m("d"))),
+        dms: tool(|t| {
+            t.s = Some(VMaxMode {
                 m: Some("c8".to_owned()),
                 t: Some("f".to_owned()),
                 ..Default::default()
-            }),
-            ..Default::default()
+            })
         }),
     }
 }
