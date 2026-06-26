@@ -1,4 +1,4 @@
-use crate::{ColorFormat, Format, Result, VoxjEncoding, VoxjFormat};
+use crate::{CameraView, ColorFormat, Format, Result, VoxjEncoding, VoxjFormat};
 use std::path::Path;
 
 /// Dependencies for this crate's operations.
@@ -21,13 +21,15 @@ pub trait Dependencies {
     /// Converts the voxel file at `input` into a Voxel Max `.vmax` package
     /// directory at `output`. `from` names the source format, inferred from
     /// `input`'s extension when `None`. `color_format` selects where each
-    /// object's colors are stored in the package.
+    /// object's colors are stored in the package. `camera` selects the scene
+    /// camera the rebuilt document opens with.
     fn to_vmax(
         &self,
         input: &Path,
         from: Option<Format>,
         output: &Path,
         color_format: ColorFormat,
+        camera: Option<CameraView>,
     ) -> Result<()>;
 
     /// Converts the voxel file at `input` into a Voxel Json document at

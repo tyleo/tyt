@@ -43,6 +43,7 @@ mod from_vmax_file;
 mod from_voxj_bytes;
 mod from_voxj_file;
 mod result;
+mod scene_camera_source;
 mod to_goxl_bytes;
 mod to_goxl_file;
 mod to_mvox_bytes;
@@ -60,6 +61,7 @@ mod to_voxj_file;
 mod to_voxj_file_with;
 mod to_voxjz_bytes;
 mod to_voxjz_bytes_with;
+mod vmax_file_builder;
 mod voxel_max_color_format;
 
 pub use error::*;
@@ -77,6 +79,7 @@ pub use from_vmax_file::*;
 pub use from_voxj_bytes::*;
 pub use from_voxj_file::*;
 pub use result::*;
+pub use scene_camera_source::*;
 pub use to_goxl_bytes::*;
 pub use to_goxl_file::*;
 pub use to_mvox_bytes::*;
@@ -94,4 +97,10 @@ pub use to_voxj_file::*;
 pub use to_voxj_file_with::*;
 pub use to_voxjz_bytes::*;
 pub use to_voxjz_bytes_with::*;
+pub use vmax_file_builder::*;
 pub use voxel_max_color_format::*;
+
+// Re-exported so callers can name the camera passed to `SceneCameraSource::Camera`.
+pub use vmax::VMaxSceneCamera;
+
+pub(crate) use to_vmax_file::write_vmax;

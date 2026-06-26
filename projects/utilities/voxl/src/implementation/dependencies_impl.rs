@@ -1,4 +1,4 @@
-use crate::{ColorFormat, Dependencies, Format, Result, VoxjEncoding, VoxjFormat};
+use crate::{CameraView, ColorFormat, Dependencies, Format, Result, VoxjEncoding, VoxjFormat};
 use std::path::Path;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -23,8 +23,9 @@ impl Dependencies for DependenciesImpl {
         from: Option<Format>,
         output: &Path,
         color_format: ColorFormat,
+        camera: Option<CameraView>,
     ) -> Result<()> {
-        super::to_vmax::to_vmax(input, from, output, color_format)
+        super::to_vmax::to_vmax(input, from, output, color_format, camera)
     }
 
     fn to_voxj(

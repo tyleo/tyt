@@ -1,4 +1,4 @@
-use crate::{ColorFormat, Dependencies, Format, Result};
+use crate::{CameraView, ColorFormat, Dependencies, Format, Result};
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -21,10 +21,21 @@ pub struct ToVmax {
     /// Where to store object colors in the package.
     #[arg(value_name = "color-format", long, default_value = "png")]
     color_format: ColorFormat,
+
+    /// Which scene camera the rebuilt document opens with. Omitted, the input's
+    /// `voxel-max` ext camera is kept when present, else the empty default.
+    #[arg(value_name = "camera", long)]
+    camera: Option<CameraView>,
 }
 
 impl ToVmax {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        dependencies.to_vmax(&self.input, self.from, &self.output, self.color_format)
+        dependencies.to_vmax(
+            &self.input,
+            self.from,
+            &self.output,
+            self.color_format,
+            self.camera,
+        )
     }
 }

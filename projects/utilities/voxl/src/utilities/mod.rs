@@ -1,3 +1,4 @@
+mod camera_view;
 mod color_format;
 mod format;
 mod voxj_encoding;
@@ -6,6 +7,7 @@ mod voxj_optimize;
 mod voxj_position_encoding;
 mod voxj_sample_encoding;
 
+pub use camera_view::*;
 pub use color_format::*;
 pub use format::*;
 pub use voxj_encoding::*;

@@ -1,6 +1,6 @@
 use crate::{
-    Error, Result, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxNode,
-    VoxelMaxPalette, ext_for, from_vox_value,
+    Error, Result, SceneCameraSource, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
+    VoxelMaxNode, VoxelMaxPalette, ext_for, from_vox_value,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, HashMap};
@@ -169,20 +169,33 @@ fn default_camera() -> VMaxCamera {
     }
 }
 
-/// Writes a [`VoxState`] back to a Voxel Max document, the inverse of
-/// [`from_vmax_file`](crate::from_vmax_file).
-/// `voxel_max_color_format` selects where each palette's colors are stored, as
-/// described on [`VoxelMaxColorFormat`].
+/// Writes a [`VoxState`] back to a Voxel Max document with default settings, the
+/// inverse of [`from_vmax_file`](crate::from_vmax_file). `voxel_max_color_format`
+/// selects where each palette's colors are stored, as described on
+/// [`VoxelMaxColorFormat`]. For control over the scene camera, use
+/// [`VmaxFileBuilder`](crate::VmaxFileBuilder).
+pub fn to_vmax_file(
+    state: &VoxState,
+    voxel_max_color_format: VoxelMaxColorFormat,
+) -> Result<VMaxFile> {
+    write_vmax(state, voxel_max_color_format, None)
+}
+
+/// Writes a [`VoxState`] back to a Voxel Max document, the workhorse behind
+/// [`to_vmax_file`] and [`VmaxFileBuilder`](crate::VmaxFileBuilder).
 ///
 /// A state carrying the `voxel-max` ext the forward path writes is rebuilt from
 /// it exactly, and editor session artifacts voxcore does not model are dropped. A
 /// state without that ext, such as one loaded from another format, has its ext
 /// synthesized from the bare voxcore scene by [`synthesize_voxel_max_ext`] and the
-/// rest of this path runs unchanged.
-pub fn to_vmax_file(
+/// rest of this path runs unchanged. `scene_camera` overrides the scene camera the
+/// document opens with, or keeps the path's own when `None`.
+pub(crate) fn write_vmax(
     state: &VoxState,
     voxel_max_color_format: VoxelMaxColorFormat,
+    scene_camera: Option<SceneCameraSource>,
 ) -> Result<VMaxFile> {
+    let had_ext = ext_for(state, "voxel-max").is_some();
     let (voxel_max, color_offset, placements) = match ext_for(state, "voxel-max") {
         Some(ext) => {
             let voxel_max = from_vox_value::<VoxelMaxExtWrapper>(ext)?.voxel_max;
@@ -307,6 +320,7 @@ pub fn to_vmax_file(
     let mut scene = voxel_max.scene;
     scene.groups = groups;
     scene.objects = objects;
+    apply_scene_camera(&mut scene, scene_camera, had_ext)?;
 
     Ok(VMaxFile {
         scene_json_file: scene,
@@ -321,6 +335,28 @@ pub fn to_vmax_file(
         contents_vmax_pngs: BTreeMap::new(),
         group_pngs: BTreeMap::new(),
     })
+}
+
+/// Applies a scene-camera override to the rebuilt scene. The lossless path carries
+/// the ext's camera and the synthesis path the empty default, so `None` leaves the
+/// scene untouched.
+fn apply_scene_camera(
+    scene: &mut VMaxSceneJsonFile,
+    scene_camera: Option<SceneCameraSource>,
+    had_ext: bool,
+) -> Result<()> {
+    match scene_camera {
+        None => {}
+        Some(SceneCameraSource::Ext) if !had_ext => {
+            return Err(Error::invalid(
+                "scene camera `ext` needs a voxel-max ext, which the input has none of",
+            ));
+        }
+        Some(SceneCameraSource::Ext) => {}
+        Some(SceneCameraSource::Empty) => scene.cam = Some(SYNTH_CAMERA),
+        Some(SceneCameraSource::Camera(camera)) => scene.cam = Some(camera),
+    }
+    Ok(())
 }
 
 /// One scene node to emit and the Voxel Max provenance that places it: the
@@ -878,8 +914,8 @@ fn suffix(index: usize) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper, cell_color, from_vmax_file,
-        object_color_ref, to_vmax_file, to_vox_value,
+        SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
+        cell_color, from_vmax_file, object_color_ref, to_vmax_file, to_vox_value,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
@@ -2020,5 +2056,99 @@ mod tests {
             world_voxels(&reloaded),
             BTreeSet::from([([0, 0, 0], red), ([1, 0, 0], green)])
         );
+    }
+
+    /// A minimal no-ext state: one red voxel placed by one object node, the input
+    /// the synthesis path takes.
+    fn one_object_state() -> VoxState {
+        let mut state = VoxState::default();
+        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        state.add_object(color_object(
+            palette,
+            TyVector3U32::new(1, 1, 1),
+            &[([0, 0, 0], 0)],
+        ));
+        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
+        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state.validate().unwrap();
+        state
+    }
+
+    /// Gives the state a `voxel-max` ext carrying `cam` as its scene camera, so the
+    /// lossless path has a camera to keep or replace.
+    fn with_ext_scene_camera(state: &mut VoxState, cam: VMaxSceneCamera) {
+        let voxel_max = VoxelMaxExt {
+            scene: VMaxSceneJsonFile {
+                cam: Some(cam),
+                ..Default::default()
+            },
+            palettes: vec![None; state.palette_count()],
+            ..Default::default()
+        };
+        let ext = to_vox_value(&VoxelMaxExtWrapper { voxel_max }).unwrap();
+        state.set_ext(Some(ext));
+        state.validate().unwrap();
+    }
+
+    /// `SceneCameraSource::Camera` writes the given scene camera, replacing whatever
+    /// the path would otherwise produce.
+    #[test]
+    fn scene_camera_camera_overrides_the_scene_camera() {
+        let state = one_object_state();
+        let camera = VMaxSceneCamera {
+            z: 123.0,
+            ..Default::default()
+        };
+        let file = VmaxFileBuilder::new(&state)
+            .scene_camera(SceneCameraSource::Camera(camera))
+            .build()
+            .unwrap();
+        assert_eq!(file.scene_json_file.cam, Some(camera));
+    }
+
+    /// `SceneCameraSource::Ext` errors on a state with no `voxel-max` ext, since
+    /// there is no camera to keep, but succeeds and keeps the camera once one is
+    /// present.
+    #[test]
+    fn scene_camera_ext_requires_an_ext() {
+        let mut state = one_object_state();
+        assert!(
+            VmaxFileBuilder::new(&state)
+                .scene_camera(SceneCameraSource::Ext)
+                .build()
+                .is_err()
+        );
+
+        let cam = VMaxSceneCamera {
+            z: 321.0,
+            ..Default::default()
+        };
+        with_ext_scene_camera(&mut state, cam);
+        let file = VmaxFileBuilder::new(&state)
+            .scene_camera(SceneCameraSource::Ext)
+            .build()
+            .unwrap();
+        assert_eq!(file.scene_json_file.cam, Some(cam));
+    }
+
+    /// `SceneCameraSource::Empty` replaces the ext's scene camera with the default,
+    /// while leaving the camera unset keeps it.
+    #[test]
+    fn scene_camera_empty_replaces_the_ext_camera() {
+        let mut state = one_object_state();
+        let cam = VMaxSceneCamera {
+            z: 999.0,
+            ..Default::default()
+        };
+        with_ext_scene_camera(&mut state, cam);
+
+        let kept = VmaxFileBuilder::new(&state).build().unwrap();
+        assert_eq!(kept.scene_json_file.cam, Some(cam));
+
+        let empty = VmaxFileBuilder::new(&state)
+            .scene_camera(SceneCameraSource::Empty)
+            .build()
+            .unwrap();
+        assert_ne!(empty.scene_json_file.cam, Some(cam));
     }
 }
