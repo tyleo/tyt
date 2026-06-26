@@ -1,6 +1,6 @@
 use crate::{
-    Error, QubicleQbclExtWrapper, QubicleQbclNode, QubicleQbclNodeBody, Result, cell_color, ext_for,
-    from_vox_value, object_color_ref,
+    Error, QubicleQbclExtWrapper, QubicleQbclNode, QubicleQbclNodeBody, Result, cell_color,
+    ext_for, from_vox_value, object_color_ref,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{

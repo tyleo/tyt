@@ -9,7 +9,7 @@ use vmax::{
     VMaxBrush, VMaxBrushColor, VMaxBrushEntry, VMaxBrushState, VMaxCamera, VMaxContentsVmaxbFile,
     VMaxFile, VMaxFlag, VMaxFlagValue, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxMode,
     VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera,
-    VMaxSceneJsonFile, VMaxTools, VMaxToolMode, VMaxViewBox,
+    VMaxSceneJsonFile, VMaxToolMode, VMaxTools, VMaxViewBox,
 };
 use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
@@ -482,7 +482,11 @@ fn secondary_object_ext(node_ext: &VoxelMaxNode, object: &VoxObject, slot: usize
 /// than its center mislocates the object. The box still spans `[0, size]`, so the
 /// re-based voxels at the grid origin are unchanged and `box_min` stays zero.
 fn centered_bounds(size: TyVector3U32) -> ([f64; 3], [f64; 3], [f64; 3]) {
-    let half = [size.x as f64 / 2.0, size.y as f64 / 2.0, size.z as f64 / 2.0];
+    let half = [
+        size.x as f64 / 2.0,
+        size.y as f64 / 2.0,
+        size.z as f64 / 2.0,
+    ];
     (half, [-half[0], -half[1], -half[2]], half)
 }
 
@@ -618,7 +622,12 @@ fn build_palette(
         material.is_some() || matches!(voxel_max_color_format, VoxelMaxColorFormat::Plist);
     if write_sidecar {
         let name = material
-            .and_then(|material| palette_names.get(material.to_u32() as usize).cloned().flatten())
+            .and_then(|material| {
+                palette_names
+                    .get(material.to_u32() as usize)
+                    .cloned()
+                    .flatten()
+            })
             .map(|palette| palette.name)
             .unwrap_or_default();
         let sidecar = format!("palette{stem}.settings.vmaxpsb");
@@ -1247,8 +1256,16 @@ mod tests {
     fn synthesizes_distinct_node_ind() {
         let mut state = VoxState::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
-        state.add_object(color_object(palette, TyVector3U32::new(1, 1, 1), &[([0, 0, 0], 0)]));
-        state.add_object(color_object(palette, TyVector3U32::new(1, 1, 1), &[([0, 0, 0], 0)]));
+        state.add_object(color_object(
+            palette,
+            TyVector3U32::new(1, 1, 1),
+            &[([0, 0, 0], 0)],
+        ));
+        state.add_object(color_object(
+            palette,
+            TyVector3U32::new(1, 1, 1),
+            &[([0, 0, 0], 0)],
+        ));
         // A root group parenting two object nodes.
         state.add_hierarchy_node(group_node("g", &[1, 2], at(0.0, 0.0, 0.0)));
         state.add_hierarchy_node(object_node("a", 0, at(0.0, 0.0, 0.0)));
@@ -1471,7 +1488,11 @@ mod tests {
             let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
             let palette = state.add_palette(rgba_palette(&refs));
             let voxels: Vec<([u32; 3], u32)> = (0..count).map(|i| ([i, 0, 0], i)).collect();
-            state.add_object(color_object(palette, TyVector3U32::new(count, 1, 1), &voxels));
+            state.add_object(color_object(
+                palette,
+                TyVector3U32::new(count, 1, 1),
+                &voxels,
+            ));
             state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
             state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
             state.validate().unwrap();
@@ -1480,7 +1501,10 @@ mod tests {
 
         let file = synthesize(254).expect("254 colors fit the synthesis budget");
         let reloaded = from_vmax_file(&file).unwrap();
-        assert_eq!(reloaded.object(U32Id::from_u32(0)).unwrap().live_count(), 254);
+        assert_eq!(
+            reloaded.object(U32Id::from_u32(0)).unwrap().live_count(),
+            254
+        );
         assert!(synthesize(255).is_err());
     }
 
@@ -1515,7 +1539,10 @@ mod tests {
             .map(|object| object.palette.as_str())
             .collect();
         assert_eq!(names, BTreeSet::from(["palette.png"]));
-        assert_eq!(file.palette_png_files.keys().collect::<Vec<_>>(), ["palette.png"]);
+        assert_eq!(
+            file.palette_png_files.keys().collect::<Vec<_>>(),
+            ["palette.png"]
+        );
 
         let reloaded = from_vmax_file(&file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
@@ -1795,7 +1822,11 @@ mod tests {
             let material = reloaded
                 .iter_palettes()
                 .map(|(_, palette)| palette)
-                .find(|palette| palette.iter_attributes().any(|(_, name)| name == "metallic"))
+                .find(|palette| {
+                    palette
+                        .iter_attributes()
+                        .any(|(_, name)| name == "metallic")
+                })
                 .expect("a material palette survives");
             let cell = material.iter_cells().next().expect("one material cell");
             let value = |name: &str| {
@@ -1834,7 +1865,10 @@ mod tests {
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
-        assert_eq!(file.palette_png_files["palette.png"].0[1], [0x33, 0x66, 0xCC, 0xFF]);
+        assert_eq!(
+            file.palette_png_files["palette.png"].0[1],
+            [0x33, 0x66, 0xCC, 0xFF]
+        );
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(
             world_voxels(&reloaded),
@@ -1916,9 +1950,15 @@ mod tests {
         assert!(contents_voxels(&file, "contents.vmaxb").is_empty());
         // Centered bounds: e_c at the box center, e_ma a half-extent of the grid.
         assert_eq!(file.scene_json_file.objects[0].center, [1.5, 2.0, 2.5]);
-        assert_eq!(file.scene_json_file.objects[0].bounds_max, Some([1.5, 2.0, 2.5]));
+        assert_eq!(
+            file.scene_json_file.objects[0].bounds_max,
+            Some([1.5, 2.0, 2.5])
+        );
         let reloaded = from_vmax_file(&file).unwrap();
-        assert_eq!(reloaded.object(U32Id::from_u32(0)).unwrap().bounds(), TyVector3U32::new(3, 4, 5));
+        assert_eq!(
+            reloaded.object(U32Id::from_u32(0)).unwrap().bounds(),
+            TyVector3U32::new(3, 4, 5)
+        );
     }
 
     /// A fully transparent color round-trips as transparent rather than being
@@ -1939,8 +1979,15 @@ mod tests {
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         // Index 0 stays the reserved empty cell, the transparent color sits at 1.
         assert_eq!(file.palette_png_files["palette.png"].0[0], [0, 0, 0, 0]);
-        assert_eq!(file.palette_png_files["palette.png"].0[1], [0x11, 0x22, 0x33, 0]);
-        assert!(contents_voxels(&file, "contents.vmaxb").iter().all(|v| v.color_idx == 1));
+        assert_eq!(
+            file.palette_png_files["palette.png"].0[1],
+            [0x11, 0x22, 0x33, 0]
+        );
+        assert!(
+            contents_voxels(&file, "contents.vmaxb")
+                .iter()
+                .all(|v| v.color_idx == 1)
+        );
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(
             world_voxels(&reloaded),
