@@ -265,11 +265,17 @@ fn shape_token(shape: GoxlShape) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{from_goxl_bytes, from_goxl_file, to_goxl_bytes, to_goxl_file};
+    use branded_id::U32Id;
     use goxl::{
         GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
         GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
     };
-    use voxcore::VoxState;
+    use std::collections::BTreeSet;
+    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+    use voxcore::{
+        BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxHierarchyNode, VoxMap, VoxObject,
+        VoxPalette, VoxState, VoxValue,
+    };
 
     /// A `4 x 4` matrix with distinct float cells, for transform and box fields.
     fn matrix(base: f32) -> [[f32; 4]; 4] {
@@ -423,6 +429,110 @@ mod tests {
         }
     }
 
+    /// A state with no format ext, built straight from voxcore: a red-green
+    /// object and a blue object sharing one `rgba` palette, placed by a hierarchy
+    /// of a nested group and two roots. This is the cross-format synthesis input.
+    fn source_state() -> VoxState {
+        let mut state = VoxState::default();
+
+        // One rgba palette: a transparent placeholder, then red, green, blue.
+        let mut palette = VoxPalette::default();
+        palette.add_attribute("rgba".to_owned());
+        for hex in ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"] {
+            palette
+                .add_cell(vec![VoxValue::Text(hex.to_owned())])
+                .expect("one value per attribute");
+        }
+        let palette_id = state.add_palette(palette);
+        let cell = |index: u32| U32Id::<BVoxPaletteCell>::from_u32(index);
+
+        // Object 0: a red then a green voxel along x.
+        let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
+            .expect("a 2x1x1 grid is within the dense limit");
+        wide.add_palette_ref(palette_id, cell(0));
+        for (x, color) in [(0u32, 1u32), (1, 2)] {
+            let voxel = wide
+                .voxel_id(TyVector3U32::new(x, 0, 0))
+                .expect("a position within the grid");
+            wide.retain_voxel(voxel, &[cell(color)])
+                .expect("one sample for the one reference");
+        }
+        state.add_object(wide);
+
+        // Object 1: a single blue voxel.
+        let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
+            .expect("a 1x1x1 grid is within the dense limit");
+        unit.add_palette_ref(palette_id, cell(0));
+        let voxel = unit
+            .voxel_id(TyVector3U32::new(0, 0, 0))
+            .expect("a position within the grid");
+        unit.retain_voxel(voxel, &[cell(3)])
+            .expect("one sample for the one reference");
+        state.add_object(unit);
+
+        let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);
+        let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
+        let placed_at = |x: f64, y: f64, z: f64| {
+            TyTransformF64::new(
+                TyVector3F64::new(x, y, z),
+                TyQuaternionF64::identity(),
+                TyVector3F64::new(1.0, 1.0, 1.0),
+            )
+        };
+
+        // node 0 groups node 1, which places object 0 at +5x; node 2 places
+        // object 1 at +3y. Nodes 0 and 2 are the roots.
+        state.add_hierarchy_node(VoxHierarchyNode {
+            name: "group".to_owned(),
+            child_nodes: vec![node(1)],
+            child_objects: Vec::new(),
+            transform: TyTransformF64::default(),
+        });
+        state.add_hierarchy_node(VoxHierarchyNode {
+            name: "wide".to_owned(),
+            child_nodes: Vec::new(),
+            child_objects: vec![object(0)],
+            transform: placed_at(5.0, 0.0, 0.0),
+        });
+        state.add_hierarchy_node(VoxHierarchyNode {
+            name: "unit".to_owned(),
+            child_nodes: Vec::new(),
+            child_objects: vec![object(1)],
+            transform: placed_at(0.0, 3.0, 0.0),
+        });
+        state.set_root_hierarchy_nodes(vec![node(0), node(2)]);
+
+        state.validate().expect("a well-formed source state");
+        state
+    }
+
+    /// The world voxels a file places: each layer block's solid cells decoded to
+    /// world coordinates and color, order-independent.
+    fn world_voxels(file: &GoxlFile) -> BTreeSet<(i32, i32, i32, (u8, u8, u8, u8))> {
+        let stride = GoxlBlock::SIZE as usize;
+        let mut set = BTreeSet::new();
+        for layer in &file.layers {
+            for placement in &layer.blocks {
+                let block = &file.blocks[placement.block_index as usize];
+                for (index, voxel) in block.voxels.iter().enumerate() {
+                    if voxel.is_empty() {
+                        continue;
+                    }
+                    let x = index % stride;
+                    let y = index / stride % stride;
+                    let z = index / (stride * stride);
+                    set.insert((
+                        placement.position[0] + x as i32,
+                        placement.position[1] + y as i32,
+                        placement.position[2] + z as i32,
+                        (voxel.r, voxel.g, voxel.b, voxel.a),
+                    ));
+                }
+            }
+        }
+        set
+    }
+
     #[test]
     fn round_trips_through_vox_state() {
         let file = sample_file();
@@ -446,10 +556,57 @@ mod tests {
         assert_eq!(to_goxl_file(&state).unwrap(), file);
     }
 
+    /// A default state has no objects and no ext, so the writer synthesizes an
+    /// empty file rather than erroring on the missing ext.
     #[test]
-    fn errors_without_goxel_ext() {
+    fn synthesizes_an_empty_state_without_an_ext() {
         let state = VoxState::default();
-        assert!(to_goxl_file(&state).is_err());
+        let file = to_goxl_file(&state).unwrap();
+        assert!(file.blocks.is_empty());
+        assert!(file.layers.is_empty());
+    }
+
+    /// A state with no `goxel` ext, such as one cross-loaded from another format,
+    /// synthesizes a file: the hierarchy flattens to layers of placed blocks
+    /// whose world voxels and colors match the source, one layer per placement
+    /// named for its node, and the file reads back into a valid state.
+    #[test]
+    fn synthesizes_a_file_without_an_ext() {
+        let state = source_state();
+        let file = to_goxl_file(&state).unwrap();
+
+        let red = (0xFF, 0, 0, 0xFF);
+        let green = (0, 0xFF, 0, 0xFF);
+        let blue = (0, 0, 0xFF, 0xFF);
+
+        // Object 0 is placed at +5x under a group, object 1 at +3y.
+        assert_eq!(
+            world_voxels(&file),
+            BTreeSet::from([(5, 0, 0, red), (6, 0, 0, green), (0, 3, 0, blue)])
+        );
+
+        assert_eq!(file.layers.len(), 2);
+        assert_eq!(file.layers[0].name, "wide");
+        assert_eq!(file.layers[1].name, "unit");
+
+        // Each object tiles to one block, and each block reads back as its own
+        // object in a valid state.
+        assert_eq!(file.blocks.len(), 2);
+        let reloaded = from_goxl_file(&file).unwrap();
+        assert_eq!(reloaded.object_count(), 2);
+    }
+
+    /// A foreign ext, here `voxel-max`, is ignored by the Goxel writer: it
+    /// synthesizes from the scene rather than failing to parse the wrong ext.
+    #[test]
+    fn synthesizes_past_a_foreign_ext() {
+        let mut state = source_state();
+        state.set_ext(Some(VoxValue::Object(VoxMap(vec![(
+            "voxel-max".to_owned(),
+            VoxValue::Null,
+        )]))));
+        let file = to_goxl_file(&state).unwrap();
+        assert_eq!(file.layers.len(), 2);
     }
 
     #[test]
