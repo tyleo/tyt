@@ -470,8 +470,10 @@ fn object_box(
     Ok((box_min, size))
 }
 
-/// The node transform that places an object authored from the origin, undoing
-/// Voxel Max's pivot-about-center placement so the voxels sit at `box_min`.
+/// The node transform that places an object's voxel-grid origin in model space.
+/// Voxel Max renders a voxel at `t_p + center + R*S*(voxel - center)`, pivoting the
+/// object about its bounds center, so the grid origin lands at
+/// `t_p + center + R*S*(box_min - center)`.
 fn object_transform(object: &VMaxObject, box_min: [i32; 3]) -> TyTransformF64 {
     let rotation = TyQuaternionF64::from_axis_angle(
         TyVector3F64::new(object.rotation[0], object.rotation[1], object.rotation[2]),
@@ -486,9 +488,9 @@ fn object_transform(object: &VMaxObject, box_min: [i32; 3]) -> TyTransformF64 {
     let rotated = rotation.rotate(offset);
     TyTransformF64::new(
         TyVector3F64::new(
-            object.position[0] + rotated.x,
-            object.position[1] + rotated.y,
-            object.position[2] + rotated.z,
+            object.position[0] + object.center[0] + rotated.x,
+            object.position[1] + object.center[1] + rotated.y,
+            object.position[2] + object.center[2] + rotated.z,
         ),
         rotation,
         TyVector3F64::new(scale[0], scale[1], scale[2]),
