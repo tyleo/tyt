@@ -626,12 +626,12 @@ mod tests {
             .collect()
     }
 
+    /// A resolved voxel: `x`, `y`, `z`, and an `rgba` color.
+    type ResolvedVoxel = (u8, u8, u8, (u8, u8, u8, u8));
+
     /// A model's voxels as `(x, y, z, (r, g, b, a))`, order-independent so a
     /// synthesized model compares without depending on raster order.
-    fn resolved_voxels(
-        model: &MVoxModel,
-        palette: &MVoxPalette,
-    ) -> BTreeSet<(u8, u8, u8, (u8, u8, u8, u8))> {
+    fn resolved_voxels(model: &MVoxModel, palette: &MVoxPalette) -> BTreeSet<ResolvedVoxel> {
         model
             .voxels
             .iter()

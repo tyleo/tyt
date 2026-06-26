@@ -458,18 +458,21 @@ mod tests {
         state
     }
 
+    /// A solid voxel in world space: `x`, `y`, `z`, and an `rgb` color.
+    type WorldVoxel = (i32, i32, i32, (u8, u8, u8));
+
     /// The world voxels a file places: each matrix or compound grid's solid cells
     /// decoded to world coordinates and color, order-independent. Synthesis bakes
     /// the world position onto each matrix and leaves models at identity, so a
     /// cell's world coordinate is its grid coordinate plus the matrix position.
-    fn world_voxels(file: &QbclFile) -> BTreeSet<(i32, i32, i32, (u8, u8, u8))> {
+    fn world_voxels(file: &QbclFile) -> BTreeSet<WorldVoxel> {
         let mut set = BTreeSet::new();
         collect_world_voxels(&file.root, &mut set);
         set
     }
 
     /// Adds a node's solid world voxels to `set`, recursing into child nodes.
-    fn collect_world_voxels(node: &QbclNode, set: &mut BTreeSet<(i32, i32, i32, (u8, u8, u8))>) {
+    fn collect_world_voxels(node: &QbclNode, set: &mut BTreeSet<WorldVoxel>) {
         match &node.body {
             QbclNodeBody::Matrix(matrix) => collect_matrix_voxels(matrix, set),
             QbclNodeBody::Model(model) => {
@@ -488,10 +491,7 @@ mod tests {
 
     /// Adds one matrix's solid world voxels to `set`, decoding the storage index
     /// `y + size_y * (z + size_z * x)` back to a grid coordinate.
-    fn collect_matrix_voxels(
-        matrix: &QbclMatrix,
-        set: &mut BTreeSet<(i32, i32, i32, (u8, u8, u8))>,
-    ) {
+    fn collect_matrix_voxels(matrix: &QbclMatrix, set: &mut BTreeSet<WorldVoxel>) {
         let [_, size_y, size_z] = matrix.size;
         for (index, voxel) in matrix.voxels.iter().enumerate() {
             if voxel.is_empty() {

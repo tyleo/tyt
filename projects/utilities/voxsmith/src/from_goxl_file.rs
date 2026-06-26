@@ -506,9 +506,12 @@ mod tests {
         state
     }
 
+    /// A solid voxel in world space: `x`, `y`, `z`, and an `rgba` color.
+    type WorldVoxel = (i32, i32, i32, (u8, u8, u8, u8));
+
     /// The world voxels a file places: each layer block's solid cells decoded to
     /// world coordinates and color, order-independent.
-    fn world_voxels(file: &GoxlFile) -> BTreeSet<(i32, i32, i32, (u8, u8, u8, u8))> {
+    fn world_voxels(file: &GoxlFile) -> BTreeSet<WorldVoxel> {
         let stride = GoxlBlock::SIZE as usize;
         let mut set = BTreeSet::new();
         for layer in &file.layers {
