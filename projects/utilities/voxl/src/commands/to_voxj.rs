@@ -2,7 +2,7 @@ use crate::{
     Dependencies, Format, Result, VoxjEncoding, VoxjFormat, VoxjOptimize, VoxjPositionEncoding,
     VoxjSampleEncoding,
 };
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use std::path::PathBuf;
 
 /// Converts a voxel file to the Voxel JSON format.
@@ -47,6 +47,18 @@ pub struct ToVoxj {
     /// `--position-encoding` and `--sample-encoding`.
     #[arg(value_name = "optimize", long)]
     optimize: Option<VoxjOptimize>,
+
+    /// Emit the user-defined `ext` extension block. Pass `--ext false` to omit
+    /// it from the output.
+    #[arg(
+        value_name = "ext",
+        long,
+        default_value_t = true,
+        default_missing_value = "true",
+        num_args = 0..=1,
+        action = ArgAction::Set
+    )]
+    ext: bool,
 }
 
 impl ToVoxj {
@@ -66,6 +78,13 @@ impl ToVoxj {
                 sample: self.sample_encoding,
             },
         };
-        dependencies.to_voxj(&self.input, self.from, &self.output, encoding, self.format)
+        dependencies.to_voxj(
+            &self.input,
+            self.from,
+            &self.output,
+            encoding,
+            self.format,
+            self.ext,
+        )
     }
 }

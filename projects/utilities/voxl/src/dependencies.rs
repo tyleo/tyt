@@ -33,7 +33,8 @@ pub trait Dependencies {
     /// Converts the voxel file at `input` into a Voxel Json document at
     /// `output`. `from` names the source format, inferred from `input`'s
     /// extension when `None`. `encoding` selects the per-object block encodings
-    /// and `format` the output container and printing form.
+    /// and `format` the output container and printing form. When `ext` is false,
+    /// the user-defined `ext` extension block is omitted from the output.
     fn to_voxj(
         &self,
         input: &Path,
@@ -41,5 +42,6 @@ pub trait Dependencies {
         output: &Path,
         encoding: VoxjEncoding,
         format: VoxjFormat,
+        ext: bool,
     ) -> Result<()>;
 }

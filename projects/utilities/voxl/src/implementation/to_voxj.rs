@@ -10,20 +10,26 @@ use voxsmith::{to_voxj_file, to_voxj_file_with};
 /// round-tripping through voxcore: the input is loaded into a
 /// [`VoxState`](voxcore::VoxState), encoded back to a voxj document with the
 /// chosen block `encoding`, then serialized in the container `format` selects.
+/// When `ext` is false, the user-defined `ext` extension block is omitted from
+/// the output.
 pub(crate) fn to_voxj(
     input: &Path,
     from: Option<Format>,
     output: &Path,
     encoding: VoxjEncoding,
     format: VoxjFormat,
+    ext: bool,
 ) -> Result<()> {
     let state = super::load_state::load_state(input, from)?;
-    let file = match encoding {
+    let mut file = match encoding {
         VoxjEncoding::Fixed { position, sample } => {
             to_voxj_file_with(&state, position_encoding(position), sample_encoding(sample))?
         }
         VoxjEncoding::Smallest => to_voxj_file(&state)?,
     };
+    if !ext {
+        file.main.ext = None;
+    }
     let bytes = match format {
         VoxjFormat::Json => to_voxj_file_bytes(&file)?,
         VoxjFormat::PrettyJson => to_voxj_pretty_file_bytes(&file)?,

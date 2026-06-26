@@ -34,7 +34,8 @@ impl Dependencies for DependenciesImpl {
         output: &Path,
         encoding: VoxjEncoding,
         format: VoxjFormat,
+        ext: bool,
     ) -> Result<()> {
-        super::to_voxj::to_voxj(input, from, output, encoding, format)
+        super::to_voxj::to_voxj(input, from, output, encoding, format, ext)
     }
 }
