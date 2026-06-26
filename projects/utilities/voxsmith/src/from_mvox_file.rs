@@ -475,6 +475,7 @@ fn invalid(message: String) -> Error {
 #[cfg(test)]
 mod tests {
     use crate::{from_mvox_bytes, from_mvox_file, to_mvox_bytes, to_mvox_file};
+    use branded_id::U32Id;
     use mvox::{
         MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer,
         MVoxMaterial, MVoxMaterialType, MVoxModel, MVoxNodeAttributes, MVoxPalette,
@@ -482,7 +483,11 @@ mod tests {
         MVoxShapeNode, MVoxTransformNode, MVoxUnknownChunk, MVoxVoxel,
     };
     use std::{array, collections::BTreeSet};
-    use voxcore::VoxState;
+    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+    use voxcore::{
+        BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxHierarchyNode, VoxMap, VoxObject,
+        VoxPalette, VoxState, VoxValue,
+    };
 
     fn pair(key: &str, value: &str) -> (String, String) {
         (key.to_owned(), value.to_owned())
@@ -621,6 +626,105 @@ mod tests {
             .collect()
     }
 
+    /// A model's voxels as `(x, y, z, (r, g, b, a))`, order-independent so a
+    /// synthesized model compares without depending on raster order.
+    fn resolved_voxels(
+        model: &MVoxModel,
+        palette: &MVoxPalette,
+    ) -> BTreeSet<(u8, u8, u8, (u8, u8, u8, u8))> {
+        model
+            .voxels
+            .iter()
+            .map(|voxel| {
+                let color = palette.colors[voxel.color_index as usize];
+                (
+                    voxel.x,
+                    voxel.y,
+                    voxel.z,
+                    (color.r, color.g, color.b, color.a),
+                )
+            })
+            .collect()
+    }
+
+    /// A state carrying no format ext, built straight from voxcore: a red-green
+    /// object and a blue object sharing one `rgba` palette, placed by a small
+    /// hierarchy of a nested group and two roots. The writer must synthesize a
+    /// MagicaVoxel file from this rather than read an ext.
+    fn source_state() -> VoxState {
+        let mut state = VoxState::default();
+
+        // One rgba palette: a transparent placeholder, then red, green, blue.
+        let mut palette = VoxPalette::default();
+        palette.add_attribute("rgba".to_owned());
+        for hex in ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"] {
+            palette
+                .add_cell(vec![VoxValue::Text(hex.to_owned())])
+                .expect("one value per attribute");
+        }
+        let palette_id = state.add_palette(palette);
+        let cell = |index: u32| U32Id::<BVoxPaletteCell>::from_u32(index);
+
+        // Object 0: a red then a green voxel along x.
+        let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
+            .expect("a 2x1x1 grid is within the dense limit");
+        wide.add_palette_ref(palette_id, cell(0));
+        for (x, color) in [(0u32, 1u32), (1, 2)] {
+            let voxel = wide
+                .voxel_id(TyVector3U32::new(x, 0, 0))
+                .expect("a position within the grid");
+            wide.retain_voxel(voxel, &[cell(color)])
+                .expect("one sample for the one reference");
+        }
+        state.add_object(wide);
+
+        // Object 1: a single blue voxel.
+        let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
+            .expect("a 1x1x1 grid is within the dense limit");
+        unit.add_palette_ref(palette_id, cell(0));
+        let voxel = unit
+            .voxel_id(TyVector3U32::new(0, 0, 0))
+            .expect("a position within the grid");
+        unit.retain_voxel(voxel, &[cell(3)])
+            .expect("one sample for the one reference");
+        state.add_object(unit);
+
+        let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);
+        let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
+        let placed_at = |x: f64, y: f64, z: f64| {
+            TyTransformF64::new(
+                TyVector3F64::new(x, y, z),
+                TyQuaternionF64::identity(),
+                TyVector3F64::new(1.0, 1.0, 1.0),
+            )
+        };
+
+        // node 0 groups node 1, which places object 0 at +5x; node 2 places
+        // object 1 at +3y. Nodes 0 and 2 are the roots.
+        state.add_hierarchy_node(VoxHierarchyNode {
+            name: "group".to_owned(),
+            child_nodes: vec![node(1)],
+            child_objects: Vec::new(),
+            transform: TyTransformF64::default(),
+        });
+        state.add_hierarchy_node(VoxHierarchyNode {
+            name: "wide".to_owned(),
+            child_nodes: Vec::new(),
+            child_objects: vec![object(0)],
+            transform: placed_at(5.0, 0.0, 0.0),
+        });
+        state.add_hierarchy_node(VoxHierarchyNode {
+            name: "unit".to_owned(),
+            child_nodes: Vec::new(),
+            child_objects: vec![object(1)],
+            transform: placed_at(0.0, 3.0, 0.0),
+        });
+        state.set_root_hierarchy_nodes(vec![node(0), node(2)]);
+
+        state.validate().expect("a well-formed source state");
+        state
+    }
+
     fn assert_files_eq(got: &MVoxFile, want: &MVoxFile) {
         assert_eq!(got.version, want.version);
         assert_eq!(got.palette, want.palette);
@@ -685,10 +789,56 @@ mod tests {
         assert_files_eq(&rebuilt, &file);
     }
 
+    /// A default state has no objects and no ext, so the writer synthesizes an
+    /// empty file rather than erroring on the missing ext.
     #[test]
-    fn errors_without_magica_voxel_ext() {
+    fn synthesizes_an_empty_state_without_an_ext() {
         let state = VoxState::default();
-        assert!(to_mvox_file(&state).is_err());
+        let file = to_mvox_file(&state).unwrap();
+        assert!(file.models.is_empty());
+    }
+
+    /// A state with no `magica-voxel` ext, such as one cross-loaded from another
+    /// format, synthesizes a file: one model per object, a global palette
+    /// gathering every used color, and a scene graph the decoder reads back.
+    #[test]
+    fn synthesizes_a_file_without_an_ext() {
+        let state = source_state();
+        let file = to_mvox_file(&state).unwrap();
+        let palette = file.palette.as_ref().expect("synthesis writes a palette");
+
+        let red = (0xFF, 0, 0, 0xFF);
+        let green = (0, 0xFF, 0, 0xFF);
+        let blue = (0, 0, 0xFF, 0xFF);
+
+        assert_eq!(file.models.len(), 2);
+        assert_eq!(file.models[0].size, [2, 1, 1]);
+        assert_eq!(
+            resolved_voxels(&file.models[0], palette),
+            BTreeSet::from([(0, 0, 0, red), (1, 0, 0, green)])
+        );
+        assert_eq!(file.models[1].size, [1, 1, 1]);
+        assert_eq!(
+            resolved_voxels(&file.models[1], palette),
+            BTreeSet::from([(0, 0, 0, blue)])
+        );
+
+        // The synthesized palette and scene graph read back into a valid state.
+        let reloaded = from_mvox_file(&file).unwrap();
+        assert_eq!(reloaded.object_count(), 2);
+    }
+
+    /// A foreign ext, here `voxel-max`, is ignored by the MagicaVoxel writer: it
+    /// synthesizes from the scene rather than failing to parse the wrong ext.
+    #[test]
+    fn synthesizes_past_a_foreign_ext() {
+        let mut state = source_state();
+        state.set_ext(Some(VoxValue::Object(VoxMap(vec![(
+            "voxel-max".to_owned(),
+            VoxValue::Null,
+        )]))));
+        let file = to_mvox_file(&state).unwrap();
+        assert_eq!(file.models.len(), 2);
     }
 
     #[test]
