@@ -14,9 +14,11 @@ use voxcore::{
     VoxPalette, VoxState, VoxValue,
 };
 
-/// Number of cells in a Voxel Max color palette. A `palette*.png` is 256x1 RGBA,
-/// and a placeholder palette covers every color index.
-const COLOR_CELLS: usize = 256;
+/// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`
+/// runs 1..=255 and 0 is the empty cell. Colors are stored 0-based; a `palette*.png`
+/// is 256x1 RGBA with the colors at 0..254 and a transparent terminator at 255,
+/// while the plist `colors` table is just the 255 colors.
+const COLOR_CELLS: usize = 255;
 
 /// The color used for every cell of a placeholder palette when an object's
 /// colors are missing, so the color indices are still preserved.
@@ -26,8 +28,10 @@ const PLACEHOLDER_COLOR: &str = "#FFFFFFFF";
 ///
 /// Geometry, palettes, and hierarchy become native voxcore entities. The Voxel
 /// Max state with no native voxcore home rides in a `voxel-max` ext so the
-/// document can be written back exactly. Voxel snapshots are decoded to voxels
-/// on the fly and palette color tables unpacked as needed.
+/// document can be written back faithfully. Voxel snapshots are decoded to voxels
+/// on the fly and palette color tables unpacked as needed. Color indices are
+/// 1-based in Voxel Max; voxcore holds the colors 0-based, so a voxel's cell is
+/// `color_idx - 1`.
 ///
 /// Errors on malformed geometry or if
 /// [`VoxState::validate`](voxcore::VoxState::validate) rejects the result.
@@ -172,7 +176,10 @@ fn build_object(
         // Sample cells follow the reference order: color first, then material.
         let mut cells = Vec::new();
         if color_palette.is_some() {
-            cells.push(U32Id::<BVoxPaletteCell>::from_u32(voxel.color_idx as u32));
+            // Color indices are 1-based; index 0 is empty.
+            cells.push(U32Id::<BVoxPaletteCell>::from_u32(
+                u32::from(voxel.color_idx).saturating_sub(1),
+            ));
         }
         if material_palette.is_some() {
             cells.push(U32Id::<BVoxPaletteCell>::from_u32(
@@ -220,13 +227,12 @@ fn color_palette(
     Some(id)
 }
 
-/// The `#RRGGBBAA` cells for an object's color palette.
+/// The `#RRGGBBAA` cells for an object's color palette, 0-based. The `palette*.png`
+/// appends a transparent terminator, so its trailing entry is dropped; the plist
+/// `colors` table has none.
 fn color_cells(serde: &VMaxFile, object: &VMaxObject) -> Vec<String> {
     if let Some(png) = serde.palette_png_files.get(&object.palette) {
-        return strip_color_terminator(png.0.clone())
-            .iter()
-            .map(hex)
-            .collect();
+        return png.0.iter().take(COLOR_CELLS).map(hex).collect();
     }
     if let Some(stem) = object.palette.strip_suffix(".png") {
         let sidecar = format!("{stem}.settings.vmaxpsb");
@@ -234,12 +240,11 @@ fn color_cells(serde: &VMaxFile, object: &VMaxObject) -> Vec<String> {
             && !palette.colors.is_empty()
         {
             // The sidecar stores colors packed (4 bytes per cell); unpack them.
-            let cells: Vec<[u8; 4]> = palette
+            return palette
                 .colors
                 .chunks_exact(4)
-                .map(|c| [c[0], c[1], c[2], c[3]])
+                .map(|c| hex(&[c[0], c[1], c[2], c[3]]))
                 .collect();
-            return strip_color_terminator(cells).iter().map(hex).collect();
         }
     }
     (0..COLOR_CELLS)
@@ -366,16 +371,6 @@ fn node_from_group(group: &VMaxGroup) -> VoxelMaxNode {
         pivot_align: Some(group.t_pa.clone()),
         selected: group.s,
     }
-}
-
-/// Drops the trailing transparent terminator Voxel Max appends to fill a color
-/// table to [`COLOR_CELLS`]. That reserved slot is referenced by no voxel, so
-/// keeping it would pad the model with a non-color.
-fn strip_color_terminator(mut colors: Vec<[u8; 4]>) -> Vec<[u8; 4]> {
-    if colors.len() == COLOR_CELLS && colors.last() == Some(&[0, 0, 0, 0]) {
-        colors.pop();
-    }
-    colors
 }
 
 /// One `#RRGGBBAA` string for an RGBA color.

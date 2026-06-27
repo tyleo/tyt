@@ -17,9 +17,10 @@ use voxcore::{
     VoxState, VoxValue,
 };
 
-/// Usable colors in a Voxel Max palette: indices 0..254. Index 255 is a reserved
-/// transparent terminator no voxel references, so the table holds this many
-/// entries and the image pads to 256 by appending the terminator.
+/// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx` is
+/// `cell + 1`, runs 1..=255, and 0 is the empty cell. Colors are stored 0-based; a
+/// `palette*.png` appends a transparent terminator (256 entries), the plist `colors`
+/// table does not (255 entries).
 const PALETTE_COLORS: usize = 255;
 
 /// Codable version stamped on a rebuilt contents file when the state carries no
@@ -183,7 +184,7 @@ pub fn to_vmax_file(
 /// [`to_vmax_file`] and [`VmaxFileBuilder`](crate::VmaxFileBuilder).
 ///
 /// A state carrying the `voxel-max` ext the forward path writes is rebuilt from
-/// it exactly, and editor session artifacts voxcore does not model are dropped. A
+/// it, and editor session artifacts voxcore does not model are dropped. A
 /// state without that ext, such as one loaded from another format, has its ext
 /// synthesized from the bare voxcore scene by [`synthesize_voxel_max_ext`] and the
 /// rest of this path runs unchanged. `scene_camera` overrides the scene camera the
@@ -194,21 +195,16 @@ pub(crate) fn write_vmax(
     scene_camera: Option<SceneCameraSource>,
 ) -> Result<VMaxFile> {
     let had_ext = ext_for(state, "voxel-max").is_some();
-    let (voxel_max, color_offset, placements) = match ext_for(state, "voxel-max") {
+    let (voxel_max, placements) = match ext_for(state, "voxel-max") {
         Some(ext) => {
             let voxel_max = from_vox_value::<VoxelMaxExtWrapper>(ext)?.voxel_max;
             let placements = ext_placements(state, &voxel_max);
-            (voxel_max, 0, placements)
+            (voxel_max, placements)
         }
-        // Voxel Max reads color index 0 as an empty cell, so a synthesized palette
-        // reserves index 0 and shifts every real color up by one. A voxcore palette
-        // built from another format uses cell 0 as a real color, which would
-        // otherwise drop voxels that reference it. The lossless ext path already
-        // satisfies this convention, so it keeps the zero offset.
         None => {
             let voxel_max = synthesize_voxel_max_ext(state);
             let placements = synthesize_placements(state);
-            (voxel_max, 1, placements)
+            (voxel_max, placements)
         }
     };
 
@@ -269,8 +265,7 @@ pub(crate) fn write_vmax(
             let data = match contents_by_object.get(&object_id) {
                 Some(data) => data.clone(),
                 None => {
-                    let voxels =
-                        reconstruct_voxels(object, color, material, box_min, color_offset)?;
+                    let voxels = reconstruct_voxels(object, color, material, box_min)?;
                     let data = format!("contents{suffix}.vmaxb");
                     // Voxels re-encode into snapshots; serde-only state the decoded
                     // voxcore object does not model (`pal`) stays absent.
@@ -312,7 +307,6 @@ pub(crate) fn write_vmax(
                 &mut palette_settings_files,
                 &mut palette_png_files,
                 voxel_max_color_format,
-                color_offset,
             );
 
             let ind = node_ind(&object_ext, false, &mut ind_counter);
@@ -631,22 +625,17 @@ fn has_attribute(palette: &VoxPalette, name: &str) -> bool {
 }
 
 /// Re-bases an object's voxels to absolute model space, reading the color and
-/// material indices from their sample references. `color_offset` is added to every
-/// color index so a synthesized palette can reserve index 0 as the empty cell
-/// Voxel Max expects; the lossless path passes zero.
+/// material indices from their sample references. A voxel's `color_idx` is the
+/// 1-based `cell + 1`; a colorless voxel takes index 1.
 ///
-/// Errors when a live voxel's shifted color index reaches [`PALETTE_COLORS`], the
-/// reserved terminator. The check is per voxel rather than over the palette, so a
-/// padded source palette such as MagicaVoxel's fixed 256 entries is fine as long as
-/// its referenced colors fit; only a voxel that genuinely cannot be represented,
-/// because the source uses more than the budget of colors, is rejected, rather than
-/// wrapping its 8-bit index or colliding with the terminator and corrupting colors.
+/// Errors when a voxel's color cell reaches [`PALETTE_COLORS`], one past the last
+/// usable color, so a padded source palette (such as MagicaVoxel's fixed 256) is
+/// fine as long as its referenced colors fit.
 fn reconstruct_voxels(
     object: &VoxObject,
     color: Option<PaletteRef>,
     material: Option<PaletteRef>,
     box_min: [i32; 3],
-    color_offset: u8,
 ) -> Result<Vec<VMaxVoxel>> {
     object
         .iter_live()
@@ -655,28 +644,32 @@ fn reconstruct_voxels(
                 .voxel_position(voxel)
                 .expect("a live voxel is within the grid");
             let cell = |reference: Option<PaletteRef>| {
-                reference.map_or(0, |(reference, _)| {
+                reference.map(|(reference, _)| {
                     object
                         .voxel_cell(voxel, reference)
                         .expect("a live voxel samples every reference")
                         .to_u32()
                 })
             };
-            let color_idx = cell(color) + color_offset as u32;
-            if color_idx >= PALETTE_COLORS as u32 {
-                return Err(Error::invalid(format!(
-                    "a voxel references color index {color_idx}, past the {} a Voxel Max \
-                     palette holds, so the source has more colors than fit",
-                    PALETTE_COLORS - 1
-                )));
-            }
+            let color_idx = match cell(color) {
+                Some(cell) if cell >= PALETTE_COLORS as u32 => {
+                    return Err(Error::invalid(format!(
+                        "a voxel references color cell {cell}, but a Voxel Max palette holds \
+                         only {PALETTE_COLORS} colors, so the source has more colors than fit"
+                    )));
+                }
+                Some(cell) => cell + 1,
+                // A colorless voxel still needs a non-empty index, so it takes the
+                // borrowed palette's first color (1), not the empty index 0.
+                None => 1,
+            };
             Ok(VMaxVoxel {
                 position: [
                     position.x as i32 + box_min[0],
                     position.y as i32 + box_min[1],
                     position.z as i32 + box_min[2],
                 ],
-                material_idx: cell(material) as u8,
+                material_idx: cell(material).unwrap_or(0) as u8,
                 color_idx: color_idx as u8,
             })
         })
@@ -696,7 +689,6 @@ fn build_palette(
     palette_settings_files: &mut BTreeMap<String, VMaxPaletteSettingsVmaxpsbFile>,
     palette_png_files: &mut BTreeMap<String, VMaxPalettePngFile>,
     voxel_max_color_format: VoxelMaxColorFormat,
-    color_offset: u8,
 ) -> String {
     let Some(color) = color else {
         // An object with no color palette borrows the default palette name; an empty
@@ -713,11 +705,12 @@ fn build_palette(
     };
     let pal = format!("palette{stem}.png");
 
-    let colors = color_palette_colors(state, color, color_offset);
+    let colors = color_palette_colors(state, color);
     if matches!(
         voxel_max_color_format,
         VoxelMaxColorFormat::Png | VoxelMaxColorFormat::All
     ) {
+        // 256 entries: the 255 colors 0-based then a transparent terminator.
         let mut cells = colors.clone();
         cells.push([0, 0, 0, 0]);
         palette_png_files.insert(pal.clone(), VMaxPalettePngFile(cells));
@@ -738,6 +731,7 @@ fn build_palette(
             .map(|palette| palette.name)
             .unwrap_or_default();
         let sidecar = format!("palette{stem}.settings.vmaxpsb");
+        // The plist `colors` table is the 255 colors with no terminator.
         let sidecar_colors = match voxel_max_color_format {
             VoxelMaxColorFormat::Png => Vec::new(),
             VoxelMaxColorFormat::Plist | VoxelMaxColorFormat::All => colors,
@@ -751,30 +745,22 @@ fn build_palette(
     pal
 }
 
-/// A color palette's cells as exactly [`PALETTE_COLORS`] RGBA entries, padded with
-/// transparent cells or truncated so the count is fixed. `color_offset` transparent
-/// cells lead the table, reserving the empty indices a synthesized palette shifts
-/// its colors past; the lossless path passes zero. Cells past the budget are
-/// dropped, which is harmless for a padded source palette whose extra entries no
-/// voxel references; [`reconstruct_voxels`] rejects any voxel that would reference
-/// one.
-fn color_palette_colors(
-    state: &VoxState,
-    palette: U32Id<BVoxPalette>,
-    color_offset: u8,
-) -> Vec<[u8; 4]> {
-    let color_offset = color_offset as usize;
+/// A color palette's cells as exactly [`PALETTE_COLORS`] 0-based RGBA entries,
+/// padded with transparent cells or truncated to that count. Cells past the budget
+/// are dropped; a voxel that would reference one is rejected by
+/// [`reconstruct_voxels`].
+fn color_palette_colors(state: &VoxState, palette: U32Id<BVoxPalette>) -> Vec<[u8; 4]> {
     let palette = state.palette(palette).expect("a referenced palette");
     let rgba = palette
         .iter_attributes()
         .find(|(_, name)| *name == "rgba" || *name == "rgb")
         .map(|(id, _)| id);
-    let mut cells: Vec<[u8; 4]> = vec![[0, 0, 0, 0]; color_offset];
+    let mut cells: Vec<[u8; 4]> = Vec::new();
     if let Some(rgba) = rgba {
         cells.extend(
             palette
                 .iter_cells()
-                .take(PALETTE_COLORS - color_offset)
+                .take(PALETTE_COLORS)
                 .map(|cell| parse_rgba(palette.cell_value(cell, rgba))),
         );
     }
@@ -1065,7 +1051,7 @@ mod tests {
         }
     }
 
-    /// A 256-cell image: 255 distinct colors plus the transparent terminator.
+    /// A 256-cell image: 255 colors then a transparent terminator.
     fn palette_png() -> VMaxPalettePngFile {
         let mut cells: Vec<[u8; 4]> = (0..255u32).map(|i| [i as u8, 0, 0, 255]).collect();
         cells.push([0, 0, 0, 0]);
@@ -1516,12 +1502,11 @@ mod tests {
         decode_vmax_snapshots(&file.contents_files[name].snapshots).expect("decodable snapshots")
     }
 
-    /// Synthesis reserves color index 0 as the empty cell Voxel Max expects: the
-    /// image's first cell is transparent, the first real color sits at index 1, and
-    /// every live voxel references a non-zero color, so a voxcore cell 0 is kept
-    /// rather than read back as empty.
+    /// The image stores colors 0-based then a transparent terminator, and voxels
+    /// take 1-based indices: the first color sits at image index 0, the terminator
+    /// at 255, and each voxel's color_idx is its cell + 1.
     #[test]
-    fn synthesis_reserves_palette_index_zero() {
+    fn synthesizes_colors_zero_based_with_a_terminator() {
         let mut state = VoxState::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF"]));
         state.add_object(color_object(
@@ -1535,51 +1520,72 @@ mod tests {
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         let png = &file.palette_png_files["palette.png"].0;
-        assert_eq!(png[0], [0, 0, 0, 0]);
-        assert_eq!(png[1], [0xFF, 0, 0, 0xFF]);
-        let voxels = contents_voxels(&file, "contents.vmaxb");
-        assert!(!voxels.is_empty());
-        assert!(voxels.iter().all(|voxel| voxel.color_idx >= 1));
+        assert_eq!(png.len(), 256);
+        assert_eq!(png[0], [0xFF, 0, 0, 0xFF]);
+        assert_eq!(png[1], [0, 0xFF, 0, 0xFF]);
+        assert_eq!(png[255], [0, 0, 0, 0]);
+        let mut indices: Vec<u8> = contents_voxels(&file, "contents.vmaxb")
+            .iter()
+            .map(|voxel| voxel.color_idx)
+            .collect();
+        indices.sort_unstable();
+        assert_eq!(indices, [1, 2]);
     }
 
-    /// The color offset never leaks into the lossless ext path: a state carrying a
-    /// real `voxel-max` ext keeps a voxel that references color cell 0 at color
-    /// index 0 in the emitted snapshots, the value Voxel Max wrote.
+    /// A voxel on the first color (index 1) and one on the last (index 255)
+    /// round-trip through a plist palette, whose `colors` table is 0-based. Guards
+    /// the bug a real Voxel Max plist file hit: the last color read back as out of
+    /// range.
     #[test]
-    fn lossless_path_keeps_color_index_zero() {
+    fn round_trips_first_and_last_color_through_plist() {
         let mut state = VoxState::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        // 255 colors: red first, blue last, green between.
+        let mut hexes = vec!["#FF0000FF".to_owned()];
+        hexes.extend((0..253).map(|_| "#00FF00FF".to_owned()));
+        hexes.push("#0000FFFF".to_owned());
+        let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
+        let palette = state.add_palette(rgba_palette(&refs));
+        // A voxel on the first color (cell 0) and one on the last (cell 254).
         state.add_object(color_object(
             palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
+            TyVector3U32::new(2, 1, 1),
+            &[([0, 0, 0], 0), ([1, 0, 0], 254)],
         ));
         state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
         state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
-        // A real, if minimal, voxel-max ext routes the write through the lossless
-        // path, so the offset must stay zero.
-        let ext = to_vox_value(&VoxelMaxExtWrapper {
-            voxel_max: VoxelMaxExt {
-                palettes: vec![None; state.palette_count()],
-                ..Default::default()
-            },
-        })
-        .unwrap();
-        state.set_ext(Some(ext));
         state.validate().unwrap();
 
-        let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
-        let colors: Vec<u8> = file.contents_files["contents.vmaxb"]
-            .snapshots
-            .iter()
-            .flat_map(|snapshot| snapshot.s.ds.chunks_exact(2).map(|pair| pair[1]))
+        let file = to_vmax_file(&state, VoxelMaxColorFormat::Plist).unwrap();
+        // The plist colors are 0-based: red first, blue last.
+        let colors: Vec<[u8; 4]> = file.palette_settings_files["palette.settings.vmaxpsb"]
+            .colors
+            .chunks_exact(4)
+            .map(|c| [c[0], c[1], c[2], c[3]])
             .collect();
-        assert!(colors.iter().all(|&color| color == 0));
+        assert_eq!(colors.len(), 255);
+        assert_eq!(colors[0], [0xFF, 0, 0, 0xFF]);
+        assert_eq!(colors[254], [0, 0, 0xFF, 0xFF]);
+        // Voxels carry 1-based indices: the first color is 1, the last is 255.
+        let mut indices: Vec<u8> = contents_voxels(&file, "contents.vmaxb")
+            .iter()
+            .map(|voxel| voxel.color_idx)
+            .collect();
+        indices.sort_unstable();
+        assert_eq!(indices, [1, 255]);
+        // It reads back without the out-of-range error, resolving to red and blue.
+        let reloaded = from_vmax_file(&file).unwrap();
+        let resolved: BTreeSet<[u8; 4]> = world_voxels(&reloaded)
+            .into_iter()
+            .map(|(_, rgba)| rgba)
+            .collect();
+        assert_eq!(
+            resolved,
+            BTreeSet::from([[0xFF, 0, 0, 0xFF], [0, 0, 0xFF, 0xFF]])
+        );
     }
 
-    /// A palette with more colors than fit after reserving the empty index is
-    /// rejected rather than silently truncated or wrapped: 254 colors is the
-    /// synthesis budget and round-trips, 255 overflows it.
+    /// A palette with more colors than fit is rejected rather than silently
+    /// truncated or wrapped: 255 colors is the budget and round-trips, 256 overflows.
     #[test]
     fn errors_when_colors_exceed_palette_budget() {
         let synthesize = |count: u32| {
@@ -1599,13 +1605,13 @@ mod tests {
             to_vmax_file(&state, VoxelMaxColorFormat::Png)
         };
 
-        let file = synthesize(254).expect("254 colors fit the synthesis budget");
+        let file = synthesize(255).expect("255 colors fit the palette");
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(
             reloaded.object(U32Id::from_u32(0)).unwrap().live_count(),
-            254
+            255
         );
-        assert!(synthesize(255).is_err());
+        assert!(synthesize(256).is_err());
     }
 
     /// An object with no color palette borrows the default palette name rather than
@@ -1647,6 +1653,43 @@ mod tests {
         let reloaded = from_vmax_file(&file).unwrap();
         let red = [0xFF, 0, 0, 0xFF];
         assert_eq!(world_voxels(&reloaded), BTreeSet::from([([0, 0, 0], red)]));
+    }
+
+    /// A colorless object's live voxels take a non-empty index (the borrowed
+    /// palette's first color), not the empty index 0, so they do not vanish.
+    #[test]
+    fn synthesizes_colorless_voxels_on_a_non_empty_index() {
+        let mut state = VoxState::default();
+        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        // Object 0: a colored voxel, so a `palette.png` exists to borrow. Object 1:
+        // a colorless object that nonetheless has a live voxel.
+        state.add_object(color_object(
+            palette,
+            TyVector3U32::new(1, 1, 1),
+            &[([0, 0, 0], 0)],
+        ));
+        let mut colorless = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
+        let voxel = colorless.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        colorless.retain_voxel(voxel, &[]).unwrap();
+        state.add_object(colorless);
+        state.add_hierarchy_node(object_node("colored", 0, at(0.0, 0.0, 0.0)));
+        state.add_hierarchy_node(object_node("colorless", 1, at(10.0, 0.0, 0.0)));
+        state.set_root_hierarchy_nodes(vec![
+            U32Id::<BVoxHierarchyNode>::from_u32(0),
+            U32Id::<BVoxHierarchyNode>::from_u32(1),
+        ]);
+        state.validate().unwrap();
+
+        let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
+        // No live voxel, colored or colorless, lands on the empty index 0.
+        let indices: Vec<u8> = file
+            .contents_files
+            .values()
+            .flat_map(|contents| decode_vmax_snapshots(&contents.snapshots).unwrap())
+            .map(|voxel| voxel.color_idx)
+            .collect();
+        assert!(!indices.is_empty());
+        assert!(indices.iter().all(|&index| index >= 1));
     }
 
     /// A node placing several objects and also parenting child nodes flattens to
@@ -1966,7 +2009,7 @@ mod tests {
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         assert_eq!(
-            file.palette_png_files["palette.png"].0[1],
+            file.palette_png_files["palette.png"].0[0],
             [0x33, 0x66, 0xCC, 0xFF]
         );
         let reloaded = from_vmax_file(&file).unwrap();
@@ -2062,8 +2105,8 @@ mod tests {
         );
     }
 
-    /// A fully transparent color round-trips as transparent rather than being
-    /// dropped, distinct from the reserved empty index 0.
+    /// A fully transparent color round-trips as a real color at image index 0
+    /// rather than being mistaken for the trailing terminator.
     #[test]
     fn round_trips_a_transparent_color() {
         let mut state = VoxState::default();
@@ -2078,12 +2121,12 @@ mod tests {
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
-        // Index 0 stays the reserved empty cell, the transparent color sits at 1.
-        assert_eq!(file.palette_png_files["palette.png"].0[0], [0, 0, 0, 0]);
+        // The color sits at index 0 (cell 0); the terminator is at the end.
         assert_eq!(
-            file.palette_png_files["palette.png"].0[1],
+            file.palette_png_files["palette.png"].0[0],
             [0x11, 0x22, 0x33, 0]
         );
+        assert_eq!(file.palette_png_files["palette.png"].0[255], [0, 0, 0, 0]);
         assert!(
             contents_voxels(&file, "contents.vmaxb")
                 .iter()
