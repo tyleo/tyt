@@ -5,7 +5,9 @@ use crate::{
 use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
-use vmax::{VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxObject, VMaxSceneJsonFile};
+use vmax::{
+    VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxObject, VMaxSceneJsonFile, VMaxViewBox,
+};
 use vmax_codec::{VMaxVoxel, decode_vmax_snapshots};
 use voxcore::{
     BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxObject,
@@ -47,8 +49,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxState> {
     for object in &scene.objects {
         let key = instance_key(object);
         if let Some(&existing) = key.as_ref().and_then(|key| instances.get(key)) {
-            let (box_min, _) = authored_box(object).expect("instance key implies authored bounds");
-            object_transforms.push(object_transform(object, box_min));
+            object_transforms.push(object_transform(object, grid_origin(serde, object)));
             object_refs.push(existing);
             continue;
         }
@@ -121,7 +122,7 @@ fn build_object(
         decode_vmax_snapshots(&serde.contents_files[&object.data].snapshots)?
     };
 
-    let (box_min, bounds) = object_box(object, &voxels, min_corner(&voxels))?;
+    let (box_min, bounds) = object_grid(object, view_box(serde, object), &voxels)?;
     let transform = object_transform(object, box_min);
     let data = (!object.data.is_empty()).then(|| object.data.clone());
 
@@ -419,6 +420,62 @@ fn instance_key(object: &VMaxObject) -> Option<InstanceKey> {
     }
     let (box_min, size) = authored_box(object)?;
     Some((object.data.clone(), object.palette.clone(), box_min, size))
+}
+
+/// The object's authored build volume (`tools.vp`) from its contents file, the
+/// size the author was working in. `None` when the object has no contents or no
+/// partition recorded.
+fn view_box<'a>(serde: &'a VMaxFile, object: &VMaxObject) -> Option<&'a VMaxViewBox> {
+    serde
+        .contents_files
+        .get(&object.data)?
+        .tools
+        .as_ref()?
+        .vp
+        .as_ref()
+}
+
+/// The edit-space origin of an object's grid: its build volume's min corner when
+/// present, else its content box origin. The companion to [`object_grid`] for the
+/// instance path, which re-places an object without rebuilding it.
+fn grid_origin(serde: &VMaxFile, object: &VMaxObject) -> [i32; 3] {
+    match view_box(serde, object) {
+        Some(vp) => [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32],
+        None => authored_box(object).map_or([0, 0, 0], |(origin, _)| origin),
+    }
+}
+
+/// The re-basing origin and `[X, Y, Z]` grid size for an object. The author's
+/// build volume (`tools.vp`) is the grid when present, so the empty space around
+/// the voxels is kept; otherwise the tight content box is used. Errors if a voxel
+/// lies outside the grid.
+fn object_grid(
+    object: &VMaxObject,
+    view_box: Option<&VMaxViewBox>,
+    voxels: &[VMaxVoxel],
+) -> Result<([i32; 3], [u32; 3])> {
+    let Some(vp) = view_box else {
+        return object_box(object, voxels, min_corner(voxels));
+    };
+    let origin = [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32];
+    let size = [
+        (vp.max[0] - vp.min[0] + 1).max(0) as u32,
+        (vp.max[1] - vp.min[1] + 1).max(0) as u32,
+        (vp.max[2] - vp.min[2] + 1).max(0) as u32,
+    ];
+    for v in voxels {
+        if (0..3).any(|k| {
+            let local = v.position[k] - origin[k];
+            local < 0 || local as i64 >= i64::from(size[k])
+        }) {
+            return Err(invalid(format!(
+                "object '{}' has voxel ({}, {}, {}) outside its build volume \
+                 (origin {origin:?}, size {size:?})",
+                object.name, v.position[0], v.position[1], v.position[2]
+            )));
+        }
+    }
+    Ok((origin, size))
 }
 
 /// The re-basing origin `round(center + bounds_min)` and `[X, Y, Z]` size from an
