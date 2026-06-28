@@ -10,7 +10,8 @@ pub struct VoxjObject {
     /// Display name of the object.
     pub name: String,
 
-    /// Indices into [`VoxjMain::palettes`](crate::VoxjMain::palettes), in
+    /// Indices into
+    /// [`VoxjRuntimeState::palettes`](crate::VoxjRuntimeState::palettes), in
     /// resolution order.
     pub palette_refs: Vec<usize>,
 

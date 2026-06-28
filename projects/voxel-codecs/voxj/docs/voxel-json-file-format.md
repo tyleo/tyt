@@ -27,18 +27,20 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
 {
   "version": 1,
   "main": {
-    "objects": [
-      /* ... */
-    ],
-    "palettes": [
-      /* ... */
-    ],
-    "hierarchyNodes": [
-      /* ... */
-    ],
-    "rootHierarchyNodes": [
-      /* ... */
-    ],
+    "runtimeState": {
+      "objects": [
+        /* ... */
+      ],
+      "palettes": [
+        /* ... */
+      ],
+      "hierarchyNodes": [
+        /* ... */
+      ],
+      "rootHierarchyNodes": [
+        /* ... */
+      ],
+    },
     "ext": {
       /* ... */
     },
@@ -46,7 +48,7 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
 }
 ```
 
-Objects, palettes, and hierarchy nodes are referenced by their array index, and `rootHierarchyNodes` lists indices into `hierarchyNodes`. `ext` is an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
+The runtime scene lives under `main.runtimeState`: objects, palettes, and hierarchy nodes are referenced by their array index, and `rootHierarchyNodes` lists indices into `hierarchyNodes`. `ext` is a sibling of `runtimeState`, an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
 
 ## Coordinate System
 
@@ -326,64 +328,66 @@ The scene's roots are exactly the nodes listed in `rootHierarchyNodes`. A node t
 {
   "version": 1,
   "main": {
-    "objects": [
-      {
-        "name": "Object A",
-        "paletteRefs": [0],
-        "bounds": [1, 1, 1],
-        "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
-        "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
-      },
-      {
-        "name": "Object B",
-        "paletteRefs": [1, 2],
-        // Two voxels at (0, 0, 0) and (1, 0, 0).
-        "bounds": [2, 1, 1],
-        "voxelPositions": {
-          "encoding": "raw-json",
-          "data": [
-            [0, 0, 0],
-            [1, 0, 0],
-          ],
+    "runtimeState": {
+      "objects": [
+        {
+          "name": "Object A",
+          "paletteRefs": [0],
+          "bounds": [1, 1, 1],
+          "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
+          "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
         },
-        // Per voxel: [palette-1 cell, palette-2 cell].
-        "voxelSamples": {
-          "encoding": "raw-json",
-          "data": [
-            [0, 0],
-            [1, 0],
-          ],
+        {
+          "name": "Object B",
+          "paletteRefs": [1, 2],
+          // Two voxels at (0, 0, 0) and (1, 0, 0).
+          "bounds": [2, 1, 1],
+          "voxelPositions": {
+            "encoding": "raw-json",
+            "data": [
+              [0, 0, 0],
+              [1, 0, 0],
+            ],
+          },
+          // Per voxel: [palette-1 cell, palette-2 cell].
+          "voxelSamples": {
+            "encoding": "raw-json",
+            "data": [
+              [0, 0],
+              [1, 0],
+            ],
+          },
         },
-      },
-    ],
-    "palettes": [
-      { "attributes": ["rgba", "metallic"], "data": [["#FF0000FF", 1]] },
-      { "attributes": ["rgba"], "data": [["#00FF00FF"], ["#0000FFFF"]] },
-      { "attributes": ["metallic", "roughness"], "data": [[1, 0.2]] },
-    ],
-    "hierarchyNodes": [
-      {
-        "name": "parent-1",
-        "childNodes": [1],
-        "childObjects": [0],
-        "transform": {
-          "position": [0, 0, 0],
-          "rotation": [0, 0, 0, 1],
-          "scale": [1, 1, 1],
+      ],
+      "palettes": [
+        { "attributes": ["rgba", "metallic"], "data": [["#FF0000FF", 1]] },
+        { "attributes": ["rgba"], "data": [["#00FF00FF"], ["#0000FFFF"]] },
+        { "attributes": ["metallic", "roughness"], "data": [[1, 0.2]] },
+      ],
+      "hierarchyNodes": [
+        {
+          "name": "parent-1",
+          "childNodes": [1],
+          "childObjects": [0],
+          "transform": {
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1, 1, 1],
+          },
         },
-      },
-      {
-        "name": "parent-2",
-        "childNodes": [],
-        "childObjects": [1],
-        "transform": {
-          "position": [0, 0, 0],
-          "rotation": [0, 0, 0, 1],
-          "scale": [1, 1, 1],
+        {
+          "name": "parent-2",
+          "childNodes": [],
+          "childObjects": [1],
+          "transform": {
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0, 1],
+            "scale": [1, 1, 1],
+          },
         },
-      },
-    ],
-    "rootHierarchyNodes": [0],
+      ],
+      "rootHierarchyNodes": [0],
+    },
   },
 }
 ```
@@ -397,14 +401,19 @@ interface VoxelJsonFile {
 }
 
 interface Main {
+  runtimeState: RuntimeState;
+  // user-defined extensions, conventionally vendor-keyed; the core format
+  // assigns no meaning and guarantees nothing about its contents
+  ext?: { [key: string]: JsonValue };
+}
+
+// The runtime scene.
+interface RuntimeState {
   objects: VoxelObject[];
   palettes: Palette[];
   hierarchyNodes: HierarchyNode[];
   // indices into hierarchyNodes; the scene's roots
   rootHierarchyNodes: number[];
-  // user-defined extensions, conventionally vendor-keyed; the core format
-  // assigns no meaning and guarantees nothing about its contents
-  ext?: { [key: string]: JsonValue };
 }
 
 // Pure geometry; placed only by a hierarchy node that references it.

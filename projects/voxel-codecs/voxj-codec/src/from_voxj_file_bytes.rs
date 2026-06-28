@@ -14,33 +14,35 @@ mod tests {
     };
     use serde_json::{Value, json};
     use voxj::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPositionBlock, VoxjSampleBlock,
-        VoxjTransform, VoxjValue,
+        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPositionBlock, VoxjRuntimeState,
+        VoxjSampleBlock, VoxjTransform, VoxjValue,
     };
 
     fn document() -> VoxjFile {
         VoxjFile {
             version: 1,
             main: VoxjMain {
-                objects: vec![VoxjObject {
-                    name: "o".to_owned(),
-                    palette_refs: vec![0],
-                    bounds: [2, 1, 1],
-                    voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
-                    voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![2]]),
-                }],
-                palettes: Vec::new(),
-                hierarchy_nodes: vec![VoxjHierarchyNode {
-                    name: "o".to_owned(),
-                    child_nodes: Vec::new(),
-                    child_objects: vec![0],
-                    transform: VoxjTransform {
-                        position: [0.0; 3],
-                        rotation: [0.0, 0.0, 0.0, 1.0],
-                        scale: [1.0; 3],
-                    },
-                }],
-                root_hierarchy_nodes: vec![0],
+                runtime_state: VoxjRuntimeState {
+                    objects: vec![VoxjObject {
+                        name: "o".to_owned(),
+                        palette_refs: vec![0],
+                        bounds: [2, 1, 1],
+                        voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
+                        voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![2]]),
+                    }],
+                    palettes: Vec::new(),
+                    hierarchy_nodes: vec![VoxjHierarchyNode {
+                        name: "o".to_owned(),
+                        child_nodes: Vec::new(),
+                        child_objects: vec![0],
+                        transform: VoxjTransform {
+                            position: [0.0; 3],
+                            rotation: [0.0, 0.0, 0.0, 1.0],
+                            scale: [1.0; 3],
+                        },
+                    }],
+                    root_hierarchy_nodes: vec![0],
+                },
                 ext: None,
             },
         }

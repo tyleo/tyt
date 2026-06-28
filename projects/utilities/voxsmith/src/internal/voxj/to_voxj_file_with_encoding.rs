@@ -3,7 +3,7 @@ use crate::{
     voxj_palette_from_vox_palette, voxj_value_from_vox_value,
 };
 use voxcore::VoxState;
-use voxj::{VoxjFile, VoxjMain};
+use voxj::{VoxjFile, VoxjMain, VoxjRuntimeState};
 use voxj_codec::{
     PositionEncoding, SampleEncoding, encode_voxj_object, encode_voxj_object_smallest,
     voxj_palette_cell_counts,
@@ -58,10 +58,12 @@ pub(crate) fn to_voxj_file_with_encoding(
     Ok(VoxjFile {
         version: VOXJ_FORMAT_VERSION,
         main: VoxjMain {
-            objects,
-            palettes,
-            hierarchy_nodes,
-            root_hierarchy_nodes,
+            runtime_state: VoxjRuntimeState {
+                objects,
+                palettes,
+                hierarchy_nodes,
+                root_hierarchy_nodes,
+            },
             ext,
         },
     })

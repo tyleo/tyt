@@ -10,10 +10,12 @@ pub struct VoxjHierarchyNode {
     /// Display name of the node.
     pub name: String,
 
-    /// Indices into [`VoxjMain::hierarchy_nodes`](crate::VoxjMain::hierarchy_nodes).
+    /// Indices into
+    /// [`VoxjRuntimeState::hierarchy_nodes`](crate::VoxjRuntimeState::hierarchy_nodes).
     pub child_nodes: Vec<usize>,
 
-    /// Indices into [`VoxjMain::objects`](crate::VoxjMain::objects).
+    /// Indices into
+    /// [`VoxjRuntimeState::objects`](crate::VoxjRuntimeState::objects).
     pub child_objects: Vec<usize>,
 
     /// Transform applied to this node and everything beneath it.

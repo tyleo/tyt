@@ -20,22 +20,24 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxState> {
 
     // Build each value before adding it so a failed conversion leaves the state
     // untouched.
-    for palette in &main.palettes {
+    for palette in &main.runtime_state.palettes {
         state.add_palette(vox_palette_from_voxj_palette(palette)?);
     }
 
-    for object in &main.objects {
-        let cell_counts = voxj_palette_cell_counts(&object.palette_refs, &main.palettes)?;
+    for object in &main.runtime_state.objects {
+        let cell_counts =
+            voxj_palette_cell_counts(&object.palette_refs, &main.runtime_state.palettes)?;
         let decoded = decode_voxj_object(object, &cell_counts)?;
         state.add_object(vox_object_from_voxj_decoded_object(&decoded)?);
     }
 
-    for node in &main.hierarchy_nodes {
+    for node in &main.runtime_state.hierarchy_nodes {
         state.add_hierarchy_node(vox_hierarchy_node_from_voxj_hierarchy_node(node)?);
     }
 
     state.set_root_hierarchy_nodes(
-        main.root_hierarchy_nodes
+        main.runtime_state
+            .root_hierarchy_nodes
             .iter()
             .map(|&index| U32Id::from_u32(index as u32))
             .collect(),
@@ -62,7 +64,7 @@ mod tests {
     use voxcore::{BVoxObject, BVoxPalette};
     use voxj::{
         VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject, VoxjPalette, VoxjPositionBlock,
-        VoxjSampleBlock, VoxjTransform, VoxjValue,
+        VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValue,
     };
     use voxj_codec::{decode_voxj_object, voxj_palette_cell_counts};
 
@@ -96,65 +98,67 @@ mod tests {
         VoxjFile {
             version: 1,
             main: VoxjMain {
-                objects: vec![
-                    object(
-                        "sparse",
-                        vec![0],
-                        [4, 4, 4],
-                        vec![[0, 0, 0], [3, 1, 2], [1, 3, 0], [2, 2, 3]],
-                        vec![vec![1], vec![0], vec![5], vec![2]],
-                    ),
-                    object(
-                        "tight",
-                        vec![0, 1],
-                        [2, 1, 1],
-                        vec![[0, 0, 0], [1, 0, 0]],
-                        vec![vec![3, 0], vec![1, 1]],
-                    ),
-                    object(
-                        "no-palette",
-                        Vec::new(),
-                        [3, 1, 2],
-                        vec![[0, 0, 0], [2, 0, 1]],
-                        vec![Vec::new(), Vec::new()],
-                    ),
-                ],
-                palettes: vec![
-                    VoxjPalette {
-                        attributes: vec!["rgba".to_owned()],
-                        data: numbered_cells(6),
-                    },
-                    VoxjPalette {
-                        attributes: vec!["metallic".to_owned(), "ior".to_owned()],
-                        data: vec![
-                            vec![VoxjValue::Bool(false), VoxjValue::Number(1.5)],
-                            vec![VoxjValue::Bool(true), VoxjValue::Number(2.0)],
-                        ],
-                    },
-                ],
-                hierarchy_nodes: vec![
-                    VoxjHierarchyNode {
-                        name: "group".to_owned(),
-                        child_nodes: vec![1],
-                        child_objects: vec![0],
-                        transform: VoxjTransform {
-                            position: [1.0, 2.0, 3.0],
-                            rotation: [0.0, 0.0, FRAC_1_SQRT_2, FRAC_1_SQRT_2],
-                            scale: [2.0, 2.0, 2.0],
+                runtime_state: VoxjRuntimeState {
+                    objects: vec![
+                        object(
+                            "sparse",
+                            vec![0],
+                            [4, 4, 4],
+                            vec![[0, 0, 0], [3, 1, 2], [1, 3, 0], [2, 2, 3]],
+                            vec![vec![1], vec![0], vec![5], vec![2]],
+                        ),
+                        object(
+                            "tight",
+                            vec![0, 1],
+                            [2, 1, 1],
+                            vec![[0, 0, 0], [1, 0, 0]],
+                            vec![vec![3, 0], vec![1, 1]],
+                        ),
+                        object(
+                            "no-palette",
+                            Vec::new(),
+                            [3, 1, 2],
+                            vec![[0, 0, 0], [2, 0, 1]],
+                            vec![Vec::new(), Vec::new()],
+                        ),
+                    ],
+                    palettes: vec![
+                        VoxjPalette {
+                            attributes: vec!["rgba".to_owned()],
+                            data: numbered_cells(6),
                         },
-                    },
-                    VoxjHierarchyNode {
-                        name: "leaf".to_owned(),
-                        child_nodes: Vec::new(),
-                        child_objects: vec![1],
-                        transform: VoxjTransform {
-                            position: [0.0, 0.0, 0.0],
-                            rotation: [0.0, 0.0, 0.0, 1.0],
-                            scale: [1.0, 1.0, 1.0],
+                        VoxjPalette {
+                            attributes: vec!["metallic".to_owned(), "ior".to_owned()],
+                            data: vec![
+                                vec![VoxjValue::Bool(false), VoxjValue::Number(1.5)],
+                                vec![VoxjValue::Bool(true), VoxjValue::Number(2.0)],
+                            ],
                         },
-                    },
-                ],
-                root_hierarchy_nodes: vec![0],
+                    ],
+                    hierarchy_nodes: vec![
+                        VoxjHierarchyNode {
+                            name: "group".to_owned(),
+                            child_nodes: vec![1],
+                            child_objects: vec![0],
+                            transform: VoxjTransform {
+                                position: [1.0, 2.0, 3.0],
+                                rotation: [0.0, 0.0, FRAC_1_SQRT_2, FRAC_1_SQRT_2],
+                                scale: [2.0, 2.0, 2.0],
+                            },
+                        },
+                        VoxjHierarchyNode {
+                            name: "leaf".to_owned(),
+                            child_nodes: Vec::new(),
+                            child_objects: vec![1],
+                            transform: VoxjTransform {
+                                position: [0.0, 0.0, 0.0],
+                                rotation: [0.0, 0.0, 0.0, 1.0],
+                                scale: [1.0, 1.0, 1.0],
+                            },
+                        },
+                    ],
+                    root_hierarchy_nodes: vec![0],
+                },
                 ext: Some(VoxjValue::Object(VoxjMap(vec![(
                     "vendor".to_owned(),
                     VoxjValue::Array(vec![
@@ -177,16 +181,21 @@ mod tests {
         VoxjFile {
             version: base.version,
             main: VoxjMain {
-                objects: vec![base.main.objects[0].clone(), base.main.objects[2].clone()],
-                palettes: vec![base.main.palettes[0].clone()],
-                hierarchy_nodes: vec![
-                    base.main.hierarchy_nodes[0].clone(),
-                    VoxjHierarchyNode {
-                        child_objects: Vec::new(),
-                        ..base.main.hierarchy_nodes[1].clone()
-                    },
-                ],
-                root_hierarchy_nodes: vec![0],
+                runtime_state: VoxjRuntimeState {
+                    objects: vec![
+                        base.main.runtime_state.objects[0].clone(),
+                        base.main.runtime_state.objects[2].clone(),
+                    ],
+                    palettes: vec![base.main.runtime_state.palettes[0].clone()],
+                    hierarchy_nodes: vec![
+                        base.main.runtime_state.hierarchy_nodes[0].clone(),
+                        VoxjHierarchyNode {
+                            child_objects: Vec::new(),
+                            ..base.main.runtime_state.hierarchy_nodes[1].clone()
+                        },
+                    ],
+                    root_hierarchy_nodes: vec![0],
+                },
                 ext: base.main.ext.clone(),
             },
         }
@@ -207,11 +216,11 @@ mod tests {
     }
 
     fn assert_file_eq(got: &VoxjFile, want: &VoxjFile) {
-        let (got, want) = (&got.main, &want.main);
+        assert_eq!(got.main.ext, want.main.ext);
+        let (got, want) = (&got.main.runtime_state, &want.main.runtime_state);
         assert_eq!(got.palettes, want.palettes);
         assert_eq!(got.hierarchy_nodes, want.hierarchy_nodes);
         assert_eq!(got.root_hierarchy_nodes, want.root_hierarchy_nodes);
-        assert_eq!(got.ext, want.ext);
         assert_eq!(got.objects.len(), want.objects.len());
         for (got_object, want_object) in got.objects.iter().zip(&want.objects) {
             assert_eq!(got_object.name, want_object.name);
@@ -286,7 +295,7 @@ mod tests {
     #[test]
     fn rejects_position_outside_bounds() {
         let mut file = sample_file();
-        file.main.objects[1].voxel_positions =
+        file.main.runtime_state.objects[1].voxel_positions =
             VoxjPositionBlock::RawJson(vec![[9, 0, 0], [1, 0, 0]]);
         assert!(from_voxj_file(&file).is_err());
     }
@@ -294,7 +303,7 @@ mod tests {
     #[test]
     fn rejects_out_of_range_sample() {
         let mut file = sample_file();
-        file.main.objects[0].voxel_samples =
+        file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![99], vec![0], vec![5], vec![2]]);
         assert!(from_voxj_file(&file).is_err());
     }
@@ -306,19 +315,21 @@ mod tests {
         let file = VoxjFile {
             version: 1,
             main: VoxjMain {
-                objects: vec![object(
-                    "empty-ref",
-                    vec![0],
-                    [2, 2, 2],
-                    Vec::new(),
-                    Vec::new(),
-                )],
-                palettes: vec![VoxjPalette {
-                    attributes: vec!["rgba".to_owned()],
-                    data: Vec::new(),
-                }],
-                hierarchy_nodes: Vec::new(),
-                root_hierarchy_nodes: Vec::new(),
+                runtime_state: VoxjRuntimeState {
+                    objects: vec![object(
+                        "empty-ref",
+                        vec![0],
+                        [2, 2, 2],
+                        Vec::new(),
+                        Vec::new(),
+                    )],
+                    palettes: vec![VoxjPalette {
+                        attributes: vec!["rgba".to_owned()],
+                        data: Vec::new(),
+                    }],
+                    hierarchy_nodes: Vec::new(),
+                    root_hierarchy_nodes: Vec::new(),
+                },
                 ext: None,
             },
         };
@@ -333,16 +344,18 @@ mod tests {
         let file = VoxjFile {
             version: 1,
             main: VoxjMain {
-                objects: vec![object(
-                    "huge",
-                    Vec::new(),
-                    [1024, 1024, 1024],
-                    Vec::new(),
-                    Vec::new(),
-                )],
-                palettes: Vec::new(),
-                hierarchy_nodes: Vec::new(),
-                root_hierarchy_nodes: Vec::new(),
+                runtime_state: VoxjRuntimeState {
+                    objects: vec![object(
+                        "huge",
+                        Vec::new(),
+                        [1024, 1024, 1024],
+                        Vec::new(),
+                        Vec::new(),
+                    )],
+                    palettes: Vec::new(),
+                    hierarchy_nodes: Vec::new(),
+                    root_hierarchy_nodes: Vec::new(),
+                },
                 ext: None,
             },
         };

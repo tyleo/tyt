@@ -39,19 +39,19 @@ pub fn validate_voxj_file(file: &VoxjFile) -> Result<()> {
 /// Checks everything below the version: palettes, objects, hierarchy nodes,
 /// roots, and acyclicity.
 fn validate_main(main: &VoxjMain) -> Result<()> {
-    for (index, palette) in main.palettes.iter().enumerate() {
+    for (index, palette) in main.runtime_state.palettes.iter().enumerate() {
         validate_palette(index, palette)?;
     }
-    for (index, object) in main.objects.iter().enumerate() {
-        validate_object(index, object, &main.palettes)?;
+    for (index, object) in main.runtime_state.objects.iter().enumerate() {
+        validate_object(index, object, &main.runtime_state.palettes)?;
     }
-    for (index, node) in main.hierarchy_nodes.iter().enumerate() {
+    for (index, node) in main.runtime_state.hierarchy_nodes.iter().enumerate() {
         validate_node(index, node, main)?;
     }
     validate_roots(main)?;
 
     // Acyclicity last, once every child index is known in range.
-    if let Some(node) = first_cycle_node(&main.hierarchy_nodes) {
+    if let Some(node) = first_cycle_node(&main.runtime_state.hierarchy_nodes) {
         return Err(invalid(format!(
             "hierarchy is not acyclic: a cycle reaches node {node}"
         )));
@@ -150,11 +150,11 @@ fn validate_object(index: usize, object: &VoxjObject, palettes: &[VoxjPalette]) 
 fn validate_node(index: usize, node: &VoxjHierarchyNode, main: &VoxjMain) -> Result<()> {
     let mut seen_nodes = HashSet::with_capacity(node.child_nodes.len());
     for &child in &node.child_nodes {
-        if child >= main.hierarchy_nodes.len() {
+        if child >= main.runtime_state.hierarchy_nodes.len() {
             return Err(invalid(format!(
                 "hierarchy node {index} lists child node {child}, \
                  but the document has {} nodes",
-                main.hierarchy_nodes.len()
+                main.runtime_state.hierarchy_nodes.len()
             )));
         }
         if !seen_nodes.insert(child) {
@@ -166,11 +166,11 @@ fn validate_node(index: usize, node: &VoxjHierarchyNode, main: &VoxjMain) -> Res
 
     let mut seen_objects = HashSet::with_capacity(node.child_objects.len());
     for &object in &node.child_objects {
-        if object >= main.objects.len() {
+        if object >= main.runtime_state.objects.len() {
             return Err(invalid(format!(
                 "hierarchy node {index} places object {object}, \
                  but the document has {} objects",
-                main.objects.len()
+                main.runtime_state.objects.len()
             )));
         }
         if !seen_objects.insert(object) {
@@ -208,12 +208,12 @@ fn validate_transform(index: usize, node: &VoxjHierarchyNode) -> Result<()> {
 
 /// Roots resolve and do not repeat.
 fn validate_roots(main: &VoxjMain) -> Result<()> {
-    let mut seen = HashSet::with_capacity(main.root_hierarchy_nodes.len());
-    for &root in &main.root_hierarchy_nodes {
-        if root >= main.hierarchy_nodes.len() {
+    let mut seen = HashSet::with_capacity(main.runtime_state.root_hierarchy_nodes.len());
+    for &root in &main.runtime_state.root_hierarchy_nodes {
+        if root >= main.runtime_state.hierarchy_nodes.len() {
             return Err(invalid(format!(
                 "root references hierarchy node {root}, but the document has {} nodes",
-                main.hierarchy_nodes.len()
+                main.runtime_state.hierarchy_nodes.len()
             )));
         }
         if !seen.insert(root) {
@@ -274,7 +274,7 @@ mod tests {
     use crate::validate_voxj_file;
     use voxj::{
         VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjPositionBlock,
-        VoxjSampleBlock, VoxjTransform, VoxjValue,
+        VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValue,
     };
 
     /// A palette with `cells` rows, each carrying one value per named attribute.
@@ -313,16 +313,18 @@ mod tests {
         VoxjFile {
             version: 1,
             main: VoxjMain {
-                objects: vec![VoxjObject {
-                    name: "o".to_owned(),
-                    palette_refs: vec![0],
-                    bounds: [2, 1, 1],
-                    voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
-                    voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![3]]),
-                }],
-                palettes: vec![palette(&["rgba"], 4)],
-                hierarchy_nodes: vec![node(vec![1], vec![0]), node(vec![], vec![])],
-                root_hierarchy_nodes: vec![0],
+                runtime_state: VoxjRuntimeState {
+                    objects: vec![VoxjObject {
+                        name: "o".to_owned(),
+                        palette_refs: vec![0],
+                        bounds: [2, 1, 1],
+                        voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
+                        voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![3]]),
+                    }],
+                    palettes: vec![palette(&["rgba"], 4)],
+                    hierarchy_nodes: vec![node(vec![1], vec![0]), node(vec![], vec![])],
+                    root_hierarchy_nodes: vec![0],
+                },
                 ext: None,
             },
         }
@@ -345,43 +347,46 @@ mod tests {
         let mut file = valid_file();
         // Two "rgba" attributes; keep rows rectangular so the duplicate is the
         // only fault.
-        file.main.palettes[0] = palette(&["rgba", "rgba"], 4);
+        file.main.runtime_state.palettes[0] = palette(&["rgba", "rgba"], 4);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_ragged_palette_row() {
         let mut file = valid_file();
-        file.main.palettes[0].data[0] = vec![VoxjValue::Number(0.0), VoxjValue::Number(1.0)];
+        file.main.runtime_state.palettes[0].data[0] =
+            vec![VoxjValue::Number(0.0), VoxjValue::Number(1.0)];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_palette_ref_out_of_range() {
         let mut file = valid_file();
-        file.main.objects[0].palette_refs = vec![5];
+        file.main.runtime_state.objects[0].palette_refs = vec![5];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_palette_ref() {
         let mut file = valid_file();
-        file.main.objects[0].palette_refs = vec![0, 0];
-        file.main.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1, 1], vec![3, 3]]);
+        file.main.runtime_state.objects[0].palette_refs = vec![0, 0];
+        file.main.runtime_state.objects[0].voxel_samples =
+            VoxjSampleBlock::RawJson(vec![vec![1, 1], vec![3, 3]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_sample_row_count_mismatch() {
         let mut file = valid_file();
-        file.main.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1]]);
+        file.main.runtime_state.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_sample_arity_mismatch() {
         let mut file = valid_file();
-        file.main.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1, 0], vec![3]]);
+        file.main.runtime_state.objects[0].voxel_samples =
+            VoxjSampleBlock::RawJson(vec![vec![1, 0], vec![3]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -389,14 +394,15 @@ mod tests {
     fn rejects_sample_cell_out_of_range() {
         let mut file = valid_file();
         // Palette 0 has four cells; cell 9 is out of range.
-        file.main.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1], vec![9]]);
+        file.main.runtime_state.objects[0].voxel_samples =
+            VoxjSampleBlock::RawJson(vec![vec![1], vec![9]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_position_out_of_bounds() {
         let mut file = valid_file();
-        file.main.objects[0].voxel_positions =
+        file.main.runtime_state.objects[0].voxel_positions =
             VoxjPositionBlock::RawJson(vec![[0, 0, 0], [5, 0, 0]]);
         assert!(validate_voxj_file(&file).is_err());
     }
@@ -404,7 +410,7 @@ mod tests {
     #[test]
     fn rejects_duplicate_position() {
         let mut file = valid_file();
-        file.main.objects[0].voxel_positions =
+        file.main.runtime_state.objects[0].voxel_positions =
             VoxjPositionBlock::RawJson(vec![[0, 0, 0], [0, 0, 0]]);
         assert!(validate_voxj_file(&file).is_err());
     }
@@ -412,42 +418,42 @@ mod tests {
     #[test]
     fn rejects_child_node_out_of_range() {
         let mut file = valid_file();
-        file.main.hierarchy_nodes[0].child_nodes = vec![9];
+        file.main.runtime_state.hierarchy_nodes[0].child_nodes = vec![9];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_child_node() {
         let mut file = valid_file();
-        file.main.hierarchy_nodes[0].child_nodes = vec![1, 1];
+        file.main.runtime_state.hierarchy_nodes[0].child_nodes = vec![1, 1];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_child_object_out_of_range() {
         let mut file = valid_file();
-        file.main.hierarchy_nodes[0].child_objects = vec![9];
+        file.main.runtime_state.hierarchy_nodes[0].child_objects = vec![9];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_child_object() {
         let mut file = valid_file();
-        file.main.hierarchy_nodes[0].child_objects = vec![0, 0];
+        file.main.runtime_state.hierarchy_nodes[0].child_objects = vec![0, 0];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_root_out_of_range() {
         let mut file = valid_file();
-        file.main.root_hierarchy_nodes = vec![9];
+        file.main.runtime_state.root_hierarchy_nodes = vec![9];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_root() {
         let mut file = valid_file();
-        file.main.root_hierarchy_nodes = vec![0, 0];
+        file.main.runtime_state.root_hierarchy_nodes = vec![0, 0];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -455,8 +461,8 @@ mod tests {
     fn rejects_a_cycle() {
         let mut file = valid_file();
         // node 0 -> node 1 -> node 0.
-        file.main.hierarchy_nodes[0].child_nodes = vec![1];
-        file.main.hierarchy_nodes[1].child_nodes = vec![0];
+        file.main.runtime_state.hierarchy_nodes[0].child_nodes = vec![1];
+        file.main.runtime_state.hierarchy_nodes[1].child_nodes = vec![0];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -464,19 +470,19 @@ mod tests {
     fn accepts_a_shared_child_dag() {
         let mut file = valid_file();
         // Both nodes share a third leaf node; legal in a DAG.
-        file.main.hierarchy_nodes = vec![
+        file.main.runtime_state.hierarchy_nodes = vec![
             node(vec![2], vec![]),
             node(vec![2], vec![]),
             node(vec![], vec![]),
         ];
-        file.main.root_hierarchy_nodes = vec![0, 1];
+        file.main.runtime_state.root_hierarchy_nodes = vec![0, 1];
         assert!(validate_voxj_file(&file).is_ok());
     }
 
     #[test]
     fn rejects_zero_scale() {
         let mut file = valid_file();
-        file.main.hierarchy_nodes[0].transform.scale = [1.0, 0.0, 1.0];
+        file.main.runtime_state.hierarchy_nodes[0].transform.scale = [1.0, 0.0, 1.0];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -484,7 +490,9 @@ mod tests {
     fn rejects_non_unit_rotation() {
         let mut file = valid_file();
         // Length squared 4, well outside the unit tolerance.
-        file.main.hierarchy_nodes[0].transform.rotation = [0.0, 0.0, 0.0, 2.0];
+        file.main.runtime_state.hierarchy_nodes[0]
+            .transform
+            .rotation = [0.0, 0.0, 0.0, 2.0];
         assert!(validate_voxj_file(&file).is_err());
     }
 }
