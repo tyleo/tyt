@@ -21,6 +21,7 @@ pub fn decode_voxj_object(object: &VoxjObject, cell_counts: &[usize]) -> Result<
         name: object.name.clone(),
         palette_refs: object.palette_refs.clone(),
         bounds: object.bounds,
+        origin: object.origin,
         positions,
         samples,
     })
@@ -175,6 +176,7 @@ mod tests {
             name: "o".to_owned(),
             palette_refs: vec![0, 1],
             bounds: [4, 4, 5],
+            origin: [0, 0, 0],
             positions: vec![[0, 0, 0], [2, 1, 0], [1, 3, 4], [3, 3, 3]],
             samples: vec![vec![1, 0], vec![5, 2], vec![200, 7], vec![0, 1]],
         }
@@ -215,6 +217,7 @@ mod tests {
             name: "o".to_owned(),
             palette_refs: Vec::new(),
             bounds: [0, 0, 0],
+            origin: [0, 0, 0],
             positions: Vec::new(),
             samples: Vec::new(),
         };
@@ -237,6 +240,7 @@ mod tests {
                 name: "o".to_owned(),
                 palette_refs: Vec::new(),
                 bounds: [2, 1, 1],
+                origin: [0, 0, 0],
                 positions: vec![[0, 0, 0], [1, 0, 0]],
                 samples: vec![Vec::new(), Vec::new()],
             };
@@ -259,6 +263,7 @@ mod tests {
             name: "o".to_owned(),
             palette_refs: vec![0],
             bounds: [2, 1, 1],
+            origin: [0, 0, 0],
             voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
             voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], Vec::new()]),
         };
@@ -273,6 +278,7 @@ mod tests {
             name: "o".to_owned(),
             palette_refs: vec![0],
             bounds: [2, 1, 1],
+            origin: [0, 0, 0],
             voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
             voxel_samples: VoxjSampleBlock::PackedBase64(vec![String::new()]),
         };
@@ -287,6 +293,7 @@ mod tests {
             name: "o".to_owned(),
             palette_refs: vec![0],
             bounds: [1, 1, 1],
+            origin: [0, 0, 0],
             voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0]]),
             voxel_samples: VoxjSampleBlock::RleJson(vec![vec![0, 1], vec![0, 1]]),
         };

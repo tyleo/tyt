@@ -56,7 +56,7 @@ The coordinate system is Z-up, right-handed. Voxel coordinates are unsigned inte
 
 ## Objects
 
-An object is one voxel volume. It is pure geometry with no transform: it is placed only by a hierarchy node that references it.
+An object is one voxel volume of pure geometry. Aside from its grid `origin`, it carries no transform of its own: rotation, scale, and placement come from the hierarchy node that references it.
 
 ```jsonc
 {
@@ -64,6 +64,9 @@ An object is one voxel volume. It is pure geometry with no transform: it is plac
 
   // [X, Y, Z] size in voxels
   "bounds": [1, 1, 1],
+
+  // [X, Y, Z] translation from the placing node to the grid's min corner
+  "origin": [0, 0, 0],
   "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
 
   // palette indices, in resolution order
@@ -75,6 +78,8 @@ An object is one voxel volume. It is pure geometry with no transform: it is plac
 `voxelPositions` and `voxelSamples` are encoded blocks (see [Voxel Encoding](#voxel-encoding)). Each voxel has a position `(x, y, z)` and one sample per referenced palette. The sample for palette `n` is a cell index into the object's `n`-th palette. The number of voxels is implicit: it is the number of positions decoded from `voxelPositions`. Positions within an object must be unique, and every voxel samples every palette.
 
 `bounds` is `[X, Y, Z]`, the object's size in voxels along each axis. Objects are authored from the origin, so every voxel position lies in `[0, X) x [0, Y) x [0, Z)`. `bounds` must contain the object but need not fit it tightly: each component is at least the maximum coordinate on that axis plus one, and may be larger to leave empty margin around the geometry (see [Validation](#validation)). `bounds` is required to decode `bitmap-base64` and `hilbert-delta-varint-base64`, so margin is not always free under those encodings: for `bitmap-base64`, changing `bounds` changes the canonical voxel order and forces re-encoding; for `hilbert-delta-varint-base64`, `bounds` enters only through `bits = max(1, bitLength(max(X, Y, Z) - 1))`, so margin that does not change `bits` is free but margin that does forces re-encoding (see [Voxel Order](#voxel-order)).
+
+`origin` is `[X, Y, Z]`, the translation in voxels from the placing hierarchy node to the grid's min corner; `[0, 0, 0]` puts the min corner at the node's local origin. It shifts where the grid sits relative to its node but does not change the voxel encodings, which stay 0-based within `bounds`. Omitted, it defaults to `[0, 0, 0]`.
 
 The position block fixes a single voxel order for the object, and the sample channels follow it voxel-for-voxel.
 
@@ -419,13 +424,16 @@ interface RuntimeState {
 // Pure geometry; placed only by a hierarchy node that references it.
 interface VoxelObject {
   name: string;
-  // indices into Main.palettes, in resolution order
+  // indices into RuntimeState.palettes, in resolution order
   paletteRefs: number[];
   // [X, Y, Z] size in voxels; voxels occupy [0, X) x [0, Y) x [0, Z). Must
   // contain every voxel (per-axis >= max + 1). Required to decode bitmap-base64
   // and hilbert-delta-varint-base64; margin is not always free under
   // those.
   bounds: Vec3;
+  // [X, Y, Z] translation from the placing node to the grid's min corner;
+  // defaults to [0, 0, 0]. Does not affect the voxel encodings.
+  origin: Vec3;
   voxelPositions: PositionBlock;
   voxelSamples: SampleBlock;
 }

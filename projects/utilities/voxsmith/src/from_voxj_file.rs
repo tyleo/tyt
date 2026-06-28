@@ -86,6 +86,7 @@ mod tests {
             name: name.to_owned(),
             palette_refs,
             bounds,
+            origin: [0, 0, 0],
             voxel_positions: VoxjPositionBlock::RawJson(positions),
             voxel_samples: VoxjSampleBlock::RawJson(samples),
         }

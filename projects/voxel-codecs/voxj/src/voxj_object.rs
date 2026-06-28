@@ -19,6 +19,11 @@ pub struct VoxjObject {
     /// `[0, X) x [0, Y) x [0, Z)`.
     pub bounds: [u32; 3],
 
+    /// `[X, Y, Z]` translation in voxels from the placing hierarchy node to the
+    /// grid's min corner. `[0, 0, 0]` puts the min corner at the node origin.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub origin: [i32; 3],
+
     /// Encoded voxel positions; the encoding fixes the voxel order.
     pub voxel_positions: VoxjPositionBlock,
 

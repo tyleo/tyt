@@ -6,6 +6,7 @@ use voxj_codec::VoxjDecodedObject;
 /// back to palette indices (each id equals its index).
 pub fn voxj_decoded_object_from_vox_object(object: &VoxObject) -> VoxjDecodedObject {
     let bounds = object.bounds();
+    let origin = object.origin();
 
     // Reference ids, reused for each voxel's sample row.
     let palette_ref_ids: Vec<_> = object.iter_palette_refs().map(|(id, _)| id).collect();
@@ -39,6 +40,7 @@ pub fn voxj_decoded_object_from_vox_object(object: &VoxObject) -> VoxjDecodedObj
         name: object.name().to_owned(),
         palette_refs,
         bounds: [bounds.x, bounds.y, bounds.z],
+        origin: [origin.x, origin.y, origin.z],
         positions,
         samples,
     }

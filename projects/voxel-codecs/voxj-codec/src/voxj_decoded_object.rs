@@ -15,6 +15,10 @@ pub struct VoxjDecodedObject {
     /// [`VoxjObject::bounds`](voxj::VoxjObject::bounds).
     pub bounds: [u32; 3],
 
+    /// `[X, Y, Z]` translation from the placing node to the grid's min corner,
+    /// as in [`VoxjObject::origin`](voxj::VoxjObject::origin).
+    pub origin: [i32; 3],
+
     /// Voxel positions `[x, y, z]`, in listing order.
     pub positions: Vec<[u32; 3]>,
 

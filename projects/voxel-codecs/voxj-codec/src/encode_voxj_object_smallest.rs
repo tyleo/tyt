@@ -86,6 +86,7 @@ mod tests {
                 name: "o".to_owned(),
                 palette_refs: Vec::new(),
                 bounds: [3, 1, 1],
+                origin: [0, 0, 0],
                 positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
                 samples: vec![Vec::new(), Vec::new(), Vec::new()],
             },

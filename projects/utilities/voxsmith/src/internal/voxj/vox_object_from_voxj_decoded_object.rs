@@ -1,6 +1,6 @@
 use crate::{Error, Result};
 use branded_id::U32Id;
-use ty_math::TyVector3U32;
+use ty_math::{TyVector3I32, TyVector3U32};
 use voxcore::{BVoxPalette, BVoxPaletteCell, VoxObject};
 use voxj_codec::VoxjDecodedObject;
 
@@ -21,6 +21,12 @@ pub fn vox_object_from_voxj_decoded_object(object: &VoxjDecodedObject) -> Result
             VoxObject::MAX_GRID_CELLS
         ))
     })?;
+
+    out.set_origin(TyVector3I32::new(
+        object.origin[0],
+        object.origin[1],
+        object.origin[2],
+    ));
 
     // Back-fill cell 0 as a placeholder; live voxels overwrite theirs below.
     let filler = U32Id::<BVoxPaletteCell>::from_u32(0);

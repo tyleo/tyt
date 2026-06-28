@@ -318,6 +318,7 @@ mod tests {
                         name: "o".to_owned(),
                         palette_refs: vec![0],
                         bounds: [2, 1, 1],
+                        origin: [0, 0, 0],
                         voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
                         voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![3]]),
                     }],

@@ -33,6 +33,7 @@ pub fn encode_voxj_object(
         name: object.name.clone(),
         palette_refs: object.palette_refs.clone(),
         bounds: object.bounds,
+        origin: object.origin,
         voxel_positions,
         voxel_samples,
     })
@@ -242,6 +243,7 @@ mod tests {
                     name: "o".to_owned(),
                     palette_refs: Vec::new(),
                     bounds: [3, 1, 1],
+                    origin: [0, 0, 0],
                     positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],
                     samples: vec![Vec::new(), Vec::new(), Vec::new()],
                 },
@@ -260,6 +262,7 @@ mod tests {
             name: "o".to_owned(),
             palette_refs: vec![0],
             bounds: [2, 1, 1],
+            origin: [0, 0, 0],
             positions: vec![[0, 0, 0], [1, 0, 0]],
             samples: vec![vec![1], vec![2]],
         };
@@ -289,6 +292,7 @@ mod tests {
             name: "o".to_owned(),
             palette_refs: vec![0, 1],
             bounds: [1, 1, 1],
+            origin: [0, 0, 0],
             positions: vec![[0, 0, 0]],
             samples: vec![vec![1]],
         };
@@ -306,6 +310,7 @@ mod tests {
             name: "o".to_owned(),
             palette_refs: vec![0],
             bounds: [2, 1, 1],
+            origin: [0, 0, 0],
             positions: vec![[0, 0, 0], [1, 0, 0]],
             samples: vec![vec![1]],
         };

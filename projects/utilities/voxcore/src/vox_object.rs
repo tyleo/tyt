@@ -3,7 +3,7 @@ use branded_id::{
     IdVec, U32Id,
     soa::{IdField, IdRemap, IdStruct},
 };
-use ty_math::TyVector3U32;
+use ty_math::{TyVector3I32, TyVector3U32};
 
 /// One object's voxel volume: a dense grid, the palettes it references, and the
 /// cell each voxel samples from each palette.
@@ -18,6 +18,10 @@ pub struct VoxObject {
 
     /// Grid size in voxels.
     bounds: TyVector3U32,
+
+    /// Translation from the placing hierarchy node to the grid's min corner, in
+    /// voxels.
+    origin: TyVector3I32,
 
     /// One id per grid cell; id equals the raster index.
     voxel_ids: IdStruct<BVoxVoxel>,
@@ -58,6 +62,7 @@ impl VoxObject {
         Some(Self {
             name,
             bounds,
+            origin: TyVector3I32::default(),
             voxel_ids,
             liveness: VoxLiveness::new(volume as usize),
             palette_ref_ids: IdStruct::new(),
@@ -82,6 +87,17 @@ impl VoxObject {
     /// Grid size in voxels.
     pub fn bounds(&self) -> TyVector3U32 {
         self.bounds
+    }
+
+    /// Translation from the placing hierarchy node to the grid's min corner, in
+    /// voxels. `[0, 0, 0]` places the grid's min corner at the node origin.
+    pub fn origin(&self) -> TyVector3I32 {
+        self.origin
+    }
+
+    /// Sets the grid [`origin`](Self::origin).
+    pub fn set_origin(&mut self, origin: TyVector3I32) {
+        self.origin = origin;
     }
 
     /// Number of live (filled) voxels.
@@ -232,6 +248,7 @@ impl VoxObject {
         Self {
             name: self.name.clone(),
             bounds: self.bounds,
+            origin: self.origin,
             voxel_ids: self.voxel_ids.clone(),
             liveness: self.liveness.clone(),
             palette_ref_ids: self.palette_ref_ids.clone(),
