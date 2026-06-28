@@ -2,8 +2,8 @@ use crate::{
     Result, voxj_decoded_object_from_vox_object, voxj_hierarchy_node_from_vox_hierarchy_node,
     voxj_palette_from_vox_palette, voxj_value_from_vox_value,
 };
-use voxcore::VoxState;
-use voxj::{VoxjFile, VoxjMain, VoxjRuntimeState};
+use voxcore::{VoxEditObject, VoxState};
+use voxj::{VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState};
 use voxj_codec::{
     PositionEncoding, SampleEncoding, encode_voxj_object, encode_voxj_object_smallest,
     voxj_palette_cell_counts,
@@ -53,6 +53,31 @@ pub(crate) fn to_voxj_file_with_encoding(
         .map(|id| id.to_u32() as usize)
         .collect();
 
+    // Editor state, aligned by index with the objects. Emitted only when some
+    // object's edit grid differs from its runtime grid; the zero-margin default
+    // is recreated by `from_voxj_file`, so omitting it loses nothing.
+    let any_margin = state.iter_objects().any(|(id, object)| {
+        let runtime = VoxEditObject {
+            bounds: object.bounds(),
+            origin: object.origin(),
+        };
+        state.edit_object(id) != Some(runtime)
+    });
+    let edit_state = any_margin.then(|| VoxjEditState {
+        objects: state
+            .iter_objects()
+            .map(|(id, _)| {
+                let edit = state
+                    .edit_object(id)
+                    .expect("a retained object has an edit grid");
+                VoxjEditObject {
+                    bounds: [edit.bounds.x, edit.bounds.y, edit.bounds.z],
+                    origin: [edit.origin.x, edit.origin.y, edit.origin.z],
+                }
+            })
+            .collect(),
+    });
+
     let ext = state.ext().map(voxj_value_from_vox_value);
 
     Ok(VoxjFile {
@@ -64,6 +89,7 @@ pub(crate) fn to_voxj_file_with_encoding(
                 hierarchy_nodes,
                 root_hierarchy_nodes,
             },
+            edit_state,
             ext,
         },
     })

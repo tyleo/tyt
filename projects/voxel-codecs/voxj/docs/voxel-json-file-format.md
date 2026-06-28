@@ -41,6 +41,11 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
         /* ... */
       ],
     },
+    "editState": {
+      "objects": [
+        /* ... */
+      ],
+    },
     "ext": {
       /* ... */
     },
@@ -48,7 +53,7 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
 }
 ```
 
-The runtime scene lives under `main.runtimeState`: objects, palettes, and hierarchy nodes are referenced by their array index, and `rootHierarchyNodes` lists indices into `hierarchyNodes`. `ext` is a sibling of `runtimeState`, an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
+The runtime scene lives under `main.runtimeState`: objects, palettes, and hierarchy nodes are referenced by their array index, and `rootHierarchyNodes` lists indices into `hierarchyNodes`. `editState` (optional) and `ext` are siblings of `runtimeState`. `editState` carries per-object editor margin aligned to the runtime objects (see [Edit State](#edit-state)); `ext` is an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
 
 ## Coordinate System
 
@@ -267,6 +272,26 @@ A transform has three fields: `position` is `[x, y, z]` (may be fractional), `ro
 
 The scene's roots are exactly the nodes listed in `rootHierarchyNodes`. A node that is neither listed as a root nor referenced as a child is unplaced and does not render, so a file may hold library nodes that are defined without being placed. The format describes placement only; how overlapping or sub-voxel placements are resolved, merged, or rasterized is consumer-defined.
 
+## Edit State
+
+`main.editState` is optional editor state, kept separate from the runtime scene. When present, its `objects` array has one entry per runtime object, aligned by index, giving the author's edit grid (the build volume) for that object.
+
+```jsonc
+{
+  "objects": [
+    {
+      // [X, Y, Z] size of the edit grid in voxels
+      "bounds": [6, 6, 6],
+
+      // [X, Y, Z] translation from the placing node to the edit grid's min corner
+      "origin": [-1, -1, -1],
+    },
+  ],
+}
+```
+
+Each edit grid must contain its object's runtime grid: on every axis the edit `origin` is `<=` the runtime `origin`, and the edit `origin + bounds` is `>=` the runtime `origin + bounds`. An edit grid equal to the runtime grid carries no margin. `editState` is omitted when no object has a distinct edit grid; a consumer that ignores it loses only editor margin, never geometry.
+
 ## Extensions
 
 `main.ext` is a reserved namespace for user-defined extensions, conventionally keyed by vendor. The core format assigns it no meaning and makes no compatibility guarantees about its contents; consumers ignore extensions they do not recognize. For example, Voxel Max's camera:
@@ -304,10 +329,10 @@ The scene's roots are exactly the nodes listed in `rootHierarchyNodes`. A node t
 
 1. `version` is recognized.
 2. All indices are in range:
-   1. object `paletteRefs` -> `main.palettes`, and one object references each palette at most once
+   1. object `paletteRefs` -> `main.runtimeState.palettes`, and one object references each palette at most once
    2. each sample cell index -> the cell count of the palette it indexes
-   3. each `childNodes` entry -> `main.hierarchyNodes` and each `childObjects` entry -> `main.objects`, and one hierarchy node lists each child node and each child object at most once
-   4. `rootHierarchyNodes` -> `main.hierarchyNodes`, and each node appears as a root at most once
+   3. each `childNodes` entry -> `main.runtimeState.hierarchyNodes` and each `childObjects` entry -> `main.runtimeState.objects`, and one hierarchy node lists each child node and each child object at most once
+   4. `rootHierarchyNodes` -> `main.runtimeState.hierarchyNodes`, and each node appears as a root at most once
 3. Position `data` is well-formed:
    1. `raw-json` is `[x, y, z]` triples
    2. `bitmap-base64` base64-decodes to exactly `ceil(X * Y * Z / 8)` bytes, its pad bits are zero, and the decoded number of voxels equals the number of set bits
@@ -324,6 +349,7 @@ The scene's roots are exactly the nodes listed in `rootHierarchyNodes`. A node t
 10. The hierarchy is acyclic.
 11. No transform `scale` component is zero.
 12. Every transform `rotation` has length-squared within `1e-6` of `1`; consumers may renormalize within this tolerance.
+13. When `editState` is present, its `objects` has exactly one entry per runtime object, and each edit grid contains its object's runtime grid: on every axis the edit `origin` is `<=` the runtime `origin`, and the edit `origin + bounds` is `>=` the runtime `origin + bounds`.
 
 ## Examples
 
@@ -407,6 +433,8 @@ interface VoxelJsonFile {
 
 interface Main {
   runtimeState: RuntimeState;
+  // optional editor state, aligned by index with the runtime objects
+  editState?: EditState;
   // user-defined extensions, conventionally vendor-keyed; the core format
   // assigns no meaning and guarantees nothing about its contents
   ext?: { [key: string]: JsonValue };
@@ -419,6 +447,19 @@ interface RuntimeState {
   hierarchyNodes: HierarchyNode[];
   // indices into hierarchyNodes; the scene's roots
   rootHierarchyNodes: number[];
+}
+
+// Optional editor state: one edit grid per runtime object, aligned by index.
+interface EditState {
+  objects: EditObject[];
+}
+
+// One object's edit grid (build volume), which must contain its runtime grid.
+interface EditObject {
+  // [X, Y, Z] size of the edit grid in voxels
+  bounds: Vec3;
+  // [X, Y, Z] translation from the placing node to the edit grid's min corner
+  origin: Vec3;
 }
 
 // Pure geometry; placed only by a hierarchy node that references it.

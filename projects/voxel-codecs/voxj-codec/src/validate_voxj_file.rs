@@ -49,6 +49,7 @@ fn validate_main(main: &VoxjMain) -> Result<()> {
         validate_node(index, node, main)?;
     }
     validate_roots(main)?;
+    validate_edit_state(main)?;
 
     // Acyclicity last, once every child index is known in range.
     if let Some(node) = first_cycle_node(&main.runtime_state.hierarchy_nodes) {
@@ -225,6 +226,37 @@ fn validate_roots(main: &VoxjMain) -> Result<()> {
     Ok(())
 }
 
+/// When present, edit state lists one edit grid per runtime object, and each
+/// edit grid contains its object's runtime grid on every axis.
+fn validate_edit_state(main: &VoxjMain) -> Result<()> {
+    let Some(edit_state) = &main.edit_state else {
+        return Ok(());
+    };
+    let objects = &main.runtime_state.objects;
+    if edit_state.objects.len() != objects.len() {
+        return Err(invalid(format!(
+            "edit state lists {} objects, but the document has {} runtime objects",
+            edit_state.objects.len(),
+            objects.len()
+        )));
+    }
+    for (index, (edit, object)) in edit_state.objects.iter().zip(objects).enumerate() {
+        for axis in 0..3 {
+            let edit_min = i64::from(edit.origin[axis]);
+            let edit_max = edit_min + i64::from(edit.bounds[axis]);
+            let run_min = i64::from(object.origin[axis]);
+            let run_max = run_min + i64::from(object.bounds[axis]);
+            if edit_min > run_min || edit_max < run_max {
+                return Err(invalid(format!(
+                    "edit grid {index} on axis {axis} ([{edit_min}, {edit_max})) does not \
+                     contain the runtime grid ([{run_min}, {run_max}))"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
 /// A node on a `child_nodes` cycle, or `None` if the hierarchy is acyclic. An
 /// iterative three-colour DFS, so a deep chain cannot overflow the stack: a back
 /// edge into an in-progress node is a cycle, revisiting a finished node is not.
@@ -326,6 +358,7 @@ mod tests {
                     hierarchy_nodes: vec![node(vec![1], vec![0]), node(vec![], vec![])],
                     root_hierarchy_nodes: vec![0],
                 },
+                edit_state: None,
                 ext: None,
             },
         }

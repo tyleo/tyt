@@ -44,6 +44,7 @@ mod tests {
                     }],
                     root_hierarchy_nodes: vec![0],
                 },
+                edit_state: None,
                 ext: None,
             },
         }

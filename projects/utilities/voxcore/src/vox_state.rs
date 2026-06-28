@@ -1,11 +1,8 @@
 use crate::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, Error, Result, VoxGcRemap,
-    VoxHierarchyNode, VoxObject, VoxPalette, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, Error, Result, VoxEditObject,
+    VoxEditState, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState, VoxValue,
 };
-use branded_id::{
-    IdVec, U32Id,
-    soa::{IdField, IdRemap, IdStruct},
-};
+use branded_id::{IdVec, U32Id, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
 
 /// The in-memory state of a voxel model: its objects, shared palettes, scene
@@ -18,107 +15,104 @@ use std::collections::{HashMap, HashSet};
 /// only within it. [`validate`](Self::validate) checks the cross-references.
 #[derive(Debug, Default)]
 pub struct VoxState {
-    /// Object id pool.
-    object_ids: IdStruct<BVoxObject>,
+    /// The runtime scene: objects, shared palettes, hierarchy, and roots.
+    runtime_state: VoxRuntimeState,
 
-    /// The objects.
-    objects: IdField<BVoxObject, VoxObject>,
-
-    /// Palette id pool.
-    palette_ids: IdStruct<BVoxPalette>,
-
-    /// The shared palettes.
-    palettes: IdField<BVoxPalette, VoxPalette>,
-
-    /// Hierarchy node id pool.
-    hierarchy_node_ids: IdStruct<BVoxHierarchyNode>,
-
-    /// The hierarchy nodes.
-    hierarchy_nodes: IdField<BVoxHierarchyNode, VoxHierarchyNode>,
-
-    /// The scene's roots: hierarchy node ids.
-    root_hierarchy_nodes: Vec<U32Id<BVoxHierarchyNode>>,
+    /// The editor state: one edit grid per runtime object.
+    edit_state: VoxEditState,
 
     /// Optional user-extension namespace; the core format assigns it no meaning.
     ext: Option<VoxValue>,
 }
 
 impl VoxState {
-    /// Adds an object, returning its id (its listing index).
+    /// Adds an object, returning its id (its listing index). Its edit grid is
+    /// initialized to the object's runtime grid (a zero-margin edit grid);
+    /// override it with [`set_edit_object`](Self::set_edit_object).
     pub fn add_object(&mut self, object: VoxObject) -> U32Id<BVoxObject> {
-        let id = self.object_ids.retain();
-        self.objects.retain(id, object);
+        let edit_object = VoxEditObject {
+            bounds: object.bounds(),
+            origin: object.origin(),
+        };
+        let id = self.runtime_state.object_ids.retain();
+        self.runtime_state.objects.retain(id, object);
+        self.edit_state.retain(id, edit_object);
         id
     }
 
     /// Number of objects.
     pub fn object_count(&self) -> usize {
-        self.object_ids.len()
+        self.runtime_state.object_ids.len()
     }
 
     /// The object `id`, or `None` if not one of this state's.
     pub fn object(&self, id: U32Id<BVoxObject>) -> Option<&VoxObject> {
         // Safety: retained ids have a value.
-        self.object_ids
+        self.runtime_state
+            .object_ids
             .is_retained(id)
-            .then(|| unsafe { self.objects.get(id) })
+            .then(|| unsafe { self.runtime_state.objects.get(id) })
     }
 
     /// Objects in id order, as `(id, object)`.
     pub fn iter_objects(&self) -> impl Iterator<Item = (U32Id<BVoxObject>, &VoxObject)> + '_ {
         // Safety: retained ids have a value.
-        self.object_ids
+        self.runtime_state
+            .object_ids
             .iter()
-            .map(move |id| (id, unsafe { self.objects.get(id) }))
+            .map(move |id| (id, unsafe { self.runtime_state.objects.get(id) }))
     }
 
     /// Adds a shared palette, returning its id (its listing index).
     pub fn add_palette(&mut self, palette: VoxPalette) -> U32Id<BVoxPalette> {
-        let id = self.palette_ids.retain();
-        self.palettes.retain(id, palette);
+        let id = self.runtime_state.palette_ids.retain();
+        self.runtime_state.palettes.retain(id, palette);
         id
     }
 
     /// Number of shared palettes.
     pub fn palette_count(&self) -> usize {
-        self.palette_ids.len()
+        self.runtime_state.palette_ids.len()
     }
 
     /// The palette `id`, or `None` if not one of this state's.
     pub fn palette(&self, id: U32Id<BVoxPalette>) -> Option<&VoxPalette> {
         // Safety: retained ids have a value.
-        self.palette_ids
+        self.runtime_state
+            .palette_ids
             .is_retained(id)
-            .then(|| unsafe { self.palettes.get(id) })
+            .then(|| unsafe { self.runtime_state.palettes.get(id) })
     }
 
     /// Palettes in id order, as `(id, palette)`.
     pub fn iter_palettes(&self) -> impl Iterator<Item = (U32Id<BVoxPalette>, &VoxPalette)> + '_ {
         // Safety: retained ids have a value.
-        self.palette_ids
+        self.runtime_state
+            .palette_ids
             .iter()
-            .map(move |id| (id, unsafe { self.palettes.get(id) }))
+            .map(move |id| (id, unsafe { self.runtime_state.palettes.get(id) }))
     }
 
     /// Adds a hierarchy node, returning its id (its listing index). Its
     /// references are checked by [`validate`](Self::validate), not here.
     pub fn add_hierarchy_node(&mut self, node: VoxHierarchyNode) -> U32Id<BVoxHierarchyNode> {
-        let id = self.hierarchy_node_ids.retain();
-        self.hierarchy_nodes.retain(id, node);
+        let id = self.runtime_state.hierarchy_node_ids.retain();
+        self.runtime_state.hierarchy_nodes.retain(id, node);
         id
     }
 
     /// Number of hierarchy nodes.
     pub fn hierarchy_node_count(&self) -> usize {
-        self.hierarchy_node_ids.len()
+        self.runtime_state.hierarchy_node_ids.len()
     }
 
     /// The hierarchy node `id`, or `None` if not one of this state's.
     pub fn hierarchy_node(&self, id: U32Id<BVoxHierarchyNode>) -> Option<&VoxHierarchyNode> {
         // Safety: retained ids have a value.
-        self.hierarchy_node_ids
+        self.runtime_state
+            .hierarchy_node_ids
             .is_retained(id)
-            .then(|| unsafe { self.hierarchy_nodes.get(id) })
+            .then(|| unsafe { self.runtime_state.hierarchy_nodes.get(id) })
     }
 
     /// Hierarchy nodes in id order, as `(id, node)`.
@@ -126,26 +120,27 @@ impl VoxState {
         &self,
     ) -> impl Iterator<Item = (U32Id<BVoxHierarchyNode>, &VoxHierarchyNode)> + '_ {
         // Safety: retained ids have a value.
-        self.hierarchy_node_ids
+        self.runtime_state
+            .hierarchy_node_ids
             .iter()
-            .map(move |id| (id, unsafe { self.hierarchy_nodes.get(id) }))
+            .map(move |id| (id, unsafe { self.runtime_state.hierarchy_nodes.get(id) }))
     }
 
     /// The scene's roots: hierarchy node ids.
     pub fn root_hierarchy_nodes(&self) -> &[U32Id<BVoxHierarchyNode>] {
-        &self.root_hierarchy_nodes
+        &self.runtime_state.root_hierarchy_nodes
     }
 
     /// Replaces the scene's roots. Checked by [`validate`](Self::validate), not
     /// here.
     pub fn set_root_hierarchy_nodes(&mut self, roots: Vec<U32Id<BVoxHierarchyNode>>) {
-        self.root_hierarchy_nodes = roots;
+        self.runtime_state.root_hierarchy_nodes = roots;
     }
 
     /// Appends a root. Root uniqueness is checked by [`validate`](Self::validate),
     /// not here.
     pub fn push_root_hierarchy_node(&mut self, root: U32Id<BVoxHierarchyNode>) {
-        self.root_hierarchy_nodes.push(root);
+        self.runtime_state.root_hierarchy_nodes.push(root);
     }
 
     /// The user-extension value, or `None` if unset.
@@ -158,22 +153,51 @@ impl VoxState {
         self.ext = ext;
     }
 
+    /// The edit grid for object `id`, or `None` if `id` is not one of this
+    /// state's objects.
+    pub fn edit_object(&self, id: U32Id<BVoxObject>) -> Option<VoxEditObject> {
+        // Safety: a retained object id always has an edit grid.
+        self.runtime_state
+            .object_ids
+            .is_retained(id)
+            .then(|| unsafe { self.edit_state.get(id) })
+    }
+
+    /// Sets the edit grid for object `id`. `None`, changing nothing, if `id` is
+    /// not one of this state's objects. The edit grid is expected to contain the
+    /// object's runtime grid; that is checked by [`validate`](Self::validate),
+    /// not here.
+    pub fn set_edit_object(
+        &mut self,
+        id: U32Id<BVoxObject>,
+        edit_object: VoxEditObject,
+    ) -> Option<()> {
+        if !self.runtime_state.object_ids.is_retained(id) {
+            return None;
+        }
+        // Safety: the id is retained, so its edit grid is live.
+        unsafe { self.edit_state.set(id, edit_object) };
+        Some(())
+    }
+
     /// Removes object `id`, detaching it from every node's `child_objects`.
     /// `None`, changing nothing, if `id` is not one of this state's objects.
     /// Leaves a hole until [`gc`](Self::gc) renumbers for a deterministic save.
     pub fn remove_object(&mut self, id: U32Id<BVoxObject>) -> Option<()> {
-        if !self.object_ids.is_retained(id) {
+        if !self.runtime_state.object_ids.is_retained(id) {
             return None;
         }
-        let node_ids: Vec<_> = self.hierarchy_node_ids.iter().collect();
+        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
         for node_id in node_ids {
             // Safety: retained node ids have a value.
-            let node = unsafe { self.hierarchy_nodes.get_mut(node_id) };
+            let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
             node.child_objects.retain(|&object| object != id);
         }
-        // Safety: a retained object id has a value.
-        unsafe { self.objects.release(id) };
-        self.object_ids.release(id);
+        // Safety: a retained object id has a value; its edit grid is keyed by the
+        // same id, so it releases alongside.
+        unsafe { self.runtime_state.objects.release(id) };
+        unsafe { self.edit_state.release(id) };
+        self.runtime_state.object_ids.release(id);
         Some(())
     }
 
@@ -182,18 +206,18 @@ impl VoxState {
     /// `id` is not one of this state's palettes. Leaves a hole until
     /// [`gc`](Self::gc) renumbers.
     pub fn remove_palette(&mut self, id: U32Id<BVoxPalette>) -> Option<()> {
-        if !self.palette_ids.is_retained(id) {
+        if !self.runtime_state.palette_ids.is_retained(id) {
             return None;
         }
-        let object_ids: Vec<_> = self.object_ids.iter().collect();
+        let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
         for object_id in object_ids {
             // Safety: retained object ids have a value.
-            let object = unsafe { self.objects.get_mut(object_id) };
+            let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
             object.remove_palette_refs_to(id);
         }
         // Safety: a retained palette id has a value; its Drop frees its cells.
-        unsafe { self.palettes.release(id) };
-        self.palette_ids.release(id);
+        unsafe { self.runtime_state.palettes.release(id) };
+        self.runtime_state.palette_ids.release(id);
         Some(())
     }
 
@@ -202,19 +226,21 @@ impl VoxState {
     /// DAG). `None`, changing nothing, if `id` is not one of this state's nodes.
     /// Leaves a hole until [`gc`](Self::gc) renumbers.
     pub fn remove_hierarchy_node(&mut self, id: U32Id<BVoxHierarchyNode>) -> Option<()> {
-        if !self.hierarchy_node_ids.is_retained(id) {
+        if !self.runtime_state.hierarchy_node_ids.is_retained(id) {
             return None;
         }
-        let node_ids: Vec<_> = self.hierarchy_node_ids.iter().collect();
+        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
         for node_id in node_ids {
             // Safety: retained node ids have a value.
-            let node = unsafe { self.hierarchy_nodes.get_mut(node_id) };
+            let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
             node.child_nodes.retain(|&child| child != id);
         }
-        self.root_hierarchy_nodes.retain(|&root| root != id);
+        self.runtime_state
+            .root_hierarchy_nodes
+            .retain(|&root| root != id);
         // Safety: a retained node id has a value.
-        unsafe { self.hierarchy_nodes.release(id) };
-        self.hierarchy_node_ids.release(id);
+        unsafe { self.runtime_state.hierarchy_nodes.release(id) };
+        self.runtime_state.hierarchy_node_ids.release(id);
         Some(())
     }
 
@@ -230,24 +256,24 @@ impl VoxState {
         cell: U32Id<BVoxPaletteCell>,
         replacement: U32Id<BVoxPaletteCell>,
     ) -> Option<()> {
-        if !self.palette_ids.is_retained(palette) || cell == replacement {
+        if !self.runtime_state.palette_ids.is_retained(palette) || cell == replacement {
             return None;
         }
         // Safety: the palette id is retained.
-        let palette_ref = unsafe { self.palettes.get(palette) };
+        let palette_ref = unsafe { self.runtime_state.palettes.get(palette) };
         if !palette_ref.contains_cell(cell) || !palette_ref.contains_cell(replacement) {
             return None;
         }
 
-        let object_ids: Vec<_> = self.object_ids.iter().collect();
+        let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
         for object_id in object_ids {
             // Safety: retained object ids have a value.
-            let object = unsafe { self.objects.get_mut(object_id) };
+            let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
             object.repaint_cell(palette, cell, replacement);
         }
 
         // Safety: the palette id is retained; the cell is one of its cells.
-        unsafe { self.palettes.get_mut(palette) }.remove_cell(cell);
+        unsafe { self.runtime_state.palettes.get_mut(palette) }.remove_cell(cell);
         Some(())
     }
 
@@ -268,46 +294,50 @@ impl VoxState {
         // Compact each palette's own pools first, so the cell relabelings are
         // ready when object samples are translated below. They are indexed by old
         // palette id, so the column covers the palette pool's whole id space.
-        let palette_id_space = self.palette_ids.peek_next_fresh().to_u32() as usize;
+        let palette_id_space = self.runtime_state.palette_ids.peek_next_fresh().to_u32() as usize;
         let mut cell_remaps: IdVec<BVoxPalette, IdRemap<BVoxPaletteCell, u32>> =
             IdVec::from_vec((0..palette_id_space).map(|_| IdRemap::default()).collect());
-        for palette_id in self.palette_ids.iter().collect::<Vec<_>>() {
+        for palette_id in self.runtime_state.palette_ids.iter().collect::<Vec<_>>() {
             // Safety: retained palette ids have a value.
-            let cell_remap = unsafe { self.palettes.get_mut(palette_id) }.gc();
+            let cell_remap = unsafe { self.runtime_state.palettes.get_mut(palette_id) }.gc();
             cell_remaps[palette_id.to_usize_id()] = cell_remap;
         }
 
         // Compact the palette pool.
-        let palette_remap = self.palette_ids.gc();
+        let palette_remap = self.runtime_state.palette_ids.gc();
         // Safety: the palette column was in sync with the pre-gc palette pool, and
         // nothing has retained or released since.
-        unsafe { self.palettes.gc(&palette_remap) };
+        unsafe { self.runtime_state.palettes.gc(&palette_remap) };
 
         // Rewrite each object's palette references and sample cells, then compact
         // its own reference pool.
-        let object_ids: Vec<_> = self.object_ids.iter().collect();
+        let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
         for object_id in object_ids {
             // Safety: retained object ids have a value.
-            unsafe { self.objects.get_mut(object_id) }.gc(&palette_remap, &cell_remaps);
+            unsafe { self.runtime_state.objects.get_mut(object_id) }
+                .gc(&palette_remap, &cell_remaps);
         }
 
         // Compact the object pool.
-        let object_remap = self.object_ids.gc();
+        let object_remap = self.runtime_state.object_ids.gc();
         // Safety: the object column was in sync with the pre-gc object pool, and
         // nothing has retained or released since.
-        unsafe { self.objects.gc(&object_remap) };
+        unsafe { self.runtime_state.objects.gc(&object_remap) };
+        // The edit column is keyed by object id, so it compacts with the same
+        // remap.
+        unsafe { self.edit_state.gc(&object_remap) };
 
         // Compact the node pool, then translate child links and roots, which point
         // at the relabeled nodes and objects.
-        let node_remap = self.hierarchy_node_ids.gc();
+        let node_remap = self.runtime_state.hierarchy_node_ids.gc();
         // Safety: the node column was in sync with the pre-gc node pool, and
         // nothing has retained or released since.
-        unsafe { self.hierarchy_nodes.gc(&node_remap) };
+        unsafe { self.runtime_state.hierarchy_nodes.gc(&node_remap) };
 
-        let node_ids: Vec<_> = self.hierarchy_node_ids.iter().collect();
+        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
         for node_id in node_ids {
             // Safety: retained node ids have a value.
-            let node = unsafe { self.hierarchy_nodes.get_mut(node_id) };
+            let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
             for child in &mut node.child_nodes {
                 *child = node_remap
                     .new_id(*child)
@@ -320,7 +350,7 @@ impl VoxState {
             }
         }
 
-        for root in &mut self.root_hierarchy_nodes {
+        for root in &mut self.runtime_state.root_hierarchy_nodes {
             *root = node_remap
                 .new_id(*root)
                 .expect("a root is live in a valid state");
@@ -455,8 +485,8 @@ impl VoxState {
         }
 
         // Roots.
-        let mut seen_roots = HashSet::with_capacity(self.root_hierarchy_nodes.len());
-        for &root in &self.root_hierarchy_nodes {
+        let mut seen_roots = HashSet::with_capacity(self.runtime_state.root_hierarchy_nodes.len());
+        for &root in &self.runtime_state.root_hierarchy_nodes {
             if self.hierarchy_node(root).is_none() {
                 return Err(Error::Root {
                     root: root.to_u32(),
@@ -489,7 +519,7 @@ impl VoxState {
 
         // Retained node ids and a lookup from id to its position here, so a holed
         // pool (ids not contiguous from zero) is handled the same as a packed one.
-        let node_ids: Vec<_> = self.hierarchy_node_ids.iter().collect();
+        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
         let index_of: HashMap<u32, usize> = node_ids
             .iter()
             .enumerate()
@@ -509,7 +539,8 @@ impl VoxState {
                 let node_id = node_ids[node];
                 let next_child = {
                     // Safety: `node_id` is a retained node id.
-                    let children = &unsafe { self.hierarchy_nodes.get(node_id) }.child_nodes;
+                    let children =
+                        &unsafe { self.runtime_state.hierarchy_nodes.get(node_id) }.child_nodes;
                     (cursor < children.len()).then(|| children[cursor].to_u32())
                 };
                 match next_child {
@@ -537,48 +568,13 @@ impl VoxState {
         None
     }
 
-    /// Deep copy, rebuilding every column against fresh id pools since the SoA
-    /// types can't derive `Clone`.
+    /// Deep copy. The runtime scene rebuilds its columns against fresh id pools;
+    /// the edit column is `Copy`, so it clones directly.
     pub fn clone_state(&self) -> Self {
-        let mut objects = IdField::new();
-        for id in self.object_ids.iter() {
-            // Safety: retained ids have a value.
-            objects.retain(id, unsafe { self.objects.get(id) }.clone_object());
-        }
-
-        let mut palettes = IdField::new();
-        for id in self.palette_ids.iter() {
-            // Safety: retained ids have a value.
-            palettes.retain(id, unsafe { self.palettes.get(id) }.clone_palette());
-        }
-
-        let mut hierarchy_nodes = IdField::new();
-        for id in self.hierarchy_node_ids.iter() {
-            // Safety: retained ids have a value.
-            hierarchy_nodes.retain(id, unsafe { self.hierarchy_nodes.get(id) }.clone());
-        }
-
         Self {
-            object_ids: self.object_ids.clone(),
-            objects,
-            palette_ids: self.palette_ids.clone(),
-            palettes,
-            hierarchy_node_ids: self.hierarchy_node_ids.clone(),
-            hierarchy_nodes,
-            root_hierarchy_nodes: self.root_hierarchy_nodes.clone(),
+            runtime_state: self.runtime_state.clone_runtime_state(),
+            edit_state: self.edit_state.clone(),
             ext: self.ext.clone(),
-        }
-    }
-}
-
-impl Drop for VoxState {
-    fn drop(&mut self) {
-        // Safety: each column holds a value for every id in its pool; the fields
-        // free their own storage on drop.
-        unsafe {
-            self.objects.release_all(&self.object_ids);
-            self.palettes.release_all(&self.palette_ids);
-            self.hierarchy_nodes.release_all(&self.hierarchy_node_ids);
         }
     }
 }
@@ -587,10 +583,10 @@ impl Drop for VoxState {
 mod tests {
     use crate::{
         BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, BVoxPaletteRef,
-        Error, VoxHierarchyNode, VoxObject, VoxPalette, VoxState, VoxValue,
+        Error, VoxEditObject, VoxHierarchyNode, VoxObject, VoxPalette, VoxState, VoxValue,
     };
     use branded_id::U32Id;
-    use ty_math::{TyQuaternion, TyVector3, TyVector3U32};
+    use ty_math::{TyQuaternion, TyVector3, TyVector3I32, TyVector3U32};
 
     fn node_id(index: u32) -> U32Id<BVoxHierarchyNode> {
         U32Id::from_u32(index)
@@ -1002,5 +998,44 @@ mod tests {
             state.remove_palette(U32Id::<BVoxPalette>::from_u32(0)),
             None
         );
+    }
+
+    #[test]
+    fn edit_objects_default_to_the_runtime_grid_and_survive_gc() {
+        let mut state = VoxState::default();
+        let a =
+            state.add_object(VoxObject::new("a".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap());
+        let b =
+            state.add_object(VoxObject::new("b".to_owned(), TyVector3U32::new(3, 3, 3)).unwrap());
+
+        // A new object's edit grid is its runtime grid (zero margin).
+        assert_eq!(
+            state.edit_object(a),
+            Some(VoxEditObject {
+                bounds: TyVector3U32::new(2, 1, 1),
+                origin: TyVector3I32::default(),
+            })
+        );
+
+        // Give `b` a distinct edit grid carrying margin.
+        let b_edit = VoxEditObject {
+            bounds: TyVector3U32::new(5, 5, 5),
+            origin: TyVector3I32::new(-1, -1, -1),
+        };
+        assert_eq!(state.set_edit_object(b, b_edit), Some(()));
+
+        // Remove `a` and gc: `b` renumbers to 0 and its edit grid moves with it.
+        assert_eq!(state.remove_object(a), Some(()));
+        assert_eq!(state.edit_object(a), None);
+        state.gc();
+
+        let b0 = U32Id::<BVoxObject>::from_u32(0);
+        assert_eq!(state.object(b0).unwrap().name(), "b");
+        assert_eq!(state.edit_object(b0), Some(b_edit));
+
+        // An unknown id has no edit grid, and setting one is rejected.
+        let unknown = U32Id::<BVoxObject>::from_u32(9);
+        assert_eq!(state.edit_object(unknown), None);
+        assert_eq!(state.set_edit_object(unknown, b_edit), None);
     }
 }

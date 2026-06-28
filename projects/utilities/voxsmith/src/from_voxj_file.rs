@@ -3,7 +3,8 @@ use crate::{
     vox_palette_from_voxj_palette, vox_value_from_voxj_value,
 };
 use branded_id::U32Id;
-use voxcore::VoxState;
+use ty_math::{TyVector3I32, TyVector3U32};
+use voxcore::{VoxEditObject, VoxState};
 use voxj::VoxjFile;
 use voxj_codec::{decode_voxj_object, voxj_palette_cell_counts};
 
@@ -24,11 +25,21 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxState> {
         state.add_palette(vox_palette_from_voxj_palette(palette)?);
     }
 
-    for object in &main.runtime_state.objects {
+    for (index, object) in main.runtime_state.objects.iter().enumerate() {
         let cell_counts =
             voxj_palette_cell_counts(&object.palette_refs, &main.runtime_state.palettes)?;
         let decoded = decode_voxj_object(object, &cell_counts)?;
-        state.add_object(vox_object_from_voxj_decoded_object(&decoded)?);
+        let vox_object = vox_object_from_voxj_decoded_object(&decoded)?;
+        let id = state.add_object(vox_object);
+        if let Some(edit) = main.edit_state.as_ref().and_then(|e| e.objects.get(index)) {
+            state.set_edit_object(
+                id,
+                VoxEditObject {
+                    bounds: TyVector3U32::new(edit.bounds[0], edit.bounds[1], edit.bounds[2]),
+                    origin: TyVector3I32::new(edit.origin[0], edit.origin[1], edit.origin[2]),
+                },
+            );
+        }
     }
 
     for node in &main.runtime_state.hierarchy_nodes {
@@ -63,8 +74,9 @@ mod tests {
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
     use voxcore::{BVoxObject, BVoxPalette};
     use voxj::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject, VoxjPalette, VoxjPositionBlock,
-        VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValue,
+        VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject,
+        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjValue,
     };
     use voxj_codec::{decode_voxj_object, voxj_palette_cell_counts};
 
@@ -160,6 +172,7 @@ mod tests {
                     ],
                     root_hierarchy_nodes: vec![0],
                 },
+                edit_state: None,
                 ext: Some(VoxjValue::Object(VoxjMap(vec![(
                     "vendor".to_owned(),
                     VoxjValue::Array(vec![
@@ -197,6 +210,7 @@ mod tests {
                     ],
                     root_hierarchy_nodes: vec![0],
                 },
+                edit_state: None,
                 ext: base.main.ext.clone(),
             },
         }
@@ -217,6 +231,7 @@ mod tests {
     }
 
     fn assert_file_eq(got: &VoxjFile, want: &VoxjFile) {
+        assert_eq!(got.main.edit_state, want.main.edit_state);
         assert_eq!(got.main.ext, want.main.ext);
         let (got, want) = (&got.main.runtime_state, &want.main.runtime_state);
         assert_eq!(got.palettes, want.palettes);
@@ -237,6 +252,41 @@ mod tests {
     #[test]
     fn round_trips_through_vox_state() {
         let file = sample_file();
+        let state = from_voxj_file(&file).unwrap();
+        assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
+    }
+
+    /// A document whose edit grid differs from the runtime grid (carries margin)
+    /// round-trips the edit state through the VoxState and back.
+    #[test]
+    fn round_trips_edit_state() {
+        let file = VoxjFile {
+            version: 1,
+            main: VoxjMain {
+                runtime_state: VoxjRuntimeState {
+                    objects: vec![object(
+                        "o",
+                        vec![0],
+                        [2, 1, 1],
+                        vec![[0, 0, 0], [1, 0, 0]],
+                        vec![vec![0], vec![1]],
+                    )],
+                    palettes: vec![VoxjPalette {
+                        attributes: vec!["rgba".to_owned()],
+                        data: numbered_cells(2),
+                    }],
+                    hierarchy_nodes: Vec::new(),
+                    root_hierarchy_nodes: Vec::new(),
+                },
+                edit_state: Some(VoxjEditState {
+                    objects: vec![VoxjEditObject {
+                        bounds: [4, 2, 2],
+                        origin: [-1, 0, 0],
+                    }],
+                }),
+                ext: None,
+            },
+        };
         let state = from_voxj_file(&file).unwrap();
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
@@ -331,6 +381,7 @@ mod tests {
                     hierarchy_nodes: Vec::new(),
                     root_hierarchy_nodes: Vec::new(),
                 },
+                edit_state: None,
                 ext: None,
             },
         };
@@ -357,6 +408,7 @@ mod tests {
                     hierarchy_nodes: Vec::new(),
                     root_hierarchy_nodes: Vec::new(),
                 },
+                edit_state: None,
                 ext: None,
             },
         };

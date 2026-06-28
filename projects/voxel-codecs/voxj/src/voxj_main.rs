@@ -1,4 +1,4 @@
-use crate::{VoxjRuntimeState, VoxjValue};
+use crate::{VoxjEditState, VoxjRuntimeState, VoxjValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +9,14 @@ use serde::{Deserialize, Serialize};
 pub struct VoxjMain {
     /// The runtime scene: objects, palettes, hierarchy, and roots.
     pub runtime_state: VoxjRuntimeState,
+
+    /// Optional editor state, aligned by index with the runtime objects.
+    /// Absent in fully-runtime documents.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub edit_state: Option<VoxjEditState>,
 
     /// Optional namespace for user-defined extensions, conventionally
     /// vendor-keyed. The core format assigns it no meaning.
