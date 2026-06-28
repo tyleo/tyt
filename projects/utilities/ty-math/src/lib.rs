@@ -10,6 +10,7 @@ mod ty_transform_f64;
 mod ty_vector3;
 mod ty_vector3_f32;
 mod ty_vector3_f64;
+mod ty_vector3_i32;
 mod ty_vector3_u32;
 
 pub use ty_quaternion::*;
@@ -24,4 +25,5 @@ pub use ty_transform_f64::*;
 pub use ty_vector3::*;
 pub use ty_vector3_f32::*;
 pub use ty_vector3_f64::*;
+pub use ty_vector3_i32::*;
 pub use ty_vector3_u32::*;

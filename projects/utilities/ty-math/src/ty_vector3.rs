@@ -3,8 +3,8 @@ use std::ops::{Add, Mul, Sub};
 /// A 3D vector generic over its component type `T`.
 ///
 /// The component type defaults to `f64`, so `TyVector3` is the `f64` vector;
-/// see `TyVector3F32`, `TyVector3F64`, and `TyVector3U32` for the common
-/// instantiations.
+/// see `TyVector3F32`, `TyVector3F64`, `TyVector3I32`, and `TyVector3U32` for
+/// the common instantiations.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TyVector3<T = f64> {
     /// The `x` component.
