@@ -141,8 +141,7 @@ fn hilbert_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, V
             d
         })
         .collect();
-    let block =
-        VoxjPositionBlock::HilbertDeltaVarintBase64(BASE64.encode(encode_varint(&deltas)));
+    let block = VoxjPositionBlock::HilbertDeltaVarintBase64(BASE64.encode(encode_varint(&deltas)));
     (order, block)
 }
 
