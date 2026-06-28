@@ -19,6 +19,6 @@ pub enum VoxjPositionBlock {
 
     /// Base64 varint stream of prefix-sum deltas of each voxel's ascending 3D
     /// Hilbert index.
-    #[cfg_attr(feature = "serde", serde(rename = "hilbert_index-delta-varint-base64"))]
-    HilbertIndexDeltaVarintBase64(String),
+    #[cfg_attr(feature = "serde", serde(rename = "hilbert-delta-varint-base64"))]
+    HilbertDeltaVarintBase64(String),
 }

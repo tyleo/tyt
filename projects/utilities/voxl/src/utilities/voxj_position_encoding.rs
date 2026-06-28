@@ -10,6 +10,6 @@ pub enum VoxjPositionEncoding {
     #[value(name = "bitmap-base64")]
     BitmapBase64,
     /// Base64 varint deltas along a Hilbert curve.
-    #[value(name = "hilbert_index-delta-varint-base64")]
+    #[value(name = "hilbert-delta-varint-base64")]
     Hilbert,
 }

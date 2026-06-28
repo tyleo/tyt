@@ -72,7 +72,7 @@ An object is one voxel volume. It is pure geometry with no transform: it is plac
 
 `voxelPositions` and `voxelSamples` are encoded blocks (see [Voxel Encoding](#voxel-encoding)). Each voxel has a position `(x, y, z)` and one sample per referenced palette. The sample for palette `n` is a cell index into the object's `n`-th palette. The number of voxels is implicit: it is the number of positions decoded from `voxelPositions`. Positions within an object must be unique, and every voxel samples every palette.
 
-`bounds` is `[X, Y, Z]`, the object's size in voxels along each axis. Objects are authored from the origin, so every voxel position lies in `[0, X) x [0, Y) x [0, Z)`. `bounds` must contain the object but need not fit it tightly: each component is at least the maximum coordinate on that axis plus one, and may be larger to leave empty margin around the geometry (see [Validation](#validation)). `bounds` is required to decode `bitmap-base64` and `hilbert_index-delta-varint-base64`, so margin is not always free under those encodings: for `bitmap-base64`, changing `bounds` changes the canonical voxel order and forces re-encoding; for `hilbert_index-delta-varint-base64`, `bounds` enters only through `bits = max(1, bitLength(max(X, Y, Z) - 1))`, so margin that does not change `bits` is free but margin that does forces re-encoding (see [Voxel Order](#voxel-order)).
+`bounds` is `[X, Y, Z]`, the object's size in voxels along each axis. Objects are authored from the origin, so every voxel position lies in `[0, X) x [0, Y) x [0, Z)`. `bounds` must contain the object but need not fit it tightly: each component is at least the maximum coordinate on that axis plus one, and may be larger to leave empty margin around the geometry (see [Validation](#validation)). `bounds` is required to decode `bitmap-base64` and `hilbert-delta-varint-base64`, so margin is not always free under those encodings: for `bitmap-base64`, changing `bounds` changes the canonical voxel order and forces re-encoding; for `hilbert-delta-varint-base64`, `bounds` enters only through `bits = max(1, bitLength(max(X, Y, Z) - 1))`, so margin that does not change `bits` is free but margin that does forces re-encoding (see [Voxel Order](#voxel-order)).
 
 The position block fixes a single voxel order for the object, and the sample channels follow it voxel-for-voxel.
 
@@ -86,7 +86,7 @@ All base64 in this format uses the standard RFC 4648 alphabet, not base64url, wi
 
 1. `raw-json`: one `[x, y, z]` triple per voxel, in listing order: `[[x0, y0, z0], [x1, y1, z1], ...]`. An empty object has `data = []`.
 2. `bitmap-base64`: a dense occupancy bitmap. `data` is a standard base64 string with no line breaks. It encodes one occupancy bit per cell of the object's `bounds = [X, Y, Z]`, so positions are implicit and this encoding requires `bounds` to decode. The cell index is `k = x * Y * Z + y * Z + z`, iterating x outermost and z innermost over `0 <= x < X`, `0 <= y < Y`, `0 <= z < Z` with `X * Y * Z` cells total. Bit `k` is `1` if cell `k` is occupied. Bits are packed 8 per byte, MSB-first: cell `k` is bit `(7 - (k mod 8))` of byte `floor(k / 8)`. The last byte is zero-padded when `X * Y * Z` is not a multiple of 8; pad bits must be `0`. The base64 encodes exactly `ceil(X * Y * Z / 8)` bytes. The number of voxels is the number of set bits. An object with no set bits is empty; its `data` is `ceil(X * Y * Z / 8)` zero bytes for the given `bounds` (`""` when `bounds = [0, 0, 0]`). Best for dense objects, roughly >= 50% filled; valid at any density.
-3. `hilbert_index-delta-varint-base64`: a Hilbert-index delta list. `data` is a standard base64 string with no line breaks, encoding the deltas as an unsigned LEB128 varint stream (see the reference code in [Hilbert Reference Code](#hilbert-reference-code)). Each position `(x, y, z)` maps to one Hilbert index via the standard 3D Hilbert curve with `bits = max(1, bitLength(max(X, Y, Z) - 1))` taken from `bounds`. Axes map to Hilbert dimensions `(x, y, z) = (0, 1, 2)`, and the curve covers a `2 ^ bits` cube containing the bounds. Voxels are sorted by ascending index, and the encoded deltas are `[h0, h1 - h0, h2 - h1, ...]`; decode by base64-decoding to the varint stream, reading the deltas, prefix-summing to recover the indices, then Hilbert-decoding each. Every delta after the first is strictly positive. An empty object has `data = ""`. A good general-purpose encoding; strongest from sparse up through moderate density, and compact at any density because each delta is a small varint rather than a full index.
+3. `hilbert-delta-varint-base64`: a Hilbert-index delta list. `data` is a standard base64 string with no line breaks, encoding the deltas as an unsigned LEB128 varint stream (see the reference code in [Hilbert Reference Code](#hilbert-reference-code)). Each position `(x, y, z)` maps to one Hilbert index via the standard 3D Hilbert curve with `bits = max(1, bitLength(max(X, Y, Z) - 1))` taken from `bounds`. Axes map to Hilbert dimensions `(x, y, z) = (0, 1, 2)`, and the curve covers a `2 ^ bits` cube containing the bounds. Voxels are sorted by ascending index, and the encoded deltas are `[h0, h1 - h0, h2 - h1, ...]`; decode by base64-decoding to the varint stream, reading the deltas, prefix-summing to recover the indices, then Hilbert-decoding each. Every delta after the first is strictly positive. An empty object has `data = ""`. A good general-purpose encoding; strongest from sparse up through moderate density, and compact at any density because each delta is a small varint rather than a full index.
 
    Because the reference algorithm assembles and decodes a Hilbert index in a JS `number` (a double, exact only to `2 ^ 53`), this encoding requires `bits <= 17`, equivalently every `bounds` dimension `<= 131072`; a validator must reject larger grids, which must instead use `bitmap-base64` or `raw-json`.
 
@@ -100,7 +100,7 @@ All base64 in this format uses the standard RFC 4648 alphabet, not base64url, wi
 // are all occupied -> bits 1111 + 4 zero pad -> byte 0xF0.
 { "encoding": "bitmap-base64", "data": "8A==" }
 
-// hilbert_index-delta-varint-base64:
+// hilbert-delta-varint-base64:
 //
 // bits = 1
 //
@@ -112,7 +112,7 @@ All base64 in this format uses the standard RFC 4648 alphabet, not base64url, wi
 // (0, 0, 0), (0, 1, 0), (1, 1, 0), (1, 0, 0). This is a different voxel order
 // than the bitmap's raster order, so the two encodings need their sample
 // channels in different orders.
-{ "encoding": "hilbert_index-delta-varint-base64", "data": "AAMBAw==" }
+{ "encoding": "hilbert-delta-varint-base64", "data": "AAMBAw==" }
 ```
 
 ### Sample Encodings
@@ -150,7 +150,7 @@ The position block defines the object's single canonical voxel order, and the sa
 
 1. `raw-json` positions: listing order.
 2. `bitmap-base64` positions: ascending cell index `k` (raster order, z fastest).
-3. `hilbert_index-delta-varint-base64` positions: ascending Hilbert index.
+3. `hilbert-delta-varint-base64` positions: ascending Hilbert index.
 
 The same geometry generally orders differently under different position encodings, so re-encoding the position block changes the order and the sample channels must be regenerated to match.
 
@@ -159,7 +159,7 @@ The same geometry generally orders differently under different position encoding
 Position:
 
 1. `bitmap-base64`: dense objects. Smallest geometry when filled, and the fastest to decode.
-2. `hilbert_index-delta-varint-base64`: sparse objects, and any object whose color is spatially coherent that you want as small as possible. Hilbert order places neighboring voxels next to each other in the stream, which also lengthens the sample channel's runs and improves its compression. It costs more to decode.
+2. `hilbert-delta-varint-base64`: sparse objects, and any object whose color is spatially coherent that you want as small as possible. Hilbert order places neighboring voxels next to each other in the stream, which also lengthens the sample channel's runs and improves its compression. It costs more to decode.
 3. `raw-json`: hand-authored or tiny objects, where readability matters more than size.
 
 Sample:
@@ -171,7 +171,7 @@ Sample:
 Favored pairs:
 
 1. `bitmap-base64` + `rle-json`: coherent color, dense or speed-sensitive. The fast default.
-2. `hilbert_index-delta-varint-base64` + `rle-json`: coherent color when you want the smallest (larger or sparser models); slower to decode.
+2. `hilbert-delta-varint-base64` + `rle-json`: coherent color when you want the smallest (larger or sparser models); slower to decode.
 3. `bitmap-base64` + `packed-base64`: incoherent or many-color.
 
 Avoid pairing Hilbert positions with `packed-base64`: Hilbert order only helps by lengthening runs, which `packed-base64` does not use, so it costs decode time for no gain.
@@ -304,7 +304,7 @@ The scene's roots are exactly the nodes listed in `rootHierarchyNodes`. A node t
 3. Position `data` is well-formed:
    1. `raw-json` is `[x, y, z]` triples
    2. `bitmap-base64` base64-decodes to exactly `ceil(X * Y * Z / 8)` bytes, its pad bits are zero, and the decoded number of voxels equals the number of set bits
-   3. `hilbert_index-delta-varint-base64` `data` base64-decodes to an unsigned LEB128 varint stream of non-negative deltas, with every delta after the first strictly positive; `bits` derived from `bounds` is `<= 17` and equivalently every `bounds` dimension `<= 131072`; after decoding, every position lies in `[0, X) x [0, Y) x [0, Z)` and `bounds` is consistent with them
+   3. `hilbert-delta-varint-base64` `data` base64-decodes to an unsigned LEB128 varint stream of non-negative deltas, with every delta after the first strictly positive; `bits` derived from `bounds` is `<= 17` and equivalently every `bounds` dimension `<= 131072`; after decoding, every position lies in `[0, X) x [0, Y) x [0, Z)` and `bounds` is consistent with them
 4. After decoding, voxel positions within an object are unique.
 5. `bounds` is three non-negative integers and contains the decoded positions: for a non-empty object each component is at least that axis's maximum coordinate plus one; an empty object may carry any such `bounds`, canonically `[0, 0, 0]`.
 6. Sample arity matches `paletteRefs.length`:
@@ -414,7 +414,7 @@ interface VoxelObject {
   paletteRefs: number[];
   // [X, Y, Z] size in voxels; voxels occupy [0, X) x [0, Y) x [0, Z). Must
   // contain every voxel (per-axis >= max + 1). Required to decode bitmap-base64
-  // and hilbert_index-delta-varint-base64; margin is not always free under
+  // and hilbert-delta-varint-base64; margin is not always free under
   // those.
   bounds: Vec3;
   voxelPositions: PositionBlock;
@@ -438,7 +438,7 @@ type PositionBlock =
   // hilbertEncode/hilbertDecode), voxels sorted by ascending index; deltas as
   // an unsigned-LEB128 varint stream, base64-encoded. Requires bits <= 17
   // (every bounds dimension <= 131072).
-  | { encoding: "hilbert_index-delta-varint-base64"; data: string };
+  | { encoding: "hilbert-delta-varint-base64"; data: string };
 
 type SampleBlock =
   // One entry per voxel: that voxel's samples, one cell index per palette in
@@ -504,7 +504,7 @@ type Quat = [number, number, number, number];
 ### Hilbert Reference Code
 
 ```ts
-// Reference algorithm for `hilbert_index-delta-varint-base64`, as three
+// Reference algorithm for `hilbert-delta-varint-base64`, as three
 // independent encode/decode codecs (hilbert, delta, varint) plus a composition.
 // The block `data` is base64(varintEncode(deltaEncode(sortedHilbertIndices))).
 //

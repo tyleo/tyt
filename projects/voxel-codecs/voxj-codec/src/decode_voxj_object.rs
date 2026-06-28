@@ -58,7 +58,7 @@ fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> Result<Vec<[
                 .collect()
         }
 
-        VoxjPositionBlock::HilbertIndexDeltaVarintBase64(base64) => {
+        VoxjPositionBlock::HilbertDeltaVarintBase64(base64) => {
             let bits = hilbert_bits(bounds);
             let mut index = 0u64;
             decode_varint(&BASE64.decode(base64).map_err(Error::Base64)?)
