@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 
-/// Automatic encoding strategy that picks the block encodings for a `to-voxj`
+/// Automatic encoding strategy that picks the block encodings for a `to voxj`
 /// document.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjOptimize {

@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 
-/// Output container and printing form for a `to-voxj` document.
+/// Output container and printing form for a `to voxj` document.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjFormat {
     /// Compact `.voxj` JSON.

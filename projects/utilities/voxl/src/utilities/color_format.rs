@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 
-/// Where `to-vmax` stores object colors in the rebuilt `.vmax` package. Voxel
+/// Where `to vmax` stores object colors in the rebuilt `.vmax` package. Voxel
 /// Max uses either a color image or a color table in the material settings
 /// sidecar, but not both.
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]

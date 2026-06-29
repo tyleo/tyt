@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 
-/// Sample-block encoding for a `to-voxj` document.
+/// Sample-block encoding for a `to voxj` document.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjSampleEncoding {
     /// Raw per-palette sample channels in JSON.

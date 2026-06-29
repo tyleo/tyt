@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 /// Converts a voxel file to the Voxel JSON format.
 #[derive(Clone, Debug, Parser)]
-#[command(name = "to-voxj")]
-pub struct ToVoxj {
+#[command(name = "voxj")]
+pub struct Voxj {
     /// The input voxel file, in any supported format.
     #[arg(value_name = "input")]
     input: PathBuf,
@@ -67,7 +67,7 @@ pub struct ToVoxj {
     edit_state: EditState,
 }
 
-impl ToVoxj {
+impl Voxj {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let encoding = match self.optimize {
             Some(VoxjOptimize::Size) => VoxjEncoding::Smallest,

@@ -1,11 +1,15 @@
-mod to_goxl;
-mod to_mvox;
-mod to_qbcl;
-mod to_vmax;
-mod to_voxj;
+mod goxl;
+mod mvox;
+mod qbcl;
+mod to;
+mod to_command;
+mod vmax;
+mod voxj;
 
-pub use to_goxl::*;
-pub use to_mvox::*;
-pub use to_qbcl::*;
-pub use to_vmax::*;
-pub use to_voxj::*;
+pub use goxl::*;
+pub use mvox::*;
+pub use qbcl::*;
+pub use to::*;
+pub use to_command::*;
+pub use vmax::*;
+pub use voxj::*;

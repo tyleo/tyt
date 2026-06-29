@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 /// Converts a voxel file to the Qubicle format.
 #[derive(Clone, Debug, Parser)]
-#[command(name = "to-qbcl")]
-pub struct ToQbcl {
+#[command(name = "qbcl")]
+pub struct Qbcl {
     /// The input voxel file, in any supported format.
     #[arg(value_name = "input")]
     input: PathBuf,
@@ -19,7 +19,7 @@ pub struct ToQbcl {
     from: Option<Format>,
 }
 
-impl ToQbcl {
+impl Qbcl {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         dependencies.to_qbcl(&self.input, self.from, &self.output)
     }

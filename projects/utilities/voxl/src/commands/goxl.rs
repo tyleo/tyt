@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 /// Converts a voxel file to the Goxel format.
 #[derive(Clone, Debug, Parser)]
-#[command(name = "to-goxl")]
-pub struct ToGoxl {
+#[command(name = "goxl")]
+pub struct Goxl {
     /// The input voxel file, in any supported format.
     #[arg(value_name = "input")]
     input: PathBuf,
@@ -19,7 +19,7 @@ pub struct ToGoxl {
     from: Option<Format>,
 }
 
-impl ToGoxl {
+impl Goxl {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         dependencies.to_goxl(&self.input, self.from, &self.output)
     }

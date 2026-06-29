@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 
-/// Position-block encoding for a `to-voxj` document.
+/// Position-block encoding for a `to voxj` document.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjPositionEncoding {
     /// Raw `[x, y, z]` triples in JSON.

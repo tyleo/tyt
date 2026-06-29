@@ -4,8 +4,8 @@ use std::path::PathBuf;
 
 /// Converts a voxel file to the MagicaVoxel format.
 #[derive(Clone, Debug, Parser)]
-#[command(name = "to-mvox")]
-pub struct ToMvox {
+#[command(name = "mvox")]
+pub struct Mvox {
     /// The input voxel file, in any supported format.
     #[arg(value_name = "input")]
     input: PathBuf,
@@ -19,7 +19,7 @@ pub struct ToMvox {
     from: Option<Format>,
 }
 
-impl ToMvox {
+impl Mvox {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         dependencies.to_mvox(&self.input, self.from, &self.output)
     }
