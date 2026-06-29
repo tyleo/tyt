@@ -15,8 +15,6 @@ required-features = ["bin"]
 [dependencies]
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
-tyt-common = { version = "0.1.0" }
-tyt-injection = { version = "0.1.0", optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
 voxcore = { version = "0.1.0", optional = true }
 voxj-codec = { version = "0.1.0", optional = true }
@@ -25,7 +23,6 @@ voxsmith = { version = "0.1.0", optional = true }
 [features]
 default = ["impl"]
 impl = [
-    "dep:tyt-injection",
     "dep:vmax-codec",
     "dep:voxcore",
     "dep:voxj-codec",

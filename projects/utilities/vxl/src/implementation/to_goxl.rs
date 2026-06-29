@@ -1,5 +1,5 @@
 use crate::{Format, Result, implementation};
-use std::path::Path;
+use std::{fs, path::Path};
 use voxsmith::to_goxl_bytes;
 
 /// Converts the voxel file at `input` into a Goxel `.gox` file at `output`,
@@ -8,6 +8,6 @@ use voxsmith::to_goxl_bytes;
 pub fn to_goxl(input: &Path, from: Option<Format>, output: &Path) -> Result<()> {
     let state = implementation::load_state(input, from)?;
     let bytes = to_goxl_bytes(&state)?;
-    tyt_injection::write_file(output, &bytes)?;
+    fs::write(output, &bytes)?;
     Ok(())
 }

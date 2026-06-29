@@ -51,7 +51,7 @@ pub fn to_vmax(
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        Ok(tyt_injection::write_file(&path, bytes)?)
+        Ok(fs::write(&path, bytes)?)
     })?;
     Ok(())
 }

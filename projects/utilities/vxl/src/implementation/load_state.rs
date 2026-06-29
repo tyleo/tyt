@@ -1,7 +1,8 @@
 use crate::{Format, Result};
 use std::{
-    io::{Error as IOError, ErrorKind},
-    path::Path,
+    fs,
+    io::{self, Error as IOError, ErrorKind},
+    path::{Path, PathBuf},
 };
 use vmax_codec::from_vmax_package;
 use voxcore::VoxMain;
@@ -15,10 +16,10 @@ use voxsmith::{
 /// voxsmith; Voxel Max reads the whole `.vmax` package directory first.
 pub fn load_state(input: &Path, from: Option<Format>) -> Result<VoxMain> {
     let state = match resolve(input, from)? {
-        Format::Voxj => from_voxj_bytes(&tyt_injection::read_file(input)?)?,
-        Format::MVox => from_mvox_bytes(&tyt_injection::read_file(input)?)?,
-        Format::Goxl => from_goxl_bytes(&tyt_injection::read_file(input)?)?,
-        Format::Qbcl => from_qbcl_bytes(&tyt_injection::read_file(input)?)?,
+        Format::Voxj => from_voxj_bytes(&fs::read(input)?)?,
+        Format::MVox => from_mvox_bytes(&fs::read(input)?)?,
+        Format::Goxl => from_goxl_bytes(&fs::read(input)?)?,
+        Format::Qbcl => from_qbcl_bytes(&fs::read(input)?)?,
         Format::VMax => {
             // Read the whole package into the lossless Voxel Max model, then
             // load it into voxcore. List every package-relative path,
@@ -28,12 +29,12 @@ pub fn load_state(input: &Path, from: Option<Format>) -> Result<VoxMain> {
             let serde = from_vmax_package(
                 || {
                     let mut paths = Vec::new();
-                    for entry in tyt_injection::list_dir(input)? {
+                    for entry in list_dir(input)? {
                         let Some(name) = entry.file_name().and_then(|n| n.to_str()) else {
                             continue;
                         };
                         if entry.is_dir() {
-                            for child in tyt_injection::list_dir(&entry)? {
+                            for child in list_dir(&entry)? {
                                 if let Some(child) = child.file_name().and_then(|n| n.to_str()) {
                                     paths.push(format!("{name}/{child}"));
                                 }
@@ -44,7 +45,7 @@ pub fn load_state(input: &Path, from: Option<Format>) -> Result<VoxMain> {
                     }
                     Ok(paths)
                 },
-                |name| match tyt_injection::read_file(&input.join(name)) {
+                |name| match fs::read(input.join(name)) {
                     Ok(bytes) => Ok(Some(bytes)),
                     Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
                     Err(e) => Err(e.into()),
@@ -72,4 +73,13 @@ fn resolve(input: &Path, from: Option<Format>) -> Result<Format> {
             .into()
         }),
     }
+}
+
+/// Returns the entries of `path`, sorted by path.
+fn list_dir(path: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut paths: Vec<PathBuf> = fs::read_dir(path)?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .collect();
+    paths.sort();
+    Ok(paths)
 }

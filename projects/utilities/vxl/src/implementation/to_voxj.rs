@@ -2,7 +2,7 @@ use crate::{
     EditState, Format, Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding,
     implementation,
 };
-use std::path::Path;
+use std::{fs, path::Path};
 use voxj_codec::{
     PositionEncoding, SampleEncoding, to_voxj_file_bytes, to_voxj_pretty_file_bytes,
     to_voxjz_file_bytes,
@@ -35,7 +35,7 @@ pub fn to_voxj(
         VoxjFormat::PrettyJson => to_voxj_pretty_file_bytes(&file)?,
         VoxjFormat::Zip => to_voxjz_file_bytes(&file)?,
     };
-    tyt_injection::write_file(output, &bytes)?;
+    fs::write(output, &bytes)?;
     Ok(())
 }
 
