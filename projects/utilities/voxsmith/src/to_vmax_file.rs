@@ -448,13 +448,14 @@ fn push_placement<'a>(
     let ext_id = synth_uuid(*counter);
     *counter += 1;
     // The content box and placement are derived from the native bounds and node
-    // transform on write, so a synthesized node carries only identity rotation and
-    // the anchor tokens; its parent links this occurrence's id.
+    // transform on write, so a synthesized node carries the default anchor tokens; its
+    // rotation is encoded from the node's live quaternion, and its parent links this
+    // occurrence's id.
     let ext = VoxelMaxNode {
         id: ext_id.clone(),
         parent_id,
         index: None,
-        rotation: Some(IDENTITY_AXIS_ANGLE),
+        rotation: Some(axis_angle(node.transform.rotation)),
         center: None,
         bounds_min: None,
         bounds_max: None,
@@ -936,6 +937,19 @@ fn node_ind(ext_node: &VoxelMaxNode, is_group: bool, counter: &mut i64) -> [i64;
 fn ext_rotation(ext_node: &VoxelMaxNode) -> TyQuaternionF64 {
     let [x, y, z, angle] = ext_node.rotation.unwrap_or(IDENTITY_AXIS_ANGLE);
     TyQuaternionF64::from_axis_angle(TyVector3F64::new(x, y, z), angle)
+}
+
+/// The `[x, y, z, angle]` axis-angle that reproduces a quaternion rotation, the
+/// inverse of [`ext_rotation`]. A synthesized node has no preserved `t_r`, so its
+/// rotation is encoded from the live quaternion; feeding the result back through
+/// [`ext_rotation`] (and Voxel Max's own decode) recovers the same rotation.
+fn axis_angle(rotation: TyQuaternionF64) -> [f64; 4] {
+    let (axis, angle) = rotation.to_axis_angle();
+    if angle == 0.0 {
+        // No rotation: match Voxel Max's `[0, 0, 0, 0]` rather than emit a bare axis.
+        return IDENTITY_AXIS_ANGLE;
+    }
+    [axis.x, axis.y, axis.z, angle]
 }
 
 /// Recovers an object's `t_p`, the inverse of the read path's `object_transform`. It
@@ -1906,10 +1920,11 @@ mod tests {
         assert_eq!(world_voxels(&reloaded), BTreeSet::from([([0, 0, 0], red)]));
     }
 
-    /// Synthesis drops node rotation to identity but keeps translation and scale,
-    /// the documented placement loss of a bare scene.
+    /// Synthesis encodes the node's quaternion rotation back to `t_r`, so rotation
+    /// survives alongside translation and scale; the lone voxel still renders at its
+    /// original world point.
     #[test]
-    fn drops_rotation_but_keeps_scale_and_translation() {
+    fn keeps_rotation_scale_and_translation() {
         let mut state = VoxState::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         state.add_object(color_object(
@@ -1917,9 +1932,11 @@ mod tests {
             TyVector3U32::new(1, 1, 1),
             &[([0, 0, 0], 0)],
         ));
+        let rotation =
+            TyQuaternionF64::from_axis_angle(TyVector3F64::new(0.0, 0.0, 1.0), 90f64.to_radians());
         let transform = TyTransformF64::new(
             TyVector3F64::new(7.0, 0.0, 0.0),
-            TyQuaternionF64::from_axis_angle(TyVector3F64::new(0.0, 0.0, 1.0), 90f64.to_radians()),
+            rotation,
             TyVector3F64::new(2.0, 1.0, 1.0),
         );
         state.add_hierarchy_node(object_node("o", 0, transform));
@@ -1929,21 +1946,27 @@ mod tests {
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         let reloaded = from_vmax_file(&file).unwrap();
         let node = reloaded.hierarchy_node(U32Id::from_u32(0)).unwrap();
-        assert_eq!(node.transform.rotation, TyQuaternionF64::identity());
+
+        // The axis-angle round-trip reproduces the rotation to floating-point noise.
+        let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        let r = node.transform.rotation;
+        assert!(close(r.x, rotation.x) && close(r.y, rotation.y));
+        assert!(close(r.z, rotation.z) && close(r.w, rotation.w));
         assert_eq!(node.transform.scale, TyVector3F64::new(2.0, 1.0, 1.0));
-        // node.position is now the content-center pivot, so the translation is kept
-        // at the world level: the lone voxel still renders where the grid sits,
-        // position + scale * (origin + local), with local at the grid corner.
+
+        // node.position is the content-center pivot and the rotation now applies to
+        // the grid, so the lone voxel still renders at its original world point:
+        // position + R * (scale * (origin + local)), with local at the grid corner.
         let object = reloaded.object(U32Id::from_u32(0)).unwrap();
         let origin = object.origin();
-        let p = node.transform.position;
         let s = node.transform.scale;
-        let world = TyVector3F64::new(
-            p.x + s.x * origin.x as f64,
-            p.y + s.y * origin.y as f64,
-            p.z + s.z * origin.z as f64,
+        let local = TyVector3F64::new(
+            s.x * origin.x as f64,
+            s.y * origin.y as f64,
+            s.z * origin.z as f64,
         );
-        assert_eq!(world, TyVector3F64::new(7.0, 0.0, 0.0));
+        let world = node.transform.position + r.rotate(local);
+        assert!(close(world.x, 7.0) && close(world.y, 0.0) && close(world.z, 0.0));
     }
 
     /// A material palette survives synthesis across every color format, and the

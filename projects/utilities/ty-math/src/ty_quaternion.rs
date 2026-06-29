@@ -57,6 +57,20 @@ macro_rules! impl_ty_quaternion_float {
                 }
             }
 
+            /// Decomposes this unit quaternion into a rotation `axis` of unit
+            /// length and an `angle` in radians, the inverse of
+            /// [`from_axis_angle`](Self::from_axis_angle). A near-zero rotation has
+            /// no defined axis, so it yields the `x` axis with a zero angle.
+            pub fn to_axis_angle(self) -> (TyVector3<$t>, $t) {
+                let axis = TyVector3::new(self.x, self.y, self.z);
+                let length = axis.magnitude();
+                if length < 1e-12 {
+                    return (TyVector3::new(1.0, 0.0, 0.0), 0.0);
+                }
+                let angle = 2.0 * length.atan2(self.w);
+                (axis * (1.0 / length), angle)
+            }
+
             /// Rotates `v` by this quaternion, taken to be unit length.
             pub fn rotate(self, v: TyVector3<$t>) -> TyVector3<$t> {
                 let axis = TyVector3::new(self.x, self.y, self.z);
@@ -104,6 +118,27 @@ mod tests {
             TyQuaternionF64::from_axis_angle(TyVector3F64::new(0.0, 0.0, 5.0), PI / 2.0);
         assert!(close(quaternion.x, 0.0) && close(quaternion.y, 0.0));
         assert!(close(quaternion.z, FRAC_1_SQRT_2) && close(quaternion.w, FRAC_1_SQRT_2));
+    }
+
+    #[test]
+    fn to_axis_angle_inverts_from_axis_angle() {
+        let axis = TyVector3F64::new(1.0, 2.0, 3.0);
+        let quaternion = TyQuaternionF64::from_axis_angle(axis, 1.2);
+        let (recovered, angle) = quaternion.to_axis_angle();
+        // The axis returns unit length along the original direction, the angle exact.
+        let unit = axis * (1.0 / axis.magnitude());
+        assert!(close(recovered.x, unit.x) && close(recovered.y, unit.y));
+        assert!(close(recovered.z, unit.z) && close(angle, 1.2));
+        // Re-encoding reproduces the same quaternion.
+        let again = TyQuaternionF64::from_axis_angle(recovered, angle);
+        assert!(close(again.x, quaternion.x) && close(again.y, quaternion.y));
+        assert!(close(again.z, quaternion.z) && close(again.w, quaternion.w));
+    }
+
+    #[test]
+    fn to_axis_angle_of_the_identity_is_a_zero_angle() {
+        let (_, angle) = TyQuaternionF64::identity().to_axis_angle();
+        assert!(close(angle, 0.0));
     }
 
     #[test]
