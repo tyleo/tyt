@@ -11,8 +11,9 @@ pub struct VMaxSceneJsonFile {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub groups: Vec<VMaxGroup>,
 
-    /// Object nodes (voxel models).
-    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
+    /// Object nodes (voxel models). Always serialized, even when empty: Voxel Max
+    /// writes `objects: []` on every document and rejects one that omits the key, so
+    /// an object-less scene must keep it (unlike `groups`, which it omits when empty).
     pub objects: Vec<VMaxObject>,
 
     /// Codable scene version.
@@ -78,6 +79,10 @@ pub struct VMaxSceneJsonFile {
     /// Noise-reduction / denoise flag.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub nrn: Option<bool>,
+
+    /// Scene-level boolean flag present on some documents.
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub oie: Option<bool>,
 
     /// Outline intensity.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
