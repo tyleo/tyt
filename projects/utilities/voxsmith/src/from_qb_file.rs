@@ -1,15 +1,13 @@
-use crate::{
-    Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result, tighten, to_vox_value,
-};
+use crate::{Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result, to_vox_value};
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbZAxisOrientation};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
-    BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxObject, VoxPalette, VoxState, VoxValue,
+    BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValue,
 };
 
-/// Loads a decoded Qubicle Binary [`QbFile`] into a [`VoxState`].
+/// Loads a decoded Qubicle Binary [`QbFile`] into a [`VoxMain`].
 ///
 /// Each matrix becomes an object sharing one `rgb` palette, placed by a hierarchy
 /// node at the matrix's scene position. The state with no native voxcore home,
@@ -18,9 +16,9 @@ use voxcore::{
 /// exactly.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or if
-/// [`VoxState::validate`](voxcore::VoxState::validate) rejects the result.
-pub fn from_qb_file(file: &QbFile) -> Result<VoxState> {
-    let mut state = VoxState::default();
+/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
+pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
+    let mut state = VoxMain::default();
 
     let (palette, cells) = build_palette(file);
     let palette_id = state.add_palette(palette);
@@ -28,14 +26,12 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxState> {
     let mut matrices = Vec::with_capacity(file.matrices.len());
     let mut roots = Vec::with_capacity(file.matrices.len());
     for matrix in &file.matrices {
-        // The matrix grid may carry empty margin; the runtime object is tight, with
-        // the matrix grid kept as the object's edit grid (build volume). The
-        // visibility bytes are read from the original grid before tightening.
+        // The matrix grid becomes the object's build volume directly; it may carry
+        // empty margin around the live voxels. The visibility bytes are read from
+        // that same grid.
         let object = build_object(matrix, palette_id, &cells)?;
         let visibility = visibility_of(&object, matrix);
-        let (object, edit) = tighten(&object);
         let object_id = state.add_object(object);
-        state.set_edit_object(object_id, edit);
         let node = VoxHierarchyNode {
             name: matrix.name.clone(),
             child_nodes: Vec::new(),
@@ -181,7 +177,7 @@ fn hex(color: [u8; 3]) -> String {
 mod tests {
     use crate::{from_qb_bytes, from_qb_file, to_qb_bytes, to_qb_file};
     use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
-    use voxcore::VoxState;
+    use voxcore::VoxMain;
 
     /// A file with two matrices: a `[2, 1, 1]` grid with two solid voxels, one
     /// carrying a non-default visibility mask, and a single-voxel grid.
@@ -242,7 +238,7 @@ mod tests {
 
     #[test]
     fn errors_without_qubicle_qb_ext() {
-        let state = VoxState::default();
+        let state = VoxMain::default();
         assert!(to_qb_file(&state).is_err());
     }
 

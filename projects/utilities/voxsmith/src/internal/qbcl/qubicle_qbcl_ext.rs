@@ -1,7 +1,7 @@
 use crate::{QubicleQbclMetadata, QubicleQbclNode, QubicleQbclThumbnail};
 use serde::{Deserialize, Serialize};
 
-/// The `qubicle-qbcl` ext payload stashed on a [`VoxState`](voxcore::VoxState):
+/// The `qubicle-qbcl` ext payload stashed on a [`VoxMain`](voxcore::VoxMain):
 /// the Qubicle Construction Library `.qbcl` state with no native voxcore home,
 /// kept so a file loaded from a `.qbcl` package can be written back exactly.
 ///

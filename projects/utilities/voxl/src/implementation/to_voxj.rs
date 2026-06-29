@@ -8,7 +8,7 @@ use voxsmith::{to_voxj_file, to_voxj_file_with};
 
 /// Converts the voxel file at `input` into a Voxel Json document at `output`,
 /// round-tripping through voxcore: the input is loaded into a
-/// [`VoxState`](voxcore::VoxState), encoded back to a voxj document with the
+/// [`VoxMain`](voxcore::VoxMain), encoded back to a voxj document with the
 /// chosen block `encoding`, then serialized in the container `format` selects.
 /// When `ext` is false, the user-defined `ext` extension block is omitted from
 /// the output.

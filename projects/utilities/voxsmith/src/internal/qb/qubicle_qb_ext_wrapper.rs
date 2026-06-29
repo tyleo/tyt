@@ -2,7 +2,7 @@ use crate::QubicleQbExt;
 use serde::{Deserialize, Serialize};
 
 /// The envelope that namespaces the Qubicle `.qb` provenance under the
-/// `qubicle-qb` key of a [`VoxState`](voxcore::VoxState) ext.
+/// `qubicle-qb` key of a [`VoxMain`](voxcore::VoxMain) ext.
 #[derive(Deserialize, Serialize)]
 pub struct QubicleQbExtWrapper {
     #[serde(rename = "qubicle-qb")]

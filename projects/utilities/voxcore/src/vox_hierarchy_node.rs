@@ -8,8 +8,8 @@ use ty_math::TyTransformF64;
 /// Nodes form a DAG, not a tree: a node may have several parents, so the same node
 /// can be reused across the scene. Within one node, though, each direct child node
 /// and child object appears at most once. The ids reference a
-/// [`VoxState`](crate::VoxState) and are meaningful only within it;
-/// [`VoxState::validate`](crate::VoxState::validate) checks them.
+/// [`VoxMain`](crate::VoxMain) and are meaningful only within it;
+/// [`VoxMain::validate`](crate::VoxMain::validate) checks them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VoxHierarchyNode {
     /// Display name.

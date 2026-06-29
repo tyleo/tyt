@@ -1,6 +1,6 @@
 use crate::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, Error, Result, VoxEditObject,
-    VoxEditState, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, Error, Result, VoxGcRemap,
+    VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState, VoxValue,
 };
 use branded_id::{IdVec, U32Id, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
@@ -14,29 +14,19 @@ use std::collections::{HashMap, HashSet};
 /// through the `iter_*` methods. Ids are bare indices into this state, meaningful
 /// only within it. [`validate`](Self::validate) checks the cross-references.
 #[derive(Debug, Default)]
-pub struct VoxState {
+pub struct VoxMain {
     /// The runtime scene: objects, shared palettes, hierarchy, and roots.
     runtime_state: VoxRuntimeState,
-
-    /// The editor state: one edit grid per runtime object.
-    edit_state: VoxEditState,
 
     /// Optional user-extension namespace; the core format assigns it no meaning.
     ext: Option<VoxValue>,
 }
 
-impl VoxState {
-    /// Adds an object, returning its id (its listing index). Its edit grid is
-    /// initialized to the object's runtime grid (a zero-margin edit grid);
-    /// override it with [`set_edit_object`](Self::set_edit_object).
+impl VoxMain {
+    /// Adds an object, returning its id (its listing index).
     pub fn add_object(&mut self, object: VoxObject) -> U32Id<BVoxObject> {
-        let edit_object = VoxEditObject {
-            bounds: object.bounds(),
-            origin: object.origin(),
-        };
         let id = self.runtime_state.object_ids.retain();
         self.runtime_state.objects.retain(id, object);
-        self.edit_state.retain(id, edit_object);
         id
     }
 
@@ -153,33 +143,6 @@ impl VoxState {
         self.ext = ext;
     }
 
-    /// The edit grid for object `id`, or `None` if `id` is not one of this
-    /// state's objects.
-    pub fn edit_object(&self, id: U32Id<BVoxObject>) -> Option<VoxEditObject> {
-        // Safety: a retained object id always has an edit grid.
-        self.runtime_state
-            .object_ids
-            .is_retained(id)
-            .then(|| unsafe { self.edit_state.get(id) })
-    }
-
-    /// Sets the edit grid for object `id`. `None`, changing nothing, if `id` is
-    /// not one of this state's objects. The edit grid is expected to contain the
-    /// object's runtime grid; that is checked by [`validate`](Self::validate),
-    /// not here.
-    pub fn set_edit_object(
-        &mut self,
-        id: U32Id<BVoxObject>,
-        edit_object: VoxEditObject,
-    ) -> Option<()> {
-        if !self.runtime_state.object_ids.is_retained(id) {
-            return None;
-        }
-        // Safety: the id is retained, so its edit grid is live.
-        unsafe { self.edit_state.set(id, edit_object) };
-        Some(())
-    }
-
     /// Removes object `id`, detaching it from every node's `child_objects`.
     /// `None`, changing nothing, if `id` is not one of this state's objects.
     /// Leaves a hole until [`gc`](Self::gc) renumbers for a deterministic save.
@@ -193,10 +156,8 @@ impl VoxState {
             let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
             node.child_objects.retain(|&object| object != id);
         }
-        // Safety: a retained object id has a value; its edit grid is keyed by the
-        // same id, so it releases alongside.
+        // Safety: a retained object id has a value.
         unsafe { self.runtime_state.objects.release(id) };
-        unsafe { self.edit_state.release(id) };
         self.runtime_state.object_ids.release(id);
         Some(())
     }
@@ -323,9 +284,6 @@ impl VoxState {
         // Safety: the object column was in sync with the pre-gc object pool, and
         // nothing has retained or released since.
         unsafe { self.runtime_state.objects.gc(&object_remap) };
-        // The edit column is keyed by object id, so it compacts with the same
-        // remap.
-        unsafe { self.edit_state.gc(&object_remap) };
 
         // Compact the node pool, then translate child links and roots, which point
         // at the relabeled nodes and objects.
@@ -369,17 +327,13 @@ impl VoxState {
     /// 1. every object palette ref resolves, and no object references the same
     ///    palette twice;
     /// 2. every live-voxel sample cell is within its palette's cells;
-    /// 3. every object's grid is exactly tight around its live voxels: an empty
-    ///    object is `[0, 0, 0]`, else each axis spans the grid from `0` to its
-    ///    bound minus one;
-    /// 4. every object's edit grid contains its runtime grid on each axis;
-    /// 5. every node child node and child object resolves, and no node lists the
+    /// 3. every node child node and child object resolves, and no node lists the
     ///    same one twice;
-    /// 6. every root resolves, and no root repeats;
-    /// 7. no palette declares the same attribute key twice;
-    /// 8. every node transform has a non-zero scale on each axis and a unit-length
+    /// 4. every root resolves, and no root repeats;
+    /// 5. no palette declares the same attribute key twice;
+    /// 6. every node transform has a non-zero scale on each axis and a unit-length
     ///    rotation quaternion within `1e-6`;
-    /// 9. the `child_nodes` graph is acyclic.
+    /// 7. the `child_nodes` graph is acyclic.
     ///
     /// A node may have several parents, since the hierarchy is a DAG; that sharing
     /// is not a cycle.
@@ -420,19 +374,8 @@ impl VoxState {
                 }
                 ref_palettes.push((palette_ref_id, palette));
             }
-            // Live-voxel sample cells, and the tight extent of the live voxels.
-            let mut min = [u32::MAX; 3];
-            let mut max = [0u32; 3];
-            let mut live = false;
+            // Every live voxel samples a cell within each referenced palette.
             for voxel_id in object.iter_live() {
-                live = true;
-                let position = object
-                    .voxel_position(voxel_id)
-                    .expect("a live voxel is within the grid");
-                for (axis, coord) in [position.x, position.y, position.z].into_iter().enumerate() {
-                    min[axis] = min[axis].min(coord);
-                    max[axis] = max[axis].max(coord);
-                }
                 for &(palette_ref_id, palette) in &ref_palettes {
                     let cell = object
                         .voxel_cell(voxel_id, palette_ref_id)
@@ -445,41 +388,6 @@ impl VoxState {
                         });
                     }
                 }
-            }
-
-            // The runtime grid is exactly tight around the live voxels: an empty
-            // object is [0, 0, 0]; otherwise each axis spans the grid fully, from 0
-            // to its bound minus one.
-            let bounds = object.bounds();
-            let grid = [bounds.x, bounds.y, bounds.z];
-            let tight = if live {
-                (0..3).all(|axis| min[axis] == 0 && grid[axis] == max[axis] + 1)
-            } else {
-                grid == [0, 0, 0]
-            };
-            if !tight {
-                return Err(Error::UntightBounds {
-                    object: object_id.to_u32(),
-                });
-            }
-
-            // The edit grid contains the runtime grid on every axis.
-            let edit = self
-                .edit_object(object_id)
-                .expect("a retained object has an edit grid");
-            let origin = object.origin();
-            let edit_origin = [edit.origin.x, edit.origin.y, edit.origin.z];
-            let edit_bounds = [edit.bounds.x, edit.bounds.y, edit.bounds.z];
-            let run_origin = [origin.x, origin.y, origin.z];
-            let contains = (0..3).all(|axis| {
-                edit_origin[axis] <= run_origin[axis]
-                    && i64::from(edit_origin[axis]) + i64::from(edit_bounds[axis])
-                        >= i64::from(run_origin[axis]) + i64::from(grid[axis])
-            });
-            if !contains {
-                return Err(Error::EditGridContainment {
-                    object: object_id.to_u32(),
-                });
             }
         }
 
@@ -619,12 +527,10 @@ impl VoxState {
         None
     }
 
-    /// Deep copy. The runtime scene rebuilds its columns against fresh id pools;
-    /// the edit column is `Copy`, so it clones directly.
+    /// Deep copy. The runtime scene rebuilds its columns against fresh id pools.
     pub fn clone_state(&self) -> Self {
         Self {
             runtime_state: self.runtime_state.clone_runtime_state(),
-            edit_state: self.edit_state.clone(),
             ext: self.ext.clone(),
         }
     }
@@ -634,10 +540,10 @@ impl VoxState {
 mod tests {
     use crate::{
         BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, BVoxPaletteRef,
-        Error, VoxEditObject, VoxHierarchyNode, VoxObject, VoxPalette, VoxState, VoxValue,
+        Error, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValue,
     };
     use branded_id::U32Id;
-    use ty_math::{TyQuaternion, TyVector3, TyVector3I32, TyVector3U32};
+    use ty_math::{TyQuaternion, TyVector3, TyVector3U32};
 
     fn node_id(index: u32) -> U32Id<BVoxHierarchyNode> {
         U32Id::from_u32(index)
@@ -681,7 +587,7 @@ mod tests {
 
     #[test]
     fn add_and_read_back_in_id_order() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let a = state.add_object(unit_object("a"));
         let b = state.add_object(unit_object("b"));
 
@@ -694,7 +600,7 @@ mod tests {
 
     #[test]
     fn validate_accepts_a_shared_child_dag() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let leaf = state.add_hierarchy_node(VoxHierarchyNode::default());
         // Sharing a child across parents is legal in a DAG; each parent lists it
         // once.
@@ -707,7 +613,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_a_duplicate_child_node() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let leaf = state.add_hierarchy_node(VoxHierarchyNode::default());
         let parent = state.add_hierarchy_node(node_with_children(vec![leaf, leaf]));
         assert_eq!(
@@ -721,7 +627,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_a_duplicate_child_object() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let object = state.add_object(unit_object("o"));
         let node = state.add_hierarchy_node(node_with_objects(vec![object, object]));
         assert_eq!(
@@ -735,7 +641,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_a_duplicate_root() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let node = state.add_hierarchy_node(VoxHierarchyNode::default());
         state.set_root_hierarchy_nodes(vec![node, node]);
         assert_eq!(
@@ -748,7 +654,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_a_duplicate_palette_ref() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(one_cell_palette(0.0));
         let mut object = unit_object("o");
         // Two references naming the same palette.
@@ -766,7 +672,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_dangling_palette_ref() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let mut object = unit_object("o");
         // Reference palette id 0, but the state has no palettes.
         object.add_palette_ref(
@@ -786,7 +692,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_dangling_child() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         state.add_hierarchy_node(node_with_children(vec![node_id(9)]));
         assert!(matches!(
             state.validate(),
@@ -796,7 +702,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_dangling_root() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         state.add_hierarchy_node(VoxHierarchyNode::default());
         state.set_root_hierarchy_nodes(vec![node_id(7)]);
         assert_eq!(state.validate(), Err(Error::Root { root: 7 }));
@@ -804,7 +710,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_a_cycle() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         // node 0 -> child 1, node 1 -> child 0.
         state.add_hierarchy_node(node_with_children(vec![node_id(1)]));
         state.add_hierarchy_node(node_with_children(vec![node_id(0)]));
@@ -813,7 +719,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_a_duplicate_attribute_key() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let mut palette = VoxPalette::default();
         palette.add_attribute("rgba".to_owned());
         palette.add_attribute("rgba".to_owned());
@@ -829,7 +735,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_a_zero_scale() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         node.transform.scale = TyVector3::new(1.0, 0.0, 1.0);
         let id = state.add_hierarchy_node(node);
@@ -841,7 +747,7 @@ mod tests {
 
     #[test]
     fn validate_rejects_a_non_unit_rotation() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         // Length squared 4, well outside the unit tolerance.
         node.transform.rotation = TyQuaternion::new(0.0, 0.0, 0.0, 2.0);
@@ -854,7 +760,7 @@ mod tests {
 
     #[test]
     fn clone_state_is_an_independent_deep_copy() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         state.add_palette(VoxPalette::default());
         state.add_object(unit_object("o"));
 
@@ -869,7 +775,7 @@ mod tests {
 
     #[test]
     fn remove_object_and_palette_then_gc_renumbers_and_resolves() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette_a = state.add_palette(one_cell_palette(0.0));
         let palette_b = state.add_palette(one_cell_palette(1.0));
 
@@ -952,7 +858,7 @@ mod tests {
 
     #[test]
     fn remove_hierarchy_node_detaches_children_and_roots() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let leaf = state.add_hierarchy_node(VoxHierarchyNode::default());
         let mid = state.add_hierarchy_node(node_with_children(vec![leaf]));
         let top = state.add_hierarchy_node(node_with_children(vec![mid, leaf]));
@@ -971,7 +877,7 @@ mod tests {
 
     #[test]
     fn remove_cell_repaints_live_voxels_onto_the_replacement() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let mut palette = VoxPalette::default();
         palette.add_attribute("v".to_owned());
         let keep = palette.add_cell(vec![VoxValue::Number(0.0)]).unwrap();
@@ -1003,7 +909,7 @@ mod tests {
 
     #[test]
     fn validate_and_gc_handle_a_high_id_sample_after_a_cell_hole() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let mut palette = VoxPalette::default();
         palette.add_attribute("v".to_owned());
         let first = palette.add_cell(vec![VoxValue::Number(0.0)]).unwrap();
@@ -1045,7 +951,7 @@ mod tests {
 
     #[test]
     fn remove_object_rejects_an_unknown_id() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let object = state.add_object(unit_object("o"));
         assert_eq!(state.remove_object(object), Some(()));
         assert_eq!(state.remove_object(object), None);
@@ -1056,41 +962,29 @@ mod tests {
     }
 
     #[test]
-    fn edit_objects_default_to_the_runtime_grid_and_survive_gc() {
-        let mut state = VoxState::default();
+    fn objects_with_build_volume_margin_validate_and_survive_gc() {
+        let mut state = VoxMain::default();
         let a =
             state.add_object(VoxObject::new("a".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap());
-        let b =
-            state.add_object(VoxObject::new("b".to_owned(), TyVector3U32::new(3, 3, 3)).unwrap());
+        // `b` carries margin: a 5x5x5 build volume with one live voxel off the
+        // origin, which the old exact-tight-bounds rule forbade.
+        let mut object_b = VoxObject::new("b".to_owned(), TyVector3U32::new(5, 5, 5)).unwrap();
+        let voxel = object_b.voxel_id(TyVector3U32::new(2, 3, 1)).unwrap();
+        object_b.retain_voxel(voxel, &[]).unwrap();
+        let b = state.add_object(object_b);
+        assert_eq!(b.to_u32(), 1);
+        assert_eq!(state.validate(), Ok(()));
 
-        // A new object's edit grid is its runtime grid (zero margin).
-        assert_eq!(
-            state.edit_object(a),
-            Some(VoxEditObject {
-                bounds: TyVector3U32::new(2, 1, 1),
-                origin: TyVector3I32::default(),
-            })
-        );
-
-        // Give `b` a distinct edit grid carrying margin.
-        let b_edit = VoxEditObject {
-            bounds: TyVector3U32::new(5, 5, 5),
-            origin: TyVector3I32::new(-1, -1, -1),
-        };
-        assert_eq!(state.set_edit_object(b, b_edit), Some(()));
-
-        // Remove `a` and gc: `b` renumbers to 0 and its edit grid moves with it.
+        // Remove `a` and gc: `b` renumbers to 0, keeping its margin grid and voxel.
         assert_eq!(state.remove_object(a), Some(()));
-        assert_eq!(state.edit_object(a), None);
         state.gc();
-
         let b0 = U32Id::<BVoxObject>::from_u32(0);
-        assert_eq!(state.object(b0).unwrap().name(), "b");
-        assert_eq!(state.edit_object(b0), Some(b_edit));
-
-        // An unknown id has no edit grid, and setting one is rejected.
-        let unknown = U32Id::<BVoxObject>::from_u32(9);
-        assert_eq!(state.edit_object(unknown), None);
-        assert_eq!(state.set_edit_object(unknown, b_edit), None);
+        let object = state.object(b0).unwrap();
+        assert_eq!(object.name(), "b");
+        assert_eq!(object.bounds(), TyVector3U32::new(5, 5, 5));
+        assert_eq!(
+            object.live_extent(),
+            Some((TyVector3U32::new(2, 3, 1), TyVector3U32::new(1, 1, 1)))
+        );
     }
 }

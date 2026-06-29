@@ -1,11 +1,9 @@
-use crate::{Error, QubicleQbExtWrapper, QubicleQbMatrix, Result, from_vox_value, untighten};
+use crate::{Error, QubicleQbExtWrapper, QubicleQbMatrix, Result, from_vox_value};
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
-use voxcore::{
-    BVoxAttribute, BVoxPaletteRef, BVoxVoxel, VoxObject, VoxPalette, VoxState, VoxValue,
-};
+use voxcore::{BVoxAttribute, BVoxPaletteRef, BVoxVoxel, VoxMain, VoxObject, VoxPalette, VoxValue};
 
-/// Writes a [`VoxState`] back to a decoded Qubicle Binary [`QbFile`], the inverse
+/// Writes a [`VoxMain`] back to a decoded Qubicle Binary [`QbFile`], the inverse
 /// of [`from_qb_file`](crate::from_qb_file).
 ///
 /// Requires the `qubicle-qb` ext the forward path writes; without it the file
@@ -14,7 +12,7 @@ use voxcore::{
 ///
 /// Errors if the ext is missing, its matrix entries do not line up with the
 /// objects, or a visibility list does not match its object.
-pub fn to_qb_file(state: &VoxState) -> Result<QbFile> {
+pub fn to_qb_file(state: &VoxMain) -> Result<QbFile> {
     let ext = match state.ext() {
         Some(ext) => from_vox_value::<QubicleQbExtWrapper>(ext)?.qubicle_qb,
         None => {
@@ -33,20 +31,12 @@ pub fn to_qb_file(state: &VoxState) -> Result<QbFile> {
     }
 
     let palette = state.iter_palettes().next().map(|(_, palette)| palette);
-    // The runtime grid is tight; restore each object's source grid (its edit grid)
-    // so the written matrix keeps the author's dimensions and voxel positions.
+    // The object is the author's build volume, so the written matrix keeps its
+    // dimensions and voxel positions directly.
     let matrices = state
         .iter_objects()
         .zip(&ext.matrices)
-        .map(|((id, object), provenance)| {
-            let source = untighten(
-                object,
-                state
-                    .edit_object(id)
-                    .expect("a retained object has an edit grid"),
-            );
-            matrix_from_object(&source, palette, provenance)
-        })
+        .map(|((_, object), provenance)| matrix_from_object(object, palette, provenance))
         .collect::<Result<_>>()?;
 
     Ok(QbFile {

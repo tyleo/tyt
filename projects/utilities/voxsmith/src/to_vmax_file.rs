@@ -1,6 +1,6 @@
 use crate::{
     Error, Result, SceneCameraSource, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
-    VoxelMaxNode, VoxelMaxPalette, ext_for, from_vox_value,
+    VoxelMaxNode, VoxelMaxPalette, ext_for, from_vox_value, tighten,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, HashMap};
@@ -13,8 +13,8 @@ use vmax::{
 };
 use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteRef, VoxEditObject, VoxHierarchyNode,
-    VoxObject, VoxPalette, VoxState, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteRef, VoxHierarchyNode, VoxMain,
+    VoxObject, VoxPalette, VoxValue,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx` is
@@ -172,19 +172,19 @@ fn default_camera(target: [f64; 3]) -> VMaxCamera {
     }
 }
 
-/// Writes a [`VoxState`] back to a Voxel Max document with default settings, the
+/// Writes a [`VoxMain`] back to a Voxel Max document with default settings, the
 /// inverse of [`from_vmax_file`](crate::from_vmax_file). `voxel_max_color_format`
 /// selects where each palette's colors are stored, as described on
 /// [`VoxelMaxColorFormat`]. For control over the scene camera, use
 /// [`VmaxFileBuilder`](crate::VmaxFileBuilder).
 pub fn to_vmax_file(
-    state: &VoxState,
+    state: &VoxMain,
     voxel_max_color_format: VoxelMaxColorFormat,
 ) -> Result<VMaxFile> {
     write_vmax(state, voxel_max_color_format, None)
 }
 
-/// Writes a [`VoxState`] back to a Voxel Max document, the workhorse behind
+/// Writes a [`VoxMain`] back to a Voxel Max document, the workhorse behind
 /// [`to_vmax_file`] and [`VmaxFileBuilder`](crate::VmaxFileBuilder).
 ///
 /// A state carrying the `voxel-max` ext the forward path writes is rebuilt from
@@ -194,7 +194,7 @@ pub fn to_vmax_file(
 /// rest of this path runs unchanged. `scene_camera` overrides the scene camera the
 /// document opens with, or keeps the path's own when `None`.
 pub(crate) fn write_vmax(
-    state: &VoxState,
+    state: &VoxMain,
     voxel_max_color_format: VoxelMaxColorFormat,
     scene_camera: Option<SceneCameraSource>,
 ) -> Result<VMaxFile> {
@@ -263,13 +263,13 @@ pub(crate) fn write_vmax(
 
             // Re-derive the object's internal-grid placement by convention: center
             // the canvas in the 256-wide workspace, then seat the runtime grid
-            // inside it by the runtime/edit origin offset. The content box and the
-            // build volume follow from the native tight bounds and edit grid; the
-            // scene placement follows from the node transform.
-            let edit = state
-                .edit_object(object_ref)
-                .expect("a retained object has an edit grid");
-            let placement = object_placement(object.bounds(), object.origin(), edit);
+            // inside it by the runtime/edit origin offset. The runtime grid is the
+            // live voxels' tight extent within the object's build volume; the content
+            // box follows from it and the build volume, the scene placement from the
+            // node transform.
+            let (tight, (edit_bounds, edit_origin)) = tighten(object);
+            let placement =
+                object_placement(tight.bounds(), tight.origin(), edit_bounds, edit_origin);
             let object_state = voxel_max
                 .object_states
                 .get(object_id)
@@ -279,7 +279,7 @@ pub(crate) fn write_vmax(
             let data = match contents_by_object.get(&object_id) {
                 Some(data) => data.clone(),
                 None => {
-                    let voxels = reconstruct_voxels(object, color, material, placement.box_min)?;
+                    let voxels = reconstruct_voxels(&tight, color, material, placement.box_min)?;
                     let data = format!("contents{suffix}.vmaxb");
                     // Voxels re-encode into snapshots; serde-only state the decoded
                     // voxcore object does not model (`pal`) stays absent.
@@ -402,7 +402,7 @@ struct Placement<'a> {
 /// Pairs each voxcore node with its ext entry by index, the placement the lossless
 /// path emits. A vmax-origin scene is a tree with one ext node per voxcore node, so
 /// this reproduces it exactly.
-fn ext_placements<'a>(state: &'a VoxState, voxel_max: &VoxelMaxExt) -> Vec<Placement<'a>> {
+fn ext_placements<'a>(state: &'a VoxMain, voxel_max: &VoxelMaxExt) -> Vec<Placement<'a>> {
     state
         .iter_hierarchy_nodes()
         .enumerate()
@@ -431,7 +431,7 @@ fn ext_placements<'a>(state: &'a VoxState, voxel_max: &VoxelMaxExt) -> Vec<Place
 /// voxcore quaternion is not inverted to, and the material palette name is left
 /// empty. Node translation and scale, the hierarchy, colors, and any material
 /// palette survive.
-fn synthesize_placements(state: &VoxState) -> Vec<Placement<'_>> {
+fn synthesize_placements(state: &VoxMain) -> Vec<Placement<'_>> {
     let mut placements = Vec::new();
     let mut counter = 0usize;
     for &root in state.root_hierarchy_nodes() {
@@ -445,7 +445,7 @@ fn synthesize_placements(state: &VoxState) -> Vec<Placement<'_>> {
 /// by several paths becomes a distinct scene node per path; child nodes attach to
 /// this occurrence's id, which is also the id of the node's first object.
 fn push_placement<'a>(
-    state: &'a VoxState,
+    state: &'a VoxMain,
     id: U32Id<BVoxHierarchyNode>,
     parent_id: Option<String>,
     counter: &mut usize,
@@ -479,7 +479,7 @@ fn push_placement<'a>(
 /// per-node home: a fallback scene version, a neutral camera, an empty name for each
 /// palette, and no preserved object state. Per-node provenance comes from
 /// [`synthesize_placements`].
-fn synthesize_voxel_max_ext(state: &VoxState) -> VoxelMaxExt {
+fn synthesize_voxel_max_ext(state: &VoxMain) -> VoxelMaxExt {
     VoxelMaxExt {
         scene: VMaxSceneJsonFile {
             v: FALLBACK_CONTENT_VERSION,
@@ -543,19 +543,20 @@ struct ObjectPlacement {
 fn object_placement(
     bounds: TyVector3U32,
     origin: TyVector3I32,
-    edit: VoxEditObject,
+    edit_bounds: TyVector3U32,
+    edit_origin: TyVector3I32,
 ) -> ObjectPlacement {
-    let canvas_min = centered_origin(edit.bounds);
+    let canvas_min = centered_origin(edit_bounds);
     let origin = [origin.x, origin.y, origin.z];
     let box_min = [
-        canvas_min[0] + origin[0] - edit.origin.x,
-        canvas_min[1] + origin[1] - edit.origin.y,
-        canvas_min[2] + origin[2] - edit.origin.z,
+        canvas_min[0] + origin[0] - edit_origin.x,
+        canvas_min[1] + origin[1] - edit_origin.y,
+        canvas_min[2] + origin[2] - edit_origin.z,
     ];
     // An empty runtime grid has no content box of its own; frame it on the build
     // volume so Voxel Max keeps a sensible content center and box for the object.
     let (content_min, content_size) = if bounds.x == 0 && bounds.y == 0 && bounds.z == 0 {
-        (canvas_min, edit.bounds)
+        (canvas_min, edit_bounds)
     } else {
         (box_min, bounds)
     };
@@ -566,7 +567,7 @@ fn object_placement(
         center,
         bounds_min,
         bounds_max,
-        view_box: object_view_box(canvas_min, edit.bounds),
+        view_box: object_view_box(canvas_min, edit_bounds),
     }
 }
 
@@ -607,7 +608,7 @@ type PaletteRef = (U32Id<BVoxPaletteRef>, U32Id<BVoxPalette>);
 /// The color and material palette references for an object, identified by the
 /// `rgba` and `metallic` attributes.
 fn object_palette_refs(
-    state: &VoxState,
+    state: &VoxMain,
     object: &VoxObject,
 ) -> (Option<PaletteRef>, Option<PaletteRef>) {
     let mut color = None;
@@ -689,7 +690,7 @@ fn reconstruct_voxels(
 /// borrows the default palette name and writes no file.
 #[allow(clippy::too_many_arguments)]
 fn build_palette(
-    state: &VoxState,
+    state: &VoxMain,
     palette_names: &[Option<VoxelMaxPalette>],
     color: Option<U32Id<BVoxPalette>>,
     material: Option<U32Id<BVoxPalette>>,
@@ -757,7 +758,7 @@ fn build_palette(
 /// padded with transparent cells or truncated to that count. Cells past the budget
 /// are dropped; a voxel that would reference one is rejected by
 /// [`reconstruct_voxels`].
-fn color_palette_colors(state: &VoxState, palette: U32Id<BVoxPalette>) -> Vec<[u8; 4]> {
+fn color_palette_colors(state: &VoxMain, palette: U32Id<BVoxPalette>) -> Vec<[u8; 4]> {
     let palette = state.palette(palette).expect("a referenced palette");
     let rgba = palette
         .iter_attributes()
@@ -783,7 +784,7 @@ fn color_palette_colors(state: &VoxState, palette: U32Id<BVoxPalette>) -> Vec<[u
 /// editor-state keys are filled with the defaults Voxel Max expects, and each slot's
 /// `mi` token from its 1-based position.
 fn material_settings(
-    state: &VoxState,
+    state: &VoxMain,
     palette: Option<U32Id<BVoxPalette>>,
     name: String,
     colors: Vec<[u8; 4]>,
@@ -906,7 +907,7 @@ fn object_from_node(
 /// here rather than kept in the ext. Memoized by node id so a subtree shared across
 /// parents is walked once. A node with no geometry collapses to a zero box.
 fn subtree_box_local(
-    state: &VoxState,
+    state: &VoxMain,
     node_id: U32Id<BVoxHierarchyNode>,
     memo: &mut HashMap<u32, ([f64; 3], [f64; 3])>,
 ) -> ([f64; 3], [f64; 3]) {
@@ -952,23 +953,21 @@ fn subtree_box_local(
 /// frame: the tight runtime grid `[origin, origin + bounds]`. An empty object has
 /// no runtime extent of its own, so it frames its build volume instead, matching
 /// the content box the write path gives it.
-fn object_box_local(state: &VoxState, object_id: U32Id<BVoxObject>) -> ([f64; 3], [f64; 3]) {
+fn object_box_local(state: &VoxMain, object_id: U32Id<BVoxObject>) -> ([f64; 3], [f64; 3]) {
     let object = state.object(object_id).expect("a valid child object");
-    let bounds = object.bounds();
+    let (tight, (edit_bounds, edit_origin)) = tighten(object);
+    let bounds = tight.bounds();
     if bounds.x == 0 && bounds.y == 0 && bounds.z == 0 {
-        let edit = state
-            .edit_object(object_id)
-            .expect("a retained object has an edit grid");
         let half = [
-            edit.bounds.x as f64 / 2.0,
-            edit.bounds.y as f64 / 2.0,
-            edit.bounds.z as f64 / 2.0,
+            edit_bounds.x as f64 / 2.0,
+            edit_bounds.y as f64 / 2.0,
+            edit_bounds.z as f64 / 2.0,
         ];
         return (
             [
-                edit.origin.x as f64 + half[0],
-                edit.origin.y as f64 + half[1],
-                edit.origin.z as f64 + half[2],
+                edit_origin.x as f64 + half[0],
+                edit_origin.y as f64 + half[1],
+                edit_origin.z as f64 + half[2],
             ],
             half,
         );
@@ -978,7 +977,7 @@ fn object_box_local(state: &VoxState, object_id: U32Id<BVoxObject>) -> ([f64; 3]
         bounds.y as f64 / 2.0,
         bounds.z as f64 / 2.0,
     ];
-    let origin = object.origin();
+    let origin = tight.origin();
     (
         [
             origin.x as f64 + half[0],
@@ -1178,15 +1177,15 @@ mod tests {
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
-    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
     use vmax::{
         VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxObject, VMaxPalettePngFile,
         VMaxSceneCamera, VMaxSceneJsonFile,
     };
     use vmax_codec::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxEditObject,
-        VoxHierarchyNode, VoxMap, VoxObject, VoxPalette, VoxState, VoxValue,
+        BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain,
+        VoxMap, VoxObject, VoxPalette, VoxValue,
     };
 
     fn material(
@@ -1368,8 +1367,8 @@ mod tests {
     /// `voxel-max` ext from this rather than read one. Red is cell 0, so a live
     /// voxel references the palette index Voxel Max reads as empty; synthesis must
     /// shift it past index 0 rather than drop the voxel.
-    fn source_state() -> VoxState {
-        let mut state = VoxState::default();
+    fn source_state() -> VoxMain {
+        let mut state = VoxMain::default();
 
         // One rgba palette whose first real color is cell 0: red, green, blue.
         let mut palette = VoxPalette::default();
@@ -1446,9 +1445,9 @@ mod tests {
     /// the roots and accumulating each node's translation. Order-independent and
     /// resolved per voxel, so a state compares to one round-tripped through a
     /// synthesized document without depending on object, palette, or voxel order.
-    fn world_voxels(state: &VoxState) -> BTreeSet<([i32; 3], [u8; 4])> {
+    fn world_voxels(state: &VoxMain) -> BTreeSet<([i32; 3], [u8; 4])> {
         fn walk(
-            state: &VoxState,
+            state: &VoxMain,
             node: U32Id<BVoxHierarchyNode>,
             origin: [i32; 3],
             voxels: &mut BTreeSet<([i32; 3], [u8; 4])>,
@@ -1496,7 +1495,7 @@ mod tests {
     /// rather than erroring on the missing ext.
     #[test]
     fn synthesizes_an_empty_state_without_an_ext() {
-        let state = VoxState::default();
+        let state = VoxMain::default();
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         assert!(file.scene_json_file.objects.is_empty());
         assert!(file.scene_json_file.groups.is_empty());
@@ -1532,7 +1531,7 @@ mod tests {
     /// objects the `0` lane.
     #[test]
     fn synthesizes_distinct_node_ind() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         state.add_object(color_object(
             palette,
@@ -1571,7 +1570,7 @@ mod tests {
     /// dropping all but the first.
     #[test]
     fn synthesizes_a_node_placing_several_objects() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
 
         let mut palette = VoxPalette::default();
         palette.add_attribute("rgba".to_owned());
@@ -1699,7 +1698,7 @@ mod tests {
     /// at 255, and each voxel's color_idx is its cell + 1.
     #[test]
     fn synthesizes_colors_zero_based_with_a_terminator() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF"]));
         state.add_object(color_object(
             palette,
@@ -1730,7 +1729,7 @@ mod tests {
     /// range.
     #[test]
     fn round_trips_first_and_last_color_through_plist() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         // 255 colors: red first, blue last, green between.
         let mut hexes = vec!["#FF0000FF".to_owned()];
         hexes.extend((0..253).map(|_| "#00FF00FF".to_owned()));
@@ -1781,7 +1780,7 @@ mod tests {
     #[test]
     fn errors_when_colors_exceed_palette_budget() {
         let synthesize = |count: u32| {
-            let mut state = VoxState::default();
+            let mut state = VoxMain::default();
             let hexes: Vec<String> = (0..count).map(|i| format!("#{:06X}FF", i)).collect();
             let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
             let palette = state.add_palette(rgba_palette(&refs));
@@ -1811,7 +1810,7 @@ mod tests {
     /// colored and empty objects share that name.
     #[test]
     fn synthesizes_a_colorless_object_sharing_the_default_palette() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         // Object 0: a single red voxel. Object 1: an empty, colorless object,
         // whose tight grid is [0, 0, 0].
@@ -1852,7 +1851,7 @@ mod tests {
     /// palette's first color), not the empty index 0, so they do not vanish.
     #[test]
     fn synthesizes_colorless_voxels_on_a_non_empty_index() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         // Object 0: a colored voxel, so a `palette.png` exists to borrow. Object 1:
         // a colorless object that nonetheless has a live voxel.
@@ -1890,7 +1889,7 @@ mod tests {
     /// hanging off the first object, and every object gets its own files.
     #[test]
     fn synthesizes_a_node_placing_objects_and_child_nodes() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF", "#0000FFFF"]));
         for cell in 0..3 {
             state.add_object(color_object(
@@ -1962,7 +1961,7 @@ mod tests {
     /// at both positions.
     #[test]
     fn synthesizes_instances_sharing_one_contents_file() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         state.add_object(color_object(
             palette,
@@ -1994,7 +1993,7 @@ mod tests {
     /// placement composes along every path to it.
     #[test]
     fn synthesizes_a_shared_subtree_at_every_parent() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         state.add_object(color_object(
             palette,
@@ -2026,7 +2025,7 @@ mod tests {
     /// dropping its root placement.
     #[test]
     fn synthesizes_a_node_that_is_root_and_child() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         state.add_object(color_object(
             palette,
@@ -2056,7 +2055,7 @@ mod tests {
     /// synthesis does not promote it to a spurious root.
     #[test]
     fn drops_a_node_unreachable_from_the_roots() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         state.add_object(color_object(
             palette,
@@ -2087,7 +2086,7 @@ mod tests {
     /// original world point.
     #[test]
     fn keeps_rotation_scale_and_translation() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         state.add_object(color_object(
             palette,
@@ -2141,7 +2140,7 @@ mod tests {
             VoxelMaxColorFormat::All,
         ];
         for format in formats {
-            let mut state = VoxState::default();
+            let mut state = VoxMain::default();
             let color = state.add_palette(rgba_palette(&["#FF0000FF"]));
             let mut materials = VoxPalette::default();
             for attribute in ["metallic", "roughness", "emissive", "shadows"] {
@@ -2212,7 +2211,7 @@ mod tests {
     /// missing alpha defaults to fully opaque rather than transparent.
     #[test]
     fn widens_rgb_source_to_opaque() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let mut palette = VoxPalette::default();
         palette.add_attribute("rgb".to_owned());
         palette
@@ -2245,7 +2244,7 @@ mod tests {
     /// path and reproduces the first document exactly.
     #[test]
     fn is_idempotent_for_a_colored_object() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF"]));
         state.add_object(color_object(
             palette,
@@ -2266,7 +2265,7 @@ mod tests {
     /// world voxel survives the reconstructed parent chain.
     #[test]
     fn synthesizes_a_deep_hierarchy() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF"]));
         state.add_object(color_object(
             palette,
@@ -2304,7 +2303,7 @@ mod tests {
     /// union to a box spanning both.
     #[test]
     fn derives_a_group_content_box_from_its_subtree() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         // Two [2, 2, 2] objects, each tight (voxels reach both ends of every axis).
         for _ in 0..2 {
@@ -2337,23 +2336,14 @@ mod tests {
     }
 
     /// An empty object synthesizes to a scene object with empty contents and a
-    /// content box framed on its grid. Reloading tightens the empty runtime grid to
-    /// `[0, 0, 0]`, since an empty object holds no voxels, while the build volume is
-    /// kept as the object's edit grid.
+    /// content box framed on its grid. Reloading keeps the `[3, 4, 5]` build volume
+    /// as the object's grid; with no live voxels its derived runtime extent is empty.
     #[test]
     fn synthesizes_an_empty_object_with_bounds() {
-        let mut state = VoxState::default();
-        // An empty object holds no voxels, so its tight runtime grid is [0, 0, 0];
-        // its [3, 4, 5] build volume rides in the edit grid.
-        let object = VoxObject::new(String::new(), TyVector3U32::new(0, 0, 0)).unwrap();
-        let id = state.add_object(object);
-        state.set_edit_object(
-            id,
-            VoxEditObject {
-                bounds: TyVector3U32::new(3, 4, 5),
-                origin: TyVector3I32::new(0, 0, 0),
-            },
-        );
+        let mut state = VoxMain::default();
+        // An empty object holds no voxels; its grid is the [3, 4, 5] build volume.
+        let object = VoxObject::new(String::new(), TyVector3U32::new(3, 4, 5)).unwrap();
+        state.add_object(object);
         state.add_hierarchy_node(object_node("empty", 0, at(0.0, 0.0, 0.0)));
         state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
         state.validate().unwrap();
@@ -2368,25 +2358,22 @@ mod tests {
             file.scene_json_file.objects[0].bounds_max,
             Some([1.5, 2.0, 2.5])
         );
-        // Reloading keeps the empty runtime grid at [0, 0, 0] and the [3, 4, 5]
-        // build volume as the object's edit grid.
+        // Reloading keeps the [3, 4, 5] build volume as the object's grid; with no
+        // live voxels its derived runtime extent is empty.
         let reloaded = from_vmax_file(&file).unwrap();
         let id = U32Id::<BVoxObject>::from_u32(0);
         assert_eq!(
             reloaded.object(id).unwrap().bounds(),
-            TyVector3U32::new(0, 0, 0)
-        );
-        assert_eq!(
-            reloaded.edit_object(id).unwrap().bounds,
             TyVector3U32::new(3, 4, 5)
         );
+        assert_eq!(reloaded.object(id).unwrap().live_extent(), None);
     }
 
     /// A fully transparent color round-trips as a real color at image index 0
     /// rather than being mistaken for the trailing terminator.
     #[test]
     fn round_trips_a_transparent_color() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#11223300"]));
         state.add_object(color_object(
             palette,
@@ -2421,7 +2408,7 @@ mod tests {
     /// palette uses only a few low indices. The size alone must not be rejected.
     #[test]
     fn synthesizes_a_padded_palette_using_low_indices() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let hexes: Vec<String> = (0..256).map(|i| format!("#{:06X}FF", i)).collect();
         let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
         let palette = state.add_palette(rgba_palette(&refs));
@@ -2447,7 +2434,7 @@ mod tests {
     /// the settings sidecar rather than an image, instead of reloading as white.
     #[test]
     fn synthesizes_a_color_only_object_in_plist() {
-        let mut state = VoxState::default();
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF"]));
         state.add_object(color_object(
             palette,
@@ -2473,8 +2460,8 @@ mod tests {
 
     /// A minimal no-ext state: one red voxel placed by one object node, the input
     /// the synthesis path takes.
-    fn one_object_state() -> VoxState {
-        let mut state = VoxState::default();
+    fn one_object_state() -> VoxMain {
+        let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
         state.add_object(color_object(
             palette,
@@ -2489,7 +2476,7 @@ mod tests {
 
     /// Gives the state a `voxel-max` ext carrying `cam` as its scene camera, so the
     /// lossless path has a camera to keep or replace.
-    fn with_ext_scene_camera(state: &mut VoxState, cam: VMaxSceneCamera) {
+    fn with_ext_scene_camera(state: &mut VoxMain, cam: VMaxSceneCamera) {
         let voxel_max = VoxelMaxExt {
             scene: VMaxSceneJsonFile {
                 cam: Some(cam),

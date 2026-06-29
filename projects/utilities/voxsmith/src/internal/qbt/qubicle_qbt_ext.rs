@@ -1,7 +1,7 @@
 use crate::QubicleQbtNode;
 use serde::{Deserialize, Serialize};
 
-/// The `qubicle-qbt` ext payload stashed on a [`VoxState`](voxcore::VoxState):
+/// The `qubicle-qbt` ext payload stashed on a [`VoxMain`](voxcore::VoxMain):
 /// the Qubicle Binary Tree `.qbt` state with no native voxcore home, kept so a
 /// file loaded from a `.qbt` package can be written back exactly.
 ///

@@ -3,7 +3,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-/// The `goxel` ext payload stashed on a [`VoxState`](voxcore::VoxState): the
+/// The `goxel` ext payload stashed on a [`VoxMain`](voxcore::VoxMain): the
 /// Goxel `.gox` state with no native voxcore home, kept so a file loaded from a
 /// Goxel package can be written back exactly.
 ///

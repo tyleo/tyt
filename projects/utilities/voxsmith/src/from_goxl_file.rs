@@ -1,17 +1,17 @@
 use crate::{
     Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer, GoxelLight,
-    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, tighten, to_vox_value,
+    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, to_vox_value,
 };
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyTransformF64, TyVector3U32};
 use voxcore::{
-    BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxObject, VoxPalette, VoxState,
+    BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValue,
 };
 
-/// Loads a decoded Goxel [`GoxlFile`] into a [`VoxState`].
+/// Loads a decoded Goxel [`GoxlFile`] into a [`VoxMain`].
 ///
 /// The shared `BL16` voxel blocks become objects sharing one `rgba` palette, and
 /// the `LAYR` layers become the hierarchy nodes, each placing the blocks it
@@ -21,19 +21,17 @@ use voxcore::{
 /// `goxel` ext so the file can be written back exactly.
 ///
 /// Errors on a layer placement that references a block outside the block list,
-/// or if [`VoxState::validate`](voxcore::VoxState::validate) rejects the result.
-pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxState> {
-    let mut state = VoxState::default();
+/// or if [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
+pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
+    let mut state = VoxMain::default();
 
     let (palette, cells) = build_palette(file);
     let palette_id = state.add_palette(palette);
 
     for block in &file.blocks {
-        // A Goxel block is a fixed 16-cube; the runtime object is tight, with the
-        // block grid kept as the object's edit grid (build volume).
-        let (object, edit) = tighten(&build_object(block, palette_id, &cells));
-        let id = state.add_object(object);
-        state.set_edit_object(id, edit);
+        // A Goxel block is a fixed 16-cube; it becomes the object's build volume
+        // directly, with its live voxels wherever they sit inside it.
+        state.add_object(build_object(block, palette_id, &cells));
     }
 
     let nodes = build_layer_nodes(file, state.object_count())?;
@@ -277,8 +275,8 @@ mod tests {
     use std::collections::BTreeSet;
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxHierarchyNode, VoxMap, VoxObject,
-        VoxPalette, VoxState, VoxValue,
+        BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxMap,
+        VoxObject, VoxPalette, VoxValue,
     };
 
     /// A `4 x 4` matrix with distinct float cells, for transform and box fields.
@@ -436,8 +434,8 @@ mod tests {
     /// A state with no format ext, built straight from voxcore: a red-green
     /// object and a blue object sharing one `rgba` palette, placed by a hierarchy
     /// of a nested group and two roots. This is the cross-format synthesis input.
-    fn source_state() -> VoxState {
-        let mut state = VoxState::default();
+    fn source_state() -> VoxMain {
+        let mut state = VoxMain::default();
 
         // One rgba palette: a transparent placeholder, then red, green, blue.
         let mut palette = VoxPalette::default();
@@ -567,7 +565,7 @@ mod tests {
     /// empty file rather than erroring on the missing ext.
     #[test]
     fn synthesizes_an_empty_state_without_an_ext() {
-        let state = VoxState::default();
+        let state = VoxMain::default();
         let file = to_goxl_file(&state).unwrap();
         assert!(file.blocks.is_empty());
         assert!(file.layers.is_empty());

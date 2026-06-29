@@ -12,7 +12,7 @@ use voxsmith::{from_vmax_file, to_voxj_file, to_voxj_file_with};
 
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
 /// stdout, round-tripping through voxcore: the package is loaded, voxsmith
-/// loads it into a [`VoxState`](voxcore::VoxState) and encodes it back to a voxj
+/// loads it into a [`VoxMain`](voxcore::VoxMain) and encodes it back to a voxj
 /// document, which is then serialized.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
     // Load: read the whole package into the lossless Voxel Max model.
@@ -44,7 +44,7 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
         },
     )?;
 
-    // Translate through voxcore: vmax -> VoxState, then encode the voxj document
+    // Translate through voxcore: vmax -> VoxMain, then encode the voxj document
     // with the chosen block encodings. The `voxel-max` ext carries the
     // provenance with no native voxj home.
     let state = from_vmax_file(&serde)?;

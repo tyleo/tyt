@@ -1,7 +1,7 @@
 use crate::{
     Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
     MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
-    MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, tighten, to_vox_value,
+    MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, to_vox_value,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -11,8 +11,8 @@ use mvox::{
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxObject,
-    VoxPalette, VoxState, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain,
+    VoxObject, VoxPalette, VoxValue,
 };
 
 /// Cells in a MagicaVoxel palette: one per color index `0..=255`.
@@ -21,7 +21,7 @@ const PALETTE_CELLS: usize = 256;
 /// The palette attributes a material folds into, after `rgba`, in this order.
 const MATERIAL_ATTRIBUTES: [&str; 7] = ["type", "weight", "rough", "spec", "ior", "att", "flux"];
 
-/// Loads a decoded MagicaVoxel [`MVoxFile`] into a [`VoxState`].
+/// Loads a decoded MagicaVoxel [`MVoxFile`] into a [`VoxMain`].
 ///
 /// Models become objects, the 256-color palette plus the `MATL` materials become
 /// one shared palette, and the `nTRN` / `nGRP` / `nSHP` scene graph becomes the
@@ -31,18 +31,16 @@ const MATERIAL_ATTRIBUTES: [&str; 7] = ["type", "weight", "rough", "spec", "ior"
 ///
 /// Errors on malformed geometry, a material id outside the palette range, a
 /// dangling scene-node reference, or if
-/// [`VoxState::validate`](voxcore::VoxState::validate) rejects the result.
-pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxState> {
-    let mut state = VoxState::default();
+/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
+pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
+    let mut state = VoxMain::default();
 
     let palette_id = state.add_palette(build_palette(file)?);
 
     for model in &file.models {
-        // The model grid may carry empty margin; the runtime object is tight, with
-        // the model grid kept as the object's edit grid (build volume).
-        let (object, edit) = tighten(&build_object(model, palette_id)?);
-        let id = state.add_object(object);
-        state.set_edit_object(id, edit);
+        // The model grid becomes the object's build volume directly; it may carry
+        // empty margin around the live voxels.
+        state.add_object(build_object(model, palette_id)?);
     }
 
     let (nodes, roots) = build_hierarchy(file)?;
@@ -489,8 +487,8 @@ mod tests {
     use std::{array, collections::BTreeSet};
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxHierarchyNode, VoxMap, VoxObject,
-        VoxPalette, VoxState, VoxValue,
+        BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxMap,
+        VoxObject, VoxPalette, VoxValue,
     };
 
     fn pair(key: &str, value: &str) -> (String, String) {
@@ -655,8 +653,8 @@ mod tests {
     /// object and a blue object sharing one `rgba` palette, placed by a small
     /// hierarchy of a nested group and two roots. The writer must synthesize a
     /// MagicaVoxel file from this rather than read an ext.
-    fn source_state() -> VoxState {
-        let mut state = VoxState::default();
+    fn source_state() -> VoxMain {
+        let mut state = VoxMain::default();
 
         // One rgba palette: a transparent placeholder, then red, green, blue.
         let mut palette = VoxPalette::default();
@@ -797,7 +795,7 @@ mod tests {
     /// empty file rather than erroring on the missing ext.
     #[test]
     fn synthesizes_an_empty_state_without_an_ext() {
-        let state = VoxState::default();
+        let state = VoxMain::default();
         let file = to_mvox_file(&state).unwrap();
         assert!(file.models.is_empty());
     }

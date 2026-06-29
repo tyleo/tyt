@@ -1,13 +1,13 @@
 use crate::{Result, to_voxj_file_with_encoding};
-use voxcore::VoxState;
+use voxcore::VoxMain;
 use voxj::VoxjFile;
 use voxj_codec::{PositionEncoding, SampleEncoding};
 
-/// Encodes a [`VoxState`] into a [`VoxjFile`] with fixed `position` and `sample`
+/// Encodes a [`VoxMain`] into a [`VoxjFile`] with fixed `position` and `sample`
 /// block encodings applied to every object. For the smallest-per-object search
 /// instead, see [`to_voxj_file`](crate::to_voxj_file).
 pub fn to_voxj_file_with(
-    state: &VoxState,
+    state: &VoxMain,
     position: PositionEncoding,
     sample: SampleEncoding,
 ) -> Result<VoxjFile> {

@@ -143,7 +143,7 @@ impl VoxPalette {
     /// Removes attribute `id`, dropping its value from every cell so the palette
     /// stays rectangular (each cell keeps one value per remaining attribute).
     /// `None`, changing nothing, if `id` is not one of this palette's attributes.
-    /// Leaves a hole until [`VoxState::gc`](crate::VoxState::gc) renumbers.
+    /// Leaves a hole until [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
     pub fn remove_attribute(&mut self, id: U32Id<BVoxAttribute>) -> Option<()> {
         if !self.attribute_ids.is_retained(id) {
             return None;
@@ -163,7 +163,7 @@ impl VoxPalette {
 
     /// Drops cell `id` and its per-attribute values. The caller must first ensure
     /// no live voxel still samples it, which is why this is internal and reached
-    /// only through [`VoxState::remove_cell`](crate::VoxState::remove_cell).
+    /// only through [`VoxMain::remove_cell`](crate::VoxMain::remove_cell).
     /// Leaves a hole until [`gc`](Self::gc) renumbers.
     pub(crate) fn remove_cell(&mut self, id: U32Id<BVoxPaletteCell>) -> Option<()> {
         if !self.palette_cell_ids.is_retained(id) {
@@ -181,7 +181,7 @@ impl VoxPalette {
 
     /// Compacts the attribute and cell pools back to a contiguous `0..len`,
     /// moving every value to its relabeled id, and returns the cell relabeling so
-    /// a [`VoxState`](crate::VoxState) can translate the samples that point at
+    /// a [`VoxMain`](crate::VoxMain) can translate the samples that point at
     /// these cells. Attributes are referenced only within this palette, so their
     /// relabeling stays internal.
     pub(crate) fn gc(&mut self) -> IdRemap<BVoxPaletteCell, u32> {

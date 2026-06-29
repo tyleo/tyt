@@ -3,21 +3,20 @@ use crate::{
     vox_palette_from_voxj_palette, vox_value_from_voxj_value,
 };
 use branded_id::U32Id;
-use ty_math::{TyVector3I32, TyVector3U32};
-use voxcore::{VoxEditObject, VoxState};
+use voxcore::VoxMain;
 use voxj::VoxjFile;
 use voxj_codec::{decode_voxj_object, voxj_palette_cell_counts};
 
-/// Loads a [`VoxjFile`] into a [`VoxState`]. Each object's position and sample
+/// Loads a [`VoxjFile`] into a [`VoxMain`]. Each object's position and sample
 /// blocks are decoded, then entities take ids in listing order, so each id
 /// equals its voxj array index and cross-references carry over.
 ///
 /// Errors on a malformed block, malformed object geometry, or if
-/// [`VoxState::validate`](voxcore::VoxState::validate) rejects the assembled
+/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the assembled
 /// state.
-pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxState> {
+pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
     let main = &file.main;
-    let mut state = VoxState::default();
+    let mut state = VoxMain::default();
 
     // Build each value before adding it so a failed conversion leaves the state
     // untouched.
@@ -29,17 +28,15 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxState> {
         let cell_counts =
             voxj_palette_cell_counts(&object.palette_refs, &main.runtime_state.palettes)?;
         let decoded = decode_voxj_object(object, &cell_counts)?;
-        let vox_object = vox_object_from_voxj_decoded_object(&decoded)?;
-        let id = state.add_object(vox_object);
-        if let Some(edit) = main.edit_state.as_ref().and_then(|e| e.objects.get(index)) {
-            state.set_edit_object(
-                id,
-                VoxEditObject {
-                    bounds: TyVector3U32::new(edit.bounds[0], edit.bounds[1], edit.bounds[2]),
-                    origin: TyVector3I32::new(edit.origin[0], edit.origin[1], edit.origin[2]),
-                },
-            );
-        }
+        // The build volume, present only when the document recorded margin around
+        // the object's live voxels; otherwise the runtime grid is the build volume.
+        let edit = main
+            .edit_state
+            .as_ref()
+            .and_then(|e| e.objects.get(index))
+            .map(|edit| (edit.bounds, edit.origin));
+        let vox_object = vox_object_from_voxj_decoded_object(&decoded, edit)?;
+        state.add_object(vox_object);
     }
 
     for node in &main.runtime_state.hierarchy_nodes {
@@ -260,7 +257,7 @@ mod tests {
     }
 
     /// A document whose edit grid differs from the runtime grid (carries margin)
-    /// round-trips the edit state through the VoxState and back.
+    /// round-trips the edit state through the VoxMain and back.
     #[test]
     fn round_trips_edit_state() {
         let file = VoxjFile {

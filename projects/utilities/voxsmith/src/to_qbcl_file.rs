@@ -1,6 +1,6 @@
 use crate::{
     Error, QubicleQbclExtWrapper, QubicleQbclNode, QubicleQbclNodeBody, Result, cell_color,
-    ext_for, from_vox_value, object_color_ref, untighten,
+    ext_for, from_vox_value, object_color_ref,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{
@@ -10,10 +10,10 @@ use qbcl::qbcl::{
 use std::collections::HashSet;
 use voxcore::{
     BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPaletteRef, BVoxVoxel, VoxHierarchyNode,
-    VoxObject, VoxPalette, VoxState, VoxValue,
+    VoxMain, VoxObject, VoxPalette, VoxValue,
 };
 
-/// Writes a [`VoxState`] to a decoded Qubicle Construction Library [`QbclFile`].
+/// Writes a [`VoxMain`] to a decoded Qubicle Construction Library [`QbclFile`].
 ///
 /// When the state carries the `qubicle-qbcl` ext the forward path writes, the file
 /// is rebuilt from it exactly, the inverse of
@@ -26,7 +26,7 @@ use voxcore::{
 /// Errors only when a `qubicle-qbcl` ext is present but its node entries do not
 /// line up with the hierarchy, the state does not have exactly one root, or a mask
 /// list does not match its object; synthesis itself never errors.
-pub fn to_qbcl_file(state: &VoxState) -> Result<QbclFile> {
+pub fn to_qbcl_file(state: &VoxMain) -> Result<QbclFile> {
     let ext = match ext_for(state, "qubicle-qbcl") {
         Some(ext) => from_vox_value::<QubicleQbclExtWrapper>(ext)?.qubicle_qbcl,
         None => return Ok(synthesize_qbcl(state)),
@@ -82,7 +82,7 @@ pub fn to_qbcl_file(state: &VoxState) -> Result<QbclFile> {
 /// aligned ext provenance.
 fn rebuild_node(
     id: U32Id<BVoxHierarchyNode>,
-    state: &VoxState,
+    state: &VoxMain,
     nodes: &[QubicleQbclNode],
     palette: Option<&VoxPalette>,
 ) -> Result<QbclNode> {
@@ -106,7 +106,7 @@ fn rebuild_node(
             pivot,
             masks,
         } => QbclNodeBody::Matrix(matrix_from_object(
-            &matrix_object(hierarchy, state)?,
+            matrix_object(hierarchy, state)?,
             palette,
             *position,
             *pivot,
@@ -118,7 +118,7 @@ fn rebuild_node(
             masks,
         } => {
             let matrix = matrix_from_object(
-                &matrix_object(hierarchy, state)?,
+                matrix_object(hierarchy, state)?,
                 palette,
                 *position,
                 *pivot,
@@ -142,7 +142,7 @@ fn rebuild_node(
 /// Rebuilds the child nodes of a hierarchy node, in stored order.
 fn rebuild_children(
     hierarchy: &VoxHierarchyNode,
-    state: &VoxState,
+    state: &VoxMain,
     nodes: &[QubicleQbclNode],
     palette: Option<&VoxPalette>,
 ) -> Result<Vec<QbclNode>> {
@@ -153,23 +153,17 @@ fn rebuild_children(
         .collect()
 }
 
-/// The source-grid object a matrix or compound node places, or an error if it has
-/// none. The runtime object is tight; its edit grid restores the author's grid so
-/// the written matrix keeps the original dimensions and voxel positions.
-fn matrix_object(hierarchy: &VoxHierarchyNode, state: &VoxState) -> Result<VoxObject> {
+/// The build-volume object a matrix or compound node places, or an error if it has
+/// none. The object is the author's build volume, so the written matrix keeps the
+/// original dimensions and voxel positions directly.
+fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result<&'a VoxObject> {
     let object_id = *hierarchy
         .child_objects
         .first()
         .ok_or_else(|| Error::invalid("a matrix or compound node has no object"))?;
-    let object = state
+    state
         .object(object_id)
-        .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))?;
-    Ok(untighten(
-        object,
-        state
-            .edit_object(object_id)
-            .expect("a retained object has an edit grid"),
-    ))
+        .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))
 }
 
 /// Rebuilds a matrix grid from an object: each solid voxel's color comes from the
@@ -292,7 +286,7 @@ const SOLID_MASK: u8 = 0x7e;
 /// with no palette merge, but a Qubicle voxel stores no alpha, so a color's alpha
 /// is dropped. Each matrix is pivoted at its grid origin, so its position is the
 /// world coordinate of the object's min corner.
-fn synthesize_qbcl(state: &VoxState) -> QbclFile {
+fn synthesize_qbcl(state: &VoxMain) -> QbclFile {
     let mut builder = QbclBuilder::default();
     let mut children: Vec<QbclNode> = state
         .root_hierarchy_nodes()
@@ -333,7 +327,7 @@ impl QbclBuilder {
     /// further objects and the mapped child nodes become its children.
     fn emit_node(
         &mut self,
-        state: &VoxState,
+        state: &VoxMain,
         node_id: U32Id<BVoxHierarchyNode>,
         parent: [i32; 3],
     ) -> QbclNode {
@@ -374,29 +368,15 @@ impl QbclBuilder {
                 transform: QbclModel::DEFAULT_TRANSFORM,
                 children,
             }),
-            // Restore the source grid so the matrix keeps its author dimensions and
-            // voxel positions, which the tight runtime grid offsets by its origin.
+            // The object is the author's build volume, so the matrix keeps its
+            // dimensions and voxel positions directly.
             Some((id, object)) if children.is_empty() => {
-                let source = untighten(
-                    object,
-                    state
-                        .edit_object(id)
-                        .expect("a retained object has an edit grid"),
-                );
-                QbclNodeBody::Matrix(self.synthesize_matrix(id, &source, world, state))
+                QbclNodeBody::Matrix(self.synthesize_matrix(id, object, world, state))
             }
-            Some((id, object)) => {
-                let source = untighten(
-                    object,
-                    state
-                        .edit_object(id)
-                        .expect("a retained object has an edit grid"),
-                );
-                QbclNodeBody::Compound(QbclCompound {
-                    matrix: self.synthesize_matrix(id, &source, world, state),
-                    children,
-                })
-            }
+            Some((id, object)) => QbclNodeBody::Compound(QbclCompound {
+                matrix: self.synthesize_matrix(id, object, world, state),
+                children,
+            }),
         };
 
         QbclNode {
@@ -410,20 +390,13 @@ impl QbclBuilder {
     /// object. Used for a node's extra objects and for the unplaced-object sweep.
     fn emit_object_node(
         &mut self,
-        state: &VoxState,
+        state: &VoxMain,
         object_id: U32Id<BVoxObject>,
         object: &VoxObject,
         world: [i32; 3],
     ) -> QbclNode {
-        // Restore the source grid so the matrix keeps its author dimensions and
-        // voxel positions, which the tight runtime grid offsets by its origin.
-        let source = untighten(
-            object,
-            state
-                .edit_object(object_id)
-                .expect("a retained object has an edit grid"),
-        );
-        let object = &source;
+        // The object is the author's build volume, so the matrix keeps its
+        // dimensions and voxel positions directly.
         QbclNode {
             name: object.name().to_owned(),
             body: QbclNodeBody::Matrix(self.synthesize_matrix(object_id, object, world, state)),
@@ -440,7 +413,7 @@ impl QbclBuilder {
         object_id: U32Id<BVoxObject>,
         object: &VoxObject,
         position: [i32; 3],
-        state: &VoxState,
+        state: &VoxMain,
     ) -> QbclMatrix {
         self.placed.insert(object_id.to_u32());
 

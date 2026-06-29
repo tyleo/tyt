@@ -5,7 +5,7 @@ use voxsmith::{VoxelMaxColorFormat, from_voxj_bytes, to_vmax_file};
 
 /// Reconstructs a `.vmax` package directory at `output` from `.voxj` / `.voxjz`
 /// bytes, round-tripping through voxcore: voxsmith loads the document into a
-/// [`VoxState`](voxcore::VoxState) and back out to the lossless Voxel Max model,
+/// [`VoxMain`](voxcore::VoxMain) and back out to the lossless Voxel Max model,
 /// which is then written one file per entry.
 ///
 /// `color_format` selects where each palette's colors live: a 256x1
@@ -17,7 +17,7 @@ pub(crate) fn write_vmax_package(
     output: &Path,
     color_format: ColorFormat,
 ) -> Result<()> {
-    // Translate through voxcore: voxj bytes -> VoxState -> vmax model.
+    // Translate through voxcore: voxj bytes -> VoxMain -> vmax model.
     let state = from_voxj_bytes(voxj_bytes)?;
     let serde = to_vmax_file(&state, voxel_max_color_format(color_format))?;
 

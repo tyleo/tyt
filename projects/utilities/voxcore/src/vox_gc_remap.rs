@@ -1,7 +1,7 @@
 use crate::{BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell};
 use branded_id::{IdVec, soa::IdRemap};
 
-/// The id relabelings from a [`VoxState::gc`](crate::VoxState::gc), one per pool,
+/// The id relabelings from a [`VoxMain::gc`](crate::VoxMain::gc), one per pool,
 /// for translating ids held across the call.
 ///
 /// `cells` is indexed by each palette's old id, since a cell id is only meaningful

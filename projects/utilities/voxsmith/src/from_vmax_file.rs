@@ -10,8 +10,8 @@ use vmax::{
 };
 use vmax_codec::{VMaxVoxel, decode_vmax_snapshots};
 use voxcore::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxEditObject, VoxHierarchyNode,
-    VoxObject, VoxPalette, VoxState, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain,
+    VoxObject, VoxPalette, VoxValue,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`
@@ -24,7 +24,7 @@ const COLOR_CELLS: usize = 255;
 /// colors are missing, so the color indices are still preserved.
 const PLACEHOLDER_COLOR: &str = "#FFFFFFFF";
 
-/// Loads a Voxel Max document into a [`VoxState`].
+/// Loads a Voxel Max document into a [`VoxMain`].
 ///
 /// Geometry, palettes, and hierarchy become native voxcore entities. The Voxel
 /// Max state with no native voxcore home rides in a `voxel-max` ext so the
@@ -34,10 +34,10 @@ const PLACEHOLDER_COLOR: &str = "#FFFFFFFF";
 /// `color_idx - 1`.
 ///
 /// Errors on malformed geometry or if
-/// [`VoxState::validate`](voxcore::VoxState::validate) rejects the result.
-pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxState> {
+/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
+pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
     let scene = &serde.scene_json_file;
-    let mut state = VoxState::default();
+    let mut state = VoxMain::default();
 
     // Palettes are shared across objects and deduped by source filename. Their
     // names, aligned by palette id, feed the ext.
@@ -61,7 +61,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxState> {
             object_refs.push(existing);
             continue;
         }
-        let (vox_object, edit, data, transform) = build_object(
+        let (vox_object, data, transform) = build_object(
             serde,
             object,
             &mut state,
@@ -69,7 +69,6 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxState> {
             &mut palette_names,
         )?;
         let object_id = state.add_object(vox_object);
-        state.set_edit_object(object_id, edit);
         object_data.push(data);
         object_transforms.push(transform);
         object_refs.push(object_id.to_u32() as usize);
@@ -104,8 +103,8 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxState> {
 }
 
 /// Captures the editor state of a contents file for the ext. The tool partition
-/// (`tools.vp`) is dropped: it is the object's build volume, held natively in the
-/// edit grid, so it is rebuilt on write rather than stored here.
+/// (`tools.vp`) is dropped: it is the object's build volume, held natively as the
+/// object's grid, so it is rebuilt on write rather than stored here.
 fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VoxelMaxObjectState {
     VoxelMaxObjectState {
         uuid: data.uuid.clone(),
@@ -120,16 +119,17 @@ fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VoxelMaxObjectSta
 }
 
 /// Builds the voxcore object for one scene object, adding any palettes it
-/// introduces to `state`. Returns the object, its edit grid (the author's build
-/// volume), its backing `data` filename, and the transform of the node that
-/// places it.
+/// introduces to `state`. The object is built in its build volume (the author's
+/// `tools.vp`), so its live voxels keep their authored positions inside it.
+/// Returns the object, its backing `data` filename, and the transform of the node
+/// that places it.
 fn build_object(
     serde: &VMaxFile,
     object: &VMaxObject,
-    state: &mut VoxState,
+    state: &mut VoxMain,
     palette_id_by_source: &mut HashMap<String, usize>,
     palette_names: &mut Vec<Option<String>>,
-) -> Result<(VoxObject, VoxEditObject, Option<String>, TyTransformF64)> {
+) -> Result<(VoxObject, Option<String>, TyTransformF64)> {
     // Voxels come from decoding the object's snapshot edit-log on the fly.
     let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
         Vec::new()
@@ -160,10 +160,17 @@ fn build_object(
     };
     let origin = pivot_origin(box_min, object.center);
     let transform = object_transform(object, box_min, origin);
-    let edit = edit_grid(view_box(serde, object), box_min, origin, bounds);
+    // The build volume is the author's `tools.vp`; its `origin` offsets it from the
+    // placing node, and `offset` shifts a runtime-grid voxel into it.
+    let (edit_bounds, edit_origin) = edit_grid(view_box(serde, object), box_min, origin, bounds);
+    let offset = [
+        origin[0] - edit_origin[0],
+        origin[1] - edit_origin[1],
+        origin[2] - edit_origin[2],
+    ];
     let data = (!object.data.is_empty()).then(|| object.data.clone());
 
-    let [size_x, size_y, size_z] = bounds;
+    let [size_x, size_y, size_z] = edit_bounds;
     let mut vox_object = VoxObject::new(
         object.name.clone(),
         TyVector3U32::new(size_x, size_y, size_z),
@@ -175,10 +182,14 @@ fn build_object(
             VoxObject::MAX_GRID_CELLS
         ))
     })?;
-    vox_object.set_origin(TyVector3I32::new(origin[0], origin[1], origin[2]));
+    vox_object.set_origin(TyVector3I32::new(
+        edit_origin[0],
+        edit_origin[1],
+        edit_origin[2],
+    ));
 
     if voxels.is_empty() {
-        return Ok((vox_object, edit, data, transform));
+        return Ok((vox_object, data, transform));
     }
 
     let color_palette = color_palette(serde, object, state, palette_id_by_source, palette_names);
@@ -195,14 +206,16 @@ fn build_object(
     }
 
     for voxel in &voxels {
+        // Shift the voxel from its model position into the build volume; an
+        // out-of-grid result casts to a huge u32 and is rejected by `voxel_id`.
         let position = TyVector3U32::new(
-            (voxel.position[0] - box_min[0]) as u32,
-            (voxel.position[1] - box_min[1]) as u32,
-            (voxel.position[2] - box_min[2]) as u32,
+            (voxel.position[0] - box_min[0] + offset[0]) as u32,
+            (voxel.position[1] - box_min[1] + offset[1]) as u32,
+            (voxel.position[2] - box_min[2] + offset[2]) as u32,
         );
         let voxel_id = vox_object.voxel_id(position).ok_or_else(|| {
             invalid(format!(
-                "object \"{}\" voxel ({}, {}, {}) lies outside its bounds",
+                "object \"{}\" voxel ({}, {}, {}) lies outside its build volume",
                 object.name, voxel.position[0], voxel.position[1], voxel.position[2]
             ))
         })?;
@@ -228,7 +241,7 @@ fn build_object(
         })?;
     }
 
-    Ok((vox_object, edit, data, transform))
+    Ok((vox_object, data, transform))
 }
 
 /// Returns the shared color palette id for an object, adding it to `state` on
@@ -238,7 +251,7 @@ fn build_object(
 fn color_palette(
     serde: &VMaxFile,
     object: &VMaxObject,
-    state: &mut VoxState,
+    state: &mut VoxMain,
     palette_id_by_source: &mut HashMap<String, usize>,
     palette_names: &mut Vec<Option<String>>,
 ) -> Option<usize> {
@@ -292,7 +305,7 @@ fn color_cells(serde: &VMaxFile, object: &VMaxObject) -> Vec<String> {
 fn material_palette(
     serde: &VMaxFile,
     object: &VMaxObject,
-    state: &mut VoxState,
+    state: &mut VoxMain,
     palette_id_by_source: &mut HashMap<String, usize>,
     palette_names: &mut Vec<Option<String>>,
 ) -> Option<usize> {
@@ -472,34 +485,31 @@ fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
     ]
 }
 
-/// The object's edit grid (the author's build volume `tools.vp`) in the node's
-/// local voxel frame, which must contain the runtime grid. Its `origin` is the
-/// build volume's min corner offset from the node, `vp.min - box_min + origin`;
-/// an object with no build volume takes a zero-margin edit grid equal to its
-/// runtime grid.
+/// The object's build volume (the author's `tools.vp`) as `(bounds, origin)` in
+/// the node's local voxel frame, which contains the runtime grid. The `origin` is
+/// the build volume's min corner offset from the node, `vp.min - box_min + origin`;
+/// an object with no build volume takes a zero-margin volume equal to its runtime
+/// grid.
 fn edit_grid(
     view_box: Option<&VMaxViewBox>,
     box_min: [i32; 3],
     origin: [i32; 3],
     bounds: [u32; 3],
-) -> VoxEditObject {
+) -> ([u32; 3], [i32; 3]) {
     match view_box {
-        Some(vp) => VoxEditObject {
-            bounds: TyVector3U32::new(
+        Some(vp) => (
+            [
                 (vp.max[0] - vp.min[0] + 1).max(0) as u32,
                 (vp.max[1] - vp.min[1] + 1).max(0) as u32,
                 (vp.max[2] - vp.min[2] + 1).max(0) as u32,
-            ),
-            origin: TyVector3I32::new(
+            ],
+            [
                 vp.min[0] as i32 - box_min[0] + origin[0],
                 vp.min[1] as i32 - box_min[1] + origin[1],
                 vp.min[2] as i32 - box_min[2] + origin[2],
-            ),
-        },
-        None => VoxEditObject {
-            bounds: TyVector3U32::new(bounds[0], bounds[1], bounds[2]),
-            origin: TyVector3I32::new(origin[0], origin[1], origin[2]),
-        },
+            ],
+        ),
+        None => (bounds, origin),
     }
 }
 
@@ -697,10 +707,9 @@ mod tests {
             .expect("an empty object with only a build volume must load");
         let id = U32Id::<BVoxObject>::from_u32(0);
         let object = state.object(id).expect("the one object");
-        assert_eq!(object.bounds(), TyVector3U32::new(0, 0, 0));
-        // The edit grid is the build volume (the 32^3 `vp`), and it contains the
-        // degenerate runtime grid.
-        let edit = state.edit_object(id).expect("the object's edit grid");
-        assert_eq!(edit.bounds, TyVector3U32::new(32, 32, 32));
+        // The object's grid is the build volume (the 32^3 `vp`); it has no live
+        // voxels, so its derived runtime extent is empty.
+        assert_eq!(object.bounds(), TyVector3U32::new(32, 32, 32));
+        assert_eq!(object.live_extent(), None);
     }
 }

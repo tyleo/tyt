@@ -2,25 +2,26 @@ use crate::{
     Result, voxj_decoded_object_from_vox_object, voxj_hierarchy_node_from_vox_hierarchy_node,
     voxj_palette_from_vox_palette, voxj_value_from_vox_value,
 };
-use voxcore::{VoxEditObject, VoxState};
+use ty_math::TyVector3U32;
+use voxcore::{VoxMain, VoxObject};
 use voxj::{VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState};
 use voxj_codec::{
     PositionEncoding, SampleEncoding, encode_voxj_object, encode_voxj_object_smallest,
     voxj_palette_cell_counts,
 };
 
-/// The voxj format version stamped on documents written from a [`VoxState`],
+/// The voxj format version stamped on documents written from a [`VoxMain`],
 /// which does not itself carry a version.
 pub(crate) const VOXJ_FORMAT_VERSION: u32 = 1;
 
-/// Builds a [`VoxjFile`] from a [`VoxState`], encoding each object's geometry
+/// Builds a [`VoxjFile`] from a [`VoxMain`], encoding each object's geometry
 /// with `encoding` (a fixed position/sample pair) or, when `None`, the smallest
 /// per-object block encodings. The shared step behind the `.voxj` and `.voxjz`
 /// writers and the fixed/smallest entry points. Objects, palettes, and hierarchy
 /// nodes are emitted in id order, so each lands at its original array index and
 /// the cross references carry over unchanged.
 pub(crate) fn to_voxj_file_with_encoding(
-    state: &VoxState,
+    state: &VoxMain,
     encoding: Option<(PositionEncoding, SampleEncoding)>,
 ) -> Result<VoxjFile> {
     let palettes = state
@@ -53,26 +54,19 @@ pub(crate) fn to_voxj_file_with_encoding(
         .map(|id| id.to_u32() as usize)
         .collect();
 
-    // Editor state, aligned by index with the objects. Emitted only when some
-    // object's edit grid differs from its runtime grid; the zero-margin default
-    // is recreated by `from_voxj_file`, so omitting it loses nothing.
-    let any_margin = state.iter_objects().any(|(id, object)| {
-        let runtime = VoxEditObject {
-            bounds: object.bounds(),
-            origin: object.origin(),
-        };
-        state.edit_object(id) != Some(runtime)
-    });
+    // Editor state, aligned by index with the objects. Each entry is the object's
+    // build volume; emitted only when some object carries margin around its live
+    // voxels, since an already-tight object recreates its build volume on load.
+    let any_margin = state.iter_objects().any(|(_, object)| !is_tight(object));
     let edit_state = any_margin.then(|| VoxjEditState {
         objects: state
             .iter_objects()
-            .map(|(id, _)| {
-                let edit = state
-                    .edit_object(id)
-                    .expect("a retained object has an edit grid");
+            .map(|(_, object)| {
+                let bounds = object.bounds();
+                let origin = object.origin();
                 VoxjEditObject {
-                    bounds: [edit.bounds.x, edit.bounds.y, edit.bounds.z],
-                    origin: [edit.origin.x, edit.origin.y, edit.origin.z],
+                    bounds: [bounds.x, bounds.y, bounds.z],
+                    origin: [origin.x, origin.y, origin.z],
                 }
             })
             .collect(),
@@ -93,4 +87,14 @@ pub(crate) fn to_voxj_file_with_encoding(
             ext,
         },
     })
+}
+
+/// Whether an object's build volume already equals its tight runtime grid, so it
+/// needs no edit-state entry to be recovered on load.
+fn is_tight(object: &VoxObject) -> bool {
+    let bounds = object.bounds();
+    match object.live_extent() {
+        Some((min, size)) => min == TyVector3U32::default() && size == bounds,
+        None => bounds == TyVector3U32::default(),
+    }
 }

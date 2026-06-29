@@ -1,16 +1,14 @@
-use crate::{
-    Error, QubicleQbtExt, QubicleQbtExtWrapper, QubicleQbtNode, Result, tighten, to_vox_value,
-};
+use crate::{Error, QubicleQbtExt, QubicleQbtExtWrapper, QubicleQbtNode, Result, to_vox_value};
 use branded_id::U32Id;
 use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
-    BVoxHierarchyNode, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxObject, VoxPalette,
-    VoxState, VoxValue,
+    BVoxHierarchyNode, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxObject,
+    VoxPalette, VoxValue,
 };
 
-/// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a [`VoxState`].
+/// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a [`VoxMain`].
 ///
 /// Matrix and compound grids become objects sharing one `rgb` palette, and the
 /// scene tree becomes the hierarchy nodes. The state with no native voxcore home,
@@ -19,9 +17,9 @@ use voxcore::{
 /// rides in a `qubicle-qbt` ext so the file can be written back exactly.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or if
-/// [`VoxState::validate`](voxcore::VoxState::validate) rejects the result.
-pub fn from_qbt_file(file: &QbtFile) -> Result<VoxState> {
-    let mut state = VoxState::default();
+/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
+pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
+    let mut state = VoxMain::default();
 
     let (palette, cells) = build_palette(&file.root);
     let palette_id = state.add_palette(palette);
@@ -53,21 +51,18 @@ pub fn from_qbt_file(file: &QbtFile) -> Result<VoxState> {
 /// at each index lines up with the hierarchy node id. Returns the new node's id.
 fn build_node(
     node: &QbtNode,
-    state: &mut VoxState,
+    state: &mut VoxMain,
     palette: U32Id<BVoxPalette>,
     cells: &HashMap<[u8; 3], U32Id<BVoxPaletteCell>>,
     nodes: &mut Vec<QubicleQbtNode>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let id = match node {
         QbtNode::Matrix(matrix) => {
-            // The matrix grid may carry empty margin; the runtime object is tight,
-            // with the matrix grid kept as the object's edit grid (build volume).
-            // The masks are read from the original grid before tightening.
+            // The matrix grid becomes the object's build volume directly; it may
+            // carry empty margin. The masks are read from that same grid.
             let object = build_object(matrix, palette, cells)?;
             let masks = masks_of(&object, matrix);
-            let (object, edit) = tighten(&object);
             let object_id = state.add_object(object);
-            state.set_edit_object(object_id, edit);
             let hierarchy = VoxHierarchyNode {
                 name: matrix.name.clone(),
                 child_nodes: Vec::new(),
@@ -104,14 +99,11 @@ fn build_node(
             for child in &compound.children {
                 child_nodes.push(build_node(child, state, palette, cells, nodes)?);
             }
-            // The compound grid may carry empty margin; the runtime object is tight,
-            // with the matrix grid kept as the object's edit grid (build volume).
-            // The masks are read from the original grid before tightening.
+            // The compound grid becomes the object's build volume directly; it may
+            // carry empty margin. The masks are read from that same grid.
             let object = build_object(&compound.matrix, palette, cells)?;
             let masks = masks_of(&object, &compound.matrix);
-            let (object, edit) = tighten(&object);
             let object_id = state.add_object(object);
-            state.set_edit_object(object_id, edit);
             let hierarchy = VoxHierarchyNode {
                 name: compound.matrix.name.clone(),
                 child_nodes,
@@ -284,7 +276,7 @@ mod tests {
     use qbcl::qbt::{
         QbtColor, QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtUnknownNode, QbtVoxel,
     };
-    use voxcore::VoxState;
+    use voxcore::VoxMain;
 
     /// A matrix node with two solid voxels in a `[2, 1, 1]` grid.
     fn matrix_node() -> QbtNode {
@@ -372,7 +364,7 @@ mod tests {
 
     #[test]
     fn errors_without_qubicle_qbt_ext() {
-        let state = VoxState::default();
+        let state = VoxMain::default();
         assert!(to_qbt_file(&state).is_err());
     }
 

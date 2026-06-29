@@ -16,15 +16,14 @@ pub struct VoxObject {
     /// Display name.
     name: String,
 
-    /// Grid size in voxels. The runtime grid is the live voxels' tight extent for
-    /// a Voxel Json document, carrying no empty margin; build-volume margin belongs
-    /// in the object's edit grid
-    /// (see [`VoxState::edit_object`](crate::VoxState::edit_object)). An empty
-    /// object's tight grid is `[0, 0, 0]`.
+    /// Grid size in voxels: the object's build volume (the author's edit grid).
+    /// Live voxels sit anywhere inside `[0, bounds)` and need not fill it; the
+    /// tight runtime extent is derived on demand by
+    /// [`live_extent`](Self::live_extent). An empty build volume is `[0, 0, 0]`.
     bounds: TyVector3U32,
 
-    /// Translation from the placing hierarchy node to the grid's min corner, in
-    /// voxels.
+    /// Translation from the placing hierarchy node to the build volume's min
+    /// corner, in voxels.
     origin: TyVector3I32,
 
     /// One id per grid cell; id equals the raster index.
@@ -166,6 +165,31 @@ impl VoxObject {
         self.liveness.iter_live()
     }
 
+    /// The tight live-voxel extent as `(min_corner, [X, Y, Z] size)` in this
+    /// object's grid, or `None` when it has no live voxels. The object stores the
+    /// wider build volume in [`bounds`](Self::bounds); the runtime/tight grid a
+    /// Voxel Json document records is derived from this.
+    pub fn live_extent(&self) -> Option<(TyVector3U32, TyVector3U32)> {
+        let mut live = self.iter_live().map(|id| {
+            self.voxel_position(id)
+                .expect("a live voxel is within the grid")
+        });
+        let first = live.next()?;
+        let (mut min, mut max) = (first, first);
+        for p in live {
+            min.x = min.x.min(p.x);
+            min.y = min.y.min(p.y);
+            min.z = min.z.min(p.z);
+            max.x = max.x.max(p.x);
+            max.y = max.y.max(p.y);
+            max.z = max.z.max(p.z);
+        }
+        Some((
+            min,
+            TyVector3U32::new(max.x - min.x + 1, max.y - min.y + 1, max.z - min.z + 1),
+        ))
+    }
+
     /// Number of palette references.
     pub fn palette_ref_count(&self) -> usize {
         self.palette_ref_ids.len()
@@ -187,7 +211,7 @@ impl VoxObject {
     /// `default_sample` until [`retain_voxel`](Self::retain_voxel) overwrites it,
     /// so widening the reference set never requires re-adding voxels. Referencing
     /// the same palette twice is rejected by
-    /// [`VoxState::validate`](crate::VoxState::validate), not here.
+    /// [`VoxMain::validate`](crate::VoxMain::validate), not here.
     pub fn add_palette_ref(
         &mut self,
         palette: U32Id<BVoxPalette>,
@@ -264,7 +288,7 @@ impl VoxObject {
     /// Removes palette reference `id`, dropping its per-voxel sample column so
     /// every voxel keeps one fewer sample. `None`, changing nothing, if `id` is
     /// not one of this object's references. Leaves a hole until
-    /// [`VoxState::gc`](crate::VoxState::gc) renumbers.
+    /// [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
     pub fn remove_palette_ref(&mut self, id: U32Id<BVoxPaletteRef>) -> Option<()> {
         if !self.palette_ref_ids.is_retained(id) {
             return None;
@@ -281,7 +305,7 @@ impl VoxObject {
     /// Removes every reference naming `palette`. A validated object names a palette
     /// at most once, but this removes every match regardless, so it is safe to call
     /// on a state that has not been validated. Used by
-    /// [`VoxState::remove_palette`](crate::VoxState::remove_palette) to detach an
+    /// [`VoxMain::remove_palette`](crate::VoxMain::remove_palette) to detach an
     /// object from a palette being removed.
     pub(crate) fn remove_palette_refs_to(&mut self, palette: U32Id<BVoxPalette>) {
         let doomed: Vec<_> = self
@@ -296,7 +320,7 @@ impl VoxObject {
 
     /// Repoints every live voxel that samples `old` through a reference naming
     /// `palette` to `new`. Used by
-    /// [`VoxState::remove_cell`](crate::VoxState::remove_cell) before the old cell
+    /// [`VoxMain::remove_cell`](crate::VoxMain::remove_cell) before the old cell
     /// is dropped.
     pub(crate) fn repaint_cell(
         &mut self,
@@ -324,7 +348,7 @@ impl VoxObject {
     }
 
     /// Rewrites this object's cross-references to match pools a
-    /// [`VoxState`](crate::VoxState) is compacting, then compacts its own
+    /// [`VoxMain`](crate::VoxMain) is compacting, then compacts its own
     /// reference pool. Each palette reference is translated through
     /// `palette_remap`, and each live voxel's sample cell through the
     /// `cell_remaps` entry for the referenced palette's pre-gc id. Requires a

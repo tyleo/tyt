@@ -4,16 +4,16 @@ use std::{
     path::Path,
 };
 use vmax_codec::from_vmax_package;
-use voxcore::VoxState;
+use voxcore::VoxMain;
 use voxsmith::{
     from_goxl_bytes, from_mvox_bytes, from_qbcl_bytes, from_vmax_file, from_voxj_bytes,
 };
 
-/// Loads the voxel file at `input` into a [`VoxState`], the common front half of
+/// Loads the voxel file at `input` into a [`VoxMain`], the common front half of
 /// every converter. `from` names the source format, inferred from `input`'s
 /// extension when `None`. Single-file formats decode their bytes through
 /// voxsmith; Voxel Max reads the whole `.vmax` package directory first.
-pub(crate) fn load_state(input: &Path, from: Option<Format>) -> Result<VoxState> {
+pub(crate) fn load_state(input: &Path, from: Option<Format>) -> Result<VoxMain> {
     let state = match resolve(input, from)? {
         Format::Voxj => from_voxj_bytes(&tyt_injection::read_file(input)?)?,
         Format::MVox => from_mvox_bytes(&tyt_injection::read_file(input)?)?,

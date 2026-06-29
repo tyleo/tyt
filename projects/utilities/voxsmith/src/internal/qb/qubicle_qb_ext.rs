@@ -1,7 +1,7 @@
 use crate::QubicleQbMatrix;
 use serde::{Deserialize, Serialize};
 
-/// The `qubicle-qb` ext payload stashed on a [`VoxState`](voxcore::VoxState): the
+/// The `qubicle-qb` ext payload stashed on a [`VoxMain`](voxcore::VoxMain): the
 /// Qubicle Binary `.qb` state with no native voxcore home, kept so a file loaded
 /// from a `.qb` package can be written back exactly.
 ///

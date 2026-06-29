@@ -3,11 +3,11 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
-/// An error from voxcore: a [`VoxState`](crate::VoxState) whose cross-references
+/// An error from voxcore: a [`VoxMain`](crate::VoxMain) whose cross-references
 /// do not resolve, whose hierarchy has a cycle, whose roots, palette refs, node
 /// children, or palette attribute keys repeat an id, or whose node transform has
 /// a zero scale component or a non-unit rotation. See
-/// [`validate`](crate::VoxState::validate). Ids are reported as their `u32`
+/// [`validate`](crate::VoxMain::validate). Ids are reported as their `u32`
 /// listing index.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
@@ -49,12 +49,6 @@ pub enum Error {
 
     /// A node's transform rotation is not a unit quaternion.
     NonUnitRotation { node: u32 },
-
-    /// An object's grid is not exactly tight around its live voxels.
-    UntightBounds { object: u32 },
-
-    /// An object's edit grid does not contain its runtime grid.
-    EditGridContainment { object: u32 },
 }
 
 impl Display for Error {
@@ -115,14 +109,6 @@ impl Display for Error {
             Error::NonUnitRotation { node } => write!(
                 f,
                 "hierarchy node {node} transform rotation is not a unit quaternion"
-            ),
-            Error::UntightBounds { object } => write!(
-                f,
-                "object {object} bounds are not exactly tight around its live voxels"
-            ),
-            Error::EditGridContainment { object } => write!(
-                f,
-                "object {object} edit grid does not contain its runtime grid"
             ),
         }
     }

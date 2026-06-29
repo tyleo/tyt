@@ -2,7 +2,7 @@
 
 //! Utilities for working with voxels.
 //!
-//! voxcore's [`VoxState`](voxcore::VoxState) is the in-memory hub for every voxel
+//! voxcore's [`VoxMain`](voxcore::VoxMain) is the in-memory hub for every voxel
 //! format this crate handles. For Voxel Json it converts both at the document
 //! level ([`from_voxj_file`] / [`to_voxj_file`], with
 //! [`to_voxj_file_with`] for a fixed block encoding) and straight to

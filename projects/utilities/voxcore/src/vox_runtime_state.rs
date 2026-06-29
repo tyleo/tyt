@@ -6,10 +6,9 @@ use branded_id::{
 
 /// The runtime scene of a voxel model: its objects, the shared palettes they
 /// sample, the scene hierarchy, and the roots of that hierarchy. Held by
-/// [`VoxState`](crate::VoxState) alongside the
-/// [`VoxEditState`](crate::VoxEditState) and the ext.
+/// [`VoxMain`](crate::VoxMain) alongside the ext.
 ///
-/// This is the struct-of-arrays backing store. [`VoxState`](crate::VoxState)
+/// This is the struct-of-arrays backing store. [`VoxMain`](crate::VoxMain)
 /// owns the add/read/remove/gc/validate logic over these fields; they are
 /// crate-private so the pools and columns stay in sync.
 #[derive(Debug, Default)]

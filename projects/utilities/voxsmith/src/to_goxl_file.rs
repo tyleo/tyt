@@ -1,6 +1,5 @@
 use crate::{
     GoxelExtWrapper, GoxelLayer, Result, cell_color, ext_for, from_vox_value, object_color_ref,
-    untighten,
 };
 use branded_id::U32Id;
 use goxl::{
@@ -10,11 +9,11 @@ use goxl::{
 use std::collections::{BTreeMap, HashSet};
 use ty_math::TyVector3U32;
 use voxcore::{
-    BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPaletteRef, BVoxVoxel, VoxObject, VoxPalette,
-    VoxState, VoxValue,
+    BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPaletteRef, BVoxVoxel, VoxMain, VoxObject,
+    VoxPalette, VoxValue,
 };
 
-/// Writes a [`VoxState`] to a decoded Goxel [`GoxlFile`].
+/// Writes a [`VoxMain`] to a decoded Goxel [`GoxlFile`].
 ///
 /// When the state carries the `goxel` ext the forward path writes, the file is
 /// rebuilt losslessly from it, the inverse of
@@ -27,7 +26,7 @@ use voxcore::{
 ///
 /// Errors only when a `goxel` ext is present but cannot be deserialized;
 /// synthesis itself never errors.
-pub fn to_goxl_file(state: &VoxState) -> Result<GoxlFile> {
+pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
     let ext = match ext_for(state, "goxel") {
         Some(ext) => from_vox_value::<GoxelExtWrapper>(ext)?.goxel,
         None => return Ok(synthesize_goxl(state)),
@@ -37,19 +36,11 @@ pub fn to_goxl_file(state: &VoxState) -> Result<GoxlFile> {
     // object; the colors live in its cells.
     let palette = state.iter_palettes().next().map(|(_, palette)| palette);
 
-    // The runtime grid is tight; restore each object's source 16-cube (its edit
-    // grid) so a block fills the fixed Goxel block size at the original positions.
+    // Each object is the author's build volume (a fixed Goxel 16-cube), so a block
+    // is written from it directly at the original positions.
     let blocks = state
         .iter_objects()
-        .map(|(id, object)| {
-            let source = untighten(
-                object,
-                state
-                    .edit_object(id)
-                    .expect("a retained object has an edit grid"),
-            );
-            block_from_object(&source, palette)
-        })
+        .map(|(_, object)| block_from_object(object, palette))
         .collect();
 
     Ok(GoxlFile {
@@ -127,7 +118,7 @@ pub fn to_goxl_file(state: &VoxState) -> Result<GoxlFile> {
 /// an absent cell, so a fully transparent live color is written opaque, and a
 /// voxel with no resolvable color is written opaque black; any other alpha is
 /// kept.
-fn synthesize_goxl(state: &VoxState) -> GoxlFile {
+fn synthesize_goxl(state: &VoxMain) -> GoxlFile {
     let mut builder = GoxlBuilder::default();
     for &root in state.root_hierarchy_nodes() {
         builder.emit_node(state, root, [0, 0, 0]);
@@ -159,7 +150,7 @@ impl GoxlBuilder {
     /// Walks one hierarchy node, summing its translation into the world position,
     /// emitting a layer for each object it places, then recursing into its child
     /// nodes.
-    fn emit_node(&mut self, state: &VoxState, node_id: U32Id<BVoxHierarchyNode>, parent: [i32; 3]) {
+    fn emit_node(&mut self, state: &VoxMain, node_id: U32Id<BVoxHierarchyNode>, parent: [i32; 3]) {
         let (name, child_objects, child_nodes, world) = {
             let node = state
                 .hierarchy_node(node_id)
@@ -193,7 +184,7 @@ impl GoxlBuilder {
     /// corner; a tile holding no solid voxel is never emitted.
     fn emit_object(
         &mut self,
-        state: &VoxState,
+        state: &VoxMain,
         object_id: U32Id<BVoxObject>,
         object: &VoxObject,
         world: [i32; 3],
@@ -201,15 +192,8 @@ impl GoxlBuilder {
     ) {
         self.placed.insert(object_id.to_u32());
 
-        // Restore the source grid so each voxel sits at its original local
-        // position, which the tight runtime grid offsets by its origin.
-        let source = untighten(
-            object,
-            state
-                .edit_object(object_id)
-                .expect("a retained object has an edit grid"),
-        );
-        let object = &source;
+        // The object is the author's build volume, so each voxel sits at its
+        // original local position directly.
         let color = object_color_ref(state, object);
         let edge = GoxlBlock::SIZE as i32;
         let stride = GoxlBlock::SIZE as usize;

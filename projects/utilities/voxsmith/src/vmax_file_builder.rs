@@ -1,19 +1,19 @@
 use crate::{Result, SceneCameraSource, VoxelMaxColorFormat, write_vmax};
 use vmax::VMaxFile;
-use voxcore::VoxState;
+use voxcore::VoxMain;
 
-/// Builds a [`VMaxFile`] from a [`VoxState`], the configurable form of
+/// Builds a [`VMaxFile`] from a [`VoxMain`], the configurable form of
 /// [`to_vmax_file`](crate::to_vmax_file). It defaults to PNG colors and keeps the
 /// scene camera the path produces, the same document that function writes.
 pub struct VmaxFileBuilder<'a> {
-    state: &'a VoxState,
+    state: &'a VoxMain,
     color_format: VoxelMaxColorFormat,
     scene_camera: Option<SceneCameraSource>,
 }
 
 impl<'a> VmaxFileBuilder<'a> {
     /// Starts a builder writing `state` back to a Voxel Max document.
-    pub fn new(state: &'a VoxState) -> Self {
+    pub fn new(state: &'a VoxMain) -> Self {
         Self {
             state,
             color_format: VoxelMaxColorFormat::Png,

@@ -4,7 +4,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-/// The `magica-voxel` ext payload stashed on a [`VoxState`](voxcore::VoxState):
+/// The `magica-voxel` ext payload stashed on a [`VoxMain`](voxcore::VoxMain):
 /// the MagicaVoxel `.vox` state with no native voxcore home, kept so a file
 /// loaded from a MagicaVoxel package can be written back exactly.
 ///

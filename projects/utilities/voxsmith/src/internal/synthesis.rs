@@ -1,13 +1,11 @@
 use branded_id::U32Id;
-use voxcore::{
-    BVoxAttribute, BVoxPaletteRef, BVoxVoxel, VoxObject, VoxPalette, VoxState, VoxValue,
-};
+use voxcore::{BVoxAttribute, BVoxPaletteRef, BVoxVoxel, VoxMain, VoxObject, VoxPalette, VoxValue};
 
 /// The state's ext, but only when it is an [`Object`](VoxValue::Object) carrying
 /// `key` as a top-level field. A foreign ext naming another format, or no ext at
 /// all, returns `None`, which lets a `to_<format>` writer fall back to synthesis
 /// without disturbing its lossless ext path.
-pub(crate) fn ext_for<'a>(state: &'a VoxState, key: &str) -> Option<&'a VoxValue> {
+pub(crate) fn ext_for<'a>(state: &'a VoxMain, key: &str) -> Option<&'a VoxValue> {
     let ext = state.ext()?;
     match ext {
         VoxValue::Object(map) if map.0.iter().any(|(name, _)| name == key) => Some(ext),
@@ -37,7 +35,7 @@ pub(crate) fn parse_color_hex(value: Option<&VoxValue>) -> [u8; 4] {
 /// an `rgba` or `rgb` color attribute, with that palette and the attribute's id.
 /// `None` when the object has no such reference.
 pub(crate) fn object_color_ref<'a>(
-    state: &'a VoxState,
+    state: &'a VoxMain,
     object: &VoxObject,
 ) -> Option<(U32Id<BVoxPaletteRef>, &'a VoxPalette, U32Id<BVoxAttribute>)> {
     object
