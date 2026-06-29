@@ -105,5 +105,3 @@ pub use voxj_file_builder::*;
 
 // Re-exported so callers can name the camera passed to `SceneCameraSource::Camera`.
 pub use vmax::VMaxSceneCamera;
-
-pub(crate) use to_vmax_file::write_vmax;
