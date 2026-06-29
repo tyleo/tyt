@@ -94,13 +94,16 @@ mod tests {
         positions: Vec<[u32; 3]>,
         samples: Vec<Vec<u32>>,
     ) -> VoxjObject {
+        let channels = (0..palette_refs.len())
+            .map(|p| samples.iter().map(|row| row[p]).collect())
+            .collect();
         VoxjObject {
             name: name.to_owned(),
             palette_refs,
             bounds,
             origin: [0, 0, 0],
             voxel_positions: VoxjPositionBlock::RawJson(positions),
-            voxel_samples: VoxjSampleBlock::RawJson(samples),
+            voxel_samples: VoxjSampleBlock::RawJson(channels),
         }
     }
 
@@ -354,8 +357,10 @@ mod tests {
     #[test]
     fn rejects_out_of_range_sample() {
         let mut file = sample_file();
+        // One channel (object 0 references one palette); the first voxel samples
+        // cell 99, which is out of range.
         file.main.runtime_state.objects[0].voxel_samples =
-            VoxjSampleBlock::RawJson(vec![vec![99], vec![0], vec![5], vec![2]]);
+            VoxjSampleBlock::RawJson(vec![vec![99, 0, 5, 2]]);
         assert!(from_voxj_file(&file).is_err());
     }
 

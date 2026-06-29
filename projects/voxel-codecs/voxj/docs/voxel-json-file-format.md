@@ -129,15 +129,15 @@ All base64 in this format uses the standard RFC 4648 alphabet, not base64url, wi
 
 ### Sample Encodings
 
-1. `raw-json`: one entry per voxel, each a plain array of that voxel's samples, one cell index per palette, in order: `[[v0p0, v0p1], [v1p0, v1p1], ...]`.
+1. `raw-json`: one channel per palette, each a plain array of that palette's cell index for every voxel, in order: `[[p0v0, p0v1], [p1v0, p1v1], ...]`.
 2. `rle-json`: one channel per palette; each channel is a flat run-length encoding `[value1, count1, value2, count2, ...]`. Counts are positive integers and, in every channel, sum to the number of voxels.
 3. `packed-base64`: one bit-packed channel per palette. For the channel sampling a palette with `c` cells, each voxel's cell index is packed at fixed width `b = max(1, bitLength(c - 1))` bits, MSB-first, 8 per byte, with the final byte zero-padded; the width is derived from `c` and not stored. `data` is one base64 string per palette, in `paletteRefs` order, each encoding exactly `ceil(voxelCount * b / 8)` bytes. This is the same packing scheme as the `bitmap-base64` position encoding, which is its `b = 1` special case. An empty object has one `""` per palette. Best for incoherent or many-color objects, where `rle-json` would approach one run per voxel.
 
 #### Example: four voxels in an object whose `paletteRefs` has length 2, with per-voxel samples in the position block's voxel order `[0, 0]`, `[0, 1]`, `[0, 1]`, `[1, 1]`
 
 ```jsonc
-// raw-json: one [palette-0 cell, palette-1 cell] row per voxel
-{ "encoding": "raw-json", "data": [[0, 0], [0, 1], [0, 1], [1, 1]] }
+// raw-json: one [voxel-0 cell, voxel-1 cell, ...] row per palette.
+{ "encoding": "raw-json", "data": [[0, 0, 0, 1], [0, 1, 1, 1]] }
 
 // rle-json: one channel per palette, each a flat [value, count, ...] run stream
 { "encoding": "rle-json", "data": [[0, 3, 1, 1], [0, 1, 1, 3]] }
@@ -340,10 +340,10 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
 4. After decoding, voxel positions within an object are unique.
 5. `bounds` is three non-negative integers and is exactly tight around the decoded positions: a non-empty object's voxels reach both ends of every axis, so on each axis the minimum voxel coordinate is `0` and `bounds` equals the maximum plus one; an empty object has `bounds = [0, 0, 0]`.
 6. Sample arity matches `paletteRefs.length`:
-   1. `raw-json` has exactly one row per voxel, each row holding exactly that many cell indices
+   1. `raw-json` has exactly that many channels (arrays), each holding exactly one cell index per voxel
    2. `rle-json` has exactly that many channels
    3. `packed-base64` has exactly that many channels (base64 strings)
-7. Each `rle-json` channel's run counts are positive and sum to the number of voxels. Each `packed-base64` channel base64-decodes to exactly `ceil(voxelCount * b / 8)` bytes for that channel's width `b = max(1, bitLength(c - 1))`, where `c` is the indexed palette's cell count, and its pad bits are zero.
+7. Each `raw-json` channel holds exactly one value per voxel. Each `rle-json` channel's run counts are positive and sum to the number of voxels. Each `packed-base64` channel base64-decodes to exactly `ceil(voxelCount * b / 8)` bytes for that channel's width `b = max(1, bitLength(c - 1))`, where `c` is the indexed palette's cell count, and its pad bits are zero.
 8. Sample order matches the position block's voxel order (see [Voxel Order](#voxel-order)). This is an authoring invariant a validator cannot confirm.
 9. In every palette, each `data` row has exactly `attributes.length` values, and `attributes` has no duplicate keys. Where a cell carries `rgba`, its value matches `^#[0-9A-F]{8}$`.
 10. The hierarchy is acyclic.
@@ -380,12 +380,12 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
               [1, 0, 0],
             ],
           },
-          // Per voxel: [palette-1 cell, palette-2 cell].
+          // Per palette: [voxel-0 cell, voxel-1 cell].
           "voxelSamples": {
             "encoding": "raw-json",
             "data": [
+              [0, 1],
               [0, 0],
-              [1, 0],
             ],
           },
         },
@@ -499,7 +499,7 @@ type PositionBlock =
   | { encoding: "hilbert-delta-varint-base64"; data: string };
 
 type SampleBlock =
-  // One entry per voxel: that voxel's samples, one cell index per palette in
+  // One channel per palette: that palette's cell index for every voxel, in
   // order.
   | { encoding: "raw-json"; data: number[][] }
   // One channel per palette: a flat run stream

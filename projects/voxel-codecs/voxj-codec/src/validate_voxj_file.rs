@@ -384,7 +384,7 @@ mod tests {
                         bounds: [2, 1, 1],
                         origin: [0, 0, 0],
                         voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
-                        voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], vec![3]]),
+                        voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1, 3]]),
                     }],
                     palettes: vec![palette(&["rgba"], 4)],
                     hierarchy_nodes: vec![node(vec![1], vec![0]), node(vec![], vec![])],
@@ -437,31 +437,34 @@ mod tests {
         let mut file = valid_file();
         file.main.runtime_state.objects[0].palette_refs = vec![0, 0];
         file.main.runtime_state.objects[0].voxel_samples =
-            VoxjSampleBlock::RawJson(vec![vec![1, 1], vec![3, 3]]);
+            VoxjSampleBlock::RawJson(vec![vec![1, 3], vec![1, 3]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
-    fn rejects_sample_row_count_mismatch() {
+    fn rejects_sample_channel_too_short() {
         let mut file = valid_file();
+        // One channel for the one palette, but only one value for two voxels.
         file.main.runtime_state.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
-    fn rejects_sample_arity_mismatch() {
+    fn rejects_sample_channel_count_mismatch() {
         let mut file = valid_file();
+        // Two channels where the object references one palette.
         file.main.runtime_state.objects[0].voxel_samples =
-            VoxjSampleBlock::RawJson(vec![vec![1, 0], vec![3]]);
+            VoxjSampleBlock::RawJson(vec![vec![1, 0], vec![3, 0]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_sample_cell_out_of_range() {
         let mut file = valid_file();
-        // Palette 0 has four cells; cell 9 is out of range.
+        // Palette 0 has four cells; cell 9 is out of range. One channel, two
+        // voxels: voxel 0 samples cell 1, voxel 1 samples cell 9.
         file.main.runtime_state.objects[0].voxel_samples =
-            VoxjSampleBlock::RawJson(vec![vec![1], vec![9]]);
+            VoxjSampleBlock::RawJson(vec![vec![1, 9]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 

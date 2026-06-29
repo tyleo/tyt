@@ -1,7 +1,7 @@
 /// The encoding used for a voxel-sample block.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SampleEncoding {
-    /// One row of cell indices per voxel.
+    /// One channel of cell indices per palette.
     RawJson,
 
     /// One run-length-encoded channel per palette.

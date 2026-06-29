@@ -81,24 +81,7 @@ fn decode_samples(
     n: usize,
 ) -> Result<Vec<Vec<u32>>> {
     let channels: Vec<Vec<u32>> = match block {
-        VoxjSampleBlock::RawJson(rows) => {
-            if rows.len() != n {
-                return Err(invalid_data(format!(
-                    "raw-json sample block has {} rows, expected {n}",
-                    rows.len()
-                )));
-            }
-            if let Some(row) = rows.iter().find(|row| row.len() != cell_counts.len()) {
-                return Err(invalid_data(format!(
-                    "raw-json sample row has {} values, expected {}",
-                    row.len(),
-                    cell_counts.len()
-                )));
-            }
-            (0..cell_counts.len())
-                .map(|p| rows.iter().map(|row| row[p]).collect())
-                .collect()
-        }
+        VoxjSampleBlock::RawJson(channels) => channels.clone(),
 
         VoxjSampleBlock::RleJson(channels) => {
             channels.iter().map(|channel| rle_decode(channel)).collect()
@@ -255,17 +238,17 @@ mod tests {
         }
     }
 
-    /// Two raw-json positions with a sample row that is too short for the
-    /// referenced palette count is malformed, not silently truncated.
+    /// A raw-json sample channel shorter than the voxel count (here one value
+    /// for two voxels) is malformed, not silently zero-filled.
     #[test]
-    fn rejects_ragged_raw_json_samples() {
+    fn rejects_short_raw_json_sample_channel() {
         let object = VoxjObject {
             name: "o".to_owned(),
             palette_refs: vec![0],
             bounds: [2, 1, 1],
             origin: [0, 0, 0],
             voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
-            voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1], Vec::new()]),
+            voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1]]),
         };
         assert!(decode_voxj_object(&object, &[4]).is_err());
     }

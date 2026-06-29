@@ -18,14 +18,16 @@ pub fn encode_voxj_object(
     let num_palettes = object.palette_refs.len();
 
     let (voxel_positions, voxel_samples) = if object.positions.is_empty() {
+        // No voxels, but still one (empty) channel per referenced palette so the
+        // block's arity matches `palette_refs`.
         (
             VoxjPositionBlock::RawJson(Vec::new()),
-            VoxjSampleBlock::RawJson(Vec::new()),
+            VoxjSampleBlock::RawJson(vec![Vec::new(); num_palettes]),
         )
     } else {
         let (order, position_block) = encode_positions(object, position);
         let channels = channels_in_order(&object.samples, &order, num_palettes);
-        let sample_block = encode_samples(&channels, sample, cell_counts, order.len());
+        let sample_block = encode_samples(&channels, sample, cell_counts);
         (position_block, sample_block)
     };
 
@@ -154,30 +156,25 @@ fn channels_in_order(samples: &[Vec<u32>], order: &[usize], num_palettes: usize)
         .collect()
 }
 
-/// Encodes the per-palette sample `channels` (already in the position block's
-/// voxel order) with `encoding`. `n` is the voxel count.
+/// Encodes the per-palette sample `channels` with `encoding`.
 fn encode_samples(
     channels: &[Vec<u32>],
     encoding: SampleEncoding,
     cell_counts: &[usize],
-    n: usize,
 ) -> VoxjSampleBlock {
     match encoding {
-        SampleEncoding::RawJson => samples_raw(channels, n),
+        SampleEncoding::RawJson => samples_raw(channels),
         SampleEncoding::RleJson => samples_rle(channels),
         SampleEncoding::PackedBase64 => samples_packed(channels, cell_counts),
     }
 }
 
-/// Builds one row per voxel, each holding that voxel's cell index per palette.
-/// `n` is the voxel count, sourced independently of `channels` so an object
-/// with voxels but zero palettes still emits `n` empty rows (matching the
-/// position block's voxel count).
-fn samples_raw(channels: &[Vec<u32>], n: usize) -> VoxjSampleBlock {
-    let rows = (0..n)
-        .map(|k| channels.iter().map(|ch| ch[k]).collect())
-        .collect();
-    VoxjSampleBlock::RawJson(rows)
+/// Emits the channels as raw JSON, one array per palette holding that palette's
+/// cell index for every voxel. The same per-palette layout as the rle-json and
+/// packed-base64 sample encodings, just left unencoded. An object with voxels
+/// but zero palettes emits zero channels, matching its empty palette set.
+fn samples_raw(channels: &[Vec<u32>]) -> VoxjSampleBlock {
+    VoxjSampleBlock::RawJson(channels.to_vec())
 }
 
 /// Flat run-length encoding: `[value1, count1, value2, count2, ...]`.
@@ -224,12 +221,12 @@ mod tests {
     use crate::{PositionEncoding, SampleEncoding, VoxjDecodedObject, encode_voxj_object};
     use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
-    /// An object with voxels but zero palettes must still emit a sample block
-    /// whose arity matches the position block: raw-json carries one (empty) row
-    /// per voxel, and rle/packed carry zero channels.
+    /// An object with voxels but zero palettes emits zero sample channels under
+    /// every encoding, since there are no palettes to carry; the voxel count
+    /// lives in the position block, not the samples.
     fn assert_zero_palette_arity(object: &VoxjObject) {
         match &object.voxel_samples {
-            VoxjSampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
+            VoxjSampleBlock::RawJson(channels) => assert!(channels.is_empty()),
             VoxjSampleBlock::RleJson(channels) => assert!(channels.is_empty()),
             VoxjSampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
         }

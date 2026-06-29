@@ -77,8 +77,8 @@ mod tests {
     use crate::{VoxjDecodedObject, encode_voxj_object_smallest};
     use voxj::VoxjSampleBlock;
 
-    /// An object with voxels but zero palettes still emits sample channels
-    /// whose arity matches the position block (rle/packed carry zero channels).
+    /// An object with voxels but zero palettes emits zero sample channels under
+    /// every encoding, since there are no palettes to carry.
     #[test]
     fn zero_palette_object_keeps_sample_arity() {
         let object = encode_voxj_object_smallest(
@@ -94,7 +94,7 @@ mod tests {
         )
         .unwrap();
         match &object.voxel_samples {
-            VoxjSampleBlock::RawJson(rows) => assert_eq!(rows.len(), 3),
+            VoxjSampleBlock::RawJson(channels) => assert!(channels.is_empty()),
             VoxjSampleBlock::RleJson(channels) => assert!(channels.is_empty()),
             VoxjSampleBlock::PackedBase64(channels) => assert!(channels.is_empty()),
         }
