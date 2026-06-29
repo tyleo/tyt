@@ -6,7 +6,9 @@ use serde::{Deserialize, Serialize};
 ///
 /// The voxcore node carries the name, position, and scale, so this holds the
 /// rest. The rotation is kept as the original axis-angle because the quaternion
-/// voxcore stores cannot be inverted back to it exactly.
+/// voxcore stores cannot be inverted back to it exactly. The content box
+/// (`e_c`/`e_mi`/`e_ma`) is not kept: it is derived on write from the native
+/// tight bounds for an object and from the subtree's geometry for a group.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VoxelMaxNode {
     /// Node UUID (`id`).
@@ -24,18 +26,6 @@ pub struct VoxelMaxNode {
     /// Axis-angle rotation `[x, y, z, angle]` (`t_r`).
     #[serde(rename = "t_r", default, skip_serializing_if = "Option::is_none")]
     pub rotation: Option<[f64; 4]>,
-
-    /// Bounds center in model space (`e_c`).
-    #[serde(rename = "e_c", default, skip_serializing_if = "Option::is_none")]
-    pub center: Option<[f64; 3]>,
-
-    /// Bounds min relative to `center` (`e_mi`).
-    #[serde(rename = "e_mi", default, skip_serializing_if = "Option::is_none")]
-    pub bounds_min: Option<[f64; 3]>,
-
-    /// Bounds max relative to `center` (`e_ma`).
-    #[serde(rename = "e_ma", default, skip_serializing_if = "Option::is_none")]
-    pub bounds_max: Option<[f64; 3]>,
 
     /// Alignment enum token (`t_al`).
     #[serde(rename = "t_al", default, skip_serializing_if = "Option::is_none")]

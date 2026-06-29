@@ -103,12 +103,17 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxState> {
     Ok(state)
 }
 
-/// Captures the editor state of a contents file for the ext.
+/// Captures the editor state of a contents file for the ext. The tool partition
+/// (`tools.vp`) is dropped: it is the object's build volume, held natively in the
+/// edit grid, so it is rebuilt on write rather than stored here.
 fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VoxelMaxObjectState {
     VoxelMaxObjectState {
         uuid: data.uuid.clone(),
         v: data.v,
-        tools: data.tools.clone(),
+        tools: data.tools.clone().map(|mut tools| {
+            tools.vp = None;
+            tools
+        }),
         brush: data.brush.clone(),
         cam: data.cam.clone(),
     }
@@ -368,16 +373,14 @@ fn voxel_max_ext(
     }
 }
 
-/// The per-node provenance for a scene object.
+/// The per-node provenance for a scene object. The content box is not kept; it is
+/// derived on write from the object's native tight bounds.
 fn node_from_object(object: &VMaxObject) -> VoxelMaxNode {
     VoxelMaxNode {
         id: object.id.clone(),
         parent_id: object.parent_id.clone(),
         index: Some(object.ind),
         rotation: Some(object.rotation),
-        center: Some(object.center),
-        bounds_min: object.bounds_min,
-        bounds_max: object.bounds_max,
         alignment: Some(object.t_al.clone()),
         pivot_face: Some(object.t_pf.clone()),
         pivot_align: Some(object.t_pa.clone()),
@@ -385,16 +388,14 @@ fn node_from_object(object: &VMaxObject) -> VoxelMaxNode {
     }
 }
 
-/// The per-node provenance for a scene group.
+/// The per-node provenance for a scene group. The content box is not kept; it is
+/// derived on write from the bounding box of the group's subtree.
 fn node_from_group(group: &VMaxGroup) -> VoxelMaxNode {
     VoxelMaxNode {
         id: group.id.clone(),
         parent_id: group.parent_id.clone(),
         index: Some(group.ind),
         rotation: Some(group.rotation),
-        center: Some(group.center),
-        bounds_min: group.bounds_min,
-        bounds_max: group.bounds_max,
         alignment: Some(group.t_al.clone()),
         pivot_face: Some(group.t_pf.clone()),
         pivot_align: Some(group.t_pa.clone()),

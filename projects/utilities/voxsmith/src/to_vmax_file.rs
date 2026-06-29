@@ -13,8 +13,8 @@ use vmax::{
 };
 use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
-    BVoxHierarchyNode, BVoxPalette, BVoxPaletteRef, VoxEditObject, VoxHierarchyNode, VoxObject,
-    VoxPalette, VoxState, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteRef, VoxEditObject, VoxHierarchyNode,
+    VoxObject, VoxPalette, VoxState, VoxValue,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx` is
@@ -228,13 +228,18 @@ pub(crate) fn write_vmax(
     // `[0, 0, 0]`. The lossless path keeps its preserved `ind` and skips this.
     let mut ind_counter = 0i64;
 
+    // A group's content box is derived from its subtree, the same box for every
+    // path to a shared node, so it is memoized by node id.
+    let mut box_memo: HashMap<u32, ([f64; 3], [f64; 3])> = HashMap::new();
+
     for placement in &placements {
         let node = placement.node;
         let ext_node = &placement.ext;
 
         if node.child_objects.is_empty() {
             let ind = node_ind(ext_node, true, &mut ind_counter);
-            groups.push(group_from_node(node, ext_node, ind));
+            let (center, half) = subtree_box_local(state, placement.id, &mut box_memo);
+            groups.push(group_from_node(node, ext_node, ind, center, half));
             continue;
         }
 
@@ -389,6 +394,7 @@ fn apply_scene_camera(
 /// way voxcore renders it, and a node reachable from no root is dropped just as
 /// voxcore never places it.
 struct Placement<'a> {
+    id: U32Id<BVoxHierarchyNode>,
     node: &'a VoxHierarchyNode,
     ext: VoxelMaxNode,
 }
@@ -400,7 +406,8 @@ fn ext_placements<'a>(state: &'a VoxState, voxel_max: &VoxelMaxExt) -> Vec<Place
     state
         .iter_hierarchy_nodes()
         .enumerate()
-        .map(|(index, (_, node))| Placement {
+        .map(|(index, (id, node))| Placement {
+            id,
             node,
             ext: voxel_max
                 .hierarchy_nodes
@@ -456,15 +463,12 @@ fn push_placement<'a>(
         parent_id,
         index: None,
         rotation: Some(axis_angle(node.transform.rotation)),
-        center: None,
-        bounds_min: None,
-        bounds_max: None,
         alignment: Some(DEFAULT_ALIGNMENT.to_owned()),
         pivot_face: Some(DEFAULT_PIVOT_FACE.to_owned()),
         pivot_align: Some(DEFAULT_PIVOT_ALIGN.to_owned()),
         selected: None,
     };
-    placements.push(Placement { node, ext });
+    placements.push(Placement { id, node, ext });
     for &child in &node.child_nodes {
         push_placement(state, child, Some(ext_id.clone()), counter, placements);
     }
@@ -495,9 +499,6 @@ fn synthesize_voxel_max_ext(state: &VoxState) -> VoxelMaxExt {
 fn secondary_object_ext(node_ext: &VoxelMaxNode, slot: usize) -> VoxelMaxNode {
     VoxelMaxNode {
         id: secondary_uuid(&node_ext.id, slot),
-        center: None,
-        bounds_min: None,
-        bounds_max: None,
         ..node_ext.clone()
     }
 }
@@ -898,8 +899,166 @@ fn object_from_node(
     }
 }
 
-/// Builds a scene group from its node and preserved provenance.
-fn group_from_node(node: &VoxHierarchyNode, ext_node: &VoxelMaxNode, ind: [i64; 3]) -> VMaxGroup {
+/// The bounding box `(center, half)` of all geometry under `node_id`, in that
+/// node's own local frame: the union of each child object's content box and each
+/// child node's box mapped through the child's transform. Voxel Max stores this per
+/// group as `e_c`/`e_mi`/`e_ma`; it is the union of the subtree, so it is derived
+/// here rather than kept in the ext. Memoized by node id so a subtree shared across
+/// parents is walked once. A node with no geometry collapses to a zero box.
+fn subtree_box_local(
+    state: &VoxState,
+    node_id: U32Id<BVoxHierarchyNode>,
+    memo: &mut HashMap<u32, ([f64; 3], [f64; 3])>,
+) -> ([f64; 3], [f64; 3]) {
+    if let Some(&box_local) = memo.get(&node_id.to_u32()) {
+        return box_local;
+    }
+    let node = state
+        .hierarchy_node(node_id)
+        .expect("a valid hierarchy node");
+    let mut bounds: Option<([f64; 3], [f64; 3])> = None;
+    for &object in &node.child_objects {
+        let (center, half) = object_box_local(state, object);
+        extend_bounds(&mut bounds, center, half);
+    }
+    for &child in &node.child_nodes {
+        let (child_center, child_half) = subtree_box_local(state, child, memo);
+        let transform = state
+            .hierarchy_node(child)
+            .expect("a valid child node")
+            .transform;
+        let center = transform_point(&transform, child_center);
+        let half = transform_half(&transform, child_half);
+        extend_bounds(&mut bounds, center, half);
+    }
+    let (min, max) = bounds.unwrap_or(([0.0; 3], [0.0; 3]));
+    let box_local = (
+        [
+            (min[0] + max[0]) / 2.0,
+            (min[1] + max[1]) / 2.0,
+            (min[2] + max[2]) / 2.0,
+        ],
+        [
+            (max[0] - min[0]) / 2.0,
+            (max[1] - min[1]) / 2.0,
+            (max[2] - min[2]) / 2.0,
+        ],
+    );
+    memo.insert(node_id.to_u32(), box_local);
+    box_local
+}
+
+/// An object's content box `(center, half)` in its placing node's local voxel
+/// frame: the tight runtime grid `[origin, origin + bounds]`. An empty object has
+/// no runtime extent of its own, so it frames its build volume instead, matching
+/// the content box the write path gives it.
+fn object_box_local(state: &VoxState, object_id: U32Id<BVoxObject>) -> ([f64; 3], [f64; 3]) {
+    let object = state.object(object_id).expect("a valid child object");
+    let bounds = object.bounds();
+    if bounds.x == 0 && bounds.y == 0 && bounds.z == 0 {
+        let edit = state
+            .edit_object(object_id)
+            .expect("a retained object has an edit grid");
+        let half = [
+            edit.bounds.x as f64 / 2.0,
+            edit.bounds.y as f64 / 2.0,
+            edit.bounds.z as f64 / 2.0,
+        ];
+        return (
+            [
+                edit.origin.x as f64 + half[0],
+                edit.origin.y as f64 + half[1],
+                edit.origin.z as f64 + half[2],
+            ],
+            half,
+        );
+    }
+    let half = [
+        bounds.x as f64 / 2.0,
+        bounds.y as f64 / 2.0,
+        bounds.z as f64 / 2.0,
+    ];
+    let origin = object.origin();
+    (
+        [
+            origin.x as f64 + half[0],
+            origin.y as f64 + half[1],
+            origin.z as f64 + half[2],
+        ],
+        half,
+    )
+}
+
+/// Grows the running `(min, max)` AABB to include the box centered at `center` with
+/// half-extents `half`.
+fn extend_bounds(bounds: &mut Option<([f64; 3], [f64; 3])>, center: [f64; 3], half: [f64; 3]) {
+    let lo = [
+        center[0] - half[0],
+        center[1] - half[1],
+        center[2] - half[2],
+    ];
+    let hi = [
+        center[0] + half[0],
+        center[1] + half[1],
+        center[2] + half[2],
+    ];
+    match bounds {
+        Some((min, max)) => {
+            for k in 0..3 {
+                min[k] = min[k].min(lo[k]);
+                max[k] = max[k].max(hi[k]);
+            }
+        }
+        None => *bounds = Some((lo, hi)),
+    }
+}
+
+/// Maps a point through a node transform: scale, then rotate, then translate.
+fn transform_point(transform: &TyTransformF64, point: [f64; 3]) -> [f64; 3] {
+    let scaled = TyVector3F64::new(
+        point[0] * transform.scale.x,
+        point[1] * transform.scale.y,
+        point[2] * transform.scale.z,
+    );
+    let rotated = transform.rotation.rotate(scaled);
+    [
+        transform.position.x + rotated.x,
+        transform.position.y + rotated.y,
+        transform.position.z + rotated.z,
+    ]
+}
+
+/// The half-extent of the AABB of a box rotated and scaled by a node transform. A
+/// box centered on its pivot stays centered under the transform, so only the
+/// half-extent picks up the rotation: `sum_j abs(col_j) * half[j]` over the rotated,
+/// scaled basis columns.
+fn transform_half(transform: &TyTransformF64, half: [f64; 3]) -> [f64; 3] {
+    let col_x = transform
+        .rotation
+        .rotate(TyVector3F64::new(transform.scale.x, 0.0, 0.0));
+    let col_y = transform
+        .rotation
+        .rotate(TyVector3F64::new(0.0, transform.scale.y, 0.0));
+    let col_z = transform
+        .rotation
+        .rotate(TyVector3F64::new(0.0, 0.0, transform.scale.z));
+    [
+        col_x.x.abs() * half[0] + col_y.x.abs() * half[1] + col_z.x.abs() * half[2],
+        col_x.y.abs() * half[0] + col_y.y.abs() * half[1] + col_z.y.abs() * half[2],
+        col_x.z.abs() * half[0] + col_y.z.abs() * half[1] + col_z.z.abs() * half[2],
+    ]
+}
+
+/// Builds a scene group from its node and preserved provenance. The content box
+/// `(center, half)` is the group's derived subtree box, written as the symmetric
+/// `e_c`/`e_mi`/`e_ma` Voxel Max stores.
+fn group_from_node(
+    node: &VoxHierarchyNode,
+    ext_node: &VoxelMaxNode,
+    ind: [i64; 3],
+    center: [f64; 3],
+    half: [f64; 3],
+) -> VMaxGroup {
     VMaxGroup {
         name: node.name.clone(),
         id: ext_node.id.clone(),
@@ -914,9 +1073,9 @@ fn group_from_node(node: &VoxHierarchyNode, ext_node: &VoxelMaxNode, ind: [i64; 
         t_pa: ext_node.pivot_align.clone().unwrap_or_default(),
         t_pf: ext_node.pivot_face.clone().unwrap_or_default(),
         t_po: None,
-        center: ext_node.center.unwrap_or_default(),
-        bounds_min: ext_node.bounds_min,
-        bounds_max: ext_node.bounds_max,
+        center,
+        bounds_min: Some([-half[0], -half[1], -half[2]]),
+        bounds_max: Some(half),
     }
 }
 
@@ -1099,9 +1258,12 @@ mod tests {
             t_pa: String::new(),
             t_pf: String::new(),
             t_po: None,
-            center: [0.0, 0.0, 0.0],
-            bounds_min: None,
-            bounds_max: None,
+            // The group's content box is derived from its subtree: the child object
+            // sits at node-local [0, 0, 0]..[2, 2, 2], so the box centers on [1, 1, 1]
+            // with unit half-extents.
+            center: [1.0, 1.0, 1.0],
+            bounds_min: Some([-1.0, -1.0, -1.0]),
+            bounds_max: Some([1.0, 1.0, 1.0]),
         };
         let object = VMaxObject {
             name: "obj".to_owned(),
@@ -2134,6 +2296,44 @@ mod tests {
             world_voxels(&reloaded),
             BTreeSet::from([([11, 2, 3], red), ([1, 22, 0], green)])
         );
+    }
+
+    /// A group's content box is derived from its subtree, not stored: the union, in
+    /// the group's own frame, of each child object's content box mapped through the
+    /// placing node's transform. Two equally-sized children at different offsets
+    /// union to a box spanning both.
+    #[test]
+    fn derives_a_group_content_box_from_its_subtree() {
+        let mut state = VoxState::default();
+        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        // Two [2, 2, 2] objects, each tight (voxels reach both ends of every axis).
+        for _ in 0..2 {
+            state.add_object(color_object(
+                palette,
+                TyVector3U32::new(2, 2, 2),
+                &[([0, 0, 0], 0), ([1, 1, 1], 0)],
+            ));
+        }
+        // A root group parenting two object nodes, the second offset +10x.
+        state.add_hierarchy_node(group_node("g", &[1, 2], at(0.0, 0.0, 0.0)));
+        state.add_hierarchy_node(object_node("a", 0, at(0.0, 0.0, 0.0)));
+        state.add_hierarchy_node(object_node("b", 1, at(10.0, 0.0, 0.0)));
+        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state.validate().unwrap();
+
+        let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
+        let group = file
+            .scene_json_file
+            .groups
+            .iter()
+            .find(|g| g.name == "g")
+            .expect("the root group");
+        // Each object box is [0, 0, 0]..[2, 2, 2] in its node-local frame, centered
+        // on [1, 1, 1]; object b is shifted +10x, so the union spans x [0, 12] and
+        // y/z [0, 2], centered on [6, 1, 1] with half-extents [6, 1, 1].
+        assert_eq!(group.center, [6.0, 1.0, 1.0]);
+        assert_eq!(group.bounds_min, Some([-6.0, -1.0, -1.0]));
+        assert_eq!(group.bounds_max, Some([6.0, 1.0, 1.0]));
     }
 
     /// An empty object synthesizes to a scene object with empty contents and a
