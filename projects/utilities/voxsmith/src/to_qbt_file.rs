@@ -12,9 +12,9 @@ use voxcore::{
 /// inverse of [`from_qbt_file`](crate::from_qbt_file).
 ///
 /// Requires the `qubicle-qbt` ext the forward path writes; without it the file
-/// cannot be rebuilt. The scene tree is walked from the single root, each matrix
-/// or compound object emitting its grid with the visibility masks and color from
-/// the ext and the palette.
+/// cannot be rebuilt. The scene tree is walked from the single root, each
+/// matrix or compound object emitting its grid with the visibility masks and
+/// color from the ext and the palette.
 ///
 /// Errors if the ext is missing, its node entries do not line up with the
 /// hierarchy, the state does not have exactly one root, or a mask list does not
@@ -141,9 +141,9 @@ fn rebuild_children(
         .collect()
 }
 
-/// The build-volume object a matrix or compound node places, or an error if it has
-/// none. The object is the author's build volume, so the written matrix keeps the
-/// original dimensions and voxel positions directly.
+/// The build-volume object a matrix or compound node places, or an error if it
+/// has none. The object is the author's build volume, so the written matrix
+/// keeps the original dimensions and voxel positions directly.
 fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result<&'a VoxObject> {
     let object_id = *hierarchy
         .child_objects
@@ -154,9 +154,10 @@ fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result
         .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))
 }
 
-/// Rebuilds a matrix grid from an object: each solid voxel's color comes from the
-/// palette and its mask from the aligned ext mask list, placed in `.qbt` storage
-/// order. Errors if the mask count does not match the object's solid voxels.
+/// Rebuilds a matrix grid from an object: each solid voxel's color comes from
+/// the palette and its mask from the aligned ext mask list, placed in `.qbt`
+/// storage order. Errors if the mask count does not match the object's solid
+/// voxels.
 #[allow(clippy::too_many_arguments)]
 fn matrix_from_object(
     object: &VoxObject,

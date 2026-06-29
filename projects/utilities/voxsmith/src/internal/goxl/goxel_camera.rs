@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// A `CAMR` camera preserved in the `goxel` ext, in stored order. Cameras have no
-/// native voxcore home, so they ride here verbatim.
+/// A `CAMR` camera preserved in the `goxel` ext, in stored order. Cameras have
+/// no native voxcore home, so they ride here verbatim.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct GoxelCamera {
     /// Camera name.

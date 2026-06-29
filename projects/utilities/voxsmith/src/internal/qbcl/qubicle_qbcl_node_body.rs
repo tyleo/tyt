@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 /// the voxcore object cannot represent, plus a model's opaque transform chunk.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum QubicleQbclNodeBody {
-    /// A matrix node: a single voxel grid. Its size is the object's grid bounds.
+    /// A matrix node: a single voxel grid. Its size is the object's grid
+    /// bounds.
     Matrix {
         /// `[x, y, z]` position in the scene.
         position: [i32; 3],

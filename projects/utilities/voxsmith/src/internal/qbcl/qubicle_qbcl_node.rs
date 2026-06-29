@@ -1,9 +1,9 @@
 use crate::QubicleQbclNodeBody;
 use serde::{Deserialize, Serialize};
 
-/// Per scene-node provenance preserved in the `qubicle-qbcl` ext: the node name,
-/// the editor flags, and the per-kind body. Aligned by index with the hierarchy
-/// nodes, so the scene tree rebuilds exactly.
+/// Per scene-node provenance preserved in the `qubicle-qbcl` ext: the node
+/// name, the editor flags, and the per-kind body. Aligned by index with the
+/// hierarchy nodes, so the scene tree rebuilds exactly.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct QubicleQbclNode {
     /// Node name.

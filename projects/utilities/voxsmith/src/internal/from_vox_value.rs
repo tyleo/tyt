@@ -40,9 +40,9 @@ impl<'de> Deserializer<'de> for VoxValueDeserializer<'de> {
         match self.0 {
             VoxValue::Null => visitor.visit_unit(),
             VoxValue::Bool(value) => visitor.visit_bool(*value),
-            // An integral value visits as an integer so a buffering consumer (an
-            // untagged enum) can still read an integer variant; only fractional
-            // values fall back to floating point.
+            // An integral value visits as an integer so a buffering consumer
+            // (an untagged enum) can still read an integer variant; only
+            // fractional values fall back to floating point.
             VoxValue::Number(value)
                 if value.fract() == 0.0
                     && *value >= i64::MIN as f64

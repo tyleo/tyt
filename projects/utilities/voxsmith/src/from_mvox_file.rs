@@ -23,10 +23,10 @@ const MATERIAL_ATTRIBUTES: [&str; 7] = ["type", "weight", "rough", "spec", "ior"
 
 /// Loads a decoded MagicaVoxel [`MVoxFile`] into a [`VoxMain`].
 ///
-/// Models become objects, the 256-color palette plus the `MATL` materials become
-/// one shared palette, and the `nTRN` / `nGRP` / `nSHP` scene graph becomes the
-/// hierarchy nodes. The state with no native voxcore home, such as layers,
-/// cameras, render settings, and the exact per-node frames, rides in a
+/// Models become objects, the 256-color palette plus the `MATL` materials
+/// become one shared palette, and the `nTRN` / `nGRP` / `nSHP` scene graph
+/// becomes the hierarchy nodes. The state with no native voxcore home, such as
+/// layers, cameras, render settings, and the exact per-node frames, rides in a
 /// `magica-voxel` ext so the file can be written back exactly.
 ///
 /// Errors on malformed geometry, a material id outside the palette range, a
@@ -38,8 +38,8 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
     let palette_id = state.add_palette(build_palette(file)?);
 
     for model in &file.models {
-        // The model grid becomes the object's build volume directly; it may carry
-        // empty margin around the live voxels.
+        // The model grid becomes the object's build volume directly; it may
+        // carry empty margin around the live voxels.
         state.add_object(build_object(model, palette_id)?);
     }
 
@@ -108,8 +108,9 @@ fn build_palette(file: &MVoxFile) -> Result<VoxPalette> {
     Ok(palette)
 }
 
-/// The material columns for a cell, in [`MATERIAL_ATTRIBUTES`] order. The `_type`
-/// token is text and the scalars are numbers, with `Null` for an absent field.
+/// The material columns for a cell, in [`MATERIAL_ATTRIBUTES`] order. The
+/// `_type` token is text and the scalars are numbers, with `Null` for an absent
+/// field.
 fn material_attribute_values(material: &MVoxMaterial) -> Vec<VoxValue> {
     vec![
         match &material.material_type {
@@ -191,9 +192,9 @@ fn build_object(model: &MVoxModel, palette: U32Id<BVoxPalette>) -> Result<VoxObj
 /// Builds the hierarchy nodes, one per scene node in stored order, plus the
 /// roots. A transform node places its single child, a group its children, and a
 /// shape the objects for its models. The links are deduplicated to satisfy
-/// voxcore's per-node uniqueness rule; the exact lists ride in the ext. Roots are
-/// the nodes no other node lists as a child. Errors on a duplicate node id or a
-/// dangling child reference.
+/// voxcore's per-node uniqueness rule; the exact lists ride in the ext. Roots
+/// are the nodes no other node lists as a child. Errors on a duplicate node id
+/// or a dangling child reference.
 fn build_hierarchy(
     file: &MVoxFile,
 ) -> Result<(Vec<VoxHierarchyNode>, Vec<U32Id<BVoxHierarchyNode>>)> {
@@ -276,8 +277,8 @@ fn resolve(position_of_id: &HashMap<i32, usize>, id: i32) -> Result<usize> {
     })
 }
 
-/// The transform projecting a transform node's first frame, or the identity when
-/// it has none. The exact frames ride in the ext, so this is only a usable
+/// The transform projecting a transform node's first frame, or the identity
+/// when it has none. The exact frames ride in the ext, so this is only a usable
 /// approximation.
 fn transform_from_frames(frames: &[MVoxFrame]) -> TyTransformF64 {
     match frames.first() {
@@ -288,7 +289,8 @@ fn transform_from_frames(frames: &[MVoxFrame]) -> TyTransformF64 {
 
 /// Projects one keyframe to a [`TyTransformF64`]. The rotation is the frame's
 /// signed-permutation matrix; an improper one (a mirror) is split into a proper
-/// rotation and a negative x scale so voxcore's unit-quaternion invariant holds.
+/// rotation and a negative x scale so voxcore's unit-quaternion invariant
+/// holds.
 fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
     let position = TyVector3F64::new(
         frame.translation[0] as f64,
@@ -306,7 +308,8 @@ fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
 
     let mut scale = TyVector3F64::new(1.0, 1.0, 1.0);
     if determinant(&matrix) < 0.0 {
-        // M = R * diag(-1, 1, 1), so negating column 0 leaves a proper rotation.
+        // M = R * diag(-1, 1, 1), so negating column 0 leaves a proper
+        // rotation.
         for row in &mut matrix {
             row[0] = -row[0];
         }
@@ -404,7 +407,8 @@ fn magica_voxel_ext(file: &MVoxFile) -> MagicaVoxelExt {
     }
 }
 
-/// The ext provenance for one scene node: its id, attributes, and per-kind body.
+/// The ext provenance for one scene node: its id, attributes, and per-kind
+/// body.
 fn node_provenance(node: &MVoxSceneNode) -> MagicaVoxelNode {
     MagicaVoxelNode {
         id: node.id,
@@ -496,9 +500,9 @@ mod tests {
     }
 
     /// A file exercising every modeled chunk: two models, a custom palette, a
-    /// transform -> group -> shape chain, a material, a layer, a render object, a
-    /// camera, palette notes, an index map, and an unknown chunk. The reserved
-    /// color 0 is left transparent so the file is also byte-stable.
+    /// transform -> group -> shape chain, a material, a layer, a render object,
+    /// a camera, palette notes, an index map, and an unknown chunk. The
+    /// reserved color 0 is left transparent so the file is also byte-stable.
     fn sample_file() -> MVoxFile {
         let mut colors = MVoxPalette::default().colors;
         colors[1] = MVoxColor::new(10, 20, 30, 40);
@@ -768,9 +772,9 @@ mod tests {
         assert_eq!(to_mvox_file(&state).unwrap(), file);
     }
 
-    /// A file with no `RGBA` chunk keeps `palette: None`: the colors come from the
-    /// built-in palette and no chunk is written back, but the voxel color indices
-    /// still round-trip.
+    /// A file with no `RGBA` chunk keeps `palette: None`: the colors come from
+    /// the built-in palette and no chunk is written back, but the voxel color
+    /// indices still round-trip.
     #[test]
     fn round_trips_a_file_without_a_palette() {
         let file = MVoxFile {
@@ -800,9 +804,10 @@ mod tests {
         assert!(file.models.is_empty());
     }
 
-    /// A state with no `magica-voxel` ext, such as one cross-loaded from another
-    /// format, synthesizes a file: one model per object, a global palette
-    /// gathering every used color, and a scene graph the decoder reads back.
+    /// A state with no `magica-voxel` ext, such as one cross-loaded from
+    /// another format, synthesizes a file: one model per object, a global
+    /// palette gathering every used color, and a scene graph the decoder reads
+    /// back.
     #[test]
     fn synthesizes_a_file_without_an_ext() {
         let state = source_state();
@@ -830,8 +835,9 @@ mod tests {
         assert_eq!(reloaded.object_count(), 2);
     }
 
-    /// A foreign ext, here `voxel-max`, is ignored by the MagicaVoxel writer: it
-    /// synthesizes from the scene rather than failing to parse the wrong ext.
+    /// A foreign ext, here `voxel-max`, is ignored by the MagicaVoxel writer:
+    /// it synthesizes from the scene rather than failing to parse the wrong
+    /// ext.
     #[test]
     fn synthesizes_past_a_foreign_ext() {
         let mut state = source_state();
@@ -872,9 +878,10 @@ mod tests {
         assert!(from_mvox_file(&file).is_err());
     }
 
-    /// A shape node may draw the same model on several animation frames, listing
-    /// the model index more than once. The voxcore node lists the placed object
-    /// once, but the ext keeps the full list, so the shape round-trips.
+    /// A shape node may draw the same model on several animation frames,
+    /// listing the model index more than once. The voxcore node lists the
+    /// placed object once, but the ext keeps the full list, so the shape
+    /// round-trips.
     #[test]
     fn round_trips_a_shape_drawing_one_model_on_two_frames() {
         let file = MVoxFile {

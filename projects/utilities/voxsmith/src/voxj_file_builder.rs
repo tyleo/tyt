@@ -4,9 +4,9 @@ use voxj::VoxjFile;
 use voxj_codec::{PositionEncoding, SampleEncoding};
 
 /// Builds a [`VoxjFile`] from a [`VoxMain`], the configurable form of
-/// [`to_voxj_file`](crate::to_voxj_file). It defaults to the smallest per-object
-/// block encodings, keeps the user-defined ext block, and records the edit state
-/// automatically, the same document that function writes.
+/// [`to_voxj_file`](crate::to_voxj_file). It defaults to the smallest
+/// per-object block encodings, keeps the user-defined ext block, and records
+/// the edit state automatically, the same document that function writes.
 pub struct VoxjFileBuilder<'a> {
     state: &'a VoxMain,
     position_encoding: Option<PositionEncoding>,
@@ -47,8 +47,8 @@ impl<'a> VoxjFileBuilder<'a> {
         self
     }
 
-    /// Sets when each object's editor build volume is recorded in the document's
-    /// edit state.
+    /// Sets when each object's editor build volume is recorded in the
+    /// document's edit state.
     pub fn edit_state(mut self, edit_state: EditStateMode) -> Self {
         self.edit_state = edit_state;
         self

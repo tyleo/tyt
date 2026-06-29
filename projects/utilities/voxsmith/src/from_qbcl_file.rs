@@ -11,14 +11,15 @@ use voxcore::{
     VoxPalette, VoxValue,
 };
 
-/// Loads a decoded Qubicle Construction Library [`QbclFile`] into a [`VoxMain`].
+/// Loads a decoded Qubicle Construction Library [`QbclFile`] into a
+/// [`VoxMain`].
 ///
 /// Matrix and compound grids become objects sharing one `rgb` palette, and the
-/// scene tree becomes the hierarchy nodes. The state with no native voxcore home,
-/// such as the per-voxel visibility masks, node names and editor flags, the
-/// model transform chunks, matrix placements and pivots, the thumbnail, the
-/// metadata strings, the guid, and the versions, rides in a `qubicle-qbcl` ext so
-/// the file can be written back exactly.
+/// scene tree becomes the hierarchy nodes. The state with no native voxcore
+/// home, such as the per-voxel visibility masks, node names and editor flags,
+/// the model transform chunks, matrix placements and pivots, the thumbnail, the
+/// metadata strings, the guid, and the versions, rides in a `qubicle-qbcl` ext
+/// so the file can be written back exactly.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or if
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
@@ -57,9 +58,10 @@ pub fn from_qbcl_file(file: &QbclFile) -> Result<VoxMain> {
     Ok(state)
 }
 
-/// Builds the hierarchy node for one scene node and its subtree, adding it and any
-/// objects to the state and appending its provenance to `nodes` so the ext entry
-/// at each index lines up with the hierarchy node id. Returns the new node's id.
+/// Builds the hierarchy node for one scene node and its subtree, adding it and
+/// any objects to the state and appending its provenance to `nodes` so the ext
+/// entry at each index lines up with the hierarchy node id. Returns the new
+/// node's id.
 fn build_node(
     node: &QbclNode,
     state: &mut VoxMain,
@@ -69,8 +71,8 @@ fn build_node(
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let id = match &node.body {
         QbclNodeBody::Matrix(matrix) => {
-            // The matrix grid becomes the object's build volume directly; it may
-            // carry empty margin. The masks are read from that same grid.
+            // The matrix grid becomes the object's build volume directly; it
+            // may carry empty margin. The masks are read from that same grid.
             let object = build_object(matrix, palette, cells)?;
             let masks = masks_of(&object, matrix);
             let object_id = state.add_object(object);
@@ -116,8 +118,8 @@ fn build_node(
             for child in &compound.children {
                 child_nodes.push(build_node(child, state, palette, cells, nodes)?);
             }
-            // The compound grid becomes the object's build volume directly; it may
-            // carry empty margin. The masks are read from that same grid.
+            // The compound grid becomes the object's build volume directly; it
+            // may carry empty margin. The masks are read from that same grid.
             let object = build_object(&compound.matrix, palette, cells)?;
             let masks = masks_of(&object, &compound.matrix);
             let object_id = state.add_object(object);
@@ -143,8 +145,8 @@ fn build_node(
 }
 
 /// Builds the one shared palette: an `rgb` cell per distinct color across every
-/// matrix and compound voxel in the tree, plus a map from a color to its cell. A
-/// tree with no solid voxels gets a single placeholder cell so objects have a
+/// matrix and compound voxel in the tree, plus a map from a color to its cell.
+/// A tree with no solid voxels gets a single placeholder cell so objects have a
 /// default sample to reference.
 fn build_palette(root: &QbclNode) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxPaletteCell>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();
@@ -198,9 +200,9 @@ fn collect_matrix(matrix: &QbclMatrix, order: &mut Vec<[u8; 3]>, seen: &mut Hash
     }
 }
 
-/// Builds an object from a matrix: a dense grid sized by the matrix, referencing
-/// the shared palette, each solid voxel sampling its color cell. Errors on an
-/// oversized grid.
+/// Builds an object from a matrix: a dense grid sized by the matrix,
+/// referencing the shared palette, each solid voxel sampling its color cell.
+/// Errors on an oversized grid.
 fn build_object(
     matrix: &QbclMatrix,
     palette: U32Id<BVoxPalette>,
@@ -243,8 +245,8 @@ fn build_object(
     Ok(object)
 }
 
-/// The visibility masks of an object's solid voxels, in live-voxel raster order,
-/// read back from the matrix the object was built from.
+/// The visibility masks of an object's solid voxels, in live-voxel raster
+/// order, read back from the matrix the object was built from.
 fn masks_of(object: &VoxObject, matrix: &QbclMatrix) -> Vec<u8> {
     object
         .iter_live()
@@ -386,8 +388,9 @@ mod tests {
     }
 
     /// A state carrying no format ext, built straight from voxcore: a red-green
-    /// object and a blue object sharing one `rgb` palette, placed by a hierarchy of
-    /// a nested group and two roots. This is the cross-format synthesis input.
+    /// object and a blue object sharing one `rgb` palette, placed by a
+    /// hierarchy of a nested group and two roots. This is the cross-format
+    /// synthesis input.
     fn source_state() -> VoxMain {
         let mut state = VoxMain::default();
 
@@ -465,10 +468,11 @@ mod tests {
     /// A solid voxel in world space: `x`, `y`, `z`, and an `rgb` color.
     type WorldVoxel = (i32, i32, i32, (u8, u8, u8));
 
-    /// The world voxels a file places: each matrix or compound grid's solid cells
-    /// decoded to world coordinates and color, order-independent. Synthesis bakes
-    /// the world position onto each matrix and leaves models at identity, so a
-    /// cell's world coordinate is its grid coordinate plus the matrix position.
+    /// The world voxels a file places: each matrix or compound grid's solid
+    /// cells decoded to world coordinates and color, order-independent.
+    /// Synthesis bakes the world position onto each matrix and leaves models at
+    /// identity, so a cell's world coordinate is its grid coordinate plus the
+    /// matrix position.
     fn world_voxels(file: &QbclFile) -> BTreeSet<WorldVoxel> {
         let mut set = BTreeSet::new();
         collect_world_voxels(&file.root, &mut set);
@@ -493,8 +497,8 @@ mod tests {
         }
     }
 
-    /// Adds one matrix's solid world voxels to `set`, decoding the storage index
-    /// `y + size_y * (z + size_z * x)` back to a grid coordinate.
+    /// Adds one matrix's solid world voxels to `set`, decoding the storage
+    /// index `y + size_y * (z + size_z * x)` back to a grid coordinate.
     fn collect_matrix_voxels(matrix: &QbclMatrix, set: &mut BTreeSet<WorldVoxel>) {
         let [_, size_y, size_z] = matrix.size;
         for (index, voxel) in matrix.voxels.iter().enumerate() {
@@ -550,8 +554,8 @@ mod tests {
     }
 
     /// A default state has no objects and no ext, so the writer synthesizes an
-    /// empty file rooted at a childless model rather than erroring on the missing
-    /// ext.
+    /// empty file rooted at a childless model rather than erroring on the
+    /// missing ext.
     #[test]
     fn synthesizes_an_empty_state_without_an_ext() {
         let state = VoxMain::default();
@@ -562,10 +566,10 @@ mod tests {
         assert!(model.children.is_empty());
     }
 
-    /// A state with no `qubicle-qbcl` ext, such as one cross-loaded from another
-    /// format, synthesizes a file: the hierarchy maps to a Qubicle scene tree whose
-    /// world voxels and colors match the source, and the file reads back into a
-    /// valid state with both objects.
+    /// A state with no `qubicle-qbcl` ext, such as one cross-loaded from
+    /// another format, synthesizes a file: the hierarchy maps to a Qubicle
+    /// scene tree whose world voxels and colors match the source, and the file
+    /// reads back into a valid state with both objects.
     #[test]
     fn synthesizes_a_file_without_an_ext() {
         let state = source_state();

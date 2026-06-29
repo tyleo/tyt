@@ -1,5 +1,6 @@
 /// Inverse of [`pack_bits`](crate::pack_bits): reads `count` values of `width`
-/// bits each, MSB-first, 8 per byte. Bytes past the end of `bytes` read as zero.
+/// bits each, MSB-first, 8 per byte. Bytes past the end of `bytes` read as
+/// zero.
 pub fn unpack_bits(bytes: &[u8], width: u32, count: usize) -> Vec<u32> {
     let mut out = Vec::with_capacity(count);
     let mut bit_pos = 0usize;

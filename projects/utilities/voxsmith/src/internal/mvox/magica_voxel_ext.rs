@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 ///
 /// Geometry, colors, and the scene graph become native voxcore entities; this
 /// holds the rest, with the per-node and per-material entries aligned by index
-/// with the hierarchy nodes and recorded materials so the file rebuilds exactly.
+/// with the hierarchy nodes and recorded materials so the file rebuilds
+/// exactly.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct MagicaVoxelExt {
     /// The format version from the header (`version`).
@@ -21,8 +22,9 @@ pub struct MagicaVoxelExt {
     #[serde(rename = "palette-present")]
     pub palette_present: bool,
 
-    /// Per-material provenance, in stored order. The scalar and type fields fold
-    /// into the palette cell named by `id`; this keeps the parts that do not.
+    /// Per-material provenance, in stored order. The scalar and type fields
+    /// fold into the palette cell named by `id`; this keeps the parts that do
+    /// not.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materials: Vec<MagicaVoxelMaterial>,
 

@@ -9,7 +9,7 @@ pub struct VoxjPalette {
     /// Ordered attribute keys shared by every cell.
     pub attributes: Vec<String>,
 
-    /// One row per cell, each value aligned to [`attributes`](Self::attributes);
-    /// a cell is referenced by its row index.
+    /// One row per cell, each value aligned to
+    /// [`attributes`](Self::attributes); a cell is referenced by its row index.
     pub data: Vec<Vec<VoxjValue>>,
 }

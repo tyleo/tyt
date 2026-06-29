@@ -17,8 +17,8 @@ pub struct QubicleQbtExt {
     #[serde(rename = "global-scale")]
     pub global_scale: [f32; 3],
 
-    /// The `COLORMAP` palette, in stored order, as `[r, g, b, a]` entries; empty
-    /// when voxels store colors directly.
+    /// The `COLORMAP` palette, in stored order, as `[r, g, b, a]` entries;
+    /// empty when voxels store colors directly.
     #[serde(rename = "color-map", default, skip_serializing_if = "Vec::is_empty")]
     pub color_map: Vec<[u8; 4]>,
 

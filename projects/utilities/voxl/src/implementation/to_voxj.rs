@@ -1,5 +1,6 @@
 use crate::{
     EditState, Format, Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding,
+    implementation,
 };
 use std::path::Path;
 use voxj_codec::{
@@ -13,7 +14,7 @@ use voxsmith::{EditStateMode, VoxjFileBuilder};
 /// [`VoxMain`](voxcore::VoxMain), encoded back to a voxj document with the
 /// chosen block `encoding`, then serialized in the container `format` selects.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn to_voxj(
+pub fn to_voxj(
     input: &Path,
     from: Option<Format>,
     output: &Path,
@@ -22,7 +23,7 @@ pub(crate) fn to_voxj(
     ext: bool,
     edit_state: EditState,
 ) -> Result<()> {
-    let state = super::load_state::load_state(input, from)?;
+    let state = implementation::load_state(input, from)?;
     let file = VoxjFileBuilder::new(&state)
         .position_encoding(position_encoding(encoding.position))
         .sample_encoding(sample_encoding(encoding.sample))

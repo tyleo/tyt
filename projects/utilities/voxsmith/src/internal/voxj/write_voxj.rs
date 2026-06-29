@@ -18,16 +18,18 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// [`to_voxj_file`](crate::to_voxj_file) and
 /// [`VoxjFileBuilder`](crate::VoxjFileBuilder).
 ///
-/// Objects, palettes, and hierarchy nodes are emitted in id order, so each lands
-/// at its original array index and the cross references carry over unchanged.
+/// Objects, palettes, and hierarchy nodes are emitted in id order, so each
+/// lands at its original array index and the cross references carry over
+/// unchanged.
 ///
 /// # Arguments
 /// * `state` - the voxel model to encode.
-/// * `position` - position-block encoding, or `None` to search for the smallest.
+/// * `position` - position-block encoding, or `None` to search for the
+///   smallest.
 /// * `sample` - sample-block encoding, or `None` to search for the smallest.
 /// * `ext` - when false, omits the user-defined `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-pub(crate) fn write_voxj(
+pub fn write_voxj(
     state: &VoxMain,
     position: Option<PositionEncoding>,
     sample: Option<SampleEncoding>,
@@ -59,8 +61,8 @@ pub(crate) fn write_voxj(
         .map(|id| id.to_u32() as usize)
         .collect();
 
-    // Editor state, aligned by index with the objects. Each entry is the object's
-    // build volume, recorded when `edit_state` calls for it.
+    // Editor state, aligned by index with the objects. Each entry is the
+    // object's build volume, recorded when `edit_state` calls for it.
     let edit_state = emit_edit_state(state, edit_state).then(|| VoxjEditState {
         objects: state
             .iter_objects()
@@ -107,8 +109,8 @@ fn emit_edit_state(state: &VoxMain, mode: EditStateMode) -> bool {
     }
 }
 
-/// Whether an object's build volume already equals its tight runtime grid, so it
-/// needs no edit-state entry to be recovered on load.
+/// Whether an object's build volume already equals its tight runtime grid, so
+/// it needs no edit-state entry to be recovered on load.
 fn is_tight(object: &VoxObject) -> bool {
     let bounds = object.bounds();
     match object.live_extent() {

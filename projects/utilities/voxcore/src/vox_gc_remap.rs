@@ -4,8 +4,8 @@ use branded_id::{IdVec, soa::IdRemap};
 /// The id relabelings from a [`VoxMain::gc`](crate::VoxMain::gc), one per pool,
 /// for translating ids held across the call.
 ///
-/// `cells` is indexed by each palette's old id, since a cell id is only meaningful
-/// within its palette.
+/// `cells` is indexed by each palette's old id, since a cell id is only
+/// meaningful within its palette.
 pub struct VoxGcRemap {
     /// The object pool relabeling.
     pub objects: IdRemap<BVoxObject, u32>,

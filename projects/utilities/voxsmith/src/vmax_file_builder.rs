@@ -3,8 +3,8 @@ use vmax::VMaxFile;
 use voxcore::VoxMain;
 
 /// Builds a [`VMaxFile`] from a [`VoxMain`], the configurable form of
-/// [`to_vmax_file`](crate::to_vmax_file). It defaults to PNG colors and keeps the
-/// scene camera the path produces, the same document that function writes.
+/// [`to_vmax_file`](crate::to_vmax_file). It defaults to PNG colors and keeps
+/// the scene camera the path produces, the same document that function writes.
 pub struct VmaxFileBuilder<'a> {
     state: &'a VoxMain,
     color_format: VoxelMaxColorFormat,
@@ -27,8 +27,8 @@ impl<'a> VmaxFileBuilder<'a> {
         self
     }
 
-    /// Overrides the scene camera the document opens with. Left unset, the path's
-    /// own camera is kept.
+    /// Overrides the scene camera the document opens with. Left unset, the
+    /// path's own camera is kept.
     pub fn scene_camera(mut self, scene_camera: SceneCameraSource) -> Self {
         self.scene_camera = Some(scene_camera);
         self

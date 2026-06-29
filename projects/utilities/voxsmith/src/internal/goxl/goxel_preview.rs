@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-/// The `PREV` preview thumbnail preserved in the `goxel` ext: the decoded `RGBA`
-/// pixels Goxel renders for the file. It has no native voxcore home, so it rides
-/// here so the chunk is written back unchanged.
+/// The `PREV` preview thumbnail preserved in the `goxel` ext: the decoded
+/// `RGBA` pixels Goxel renders for the file. It has no native voxcore home, so
+/// it rides here so the chunk is written back unchanged.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct GoxelPreview {
     /// Image width, in pixels.

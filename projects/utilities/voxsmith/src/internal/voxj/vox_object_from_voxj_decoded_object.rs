@@ -8,9 +8,10 @@ use voxj_codec::VoxjDecodedObject;
 /// volume.
 ///
 /// The decoded object holds the tight runtime grid. When `edit` is `Some`, the
-/// object is built in that build volume (the author's edit grid) with each voxel
-/// shifted from the runtime grid into it, recovering the margin the document
-/// recorded. When `edit` is `None`, the build volume equals the tight grid.
+/// object is built in that build volume (the author's edit grid) with each
+/// voxel shifted from the runtime grid into it, recovering the margin the
+/// document recorded. When `edit` is `None`, the build volume equals the tight
+/// grid.
 ///
 /// Errors on an oversized grid, a position outside the grid, or ragged sample
 /// rows. Cross-references are checked later by
@@ -19,8 +20,8 @@ pub fn vox_object_from_voxj_decoded_object(
     object: &VoxjDecodedObject,
     edit: Option<([u32; 3], [i32; 3])>,
 ) -> Result<VoxObject> {
-    // The grid the voxcore object lives in (its build volume), its placing origin,
-    // and the offset shifting a runtime-grid position into it.
+    // The grid the voxcore object lives in (its build volume), its placing
+    // origin, and the offset shifting a runtime-grid position into it.
     let (bounds, origin, offset) = match edit {
         Some((bounds, origin)) => (
             bounds,
@@ -94,8 +95,8 @@ pub fn vox_object_from_voxj_decoded_object(
     Ok(out)
 }
 
-/// The `[x, y, z]` point as a grid position, or `None` if any axis is negative or
-/// reaches `bounds`.
+/// The `[x, y, z]` point as a grid position, or `None` if any axis is negative
+/// or reaches `bounds`.
 fn in_bounds(p: [i64; 3], bounds: [u32; 3]) -> Option<TyVector3U32> {
     let inside = (0..3).all(|a| p[a] >= 0 && p[a] < bounds[a] as i64);
     inside.then(|| TyVector3U32::new(p[0] as u32, p[1] as u32, p[2] as u32))

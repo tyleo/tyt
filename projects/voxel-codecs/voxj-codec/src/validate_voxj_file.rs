@@ -12,8 +12,8 @@ const ROTATION_TOLERANCE: f64 = 1e-6;
 /// Checks a [`VoxjFile`] against the format's document rules:
 ///
 /// 1. the version is recognized;
-/// 2. palette refs, node children, and roots resolve and are each listed at most
-///    once;
+/// 2. palette refs, node children, and roots resolve and are each listed at
+///    most once;
 /// 3. each sample cell indexes a cell of its palette;
 /// 4. voxel positions are unique and within their object's bounds, which are
 ///    exactly tight around them;
@@ -115,8 +115,8 @@ fn validate_object(index: usize, object: &VoxjObject, palettes: &[VoxjPalette]) 
     })?;
 
     for (voxel, row) in decoded.samples.iter().enumerate() {
-        // Decoding guarantees one sample per referenced palette, so each channel
-        // indexes the palette named at that position.
+        // Decoding guarantees one sample per referenced palette, so each
+        // channel indexes the palette named at that position.
         for (channel, &cell) in row.iter().enumerate() {
             let palette = object.palette_refs[channel];
             let cell_count = palettes[palette].data.len();
@@ -151,9 +151,9 @@ fn validate_object(index: usize, object: &VoxjObject, palettes: &[VoxjPalette]) 
         }
     }
 
-    // The runtime grid is exactly tight: it fits the voxels with no empty margin on
-    // any face. An empty object is [0, 0, 0]; otherwise each axis spans the grid
-    // fully, from 0 to its bound minus one.
+    // The runtime grid is exactly tight: it fits the voxels with no empty
+    // margin on any face. An empty object is [0, 0, 0]; otherwise each axis
+    // spans the grid fully, from 0 to its bound minus one.
     if decoded.positions.is_empty() {
         if object.bounds != [0, 0, 0] {
             return Err(invalid(format!(
@@ -290,9 +290,9 @@ fn validate_edit_state(main: &VoxjMain) -> Result<()> {
 }
 
 /// A node on a `child_nodes` cycle, or `None` if the hierarchy is acyclic. An
-/// iterative three-colour DFS, so a deep chain cannot overflow the stack: a back
-/// edge into an in-progress node is a cycle, revisiting a finished node is not.
-/// Call only once every child index is known in range.
+/// iterative three-colour DFS, so a deep chain cannot overflow the stack: a
+/// back edge into an in-progress node is a cycle, revisiting a finished node is
+/// not. Call only once every child index is known in range.
 fn first_cycle_node(nodes: &[VoxjHierarchyNode]) -> Option<usize> {
     const WHITE: u8 = 0;
     const GREY: u8 = 1;
@@ -341,7 +341,8 @@ mod tests {
         VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValue,
     };
 
-    /// A palette with `cells` rows, each carrying one value per named attribute.
+    /// A palette with `cells` rows, each carrying one value per named
+    /// attribute.
     fn palette(attributes: &[&str], cells: usize) -> VoxjPalette {
         VoxjPalette {
             attributes: attributes.iter().map(|a| (*a).to_owned()).collect(),
@@ -371,8 +372,8 @@ mod tests {
     }
 
     /// A small but complete valid document: one four-cell palette, an object
-    /// sampling it across two in-bounds voxels (raw-json blocks), and a two-node
-    /// DAG with a root.
+    /// sampling it across two in-bounds voxels (raw-json blocks), and a
+    /// two-node DAG with a root.
     fn valid_file() -> VoxjFile {
         VoxjFile {
             version: 1,

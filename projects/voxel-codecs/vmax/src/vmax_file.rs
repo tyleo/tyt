@@ -5,10 +5,10 @@ use crate::{
 };
 use std::collections::BTreeMap;
 
-/// Parsed contents of a `.vmax` package directory: `scene.json` plus every other
-/// file the package holds. The lossless on-disk model a package round-trips
-/// through. Voxel geometry and palette colors stay in their stored form here
-/// (snapshots, packed bytes), decoded on demand.
+/// Parsed contents of a `.vmax` package directory: `scene.json` plus every
+/// other file the package holds. The lossless on-disk model a package
+/// round-trips through. Voxel geometry and palette colors stay in their stored
+/// form here (snapshots, packed bytes), decoded on demand.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VMaxFile {
     /// `scene.json`.
@@ -36,8 +36,8 @@ pub struct VMaxFile {
     /// `*.selection.vmaxb` saved voxel selections, keyed by filename.
     pub selection_vmaxb_files: BTreeMap<String, VMaxSelectionVmaxbFile>,
 
-    /// Package-level `QuickLook/Thumbnail.png` preview, decoded. `None` when the
-    /// package ships no thumbnail.
+    /// Package-level `QuickLook/Thumbnail.png` preview, decoded. `None` when
+    /// the package ships no thumbnail.
     pub thumbnail_png: Option<VMaxImage>,
 
     /// Per-object `QuickLook/contents*.vmaxb.png` previews, decoded, keyed by

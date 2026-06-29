@@ -27,9 +27,9 @@ pub struct VoxPalette {
 }
 
 impl VoxPalette {
-    /// Adds an attribute after any existing ones and returns its id, back-filling
-    /// existing cells with [`VoxValue::Null`] so the palette stays rectangular.
-    /// Add all attributes before any cells to avoid the back-fill.
+    /// Adds an attribute after any existing ones and returns its id,
+    /// back-filling existing cells with [`VoxValue::Null`] so the palette stays
+    /// rectangular. Add all attributes before any cells to avoid the back-fill.
     pub fn add_attribute(&mut self, name: String) -> U32Id<BVoxAttribute> {
         let attribute_id = self.attribute_ids.retain();
         self.attributes.retain(attribute_id, name);
@@ -140,10 +140,11 @@ impl VoxPalette {
         }
     }
 
-    /// Removes attribute `id`, dropping its value from every cell so the palette
-    /// stays rectangular (each cell keeps one value per remaining attribute).
-    /// `None`, changing nothing, if `id` is not one of this palette's attributes.
-    /// Leaves a hole until [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
+    /// Removes attribute `id`, dropping its value from every cell so the
+    /// palette stays rectangular (each cell keeps one value per remaining
+    /// attribute). `None`, changing nothing, if `id` is not one of this
+    /// palette's attributes. Leaves a hole until
+    /// [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
     pub fn remove_attribute(&mut self, id: U32Id<BVoxAttribute>) -> Option<()> {
         if !self.attribute_ids.is_retained(id) {
             return None;
@@ -161,16 +162,17 @@ impl VoxPalette {
         Some(())
     }
 
-    /// Drops cell `id` and its per-attribute values. The caller must first ensure
-    /// no live voxel still samples it, which is why this is internal and reached
-    /// only through [`VoxMain::remove_cell`](crate::VoxMain::remove_cell).
-    /// Leaves a hole until [`gc`](Self::gc) renumbers.
+    /// Drops cell `id` and its per-attribute values. The caller must first
+    /// ensure no live voxel still samples it, which is why this is internal and
+    /// reached only through
+    /// [`VoxMain::remove_cell`](crate::VoxMain::remove_cell). Leaves a hole
+    /// until [`gc`](Self::gc) renumbers.
     pub(crate) fn remove_cell(&mut self, id: U32Id<BVoxPaletteCell>) -> Option<()> {
         if !self.palette_cell_ids.is_retained(id) {
             return None;
         }
-        // Safety: a retained cell holds a value for every attribute; release each
-        // before the inner column so `VoxValue`'s heap data is freed.
+        // Safety: a retained cell holds a value for every attribute; release
+        // each before the inner column so `VoxValue`'s heap data is freed.
         let cell = unsafe { self.palette_cells.get_mut(id) };
         unsafe { cell.release_all(&self.attribute_ids) };
         // Safety: a retained cell has an inner column.
@@ -180,20 +182,20 @@ impl VoxPalette {
     }
 
     /// Compacts the attribute and cell pools back to a contiguous `0..len`,
-    /// moving every value to its relabeled id, and returns the cell relabeling so
-    /// a [`VoxMain`](crate::VoxMain) can translate the samples that point at
-    /// these cells. Attributes are referenced only within this palette, so their
-    /// relabeling stays internal.
+    /// moving every value to its relabeled id, and returns the cell relabeling
+    /// so a [`VoxMain`](crate::VoxMain) can translate the samples that point at
+    /// these cells. Attributes are referenced only within this palette, so
+    /// their relabeling stays internal.
     pub(crate) fn gc(&mut self) -> IdRemap<BVoxPaletteCell, u32> {
         let attribute_remap = self.attribute_ids.gc();
-        // Safety: the name column was in sync with the pre-gc attribute pool, and
-        // nothing has retained or released since.
+        // Safety: the name column was in sync with the pre-gc attribute pool,
+        // and nothing has retained or released since.
         unsafe { self.attributes.gc(&attribute_remap) };
 
         let cell_ids: Vec<_> = self.palette_cell_ids.iter().collect();
         for cell_id in cell_ids {
-            // Safety: a retained cell holds a value for every pre-gc attribute id,
-            // and the remap came from this palette's attribute pool.
+            // Safety: a retained cell holds a value for every pre-gc attribute
+            // id, and the remap came from this palette's attribute pool.
             let cell = unsafe { self.palette_cells.get_mut(cell_id) };
             unsafe { cell.gc(&attribute_remap) };
         }

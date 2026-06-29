@@ -7,9 +7,9 @@ use crate::{
 use vmax::VMaxFile;
 
 /// Writes a [`VMaxFile`] back to a `.vmax` package, the inverse of
-/// [`from_vmax_package`](crate::from_vmax_package). `write` receives each file's
-/// package-relative name and bytes and performs the actual writes (creating
-/// any subdirectory a `QuickLook/` name implies).
+/// [`from_vmax_package`](crate::from_vmax_package). `write` receives each
+/// file's package-relative name and bytes and performs the actual writes
+/// (creating any subdirectory a `QuickLook/` name implies).
 pub fn to_vmax_package<W>(file: &VMaxFile, mut write: W) -> Result<()>
 where
     W: FnMut(&str, &[u8]) -> Result<()>,

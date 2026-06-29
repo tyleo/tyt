@@ -3,9 +3,10 @@ use crate::{VoxjHierarchyNode, VoxjObject, VoxjPalette};
 use serde::{Deserialize, Serialize};
 
 /// The runtime scene of a Voxel Json document: the voxel objects, the palettes
-/// they sample, the hierarchy that places them, and the roots of that hierarchy.
-/// Held in [`VoxjMain::runtime_state`](crate::VoxjMain::runtime_state),
-/// separate from the optional editor `edit_state` and `ext`.
+/// they sample, the hierarchy that places them, and the roots of that
+/// hierarchy. Held in
+/// [`VoxjMain::runtime_state`](crate::VoxjMain::runtime_state), separate from
+/// the optional editor `edit_state` and `ext`.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]

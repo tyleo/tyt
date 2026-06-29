@@ -14,17 +14,6 @@ const CHUNK_ORDER: i64 = 5;
 /// Snapshot type written for every rebuilt chunk (4 = checkpoint).
 const CHECKPOINT: i64 = 4;
 
-/// The 4-component Morton stat for a corner in `st`: per-axis decomposition of
-/// the corner's local coords plus their sum
-/// (`stat[3] == stat[0]+stat[1]+stat[2]`).
-fn morton_stat(morton: u32) -> Vec<i64> {
-    let c = decode_morton_3d(morton);
-    let x = encode_morton_3d([c[0], 0, 0]) as i64;
-    let y = encode_morton_3d([0, c[1], 0]) as i64;
-    let z = encode_morton_3d([0, 0, c[2]]) as i64;
-    vec![x, y, z, x + y + z]
-}
-
 /// Encodes voxels into a `VMaxContentsVmaxbFile`'s `snapshots` array, the
 /// inverse of [`decode_vmax_snapshots`](crate::decode_vmax_snapshots). Emits
 /// one checkpoint snapshot per occupied chunk.
@@ -50,10 +39,10 @@ pub fn encode_vmax_snapshots(voxels: &[VMaxVoxel]) -> Vec<VMaxSnapshot> {
     chunks
         .into_iter()
         .map(|(chunk_id, slots)| {
-            // Anchor `ds` and the `st` bounds to the Morton codes of the occupied
-            // bounding-box corners, not the smallest/largest occupied code. Voxel
-            // Max reads these corners to place the editor grid; tight occupied-code
-            // bounds would mislocate it for sparse chunks.
+            // Anchor `ds` and the `st` bounds to the Morton codes of the
+            // occupied bounding-box corners, not the smallest/largest occupied
+            // code. Voxel Max reads these corners to place the editor grid;
+            // tight occupied-code bounds would mislocate it for sparse chunks.
             let mut lo = [CHUNK_MAX; 3];
             let mut hi = [0u32; 3];
             for &morton in slots.keys() {
@@ -115,6 +104,17 @@ pub fn encode_vmax_snapshots(voxels: &[VMaxVoxel]) -> Vec<VMaxSnapshot> {
         .collect()
 }
 
+/// The 4-component Morton stat for a corner in `st`: per-axis decomposition of
+/// the corner's local coords plus their sum
+/// (`stat[3] == stat[0]+stat[1]+stat[2]`).
+fn morton_stat(morton: u32) -> Vec<i64> {
+    let c = decode_morton_3d(morton);
+    let x = encode_morton_3d([c[0], 0, 0]) as i64;
+    let y = encode_morton_3d([0, c[1], 0]) as i64;
+    let z = encode_morton_3d([0, 0, c[2]]) as i64;
+    vec![x, y, z, x + y + z]
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{VMaxVoxel, encode_vmax_snapshots};
@@ -131,9 +131,9 @@ mod tests {
     /// `st`/`ds` to those corner Morton codes, not the occupied codes.
     #[test]
     fn anchors_stats_to_bounding_box_corners() {
-        // Voxels at (1, 0, 0) and (0, 1, 0) in chunk 0: the bounding box spans the
-        // (0, 0, 0)..(1, 1, 0) corners (codes 0 and 3), neither occupied; the
-        // occupied codes are 1 and 2.
+        // Voxels at (1, 0, 0) and (0, 1, 0) in chunk 0: the bounding box spans
+        // the (0, 0, 0)..(1, 1, 0) corners (codes 0 and 3), neither occupied;
+        // the occupied codes are 1 and 2.
         let snapshots = encode_vmax_snapshots(&[voxel(1, 0, 0, 1), voxel(0, 1, 0, 2)]);
         assert_eq!(snapshots.len(), 1);
         let storage = &snapshots[0].s;
@@ -144,8 +144,9 @@ mod tests {
         // count is still the occupied-voxel count, not the slot span.
         assert_eq!(storage.st.count, 2);
 
-        // ds spans all four corner-to-corner slots (2 bytes each); the two corner
-        // slots (0 and 3) stay empty, the occupied slots (1 and 2) carry color.
+        // ds spans all four corner-to-corner slots (2 bytes each); the two
+        // corner slots (0 and 3) stay empty, the occupied slots (1 and 2) carry
+        // color.
         assert_eq!(storage.ds, vec![0, 0, 0, 1, 0, 2, 0, 0]);
     }
 }

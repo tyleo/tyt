@@ -3,12 +3,12 @@ use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
 use voxcore::{BVoxAttribute, BVoxPaletteRef, BVoxVoxel, VoxMain, VoxObject, VoxPalette, VoxValue};
 
-/// Writes a [`VoxMain`] back to a decoded Qubicle Binary [`QbFile`], the inverse
-/// of [`from_qb_file`](crate::from_qb_file).
+/// Writes a [`VoxMain`] back to a decoded Qubicle Binary [`QbFile`], the
+/// inverse of [`from_qb_file`](crate::from_qb_file).
 ///
 /// Requires the `qubicle-qb` ext the forward path writes; without it the file
-/// cannot be rebuilt. Each object emits one matrix, taking its name, position, and
-/// per-voxel visibility from the ext and its colors from the palette.
+/// cannot be rebuilt. Each object emits one matrix, taking its name, position,
+/// and per-voxel visibility from the ext and its colors from the palette.
 ///
 /// Errors if the ext is missing, its matrix entries do not line up with the
 /// objects, or a visibility list does not match its object.
@@ -57,9 +57,10 @@ pub fn to_qb_file(state: &VoxMain) -> Result<QbFile> {
     })
 }
 
-/// Rebuilds a matrix grid from an object: each solid voxel's color comes from the
-/// palette and its visibility from the aligned ext list, placed in `.qb` storage
-/// order. Errors if the visibility count does not match the object's solid voxels.
+/// Rebuilds a matrix grid from an object: each solid voxel's color comes from
+/// the palette and its visibility from the aligned ext list, placed in `.qb`
+/// storage order. Errors if the visibility count does not match the object's
+/// solid voxels.
 fn matrix_from_object(
     object: &VoxObject,
     palette: Option<&VoxPalette>,

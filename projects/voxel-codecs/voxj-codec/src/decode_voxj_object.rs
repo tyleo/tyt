@@ -7,8 +7,8 @@ use std::iter;
 use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
 /// Decodes one [`VoxjObject`] into a [`VoxjDecodedObject`], the inverse of
-/// [`encode_voxj_object`](crate::encode_voxj_object()). `cell_counts` comes from
-/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts()).
+/// [`encode_voxj_object`](crate::encode_voxj_object()). `cell_counts` comes
+/// from [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts()).
 ///
 /// Each returned `positions[k]` pairs with `samples[k]`.
 pub fn decode_voxj_object(object: &VoxjObject, cell_counts: &[usize]) -> Result<VoxjDecodedObject> {
@@ -105,8 +105,9 @@ fn decode_samples(
             .collect::<Result<Vec<_>>>()?,
     };
 
-    // Every encoding must yield one channel per referenced palette, each holding
-    // a value for every voxel; otherwise the object's samples are malformed.
+    // Every encoding must yield one channel per referenced palette, each
+    // holding a value for every voxel; otherwise the object's samples are
+    // malformed.
     if channels.len() != cell_counts.len() {
         return Err(invalid_data(format!(
             "sample block has {} channels, expected {} (one per referenced palette)",
@@ -268,8 +269,9 @@ mod tests {
         assert!(decode_voxj_object(&object, &[4]).is_err());
     }
 
-    /// A sample block carrying more channels than the object references palettes
-    /// is rejected rather than packing the extra channel at a guessed width.
+    /// A sample block carrying more channels than the object references
+    /// palettes is rejected rather than packing the extra channel at a guessed
+    /// width.
     #[test]
     fn rejects_channel_count_mismatch() {
         let object = VoxjObject {

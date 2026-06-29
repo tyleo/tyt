@@ -248,8 +248,8 @@ impl SerializeTupleStruct for SerializeArray {
     }
 }
 
-/// Collects a tuple variant into a single-entry [`VoxValue::Object`] keyed by the
-/// variant name.
+/// Collects a tuple variant into a single-entry [`VoxValue::Object`] keyed by
+/// the variant name.
 struct SerializeVariantArray {
     name: String,
     items: Vec<VoxValue>,

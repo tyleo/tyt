@@ -1,5 +1,6 @@
 use crate::{
     CameraView, ColorFormat, Dependencies, EditState, Format, Result, VoxjEncoding, VoxjFormat,
+    implementation,
 };
 use std::path::Path;
 
@@ -8,15 +9,15 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn to_goxl(&self, input: &Path, from: Option<Format>, output: &Path) -> Result<()> {
-        super::to_goxl::to_goxl(input, from, output)
+        implementation::to_goxl(input, from, output)
     }
 
     fn to_mvox(&self, input: &Path, from: Option<Format>, output: &Path) -> Result<()> {
-        super::to_mvox::to_mvox(input, from, output)
+        implementation::to_mvox(input, from, output)
     }
 
     fn to_qbcl(&self, input: &Path, from: Option<Format>, output: &Path) -> Result<()> {
-        super::to_qbcl::to_qbcl(input, from, output)
+        implementation::to_qbcl(input, from, output)
     }
 
     fn to_vmax(
@@ -27,7 +28,7 @@ impl Dependencies for DependenciesImpl {
         color_format: ColorFormat,
         camera: Option<CameraView>,
     ) -> Result<()> {
-        super::to_vmax::to_vmax(input, from, output, color_format, camera)
+        implementation::to_vmax(input, from, output, color_format, camera)
     }
 
     fn to_voxj(
@@ -40,6 +41,6 @@ impl Dependencies for DependenciesImpl {
         ext: bool,
         edit_state: EditState,
     ) -> Result<()> {
-        super::to_voxj::to_voxj(input, from, output, encoding, format, ext, edit_state)
+        implementation::to_voxj(input, from, output, encoding, format, ext, edit_state)
     }
 }

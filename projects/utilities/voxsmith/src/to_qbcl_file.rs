@@ -15,17 +15,17 @@ use voxcore::{
 
 /// Writes a [`VoxMain`] to a decoded Qubicle Construction Library [`QbclFile`].
 ///
-/// When the state carries the `qubicle-qbcl` ext the forward path writes, the file
-/// is rebuilt from it exactly, the inverse of
+/// When the state carries the `qubicle-qbcl` ext the forward path writes, the
+/// file is rebuilt from it exactly, the inverse of
 /// [`from_qbcl_file`](crate::from_qbcl_file): the scene tree is walked from the
 /// single root, each matrix or compound emitting its grid with the visibility
-/// masks and color from the ext and the palette. When the ext is absent or names
-/// another format, the file is synthesized from the bare scene by
-/// [`synthesize_qbcl`], so any source can be written to Qubicle.
+/// masks and color from the ext and the palette. When the ext is absent or
+/// names another format, the file is synthesized from the bare scene by
+/// `synthesize_qbcl`, so any source can be written to Qubicle.
 ///
 /// Errors only when a `qubicle-qbcl` ext is present but its node entries do not
-/// line up with the hierarchy, the state does not have exactly one root, or a mask
-/// list does not match its object; synthesis itself never errors.
+/// line up with the hierarchy, the state does not have exactly one root, or a
+/// mask list does not match its object; synthesis itself never errors.
 pub fn to_qbcl_file(state: &VoxMain) -> Result<QbclFile> {
     let ext = match ext_for(state, "qubicle-qbcl") {
         Some(ext) => from_vox_value::<QubicleQbclExtWrapper>(ext)?.qubicle_qbcl,
@@ -153,9 +153,9 @@ fn rebuild_children(
         .collect()
 }
 
-/// The build-volume object a matrix or compound node places, or an error if it has
-/// none. The object is the author's build volume, so the written matrix keeps the
-/// original dimensions and voxel positions directly.
+/// The build-volume object a matrix or compound node places, or an error if it
+/// has none. The object is the author's build volume, so the written matrix
+/// keeps the original dimensions and voxel positions directly.
 fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result<&'a VoxObject> {
     let object_id = *hierarchy
         .child_objects
@@ -166,9 +166,10 @@ fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result
         .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))
 }
 
-/// Rebuilds a matrix grid from an object: each solid voxel's color comes from the
-/// palette and its mask from the aligned ext mask list, placed in `.qbcl` storage
-/// order. Errors if the mask count does not match the object's solid voxels.
+/// Rebuilds a matrix grid from an object: each solid voxel's color comes from
+/// the palette and its mask from the aligned ext mask list, placed in `.qbcl`
+/// storage order. Errors if the mask count does not match the object's solid
+/// voxels.
 fn matrix_from_object(
     object: &VoxObject,
     palette: Option<&VoxPalette>,
@@ -261,31 +262,31 @@ fn parse_rgb(value: Option<&VoxValue>) -> [u8; 3] {
     [byte(0), byte(1), byte(2)]
 }
 
-/// The visibility mask written for every synthesized solid voxel. Qubicle reads a
-/// zero mask as an empty cell and any non-zero mask as a solid voxel whose bits
-/// are a per-face visibility set; the exact bits are cosmetic, so this mirrors the
-/// codec's solid fixture.
+/// The visibility mask written for every synthesized solid voxel. Qubicle reads
+/// a zero mask as an empty cell and any non-zero mask as a solid voxel whose
+/// bits are a per-face visibility set; the exact bits are cosmetic, so this
+/// mirrors the codec's solid fixture.
 const SOLID_MASK: u8 = 0x7e;
 
-/// Synthesizes a Qubicle file from a state that carries no `qubicle-qbcl` ext, such
-/// as one cross-loaded from another format.
+/// Synthesizes a Qubicle file from a state that carries no `qubicle-qbcl` ext,
+/// such as one cross-loaded from another format.
 ///
-/// The voxcore hierarchy is mirrored into Qubicle's scene tree: a node with only
-/// child nodes becomes a model, a node placing one object becomes a matrix, and a
-/// node placing an object alongside child nodes or several objects becomes a
-/// compound whose grid is the node's first object and whose children hold the
-/// rest. Qubicle requires a single root, so every voxcore root hangs under one
-/// synthetic model; an object no node places is swept under it at the origin so no
-/// geometry is dropped, and an object placed by several nodes is duplicated at each
-/// placement.
+/// The voxcore hierarchy is mirrored into Qubicle's scene tree: a node with
+/// only child nodes becomes a model, a node placing one object becomes a
+/// matrix, and a node placing an object alongside child nodes or several
+/// objects becomes a compound whose grid is the node's first object and whose
+/// children hold the rest. Qubicle requires a single root, so every voxcore
+/// root hangs under one synthetic model; an object no node places is swept
+/// under it at the origin so no geometry is dropped, and an object placed by
+/// several nodes is duplicated at each placement.
 ///
-/// Lossy only where Qubicle cannot represent the source: a model's transform chunk
-/// cannot carry translation, so a group node's placement is folded into the world
-/// position of its descendant matrices, summed down the hierarchy and rounded to
-/// whole voxels, and node rotation and scale are dropped. Colors stay per voxel
-/// with no palette merge, but a Qubicle voxel stores no alpha, so a color's alpha
-/// is dropped. Each matrix is pivoted at its grid origin, so its position is the
-/// world coordinate of the object's min corner.
+/// Lossy only where Qubicle cannot represent the source: a model's transform
+/// chunk cannot carry translation, so a group node's placement is folded into
+/// the world position of its descendant matrices, summed down the hierarchy and
+/// rounded to whole voxels, and node rotation and scale are dropped. Colors
+/// stay per voxel with no palette merge, but a Qubicle voxel stores no alpha,
+/// so a color's alpha is dropped. Each matrix is pivoted at its grid origin, so
+/// its position is the world coordinate of the object's min corner.
 fn synthesize_qbcl(state: &VoxMain) -> QbclFile {
     let mut builder = QbclBuilder::default();
     let mut children: Vec<QbclNode> = state
@@ -386,8 +387,9 @@ impl QbclBuilder {
         }
     }
 
-    /// Wraps one object in a matrix node placed at `world`, naming the node for the
-    /// object. Used for a node's extra objects and for the unplaced-object sweep.
+    /// Wraps one object in a matrix node placed at `world`, naming the node for
+    /// the object. Used for a node's extra objects and for the unplaced-object
+    /// sweep.
     fn emit_object_node(
         &mut self,
         state: &VoxMain,
@@ -406,8 +408,8 @@ impl QbclBuilder {
 
     /// Builds a matrix grid from an object, placed at the world `position`: one
     /// solid voxel per live cell in `.qbcl` storage order, each carrying the
-    /// object's color with its alpha dropped and a solid visibility mask. Marks the
-    /// object placed so the sweep does not re-emit it.
+    /// object's color with its alpha dropped and a solid visibility mask. Marks
+    /// the object placed so the sweep does not re-emit it.
     fn synthesize_matrix(
         &mut self,
         object_id: U32Id<BVoxObject>,

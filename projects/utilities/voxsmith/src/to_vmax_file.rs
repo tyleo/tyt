@@ -3,9 +3,9 @@ use vmax::VMaxFile;
 use voxcore::VoxMain;
 
 /// Writes a [`VoxMain`] back to a Voxel Max document with default settings, the
-/// inverse of [`from_vmax_file`](crate::from_vmax_file). `voxel_max_color_format`
-/// selects where each palette's colors are stored, as described on
-/// [`VoxelMaxColorFormat`]. For control over the scene camera, use
+/// inverse of [`from_vmax_file`](crate::from_vmax_file).
+/// `voxel_max_color_format` selects where each palette's colors are stored, as
+/// described on [`VoxelMaxColorFormat`]. For control over the scene camera, use
 /// [`VmaxFileBuilder`](crate::VmaxFileBuilder).
 pub fn to_vmax_file(
     state: &VoxMain,
@@ -84,9 +84,9 @@ mod tests {
     }
 
     /// A document with a root group, a child object placed at the origin with
-    /// authored bounds, a shared color and material palette, and preserved scene
-    /// and object editor state. Built in the canonical form the reverse path
-    /// emits so it round-trips to equality.
+    /// authored bounds, a shared color and material palette, and preserved
+    /// scene and object editor state. Built in the canonical form the reverse
+    /// path emits so it round-trips to equality.
     fn sample() -> VMaxFile {
         let group = VMaxGroup {
             name: "grp".to_owned(),
@@ -102,9 +102,9 @@ mod tests {
             t_pa: String::new(),
             t_pf: String::new(),
             t_po: None,
-            // The group's content box is derived from its subtree: the child object
-            // sits at node-local [0, 0, 0]..[2, 2, 2], so the box centers on [1, 1, 1]
-            // with unit half-extents.
+            // The group's content box is derived from its subtree: the child
+            // object sits at node-local [0, 0, 0]..[2, 2, 2], so the box
+            // centers on [1, 1, 1] with unit half-extents.
             center: [1.0, 1.0, 1.0],
             bounds_min: Some([-1.0, -1.0, -1.0]),
             bounds_max: Some([1.0, 1.0, 1.0]),
@@ -117,9 +117,9 @@ mod tests {
             id: "o".to_owned(),
             parent_id: Some("g".to_owned()),
             hidden: None,
-            // Canonical placement the reverse path emits: the grid is centered in
-            // the workspace, the content box is symmetric about the center, and the
-            // placement pivots about it.
+            // Canonical placement the reverse path emits: the grid is centered
+            // in the workspace, the content box is symmetric about the center,
+            // and the placement pivots about it.
             position: [-127.0, -127.0, 0.0],
             rotation: [0.0, 0.0, 0.0, 0.0],
             scale: [1.0, 1.0, 1.0],
@@ -143,8 +143,9 @@ mod tests {
             ..Default::default()
         };
 
-        // Canonical snapshots: voxels re-encoded at the centered internal grid just
-        // as the reverse path emits, the runtime grid [127, 127, 0]..[128, 128, 1].
+        // Canonical snapshots: voxels re-encoded at the centered internal grid
+        // just as the reverse path emits, the runtime grid [127, 127, 0]..[128,
+        // 128, 1].
         let contents = VMaxContentsVmaxbFile {
             snapshots: encode_vmax_snapshots(&[
                 VMaxVoxel {
@@ -208,10 +209,10 @@ mod tests {
 
     /// A state carrying no format ext, built straight from voxcore: a red-green
     /// object and a blue object sharing one `rgba` palette, placed by a small
-    /// hierarchy of a nested group and two roots. The writer must synthesize the
-    /// `voxel-max` ext from this rather than read one. Red is cell 0, so a live
-    /// voxel references the palette index Voxel Max reads as empty; synthesis must
-    /// shift it past index 0 rather than drop the voxel.
+    /// hierarchy of a nested group and two roots. The writer must synthesize
+    /// the `voxel-max` ext from this rather than read one. Red is cell 0, so a
+    /// live voxel references the palette index Voxel Max reads as empty;
+    /// synthesis must shift it past index 0 rather than drop the voxel.
     fn source_state() -> VoxMain {
         let mut state = VoxMain::default();
 
@@ -286,10 +287,11 @@ mod tests {
         state
     }
 
-    /// Every live voxel as `(world position, color)`, walking the hierarchy from
-    /// the roots and accumulating each node's translation. Order-independent and
-    /// resolved per voxel, so a state compares to one round-tripped through a
-    /// synthesized document without depending on object, palette, or voxel order.
+    /// Every live voxel as `(world position, color)`, walking the hierarchy
+    /// from the roots and accumulating each node's translation.
+    /// Order-independent and resolved per voxel, so a state compares to one
+    /// round-tripped through a synthesized document without depending on
+    /// object, palette, or voxel order.
     fn world_voxels(state: &VoxMain) -> BTreeSet<([i32; 3], [u8; 4])> {
         fn walk(
             state: &VoxMain,
@@ -308,8 +310,8 @@ mod tests {
                 let object = state.object(object).expect("a valid object");
                 let color = object_color_ref(state, object);
                 // A voxel sits at node-local `origin + grid`; these states use
-                // identity rotation and unit scale, so the world position is the
-                // accumulated translation plus that offset.
+                // identity rotation and unit scale, so the world position is
+                // the accumulated translation plus that offset.
                 let object_origin = object.origin();
                 for voxel in object.iter_live() {
                     let grid = object.voxel_position(voxel).expect("within the grid");
@@ -336,8 +338,8 @@ mod tests {
         voxels
     }
 
-    /// A default state has no scene, so the writer synthesizes an empty document
-    /// rather than erroring on the missing ext.
+    /// A default state has no scene, so the writer synthesizes an empty
+    /// document rather than erroring on the missing ext.
     #[test]
     fn synthesizes_an_empty_state_without_an_ext() {
         let state = VoxMain::default();
@@ -357,8 +359,9 @@ mod tests {
         assert_eq!(world_voxels(&reloaded), world_voxels(&source));
     }
 
-    /// A foreign ext, here `magica-voxel`, is ignored by the Voxel Max writer: it
-    /// synthesizes from the scene rather than failing to parse the wrong ext.
+    /// A foreign ext, here `magica-voxel`, is ignored by the Voxel Max writer:
+    /// it synthesizes from the scene rather than failing to parse the wrong
+    /// ext.
     #[test]
     fn synthesizes_past_a_foreign_ext() {
         let mut source = source_state();
@@ -371,9 +374,9 @@ mod tests {
         assert_eq!(world_voxels(&reloaded), world_voxels(&source));
     }
 
-    /// Synthesis gives every node a distinct `ind`, since Voxel Max collapses nodes
-    /// that share the `[0, 0, 0]` path triple onto one. Groups take the `1` lane and
-    /// objects the `0` lane.
+    /// Synthesis gives every node a distinct `ind`, since Voxel Max collapses
+    /// nodes that share the `[0, 0, 0]` path triple onto one. Groups take the
+    /// `1` lane and objects the `0` lane.
     #[test]
     fn synthesizes_distinct_node_ind() {
         let mut state = VoxMain::default();
@@ -409,10 +412,10 @@ mod tests {
         assert!(scene.objects.iter().all(|o| o.ind[1] == 0));
     }
 
-    /// A node placing several objects, as a Goxel layer's blocks do, keeps every
-    /// object: Voxel Max models one object per node, so synthesis flattens the
-    /// extra objects to siblings that share the node's placement rather than
-    /// dropping all but the first.
+    /// A node placing several objects, as a Goxel layer's blocks do, keeps
+    /// every object: Voxel Max models one object per node, so synthesis
+    /// flattens the extra objects to siblings that share the node's placement
+    /// rather than dropping all but the first.
     #[test]
     fn synthesizes_a_node_placing_several_objects() {
         let mut state = VoxMain::default();
@@ -481,8 +484,8 @@ mod tests {
         palette
     }
 
-    /// An object of `bounds` whose live voxels each sample one color cell, given as
-    /// `(position, cell)` pairs.
+    /// An object of `bounds` whose live voxels each sample one color cell,
+    /// given as `(position, cell)` pairs.
     fn color_object(
         palette: U32Id<BVoxPalette>,
         bounds: TyVector3U32,
@@ -538,9 +541,9 @@ mod tests {
         decode_vmax_snapshots(&file.contents_files[name].snapshots).expect("decodable snapshots")
     }
 
-    /// The image stores colors 0-based then a transparent terminator, and voxels
-    /// take 1-based indices: the first color sits at image index 0, the terminator
-    /// at 255, and each voxel's color_idx is its cell + 1.
+    /// The image stores colors 0-based then a transparent terminator, and
+    /// voxels take 1-based indices: the first color sits at image index 0, the
+    /// terminator at 255, and each voxel's color_idx is its cell + 1.
     #[test]
     fn synthesizes_colors_zero_based_with_a_terminator() {
         let mut state = VoxMain::default();
@@ -569,9 +572,9 @@ mod tests {
     }
 
     /// A voxel on the first color (index 1) and one on the last (index 255)
-    /// round-trip through a plist palette, whose `colors` table is 0-based. Guards
-    /// the bug a real Voxel Max plist file hit: the last color read back as out of
-    /// range.
+    /// round-trip through a plist palette, whose `colors` table is 0-based.
+    /// Guards the bug a real Voxel Max plist file hit: the last color read back
+    /// as out of range.
     #[test]
     fn round_trips_first_and_last_color_through_plist() {
         let mut state = VoxMain::default();
@@ -608,7 +611,8 @@ mod tests {
             .collect();
         indices.sort_unstable();
         assert_eq!(indices, [1, 255]);
-        // It reads back without the out-of-range error, resolving to red and blue.
+        // It reads back without the out-of-range error, resolving to red and
+        // blue.
         let reloaded = from_vmax_file(&file).unwrap();
         let resolved: BTreeSet<[u8; 4]> = world_voxels(&reloaded)
             .into_iter()
@@ -621,7 +625,8 @@ mod tests {
     }
 
     /// A palette with more colors than fit is rejected rather than silently
-    /// truncated or wrapped: 255 colors is the budget and round-trips, 256 overflows.
+    /// truncated or wrapped: 255 colors is the budget and round-trips, 256
+    /// overflows.
     #[test]
     fn errors_when_colors_exceed_palette_budget() {
         let synthesize = |count: u32| {
@@ -650,9 +655,9 @@ mod tests {
         assert!(synthesize(256).is_err());
     }
 
-    /// An object with no color palette borrows the default palette name rather than
-    /// an empty `pal` Voxel Max cannot resolve, and writes no file of its own. The
-    /// colored and empty objects share that name.
+    /// An object with no color palette borrows the default palette name rather
+    /// than an empty `pal` Voxel Max cannot resolve, and writes no file of its
+    /// own. The colored and empty objects share that name.
     #[test]
     fn synthesizes_a_colorless_object_sharing_the_default_palette() {
         let mut state = VoxMain::default();
@@ -698,8 +703,8 @@ mod tests {
     fn synthesizes_colorless_voxels_on_a_non_empty_index() {
         let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
-        // Object 0: a colored voxel, so a `palette.png` exists to borrow. Object 1:
-        // a colorless object that nonetheless has a live voxel.
+        // Object 0: a colored voxel, so a `palette.png` exists to borrow.
+        // Object 1: a colorless object that nonetheless has a live voxel.
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -729,9 +734,9 @@ mod tests {
         assert!(indices.iter().all(|&index| index >= 1));
     }
 
-    /// A node placing several objects and also parenting child nodes flattens to
-    /// sibling object-nodes sharing the node's placement, with the child nodes
-    /// hanging off the first object, and every object gets its own files.
+    /// A node placing several objects and also parenting child nodes flattens
+    /// to sibling object-nodes sharing the node's placement, with the child
+    /// nodes hanging off the first object, and every object gets its own files.
     #[test]
     fn synthesizes_a_node_placing_objects_and_child_nodes() {
         let mut state = VoxMain::default();
@@ -750,8 +755,8 @@ mod tests {
             TyVector3U32::new(1, 1, 1),
             &[([0, 0, 0], 0)],
         ));
-        // node 0 places objects 0, 1, 2 at +10x and parents node 1; node 1 places
-        // object 3 at +1y of the first object.
+        // node 0 places objects 0, 1, 2 at +10x and parents node 1; node 1
+        // places object 3 at +1y of the first object.
         state.add_hierarchy_node(VoxHierarchyNode {
             name: "layer".to_owned(),
             child_nodes: vec![U32Id::<BVoxHierarchyNode>::from_u32(1)],
@@ -767,7 +772,8 @@ mod tests {
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
-        // Four scene objects: three from the multi-object node, one from the child.
+        // Four scene objects: three from the multi-object node, one from the
+        // child.
         assert_eq!(file.scene_json_file.objects.len(), 4);
         // The three siblings share the parent's id, and ids are all distinct.
         let ids: BTreeSet<&str> = file
@@ -782,13 +788,14 @@ mod tests {
         let red = [0xFF, 0, 0, 0xFF];
         let green = [0, 0xFF, 0, 0xFF];
         let blue = [0, 0, 0xFF, 0xFF];
-        // The three siblings keep their place. The child node hangs off the first
-        // object, and a node placed under an object anchors at that object's
-        // content-center pivot, not its grid corner. The object re-centers on reload
-        // (its origin becomes round(box_min - center)), so its descendant shifts by
-        // that origin, here to [11, 2, 1]. This only arises for object-under-object
-        // nesting, which other formats such as Goxel produce; Voxel Max objects are
-        // leaves, so a Voxel Max round-trip is unaffected.
+        // The three siblings keep their place. The child node hangs off the
+        // first object, and a node placed under an object anchors at that
+        // object's content-center pivot, not its grid corner. The object
+        // re-centers on reload (its origin becomes round(box_min - center)), so
+        // its descendant shifts by that origin, here to [11, 2, 1]. This only
+        // arises for object-under-object nesting, which other formats such as
+        // Goxel produce; Voxel Max objects are leaves, so a Voxel Max
+        // round-trip is unaffected.
         assert_eq!(
             world_voxels(&reloaded),
             BTreeSet::from([
@@ -800,10 +807,10 @@ mod tests {
         );
     }
 
-    /// Two nodes placing one object instance it: the object's voxels are rebuilt
-    /// once into a shared contents file, the scene carries two objects with
-    /// distinct ids, and reloading collapses them back to one voxcore object placed
-    /// at both positions.
+    /// Two nodes placing one object instance it: the object's voxels are
+    /// rebuilt once into a shared contents file, the scene carries two objects
+    /// with distinct ids, and reloading collapses them back to one voxcore
+    /// object placed at both positions.
     #[test]
     fn synthesizes_instances_sharing_one_contents_file() {
         let mut state = VoxMain::default();
@@ -834,8 +841,8 @@ mod tests {
     }
 
     /// A subtree shared by several parents is placed once per parent: synthesis
-    /// duplicates it per path so the rebuilt world matches voxcore, where a node's
-    /// placement composes along every path to it.
+    /// duplicates it per path so the rebuilt world matches voxcore, where a
+    /// node's placement composes along every path to it.
     #[test]
     fn synthesizes_a_shared_subtree_at_every_parent() {
         let mut state = VoxMain::default();
@@ -896,8 +903,8 @@ mod tests {
         );
     }
 
-    /// A node reachable from no root is dropped, since voxcore never places it, so
-    /// synthesis does not promote it to a spurious root.
+    /// A node reachable from no root is dropped, since voxcore never places it,
+    /// so synthesis does not promote it to a spurious root.
     #[test]
     fn drops_a_node_unreachable_from_the_roots() {
         let mut state = VoxMain::default();
@@ -912,8 +919,8 @@ mod tests {
             TyVector3U32::new(1, 1, 1),
             &[([0, 0, 0], 0)],
         ));
-        // node 0 is a root placing object 0; node 1 places object 1 but is neither
-        // a root nor anyone's child.
+        // node 0 is a root placing object 0; node 1 places object 1 but is
+        // neither a root nor anyone's child.
         state.add_hierarchy_node(object_node("rooted", 0, at(0.0, 0.0, 0.0)));
         state.add_hierarchy_node(object_node("orphan", 1, at(50.0, 0.0, 0.0)));
         state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
@@ -926,9 +933,9 @@ mod tests {
         assert_eq!(world_voxels(&reloaded), BTreeSet::from([([0, 0, 0], red)]));
     }
 
-    /// Synthesis encodes the node's quaternion rotation back to `t_r`, so rotation
-    /// survives alongside translation and scale; the lone voxel still renders at its
-    /// original world point.
+    /// Synthesis encodes the node's quaternion rotation back to `t_r`, so
+    /// rotation survives alongside translation and scale; the lone voxel still
+    /// renders at its original world point.
     #[test]
     fn keeps_rotation_scale_and_translation() {
         let mut state = VoxMain::default();
@@ -953,16 +960,18 @@ mod tests {
         let reloaded = from_vmax_file(&file).unwrap();
         let node = reloaded.hierarchy_node(U32Id::from_u32(0)).unwrap();
 
-        // The axis-angle round-trip reproduces the rotation to floating-point noise.
+        // The axis-angle round-trip reproduces the rotation to floating-point
+        // noise.
         let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
         let r = node.transform.rotation;
         assert!(close(r.x, rotation.x) && close(r.y, rotation.y));
         assert!(close(r.z, rotation.z) && close(r.w, rotation.w));
         assert_eq!(node.transform.scale, TyVector3F64::new(2.0, 1.0, 1.0));
 
-        // node.position is the content-center pivot and the rotation now applies to
-        // the grid, so the lone voxel still renders at its original world point:
-        // position + R * (scale * (origin + local)), with local at the grid corner.
+        // node.position is the content-center pivot and the rotation now
+        // applies to the grid, so the lone voxel still renders at its original
+        // world point: position + R * (scale * (origin + local)), with local at
+        // the grid corner.
         let object = reloaded.object(U32Id::from_u32(0)).unwrap();
         let origin = object.origin();
         let s = node.transform.scale;
@@ -1085,8 +1094,8 @@ mod tests {
     }
 
     /// Writing a colored single-object scene with no ext, reloading it, then
-    /// writing it again reaches a fixed point: the second write takes the lossless
-    /// path and reproduces the first document exactly.
+    /// writing it again reaches a fixed point: the second write takes the
+    /// lossless path and reproduces the first document exactly.
     #[test]
     fn is_idempotent_for_a_colored_object() {
         let mut state = VoxMain::default();
@@ -1106,8 +1115,8 @@ mod tests {
         assert_eq!(file2, file1);
     }
 
-    /// A deep hierarchy of nested groups and object nodes round-trips: every leaf's
-    /// world voxel survives the reconstructed parent chain.
+    /// A deep hierarchy of nested groups and object nodes round-trips: every
+    /// leaf's world voxel survives the reconstructed parent chain.
     #[test]
     fn synthesizes_a_deep_hierarchy() {
         let mut state = VoxMain::default();
@@ -1122,8 +1131,8 @@ mod tests {
             TyVector3U32::new(1, 1, 1),
             &[([0, 0, 0], 1)],
         ));
-        // root group 0 -> group 1 -> group 2 -> object node 3, plus object node 4
-        // hanging off group 1, so leaves sit at different depths.
+        // root group 0 -> group 1 -> group 2 -> object node 3, plus object node
+        // 4 hanging off group 1, so leaves sit at different depths.
         state.add_hierarchy_node(group_node("r", &[1], at(1.0, 0.0, 0.0)));
         state.add_hierarchy_node(group_node("g1", &[2, 4], at(0.0, 2.0, 0.0)));
         state.add_hierarchy_node(group_node("g2", &[3], at(0.0, 0.0, 3.0)));
@@ -1142,15 +1151,16 @@ mod tests {
         );
     }
 
-    /// A group's content box is derived from its subtree, not stored: the union, in
-    /// the group's own frame, of each child object's content box mapped through the
-    /// placing node's transform. Two equally-sized children at different offsets
-    /// union to a box spanning both.
+    /// A group's content box is derived from its subtree, not stored: the
+    /// union, in the group's own frame, of each child object's content box
+    /// mapped through the placing node's transform. Two equally-sized children
+    /// at different offsets union to a box spanning both.
     #[test]
     fn derives_a_group_content_box_from_its_subtree() {
         let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
-        // Two [2, 2, 2] objects, each tight (voxels reach both ends of every axis).
+        // Two [2, 2, 2] objects, each tight (voxels reach both ends of every
+        // axis).
         for _ in 0..2 {
             state.add_object(color_object(
                 palette,
@@ -1172,21 +1182,24 @@ mod tests {
             .iter()
             .find(|g| g.name == "g")
             .expect("the root group");
-        // Each object box is [0, 0, 0]..[2, 2, 2] in its node-local frame, centered
-        // on [1, 1, 1]; object b is shifted +10x, so the union spans x [0, 12] and
-        // y/z [0, 2], centered on [6, 1, 1] with half-extents [6, 1, 1].
+        // Each object box is [0, 0, 0]..[2, 2, 2] in its node-local frame,
+        // centered on [1, 1, 1]; object b is shifted +10x, so the union spans x
+        // [0, 12] and y/z [0, 2], centered on [6, 1, 1] with half-extents [6,
+        // 1, 1].
         assert_eq!(group.center, [6.0, 1.0, 1.0]);
         assert_eq!(group.bounds_min, Some([-6.0, -1.0, -1.0]));
         assert_eq!(group.bounds_max, Some([6.0, 1.0, 1.0]));
     }
 
     /// An empty object synthesizes to a scene object with empty contents and a
-    /// content box framed on its grid. Reloading keeps the `[3, 4, 5]` build volume
-    /// as the object's grid; with no live voxels its derived runtime extent is empty.
+    /// content box framed on its grid. Reloading keeps the `[3, 4, 5]` build
+    /// volume as the object's grid; with no live voxels its derived runtime
+    /// extent is empty.
     #[test]
     fn synthesizes_an_empty_object_with_bounds() {
         let mut state = VoxMain::default();
-        // An empty object holds no voxels; its grid is the [3, 4, 5] build volume.
+        // An empty object holds no voxels; its grid is the [3, 4, 5] build
+        // volume.
         let object = VoxObject::new(String::new(), TyVector3U32::new(3, 4, 5)).unwrap();
         state.add_object(object);
         state.add_hierarchy_node(object_node("empty", 0, at(0.0, 0.0, 0.0)));
@@ -1196,15 +1209,15 @@ mod tests {
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         assert_eq!(file.scene_json_file.objects.len(), 1);
         assert!(contents_voxels(&file, "contents.vmaxb").is_empty());
-        // The content box frames the [3, 4, 5] build volume, centered in the 256
-        // workspace: e_c at its center, e_ma the half-extents.
+        // The content box frames the [3, 4, 5] build volume, centered in the
+        // 256 workspace: e_c at its center, e_ma the half-extents.
         assert_eq!(file.scene_json_file.objects[0].center, [127.5, 128.0, 2.5]);
         assert_eq!(
             file.scene_json_file.objects[0].bounds_max,
             Some([1.5, 2.0, 2.5])
         );
-        // Reloading keeps the [3, 4, 5] build volume as the object's grid; with no
-        // live voxels its derived runtime extent is empty.
+        // Reloading keeps the [3, 4, 5] build volume as the object's grid; with
+        // no live voxels its derived runtime extent is empty.
         let reloaded = from_vmax_file(&file).unwrap();
         let id = U32Id::<BVoxObject>::from_u32(0);
         assert_eq!(
@@ -1249,8 +1262,9 @@ mod tests {
     }
 
     /// A padded source palette larger than the budget is fine as long as its
-    /// referenced colors fit, matching a MagicaVoxel source whose fixed 256-entry
-    /// palette uses only a few low indices. The size alone must not be rejected.
+    /// referenced colors fit, matching a MagicaVoxel source whose fixed
+    /// 256-entry palette uses only a few low indices. The size alone must not
+    /// be rejected.
     #[test]
     fn synthesizes_a_padded_palette_using_low_indices() {
         let mut state = VoxMain::default();
@@ -1275,8 +1289,9 @@ mod tests {
         );
     }
 
-    /// A color-only object keeps its colors in plist mode, where the colors ride in
-    /// the settings sidecar rather than an image, instead of reloading as white.
+    /// A color-only object keeps its colors in plist mode, where the colors
+    /// ride in the settings sidecar rather than an image, instead of reloading
+    /// as white.
     #[test]
     fn synthesizes_a_color_only_object_in_plist() {
         let mut state = VoxMain::default();
@@ -1291,7 +1306,8 @@ mod tests {
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Plist).unwrap();
-        // No image in plist mode; the colors must still survive via the sidecar.
+        // No image in plist mode; the colors must still survive via the
+        // sidecar.
         assert!(file.palette_png_files.is_empty());
         assert!(!file.palette_settings_files.is_empty());
         let reloaded = from_vmax_file(&file).unwrap();
@@ -1303,8 +1319,8 @@ mod tests {
         );
     }
 
-    /// A minimal no-ext state: one red voxel placed by one object node, the input
-    /// the synthesis path takes.
+    /// A minimal no-ext state: one red voxel placed by one object node, the
+    /// input the synthesis path takes.
     fn one_object_state() -> VoxMain {
         let mut state = VoxMain::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
@@ -1319,8 +1335,8 @@ mod tests {
         state
     }
 
-    /// Gives the state a `voxel-max` ext carrying `cam` as its scene camera, so the
-    /// lossless path has a camera to keep or replace.
+    /// Gives the state a `voxel-max` ext carrying `cam` as its scene camera, so
+    /// the lossless path has a camera to keep or replace.
     fn with_ext_scene_camera(state: &mut VoxMain, cam: VMaxSceneCamera) {
         let voxel_max = VoxelMaxExt {
             scene: VMaxSceneJsonFile {
@@ -1335,8 +1351,8 @@ mod tests {
         state.validate().unwrap();
     }
 
-    /// `SceneCameraSource::Camera` writes the given scene camera, replacing whatever
-    /// the path would otherwise produce.
+    /// `SceneCameraSource::Camera` writes the given scene camera, replacing
+    /// whatever the path would otherwise produce.
     #[test]
     fn scene_camera_camera_overrides_the_scene_camera() {
         let state = one_object_state();
@@ -1351,9 +1367,9 @@ mod tests {
         assert_eq!(file.scene_json_file.cam, Some(camera));
     }
 
-    /// `SceneCameraSource::Ext` errors on a state with no `voxel-max` ext, since
-    /// there is no camera to keep, but succeeds and keeps the camera once one is
-    /// present.
+    /// `SceneCameraSource::Ext` errors on a state with no `voxel-max` ext,
+    /// since there is no camera to keep, but succeeds and keeps the camera once
+    /// one is present.
     #[test]
     fn scene_camera_ext_requires_an_ext() {
         let mut state = one_object_state();
@@ -1376,8 +1392,8 @@ mod tests {
         assert_eq!(file.scene_json_file.cam, Some(cam));
     }
 
-    /// `SceneCameraSource::Empty` replaces the ext's scene camera with the default,
-    /// while leaving the camera unset keeps it.
+    /// `SceneCameraSource::Empty` replaces the ext's scene camera with the
+    /// default, while leaving the camera unset keeps it.
     #[test]
     fn scene_camera_empty_replaces_the_ext_camera() {
         let mut state = one_object_state();

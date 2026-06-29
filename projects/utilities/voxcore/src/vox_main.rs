@@ -10,15 +10,17 @@ use std::collections::{HashMap, HashSet};
 ///
 /// Add entities with [`add_object`](Self::add_object),
 /// [`add_palette`](Self::add_palette), and
-/// [`add_hierarchy_node`](Self::add_hierarchy_node), and read them back by id or
-/// through the `iter_*` methods. Ids are bare indices into this state, meaningful
-/// only within it. [`validate`](Self::validate) checks the cross-references.
+/// [`add_hierarchy_node`](Self::add_hierarchy_node), and read them back by id
+/// or through the `iter_*` methods. Ids are bare indices into this state,
+/// meaningful only within it. [`validate`](Self::validate) checks the
+/// cross-references.
 #[derive(Debug, Default)]
 pub struct VoxMain {
     /// The runtime scene: objects, shared palettes, hierarchy, and roots.
     runtime_state: VoxRuntimeState,
 
-    /// Optional user-extension namespace; the core format assigns it no meaning.
+    /// Optional user-extension namespace; the core format assigns it no
+    /// meaning.
     ext: Option<VoxValue>,
 }
 
@@ -127,8 +129,8 @@ impl VoxMain {
         self.runtime_state.root_hierarchy_nodes = roots;
     }
 
-    /// Appends a root. Root uniqueness is checked by [`validate`](Self::validate),
-    /// not here.
+    /// Appends a root. Root uniqueness is checked by
+    /// [`validate`](Self::validate), not here.
     pub fn push_root_hierarchy_node(&mut self, root: U32Id<BVoxHierarchyNode>) {
         self.runtime_state.root_hierarchy_nodes.push(root);
     }
@@ -182,10 +184,10 @@ impl VoxMain {
         Some(())
     }
 
-    /// Removes hierarchy node `id`, detaching it from every `child_nodes` list and
-    /// from the roots. Its own children keep any other parents (the hierarchy is a
-    /// DAG). `None`, changing nothing, if `id` is not one of this state's nodes.
-    /// Leaves a hole until [`gc`](Self::gc) renumbers.
+    /// Removes hierarchy node `id`, detaching it from every `child_nodes` list
+    /// and from the roots. Its own children keep any other parents (the
+    /// hierarchy is a DAG). `None`, changing nothing, if `id` is not one of
+    /// this state's nodes. Leaves a hole until [`gc`](Self::gc) renumbers.
     pub fn remove_hierarchy_node(&mut self, id: U32Id<BVoxHierarchyNode>) -> Option<()> {
         if !self.runtime_state.hierarchy_node_ids.is_retained(id) {
             return None;
@@ -207,10 +209,10 @@ impl VoxMain {
 
     /// Removes `cell` from `palette`, first repainting every live voxel that
     /// samples it onto `replacement` so no voxel is left without a material.
-    /// `None`, changing nothing, if `palette` is not one of this state's palettes,
-    /// if `cell` or `replacement` is not one of that palette's cells, or if
-    /// `replacement` is `cell` itself. Leaves a hole until [`gc`](Self::gc)
-    /// renumbers.
+    /// `None`, changing nothing, if `palette` is not one of this state's
+    /// palettes, if `cell` or `replacement` is not one of that palette's cells,
+    /// or if `replacement` is `cell` itself. Leaves a hole until
+    /// [`gc`](Self::gc) renumbers.
     pub fn remove_cell(
         &mut self,
         palette: U32Id<BVoxPalette>,
@@ -244,17 +246,18 @@ impl VoxMain {
     /// deterministic (id equals listing index). Call this after any removal and
     /// before saving.
     ///
-    /// Requires a referentially valid state, which the `remove_*` methods preserve
-    /// (each detaches what it removes) and [`validate`](Self::validate) checks.
-    /// The voxel grids are dense and never compacted, so voxel ids keep equaling
-    /// their raster index.
+    /// Requires a referentially valid state, which the `remove_*` methods
+    /// preserve (each detaches what it removes) and
+    /// [`validate`](Self::validate) checks. The voxel grids are dense and never
+    /// compacted, so voxel ids keep equaling their raster index.
     ///
-    /// Returns the [`VoxGcRemap`] recording where each id moved, so any ids held
-    /// outside the state can be translated to their compacted values.
+    /// Returns the [`VoxGcRemap`] recording where each id moved, so any ids
+    /// held outside the state can be translated to their compacted values.
     pub fn gc(&mut self) -> VoxGcRemap {
         // Compact each palette's own pools first, so the cell relabelings are
-        // ready when object samples are translated below. They are indexed by old
-        // palette id, so the column covers the palette pool's whole id space.
+        // ready when object samples are translated below. They are indexed by
+        // old palette id, so the column covers the palette pool's whole id
+        // space.
         let palette_id_space = self.runtime_state.palette_ids.peek_next_fresh().to_u32() as usize;
         let mut cell_remaps: IdVec<BVoxPalette, IdRemap<BVoxPaletteCell, u32>> =
             IdVec::from_vec((0..palette_id_space).map(|_| IdRemap::default()).collect());
@@ -266,12 +269,12 @@ impl VoxMain {
 
         // Compact the palette pool.
         let palette_remap = self.runtime_state.palette_ids.gc();
-        // Safety: the palette column was in sync with the pre-gc palette pool, and
-        // nothing has retained or released since.
+        // Safety: the palette column was in sync with the pre-gc palette pool,
+        // and nothing has retained or released since.
         unsafe { self.runtime_state.palettes.gc(&palette_remap) };
 
-        // Rewrite each object's palette references and sample cells, then compact
-        // its own reference pool.
+        // Rewrite each object's palette references and sample cells, then
+        // compact its own reference pool.
         let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
         for object_id in object_ids {
             // Safety: retained object ids have a value.
@@ -281,12 +284,12 @@ impl VoxMain {
 
         // Compact the object pool.
         let object_remap = self.runtime_state.object_ids.gc();
-        // Safety: the object column was in sync with the pre-gc object pool, and
-        // nothing has retained or released since.
+        // Safety: the object column was in sync with the pre-gc object pool,
+        // and nothing has retained or released since.
         unsafe { self.runtime_state.objects.gc(&object_remap) };
 
-        // Compact the node pool, then translate child links and roots, which point
-        // at the relabeled nodes and objects.
+        // Compact the node pool, then translate child links and roots, which
+        // point at the relabeled nodes and objects.
         let node_remap = self.runtime_state.hierarchy_node_ids.gc();
         // Safety: the node column was in sync with the pre-gc node pool, and
         // nothing has retained or released since.
@@ -327,16 +330,16 @@ impl VoxMain {
     /// 1. every object palette ref resolves, and no object references the same
     ///    palette twice;
     /// 2. every live-voxel sample cell is within its palette's cells;
-    /// 3. every node child node and child object resolves, and no node lists the
-    ///    same one twice;
+    /// 3. every node child node and child object resolves, and no node lists
+    ///    the same one twice;
     /// 4. every root resolves, and no root repeats;
     /// 5. no palette declares the same attribute key twice;
-    /// 6. every node transform has a non-zero scale on each axis and a unit-length
-    ///    rotation quaternion within `1e-6`;
+    /// 6. every node transform has a non-zero scale on each axis and a
+    ///    unit-length rotation quaternion within `1e-6`;
     /// 7. the `child_nodes` graph is acyclic.
     ///
-    /// A node may have several parents, since the hierarchy is a DAG; that sharing
-    /// is not a cycle.
+    /// A node may have several parents, since the hierarchy is a DAG; that
+    /// sharing is not a cycle.
     pub fn validate(&self) -> Result<()> {
         // How far a rotation quaternion's length-squared may stray from 1 and
         // still count as a unit quaternion.
@@ -469,15 +472,16 @@ impl VoxMain {
     /// A node on a `child_nodes` cycle, or `None` if acyclic. Iterative
     /// three-colour DFS (so a deep chain can't overflow the stack): a back edge
     /// into an in-progress node is a cycle, revisiting a finished node is not.
-    /// Call only after every child id is known live. Works over the retained node
-    /// ids by position, so it holds whether or not the pool has holes.
+    /// Call only after every child id is known live. Works over the retained
+    /// node ids by position, so it holds whether or not the pool has holes.
     fn first_cycle_node(&self) -> Option<u32> {
         const WHITE: u8 = 0;
         const GREY: u8 = 1;
         const BLACK: u8 = 2;
 
-        // Retained node ids and a lookup from id to its position here, so a holed
-        // pool (ids not contiguous from zero) is handled the same as a packed one.
+        // Retained node ids and a lookup from id to its position here, so a
+        // holed pool (ids not contiguous from zero) is handled the same as a
+        // packed one.
         let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
         let index_of: HashMap<u32, usize> = node_ids
             .iter()
@@ -492,7 +496,8 @@ impl VoxMain {
                 continue;
             }
             colour[start] = GREY;
-            // Each frame is a node position plus how many children we have walked.
+            // Each frame is a node position plus how many children we have
+            // walked.
             let mut stack: Vec<(usize, usize)> = vec![(start, 0)];
             while let Some(&(node, cursor)) = stack.last() {
                 let node_id = node_ids[node];
@@ -527,7 +532,8 @@ impl VoxMain {
         None
     }
 
-    /// Deep copy. The runtime scene rebuilds its columns against fresh id pools.
+    /// Deep copy. The runtime scene rebuilds its columns against fresh id
+    /// pools.
     pub fn clone_state(&self) -> Self {
         Self {
             runtime_state: self.runtime_state.clone_runtime_state(),
@@ -602,8 +608,8 @@ mod tests {
     fn validate_accepts_a_shared_child_dag() {
         let mut state = VoxMain::default();
         let leaf = state.add_hierarchy_node(VoxHierarchyNode::default());
-        // Sharing a child across parents is legal in a DAG; each parent lists it
-        // once.
+        // Sharing a child across parents is legal in a DAG; each parent lists
+        // it once.
         let a = state.add_hierarchy_node(node_with_children(vec![leaf]));
         let b = state.add_hierarchy_node(node_with_children(vec![leaf]));
         state.set_root_hierarchy_nodes(vec![a, b]);
@@ -832,7 +838,8 @@ mod tests {
             Some(cell_id(0))
         );
 
-        // The inner node dropped `a` and renumbered `b` to 0; the roots are intact.
+        // The inner node dropped `a` and renumbered `b` to 0; the roots are
+        // intact.
         let inner = U32Id::<BVoxHierarchyNode>::from_u32(0);
         assert_eq!(
             state.hierarchy_node(inner).unwrap().child_objects,
@@ -867,7 +874,8 @@ mod tests {
         assert_eq!(state.remove_hierarchy_node(mid), Some(()));
         assert_eq!(state.remove_hierarchy_node(mid), None); // already gone
 
-        // `mid` is detached from `top` and the roots; the shared `leaf` survives.
+        // `mid` is detached from `top` and the roots; the shared `leaf`
+        // survives.
         assert_eq!(state.hierarchy_node(top).unwrap().child_nodes, [leaf]);
         assert_eq!(state.root_hierarchy_nodes(), [top]);
         assert!(state.hierarchy_node(mid).is_none());
@@ -924,9 +932,9 @@ mod tests {
         let object = state.add_object(object);
 
         // Remove `first`; no live voxel used it, so the repaint is a no-op. The
-        // palette is now holed: the voxel still samples `third`, whose id exceeds
-        // the live cell count. A range check would wrongly reject this; the
-        // retention check accepts it.
+        // palette is now holed: the voxel still samples `third`, whose id
+        // exceeds the live cell count. A range check would wrongly reject this;
+        // the retention check accepts it.
         assert_eq!(state.remove_cell(palette, first, second), Some(()));
         assert_eq!(state.validate(), Ok(()));
 
@@ -975,7 +983,8 @@ mod tests {
         assert_eq!(b.to_u32(), 1);
         assert_eq!(state.validate(), Ok(()));
 
-        // Remove `a` and gc: `b` renumbers to 0, keeping its margin grid and voxel.
+        // Remove `a` and gc: `b` renumbers to 0, keeping its margin grid and
+        // voxel.
         assert_eq!(state.remove_object(a), Some(()));
         state.gc();
         let b0 = U32Id::<BVoxObject>::from_u32(0);

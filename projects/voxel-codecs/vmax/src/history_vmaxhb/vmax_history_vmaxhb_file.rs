@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 
 /// Decoded `*.vmaxhb` undo-history file. Written per object (named by the
 /// object's `hist` reference, e.g. `history1.vmaxhb`) and once for the working
-/// scene (`scene.vmaxhb`). The envelope is an LZFSE-framed (`bvx2`) binary plist.
+/// scene (`scene.vmaxhb`). The envelope is an LZFSE-framed (`bvx2`) binary
+/// plist.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(deny_unknown_fields))]

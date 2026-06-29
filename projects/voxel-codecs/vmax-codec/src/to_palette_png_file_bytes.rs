@@ -25,7 +25,8 @@ pub fn to_palette_png_file_bytes(file: &VMaxPalettePngFile) -> Result<Vec<u8>> {
     encoder.set_color(ColorType::Rgba);
     encoder.set_depth(BitDepth::Eight);
     // Match Voxel Max's encoder: a Sub-filtered scanline tagged with an sRGB
-    // chunk, followed by the Exif block restating the color space and dimensions.
+    // chunk, followed by the Exif block restating the color space and
+    // dimensions.
     encoder.set_filter(Filter::Sub);
     encoder.set_source_srgb(SrgbRenderingIntent::Perceptual);
     let mut writer = encoder.write_header()?;

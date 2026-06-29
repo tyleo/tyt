@@ -13,8 +13,8 @@ use voxcore::{
 
 /// Loads a decoded Goxel [`GoxlFile`] into a [`VoxMain`].
 ///
-/// The shared `BL16` voxel blocks become objects sharing one `rgba` palette, and
-/// the `LAYR` layers become the hierarchy nodes, each placing the blocks it
+/// The shared `BL16` voxel blocks become objects sharing one `rgba` palette,
+/// and the `LAYR` layers become the hierarchy nodes, each placing the blocks it
 /// stamps. The state with no native voxcore home, such as the image metadata,
 /// preview, materials, cameras, light, per-layer metadata, the clone and shape
 /// definitions, the exact block placements, and unknown chunks, rides in a
@@ -29,8 +29,8 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
     let palette_id = state.add_palette(palette);
 
     for block in &file.blocks {
-        // A Goxel block is a fixed 16-cube; it becomes the object's build volume
-        // directly, with its live voxels wherever they sit inside it.
+        // A Goxel block is a fixed 16-cube; it becomes the object's build
+        // volume directly, with its live voxels wherever they sit inside it.
         state.add_object(build_object(block, palette_id, &cells));
     }
 
@@ -128,10 +128,10 @@ fn build_object(
     object
 }
 
-/// Builds the hierarchy nodes, one per layer in stored order. A layer node places
-/// the distinct blocks it stamps, deduplicated to satisfy voxcore's per-node
-/// uniqueness rule; the exact placement list rides in the ext. Errors on a
-/// placement that references a block outside the block list.
+/// Builds the hierarchy nodes, one per layer in stored order. A layer node
+/// places the distinct blocks it stamps, deduplicated to satisfy voxcore's
+/// per-node uniqueness rule; the exact placement list rides in the ext. Errors
+/// on a placement that references a block outside the block list.
 fn build_layer_nodes(file: &GoxlFile, object_count: usize) -> Result<Vec<VoxHierarchyNode>> {
     let mut nodes = Vec::with_capacity(file.layers.len());
     for layer in &file.layers {
@@ -279,7 +279,8 @@ mod tests {
         VoxObject, VoxPalette, VoxValue,
     };
 
-    /// A `4 x 4` matrix with distinct float cells, for transform and box fields.
+    /// A `4 x 4` matrix with distinct float cells, for transform and box
+    /// fields.
     fn matrix(base: f32) -> [[f32; 4]; 4] {
         let mut matrix = [[0.0f32; 4]; 4];
         for (index, cell) in matrix.iter_mut().flatten().enumerate() {
@@ -310,8 +311,8 @@ mod tests {
     }
 
     /// A file exercising every modeled chunk: two shared blocks, a normal layer
-    /// stamping both, a clone layer, a shape layer, materials, cameras, a light,
-    /// a preview, an image box, and an unknown chunk.
+    /// stamping both, a clone layer, a shape layer, materials, cameras, a
+    /// light, a preview, an image box, and an unknown chunk.
     fn sample_file() -> GoxlFile {
         GoxlFile {
             version: 2,
@@ -432,8 +433,9 @@ mod tests {
     }
 
     /// A state with no format ext, built straight from voxcore: a red-green
-    /// object and a blue object sharing one `rgba` palette, placed by a hierarchy
-    /// of a nested group and two roots. This is the cross-format synthesis input.
+    /// object and a blue object sharing one `rgba` palette, placed by a
+    /// hierarchy of a nested group and two roots. This is the cross-format
+    /// synthesis input.
     fn source_state() -> VoxMain {
         let mut state = VoxMain::default();
 
@@ -511,8 +513,8 @@ mod tests {
     /// A solid voxel in world space: `x`, `y`, `z`, and an `rgba` color.
     type WorldVoxel = (i32, i32, i32, (u8, u8, u8, u8));
 
-    /// The world voxels a file places: each layer block's solid cells decoded to
-    /// world coordinates and color, order-independent.
+    /// The world voxels a file places: each layer block's solid cells decoded
+    /// to world coordinates and color, order-independent.
     fn world_voxels(file: &GoxlFile) -> BTreeSet<WorldVoxel> {
         let stride = GoxlBlock::SIZE as usize;
         let mut set = BTreeSet::new();
@@ -571,10 +573,11 @@ mod tests {
         assert!(file.layers.is_empty());
     }
 
-    /// A state with no `goxel` ext, such as one cross-loaded from another format,
-    /// synthesizes a file: the hierarchy flattens to layers of placed blocks
-    /// whose world voxels and colors match the source, one layer per placement
-    /// named for its node, and the file reads back into a valid state.
+    /// A state with no `goxel` ext, such as one cross-loaded from another
+    /// format, synthesizes a file: the hierarchy flattens to layers of placed
+    /// blocks whose world voxels and colors match the source, one layer per
+    /// placement named for its node, and the file reads back into a valid
+    /// state.
     #[test]
     fn synthesizes_a_file_without_an_ext() {
         let state = source_state();

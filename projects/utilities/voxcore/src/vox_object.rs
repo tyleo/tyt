@@ -19,7 +19,8 @@ pub struct VoxObject {
     /// Grid size in voxels: the object's build volume (the author's edit grid).
     /// Live voxels sit anywhere inside `[0, bounds)` and need not fill it; the
     /// tight runtime extent is derived on demand by
-    /// [`live_extent`](Self::live_extent). An empty build volume is `[0, 0, 0]`.
+    /// [`live_extent`](Self::live_extent). An empty build volume is
+    /// `[0, 0, 0]`.
     bounds: TyVector3U32,
 
     /// Translation from the placing hierarchy node to the build volume's min
@@ -43,13 +44,13 @@ pub struct VoxObject {
 }
 
 impl VoxObject {
-    /// Largest dense grid an object may allocate, in cells. The grid stores every
-    /// cell whether live or not, so this caps memory. Always `<= u32::MAX`, so a
-    /// voxel id is always a valid raster index.
+    /// Largest dense grid an object may allocate, in cells. The grid stores
+    /// every cell whether live or not, so this caps memory. Always
+    /// `<= u32::MAX`, so a voxel id is always a valid raster index.
     pub const MAX_GRID_CELLS: u64 = 1 << 27;
 
-    /// Creates an empty grid of size `bounds`: every cell has a voxel id, none is
-    /// live, and no palettes are referenced yet. Then use
+    /// Creates an empty grid of size `bounds`: every cell has a voxel id, none
+    /// is live, and no palettes are referenced yet. Then use
     /// [`add_palette_ref`](Self::add_palette_ref) and
     /// [`retain_voxel`](Self::retain_voxel). `None` if the grid would exceed
     /// [`MAX_GRID_CELLS`](Self::MAX_GRID_CELLS).
@@ -108,7 +109,8 @@ impl VoxObject {
         self.liveness.count_live()
     }
 
-    /// Voxel id at grid `position`, or `None` if outside [`bounds`](Self::bounds).
+    /// Voxel id at grid `position`, or `None` if outside
+    /// [`bounds`](Self::bounds).
     pub fn voxel_id(&self, position: TyVector3U32) -> Option<U32Id<BVoxVoxel>> {
         if position.x >= self.bounds.x || position.y >= self.bounds.y || position.z >= self.bounds.z
         {
@@ -143,8 +145,9 @@ impl VoxObject {
         (id.to_u32() as usize) < self.liveness.len() && self.liveness.is_live(id)
     }
 
-    /// Cell the live voxel `id` takes from `palette_ref`, or `None` if the voxel
-    /// is not live or `palette_ref` is not one of this object's references.
+    /// Cell the live voxel `id` takes from `palette_ref`, or `None` if the
+    /// voxel is not live or `palette_ref` is not one of this object's
+    /// references.
     pub fn voxel_cell(
         &self,
         id: U32Id<BVoxVoxel>,
@@ -153,7 +156,8 @@ impl VoxObject {
         if !self.is_live(id) || !self.palette_ref_ids.is_retained(palette_ref) {
             return None;
         }
-        // Safety: the dense grid gives every reference a slot for every voxel id.
+        // Safety: the dense grid gives every reference a slot for every voxel
+        // id.
         let column = unsafe { self.samples.get(palette_ref) };
         Some(*unsafe { column.get(id) })
     }
@@ -166,9 +170,9 @@ impl VoxObject {
     }
 
     /// The tight live-voxel extent as `(min_corner, [X, Y, Z] size)` in this
-    /// object's grid, or `None` when it has no live voxels. The object stores the
-    /// wider build volume in [`bounds`](Self::bounds); the runtime/tight grid a
-    /// Voxel Json document records is derived from this.
+    /// object's grid, or `None` when it has no live voxels. The object stores
+    /// the wider build volume in [`bounds`](Self::bounds); the runtime/tight
+    /// grid a Voxel Json document records is derived from this.
     pub fn live_extent(&self) -> Option<(TyVector3U32, TyVector3U32)> {
         let mut live = self.iter_live().map(|id| {
             self.voxel_position(id)
@@ -195,8 +199,9 @@ impl VoxObject {
         self.palette_ref_ids.len()
     }
 
-    /// Palette references in resolution order, as `(reference id, palette)`. Pair
-    /// a reference id with [`voxel_cell`](Self::voxel_cell) to read its samples.
+    /// Palette references in resolution order, as `(reference id, palette)`.
+    /// Pair a reference id with [`voxel_cell`](Self::voxel_cell) to read its
+    /// samples.
     pub fn iter_palette_refs(
         &self,
     ) -> impl Iterator<Item = (U32Id<BVoxPaletteRef>, U32Id<BVoxPalette>)> + '_ {
@@ -208,9 +213,9 @@ impl VoxObject {
 
     /// Adds a palette reference after any existing ones and returns its id,
     /// back-filling every voxel with `default_sample`. Live voxels keep
-    /// `default_sample` until [`retain_voxel`](Self::retain_voxel) overwrites it,
-    /// so widening the reference set never requires re-adding voxels. Referencing
-    /// the same palette twice is rejected by
+    /// `default_sample` until [`retain_voxel`](Self::retain_voxel) overwrites
+    /// it, so widening the reference set never requires re-adding voxels.
+    /// Referencing the same palette twice is rejected by
     /// [`VoxMain::validate`](crate::VoxMain::validate), not here.
     pub fn add_palette_ref(
         &mut self,
@@ -229,9 +234,10 @@ impl VoxObject {
         palette_ref_id
     }
 
-    /// Makes the voxel at `id` live with one `samples` cell per palette reference,
-    /// in [`add_palette_ref`](Self::add_palette_ref) order. `None`, changing
-    /// nothing, if `id` is outside the grid or `samples` has the wrong length.
+    /// Makes the voxel at `id` live with one `samples` cell per palette
+    /// reference, in [`add_palette_ref`](Self::add_palette_ref) order. `None`,
+    /// changing nothing, if `id` is outside the grid or `samples` has the wrong
+    /// length.
     pub fn retain_voxel(
         &mut self,
         id: U32Id<BVoxVoxel>,
@@ -302,9 +308,9 @@ impl VoxObject {
         Some(())
     }
 
-    /// Removes every reference naming `palette`. A validated object names a palette
-    /// at most once, but this removes every match regardless, so it is safe to call
-    /// on a state that has not been validated. Used by
+    /// Removes every reference naming `palette`. A validated object names a
+    /// palette at most once, but this removes every match regardless, so it is
+    /// safe to call on a state that has not been validated. Used by
     /// [`VoxMain::remove_palette`](crate::VoxMain::remove_palette) to detach an
     /// object from a palette being removed.
     pub(crate) fn remove_palette_refs_to(&mut self, palette: U32Id<BVoxPalette>) {
@@ -320,8 +326,8 @@ impl VoxObject {
 
     /// Repoints every live voxel that samples `old` through a reference naming
     /// `palette` to `new`. Used by
-    /// [`VoxMain::remove_cell`](crate::VoxMain::remove_cell) before the old cell
-    /// is dropped.
+    /// [`VoxMain::remove_cell`](crate::VoxMain::remove_cell) before the old
+    /// cell is dropped.
     pub(crate) fn repaint_cell(
         &mut self,
         palette: U32Id<BVoxPalette>,
@@ -399,9 +405,9 @@ impl VoxObject {
 
 impl Drop for VoxObject {
     fn drop(&mut self) {
-        // Safety: every `palette_ref_ids` id has a value in both columns. Sample
-        // cells are Copy, so dropping the inner columns frees their storage and
-        // the voxel pool needs no part here.
+        // Safety: every `palette_ref_ids` id has a value in both columns.
+        // Sample cells are Copy, so dropping the inner columns frees their
+        // storage and the voxel pool needs no part here.
         unsafe {
             self.palette_refs.release_all(&self.palette_ref_ids);
             self.samples.release_all(&self.palette_ref_ids);
@@ -468,7 +474,8 @@ mod tests {
         object.add_palette_ref(U32Id::<BVoxPalette>::from_u32(0), cell(0));
         let id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
 
-        // Wrong sample arity and an out-of-grid id are both rejected, untouched.
+        // Wrong sample arity and an out-of-grid id are both rejected,
+        // untouched.
         assert_eq!(object.retain_voxel(id, &[]), None);
         assert_eq!(object.retain_voxel(U32Id::from_u32(99), &[cell(0)]), None);
         assert_eq!(object.live_count(), 0);

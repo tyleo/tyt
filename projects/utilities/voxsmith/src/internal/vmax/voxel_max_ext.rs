@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use vmax::VMaxSceneJsonFile;
 
 /// The `voxel-max` ext payload stashed on a [`VoxMain`](voxcore::VoxMain): the
-/// Voxel Max state with no native voxcore home, kept so a document loaded from a
-/// Voxel Max package can be written back exactly.
+/// Voxel Max state with no native voxcore home, kept so a document loaded from
+/// a Voxel Max package can be written back exactly.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct VoxelMaxExt {
     /// The Voxel Max scene with its hierarchy emptied, holding only the

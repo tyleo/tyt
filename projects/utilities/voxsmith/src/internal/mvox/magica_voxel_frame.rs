@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 /// One transform-node keyframe preserved in the `magica-voxel` ext. The voxcore
 /// transform projects only the first frame, and as a quaternion that cannot be
-/// inverted back to the packed rotation byte exactly, so the exact frame data is
-/// kept here.
+/// inverted back to the packed rotation byte exactly, so the exact frame data
+/// is kept here.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct MagicaVoxelFrame {
     /// `_r`: the packed signed-permutation rotation byte.

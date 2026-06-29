@@ -11,9 +11,10 @@ pub struct VMaxSceneJsonFile {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub groups: Vec<VMaxGroup>,
 
-    /// Object nodes (voxel models). Always serialized, even when empty: Voxel Max
-    /// writes `objects: []` on every document and rejects one that omits the key, so
-    /// an object-less scene must keep it (unlike `groups`, which it omits when empty).
+    /// Object nodes (voxel models). Always serialized, even when empty: Voxel
+    /// Max writes `objects: []` on every document and rejects one that omits
+    /// the key, so an object-less scene must keep it (unlike `groups`, which it
+    /// omits when empty).
     pub objects: Vec<VMaxObject>,
 
     /// Codable scene version.

@@ -230,7 +230,8 @@ mod tests {
         assert_eq!(u16_at(extra, 2), 16); // two 8-byte values
 
         // The zip64 end record and locator sit just before the classic end
-        // record, which now defers its central-directory offset to the sentinel.
+        // record, which now defers its central-directory offset to the
+        // sentinel.
         let eocd = bytes.len() - 22;
         let locator = eocd - 20;
         let zip64_eocd = locator - 56;

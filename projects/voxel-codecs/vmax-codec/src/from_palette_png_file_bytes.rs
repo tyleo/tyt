@@ -7,8 +7,8 @@ use vmax::VMaxPalettePngFile;
 /// `[r, g, b, a]` cell per pixel, in image order).
 pub fn from_palette_png_file_bytes(bytes: &[u8]) -> Result<VMaxPalettePngFile> {
     let mut decoder = Decoder::new(Cursor::new(bytes));
-    // Normalize paletted, sub-8-bit, and 16-bit inputs down to 8-bit channels so
-    // each pixel reduces to a single `[r, g, b, a]` cell below.
+    // Normalize paletted, sub-8-bit, and 16-bit inputs down to 8-bit channels
+    // so each pixel reduces to a single `[r, g, b, a]` cell below.
     decoder.set_transformations(Transformations::EXPAND | Transformations::STRIP_16);
     let mut reader = decoder.read_info()?;
     let size = reader

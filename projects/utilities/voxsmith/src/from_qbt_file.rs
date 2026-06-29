@@ -11,10 +11,11 @@ use voxcore::{
 /// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a [`VoxMain`].
 ///
 /// Matrix and compound grids become objects sharing one `rgb` palette, and the
-/// scene tree becomes the hierarchy nodes. The state with no native voxcore home,
-/// such as the per-voxel visibility masks, matrix names, placements, scales, and
-/// pivots, the color map, the global scale, the version, and any unknown nodes,
-/// rides in a `qubicle-qbt` ext so the file can be written back exactly.
+/// scene tree becomes the hierarchy nodes. The state with no native voxcore
+/// home, such as the per-voxel visibility masks, matrix names, placements,
+/// scales, and pivots, the color map, the global scale, the version, and any
+/// unknown nodes, rides in a `qubicle-qbt` ext so the file can be written back
+/// exactly.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or if
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
@@ -46,9 +47,10 @@ pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
     Ok(state)
 }
 
-/// Builds the hierarchy node for one scene node and its subtree, adding it and any
-/// objects to the state and appending its provenance to `nodes` so the ext entry
-/// at each index lines up with the hierarchy node id. Returns the new node's id.
+/// Builds the hierarchy node for one scene node and its subtree, adding it and
+/// any objects to the state and appending its provenance to `nodes` so the ext
+/// entry at each index lines up with the hierarchy node id. Returns the new
+/// node's id.
 fn build_node(
     node: &QbtNode,
     state: &mut VoxMain,
@@ -58,8 +60,8 @@ fn build_node(
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let id = match node {
         QbtNode::Matrix(matrix) => {
-            // The matrix grid becomes the object's build volume directly; it may
-            // carry empty margin. The masks are read from that same grid.
+            // The matrix grid becomes the object's build volume directly; it
+            // may carry empty margin. The masks are read from that same grid.
             let object = build_object(matrix, palette, cells)?;
             let masks = masks_of(&object, matrix);
             let object_id = state.add_object(object);
@@ -99,8 +101,8 @@ fn build_node(
             for child in &compound.children {
                 child_nodes.push(build_node(child, state, palette, cells, nodes)?);
             }
-            // The compound grid becomes the object's build volume directly; it may
-            // carry empty margin. The masks are read from that same grid.
+            // The compound grid becomes the object's build volume directly; it
+            // may carry empty margin. The masks are read from that same grid.
             let object = build_object(&compound.matrix, palette, cells)?;
             let masks = masks_of(&object, &compound.matrix);
             let object_id = state.add_object(object);
@@ -139,8 +141,8 @@ fn build_node(
 }
 
 /// Builds the one shared palette: an `rgb` cell per distinct color across every
-/// matrix and compound voxel in the tree, plus a map from a color to its cell. A
-/// tree with no solid voxels gets a single placeholder cell so objects have a
+/// matrix and compound voxel in the tree, plus a map from a color to its cell.
+/// A tree with no solid voxels gets a single placeholder cell so objects have a
 /// default sample to reference.
 fn build_palette(root: &QbtNode) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxPaletteCell>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();
@@ -195,9 +197,9 @@ fn collect_matrix(matrix: &QbtMatrix, order: &mut Vec<[u8; 3]>, seen: &mut HashS
     }
 }
 
-/// Builds an object from a matrix: a dense grid sized by the matrix, referencing
-/// the shared palette, each solid voxel sampling its color cell. Errors on an
-/// oversized grid.
+/// Builds an object from a matrix: a dense grid sized by the matrix,
+/// referencing the shared palette, each solid voxel sampling its color cell.
+/// Errors on an oversized grid.
 fn build_object(
     matrix: &QbtMatrix,
     palette: U32Id<BVoxPalette>,
@@ -240,8 +242,8 @@ fn build_object(
     Ok(object)
 }
 
-/// The visibility masks of an object's solid voxels, in live-voxel raster order,
-/// read back from the matrix the object was built from.
+/// The visibility masks of an object's solid voxels, in live-voxel raster
+/// order, read back from the matrix the object was built from.
 fn masks_of(object: &VoxObject, matrix: &QbtMatrix) -> Vec<u8> {
     object
         .iter_live()

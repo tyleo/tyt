@@ -1,6 +1,6 @@
-/// A single decoded voxel in a Voxel Max object's model space (0..256 per axis).
-/// Produced by decoding a `contents*.vmaxb`'s snapshots and consumed when
-/// encoding them back.
+/// A single decoded voxel in a Voxel Max object's model space (0..256 per
+/// axis). Produced by decoding a `contents*.vmaxb`'s snapshots and consumed
+/// when encoding them back.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct VMaxVoxel {
     /// `[x, y, z]` position in the object's model space.

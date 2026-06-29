@@ -13,17 +13,18 @@ use voxsmith::{
 /// every converter. `from` names the source format, inferred from `input`'s
 /// extension when `None`. Single-file formats decode their bytes through
 /// voxsmith; Voxel Max reads the whole `.vmax` package directory first.
-pub(crate) fn load_state(input: &Path, from: Option<Format>) -> Result<VoxMain> {
+pub fn load_state(input: &Path, from: Option<Format>) -> Result<VoxMain> {
     let state = match resolve(input, from)? {
         Format::Voxj => from_voxj_bytes(&tyt_injection::read_file(input)?)?,
         Format::MVox => from_mvox_bytes(&tyt_injection::read_file(input)?)?,
         Format::Goxl => from_goxl_bytes(&tyt_injection::read_file(input)?)?,
         Format::Qbcl => from_qbcl_bytes(&tyt_injection::read_file(input)?)?,
         Format::VMax => {
-            // Read the whole package into the lossless Voxel Max model, then load
-            // it into voxcore. List every package-relative path, descending one
-            // level into subdirectories (only `QuickLook/`) so its thumbnails
-            // keep their prefix; resolve reads each path's bytes.
+            // Read the whole package into the lossless Voxel Max model, then
+            // load it into voxcore. List every package-relative path,
+            // descending one level into subdirectories (only `QuickLook/`) so
+            // its thumbnails keep their prefix; resolve reads each path's
+            // bytes.
             let serde = from_vmax_package(
                 || {
                     let mut paths = Vec::new();

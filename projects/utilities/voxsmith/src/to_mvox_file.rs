@@ -19,15 +19,15 @@ use voxcore::{
 /// Writes a [`VoxMain`] back to a decoded MagicaVoxel [`MVoxFile`], the inverse
 /// of [`from_mvox_file`](crate::from_mvox_file).
 ///
-/// A state carrying the `magica-voxel` ext the forward path writes is rebuilt from
-/// it exactly. A state without that ext, such as one loaded from another format,
-/// is synthesized from the bare voxcore scene by [`synthesize_mvox`]. Each object
-/// emits one model whose voxels are listed in ascending raster order, which need
-/// not match their original stored order.
+/// A state carrying the `magica-voxel` ext the forward path writes is rebuilt
+/// from it exactly. A state without that ext, such as one loaded from another
+/// format, is synthesized from the bare voxcore scene by `synthesize_mvox`.
+/// Each object emits one model whose voxels are listed in ascending raster
+/// order, which need not match their original stored order.
 ///
-/// Errors if the ext is present but its per-node entries do not line up with the
-/// hierarchy, or if synthesis exceeds a MagicaVoxel limit such as the per-axis
-/// voxel cap.
+/// Errors if the ext is present but its per-node entries do not line up with
+/// the hierarchy, or if synthesis exceeds a MagicaVoxel limit such as the
+/// per-axis voxel cap.
 pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
     let ext = match ext_for(state, "magica-voxel") {
         Some(ext) => from_vox_value::<MagicaVoxelExtWrapper>(ext)?.magica_voxel,
@@ -125,8 +125,8 @@ fn colors_from_palette(palette: Option<&VoxPalette>) -> [MVoxColor; 256] {
     colors
 }
 
-/// Rebuilds the materials from the ext, reading each one's type and scalar fields
-/// from the palette cell its id names.
+/// Rebuilds the materials from the ext, reading each one's type and scalar
+/// fields from the palette cell its id names.
 fn build_materials(ext: &MagicaVoxelExt, palette: Option<&VoxPalette>) -> Vec<MVoxMaterial> {
     ext.materials
         .iter()
@@ -171,9 +171,9 @@ fn number(value: Option<&VoxValue>) -> Option<f32> {
     }
 }
 
-/// Builds a model from an object: its size from the grid bounds and one voxel per
-/// live cell, in ascending raster order, each taking its color index from the
-/// sample of the object's first palette reference.
+/// Builds a model from an object: its size from the grid bounds and one voxel
+/// per live cell, in ascending raster order, each taking its color index from
+/// the sample of the object's first palette reference.
 fn model_from_object(object: &VoxObject) -> MVoxModel {
     let bounds = object.bounds();
     let reference = object.iter_palette_refs().next().map(|(id, _)| id);
@@ -204,8 +204,8 @@ fn model_from_object(object: &VoxObject) -> MVoxModel {
 
 /// Rebuilds the scene nodes from the ext, one per entry in stored order. The
 /// references come from the ext, which holds the exact lists, so a shape that
-/// draws one model on several frames or any other repeated reference round-trips.
-/// Errors if the ext node count does not match the hierarchy.
+/// draws one model on several frames or any other repeated reference
+/// round-trips. Errors if the ext node count does not match the hierarchy.
 fn build_scene_nodes(state: &VoxMain, ext: &MagicaVoxelExt) -> Result<Vec<MVoxSceneNode>> {
     let node_count = state.hierarchy_node_count();
     if node_count != ext.scene_nodes.len() {
@@ -299,16 +299,16 @@ fn parse_rgba(value: Option<&VoxValue>) -> MVoxColor {
     MVoxColor::new(byte(0), byte(1), byte(2), byte(3))
 }
 
-/// Synthesizes a MagicaVoxel file from a state that carries no `magica-voxel` ext,
-/// such as one loaded from another format. Builds one model per object, a single
-/// global 256-color palette gathering every distinct color used, and a scene graph
-/// mirroring the voxcore hierarchy.
+/// Synthesizes a MagicaVoxel file from a state that carries no `magica-voxel`
+/// ext, such as one loaded from another format. Builds one model per object, a
+/// single global 256-color palette gathering every distinct color used, and a
+/// scene graph mirroring the voxcore hierarchy.
 ///
 /// Lossy only at MagicaVoxel's own limits: an object grid may be at most 256
 /// voxels per axis, since voxel coordinates are bytes, and a scene transform
-/// carries only translation, so node rotation and scale are dropped. The palette
-/// is lossless up to 255 distinct colors; beyond that the table is full and the
-/// excess collapses onto the last slot.
+/// carries only translation, so node rotation and scale are dropped. The
+/// palette is lossless up to 255 distinct colors; beyond that the table is full
+/// and the excess collapses onto the last slot.
 fn synthesize_mvox(state: &VoxMain) -> Result<MVoxFile> {
     let (palette, color_index) = synthesize_palette(state);
     let models = state
@@ -325,10 +325,10 @@ fn synthesize_mvox(state: &VoxMain) -> Result<MVoxFile> {
     })
 }
 
-/// Gathers every distinct color used across all objects into one 256-color table
-/// and the matching color-to-index map. Slot 0 is MagicaVoxel's reserved empty
-/// color, so real colors fill `1..=255`; a 256th distinct color and beyond reuse
-/// the last slot.
+/// Gathers every distinct color used across all objects into one 256-color
+/// table and the matching color-to-index map. Slot 0 is MagicaVoxel's reserved
+/// empty color, so real colors fill `1..=255`; a 256th distinct color and
+/// beyond reuse the last slot.
 fn synthesize_palette(state: &VoxMain) -> (MVoxPalette, HashMap<[u8; 4], u8>) {
     let mut colors = [MVoxColor::default(); 256];
     let mut color_index: HashMap<[u8; 4], u8> = HashMap::new();
@@ -348,8 +348,8 @@ fn synthesize_palette(state: &VoxMain) -> (MVoxPalette, HashMap<[u8; 4], u8>) {
                 color_index.insert(rgba, next as u8);
                 next += 1;
             } else {
-                // The 256-color table is full; collapse the excess onto the last
-                // slot rather than overwriting a color already in use.
+                // The 256-color table is full; collapse the excess onto the
+                // last slot rather than overwriting a color already in use.
                 color_index.insert(rgba, 255);
             }
         }
@@ -358,10 +358,11 @@ fn synthesize_palette(state: &VoxMain) -> (MVoxPalette, HashMap<[u8; 4], u8>) {
     (MVoxPalette { colors }, color_index)
 }
 
-/// Builds one model from an object: its grid size and one voxel per live cell in
-/// ascending raster order, each taking its global palette index from the object's
-/// color. Errors when the grid exceeds MagicaVoxel's 256-voxel-per-axis limit,
-/// past which the byte voxel coordinates cannot address it.
+/// Builds one model from an object: its grid size and one voxel per live cell
+/// in ascending raster order, each taking its global palette index from the
+/// object's color. Errors when the grid exceeds MagicaVoxel's
+/// 256-voxel-per-axis limit, past which the byte voxel coordinates cannot
+/// address it.
 fn synthesize_model(
     state: &VoxMain,
     object: &VoxObject,
@@ -403,12 +404,13 @@ fn synthesize_model(
     })
 }
 
-/// Builds the MagicaVoxel scene graph mirroring the voxcore hierarchy. Every node
-/// becomes an `nTRN` carrying its local translation over an `nGRP` of its mapped
-/// child nodes and per-object `nTRN` -> `nSHP` placements; all roots hang under one
-/// synthetic root `nTRN` -> `nGRP`, the single root MagicaVoxel requires. An object
-/// no node places is emitted once at the origin so geometry is never dropped, and
-/// an object placed by several nodes is emitted once per placement.
+/// Builds the MagicaVoxel scene graph mirroring the voxcore hierarchy. Every
+/// node becomes an `nTRN` carrying its local translation over an `nGRP` of its
+/// mapped child nodes and per-object `nTRN` -> `nSHP` placements; all roots
+/// hang under one synthetic root `nTRN` -> `nGRP`, the single root MagicaVoxel
+/// requires. An object no node places is emitted once at the origin so geometry
+/// is never dropped, and an object placed by several nodes is emitted once per
+/// placement.
 fn synthesize_scene(state: &VoxMain) -> Vec<MVoxSceneNode> {
     let mut builder = SceneBuilder::default();
     let root_transform = builder.allocate();
@@ -485,8 +487,9 @@ impl SceneBuilder {
         transform
     }
 
-    /// Emits an `nTRN` -> `nSHP` placing one object, offsetting the transform by the
-    /// model's pivot so MagicaVoxel centers it where voxcore's min corner sits.
+    /// Emits an `nTRN` -> `nSHP` placing one object, offsetting the transform
+    /// by the model's pivot so MagicaVoxel centers it where voxcore's min
+    /// corner sits.
     fn emit_object(&mut self, object_id: U32Id<BVoxObject>, object: &VoxObject) -> i32 {
         self.placed.insert(object_id.to_u32());
         let transform = self.allocate();

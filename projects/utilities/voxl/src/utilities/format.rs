@@ -22,9 +22,9 @@ pub enum Format {
 }
 
 impl Format {
-    /// Infers the format from `path`'s extension, matched case-insensitively, or
-    /// `None` when the extension names no supported format. `.voxj` and `.voxjz`
-    /// both map to [`Format::Voxj`].
+    /// Infers the format from `path`'s extension, matched case-insensitively,
+    /// or `None` when the extension names no supported format. `.voxj` and
+    /// `.voxjz` both map to [`Format::Voxj`].
     pub fn from_path(path: &Path) -> Option<Format> {
         let extension = path.extension()?.to_str()?.to_ascii_lowercase();
         match extension.as_str() {

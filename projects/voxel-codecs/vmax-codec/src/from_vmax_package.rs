@@ -185,9 +185,10 @@ mod tests {
         let mut palette_png_files = BTreeMap::new();
         palette_png_files.insert("palette.png".to_owned(), png);
 
-        // The optional file kinds the scene graph never references: enumeration,
-        // not reference-following, must find and preserve each of them. History
-        // now round-trips as typed plist; selection stays verbatim bytes.
+        // The optional file kinds the scene graph never references:
+        // enumeration, not reference-following, must find and preserve each of
+        // them. History now round-trips as typed plist; selection stays
+        // verbatim bytes.
         let mut history_vmaxhb_files = BTreeMap::new();
         history_vmaxhb_files.insert(
             "history.vmaxhb".to_owned(),
@@ -267,7 +268,8 @@ mod tests {
         .unwrap();
         assert_eq!(read, file);
 
-        // The three QuickLook roles land in their named maps under the right keys.
+        // The three QuickLook roles land in their named maps under the right
+        // keys.
         assert!(read.thumbnail_png.is_some());
         assert!(read.contents_vmax_pngs.contains_key("contents.vmaxb"));
         assert!(read.group_pngs.contains_key("group-id"));

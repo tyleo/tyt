@@ -20,7 +20,7 @@ pub struct VMaxHistorySession {
     /// `VMaxValue` (round-trips unchanged).
     pub ssnapshots: Vec<VMaxValue>,
 
-    /// Object-snapshot payloads; undocumented per-command shape, kept as untyped
-    /// `VMaxValue` (round-trips unchanged).
+    /// Object-snapshot payloads; undocumented per-command shape, kept as
+    /// untyped `VMaxValue` (round-trips unchanged).
     pub osnapshots: Vec<VMaxValue>,
 }

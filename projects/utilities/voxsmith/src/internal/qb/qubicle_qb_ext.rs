@@ -2,12 +2,12 @@ use crate::QubicleQbMatrix;
 use serde::{Deserialize, Serialize};
 
 /// The `qubicle-qb` ext payload stashed on a [`VoxMain`](voxcore::VoxMain): the
-/// Qubicle Binary `.qb` state with no native voxcore home, kept so a file loaded
-/// from a `.qb` package can be written back exactly.
+/// Qubicle Binary `.qb` state with no native voxcore home, kept so a file
+/// loaded from a `.qb` package can be written back exactly.
 ///
-/// Each matrix's geometry and colors become a native object sharing one palette,
-/// placed by a hierarchy node; this holds the header flags and the per-matrix
-/// entries, aligned by index with the objects.
+/// Each matrix's geometry and colors become a native object sharing one
+/// palette, placed by a hierarchy node; this holds the header flags and the
+/// per-matrix entries, aligned by index with the objects.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct QubicleQbExt {
     /// The format version from the header.

@@ -18,8 +18,8 @@ pub fn encode_voxj_object(
     let num_palettes = object.palette_refs.len();
 
     let (voxel_positions, voxel_samples) = if object.positions.is_empty() {
-        // No voxels, but still one (empty) channel per referenced palette so the
-        // block's arity matches `palette_refs`.
+        // No voxels, but still one (empty) channel per referenced palette so
+        // the block's arity matches `palette_refs`.
         (
             VoxjPositionBlock::RawJson(Vec::new()),
             VoxjSampleBlock::RawJson(vec![Vec::new(); num_palettes]),

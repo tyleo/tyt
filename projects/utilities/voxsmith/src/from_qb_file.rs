@@ -9,11 +9,11 @@ use voxcore::{
 
 /// Loads a decoded Qubicle Binary [`QbFile`] into a [`VoxMain`].
 ///
-/// Each matrix becomes an object sharing one `rgb` palette, placed by a hierarchy
-/// node at the matrix's scene position. The state with no native voxcore home,
-/// such as the header flags, matrix names, positions, and the per-voxel
-/// visibility bytes, rides in a `qubicle-qb` ext so the file can be written back
-/// exactly.
+/// Each matrix becomes an object sharing one `rgb` palette, placed by a
+/// hierarchy node at the matrix's scene position. The state with no native
+/// voxcore home, such as the header flags, matrix names, positions, and the
+/// per-voxel visibility bytes, rides in a `qubicle-qb` ext so the file can be
+/// written back exactly.
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or if
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
@@ -26,9 +26,9 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
     let mut matrices = Vec::with_capacity(file.matrices.len());
     let mut roots = Vec::with_capacity(file.matrices.len());
     for matrix in &file.matrices {
-        // The matrix grid becomes the object's build volume directly; it may carry
-        // empty margin around the live voxels. The visibility bytes are read from
-        // that same grid.
+        // The matrix grid becomes the object's build volume directly; it may
+        // carry empty margin around the live voxels. The visibility bytes are
+        // read from that same grid.
         let object = build_object(matrix, palette_id, &cells)?;
         let visibility = visibility_of(&object, matrix);
         let object_id = state.add_object(object);
@@ -98,9 +98,9 @@ fn build_palette(file: &QbFile) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxPalet
     (palette, cells)
 }
 
-/// Builds an object from a matrix: a dense grid sized by the matrix, referencing
-/// the shared palette, each solid voxel sampling its color cell. Errors on an
-/// oversized grid.
+/// Builds an object from a matrix: a dense grid sized by the matrix,
+/// referencing the shared palette, each solid voxel sampling its color cell.
+/// Errors on an oversized grid.
 fn build_object(
     matrix: &QbMatrix,
     palette: U32Id<BVoxPalette>,
@@ -143,8 +143,8 @@ fn build_object(
     Ok(object)
 }
 
-/// The visibility bytes of an object's solid voxels, in live-voxel raster order,
-/// read back from the matrix the object was built from.
+/// The visibility bytes of an object's solid voxels, in live-voxel raster
+/// order, read back from the matrix the object was built from.
 fn visibility_of(object: &VoxObject, matrix: &QbMatrix) -> Vec<u8> {
     object
         .iter_live()

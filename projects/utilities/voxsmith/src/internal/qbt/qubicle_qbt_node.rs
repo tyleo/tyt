@@ -1,12 +1,14 @@
 use serde::{Deserialize, Serialize};
 
-/// Per scene-node provenance in the `qubicle-qbt` ext, one variant per node type.
-/// The geometry and colors of a matrix or compound become a native object; this
-/// holds the name, placement, scale, pivot, and per-voxel visibility masks the
-/// voxcore object cannot represent. Aligned by index with the hierarchy nodes.
+/// Per scene-node provenance in the `qubicle-qbt` ext, one variant per node
+/// type. The geometry and colors of a matrix or compound become a native
+/// object; this holds the name, placement, scale, pivot, and per-voxel
+/// visibility masks the voxcore object cannot represent. Aligned by index with
+/// the hierarchy nodes.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub enum QubicleQbtNode {
-    /// A matrix node: a single voxel grid. Its size is the object's grid bounds.
+    /// A matrix node: a single voxel grid. Its size is the object's grid
+    /// bounds.
     Matrix {
         /// Matrix name.
         #[serde(default, skip_serializing_if = "String::is_empty")]

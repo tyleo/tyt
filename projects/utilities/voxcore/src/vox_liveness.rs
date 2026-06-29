@@ -1,20 +1,20 @@
 use crate::BVoxVoxel;
 use branded_id::U32Id;
 
-/// A packed occupancy bitmap for a [`VoxObject`](crate::VoxObject)'s dense voxel
-/// grid: one bit per grid cell, keyed by the cell's voxel id (its raster index
-/// `x * Y * Z + y * Z + z`). A set bit marks a live (filled) voxel; a clear bit
-/// marks empty space.
+/// A packed occupancy bitmap for a [`VoxObject`](crate::VoxObject)'s dense
+/// voxel grid: one bit per grid cell, keyed by the cell's voxel id (its raster
+/// index `x * Y * Z + y * Z + z`). A set bit marks a live (filled) voxel; a
+/// clear bit marks empty space.
 ///
 /// The grid allocates a voxel id for every cell, so the sample columns always
 /// have a value to return; this map is what distinguishes a filled cell from
-/// empty space, since a sample is always a valid cell reference and so cannot by
-/// itself mark a cell empty.
+/// empty space, since a sample is always a valid cell reference and so cannot
+/// by itself mark a cell empty.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VoxLiveness {
-    /// Bit `i % 64` of word `i / 64`, counted from the least significant bit, is
-    /// the liveness of voxel id `i`. Bits at indices `>= len` are kept clear so
-    /// two maps with the same length and live set compare equal.
+    /// Bit `i % 64` of word `i / 64`, counted from the least significant bit,
+    /// is the liveness of voxel id `i`. Bits at indices `>= len` are kept clear
+    /// so two maps with the same length and live set compare equal.
     words: Vec<u64>,
 
     /// The number of grid cells the map covers (`X * Y * Z`).
@@ -59,8 +59,9 @@ impl VoxLiveness {
     /// # Panics
     /// Panics if `id` is outside the covered range (`>= len`). Enforcing this
     /// keeps every bit at an index `>= len` clear, which the derived equality,
-    /// [`count_live`](Self::count_live), and [`iter_live`](Self::iter_live) rely
-    /// on (the trailing bits of the final word are never part of the live set).
+    /// [`count_live`](Self::count_live), and [`iter_live`](Self::iter_live)
+    /// rely on (the trailing bits of the final word are never part of the live
+    /// set).
     pub fn set_live(&mut self, id: U32Id<BVoxVoxel>, live: bool) {
         let i = id.to_u32() as usize;
         assert!(

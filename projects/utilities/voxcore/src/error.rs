@@ -5,8 +5,8 @@ use std::{
 
 /// An error from voxcore: a [`VoxMain`](crate::VoxMain) whose cross-references
 /// do not resolve, whose hierarchy has a cycle, whose roots, palette refs, node
-/// children, or palette attribute keys repeat an id, or whose node transform has
-/// a zero scale component or a non-unit rotation. See
+/// children, or palette attribute keys repeat an id, or whose node transform
+/// has a zero scale component or a non-unit rotation. See
 /// [`validate`](crate::VoxMain::validate). Ids are reported as their `u32`
 /// listing index.
 #[derive(Clone, Debug, PartialEq, Eq)]

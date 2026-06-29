@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// Per-matrix provenance preserved in the `qubicle-qb` ext, aligned by index with
-/// the objects and hierarchy nodes, in stored order.
+/// Per-matrix provenance preserved in the `qubicle-qb` ext, aligned by index
+/// with the objects and hierarchy nodes, in stored order.
 ///
 /// A matrix's geometry and colors become a native object; this keeps the name,
 /// scene position, and the per-voxel visibility bytes the voxcore object cannot

@@ -71,8 +71,8 @@ impl VoxRuntimeState {
 
 impl Drop for VoxRuntimeState {
     fn drop(&mut self) {
-        // Safety: each column holds a value for every id in its pool; the fields
-        // free their own storage on drop.
+        // Safety: each column holds a value for every id in its pool; the
+        // fields free their own storage on drop.
         unsafe {
             self.objects.release_all(&self.object_ids);
             self.palettes.release_all(&self.palette_ids);

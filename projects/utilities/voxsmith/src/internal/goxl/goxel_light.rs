@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-/// The `LIGH` light-and-shading settings preserved in the `goxel` ext. They have
-/// no native voxcore home, so they ride here verbatim.
+/// The `LIGH` light-and-shading settings preserved in the `goxel` ext. They
+/// have no native voxcore home, so they ride here verbatim.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct GoxelLight {
     /// Light pitch, in radians.

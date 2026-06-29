@@ -1,12 +1,12 @@
-use crate::{CameraView, ColorFormat, Format, Result};
+use crate::{CameraView, ColorFormat, Format, Result, implementation};
 use std::{fs, path::Path};
 use vmax_codec::to_vmax_package;
 use voxsmith::{SceneCameraSource, VMaxSceneCamera, VmaxFileBuilder, VoxelMaxColorFormat};
 
 /// The top-corner scene camera `--camera corner` writes: the empty camera's
 /// framing at the origin, rotated to a three-quarter view looking down at the
-/// model from a corner. App-specific to this CLI, so it lives here rather than in
-/// voxsmith.
+/// model from a corner. App-specific to this CLI, so it lives here rather than
+/// in voxsmith.
 const TOP_CORNER_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
     da: 0.0,
     ha: 0.19591325521469116,
@@ -20,20 +20,20 @@ const TOP_CORNER_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
     z: 512.0,
 };
 
-/// Converts the voxel file at `input` into a Voxel Max `.vmax` package directory
-/// at `output`, round-tripping through voxcore: the input is loaded into a
-/// [`VoxMain`](voxcore::VoxMain), written back out to the lossless Voxel Max
-/// model, then emitted one file per package entry. `color_format` selects where
-/// each palette's colors live and `camera` the scene camera the document opens
-/// with.
-pub(crate) fn to_vmax(
+/// Converts the voxel file at `input` into a Voxel Max `.vmax` package
+/// directory at `output`, round-tripping through voxcore: the input is loaded
+/// into a [`VoxMain`](voxcore::VoxMain), written back out to the lossless Voxel
+/// Max model, then emitted one file per package entry. `color_format` selects
+/// where each palette's colors live and `camera` the scene camera the document
+/// opens with.
+pub fn to_vmax(
     input: &Path,
     from: Option<Format>,
     output: &Path,
     color_format: ColorFormat,
     camera: Option<CameraView>,
 ) -> Result<()> {
-    let state = super::load_state::load_state(input, from)?;
+    let state = implementation::load_state(input, from)?;
     let mut builder =
         VmaxFileBuilder::new(&state).color_format(voxel_max_color_format(color_format));
     // Omitted, the path keeps its own camera: the ext's when present, else the

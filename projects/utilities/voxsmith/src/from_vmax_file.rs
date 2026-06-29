@@ -15,9 +15,9 @@ use voxcore::{
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`
-/// runs 1..=255 and 0 is the empty cell. Colors are stored 0-based; a `palette*.png`
-/// is 256x1 RGBA with the colors at 0..254 and a transparent terminator at 255,
-/// while the plist `colors` table is just the 255 colors.
+/// runs 1..=255 and 0 is the empty cell. Colors are stored 0-based; a
+/// `palette*.png` is 256x1 RGBA with the colors at 0..254 and a transparent
+/// terminator at 255, while the plist `colors` table is just the 255 colors.
 const COLOR_CELLS: usize = 255;
 
 /// The color used for every cell of a placeholder palette when an object's
@@ -28,10 +28,10 @@ const PLACEHOLDER_COLOR: &str = "#FFFFFFFF";
 ///
 /// Geometry, palettes, and hierarchy become native voxcore entities. The Voxel
 /// Max state with no native voxcore home rides in a `voxel-max` ext so the
-/// document can be written back faithfully. Voxel snapshots are decoded to voxels
-/// on the fly and palette color tables unpacked as needed. Color indices are
-/// 1-based in Voxel Max; voxcore holds the colors 0-based, so a voxel's cell is
-/// `color_idx - 1`.
+/// document can be written back faithfully. Voxel snapshots are decoded to
+/// voxels on the fly and palette color tables unpacked as needed. Color indices
+/// are 1-based in Voxel Max; voxcore holds the colors 0-based, so a voxel's
+/// cell is `color_idx - 1`.
 ///
 /// Errors on malformed geometry or if
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
@@ -53,8 +53,8 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
     for object in &scene.objects {
         let key = instance_key(object);
         if let Some(&existing) = key.as_ref().and_then(|key| instances.get(key)) {
-            // An instance shares the geometry it re-places, so it re-derives only
-            // the placing transform from its own content box and pivot.
+            // An instance shares the geometry it re-places, so it re-derives
+            // only the placing transform from its own content box and pivot.
             let box_min = authored_box(object).map_or([0, 0, 0], |(box_min, _)| box_min);
             let origin = pivot_origin(box_min, object.center);
             object_transforms.push(object_transform(object, box_min, origin));
@@ -103,8 +103,8 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
 }
 
 /// Captures the editor state of a contents file for the ext. The tool partition
-/// (`tools.vp`) is dropped: it is the object's build volume, held natively as the
-/// object's grid, so it is rebuilt on write rather than stored here.
+/// (`tools.vp`) is dropped: it is the object's build volume, held natively as
+/// the object's grid, so it is rebuilt on write rather than stored here.
 fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VoxelMaxObjectState {
     VoxelMaxObjectState {
         uuid: data.uuid.clone(),
@@ -121,8 +121,8 @@ fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VoxelMaxObjectSta
 /// Builds the voxcore object for one scene object, adding any palettes it
 /// introduces to `state`. The object is built in its build volume (the author's
 /// `tools.vp`), so its live voxels keep their authored positions inside it.
-/// Returns the object, its backing `data` filename, and the transform of the node
-/// that places it.
+/// Returns the object, its backing `data` filename, and the transform of the
+/// node that places it.
 fn build_object(
     serde: &VMaxFile,
     object: &VMaxObject,
@@ -137,16 +137,16 @@ fn build_object(
         decode_vmax_snapshots(&serde.contents_files[&object.data].snapshots)?
     };
 
-    // The runtime grid is exactly tight: the occupied voxel extent, re-based so the
-    // voxels fill it from the origin. An empty object is a degenerate [0, 0, 0] grid
-    // seated at its content box so the placing node still pivots about the recorded
-    // center. `origin` offsets that grid from the node so the node transform pivots
-    // about the content center.
+    // The runtime grid is exactly tight: the occupied voxel extent, re-based so
+    // the voxels fill it from the origin. An empty object is a degenerate [0,
+    // 0, 0] grid seated at its content box so the placing node still pivots
+    // about the recorded center. `origin` offsets that grid from the node so
+    // the node transform pivots about the content center.
     let (box_min, bounds) = match min_corner(&voxels) {
         Some(min) => (min, object_bounds(&voxels, min)),
-        // An empty object seats at its content box; lacking one, it seats at the
-        // build volume `vp.min` so the edit grid still contains the runtime grid,
-        // and only at the world origin when it has neither.
+        // An empty object seats at its content box; lacking one, it seats at
+        // the build volume `vp.min` so the edit grid still contains the runtime
+        // grid, and only at the world origin when it has neither.
         None => (
             authored_box(object)
                 .map(|(box_min, _)| box_min)
@@ -160,8 +160,8 @@ fn build_object(
     };
     let origin = pivot_origin(box_min, object.center);
     let transform = object_transform(object, box_min, origin);
-    // The build volume is the author's `tools.vp`; its `origin` offsets it from the
-    // placing node, and `offset` shifts a runtime-grid voxel into it.
+    // The build volume is the author's `tools.vp`; its `origin` offsets it from
+    // the placing node, and `offset` shifts a runtime-grid voxel into it.
     let (edit_bounds, edit_origin) = edit_grid(view_box(serde, object), box_min, origin, bounds);
     let offset = [
         origin[0] - edit_origin[0],
@@ -274,9 +274,9 @@ fn color_palette(
     Some(id)
 }
 
-/// The `#RRGGBBAA` cells for an object's color palette, 0-based. The `palette*.png`
-/// appends a transparent terminator, so its trailing entry is dropped; the plist
-/// `colors` table has none.
+/// The `#RRGGBBAA` cells for an object's color palette, 0-based. The
+/// `palette*.png` appends a transparent terminator, so its trailing entry is
+/// dropped; the plist `colors` table has none.
 fn color_cells(serde: &VMaxFile, object: &VMaxObject) -> Vec<String> {
     if let Some(png) = serde.palette_png_files.get(&object.palette) {
         return png.0.iter().take(COLOR_CELLS).map(hex).collect();
@@ -319,9 +319,9 @@ fn material_palette(
         return None;
     }
 
-    // Dispersion columns are added only when some slot carries an `md` block, so
-    // palettes without dispersion are unchanged. Slots lacking `md` fill those
-    // columns with null so every row spans every attribute.
+    // Dispersion columns are added only when some slot carries an `md` block,
+    // so palettes without dispersion are unchanged. Slots lacking `md` fill
+    // those columns with null so every row spans every attribute.
     let has_dispersion = settings.materials.iter().any(|m| m.md.is_some());
     let mut palette = VoxPalette::default();
     for attribute in ["metallic", "roughness", "emissive", "shadows"] {
@@ -386,8 +386,8 @@ fn voxel_max_ext(
     }
 }
 
-/// The per-node provenance for a scene object. The content box is not kept; it is
-/// derived on write from the object's native tight bounds.
+/// The per-node provenance for a scene object. The content box is not kept; it
+/// is derived on write from the object's native tight bounds.
 fn node_from_object(object: &VMaxObject) -> VoxelMaxNode {
     VoxelMaxNode {
         id: object.id.clone(),
@@ -401,8 +401,8 @@ fn node_from_object(object: &VMaxObject) -> VoxelMaxNode {
     }
 }
 
-/// The per-node provenance for a scene group. The content box is not kept; it is
-/// derived on write from the bounding box of the group's subtree.
+/// The per-node provenance for a scene group. The content box is not kept; it
+/// is derived on write from the bounding box of the group's subtree.
 fn node_from_group(group: &VMaxGroup) -> VoxelMaxNode {
     VoxelMaxNode {
         id: group.id.clone(),
@@ -434,7 +434,8 @@ fn min_corner(voxels: &[VMaxVoxel]) -> Option<[i32; 3]> {
     })
 }
 
-/// The `[X, Y, Z]` bounds: the per-axis extent of `voxels` relative to `box_min`.
+/// The `[X, Y, Z]` bounds: the per-axis extent of `voxels` relative to
+/// `box_min`.
 fn object_bounds(voxels: &[VMaxVoxel], box_min: [i32; 3]) -> [u32; 3] {
     let mut bounds = [1u32; 3];
     for v in voxels {
@@ -473,10 +474,10 @@ fn view_box<'a>(serde: &'a VMaxFile, object: &VMaxObject) -> Option<&'a VMaxView
         .as_ref()
 }
 
-/// The integer grid `origin`: the min corner offset from the placing node in the
-/// node's local voxel frame. `round(box_min - center)` so the node transform's
-/// position lands on the content center (the pivot); any odd-extent half-voxel
-/// remainder is absorbed by that position, keeping rendering exact.
+/// The integer grid `origin`: the min corner offset from the placing node in
+/// the node's local voxel frame. `round(box_min - center)` so the node
+/// transform's position lands on the content center (the pivot); any odd-extent
+/// half-voxel remainder is absorbed by that position, keeping rendering exact.
 fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
     [
         (box_min[0] as f64 - center[0]).round() as i32,
@@ -486,10 +487,10 @@ fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
 }
 
 /// The object's build volume (the author's `tools.vp`) as `(bounds, origin)` in
-/// the node's local voxel frame, which contains the runtime grid. The `origin` is
-/// the build volume's min corner offset from the node, `vp.min - box_min + origin`;
-/// an object with no build volume takes a zero-margin volume equal to its runtime
-/// grid.
+/// the node's local voxel frame, which contains the runtime grid. The `origin`
+/// is the build volume's min corner offset from the node, `vp.min - box_min +
+/// origin`; an object with no build volume takes a zero-margin volume equal to
+/// its runtime grid.
 fn edit_grid(
     view_box: Option<&VMaxViewBox>,
     box_min: [i32; 3],
@@ -513,8 +514,8 @@ fn edit_grid(
     }
 }
 
-/// The re-basing origin `round(center + bounds_min)` and `[X, Y, Z]` size from an
-/// object's authored Voxel Max bounds, or `None` when it has none.
+/// The re-basing origin `round(center + bounds_min)` and `[X, Y, Z]` size from
+/// an object's authored Voxel Max bounds, or `None` when it has none.
 fn authored_box(object: &VMaxObject) -> Option<([i32; 3], [u32; 3])> {
     let (min, max) = (object.bounds_min?, object.bounds_max?);
     let box_min = [
@@ -541,12 +542,12 @@ fn vec3(v: [f64; 3]) -> TyVector3F64 {
     TyVector3F64::new(v[0], v[1], v[2])
 }
 
-/// The node transform that places an object so rotating the node pivots its grid
-/// about the content center. Voxel Max renders a voxel at
-/// `t_p + center + R*S*(voxel - center)`, and a voxel is `box_min + local`, which
-/// sits at node-local `origin + local`, so the node position is
-/// `t_p + center + R*S*(box_min - center - origin)`. The bracket is the sub-voxel
-/// remainder `box_min - center - origin`, so the position lands on the pivot and
+/// The node transform that places an object so rotating the node pivots its
+/// grid about the content center. Voxel Max renders a voxel at `t_p + center +
+/// R*S*(voxel - center)`, and a voxel is `box_min + local`, which sits at
+/// node-local `origin + local`, so the node position is `t_p + center +
+/// R*S*(box_min - center - origin)`. The bracket is the sub-voxel remainder
+/// `box_min - center - origin`, so the position lands on the pivot and
 /// rendering stays exact for any integer `origin`.
 fn object_transform(object: &VMaxObject, box_min: [i32; 3], origin: [i32; 3]) -> TyTransformF64 {
     let rotation = axis_angle(object.rotation);
@@ -579,9 +580,9 @@ fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
 }
 
 /// Builds the voxcore hierarchy: one node per group then one per object, the
-/// latter placing its geometry. `object_refs[i]` is the object that scene object
-/// `i` places, so instances share a `child_objects` id. Returns the nodes in id
-/// order and the root ids.
+/// latter placing its geometry. `object_refs[i]` is the object that scene
+/// object `i` places, so instances share a `child_objects` id. Returns the
+/// nodes in id order and the root ids.
 fn build_hierarchy(
     scene: &VMaxSceneJsonFile,
     object_transforms: &[TyTransformF64],
@@ -637,12 +638,12 @@ mod tests {
     use vmax::{VMaxTools, VMaxViewBox};
     use vmax_codec::encode_vmax_snapshots;
 
-    /// An empty object (zero voxels) with no authored content box (`e_mi`/`e_ma`
-    /// absent) but a `tools.vp` build volume away from the origin. Voxel Max opens
-    /// such a file, so the loader must too: seating `box_min` at `vp.min` keeps the
-    /// edit grid containing the runtime grid. Previously `box_min` fell back to
-    /// `[0, 0, 0]`, the edit grid was offset off the runtime point, and the
-    /// containment validator rejected the load.
+    /// An empty object (zero voxels) with no authored content box
+    /// (`e_mi`/`e_ma` absent) but a `tools.vp` build volume away from the
+    /// origin. Voxel Max opens such a file, so the loader must too: seating
+    /// `box_min` at `vp.min` keeps the edit grid containing the runtime grid.
+    /// Previously `box_min` fell back to `[0, 0, 0]`, the edit grid was offset
+    /// off the runtime point, and the containment validator rejected the load.
     fn empty_object_with_view_box_only() -> VMaxFile {
         let object = VMaxObject {
             name: "empty".to_owned(),

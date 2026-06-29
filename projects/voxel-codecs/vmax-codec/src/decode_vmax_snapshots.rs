@@ -25,8 +25,9 @@ pub fn decode_vmax_snapshots(snapshots: &[VMaxSnapshot]) -> Result<Vec<VMaxVoxel
             grid[1] as i32 * CHUNK_PITCH,
             grid[2] as i32 * CHUNK_PITCH,
         ];
-        // `st.min[3]` is the Morton code of the chunk's first `ds` slot; it must
-        // be present and non-negative, or the chunk's voxels can't be placed.
+        // `st.min[3]` is the Morton code of the chunk's first `ds` slot; it
+        // must be present and non-negative, or the chunk's voxels can't be
+        // placed.
         let morton_offset = match storage.st.min.get(3) {
             Some(&offset) if offset >= 0 => offset as u32,
             _ => {

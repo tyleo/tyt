@@ -17,10 +17,10 @@ use voxcore::{
 ///
 /// When the state carries the `goxel` ext the forward path writes, the file is
 /// rebuilt losslessly from it, the inverse of
-/// [`from_goxl_file`](crate::from_goxl_file): each object emits one
-/// `16 x 16 x 16` block, and the layers, materials, cameras, light, preview, and
-/// image come from the ext. When the ext is absent or names another format, the
-/// file is synthesized from the bare scene instead by [`synthesize_goxl`], so any
+/// [`from_goxl_file`](crate::from_goxl_file): each object emits one `16 x 16 x
+/// 16` block, and the layers, materials, cameras, light, preview, and image
+/// come from the ext. When the ext is absent or names another format, the file
+/// is synthesized from the bare scene instead by `synthesize_goxl`, so any
 /// source can be written to Goxel. An empty cell is written back as the
 /// transparent zero voxel.
 ///
@@ -36,8 +36,8 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
     // object; the colors live in its cells.
     let palette = state.iter_palettes().next().map(|(_, palette)| palette);
 
-    // Each object is the author's build volume (a fixed Goxel 16-cube), so a block
-    // is written from it directly at the original positions.
+    // Each object is the author's build volume (a fixed Goxel 16-cube), so a
+    // block is written from it directly at the original positions.
     let blocks = state
         .iter_objects()
         .map(|(_, object)| block_from_object(object, palette))
@@ -100,24 +100,25 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
     })
 }
 
-/// Synthesizes a Goxel file from a state that carries no `goxel` ext, such as one
-/// cross-loaded from another format.
+/// Synthesizes a Goxel file from a state that carries no `goxel` ext, such as
+/// one cross-loaded from another format.
 ///
-/// Goxel has no scene hierarchy, only flat layers of placed `16 x 16 x 16` blocks,
-/// so the voxcore hierarchy is flattened: every object placement becomes one layer
-/// whose blocks are tiled from the object's grid and stamped at the placement's
-/// world translation, summed down the hierarchy from the roots. An object placed
-/// by no node is emitted once at the origin so no geometry is dropped, and an
-/// object placed by several nodes is duplicated at each placement.
+/// Goxel has no scene hierarchy, only flat layers of placed `16 x 16 x 16`
+/// blocks, so the voxcore hierarchy is flattened: every object placement
+/// becomes one layer whose blocks are tiled from the object's grid and stamped
+/// at the placement's world translation, summed down the hierarchy from the
+/// roots. An object placed by no node is emitted once at the origin so no
+/// geometry is dropped, and an object placed by several nodes is duplicated at
+/// each placement.
 ///
 /// Lossy only where Goxel cannot represent the source: node grouping collapses,
-/// since layers do not nest, and node rotation and scale are dropped, since only
-/// translation survives the flattening. That translation is rounded to whole
-/// voxels, since block positions are integer coordinates. Colors stay per voxel
-/// with no palette merge. A live voxel must be solid, but Goxel reads alpha 0 as
-/// an absent cell, so a fully transparent live color is written opaque, and a
-/// voxel with no resolvable color is written opaque black; any other alpha is
-/// kept.
+/// since layers do not nest, and node rotation and scale are dropped, since
+/// only translation survives the flattening. That translation is rounded to
+/// whole voxels, since block positions are integer coordinates. Colors stay per
+/// voxel with no palette merge. A live voxel must be solid, but Goxel reads
+/// alpha 0 as an absent cell, so a fully transparent live color is written
+/// opaque, and a voxel with no resolvable color is written opaque black; any
+/// other alpha is kept.
 fn synthesize_goxl(state: &VoxMain) -> GoxlFile {
     let mut builder = GoxlBuilder::default();
     for &root in state.root_hierarchy_nodes() {
@@ -136,8 +137,8 @@ fn synthesize_goxl(state: &VoxMain) -> GoxlFile {
     }
 }
 
-/// Accumulates a flattened Goxel scene: the shared blocks, the layers that place
-/// them, and the ids of objects already placed by a hierarchy node.
+/// Accumulates a flattened Goxel scene: the shared blocks, the layers that
+/// place them, and the ids of objects already placed by a hierarchy node.
 #[derive(Default)]
 struct GoxlBuilder {
     blocks: Vec<GoxlBlock>,
@@ -147,9 +148,9 @@ struct GoxlBuilder {
 }
 
 impl GoxlBuilder {
-    /// Walks one hierarchy node, summing its translation into the world position,
-    /// emitting a layer for each object it places, then recursing into its child
-    /// nodes.
+    /// Walks one hierarchy node, summing its translation into the world
+    /// position, emitting a layer for each object it places, then recursing
+    /// into its child nodes.
     fn emit_node(&mut self, state: &VoxMain, node_id: U32Id<BVoxHierarchyNode>, parent: [i32; 3]) {
         let (name, child_objects, child_nodes, world) = {
             let node = state
@@ -179,9 +180,9 @@ impl GoxlBuilder {
         }
     }
 
-    /// Emits one layer placing `object` at its world position. The grid is tiled
-    /// into `16 x 16 x 16` blocks, each stamped at the world position of its lower
-    /// corner; a tile holding no solid voxel is never emitted.
+    /// Emits one layer placing `object` at its world position. The grid is
+    /// tiled into `16 x 16 x 16` blocks, each stamped at the world position of
+    /// its lower corner; a tile holding no solid voxel is never emitted.
     fn emit_object(
         &mut self,
         state: &VoxMain,
@@ -249,9 +250,9 @@ impl GoxlBuilder {
     }
 }
 
-/// One solid Goxel voxel for a sampled `[r, g, b, a]` color. A live voxel must be
-/// present, but Goxel reads alpha 0 as an empty cell, so a fully transparent color
-/// is forced opaque; any other alpha is kept.
+/// One solid Goxel voxel for a sampled `[r, g, b, a]` color. A live voxel must
+/// be present, but Goxel reads alpha 0 as an empty cell, so a fully transparent
+/// color is forced opaque; any other alpha is kept.
 fn solid_voxel(rgba: [u8; 4]) -> GoxlVoxel {
     let alpha = if rgba[3] == 0 { 255 } else { rgba[3] };
     GoxlVoxel {
@@ -329,8 +330,8 @@ fn layer_from_provenance(layer: GoxelLayer) -> GoxlLayer {
     }
 }
 
-/// The procedural shape for an on-disk shape name, or `None` for an unrecognized
-/// one.
+/// The procedural shape for an on-disk shape name, or `None` for an
+/// unrecognized one.
 fn shape_from_token(token: &str) -> Option<GoxlShape> {
     match token {
         "sphere" => Some(GoxlShape::Sphere),
@@ -349,8 +350,8 @@ fn attribute_id(palette: &VoxPalette, name: &str) -> Option<U32Id<BVoxAttribute>
         .map(|(id, _)| id)
 }
 
-/// Parses a `#RRGGBBAA` color cell into `[r, g, b, a]`, defaulting to transparent
-/// on a missing or malformed value.
+/// Parses a `#RRGGBBAA` color cell into `[r, g, b, a]`, defaulting to
+/// transparent on a missing or malformed value.
 fn parse_rgba(value: Option<&VoxValue>) -> [u8; 4] {
     let Some(VoxValue::Text(hex)) = value else {
         return [0, 0, 0, 0];

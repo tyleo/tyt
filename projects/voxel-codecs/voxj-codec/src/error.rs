@@ -14,7 +14,8 @@ pub enum Error {
     /// A base64-encoded position or sample block could not be decoded.
     Base64(DecodeError),
 
-    /// The document or `.voxjz` archive was readable but structurally malformed.
+    /// The document or `.voxjz` archive was readable but structurally
+    /// malformed.
     Invalid(String),
 }
 

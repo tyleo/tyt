@@ -25,8 +25,8 @@ pub struct Voxj {
     #[arg(value_name = "format", long, default_value = "json")]
     format: VoxjFormat,
 
-    /// Position-block encoding. When unset it follows `--optimize`, defaulting to
-    /// `smallest`. An explicit value pins the block, leaving `--optimize` to
+    /// Position-block encoding. When unset it follows `--optimize`, defaulting
+    /// to `smallest`. An explicit value pins the block, leaving `--optimize` to
     /// search only the other.
     #[arg(value_name = "position-encoding", long)]
     position_encoding: Option<VoxjPositionEncoding>,
@@ -38,7 +38,8 @@ pub struct Voxj {
     sample_encoding: Option<VoxjSampleEncoding>,
 
     /// Default encoding strategy for blocks left unset. An explicit
-    /// `--position-encoding` or `--sample-encoding` overrides it for that block.
+    /// `--position-encoding` or `--sample-encoding` overrides it for that
+    /// block.
     #[arg(value_name = "optimize", long)]
     optimize: Option<VoxjOptimize>,
 

@@ -28,8 +28,9 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
         let cell_counts =
             voxj_palette_cell_counts(&object.palette_refs, &main.runtime_state.palettes)?;
         let decoded = decode_voxj_object(object, &cell_counts)?;
-        // The build volume, present only when the document recorded margin around
-        // the object's live voxels; otherwise the runtime grid is the build volume.
+        // The build volume, present only when the document recorded margin
+        // around the object's live voxels; otherwise the runtime grid is the
+        // build volume.
         let edit = main
             .edit_state
             .as_ref()
@@ -85,8 +86,8 @@ mod tests {
         (0..n).map(|i| vec![VoxjValue::Number(i as f64)]).collect()
     }
 
-    /// One object holding raw-json position and sample blocks, the readable form
-    /// the fixtures author geometry in.
+    /// One object holding raw-json position and sample blocks, the readable
+    /// form the fixtures author geometry in.
     fn object(
         name: &str,
         palette_refs: Vec<usize>,
@@ -190,9 +191,9 @@ mod tests {
     }
 
     /// [`sample_file`] after removing the "tight" object (id 1) and the palette
-    /// only it referenced (id 1), then compacting: the two survivors renumber to
-    /// objects 0 and 1, the lone palette stays 0, and the "leaf" node loses its
-    /// reference to the removed object.
+    /// only it referenced (id 1), then compacting: the two survivors renumber
+    /// to objects 0 and 1, the lone palette stays 0, and the "leaf" node loses
+    /// its reference to the removed object.
     fn sample_file_without_tight() -> VoxjFile {
         let base = sample_file();
         VoxjFile {
@@ -219,9 +220,10 @@ mod tests {
         }
     }
 
-    /// The `(position, samples)` pairs of an object, order-independent, since the
-    /// dense grid re-emits voxels in raster order and the block encodings reorder
-    /// them again. The object's blocks are decoded against the document palettes.
+    /// The `(position, samples)` pairs of an object, order-independent, since
+    /// the dense grid re-emits voxels in raster order and the block encodings
+    /// reorder them again. The object's blocks are decoded against the document
+    /// palettes.
     fn voxel_set(object: &VoxjObject, palettes: &[VoxjPalette]) -> BTreeSet<([u32; 3], Vec<u32>)> {
         let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes).unwrap();
         let decoded = decode_voxj_object(object, &cell_counts).unwrap();
@@ -259,8 +261,8 @@ mod tests {
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
-    /// A document whose edit grid differs from the runtime grid (carries margin)
-    /// round-trips the edit state through the VoxMain and back.
+    /// A document whose edit grid differs from the runtime grid (carries
+    /// margin) round-trips the edit state through the VoxMain and back.
     #[test]
     fn round_trips_edit_state() {
         let file = VoxjFile {
@@ -458,15 +460,16 @@ mod tests {
     #[test]
     fn rejects_out_of_range_sample() {
         let mut file = sample_file();
-        // One channel (object 0 references one palette); the first voxel samples
-        // cell 99, which is out of range.
+        // One channel (object 0 references one palette); the first voxel
+        // samples cell 99, which is out of range.
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![99, 0, 5, 2]]);
         assert!(from_voxj_file(&file).is_err());
     }
 
     /// A voxelless object (tight bounds `[0, 0, 0]`) may reference an empty
-    /// palette: no voxel samples it, so it round-trips rather than being rejected.
+    /// palette: no voxel samples it, so it round-trips rather than being
+    /// rejected.
     #[test]
     fn round_trips_empty_palette_referenced_by_voxelless_object() {
         let file = VoxjFile {
