@@ -90,7 +90,7 @@ The position block fixes a single voxel order for the object, and the sample cha
 
 ## Voxel Encoding
 
-Each block is `{ "encoding", "data" }`. New `encoding` values may be added in future versions (see [Versioning](#versioning-and-extensibility)).
+Each block is `{ "encoding", "data" }`. New `encoding` values may be added in future versions (see [Versioning](#versioning-and-extensibility)). Every binary encoding below has a reference implementation in [Reference Code](#reference-code).
 
 All base64 in this format uses the standard RFC 4648 alphabet, not base64url, with `=` padding and no line breaks.
 
@@ -98,7 +98,7 @@ All base64 in this format uses the standard RFC 4648 alphabet, not base64url, wi
 
 1. `raw-json`: one `[x, y, z]` triple per voxel, in listing order: `[[x0, y0, z0], [x1, y1, z1], ...]`. An empty object has `data = []`.
 2. `bitmap-base64`: a dense occupancy bitmap. `data` is a standard base64 string with no line breaks. It encodes one occupancy bit per cell of the object's `bounds = [X, Y, Z]`, so positions are implicit and this encoding requires `bounds` to decode. The cell index is `k = x * Y * Z + y * Z + z`, iterating x outermost and z innermost over `0 <= x < X`, `0 <= y < Y`, `0 <= z < Z` with `X * Y * Z` cells total. Bit `k` is `1` if cell `k` is occupied. Bits are packed 8 per byte, MSB-first: cell `k` is bit `(7 - (k mod 8))` of byte `floor(k / 8)`. The last byte is zero-padded when `X * Y * Z` is not a multiple of 8; pad bits must be `0`. The base64 encodes exactly `ceil(X * Y * Z / 8)` bytes. The number of voxels is the number of set bits. An empty object has `bounds = [0, 0, 0]`, so its `data` is the empty string. Best for dense objects, roughly >= 50% filled; valid at any density.
-3. `hilbert-delta-varint-base64`: a Hilbert-index delta list. `data` is a standard base64 string with no line breaks, encoding the deltas as an unsigned LEB128 varint stream (see the reference code in [Hilbert Reference Code](#hilbert-reference-code)). Each position `(x, y, z)` maps to one Hilbert index via the standard 3D Hilbert curve with `bits = max(1, bitLength(max(X, Y, Z) - 1))` taken from `bounds`. Axes map to Hilbert dimensions `(x, y, z) = (0, 1, 2)`, and the curve covers a `2 ^ bits` cube containing the bounds. Voxels are sorted by ascending index, and the encoded deltas are `[h0, h1 - h0, h2 - h1, ...]`; decode by base64-decoding to the varint stream, reading the deltas, prefix-summing to recover the indices, then Hilbert-decoding each. Every delta after the first is strictly positive. An empty object has `data = ""`. A good general-purpose encoding; strongest from sparse up through moderate density, and compact at any density because each delta is a small varint rather than a full index.
+3. `hilbert-delta-varint-base64`: a Hilbert-index delta list. `data` is a standard base64 string with no line breaks, encoding the deltas as an unsigned LEB128 varint stream (see the reference code in [Reference Code](#reference-code)). Each position `(x, y, z)` maps to one Hilbert index via the standard 3D Hilbert curve with `bits = max(1, bitLength(max(X, Y, Z) - 1))` taken from `bounds`. Axes map to Hilbert dimensions `(x, y, z) = (0, 1, 2)`, and the curve covers a `2 ^ bits` cube containing the bounds. Voxels are sorted by ascending index, and the encoded deltas are `[h0, h1 - h0, h2 - h1, ...]`; decode by base64-decoding to the varint stream, reading the deltas, prefix-summing to recover the indices, then Hilbert-decoding each. Every delta after the first is strictly positive. An empty object has `data = ""`. A good general-purpose encoding; strongest from sparse up through moderate density, and compact at any density because each delta is a small varint rather than a full index.
 
    Because the reference algorithm assembles and decodes a Hilbert index in a JS `number` (a double, exact only to `2 ^ 53`), this encoding requires `bits <= 17`, equivalently every `bounds` dimension `<= 131072`; a validator must reject larger grids, which must instead use `bitmap-base64` or `raw-json`.
 
@@ -559,25 +559,16 @@ type Vec3 = [number, number, number];
 type Quat = [number, number, number, number];
 ```
 
-### Hilbert Reference Code
+### Reference Code
+
+Reference implementations of the binary encodings, as small independent codecs to port directly. `raw-json` positions and samples are plain JSON and need none. `base64` / `unbase64` are standard RFC 4648 (`btoa`/`atob` or `Buffer` in JS; see [Voxel Encoding](#voxel-encoding)). `Vec3` is `[number, number, number]`. Each block's `data` is one composition below.
+
+#### Bit Widths
 
 ```ts
-// Reference algorithm for `hilbert-delta-varint-base64`, as three
-// independent encode/decode codecs (hilbert, delta, varint) plus a composition.
-// The block `data` is base64(varintEncode(deltaEncode(sortedHilbertIndices))).
-//
-// NOTE: indices are assembled with arithmetic, not `<<`, because JS bitwise
-// operators are 32-bit and an index can exceed 31 bits on large grids. The
-// index is exact in a JS `number` only while 3 * bits <= 53, i.e. bits <= 17;
-// the format caps bits at 17 (every bounds dimension <= 131072) for this
-// reason.
-
-// 0. Bit length: number of binary digits in a non-negative integer, with
-//    bitLength(0) = 0 (so bitLength(n) = floor(log2(n)) + 1 for n >= 1). The
-//    width formulas below call bitLength(x - 1), which is the number of bits
-//    needed to index x distinct values (= ceil(log2(x)) for x >= 1) and is
-//    integer-exact with no floating-point rounding. Used to derive Hilbert
-//    `bits` and the packed-base64 width `b`; never use Math.log2 for these.
+// Binary digits in a non-negative integer, bitLength(0) = 0. The width formulas
+// call bitLength(x - 1): the bits to index x distinct values, integer-exact
+// with no floating point. Never use Math.log2 for these.
 function bitLength(n: number): number {
   let len = 0;
   while (n > 0) {
@@ -587,16 +578,131 @@ function bitLength(n: number): number {
   return len;
 }
 
-// Hilbert `bits` per axis from bounds, and packed-base64 channel width `b` from
-// a palette cell count. Both are max(1, ceil(log2(.))) computed via bitLength.
+// Hilbert `bits` per axis from bounds, and packed-base64 channel width from a
+// palette cell count. Both are max(1, ceil(log2(.))) via bitLength.
 function hilbertBits(bounds: Vec3): number {
-  const maxDim = Math.max(bounds[0], bounds[1], bounds[2]);
-  return Math.max(1, bitLength(maxDim - 1));
+  return Math.max(1, bitLength(Math.max(bounds[0], bounds[1], bounds[2]) - 1));
 }
 
 function packedWidth(cellCount: number): number {
   return Math.max(1, bitLength(cellCount - 1));
 }
+```
+
+#### Bit-Packing: `bitmap-base64` positions and `packed-base64` samples
+
+```ts
+// Pack `values` at a fixed `width` bits each, MSB-first, 8 per byte, final byte
+// zero-padded. bitmap-base64 is the width = 1 case.
+function packBits(values: number[], width: number): Uint8Array {
+  const out = new Uint8Array(Math.ceil((values.length * width) / 8));
+  let bit = 0;
+  for (const value of values) {
+    for (let b = width - 1; b >= 0; b--) {
+      if ((value >> b) & 1) out[bit >> 3] |= 1 << (7 - (bit & 7));
+      bit++;
+    }
+  }
+  return out;
+}
+
+// Inverse of packBits. Bytes past the end read as zero.
+function unpackBits(bytes: Uint8Array, width: number, count: number): number[] {
+  const out: number[] = [];
+  let bit = 0;
+  for (let i = 0; i < count; i++) {
+    let value = 0;
+    for (let w = 0; w < width; w++) {
+      const byte = bytes[bit >> 3] ?? 0;
+      value = (value << 1) | ((byte >> (7 - (bit & 7))) & 1);
+      bit++;
+    }
+    out.push(value);
+  }
+  return out;
+}
+
+// Raster cell index of a position within `bounds`: x outermost, z innermost.
+function cellIndex([x, y, z]: Vec3, [, Y, Z]: Vec3): number {
+  return x * Y * Z + y * Z + z;
+}
+
+// bitmap-base64: one occupancy bit per cell of `bounds`, packed at width 1. The
+// canonical voxel order is ascending cell index, so reorder each sample channel
+// to match (sort voxel indices by cellIndex for the same remap that
+// encodeHilbertBlockWithRemap returns).
+function encodeBitmapBlock(positions: Vec3[], bounds: Vec3): string {
+  const occupancy = new Array<number>(bounds[0] * bounds[1] * bounds[2]).fill(0);
+  for (const p of positions) occupancy[cellIndex(p, bounds)] = 1;
+  return base64(packBits(occupancy, 1));
+}
+
+function decodeBitmapBlock(data: string, bounds: Vec3): Vec3[] {
+  const [X, Y, Z] = bounds;
+  const cells = X * Y * Z;
+  const occupancy = unpackBits(unbase64(data), 1, cells);
+  const out: Vec3[] = [];
+  for (let k = 0; k < cells; k++) {
+    if (occupancy[k]) {
+      out.push([Math.floor(k / (Y * Z)), Math.floor((k % (Y * Z)) / Z), k % Z]);
+    }
+  }
+  return out;
+}
+
+// packed-base64: one channel per palette, each voxel's cell index packed at
+// packedWidth(cellCount). `cells` is in the position block's voxel order.
+function encodePackedChannel(cells: number[], cellCount: number): string {
+  return base64(packBits(cells, packedWidth(cellCount)));
+}
+
+function decodePackedChannel(
+  data: string,
+  cellCount: number,
+  voxelCount: number,
+): number[] {
+  return unpackBits(unbase64(data), packedWidth(cellCount), voxelCount);
+}
+```
+
+#### Run-Length: `rle-json` samples
+
+```ts
+// rle-json: one channel per palette as a flat [value, count, ...] run stream;
+// counts are positive and sum to the voxel count.
+function rleEncode(cells: number[]): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < cells.length; ) {
+    const value = cells[i];
+    let count = 1;
+    while (cells[i + count] === value) count++;
+    out.push(value, count);
+    i += count;
+  }
+  return out;
+}
+
+function rleDecode(rle: number[]): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < rle.length; i += 2) {
+    for (let c = 0; c < rle[i + 1]; c++) out.push(rle[i]);
+  }
+  return out;
+}
+```
+
+#### Hilbert: `hilbert-delta-varint-base64` positions
+
+```ts
+// Three independent encode/decode codecs (hilbert, delta, varint) plus a
+// composition. The block `data` is
+// base64(varintEncode(deltaEncode(sortedHilbertIndices))).
+//
+// NOTE: indices are assembled with arithmetic, not `<<`, because JS bitwise
+// operators are 32-bit and an index can exceed 31 bits on large grids. The
+// index is exact in a JS `number` only while 3 * bits <= 53, i.e. bits <= 17;
+// the format caps bits at 17 (every bounds dimension <= 131072) for this
+// reason.
 
 // 1. Hilbert: a position <-> its 3D Hilbert-curve index (Skilling's transform),
 //    `bits` bits per axis.
