@@ -1,7 +1,7 @@
 use clap::ValueEnum;
 use std::path::Path;
 
-/// A voxel file format that voxl can read or write.
+/// A voxel file format that vxl can read or write.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum Format {
     /// Voxel JSON, the `.voxj` and `.voxjz` documents.

@@ -10,7 +10,7 @@ use tyt_meshy::TytMeshy;
 use tyt_meta::TytMeta;
 use tyt_oai::TytOAI;
 use tyt_vmax::TytVMax;
-use voxl::Voxl;
+use vxl::Vxl;
 
 /// The main command for `tyt`, which ties all my command-line tools together.
 #[allow(clippy::large_enum_variant)]
@@ -77,10 +77,10 @@ pub enum Tyt {
         vmax: TytVMax,
     },
 
-    #[command(name = "voxl")]
-    Voxl {
+    #[command(name = "vxl")]
+    Vxl {
         #[clap(subcommand)]
-        voxl: Voxl,
+        vxl: Vxl,
     },
 }
 
@@ -97,7 +97,7 @@ impl Tyt {
             Tyt::Meta { meta } => meta.execute(deps.tyt_meta_dependencies())?,
             Tyt::OAI { oai } => oai.execute(deps.tyt_oai_dependencies())?,
             Tyt::VMax { vmax } => vmax.execute(deps.tyt_vmax_dependencies())?,
-            Tyt::Voxl { voxl } => voxl.execute(deps.voxl_dependencies())?,
+            Tyt::Vxl { vxl } => vxl.execute(deps.vxl_dependencies())?,
         }
 
         Ok(())

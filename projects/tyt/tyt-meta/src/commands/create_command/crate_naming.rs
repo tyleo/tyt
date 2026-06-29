@@ -3,10 +3,10 @@ use crate::commands::create_command;
 /// Resolved crate names for a command, with or without the `tyt-` prefix.
 pub(crate) struct CrateNaming {
     prefixed: bool,
-    /// Cargo package name, e.g. `tyt-vmax` or `voxl`.
+    /// Cargo package name, e.g. `tyt-vmax` or `vxl`.
     pub package: String,
     /// Library crate and root command-enum module name, e.g. `tyt_vmax` or
-    /// `voxl`. The root enum lives in `src/{module}.rs`.
+    /// `vxl`. The root enum lives in `src/{module}.rs`.
     pub module: String,
 }
 
@@ -28,7 +28,7 @@ impl CrateNaming {
     }
 
     /// Root command-enum name for the PascalCase `name`, e.g. `TytVMax` when
-    /// prefixed or `Voxl` when not.
+    /// prefixed or `Vxl` when not.
     pub fn root_enum(&self, name: &str) -> String {
         if self.prefixed {
             format!("Tyt{name}")

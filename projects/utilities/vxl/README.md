@@ -1,3 +1,3 @@
-# voxl
+# vxl
 
 A command-line tool for working with voxels.

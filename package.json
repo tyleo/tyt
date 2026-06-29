@@ -10,6 +10,6 @@
         "build:release-wasm": "cargo build",
         "install:tyt": "cargo install --path ./projects/tyt/tyt --features=\"bin\"",
         "install:vmax": "cargo install --path ./projects/tyt/tyt-vmax --features=\"bin\"",
-        "install:voxl": "cargo install --path ./projects/utilities/voxl --features=\"bin\""
+        "install:vxl": "cargo install --path ./projects/utilities/vxl --features=\"bin\""
     }
 }

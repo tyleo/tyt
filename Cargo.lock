@@ -1632,7 +1632,7 @@ dependencies = [
  "tyt-meta",
  "tyt-oai",
  "tyt-vmax",
- "voxl",
+ "vxl",
 ]
 
 [[package]]
@@ -1910,20 +1910,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "voxl"
-version = "0.1.0"
-dependencies = [
- "clap",
- "clap_complete",
- "tyt-common",
- "tyt-injection",
- "vmax-codec",
- "voxcore",
- "voxj-codec",
- "voxsmith",
-]
-
-[[package]]
 name = "voxsmith"
 version = "0.1.0"
 dependencies = [
@@ -1941,6 +1927,20 @@ dependencies = [
  "voxcore",
  "voxj",
  "voxj-codec",
+]
+
+[[package]]
+name = "vxl"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "clap_complete",
+ "tyt-common",
+ "tyt-injection",
+ "vmax-codec",
+ "voxcore",
+ "voxj-codec",
+ "voxsmith",
 ]
 
 [[package]]

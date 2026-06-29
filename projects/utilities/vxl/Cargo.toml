@@ -1,5 +1,5 @@
 [package]
-name = "voxl"
+name = "vxl"
 version = "0.1.0"
 edition = "2024"
 license-file = "LICENSE"
@@ -8,7 +8,7 @@ description = "A command-line tool for working with voxels."
 autobins = false
 
 [[bin]]
-name = "voxl"
+name = "vxl"
 path = "src/main.rs"
 required-features = ["bin"]
 

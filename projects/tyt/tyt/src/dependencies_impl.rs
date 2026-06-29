@@ -9,7 +9,7 @@ use tyt_meshy::DependenciesImpl as TytMeshyDependenciesImpl;
 use tyt_meta::DependenciesImpl as TytMetaDependenciesImpl;
 use tyt_oai::DependenciesImpl as TytOAIDependenciesImpl;
 use tyt_vmax::DependenciesImpl as TytVMaxDependenciesImpl;
-use voxl::DependenciesImpl as VoxlDependenciesImpl;
+use vxl::DependenciesImpl as VxlDependenciesImpl;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -25,7 +25,7 @@ impl Dependencies for DependenciesImpl {
     type TytMetaDependencies = TytMetaDependenciesImpl;
     type TytOAIDependencies = TytOAIDependenciesImpl;
     type TytVMaxDependencies = TytVMaxDependenciesImpl;
-    type VoxlDependencies = VoxlDependenciesImpl;
+    type VxlDependencies = VxlDependenciesImpl;
 
     fn tyt_claude_dependencies(&self) -> Self::TytClaudeDependencies {
         TytClaudeDependenciesImpl
@@ -67,7 +67,7 @@ impl Dependencies for DependenciesImpl {
         TytVMaxDependenciesImpl
     }
 
-    fn voxl_dependencies(&self) -> Self::VoxlDependencies {
-        VoxlDependenciesImpl
+    fn vxl_dependencies(&self) -> Self::VxlDependencies {
+        VxlDependenciesImpl
     }
 }

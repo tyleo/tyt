@@ -10,7 +10,7 @@ use tyt_meta::Error as MetaError;
 
 use tyt_oai::Error as OAIError;
 use tyt_vmax::Error as VMaxError;
-use voxl::Error as VoxlError;
+use vxl::Error as VxlError;
 #[derive(Debug)]
 pub enum Error {
     Claude(ClaudeError),
@@ -23,7 +23,7 @@ pub enum Error {
     Meta(MetaError),
     OAI(OAIError),
     VMax(VMaxError),
-    Voxl(VoxlError),
+    Vxl(VxlError),
 }
 
 impl fmt::Display for Error {
@@ -39,7 +39,7 @@ impl fmt::Display for Error {
             Error::Meta(e) => e.fmt(f),
             Error::OAI(e) => e.fmt(f),
             Error::VMax(e) => e.fmt(f),
-            Error::Voxl(e) => e.fmt(f),
+            Error::Vxl(e) => e.fmt(f),
         }
     }
 }
@@ -57,7 +57,7 @@ impl StdError for Error {
             Error::Meta(e) => Some(e),
             Error::OAI(e) => Some(e),
             Error::VMax(e) => Some(e),
-            Error::Voxl(e) => Some(e),
+            Error::Vxl(e) => Some(e),
         }
     }
 }
@@ -122,8 +122,8 @@ impl From<VMaxError> for Error {
     }
 }
 
-impl From<VoxlError> for Error {
-    fn from(e: VoxlError) -> Self {
-        Error::Voxl(e)
+impl From<VxlError> for Error {
+    fn from(e: VxlError) -> Self {
+        Error::Vxl(e)
     }
 }

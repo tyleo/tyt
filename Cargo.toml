@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+    "projects/tyt/tyt",
     "projects/tyt/tyt-claude",
     "projects/tyt/tyt-common",
     "projects/tyt/tyt-cubemap",
@@ -14,22 +15,23 @@ members = [
     "projects/tyt/tyt-oai",
     "projects/tyt/tyt-preferences",
     "projects/tyt/tyt-vmax",
-    "projects/tyt/tyt",
-    "projects/utilities/ty-math-serde",
+
     "projects/utilities/ty-math",
+    "projects/utilities/ty-math-serde",
     "projects/utilities/voxcore",
-    "projects/utilities/voxl",
     "projects/utilities/voxsmith",
-    "projects/voxel-codecs/goxl-codec",
+    "projects/utilities/vxl",
+
     "projects/voxel-codecs/goxl",
-    "projects/voxel-codecs/mvox-codec",
+    "projects/voxel-codecs/goxl-codec",
     "projects/voxel-codecs/mvox",
-    "projects/voxel-codecs/qbcl-codec",
+    "projects/voxel-codecs/mvox-codec",
     "projects/voxel-codecs/qbcl",
-    "projects/voxel-codecs/vmax-codec",
+    "projects/voxel-codecs/qbcl-codec",
     "projects/voxel-codecs/vmax",
-    "projects/voxel-codecs/voxj-codec",
+    "projects/voxel-codecs/vmax-codec",
     "projects/voxel-codecs/voxj",
+    "projects/voxel-codecs/voxj-codec",
 ]
 
 resolver = "2"
@@ -54,16 +56,16 @@ tyt-vmax = { path = "projects/tyt/tyt-vmax" }
 ty-math = { path = "projects/utilities/ty-math" }
 ty-math-serde = { path = "projects/utilities/ty-math-serde" }
 voxcore = { path = "projects/utilities/voxcore" }
-voxl = { path = "projects/utilities/voxl" }
 voxsmith = { path = "projects/utilities/voxsmith" }
+vxl = { path = "projects/utilities/vxl" }
 
-voxj = { path = "projects/voxel-codecs/voxj" }
-voxj-codec = { path = "projects/voxel-codecs/voxj-codec" }
-vmax = { path = "projects/voxel-codecs/vmax" }
-vmax-codec = { path = "projects/voxel-codecs/vmax-codec" }
-mvox = { path = "projects/voxel-codecs/mvox" }
-mvox-codec = { path = "projects/voxel-codecs/mvox-codec" }
 goxl = { path = "projects/voxel-codecs/goxl" }
 goxl-codec = { path = "projects/voxel-codecs/goxl-codec" }
+mvox = { path = "projects/voxel-codecs/mvox" }
+mvox-codec = { path = "projects/voxel-codecs/mvox-codec" }
 qbcl = { path = "projects/voxel-codecs/qbcl" }
 qbcl-codec = { path = "projects/voxel-codecs/qbcl-codec" }
+vmax = { path = "projects/voxel-codecs/vmax" }
+vmax-codec = { path = "projects/voxel-codecs/vmax-codec" }
+voxj = { path = "projects/voxel-codecs/voxj" }
+voxj-codec = { path = "projects/voxel-codecs/voxj-codec" }
