@@ -12,7 +12,8 @@ pub fn to_voxjz_bytes_with(
     sample: SampleEncoding,
 ) -> Result<Vec<u8>> {
     let file = VoxjFileBuilder::new(state)
-        .encoding(Some((position, sample)))
+        .position_encoding(Some(position))
+        .sample_encoding(Some(sample))
         .build()?;
     Ok(to_voxjz_file_bytes(&file)?)
 }

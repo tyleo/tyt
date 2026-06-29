@@ -21,8 +21,8 @@ Flatten the encoded blocks on demand, then re-encode.
 - `decode_voxj_object`: flatten one object into per-voxel positions and
   per-palette samples.
 - `encode_voxj_object`: re-encode with fixed block encodings.
-- `encode_voxj_object_smallest`: try every encoding pairing and keep the
-  smallest deflated.
+- `encode_voxj_object_optimized`: pin either block or leave it unset to search
+  its candidate encodings, keeping the smallest deflated pairing.
 - `voxj_palette_cell_counts`: the cell count per referenced palette, the widths
   `packed-base64` needs.
 

@@ -9,7 +9,8 @@ use voxj_codec::{PositionEncoding, SampleEncoding};
 /// automatically, the same document that function writes.
 pub struct VoxjFileBuilder<'a> {
     state: &'a VoxMain,
-    encoding: Option<(PositionEncoding, SampleEncoding)>,
+    position_encoding: Option<PositionEncoding>,
+    sample_encoding: Option<SampleEncoding>,
     ext: bool,
     edit_state: EditStateMode,
 }
@@ -19,17 +20,24 @@ impl<'a> VoxjFileBuilder<'a> {
     pub fn new(state: &'a VoxMain) -> Self {
         Self {
             state,
-            encoding: None,
+            position_encoding: None,
+            sample_encoding: None,
             ext: true,
             edit_state: EditStateMode::Auto,
         }
     }
 
-    /// Sets the block encoding applied to every object: a fixed position/sample
-    /// pair, or `None` to search for the smallest per-object encoding. Defaults
-    /// to `None`.
-    pub fn encoding(mut self, encoding: Option<(PositionEncoding, SampleEncoding)>) -> Self {
-        self.encoding = encoding;
+    /// Sets the position-block encoding, or `None` to search for the smallest
+    /// paired with the sample encoding.
+    pub fn position_encoding(mut self, position_encoding: Option<PositionEncoding>) -> Self {
+        self.position_encoding = position_encoding;
+        self
+    }
+
+    /// Sets the sample-block encoding, or `None` to search for the smallest
+    /// paired with the position encoding.
+    pub fn sample_encoding(mut self, sample_encoding: Option<SampleEncoding>) -> Self {
+        self.sample_encoding = sample_encoding;
         self
     }
 
@@ -48,6 +56,12 @@ impl<'a> VoxjFileBuilder<'a> {
 
     /// Builds the [`VoxjFile`].
     pub fn build(self) -> Result<VoxjFile> {
-        write_voxj(self.state, self.encoding, self.ext, self.edit_state)
+        write_voxj(
+            self.state,
+            self.position_encoding,
+            self.sample_encoding,
+            self.ext,
+            self.edit_state,
+        )
     }
 }

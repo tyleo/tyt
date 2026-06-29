@@ -7,5 +7,5 @@ use voxj::VoxjFile;
 /// and `.voxjz` writers. For control over the block encodings, the ext block, or
 /// the edit state, use [`VoxjFileBuilder`](crate::VoxjFileBuilder).
 pub fn to_voxj_file(state: &VoxMain) -> Result<VoxjFile> {
-    write_voxj(state, None, true, EditStateMode::Auto)
+    write_voxj(state, None, None, true, EditStateMode::Auto)
 }

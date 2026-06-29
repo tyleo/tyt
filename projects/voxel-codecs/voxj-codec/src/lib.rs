@@ -3,7 +3,7 @@ pub(crate) use internal::*;
 
 mod decode_voxj_object;
 mod encode_voxj_object;
-mod encode_voxj_object_smallest;
+mod encode_voxj_object_optimized;
 mod error;
 mod from_voxj_file_bytes;
 mod from_voxj_or_voxjz_file_bytes;
@@ -20,7 +20,7 @@ mod voxj_palette_cell_counts;
 
 pub use decode_voxj_object::*;
 pub use encode_voxj_object::*;
-pub use encode_voxj_object_smallest::*;
+pub use encode_voxj_object_optimized::*;
 pub use error::*;
 pub use from_voxj_file_bytes::*;
 pub use from_voxj_or_voxjz_file_bytes::*;

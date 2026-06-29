@@ -1,10 +1,11 @@
 use clap::ValueEnum;
 
-/// Automatic encoding strategy that picks the block encodings for a `to voxj`
-/// document.
+/// Encoding strategy that fills the default for any block a `to voxj` document
+/// leaves unset. An explicit `--position-encoding` or `--sample-encoding`
+/// overrides it for that block.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjOptimize {
-    /// Try every non-raw encoding pairing and keep the smallest.
+    /// Search every non-raw encoding pairing and keep the smallest.
     #[value(name = "size")]
     Size,
     /// Fast to decode: bitmap positions and packed samples.

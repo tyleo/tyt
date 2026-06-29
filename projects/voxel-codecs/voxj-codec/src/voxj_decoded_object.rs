@@ -2,7 +2,7 @@
 /// decoded counterpart of [`VoxjObject`](voxj::VoxjObject), produced by
 /// [`decode_voxj_object`](crate::decode_voxj_object()) and re-encoded by
 /// [`encode_voxj_object`](crate::encode_voxj_object()) /
-/// [`encode_voxj_object_smallest`](crate::encode_voxj_object_smallest()).
+/// [`encode_voxj_object_optimized`](crate::encode_voxj_object_optimized()).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VoxjDecodedObject {
     /// Display name of the object.

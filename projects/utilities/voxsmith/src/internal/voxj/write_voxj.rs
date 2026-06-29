@@ -7,8 +7,7 @@ use ty_math::TyVector3U32;
 use voxcore::{VoxMain, VoxObject};
 use voxj::{VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState};
 use voxj_codec::{
-    PositionEncoding, SampleEncoding, encode_voxj_object, encode_voxj_object_smallest,
-    voxj_palette_cell_counts,
+    PositionEncoding, SampleEncoding, encode_voxj_object_optimized, voxj_palette_cell_counts,
 };
 
 /// The voxj format version stamped on documents written from a [`VoxMain`],
@@ -19,15 +18,19 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// [`to_voxj_file`](crate::to_voxj_file) and
 /// [`VoxjFileBuilder`](crate::VoxjFileBuilder).
 ///
-/// Each object's geometry is encoded with `encoding`, a fixed position/sample
-/// pair, or the smallest per-object block encodings when `None`. When `ext` is
-/// false the user-defined ext block is dropped. `edit_state` selects when each
-/// object's build volume is recorded. Objects, palettes, and hierarchy nodes are
-/// emitted in id order, so each lands at its original array index and the cross
-/// references carry over unchanged.
+/// Objects, palettes, and hierarchy nodes are emitted in id order, so each lands
+/// at its original array index and the cross references carry over unchanged.
+///
+/// # Arguments
+/// * `state` - the voxel model to encode.
+/// * `position` - position-block encoding, or `None` to search for the smallest.
+/// * `sample` - sample-block encoding, or `None` to search for the smallest.
+/// * `ext` - when false, omits the user-defined `ext` extension block.
+/// * `edit_state` - when to record each object's editor build volume.
 pub(crate) fn write_voxj(
     state: &VoxMain,
-    encoding: Option<(PositionEncoding, SampleEncoding)>,
+    position: Option<PositionEncoding>,
+    sample: Option<SampleEncoding>,
     ext: bool,
     edit_state: EditStateMode,
 ) -> Result<VoxjFile> {
@@ -41,12 +44,7 @@ pub(crate) fn write_voxj(
         .map(|(_, object)| {
             let decoded = voxj_decoded_object_from_vox_object(object);
             let cell_counts = voxj_palette_cell_counts(&decoded.palette_refs, &palettes)?;
-            match encoding {
-                Some((position, sample)) => {
-                    encode_voxj_object(&decoded, &cell_counts, position, sample)
-                }
-                None => encode_voxj_object_smallest(&decoded, &cell_counts),
-            }
+            encode_voxj_object_optimized(&decoded, &cell_counts, position, sample)
         })
         .collect::<voxj_codec::Result<Vec<_>>>()?;
 

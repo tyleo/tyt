@@ -25,26 +25,20 @@ pub struct Voxj {
     #[arg(value_name = "format", long, default_value = "json")]
     format: VoxjFormat,
 
-    /// Position-block encoding. Ignored when `--optimize` is given.
-    #[arg(
-        value_name = "position-encoding",
-        long,
-        default_value = "bitmap-base64",
-        conflicts_with = "optimize"
-    )]
-    position_encoding: VoxjPositionEncoding,
+    /// Position-block encoding. When unset it follows `--optimize`, defaulting to
+    /// `smallest`. An explicit value pins the block, leaving `--optimize` to
+    /// search only the other.
+    #[arg(value_name = "position-encoding", long)]
+    position_encoding: Option<VoxjPositionEncoding>,
 
-    /// Sample-block encoding. Ignored when `--optimize` is given.
-    #[arg(
-        value_name = "sample-encoding",
-        long,
-        default_value = "rle-json",
-        conflicts_with = "optimize"
-    )]
-    sample_encoding: VoxjSampleEncoding,
+    /// Sample-block encoding. When unset it follows `--optimize`, defaulting to
+    /// `smallest`. An explicit value pins the block, leaving `--optimize` to
+    /// search only the other.
+    #[arg(value_name = "sample-encoding", long)]
+    sample_encoding: Option<VoxjSampleEncoding>,
 
-    /// Pick the block encodings automatically. Conflicts with
-    /// `--position-encoding` and `--sample-encoding`.
+    /// Default encoding strategy for blocks left unset. An explicit
+    /// `--position-encoding` or `--sample-encoding` overrides it for that block.
     #[arg(value_name = "optimize", long)]
     optimize: Option<VoxjOptimize>,
 
@@ -69,20 +63,13 @@ pub struct Voxj {
 
 impl Voxj {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let encoding = match self.optimize {
-            Some(VoxjOptimize::Size) => VoxjEncoding::Smallest,
-            Some(VoxjOptimize::Fast) => VoxjEncoding::Fixed {
-                position: VoxjPositionEncoding::BitmapBase64,
-                sample: VoxjSampleEncoding::PackedBase64,
-            },
-            Some(VoxjOptimize::Pretty) => VoxjEncoding::Fixed {
-                position: VoxjPositionEncoding::RawJson,
-                sample: VoxjSampleEncoding::RawJson,
-            },
-            None => VoxjEncoding::Fixed {
-                position: self.position_encoding,
-                sample: self.sample_encoding,
-            },
+        let encoding = VoxjEncoding {
+            position: self
+                .position_encoding
+                .unwrap_or_else(|| default_position(self.optimize)),
+            sample: self
+                .sample_encoding
+                .unwrap_or_else(|| default_sample(self.optimize)),
         };
         dependencies.to_voxj(
             &self.input,
@@ -93,5 +80,25 @@ impl Voxj {
             self.ext,
             self.edit_state,
         )
+    }
+}
+
+/// The position encoding an unset `--position-encoding` falls back to, derived
+/// from `--optimize`. With no `--optimize` it searches for the smallest.
+fn default_position(optimize: Option<VoxjOptimize>) -> VoxjPositionEncoding {
+    match optimize {
+        None | Some(VoxjOptimize::Size) => VoxjPositionEncoding::Smallest,
+        Some(VoxjOptimize::Fast) => VoxjPositionEncoding::BitmapBase64,
+        Some(VoxjOptimize::Pretty) => VoxjPositionEncoding::RawJson,
+    }
+}
+
+/// The sample encoding an unset `--sample-encoding` falls back to, derived from
+/// `--optimize`. With no `--optimize` it searches for the smallest.
+fn default_sample(optimize: Option<VoxjOptimize>) -> VoxjSampleEncoding {
+    match optimize {
+        None | Some(VoxjOptimize::Size) => VoxjSampleEncoding::Smallest,
+        Some(VoxjOptimize::Fast) => VoxjSampleEncoding::PackedBase64,
+        Some(VoxjOptimize::Pretty) => VoxjSampleEncoding::RawJson,
     }
 }
