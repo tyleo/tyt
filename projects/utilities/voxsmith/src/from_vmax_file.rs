@@ -139,8 +139,17 @@ fn build_object(
     // about the content center.
     let (box_min, bounds) = match min_corner(&voxels) {
         Some(min) => (min, object_bounds(&voxels, min)),
+        // An empty object seats at its content box; lacking one, it seats at the
+        // build volume `vp.min` so the edit grid still contains the runtime grid,
+        // and only at the world origin when it has neither.
         None => (
-            authored_box(object).map_or([0, 0, 0], |(box_min, _)| box_min),
+            authored_box(object)
+                .map(|(box_min, _)| box_min)
+                .or_else(|| {
+                    view_box(serde, object)
+                        .map(|vp| [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32])
+                })
+                .unwrap_or([0, 0, 0]),
             [0, 0, 0],
         ),
     };
@@ -608,4 +617,89 @@ fn build_hierarchy(
 /// Invalid-data error from a message.
 fn invalid(message: String) -> Error {
     Error::Invalid(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeMap;
+    use vmax::{VMaxTools, VMaxViewBox};
+    use vmax_codec::encode_vmax_snapshots;
+
+    /// An empty object (zero voxels) with no authored content box (`e_mi`/`e_ma`
+    /// absent) but a `tools.vp` build volume away from the origin. Voxel Max opens
+    /// such a file, so the loader must too: seating `box_min` at `vp.min` keeps the
+    /// edit grid containing the runtime grid. Previously `box_min` fell back to
+    /// `[0, 0, 0]`, the edit grid was offset off the runtime point, and the
+    /// containment validator rejected the load.
+    fn empty_object_with_view_box_only() -> VMaxFile {
+        let object = VMaxObject {
+            name: "empty".to_owned(),
+            data: "contents1.vmaxb".to_owned(),
+            palette: String::new(),
+            history: String::new(),
+            id: "o".to_owned(),
+            parent_id: None,
+            hidden: None,
+            position: [0.0, 0.0, 0.0],
+            rotation: [0.0, 0.0, 0.0, 0.0],
+            scale: [1.0, 1.0, 1.0],
+            ind: [0, 0, 0],
+            s: None,
+            t_al: String::new(),
+            t_pa: String::new(),
+            t_pf: String::new(),
+            t_po: None,
+            center: [128.0, 128.0, 16.0],
+            bounds_min: None,
+            bounds_max: None,
+        };
+        let contents = VMaxContentsVmaxbFile {
+            snapshots: encode_vmax_snapshots(&[]),
+            uuid: "u".to_owned(),
+            v: 4,
+            tools: Some(VMaxTools {
+                vp: Some(VMaxViewBox {
+                    min: [112, 112, 0],
+                    max: [143, 143, 31],
+                }),
+                ..Default::default()
+            }),
+            brush: None,
+            cam: None,
+            pal: None,
+        };
+        let mut contents_files = BTreeMap::new();
+        contents_files.insert("contents1.vmaxb".to_owned(), contents);
+        VMaxFile {
+            scene_json_file: VMaxSceneJsonFile {
+                v: 4,
+                objects: vec![object],
+                ..Default::default()
+            },
+            contents_files,
+            palette_settings_files: BTreeMap::new(),
+            palette_png_files: BTreeMap::new(),
+            history_vmaxhb_files: BTreeMap::new(),
+            history_vmaxhvsb_files: BTreeMap::new(),
+            history_vmaxhvsc_files: BTreeMap::new(),
+            selection_vmaxb_files: BTreeMap::new(),
+            thumbnail_png: None,
+            contents_vmax_pngs: BTreeMap::new(),
+            group_pngs: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn empty_object_without_content_box_loads_from_its_view_box() {
+        let state = from_vmax_file(&empty_object_with_view_box_only())
+            .expect("an empty object with only a build volume must load");
+        let id = U32Id::<BVoxObject>::from_u32(0);
+        let object = state.object(id).expect("the one object");
+        assert_eq!(object.bounds(), TyVector3U32::new(0, 0, 0));
+        // The edit grid is the build volume (the 32^3 `vp`), and it contains the
+        // degenerate runtime grid.
+        let edit = state.edit_object(id).expect("the object's edit grid");
+        assert_eq!(edit.bounds, TyVector3U32::new(32, 32, 32));
+    }
 }
