@@ -1,7 +1,7 @@
 use crate::{
     Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
     MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
-    MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, to_vox_value,
+    MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, tighten, to_vox_value,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -38,7 +38,11 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxState> {
     let palette_id = state.add_palette(build_palette(file)?);
 
     for model in &file.models {
-        state.add_object(build_object(model, palette_id)?);
+        // The model grid may carry empty margin; the runtime object is tight, with
+        // the model grid kept as the object's edit grid (build volume).
+        let (object, edit) = tighten(&build_object(model, palette_id)?);
+        let id = state.add_object(object);
+        state.set_edit_object(id, edit);
     }
 
     let (nodes, roots) = build_hierarchy(file)?;

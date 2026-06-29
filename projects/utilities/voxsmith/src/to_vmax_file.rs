@@ -1,10 +1,10 @@
 use crate::{
     Error, Result, SceneCameraSource, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
-    VoxelMaxNode, VoxelMaxObjectState, VoxelMaxPalette, ext_for, from_vox_value,
+    VoxelMaxNode, VoxelMaxPalette, ext_for, from_vox_value,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, HashMap};
-use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use vmax::{
     VMaxBrush, VMaxBrushColor, VMaxBrushEntry, VMaxBrushState, VMaxCamera, VMaxContentsVmaxbFile,
     VMaxFile, VMaxFlag, VMaxFlagValue, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxMode,
@@ -13,8 +13,8 @@ use vmax::{
 };
 use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
-    BVoxHierarchyNode, BVoxPalette, BVoxPaletteRef, VoxHierarchyNode, VoxObject, VoxPalette,
-    VoxState, VoxValue,
+    BVoxHierarchyNode, BVoxPalette, BVoxPaletteRef, VoxEditObject, VoxHierarchyNode, VoxObject,
+    VoxPalette, VoxState, VoxValue,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx` is
@@ -249,36 +249,49 @@ pub(crate) fn write_vmax(
             let object_ext = if slot == 0 {
                 ext_node.clone()
             } else {
-                secondary_object_ext(ext_node, object, slot)
+                secondary_object_ext(ext_node, slot)
             };
 
-            // The build volume's edit-space origin: the preserved partition on the
-            // lossless path, centered for a synthesized object. Voxels re-encode at
-            // their grid positions offset by it.
+            // Re-derive the object's internal-grid placement by convention: center
+            // the canvas in the 256-wide workspace, then seat the runtime grid
+            // inside it by the runtime/edit origin offset. The content box and the
+            // build volume follow from the native tight bounds and edit grid; the
+            // scene placement follows from the node transform.
+            let edit = state
+                .edit_object(object_ref)
+                .expect("a retained object has an edit grid");
+            let placement = object_placement(object.bounds(), object.origin(), edit);
             let object_state = voxel_max
                 .object_states
                 .get(object_id)
                 .and_then(|s| s.clone());
-            let box_min = view_min(object_state.as_ref(), object, &object_ext);
 
             // Instances share one contents file: rebuild it once.
             let data = match contents_by_object.get(&object_id) {
                 Some(data) => data.clone(),
                 None => {
-                    let voxels = reconstruct_voxels(object, color, material, box_min)?;
+                    let voxels = reconstruct_voxels(object, color, material, placement.box_min)?;
                     let data = format!("contents{suffix}.vmaxb");
                     // Voxels re-encode into snapshots; serde-only state the decoded
                     // voxcore object does not model (`pal`) stays absent.
                     let contents = match object_state {
-                        Some(state) => VMaxContentsVmaxbFile {
-                            snapshots: encode_vmax_snapshots(&voxels),
-                            uuid: state.uuid,
-                            v: state.v,
-                            tools: state.tools,
-                            brush: state.brush,
-                            cam: state.cam,
-                            pal: None,
-                        },
+                        // Keep the preserved editor session, but re-scope its canvas
+                        // (`vp`) to the derived build volume.
+                        Some(state) => {
+                            let mut tools = state.tools;
+                            if let Some(tools) = tools.as_mut() {
+                                tools.vp = Some(placement.view_box.clone());
+                            }
+                            VMaxContentsVmaxbFile {
+                                snapshots: encode_vmax_snapshots(&voxels),
+                                uuid: state.uuid,
+                                v: state.v,
+                                tools,
+                                brush: state.brush,
+                                cam: state.cam,
+                                pal: None,
+                            }
+                        }
                         // Voxel Max's object decoder rejects a sparse editor state,
                         // so a synthesized object carries default `tools`, `brush`,
                         // and `cam`. Its `vp` frames the object's build volume.
@@ -286,7 +299,7 @@ pub(crate) fn write_vmax(
                             snapshots: encode_vmax_snapshots(&voxels),
                             uuid: object_ext.id.clone(),
                             v: FALLBACK_CONTENT_VERSION,
-                            tools: Some(default_tools(object_view_box(box_min, object.bounds()))),
+                            tools: Some(default_tools(placement.view_box.clone())),
                             brush: Some(default_brush()),
                             cam: Some(default_camera()),
                             pal: None,
@@ -313,7 +326,7 @@ pub(crate) fn write_vmax(
             objects.push(object_from_node(
                 node,
                 &object_ext,
-                box_min,
+                &placement,
                 data,
                 pal,
                 &suffix,
@@ -430,22 +443,17 @@ fn push_placement<'a>(
     let node = state.hierarchy_node(id).expect("a valid hierarchy node");
     let ext_id = synth_uuid(*counter);
     *counter += 1;
-    // An object node carries its first object's content box; a group node carries
-    // none. The object sits centered in the workspace, the placement the reverse
-    // path re-bases against.
-    let bounds = node.child_objects.first().and_then(|object| {
-        state
-            .object(*object)
-            .map(|object| content_bounds(object, centered_origin(object.bounds())))
-    });
+    // The content box and placement are derived from the native bounds and node
+    // transform on write, so a synthesized node carries only identity rotation and
+    // the anchor tokens; its parent links this occurrence's id.
     let ext = VoxelMaxNode {
         id: ext_id.clone(),
         parent_id,
         index: None,
         rotation: Some(IDENTITY_AXIS_ANGLE),
-        center: Some(bounds.map_or([0.0, 0.0, 0.0], |(center, _, _)| center)),
-        bounds_min: bounds.map(|(_, min, _)| min),
-        bounds_max: bounds.map(|(_, _, max)| max),
+        center: None,
+        bounds_min: None,
+        bounds_max: None,
         alignment: Some(DEFAULT_ALIGNMENT.to_owned()),
         pivot_face: Some(DEFAULT_PIVOT_FACE.to_owned()),
         pivot_align: Some(DEFAULT_PIVOT_ALIGN.to_owned()),
@@ -476,16 +484,15 @@ fn synthesize_voxel_max_ext(state: &VoxState) -> VoxelMaxExt {
 }
 
 /// The per-object ext for an extra object on a node placing several, such as a Goxel
-/// layer's blocks. It takes a distinct id and the object's own centered bounds, and
-/// inherits the node's parent, rotation, and alignment to stay a sibling of the
-/// node's first object.
-fn secondary_object_ext(node_ext: &VoxelMaxNode, object: &VoxObject, slot: usize) -> VoxelMaxNode {
-    let (center, bounds_min, bounds_max) = content_bounds(object, centered_origin(object.bounds()));
+/// layer's blocks. It takes a distinct id and inherits the node's parent, rotation,
+/// and alignment to stay a sibling of the node's first object; its content box is
+/// derived from its own bounds on write.
+fn secondary_object_ext(node_ext: &VoxelMaxNode, slot: usize) -> VoxelMaxNode {
     VoxelMaxNode {
         id: secondary_uuid(&node_ext.id, slot),
-        center: Some(center),
-        bounds_min: Some(bounds_min),
-        bounds_max: Some(bounds_max),
+        center: None,
+        bounds_min: None,
+        bounds_max: None,
         ..node_ext.clone()
     }
 }
@@ -499,50 +506,77 @@ fn centered_origin(size: TyVector3U32) -> [i32; 3] {
     [centered(size.x), centered(size.y), 0]
 }
 
-/// The live-voxel grid extent `(min, max)` of an object, or `None` when it has no
-/// live voxels.
-fn voxel_extent(object: &VoxObject) -> Option<([u32; 3], [u32; 3])> {
-    let mut live = object.iter_live().map(|id| {
-        let p = object
-            .voxel_position(id)
-            .expect("a live voxel is within the grid");
-        [p.x, p.y, p.z]
-    });
-    let first = live.next()?;
-    let (mut min, mut max) = (first, first);
-    for p in live {
-        for k in 0..3 {
-            min[k] = min[k].min(p[k]);
-            max[k] = max[k].max(p[k]);
-        }
-    }
-    Some((min, max))
+/// An object's internal-grid placement derived for the Voxel Max write: where its
+/// voxels sit in the private workspace, and the content box and build volume that
+/// follow. The scene placement is recovered separately from the node transform.
+struct ObjectPlacement {
+    /// The runtime grid's min corner in the workspace.
+    box_min: [i32; 3],
+
+    /// The grid `origin` carried over from the object, for the pivot math.
+    origin: [i32; 3],
+
+    /// The content center (`e_c`): `box_min + bounds / 2`.
+    center: [f64; 3],
+
+    /// The content box min relative to the center (`e_mi`): `-bounds / 2`.
+    bounds_min: [f64; 3],
+
+    /// The content box max relative to the center (`e_ma`): `bounds / 2`.
+    bounds_max: [f64; 3],
+
+    /// The build volume (`tools.vp`): the edit grid placed in the workspace.
+    view_box: VMaxViewBox,
 }
 
-/// The Voxel Max content bounds `(e_c, e_mi, e_ma)` for a synthesized object whose
-/// grid sits at `origin` in the workspace: the tight live-voxel box in edit space,
-/// `e_c` its center and `e_mi`/`e_ma` the symmetric half-extents. An empty object
-/// falls back to its whole grid. The build volume is the grid; this is the inner
-/// content box Voxel Max pivots and frames against.
-fn content_bounds(object: &VoxObject, origin: [i32; 3]) -> ([f64; 3], [f64; 3], [f64; 3]) {
-    let grid = object.bounds();
-    let (min, max) = voxel_extent(object).unwrap_or((
-        [0, 0, 0],
-        [
-            grid.x.saturating_sub(1),
-            grid.y.saturating_sub(1),
-            grid.z.saturating_sub(1),
-        ],
-    ));
+/// Derives an object's internal-grid placement by convention. The canvas (edit grid)
+/// is centered in the 256-wide workspace, and the runtime grid sits inside it by the
+/// runtime/edit origin offset. The content box follows from the tight bounds. The
+/// internal-grid position is invisible to the scene, which the node transform places,
+/// so re-deriving it loses nothing.
+fn object_placement(
+    bounds: TyVector3U32,
+    origin: TyVector3I32,
+    edit: VoxEditObject,
+) -> ObjectPlacement {
+    let canvas_min = centered_origin(edit.bounds);
+    let origin = [origin.x, origin.y, origin.z];
+    let box_min = [
+        canvas_min[0] + origin[0] - edit.origin.x,
+        canvas_min[1] + origin[1] - edit.origin.y,
+        canvas_min[2] + origin[2] - edit.origin.z,
+    ];
+    // An empty runtime grid has no content box of its own; frame it on the build
+    // volume so Voxel Max keeps a sensible content center and box for the object.
+    let (content_min, content_size) = if bounds.x == 0 && bounds.y == 0 && bounds.z == 0 {
+        (canvas_min, edit.bounds)
+    } else {
+        (box_min, bounds)
+    };
+    let (center, bounds_min, bounds_max) = content_box(content_min, content_size);
+    ObjectPlacement {
+        box_min,
+        origin,
+        center,
+        bounds_min,
+        bounds_max,
+        view_box: object_view_box(canvas_min, edit.bounds),
+    }
+}
+
+/// The Voxel Max content bounds `(e_c, e_mi, e_ma)` for a grid of `bounds` whose min
+/// corner sits at `box_min`: the box center and its symmetric half-extents. Voxel Max
+/// renders and frames against this and pivots about the center.
+fn content_box(box_min: [i32; 3], bounds: TyVector3U32) -> ([f64; 3], [f64; 3], [f64; 3]) {
     let half = [
-        (max[0] - min[0] + 1) as f64 / 2.0,
-        (max[1] - min[1] + 1) as f64 / 2.0,
-        (max[2] - min[2] + 1) as f64 / 2.0,
+        bounds.x as f64 / 2.0,
+        bounds.y as f64 / 2.0,
+        bounds.z as f64 / 2.0,
     ];
     let center = [
-        origin[0] as f64 + min[0] as f64 + half[0],
-        origin[1] as f64 + min[1] as f64 + half[1],
-        origin[2] as f64 + min[2] as f64 + half[2],
+        box_min[0] as f64 + half[0],
+        box_min[1] as f64 + half[1],
+        box_min[2] as f64 + half[2],
     ];
     (center, [-half[0], -half[1], -half[2]], half)
 }
@@ -558,38 +592,6 @@ fn object_view_box(origin: [i32; 3], size: TyVector3U32) -> VMaxViewBox {
             origin[2] as i64 + size.z.max(1) as i64 - 1,
         ],
     }
-}
-
-/// The build volume's edit-space origin for an object: its preserved partition
-/// (`tools.vp`) when the lossless path recorded one; the content box origin for a
-/// lossless object with no partition; centered for a synthesized object.
-fn view_min(
-    state: Option<&VoxelMaxObjectState>,
-    object: &VoxObject,
-    ext_node: &VoxelMaxNode,
-) -> [i32; 3] {
-    if let Some(vp) = state
-        .and_then(|state| state.tools.as_ref())
-        .and_then(|tools| tools.vp.as_ref())
-    {
-        return [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32];
-    }
-    match state {
-        Some(_) => box_min(ext_node),
-        None => centered_origin(object.bounds()),
-    }
-}
-
-/// The content box origin `round(center + bounds_min)` an ext node records, the
-/// edit-space corner its voxels start at when no separate build volume is kept.
-fn box_min(ext_node: &VoxelMaxNode) -> [i32; 3] {
-    let center = ext_node.center.unwrap_or_default();
-    let min = ext_node.bounds_min.unwrap_or_default();
-    [
-        (center[0] + min[0]).round() as i32,
-        (center[1] + min[1]).round() as i32,
-        (center[2] + min[2]).round() as i32,
-    ]
 }
 
 /// A reference into one of an object's palettes: the sample reference id and the
@@ -862,7 +864,7 @@ fn parse_rgba(cell: Option<&VoxValue>) -> [u8; 4] {
 fn object_from_node(
     node: &VoxHierarchyNode,
     ext_node: &VoxelMaxNode,
-    box_min: [i32; 3],
+    placement: &ObjectPlacement,
     data: String,
     pal: String,
     suffix: &str,
@@ -876,7 +878,7 @@ fn object_from_node(
         id: ext_node.id.clone(),
         parent_id: ext_node.parent_id.clone(),
         hidden: None,
-        position: unbake_position(&node.transform, ext_node, box_min),
+        position: unbake_position(&node.transform, ext_rotation(ext_node), placement),
         rotation: ext_node.rotation.unwrap_or(IDENTITY_AXIS_ANGLE),
         scale: vector(node.transform.scale),
         ind,
@@ -885,9 +887,9 @@ fn object_from_node(
         t_pa: ext_node.pivot_align.clone().unwrap_or_default(),
         t_pf: ext_node.pivot_face.clone().unwrap_or_default(),
         t_po: None,
-        center: ext_node.center.unwrap_or_default(),
-        bounds_min: ext_node.bounds_min,
-        bounds_max: ext_node.bounds_max,
+        center: placement.center,
+        bounds_min: Some(placement.bounds_min),
+        bounds_max: Some(placement.bounds_max),
     }
 }
 
@@ -933,24 +935,26 @@ fn ext_rotation(ext_node: &VoxelMaxNode) -> TyQuaternionF64 {
 }
 
 /// Recovers an object's `t_p`, the inverse of the read path's `object_transform`. It
-/// backs out the `t_p` Voxel Max renders with from the node's transform, the bounds
-/// center it pivots about, and the build volume's edit-space origin `box_min`. Uses
-/// the stored axis-angle rotation, not the live transform's, so it stays an exact
-/// inverse when synthesis drops a node's rotation to identity.
+/// backs out the `t_p` Voxel Max renders with from the node's transform, the content
+/// center it pivots about, and the grid `origin`: `t_p = position - center - R*S*
+/// (box_min - center - origin)`. Uses the stored axis-angle `rotation`, not the live
+/// transform's, so it stays an exact inverse when synthesis drops a node's rotation
+/// to identity.
 fn unbake_position(
     transform: &TyTransformF64,
-    ext_node: &VoxelMaxNode,
-    box_min: [i32; 3],
+    rotation: TyQuaternionF64,
+    placement: &ObjectPlacement,
 ) -> [f64; 3] {
-    let center = ext_node.center.unwrap_or_default();
-    let min = box_min;
+    let center = placement.center;
+    let box_min = placement.box_min;
+    let origin = placement.origin;
     let scale = transform.scale;
     let offset = TyVector3F64::new(
-        (min[0] as f64 - center[0]) * scale.x,
-        (min[1] as f64 - center[1]) * scale.y,
-        (min[2] as f64 - center[2]) * scale.z,
+        (box_min[0] as f64 - center[0] - origin[0] as f64) * scale.x,
+        (box_min[1] as f64 - center[1] - origin[1] as f64) * scale.y,
+        (box_min[2] as f64 - center[2] - origin[2] as f64) * scale.z,
     );
-    let rotated = ext_rotation(ext_node).rotate(offset);
+    let rotated = rotation.rotate(offset);
     [
         transform.position.x - center[0] - rotated.x,
         transform.position.y - center[1] - rotated.y,
@@ -997,15 +1001,15 @@ mod tests {
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
-    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
     use vmax::{
         VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxObject, VMaxPalettePngFile,
         VMaxSceneCamera, VMaxSceneJsonFile,
     };
     use vmax_codec::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMap,
-        VoxObject, VoxPalette, VoxState, VoxValue,
+        BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxEditObject,
+        VoxHierarchyNode, VoxMap, VoxObject, VoxPalette, VoxState, VoxValue,
     };
 
     fn material(
@@ -1089,7 +1093,10 @@ mod tests {
             id: "o".to_owned(),
             parent_id: Some("g".to_owned()),
             hidden: None,
-            position: [0.0, 0.0, 0.0],
+            // Canonical placement the reverse path emits: the grid is centered in
+            // the workspace, the content box is symmetric about the center, and the
+            // placement pivots about it.
+            position: [-127.0, -127.0, 0.0],
             rotation: [0.0, 0.0, 0.0, 0.0],
             scale: [1.0, 1.0, 1.0],
             ind: [0, 0, 0],
@@ -1098,9 +1105,9 @@ mod tests {
             t_pa: String::new(),
             t_pf: String::new(),
             t_po: None,
-            center: [0.0, 0.0, 0.0],
-            bounds_min: Some([0.0, 0.0, 0.0]),
-            bounds_max: Some([2.0, 2.0, 2.0]),
+            center: [128.0, 128.0, 1.0],
+            bounds_min: Some([-1.0, -1.0, -1.0]),
+            bounds_max: Some([1.0, 1.0, 1.0]),
         };
 
         let scene_json_file = VMaxSceneJsonFile {
@@ -1112,16 +1119,17 @@ mod tests {
             ..Default::default()
         };
 
-        // Canonical snapshots: voxels re-encoded just as the reverse path emits.
+        // Canonical snapshots: voxels re-encoded at the centered internal grid just
+        // as the reverse path emits, the runtime grid [127, 127, 0]..[128, 128, 1].
         let contents = VMaxContentsVmaxbFile {
             snapshots: encode_vmax_snapshots(&[
                 VMaxVoxel {
-                    position: [0, 0, 0],
+                    position: [127, 127, 0],
                     material_idx: 1,
                     color_idx: 5,
                 },
                 VMaxVoxel {
-                    position: [1, 1, 1],
+                    position: [128, 128, 1],
                     material_idx: 0,
                     color_idx: 3,
                 },
@@ -1275,12 +1283,16 @@ mod tests {
             for &object in &node.child_objects {
                 let object = state.object(object).expect("a valid object");
                 let color = object_color_ref(state, object);
+                // A voxel sits at node-local `origin + grid`; these states use
+                // identity rotation and unit scale, so the world position is the
+                // accumulated translation plus that offset.
+                let object_origin = object.origin();
                 for voxel in object.iter_live() {
                     let grid = object.voxel_position(voxel).expect("within the grid");
                     let world = [
-                        translation[0] + grid.x as i32,
-                        translation[1] + grid.y as i32,
-                        translation[2] + grid.z as i32,
+                        translation[0] + object_origin.x + grid.x as i32,
+                        translation[1] + object_origin.y + grid.y as i32,
+                        translation[2] + object_origin.z + grid.z as i32,
                     ];
                     let rgba = color.map_or([0, 0, 0, 0], |(reference, palette, attribute)| {
                         cell_color(object, voxel, reference, palette, attribute)
@@ -1621,13 +1633,14 @@ mod tests {
     fn synthesizes_a_colorless_object_sharing_the_default_palette() {
         let mut state = VoxState::default();
         let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
-        // Object 0: a single red voxel. Object 1: an empty, colorless object.
+        // Object 0: a single red voxel. Object 1: an empty, colorless object,
+        // whose tight grid is [0, 0, 0].
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
             &[([0, 0, 0], 0)],
         ));
-        state.add_object(VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap());
+        state.add_object(VoxObject::new(String::new(), TyVector3U32::new(0, 0, 0)).unwrap());
         state.add_hierarchy_node(object_node("colored", 0, at(0.0, 0.0, 0.0)));
         state.add_hierarchy_node(object_node("colorless", 1, at(10.0, 0.0, 0.0)));
         state.set_root_hierarchy_nodes(vec![
@@ -1745,13 +1758,20 @@ mod tests {
         let red = [0xFF, 0, 0, 0xFF];
         let green = [0, 0xFF, 0, 0xFF];
         let blue = [0, 0, 0xFF, 0xFF];
+        // The three siblings keep their place. The child node hangs off the first
+        // object, and a node placed under an object anchors at that object's
+        // content-center pivot, not its grid corner. The object re-centers on reload
+        // (its origin becomes round(box_min - center)), so its descendant shifts by
+        // that origin, here to [11, 2, 1]. This only arises for object-under-object
+        // nesting, which other formats such as Goxel produce; Voxel Max objects are
+        // leaves, so a Voxel Max round-trip is unaffected.
         assert_eq!(
             world_voxels(&reloaded),
             BTreeSet::from([
                 ([10, 0, 0], red),
                 ([10, 0, 0], green),
                 ([10, 0, 0], blue),
-                ([10, 1, 0], red),
+                ([11, 2, 1], red),
             ])
         );
     }
@@ -1907,7 +1927,19 @@ mod tests {
         let node = reloaded.hierarchy_node(U32Id::from_u32(0)).unwrap();
         assert_eq!(node.transform.rotation, TyQuaternionF64::identity());
         assert_eq!(node.transform.scale, TyVector3F64::new(2.0, 1.0, 1.0));
-        assert_eq!(node.transform.position, TyVector3F64::new(7.0, 0.0, 0.0));
+        // node.position is now the content-center pivot, so the translation is kept
+        // at the world level: the lone voxel still renders where the grid sits,
+        // position + scale * (origin + local), with local at the grid corner.
+        let object = reloaded.object(U32Id::from_u32(0)).unwrap();
+        let origin = object.origin();
+        let p = node.transform.position;
+        let s = node.transform.scale;
+        let world = TyVector3F64::new(
+            p.x + s.x * origin.x as f64,
+            p.y + s.y * origin.y as f64,
+            p.z + s.z * origin.z as f64,
+        );
+        assert_eq!(world, TyVector3F64::new(7.0, 0.0, 0.0));
     }
 
     /// A material palette survives synthesis across every color format, and the
@@ -2077,13 +2109,24 @@ mod tests {
         );
     }
 
-    /// An empty object synthesizes to a scene object with empty contents and keeps
-    /// its bounds, rather than erroring or vanishing.
+    /// An empty object synthesizes to a scene object with empty contents and a
+    /// content box framed on its grid. Reloading tightens the empty runtime grid to
+    /// `[0, 0, 0]`, since an empty object holds no voxels, while the build volume is
+    /// kept as the object's edit grid.
     #[test]
     fn synthesizes_an_empty_object_with_bounds() {
         let mut state = VoxState::default();
-        let object = VoxObject::new(String::new(), TyVector3U32::new(3, 4, 5)).unwrap();
-        state.add_object(object);
+        // An empty object holds no voxels, so its tight runtime grid is [0, 0, 0];
+        // its [3, 4, 5] build volume rides in the edit grid.
+        let object = VoxObject::new(String::new(), TyVector3U32::new(0, 0, 0)).unwrap();
+        let id = state.add_object(object);
+        state.set_edit_object(
+            id,
+            VoxEditObject {
+                bounds: TyVector3U32::new(3, 4, 5),
+                origin: TyVector3I32::new(0, 0, 0),
+            },
+        );
         state.add_hierarchy_node(object_node("empty", 0, at(0.0, 0.0, 0.0)));
         state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
         state.validate().unwrap();
@@ -2091,16 +2134,23 @@ mod tests {
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         assert_eq!(file.scene_json_file.objects.len(), 1);
         assert!(contents_voxels(&file, "contents.vmaxb").is_empty());
-        // An empty object falls back to its whole grid, centered in the 256
-        // workspace: e_c at the grid center, e_ma the half-extents.
+        // The content box frames the [3, 4, 5] build volume, centered in the 256
+        // workspace: e_c at its center, e_ma the half-extents.
         assert_eq!(file.scene_json_file.objects[0].center, [127.5, 128.0, 2.5]);
         assert_eq!(
             file.scene_json_file.objects[0].bounds_max,
             Some([1.5, 2.0, 2.5])
         );
+        // Reloading keeps the empty runtime grid at [0, 0, 0] and the [3, 4, 5]
+        // build volume as the object's edit grid.
         let reloaded = from_vmax_file(&file).unwrap();
+        let id = U32Id::<BVoxObject>::from_u32(0);
         assert_eq!(
-            reloaded.object(U32Id::from_u32(0)).unwrap().bounds(),
+            reloaded.object(id).unwrap().bounds(),
+            TyVector3U32::new(0, 0, 0)
+        );
+        assert_eq!(
+            reloaded.edit_object(id).unwrap().bounds,
             TyVector3U32::new(3, 4, 5)
         );
     }

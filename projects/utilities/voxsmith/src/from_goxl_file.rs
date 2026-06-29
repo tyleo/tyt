@@ -1,6 +1,6 @@
 use crate::{
     Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer, GoxelLight,
-    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, to_vox_value,
+    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, tighten, to_vox_value,
 };
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
@@ -29,7 +29,11 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxState> {
     let palette_id = state.add_palette(palette);
 
     for block in &file.blocks {
-        state.add_object(build_object(block, palette_id, &cells));
+        // A Goxel block is a fixed 16-cube; the runtime object is tight, with the
+        // block grid kept as the object's edit grid (build volume).
+        let (object, edit) = tighten(&build_object(block, palette_id, &cells));
+        let id = state.add_object(object);
+        state.set_edit_object(id, edit);
     }
 
     let nodes = build_layer_nodes(file, state.object_count())?;

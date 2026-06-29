@@ -1,5 +1,6 @@
 use crate::{
     GoxelExtWrapper, GoxelLayer, Result, cell_color, ext_for, from_vox_value, object_color_ref,
+    untighten,
 };
 use branded_id::U32Id;
 use goxl::{
@@ -36,9 +37,19 @@ pub fn to_goxl_file(state: &VoxState) -> Result<GoxlFile> {
     // object; the colors live in its cells.
     let palette = state.iter_palettes().next().map(|(_, palette)| palette);
 
+    // The runtime grid is tight; restore each object's source 16-cube (its edit
+    // grid) so a block fills the fixed Goxel block size at the original positions.
     let blocks = state
         .iter_objects()
-        .map(|(_, object)| block_from_object(object, palette))
+        .map(|(id, object)| {
+            let source = untighten(
+                object,
+                state
+                    .edit_object(id)
+                    .expect("a retained object has an edit grid"),
+            );
+            block_from_object(&source, palette)
+        })
         .collect();
 
     Ok(GoxlFile {
@@ -190,6 +201,15 @@ impl GoxlBuilder {
     ) {
         self.placed.insert(object_id.to_u32());
 
+        // Restore the source grid so each voxel sits at its original local
+        // position, which the tight runtime grid offsets by its origin.
+        let source = untighten(
+            object,
+            state
+                .edit_object(object_id)
+                .expect("a retained object has an edit grid"),
+        );
+        let object = &source;
         let color = object_color_ref(state, object);
         let edge = GoxlBlock::SIZE as i32;
         let stride = GoxlBlock::SIZE as usize;

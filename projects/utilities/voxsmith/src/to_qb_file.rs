@@ -1,4 +1,4 @@
-use crate::{Error, QubicleQbExtWrapper, QubicleQbMatrix, Result, from_vox_value};
+use crate::{Error, QubicleQbExtWrapper, QubicleQbMatrix, Result, from_vox_value, untighten};
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
 use voxcore::{
@@ -33,10 +33,20 @@ pub fn to_qb_file(state: &VoxState) -> Result<QbFile> {
     }
 
     let palette = state.iter_palettes().next().map(|(_, palette)| palette);
+    // The runtime grid is tight; restore each object's source grid (its edit grid)
+    // so the written matrix keeps the author's dimensions and voxel positions.
     let matrices = state
         .iter_objects()
         .zip(&ext.matrices)
-        .map(|((_, object), provenance)| matrix_from_object(object, palette, provenance))
+        .map(|((id, object), provenance)| {
+            let source = untighten(
+                object,
+                state
+                    .edit_object(id)
+                    .expect("a retained object has an edit grid"),
+            );
+            matrix_from_object(&source, palette, provenance)
+        })
         .collect::<Result<_>>()?;
 
     Ok(QbFile {

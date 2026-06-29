@@ -1,4 +1,4 @@
-use crate::{Error, QubicleQbtExtWrapper, QubicleQbtNode, Result, from_vox_value};
+use crate::{Error, QubicleQbtExtWrapper, QubicleQbtNode, Result, from_vox_value, untighten};
 use branded_id::U32Id;
 use qbcl::qbt::{
     QbtColor, QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtUnknownNode, QbtVoxel,
@@ -89,7 +89,7 @@ fn rebuild_node(
             pivot,
             masks,
         } => QbtNode::Matrix(matrix_from_object(
-            matrix_object(hierarchy, state)?,
+            &matrix_object(hierarchy, state)?,
             palette,
             name.clone(),
             *position,
@@ -105,7 +105,7 @@ fn rebuild_node(
             masks,
         } => {
             let matrix = matrix_from_object(
-                matrix_object(hierarchy, state)?,
+                &matrix_object(hierarchy, state)?,
                 palette,
                 name.clone(),
                 *position,
@@ -141,15 +141,23 @@ fn rebuild_children(
         .collect()
 }
 
-/// The object a matrix or compound node places, or an error if it has none.
-fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxState) -> Result<&'a VoxObject> {
+/// The source-grid object a matrix or compound node places, or an error if it has
+/// none. The runtime object is tight; its edit grid restores the author's grid so
+/// the written matrix keeps the original dimensions and voxel positions.
+fn matrix_object(hierarchy: &VoxHierarchyNode, state: &VoxState) -> Result<VoxObject> {
     let object_id = *hierarchy
         .child_objects
         .first()
         .ok_or_else(|| Error::invalid("a matrix or compound node has no object"))?;
-    state
+    let object = state
         .object(object_id)
-        .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))
+        .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))?;
+    Ok(untighten(
+        object,
+        state
+            .edit_object(object_id)
+            .expect("a retained object has an edit grid"),
+    ))
 }
 
 /// Rebuilds a matrix grid from an object: each solid voxel's color comes from the

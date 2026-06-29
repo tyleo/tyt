@@ -359,8 +359,8 @@ mod tests {
         assert!(from_voxj_file(&file).is_err());
     }
 
-    /// An object with bounds but no voxels may reference an empty palette: no
-    /// voxel samples it, so it round-trips rather than being rejected.
+    /// A voxelless object (tight bounds `[0, 0, 0]`) may reference an empty
+    /// palette: no voxel samples it, so it round-trips rather than being rejected.
     #[test]
     fn round_trips_empty_palette_referenced_by_voxelless_object() {
         let file = VoxjFile {
@@ -370,7 +370,7 @@ mod tests {
                     objects: vec![object(
                         "empty-ref",
                         vec![0],
-                        [2, 2, 2],
+                        [0, 0, 0],
                         Vec::new(),
                         Vec::new(),
                     )],

@@ -1,6 +1,6 @@
 use crate::{
     Error, QubicleQbclExt, QubicleQbclExtWrapper, QubicleQbclMetadata, QubicleQbclNode,
-    QubicleQbclNodeBody, QubicleQbclThumbnail, Result, to_vox_value,
+    QubicleQbclNodeBody, QubicleQbclThumbnail, Result, tighten, to_vox_value,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMatrix, QbclMetadata, QbclNode, QbclNodeBody};
@@ -69,9 +69,14 @@ fn build_node(
 ) -> Result<U32Id<BVoxHierarchyNode>> {
     let id = match &node.body {
         QbclNodeBody::Matrix(matrix) => {
+            // The matrix grid may carry empty margin; the runtime object is tight,
+            // with the matrix grid kept as the object's edit grid (build volume).
+            // The masks are read from the original grid before tightening.
             let object = build_object(matrix, palette, cells)?;
             let masks = masks_of(&object, matrix);
+            let (object, edit) = tighten(&object);
             let object_id = state.add_object(object);
+            state.set_edit_object(object_id, edit);
             let hierarchy = VoxHierarchyNode {
                 name: node.name.clone(),
                 child_nodes: Vec::new(),
@@ -114,9 +119,14 @@ fn build_node(
             for child in &compound.children {
                 child_nodes.push(build_node(child, state, palette, cells, nodes)?);
             }
+            // The compound grid may carry empty margin; the runtime object is tight,
+            // with the matrix grid kept as the object's edit grid (build volume).
+            // The masks are read from the original grid before tightening.
             let object = build_object(&compound.matrix, palette, cells)?;
             let masks = masks_of(&object, &compound.matrix);
+            let (object, edit) = tighten(&object);
             let object_id = state.add_object(object);
+            state.set_edit_object(object_id, edit);
             let hierarchy = VoxHierarchyNode {
                 name: node.name.clone(),
                 child_nodes,

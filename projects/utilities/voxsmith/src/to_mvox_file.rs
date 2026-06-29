@@ -1,6 +1,6 @@
 use crate::{
     Error, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame, MagicaVoxelNodeBody, Result,
-    cell_color, ext_for, from_vox_value, object_color_ref,
+    cell_color, ext_for, from_vox_value, object_color_ref, untighten,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -42,9 +42,19 @@ pub fn to_mvox_file(state: &VoxState) -> Result<MVoxFile> {
     });
 
     let materials = build_materials(&ext, palette);
+    // The runtime grid is tight; restore each object's source grid (its edit grid)
+    // so the written model keeps the author's dimensions and voxel positions.
     let models = state
         .iter_objects()
-        .map(|(_, object)| model_from_object(object))
+        .map(|(id, object)| {
+            let source = untighten(
+                object,
+                state
+                    .edit_object(id)
+                    .expect("a retained object has an edit grid"),
+            );
+            model_from_object(&source)
+        })
         .collect();
     let scene_nodes = build_scene_nodes(state, &ext)?;
 
@@ -311,7 +321,15 @@ fn synthesize_mvox(state: &VoxState) -> Result<MVoxFile> {
     let (palette, color_index) = synthesize_palette(state);
     let models = state
         .iter_objects()
-        .map(|(_, object)| synthesize_model(state, object, &color_index))
+        .map(|(id, object)| {
+            let source = untighten(
+                object,
+                state
+                    .edit_object(id)
+                    .expect("a retained object has an edit grid"),
+            );
+            synthesize_model(state, &source, &color_index)
+        })
         .collect::<Result<Vec<_>>>()?;
 
     Ok(MVoxFile {

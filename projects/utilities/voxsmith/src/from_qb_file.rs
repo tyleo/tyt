@@ -1,4 +1,6 @@
-use crate::{Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result, to_vox_value};
+use crate::{
+    Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result, tighten, to_vox_value,
+};
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbZAxisOrientation};
 use std::collections::{HashMap, HashSet};
@@ -26,9 +28,14 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxState> {
     let mut matrices = Vec::with_capacity(file.matrices.len());
     let mut roots = Vec::with_capacity(file.matrices.len());
     for matrix in &file.matrices {
+        // The matrix grid may carry empty margin; the runtime object is tight, with
+        // the matrix grid kept as the object's edit grid (build volume). The
+        // visibility bytes are read from the original grid before tightening.
         let object = build_object(matrix, palette_id, &cells)?;
         let visibility = visibility_of(&object, matrix);
+        let (object, edit) = tighten(&object);
         let object_id = state.add_object(object);
+        state.set_edit_object(object_id, edit);
         let node = VoxHierarchyNode {
             name: matrix.name.clone(),
             child_nodes: Vec::new(),

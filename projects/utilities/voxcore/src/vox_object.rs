@@ -16,7 +16,11 @@ pub struct VoxObject {
     /// Display name.
     name: String,
 
-    /// Grid size in voxels.
+    /// Grid size in voxels. The runtime grid is the live voxels' tight extent for
+    /// a Voxel Json document, carrying no empty margin; build-volume margin belongs
+    /// in the object's edit grid
+    /// (see [`VoxState::edit_object`](crate::VoxState::edit_object)). An empty
+    /// object's tight grid is `[0, 0, 0]`.
     bounds: TyVector3U32,
 
     /// Translation from the placing hierarchy node to the grid's min corner, in

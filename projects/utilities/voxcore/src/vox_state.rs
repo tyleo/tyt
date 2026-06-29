@@ -369,13 +369,17 @@ impl VoxState {
     /// 1. every object palette ref resolves, and no object references the same
     ///    palette twice;
     /// 2. every live-voxel sample cell is within its palette's cells;
-    /// 3. every node child node and child object resolves, and no node lists the
+    /// 3. every object's grid is exactly tight around its live voxels: an empty
+    ///    object is `[0, 0, 0]`, else each axis spans the grid from `0` to its
+    ///    bound minus one;
+    /// 4. every object's edit grid contains its runtime grid on each axis;
+    /// 5. every node child node and child object resolves, and no node lists the
     ///    same one twice;
-    /// 4. every root resolves, and no root repeats;
-    /// 5. no palette declares the same attribute key twice;
-    /// 6. every node transform has a non-zero scale on each axis and a unit-length
+    /// 6. every root resolves, and no root repeats;
+    /// 7. no palette declares the same attribute key twice;
+    /// 8. every node transform has a non-zero scale on each axis and a unit-length
     ///    rotation quaternion within `1e-6`;
-    /// 7. the `child_nodes` graph is acyclic.
+    /// 9. the `child_nodes` graph is acyclic.
     ///
     /// A node may have several parents, since the hierarchy is a DAG; that sharing
     /// is not a cycle.
@@ -416,7 +420,19 @@ impl VoxState {
                 }
                 ref_palettes.push((palette_ref_id, palette));
             }
+            // Live-voxel sample cells, and the tight extent of the live voxels.
+            let mut min = [u32::MAX; 3];
+            let mut max = [0u32; 3];
+            let mut live = false;
             for voxel_id in object.iter_live() {
+                live = true;
+                let position = object
+                    .voxel_position(voxel_id)
+                    .expect("a live voxel is within the grid");
+                for (axis, coord) in [position.x, position.y, position.z].into_iter().enumerate() {
+                    min[axis] = min[axis].min(coord);
+                    max[axis] = max[axis].max(coord);
+                }
                 for &(palette_ref_id, palette) in &ref_palettes {
                     let cell = object
                         .voxel_cell(voxel_id, palette_ref_id)
@@ -429,6 +445,41 @@ impl VoxState {
                         });
                     }
                 }
+            }
+
+            // The runtime grid is exactly tight around the live voxels: an empty
+            // object is [0, 0, 0]; otherwise each axis spans the grid fully, from 0
+            // to its bound minus one.
+            let bounds = object.bounds();
+            let grid = [bounds.x, bounds.y, bounds.z];
+            let tight = if live {
+                (0..3).all(|axis| min[axis] == 0 && grid[axis] == max[axis] + 1)
+            } else {
+                grid == [0, 0, 0]
+            };
+            if !tight {
+                return Err(Error::UntightBounds {
+                    object: object_id.to_u32(),
+                });
+            }
+
+            // The edit grid contains the runtime grid on every axis.
+            let edit = self
+                .edit_object(object_id)
+                .expect("a retained object has an edit grid");
+            let origin = object.origin();
+            let edit_origin = [edit.origin.x, edit.origin.y, edit.origin.z];
+            let edit_bounds = [edit.bounds.x, edit.bounds.y, edit.bounds.z];
+            let run_origin = [origin.x, origin.y, origin.z];
+            let contains = (0..3).all(|axis| {
+                edit_origin[axis] <= run_origin[axis]
+                    && i64::from(edit_origin[axis]) + i64::from(edit_bounds[axis])
+                        >= i64::from(run_origin[axis]) + i64::from(grid[axis])
+            });
+            if !contains {
+                return Err(Error::EditGridContainment {
+                    object: object_id.to_u32(),
+                });
             }
         }
 
@@ -612,8 +663,12 @@ mod tests {
         }
     }
 
+    /// A 1x1x1 object with its single voxel live, so its grid is exactly tight.
     fn unit_object(name: &str) -> VoxObject {
-        VoxObject::new(name.to_owned(), TyVector3U32::new(1, 1, 1)).unwrap()
+        let mut object = VoxObject::new(name.to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel, &[]).unwrap();
+        object
     }
 
     /// A palette with one attribute and one cell whose value is `value`.

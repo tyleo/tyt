@@ -15,7 +15,8 @@ const ROTATION_TOLERANCE: f64 = 1e-6;
 /// 2. palette refs, node children, and roots resolve and are each listed at most
 ///    once;
 /// 3. each sample cell indexes a cell of its palette;
-/// 4. voxel positions are unique and within their object's bounds;
+/// 4. voxel positions are unique and within their object's bounds, which are
+///    exactly tight around them;
 /// 5. palettes are rectangular with distinct attribute keys;
 /// 6. node transforms have no zero scale component and a unit-length rotation
 ///    within `1e-6`;
@@ -130,6 +131,8 @@ fn validate_object(index: usize, object: &VoxjObject, palettes: &[VoxjPalette]) 
 
     let [bound_x, bound_y, bound_z] = object.bounds;
     let mut seen_positions = HashSet::with_capacity(decoded.positions.len());
+    let mut min = [u32::MAX; 3];
+    let mut max = [0u32; 3];
     for &[x, y, z] in &decoded.positions {
         if x >= bound_x || y >= bound_y || z >= bound_z {
             return Err(invalid(format!(
@@ -141,6 +144,35 @@ fn validate_object(index: usize, object: &VoxjObject, palettes: &[VoxjPalette]) 
             return Err(invalid(format!(
                 "object {index} repeats voxel position [{x}, {y}, {z}]"
             )));
+        }
+        for (axis, c) in [x, y, z].into_iter().enumerate() {
+            min[axis] = min[axis].min(c);
+            max[axis] = max[axis].max(c);
+        }
+    }
+
+    // The runtime grid is exactly tight: it fits the voxels with no empty margin on
+    // any face. An empty object is [0, 0, 0]; otherwise each axis spans the grid
+    // fully, from 0 to its bound minus one.
+    if decoded.positions.is_empty() {
+        if object.bounds != [0, 0, 0] {
+            return Err(invalid(format!(
+                "object {index} is empty, so its bounds must be [0, 0, 0], \
+                 not [{bound_x}, {bound_y}, {bound_z}]"
+            )));
+        }
+    } else {
+        for (axis, name) in ["x", "y", "z"].into_iter().enumerate() {
+            if min[axis] != 0 || object.bounds[axis] != max[axis] + 1 {
+                return Err(invalid(format!(
+                    "object {index} bounds are not tight on {name}: its voxels span \
+                     [{}, {}], so the bound must be {}, not {}",
+                    min[axis],
+                    max[axis],
+                    max[axis] + 1,
+                    object.bounds[axis]
+                )));
+            }
         }
     }
     Ok(())

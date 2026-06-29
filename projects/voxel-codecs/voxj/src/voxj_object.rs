@@ -15,8 +15,11 @@ pub struct VoxjObject {
     /// resolution order.
     pub palette_refs: Vec<usize>,
 
-    /// `[X, Y, Z]` size in voxels; every voxel lies in
-    /// `[0, X) x [0, Y) x [0, Z)`.
+    /// `[X, Y, Z]` size in voxels, exactly tight around the geometry: every voxel
+    /// lies in `[0, X) x [0, Y) x [0, Z)` and some voxel reaches each end of every
+    /// axis, so the grid carries no empty margin. An empty object is `[0, 0, 0]`;
+    /// build-volume margin lives in the edit grid
+    /// ([`VoxjEditObject`](crate::VoxjEditObject)).
     pub bounds: [u32; 3],
 
     /// `[X, Y, Z]` translation in voxels from the placing hierarchy node to the

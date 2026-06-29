@@ -49,6 +49,12 @@ pub enum Error {
 
     /// A node's transform rotation is not a unit quaternion.
     NonUnitRotation { node: u32 },
+
+    /// An object's grid is not exactly tight around its live voxels.
+    UntightBounds { object: u32 },
+
+    /// An object's edit grid does not contain its runtime grid.
+    EditGridContainment { object: u32 },
 }
 
 impl Display for Error {
@@ -109,6 +115,14 @@ impl Display for Error {
             Error::NonUnitRotation { node } => write!(
                 f,
                 "hierarchy node {node} transform rotation is not a unit quaternion"
+            ),
+            Error::UntightBounds { object } => write!(
+                f,
+                "object {object} bounds are not exactly tight around its live voxels"
+            ),
+            Error::EditGridContainment { object } => write!(
+                f,
+                "object {object} edit grid does not contain its runtime grid"
             ),
         }
     }

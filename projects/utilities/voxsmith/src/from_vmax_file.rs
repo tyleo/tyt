@@ -4,14 +4,14 @@ use crate::{
 };
 use branded_id::U32Id;
 use std::collections::HashMap;
-use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxObject, VMaxSceneJsonFile, VMaxViewBox,
 };
 use vmax_codec::{VMaxVoxel, decode_vmax_snapshots};
 use voxcore::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxObject,
-    VoxPalette, VoxState, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxEditObject, VoxHierarchyNode,
+    VoxObject, VoxPalette, VoxState, VoxValue,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`
@@ -53,23 +53,28 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxState> {
     for object in &scene.objects {
         let key = instance_key(object);
         if let Some(&existing) = key.as_ref().and_then(|key| instances.get(key)) {
-            object_transforms.push(object_transform(object, grid_origin(serde, object)));
+            // An instance shares the geometry it re-places, so it re-derives only
+            // the placing transform from its own content box and pivot.
+            let box_min = authored_box(object).map_or([0, 0, 0], |(box_min, _)| box_min);
+            let origin = pivot_origin(box_min, object.center);
+            object_transforms.push(object_transform(object, box_min, origin));
             object_refs.push(existing);
             continue;
         }
-        let (vox_object, data, transform) = build_object(
+        let (vox_object, edit, data, transform) = build_object(
             serde,
             object,
             &mut state,
             &mut palette_id_by_source,
             &mut palette_names,
         )?;
-        let object_id = state.add_object(vox_object).to_u32() as usize;
+        let object_id = state.add_object(vox_object);
+        state.set_edit_object(object_id, edit);
         object_data.push(data);
         object_transforms.push(transform);
-        object_refs.push(object_id);
+        object_refs.push(object_id.to_u32() as usize);
         if let Some(key) = key {
-            instances.insert(key, object_id);
+            instances.insert(key, object_id.to_u32() as usize);
         }
     }
 
@@ -110,15 +115,16 @@ fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VoxelMaxObjectSta
 }
 
 /// Builds the voxcore object for one scene object, adding any palettes it
-/// introduces to `state`. Returns the object, its backing `data` filename, and
-/// the transform of the node that places it.
+/// introduces to `state`. Returns the object, its edit grid (the author's build
+/// volume), its backing `data` filename, and the transform of the node that
+/// places it.
 fn build_object(
     serde: &VMaxFile,
     object: &VMaxObject,
     state: &mut VoxState,
     palette_id_by_source: &mut HashMap<String, usize>,
     palette_names: &mut Vec<Option<String>>,
-) -> Result<(VoxObject, Option<String>, TyTransformF64)> {
+) -> Result<(VoxObject, VoxEditObject, Option<String>, TyTransformF64)> {
     // Voxels come from decoding the object's snapshot edit-log on the fly.
     let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
         Vec::new()
@@ -126,8 +132,21 @@ fn build_object(
         decode_vmax_snapshots(&serde.contents_files[&object.data].snapshots)?
     };
 
-    let (box_min, bounds) = object_grid(object, view_box(serde, object), &voxels)?;
-    let transform = object_transform(object, box_min);
+    // The runtime grid is exactly tight: the occupied voxel extent, re-based so the
+    // voxels fill it from the origin. An empty object is a degenerate [0, 0, 0] grid
+    // seated at its content box so the placing node still pivots about the recorded
+    // center. `origin` offsets that grid from the node so the node transform pivots
+    // about the content center.
+    let (box_min, bounds) = match min_corner(&voxels) {
+        Some(min) => (min, object_bounds(&voxels, min)),
+        None => (
+            authored_box(object).map_or([0, 0, 0], |(box_min, _)| box_min),
+            [0, 0, 0],
+        ),
+    };
+    let origin = pivot_origin(box_min, object.center);
+    let transform = object_transform(object, box_min, origin);
+    let edit = edit_grid(view_box(serde, object), box_min, origin, bounds);
     let data = (!object.data.is_empty()).then(|| object.data.clone());
 
     let [size_x, size_y, size_z] = bounds;
@@ -142,9 +161,10 @@ fn build_object(
             VoxObject::MAX_GRID_CELLS
         ))
     })?;
+    vox_object.set_origin(TyVector3I32::new(origin[0], origin[1], origin[2]));
 
     if voxels.is_empty() {
-        return Ok((vox_object, data, transform));
+        return Ok((vox_object, edit, data, transform));
     }
 
     let color_palette = color_palette(serde, object, state, palette_id_by_source, palette_names);
@@ -194,7 +214,7 @@ fn build_object(
         })?;
     }
 
-    Ok((vox_object, data, transform))
+    Ok((vox_object, edit, data, transform))
 }
 
 /// Returns the shared color palette id for an object, adding it to `state` on
@@ -430,47 +450,47 @@ fn view_box<'a>(serde: &'a VMaxFile, object: &VMaxObject) -> Option<&'a VMaxView
         .as_ref()
 }
 
-/// The edit-space origin of an object's grid: its build volume's min corner when
-/// present, else its content box origin. The companion to [`object_grid`] for the
-/// instance path, which re-places an object without rebuilding it.
-fn grid_origin(serde: &VMaxFile, object: &VMaxObject) -> [i32; 3] {
-    match view_box(serde, object) {
-        Some(vp) => [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32],
-        None => authored_box(object).map_or([0, 0, 0], |(origin, _)| origin),
-    }
+/// The integer grid `origin`: the min corner offset from the placing node in the
+/// node's local voxel frame. `round(box_min - center)` so the node transform's
+/// position lands on the content center (the pivot); any odd-extent half-voxel
+/// remainder is absorbed by that position, keeping rendering exact.
+fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
+    [
+        (box_min[0] as f64 - center[0]).round() as i32,
+        (box_min[1] as f64 - center[1]).round() as i32,
+        (box_min[2] as f64 - center[2]).round() as i32,
+    ]
 }
 
-/// The re-basing origin and `[X, Y, Z]` grid size for an object. The author's
-/// build volume (`tools.vp`) is the grid when present, so the empty space around
-/// the voxels is kept; otherwise the tight content box is used. Errors if a voxel
-/// lies outside the grid.
-fn object_grid(
-    object: &VMaxObject,
+/// The object's edit grid (the author's build volume `tools.vp`) in the node's
+/// local voxel frame, which must contain the runtime grid. Its `origin` is the
+/// build volume's min corner offset from the node, `vp.min - box_min + origin`;
+/// an object with no build volume takes a zero-margin edit grid equal to its
+/// runtime grid.
+fn edit_grid(
     view_box: Option<&VMaxViewBox>,
-    voxels: &[VMaxVoxel],
-) -> Result<([i32; 3], [u32; 3])> {
-    let Some(vp) = view_box else {
-        return object_box(object, voxels, min_corner(voxels));
-    };
-    let origin = [vp.min[0] as i32, vp.min[1] as i32, vp.min[2] as i32];
-    let size = [
-        (vp.max[0] - vp.min[0] + 1).max(0) as u32,
-        (vp.max[1] - vp.min[1] + 1).max(0) as u32,
-        (vp.max[2] - vp.min[2] + 1).max(0) as u32,
-    ];
-    for v in voxels {
-        if (0..3).any(|k| {
-            let local = v.position[k] - origin[k];
-            local < 0 || local as i64 >= i64::from(size[k])
-        }) {
-            return Err(invalid(format!(
-                "object '{}' has voxel ({}, {}, {}) outside its build volume \
-                 (origin {origin:?}, size {size:?})",
-                object.name, v.position[0], v.position[1], v.position[2]
-            )));
-        }
+    box_min: [i32; 3],
+    origin: [i32; 3],
+    bounds: [u32; 3],
+) -> VoxEditObject {
+    match view_box {
+        Some(vp) => VoxEditObject {
+            bounds: TyVector3U32::new(
+                (vp.max[0] - vp.min[0] + 1).max(0) as u32,
+                (vp.max[1] - vp.min[1] + 1).max(0) as u32,
+                (vp.max[2] - vp.min[2] + 1).max(0) as u32,
+            ),
+            origin: TyVector3I32::new(
+                vp.min[0] as i32 - box_min[0] + origin[0],
+                vp.min[1] as i32 - box_min[1] + origin[1],
+                vp.min[2] as i32 - box_min[2] + origin[2],
+            ),
+        },
+        None => VoxEditObject {
+            bounds: TyVector3U32::new(bounds[0], bounds[1], bounds[2]),
+            origin: TyVector3I32::new(origin[0], origin[1], origin[2]),
+        },
     }
-    Ok((origin, size))
 }
 
 /// The re-basing origin `round(center + bounds_min)` and `[X, Y, Z]` size from an
@@ -490,38 +510,6 @@ fn authored_box(object: &VMaxObject) -> Option<([i32; 3], [u32; 3])> {
     Some((box_min, size))
 }
 
-/// The re-basing origin and `[X, Y, Z]` size for an object. Uses the authored
-/// Voxel Max bounds when present so the encoded bounds match vmax exactly; an
-/// object with no authored bounds falls back to the tight extent of its voxels.
-/// Errors if authored bounds do not enclose every voxel.
-fn object_box(
-    object: &VMaxObject,
-    voxels: &[VMaxVoxel],
-    tight_min: Option<[i32; 3]>,
-) -> Result<([i32; 3], [u32; 3])> {
-    let Some((box_min, size)) = authored_box(object) else {
-        return Ok(match tight_min {
-            Some(tight) => (tight, object_bounds(voxels, tight)),
-            None => ([0, 0, 0], [0, 0, 0]),
-        });
-    };
-    for v in voxels {
-        let local = [
-            v.position[0] - box_min[0],
-            v.position[1] - box_min[1],
-            v.position[2] - box_min[2],
-        ];
-        if (0..3).any(|k| local[k] < 0 || local[k] as i64 >= i64::from(size[k])) {
-            return Err(invalid(format!(
-                "object '{}' has voxel ({}, {}, {}) outside its Voxel Max bounds \
-                 (origin {box_min:?}, size {size:?})",
-                object.name, v.position[0], v.position[1], v.position[2]
-            )));
-        }
-    }
-    Ok((box_min, size))
-}
-
 /// Decodes a stored `[x, y, z, angle]` axis-angle rotation into a quaternion.
 fn axis_angle(rotation: [f64; 4]) -> TyQuaternionF64 {
     let [x, y, z, angle] = rotation;
@@ -533,24 +521,28 @@ fn vec3(v: [f64; 3]) -> TyVector3F64 {
     TyVector3F64::new(v[0], v[1], v[2])
 }
 
-/// The node transform that places an object's voxel-grid origin in model space.
-/// Voxel Max renders a voxel at `t_p + center + R*S*(voxel - center)`, pivoting the
-/// object about its bounds center, so the grid origin lands at
-/// `t_p + center + R*S*(box_min - center)`.
-fn object_transform(object: &VMaxObject, box_min: [i32; 3]) -> TyTransformF64 {
+/// The node transform that places an object so rotating the node pivots its grid
+/// about the content center. Voxel Max renders a voxel at
+/// `t_p + center + R*S*(voxel - center)`, and a voxel is `box_min + local`, which
+/// sits at node-local `origin + local`, so the node position is
+/// `t_p + center + R*S*(box_min - center - origin)`. The bracket is the sub-voxel
+/// remainder `box_min - center - origin`, so the position lands on the pivot and
+/// rendering stays exact for any integer `origin`.
+fn object_transform(object: &VMaxObject, box_min: [i32; 3], origin: [i32; 3]) -> TyTransformF64 {
     let rotation = axis_angle(object.rotation);
     let scale = object.scale;
+    let center = object.center;
     let offset = TyVector3F64::new(
-        (box_min[0] as f64 - object.center[0]) * scale[0],
-        (box_min[1] as f64 - object.center[1]) * scale[1],
-        (box_min[2] as f64 - object.center[2]) * scale[2],
+        (box_min[0] as f64 - center[0] - origin[0] as f64) * scale[0],
+        (box_min[1] as f64 - center[1] - origin[1] as f64) * scale[1],
+        (box_min[2] as f64 - center[2] - origin[2] as f64) * scale[2],
     );
     let rotated = rotation.rotate(offset);
     TyTransformF64::new(
         TyVector3F64::new(
-            object.position[0] + object.center[0] + rotated.x,
-            object.position[1] + object.center[1] + rotated.y,
-            object.position[2] + object.center[2] + rotated.z,
+            object.position[0] + center[0] + rotated.x,
+            object.position[1] + center[1] + rotated.y,
+            object.position[2] + center[2] + rotated.z,
         ),
         rotation,
         vec3(scale),

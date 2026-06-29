@@ -1,6 +1,6 @@
 use crate::{
     Error, QubicleQbclExtWrapper, QubicleQbclNode, QubicleQbclNodeBody, Result, cell_color,
-    ext_for, from_vox_value, object_color_ref,
+    ext_for, from_vox_value, object_color_ref, untighten,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{
@@ -106,7 +106,7 @@ fn rebuild_node(
             pivot,
             masks,
         } => QbclNodeBody::Matrix(matrix_from_object(
-            matrix_object(hierarchy, state)?,
+            &matrix_object(hierarchy, state)?,
             palette,
             *position,
             *pivot,
@@ -118,7 +118,7 @@ fn rebuild_node(
             masks,
         } => {
             let matrix = matrix_from_object(
-                matrix_object(hierarchy, state)?,
+                &matrix_object(hierarchy, state)?,
                 palette,
                 *position,
                 *pivot,
@@ -153,15 +153,23 @@ fn rebuild_children(
         .collect()
 }
 
-/// The object a matrix or compound node places, or an error if it has none.
-fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxState) -> Result<&'a VoxObject> {
+/// The source-grid object a matrix or compound node places, or an error if it has
+/// none. The runtime object is tight; its edit grid restores the author's grid so
+/// the written matrix keeps the original dimensions and voxel positions.
+fn matrix_object(hierarchy: &VoxHierarchyNode, state: &VoxState) -> Result<VoxObject> {
     let object_id = *hierarchy
         .child_objects
         .first()
         .ok_or_else(|| Error::invalid("a matrix or compound node has no object"))?;
-    state
+    let object = state
         .object(object_id)
-        .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))
+        .ok_or_else(|| Error::invalid(format!("object {} does not exist", object_id.to_u32())))?;
+    Ok(untighten(
+        object,
+        state
+            .edit_object(object_id)
+            .expect("a retained object has an edit grid"),
+    ))
 }
 
 /// Rebuilds a matrix grid from an object: each solid voxel's color comes from the
@@ -366,13 +374,29 @@ impl QbclBuilder {
                 transform: QbclModel::DEFAULT_TRANSFORM,
                 children,
             }),
+            // Restore the source grid so the matrix keeps its author dimensions and
+            // voxel positions, which the tight runtime grid offsets by its origin.
             Some((id, object)) if children.is_empty() => {
-                QbclNodeBody::Matrix(self.synthesize_matrix(id, object, world, state))
+                let source = untighten(
+                    object,
+                    state
+                        .edit_object(id)
+                        .expect("a retained object has an edit grid"),
+                );
+                QbclNodeBody::Matrix(self.synthesize_matrix(id, &source, world, state))
             }
-            Some((id, object)) => QbclNodeBody::Compound(QbclCompound {
-                matrix: self.synthesize_matrix(id, object, world, state),
-                children,
-            }),
+            Some((id, object)) => {
+                let source = untighten(
+                    object,
+                    state
+                        .edit_object(id)
+                        .expect("a retained object has an edit grid"),
+                );
+                QbclNodeBody::Compound(QbclCompound {
+                    matrix: self.synthesize_matrix(id, &source, world, state),
+                    children,
+                })
+            }
         };
 
         QbclNode {
@@ -391,6 +415,15 @@ impl QbclBuilder {
         object: &VoxObject,
         world: [i32; 3],
     ) -> QbclNode {
+        // Restore the source grid so the matrix keeps its author dimensions and
+        // voxel positions, which the tight runtime grid offsets by its origin.
+        let source = untighten(
+            object,
+            state
+                .edit_object(object_id)
+                .expect("a retained object has an edit grid"),
+        );
+        let object = &source;
         QbclNode {
             name: object.name().to_owned(),
             body: QbclNodeBody::Matrix(self.synthesize_matrix(object_id, object, world, state)),

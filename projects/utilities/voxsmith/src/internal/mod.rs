@@ -1,5 +1,6 @@
 mod from_vox_value;
 mod goxl;
+mod grid;
 mod mvox;
 mod qb;
 mod qbcl;
@@ -11,6 +12,7 @@ mod voxj;
 
 pub(crate) use from_vox_value::*;
 pub(crate) use goxl::*;
+pub(crate) use grid::*;
 pub(crate) use mvox::*;
 pub(crate) use qb::*;
 pub(crate) use qbcl::*;
