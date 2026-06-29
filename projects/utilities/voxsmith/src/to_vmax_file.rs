@@ -152,8 +152,12 @@ fn default_brush() -> VMaxBrush {
     }
 }
 
-/// Default editor `cam` for a synthesized object, a neutral view at the origin.
-fn default_camera() -> VMaxCamera {
+/// Default editor `cam` for a synthesized object. A single-object document opens
+/// straight into this object-editor view, so the camera must orbit the object's
+/// content, not the corner of its 0..256 internal grid: `target` is the content
+/// center in internal-grid coordinates (the object's `e_c`), matching the rig Voxel
+/// Max writes when it frames the object. The rest is a neutral framed-view rig.
+fn default_camera(target: [f64; 3]) -> VMaxCamera {
     VMaxCamera {
         wa: 0.0,
         ha: 0.1959133446216583,
@@ -164,7 +168,7 @@ fn default_camera() -> VMaxCamera {
         px: 0.0,
         py: 0.0,
         z: 512.0,
-        o: [0.0, 0.0, 0.0],
+        o: target,
     }
 }
 
@@ -301,7 +305,7 @@ pub(crate) fn write_vmax(
                             v: FALLBACK_CONTENT_VERSION,
                             tools: Some(default_tools(placement.view_box.clone())),
                             brush: Some(default_brush()),
-                            cam: Some(default_camera()),
+                            cam: Some(default_camera(placement.center)),
                             pal: None,
                         },
                     };
