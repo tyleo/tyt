@@ -10,9 +10,10 @@ pub struct Mvox {
     #[arg(value_name = "input")]
     input: PathBuf,
 
-    /// The output `.vox` file to write.
+    /// The output `.vox` file to write. Defaults to the input path with a
+    /// `.vox` extension.
     #[arg(value_name = "output")]
-    output: PathBuf,
+    output: Option<PathBuf>,
 
     /// Source format of the input. Inferred from its extension when omitted.
     #[arg(value_name = "from", long)]
@@ -21,6 +22,9 @@ pub struct Mvox {
 
 impl Mvox {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        dependencies.to_mvox(&self.input, self.from, &self.output)
+        let output = self
+            .output
+            .unwrap_or_else(|| self.input.with_extension("vox"));
+        dependencies.to_mvox(&self.input, self.from, &output)
     }
 }

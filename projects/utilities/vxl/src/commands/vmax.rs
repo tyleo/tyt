@@ -10,9 +10,10 @@ pub struct Vmax {
     #[arg(value_name = "input")]
     input: PathBuf,
 
-    /// The output `.vmax` package directory to create.
+    /// The output `.vmax` package directory to create. Defaults to the input
+    /// path with a `.vmax` extension.
     #[arg(value_name = "output")]
-    output: PathBuf,
+    output: Option<PathBuf>,
 
     /// Source format of the input. Inferred from its extension when omitted.
     #[arg(value_name = "from", long)]
@@ -30,10 +31,13 @@ pub struct Vmax {
 
 impl Vmax {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
+        let output = self
+            .output
+            .unwrap_or_else(|| self.input.with_extension("vmax"));
         dependencies.to_vmax(
             &self.input,
             self.from,
-            &self.output,
+            &output,
             self.color_format,
             self.camera,
         )

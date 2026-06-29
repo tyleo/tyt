@@ -10,9 +10,10 @@ pub struct Qbcl {
     #[arg(value_name = "input")]
     input: PathBuf,
 
-    /// The output `.qbcl` file to write.
+    /// The output `.qbcl` file to write. Defaults to the input path with a
+    /// `.qbcl` extension.
     #[arg(value_name = "output")]
-    output: PathBuf,
+    output: Option<PathBuf>,
 
     /// Source format of the input. Inferred from its extension when omitted.
     #[arg(value_name = "from", long)]
@@ -21,6 +22,9 @@ pub struct Qbcl {
 
 impl Qbcl {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        dependencies.to_qbcl(&self.input, self.from, &self.output)
+        let output = self
+            .output
+            .unwrap_or_else(|| self.input.with_extension("qbcl"));
+        dependencies.to_qbcl(&self.input, self.from, &output)
     }
 }

@@ -3,7 +3,7 @@ use crate::{
     VoxjPositionEncoding, VoxjSampleEncoding,
 };
 use clap::{ArgAction, Parser};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Converts a voxel file to the Voxel JSON format.
 #[derive(Clone, Debug, Parser)]
@@ -13,17 +13,19 @@ pub struct Voxj {
     #[arg(value_name = "input")]
     input: PathBuf,
 
-    /// The output `.voxj` or `.voxjz` document to write.
+    /// The output `.voxj` or `.voxjz` document to write. Defaults to the input
+    /// path with a `.voxj` extension, or `.voxjz` when `--format zip`.
     #[arg(value_name = "output")]
-    output: PathBuf,
+    output: Option<PathBuf>,
 
     /// Source format of the input. Inferred from its extension when omitted.
     #[arg(value_name = "from", long)]
     from: Option<Format>,
 
-    /// Output container and printing form.
-    #[arg(value_name = "format", long, default_value = "json")]
-    format: VoxjFormat,
+    /// Output container and printing form. Defaults to compact JSON, or the
+    /// container inferred from the output extension when `--format` is omitted.
+    #[arg(value_name = "format", long)]
+    format: Option<VoxjFormat>,
 
     /// Position-block encoding. When unset it follows `--optimize`, defaulting
     /// to `smallest`. An explicit value pins the block, leaving `--optimize` to
@@ -72,16 +74,28 @@ impl Voxj {
                 .sample_encoding
                 .unwrap_or_else(|| default_sample(self.optimize)),
         };
+        let format = resolve_format(self.format, self.output.as_deref());
+        let output = self
+            .output
+            .unwrap_or_else(|| self.input.with_extension(format.extension()));
         dependencies.to_voxj(
             &self.input,
             self.from,
-            &self.output,
+            &output,
             encoding,
-            self.format,
+            format,
             self.ext,
             self.edit_state,
         )
     }
+}
+
+/// The output container: the explicit `--format`, else the container inferred
+/// from the output path's extension, else the compact JSON default.
+fn resolve_format(format: Option<VoxjFormat>, output: Option<&Path>) -> VoxjFormat {
+    format
+        .or_else(|| output.and_then(VoxjFormat::from_path))
+        .unwrap_or(VoxjFormat::Json)
 }
 
 /// The position encoding an unset `--position-encoding` falls back to, derived
