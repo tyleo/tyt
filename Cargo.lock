@@ -637,7 +637,7 @@ version = "0.1.0"
 
 [[package]]
 name = "goxl-codec"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "goxl",
  "png",
@@ -904,7 +904,7 @@ version = "0.1.0"
 
 [[package]]
 name = "mvox-codec"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "mvox",
 ]
@@ -1119,11 +1119,11 @@ dependencies = [
 
 [[package]]
 name = "qbcl"
-version = "0.1.0"
+version = "0.1.1"
 
 [[package]]
 name = "qbcl-codec"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "flate2",
  "qbcl",
@@ -1605,7 +1605,7 @@ dependencies = [
 
 [[package]]
 name = "ty-math"
-version = "0.1.7"
+version = "0.1.8"
 
 [[package]]
 name = "ty-math-serde"
@@ -1866,7 +1866,7 @@ dependencies = [
 
 [[package]]
 name = "vmax"
-version = "0.1.7"
+version = "0.1.8"
 dependencies = [
  "serde",
  "serde_bytes",
@@ -1875,7 +1875,7 @@ dependencies = [
 
 [[package]]
 name = "vmax-codec"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "lzfse",
  "plist",
@@ -1886,7 +1886,7 @@ dependencies = [
 
 [[package]]
 name = "voxcore"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "branded-id",
  "ty-math",
@@ -1894,14 +1894,14 @@ dependencies = [
 
 [[package]]
 name = "voxj"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "voxj-codec"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64",
  "flate2",
@@ -1911,7 +1911,7 @@ dependencies = [
 
 [[package]]
 name = "voxsmith"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "branded-id",
  "goxl",
