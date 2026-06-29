@@ -1,4 +1,4 @@
-use crate::{CameraView, ColorFormat, Format, Result, VoxjEncoding, VoxjFormat};
+use crate::{CameraView, ColorFormat, EditState, Format, Result, VoxjEncoding, VoxjFormat};
 use std::path::Path;
 
 /// Dependencies for this crate's operations.
@@ -37,6 +37,8 @@ pub trait Dependencies {
     /// extension when `None`. `encoding` selects the per-object block encodings
     /// and `format` the output container and printing form. When `ext` is false,
     /// the user-defined `ext` extension block is omitted from the output.
+    /// `edit_state` selects when each object's editor build volume is recorded.
+    #[allow(clippy::too_many_arguments)]
     fn to_voxj(
         &self,
         input: &Path,
@@ -45,5 +47,6 @@ pub trait Dependencies {
         encoding: VoxjEncoding,
         format: VoxjFormat,
         ext: bool,
+        edit_state: EditState,
     ) -> Result<()>;
 }

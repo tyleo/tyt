@@ -66,7 +66,10 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_voxj_bytes, from_voxj_file, to_voxj_bytes, to_voxj_file, to_voxjz_bytes};
+    use crate::{
+        EditStateMode, VoxjFileBuilder, from_voxj_bytes, from_voxj_file, to_voxj_bytes,
+        to_voxj_file, to_voxjz_bytes,
+    };
     use branded_id::U32Id;
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
     use voxcore::{BVoxObject, BVoxPalette};
@@ -289,6 +292,107 @@ mod tests {
         };
         let state = from_voxj_file(&file).unwrap();
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
+    }
+
+    /// The builder's defaults reproduce the document [`to_voxj_file`] writes.
+    #[test]
+    fn builder_default_matches_to_voxj_file() {
+        let state = from_voxj_file(&sample_file()).unwrap();
+        assert_file_eq(
+            &VoxjFileBuilder::new(&state).build().unwrap(),
+            &to_voxj_file(&state).unwrap(),
+        );
+    }
+
+    /// `EditStateMode::Always` records the edit state even when every object is
+    /// already tight, one entry per object holding its build volume.
+    #[test]
+    fn always_records_edit_state_when_tight() {
+        let state = from_voxj_file(&sample_file()).unwrap();
+        // Auto omits it: every object in the fixture is already tight.
+        assert_eq!(to_voxj_file(&state).unwrap().main.edit_state, None);
+
+        let file = VoxjFileBuilder::new(&state)
+            .edit_state(EditStateMode::Always)
+            .build()
+            .unwrap();
+        assert_eq!(
+            file.main.edit_state,
+            Some(VoxjEditState {
+                objects: vec![
+                    VoxjEditObject {
+                        bounds: [4, 4, 4],
+                        origin: [0, 0, 0],
+                    },
+                    VoxjEditObject {
+                        bounds: [2, 1, 1],
+                        origin: [0, 0, 0],
+                    },
+                    VoxjEditObject {
+                        bounds: [3, 1, 2],
+                        origin: [0, 0, 0],
+                    },
+                ],
+            })
+        );
+    }
+
+    /// `EditStateMode::Never` drops the edit state even when an object carries
+    /// margin, so its build volume is not recorded.
+    #[test]
+    fn never_discards_edit_state_with_margin() {
+        let file = VoxjFile {
+            version: 1,
+            main: VoxjMain {
+                runtime_state: VoxjRuntimeState {
+                    objects: vec![object(
+                        "o",
+                        vec![0],
+                        [2, 1, 1],
+                        vec![[0, 0, 0], [1, 0, 0]],
+                        vec![vec![0], vec![1]],
+                    )],
+                    palettes: vec![VoxjPalette {
+                        attributes: vec!["rgba".to_owned()],
+                        data: numbered_cells(2),
+                    }],
+                    hierarchy_nodes: Vec::new(),
+                    root_hierarchy_nodes: Vec::new(),
+                },
+                edit_state: Some(VoxjEditState {
+                    objects: vec![VoxjEditObject {
+                        bounds: [4, 2, 2],
+                        origin: [-1, 0, 0],
+                    }],
+                }),
+                ext: None,
+            },
+        };
+        let state = from_voxj_file(&file).unwrap();
+        // Auto would emit it, since the object carries margin.
+        assert!(to_voxj_file(&state).unwrap().main.edit_state.is_some());
+
+        let got = VoxjFileBuilder::new(&state)
+            .edit_state(EditStateMode::Never)
+            .build()
+            .unwrap();
+        assert_eq!(got.main.edit_state, None);
+    }
+
+    /// `ext(false)` drops the user-defined ext block; the default keeps it.
+    #[test]
+    fn ext_false_drops_the_ext_block() {
+        let state = from_voxj_file(&sample_file()).unwrap();
+        assert!(
+            VoxjFileBuilder::new(&state)
+                .build()
+                .unwrap()
+                .main
+                .ext
+                .is_some()
+        );
+        let dropped = VoxjFileBuilder::new(&state).ext(false).build().unwrap();
+        assert_eq!(dropped.main.ext, None);
     }
 
     #[test]

@@ -5,7 +5,8 @@
 //! voxcore's [`VoxMain`](voxcore::VoxMain) is the in-memory hub for every voxel
 //! format this crate handles. For Voxel Json it converts both at the document
 //! level ([`from_voxj_file`] / [`to_voxj_file`], with
-//! [`to_voxj_file_with`] for a fixed block encoding) and straight to
+//! [`VoxjFileBuilder`] for control over the block encoding, ext block, and edit
+//! state) and straight to
 //! and from `.voxj` / `.voxjz` bytes ([`from_voxj_bytes`],
 //! [`to_voxj_bytes`], [`to_voxjz_bytes`]). For Voxel Max it
 //! converts to and from the
@@ -28,6 +29,7 @@
 mod internal;
 pub(crate) use internal::*;
 
+mod edit_state_mode;
 mod error;
 mod from_goxl_bytes;
 mod from_goxl_file;
@@ -58,12 +60,13 @@ mod to_vmax_file;
 mod to_voxj_bytes;
 mod to_voxj_bytes_with;
 mod to_voxj_file;
-mod to_voxj_file_with;
 mod to_voxjz_bytes;
 mod to_voxjz_bytes_with;
 mod vmax_file_builder;
 mod voxel_max_color_format;
+mod voxj_file_builder;
 
+pub use edit_state_mode::*;
 pub use error::*;
 pub use from_goxl_bytes::*;
 pub use from_goxl_file::*;
@@ -94,11 +97,11 @@ pub use to_vmax_file::*;
 pub use to_voxj_bytes::*;
 pub use to_voxj_bytes_with::*;
 pub use to_voxj_file::*;
-pub use to_voxj_file_with::*;
 pub use to_voxjz_bytes::*;
 pub use to_voxjz_bytes_with::*;
 pub use vmax_file_builder::*;
 pub use voxel_max_color_format::*;
+pub use voxj_file_builder::*;
 
 // Re-exported so callers can name the camera passed to `SceneCameraSource::Camera`.
 pub use vmax::VMaxSceneCamera;

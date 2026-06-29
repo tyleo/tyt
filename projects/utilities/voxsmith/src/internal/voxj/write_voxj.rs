@@ -1,6 +1,7 @@
 use crate::{
-    Result, voxj_decoded_object_from_vox_object, voxj_hierarchy_node_from_vox_hierarchy_node,
-    voxj_palette_from_vox_palette, voxj_value_from_vox_value,
+    EditStateMode, Result, voxj_decoded_object_from_vox_object,
+    voxj_hierarchy_node_from_vox_hierarchy_node, voxj_palette_from_vox_palette,
+    voxj_value_from_vox_value,
 };
 use ty_math::TyVector3U32;
 use voxcore::{VoxMain, VoxObject};
@@ -12,17 +13,23 @@ use voxj_codec::{
 
 /// The voxj format version stamped on documents written from a [`VoxMain`],
 /// which does not itself carry a version.
-pub(crate) const VOXJ_FORMAT_VERSION: u32 = 1;
+const VOXJ_FORMAT_VERSION: u32 = 1;
 
-/// Builds a [`VoxjFile`] from a [`VoxMain`], encoding each object's geometry
-/// with `encoding` (a fixed position/sample pair) or, when `None`, the smallest
-/// per-object block encodings. The shared step behind the `.voxj` and `.voxjz`
-/// writers and the fixed/smallest entry points. Objects, palettes, and hierarchy
-/// nodes are emitted in id order, so each lands at its original array index and
-/// the cross references carry over unchanged.
-pub(crate) fn to_voxj_file_with_encoding(
+/// Builds a [`VoxjFile`] from a [`VoxMain`], the workhorse behind
+/// [`to_voxj_file`](crate::to_voxj_file) and
+/// [`VoxjFileBuilder`](crate::VoxjFileBuilder).
+///
+/// Each object's geometry is encoded with `encoding`, a fixed position/sample
+/// pair, or the smallest per-object block encodings when `None`. When `ext` is
+/// false the user-defined ext block is dropped. `edit_state` selects when each
+/// object's build volume is recorded. Objects, palettes, and hierarchy nodes are
+/// emitted in id order, so each lands at its original array index and the cross
+/// references carry over unchanged.
+pub(crate) fn write_voxj(
     state: &VoxMain,
     encoding: Option<(PositionEncoding, SampleEncoding)>,
+    ext: bool,
+    edit_state: EditStateMode,
 ) -> Result<VoxjFile> {
     let palettes = state
         .iter_palettes()
@@ -55,10 +62,8 @@ pub(crate) fn to_voxj_file_with_encoding(
         .collect();
 
     // Editor state, aligned by index with the objects. Each entry is the object's
-    // build volume; emitted only when some object carries margin around its live
-    // voxels, since an already-tight object recreates its build volume on load.
-    let any_margin = state.iter_objects().any(|(_, object)| !is_tight(object));
-    let edit_state = any_margin.then(|| VoxjEditState {
+    // build volume, recorded when `edit_state` calls for it.
+    let edit_state = emit_edit_state(state, edit_state).then(|| VoxjEditState {
         objects: state
             .iter_objects()
             .map(|(_, object)| {
@@ -72,7 +77,11 @@ pub(crate) fn to_voxj_file_with_encoding(
             .collect(),
     });
 
-    let ext = state.ext().map(voxj_value_from_vox_value);
+    let ext = if ext {
+        state.ext().map(voxj_value_from_vox_value)
+    } else {
+        None
+    };
 
     Ok(VoxjFile {
         version: VOXJ_FORMAT_VERSION,
@@ -87,6 +96,17 @@ pub(crate) fn to_voxj_file_with_encoding(
             ext,
         },
     })
+}
+
+/// Whether the document records editor build volumes under `mode`. Auto records
+/// them only when some object carries margin around its live voxels, since an
+/// already-tight object recreates its build volume on load.
+fn emit_edit_state(state: &VoxMain, mode: EditStateMode) -> bool {
+    match mode {
+        EditStateMode::Always => true,
+        EditStateMode::Never => false,
+        EditStateMode::Auto => state.iter_objects().any(|(_, object)| !is_tight(object)),
+    }
 }
 
 /// Whether an object's build volume already equals its tight runtime grid, so it

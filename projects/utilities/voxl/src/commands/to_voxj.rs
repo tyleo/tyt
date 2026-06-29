@@ -1,6 +1,6 @@
 use crate::{
-    Dependencies, Format, Result, VoxjEncoding, VoxjFormat, VoxjOptimize, VoxjPositionEncoding,
-    VoxjSampleEncoding,
+    Dependencies, EditState, Format, Result, VoxjEncoding, VoxjFormat, VoxjOptimize,
+    VoxjPositionEncoding, VoxjSampleEncoding,
 };
 use clap::{ArgAction, Parser};
 use std::path::PathBuf;
@@ -59,6 +59,12 @@ pub struct ToVoxj {
         action = ArgAction::Set
     )]
     ext: bool,
+
+    /// When to record each object's editor build volume in the document's
+    /// `edit_state`. `auto` records it only when some object carries margin
+    /// around its live voxels.
+    #[arg(value_name = "edit-state", long, default_value = "auto")]
+    edit_state: EditState,
 }
 
 impl ToVoxj {
@@ -85,6 +91,7 @@ impl ToVoxj {
             encoding,
             self.format,
             self.ext,
+            self.edit_state,
         )
     }
 }

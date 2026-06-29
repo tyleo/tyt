@@ -1,5 +1,6 @@
 mod camera_view;
 mod color_format;
+mod edit_state;
 mod format;
 mod voxj_encoding;
 mod voxj_format;
@@ -9,6 +10,7 @@ mod voxj_sample_encoding;
 
 pub use camera_view::*;
 pub use color_format::*;
+pub use edit_state::*;
 pub use format::*;
 pub use voxj_encoding::*;
 pub use voxj_format::*;

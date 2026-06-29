@@ -8,7 +8,7 @@ use voxj_codec::{
     PositionEncoding, SampleEncoding, to_voxj_file_bytes, to_voxj_pretty_file_bytes,
     to_voxjz_file_bytes,
 };
-use voxsmith::{from_vmax_file, to_voxj_file, to_voxj_file_with};
+use voxsmith::{VoxjFileBuilder, from_vmax_file};
 
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
 /// stdout, round-tripping through voxcore: the package is loaded, voxsmith
@@ -48,12 +48,9 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
     // with the chosen block encodings. The `voxel-max` ext carries the
     // provenance with no native voxj home.
     let state = from_vmax_file(&serde)?;
-    let serialized = match encoding {
-        VoxjEncoding::Fixed { position, sample } => {
-            to_voxj_file_with(&state, position_encoding(position), sample_encoding(sample))?
-        }
-        VoxjEncoding::Smallest => to_voxj_file(&state)?,
-    };
+    let serialized = VoxjFileBuilder::new(&state)
+        .encoding(block_encoding(encoding))
+        .build()?;
     let bytes = match format {
         VoxjFormat::Json => to_voxj_file_bytes(&serialized),
         VoxjFormat::PrettyJson => to_voxj_pretty_file_bytes(&serialized),
@@ -63,6 +60,17 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
 
     tyt_injection::write_stdout(&bytes)?;
     Ok(())
+}
+
+/// Maps a CLI encoding choice to a fixed codec encoding pair, or `None` for the
+/// smallest per-object search.
+fn block_encoding(encoding: VoxjEncoding) -> Option<(PositionEncoding, SampleEncoding)> {
+    match encoding {
+        VoxjEncoding::Fixed { position, sample } => {
+            Some((position_encoding(position), sample_encoding(sample)))
+        }
+        VoxjEncoding::Smallest => None,
+    }
 }
 
 /// Maps a CLI position-encoding choice to the voxj codec encoding.

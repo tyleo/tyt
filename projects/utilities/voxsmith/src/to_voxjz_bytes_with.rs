@@ -1,4 +1,4 @@
-use crate::{Result, to_voxj_file_with};
+use crate::{Result, VoxjFileBuilder};
 use voxcore::VoxMain;
 use voxj_codec::{PositionEncoding, SampleEncoding, to_voxjz_file_bytes};
 
@@ -11,6 +11,8 @@ pub fn to_voxjz_bytes_with(
     position: PositionEncoding,
     sample: SampleEncoding,
 ) -> Result<Vec<u8>> {
-    let file = to_voxj_file_with(state, position, sample)?;
+    let file = VoxjFileBuilder::new(state)
+        .encoding(Some((position, sample)))
+        .build()?;
     Ok(to_voxjz_file_bytes(&file)?)
 }

@@ -1,4 +1,6 @@
-use crate::{CameraView, ColorFormat, Dependencies, Format, Result, VoxjEncoding, VoxjFormat};
+use crate::{
+    CameraView, ColorFormat, Dependencies, EditState, Format, Result, VoxjEncoding, VoxjFormat,
+};
 use std::path::Path;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -36,7 +38,8 @@ impl Dependencies for DependenciesImpl {
         encoding: VoxjEncoding,
         format: VoxjFormat,
         ext: bool,
+        edit_state: EditState,
     ) -> Result<()> {
-        super::to_voxj::to_voxj(input, from, output, encoding, format, ext)
+        super::to_voxj::to_voxj(input, from, output, encoding, format, ext, edit_state)
     }
 }
