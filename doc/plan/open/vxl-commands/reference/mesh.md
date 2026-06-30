@@ -24,14 +24,24 @@ is a separate mode left for a later pass.
    extension when omitted.
 2. `--from <format>`: source voxel format. Inferred from the input extension
    when omitted.
-3. `--method` `greedy` | `culled` | `naive` (default `greedy`): meshing
+3. `--scale <meters>` (default `1.0`): the real-world edge length of one voxel
+   in meters, applied as a uniform scale to every output vertex. The voxel-json
+   format is unitless, with one unit per voxel, so `--scale` is where that grid
+   gains a physical size: `1.0` sizes a voxel at one meter, `0.01` at one
+   centimeter, and `0.001` at one millimeter. The size is held constant across
+   mesh formats. `gltf` is meter-native and writes `<meters>` per voxel, while
+   `fbx` is centimeter-native and writes `100 * <meters>` per voxel with the
+   file's unit set to centimeters, so the two open at the same real size. `obj`
+   carries no unit metadata and is written in meters like `gltf`. Scale affects
+   vertex positions only and leaves UVs, normals, and vertex colors unchanged.
+4. `--method` `greedy` | `culled` | `naive` (default `greedy`): meshing
    strategy. `greedy` merges coplanar, same-material faces into the fewest
    quads and has the lowest triangle count. `culled` emits one quad per
    solid-empty boundary face without merging. `naive` emits all six faces of
    every solid voxel, including hidden interior faces, and has the highest
    triangle count. Choose `culled` or `naive` only when you need stable
    per-voxel topology for further per-face editing.
-4. `--vertex-computed-occlusion [true|false]` (default `false`): bakes
+5. `--vertex-computed-occlusion [true|false]` (default `false`): bakes
    occlusion computed from the voxel geometry into the mesh's vertex colors,
    darkening concave junctions. Each face vertex takes its occlusion from the
    three voxels meeting at that corner, giving four discrete levels. The value
@@ -44,24 +54,24 @@ is a separate mode left for a later pass.
    occlusion into a texture instead of vertex colors, use `computed-occlusion`
    under [Material and texture maps](#material-and-texture-maps). Settable
    boolean: bare `--vertex-computed-occlusion` means `true`.
-5. `--computed-occlusion-strength <0..1>` (default `1.0`): scales how much
+6. `--computed-occlusion-strength <0..1>` (default `1.0`): scales how much
    computed occlusion darkens, from `0` for none to `1` for the full effect.
    Applies to both `--vertex-computed-occlusion` and the `computed-occlusion`
    map.
-6. `--computed-occlusion-min-brightness <0..1>` (default `0.0`): floor on the
+7. `--computed-occlusion-min-brightness <0..1>` (default `0.0`): floor on the
    brightness the deepest occlusion reaches, so crevices never darken below it.
    `0` lets occlusion reach black.
-7. `--computed-occlusion-color-space` `linear` | `srgb` (default `linear`): the
+8. `--computed-occlusion-color-space` `linear` | `srgb` (default `linear`): the
    space the occlusion values are written in. `linear` is correct for glTF and
    other PBR data textures; `srgb` matches pipelines that multiply occlusion in
    sRGB space.
-8. `--atlas` `palette` | `unwrap` (default `palette`): material-map atlas layout;
+9. `--atlas` `palette` | `unwrap` (default `palette`): material-map atlas layout;
    see [Material and texture maps](#material-and-texture-maps).
-9. `--select <glob>`: output only objects whose name matches the glob.
+10. `--select <glob>`: output only objects whose name matches the glob.
    Repeatable; the result is the union of every `--select` and `--select-index`
    value. See [Object selectors](conventions.md#object-selectors). Given no
    selector of either kind, every object is output.
-10. `--select-index <index>`: output only objects at the given position, an
+11. `--select-index <index>`: output only objects at the given position, an
    integer or an `a-b` range. Repeatable; unions with `--select` as above. See
    [Object selectors](conventions.md#object-selectors).
 

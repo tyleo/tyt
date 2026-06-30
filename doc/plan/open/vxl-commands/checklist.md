@@ -45,12 +45,16 @@ land.
 ### mesh ([reference/mesh.md](reference/mesh.md))
 
 - [ ] `Mesh` command struct, dispatch, and per-object pure-geometry output.
-- [ ] `--to` / `--from`, `--method`, `--ambient-occlusion`, `--atlas`,
+- [ ] `--to` / `--from`, `--scale` (meters per voxel, default `1.0`;
+      centimeter-native `fbx` writes `100 * scale`), `--method`,
+      `--vertex-computed-occlusion` with `--computed-occlusion-strength`,
+      `--computed-occlusion-min-brightness`, and
+      `--computed-occlusion-color-space`, `--atlas`,
       `--select` / `--select-index`.
 - [ ] Material maps: `--texture <name> [path]` presets (albedo, orm,
       metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
-      roughness, smoothness) and `--texture-map <path> <channels>`, default
-      paths from the mesh stem.
+      computed-occlusion, roughness, smoothness) and `--texture-map <path>
+      <channels>`, default paths from the mesh stem.
 - [ ] `Dependencies::mesh` and its impl.
 
 ### material ([reference/material.md](reference/material.md))
