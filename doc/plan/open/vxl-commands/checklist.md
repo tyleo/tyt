@@ -27,7 +27,8 @@ land.
       `from_path` extension inference, mirroring `Format::from_path`. Only
       implement `fbx` at first.
 - [ ] Object selector parsers: `--select-index` (integer or `a-b` range) and
-      `--select` name glob, both repeatable, union over all values. See
+      `--select` path glob over each object's hierarchy placement, both
+      repeatable, union over all values. See
       [conventions](reference/conventions.md).
 - [ ] Material-map model: `--atlas` palette (one texel per palette entry,
       shareable) and unwrap (per-mesh UV) layouts; preset packings and the

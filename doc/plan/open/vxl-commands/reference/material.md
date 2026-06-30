@@ -26,8 +26,8 @@ unwrapped per mesh. Either way you can iterate on materials without re-meshing.
    when omitted.
 2. `--atlas` `palette` | `unwrap` (default `palette`): atlas layout, the same as
    `mesh`; see [Material and texture maps](mesh.md#material-and-texture-maps).
-3. `--select <glob>`: restrict the material set to objects whose name matches
-   the glob, the same selector as `mesh`. Repeatable; unions with
+3. `--select <glob>`: restrict the material set to objects whose hierarchy path
+   matches the glob, the same selector as `mesh`. Repeatable; unions with
    `--select-index`. See [Object selectors](conventions.md#object-selectors).
 4. `--select-index <index>`: restrict the material set to objects at the given
    position, an integer or an `a-b` range, the same selector as `mesh`.

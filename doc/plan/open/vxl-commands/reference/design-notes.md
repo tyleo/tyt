@@ -36,10 +36,11 @@ Rationale for the non-obvious choices, for reviewers.
    cannot, such as ambient occlusion in the map instead of vertex colors.
 5. `mesh` outputs objects as pure geometry, narrowed by object selectors. The
    main use is pulling leaf objects out with no transform data, so selection
-   targets objects, by index, the canonical reference, or by name glob, rather
-   than hierarchy nodes. Index and name are separate repeatable options,
-   `--select-index` and `--select`, rather than one option that guesses whether
-   a value is an index or a glob, since a name made only of digits is
+   targets objects, by index, the canonical reference, or by a glob over their
+   hierarchy path, matched as `hierarchy show` matches node paths, rather than
+   baking hierarchy-node subtrees. Index and path are separate repeatable
+   options, `--select-index` and `--select`, rather than one option that guesses
+   whether a value is an index or a glob, since a name made only of digits is
    unaddressable under that guess. They are flags, not positionals, because the
    optional `output` positional is the house convention and trailing optional
    positionals would be ambiguous. Assembling a placed scene from hierarchy

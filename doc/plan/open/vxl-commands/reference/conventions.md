@@ -22,20 +22,38 @@ These hold across the commands and match the existing `to` commands.
    exception is the `--texture-map` channel list, where the comma-separated RGBA
    packing is a single structured value.
 
+## Glob patterns
+
+Globs follow git pathspec rules, not grep substring matching. The
+[`hierarchy show`](hierarchy/show.md) `pattern` and the `--select` object-path
+glob share one rule set:
+
+1. A pattern is a full match against the whole candidate, not a substring. `door`
+   matches the name `door`, not `backdoor`; write `*door*` for a substring match.
+2. `*` and `?` match within a segment and never cross `/`; `**` crosses `/`.
+   `[...]` is a character class.
+3. `**/` is auto-prepended when the pattern does not already start with it, so a
+   bare pattern matches at any depth.
+
 ## Object selectors
 
 [`mesh`](mesh.md) and [`material`](material.md) choose which objects to output
 with two repeatable options, one per addressing mode, so a value is never parsed
-as either an index or a glob. Each matched object is meshed as pure geometry,
-with no hierarchy-node transform.
+as either an index or a glob. Selection targets objects; each matched object is
+meshed as pure geometry with no hierarchy-node transform, so a path is only the
+selection key, not placement.
 
 1. `--select-index <index>`: an object index into the document's `objects`,
    a plain integer such as `0` or a range `a-b` such as `2-5`. Repeat the flag
    to pick several, as in `--select-index 0 --select-index 3`. Index is the
    canonical object reference in the spec.
-2. `--select <glob>`: a glob over object names, where `*`, `?`, and `[...]`
-   match as in a shell. Object names are flat, not paths, and are not guaranteed
-   unique, so a glob may match several objects.
+2. `--select <glob>`: a glob over object paths, matched with the shared
+   [glob rules](#glob-patterns) exactly as [`hierarchy show`](hierarchy/show.md)
+   matches node paths. An object's path is the chain of hierarchy node names from
+   a root down to the object. The graph is a DAG, so an object reached through
+   several parents has one path per placement and a glob selects it when any path
+   matches; an object no node references has just its name as its path. Names are
+   not unique, so a glob may match several objects.
 
 Both options repeat, and every `--select-index` and `--select` value unions its
 matches. Given neither, every object is output.

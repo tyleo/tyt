@@ -67,7 +67,7 @@ is a separate mode left for a later pass.
    sRGB space.
 9. `--atlas` `palette` | `unwrap` (default `palette`): material-map atlas layout;
    see [Material and texture maps](#material-and-texture-maps).
-10. `--select <glob>`: output only objects whose name matches the glob.
+10. `--select <glob>`: output only objects whose hierarchy path matches the glob.
    Repeatable; the result is the union of every `--select` and `--select-index`
    value. See [Object selectors](conventions.md#object-selectors). Given no
    selector of either kind, every object is output.

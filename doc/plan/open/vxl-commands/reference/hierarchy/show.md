@@ -18,7 +18,7 @@ shows its name and its referenced child objects. See
 1. `pattern`: an optional glob matched against node paths. When set, only
    matched nodes and their ancestors print, or only matched nodes with
    `--collapse-ancestors`. `**/` is auto-prepended when the pattern does not
-   already start with it.
+   already start with it. See [Glob patterns](../conventions.md#glob-patterns).
 2. `--show-transforms [space] [rot-unit] [precision]`: prepend each node's
    transform as a nested subtree. `space` is `local` (default) or `world`;
    `rot-unit` is `rad` (default) or `deg`; `precision` is the decimal precision
