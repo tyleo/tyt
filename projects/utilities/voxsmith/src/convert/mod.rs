@@ -1,3 +1,5 @@
+#[cfg(feature = "gltf")]
+mod gltf;
 #[cfg(feature = "goxl")]
 mod goxl;
 #[cfg(feature = "mvox")]
@@ -9,6 +11,8 @@ mod vmax;
 #[cfg(feature = "voxj")]
 mod voxj;
 
+#[cfg(feature = "gltf")]
+pub use gltf::*;
 #[cfg(feature = "goxl")]
 pub use goxl::*;
 #[cfg(feature = "mvox")]

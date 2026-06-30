@@ -23,6 +23,10 @@ mod parse_color_hex;
 #[cfg(feature = "vmax")]
 mod grid;
 
+// Mesh-voxelization internal helpers, gated by the `gltf` feature.
+#[cfg(feature = "gltf")]
+mod gltf;
+
 // Per-codec internal modules.
 #[cfg(feature = "goxl")]
 mod goxl;
@@ -51,6 +55,9 @@ pub(crate) use parse_color_hex::*;
 
 #[cfg(feature = "vmax")]
 pub(crate) use grid::*;
+
+#[cfg(feature = "gltf")]
+pub(crate) use gltf::*;
 
 #[cfg(feature = "goxl")]
 pub(crate) use goxl::*;

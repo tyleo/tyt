@@ -11,7 +11,9 @@ mod to_qbcl;
 mod to_vmax;
 mod to_voxj;
 mod validate;
+mod voxelize;
 mod write_stdout;
+mod write_voxj_document;
 
 pub use dependencies_impl::*;
 pub(crate) use info::*;
@@ -26,4 +28,6 @@ pub(crate) use to_qbcl::*;
 pub(crate) use to_vmax::*;
 pub(crate) use to_voxj::*;
 pub(crate) use validate::*;
+pub(crate) use voxelize::*;
 pub(crate) use write_stdout::*;
+pub(crate) use write_voxj_document::*;

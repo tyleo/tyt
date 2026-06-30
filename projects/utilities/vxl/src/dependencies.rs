@@ -1,6 +1,6 @@
 use crate::{
-    AttributeSelector, CameraView, ColorFormat, EditState, Format, PaletteShowLayout, ReportLayout,
-    Result, VoxjEncoding, VoxjFormat, Width,
+    AttributeSelector, CameraView, ColorFormat, EditState, FillMode, Format, MeshFormat,
+    PaletteShowLayout, ReportLayout, Result, VoxjEncoding, VoxjFormat, Width,
 };
 use std::path::Path;
 
@@ -71,6 +71,35 @@ pub trait Dependencies {
         format: VoxjFormat,
         ext: bool,
         edit_state: EditState,
+    ) -> Result<()>;
+
+    /// Voxelizes the mesh at `input` into a Voxel Json document at `output`,
+    /// reading the mesh extent to size the grid, then rasterizing into it.
+    ///
+    /// # Arguments
+    /// * `input` - the glTF or GLB mesh to read.
+    /// * `from` - source mesh format, inferred from `input`'s extension when
+    ///   `None`.
+    /// * `output` - the `.voxj` or `.voxjz` document to write.
+    /// * `side_length` - grid resolution in voxels along the longest axis.
+    /// * `scale` - meters per voxel, recorded as the placing node's scale.
+    ///   Exactly one of `side_length` and `scale` is set.
+    /// * `fill_mode` - a solid body (flood-filled) or a hollow surface shell.
+    /// * `fill_color` - the straight-RGBA color every filled voxel takes.
+    /// * `encoding` - the per-object block encodings.
+    /// * `format` - the output container and printing form.
+    #[allow(clippy::too_many_arguments)]
+    fn voxelize(
+        &self,
+        input: &Path,
+        from: Option<MeshFormat>,
+        output: &Path,
+        side_length: Option<u32>,
+        scale: Option<f64>,
+        fill_mode: FillMode,
+        fill_color: [u8; 4],
+        encoding: VoxjEncoding,
+        format: VoxjFormat,
     ) -> Result<()>;
 
     /// Reports what the voxel file at `input` contains: a document summary, its

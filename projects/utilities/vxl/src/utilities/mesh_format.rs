@@ -1,12 +1,16 @@
 use clap::ValueEnum;
 use std::path::Path;
 
-/// A mesh file format that vxl can write. Only `fbx` is implemented.
+/// A mesh file format that `mesh` and `voxelize` read or write. glTF is the only
+/// mesh format for now, in its text (`.gltf`) and binary (`.glb`) containers.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum MeshFormat {
-    /// Autodesk FBX, the `.fbx` file.
-    #[value(name = "fbx")]
-    Fbx,
+    /// glTF text, the `.gltf` file.
+    #[value(name = "gltf")]
+    Gltf,
+    /// glTF binary, the `.glb` file.
+    #[value(name = "glb")]
+    Glb,
 }
 
 impl MeshFormat {
@@ -15,7 +19,8 @@ impl MeshFormat {
     pub fn from_path(path: &Path) -> Option<MeshFormat> {
         let extension = path.extension()?.to_str()?.to_ascii_lowercase();
         match extension.as_str() {
-            "fbx" => Some(MeshFormat::Fbx),
+            "gltf" => Some(MeshFormat::Gltf),
+            "glb" => Some(MeshFormat::Glb),
             _ => None,
         }
     }

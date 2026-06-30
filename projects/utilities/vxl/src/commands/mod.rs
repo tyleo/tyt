@@ -10,6 +10,7 @@ mod to_qbcl;
 mod to_vmax;
 mod to_voxj;
 mod validate;
+mod voxelize;
 
 pub use info::*;
 pub use palette::*;
@@ -23,3 +24,4 @@ pub use to_qbcl::*;
 pub use to_vmax::*;
 pub use to_voxj::*;
 pub use validate::*;
+pub use voxelize::*;

@@ -18,6 +18,7 @@ clap_complete = { version = "4.5", optional = true }
 globset = { version = "0.4", optional = true }
 libc = { version = "0.2", optional = true }
 serde_json = { version = "1", features = ["preserve_order"], optional = true }
+ty-math = { version = "0.1.7", optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
 voxcore = { version = "0.1.0", optional = true }
 voxj-codec = { version = "0.1.0", optional = true }
@@ -32,9 +33,11 @@ impl = [
     "dep:globset",
     "dep:libc",
     "dep:serde_json",
+    "dep:ty-math",
     "dep:vmax-codec",
     "dep:voxcore",
     "dep:voxj-codec",
     "dep:voxsmith",
+    "voxsmith/gltf",
 ]
 bin = ["impl", "dep:clap_complete"]

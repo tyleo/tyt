@@ -1,3 +1,5 @@
+#[cfg(feature = "gltf")]
+use gltf::Error as GltfError;
 #[cfg(feature = "goxl")]
 use goxl_codec::Error as GoxlError;
 #[cfg(feature = "mvox")]
@@ -15,11 +17,8 @@ use voxcore::Error as VoxError;
 #[cfg(feature = "voxj")]
 use voxj_codec::Error as VoxjError;
 
-/// An error from voxsmith: voxel data that is malformed, a state that fails
-/// voxcore validation, a Voxel Json document that fails to encode or decode, a
-/// MagicaVoxel `.vox` file that fails to decode, a Voxel Max payload that fails
-/// to decode or encode, a Goxel `.gox` file that fails to decode, or a Qubicle
-/// `.qb` / `.qbt` / `.qbcl` file that fails to decode.
+/// An error from voxsmith: malformed voxel data, a state that fails voxcore
+/// validation, or a codec failure reading or writing a supported format.
 #[derive(Debug)]
 pub enum Error {
     /// Voxel data was readable but semantically malformed.
@@ -47,6 +46,10 @@ pub enum Error {
     /// Decoding a Qubicle `.qb` / `.qbt` / `.qbcl` file failed.
     #[cfg(feature = "qbcl")]
     Qbcl(QbclError),
+
+    /// Reading a glTF or GLB mesh failed.
+    #[cfg(feature = "gltf")]
+    Gltf(GltfError),
 }
 
 impl Error {
@@ -71,6 +74,8 @@ impl Display for Error {
             Error::Goxl(error) => error.fmt(f),
             #[cfg(feature = "qbcl")]
             Error::Qbcl(error) => error.fmt(f),
+            #[cfg(feature = "gltf")]
+            Error::Gltf(error) => error.fmt(f),
         }
     }
 }
@@ -90,6 +95,8 @@ impl StdError for Error {
             Error::Goxl(error) => Some(error),
             #[cfg(feature = "qbcl")]
             Error::Qbcl(error) => Some(error),
+            #[cfg(feature = "gltf")]
+            Error::Gltf(error) => Some(error),
         }
     }
 }
@@ -132,6 +139,13 @@ impl From<GoxlError> for Error {
 impl From<QbclError> for Error {
     fn from(error: QbclError) -> Self {
         Error::Qbcl(error)
+    }
+}
+
+#[cfg(feature = "gltf")]
+impl From<GltfError> for Error {
+    fn from(error: GltfError) -> Self {
+        Error::Gltf(error)
     }
 }
 

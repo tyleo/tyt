@@ -1,4 +1,4 @@
-use crate::commands::{Info, Palette, Validate};
+use crate::commands::{Info, Palette, Validate, Voxelize};
 use crate::{Dependencies, Result, commands::To};
 use clap::Subcommand;
 
@@ -14,6 +14,8 @@ pub enum Vxl {
     To(To),
     #[command(name = "validate")]
     Validate(Validate),
+    #[command(name = "voxelize")]
+    Voxelize(Voxelize),
 }
 
 impl Vxl {
@@ -23,6 +25,7 @@ impl Vxl {
             Vxl::Palette(palette) => palette.execute(dependencies),
             Vxl::To(to) => to.execute(dependencies),
             Vxl::Validate(validate) => validate.execute(dependencies),
+            Vxl::Voxelize(voxelize) => voxelize.execute(dependencies),
         }
     }
 }

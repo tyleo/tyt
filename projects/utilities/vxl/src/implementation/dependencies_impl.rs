@@ -1,6 +1,7 @@
 use crate::{
-    AttributeSelector, CameraView, ColorFormat, Dependencies, EditState, Format, PaletteShowLayout,
-    ReportLayout, Result, VoxjEncoding, VoxjFormat, Width, implementation,
+    AttributeSelector, CameraView, ColorFormat, Dependencies, EditState, FillMode, Format,
+    MeshFormat, PaletteShowLayout, ReportLayout, Result, VoxjEncoding, VoxjFormat, Width,
+    implementation,
 };
 use std::path::Path;
 
@@ -42,6 +43,32 @@ impl Dependencies for DependenciesImpl {
         edit_state: EditState,
     ) -> Result<()> {
         implementation::to_voxj(input, from, output, encoding, format, ext, edit_state)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn voxelize(
+        &self,
+        input: &Path,
+        from: Option<MeshFormat>,
+        output: &Path,
+        side_length: Option<u32>,
+        scale: Option<f64>,
+        fill_mode: FillMode,
+        fill_color: [u8; 4],
+        encoding: VoxjEncoding,
+        format: VoxjFormat,
+    ) -> Result<()> {
+        implementation::voxelize(
+            input,
+            from,
+            output,
+            side_length,
+            scale,
+            fill_mode,
+            fill_color,
+            encoding,
+            format,
+        )
     }
 
     fn info(&self, input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()> {
