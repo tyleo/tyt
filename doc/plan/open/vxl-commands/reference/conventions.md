@@ -14,7 +14,10 @@ These hold across the commands and match the existing `to` commands.
    explicit `--flag false` turns it off, and the option has a default.
 4. Palette addressing is one pair of options everywhere it appears, `--index`
    (default `0`) and `--attribute` (default `rgba`), rather than positional
-   arguments, so optional values never trail required ones.
+   arguments, so optional values never trail required ones. Only the read-only
+   [`palette show`](palette/show.md) extends `--attribute` with the
+   `<key>.component` grammar to read one channel of a color; the mutating
+   `quantize` and `remap` operate on a whole attribute and reject a component.
 5. `--json` is available on the read-only reports: `palette list`,
    `palette show`, `hierarchy show`, `validate`, and `info`.
 6. Multiple values are passed by repeating the flag, as in

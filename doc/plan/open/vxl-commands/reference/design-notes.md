@@ -73,6 +73,19 @@ Rationale for the non-obvious choices, for reviewers.
    Inline `N:` and `.component` qualifiers with no declaration were dropped: they
    cannot carry an explicit type, leaving an ambiguous custom value no home, and
    they give no reusable name.
+9. `palette show` infers the attribute type from the stored value, a `#RRGGBBAA`
+   string for a color and a number for a scalar, where mesh's
+   `--define-attribute` must be told the type. The difference is that `show`
+   reads concrete cells and the value names its own type, while a `--texture-map`
+   packing is compiled before any cell is read and cannot. `--type` stays as an
+   optional override so a preview can assert the same type a `--define-attribute`
+   binding declares and read a custom key exactly as the mesh packing will. The
+   `.component` grammar is reused from `--texture-map`, so `rgba.a` means one
+   thing across show, mesh, and the packings; it is read-only inspection sugar,
+   scoped to show, so the mutating palette commands keep whole-attribute
+   semantics. `swatch` extends to scalars and extracted channels as a grayscale
+   ramp, since a single `0..1` value renders as gray, while `auto` keeps numeric
+   output for scalars and swatches only true colors.
 
 ## Future and nice-to-haves
 
