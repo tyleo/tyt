@@ -83,7 +83,8 @@ the atlas is laid out and how the mesh's UVs index it:
    on the merged material: one texel per combination of layer cells, the product
    of the layer sizes, which stays a pure function of the palette set and so
    stays shareable. The product grows with the layers, so a many-layer object is
-   better served by `unwrap`; a single-layer object is just one texel per cell.
+   better served by `unwrap` or by `--vertex palette-layers`; a single-layer
+   object is just one texel per cell.
 2. `unwrap`: each face takes its own texel from a per-mesh UV unwrap, so the
    atlas is unique to one mesh and larger. Use it for spatially varying data
    that one texel per material cannot hold, such as `computed-occlusion`
@@ -100,6 +101,16 @@ maps and a per-mesh occlusion bake. Under `--atlas unwrap` every map already
 shares the one unwrap set and occlusion is another image on it. The second UV
 set needs a mesh format that stores more than one, which glTF does, so a glTF
 target can pair palette material maps with `computed-occlusion`.
+
+`--texture-storage` `embedded` | `external` | `both` chooses where the images
+go. `external` writes each map as a separate `.png` beside the mesh, the
+`{stem}-mse.png` paths below; `embedded` packs them into the mesh itself, a
+`.glb` binary chunk or a base64 data URI in a `.gltf`; and `both` embeds the
+copy the mesh references and also writes the loose `.png` files. The default
+follows the target, `embedded` for a `.glb` and `external` for a `.gltf`,
+matching how each form carries its other resources. Under `both` the mesh reads
+the embedded copy, so the loose files are working copies to edit and re-bake
+from, which is why a texture-heavy mesh is easier to iterate on as `external`.
 
 Maps come from two flags, each repeatable once per output image: `--texture` for
 the named presets and `--texture-map` for a custom packing.
@@ -217,9 +228,22 @@ The names reuse the texture presets and pack the same way:
 4. `orm`, `mse`, `metallic-roughness`, `metallic-smoothness`: the packed presets,
    into `_ORM`, `_MSE`, and so on, packed across the attribute's components
    exactly as the texture preset packs them across channels. Custom attributes.
-
-Indexed carriers that ship a per-vertex index plus a shared lookup table,
-`palette-index` and `palette-layers`, are deferred; see [Future work](#future-work).
+5. `palette-index`: one index per vertex into a flattened table of the distinct
+   merged materials this mesh uses, written as a scalar into `_PALETTEINDEX` with
+   that table shipped as [palette data](#palette-data). A custom shader looks the
+   material up by index rather than sampling a texture: the most compact carrier
+   and the exact-value alternative to the palette atlas. The table is the used
+   combinations, so it is per-mesh, not shared across meshes. Custom; not read by
+   a generic viewer.
+6. `palette-layers`: one index per referenced palette layer per vertex, written
+   as scalars `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on, with each layer's
+   palette shipped verbatim as [palette data](#palette-data). A custom shader merges the
+   indexed cells the way the spec defines, later layers winning. Its data sums
+   the layer sizes rather than multiplying them and depends only on the palette
+   set, so it stays shareable across meshes and is the compact carrier for a
+   many-layer object; it is also the only carrier that keeps a layer value the
+   merge would otherwise drop. A single-layer object reduces to one
+   `_PALETTEINDEX0` and the one palette. Custom; not read by a generic viewer.
 
 `--vertex-map <target> <channels>` writes a custom packing to a named attribute,
 repeatable, the vertex twin of `--texture-map`. `target` is `COLOR_0` or a custom
@@ -234,6 +258,110 @@ The two carriers compose in one run: write base color to `COLOR_0` and bake PBR
 into a shared palette atlas, or carry everything on vertices for a texture-free
 mesh. `--atlas` sets only the texture layout and never affects vertex attributes.
 
+## Palette data
+
+`--vertex palette-index` and `--vertex palette-layers` write only an index per
+vertex; the table that turns an index into a material is a small block of JSON.
+`--palette-storage` `embedded` | `external` | `both` chooses where it goes:
+
+1. `embedded`: in the glTF document's `extras`, under a `vxl` key, so the table
+   travels inside the `.gltf` or `.glb` and a custom loader reads `extras.vxl`.
+2. `external`: in a sidecar JSON file beside the mesh, the mesh stem plus
+   `-palette.json`, so `model.gltf` pairs with `model-palette.json`. Easier to
+   read and edit on its own.
+3. `both`: write the `extras` block and the sidecar file; the embedded copy is
+   the one a loader should trust, the file a loose working copy.
+
+The default follows the target, `embedded` for a `.glb` and `external` for a
+`.gltf`, the same split as `--texture-storage`. Either way a generic glTF viewer
+ignores the data, since it is not a glTF material; these carriers need a custom
+loader. The sidecar file's top-level object is exactly the value of `extras.vxl`,
+so the two forms carry byte-identical content in different places. Examples below
+are JSONC for readability; a real file is plain JSON.
+
+The top-level `kind` says which carrier wrote it. A material is an object of
+voxel-json
+[attribute](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes)
+keys to values: a color is a `#RRGGBBAA` hex string, a scalar is a number, and an
+omitted attribute takes its spec default, so a material lists only what it sets.
+An unrecognized `version` is rejected.
+
+### `kind: "palette-index"`
+
+`_PALETTEINDEX` on each vertex indexes `materials`, one entry per distinct merged
+material the mesh uses:
+
+```jsonc
+{
+  "version": 1,
+  "kind": "palette-index",
+  "materials": [
+    { "rgba": "#FF0000FF", "roughness": 0.9 }, // index 0
+    { "rgba": "#FF0000FF", "roughness": 0.1 }, // index 1
+    { "rgba": "#0000FFFF", "roughness": 0.1 }  // index 2
+  ]
+}
+```
+
+### `kind: "palette-layers"`
+
+`_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on index `layers[0]`, `layers[1]`, and
+so on in the object's `paletteRefs` order. A custom shader merges the indexed
+cells, a later layer overriding an earlier one on a shared key, the same merge
+the voxel-json format defines:
+
+```jsonc
+{
+  "version": 1,
+  "kind": "palette-layers",
+  "layers": [
+    [ // layer 0 (base), indexed by _PALETTEINDEX0
+      { "rgba": "#FF0000FF", "tint": "#880000FF" },
+      { "rgba": "#0000FFFF", "tint": "#000088FF" }
+    ],
+    [ // layer 1 (finish), indexed by _PALETTEINDEX1
+      { "roughness": 0.9, "tint": "#FFFFFFFF" },
+      { "roughness": 0.1, "tint": "#FFFF00FF" }
+    ]
+  ]
+}
+```
+
+For the three voxels A = (base 0, finish 0), B = (base 0, finish 1), and
+C = (base 1, finish 1), `_PALETTEINDEX0` is `0, 0, 1` and `_PALETTEINDEX1` is
+`0, 1, 1`.
+
+### TypeScript Schema
+
+```typescript
+// The palette data the palette-index and palette-layers vertex carriers write,
+// either in glTF `extras.vxl` or in a `<stem>-palette.json` sidecar; the two
+// carry identical content.
+type PaletteData = PaletteIndexData | PaletteLayersData;
+
+interface PaletteIndexData {
+  version: 1;
+  kind: "palette-index";
+  // _PALETTEINDEX on each vertex indexes this array; one entry per distinct
+  // merged material the mesh uses.
+  materials: Material[];
+}
+
+interface PaletteLayersData {
+  version: 1;
+  kind: "palette-layers";
+  // _PALETTEINDEX0, _PALETTEINDEX1, ... index layers[0], layers[1], ... in the
+  // object's paletteRefs order; a later layer overrides an earlier one on a
+  // shared key.
+  layers: Material[][];
+}
+
+// Attribute keys to values, following the voxel-json Attributes vocabulary: a
+// color is a `#RRGGBBAA` hex string, a scalar is a number. An omitted attribute
+// takes its spec default, so a material lists only what it sets.
+type Material = { [attribute: string]: string | number };
+```
+
 ## Future work
 
 A later pass may add `--computed-occlusion-radius` and
@@ -241,11 +369,3 @@ A later pass may add `--computed-occlusion-radius` and
 occluders out to a distance and weights them by a falloff curve, giving smoother
 and wider gradients. They do not apply to the current discrete corner method,
 which has a fixed one-voxel reach, so they are left out until that model lands.
-
-Indexed palette carriers may also return: `--vertex palette-index` and
-`--vertex palette-layers` would ship a small per-vertex index plus a shared
-lookup table for a custom engine that wants compact indexed material instead of
-baked textures or per-vertex values. They wait on a settled, GPU-friendly table
-format, a glTF binary buffer rather than JSON `extras`, and a multi-layer
-flattening choice; until then `--atlas palette` and the direct `--vertex` value
-presets cover the same ground.
