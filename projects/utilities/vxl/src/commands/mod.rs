@@ -7,6 +7,7 @@ mod qbcl;
 mod show;
 mod to;
 mod to_command;
+mod validate;
 mod vmax;
 mod voxj;
 
@@ -19,5 +20,6 @@ pub use qbcl::*;
 pub use show::*;
 pub use to::*;
 pub use to_command::*;
+pub use validate::*;
 pub use vmax::*;
 pub use voxj::*;

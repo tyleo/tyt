@@ -1,6 +1,7 @@
 mod internal;
 pub(crate) use internal::*;
 
+mod check_voxj_file;
 mod decode_voxj_object;
 mod encode_voxj_object;
 mod encode_voxj_object_optimized;
@@ -15,9 +16,12 @@ mod to_voxj_file_bytes;
 mod to_voxj_pretty_file_bytes;
 mod to_voxjz_file_bytes;
 mod validate_voxj_file;
+mod voxj_check;
+mod voxj_check_status;
 mod voxj_decoded_object;
 mod voxj_palette_cell_counts;
 
+pub use check_voxj_file::*;
 pub use decode_voxj_object::*;
 pub use encode_voxj_object::*;
 pub use encode_voxj_object_optimized::*;
@@ -32,5 +36,7 @@ pub use to_voxj_file_bytes::*;
 pub use to_voxj_pretty_file_bytes::*;
 pub use to_voxjz_file_bytes::*;
 pub use validate_voxj_file::*;
+pub use voxj_check::*;
+pub use voxj_check_status::*;
 pub use voxj_decoded_object::*;
 pub use voxj_palette_cell_counts::*;

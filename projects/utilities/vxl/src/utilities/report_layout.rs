@@ -1,9 +1,10 @@
 use clap::ValueEnum;
 
-/// Output layout for `info`.
+/// How a read-only report renders: human-readable Markdown or JSON. Shared by
+/// the report commands so `--layout` means the same everywhere.
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
-pub enum InfoLayout {
-    /// Markdown tables: document, palettes, objects.
+pub enum ReportLayout {
+    /// Human-readable Markdown.
     #[default]
     #[value(name = "markdown")]
     Markdown,

@@ -1,6 +1,6 @@
 use crate::{
-    AttributeType, CameraView, ColorComponent, ColorFormat, EditState, Format, InfoLayout,
-    PaletteShowFormat, Result, VoxjEncoding, VoxjFormat,
+    AttributeType, CameraView, ColorComponent, ColorFormat, EditState, Format, PaletteShowFormat,
+    ReportLayout, Result, VoxjEncoding, VoxjFormat,
 };
 use std::path::Path;
 
@@ -80,7 +80,18 @@ pub trait Dependencies {
     /// * `input` - the voxel file to read, in any supported format.
     /// * `from` - source format, inferred from `input`'s extension when `None`.
     /// * `layout` - how to lay out the report.
-    fn info(&self, input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()>;
+    fn info(&self, input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()>;
+
+    /// Validates the Voxel Json document at `input` against the format spec and
+    /// writes a per-check report to standard output, then fails when any check
+    /// failed so the process exits non-zero. Voxel Json only; the on-disk
+    /// encoding the checks inspect exists in no other format.
+    ///
+    /// # Arguments
+    /// * `input` - the `.voxj` or `.voxjz` document to validate, recognized by
+    ///   its leading bytes.
+    /// * `layout` - how to lay out the report.
+    fn validate(&self, input: &Path, layout: ReportLayout) -> Result<()>;
 
     /// Prints the selected attribute of one palette in the voxel file at
     /// `input`.

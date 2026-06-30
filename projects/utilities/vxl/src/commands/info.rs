@@ -1,4 +1,4 @@
-use crate::{Dependencies, Format, InfoLayout, Result};
+use crate::{Dependencies, Format, ReportLayout, Result};
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -16,7 +16,7 @@ pub struct Info {
 
     /// How to lay out the report.
     #[arg(value_name = "layout", long, default_value = "markdown")]
-    layout: InfoLayout,
+    layout: ReportLayout,
 }
 
 impl Info {

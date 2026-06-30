@@ -8,6 +8,7 @@ mod to_mvox;
 mod to_qbcl;
 mod to_vmax;
 mod to_voxj;
+mod validate;
 mod write_stdout;
 
 pub use dependencies_impl::*;
@@ -20,4 +21,5 @@ pub(crate) use to_mvox::*;
 pub(crate) use to_qbcl::*;
 pub(crate) use to_vmax::*;
 pub(crate) use to_voxj::*;
+pub(crate) use validate::*;
 pub(crate) use write_stdout::*;

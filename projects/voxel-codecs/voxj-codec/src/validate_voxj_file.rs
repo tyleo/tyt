@@ -1,336 +1,15 @@
-use crate::{Error, Result, decode_voxj_object, voxj_palette_cell_counts};
-use std::collections::HashSet;
-use voxj::{VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette};
+use crate::{Error, Result, collect_voxj_failures};
+use voxj::VoxjFile;
 
-/// The only Voxel Json document version this codec understands.
-const SUPPORTED_VERSION: u32 = 1;
-
-/// How far a rotation quaternion's length-squared may stray from `1` and still
-/// count as a unit quaternion.
-const ROTATION_TOLERANCE: f64 = 1e-6;
-
-/// Checks a [`VoxjFile`] against the format's document rules:
-///
-/// 1. the version is recognized;
-/// 2. palette refs, node children, and roots resolve and are each listed at
-///    most once;
-/// 3. each sample cell indexes a cell of its palette;
-/// 4. voxel positions are unique and within their object's bounds, which are
-///    exactly tight around them;
-/// 5. palettes are rectangular with distinct attribute keys;
-/// 6. node transforms have no zero scale component and a unit-length rotation
-///    within `1e-6`;
-/// 7. the hierarchy is acyclic.
-///
-/// Each object's blocks are decoded with
-/// [`decode_voxj_object`](crate::decode_voxj_object()) to run the geometry
-/// checks, so a block that cannot be decoded is reported as invalid. The `rgba`
-/// format is unchecked, as is whether the sample channels follow the position
-/// block's voxel order, which no document can witness.
+/// Checks a [`VoxjFile`] against the format's document rules, returning the
+/// first failure. This is the fail-fast counterpart of
+/// [`check_voxj_file`](crate::check_voxj_file()), which runs every check and
+/// reports each result; both share one set of checks, listed there.
 pub fn validate_voxj_file(file: &VoxjFile) -> Result<()> {
-    if file.version != SUPPORTED_VERSION {
-        return Err(invalid(format!(
-            "unrecognized version {}, expected {SUPPORTED_VERSION}",
-            file.version
-        )));
+    match collect_voxj_failures(file, true).into_iter().next() {
+        Some((_, message)) => Err(Error::Invalid(message)),
+        None => Ok(()),
     }
-    validate_main(&file.main)
-}
-
-/// Checks everything below the version: palettes, objects, hierarchy nodes,
-/// roots, and acyclicity.
-fn validate_main(main: &VoxjMain) -> Result<()> {
-    for (index, palette) in main.runtime_state.palettes.iter().enumerate() {
-        validate_palette(index, palette)?;
-    }
-    for (index, object) in main.runtime_state.objects.iter().enumerate() {
-        validate_object(index, object, &main.runtime_state.palettes)?;
-    }
-    for (index, node) in main.runtime_state.hierarchy_nodes.iter().enumerate() {
-        validate_node(index, node, main)?;
-    }
-    validate_roots(main)?;
-    validate_edit_state(main)?;
-
-    // Acyclicity last, once every child index is known in range.
-    if let Some(node) = first_cycle_node(&main.runtime_state.hierarchy_nodes) {
-        return Err(invalid(format!(
-            "hierarchy is not acyclic: a cycle reaches node {node}"
-        )));
-    }
-    Ok(())
-}
-
-/// A palette is rectangular, with one value per attribute in every row, and its
-/// attribute keys are distinct.
-fn validate_palette(index: usize, palette: &VoxjPalette) -> Result<()> {
-    let mut seen = HashSet::with_capacity(palette.attributes.len());
-    for attribute in &palette.attributes {
-        if !seen.insert(attribute.as_str()) {
-            return Err(invalid(format!(
-                "palette {index} declares attribute key {attribute:?} more than once"
-            )));
-        }
-    }
-    for (cell, row) in palette.data.iter().enumerate() {
-        if row.len() != palette.attributes.len() {
-            return Err(invalid(format!(
-                "palette {index} cell {cell} has {} values but the palette has {} attributes",
-                row.len(),
-                palette.attributes.len()
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// An object's palette refs resolve and do not repeat; its decoded samples stay
-/// within each palette's cells, and its decoded positions are unique and lie
-/// within bounds. Decoding also rejects a sample block whose arity or counts do
-/// not match the positions.
-fn validate_object(index: usize, object: &VoxjObject, palettes: &[VoxjPalette]) -> Result<()> {
-    let mut seen_refs = HashSet::with_capacity(object.palette_refs.len());
-    for &palette_ref in &object.palette_refs {
-        if palette_ref >= palettes.len() {
-            return Err(invalid(format!(
-                "object {index} references palette {palette_ref}, but the document has {} palettes",
-                palettes.len()
-            )));
-        }
-        if !seen_refs.insert(palette_ref) {
-            return Err(invalid(format!(
-                "object {index} references palette {palette_ref} more than once"
-            )));
-        }
-    }
-
-    // Refs are in range, so cell counts resolve. Decoding both flattens the
-    // geometry and rejects a malformed or mismatched sample block; the object
-    // index is added to the message the decoder cannot supply.
-    let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes)?;
-    let decoded = decode_voxj_object(object, &cell_counts).map_err(|e| {
-        invalid(format!(
-            "object {index} has a malformed position or sample block: {e}"
-        ))
-    })?;
-
-    for (voxel, row) in decoded.samples.iter().enumerate() {
-        // Decoding guarantees one sample per referenced palette, so each
-        // channel indexes the palette named at that position.
-        for (channel, &cell) in row.iter().enumerate() {
-            let palette = object.palette_refs[channel];
-            let cell_count = palettes[palette].data.len();
-            if cell as usize >= cell_count {
-                return Err(invalid(format!(
-                    "object {index} voxel {voxel} samples cell {cell} of palette {palette}, \
-                     which has {cell_count} cells"
-                )));
-            }
-        }
-    }
-
-    let [bound_x, bound_y, bound_z] = object.bounds;
-    let mut seen_positions = HashSet::with_capacity(decoded.positions.len());
-    let mut min = [u32::MAX; 3];
-    let mut max = [0u32; 3];
-    for &[x, y, z] in &decoded.positions {
-        if x >= bound_x || y >= bound_y || z >= bound_z {
-            return Err(invalid(format!(
-                "object {index} voxel position [{x}, {y}, {z}] lies outside \
-                 bounds [{bound_x}, {bound_y}, {bound_z}]"
-            )));
-        }
-        if !seen_positions.insert([x, y, z]) {
-            return Err(invalid(format!(
-                "object {index} repeats voxel position [{x}, {y}, {z}]"
-            )));
-        }
-        for (axis, c) in [x, y, z].into_iter().enumerate() {
-            min[axis] = min[axis].min(c);
-            max[axis] = max[axis].max(c);
-        }
-    }
-
-    // The runtime grid is exactly tight: it fits the voxels with no empty
-    // margin on any face. An empty object is [0, 0, 0]; otherwise each axis
-    // spans the grid fully, from 0 to its bound minus one.
-    if decoded.positions.is_empty() {
-        if object.bounds != [0, 0, 0] {
-            return Err(invalid(format!(
-                "object {index} is empty, so its bounds must be [0, 0, 0], \
-                 not [{bound_x}, {bound_y}, {bound_z}]"
-            )));
-        }
-    } else {
-        for (axis, name) in ["x", "y", "z"].into_iter().enumerate() {
-            if min[axis] != 0 || object.bounds[axis] != max[axis] + 1 {
-                return Err(invalid(format!(
-                    "object {index} bounds are not tight on {name}: its voxels span \
-                     [{}, {}], so the bound must be {}, not {}",
-                    min[axis],
-                    max[axis],
-                    max[axis] + 1,
-                    object.bounds[axis]
-                )));
-            }
-        }
-    }
-    Ok(())
-}
-
-/// A node's children resolve and do not repeat, and its transform is
-/// non-degenerate.
-fn validate_node(index: usize, node: &VoxjHierarchyNode, main: &VoxjMain) -> Result<()> {
-    let mut seen_nodes = HashSet::with_capacity(node.child_nodes.len());
-    for &child in &node.child_nodes {
-        if child >= main.runtime_state.hierarchy_nodes.len() {
-            return Err(invalid(format!(
-                "hierarchy node {index} lists child node {child}, \
-                 but the document has {} nodes",
-                main.runtime_state.hierarchy_nodes.len()
-            )));
-        }
-        if !seen_nodes.insert(child) {
-            return Err(invalid(format!(
-                "hierarchy node {index} lists child node {child} more than once"
-            )));
-        }
-    }
-
-    let mut seen_objects = HashSet::with_capacity(node.child_objects.len());
-    for &object in &node.child_objects {
-        if object >= main.runtime_state.objects.len() {
-            return Err(invalid(format!(
-                "hierarchy node {index} places object {object}, \
-                 but the document has {} objects",
-                main.runtime_state.objects.len()
-            )));
-        }
-        if !seen_objects.insert(object) {
-            return Err(invalid(format!(
-                "hierarchy node {index} places object {object} more than once"
-            )));
-        }
-    }
-
-    validate_transform(index, node)
-}
-
-/// A node transform has no zero scale component and a unit rotation quaternion.
-fn validate_transform(index: usize, node: &VoxjHierarchyNode) -> Result<()> {
-    let [scale_x, scale_y, scale_z] = node.transform.scale;
-    if scale_x == 0.0 || scale_y == 0.0 || scale_z == 0.0 {
-        return Err(invalid(format!(
-            "hierarchy node {index} has a transform scale component of zero"
-        )));
-    }
-
-    let [rotation_x, rotation_y, rotation_z, rotation_w] = node.transform.rotation;
-    let length_squared = rotation_x * rotation_x
-        + rotation_y * rotation_y
-        + rotation_z * rotation_z
-        + rotation_w * rotation_w;
-    if (length_squared - 1.0).abs() > ROTATION_TOLERANCE {
-        return Err(invalid(format!(
-            "hierarchy node {index} rotation is not a unit quaternion \
-             (length squared {length_squared})"
-        )));
-    }
-    Ok(())
-}
-
-/// Roots resolve and do not repeat.
-fn validate_roots(main: &VoxjMain) -> Result<()> {
-    let mut seen = HashSet::with_capacity(main.runtime_state.root_hierarchy_nodes.len());
-    for &root in &main.runtime_state.root_hierarchy_nodes {
-        if root >= main.runtime_state.hierarchy_nodes.len() {
-            return Err(invalid(format!(
-                "root references hierarchy node {root}, but the document has {} nodes",
-                main.runtime_state.hierarchy_nodes.len()
-            )));
-        }
-        if !seen.insert(root) {
-            return Err(invalid(format!(
-                "root lists hierarchy node {root} more than once"
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// When present, edit state lists one edit grid per runtime object, and each
-/// edit grid contains its object's runtime grid on every axis.
-fn validate_edit_state(main: &VoxjMain) -> Result<()> {
-    let Some(edit_state) = &main.edit_state else {
-        return Ok(());
-    };
-    let objects = &main.runtime_state.objects;
-    if edit_state.objects.len() != objects.len() {
-        return Err(invalid(format!(
-            "edit state lists {} objects, but the document has {} runtime objects",
-            edit_state.objects.len(),
-            objects.len()
-        )));
-    }
-    for (index, (edit, object)) in edit_state.objects.iter().zip(objects).enumerate() {
-        for axis in 0..3 {
-            let edit_min = i64::from(edit.origin[axis]);
-            let edit_max = edit_min + i64::from(edit.bounds[axis]);
-            let run_min = i64::from(object.origin[axis]);
-            let run_max = run_min + i64::from(object.bounds[axis]);
-            if edit_min > run_min || edit_max < run_max {
-                return Err(invalid(format!(
-                    "edit grid {index} on axis {axis} ([{edit_min}, {edit_max})) does not \
-                     contain the runtime grid ([{run_min}, {run_max}))"
-                )));
-            }
-        }
-    }
-    Ok(())
-}
-
-/// A node on a `child_nodes` cycle, or `None` if the hierarchy is acyclic. An
-/// iterative three-colour DFS, so a deep chain cannot overflow the stack: a
-/// back edge into an in-progress node is a cycle, revisiting a finished node is
-/// not. Call only once every child index is known in range.
-fn first_cycle_node(nodes: &[VoxjHierarchyNode]) -> Option<usize> {
-    const WHITE: u8 = 0;
-    const GREY: u8 = 1;
-    const BLACK: u8 = 2;
-
-    let mut colour = vec![WHITE; nodes.len()];
-    for start in 0..nodes.len() {
-        if colour[start] != WHITE {
-            continue;
-        }
-        colour[start] = GREY;
-        // Each frame is a node plus how many of its children we have walked.
-        let mut stack: Vec<(usize, usize)> = vec![(start, 0)];
-        while let Some(&(node, cursor)) = stack.last() {
-            let children = &nodes[node].child_nodes;
-            if cursor < children.len() {
-                stack.last_mut().unwrap().1 += 1;
-                let child = children[cursor];
-                match colour[child] {
-                    WHITE => {
-                        colour[child] = GREY;
-                        stack.push((child, 0));
-                    }
-                    GREY => return Some(child),
-                    _ => {}
-                }
-            } else {
-                colour[node] = BLACK;
-                stack.pop();
-            }
-        }
-    }
-    None
-}
-
-/// Wraps a message describing a malformed document as invalid data.
-fn invalid(message: String) -> Error {
-    Error::Invalid(message)
 }
 
 #[cfg(test)]
@@ -342,13 +21,23 @@ mod tests {
     };
 
     /// A palette with `cells` rows, each carrying one value per named
-    /// attribute.
+    /// attribute: a valid `#RRGGBBAA` string for `rgba`, a number otherwise, so
+    /// the palette passes the rgba-format check unless a test makes it fail.
     fn palette(attributes: &[&str], cells: usize) -> VoxjPalette {
         VoxjPalette {
             attributes: attributes.iter().map(|a| (*a).to_owned()).collect(),
             data: (0..cells)
-                .map(|_| attributes.iter().map(|_| VoxjValue::Number(0.0)).collect())
+                .map(|_| attributes.iter().map(|a| cell_value(a)).collect())
                 .collect(),
+        }
+    }
+
+    /// The placeholder value for one attribute in [`palette`].
+    fn cell_value(attribute: &str) -> VoxjValue {
+        if attribute == "rgba" {
+            VoxjValue::Text("#000000FF".to_owned())
+        } else {
+            VoxjValue::Number(0.0)
         }
     }
 

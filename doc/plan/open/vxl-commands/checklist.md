@@ -111,7 +111,7 @@ off as they land.
 
 ### validate ([reference/validate.md](reference/validate.md))
 
-- [ ] Implement the spec validation checklist; non-zero exit on failure;
+- [x] Implement the spec validation checklist; non-zero exit on failure;
       `--layout` report.
 
 ### info ([reference/info.md](reference/info.md))

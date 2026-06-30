@@ -8,6 +8,7 @@ mod pack_bits;
 mod packed_width;
 mod unpack_bits;
 mod unwrap_voxjz;
+mod voxj_validation;
 mod wrap_voxjz;
 
 pub(crate) use bit_length::*;
@@ -20,4 +21,5 @@ pub(crate) use pack_bits::*;
 pub(crate) use packed_width::*;
 pub(crate) use unpack_bits::*;
 pub(crate) use unwrap_voxjz::*;
+pub(crate) use voxj_validation::*;
 pub(crate) use wrap_voxjz::*;

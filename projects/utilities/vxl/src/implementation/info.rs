@@ -1,4 +1,4 @@
-use crate::{Format, InfoLayout, Result, implementation};
+use crate::{Format, ReportLayout, Result, implementation};
 use serde_json::{Map, Value, json};
 use std::{fs, io::Error as IOError, path::Path};
 use voxcore::{VoxMain, VoxObject, VoxPalette};
@@ -7,7 +7,7 @@ use voxj_codec::from_voxj_or_voxjz_file_bytes;
 /// Loads the voxel file at `input` and reports what it contains in `layout`.
 /// The document is read into voxcore first; only the format and, for Voxel Json,
 /// the document version come from outside that model.
-pub fn info(input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()> {
+pub fn info(input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()> {
     let state = implementation::load_state(input, from)?;
     // load_state resolved the format, so this inference cannot fail.
     let format = from
@@ -37,12 +37,12 @@ fn render(
     format: Format,
     voxj_version: Option<u32>,
     name: &str,
-    layout: InfoLayout,
+    layout: ReportLayout,
 ) -> Result<String> {
     match layout {
-        InfoLayout::Markdown => Ok(render_markdown(state, format, voxj_version, name)),
-        InfoLayout::PrettyJson => render_json(state, format, voxj_version, true),
-        InfoLayout::CompactJson => render_json(state, format, voxj_version, false),
+        ReportLayout::Markdown => Ok(render_markdown(state, format, voxj_version, name)),
+        ReportLayout::PrettyJson => render_json(state, format, voxj_version, true),
+        ReportLayout::CompactJson => render_json(state, format, voxj_version, false),
     }
 }
 
@@ -266,7 +266,7 @@ fn md_cell(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Format, InfoLayout, implementation::info::render};
+    use crate::{Format, ReportLayout, implementation::info::render};
     use serde_json::Value;
     use ty_math::TyVector3U32;
     use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValue};
@@ -296,7 +296,7 @@ mod tests {
             Format::Voxj,
             Some(2),
             "test.voxj",
-            InfoLayout::Markdown,
+            ReportLayout::Markdown,
         )
         .unwrap();
         assert_eq!(
@@ -327,7 +327,7 @@ mod tests {
             Format::Voxj,
             Some(2),
             "test.voxj",
-            InfoLayout::CompactJson,
+            ReportLayout::CompactJson,
         )
         .unwrap();
         assert_eq!(
@@ -347,7 +347,7 @@ mod tests {
             Format::Voxj,
             Some(2),
             "test.voxj",
-            InfoLayout::PrettyJson,
+            ReportLayout::PrettyJson,
         )
         .unwrap();
         let compact = render(
@@ -355,7 +355,7 @@ mod tests {
             Format::Voxj,
             Some(2),
             "test.voxj",
-            InfoLayout::CompactJson,
+            ReportLayout::CompactJson,
         )
         .unwrap();
         assert!(pretty.starts_with("{\n"));
@@ -372,7 +372,7 @@ mod tests {
             Format::MVox,
             None,
             "model.mvox",
-            InfoLayout::Markdown,
+            ReportLayout::Markdown,
         )
         .unwrap();
         assert!(markdown.contains("| Format   | mvox  |\n"));
@@ -383,7 +383,7 @@ mod tests {
             Format::MVox,
             None,
             "model.mvox",
-            InfoLayout::CompactJson,
+            ReportLayout::CompactJson,
         )
         .unwrap();
         assert!(!json.contains("voxj_version"));
@@ -404,7 +404,7 @@ mod tests {
             Format::Voxj,
             Some(1),
             "sample.voxj",
-            InfoLayout::Markdown,
+            ReportLayout::Markdown,
         )
         .unwrap();
         assert!(markdown.contains("| Has edit     | yes   |\n"));
@@ -420,7 +420,7 @@ mod tests {
             Format::Voxj,
             Some(1),
             "sample.voxj",
-            InfoLayout::CompactJson,
+            ReportLayout::CompactJson,
         )
         .unwrap();
         assert!(json.contains("\"has_edit\":true"));
