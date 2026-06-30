@@ -26,9 +26,9 @@ land.
 - [ ] `MeshFormat` `ValueEnum` (to support `fbx` | `obj` | `gltf`) with
       `from_path` extension inference, mirroring `Format::from_path`. Only
       implement `fbx` at first.
-- [ ] Object `--select` parser: index form (integer, `a-b` range, comma list)
-      versus name glob, union over repeats. See
-      [conventions](reference/conventions.md).
+- [ ] Object selector parsers: `--select-index` (integer, `a-b` range, comma
+      list) and `--select` name glob, both repeatable, union over all values.
+      See [conventions](reference/conventions.md).
 - [ ] Material-map model: atlas of unique merged materials; preset packings and
       the `--map` channel parser (`R`/`G`/`B`/`A` = `attr` | `1-attr` | `0` |
       `1`). See [mesh](reference/mesh.md).
@@ -43,7 +43,8 @@ land.
 ### mesh ([reference/mesh.md](reference/mesh.md))
 
 - [ ] `Mesh` command struct, dispatch, and per-object pure-geometry output.
-- [ ] `--to` / `--from`, `--method`, `--ambient-occlusion`, `--select`.
+- [ ] `--to` / `--from`, `--method`, `--ambient-occlusion`, `--select` /
+      `--select-index`.
 - [ ] Material maps: presets (`--albedo`, `--orm`, `--metallic-roughness`,
       `--mse`, `--emissive`, `--occlusion`) plus `--map`, default paths from the
       mesh stem.

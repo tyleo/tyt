@@ -13,8 +13,8 @@ extension; the mesh format is inferred from the output extension or set with
 
 By default `mesh` outputs every object as pure geometry: each object's voxel
 grid is meshed on its own, with no hierarchy-node transform applied, since the
-common case is pulling leaf objects out without placement. Pass `--select` to
-choose which objects to output; see
+common case is pulling leaf objects out without placement. Pass `--select` or
+`--select-index` to choose which objects to output; see
 [Object selectors](conventions.md#object-selectors). Assembling a placed scene
 from the hierarchy, baking the node transforms and instancing in
 [Hierarchy Nodes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#hierarchy-nodes),
@@ -34,10 +34,11 @@ is a separate mode left for a later pass.
 4. `--ambient-occlusion [true|false]` (default `false`): when on, bakes
    per-vertex ambient-occlusion darkening at concave junctions into vertex
    colors. Settable boolean: bare `--ambient-occlusion` means `true`.
-5. `--select <selector>`: output only the matching objects. Repeatable; the
-   result is the union of all selectors. A selector is an object index or a name
-   glob; see [Object selectors](conventions.md#object-selectors). Omitted, every
-   object is output.
+5. `--select <glob>` / `--select-index <index>`: output only the matching
+   objects. Both repeat, and the result is the union of all values. `--select`
+   takes a name glob; `--select-index` takes an integer, `a-b` range, or comma
+   list; see [Object selectors](conventions.md#object-selectors). Given neither,
+   every object is output.
 
 ## Material and texture maps
 

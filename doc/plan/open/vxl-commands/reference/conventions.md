@@ -20,20 +20,20 @@ These hold across the commands and match the existing `to` commands.
 
 ## Object selectors
 
-[`mesh`](mesh.md) and [`material`](material.md) take `--select`, repeatable, to
-choose which objects to output. Each matched object is meshed as pure geometry,
-with no hierarchy-node transform. A selector matches objects one of two ways:
+[`mesh`](mesh.md) and [`material`](material.md) choose which objects to output
+with two repeatable options, one per addressing mode, so a value is never parsed
+as either an index or a glob. Each matched object is meshed as pure geometry,
+with no hierarchy-node transform.
 
-1. By index: an object index into the document's `objects`, written as a plain
-   integer, a range `a-b`, or a comma-separated list, as in `0`, `2-5`, or
-   `0,3,7`. Index is the canonical object reference in the spec.
-2. By name: a glob over object names, where `*`, `?`, and `[...]` match as in a
-   shell. Object names are flat, not paths, and are not guaranteed unique, so a
-   glob may match several objects.
+1. `--select-index <index>`: an object index into the document's `objects`,
+   written as a plain integer, a range `a-b`, or a comma-separated list, as in
+   `0`, `2-5`, or `0,3,7`. Index is the canonical object reference in the spec.
+2. `--select <glob>`: a glob over object names, where `*`, `?`, and `[...]`
+   match as in a shell. Object names are flat, not paths, and are not guaranteed
+   unique, so a glob may match several objects.
 
-A selector is read as an index when it contains only digits, ranges, and
-commas, and as a name glob otherwise. Multiple `--select` values union their
-matches.
+Both options repeat, and every `--select-index` and `--select` value unions its
+matches. Given neither, every object is output.
 
 Selecting hierarchy nodes instead, to bake a node's subtree and transforms into
 one larger placed mesh, is a separate mode left for a later pass.

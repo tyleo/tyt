@@ -21,9 +21,9 @@ That lets you iterate on materials without re-meshing.
 
 1. `--from <format>`: source voxel format. Inferred from the input extension
    when omitted.
-2. `--select <selector>`: restrict the material set to the matching objects,
-   the same selector as `mesh`; see
-   [Object selectors](conventions.md#object-selectors). Repeatable. The default
+2. `--select <glob>` / `--select-index <index>`: restrict the material set to
+   the matching objects, the same selectors as `mesh`; see
+   [Object selectors](conventions.md#object-selectors). Both repeat. The default
    covers every object.
 
 At least one map must be requested; with no map flags the command reports the
