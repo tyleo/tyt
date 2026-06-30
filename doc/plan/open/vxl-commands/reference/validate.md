@@ -18,5 +18,6 @@ component; unit `rotation` quaternions within tolerance; and, when present, an
 validator cannot confirm, that sample order matches the position block's voxel
 order, is reported as unverifiable.
 
-1. `--json`: emit a structured report of every check and its result instead of
-   human-readable output.
+1. `--layout` `markdown` | `pretty-json` | `compact-json` (default `markdown`):
+   how to render the report. `markdown` is a human-readable per-check list; the
+   JSON forms emit a structured report of every check and its result.

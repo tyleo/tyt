@@ -89,7 +89,7 @@ off as they land.
 
 ### palette ([reference/palette/](reference/palette/))
 
-- [ ] `palette list` (+ `--json`): index, attributes, cell count, referencing
+- [ ] `palette list` (+ `--layout`): index, attributes, cell count, referencing
       objects.
 - [x] `palette show` (+ `--json`): `--index` / `--attribute` / `--format`. See
       the V2 follow-ups in [palette show](reference/palette/show.md) for the
@@ -107,22 +107,23 @@ off as they land.
 
 - [ ] Tree render with DAG / instancing and unplaced-node markers.
 - [ ] `pattern` glob; `--show-transforms` / `--show-bounds` / `--show-extents`;
-      collapse flags; `--json`.
+      collapse flags; `--layout`.
 
 ### validate ([reference/validate.md](reference/validate.md))
 
 - [ ] Implement the spec validation checklist; non-zero exit on failure;
-      `--json` report.
+      `--layout` report.
 
 ### info ([reference/info.md](reference/info.md))
 
 - [ ] Report version, per-object bounds / voxel count / encodings, palette
       attribute sets and cell counts, `editState` and `ext` presence, and root /
-      instanced / unplaced nodes; `--json`.
+      instanced / unplaced nodes; `--layout`.
 
 ## Finishing
 
-- [ ] `--json` output on `list`, `show`, `hierarchy show`, `validate`, `info`.
+- [ ] `--layout` output on `list`, `hierarchy show`, `validate`, and `info`;
+      `palette show` keeps its own `--json`.
 - [ ] Help text and `clap_complete` completions cover the new commands.
 - [ ] Tests per command, following the existing test style.
 

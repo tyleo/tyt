@@ -20,5 +20,7 @@ and [`remap`](remap.md) ask for. Example:
 
 From there, `vxl palette show <input> --index 1` prints palette 1's colors.
 
-1. `--json`: emit the listing as JSON, including per-palette attribute keys,
-   cell count, and referencing object indices.
+1. `--layout` `markdown` | `pretty-json` | `compact-json` (default `markdown`):
+   how to render the listing. `markdown` is the table above; the JSON forms emit
+   the listing, including per-palette attribute keys, cell count, and referencing
+   object indices, as pretty or compact JSON.
