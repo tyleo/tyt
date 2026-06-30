@@ -24,13 +24,22 @@
 //! with no native home under a `qubicle-qb`, `qubicle-qbt`, or `qubicle-qbcl`
 //! ext.
 
+#[cfg(not(feature = "_codec"))]
+compile_error!(
+    "voxsmith needs at least one codec feature enabled: goxl, mvox, qbcl, vmax, or voxj"
+);
+
+#[cfg(feature = "_codec")]
 mod internal;
+#[cfg(feature = "_codec")]
 pub(crate) use internal::*;
 
+#[cfg(feature = "_codec")]
 mod convert;
 mod error;
 mod result;
 
+#[cfg(feature = "_codec")]
 pub use convert::*;
 pub use error::*;
 pub use result::*;

@@ -8,16 +8,39 @@ description = "Utilities for working with voxels."
 
 [dependencies]
 branded-id = "0.1.3"
-goxl = "0.1.0"
-goxl-codec = "0.1.0"
-mvox = "0.1.0"
-mvox-codec = "0.1.0"
-qbcl = "0.1.0"
-qbcl-codec = "0.1.0"
+goxl = { version = "0.1.0", optional = true }
+goxl-codec = { version = "0.1.0", optional = true }
+mvox = { version = "0.1.0", optional = true }
+mvox-codec = { version = "0.1.0", optional = true }
+qbcl = { version = "0.1.0", optional = true }
+qbcl-codec = { version = "0.1.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 ty-math = "0.1.7"
-vmax = { version = "0.1.7", features = ["serde"] }
-vmax-codec = "0.1.0"
+vmax = { version = "0.1.7", features = ["serde"], optional = true }
+vmax-codec = { version = "0.1.0", optional = true }
 voxcore = "0.1.0"
-voxj = { version = "0.1.1", features = ["serde"] }
-voxj-codec = "0.1.1"
+voxj = { version = "0.1.1", features = ["serde"], optional = true }
+voxj-codec = { version = "0.1.1", optional = true }
+
+[features]
+default = ["goxl", "mvox", "qbcl", "vmax", "voxj"]
+
+# Each codec feature gates its format crate, its codec crate, and the
+# voxsmith modules that convert that format. The `qbcl` feature covers the
+# whole Qubicle family (`.qb`, `.qbt`, and `.qbcl`), since all three share the
+# `qbcl` / `qbcl-codec` crates.
+goxl = ["dep:goxl", "dep:goxl-codec", "_codec", "_ext", "_color"]
+mvox = ["dep:mvox", "dep:mvox-codec", "_codec", "_ext", "_color"]
+qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec", "_ext", "_color"]
+vmax = ["dep:vmax", "dep:vmax-codec", "_codec", "_ext"]
+voxj = ["dep:voxj", "dep:voxj-codec", "_codec"]
+
+# Private, auto-enabled by the codecs that need them; not meant to be enabled
+# directly. `_codec` marks that at least one codec is on (voxsmith errors at
+# compile time otherwise). `_ext` gates the ext-block serde helpers shared by
+# every format that stashes a lossless ext (all but Voxel Json). `_color` gates
+# the palette-color sampling helpers shared by the formats that re-sample
+# colors per voxel (Goxel, MagicaVoxel, Qubicle).
+_codec = []
+_ext = []
+_color = []

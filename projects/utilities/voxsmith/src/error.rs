@@ -1,13 +1,18 @@
+#[cfg(feature = "goxl")]
 use goxl_codec::Error as GoxlError;
+#[cfg(feature = "mvox")]
 use mvox_codec::Error as MVoxError;
+#[cfg(feature = "qbcl")]
 use qbcl_codec::Error as QbclError;
 use serde::{de::Error as DeError, ser::Error as SerError};
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
 };
+#[cfg(feature = "vmax")]
 use vmax_codec::Error as VMaxError;
 use voxcore::Error as VoxError;
+#[cfg(feature = "voxj")]
 use voxj_codec::Error as VoxjError;
 
 /// An error from voxsmith: voxel data that is malformed, a state that fails
@@ -24,18 +29,23 @@ pub enum Error {
     Vox(VoxError),
 
     /// Encoding or decoding a Voxel Json document failed.
+    #[cfg(feature = "voxj")]
     Voxj(VoxjError),
 
     /// Decoding a MagicaVoxel `.vox` file failed.
+    #[cfg(feature = "mvox")]
     MVox(MVoxError),
 
     /// Decoding or encoding a Voxel Max payload failed.
+    #[cfg(feature = "vmax")]
     VMax(VMaxError),
 
     /// Decoding a Goxel `.gox` file failed.
+    #[cfg(feature = "goxl")]
     Goxl(GoxlError),
 
     /// Decoding a Qubicle `.qb` / `.qbt` / `.qbcl` file failed.
+    #[cfg(feature = "qbcl")]
     Qbcl(QbclError),
 }
 
@@ -51,10 +61,15 @@ impl Display for Error {
         match self {
             Error::Invalid(message) => write!(f, "{message}"),
             Error::Vox(error) => error.fmt(f),
+            #[cfg(feature = "voxj")]
             Error::Voxj(error) => error.fmt(f),
+            #[cfg(feature = "mvox")]
             Error::MVox(error) => error.fmt(f),
+            #[cfg(feature = "vmax")]
             Error::VMax(error) => error.fmt(f),
+            #[cfg(feature = "goxl")]
             Error::Goxl(error) => error.fmt(f),
+            #[cfg(feature = "qbcl")]
             Error::Qbcl(error) => error.fmt(f),
         }
     }
@@ -65,10 +80,15 @@ impl StdError for Error {
         match self {
             Error::Invalid(_) => None,
             Error::Vox(error) => Some(error),
+            #[cfg(feature = "voxj")]
             Error::Voxj(error) => Some(error),
+            #[cfg(feature = "mvox")]
             Error::MVox(error) => Some(error),
+            #[cfg(feature = "vmax")]
             Error::VMax(error) => Some(error),
+            #[cfg(feature = "goxl")]
             Error::Goxl(error) => Some(error),
+            #[cfg(feature = "qbcl")]
             Error::Qbcl(error) => Some(error),
         }
     }
@@ -80,30 +100,35 @@ impl From<VoxError> for Error {
     }
 }
 
+#[cfg(feature = "voxj")]
 impl From<VoxjError> for Error {
     fn from(error: VoxjError) -> Self {
         Error::Voxj(error)
     }
 }
 
+#[cfg(feature = "mvox")]
 impl From<MVoxError> for Error {
     fn from(error: MVoxError) -> Self {
         Error::MVox(error)
     }
 }
 
+#[cfg(feature = "vmax")]
 impl From<VMaxError> for Error {
     fn from(error: VMaxError) -> Self {
         Error::VMax(error)
     }
 }
 
+#[cfg(feature = "goxl")]
 impl From<GoxlError> for Error {
     fn from(error: GoxlError) -> Self {
         Error::Goxl(error)
     }
 }
 
+#[cfg(feature = "qbcl")]
 impl From<QbclError> for Error {
     fn from(error: QbclError) -> Self {
         Error::Qbcl(error)
