@@ -1,7 +1,7 @@
 use clap::ValueEnum;
 
 /// Output form for `palette show`.
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, ValueEnum)]
 pub enum PaletteShowFormat {
     /// A swatch beside its value for a color, a bare number for a scalar or
     /// extracted channel.

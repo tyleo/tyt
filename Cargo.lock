@@ -1952,6 +1952,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "globset",
+ "libc",
  "serde_json",
  "ty-math",
  "vmax-codec",

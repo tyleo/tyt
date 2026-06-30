@@ -1,6 +1,6 @@
 use crate::{
-    AttributeType, CameraView, ColorComponent, ColorFormat, EditState, Format, PaletteShowFormat,
-    ReportLayout, Result, VoxjEncoding, VoxjFormat,
+    AttributeSelector, CameraView, ColorFormat, EditState, Format, PaletteShowLayout, ReportLayout,
+    Result, VoxjEncoding, VoxjFormat, Width,
 };
 use std::path::Path;
 
@@ -93,31 +93,24 @@ pub trait Dependencies {
     /// * `layout` - how to lay out the report.
     fn validate(&self, input: &Path, layout: ReportLayout) -> Result<()>;
 
-    /// Prints the selected attribute of one palette in the voxel file at
-    /// `input`.
+    /// Prints the value collections named by `selectors` from the palettes in
+    /// the voxel file at `input`.
     ///
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.
     /// * `from` - source format, inferred from `input`'s extension when `None`.
-    /// * `index` - which palette to show, by index into the document's palettes.
-    /// * `attribute` - the attribute key to show.
-    /// * `component` - one color component to extract, or `None` for the whole
-    ///   value.
-    /// * `r#type` - how to interpret the values, inferred from the stored value
-    ///   when `None`.
-    /// * `format` - how to render each value.
-    /// * `json` - emit the selected attribute as JSON instead.
-    #[allow(clippy::too_many_arguments)]
+    /// * `selectors` - the `--attribute` selectors, each naming one or more
+    ///   value collections, in render order.
+    /// * `layout` - how to arrange the collections, and the serialization to
+    ///   emit.
+    /// * `width` - the width the `row` layouts wrap to.
     fn palette_show(
         &self,
         input: &Path,
         from: Option<Format>,
-        index: usize,
-        attribute: &str,
-        component: Option<ColorComponent>,
-        r#type: Option<AttributeType>,
-        format: PaletteShowFormat,
-        json: bool,
+        selectors: &[AttributeSelector],
+        layout: PaletteShowLayout,
+        width: Width,
     ) -> Result<()>;
 
     /// Matches `pattern` against each candidate hierarchy path, returning one

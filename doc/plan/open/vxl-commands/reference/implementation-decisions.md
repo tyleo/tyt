@@ -190,3 +190,75 @@ path is the default and the MVP; the surface color-sampling path can land after
 it, with surface initially falling back to the flat color until sampling exists.
 `--fill-color` accepts a `#RRGGBBAA` hex or the name `white`, parsed in vxl into
 the `rgba` value voxsmith stores.
+
+## palette show V2
+
+The V1 `--index`, `--attribute`, `--type`, and `--format` flags become one
+repeatable `--attribute <palette> <attribute> <format>` selector and a global
+`--layout`. `--json` is gone; its `compact` and `pretty` renderings are the
+`compact-json` and `pretty-json` values of `--layout`, beside `row`,
+`row-no-header`, `column`, `column-no-header`, and a `markdown` table. The same
+`--format`-to-`--layout` move lands on the other read commands so the json forms
+read the same everywhere; `--layout` defaults to a flat `row` rather than the
+spec's earlier row-for-one, table-for-several default, which the explicit values
+made redundant.
+
+`row` pads only the header, to the longest, so the first value of each row lines
+up; the values themselves are not column-aligned, since aligning every value
+would let one wide attribute like a long float stretch the rest. The rows are
+separated by a blank line, and a swatch row's cells abut into a strip while the
+other formats keep one space between cells. The `-no-header` variants of `row`
+and `column` reuse the same renderer with the header column or row dropped, and a
+header-less column sizes its width from the cells alone.
+
+clap derive has no typed grouping for several values per option occurrence, so
+`--attribute` is a `Vec<String>` with `num_args = 3` and `ArgAction::Append`,
+chunked by three in the command. The fixed arity makes the flattened list chunk
+unambiguously, the same reason the design fixes three fields. The fields use
+`value_names` so help names each, the one place a multi-value option needs the
+plural of the `value_name` rule. The format field is parsed with
+`ValueEnum::from_str` so its error lists the variants.
+
+The selector lowers to three utility types, `PaletteRef`, `AttributeRef`, and
+`AttributeSelector`, with parsing on the types and resolution in the
+implementation, the same split the channel and binding types use. `AttributeRef`
+carries the `<key>.component` split moved off the old command-level
+`parse_attribute`, so the dotted-key rule lives with the type. `PaletteShowFormat`
+gains `PartialEq` for the selector's derive. The new layout enum is
+`PaletteShowLayout`.
+
+`--type` is gone; the type is always inferred from the cells. `AttributeType`
+stays, because the inference and the `--define-attribute` binding still use it. A
+color component is now a `0..255` byte rather than the V1 `0..1` fraction, a new
+`Sample::Component(u8)` distinct from a scalar; a scalar still maps its `0..1`
+value onto a gray level, while a component is its byte directly.
+
+Resolution skips a `*`-matched palette that lacks a named attribute but errors on
+a named palette that lacks it, so a typo on a named palette is caught while a
+broad `'*'` stays quiet. A color component on an inferred scalar is an error
+whether the palette was named or `*`-matched, since it names a channel the value
+does not carry. Collections come out in selector order, then palette then
+attribute order, which is the JSON render order too.
+
+Alignment measures a cell's visible width past its ANSI CSI escapes, so the
+zero-width swatch codes do not throw the value columns off. `render` is pure over
+the resolved collections and `resolve_collections` pure over the loaded state, so
+both unit-test without the filesystem.
+
+`conventions.md` still describes the V1 `--json` on the read reports. The
+`--json`-to-`--layout` move is a cross-command convention, so it is left for the
+coordinated pass that lands the other read commands rather than edited here from
+`show` alone. The bare palette `--from palette` input and the shared JSON
+envelope stay deferred for the same reason.
+
+`--width` wraps the `row` layouts so a 255-entry palette folds into a block
+instead of one multi-thousand-column line that the terminal mangles when it
+wraps. It is a `Width` of `terminal`, `unlimited`, or a column count, parsed by
+`FromStr` since the count rules out a `ValueEnum`. The default is `terminal`,
+resolved against the terminal width read from stdout; a non-terminal stdout, as
+when piped, resolves to no wrapping so a pager or file keeps the full line. The
+width is read with a `libc` ioctl rather than the `terminal_size` crate, since
+`libc` is already in the lock and the crate is not, so the ioctl adds no new
+download; it is gated to unix, and other platforms simply do not wrap. Only the
+`row` layouts wrap, as `column` and `markdown` are already vertical or
+self-sizing.
