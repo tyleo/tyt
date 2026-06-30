@@ -50,6 +50,12 @@ off as they land.
       (`scalar` | `color`), and `AttributeBinding` (`name palette key [type]`).
       The clap multi-value wiring lands with `mesh`. See
       [mesh](reference/mesh.md).
+- [ ] `--vertex` / `--vertex-map` carrier: preset-to-attribute-name mapping
+      (`albedo`/`computed-occlusion` → `COLOR_0`, the others → `_NAME`,
+      `palette-index` → `_PALETTEINDEX`), reusing the `--texture-map` channel
+      parser and `--define-attribute`; emit glTF vertex attributes (`COLOR_0`
+      standard, `_NAME` custom) and ship the `palette-index` material table in
+      `extras`. See [mesh](reference/mesh.md).
 - [x] Shared voxj encoding options (`--format`, `--encoding-preset`,
       `--position-encoding`, `--sample-encoding`) in `VoxjEncodingOptions`,
       flattened by `to voxj` and `voxelize`; `--ext`/`--edit-state` stay on
@@ -69,16 +75,22 @@ off as they land.
 - [ ] `Mesh` command struct, dispatch, and single-object pure-geometry output;
       error when the selection is not exactly one object.
 - [ ] `--to` / `--from` (`gltf` | `glb`), `--scale` (meters per voxel, default
-      `1.0`; glTF is meter-native and writes `scale` per voxel), `--method`,
-      `--vertex-computed-occlusion` with `--computed-occlusion-strength`,
-      `--computed-occlusion-min-brightness`, and
-      `--computed-occlusion-color-space`, `--atlas`,
+      `1.0`; glTF is meter-native and writes `scale` per voxel), `--method`, the
+      `--computed-occlusion-strength` / `--computed-occlusion-min-brightness` /
+      `--computed-occlusion-color-space` tuning, `--atlas`,
       `--select` / `--select-index`.
 - [ ] Material maps: `--texture <name> [path]` presets (albedo, orm,
       metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
       computed-occlusion, roughness, smoothness), `--texture-map <path>
       <channels>`, and `--define-attribute <name> <palette-index> <key> [type]`,
       default paths from the mesh stem.
+- [ ] Vertex attribute maps: `--vertex <name> [target]` presets (albedo →
+      `COLOR_0`, computed-occlusion → `COLOR_0` darken, metallic / roughness /
+      emissive / occlusion / smoothness → scalar `_NAME`, orm / mse /
+      metallic-roughness / metallic-smoothness → packed `_NAME`, palette-index →
+      `_PALETTEINDEX` plus the per-index material table in glTF `extras`), and
+      `--vertex-map <target> <channels>` reusing the `--texture-map` channel
+      grammar and `--define-attribute`.
 - [ ] `Dependencies::mesh` and its impl.
 
 ### material ([reference/material.md](reference/material.md))

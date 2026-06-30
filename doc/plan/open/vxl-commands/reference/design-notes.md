@@ -123,6 +123,23 @@ Rationale for the non-obvious choices, for reviewers.
     for bit-exact materials. Sampling drops no PBR: voxelize writes the same
     `rgba`, `metallic`, `roughness`, `emissive`, and `occlusion` attributes
     `mesh` bakes, so the two are inverses.
+12. Vertex attribute maps share the texture maps' source grammar and add only a
+    carrier. A map resolves a material value the same way whether it lands in a
+    texel or on a vertex, so `--vertex` and `--vertex-map` reuse the
+    `--texture`/`--texture-map` presets, the `--texture-map` channel grammar, and
+    `--define-attribute`, differing only in destination. This folds the former
+    `--vertex-computed-occlusion` boolean into `--vertex computed-occlusion`, one
+    cell of the general family, and leaves the texture presets untouched. A
+    separate `--atlas vertex` was rejected: atlas is a texture layout, while the
+    carrier is chosen per map by `--texture` versus `--vertex`, so color can ride
+    on vertices while PBR bakes to a shared atlas in the same run. `COLOR_0` is
+    glTF's only per-vertex PBR slot, so per-vertex color is portable while
+    per-vertex metallic, roughness, and `palette-index` go in
+    application-specific `_NAME` attributes only a custom shader reads. The
+    `palette-index` attribute is the palette atlas's indirection with the index
+    on the vertex and the per-index material table in `extras` rather than a UV
+    into a texture, the most compact carrier and the exact-value alternative to
+    the palette atlas.
 
 ## Future and nice-to-haves
 

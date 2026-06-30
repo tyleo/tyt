@@ -6,10 +6,10 @@ _Part of the [Vxl Command-Line Reference](../README.md)._
 vxl mesh <input> [output] [options]
 ```
 
-Triangulates voxels into a mesh and optionally bakes material textures the
-mesh's UVs sample. The default output path is the input stem with the mesh
-extension; the mesh format is inferred from the output extension or set with
-`--to`.
+Triangulates voxels into a mesh and optionally writes the voxels' material into
+the mesh, either as textures the mesh's UVs sample or as per-vertex attributes.
+The default output path is the input stem with the mesh extension; the mesh
+format is inferred from the output extension or set with `--to`.
 
 `mesh` outputs one object as pure geometry: the object's voxel grid is meshed on
 its own, with no hierarchy-node transform applied, since the common case is
@@ -41,38 +41,25 @@ is a separate mode left for a later pass.
    every solid voxel, including hidden interior faces, and has the highest
    triangle count. Choose `culled` or `naive` only when you need stable
    per-voxel topology for further per-face editing.
-5. `--vertex-computed-occlusion [true|false]` (default `false`): bakes
-   occlusion computed from the voxel geometry into the mesh's vertex colors,
-   darkening concave junctions. Each face vertex takes its occlusion from the
-   three voxels meeting at that corner, giving four discrete levels. The value
-   lives on vertices, so it forces per-face resolution: with `--method greedy`
-   the mesher merges two faces only when their occlusion matches along the
-   shared edge, so flat runs still merge into large quads while concave seams
-   split; `culled` and `naive` already carry one value per face corner. When a
-   quad's four corners are uneven, the triangle diagonal is chosen to keep the
-   darker pair together so interpolation does not seam. To write the same
-   occlusion into a texture instead of vertex colors, use `computed-occlusion`
-   under [Material and texture maps](#material-and-texture-maps). Settable
-   boolean: bare `--vertex-computed-occlusion` means `true`.
-6. `--computed-occlusion-strength <0..1>` (default `1.0`): scales how much
+5. `--computed-occlusion-strength <0..1>` (default `1.0`): scales how much
    computed occlusion darkens, from `0` for none to `1` for the full effect.
-   Applies to both `--vertex-computed-occlusion` and the `computed-occlusion`
-   map.
-7. `--computed-occlusion-min-brightness <0..1>` (default `0.0`): floor on the
+   Applies to computed occlusion wherever it is written, the
+   `--vertex computed-occlusion` attribute or the `computed-occlusion` map.
+6. `--computed-occlusion-min-brightness <0..1>` (default `0.0`): floor on the
    brightness the deepest occlusion reaches, so crevices never darken below it.
    `0` lets occlusion reach black.
-8. `--computed-occlusion-color-space` `linear` | `srgb` (default `linear`): the
+7. `--computed-occlusion-color-space` `linear` | `srgb` (default `linear`): the
    space the occlusion values are written in. `linear` is correct for glTF and
    other PBR data textures; `srgb` matches pipelines that multiply occlusion in
    sRGB space.
-9. `--atlas` `palette` | `unwrap` (default `palette`): material-map atlas layout;
+8. `--atlas` `palette` | `unwrap` (default `palette`): material-map atlas layout;
    see [Material and texture maps](#material-and-texture-maps).
-10. `--select <glob>`: choose the object by hierarchy path, matched as
+9. `--select <glob>`: choose the object by hierarchy path, matched as
    `hierarchy show` matches node paths, so a node path selects its subtree.
    Repeatable; the result is the union of every `--select` and `--select-index`
    value. See [Object selectors](conventions.md#object-selectors). The selection
    must resolve to one object, as above.
-11. `--select-index <index>`: choose the object by position, an integer or an
+10. `--select-index <index>`: choose the object by position, an integer or an
    `a-b` range. Repeatable; unions with `--select` as above. See
    [Object selectors](conventions.md#object-selectors).
 
@@ -98,7 +85,8 @@ the atlas is laid out and how the mesh's UVs index it:
    baked from the voxel geometry.
 
 `computed-occlusion` is occlusion computed from the voxel geometry, the same
-quantity `--vertex-computed-occlusion` writes to vertex colors. It
+quantity `--vertex computed-occlusion` writes to vertex colors (see
+[Vertex attribute maps](#vertex-attribute-maps)). It
 varies across a surface, so it cannot occupy a palette texel and always bakes
 into an unwrap layout for its own image. Under `--atlas palette` the shared
 palette maps keep the mesh's primary UV set and the occlusion image takes a
@@ -153,17 +141,18 @@ is an error, and `--texture albedo` is the way to write the whole color. A
 scalar attribute names no component, so `metallic.r` is an error.
 
 `--define-attribute <name> <palette-index> <key> [type=scalar]` names a custom
-attribute so `--texture-map` can read it, repeatable, as in
+attribute so `--texture-map` and `--vertex-map` can read it, repeatable, as in
 `--define-attribute sss 0 subsurface` and `--define-attribute tint 1 tint
 color`. The voxel-json format stores attributes generically, so a palette may
 carry keys beyond the recommended set in
 [Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
 and a binding gives one such key a name a packing can use. Its parts are:
 
-1. `name`: the name used in `--texture-map`. It shadows a built-in attribute
-   name on collision, so `--define-attribute roughness 2 micro-rough` makes
-   `R=roughness` read `micro-rough` from palette `2`. The shadowing is scoped to
-   `--texture-map`; the `--texture` presets always read the spec attributes.
+1. `name`: the name used in `--texture-map` and `--vertex-map`. It shadows a
+   built-in attribute name on collision, so `--define-attribute roughness 2
+   micro-rough` makes `R=roughness` read `micro-rough` from palette `2`. The
+   shadowing is scoped to the custom packings; the `--texture` and `--vertex`
+   presets always read the spec attributes.
 2. `palette-index`: which palette layer to read, as a position in the object's
    `paletteRefs`, where `0` is the first layer, the same order the material
    merge uses. This targets one specific layer when several carry the key.
@@ -175,6 +164,73 @@ and a binding gives one such key a name a packing can use. Its parts are:
 For example, `--define-attribute tint 1 tint color` then `--texture-map
 paint.png R=tint.r,G=tint.g,B=tint.b,A=rgba.a` packs the custom `tint` color
 from palette `1` into RGB and the base color's alpha into `A`.
+
+## Vertex attribute maps
+
+A material map reads a material's attributes the same way whether it lands in a
+texture or on the mesh's vertices; only the carrier differs. The
+[texture maps](#material-and-texture-maps) above write through `--texture` and
+`--texture-map`, sampled by the mesh's UVs; `--vertex` and `--vertex-map` write
+the same resolved values to glTF vertex attributes, one value per vertex, with no
+texture and no UV set. The source grammar is shared: `--vertex-map` reads the
+same `<channels>` expressions as `--texture-map`, and `--define-attribute` names
+custom attributes for both. Vertex attributes need geometry, so unlike texture
+maps they have no `material`-command equivalent.
+
+The attribute name a value lands in decides whether a generic glTF viewer reads
+it. glTF's metallic-roughness shading reads one per-vertex slot, `COLOR_0`, a
+vec4 that multiplies the base color, so per-vertex color is portable but
+per-vertex metallic, roughness, and the rest are not: they go in
+application-specific attributes, whose names glTF requires to start with `_` and
+that only a custom shader reads. A generic viewer stores and ignores them.
+
+A vertex carries one value per face corner. Greedy meshing merges only coplanar,
+same-material faces, so every corner of a merged quad shares one material and
+per-vertex material stays constant across the quad with no extra splitting;
+`culled` and `naive` already carry one value per face corner. `computed-occlusion`
+is the exception: it takes each corner's value from the three voxels meeting
+there, four discrete levels, so it varies within a quad and forces per-face
+resolution. With `--method greedy` two faces merge only when their occlusion
+matches along the shared edge, so flat runs still merge into large quads while
+concave seams split, and when a quad's four corners are uneven the triangle
+diagonal is chosen to keep the darker pair together so interpolation does not
+seam.
+
+`--vertex <name> [target]` writes a preset to vertices, repeatable, the vertex
+twin of `--texture`. The optional `target` overrides the default attribute name.
+The names reuse the texture presets and pack the same way:
+
+1. `albedo`: RGBA base color from `rgba` into `COLOR_0`. Portable; a glTF viewer
+   renders it as the per-vertex base color with no texture.
+2. `computed-occlusion`: occlusion computed from the voxel geometry, multiplied
+   into `COLOR_0` to darken the base color, tuned by the `--computed-occlusion-*`
+   options above. Override the target, as `--vertex computed-occlusion _AO`, to
+   write it as a standalone custom scalar instead of darkening the color.
+3. `metallic`, `roughness`, `emissive`, `occlusion`, `smoothness`: one scalar
+   into `_METALLIC`, `_ROUGHNESS`, and so on, the name a `_` plus the preset
+   uppercased. Custom attributes a custom shader reads.
+4. `orm`, `mse`, `metallic-roughness`, `metallic-smoothness`: the packed presets,
+   into `_ORM`, `_MSE`, and so on, packed across the attribute's components
+   exactly as the texture preset packs them across channels. Custom attributes.
+5. `palette-index`: the cell index `--atlas palette` resolves to a UV, written as
+   a scalar into `_PALETTEINDEX`, with the per-index material table that `--atlas
+   palette` bakes into a texture shipped instead as data in the glTF `extras`. A
+   custom shader looks the material up by index rather than sampling a texture:
+   the most compact carrier and the exact-value alternative to the palette atlas.
+   Custom; not read by a generic viewer.
+
+`--vertex-map <target> <channels>` writes a custom packing to a named attribute,
+repeatable, the vertex twin of `--texture-map`. `target` is `COLOR_0` or a custom
+`_NAME`, and `channels` is the same comma-separated `R=<expr>,G=<expr>,...` list,
+so `--vertex-map _ORM R=occlusion,G=roughness,B=metallic` packs ORM into a vec3
+attribute and `--vertex-map COLOR_0 R=rgba.r,G=rgba.g,B=rgba.b,A=rgba.a` writes
+the base color. The component count follows the channels named: one is a scalar,
+two a vec2, three a vec3, four a vec4. A packing that names `computed-occlusion`
+resolves it per corner as above.
+
+The two carriers compose in one run: write base color to `COLOR_0` and bake PBR
+into a shared palette atlas, or carry everything on vertices for a texture-free
+mesh. `--atlas` sets only the texture layout and never affects vertex attributes.
 
 ## Future work
 

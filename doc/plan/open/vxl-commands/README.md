@@ -33,8 +33,8 @@ palette, default `0`) and `--attribute` (which attribute key, default `rgba`).
 
 - [`vxl to <format>`](reference/to/README.md): convert between voxel formats,
   and the canonical way to re-encode, pack, and unpack a document.
-- [`vxl mesh`](reference/mesh.md): voxel to editable mesh, with material and
-  texture maps.
+- [`vxl mesh`](reference/mesh.md): voxel to editable mesh, with material maps as
+  textures or per-vertex attributes.
 - [`vxl material`](reference/material.md): bake material maps only.
 - [`vxl voxelize`](reference/voxelize.md): mesh to voxel grid.
 - [`vxl palette`](reference/palette/README.md): list, show, quantize, and remap
