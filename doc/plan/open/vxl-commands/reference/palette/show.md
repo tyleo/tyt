@@ -94,7 +94,8 @@ directly and ignore the format.
    `{palette}.{attribute}` header, the headers padded to the longest so the first
    value of each row lines up, and the rows separated by a blank line. Only the
    header is padded; the values are not column-aligned. Swatch cells abut into a
-   continuous strip; the other formats separate their values with a single space.
+   continuous strip; the other formats, and a swatch value with no swatch such as
+   a bool, separate their values with a single space.
 2. `row-no-header`: `row` with the header column dropped.
 3. `column`: each collection is its own column beneath its header, padded to a
    common width so a `value` rendering reads straight down.

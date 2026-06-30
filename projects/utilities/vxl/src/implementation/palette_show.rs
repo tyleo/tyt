@@ -2,6 +2,7 @@ use crate::{
     AttributeRef, AttributeSelector, AttributeType, ColorComponent, Format, PaletteRef,
     PaletteShowFormat, PaletteShowLayout, Result, Width, implementation,
 };
+use serde_json::{Value, json};
 use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
@@ -405,6 +406,17 @@ fn scalar_level(value: f64) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
+/// Whether a collection's cells abut into a strip: a `swatch` collection whose
+/// every value is a real swatch. A value with no swatch, a raw fallback like a
+/// bool, keeps the one-space separator so it does not run together.
+fn abuts(collection: &Collection) -> bool {
+    matches!(collection.format, PaletteShowFormat::Swatch)
+        && !collection
+            .samples
+            .iter()
+            .any(|sample| matches!(sample, Sample::Raw(_)))
+}
+
 /// Each collection on one row, the rows separated by a blank line. A swatch
 /// collection's cells abut into a strip; other formats put one space between
 /// cells. With `with_header`, only the header is padded, to the longest, so the
@@ -414,17 +426,18 @@ fn scalar_level(value: f64) -> u8 {
 fn render_row(collections: &[Collection], with_header: bool, width: Option<usize>) -> String {
     let headers: Vec<String> = collections.iter().map(Collection::header).collect();
     let cells: Vec<Vec<String>> = collections.iter().map(rendered_cells).collect();
-    let header_width = headers.iter().map(|h| visible_width(h)).max().unwrap_or(0);
+    let header_width = headers
+        .iter()
+        .map(|h| implementation::visible_width(h))
+        .max()
+        .unwrap_or(0);
     let indent = if with_header { header_width + 1 } else { 0 };
 
     let mut blocks: Vec<String> = Vec::new();
     for ((collection, header), row) in collections.iter().zip(&headers).zip(&cells) {
-        // Swatches abut into a strip; other formats keep one space so values
-        // stay legible.
-        let separator = match collection.format {
-            PaletteShowFormat::Swatch => "",
-            _ => " ",
-        };
+        // Swatches abut into a strip; other formats, and swatch cells that fell
+        // back to raw text, keep one space so values stay legible.
+        let separator = if abuts(collection) { "" } else { " " };
         let segments = match width {
             // Leave room for at least one cell beside the header indent.
             Some(width) => wrap_cells(row, separator, width.saturating_sub(indent).max(1)),
@@ -454,7 +467,7 @@ fn wrap_cells(cells: &[String], separator: &str, budget: usize) -> Vec<String> {
     let mut current: Vec<&str> = Vec::new();
     let mut width = 0;
     for cell in cells {
-        let cell_width = visible_width(cell);
+        let cell_width = implementation::visible_width(cell);
         if !current.is_empty() && width + separator_width + cell_width > budget {
             segments.push(current.join(separator));
             current.clear();
@@ -484,7 +497,9 @@ fn assemble_row(
 ) -> String {
     if segments.is_empty() {
         return if with_header {
-            pad_right(header, header_width).trim_end().to_string()
+            implementation::pad_right(header, header_width)
+                .trim_end()
+                .to_string()
         } else {
             String::new()
         };
@@ -494,7 +509,7 @@ fn assemble_row(
         .enumerate()
         .map(|(line, segment)| {
             let prefix = match (line, with_header) {
-                (0, true) => format!("{} ", pad_right(header, header_width)),
+                (0, true) => format!("{} ", implementation::pad_right(header, header_width)),
                 (0, false) => String::new(),
                 _ => " ".repeat(indent),
             };
@@ -514,9 +529,13 @@ fn render_column(collections: &[Collection], with_header: bool) -> String {
         .iter()
         .zip(&cells)
         .map(|(header, column)| {
-            let cell = column.iter().map(|c| visible_width(c)).max().unwrap_or(0);
+            let cell = column
+                .iter()
+                .map(|c| implementation::visible_width(c))
+                .max()
+                .unwrap_or(0);
             if with_header {
-                visible_width(header).max(cell)
+                implementation::visible_width(header).max(cell)
             } else {
                 cell
             }
@@ -549,46 +568,18 @@ fn render_markdown(collections: &[Collection]) -> String {
     }
     let headers: Vec<String> = collections.iter().map(Collection::header).collect();
     let cells: Vec<Vec<String>> = collections.iter().map(rendered_cells).collect();
-    // Three is the minimum dash run a markdown column separator needs.
-    let widths = column_widths(&headers, &cells, 3);
     let row_count = cells.iter().map(Vec::len).max().unwrap_or(0);
-
-    let mut output = String::new();
-    output.push_str(&table_row(&headers, &widths));
-    let rules: Vec<String> = widths.iter().map(|width| "-".repeat(*width)).collect();
-    output.push_str(&table_row(&rules, &widths));
-    for row in 0..row_count {
-        let line: Vec<String> = cells
-            .iter()
-            .map(|column| column.get(row).cloned().unwrap_or_default())
-            .collect();
-        output.push_str(&table_row(&line, &widths));
-    }
-    output
-}
-
-/// One `| ... | ... |` markdown row, each cell padded to its column width.
-fn table_row(cells: &[String], widths: &[usize]) -> String {
-    let mut line = String::from("|");
-    for (cell, width) in cells.iter().zip(widths) {
-        line.push(' ');
-        line.push_str(&pad_right(cell, *width));
-        line.push_str(" |");
-    }
-    line.push('\n');
-    line
-}
-
-/// The per-column visible widths, each at least the header's width and `floor`.
-fn column_widths(headers: &[String], cells: &[Vec<String>], floor: usize) -> Vec<usize> {
-    headers
-        .iter()
-        .zip(cells)
-        .map(|(header, column)| {
-            let cell = column.iter().map(|c| visible_width(c)).max().unwrap_or(0);
-            visible_width(header).max(cell).max(floor)
+    // One row per cell index, drawing each collection's cell or a blank.
+    let rows: Vec<Vec<String>> = (0..row_count)
+        .map(|row| {
+            cells
+                .iter()
+                .map(|column| column.get(row).cloned().unwrap_or_default())
+                .collect()
         })
-        .collect()
+        .collect();
+    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
+    implementation::markdown_table(&header_refs, &rows)
 }
 
 /// Joins one value per column, each padded to its column width, with single
@@ -597,7 +588,7 @@ fn join_padded(values: &[String], widths: &[usize]) -> String {
     values
         .iter()
         .zip(widths)
-        .map(|(value, width)| pad_right(value, *width))
+        .map(|(value, width)| implementation::pad_right(value, *width))
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -611,110 +602,46 @@ fn rendered_cells(collection: &Collection) -> Vec<String> {
         .collect()
 }
 
-/// Pads `value` on the right with spaces to a visible width of `width`,
-/// measuring past the swatch escape codes.
-fn pad_right(value: &str, width: usize) -> String {
-    let visible = visible_width(value);
-    let mut output = value.to_string();
-    if width > visible {
-        output.push_str(&" ".repeat(width - visible));
-    }
-    output
-}
-
-/// The visible width of `value`, counting characters outside of ANSI CSI escape
-/// sequences so a swatch's color codes carry no width.
-fn visible_width(value: &str) -> usize {
-    let mut width = 0;
-    let mut chars = value.chars();
-    while let Some(character) = chars.next() {
-        if character == '\x1b' {
-            // A CSI sequence is `ESC [` then bytes up to a final `0x40..=0x7e`.
-            if chars.next() == Some('[') {
-                for tail in chars.by_ref() {
-                    if ('\x40'..='\x7e').contains(&tail) {
-                        break;
-                    }
-                }
-            }
-        } else {
-            width += 1;
-        }
-    }
-    width
-}
-
 /// The collections as JSON, one record per collection in render order: its
 /// resolved palette index, its attribute label, and its values in native JSON
 /// types. The format and layout are ignored; a color is a hex string, a
-/// component its byte, and a scalar a number.
+/// component its byte, and a scalar a number. `pretty` selects indented output,
+/// matching the shared report JSON.
 fn render_json(collections: &[Collection], pretty: bool) -> String {
-    if collections.is_empty() {
-        return "[]\n".to_string();
-    }
-    let records: Vec<String> = collections
+    let records: Vec<Value> = collections
         .iter()
         .map(|collection| {
-            let values = collection
-                .samples
-                .iter()
-                .map(sample_json)
-                .collect::<Vec<_>>();
-            if pretty {
-                format!(
-                    "  {{ \"palette\": {}, \"attribute\": {}, \"values\": [{}] }}",
-                    collection.palette,
-                    json_string(&collection.attribute),
-                    values.join(", ")
-                )
-            } else {
-                format!(
-                    "{{\"palette\":{},\"attribute\":{},\"values\":[{}]}}",
-                    collection.palette,
-                    json_string(&collection.attribute),
-                    values.join(",")
-                )
-            }
+            let values: Vec<Value> = collection.samples.iter().map(sample_value).collect();
+            json!({
+                "palette": collection.palette,
+                "attribute": collection.attribute,
+                "values": values,
+            })
         })
         .collect();
-    if pretty {
-        format!("[\n{}\n]\n", records.join(",\n"))
+    let payload = Value::Array(records);
+    let text = if pretty {
+        serde_json::to_string_pretty(&payload)
     } else {
-        format!("[{}]\n", records.join(","))
+        serde_json::to_string(&payload)
     }
+    .expect("palette values serialize to JSON");
+    format!("{text}\n")
 }
 
-/// One sample as a JSON value: a quoted hex string for a color, a bare integer
-/// for a component byte, a bare number for a scalar, a quoted string for a raw
-/// fallback.
-fn sample_json(sample: &Sample) -> String {
+/// One sample as a JSON value: a hex string for a color, a component byte, a
+/// number for a scalar, a string for a raw fallback. An integral scalar emits
+/// as an integer so it reads as it does in the text layouts.
+fn sample_value(sample: &Sample) -> Value {
     match sample {
-        Sample::Color(rgba) => json_string(&hex(rgba)),
-        Sample::Component(byte) => format!("{byte}"),
-        Sample::Scalar(value) => format!("{value}"),
-        Sample::Raw(text) => json_string(text),
-    }
-}
-
-/// `text` as a quoted, escaped JSON string.
-fn json_string(text: &str) -> String {
-    let mut output = String::with_capacity(text.len() + 2);
-    output.push('"');
-    for character in text.chars() {
-        match character {
-            '"' => output.push_str("\\\""),
-            '\\' => output.push_str("\\\\"),
-            '\n' => output.push_str("\\n"),
-            '\r' => output.push_str("\\r"),
-            '\t' => output.push_str("\\t"),
-            control if (control as u32) < 0x20 => {
-                output.push_str(&format!("\\u{:04x}", control as u32))
-            }
-            character => output.push(character),
+        Sample::Color(rgba) => Value::String(hex(rgba)),
+        Sample::Component(byte) => json!(byte),
+        Sample::Scalar(number) if number.fract() == 0.0 && number.abs() < i64::MAX as f64 => {
+            json!(*number as i64)
         }
+        Sample::Scalar(number) => json!(number),
+        Sample::Raw(text) => Value::String(text.clone()),
     }
-    output.push('"');
-    output
 }
 
 #[cfg(test)]
@@ -723,6 +650,7 @@ mod tests {
         AttributeSelector, PaletteShowLayout,
         implementation::palette_show::{render, resolve_collections},
     };
+    use serde_json::Value;
     use voxcore::{VoxMain, VoxPalette, VoxValue};
 
     /// A document with two palettes: palette 0 has `rgba` and `metallic` with
@@ -794,6 +722,25 @@ mod tests {
             output,
             "0.rgba \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
         );
+    }
+
+    #[test]
+    fn swatch_spaces_values_with_no_swatch() {
+        let mut state = VoxMain::default();
+        let mut palette = VoxPalette::default();
+        palette.add_attribute("shadows".to_owned());
+        palette.add_cell(vec![VoxValue::Bool(true)]).unwrap();
+        palette.add_cell(vec![VoxValue::Bool(false)]).unwrap();
+        state.add_palette(palette);
+
+        // Bools have no swatch, so swatch format spaces them rather than
+        // abutting them into `truefalse`.
+        let output = show(
+            &state,
+            &[("0", "shadows", "swatch")],
+            PaletteShowLayout::Row,
+        );
+        assert_eq!(output, "0.shadows true false\n");
     }
 
     #[test]
@@ -906,20 +853,16 @@ mod tests {
     }
 
     #[test]
-    fn pretty_json_indents_one_record_per_line() {
+    fn pretty_json_is_indented_and_matches_compact() {
         let state = sample_state();
-        let output = show(
-            &state,
-            &[("0", "rgba", "value"), ("0", "rgba.a", "value")],
-            PaletteShowLayout::PrettyJson,
-        );
-        assert_eq!(
-            output,
-            "[\n\
-             \x20 { \"palette\": 0, \"attribute\": \"rgba\", \"values\": [\"#FF0000FF\", \"#00FF0080\"] },\n\
-             \x20 { \"palette\": 0, \"attribute\": \"rgba.a\", \"values\": [255, 128] }\n\
-             ]\n"
-        );
+        let fields: &[(&str, &str, &str)] = &[("0", "rgba", "value"), ("0", "rgba.a", "value")];
+        let pretty = show(&state, fields, PaletteShowLayout::PrettyJson);
+        let compact = show(&state, fields, PaletteShowLayout::CompactJson);
+        // Indented, and carrying the same data as the compact form.
+        assert!(pretty.contains("\n  "));
+        let pretty_value: Value = serde_json::from_str(&pretty).unwrap();
+        let compact_value: Value = serde_json::from_str(&compact).unwrap();
+        assert_eq!(pretty_value, compact_value);
     }
 
     #[test]

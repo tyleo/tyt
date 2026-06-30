@@ -206,10 +206,12 @@ made redundant.
 `row` pads only the header, to the longest, so the first value of each row lines
 up; the values themselves are not column-aligned, since aligning every value
 would let one wide attribute like a long float stretch the rest. The rows are
-separated by a blank line, and a swatch row's cells abut into a strip while the
-other formats keep one space between cells. The `-no-header` variants of `row`
-and `column` reuse the same renderer with the header column or row dropped, and a
-header-less column sizes its width from the cells alone.
+separated by a blank line. A swatch row's cells abut into a strip, except a value
+with no swatch, a bool that fell back to raw text, which keeps the one space so it
+does not run together; the other formats always space their cells. The
+`-no-header` variants of `row` and `column` reuse the same renderer with the
+header column or row dropped, and a header-less column sizes its width from the
+cells alone.
 
 clap derive has no typed grouping for several values per option occurrence, so
 `--attribute` is a `Vec<String>` with `num_args = 3` and `ArgAction::Append`,
@@ -245,11 +247,21 @@ zero-width swatch codes do not throw the value columns off. `render` is pure ove
 the resolved collections and `resolve_collections` pure over the loaded state, so
 both unit-test without the filesystem.
 
-`conventions.md` still describes the V1 `--json` on the read reports. The
-`--json`-to-`--layout` move is a cross-command convention, so it is left for the
-coordinated pass that lands the other read commands rather than edited here from
-`show` alone. The bare palette `--from palette` input and the shared JSON
-envelope stay deferred for the same reason.
+The `--json`-to-`--layout` move has since landed across the read reports, with a
+shared `ReportLayout` of `markdown`, `pretty-json`, and `compact-json`. `palette
+show` keeps its own richer `PaletteShowLayout`, since it adds the `row`, `column`,
+and swatch arrangements, but its `markdown`, `pretty-json`, and `compact-json`
+names and behavior match the shared form. The bare palette `--from palette` input
+and a shared JSON envelope stay deferred.
+
+JSON is built with `serde_json`, the crate `info` and `validate` already pull in,
+replacing the V1 hand-rolled serializer: `compact-json` is `to_string` and
+`pretty-json` is `to_string_pretty`, the same indented form `info` emits, so the
+read commands' JSON reads alike. An integral scalar still serializes as an integer
+so it matches the text layouts. The markdown layout shares one `markdown_table`
+helper with `info`, and the `visible_width` and `pad_right` primitives move to a
+`text_width` module; the shared table measures past ANSI escapes so swatch cells
+align, which `info`'s plain text neither needs nor is hurt by.
 
 `--width` wraps the `row` layouts so a 255-entry palette folds into a block
 instead of one multi-thousand-column line that the terminal mangles when it

@@ -94,15 +94,18 @@ fn render_markdown(
 
     let mut output = format!("# {name}\n\n");
     output.push_str("## Document\n\n");
-    output.push_str(&markdown_table(["Property", "Value"], &document_rows));
+    output.push_str(&implementation::markdown_table(
+        &["Property", "Value"],
+        &document_rows,
+    ));
     output.push_str("\n## Palettes\n\n");
-    output.push_str(&markdown_table(
-        ["Id", "Attributes", "Cells"],
+    output.push_str(&implementation::markdown_table(
+        &["Id", "Attributes", "Cells"],
         &palette_rows,
     ));
     output.push_str("\n## Objects\n\n");
-    output.push_str(&markdown_table(
-        [
+    output.push_str(&implementation::markdown_table(
+        &[
             "Id",
             "Name",
             "Bounds",
@@ -119,35 +122,6 @@ fn render_markdown(
 /// Collects borrowed cells into one owned table row.
 fn row<const N: usize>(cells: [&str; N]) -> Vec<String> {
     cells.iter().map(|cell| cell.to_string()).collect()
-}
-
-/// One table: header, separator, then rows, every column padded to its widest
-/// cell. Columns are at least three wide so the separator stays valid Markdown.
-fn markdown_table<const N: usize>(headers: [&str; N], rows: &[Vec<String>]) -> String {
-    let mut widths: Vec<usize> = headers.iter().map(|h| h.chars().count().max(3)).collect();
-    for row in rows {
-        for (column, cell) in row.iter().enumerate() {
-            widths[column] = widths[column].max(cell.chars().count());
-        }
-    }
-
-    let separators: Vec<String> = widths.iter().map(|width| "-".repeat(*width)).collect();
-    let mut output = table_row(headers.iter().map(|h| h.to_string()), &widths);
-    output.push_str(&table_row(separators.into_iter(), &widths));
-    for row in rows {
-        output.push_str(&table_row(row.iter().cloned(), &widths));
-    }
-    output
-}
-
-/// One `| a | b |` line, each cell padded to its column width.
-fn table_row(cells: impl Iterator<Item = String>, widths: &[usize]) -> String {
-    let mut output = String::from("|");
-    for (cell, &width) in cells.zip(widths) {
-        output.push_str(&format!(" {cell:<width$} |"));
-    }
-    output.push('\n');
-    output
 }
 
 /// The report as one JSON object, pretty or compact. Keys keep insertion order.
