@@ -1,5 +1,6 @@
 mod atlas;
 mod camera_view;
+mod channel_packing;
 mod channel_source;
 mod color_format;
 mod edit_state;
@@ -15,6 +16,7 @@ mod voxj_sample_encoding;
 
 pub use atlas::*;
 pub use camera_view::*;
+pub use channel_packing::*;
 pub use channel_source::*;
 pub use color_format::*;
 pub use edit_state::*;

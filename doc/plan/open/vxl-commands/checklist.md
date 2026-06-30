@@ -36,9 +36,12 @@ off as they land.
       [conventions](reference/conventions.md).
 - [x] `--atlas` layout `ValueEnum`: palette (one texel per palette entry,
       shareable) and unwrap (per-mesh UV) layouts. See [mesh](reference/mesh.md).
-- [ ] Material packing model: preset packings and the `--texture-map` channel
-      parser (`R`/`G`/`B`/`A` = `attr` | `1-attr` | `0` | `1`), with
+- [x] `--texture-map` channel parser: channel sources (`R`/`G`/`B`/`A` = `attr`
+      | `1-attr` | `0` | `1` | `computed-occlusion`) and the RGBA packing, with
       `smoothness` accepted as `1-roughness`. See [mesh](reference/mesh.md).
+- [ ] `--texture` preset packings (albedo, orm, metallic-roughness,
+      metallic-smoothness, mse, emissive, occlusion, computed-occlusion,
+      roughness, smoothness). See [mesh](reference/mesh.md).
 - [ ] Shared voxj writer options (`--format`, `--optimize`,
       `--position-encoding`, `--sample-encoding`, `--ext`, `--edit-state`)
       factored for reuse by `voxelize`.

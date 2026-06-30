@@ -52,3 +52,9 @@ attribute, not only the recommended ones. `smoothness` is not a stored
 attribute; the parser canonicalizes `smoothness` and `1-smoothness` to the
 `roughness` attribute with the matching inversion, so the bake always reads one
 real attribute.
+
+`ChannelPacking` sizes the image by the highest channel letter present, so
+naming `A` makes a four-channel image even when `G` and `B` are unnamed, which
+then default to `0`. This is what lets `R=metallic,A=smoothness` reproduce the
+metallic-smoothness preset. The docs' "number of channels named" holds for
+contiguous packings, the common case.
