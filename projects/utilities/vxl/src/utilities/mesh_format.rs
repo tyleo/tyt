@@ -1,9 +1,7 @@
 use clap::ValueEnum;
 use std::path::Path;
 
-/// A mesh file format that vxl can write. `mesh` infers it from the output
-/// extension or takes it from `--to`, mirroring how [`crate::Format`] infers a
-/// voxel format. Only `fbx` is supported for now; `obj` and `gltf` are planned.
+/// A mesh file format that vxl can write. Only `fbx` is implemented.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum MeshFormat {
     /// Autodesk FBX, the `.fbx` file.

@@ -1,19 +1,14 @@
 use std::str::FromStr;
 
-/// One `--select` value: a glob over hierarchy paths, matched with the
-/// project-standard globset rules shared with `hierarchy show`'s `pattern`. This
-/// type carries the pattern with `**/` auto-prepended unless it already starts
-/// with `**/`, so a bare pattern matches at any depth. The matching itself runs
-/// through `Dependencies::match_glob`, which keeps the globset engine behind the
-/// `impl` feature. The flag repeats; selecting a matched node's subtree is the
-/// resolver's job.
+/// One `--select` value: a hierarchy-path glob, `**/`-prepended unless it
+/// already starts with `**/` so a bare pattern matches at any depth.
 #[derive(Clone, Debug)]
 pub struct PathGlob {
     pattern: String,
 }
 
 impl PathGlob {
-    /// The normalized glob pattern to hand to `Dependencies::match_glob`.
+    /// The normalized glob pattern.
     pub fn pattern(&self) -> &str {
         &self.pattern
     }

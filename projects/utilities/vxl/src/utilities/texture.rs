@@ -1,10 +1,7 @@
 use crate::{ChannelPacking, ChannelSource, TextureBake};
 use clap::ValueEnum;
 
-/// A named `--texture` preset, a common material-map packing. Each lowers to a
-/// [`TextureBake`] with [`Texture::bake`]: `albedo` to the RGBA base color, the
-/// rest to a scalar [`ChannelPacking`]. `computed-occlusion` reads occlusion
-/// from the voxel geometry, so it always bakes into an unwrap layout.
+/// A named `--texture` preset, a common material-map packing.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum Texture {
     /// RGBA base color from `rgba`. Four channels.

@@ -1,9 +1,7 @@
 use std::str::FromStr;
 
 /// One `--select-index` value: a single object index such as `0`, or an
-/// inclusive range `a-b` such as `2-5`. Indices are positions into the
-/// document's `objects`. The flag repeats, and an object is selected when any
-/// value covers its index.
+/// inclusive range `a-b` such as `2-5`, into the document's `objects`.
 #[derive(Clone, Copy, Debug)]
 pub struct SelectIndex {
     start: usize,

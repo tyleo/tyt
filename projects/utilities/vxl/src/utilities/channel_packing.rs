@@ -1,13 +1,7 @@
 use crate::ChannelSource;
 use std::str::FromStr;
 
-/// A custom material-map packing: the `<channels>` argument of `--texture-map`,
-/// a comma-separated list of `R=<expr>`, `G=<expr>`, `B=<expr>`, and optional
-/// `A=<expr>`, each `<expr>` a [`ChannelSource`]. The image's channel count is
-/// the highest channel letter present, so naming `A` makes a four-channel image
-/// even when `G` and `B` are unnamed; an unnamed channel below the highest is
-/// `0`. That is what lets `R=metallic,A=smoothness` reproduce the
-/// metallic-smoothness preset.
+/// A material-map channel packing: a [`ChannelSource`] per named RGBA channel.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChannelPacking {
     r: Option<ChannelSource>,

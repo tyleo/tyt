@@ -1,16 +1,8 @@
 use std::str::FromStr;
 
-/// One channel's value in a material map: the right-hand side of an `R=`, `G=`,
-/// `B=`, or `A=` entry in `--texture-map`, and the building block the
-/// `--texture` presets are defined in terms of. A channel reads an attribute by
-/// its voxj key, optionally inverted as `1-<attribute>`, the constant `0` or
-/// `1`, or `computed-occlusion` derived from the voxel geometry.
-///
-/// `smoothness` is the derived `1-roughness`, so `smoothness` and `1-roughness`
-/// are interchangeable, as are `1-smoothness` and `roughness`; all canonicalize
-/// to the `roughness` attribute with the matching inversion. The attribute key
-/// is held as a string because the voxj format stores attributes generically,
-/// so a packing may read any attribute, not only the recommended ones.
+/// One channel's value in a material map: an attribute by voxj key, optionally
+/// inverted as `1-<attribute>`, the constant `0` or `1`, or `computed-occlusion`
+/// derived from the voxel geometry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ChannelSource {
     /// An attribute value by its voxj key, inverted to `1 - value` when `invert`

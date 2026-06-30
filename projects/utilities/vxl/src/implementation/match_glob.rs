@@ -2,9 +2,8 @@ use crate::Result;
 use globset::GlobBuilder;
 use std::io::{Error as IOError, ErrorKind};
 
-/// Matches `pattern` against each candidate hierarchy path with globset, the
-/// project's standard glob engine, built with path separators literal. Returns
-/// one boolean per candidate in order; an invalid glob is an error.
+/// Matches `pattern` against each candidate path with globset, path separators
+/// literal. Returns one boolean per candidate in order; an invalid glob errors.
 pub fn match_glob(pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
     let matcher = GlobBuilder::new(pattern)
         .literal_separator(true)
