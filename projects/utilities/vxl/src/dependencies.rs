@@ -1,4 +1,7 @@
-use crate::{CameraView, ColorFormat, EditState, Format, Result, VoxjEncoding, VoxjFormat};
+use crate::{
+    AttributeType, CameraView, ColorComponent, ColorFormat, EditState, Format, PaletteShowFormat,
+    Result, VoxjEncoding, VoxjFormat,
+};
 use std::path::Path;
 
 /// Dependencies for this crate's operations.
@@ -68,6 +71,33 @@ pub trait Dependencies {
         format: VoxjFormat,
         ext: bool,
         edit_state: EditState,
+    ) -> Result<()>;
+
+    /// Prints the selected attribute of one palette in the voxel file at
+    /// `input`.
+    ///
+    /// # Arguments
+    /// * `input` - the voxel file to read, in any supported format.
+    /// * `from` - source format, inferred from `input`'s extension when `None`.
+    /// * `index` - which palette to show, by index into the document's palettes.
+    /// * `attribute` - the attribute key to show.
+    /// * `component` - one color component to extract, or `None` for the whole
+    ///   value.
+    /// * `r#type` - how to interpret the values, inferred from the stored value
+    ///   when `None`.
+    /// * `format` - how to render each value.
+    /// * `json` - emit the selected attribute as JSON instead.
+    #[allow(clippy::too_many_arguments)]
+    fn palette_show(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        index: usize,
+        attribute: &str,
+        component: Option<ColorComponent>,
+        r#type: Option<AttributeType>,
+        format: PaletteShowFormat,
+        json: bool,
     ) -> Result<()>;
 
     /// Matches `pattern` against each candidate hierarchy path, returning one

@@ -52,7 +52,7 @@ off as they land.
       flattened by `to voxj` and `voxelize`; `--ext`/`--edit-state` stay on
       `to voxj`.
 - [x] `ValueEnum`s for the palette ops: quantize method, color space, dither,
-      and `palette show` format (`auto` | `swatch` | `string`).
+      and `palette show` format (`auto` | `swatch` | `swatch-value` | `value`).
 
 ## Commands
 
@@ -91,7 +91,9 @@ off as they land.
 
 - [ ] `palette list` (+ `--json`): index, attributes, cell count, referencing
       objects.
-- [ ] `palette show` (+ `--json`): `--index` / `--attribute` / `--format`.
+- [x] `palette show` (+ `--json`): `--index` / `--attribute` / `--format`. See
+      the V2 follow-ups in [palette show](reference/palette/show.md) for the
+      broader version.
 - [ ] `palette quantize`: `--count` with median-cut / octree / kmeans, space,
       dither with `--select` / `--select-index`, and the multi-attribute merge
       rule. Accept a full document or a bare palette JSON; dither only with a

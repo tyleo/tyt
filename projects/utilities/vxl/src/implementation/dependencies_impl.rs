@@ -1,6 +1,6 @@
 use crate::{
-    CameraView, ColorFormat, Dependencies, EditState, Format, Result, VoxjEncoding, VoxjFormat,
-    implementation,
+    AttributeType, CameraView, ColorComponent, ColorFormat, Dependencies, EditState, Format,
+    PaletteShowFormat, Result, VoxjEncoding, VoxjFormat, implementation,
 };
 use std::path::Path;
 
@@ -42,6 +42,23 @@ impl Dependencies for DependenciesImpl {
         edit_state: EditState,
     ) -> Result<()> {
         implementation::to_voxj(input, from, output, encoding, format, ext, edit_state)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn palette_show(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        index: usize,
+        attribute: &str,
+        component: Option<ColorComponent>,
+        r#type: Option<AttributeType>,
+        format: PaletteShowFormat,
+        json: bool,
+    ) -> Result<()> {
+        implementation::palette_show(
+            input, from, index, attribute, component, r#type, format, json,
+        )
     }
 
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {

@@ -83,9 +83,12 @@ Rationale for the non-obvious choices, for reviewers.
    `.component` grammar is reused from `--texture-map`, so `rgba.a` means one
    thing across show, mesh, and the packings; it is read-only inspection sugar,
    scoped to show, so the mutating palette commands keep whole-attribute
-   semantics. `swatch` extends to scalars and extracted channels as a grayscale
-   ramp, since a single `0..1` value renders as gray, while `auto` keeps numeric
-   output for scalars and swatches only true colors.
+   semantics. `auto` keeps numeric output for scalars and swatches only true
+   colors, beside their hex. `swatch` and `swatch-value` extend swatches to
+   scalars and extracted channels as a grayscale ramp, since a single `0..1`
+   value renders as gray, the first printing the swatch alone and the second
+   adding the exact hex or number beside it, while `value` drops the swatch for
+   piping.
 
 ## Future and nice-to-haves
 

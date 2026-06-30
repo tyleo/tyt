@@ -121,3 +121,32 @@ vxl implements `write_stdout` against `std::io::stdout().write_all` as a free
 function in the implementation module rather than delegating to
 `tyt_injection::write_stdout` the way the prefixed tyt crates do, because vxl
 stays independent of the tyt support crates.
+
+## palette show
+
+The command splits `--attribute` into a key and an optional trailing color
+component with its own parser rather than reusing `ChannelSource`, because
+`--attribute` takes only `<key>.component` and must reject the `1-` inversion,
+the `0` and `1` constants, and the `smoothness` alias a `--texture-map` channel
+accepts. The split rule itself is the shared one: a trailing single letter that
+names a color component is the component, and a longer dotted suffix stays part
+of the key, so a dotted attribute key still parses whole.
+
+`Dependencies::palette_show` carries the load, render, and print together, like
+the `to_*` converters, so the command struct only parses flags. Its core is a
+pure function over a `VoxPalette` that returns the output string, which keeps the
+formatting unit-testable without the filesystem; the wrapper loads the document,
+selects the palette by index, and writes the result to stdout.
+
+The value type resolves at render time, not parse time, the same deferral the
+selectors use: the type is inferred from the first concrete value unless `--type`
+overrides it, and a component on a scalar is rejected once the type is known. A
+value that does not match the resolved type falls back to its raw text rather
+than failing, so a forced `--type` never crashes on a stray cell.
+
+JSON is hand-rolled rather than pulling in a serializer, since vxl carries no
+serde dependency and the shape is a flat object of the palette index, the
+attribute label, and the rendered values. The values carry their own JSON type,
+a hex string for a color and a number otherwise, so no separate type field is
+reported. The richer JSON forms are left to the V2 follow-ups in
+[palette show](palette/show.md).

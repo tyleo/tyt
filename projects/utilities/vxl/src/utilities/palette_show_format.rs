@@ -3,14 +3,18 @@ use clap::ValueEnum;
 /// Output form for `palette show`.
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
 pub enum PaletteShowFormat {
-    /// Swatches for `rgba`, numeric values otherwise.
+    /// A swatch beside its value for a color, a bare number for a scalar or
+    /// extracted channel.
     #[default]
     #[value(name = "auto")]
     Auto,
-    /// Colored swatches.
+    /// Swatches alone, with no value text.
     #[value(name = "swatch")]
     Swatch,
-    /// Raw values, one per line.
-    #[value(name = "string")]
-    String,
+    /// Swatches each followed by their value text.
+    #[value(name = "swatch-value")]
+    SwatchValue,
+    /// Raw value text, one per line.
+    #[value(name = "value")]
+    Value,
 }
