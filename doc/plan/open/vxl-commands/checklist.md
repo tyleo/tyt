@@ -2,8 +2,10 @@
 
 Tracks building the commands in this plan. Start from the [README](README.md)
 for the overview, the per-command pages under [reference/](reference/), and the
-[design notes](reference/design-notes.md) for rationale. Check items off as they
-land.
+[design notes](reference/design-notes.md) for rationale. Code-level decisions
+made while building are logged in
+[implementation decisions](reference/implementation-decisions.md). Check items
+off as they land.
 
 ## Ground rules
 
@@ -26,9 +28,11 @@ land.
 - [x] `MeshFormat` `ValueEnum` (to support `fbx` | `obj` | `gltf`) with
       `from_path` extension inference, mirroring `Format::from_path`. Only
       implement `fbx` at first.
-- [ ] Object selector parsers: `--select-index` (integer or `a-b` range) and
-      `--select` hierarchy-path glob (a node path selects its subtree), both
+- [x] `--select-index` object selector parser: integer or `a-b` range,
       repeatable, union over all values. See
+      [conventions](reference/conventions.md).
+- [ ] `--select` hierarchy-path glob object selector: a node path selects its
+      subtree, repeatable, union over all values. See
       [conventions](reference/conventions.md).
 - [ ] Material-map model: `--atlas` palette (one texel per palette entry,
       shareable) and unwrap (per-mesh UV) layouts; preset packings and the
