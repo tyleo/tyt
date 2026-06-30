@@ -17,6 +17,17 @@ pub struct ChannelPacking {
 }
 
 impl ChannelPacking {
+    /// A packing from per-channel sources, each `None` when the channel is not
+    /// part of the image; see [`channel_count`](Self::channel_count).
+    pub fn new(
+        r: Option<ChannelSource>,
+        g: Option<ChannelSource>,
+        b: Option<ChannelSource>,
+        a: Option<ChannelSource>,
+    ) -> Self {
+        ChannelPacking { r, g, b, a }
+    }
+
     /// The image's channel count, the index of the highest channel named, from
     /// `1` for an R-only packing to `4` when `A` is present.
     pub fn channel_count(&self) -> usize {

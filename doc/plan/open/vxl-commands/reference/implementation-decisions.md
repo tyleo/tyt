@@ -58,3 +58,11 @@ naming `A` makes a four-channel image even when `G` and `B` are unnamed, which
 then default to `0`. This is what lets `R=metallic,A=smoothness` reproduce the
 metallic-smoothness preset. The docs' "number of channels named" holds for
 contiguous packings, the common case.
+
+The `--texture` presets lower to `TextureBake` via `Texture::bake`. All but
+`albedo` are scalar `ChannelPacking`s built the same way `--texture-map` parses,
+so a preset and its channel-list spelling are the same value. `albedo` is the
+RGBA base color, which a scalar packing cannot express, so it is its own
+`TextureBake` variant. `computed-occlusion` lowers to a packing whose one source
+is `ComputedOcclusion`, which the bake treats as forcing an unwrap layout, so no
+separate flag is needed.

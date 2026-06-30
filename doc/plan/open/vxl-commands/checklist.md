@@ -39,7 +39,7 @@ off as they land.
 - [x] `--texture-map` channel parser: channel sources (`R`/`G`/`B`/`A` = `attr`
       | `1-attr` | `0` | `1` | `computed-occlusion`) and the RGBA packing, with
       `smoothness` accepted as `1-roughness`. See [mesh](reference/mesh.md).
-- [ ] `--texture` preset packings (albedo, orm, metallic-roughness,
+- [x] `--texture` preset packings (albedo, orm, metallic-roughness,
       metallic-smoothness, mse, emissive, occlusion, computed-occlusion,
       roughness, smoothness). See [mesh](reference/mesh.md).
 - [ ] Shared voxj writer options (`--format`, `--optimize`,
