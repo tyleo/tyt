@@ -37,11 +37,13 @@ glob share one rule set:
 
 ## Object selectors
 
-[`mesh`](mesh.md) and [`material`](material.md) choose which objects to output
-with two repeatable options, one per addressing mode, so a value is never parsed
-as either an index or a glob. Selection targets objects; each matched object is
-meshed as pure geometry with no hierarchy-node transform, so a path is only the
-selection key, not placement.
+[`mesh`](mesh.md) and [`material`](material.md) choose which objects to output,
+and [`palette quantize`](palette/quantize.md) and
+[`palette remap`](palette/remap.md) choose which objects to dither, with two
+repeatable options, one per addressing mode, so a value is never parsed as
+either an index or a glob. Selection targets objects; under `mesh` each matched
+object is meshed as pure geometry with no hierarchy-node transform, so a path is
+only the selection key, not placement.
 
 1. `--select-index <index>`: an object index into the document's `objects`,
    a plain integer such as `0` or a range `a-b` such as `2-5`. Repeat the flag
@@ -56,7 +58,8 @@ selection key, not placement.
    not unique, so a glob may match several objects.
 
 Both options repeat, and every `--select-index` and `--select` value unions its
-matches. Given neither, every object is output.
+matches. Given neither, every object is covered, output by `mesh` and
+`material` and dithered by `quantize` and `remap`.
 
 Selecting hierarchy nodes instead, to bake a node's subtree and transforms into
 one larger placed mesh, is a separate mode left for a later pass.

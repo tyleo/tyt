@@ -78,9 +78,13 @@ land.
       objects.
 - [ ] `palette show` (+ `--json`): `--index` / `--attribute` / `--format`.
 - [ ] `palette quantize`: `--count` with median-cut / octree / kmeans, space,
-      dither, and the multi-attribute merge rule.
+      dither with `--select` / `--select-index`, and the multi-attribute merge
+      rule. Accept a full document or a bare palette JSON; dither only with a
+      document.
 - [ ] `palette remap`: `--target` (JSON `palettes` array) or `--target-index`,
-      `--target-attribute`, space, dither, and the same merge rule.
+      `--target-attribute`, space, dither with `--select` / `--select-index`,
+      and the same merge rule. Accept a full document or a bare palette JSON
+      input, the `--target` shape; dither only with a document.
 
 ### hierarchy show ([reference/hierarchy/show.md](reference/hierarchy/show.md))
 

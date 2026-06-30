@@ -49,6 +49,12 @@ Rationale for the non-obvious choices, for reviewers.
    attribute, so reducing one attribute has to define what happens to cells
    that share that value but differ elsewhere. Both keep such cells distinct,
    bounding the selected attribute without silently dropping PBR distinctions.
+7. Quantize and remap take either a full document or a bare palette JSON, the
+   remap `--target` shape. The palette transform is the same either way; a
+   document additionally carries voxels, so it can dither the rewritten samples
+   in 3D order and narrow that dithering with the object selectors, while a bare
+   palette has nothing to walk and skips both. Reusing the selectors keeps one
+   addressing model across mesh, material, quantize, and remap.
 
 ## Future and nice-to-haves
 
