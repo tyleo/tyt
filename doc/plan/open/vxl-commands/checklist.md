@@ -26,12 +26,14 @@ land.
 - [ ] `MeshFormat` `ValueEnum` (to support `fbx` | `obj` | `gltf`) with
       `from_path` extension inference, mirroring `Format::from_path`. Only
       implement `fbx` at first.
-- [ ] Object selector parsers: `--select-index` (integer, `a-b` range, comma
-      list) and `--select` name glob, both repeatable, union over all values.
-      See [conventions](reference/conventions.md).
-- [ ] Material-map model: atlas of unique merged materials; preset packings and
-      the `--map` channel parser (`R`/`G`/`B`/`A` = `attr` | `1-attr` | `0` |
-      `1`). See [mesh](reference/mesh.md).
+- [ ] Object selector parsers: `--select-index` (integer or `a-b` range) and
+      `--select` name glob, both repeatable, union over all values. See
+      [conventions](reference/conventions.md).
+- [ ] Material-map model: `--atlas` palette (one texel per palette entry,
+      shareable) and unwrap (per-mesh UV) layouts; preset packings and the
+      `--texture-map` channel parser (`R`/`G`/`B`/`A` = `attr` | `1-attr` | `0`
+      | `1`), with `smoothness` accepted as `1-roughness`. See
+      [mesh](reference/mesh.md).
 - [ ] Shared voxj writer options (`--format`, `--optimize`,
       `--position-encoding`, `--sample-encoding`, `--ext`, `--edit-state`)
       factored for reuse by `voxelize`.
@@ -43,17 +45,19 @@ land.
 ### mesh ([reference/mesh.md](reference/mesh.md))
 
 - [ ] `Mesh` command struct, dispatch, and per-object pure-geometry output.
-- [ ] `--to` / `--from`, `--method`, `--ambient-occlusion`, `--select` /
-      `--select-index`.
-- [ ] Material maps: presets (`--albedo`, `--orm`, `--metallic-roughness`,
-      `--mse`, `--emissive`, `--occlusion`) plus `--map`, default paths from the
-      mesh stem.
+- [ ] `--to` / `--from`, `--method`, `--ambient-occlusion`, `--atlas`,
+      `--select` / `--select-index`.
+- [ ] Material maps: `--texture <name> [path]` presets (albedo, orm,
+      metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
+      roughness, smoothness) and `--texture-map <path> <channels>`, default
+      paths from the mesh stem.
 - [ ] `Dependencies::mesh` and its impl.
 
 ### material ([reference/material.md](reference/material.md))
 
 - [ ] `Material` command sharing the mesh map flags, bake-only with no geometry.
-- [ ] Atlas derivation identical to `mesh`; verify byte-for-byte parity.
+- [ ] `--atlas` shared with `mesh`; atlas derivation identical per mode; verify
+      byte-for-byte parity.
 - [ ] Require at least one map; otherwise list the maps and exit non-zero.
 
 ### voxelize ([reference/voxelize.md](reference/voxelize.md))

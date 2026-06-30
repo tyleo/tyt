@@ -17,6 +17,10 @@ These hold across the commands and match the existing `to` commands.
    arguments, so optional values never trail required ones.
 5. `--json` is available on the read-only reports: `palette list`,
    `palette show`, `hierarchy show`, `validate`, and `info`.
+6. Multiple values are passed by repeating the flag, as in
+   `--select-index 0 --select-index 3`, not as one comma-separated argument. The
+   exception is the `--texture-map` channel list, where the comma-separated RGBA
+   packing is a single structured value.
 
 ## Object selectors
 
@@ -26,8 +30,9 @@ as either an index or a glob. Each matched object is meshed as pure geometry,
 with no hierarchy-node transform.
 
 1. `--select-index <index>`: an object index into the document's `objects`,
-   written as a plain integer, a range `a-b`, or a comma-separated list, as in
-   `0`, `2-5`, or `0,3,7`. Index is the canonical object reference in the spec.
+   a plain integer such as `0` or a range `a-b` such as `2-5`. Repeat the flag
+   to pick several, as in `--select-index 0 --select-index 3`. Index is the
+   canonical object reference in the spec.
 2. `--select <glob>`: a glob over object names, where `*`, `?`, and `[...]`
    match as in a shell. Object names are flat, not paths, and are not guaranteed
    unique, so a glob may match several objects.

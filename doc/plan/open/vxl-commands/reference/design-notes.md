@@ -13,15 +13,28 @@ Rationale for the non-obvious choices, for reviewers.
    `to vmax` infer source format, keeps one home for the material options, and
    avoids a subcommand per format. `voxelize` is the conventional verb for the
    inverse.
-3. Material maps live on `mesh` as presets plus a `--map` escape hatch. The
-   presets name the common packings, ORM and MSE included, so the common cases
-   are one flag, while `--map` expresses any custom channel-to-attribute
-   packing without a code change. This replaces the original single `--texture`
-   flag that packed a filename, a channel count, a palette index, and a
-   variadic cell list into one argument. The same map flags are exposed as a
-   standalone `material` command so textures can be re-baked without re-meshing;
-   both derive the same atlas, so the maps stay aligned to the mesh UVs.
-4. `mesh` outputs objects as pure geometry, narrowed by object selectors. The
+3. Material maps come from `--texture <name> [path]` for the named presets and
+   `--texture-map <path> <channels>` for a custom packing. The presets name the
+   common packings, ORM and MSE included, so the common cases are one flag,
+   while `--texture-map` expresses any channel-to-attribute packing without a
+   code change. Each flag takes its parts as separate arguments, the preset name
+   and an optional path, or the output path and the channel list, rather than
+   packing a filename, channel count, palette index, and cell list into one
+   argument as the original `--texture` flag did. The channel list keeps its
+   commas because the RGBA packing is one structured value, and an arity that
+   varied with a layout token would need a greedy parser that swallows the
+   optional `output` positional. `smoothness` is accepted as the derived
+   `1 - roughness`, so it need not be spelled `1-roughness`. The same flags back
+   the standalone `material` command so textures can be re-baked without
+   re-meshing; both derive the same atlas, so the maps stay aligned to the mesh
+   UVs.
+4. The material atlas has two layouts, `--atlas palette` and `--atlas unwrap`.
+   Palette is the default because it is tiny and, keyed to the palette index
+   rather than the per-mesh material set, identical for every mesh on a palette,
+   so meshes share one set of maps. Unwrap trades that sharing for a per-mesh UV
+   unwrap that can hold spatially varying bakes a single texel per material
+   cannot, such as ambient occlusion in the map instead of vertex colors.
+5. `mesh` outputs objects as pure geometry, narrowed by object selectors. The
    main use is pulling leaf objects out with no transform data, so selection
    targets objects, by index, the canonical reference, or by name glob, rather
    than hierarchy nodes. Index and name are separate repeatable options,
@@ -31,7 +44,7 @@ Rationale for the non-obvious choices, for reviewers.
    optional `output` positional is the house convention and trailing optional
    positionals would be ambiguous. Assembling a placed scene from hierarchy
    nodes, baking transforms and instancing, is a deferred, separate mode.
-5. Quantize and remap state their multi-attribute rule. A cell spans every
+6. Quantize and remap state their multi-attribute rule. A cell spans every
    attribute, so reducing one attribute has to define what happens to cells
    that share that value but differ elsewhere. Both keep such cells distinct,
    bounding the selected attribute without silently dropping PBR distinctions.

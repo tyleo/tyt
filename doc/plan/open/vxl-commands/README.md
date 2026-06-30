@@ -48,8 +48,8 @@ palette, default `0`) and `--attribute` (which attribute key, default `rgba`).
 ## Cross-cutting
 
 - [Conventions and cross-command options](reference/conventions.md): shared
-  formats, defaults, settable booleans, palette addressing, and the `--select` /
-  `--select-index` object selectors.
+  formats, defaults, settable booleans, palette addressing, the `--select` /
+  `--select-index` object selectors, and repeating a flag for multiple values.
 - [Design notes](reference/design-notes.md): rationale for the non-obvious
   choices, and future work.
 
