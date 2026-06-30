@@ -22,20 +22,18 @@ scene from the hierarchy, baking the node transforms and instancing in
 [Hierarchy Nodes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#hierarchy-nodes),
 is a separate mode left for a later pass.
 
-1. `--to` `fbx`: target mesh format. Inferred from the output
-   extension when omitted.
+1. `--to` `gltf` | `glb`: target mesh format, glTF text (`.gltf`) or binary
+   (`.glb`); glTF is the only mesh format written for now. Inferred from the
+   output extension when omitted.
 2. `--from <format>`: source voxel format. Inferred from the input extension
    when omitted.
 3. `--scale <meters>` (default `1.0`): the real-world edge length of one voxel
    in meters, applied as a uniform scale to every output vertex. The voxel-json
    format is unitless, with one unit per voxel, so `--scale` is where that grid
    gains a physical size: `1.0` sizes a voxel at one meter, `0.01` at one
-   centimeter, and `0.001` at one millimeter. The size is held constant across
-   mesh formats. `gltf` is meter-native and writes `<meters>` per voxel, while
-   `fbx` is centimeter-native and writes `100 * <meters>` per voxel with the
-   file's unit set to centimeters, so the two open at the same real size. `obj`
-   carries no unit metadata and is written in meters like `gltf`. Scale affects
-   vertex positions only and leaves UVs, normals, and vertex colors unchanged.
+   centimeter, and `0.001` at one millimeter. glTF is meter-native, so the mesh
+   writes `<meters>` per voxel and opens at that real size. Scale affects vertex
+   positions only and leaves UVs, normals, and vertex colors unchanged.
 4. `--method` `greedy` | `culled` | `naive` (default `greedy`): meshing
    strategy. `greedy` merges coplanar, same-material faces into the fewest
    quads and has the lowest triangle count. `culled` emits one quad per
@@ -107,9 +105,8 @@ palette maps keep the mesh's primary UV set and the occlusion image takes a
 second, unwrap UV set, so one mesh carries both the compact shared material
 maps and a per-mesh occlusion bake. Under `--atlas unwrap` every map already
 shares the one unwrap set and occlusion is another image on it. The second UV
-set needs a mesh format that stores more than one: `gltf` and `fbx` do, `obj`
-does not, so an `obj` target cannot pair palette material maps with
-`computed-occlusion`; use `--atlas unwrap` or output `gltf` or `fbx` instead.
+set needs a mesh format that stores more than one, which glTF does, so a glTF
+target can pair palette material maps with `computed-occlusion`.
 
 Maps come from two flags, each repeatable once per output image: `--texture` for
 the named presets and `--texture-map` for a custom packing.

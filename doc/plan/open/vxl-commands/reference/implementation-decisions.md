@@ -8,9 +8,13 @@ for implementation choices a reviewer of the Rust would want explained.
 
 ## MeshFormat
 
-The doc comment names the planned `obj` and `gltf` variants even though only
-`fbx` is implemented, because the checklist scopes this to fbx first and the
-unbuilt variants are a stated plan rather than a hedge.
+`MeshFormat` carries the two glTF variants, `Gltf` (`.gltf`) and `Glb` (`.glb`),
+which are the only mesh formats `mesh` and `voxelize` handle for now. glTF was
+chosen over `fbx` and `obj` because it has a mature pure-Rust reader, the `gltf`
+crate, so the mesh I/O needs no Blender shell-out or C++ bindings. `from_path`
+infers the variant from the extension, mirroring `Format::from_path`. Other
+formats are stated future work in the [design notes](design-notes.md), not a
+current variant.
 
 No `extension()` method yet. `Format` carries none, and the only caller is the
 defaulted output path, which lands with the `mesh` command.
@@ -150,3 +154,39 @@ attribute label, and the rendered values. The values carry their own JSON type,
 a hex string for a color and a number otherwise, so no separate type field is
 reported. The richer JSON forms are left to the V2 follow-ups in
 [palette show](palette/show.md).
+
+## voxelize
+
+The mesh-reading and rasterization live in voxsmith, not vxl, so the command
+follows the `to voxj` template: `commands/voxelize.rs` parses the flags and
+`implementation/voxelize.rs` calls voxsmith, which returns a
+[`VoxMain`](voxcore::VoxMain) that the same `VoxjFileBuilder` path then encodes
+with the shared `--format` / `--encoding-preset` / `--position-encoding` /
+`--sample-encoding` options. vxl gains no mesh dependency of its own; the `gltf`
+crate and the voxelizer sit behind voxsmith.
+
+voxsmith gets a new Cargo feature (a `gltf` feature beside the existing
+`goxl` / `mvox` / `qbcl` / `vmax` / `voxj` features) that gates the `gltf`
+dependency and the voxelization module. Unlike the codec features it is not a
+load/save converter, so it does not turn on `_codec`; it is a mesh-to-`VoxMain`
+front end. vxl's `impl` feature enables it. The voxsmith entry point takes the
+glTF bytes, the grid resolution, the fill mode, and the fill color, and returns a
+`VoxMain` carrying one object placed by one root node. When the caller resolved
+the grid from `--scale`, it sets that node's transform scale to `<meters>` so the
+assembled model keeps its source size; `--side-length` leaves the scale at `1`.
+
+Grid resolution is resolved in vxl before the call, into a single voxel-count
+triple, so voxsmith takes counts and never re-reads the mesh extent: `--side-length`
+caps the longest axis and sizes the others to preserve aspect, while `--scale`
+divides each meter extent by `<meters>` and rounds up. The mutual exclusion of
+`--side-length` and `--scale` is a clap `ArgGroup` with `required = true`, so
+exactly one is always present.
+
+`--fill-mode solid` paints every voxel the one `--fill-color`, so the document
+has one palette with a single `rgba` cell. `--fill-mode surface` samples each
+voxel's color from the glTF material, so its palette holds one cell per distinct
+sampled color; `--fill-color` is rejected with `surface`. The solid flat-color
+path is the default and the MVP; the surface color-sampling path can land after
+it, with surface initially falling back to the flat color until sampling exists.
+`--fill-color` accepts a `#RRGGBBAA` hex or the name `white`, parsed in vxl into
+the `rgba` value voxsmith stores.

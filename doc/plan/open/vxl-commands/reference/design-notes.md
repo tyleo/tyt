@@ -8,11 +8,11 @@ Rationale for the non-obvious choices, for reviewers.
    of `to voxj`, which already owns encoding and container selection, so adding
    them would duplicate that logic and split the invariant that re-encoding
    positions must regenerate samples.
-2. `mesh` plus `voxelize` rather than per-format `mesh fbx`. Inferring the mesh
+2. `mesh` plus `voxelize` rather than per-format `mesh gltf`. Inferring the mesh
    format from the extension with `--to` and `--from` matches how `to voxj` and
    `to vmax` infer source format, keeps one home for the material options, and
-   avoids a subcommand per format. `voxelize` is the conventional verb for the
-   inverse.
+   leaves room for more mesh formats without a subcommand per format. glTF is the
+   only mesh format for now. `voxelize` is the conventional verb for the inverse.
 3. Material maps come from `--texture <name> [path]` for the named presets and
    `--texture-map <path> <channels>` for a custom packing. The presets name the
    common packings, ORM and MSE included, so the common cases are one flag,
@@ -89,6 +89,16 @@ Rationale for the non-obvious choices, for reviewers.
    value renders as gray, the first printing the swatch alone and the second
    adding the exact hex or number beside it, while `value` drops the swatch for
    piping.
+10. `voxelize` defaults to `--fill-mode solid` because the common use is turning
+    a mesh into a filled voxel body, not a hollow shell. `solid` cannot read a
+    color off the mesh for the interior voxels it invents, so it paints the whole
+    body one flat `--fill-color`, default `white`. `surface` keeps only the voxels
+    the triangles cross, each of which sits on real geometry, so it samples that
+    voxel's color from the mesh material instead and ignores `--fill-color`. This
+    is why `--fill-color` is scoped to `solid`: it is the fallback for the mode
+    that has no mesh color to read. `voxelize` takes none of `mesh`'s texture or
+    attribute flags; it writes geometry plus a base color, and richer material
+    transfer is left to a later pass.
 
 ## Future and nice-to-haves
 
@@ -97,4 +107,5 @@ Rationale for the non-obvious choices, for reviewers.
    complementing the pure-geometry object selectors.
 2. stdin and stdout via `-`, so commands compose in pipelines.
 3. A dry-run or preview mode for the destructive palette operations.
-4. Additional mesh export targets beyond `fbx`, `obj`, and `gltf` as needed.
+4. Additional mesh formats beyond glTF, such as `fbx` and `obj`, as needed, for
+   both `mesh` output and `voxelize` input.

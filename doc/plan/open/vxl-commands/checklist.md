@@ -12,7 +12,9 @@ off as they land.
 - `vxl` stays independent of `tyt-common` and `tyt-injection`. Use `std::fs` and
   the codec crates already wired in `Cargo.toml` (`voxcore`, `voxj-codec`,
   `voxsmith`, `vmax-codec`). The tyt FBX and material commands are behavioral
-  models only, not dependencies.
+  models only, not dependencies. Mesh reading for `mesh` and `voxelize` goes
+  through voxsmith, which gains a `gltf` feature gating the `gltf` crate, rather
+  than a vxl-level mesh dependency.
 - Follow the existing command house style: one `clap` `Parser` struct per file
   in `src/commands/`, re-exported from `commands/mod.rs`, dispatched from
   `vxl.rs`; one `Dependencies` trait method per operation in `dependencies.rs`
@@ -25,9 +27,10 @@ off as they land.
 
 ## Shared infrastructure
 
-- [x] `MeshFormat` `ValueEnum` (to support `fbx` | `obj` | `gltf`) with
-      `from_path` extension inference, mirroring `Format::from_path`. Only
-      implement `fbx` at first.
+- [ ] `MeshFormat` `ValueEnum` of `gltf` | `glb` with `from_path` extension
+      inference, mirroring `Format::from_path`. glTF is the only mesh format for
+      now, read via the `gltf` crate. (A prior scaffold held an `fbx` variant;
+      retarget it to glTF.)
 - [x] `--select-index` object selector parser: integer or `a-b` range,
       repeatable, union over all values. See
       [conventions](reference/conventions.md).
@@ -60,8 +63,8 @@ off as they land.
 
 - [ ] `Mesh` command struct, dispatch, and single-object pure-geometry output;
       error when the selection is not exactly one object.
-- [ ] `--to` / `--from`, `--scale` (meters per voxel, default `1.0`;
-      centimeter-native `fbx` writes `100 * scale`), `--method`,
+- [ ] `--to` / `--from` (`gltf` | `glb`), `--scale` (meters per voxel, default
+      `1.0`; glTF is meter-native and writes `scale` per voxel), `--method`,
       `--vertex-computed-occlusion` with `--computed-occlusion-strength`,
       `--computed-occlusion-min-brightness`, and
       `--computed-occlusion-color-space`, `--atlas`,
@@ -82,10 +85,16 @@ off as they land.
 
 ### voxelize ([reference/voxelize.md](reference/voxelize.md))
 
-- [ ] `Voxelize` command; `--from`, mutually exclusive
-      `--side-length` | `--scale`.
+- [ ] `Voxelize` command; `--from` (`gltf` | `glb`), mutually exclusive
+      `--side-length` | `--scale` (clap `ArgGroup`, `required = true`).
+- [ ] `--fill-mode` `solid` (default) | `surface`; `--fill-color` (default
+      `white`, a `#RRGGBBAA` hex or name), used by `solid` only and rejected with
+      `surface`.
 - [ ] Reuse the voxj writer options; record `--scale` (meters per voxel) as the
-      node scale.
+      node scale, leaving `--side-length` at scale `1`.
+- [ ] voxsmith `gltf` feature gating the `gltf` crate and a mesh-to-`VoxMain`
+      voxelizer; `Dependencies::voxelize` and its impl call it, then write
+      through `VoxjFileBuilder` like `to voxj`.
 
 ### palette ([reference/palette/](reference/palette/))
 
