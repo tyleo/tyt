@@ -169,27 +169,63 @@ voxsmith gets a new Cargo feature (a `gltf` feature beside the existing
 `goxl` / `mvox` / `qbcl` / `vmax` / `voxj` features) that gates the `gltf`
 dependency and the voxelization module. Unlike the codec features it is not a
 load/save converter, so it does not turn on `_codec`; it is a mesh-to-`VoxMain`
-front end. vxl's `impl` feature enables it. The voxsmith entry point takes the
-glTF bytes, the grid resolution, the fill mode, and the fill color, and returns a
-`VoxMain` carrying one object placed by one root node. When the caller resolved
-the grid from `--scale`, it sets that node's transform scale to `<meters>` so the
-assembled model keeps its source size; `--side-length` leaves the scale at `1`.
+front end gated by `dep:gltf` plus the `import` and `utils` gltf features (which
+pull `gltf::import_slice` and the buffer `Reader`). vxl's `impl` feature enables
+it through `voxsmith/gltf`. voxsmith exposes two free functions in
+`convert/gltf/`: `gltf_mesh_extent` returns the mesh's meter extent so vxl can
+size the grid, and `voxelize_gltf` takes the byte slice, the resolved voxel
+counts, the fill mode, the fill color, and the node scale, returning a `VoxMain`
+of one object placed by one root node. When the caller resolved the grid from
+`--scale` it passes `<meters>` as the node scale so the assembled model keeps its
+source size; `--side-length` passes `1`. The two functions each call
+`import_slice`, so the glTF parses twice (extent, then rasterize); the file is
+small for voxelization and this keeps the resolution policy in vxl with voxsmith
+taking plain counts. `import_slice` auto-detects `.glb` versus `.gltf` from the
+bytes, so `--from` is accepted for the documented interface but does not steer
+parsing; a `.gltf` with external `.bin` buffers cannot resolve from bytes and
+errors.
 
-Grid resolution is resolved in vxl before the call, into a single voxel-count
-triple, so voxsmith takes counts and never re-reads the mesh extent: `--side-length`
-caps the longest axis and sizes the others to preserve aspect, while `--scale`
-divides each meter extent by `<meters>` and rounds up. The mutual exclusion of
-`--side-length` and `--scale` is a clap `ArgGroup` with `required = true`, so
-exactly one is always present.
+Grid resolution is resolved in vxl's `implementation/voxelize.rs` before the
+voxsmith call, into a single voxel-count triple: `--side-length` caps the longest
+axis and sizes the others to preserve aspect, while `--scale` divides each meter
+extent by `<meters>` and rounds up. The mutual exclusion of `--side-length` and
+`--scale` is a clap `ArgGroup` with `required = true`, so exactly one is present.
+The voxj writer is the same `VoxjFileBuilder` path, factored into a shared
+`implementation/write_voxj_document` helper that `to voxj` also uses; voxelize
+calls it with `ext = false` and `EditStateMode::Never`, since a voxelized mesh
+carries neither a source `ext` block nor an editor build volume.
+
+The voxelizer rasterizes with a separating-axis triangle-vs-voxel-box test in
+grid space (each voxel a unit cube), and `solid` adds a six-connected flood fill
+from the grid boundary so every cell the outside cannot reach is filled. Working
+in grid space keeps the box a unit cube even when the per-axis voxel size differs,
+which is valid because the map onto grid space is affine and affine maps preserve
+overlap.
+
+Coordinates convert from glTF's Y-up to Voxel Json's Z-up: each gathered
+world-space point is sent through `(x, y, z) -> (x, -z, y)`, a +90 degree
+rotation about X that preserves the right-handedness both formats use, so a model
+stands upright in a Z-up editor. The conversion is fixed by the two formats'
+specs (glTF mandates Y-up), so it needs no flag; a future `--axes` style override
+for the rare mis-authored file is left as future work, and `vxl mesh` (the
+inverse) must mirror this mapping.
 
 `--fill-mode solid` paints every voxel the one `--fill-color`, so the document
-has one palette with a single `rgba` cell. `--fill-mode surface` samples each
-voxel's color from the glTF material, so its palette holds one cell per distinct
-sampled color; `--fill-color` is rejected with `surface`. The solid flat-color
-path is the default and the MVP; the surface color-sampling path can land after
-it, with surface initially falling back to the flat color until sampling exists.
-`--fill-color` accepts a `#RRGGBBAA` hex or the name `white`, parsed in vxl into
-the `rgba` value voxsmith stores.
+has one palette with a single `rgba` cell. `--fill-mode surface` is a hollow
+shell and `--fill-color` is rejected with it; sampling each voxel's color from the
+glTF material is future work, so for now `surface` falls back to the flat color
+(the `white` default). `--fill-color` accepts a `#RRGGBBAA` or `#RRGGBB` hex or a
+color name, parsed in vxl into the `rgba` value voxsmith stores. Reading the mesh
+fails the conversion as a `voxsmith::Error::Gltf`, a new variant beside the codec
+ones.
+
+The richer color path is now designed though unbuilt: `--material-mode`
+(`auto` / `per-primitive` / `per-texel` / `flat`), a `--max-palette` cap reusing
+the `palette quantize` reduction engine, and the material-follows-color rule
+shared with quantize and remap. See [voxelize](voxelize.md) and the
+[design notes](design-notes.md). The shipped flat-color path above becomes
+`--material-mode flat`, and the `--fill-color`/`--fill-mode surface` guard is
+replaced when that work lands.
 
 ## palette show V2
 

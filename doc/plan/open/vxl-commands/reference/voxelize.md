@@ -26,11 +26,51 @@ with `--scale`.
    grid. `solid` rasterizes the surface and flood-fills the volume it encloses,
    producing a filled body, and expects a watertight mesh. `surface` rasterizes
    only the voxels the triangles pass through, leaving a hollow shell.
-5. `--fill-color <color>` (default `white`): a `#RRGGBBAA` hex or a name like
-   `white`. Under the default `--fill-mode solid` every voxel takes this one
-   color, written as the single cell of the document's one palette. Under
-   `--fill-mode surface` each voxel instead samples its color from the source
-   mesh's material at that surface point, so `--fill-color` does not apply there.
+5. `--material-mode` `auto` | `per-primitive` | `per-texel` | `flat` (default
+   `auto`): where each voxel's color and material come from. `--fill-mode` sets
+   the geometry; this sets the color, the two are independent.
+   1. `per-primitive` reads each mesh material's flat factors (base color,
+      metallic, roughness, emissive, occlusion), giving one palette cell per
+      material, so an untextured or stylized mesh stays exact with a tiny palette.
+   2. `per-texel` samples those maps at each voxel's surface point, area-averaged
+      over the voxel's footprint rather than point-sampled so fine texture does
+      not alias into a muddy palette, capturing spatial detail at the cost of a
+      larger palette.
+   3. `flat` reads nothing from the mesh and paints the one `--fill-color`.
+   4. `auto`, the default, picks `per-texel` when the mesh carries textures and
+      `per-primitive` when it does not.
+
+   Every mode writes the same attributes [`mesh`](mesh.md) bakes back, `rgba`,
+   `metallic`, `roughness`, `emissive`, and `occlusion`, so a voxelized model
+   round-trips through `mesh`.
+6. `--fill-color` `none` | `<#RRGGBBAA>` (default `none`): the color of voxels
+   that have no sampled surface. Its role depends on `--material-mode`:
+
+   |                            | `--fill-color none`                           | `--fill-color #RRGGBBAA`             |
+   | -------------------------- | --------------------------------------------- | ------------------------------------ |
+   | `flat`                     | whole object white                            | whole object that color              |
+   | `per-primitive`/`per-texel`| exterior sampled, interior its nearest surface | exterior sampled, interior that color |
+
+   Only the interior voxels a `--fill-mode solid` body invents have no surface; a
+   hollow `--fill-mode surface` shell is all surface, so under the sampling modes
+   `--fill-color` does nothing there.
+7. `--max-palette` `<n>` | `none` (default `256`): the most cells the document's
+   palette may hold. Sampling can yield many distinct materials, `per-texel`
+   especially; when the count exceeds `<n>` the palette is reduced to it and a
+   note is written to standard error, never failing and never silently dropping
+   cells. `256` keeps each per-voxel sample index within one byte (the format
+   packs it at `ceil(log2(cells))` bits) and matches the familiar 256-color
+   ceiling; `none` disables the cap for bit-exact materials. Reduction clusters
+   on `rgba` and a merged cell takes its cluster representative's whole row, so
+   material follows color: materials that land in one color cluster collapse to
+   one real representative cell, not an averaged one. This is the same reduction
+   [`palette quantize`](palette/quantize.md) runs, so `--max-palette <n>` matches
+   piping the output through `palette quantize --count <n>`.
+8. `--method`, `--space`, and `--dither`: the palette-reduction controls shared
+   with [`palette quantize`](palette/quantize.md), defaulting the same way
+   (`median-cut`, `oklab`, `none`). They shape the `--max-palette` reduction and
+   are inert when it does not fire; `--dither` diffuses the snapping error across
+   the voxels in 3D order.
 
 The format carries no physical units: one unit is one voxel, and real-world
 scale comes from hierarchy-node transforms. `--side-length` is a voxel count,

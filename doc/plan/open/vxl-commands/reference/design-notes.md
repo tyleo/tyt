@@ -46,10 +46,16 @@ Rationale for the non-obvious choices, for reviewers.
    would be ambiguous. `mesh` errors when the selection is not exactly one object;
    how to output several, and whether to bake a node's subtree, transforms, and
    instancing into one placed mesh, is a deferred, separate mode.
-6. Quantize and remap state their multi-attribute rule. A cell spans every
-   attribute, so reducing one attribute has to define what happens to cells
-   that share that value but differ elsewhere. Both keep such cells distinct,
-   bounding the selected attribute without silently dropping PBR distinctions.
+6. Quantize, remap, and `voxelize`'s `--max-palette` share one reduction rule:
+   material follows color. Reducing the compared attribute (`rgba` by default)
+   clusters cells by it and collapses each cluster to one representative cell, so
+   a cell's other attributes ride along with its color and a count bounds the
+   cell count, not just the attribute's distinct values. The earlier rule kept
+   same-color/different-material cells distinct; it was dropped so a count
+   actually bounds the palette, the representative stays a real cell rather than
+   an average, and the three commands share one engine and its `--method` /
+   `--space` / `--dither` controls. The accepted cost is that fusing two colors
+   fuses their materials too.
 7. Quantize and remap take either a full document or a bare palette JSON, the
    remap `--target` shape. The palette transform is the same either way; a
    document additionally carries voxels, so it can dither the rewritten samples
@@ -89,16 +95,34 @@ Rationale for the non-obvious choices, for reviewers.
    value renders as gray, the first printing the swatch alone and the second
    adding the exact hex or number beside it, while `value` drops the swatch for
    piping.
-10. `voxelize` defaults to `--fill-mode solid` because the common use is turning
-    a mesh into a filled voxel body, not a hollow shell. `solid` cannot read a
-    color off the mesh for the interior voxels it invents, so it paints the whole
-    body one flat `--fill-color`, default `white`. `surface` keeps only the voxels
-    the triangles cross, each of which sits on real geometry, so it samples that
-    voxel's color from the mesh material instead and ignores `--fill-color`. This
-    is why `--fill-color` is scoped to `solid`: it is the fallback for the mode
-    that has no mesh color to read. `voxelize` takes none of `mesh`'s texture or
-    attribute flags; it writes geometry plus a base color, and richer material
-    transfer is left to a later pass.
+10. `voxelize` separates geometry from color. `--fill-mode` chooses a filled body
+    or a hollow shell; `--material-mode` chooses where color comes from and
+    defaults to `auto`, sampling `per-texel` when the mesh is textured and
+    `per-primitive` when it is not. Per-primitive reads each material's flat
+    factors into one cell per material, exact and tiny for stylized meshes;
+    per-texel samples the maps at each voxel's surface point, area-averaged so
+    fine texture does not alias into a muddy palette; `flat` ignores the mesh for
+    a one-color body. Per-primitive is not a rival of per-texel but a part of it:
+    any sampling first attributes a voxel to a material and reads its factors, and
+    a `solid` body's interior voxels sit on no surface and fall back to that
+    factor regardless, so the two modes share one path and per-texel only adds the
+    texel sampler. `--fill-color` is the color the modes cannot sample: the whole
+    body under `flat`, where `none` yields white, or only the invented interior of a
+    `solid` per-* body, leaving the sampled exterior alone; it does nothing for a
+    hollow shell, which is all surface. `auto` engages per-texel on textured
+    meshes because importing a textured model implies wanting its surface color,
+    while the explicit modes override that guess. The flat color mode is named
+    `flat`, not `solid`, so it does not collide with `--fill-mode solid`, which is
+    geometry.
+11. `voxelize --max-palette` bounds the generated palette, defaulting to 256 (a
+    one-byte sample index and the familiar color ceiling). It auto-reduces with a
+    warning rather than erroring or truncating, since a textured mesh exceeding
+    the cap is the normal case, and reuses the `palette quantize` engine and its
+    `--method` / `--space` / `--dither` controls rather than inventing its own, so
+    the inline cap and the standalone command cannot diverge; `none` disables it
+    for bit-exact materials. Sampling drops no PBR: voxelize writes the same
+    `rgba`, `metallic`, `roughness`, `emissive`, and `occlusion` attributes
+    `mesh` bakes, so the two are inverses.
 
 ## Future and nice-to-haves
 

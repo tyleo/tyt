@@ -46,9 +46,10 @@ its own format or a bare palette JSON.
    unions with `--select`. Given no selector of either kind, every object is
    dithered. See [Object selectors](../conventions.md#object-selectors).
 
-Remap merges input cells that land on the same target entry only when they
-agree on every non-compared attribute, the same rule [`quantize`](quantize.md)
-follows for multi-attribute cells.
+When several input cells land on the same target entry they merge into it, each
+remapped voxel adopting the target entry's whole row, so material follows color
+(the compared attribute), the same rule [`quantize`](quantize.md) and
+[`voxelize`](../voxelize.md) follow.
 
 ## Example
 

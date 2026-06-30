@@ -27,7 +27,7 @@ off as they land.
 
 ## Shared infrastructure
 
-- [ ] `MeshFormat` `ValueEnum` of `gltf` | `glb` with `from_path` extension
+- [x] `MeshFormat` `ValueEnum` of `gltf` | `glb` with `from_path` extension
       inference, mirroring `Format::from_path`. glTF is the only mesh format for
       now, read via the `gltf` crate. (A prior scaffold held an `fbx` variant;
       retarget it to glTF.)
@@ -56,6 +56,11 @@ off as they land.
       `to voxj`.
 - [x] `ValueEnum`s for the palette ops: quantize method, color space, dither,
       and `palette show` format (`auto` | `swatch` | `swatch-value` | `value`).
+- [ ] Shared palette-reduction engine and a flattened options group
+      (`--method` / `--space` / `--dither`), reused by `palette quantize`,
+      `palette remap` (space/dither), and `voxelize`'s `--max-palette`, on the
+      one material-follows-color rule (a count bounds cells; a merged cell takes
+      its cluster representative's whole row).
 
 ## Commands
 
@@ -85,16 +90,38 @@ off as they land.
 
 ### voxelize ([reference/voxelize.md](reference/voxelize.md))
 
-- [ ] `Voxelize` command; `--from` (`gltf` | `glb`), mutually exclusive
+- [x] `Voxelize` command; `--from` (`gltf` | `glb`), mutually exclusive
       `--side-length` | `--scale` (clap `ArgGroup`, `required = true`).
-- [ ] `--fill-mode` `solid` (default) | `surface`; `--fill-color` (default
+- [x] `--fill-mode` `solid` (default) | `surface`; `--fill-color` (default
       `white`, a `#RRGGBBAA` hex or name), used by `solid` only and rejected with
-      `surface`.
-- [ ] Reuse the voxj writer options; record `--scale` (meters per voxel) as the
+      `surface`. Surface is a hollow shell; per-voxel color sampling from the
+      glTF material is deferred, so surface uses the flat color for now. (Shipped
+      MVP; superseded by the material-mode work below.)
+- [x] Reuse the voxj writer options; record `--scale` (meters per voxel) as the
       node scale, leaving `--side-length` at scale `1`.
-- [ ] voxsmith `gltf` feature gating the `gltf` crate and a mesh-to-`VoxMain`
+- [x] voxsmith `gltf` feature gating the `gltf` crate and a mesh-to-`VoxMain`
       voxelizer; `Dependencies::voxelize` and its impl call it, then write
-      through `VoxjFileBuilder` like `to voxj`.
+      through `VoxjFileBuilder` like `to voxj`. glTF Y-up is converted to the
+      Z-up document convention; the inverse `mesh` command must mirror it.
+
+Material sampling (designed, not yet built; see
+[voxelize](reference/voxelize.md) and [design notes](reference/design-notes.md)):
+
+- [ ] `--material-mode auto | per-primitive | per-texel | flat` (default
+      `auto`), replacing the shipped flat-only coloring and its
+      `--fill-color`-with-`--fill-mode surface` guard. `auto` samples per-texel
+      when the mesh is textured, else per-primitive.
+- [ ] `per-primitive`: one cell per material from the PBR factors (`rgba`,
+      `metallic`, `roughness`, `emissive`, `occlusion`), matching what `mesh`
+      bakes.
+- [ ] `--fill-color none | #RRGGBBAA` (default `none`): the whole object under
+      `flat`, the `solid`-fill interior under the sampling modes; drop the
+      surface rejection.
+- [ ] `--max-palette <n> | none` (default `256`) via the shared reduction
+      engine; expose `--method` / `--space` / `--dither` on `voxelize`.
+- [ ] `per-texel`: UV interpolation, image decode, area-average over the voxel
+      footprint, epsilon-merge of near-identical tuples, and a `solid`-interior
+      fallback to the nearest surface cell.
 
 ### palette ([reference/palette/](reference/palette/))
 
@@ -104,12 +131,14 @@ off as they land.
       the V2 follow-ups in [palette show](reference/palette/show.md) for the
       broader version.
 - [ ] `palette quantize`: `--count` with median-cut / octree / kmeans, space,
-      dither with `--select` / `--select-index`, and the multi-attribute merge
-      rule. Accept a full document or a bare palette JSON; dither only with a
-      document.
+      dither with `--select` / `--select-index`, and the material-follows-color
+      reduction rule (`--count` bounds cells; a merged cell takes its cluster
+      representative's whole row). Accept a full document or a bare palette JSON;
+      dither only with a document.
 - [ ] `palette remap`: `--target` (JSON `palettes` array) or `--target-index`,
       `--target-attribute`, space, dither with `--select` / `--select-index`,
-      and the same merge rule. Accept a full document or a bare palette JSON
+      and the same material-follows-color rule (a remapped voxel adopts the
+      target entry's whole row). Accept a full document or a bare palette JSON
       input, the `--target` shape; dither only with a document.
 
 ### hierarchy show ([reference/hierarchy/show.md](reference/hierarchy/show.md))

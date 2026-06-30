@@ -17,8 +17,9 @@ narrowed to chosen objects by `--select` and `--select-index`. A bare palette
 has no voxels, so only its entries are reduced and dithering does not apply. The
 output mirrors the input, a document in its own format or a bare palette JSON.
 
-1. `--count <n>` (required): the maximum number of distinct attribute values to
-   keep.
+1. `--count <n>` (required): the maximum number of cells to keep. The selected
+   attribute is clustered to this many values and each cluster collapses to one
+   cell.
 2. `--index <n>` (default `0`): which palette to quantize.
 3. `--attribute <key>` (default `rgba`): which attribute to cluster on.
 4. `--method` `median-cut` | `octree` | `kmeans` (default `median-cut`):
@@ -37,11 +38,14 @@ output mirrors the input, a document in its own format or a bare palette JSON.
    unions with `--select`. Given no selector of either kind, every object is
    dithered. See [Object selectors](../conventions.md#object-selectors).
 
-A cell is a row across all of a palette's attributes, so quantizing one
-attribute must not silently destroy the others. `quantize` clusters only the
-selected attribute and merges two cells into one only when they agree on every
-attribute after quantization. Cells that quantize to the same value of the
-selected attribute but differ elsewhere stay distinct. So `--count` bounds the
-distinct values of the selected attribute, while the total cell count may
-remain higher. See
+A cell is a row across all of a palette's attributes. Material follows color:
+`quantize` clusters the selected attribute to at most `--count` values, then
+collapses each cluster to one cell whose whole row is its representative's, so
+the other attributes follow the clustered one: cells in the same color cluster merge into one and any
+material difference between them is lost to the representative. `--count`
+therefore bounds the palette's cell count, not just the selected attribute's
+distinct values. The representative is an actual cell, never an averaged one, so
+every kept row is a real material. This is the reduction
+[`voxelize`](../voxelize.md)'s `--max-palette` applies inline, sharing this
+command's `--method`, `--space`, and `--dither`. See
 [Palettes](../../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).
