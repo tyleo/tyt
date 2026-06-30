@@ -37,11 +37,16 @@ off as they land.
 - [x] `--atlas` layout `ValueEnum`: palette (one texel per palette entry,
       shareable) and unwrap (per-mesh UV) layouts. See [mesh](reference/mesh.md).
 - [x] `--texture-map` channel parser: channel sources (`R`/`G`/`B`/`A` = `attr`
-      | `1-attr` | `0` | `1` | `computed-occlusion`) and the RGBA packing, with
-      `smoothness` accepted as `1-roughness`. See [mesh](reference/mesh.md).
+      | `1-attr` | `attr.r`/`.g`/`.b`/`.a` color component | `0` | `1` |
+      `computed-occlusion`) and the RGBA packing, with `smoothness` accepted as
+      `1-roughness`. See [mesh](reference/mesh.md).
 - [x] `--texture` preset packings (albedo, orm, metallic-roughness,
       metallic-smoothness, mse, emissive, occlusion, computed-occlusion,
       roughness, smoothness). See [mesh](reference/mesh.md).
+- [x] `--define-attribute` binding types: `ColorComponent`, `AttributeType`
+      (`scalar` | `color`), and `AttributeBinding` (`name palette key [type]`).
+      The clap multi-value wiring lands with `mesh`. See
+      [mesh](reference/mesh.md).
 - [x] Shared voxj encoding options (`--format`, `--encoding-preset`,
       `--position-encoding`, `--sample-encoding`) in `VoxjEncodingOptions`,
       flattened by `to voxj` and `voxelize`; `--ext`/`--edit-state` stay on
@@ -63,8 +68,9 @@ off as they land.
       `--select` / `--select-index`.
 - [ ] Material maps: `--texture <name> [path]` presets (albedo, orm,
       metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
-      computed-occlusion, roughness, smoothness) and `--texture-map <path>
-      <channels>`, default paths from the mesh stem.
+      computed-occlusion, roughness, smoothness), `--texture-map <path>
+      <channels>`, and `--define-attribute <name> <palette-index> <key> [type]`,
+      default paths from the mesh stem.
 - [ ] `Dependencies::mesh` and its impl.
 
 ### material ([reference/material.md](reference/material.md))

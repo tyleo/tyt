@@ -67,6 +67,31 @@ RGBA base color, which a scalar packing cannot express, so it is its own
 is `ComputedOcclusion`, which the bake treats as forcing an unwrap layout, so no
 separate flag is needed.
 
+## Custom attribute bindings
+
+`ChannelSource::Attribute` grew a `component: Option<ColorComponent>`. The parser
+reads a trailing single-letter `.r`/`.g`/`.b`/`.a` as the component and treats a
+longer dotted suffix as part of the key, so an attribute key that contains a dot
+still parses whole. `key` stays the name token as written; whether it is a
+`--define-attribute` binding alias or a direct attribute key is resolved later
+against the binding table, which lands with the bake, the same deferral as the
+selector resolvers. Validating a component against the resolved type, a component
+only on a color and a color only with a component, is that same resolution-time
+work, so the parser does not enforce it yet.
+
+`AttributeType` is a `ValueEnum` of `scalar` and `color`; `AttributeBinding`
+holds the name, palette index, key, and type. The `--define-attribute` flag is a
+repeatable, three-or-four-value option, which clap groups per occurrence only at
+fixed arity, so the clap wiring is deferred to the `mesh` command beside the
+other unbuilt map flags. `AttributeBinding::FromStr` parses the whitespace
+`name palette key [type]` form for now, which also drives the unit tests; the
+fixed-versus-variable arity choice is made when `mesh` lands.
+
+`smoothness` still canonicalizes to inverted `roughness` in the parser, before
+the binding table exists, so a binding that shadows `roughness` also flows
+through `smoothness`. A binding literally named `smoothness` would be bypassed, a
+niche the docs do not promise.
+
 ## Shared voxj encoding options
 
 `VoxjEncodingOptions` is a `clap::Args` group with the four flags that shape a

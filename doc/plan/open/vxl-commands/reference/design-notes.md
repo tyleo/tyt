@@ -56,6 +56,23 @@ Rationale for the non-obvious choices, for reviewers.
    in 3D order and narrow that dithering with the object selectors, while a bare
    palette has nothing to walk and skips both. Reusing the selectors keeps one
    addressing model across mesh, material, quantize, and remap.
+8. Custom attributes reach `--texture-map` through a declared binding,
+   `--define-attribute <name> <palette-index> <key> [type]`, rather than inline
+   qualifiers. The voxel-json format stores attributes generically, so a packing
+   must read a key the presets do not name, of a type the tool cannot infer: a
+   custom value may be a `0..1` number or a `#RRGGBBAA` color, and only a color
+   exposes `r`/`g`/`b`/`a` components. A binding states the type once and gives
+   the source a name, so the packing grammar stays a flat `name`, `1-name`, or
+   `name.component`, and the name is reusable across channels and images. It
+   shadows a built-in on collision, scoped to `--texture-map` so a binding never
+   silently changes a `--texture` preset. The palette index is a position in the
+   object's `paletteRefs`, the merge order `mesh` already walks, always valid for
+   the single object `mesh` outputs and the way to disambiguate a key shared by
+   several layers. The built-in `rgba` is itself a color, so `rgba.a` and an
+   RGBA split need no binding, complementing the whole-color `albedo` preset.
+   Inline `N:` and `.component` qualifiers with no declaration were dropped: they
+   cannot carry an explicit type, leaving an ambiguous custom value no home, and
+   they give no reusable name.
 
 ## Future and nice-to-haves
 

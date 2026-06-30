@@ -84,6 +84,7 @@ impl Texture {
 fn attribute(key: &str, invert: bool) -> Option<ChannelSource> {
     Some(ChannelSource::Attribute {
         key: key.to_string(),
+        component: None,
         invert,
     })
 }
@@ -105,6 +106,7 @@ mod tests {
     fn attribute(key: &str, invert: bool) -> ChannelSource {
         ChannelSource::Attribute {
             key: key.to_string(),
+            component: None,
             invert,
         }
     }

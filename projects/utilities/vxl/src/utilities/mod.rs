@@ -1,7 +1,10 @@
 mod atlas;
+mod attribute_binding;
+mod attribute_type;
 mod camera_view;
 mod channel_packing;
 mod channel_source;
+mod color_component;
 mod color_format;
 mod color_space;
 mod dither;
@@ -22,9 +25,12 @@ mod voxj_position_encoding;
 mod voxj_sample_encoding;
 
 pub use atlas::*;
+pub use attribute_binding::*;
+pub use attribute_type::*;
 pub use camera_view::*;
 pub use channel_packing::*;
 pub use channel_source::*;
+pub use color_component::*;
 pub use color_format::*;
 pub use color_space::*;
 pub use dither::*;

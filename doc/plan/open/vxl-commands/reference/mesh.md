@@ -139,13 +139,45 @@ the mesh stem plus the name, the `{stem}-mse.png` style. The names are:
 `--texture-map <path> <channels>` writes a custom packing, also repeatable. The
 `channels` argument is a comma-separated list of `R=<expr>`, `G=<expr>`,
 `B=<expr>`, and optional `A=<expr>`, where `<expr>` is an attribute name,
-`1-<attribute>` for an inverted attribute, the constant `0` or `1`, or
+`1-<attribute>` for an inverted attribute, one color component as
+`<attribute>.r`, `.g`, `.b`, or `.a`, the constant `0` or `1`, or
 `computed-occlusion` for the geometry-derived occlusion. The channel
 count is the number of channels named; an omitted channel is `0`. For example
 `--texture-map model-mse.png R=metallic,G=smoothness,B=emissive` reproduces
 `--texture mse`, and swapping `G=roughness` writes roughness instead of
 smoothness. A packing that names `computed-occlusion` always bakes into an
 unwrap layout, as `--texture-map ao.png R=computed-occlusion` does.
+
+A color attribute is read one component at a time. `rgba` is a color, so
+`R=rgba.a` writes its straight alpha and `R=rgba.r,G=rgba.g,B=rgba.b,A=rgba.a`
+splits the color across four channels; the components are the stored sRGB
+values with straight alpha. Naming a color with no component, as in `R=rgba`,
+is an error, and `--texture albedo` is the way to write the whole color. A
+scalar attribute names no component, so `metallic.r` is an error.
+
+`--define-attribute <name> <palette-index> <key> [type=scalar]` names a custom
+attribute so `--texture-map` can read it, repeatable, as in
+`--define-attribute sss 0 subsurface` and `--define-attribute tint 1 tint
+color`. The voxel-json format stores attributes generically, so a palette may
+carry keys beyond the recommended set in
+[Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
+and a binding gives one such key a name a packing can use. Its parts are:
+
+1. `name`: the name used in `--texture-map`. It shadows a built-in attribute
+   name on collision, so `--define-attribute roughness 2 micro-rough` makes
+   `R=roughness` read `micro-rough` from palette `2`. The shadowing is scoped to
+   `--texture-map`; the `--texture` presets always read the spec attributes.
+2. `palette-index`: which palette layer to read, as a position in the object's
+   `paletteRefs`, where `0` is the first layer, the same order the material
+   merge uses. This targets one specific layer when several carry the key.
+3. `key`: the voxel-json attribute key read from that layer.
+4. `type` (default `scalar`): `scalar` for a `0..1` number read as a bare
+   `<name>`, or `color` for a `#RRGGBBAA` hex whose `r`, `g`, `b`, and `a`
+   components a packing reads as `<name>.r` and so on.
+
+For example, `--define-attribute tint 1 tint color` then `--texture-map
+paint.png R=tint.r,G=tint.g,B=tint.b,A=rgba.a` packs the custom `tint` color
+from palette `1` into RGB and the base color's alpha into `A`.
 
 ## Future work
 
