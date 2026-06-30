@@ -1,3 +1,4 @@
+mod atlas;
 mod camera_view;
 mod color_format;
 mod edit_state;
@@ -11,6 +12,7 @@ mod voxj_optimize;
 mod voxj_position_encoding;
 mod voxj_sample_encoding;
 
+pub use atlas::*;
 pub use camera_view::*;
 pub use color_format::*;
 pub use edit_state::*;

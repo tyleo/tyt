@@ -34,11 +34,11 @@ off as they land.
 - [x] `--select` hierarchy-path glob object selector: a node path selects its
       subtree, repeatable, union over all values. See
       [conventions](reference/conventions.md).
-- [ ] Material-map model: `--atlas` palette (one texel per palette entry,
-      shareable) and unwrap (per-mesh UV) layouts; preset packings and the
-      `--texture-map` channel parser (`R`/`G`/`B`/`A` = `attr` | `1-attr` | `0`
-      | `1`), with `smoothness` accepted as `1-roughness`. See
-      [mesh](reference/mesh.md).
+- [x] `--atlas` layout `ValueEnum`: palette (one texel per palette entry,
+      shareable) and unwrap (per-mesh UV) layouts. See [mesh](reference/mesh.md).
+- [ ] Material packing model: preset packings and the `--texture-map` channel
+      parser (`R`/`G`/`B`/`A` = `attr` | `1-attr` | `0` | `1`), with
+      `smoothness` accepted as `1-roughness`. See [mesh](reference/mesh.md).
 - [ ] Shared voxj writer options (`--format`, `--optimize`,
       `--position-encoding`, `--sample-encoding`, `--ext`, `--edit-state`)
       factored for reuse by `voxelize`.
