@@ -57,3 +57,6 @@ palette, default `0`) and `--attribute` (which attribute key, default `rgba`).
 
 - [Implementation checklist](checklist.md): the task list for building these
   commands. Start here when implementing.
+- [Implementation decisions](reference/implementation-decisions.md): code-level
+  decisions recorded as the commands are built, the Rust-level companion to the
+  design notes.
