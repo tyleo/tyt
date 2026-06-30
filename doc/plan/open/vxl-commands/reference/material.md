@@ -9,7 +9,8 @@ vxl material <input> [output-stem] [maps] [options]
 Bakes the material maps from [`vxl mesh`](mesh.md) without writing any geometry,
 so you can produce or re-bake textures for a mesh you already have. It takes the
 same map flags as `mesh`, `--texture <name> [path]` for the presets and
-`--texture-map <path> <channels>` for a custom packing; see
+`--texture-map <path> <channels>` for a custom packing, plus the
+`--computed-occlusion-*` options that tune a baked `computed-occlusion` map; see
 [Material and texture maps](mesh.md#material-and-texture-maps). The default
 `output-stem` is the input stem, and each preset path defaults to that stem plus
 the map name.
