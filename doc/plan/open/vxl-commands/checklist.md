@@ -46,7 +46,7 @@ off as they land.
       `--position-encoding`, `--sample-encoding`) in `VoxjEncodingOptions`,
       flattened by `to voxj` and `voxelize`; `--ext`/`--edit-state` stay on
       `to voxj`.
-- [ ] `ValueEnum`s for the palette ops: quantize method, color space, dither,
+- [x] `ValueEnum`s for the palette ops: quantize method, color space, dither,
       and `palette show` format (`auto` | `swatch` | `string`).
 
 ## Commands
