@@ -43,4 +43,8 @@ impl Dependencies for DependenciesImpl {
     ) -> Result<()> {
         implementation::to_voxj(input, from, output, encoding, format, ext, edit_state)
     }
+
+    fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
+        implementation::match_glob(pattern, candidates)
+    }
 }

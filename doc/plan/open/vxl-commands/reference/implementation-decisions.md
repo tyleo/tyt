@@ -26,3 +26,20 @@ The public API is just `contains`. The union resolver tests each object index
 against every selector, which is all `contains` needs to support. Validating an
 index against the real object count is resolution-time work and lands with the
 shared selector resolver.
+
+## --select path glob
+
+Matching delegates to globset, the project's standard glob engine, through a
+`Dependencies::match_glob` method. It is the same `GlobBuilder` with
+`literal_separator(true)` that `tyt-injection` exposes, reimplemented inline in
+vxl's `implementation/` behind the `impl` feature so vxl gets the standard glob
+behavior without depending on `tyt-injection`. globset is an optional dependency
+gated by `impl`, beside the codec crates. A hand-rolled matcher was tried first
+but dropped, since reproducing globset by hand risks subtle divergence from the
+shared format.
+
+`PathGlob` carries only the pattern, `**/`-prepended unless it already starts
+with `**/`, the same normalization the tyt hierarchy commands apply. It hands
+that normalized string to `match_glob` rather than matching itself, because the
+globset engine lives behind `impl`. Expanding a matched node's subtree and
+unioning the selectors is resolution-time work that lands with the commands.

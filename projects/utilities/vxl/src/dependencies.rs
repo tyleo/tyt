@@ -69,4 +69,13 @@ pub trait Dependencies {
         ext: bool,
         edit_state: EditState,
     ) -> Result<()>;
+
+    /// Matches `pattern` against each candidate hierarchy path, returning one
+    /// boolean per candidate in order. The pattern is the project's standard
+    /// glob, built with path separators literal.
+    ///
+    /// # Arguments
+    /// * `pattern` - the glob to match, already `**/`-normalized by the caller.
+    /// * `candidates` - the hierarchy paths to test, in order.
+    fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>>;
 }

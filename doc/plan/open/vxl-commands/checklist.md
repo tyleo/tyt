@@ -31,7 +31,7 @@ off as they land.
 - [x] `--select-index` object selector parser: integer or `a-b` range,
       repeatable, union over all values. See
       [conventions](reference/conventions.md).
-- [ ] `--select` hierarchy-path glob object selector: a node path selects its
+- [x] `--select` hierarchy-path glob object selector: a node path selects its
       subtree, repeatable, union over all values. See
       [conventions](reference/conventions.md).
 - [ ] Material-map model: `--atlas` palette (one texel per palette entry,
