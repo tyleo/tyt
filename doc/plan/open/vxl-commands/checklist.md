@@ -83,8 +83,8 @@ off as they land.
 ### voxelize ([reference/voxelize.md](reference/voxelize.md))
 
 - [ ] `Voxelize` command; `--from`, mutually exclusive
-      `--side-length` | `--voxel-size`.
-- [ ] Reuse the voxj writer options; optionally record `--voxel-size` as the
+      `--side-length` | `--scale`.
+- [ ] Reuse the voxj writer options; record `--scale` (meters per voxel) as the
       node scale.
 
 ### palette ([reference/palette/](reference/palette/))
