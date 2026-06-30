@@ -138,21 +138,17 @@ Rationale for the non-obvious choices, for reviewers.
     carrier is chosen per map by `--texture` versus `--vertex`, so color can ride
     on vertices while PBR bakes to a shared atlas in the same run. `COLOR_0` is
     glTF's only per-vertex PBR slot, so per-vertex color is portable while
-    per-vertex metallic, roughness, and the palette presets go in
-    application-specific `_NAME` attributes only a custom shader reads. The
-    palette indirection comes in two shapes because a multi-layer object's
-    material is the merge of one cell per layer, which no single index names:
-    `palette-index` flattens to the distinct merged materials the mesh uses, one
-    `_PALETTEINDEX` into a per-mesh table, the smallest carrier; `palette-layers`
-    keeps the layers, one `_PALETTEINDEXn` per layer plus each layer's palette,
-    summing rather than multiplying the layer sizes, staying shareable across
-    meshes, and alone preserving a layer value the merge would drop. Their
-    product, one index over every layer combination, was rejected:
-    `palette-layers` is both smaller and shareable, so the product never wins.
-    The texture `--atlas palette` keeps the merged-product keying instead, since
-    per-layer textures would need a custom shader and forfeit the atlas's
-    portability, so per-layer and used-combos compactness live on the vertex
-    carrier.
+    per-vertex metallic, roughness, and the rest go in application-specific
+    `_NAME` attributes only a custom shader reads. An object with several palette
+    layers has its material in the merge of one cell per layer, so the texture
+    `--atlas palette` keys on that merged material: one texel per layer-cell
+    combination, the product of the layer sizes, which stays a pure function of
+    the palette set and so stays shareable. Indexed vertex carriers that ship a
+    small per-vertex index plus a shared lookup table were considered and deferred
+    (see [Future](#future-and-nice-to-haves)): they trade portability for
+    compactness, their lookup-table packaging and multi-layer flattening are
+    unsettled, and the direct `--vertex` value presets already cover per-vertex
+    material.
 
 ## Future and nice-to-haves
 
@@ -163,3 +159,11 @@ Rationale for the non-obvious choices, for reviewers.
 3. A dry-run or preview mode for the destructive palette operations.
 4. Additional mesh formats beyond glTF, such as `fbx` and `obj`, as needed, for
    both `mesh` output and `voxelize` input.
+5. Indexed palette carriers for `mesh`: `--vertex palette-index` (one
+   `_PALETTEINDEX` into a per-mesh table of the distinct merged materials used)
+   and `--vertex palette-layers` (one `_PALETTEINDEXn` per palette layer plus each
+   layer's palette), for a custom engine wanting compact indexed material over
+   baked textures or per-vertex values. Needs a GPU-friendly lookup-table format,
+   a glTF binary buffer rather than JSON `extras`, and a multi-layer flattening
+   choice. A `--define-attribute` form that reads a specific non-winning palette
+   layer belongs here too, if ever wanted.

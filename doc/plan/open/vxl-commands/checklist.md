@@ -53,11 +53,10 @@ off as they land.
       clap multi-value wiring lands with `mesh`. See [mesh](reference/mesh.md).
 - [ ] `--vertex` / `--vertex-map` carrier: preset-to-attribute-name mapping
       (`albedo`/`computed-occlusion` → `COLOR_0`, the scalar/packed presets →
-      `_NAME`, `palette-index` → `_PALETTEINDEX` over a per-mesh used-combos
-      table, `palette-layers` → `_PALETTEINDEX0..n` over per-layer palettes),
-      reusing the `--texture-map` channel parser and `--define-attribute`; emit
-      glTF vertex attributes (`COLOR_0` standard, `_NAME` custom) and ship the
-      palette tables in `extras`. See [mesh](reference/mesh.md).
+      `_NAME`), reusing the `--texture-map` channel parser and
+      `--define-attribute`; emit glTF vertex attributes (`COLOR_0` standard,
+      `_NAME` custom). The indexed `palette-index` / `palette-layers` carriers are
+      deferred (see Deferred below). See [mesh](reference/mesh.md).
 - [x] Shared voxj encoding options (`--format`, `--encoding-preset`,
       `--position-encoding`, `--sample-encoding`) in `VoxjEncodingOptions`,
       flattened by `to voxj` and `voxelize`; `--ext`/`--edit-state` stay on
@@ -89,10 +88,8 @@ off as they land.
 - [ ] Vertex attribute maps: `--vertex <name> [target]` presets (albedo →
       `COLOR_0`, computed-occlusion → `COLOR_0` darken, metallic / roughness /
       emissive / occlusion / smoothness → scalar `_NAME`, orm / mse /
-      metallic-roughness / metallic-smoothness → packed `_NAME`, palette-index →
-      `_PALETTEINDEX` over a per-mesh used-combos table in `extras`,
-      palette-layers → `_PALETTEINDEX0..n` over per-layer palettes in `extras`),
-      and `--vertex-map <target> <channels>` reusing the `--texture-map` channel
+      metallic-roughness / metallic-smoothness → packed `_NAME`), and
+      `--vertex-map <target> <channels>` reusing the `--texture-map` channel
       grammar and `--define-attribute`.
 - [ ] `Dependencies::mesh` and its impl.
 
@@ -187,3 +184,6 @@ Material sampling (designed, not yet built; see
 - [ ] Single-object vs whole-document output nuance, and multi-object mesh
       layout in one file.
 - [ ] stdin / stdout via `-`; dry-run for destructive palette ops.
+- [ ] Indexed palette carriers: `--vertex palette-index` / `--vertex
+      palette-layers`, with a GPU-friendly lookup-table format (a glTF binary
+      buffer, not JSON `extras`) and a multi-layer flattening choice.

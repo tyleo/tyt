@@ -83,8 +83,7 @@ the atlas is laid out and how the mesh's UVs index it:
    on the merged material: one texel per combination of layer cells, the product
    of the layer sizes, which stays a pure function of the palette set and so
    stays shareable. The product grows with the layers, so a many-layer object is
-   better served by `unwrap` or by `--vertex palette-layers`; a single-layer
-   object is just one texel per cell.
+   better served by `unwrap`; a single-layer object is just one texel per cell.
 2. `unwrap`: each face takes its own texel from a per-mesh UV unwrap, so the
    atlas is unique to one mesh and larger. Use it for spatially varying data
    that one texel per material cannot hold, such as `computed-occlusion`
@@ -218,22 +217,9 @@ The names reuse the texture presets and pack the same way:
 4. `orm`, `mse`, `metallic-roughness`, `metallic-smoothness`: the packed presets,
    into `_ORM`, `_MSE`, and so on, packed across the attribute's components
    exactly as the texture preset packs them across channels. Custom attributes.
-5. `palette-index`: one index per vertex into a flattened table of the distinct
-   merged materials this mesh uses, written as a scalar into `_PALETTEINDEX` with
-   that table shipped as data in the glTF `extras`. A custom shader looks the
-   material up by index rather than sampling a texture: the most compact carrier
-   and the exact-value alternative to the palette atlas. The table is the used
-   combinations, so it is per-mesh, not shared across meshes. Custom; not read by
-   a generic viewer.
-6. `palette-layers`: one index per referenced palette layer per vertex, written
-   as scalars `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on, with each layer's
-   palette shipped verbatim in the glTF `extras`. A custom shader merges the
-   indexed cells the way the spec defines, later layers winning. Its data sums
-   the layer sizes rather than multiplying them and depends only on the palette
-   set, so it stays shareable across meshes and is the compact carrier for a
-   many-layer object; it is also the only carrier that keeps a layer value the
-   merge would otherwise drop. A single-layer object reduces to one
-   `_PALETTEINDEX0` and the one palette. Custom; not read by a generic viewer.
+
+Indexed carriers that ship a per-vertex index plus a shared lookup table,
+`palette-index` and `palette-layers`, are deferred; see [Future work](#future-work).
 
 `--vertex-map <target> <channels>` writes a custom packing to a named attribute,
 repeatable, the vertex twin of `--texture-map`. `target` is `COLOR_0` or a custom
@@ -255,3 +241,11 @@ A later pass may add `--computed-occlusion-radius` and
 occluders out to a distance and weights them by a falloff curve, giving smoother
 and wider gradients. They do not apply to the current discrete corner method,
 which has a fixed one-voxel reach, so they are left out until that model lands.
+
+Indexed palette carriers may also return: `--vertex palette-index` and
+`--vertex palette-layers` would ship a small per-vertex index plus a shared
+lookup table for a custom engine that wants compact indexed material instead of
+baked textures or per-vertex values. They wait on a settled, GPU-friendly table
+format, a glTF binary buffer rather than JSON `extras`, and a multi-layer
+flattening choice; until then `--atlas palette` and the direct `--vertex` value
+presets cover the same ground.
