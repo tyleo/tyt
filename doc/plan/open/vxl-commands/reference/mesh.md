@@ -74,11 +74,17 @@ so a map never fails for a missing attribute. Wherever an attribute is read,
 are interchangeable, as are `1-smoothness` and `roughness`. `--atlas` sets how
 the atlas is laid out and how the mesh's UVs index it:
 
-1. `palette` (default): one texel per palette entry, placed at the entry's
-   palette index. The atlas depends only on the palette, not the geometry, so
-   every mesh on a palette gets a byte-identical texture and identical UVs, and
+1. `palette` (default): one texel per palette material, placed at its palette
+   index. The atlas depends only on the palette set, not the geometry, so every
+   mesh on those palettes gets a byte-identical texture and identical UVs, and
    meshes that share a palette share its maps. Many faces sample one texel. This
-   is the compact, shareable form.
+   is the compact, shareable form. An object that references several palette
+   layers has its material in the merge of one cell per layer, so the atlas keys
+   on the merged material: one texel per combination of layer cells, the product
+   of the layer sizes, which stays a pure function of the palette set and so
+   stays shareable. The product grows with the layers, so a many-layer object is
+   better served by `unwrap` or by `--vertex palette-layers`; a single-layer
+   object is just one texel per cell.
 2. `unwrap`: each face takes its own texel from a per-mesh UV unwrap, so the
    atlas is unique to one mesh and larger. Use it for spatially varying data
    that one texel per material cannot hold, such as `computed-occlusion`
@@ -140,30 +146,30 @@ values with straight alpha. Naming a color with no component, as in `R=rgba`,
 is an error, and `--texture albedo` is the way to write the whole color. A
 scalar attribute names no component, so `metallic.r` is an error.
 
-`--define-attribute <name> <palette-index> <key> [type=scalar]` names a custom
+`--define-attribute <name> <key> [type=scalar]` names a custom
 attribute so `--texture-map` and `--vertex-map` can read it, repeatable, as in
-`--define-attribute sss 0 subsurface` and `--define-attribute tint 1 tint
-color`. The voxel-json format stores attributes generically, so a palette may
+`--define-attribute sss subsurface` and `--define-attribute tint tint color`.
+The voxel-json format stores attributes generically, so a palette may
 carry keys beyond the recommended set in
 [Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
-and a binding gives one such key a name a packing can use. Its parts are:
+and a binding gives one such key a name a packing can use. A binding reads the
+key's merged value across the object's palette layers, the same merge the rest
+of `mesh` walks, so a key several layers set resolves to the last layer that
+sets it. Its parts are:
 
 1. `name`: the name used in `--texture-map` and `--vertex-map`. It shadows a
-   built-in attribute name on collision, so `--define-attribute roughness 2
-   micro-rough` makes `R=roughness` read `micro-rough` from palette `2`. The
+   built-in attribute name on collision, so `--define-attribute roughness
+   micro-rough` makes `R=roughness` read the merged `micro-rough` instead. The
    shadowing is scoped to the custom packings; the `--texture` and `--vertex`
    presets always read the spec attributes.
-2. `palette-index`: which palette layer to read, as a position in the object's
-   `paletteRefs`, where `0` is the first layer, the same order the material
-   merge uses. This targets one specific layer when several carry the key.
-3. `key`: the voxel-json attribute key read from that layer.
-4. `type` (default `scalar`): `scalar` for a `0..1` number read as a bare
+2. `key`: the voxel-json attribute key read from the merged material.
+3. `type` (default `scalar`): `scalar` for a `0..1` number read as a bare
    `<name>`, or `color` for a `#RRGGBBAA` hex whose `r`, `g`, `b`, and `a`
    components a packing reads as `<name>.r` and so on.
 
-For example, `--define-attribute tint 1 tint color` then `--texture-map
+For example, `--define-attribute tint tint color` then `--texture-map
 paint.png R=tint.r,G=tint.g,B=tint.b,A=rgba.a` packs the custom `tint` color
-from palette `1` into RGB and the base color's alpha into `A`.
+into RGB and the base color's alpha into `A`.
 
 ## Vertex attribute maps
 
@@ -212,12 +218,22 @@ The names reuse the texture presets and pack the same way:
 4. `orm`, `mse`, `metallic-roughness`, `metallic-smoothness`: the packed presets,
    into `_ORM`, `_MSE`, and so on, packed across the attribute's components
    exactly as the texture preset packs them across channels. Custom attributes.
-5. `palette-index`: the cell index `--atlas palette` resolves to a UV, written as
-   a scalar into `_PALETTEINDEX`, with the per-index material table that `--atlas
-   palette` bakes into a texture shipped instead as data in the glTF `extras`. A
-   custom shader looks the material up by index rather than sampling a texture:
-   the most compact carrier and the exact-value alternative to the palette atlas.
-   Custom; not read by a generic viewer.
+5. `palette-index`: one index per vertex into a flattened table of the distinct
+   merged materials this mesh uses, written as a scalar into `_PALETTEINDEX` with
+   that table shipped as data in the glTF `extras`. A custom shader looks the
+   material up by index rather than sampling a texture: the most compact carrier
+   and the exact-value alternative to the palette atlas. The table is the used
+   combinations, so it is per-mesh, not shared across meshes. Custom; not read by
+   a generic viewer.
+6. `palette-layers`: one index per referenced palette layer per vertex, written
+   as scalars `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on, with each layer's
+   palette shipped verbatim in the glTF `extras`. A custom shader merges the
+   indexed cells the way the spec defines, later layers winning. Its data sums
+   the layer sizes rather than multiplying them and depends only on the palette
+   set, so it stays shareable across meshes and is the compact carrier for a
+   many-layer object; it is also the only carrier that keeps a layer value the
+   merge would otherwise drop. A single-layer object reduces to one
+   `_PALETTEINDEX0` and the one palette. Custom; not read by a generic viewer.
 
 `--vertex-map <target> <channels>` writes a custom packing to a named attribute,
 repeatable, the vertex twin of `--texture-map`. `target` is `COLOR_0` or a custom

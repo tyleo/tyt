@@ -62,23 +62,27 @@ Rationale for the non-obvious choices, for reviewers.
    in 3D order and narrow that dithering with the object selectors, while a bare
    palette has nothing to walk and skips both. Reusing the selectors keeps one
    addressing model across mesh, material, quantize, and remap.
-8. Custom attributes reach `--texture-map` through a declared binding,
-   `--define-attribute <name> <palette-index> <key> [type]`, rather than inline
+8. Custom attributes reach `--texture-map` and `--vertex-map` through a declared
+   binding, `--define-attribute <name> <key> [type]`, rather than inline
    qualifiers. The voxel-json format stores attributes generically, so a packing
    must read a key the presets do not name, of a type the tool cannot infer: a
    custom value may be a `0..1` number or a `#RRGGBBAA` color, and only a color
    exposes `r`/`g`/`b`/`a` components. A binding states the type once and gives
    the source a name, so the packing grammar stays a flat `name`, `1-name`, or
-   `name.component`, and the name is reusable across channels and images. It
-   shadows a built-in on collision, scoped to `--texture-map` so a binding never
-   silently changes a `--texture` preset. The palette index is a position in the
-   object's `paletteRefs`, the merge order `mesh` already walks, always valid for
-   the single object `mesh` outputs and the way to disambiguate a key shared by
-   several layers. The built-in `rgba` is itself a color, so `rgba.a` and an
-   RGBA split need no binding, complementing the whole-color `albedo` preset.
-   Inline `N:` and `.component` qualifiers with no declaration were dropped: they
-   cannot carry an explicit type, leaving an ambiguous custom value no home, and
-   they give no reusable name.
+   `name.component`, and the name is reusable across channels, images, and vertex
+   attributes. It shadows a built-in on collision, scoped to the custom packings
+   so a binding never silently changes a `--texture` or `--vertex` preset. The
+   binding reads the key's merged value across the object's palette layers, the
+   same merge the rest of `mesh` walks, rather than naming a layer: the merge
+   already resolves a shared key to one winner, so a layer index would only buy
+   the rare case of reading a deliberately overridden value, not worth the extra
+   argument and the `paletteRefs`-order concept it forces on the user; reaching a
+   non-winning layer is left to a later flag if it is ever wanted. The built-in
+   `rgba` is itself a color, so `rgba.a` and an RGBA split need no binding,
+   complementing the whole-color `albedo` preset. Inline `N:` and `.component`
+   qualifiers with no declaration were dropped: they cannot carry an explicit
+   type, leaving an ambiguous custom value no home, and they give no reusable
+   name.
 9. `palette show` infers the attribute type from the stored value, a `#RRGGBBAA`
    string for a color and a number for a scalar, where mesh's
    `--define-attribute` must be told the type. The difference is that `show`
@@ -134,12 +138,21 @@ Rationale for the non-obvious choices, for reviewers.
     carrier is chosen per map by `--texture` versus `--vertex`, so color can ride
     on vertices while PBR bakes to a shared atlas in the same run. `COLOR_0` is
     glTF's only per-vertex PBR slot, so per-vertex color is portable while
-    per-vertex metallic, roughness, and `palette-index` go in
+    per-vertex metallic, roughness, and the palette presets go in
     application-specific `_NAME` attributes only a custom shader reads. The
-    `palette-index` attribute is the palette atlas's indirection with the index
-    on the vertex and the per-index material table in `extras` rather than a UV
-    into a texture, the most compact carrier and the exact-value alternative to
-    the palette atlas.
+    palette indirection comes in two shapes because a multi-layer object's
+    material is the merge of one cell per layer, which no single index names:
+    `palette-index` flattens to the distinct merged materials the mesh uses, one
+    `_PALETTEINDEX` into a per-mesh table, the smallest carrier; `palette-layers`
+    keeps the layers, one `_PALETTEINDEXn` per layer plus each layer's palette,
+    summing rather than multiplying the layer sizes, staying shareable across
+    meshes, and alone preserving a layer value the merge would drop. Their
+    product, one index over every layer combination, was rejected:
+    `palette-layers` is both smaller and shareable, so the product never wins.
+    The texture `--atlas palette` keeps the merged-product keying instead, since
+    per-layer textures would need a custom shader and forfeit the atlas's
+    portability, so per-layer and used-combos compactness live on the vertex
+    carrier.
 
 ## Future and nice-to-haves
 

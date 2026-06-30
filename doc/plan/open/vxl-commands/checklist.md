@@ -37,8 +37,9 @@ off as they land.
 - [x] `--select` hierarchy-path glob object selector: a node path selects its
       subtree, repeatable, union over all values. See
       [conventions](reference/conventions.md).
-- [x] `--atlas` layout `ValueEnum`: palette (one texel per palette entry,
-      shareable) and unwrap (per-mesh UV) layouts. See [mesh](reference/mesh.md).
+- [x] `--atlas` layout `ValueEnum`: palette (one texel per merged material;
+      product over the object's layers, shareable) and unwrap (per-mesh UV)
+      layouts. See [mesh](reference/mesh.md).
 - [x] `--texture-map` channel parser: channel sources (`R`/`G`/`B`/`A` = `attr`
       | `1-attr` | `attr.r`/`.g`/`.b`/`.a` color component | `0` | `1` |
       `computed-occlusion`) and the RGBA packing, with `smoothness` accepted as
@@ -47,15 +48,16 @@ off as they land.
       metallic-smoothness, mse, emissive, occlusion, computed-occlusion,
       roughness, smoothness). See [mesh](reference/mesh.md).
 - [x] `--define-attribute` binding types: `ColorComponent`, `AttributeType`
-      (`scalar` | `color`), and `AttributeBinding` (`name palette key [type]`).
-      The clap multi-value wiring lands with `mesh`. See
-      [mesh](reference/mesh.md).
+      (`scalar` | `color`), and `AttributeBinding` (`name key [type]`; bindings
+      read the merged value, so the former palette-index field is dropped). The
+      clap multi-value wiring lands with `mesh`. See [mesh](reference/mesh.md).
 - [ ] `--vertex` / `--vertex-map` carrier: preset-to-attribute-name mapping
-      (`albedo`/`computed-occlusion` → `COLOR_0`, the others → `_NAME`,
-      `palette-index` → `_PALETTEINDEX`), reusing the `--texture-map` channel
-      parser and `--define-attribute`; emit glTF vertex attributes (`COLOR_0`
-      standard, `_NAME` custom) and ship the `palette-index` material table in
-      `extras`. See [mesh](reference/mesh.md).
+      (`albedo`/`computed-occlusion` → `COLOR_0`, the scalar/packed presets →
+      `_NAME`, `palette-index` → `_PALETTEINDEX` over a per-mesh used-combos
+      table, `palette-layers` → `_PALETTEINDEX0..n` over per-layer palettes),
+      reusing the `--texture-map` channel parser and `--define-attribute`; emit
+      glTF vertex attributes (`COLOR_0` standard, `_NAME` custom) and ship the
+      palette tables in `extras`. See [mesh](reference/mesh.md).
 - [x] Shared voxj encoding options (`--format`, `--encoding-preset`,
       `--position-encoding`, `--sample-encoding`) in `VoxjEncodingOptions`,
       flattened by `to voxj` and `voxelize`; `--ext`/`--edit-state` stay on
@@ -82,14 +84,15 @@ off as they land.
 - [ ] Material maps: `--texture <name> [path]` presets (albedo, orm,
       metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
       computed-occlusion, roughness, smoothness), `--texture-map <path>
-      <channels>`, and `--define-attribute <name> <palette-index> <key> [type]`,
-      default paths from the mesh stem.
+      <channels>`, and `--define-attribute <name> <key> [type]`, default paths
+      from the mesh stem.
 - [ ] Vertex attribute maps: `--vertex <name> [target]` presets (albedo →
       `COLOR_0`, computed-occlusion → `COLOR_0` darken, metallic / roughness /
       emissive / occlusion / smoothness → scalar `_NAME`, orm / mse /
       metallic-roughness / metallic-smoothness → packed `_NAME`, palette-index →
-      `_PALETTEINDEX` plus the per-index material table in glTF `extras`), and
-      `--vertex-map <target> <channels>` reusing the `--texture-map` channel
+      `_PALETTEINDEX` over a per-mesh used-combos table in `extras`,
+      palette-layers → `_PALETTEINDEX0..n` over per-layer palettes in `extras`),
+      and `--vertex-map <target> <channels>` reusing the `--texture-map` channel
       grammar and `--define-attribute`.
 - [ ] `Dependencies::mesh` and its impl.
 
