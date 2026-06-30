@@ -23,7 +23,7 @@ land.
 
 ## Shared infrastructure
 
-- [ ] `MeshFormat` `ValueEnum` (to support `fbx` | `obj` | `gltf`) with
+- [x] `MeshFormat` `ValueEnum` (to support `fbx` | `obj` | `gltf`) with
       `from_path` extension inference, mirroring `Format::from_path`. Only
       implement `fbx` at first.
 - [ ] Object selector parsers: `--select-index` (integer or `a-b` range) and
