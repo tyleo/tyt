@@ -25,8 +25,8 @@ These hold across the commands and match the existing `to` commands.
 ## Glob patterns
 
 Globs follow git pathspec rules, not grep substring matching. The
-[`hierarchy show`](hierarchy/show.md) `pattern` and the `--select` object-path
-glob share one rule set:
+[`hierarchy show`](hierarchy/show.md) `pattern` and the `--select` path glob
+share one rule set:
 
 1. A pattern is a full match against the whole candidate, not a substring. `door`
    matches the name `door`, not `backdoor`; write `*door*` for a substring match.
@@ -49,17 +49,24 @@ only the selection key, not placement.
    a plain integer such as `0` or a range `a-b` such as `2-5`. Repeat the flag
    to pick several, as in `--select-index 0 --select-index 3`. Index is the
    canonical object reference in the spec.
-2. `--select <glob>`: a glob over object paths, matched with the shared
+2. `--select <glob>`: a glob over hierarchy paths, matched with the shared
    [glob rules](#glob-patterns) exactly as [`hierarchy show`](hierarchy/show.md)
-   matches node paths. An object's path is the chain of hierarchy node names from
-   a root down to the object. The graph is a DAG, so an object reached through
-   several parents has one path per placement and a glob selects it when any path
-   matches; an object no node references has just its name as its path. Names are
-   not unique, so a glob may match several objects.
+   matches node paths. The candidates are the path of every node and every object
+   it places: a node's path is the chain of node names from a root, an object's
+   path that chain plus the object. A match selects every object at or under it,
+   so matching a node selects its whole subtree, just as selecting a node in
+   `hierarchy show` brings in its subtree, and matching an object selects that
+   object. `--select a` selects every object under node `a`, `--select a/**` the
+   same by its descendants, and `--select a/b` only object `b`. The graph is a
+   DAG, so an object reached through several parents has one path per placement
+   and matches when any path does; an object no node references has just its name
+   as its path. Names are not unique, so a glob may match several objects.
 
 Both options repeat, and every `--select-index` and `--select` value unions its
-matches. Given neither, every object is covered, output by `mesh` and
-`material` and dithered by `quantize` and `remap`.
+matches. Given neither, every object is selected. `material` outputs the
+selection, and `quantize` and `remap` dither it; `mesh` outputs it too but for
+now requires it to resolve to a single object (see [mesh](mesh.md)).
 
-Selecting hierarchy nodes instead, to bake a node's subtree and transforms into
-one larger placed mesh, is a separate mode left for a later pass.
+Baking a matched node's subtree and transforms into one larger placed mesh,
+rather than selecting its objects as pure geometry, is a separate mode left for a
+later pass.

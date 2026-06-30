@@ -28,9 +28,10 @@ output mirrors the input, a document in its own format or a bare palette JSON.
 6. `--dither` `none` | `floyd-steinberg` | `ordered` (default `none`): error
    diffusion when snapping values, walking each object's voxels in 3D order, not
    a 2D image. Needs a document; a bare palette has no voxels to walk.
-7. `--select <glob>`: dither only objects whose hierarchy path matches the glob,
-   effective only with `--dither` set. Repeatable; unions with `--select-index`.
-   See [Object selectors](../conventions.md#object-selectors).
+7. `--select <glob>`: dither only objects selected by hierarchy path, a node
+   path selecting its subtree, effective only with `--dither` set. Repeatable;
+   unions with `--select-index`. See
+   [Object selectors](../conventions.md#object-selectors).
 8. `--select-index <index>`: dither only objects at the given position, an
    integer or an `a-b` range, effective only with `--dither` set. Repeatable;
    unions with `--select`. Given no selector of either kind, every object is

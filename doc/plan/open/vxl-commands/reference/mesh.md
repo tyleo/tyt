@@ -11,12 +11,14 @@ mesh's UVs sample. The default output path is the input stem with the mesh
 extension; the mesh format is inferred from the output extension or set with
 `--to`.
 
-By default `mesh` outputs every object as pure geometry: each object's voxel
-grid is meshed on its own, with no hierarchy-node transform applied, since the
-common case is pulling leaf objects out without placement. Pass `--select` or
-`--select-index` to choose which objects to output; see
-[Object selectors](conventions.md#object-selectors). Assembling a placed scene
-from the hierarchy, baking the node transforms and instancing in
+`mesh` outputs one object as pure geometry: the object's voxel grid is meshed on
+its own, with no hierarchy-node transform applied, since the common case is
+pulling a leaf object out without placement. Pass `--select` or `--select-index`
+to choose which object; see [Object selectors](conventions.md#object-selectors).
+The selectors may resolve to several objects, but how to output more than one is
+not settled, so for now `mesh` errors unless the selection is exactly one object,
+including a multi-object document meshed with no selector. Assembling a placed
+scene from the hierarchy, baking the node transforms and instancing in
 [Hierarchy Nodes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#hierarchy-nodes),
 is a separate mode left for a later pass.
 
@@ -67,12 +69,13 @@ is a separate mode left for a later pass.
    sRGB space.
 9. `--atlas` `palette` | `unwrap` (default `palette`): material-map atlas layout;
    see [Material and texture maps](#material-and-texture-maps).
-10. `--select <glob>`: output only objects whose hierarchy path matches the glob.
+10. `--select <glob>`: choose the object by hierarchy path, matched as
+   `hierarchy show` matches node paths, so a node path selects its subtree.
    Repeatable; the result is the union of every `--select` and `--select-index`
-   value. See [Object selectors](conventions.md#object-selectors). Given no
-   selector of either kind, every object is output.
-11. `--select-index <index>`: output only objects at the given position, an
-   integer or an `a-b` range. Repeatable; unions with `--select` as above. See
+   value. See [Object selectors](conventions.md#object-selectors). The selection
+   must resolve to one object, as above.
+11. `--select-index <index>`: choose the object by position, an integer or an
+   `a-b` range. Repeatable; unions with `--select` as above. See
    [Object selectors](conventions.md#object-selectors).
 
 ## Material and texture maps

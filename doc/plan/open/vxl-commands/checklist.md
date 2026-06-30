@@ -27,7 +27,7 @@ land.
       `from_path` extension inference, mirroring `Format::from_path`. Only
       implement `fbx` at first.
 - [ ] Object selector parsers: `--select-index` (integer or `a-b` range) and
-      `--select` path glob over each object's hierarchy placement, both
+      `--select` hierarchy-path glob (a node path selects its subtree), both
       repeatable, union over all values. See
       [conventions](reference/conventions.md).
 - [ ] Material-map model: `--atlas` palette (one texel per palette entry,
@@ -45,7 +45,8 @@ land.
 
 ### mesh ([reference/mesh.md](reference/mesh.md))
 
-- [ ] `Mesh` command struct, dispatch, and per-object pure-geometry output.
+- [ ] `Mesh` command struct, dispatch, and single-object pure-geometry output;
+      error when the selection is not exactly one object.
 - [ ] `--to` / `--from`, `--scale` (meters per voxel, default `1.0`;
       centimeter-native `fbx` writes `100 * scale`), `--method`,
       `--vertex-computed-occlusion` with `--computed-occlusion-strength`,

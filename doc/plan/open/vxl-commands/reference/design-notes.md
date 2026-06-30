@@ -34,17 +34,18 @@ Rationale for the non-obvious choices, for reviewers.
    so meshes share one set of maps. Unwrap trades that sharing for a per-mesh UV
    unwrap that can hold spatially varying bakes a single texel per material
    cannot, such as ambient occlusion in the map instead of vertex colors.
-5. `mesh` outputs objects as pure geometry, narrowed by object selectors. The
+5. `mesh` outputs an object as pure geometry, narrowed by object selectors. The
    main use is pulling leaf objects out with no transform data, so selection
-   targets objects, by index, the canonical reference, or by a glob over their
-   hierarchy path, matched as `hierarchy show` matches node paths, rather than
-   baking hierarchy-node subtrees. Index and path are separate repeatable
-   options, `--select-index` and `--select`, rather than one option that guesses
-   whether a value is an index or a glob, since a name made only of digits is
-   unaddressable under that guess. They are flags, not positionals, because the
-   optional `output` positional is the house convention and trailing optional
-   positionals would be ambiguous. Assembling a placed scene from hierarchy
-   nodes, baking transforms and instancing, is a deferred, separate mode.
+   targets objects, by index, the canonical reference, or by a glob over the
+   hierarchy path, matched as `hierarchy show` matches node paths so a node path
+   selects its subtree. Index and path are separate repeatable options,
+   `--select-index` and `--select`, rather than one option that guesses whether a
+   value is an index or a glob, since a name made only of digits is unaddressable
+   under that guess. They are flags, not positionals, because the optional
+   `output` positional is the house convention and trailing optional positionals
+   would be ambiguous. `mesh` errors when the selection is not exactly one object;
+   how to output several, and whether to bake a node's subtree, transforms, and
+   instancing into one placed mesh, is a deferred, separate mode.
 6. Quantize and remap state their multi-attribute rule. A cell spans every
    attribute, so reducing one attribute has to define what happens to cells
    that share that value but differ elsewhere. Both keep such cells distinct,
