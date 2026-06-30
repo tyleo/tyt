@@ -66,3 +66,20 @@ RGBA base color, which a scalar packing cannot express, so it is its own
 `TextureBake` variant. `computed-occlusion` lowers to a packing whose one source
 is `ComputedOcclusion`, which the bake treats as forcing an unwrap layout, so no
 separate flag is needed.
+
+## Shared voxj encoding options
+
+`VoxjEncodingOptions` is a `clap::Args` group with the four flags that shape a
+voxj document: `--format`, `--encoding-preset`, `--position-encoding`, and
+`--sample-encoding`, with `encoding` and `resolve_format` resolution methods.
+Both `to voxj` and `voxelize` flatten it; `to voxj` adds `--ext` and
+`--edit-state`, which a voxelized mesh has no source for, so they are not in the
+shared group. clap cannot prefix a flattened group, so sharing happens at this
+sub-group rather than wrapping each command's whole writer surface. Output-path
+defaulting stays per command, since the default stem differs: `to voxj` defaults
+from the voxel file, `voxelize` from the mesh.
+
+`--optimize` was renamed to `--encoding-preset`, and the type `VoxjOptimize` to
+`VoxjEncodingPreset`, because its values are `size`, `fast`, and `pretty`, and
+`pretty` is not an optimization. "Encoding preset" describes all three and reads
+clearly beside the per-block `--position-encoding` and `--sample-encoding`.

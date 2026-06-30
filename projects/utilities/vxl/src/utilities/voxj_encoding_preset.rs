@@ -1,10 +1,9 @@
 use clap::ValueEnum;
 
-/// Encoding strategy that fills the default for any block a `to voxj` document
-/// leaves unset. An explicit `--position-encoding` or `--sample-encoding`
-/// overrides it for that block.
+/// Default block-encoding strategy for a voxj document, the `--encoding-preset`
+/// value.
 #[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum VoxjOptimize {
+pub enum VoxjEncodingPreset {
     /// Search every non-raw encoding pairing and keep the smallest.
     #[value(name = "size")]
     Size,

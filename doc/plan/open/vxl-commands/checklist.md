@@ -42,9 +42,10 @@ off as they land.
 - [x] `--texture` preset packings (albedo, orm, metallic-roughness,
       metallic-smoothness, mse, emissive, occlusion, computed-occlusion,
       roughness, smoothness). See [mesh](reference/mesh.md).
-- [ ] Shared voxj writer options (`--format`, `--optimize`,
-      `--position-encoding`, `--sample-encoding`, `--ext`, `--edit-state`)
-      factored for reuse by `voxelize`.
+- [x] Shared voxj encoding options (`--format`, `--encoding-preset`,
+      `--position-encoding`, `--sample-encoding`) in `VoxjEncodingOptions`,
+      flattened by `to voxj` and `voxelize`; `--ext`/`--edit-state` stay on
+      `to voxj`.
 - [ ] `ValueEnum`s for the palette ops: quantize method, color space, dither,
       and `palette show` format (`auto` | `swatch` | `string`).
 

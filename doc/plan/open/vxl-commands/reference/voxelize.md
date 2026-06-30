@@ -28,7 +28,8 @@ node transforms, `voxelize` can record `<s>` as the placing node's scale so the
 assembled model keeps its source dimensions. See
 [Coordinate System](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#coordinate-system).
 
-`voxelize` writes a voxel-json document and accepts the same output options as
-`to voxj`: `--format`, `--optimize`, `--position-encoding`,
-`--sample-encoding`, `--ext`, and `--edit-state`. Those default the same way
-they do there.
+`voxelize` writes a voxel-json document and shares `to voxj`'s encoding options:
+`--format`, `--encoding-preset`, `--position-encoding`, and `--sample-encoding`,
+which default the same way they do there. It does not take `--ext` or
+`--edit-state`: a voxelized mesh has no source `ext` block to carry and no
+editor build volume to record.
