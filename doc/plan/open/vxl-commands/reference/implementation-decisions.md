@@ -43,3 +43,12 @@ with `**/`, the same normalization the tyt hierarchy commands apply. It hands
 that normalized string to `match_glob` rather than matching itself, because the
 globset engine lives behind `impl`. Expanding a matched node's subtree and
 unioning the selectors is resolution-time work that lands with the commands.
+
+## Material packing model
+
+`ChannelSource` holds an attribute key as a `String` rather than a fixed enum,
+because the voxj format stores attributes generically and a packing may read any
+attribute, not only the recommended ones. `smoothness` is not a stored
+attribute; the parser canonicalizes `smoothness` and `1-smoothness` to the
+`roughness` attribute with the matching inversion, so the bake always reads one
+real attribute.
