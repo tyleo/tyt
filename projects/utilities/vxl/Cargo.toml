@@ -16,15 +16,20 @@ required-features = ["bin"]
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
 globset = { version = "0.4", optional = true }
+serde_json = { version = "1", features = ["preserve_order"], optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
 voxcore = { version = "0.1.0", optional = true }
 voxj-codec = { version = "0.1.0", optional = true }
 voxsmith = { version = "0.1.0", optional = true }
 
+[dev-dependencies]
+ty-math = "0.1.7"
+
 [features]
 default = ["impl"]
 impl = [
     "dep:globset",
+    "dep:serde_json",
     "dep:vmax-codec",
     "dep:voxcore",
     "dep:voxj-codec",

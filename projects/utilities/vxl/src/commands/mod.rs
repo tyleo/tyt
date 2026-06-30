@@ -1,4 +1,5 @@
 mod goxl;
+mod info;
 mod mvox;
 mod palette;
 mod palette_command;
@@ -10,6 +11,7 @@ mod vmax;
 mod voxj;
 
 pub use goxl::*;
+pub use info::*;
 pub use mvox::*;
 pub use palette::*;
 pub use palette_command::*;

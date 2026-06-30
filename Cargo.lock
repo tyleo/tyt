@@ -1952,6 +1952,8 @@ dependencies = [
  "clap",
  "clap_complete",
  "globset",
+ "serde_json",
+ "ty-math",
  "vmax-codec",
  "voxcore",
  "voxj-codec",

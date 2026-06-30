@@ -1,6 +1,6 @@
 use crate::{
-    AttributeType, CameraView, ColorComponent, ColorFormat, EditState, Format, PaletteShowFormat,
-    Result, VoxjEncoding, VoxjFormat,
+    AttributeType, CameraView, ColorComponent, ColorFormat, EditState, Format, InfoLayout,
+    PaletteShowFormat, Result, VoxjEncoding, VoxjFormat,
 };
 use std::path::Path;
 
@@ -72,6 +72,15 @@ pub trait Dependencies {
         ext: bool,
         edit_state: EditState,
     ) -> Result<()>;
+
+    /// Reports what the voxel file at `input` contains: a document summary, its
+    /// palettes, and its objects.
+    ///
+    /// # Arguments
+    /// * `input` - the voxel file to read, in any supported format.
+    /// * `from` - source format, inferred from `input`'s extension when `None`.
+    /// * `layout` - how to lay out the report.
+    fn info(&self, input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()>;
 
     /// Prints the selected attribute of one palette in the voxel file at
     /// `input`.

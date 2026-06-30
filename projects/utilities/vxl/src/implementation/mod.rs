@@ -1,4 +1,5 @@
 mod dependencies_impl;
+mod info;
 mod load_state;
 mod match_glob;
 mod palette_show;
@@ -10,6 +11,7 @@ mod to_voxj;
 mod write_stdout;
 
 pub use dependencies_impl::*;
+pub(crate) use info::*;
 pub(crate) use load_state::*;
 pub(crate) use match_glob::*;
 pub(crate) use palette_show::*;

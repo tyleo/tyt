@@ -1,4 +1,4 @@
-use crate::commands::Palette;
+use crate::commands::{Info, Palette};
 use crate::{Dependencies, Result, commands::To};
 use clap::Subcommand;
 
@@ -6,6 +6,8 @@ use clap::Subcommand;
 #[derive(Clone, Debug, Subcommand)]
 #[command(subcommand_value_name = "command")]
 pub enum Vxl {
+    #[command(name = "info")]
+    Info(Info),
     #[command(name = "palette")]
     Palette(Palette),
     #[command(name = "to")]
@@ -15,6 +17,7 @@ pub enum Vxl {
 impl Vxl {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         match self {
+            Vxl::Info(info) => info.execute(dependencies),
             Vxl::Palette(palette) => palette.execute(dependencies),
             Vxl::To(to) => to.execute(dependencies),
         }

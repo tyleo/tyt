@@ -36,4 +36,15 @@ impl Format {
             _ => None,
         }
     }
+
+    /// The lowercase name for this format, matching its `--from` value.
+    pub fn name(self) -> &'static str {
+        match self {
+            Format::Voxj => "voxj",
+            Format::VMax => "vmax",
+            Format::MVox => "mvox",
+            Format::Goxl => "goxl",
+            Format::Qbcl => "qbcl",
+        }
+    }
 }
