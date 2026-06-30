@@ -1,5 +1,6 @@
 mod goxl;
 mod mvox;
+mod palette;
 mod qbcl;
 mod to;
 mod to_command;
@@ -8,6 +9,7 @@ mod voxj;
 
 pub use goxl::*;
 pub use mvox::*;
+pub use palette::*;
 pub use qbcl::*;
 pub use to::*;
 pub use to_command::*;

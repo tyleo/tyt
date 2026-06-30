@@ -78,4 +78,10 @@ pub trait Dependencies {
     /// * `pattern` - the glob to match, already `**/`-normalized by the caller.
     /// * `candidates` - the hierarchy paths to test, in order.
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>>;
+
+    /// Writes `contents` to standard output.
+    ///
+    /// # Arguments
+    /// * `contents` - the bytes to write.
+    fn write_stdout(&self, contents: &[u8]) -> Result<()>;
 }

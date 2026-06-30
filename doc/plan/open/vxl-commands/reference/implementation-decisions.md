@@ -108,3 +108,16 @@ from the voxel file, `voxelize` from the mesh.
 `VoxjEncodingPreset`, because its values are `size`, `fast`, and `pretty`, and
 `pretty` is not an optimization. "Encoding preset" describes all three and reads
 clearly beside the per-block `--position-encoding` and `--sample-encoding`.
+
+## palette command group
+
+`tyt meta create-command` scaffolds the `palette` group. Its leaf prints a
+placeholder line for now; the real `list`, `show`, and `quantize` subcommands
+land later. The scaffolder's command template calls `Dependencies::write_stdout`,
+a method every freshly generated crate's trait carries, so restoring that method
+to vxl was the only change the generated code needed to compile.
+
+vxl implements `write_stdout` against `std::io::stdout().write_all` as a free
+function in the implementation module rather than delegating to
+`tyt_injection::write_stdout` the way the prefixed tyt crates do, because vxl
+stays independent of the tyt support crates.
