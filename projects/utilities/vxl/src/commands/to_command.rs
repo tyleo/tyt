@@ -1,6 +1,6 @@
 use crate::{
     Dependencies, Result,
-    commands::{Goxl, Mvox, Qbcl, Vmax, Voxj},
+    commands::{ToGoxl, ToMvox, ToQbcl, ToVmax, ToVoxj},
 };
 use clap::Subcommand;
 
@@ -9,25 +9,25 @@ use clap::Subcommand;
 #[command(subcommand_value_name = "command")]
 pub enum ToCommand {
     #[command(name = "goxl")]
-    Goxl(Goxl),
+    ToGoxl(ToGoxl),
     #[command(name = "mvox")]
-    Mvox(Mvox),
+    ToMvox(ToMvox),
     #[command(name = "qbcl")]
-    Qbcl(Qbcl),
+    ToQbcl(ToQbcl),
     #[command(name = "vmax")]
-    Vmax(Vmax),
+    ToVmax(ToVmax),
     #[command(name = "voxj")]
-    Voxj(Voxj),
+    ToVoxj(ToVoxj),
 }
 
 impl ToCommand {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         match self {
-            ToCommand::Goxl(goxl) => goxl.execute(dependencies),
-            ToCommand::Mvox(mvox) => mvox.execute(dependencies),
-            ToCommand::Qbcl(qbcl) => qbcl.execute(dependencies),
-            ToCommand::Vmax(vmax) => vmax.execute(dependencies),
-            ToCommand::Voxj(voxj) => voxj.execute(dependencies),
+            ToCommand::ToGoxl(goxl) => goxl.execute(dependencies),
+            ToCommand::ToMvox(mvox) => mvox.execute(dependencies),
+            ToCommand::ToQbcl(qbcl) => qbcl.execute(dependencies),
+            ToCommand::ToVmax(vmax) => vmax.execute(dependencies),
+            ToCommand::ToVoxj(voxj) => voxj.execute(dependencies),
         }
     }
 }

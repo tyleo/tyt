@@ -1,4 +1,4 @@
-use crate::commands::Show;
+use crate::commands::PaletteShow;
 use clap::Subcommand;
 
 /// The `palette` command group.
@@ -6,13 +6,13 @@ use clap::Subcommand;
 #[command(subcommand_value_name = "command")]
 pub enum PaletteCommand {
     #[command(name = "show")]
-    Show(Show),
+    PaletteShow(PaletteShow),
 }
 
 impl PaletteCommand {
     pub fn execute(self, _dependencies: impl crate::Dependencies) -> crate::Result<()> {
         match self {
-            PaletteCommand::Show(show) => show.execute(_dependencies),
+            PaletteCommand::PaletteShow(show) => show.execute(_dependencies),
         }
     }
 }

@@ -15,10 +15,15 @@ use clap::{ArgAction, Parser};
 /// which are created on demand (e.g. `--parent voxj --parent from` adds a command
 /// at `tyt voxj from <command>`). Here `--dir` and `--prefix` are inferred from the
 /// existing crate when omitted, and only needed to disambiguate same-named crates.
+///
+/// Each parent group is prepended to the new command's type and file name, so
+/// `show` under `palette` becomes `PaletteShow` in `palette_show.rs` while its CLI
+/// name stays `show`. This keeps same-named leaves under different groups distinct.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "create-command")]
 pub struct CreateCommand {
-    /// PascalCase type name (e.g., `FooBar`).
+    /// PascalCase type name (e.g., `FooBar`). Parent groups are prepended, so
+    /// `Show` under `palette` lands as `PaletteShow`.
     #[arg(value_name = "name")]
     pub name: String,
 

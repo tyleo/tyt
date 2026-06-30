@@ -274,3 +274,25 @@ width is read with a `libc` ioctl rather than the `terminal_size` crate, since
 download; it is gated to unix, and other platforms simply do not wrap. Only the
 `row` layouts wrap, as `column` and `markdown` are already vertical or
 self-sizing.
+
+## Parent-prefixed command names
+
+`create-command` lays every command, group or leaf, in one flat `src/commands/`
+namespace flattened through `pub use {snake}::*`, so a leaf's CLI name had to be
+unique across the whole crate at both the file (`show.rs`) and the type (`Show`)
+level. That blocked `vxl hierarchy show` while `vxl palette show` already owned
+both. Now a grouped command's type and file name carry their parent-group path:
+`show` under `palette` is the `PaletteShow` type in `palette_show.rs`, and the
+same `show` under a `hierarchy` group would land as `HierarchyShow` in
+`hierarchy_show.rs`. The clap
+`#[command(name = "show")]` keeps the bare CLI name, so the surface is unchanged
+and both still run as `... show`. Top-level commands and the group structs take
+no prefix, so `info`, `palette`, and `to` are untouched.
+
+The prefix keeps the namespace flat instead of nesting each group in its own
+`commands/<group>/` submodule. Flat naming leaves the `mod.rs` shape and the enum
+imports as plain `use crate::commands::{...}`, so the generator's string inserters
+and templates feed the prefixed names with no structural change. The existing
+`palette` and `to` leaves were renamed to the same rule, `Show` to `PaletteShow`
+and `Goxl` to `ToGoxl` and so on, so generated and hand-written commands share one
+layout.

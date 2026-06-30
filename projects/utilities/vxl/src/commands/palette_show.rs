@@ -8,7 +8,7 @@ use std::{
 /// Prints one or more palette value collections.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "show")]
-pub struct Show {
+pub struct PaletteShow {
     /// The input voxel file, in any supported format.
     #[arg(value_name = "input")]
     input: PathBuf,
@@ -40,7 +40,7 @@ pub struct Show {
     width: Width,
 }
 
-impl Show {
+impl PaletteShow {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         // clap fixes each occurrence at three values, so the flattened list
         // chunks cleanly into one selector per occurrence.

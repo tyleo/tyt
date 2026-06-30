@@ -2,16 +2,16 @@ use crate::{Dependencies, Format, Result};
 use clap::Parser;
 use std::path::PathBuf;
 
-/// Converts a voxel file to the Qubicle format.
+/// Converts a voxel file to the Goxel format.
 #[derive(Clone, Debug, Parser)]
-#[command(name = "qbcl")]
-pub struct Qbcl {
+#[command(name = "goxl")]
+pub struct ToGoxl {
     /// The input voxel file, in any supported format.
     #[arg(value_name = "input")]
     input: PathBuf,
 
-    /// The output `.qbcl` file to write. Defaults to the input path with a
-    /// `.qbcl` extension.
+    /// The output `.gox` file to write. Defaults to the input path with a
+    /// `.gox` extension.
     #[arg(value_name = "output")]
     output: Option<PathBuf>,
 
@@ -20,11 +20,11 @@ pub struct Qbcl {
     from: Option<Format>,
 }
 
-impl Qbcl {
+impl ToGoxl {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let output = self
             .output
-            .unwrap_or_else(|| self.input.with_extension("qbcl"));
-        dependencies.to_qbcl(&self.input, self.from, &output)
+            .unwrap_or_else(|| self.input.with_extension("gox"));
+        dependencies.to_goxl(&self.input, self.from, &output)
     }
 }

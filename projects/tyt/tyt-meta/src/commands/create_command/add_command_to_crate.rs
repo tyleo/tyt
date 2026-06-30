@@ -23,6 +23,22 @@ pub fn add_command_to_crate(
         .split_first()
         .ok_or_else(|| Error::Meta("at least one parent is required".to_string()))?;
 
+    // A grouped command's type and file are prefixed with its parent-group path
+    // so leaves sharing a CLI name under different groups stay distinct in the
+    // flat `commands/` namespace. The clap `#[command(name)]` keeps the bare CLI
+    // name. Top-level commands (no groups) are left unprefixed.
+    let group_pascal: String = groups
+        .iter()
+        .map(|group| create_command::kebab_to_pascal_case(group))
+        .collect();
+    let leaf_name = format!("{group_pascal}{name}");
+    let leaf_snake = groups
+        .iter()
+        .map(|group| create_command::kebab_to_snake_case(group))
+        .chain([command_snake])
+        .collect::<Vec<_>>()
+        .join("_");
+
     let root = deps.workspace_root()?;
     // Discover the crate on disk, inferring its group directory and prefix from
     // whatever `--dir` / `--prefix` were not given.
@@ -46,13 +62,19 @@ pub fn add_command_to_crate(
     // track the enum the new command will be wired into (the crate root enum when
     // there are no groups, otherwise the innermost group's subcommand enum).
     let mut enum_path = crate_dir.join(format!("src/{}.rs", naming.module));
-    for group in groups {
-        enum_path =
-            create_command::ensure_group(deps, &commands_dir, &mod_path, &enum_path, group)?;
+    for (depth, group) in groups.iter().enumerate() {
+        enum_path = create_command::ensure_group(
+            deps,
+            &commands_dir,
+            &mod_path,
+            &enum_path,
+            &groups[..depth],
+            group,
+        )?;
     }
 
     // 1. Create the leaf command file.
-    let cmd_file = commands_dir.join(format!("{command_snake}.rs"));
+    let cmd_file = commands_dir.join(format!("{leaf_snake}.rs"));
     if cmd_file.exists() {
         return Err(Error::Meta(format!(
             "command file already exists: {}",
@@ -61,19 +83,20 @@ pub fn add_command_to_crate(
     }
     deps.write(
         &cmd_file,
-        &create_command::command_file_template(name, command, description),
+        &create_command::command_file_template(&leaf_name, command, description),
     )?;
 
     // 2. Register the module and wire the variant into the target enum.
-    create_command::register_command_mod(deps, &mod_path, &command_snake)?;
-    create_command::wire_enum_variant(deps, &enum_path, name, command)?;
+    create_command::register_command_mod(deps, &mod_path, &leaf_snake)?;
+    create_command::wire_enum_variant(deps, &enum_path, &leaf_name, command)?;
 
     // Prefixed crates run as `tyt {suffix} ...`; standalone crates run via their
     // own binary, e.g. `{suffix} ...`.
     let path = parents.join(" ");
     let binary = if prefix { "tyt " } else { "" };
     deps.write_stdout(
-        format!("Added `{name}` command. Run it with `{binary}{path} {command}`.\n").as_bytes(),
+        format!("Added `{leaf_name}` command. Run it with `{binary}{path} {command}`.\n")
+            .as_bytes(),
     )?;
 
     Ok(())

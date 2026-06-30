@@ -5,7 +5,7 @@ use std::path::PathBuf;
 /// Converts a voxel file to the MagicaVoxel format.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "mvox")]
-pub struct Mvox {
+pub struct ToMvox {
     /// The input voxel file, in any supported format.
     #[arg(value_name = "input")]
     input: PathBuf,
@@ -20,7 +20,7 @@ pub struct Mvox {
     from: Option<Format>,
 }
 
-impl Mvox {
+impl ToMvox {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let output = self
             .output

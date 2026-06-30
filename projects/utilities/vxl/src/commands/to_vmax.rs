@@ -5,7 +5,7 @@ use std::path::PathBuf;
 /// Converts a voxel file to the Voxel Max format.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "vmax")]
-pub struct Vmax {
+pub struct ToVmax {
     /// The input voxel file, in any supported format.
     #[arg(value_name = "input")]
     input: PathBuf,
@@ -29,7 +29,7 @@ pub struct Vmax {
     camera: Option<CameraView>,
 }
 
-impl Vmax {
+impl ToVmax {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let output = self
             .output

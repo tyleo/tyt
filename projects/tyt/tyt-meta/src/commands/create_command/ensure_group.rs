@@ -9,15 +9,29 @@ use std::path::{Path, PathBuf};
 /// - If a pristine leaf-command stub already occupies the name, converts it into a
 ///   group in place (its variant in `parent_enum_path` is reused unchanged).
 /// - If the group already exists, leaves it untouched.
+///
+/// `ancestors` is the chain of parent groups above this one; the group's type and
+/// file names are prefixed with it so nested groups stay distinct in the flat
+/// `commands/` namespace. The clap `#[command(name)]` keeps the bare CLI name.
 pub fn ensure_group(
     deps: &impl Dependencies,
     commands_dir: &Path,
     mod_path: &Path,
     parent_enum_path: &Path,
+    ancestors: &[String],
     group: &str,
 ) -> Result<PathBuf> {
-    let group_snake = create_command::kebab_to_snake_case(group);
-    let group_pascal = create_command::kebab_to_pascal_case(group);
+    let group_snake = ancestors
+        .iter()
+        .map(|ancestor| create_command::kebab_to_snake_case(ancestor))
+        .chain([create_command::kebab_to_snake_case(group)])
+        .collect::<Vec<_>>()
+        .join("_");
+    let group_pascal: String = ancestors
+        .iter()
+        .map(|ancestor| create_command::kebab_to_pascal_case(ancestor))
+        .chain([create_command::kebab_to_pascal_case(group)])
+        .collect();
     let struct_path = commands_dir.join(format!("{group_snake}.rs"));
     let enum_path = commands_dir.join(format!("{group_snake}_command.rs"));
     let enum_mod = format!("{group_snake}_command");
