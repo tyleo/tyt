@@ -1,4 +1,5 @@
 mod dependencies_impl;
+mod hierarchy_show;
 mod info;
 mod load_state;
 mod markdown_table;
@@ -16,6 +17,7 @@ mod write_stdout;
 mod write_voxj_document;
 
 pub use dependencies_impl::*;
+pub(crate) use hierarchy_show::*;
 pub(crate) use info::*;
 pub(crate) use load_state::*;
 pub(crate) use markdown_table::*;

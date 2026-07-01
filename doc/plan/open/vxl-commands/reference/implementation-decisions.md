@@ -332,3 +332,69 @@ and templates feed the prefixed names with no structural change. The existing
 `palette` and `to` leaves were renamed to the same rule, `Show` to `PaletteShow`
 and `Goxl` to `ToGoxl` and so on, so generated and hand-written commands share one
 layout.
+
+## hierarchy show
+
+This is the first of three iterations: the core tree with its instancing and
+unplaced marks and the `--collapse-instances` flag land here; the `pattern` glob
+with the `--collapse-ancestors`/`--collapse-descendants` flags, and the
+`--show-transforms`/`--show-bounds`/`--show-extents` subtrees, follow.
+
+`Dependencies::hierarchy_show` carries the load, render, and print together like
+the other read reports, so the command struct only parses flags. Its core is a
+pure `render` over a `VoxMain` that returns the output string, which unit-tests
+without the filesystem; the wrapper loads the document and writes to standard
+output.
+
+The renderer flattens the scene into a `Graph` keyed by `u32` id, built once from
+the `VoxMain`. Working in `u32` keeps vxl from naming `branded_id::U32Id`, the id
+type voxcore uses but does not re-export. The flattening reads each node's name,
+child node ids, and child object ids, and tallies a placement count per node and
+object. A node's placement count is its parent references plus a root listing; an
+object's is its parent references. The counts drive both marks: two or more
+placements is instanced, zero is unplaced.
+
+Every line ends with one bundled tag: `name [Node <id>]` or `name [Object <id>]`,
+with extra comma-separated fields appended. The kind and id always show, so the
+id that correlates instances lives in the tag itself rather than a separate
+column.
+
+Instancing renders every placement expanded and appends `Instance` to the tag at
+each one, as `name [Node <id>, Instance]`, the faithful view of a DAG that places
+a shared node once per path. `--collapse-instances` expands only the first
+placement and prints each later one as a `[Node <id>, Instance, Collapsed]` stub,
+tracked by a set of already-expanded ids; the shared id ties a collapsed stub
+back to its expanded occurrence. An object placed by several nodes takes the same
+`Instance` field, but it is a leaf, so collapse does not apply to it. The flag is
+a plain presence bool, matching the `--collapse-ancestors`/`--collapse-descendants`
+family rather than the settable `--ext` style.
+
+The tree keeps document order rather than sorting children by name the way the FBX
+and Voxel Max views do, because a voxel-json document already orders its roots,
+child nodes, and child objects, so preserving that order is both deterministic and
+the truthful rendering. Child nodes print before child objects within a parent,
+following the struct field order.
+
+A traversal guard appends `Cycle` to the tag of a node found on its own ancestor
+chain and does not re-enter it. The loaders build a `VoxMain` without validating,
+so a document with a `childNodes` cycle would otherwise recurse forever.
+Instancing across sibling branches is a diamond, not a cycle, so only an ancestor
+repeat stops the walk.
+
+The tree is split into a `Root` section of each root's subtree and an `Unplaced`
+section, each under a bare header line printed only when its section is non-empty.
+`Unplaced` lists nodes that are neither a root nor a child, then objects no node
+places, each in listing order. Unplaced nodes render with their subtrees, which
+surfaces child nodes reachable only through an unplaced parent and so absent from
+the root tree. Orphan objects match the `--select` convention that an unreferenced
+object has its bare name as its path, and `info` already reports every object.
+
+`hierarchy show` renders only the markdown tree and takes no `--layout`, unlike
+the other read reports with their `pretty-json` and `compact-json` forms. The
+scene graph reads as a tree, so a JSON layout was dropped for this command, which
+also keeps it off the shared `ReportLayout` and its `serde_json` path. A
+machine-readable graph can return later if a caller needs one.
+
+`branded-id` is a dev-dependency, used only by the tests to build hierarchy nodes
+from returned ids and to fabricate a cyclic state for the cycle guard. The shipped
+crate names no branded id; the render path stays on `u32`.

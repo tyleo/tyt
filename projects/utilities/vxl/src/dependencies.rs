@@ -142,6 +142,22 @@ pub trait Dependencies {
         width: Width,
     ) -> Result<()>;
 
+    /// Prints the scene graph of the voxel file at `input` as a tree, marking
+    /// instanced nodes and listing nodes that are neither a root nor a child
+    /// and objects no node places.
+    ///
+    /// # Arguments
+    /// * `input` - the voxel file to read, in any supported format.
+    /// * `from` - source format, inferred from `input`'s extension when `None`.
+    /// * `collapse_instances` - when true, expand a shared node's first
+    ///   placement and print each later placement as a non-expanded stub.
+    fn hierarchy_show(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        collapse_instances: bool,
+    ) -> Result<()>;
+
     /// Matches `pattern` against each candidate hierarchy path, returning one
     /// boolean per candidate in order. The pattern is the project's standard
     /// glob, built with path separators literal.

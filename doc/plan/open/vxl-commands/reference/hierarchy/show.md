@@ -34,7 +34,6 @@ shows its name and its referenced child objects. See
 6. `--collapse-descendants` (flag): with a `pattern`, hide the descendants of
    each match and replace them with a `(DESCENDANTS)` marker, omitted when the
    match has no descendants. No effect without a `pattern`.
-7. `--layout` `markdown` | `pretty-json` | `compact-json` (default `markdown`):
-   how to render the graph. `markdown` is the tree above; the JSON forms emit the
-   graph, including root, instanced, and unplaced flags, as pretty or compact
-   JSON.
+7. `--collapse-instances` (flag): expand each shared node's first placement and
+   print each later placement as a non-expanded stub, rather than expanding every
+   placement in full. This command prints only the tree; it has no `--layout`.

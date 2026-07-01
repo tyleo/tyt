@@ -1,3 +1,6 @@
+mod hierarchy;
+mod hierarchy_command;
+mod hierarchy_show;
 mod info;
 mod palette;
 mod palette_command;
@@ -12,6 +15,9 @@ mod to_voxj;
 mod validate;
 mod voxelize;
 
+pub use hierarchy::*;
+pub use hierarchy_command::*;
+pub use hierarchy_show::*;
 pub use info::*;
 pub use palette::*;
 pub use palette_command::*;

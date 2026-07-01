@@ -166,9 +166,10 @@ Material sampling (designed, not yet built; see
 
 ### hierarchy show ([reference/hierarchy/show.md](reference/hierarchy/show.md))
 
-- [ ] Tree render with DAG / instancing and unplaced-node markers.
+- [x] Tree render with DAG / instancing and unplaced-node markers, plus
+      `--collapse-instances`. Markdown tree only; no `--layout`.
 - [ ] `pattern` glob; `--show-transforms` / `--show-bounds` / `--show-extents`;
-      collapse flags; `--layout`.
+      `--collapse-ancestors` / `--collapse-descendants`.
 
 ### validate ([reference/validate.md](reference/validate.md))
 
@@ -183,8 +184,8 @@ Material sampling (designed, not yet built; see
 
 ## Finishing
 
-- [ ] `--layout` output on `list`, `hierarchy show`, `validate`, and `info`;
-      `palette show` keeps its own `--json`.
+- [ ] `--layout` output on `list`, `validate`, and `info`; `palette show` keeps
+      its own `--json`, and `hierarchy show` prints only its tree.
 - [ ] Help text and `clap_complete` completions cover the new commands.
 - [ ] Tests per command, following the existing test style.
 

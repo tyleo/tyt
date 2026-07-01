@@ -90,6 +90,15 @@ impl Dependencies for DependenciesImpl {
         implementation::palette_show(input, from, selectors, layout, width)
     }
 
+    fn hierarchy_show(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        collapse_instances: bool,
+    ) -> Result<()> {
+        implementation::hierarchy_show(input, from, collapse_instances)
+    }
+
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
         implementation::match_glob(pattern, candidates)
     }
