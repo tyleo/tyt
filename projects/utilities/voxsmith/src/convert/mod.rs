@@ -2,6 +2,8 @@
 mod gltf;
 #[cfg(feature = "goxl")]
 mod goxl;
+#[cfg(feature = "gltf")]
+mod mesh;
 #[cfg(feature = "mvox")]
 mod mvox;
 #[cfg(feature = "qbcl")]
@@ -17,6 +19,8 @@ mod voxj;
 pub use gltf::*;
 #[cfg(feature = "goxl")]
 pub use goxl::*;
+#[cfg(feature = "gltf")]
+pub use mesh::*;
 #[cfg(feature = "mvox")]
 pub use mvox::*;
 #[cfg(feature = "qbcl")]
