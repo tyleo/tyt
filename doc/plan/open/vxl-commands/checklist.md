@@ -169,7 +169,7 @@ Material sampling (designed, not yet built; see
 - [x] Tree render with DAG / instancing and unplaced-node markers, plus
       `--collapse-instances`. Markdown tree only; no `--layout`.
 - [x] `pattern` glob with `--collapse-ancestors` / `--collapse-descendants`.
-- [ ] `--show-transforms` / `--show-bounds` / `--show-extents`.
+- [x] `--show-transforms` / `--show-bounds` / `--show-extents`, local and world.
 
 ### validate ([reference/validate.md](reference/validate.md))
 

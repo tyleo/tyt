@@ -1,7 +1,7 @@
 use crate::{
-    AttributeSelector, CameraView, ColorFormat, Dependencies, EditState, FillMode, Format,
-    MeshFormat, PaletteShowLayout, ReportLayout, Result, VoxjEncoding, VoxjFormat, Width,
-    implementation,
+    AttributeSelector, BoundsView, CameraView, ColorFormat, Dependencies, EditState, FillMode,
+    Format, MeshFormat, PaletteShowLayout, PatternView, ReportLayout, Result, TransformView,
+    VoxjEncoding, VoxjFormat, Width, implementation,
 };
 use std::path::Path;
 
@@ -90,22 +90,25 @@ impl Dependencies for DependenciesImpl {
         implementation::palette_show(input, from, selectors, layout, width)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn hierarchy_show(
         &self,
         input: &Path,
         from: Option<Format>,
-        pattern: Option<String>,
+        pattern: Option<PatternView>,
         collapse_instances: bool,
-        collapse_ancestors: bool,
-        collapse_descendants: bool,
+        transforms: Option<TransformView>,
+        bounds: Option<BoundsView>,
+        extents: Option<BoundsView>,
     ) -> Result<()> {
         implementation::hierarchy_show(
             input,
             from,
             pattern,
             collapse_instances,
-            collapse_ancestors,
-            collapse_descendants,
+            transforms,
+            bounds,
+            extents,
         )
     }
 

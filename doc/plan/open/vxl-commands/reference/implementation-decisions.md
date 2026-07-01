@@ -337,8 +337,9 @@ layout.
 
 This is built in three iterations. The first landed the core tree with its
 instancing and unplaced marks and `--collapse-instances`; the second the
-`pattern` glob with `--collapse-ancestors`/`--collapse-descendants`; the
-`--show-transforms`/`--show-bounds`/`--show-extents` subtrees follow.
+`pattern` glob with `--collapse-ancestors`/`--collapse-descendants`; the third
+the `--show-transforms`/`--show-bounds`/`--show-extents` subtrees, local and
+world.
 
 `Dependencies::hierarchy_show` carries the load, render, and print together like
 the other read reports, so the command struct only parses flags. Its core is a
@@ -346,28 +347,57 @@ pure `render` over a `VoxMain` that returns the output string, which unit-tests
 without the filesystem; the wrapper loads the document and writes to standard
 output.
 
-The renderer flattens the scene into a `Graph` keyed by `u32` id, built once from
-the `VoxMain`. Working in `u32` keeps vxl from naming `branded_id::U32Id`, the id
-type voxcore uses but does not re-export. The flattening reads each node's name,
-child node ids, and child object ids, and tallies a placement count per node and
-object. A node's placement count is its parent references plus a root listing; an
-object's is its parent references. The counts drive both marks: two or more
-placements is instanced, zero is unplaced.
+The renderer works against the loaded `VoxMain` directly through a thin `Scene`
+view. `VoxMain` stays the single source of truth for names, children, transforms,
+and grid boxes, read back by id through its accessors as the walk needs them. The
+only datum `Scene` derives is the placement count per node and object, tallied
+once from the roots and every node's child lists. A node's placement count is its
+parent references plus a root listing; an object's is its parent references. The
+counts drive both marks: two or more placements is instanced, zero is unplaced.
 
-Every line ends with one bundled tag: `name [Node <id>]` or `name [Object <id>]`,
-with extra comma-separated fields appended. The kind and id always show, so the
-id that correlates instances lives in the tag itself rather than a separate
-column.
+The two count columns are `IdVec`s indexed by branded id rather than hash maps.
+The render path never mutates the loaded state, and a freshly loaded document
+numbers its ids `0..count` with no holes, so each column is sized once to the
+live count and filled in place, which fits the counts better than growing a map
+key by key. The tally ignores an id outside that range, so an unvalidated
+document's dangling reference stays a no-op rather than an out-of-bounds panic,
+and the missing node or object still renders through the walk's own missing-id
+markers.
 
-Instancing renders every placement expanded and appends `Instance` to the tag at
-each one, as `name [Node <id>, Instance]`, the faithful view of a DAG that places
-a shared node once per path. `--collapse-instances` expands only the first
-placement and prints each later one as a `[Node <id>, Instance, Collapsed]` stub,
-tracked by a set of already-expanded ids; the shared id ties a collapsed stub
-back to its expanded occurrence. An object placed by several nodes takes the same
-`Instance` field, but it is a leaf, so collapse does not apply to it. The flag is
-a plain presence bool, matching the `--collapse-ancestors`/`--collapse-descendants`
-family rather than the settable `--ext` style.
+An earlier cut flattened the whole scene into a `Graph` of `u32`-keyed maps that
+duplicated `VoxMain`, chosen so vxl would not name `branded_id::U32Id`, the id
+type voxcore uses but does not re-export. Dropping it removed that copy and cut
+the file's rendering code by about sixty lines, and it also ended the id erasure
+that let a node id and an object id be mixed. `Scene` indexes its count columns
+and threads its walk on branded ids through the aliases `NodeId` and `ObjectId`,
+so the two id kinds are distinct types again. Naming `U32Id` makes `branded-id` a
+real `impl`-gated dependency rather than a dev-only one. Its `Display` prints the
+brand name, so the id in each tag formats through `to_u32` for the bare integer.
+
+Every node and object line reads `name: {node: <id>}` or `name: {object: <id>}`,
+the name as a prefix over a map of the entity's fields. The kind and id always
+show, so the id that correlates instances lives in the tag itself rather than a
+separate column.
+
+The delimiters follow the data shape, like JSON: `{...}` wraps a map of
+`key: value` fields, so an entity tag reads `{node: <id>, instance: <k>}`, and
+`[...]` wraps an array, so a vector value reads `position: [x, y, z]`. Everything
+else is a bare lowercase label: the `root` and `unplaced` section headers, the
+`transform` and `bounds` subtree headers, and the `ancestors` and `descendants`
+markers. Earlier spellings bracketed every annotation uniformly and capitalized
+the labels, before this split the delimiters by shape and lowercased throughout.
+
+A shared node, placed two or more times, adds an `instance: <k>` field counting
+the placements already shown, so its first occurrence is `instance: 0` and each
+repeat climbs from there, tracked by a per-id counter rather than a set. By
+default every placement expands, the faithful view of a DAG that places a shared
+node once per path. `--collapse-instances` expands only the first occurrence and
+stops each repeat as a stub; no separate `collapsed` field is needed, since a
+nonzero `instance` already says the occurrence is a repeat. An object placed by
+several nodes takes the same `instance` field, but it is a leaf, so collapse does
+not apply to it. The flag is a plain presence bool, matching the
+`--collapse-ancestors`/`--collapse-descendants` family rather than the settable
+`--ext` style.
 
 The tree keeps document order rather than sorting children by name the way the FBX
 and Voxel Max views do, because a voxel-json document already orders its roots,
@@ -375,15 +405,15 @@ child nodes, and child objects, so preserving that order is both deterministic a
 the truthful rendering. Child nodes print before child objects within a parent,
 following the struct field order.
 
-A traversal guard appends `Cycle` to the tag of a node found on its own ancestor
+A traversal guard adds a `cycle: true` field to a node found on its own ancestor
 chain and does not re-enter it. The loaders build a `VoxMain` without validating,
 so a document with a `childNodes` cycle would otherwise recurse forever.
 Instancing across sibling branches is a diamond, not a cycle, so only an ancestor
 repeat stops the walk.
 
-The tree is split into a `Root` section of each root's subtree and an `Unplaced`
+The tree is split into a `root` section of each root's subtree and an `unplaced`
 section, each under a bare header line printed only when its section is non-empty.
-`Unplaced` lists nodes that are neither a root nor a child, then objects no node
+`unplaced` lists nodes that are neither a root nor a child, then objects no node
 places, each in listing order. Unplaced nodes render with their subtrees, which
 surfaces child nodes reachable only through an unplaced parent and so absent from
 the root tree. Orphan objects match the `--select` convention that an unreferenced
@@ -410,20 +440,65 @@ Rendering threads an in-match flag and the current path. Above a match the walk
 keeps only the child nodes whose path leads to a match and drops child objects,
 which no node path names; in or below a match the whole subtree shows. Orphan
 objects, which have no node path, drop entirely under a filter, though objects
-still show under a matched node. Both the `Root` and `Unplaced` sections filter
+still show under a matched node. Both the `root` and `unplaced` sections filter
 this way, and an emptied section, header included, is omitted.
 
 `--collapse-ancestors` prints the matches as a flat list rather than in their
-sections, each behind an `[Ancestors]` marker, dropped when the match is a section
+sections, each behind an `ancestors` marker, dropped when the match is a section
 root with no chain to hide. `--collapse-descendants` replaces a matched node's
-children with a `[Descendants]` marker. The markers are bracketed to match the
-`[Node ...]` tag family and to read as placeholders rather than node names; the
-earlier `(ANCESTORS)`/`(DESCENDANTS)` spelling followed the FBX view, before the
-tag redesign. Both flags act only with a pattern. The recursion moved onto a
-`Walk` struct so the growing option set does not bloat a parameter list: the
-graph, the collapse flags, and the filter are fields, while the per-branch prefix,
-path, in-match flag, and cycle set stay method arguments.
+children with a `descendants` marker. The markers print bare, like the `root` and
+`unplaced` section headers, so they read as placeholders rather than node names;
+an earlier spelling bracketed them, before brackets were reserved for collections.
+Because the two collapse flags act only with a pattern, they are
+bundled into the pattern option, a `PatternView` of the glob and the two flags, so
+a collapse flag cannot be set without a pattern; the resolved filter carries them,
+so the walk reads them off it rather than guarding each with a has-filter check.
+The command enforces the same shape at the CLI with a clap `requires`, so passing a
+collapse flag without a pattern is a clear error rather than a silent no-op. The
+recursion moved onto a `Walk` struct so the growing option set does not bloat a
+parameter list: the scene, the instance-collapse flag, the subtree views, and the
+filter are fields, while the per-branch prefix, path, in-match flag, and cycle set
+stay method arguments.
 
-`branded-id` is a dev-dependency, used only by the tests to build hierarchy nodes
-from returned ids and to fabricate a cyclic state for the cycle guard. The shipped
-crate names no branded id; the render path stays on `u32`.
+`--show-transforms` prepends a `transform` subtree under each node, since a
+transform lives on a node; `--show-bounds` and `--show-extents` append `bounds`
+and `extents` under each object, since a grid box lives on an object. A bare
+subtree header sits over its value lines, `transform` over `position`/`rotation`/
+`scale`, `bounds` over `min`/`max`, and `extents` as one line, each value naming
+its field and bracketing its vector, as `min: [x, y, z]`. Each vector prints to
+the view's decimal precision, uniform across a local integer grid and a
+world-space float. They fold into the node's ordered children so the
+box-drawing connectors stay correct, the transform ahead of the real children and
+the bounds and extents after the object line.
+
+World space folds the parent chain into one lossy world transform rather than
+building and decomposing a matrix, matching how the `com.tyleo.game` engine
+composes: rotation is the Hamilton product down the chain, scale the component-wise
+product, and position the running `parentT + parentR.rotate(parentS * childT)`.
+The scale is lossy because a rotation between non-uniform scales introduces shear a
+per-axis scale cannot hold, the same tradeoff the engine names in
+`GetLossyWorldScale`. World bounds apply that transform to the object's grid box
+with the abs-rotation extents trick, so the reported box is the axis-aligned bound
+after placement. The primitives this needs, the quaternion product,
+component-wise multiply, `rotate_extents_abs`, transform compose and
+transform-point, and a quaternion-to-euler, were added to `ty_math` in the prior
+commit.
+
+A node's world transform depends on its route, since an instanced node has one per
+placement, so the fold threads through the walk from the identity at each section
+root, and each match also stores its parent's world transform during path
+enumeration, so `--collapse-ancestors` still places a match in world space without
+its hidden chain. Rotation renders as Tait-Bryan euler in `Rz*Ry*Rx` order so a
+single-axis turn reads on its own component; the rotation samples confirm it, `40`
+about z showing `0, 0, 40` and `30` about y then `40` about z showing `0, 30, 40`.
+
+`--show-transforms` takes `[space] [rot-unit] [precision]` and the bounds flags
+`[space] [precision]`, the FBX arg shape, parsed in the command into the
+`TransformView` and `BoundsView` data structs the trait carries; the growing
+signature takes a `too_many_arguments` allow, the house style beside `voxelize`.
+
+`branded-id` is an `impl`-gated dependency. The render path names its `U32Id`
+through the `NodeId` and `ObjectId` aliases, and the tests use it to build
+hierarchy nodes from returned ids and to fabricate a cyclic state for the cycle
+guard. It was dev-only while the render path stayed on `u32`; the `Scene` refactor
+that dropped the `u32` projection moved it into the shipped crate.

@@ -1,6 +1,7 @@
 use crate::{
-    AttributeSelector, CameraView, ColorFormat, EditState, FillMode, Format, MeshFormat,
-    PaletteShowLayout, ReportLayout, Result, VoxjEncoding, VoxjFormat, Width,
+    AttributeSelector, BoundsView, CameraView, ColorFormat, EditState, FillMode, Format,
+    MeshFormat, PaletteShowLayout, PatternView, ReportLayout, Result, TransformView, VoxjEncoding,
+    VoxjFormat, Width,
 };
 use std::path::Path;
 
@@ -149,22 +150,23 @@ pub trait Dependencies {
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.
     /// * `from` - source format, inferred from `input`'s extension when `None`.
-    /// * `pattern` - a glob matched against node paths; when set, only matched
-    ///   nodes and their ancestors print.
+    /// * `pattern` - a node-path glob and its collapse flags; when set, only
+    ///   matched nodes and their ancestors print.
     /// * `collapse_instances` - when true, expand a shared node's first
     ///   placement and print each later placement as a non-expanded stub.
-    /// * `collapse_ancestors` - with `pattern`, hide the ancestor chain above
-    ///   each match behind a marker.
-    /// * `collapse_descendants` - with `pattern`, hide the descendants of each
-    ///   match behind a marker.
+    /// * `transforms` - when set, prepend each node's transform as a subtree.
+    /// * `bounds` - when set, append each object's grid bounds as a subtree.
+    /// * `extents` - when set, append each object's extents as a subtree.
+    #[allow(clippy::too_many_arguments)]
     fn hierarchy_show(
         &self,
         input: &Path,
         from: Option<Format>,
-        pattern: Option<String>,
+        pattern: Option<PatternView>,
         collapse_instances: bool,
-        collapse_ancestors: bool,
-        collapse_descendants: bool,
+        transforms: Option<TransformView>,
+        bounds: Option<BoundsView>,
+        extents: Option<BoundsView>,
     ) -> Result<()>;
 
     /// Matches `pattern` against each candidate hierarchy path, returning one
