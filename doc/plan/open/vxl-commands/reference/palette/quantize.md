@@ -3,10 +3,10 @@
 *Part of [`vxl palette`](README.md) in the [Vxl Command-Line Reference](../../README.md).*
 
 ```
-vxl palette quantize <input> [output] --count <n> [--index 0] [--attribute rgba] [options]
+vxl palette quantize <input> [output] --max-palette-cells <n> [--index 0] [--attribute rgba] [options]
 ```
 
-Reduces the selected attribute of a palette to at most `--count` distinct
+Reduces the selected attribute of a palette to at most `--max-palette-cells` distinct
 values and rewrites the affected sample channel to match.
 
 The input is either a full voxj/voxjz document or a bare palette JSON file, a
@@ -17,7 +17,7 @@ narrowed to chosen objects by `--select` and `--select-index`. A bare palette
 has no voxels, so only its entries are reduced and dithering does not apply. The
 output mirrors the input, a document in its own format or a bare palette JSON.
 
-1. `--count <n>` (required): the maximum number of cells to keep. The selected
+1. `--max-palette-cells <n>` (required): the maximum number of cells to keep. The selected
    attribute is clustered to this many values and each cluster collapses to one
    cell.
 2. `--index <n>` (default `0`): which palette to quantize.
@@ -39,13 +39,13 @@ output mirrors the input, a document in its own format or a bare palette JSON.
    dithered. See [Object selectors](../conventions.md#object-selectors).
 
 A cell is a row across all of a palette's attributes. Material follows color:
-`quantize` clusters the selected attribute to at most `--count` values, then
+`quantize` clusters the selected attribute to at most `--max-palette-cells` values, then
 collapses each cluster to one cell whose whole row is its representative's, so
 the other attributes follow the clustered one: cells in the same color cluster merge into one and any
-material difference between them is lost to the representative. `--count`
+material difference between them is lost to the representative. `--max-palette-cells`
 therefore bounds the palette's cell count, not just the selected attribute's
 distinct values. The representative is an actual cell, never an averaged one, so
 every kept row is a real material. This is the reduction
-[`voxelize`](../voxelize.md)'s `--max-palette` applies inline, sharing this
+[`voxelize`](../voxelize.md)'s `--max-palette-cells` applies inline, sharing this
 command's `--method`, `--space`, and `--dither`. See
 [Palettes](../../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).

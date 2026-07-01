@@ -1,4 +1,7 @@
-use crate::{Dependencies, FillMode, MeshFormat, Result, VoxjEncodingOptions};
+use crate::{
+    Dependencies, FillColor, FillMode, GridResolution, MaterialMode, MaxPaletteCells, MeshFormat,
+    PaletteReductionOptions, Result, VoxjEncodingOptions,
+};
 use clap::{ArgGroup, Parser};
 use std::{
     io::{Error as IOError, ErrorKind},
@@ -9,7 +12,7 @@ use std::{
 #[derive(Clone, Debug, Parser)]
 #[command(
     name = "voxelize",
-    group(ArgGroup::new("resolution").required(true).args(["side_length", "scale"]))
+    group(ArgGroup::new("resolution").required(true).args(["voxel_grid_length", "meters_per_voxel"]))
 )]
 pub struct Voxelize {
     /// The input glTF (`.gltf`) or GLB (`.glb`) mesh.
@@ -26,26 +29,41 @@ pub struct Voxelize {
     from: Option<MeshFormat>,
 
     /// Grid resolution in voxels along the longest axis; the other axes are
-    /// sized to preserve aspect. Mutually exclusive with `--scale`.
-    #[arg(value_name = "side-length", long)]
-    side_length: Option<u32>,
+    /// sized to preserve aspect. Mutually exclusive with `--meters-per-voxel`.
+    #[arg(value_name = "voxel-grid-length", long)]
+    voxel_grid_length: Option<u32>,
 
     /// Edge length of one voxel in meters; each axis count is the mesh extent on
     /// that axis divided by this, rounded up. Recorded as the placing node's
     /// scale so the model keeps its source size. Mutually exclusive with
-    /// `--side-length`.
-    #[arg(value_name = "scale", long)]
-    scale: Option<f64>,
+    /// `--voxel-grid-length`.
+    #[arg(value_name = "meters-per-voxel", long)]
+    meters_per_voxel: Option<f64>,
 
-    /// How the mesh fills the grid.
+    /// How the mesh fills the grid, independent of `--material-mode`.
     #[arg(value_name = "fill-mode", long, default_value = "solid")]
     fill_mode: FillMode,
 
-    /// Color of every voxel under `--fill-mode solid`, a `#RRGGBBAA` hex or a
-    /// name like `white` (the default). Rejected with `--fill-mode surface`,
-    /// which samples the mesh's own color.
-    #[arg(value_name = "fill-color", long, value_parser = parse_fill_color)]
-    fill_color: Option<[u8; 4]>,
+    /// Where each voxel's color comes from, independent of `--fill-mode`.
+    #[arg(value_name = "material-mode", long, default_value = "auto")]
+    material_mode: MaterialMode,
+
+    /// Color of voxels a mode cannot sample: `none` or a `#RRGGBBAA` hex.
+    #[arg(value_name = "fill-color", long, default_value = "none")]
+    fill_color: FillColor,
+
+    /// Name for the voxelized object. Defaults to the mesh's own name, else the
+    /// input file stem.
+    #[arg(value_name = "name", long)]
+    name: Option<String>,
+
+    /// Most cells the palette may hold; sampling over this reduces to it with a
+    /// note. `none` disables the cap.
+    #[arg(value_name = "max-palette-cells", long, default_value = "256")]
+    max_palette_cells: MaxPaletteCells,
+
+    #[command(flatten)]
+    reduction_options: PaletteReductionOptions,
 
     #[command(flatten)]
     encoding_options: VoxjEncodingOptions,
@@ -53,35 +71,43 @@ pub struct Voxelize {
 
 impl Voxelize {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        if self.fill_mode == FillMode::Surface && self.fill_color.is_some() {
-            return Err(usage(
-                "--fill-color cannot be used with --fill-mode surface, which samples the mesh's own color",
-            ));
-        }
-        if let Some(meters) = self.scale
+        if let Some(meters) = self.meters_per_voxel
             && (meters <= 0.0 || meters.is_nan())
         {
-            return Err(usage("--scale must be greater than 0"));
+            return Err(usage("--meters-per-voxel must be greater than 0"));
         }
-        if self.side_length == Some(0) {
-            return Err(usage("--side-length must be at least 1"));
+
+        if self.voxel_grid_length == Some(0) {
+            return Err(usage("--voxel-grid-length must be at least 1"));
         }
-        let fill_color = self.fill_color.unwrap_or([255, 255, 255, 255]);
+
+        // The clap `ArgGroup` guarantees exactly one of the two is set.
+        let resolution = match (self.voxel_grid_length, self.meters_per_voxel) {
+            (Some(length), _) => GridResolution::VoxelGridLength(length),
+            (_, Some(meters)) => GridResolution::MetersPerVoxel(meters),
+            (None, None) => return Err(usage("set --voxel-grid-length or --meters-per-voxel")),
+        };
 
         let format = self.encoding_options.resolve_format(self.output.as_deref());
+
         let output = self
             .output
             .unwrap_or_else(|| self.input.with_extension(format.extension()));
+
         let encoding = self.encoding_options.encoding();
+
+        let reduction = self.reduction_options.resolve(self.max_palette_cells);
 
         dependencies.voxelize(
             &self.input,
             self.from,
             &output,
-            self.side_length,
-            self.scale,
+            resolution,
             self.fill_mode,
-            fill_color,
+            self.material_mode,
+            self.fill_color.rgba(),
+            self.name.as_deref(),
+            reduction,
             encoding,
             format,
         )
@@ -92,68 +118,4 @@ impl Voxelize {
 /// message.
 fn usage(message: &str) -> crate::Error {
     IOError::new(ErrorKind::InvalidInput, message).into()
-}
-
-/// Parses a `--fill-color` value: a `#RRGGBB` or `#RRGGBBAA` hex, or a color
-/// name, into straight RGBA bytes.
-fn parse_fill_color(value: &str) -> std::result::Result<[u8; 4], String> {
-    if let Some(hex) = value.strip_prefix('#') {
-        return parse_hex(hex);
-    }
-    match value.to_ascii_lowercase().as_str() {
-        "white" => Ok([255, 255, 255, 255]),
-        "black" => Ok([0, 0, 0, 255]),
-        "red" => Ok([255, 0, 0, 255]),
-        "green" => Ok([0, 128, 0, 255]),
-        "blue" => Ok([0, 0, 255, 255]),
-        "yellow" => Ok([255, 255, 0, 255]),
-        "cyan" => Ok([0, 255, 255, 255]),
-        "magenta" => Ok([255, 0, 255, 255]),
-        "gray" | "grey" => Ok([128, 128, 128, 255]),
-        other => Err(format!(
-            "unknown color \"{other}\"; use a #RRGGBB or #RRGGBBAA hex or a name like white"
-        )),
-    }
-}
-
-/// Parses the digits after `#` of a `RRGGBB` or `RRGGBBAA` hex color, defaulting
-/// a missing alpha to opaque.
-fn parse_hex(hex: &str) -> std::result::Result<[u8; 4], String> {
-    let invalid = || format!("invalid color \"#{hex}\"; expected #RRGGBB or #RRGGBBAA");
-    if (hex.len() != 6 && hex.len() != 8) || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(invalid());
-    }
-    let byte = |index: usize| {
-        u8::from_str_radix(&hex[index * 2..index * 2 + 2], 16).map_err(|_| invalid())
-    };
-    let alpha = if hex.len() == 8 { byte(3)? } else { 255 };
-    Ok([byte(0)?, byte(1)?, byte(2)?, alpha])
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_fill_color;
-
-    #[test]
-    fn parses_a_six_digit_hex_as_opaque() {
-        assert_eq!(parse_fill_color("#1A2B3C"), Ok([0x1A, 0x2B, 0x3C, 0xFF]));
-    }
-
-    #[test]
-    fn parses_an_eight_digit_hex_with_alpha() {
-        assert_eq!(parse_fill_color("#1A2B3C4D"), Ok([0x1A, 0x2B, 0x3C, 0x4D]));
-    }
-
-    #[test]
-    fn parses_a_color_name_case_insensitively() {
-        assert_eq!(parse_fill_color("white"), Ok([255, 255, 255, 255]));
-        assert_eq!(parse_fill_color("Red"), Ok([255, 0, 0, 255]));
-    }
-
-    #[test]
-    fn rejects_a_bad_length_or_non_hex() {
-        assert!(parse_fill_color("#12345").is_err());
-        assert!(parse_fill_color("#GG0000").is_err());
-        assert!(parse_fill_color("chartreuse").is_err());
-    }
 }

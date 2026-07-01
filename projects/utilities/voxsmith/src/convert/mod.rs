@@ -8,6 +8,8 @@ mod mvox;
 mod qbcl;
 #[cfg(feature = "vmax")]
 mod vmax;
+#[cfg(feature = "_mesh")]
+mod voxelize;
 #[cfg(feature = "voxj")]
 mod voxj;
 
@@ -21,5 +23,7 @@ pub use mvox::*;
 pub use qbcl::*;
 #[cfg(feature = "vmax")]
 pub use vmax::*;
+#[cfg(feature = "_mesh")]
+pub use voxelize::*;
 #[cfg(feature = "voxj")]
 pub use voxj::*;

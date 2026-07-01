@@ -170,31 +170,46 @@ with the shared `--format` / `--encoding-preset` / `--position-encoding` /
 `--sample-encoding` options. vxl gains no mesh dependency of its own; the `gltf`
 crate and the voxelizer sit behind voxsmith.
 
-voxsmith gets a new Cargo feature (a `gltf` feature beside the existing
-`goxl` / `mvox` / `qbcl` / `vmax` / `voxj` features) that gates the `gltf`
-dependency and the voxelization module. Unlike the codec features it is not a
-load/save converter, so it does not turn on `_codec`; it is a mesh-to-`VoxMain`
-front end gated by `dep:gltf` plus the `import` and `utils` gltf features (which
-pull `gltf::import_slice` and the buffer `Reader`). vxl's `impl` feature enables
-it through `voxsmith/gltf`. voxsmith exposes two free functions in
-`convert/gltf/`: `gltf_mesh_extent` returns the mesh's meter extent so vxl can
-size the grid, and `voxelize_gltf` takes the byte slice, the resolved voxel
-counts, the fill mode, the fill color, and the node scale, returning a `VoxMain`
-of one object placed by one root node. When the caller resolved the grid from
-`--scale` it passes `<meters>` as the node scale so the assembled model keeps its
-source size; `--side-length` passes `1`. The two functions each call
-`import_slice`, so the glTF parses twice (extent, then rasterize); the file is
-small for voxelization and this keeps the resolution policy in vxl with voxsmith
-taking plain counts. `import_slice` auto-detects `.glb` versus `.gltf` from the
-bytes, so `--from` is accepted for the documented interface but does not steer
-parsing; a `.gltf` with external `.bin` buffers cannot resolve from bytes and
-errors.
+voxsmith gets a new `gltf` Cargo feature (beside the existing
+`goxl` / `mvox` / `qbcl` / `vmax` / `voxj` features) that gates the glTF reader,
+plus a private `_mesh` marker the `gltf` feature enables that gates the
+format-independent mesh type and the voxelizer, so a future mesh format enables
+`_mesh` the same way. Unlike the codec features these are a mesh-to-`VoxMain`
+front end, not a load/save converter, so they do not turn on `_codec`; `gltf` is
+`dep:gltf` plus the `import`, `names`, and `utils` gltf features (which pull
+`gltf::import_slice`, the node and mesh `name` accessors, and the buffer
+`Reader`). vxl's `impl` feature enables it through `voxsmith/gltf`.
+
+The pipeline pivots through a generic `Mesh`, a soup of material-tagged triangles
+(each vertex a `TyVector3F64` on the Z-up axes) plus a deduplicated material
+table, so voxsmith reads any mesh format into one type the voxelizer consumes.
+`from_gltf_bytes` (in `convert/gltf/`) parses a glTF or GLB byte slice into a
+`Mesh`; `Mesh::extent` returns its meter extent so vxl can size the grid; and
+`voxelize_mesh` (in `convert/voxelize/`) takes the mesh, the resolved voxel
+counts, the fill mode, the material mode, the fill color, the node scale, and the
+object name, returning a `VoxMain` of one object placed by one root node. A
+future mesh format adds only its own reader; extent and voxelization are shared.
+The object name resolves override first (`--name`), then the mesh's own name (the
+first mesh-bearing node's, its own preferred over its mesh's), then a
+`fallback_name` the caller passes, which vxl fills with the input file stem. When
+the caller resolved the grid from `--meters-per-voxel` it passes `<meters>` as
+the node scale so the assembled model keeps its source size; `--voxel-grid-length`
+passes `1`. vxl parses the glTF once, into the `Mesh`, then reads its extent and
+voxelizes it, so the resolution policy stays in vxl with voxsmith taking plain
+counts. `import_slice` auto-detects `.glb` versus `.gltf` from the bytes, so
+`--from` is accepted for the documented interface but does not steer parsing; a
+`.gltf` with external `.bin` buffers cannot resolve from bytes and errors.
 
 Grid resolution is resolved in vxl's `implementation/voxelize.rs` before the
-voxsmith call, into a single voxel-count triple: `--side-length` caps the longest
-axis and sizes the others to preserve aspect, while `--scale` divides each meter
-extent by `<meters>` and rounds up. The mutual exclusion of `--side-length` and
-`--scale` is a clap `ArgGroup` with `required = true`, so exactly one is present.
+voxsmith call, into a single voxel-count triple: `--voxel-grid-length` caps the
+longest axis and sizes the others to preserve aspect, while `--meters-per-voxel`
+divides each meter extent by `<meters>` and rounds up. The mutual exclusion of
+`--voxel-grid-length` and `--meters-per-voxel` is a clap `ArgGroup` with
+`required = true`, so exactly one is present. The two `Option` flags live only in
+the command struct clap fills; `execute` collapses them into a `GridResolution`
+enum (`VoxelGridLength(u32)` | `MetersPerVoxel(f64)`) that the trait and impl
+take, so the "exactly one" the group enforces at the CLI is a type invariant
+past it, not a pair of `Option`s a resolver has to reconcile.
 The voxj writer is the same `VoxjFileBuilder` path, factored into a shared
 `implementation/write_voxj_document` helper that `to voxj` also uses; voxelize
 calls it with `ext = false` and `EditStateMode::Never`, since a voxelized mesh
@@ -215,22 +230,115 @@ specs (glTF mandates Y-up), so it needs no flag; a future `--axes` style overrid
 for the rare mis-authored file is left as future work, and `vxl mesh` (the
 inverse) must mirror this mapping.
 
-`--fill-mode solid` paints every voxel the one `--fill-color`, so the document
-has one palette with a single `rgba` cell. `--fill-mode surface` is a hollow
-shell and `--fill-color` is rejected with it; sampling each voxel's color from the
-glTF material is future work, so for now `surface` falls back to the flat color
-(the `white` default). `--fill-color` accepts a `#RRGGBBAA` or `#RRGGBB` hex or a
-color name, parsed in vxl into the `rgba` value voxsmith stores. Reading the mesh
-fails the conversion as a `voxsmith::Error::Gltf`, a new variant beside the codec
-ones.
+`--material-mode` chooses the color source, `--fill-mode` the geometry, and the
+two are independent. Reading the mesh fails the conversion as a
+`voxsmith::Error::Gltf`, a new variant beside the codec ones.
 
-The richer color path is now designed though unbuilt: `--material-mode`
-(`auto` / `per-primitive` / `per-texel` / `flat`), a `--max-palette` cap reusing
-the `palette quantize` reduction engine, and the material-follows-color rule
-shared with quantize and remap. See [voxelize](voxelize.md) and the
-[design notes](design-notes.md). The shipped flat-color path above becomes
-`--material-mode flat`, and the `--fill-color`/`--fill-mode surface` guard is
-replaced when that work lands.
+`Mesh::extent` sizes the grid straight from the parsed triangles, so there is no
+separate points-only pass. The rasterizer records, in one pass, the first
+covering triangle's material per surface cell alongside the occupancy grid
+(`VoxelGrid`), so geometry and color share one raster; a `solid` flood fill then
+invents interior cells with no material. The rasterizer and the `VoxelGrid`,
+material table, and triangle types are all format-independent (they live under
+`internal/mesh/`); only the glTF reader is glTF-specific.
+
+Every mode writes the five attributes `mesh` bakes: `rgba`, `metallic`,
+`roughness`, `emissive`, `occlusion`. `flat` and the interior fill cell use a
+default finish (matte, non-metal, unoccluded). `per-primitive` reads each glTF
+material's flat factors: glTF's linear base color is sRGB-encoded to match the
+`rgba` attribute while its alpha, carrying no gamma, is scaled directly;
+`metallic` and `roughness` are the raw factors; `emissive` collapses glTF's
+emissive color to its strongest channel, since Voxel Json models emissive as one
+strength scaling `rgba` (the `KHR_materials_emissive_strength` multiplier is not
+applied yet); and `occlusion` defaults to `1`, as glTF carries occlusion only in
+a texture, no flat factor.
+
+`--fill-color` parses in vxl to `Option<[u8; 4]>` (a `FillColor` of `none` or a
+`#RRGGBB`/`#RRGGBBAA` hex; the color names the MVP accepted are gone), `None`
+being the `none` default. A `solid` body's interior takes that color through one
+shared fill cell when given, else adopts its nearest surface material by a
+six-connected multi-source flood from the surface cells. A hollow `surface`
+shell has no interior, so `--fill-color` is inert there rather than rejected; the
+old guard is gone.
+
+Deferred to later commits: the texel sampler and texture-aware `auto` (both fall
+back to `per-primitive` for now).
+
+## Palette reduction
+
+The `--max-palette-cells` cap and the shared `--method` / `--space` / `--dither`
+controls reduce a palette to at most N cells. The flag is named
+`--max-palette-cells` (not `--count` or `--max-palette`) and `palette quantize`
+takes the same name, since both run the identical operation: clustering M cells
+into N > M is a no-op, so a "count" is really a ceiling. Its value is a
+`MaxPaletteCells` of `none` or a positive count; `voxelize` defaults it to 256,
+`quantize` will require it. The `--method` / `--space` / `--dither` trio is a
+flattened `PaletteReductionOptions` clap group, paired with the per-command cap
+flag into a plain `PaletteReduction` the trait carries, so the group can be
+shared while the caps differ (default vs required).
+
+`reduce_palette` is the engine, a public voxsmith operation on the assembled
+`VoxMain`: reduction is a general voxel operation, not vxl policy, so it lives
+beside voxsmith's other `VoxMain` work rather than in the CLI. voxsmith defines
+the plain `ReductionMethod` / `ColorSpace` / `Dither` enums; vxl keeps its
+`--method` / `--space` / `--dither` clap `ValueEnum`s and maps to them, exactly as
+`FillMode` / `MaterialMode` map to their voxsmith counterparts, while the
+`PaletteReductionOptions` group and the `--max-palette-cells` cap stay in vxl.
+voxsmith builds the full palette and vxl caps it by calling the engine after
+voxsmith returns the state. The material-follows-color rule falls out of voxcore's
+`remove_cell`, which repaints every voxel of a merged cell onto a real
+representative cell (never an average) and drops the merged cell; a final `gc`
+compacts the holes. The representative is the most-sampled cell in its cluster
+(ties to the lowest id), so the common color wins and the choice is deterministic.
+Clustering is on the `rgba` color converted to the chosen space (a cell without
+`rgba` survives untouched); alpha is not a clustering dimension but rides along in
+the representative's row. The `branded-id` dependency moved to voxsmith with the
+engine, so vxl no longer depends on it.
+
+Only median-cut is built, in all three spaces (oklab, lab, rgb). `octree`,
+`kmeans`, and any `--dither` but `none` error as not-yet-implemented, but only
+when the reduction actually fires: under the cap the controls are inert, matching
+the spec, so an unbuilt choice on a small palette is silent. The cap fires with a
+note to standard error, never failing.
+
+## Typed colors and the generic mesh
+
+Two changes landed together, both moving voxsmith toward general, ty-math-founded
+types.
+
+Typed colors replaced the ad-hoc color math. `reduce_palette` used to convert
+`[u8; 4]` to `[f64; 3]` through bare `linear` / `oklab` / `lab` functions, and the
+glTF material reader carried its own sRGB encode; both now go through one typed
+color family in `ty-math`, so the compiler forbids mixing spaces (no clustering an
+sRGB value against a linear one) and the two duplicated sRGB implementations
+collapse to one. The types live in `ty-math` beside its existing space-agnostic
+`TyRgbaColor`, split by storage form versus compute form. `TySrgbaColor` is
+byte-backed (`r` / `g` / `b` / `a: u8`), the 8-bit sRGB storage code voxj keeps as
+`#RRGGBBAA`; it has no arithmetic, so the only way to compute is to leave for
+linear via `to_linear_rgb`. `TyLinearRgbColor` / `TyOklabColor` / `TyCielabColor`
+are the float working spaces, generic over `T` with f32/f64 aliases; the
+conversions are impl'd at f64, where every consumer here lives and where the
+high-precision perceptual matrices avoid the `excessive_precision` clippy lint an
+f32 instantiation would trip (an OKLab-in-`u8` is meaningless, so the generic
+ranges only over floats regardless). sRGB is the one space with a real 8-bit
+story and never appears fractional here, so it stays byte-backed while linear and
+the perceptual spaces stay float; 8-bit lives only at the storage boundary, which
+is also how a GPU treats it (sample `RGBA8` sRGB, linearize, compute in float).
+The C# types the user cited (`scratch/com.tyleo.game/Tyleo.Game/`: `TyRgbaColor`,
+`TyHsvaColor`) model the value-struct convention, but have no perceptual spaces
+and no linear/sRGB split, which was the gap to close.
+
+The glTF-specific mesh became a general `Mesh`. The voxelizer already worked on a
+material-tagged triangle soup rather than on glTF, so the reader was the only
+glTF-bound piece; naming that seam gives a format-independent `Mesh` (triangles of
+`TyVector3F64` in Z-up world space plus a material table) that any reader loads
+into and that `voxelize_mesh` and `Mesh::extent` consume, a mesh-side echo of the
+crate's format-to-`VoxMain` hub. It also drops the old double-parse: vxl parses
+the glTF once into a `Mesh`, not once for the extent and again to rasterize. The
+rasterizer keeps its `[f64; 3]` grid-space separating-axis math untouched,
+converting from the mesh's `TyVector3F64` points at the one boundary; retyping the
+tested SAT math would have added churn and risk for no payoff, since grid space is
+a private implementation detail.
 
 ## palette show V2
 

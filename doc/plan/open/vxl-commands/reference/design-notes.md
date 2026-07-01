@@ -46,7 +46,7 @@ Rationale for the non-obvious choices, for reviewers.
    would be ambiguous. `mesh` errors when the selection is not exactly one object;
    how to output several, and whether to bake a node's subtree, transforms, and
    instancing into one placed mesh, is a deferred, separate mode.
-6. Quantize, remap, and `voxelize`'s `--max-palette` share one reduction rule:
+6. Quantize, remap, and `voxelize`'s `--max-palette-cells` share one reduction rule:
    material follows color. Reducing the compared attribute (`rgba` by default)
    clusters cells by it and collapses each cluster to one representative cell, so
    a cell's other attributes ride along with its color and a count bounds the
@@ -118,7 +118,7 @@ Rationale for the non-obvious choices, for reviewers.
     while the explicit modes override that guess. The flat color mode is named
     `flat`, not `solid`, so it does not collide with `--fill-mode solid`, which is
     geometry.
-11. `voxelize --max-palette` bounds the generated palette, defaulting to 256 (a
+11. `voxelize --max-palette-cells` bounds the generated palette, defaulting to 256 (a
     one-byte sample index and the familiar color ceiling). It auto-reduces with a
     warning rather than erroring or truncating, since a textured mesh exceeding
     the cap is the normal case, and reuses the `palette quantize` engine and its

@@ -10,6 +10,7 @@ description = "Utilities for working with voxels."
 branded-id = "0.1.3"
 gltf = { version = "1.4.1", default-features = false, features = [
     "import",
+    "names",
     "utils",
 ], optional = true }
 goxl = { version = "0.1.0", optional = true }
@@ -39,10 +40,12 @@ qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec", "_ext", "_color"]
 vmax = ["dep:vmax", "dep:vmax-codec", "_codec", "_ext"]
 voxj = ["dep:voxj", "dep:voxj-codec", "_codec"]
 
-# Mesh-to-`VoxMain` voxelization, gating the `gltf` reader and the voxelize
-# module. Unlike the codec features it is a front end, not a load/save
-# converter, so it does not turn on `_codec`.
-gltf = ["dep:gltf"]
+# Mesh-to-`VoxMain` voxelization. `gltf` gates the glTF reader (`dep:gltf`) that
+# loads a `Mesh`; the private `_mesh` marker gates the format-independent `Mesh`
+# type and the voxelizer, so a future mesh format enables `_mesh` the same way.
+# Unlike the codec features these are a front end, not a load/save converter, so
+# they do not turn on `_codec`.
+gltf = ["dep:gltf", "_mesh"]
 
 # Private, auto-enabled by the codecs that need them; not meant to be enabled
 # directly. `_codec` marks that at least one codec is on (voxsmith errors at
@@ -53,3 +56,7 @@ gltf = ["dep:gltf"]
 _codec = []
 _ext = []
 _color = []
+
+# Marks that a mesh-voxelization front end is on (`gltf`, and future mesh
+# formats); gates the generic `Mesh` type and the voxelizer.
+_mesh = []

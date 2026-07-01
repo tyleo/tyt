@@ -72,9 +72,12 @@ off as they land.
       and `palette show` format (`auto` | `swatch` | `swatch-value` | `value`).
 - [ ] Shared palette-reduction engine and a flattened options group
       (`--method` / `--space` / `--dither`), reused by `palette quantize`,
-      `palette remap` (space/dither), and `voxelize`'s `--max-palette`, on the
-      one material-follows-color rule (a count bounds cells; a merged cell takes
-      its cluster representative's whole row).
+      `palette remap` (space/dither), and `voxelize`'s `--max-palette-cells`, on
+      the one material-follows-color rule (a count bounds cells; a merged cell
+      takes its cluster representative's whole row). Landed: the
+      `PaletteReductionOptions` group and `reduce_palette` (median-cut in
+      oklab/lab/rgb via `remove_cell`+`gc`). Pending: `octree` / `kmeans` and
+      `--dither` (they error until built); `quantize` / `remap` will reuse it.
 
 ## Commands
 
@@ -82,10 +85,12 @@ off as they land.
 
 - [ ] `Mesh` command struct, dispatch, and single-object pure-geometry output;
       error when the selection is not exactly one object.
-- [ ] `--to` / `--from` (`gltf` | `glb`), `--scale` (meters per voxel, default
-      `1.0`; glTF is meter-native and writes `scale` per voxel), `--method`, the
-      `--computed-occlusion-strength` / `--computed-occlusion-min-brightness` /
-      `--computed-occlusion-color-space` tuning, `--atlas`,
+- [ ] `--to` / `--from` (`gltf` | `glb`), `--meters-per-voxel` (meters per voxel,
+      default `1.0`; glTF is meter-native and writes `scale` per voxel),
+      `--method`,
+      `--vertex-computed-occlusion` with `--computed-occlusion-strength`,
+      `--computed-occlusion-min-brightness`, and
+      `--computed-occlusion-color-space`, `--atlas`,
       `--select` / `--select-index`.
 - [ ] Material maps: `--texture <name> [path]` presets (albedo, orm,
       metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
@@ -114,37 +119,41 @@ off as they land.
 ### voxelize ([reference/voxelize.md](reference/voxelize.md))
 
 - [x] `Voxelize` command; `--from` (`gltf` | `glb`), mutually exclusive
-      `--side-length` | `--scale` (clap `ArgGroup`, `required = true`).
+      `--voxel-grid-length` | `--meters-per-voxel` (clap `ArgGroup`,
+      `required = true`).
 - [x] `--fill-mode` `solid` (default) | `surface`; `--fill-color` (default
       `white`, a `#RRGGBBAA` hex or name), used by `solid` only and rejected with
       `surface`. Surface is a hollow shell; per-voxel color sampling from the
       glTF material is deferred, so surface uses the flat color for now. (Shipped
       MVP; superseded by the material-mode work below.)
-- [x] Reuse the voxj writer options; record `--scale` (meters per voxel) as the
-      node scale, leaving `--side-length` at scale `1`.
+- [x] Reuse the voxj writer options; record `--meters-per-voxel` (meters per
+      voxel) as the node scale, leaving `--voxel-grid-length` at scale `1`.
 - [x] voxsmith `gltf` feature gating the `gltf` crate and a mesh-to-`VoxMain`
       voxelizer; `Dependencies::voxelize` and its impl call it, then write
       through `VoxjFileBuilder` like `to voxj`. glTF Y-up is converted to the
       Z-up document convention; the inverse `mesh` command must mirror it.
 
-Material sampling (designed, not yet built; see
-[voxelize](reference/voxelize.md) and [design notes](reference/design-notes.md)):
+Material sampling (see [voxelize](reference/voxelize.md) and
+[design notes](reference/design-notes.md)):
 
-- [ ] `--material-mode auto | per-primitive | per-texel | flat` (default
+- [x] `--material-mode auto | per-primitive | per-texel | flat` (default
       `auto`), replacing the shipped flat-only coloring and its
-      `--fill-color`-with-`--fill-mode surface` guard. `auto` samples per-texel
-      when the mesh is textured, else per-primitive.
-- [ ] `per-primitive`: one cell per material from the PBR factors (`rgba`,
+      `--fill-color`-with-`--fill-mode surface` guard. `per-texel` and
+      texture-aware `auto` still fall back to `per-primitive` until the texel
+      sampler lands below.
+- [x] `per-primitive`: one cell per material from the PBR factors (`rgba`,
       `metallic`, `roughness`, `emissive`, `occlusion`), matching what `mesh`
       bakes.
-- [ ] `--fill-color none | #RRGGBBAA` (default `none`): the whole object under
+- [x] `--fill-color none | #RRGGBBAA` (default `none`): the whole object under
       `flat`, the `solid`-fill interior under the sampling modes; drop the
-      surface rejection.
-- [ ] `--max-palette <n> | none` (default `256`) via the shared reduction
-      engine; expose `--method` / `--space` / `--dither` on `voxelize`.
+      surface rejection. A `none` interior adopts its nearest surface material.
+- [ ] `--max-palette-cells <n> | none` (default `256`) via the shared reduction
+      engine; expose `--method` / `--space` / `--dither` on `voxelize`. Landed for
+      median-cut with a stderr note; `octree` / `kmeans` / `--dither` error until
+      built.
 - [ ] `per-texel`: UV interpolation, image decode, area-average over the voxel
       footprint, epsilon-merge of near-identical tuples, and a `solid`-interior
-      fallback to the nearest surface cell.
+      fallback to the nearest surface cell. `auto` becomes texture-aware here.
 
 ### palette ([reference/palette/](reference/palette/))
 
@@ -196,3 +205,12 @@ Material sampling (designed, not yet built; see
 - [ ] Single-object vs whole-document output nuance, and multi-object mesh
       layout in one file.
 - [ ] stdin / stdout via `-`; dry-run for destructive palette ops.
+- [x] Move the palette reduction from vxl into voxsmith as a general operation
+      (public `reduce_palette` + plain enums; vxl maps its clap `ValueEnum`s like
+      `FillMode` / `MaterialMode` do). See
+      [implementation decisions](reference/implementation-decisions.md).
+- [x] Adopt richer typed color types (one struct per space with `from_` / `to_`
+      conversions) in `ty-math`, in place of the ad-hoc `[u8;4]` -> `[f64;3]`
+      math, so spaces cannot be mixed. Landed with the generic `Mesh` (glTF is
+      one reader into it). See
+      [implementation decisions](reference/implementation-decisions.md).

@@ -27,10 +27,11 @@ is a separate mode left for a later pass.
    output extension when omitted.
 2. `--from <format>`: source voxel format. Inferred from the input extension
    when omitted.
-3. `--scale <meters>` (default `1.0`): the real-world edge length of one voxel
-   in meters, applied as a uniform scale to every output vertex. The voxel-json
-   format is unitless, with one unit per voxel, so `--scale` is where that grid
-   gains a physical size: `1.0` sizes a voxel at one meter, `0.01` at one
+3. `--meters-per-voxel <meters>` (default `1.0`): the real-world edge length of
+   one voxel in meters, applied as a uniform scale to every output vertex. The
+   voxel-json format is unitless, with one unit per voxel, so `--meters-per-voxel`
+   is where that grid gains a physical size: `1.0` sizes a voxel at one meter,
+   `0.01` at one
    centimeter, and `0.001` at one millimeter. glTF is meter-native, so the mesh
    writes `<meters>` per voxel and opens at that real size. Scale affects vertex
    positions only and leaves UVs, normals, and vertex colors unchanged.

@@ -1,7 +1,7 @@
 use crate::{
     AttributeSelector, BoundsView, CameraView, ColorFormat, EditState, FillMode, Format,
-    MeshFormat, PaletteShowLayout, PatternView, ReportLayout, Result, TransformView, VoxjEncoding,
-    VoxjFormat, Width,
+    GridResolution, MaterialMode, MeshFormat, PaletteReduction, PaletteShowLayout, PatternView,
+    ReportLayout, Result, TransformView, VoxjEncoding, VoxjFormat, Width,
 };
 use std::path::Path;
 
@@ -82,11 +82,15 @@ pub trait Dependencies {
     /// * `from` - source mesh format, inferred from `input`'s extension when
     ///   `None`.
     /// * `output` - the `.voxj` or `.voxjz` document to write.
-    /// * `side_length` - grid resolution in voxels along the longest axis.
-    /// * `scale` - meters per voxel, recorded as the placing node's scale.
-    ///   Exactly one of `side_length` and `scale` is set.
+    /// * `resolution` - how the grid is sized: a voxel count along the longest
+    ///   axis, or a real-world voxel size (recorded as the placing node's scale).
     /// * `fill_mode` - a solid body (flood-filled) or a hollow surface shell.
-    /// * `fill_color` - the straight-RGBA color every filled voxel takes.
+    /// * `material_mode` - where each voxel's color and material come from.
+    /// * `fill_color` - the color of voxels a mode cannot sample, or `None` for
+    ///   the `none` default.
+    /// * `name` - object-name override; `None` uses the mesh's name, else the
+    ///   input stem.
+    /// * `reduction` - the palette cell cap and its clustering controls.
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
     #[allow(clippy::too_many_arguments)]
@@ -95,10 +99,12 @@ pub trait Dependencies {
         input: &Path,
         from: Option<MeshFormat>,
         output: &Path,
-        side_length: Option<u32>,
-        scale: Option<f64>,
+        resolution: GridResolution,
         fill_mode: FillMode,
-        fill_color: [u8; 4],
+        material_mode: MaterialMode,
+        fill_color: Option<[u8; 4]>,
+        name: Option<&str>,
+        reduction: PaletteReduction,
         encoding: VoxjEncoding,
         format: VoxjFormat,
     ) -> Result<()>;

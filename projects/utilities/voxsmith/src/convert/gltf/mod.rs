@@ -1,7 +1,3 @@
-mod fill_mode;
-mod gltf_mesh_extent;
-mod voxelize_gltf;
+mod from_gltf_bytes;
 
-pub use fill_mode::*;
-pub use gltf_mesh_extent::*;
-pub use voxelize_gltf::*;
+pub use from_gltf_bytes::*;

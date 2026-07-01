@@ -5,6 +5,7 @@ pub enum FillMode {
     /// filled body. Expects a watertight mesh.
     #[default]
     Solid,
+
     /// Rasterize only the voxels the triangles pass through, leaving a hollow
     /// shell.
     Surface,

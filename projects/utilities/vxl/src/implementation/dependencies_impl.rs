@@ -1,7 +1,8 @@
 use crate::{
     AttributeSelector, BoundsView, CameraView, ColorFormat, Dependencies, EditState, FillMode,
-    Format, MeshFormat, PaletteShowLayout, PatternView, ReportLayout, Result, TransformView,
-    VoxjEncoding, VoxjFormat, Width, implementation,
+    Format, GridResolution, MaterialMode, MeshFormat, PaletteReduction, PaletteShowLayout,
+    PatternView, ReportLayout, Result, TransformView, VoxjEncoding, VoxjFormat, Width,
+    implementation,
 };
 use std::path::Path;
 
@@ -51,10 +52,12 @@ impl Dependencies for DependenciesImpl {
         input: &Path,
         from: Option<MeshFormat>,
         output: &Path,
-        side_length: Option<u32>,
-        scale: Option<f64>,
+        resolution: GridResolution,
         fill_mode: FillMode,
-        fill_color: [u8; 4],
+        material_mode: MaterialMode,
+        fill_color: Option<[u8; 4]>,
+        name: Option<&str>,
+        reduction: PaletteReduction,
         encoding: VoxjEncoding,
         format: VoxjFormat,
     ) -> Result<()> {
@@ -62,10 +65,12 @@ impl Dependencies for DependenciesImpl {
             input,
             from,
             output,
-            side_length,
-            scale,
+            resolution,
             fill_mode,
+            material_mode,
             fill_color,
+            name,
+            reduction,
             encoding,
             format,
         )

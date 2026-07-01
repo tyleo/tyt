@@ -15,6 +15,7 @@ pub(crate) fn triangle_box_overlap(center: [f64; 3], half: f64, triangle: &[[f64
         sub(triangle[1], center),
         sub(triangle[2], center),
     ];
+
     let edges = [sub(v[1], v[0]), sub(v[2], v[1]), sub(v[0], v[2])];
     let axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
@@ -26,6 +27,7 @@ pub(crate) fn triangle_box_overlap(center: [f64; 3], half: f64, triangle: &[[f64
             }
         }
     }
+
     // The 3 cube face normals.
     for axis in axes {
         if separates(axis, &v, half) {

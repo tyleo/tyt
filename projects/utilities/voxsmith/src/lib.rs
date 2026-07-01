@@ -29,17 +29,25 @@ compile_error!(
     "voxsmith needs at least one codec feature enabled: goxl, mvox, qbcl, vmax, or voxj"
 );
 
-#[cfg(any(feature = "_codec", feature = "gltf"))]
+#[cfg(any(feature = "_codec", feature = "_mesh"))]
 mod internal;
-#[cfg(any(feature = "_codec", feature = "gltf"))]
+#[cfg(any(feature = "_codec", feature = "_mesh"))]
 pub(crate) use internal::*;
 
-#[cfg(any(feature = "_codec", feature = "gltf"))]
+mod color_space;
+#[cfg(any(feature = "_codec", feature = "_mesh"))]
 mod convert;
+mod dither;
 mod error;
+mod reduce_palette;
+mod reduction_method;
 mod result;
 
-#[cfg(any(feature = "_codec", feature = "gltf"))]
+pub use color_space::*;
+#[cfg(any(feature = "_codec", feature = "_mesh"))]
 pub use convert::*;
+pub use dither::*;
 pub use error::*;
+pub use reduce_palette::*;
+pub use reduction_method::*;
 pub use result::*;
