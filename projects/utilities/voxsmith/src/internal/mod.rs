@@ -28,6 +28,11 @@ mod grid;
 #[cfg(feature = "_mesh")]
 mod mesh;
 
+// glTF-output internal helpers (the `VoxObject`-to-glTF document builders),
+// gated by the `gltf` writer feature.
+#[cfg(feature = "gltf")]
+mod gltf;
+
 // Per-codec internal modules.
 #[cfg(feature = "goxl")]
 mod goxl;
@@ -59,6 +64,9 @@ pub(crate) use grid::*;
 
 #[cfg(feature = "_mesh")]
 pub(crate) use mesh::*;
+
+#[cfg(feature = "gltf")]
+pub(crate) use gltf::*;
 
 #[cfg(feature = "goxl")]
 pub(crate) use goxl::*;

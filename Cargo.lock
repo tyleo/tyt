@@ -2005,6 +2005,7 @@ dependencies = [
 name = "voxsmith"
 version = "0.1.1"
 dependencies = [
+ "base64 0.22.1",
  "branded-id",
  "gltf",
  "goxl",
@@ -2015,6 +2016,7 @@ dependencies = [
  "qbcl",
  "qbcl-codec",
  "serde",
+ "serde_json",
  "ty-math",
  "vmax",
  "vmax-codec",
