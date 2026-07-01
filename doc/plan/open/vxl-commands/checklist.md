@@ -85,15 +85,17 @@ off as they land.
 
 ### mesh ([reference/mesh.md](reference/mesh.md))
 
-- [ ] `Mesh` command struct, dispatch, and single-object pure-geometry output;
-      error when the selection is not exactly one object.
-- [ ] `--to` / `--from` (`gltf` | `glb`), `--meters-per-voxel` (meters per voxel,
-      default `1.0`; glTF is meter-native and writes `scale` per voxel),
-      `--method`,
-      `--vertex-computed-occlusion` with `--computed-occlusion-strength`,
-      `--computed-occlusion-min-brightness`, and
-      `--computed-occlusion-color-space`, `--atlas`,
-      `--select` / `--select-index`.
+- [x] `Mesh` command struct, dispatch, and single-object pure-geometry output;
+      error when the selection is not exactly one object. The mesher lives in
+      voxsmith (`object_to_mesh_geometry` plus `object_to_glb_bytes` /
+      `object_to_gltf_bytes`) behind the `gltf` feature; vxl stays a thin CLI.
+- [x] `--to` / `--from` (`gltf` | `glb`), `--scale` (meters per voxel, default
+      `1.0`, baked into every vertex; glTF is meter-native), `--method`, and the
+      `--select` / `--select-index` object selectors, `--select` matched through
+      the shared `pathspec` gitignore engine like `hierarchy show`.
+- [ ] `--atlas` and the `--computed-occlusion-strength` /
+      `--computed-occlusion-min-brightness` / `--computed-occlusion-color-space`
+      tuning (land with the texture / occlusion maps below).
 - [ ] Material maps: `--texture <name> [path]` presets (albedo, orm,
       metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
       computed-occlusion, roughness, smoothness), `--texture-map <path>
@@ -109,7 +111,10 @@ off as they land.
       written per `--palette-storage` (extras / `-palette.json` / both), and
       `--vertex-map <target> <channels>` reusing the `--texture-map` channel
       grammar and `--define-attribute`.
-- [ ] `Dependencies::mesh` and its impl.
+- [x] `Dependencies::resolve_objects` and `mesh_object` and their impls, the
+      flag-agnostic split that replaces the planned single `Dependencies::mesh`:
+      the impl resolves the selectors to object indices and meshes by index,
+      while the command owns the exactly-one policy and its flag-named errors.
 
 ### material ([reference/material.md](reference/material.md))
 

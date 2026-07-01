@@ -952,3 +952,77 @@ descendant re-selected. The tree layer selects on the union of node and object
 placements, then shows a node when it is selected or leads to a selection and an
 object when it is selected; the collapse features key on the match roots, the
 selected placements whose parent is unselected.
+
+## mesh
+
+The mesh engine lives in voxsmith, not vxl, mirroring `voxelize`: vxl gains no
+mesh dependency of its own, and the `gltf` crate plus the meshing and glTF
+writing sit behind voxsmith's `gltf` feature. voxsmith exposes
+`object_to_mesh_geometry` (a `VoxObject` to a `MeshGeometry` of positions,
+normals, and triangle indices) and two writers, `object_to_glb_bytes` and
+`object_to_gltf_bytes`, sharing an internal `object_to_gltf_document`. The
+`object_to_*` names keep `mesh` a noun throughout and leave a bare
+`to_gltf_bytes(&VoxMain)` free for a future whole-scene exporter.
+
+`MeshGeometry` carries its positions and normals as ty-math `TyVector3F32`, not
+bare `[f32; 3]`, so the mesher reuses the crate's vector math rather than
+open-coding it: the outward-winding test is `TyVector3::cross(...).dot(&normal)`,
+and the writer's glTF accessor bounds are a `component_min_with` /
+`component_max_with` fold. The vectors flatten to the `[f32; 3]` glTF wants with
+`to_array` at the one buffer-packing boundary.
+
+One slice sweep serves all three `--method` strategies, parameterized by two
+booleans: `naive` emits every voxel face, `culled` only solid-empty boundary
+faces, and `greedy` fuses coplanar boundary faces into maximal rectangles over
+the slice mask. The mesher works in voxel-grid space, Z-up, winding each quad
+counter-clockwise outward by a corner-cross test robust to either in-plane axis
+orientation. Real-world scale and the axis flip are the writer's job, so the
+mesher stays a pure grid-space function that unit-tests without any glTF.
+
+The writer builds glTF with `serde_json::json!`, not the `gltf_json` structs:
+voxsmith builds the `gltf` crate with `default-features = false`, which turns off
+gltf-json's `names` and `extras` features and removes those struct fields, so
+hand-constructing the typed structs would be brittle. `serde_json` gives a fixed
+schema with no feature-gated fields; the `.glb` container is still assembled with
+`gltf::binary::Glb`, and a `.gltf` embeds its one buffer as a base64 data URI so
+the text form stays a single self-contained file. Vertices bake from Z-up grid
+space to glTF Y-up by `(x, y, z) -> (x, z, -y)` then a uniform scale, the exact
+inverse of the voxelizer's `(x, y, z) -> (x, -z, y)`; it is a proper rotation, so
+outward winding is preserved. voxsmith gains `base64` and `serde_json` behind its
+`gltf` feature.
+
+`mesh` outputs one object, chosen by the `--select` / `--select-index` selectors,
+and errors unless exactly one resolves. To keep flag knowledge out of the
+implementation layer, the work splits across two `Dependencies` methods:
+`resolve_objects` loads the document and resolves the selectors to matching
+object indices (document order, deduplicated, with no flag-named errors), and
+`mesh_object` meshes the object at a given index. The command orchestrates the
+two and owns the mesh-specific "exactly one object" policy and its
+`--select` / `--select-index` guidance. The cost is that the command loads the
+document twice, once to resolve and once to mesh, since it cannot hold a
+`voxcore` value across trait calls (voxcore is behind the `impl` feature); this
+mirrors `voxelize`, which parses its glTF twice for the same reason, and the
+accepted trade keeps `resolve_objects` reusable by `material`, `quantize`, and
+`remap`.
+
+The resolver returns plain `usize` object indices rather than voxcore ids, so the
+command, which is not behind the `impl` feature, passes them back through
+`mesh_object` without naming a voxcore type. Its core is a pure `select_objects`
+over a `VoxMain` that unit-tests without the filesystem: it builds each object's
+hierarchy paths from the roots (one path per placement in the DAG, guarding
+against a cycle), then matches them through the shared `pathspec` gitignore
+engine, the same one `hierarchy show` uses (`GitIgnoreRegex::from_spans_ignore_inert`
+compiles `--select`'s raw glob strings and `pathspec::is_path_match` tests each
+object path as a file leaf). Because `is_path_match` walks a path's ancestor
+directories, a selected node carries down to its whole object subtree with no
+separate expansion, and `!` negation with last-match-wins prunes it, so `--select`
+inherits the full `hierarchy show` glob semantics for free. This retired the old
+`PathGlob` / `match_glob` globset path. vxl gains `pathspec` and `branded-id`
+behind its `impl` feature, the former for the matcher and the latter to name the
+voxcore ids the resolver compares internally.
+
+The vxl-side `MeshMethod` is a `ValueEnum` mapped to voxsmith's method in the
+impl; `MeshFormat` gains an `extension()` for the defaulted output path, and the
+output format defaults to `glb` when neither `--to` nor the output extension
+picks one. The material, vertex, atlas, computed-occlusion, and storage flags in
+[mesh.md](mesh.md) are unbuilt; the shipped command is the geometry-only subset.
