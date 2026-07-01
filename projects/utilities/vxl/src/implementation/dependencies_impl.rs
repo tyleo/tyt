@@ -1,8 +1,8 @@
 use crate::{
     AttributeSelector, CameraView, ColorFormat, Dependencies, EditState, FillMode, Format,
-    GridResolution, HierarchyViews, MaterialMode, MeshFormat, PaletteListFields, PaletteListLayout,
-    PaletteReduction, PaletteShowLayout, PatternView, ReportLayout, Result, SelectIndex,
-    VoxjEncoding, VoxjFormat, Width, implementation,
+    GridResolution, HierarchyViews, MaterialMode, MeshFormat, MeshMethod, PaletteListFields,
+    PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView, ReportLayout, Result,
+    SelectIndex, VoxjEncoding, VoxjFormat, Width, implementation,
 };
 use std::path::Path;
 
@@ -74,6 +74,30 @@ impl Dependencies for DependenciesImpl {
             encoding,
             format,
         )
+    }
+
+    fn resolve_objects(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        select: &[String],
+        select_index: &[SelectIndex],
+    ) -> Result<Vec<usize>> {
+        implementation::resolve_objects(input, from, select, select_index)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn mesh_object(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        output: &Path,
+        format: MeshFormat,
+        scale: f64,
+        method: MeshMethod,
+        object: usize,
+    ) -> Result<()> {
+        implementation::mesh_object(input, from, output, format, scale, method, object)
     }
 
     fn info(&self, input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()> {

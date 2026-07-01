@@ -1,13 +1,13 @@
 use clap::ValueEnum;
 use std::path::Path;
 
-/// A mesh file format that `mesh` and `voxelize` read or write. glTF is the only
-/// mesh format for now, in its text (`.gltf`) and binary (`.glb`) containers.
+/// A mesh file format that `mesh` and `voxelize` read or write.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum MeshFormat {
     /// glTF text, the `.gltf` file.
     #[value(name = "gltf")]
     Gltf,
+
     /// glTF binary, the `.glb` file.
     #[value(name = "glb")]
     Glb,
@@ -22,6 +22,14 @@ impl MeshFormat {
             "gltf" => Some(MeshFormat::Gltf),
             "glb" => Some(MeshFormat::Glb),
             _ => None,
+        }
+    }
+
+    /// The file extension for this format, without a leading dot.
+    pub fn extension(self) -> &'static str {
+        match self {
+            MeshFormat::Gltf => "gltf",
+            MeshFormat::Glb => "glb",
         }
     }
 }

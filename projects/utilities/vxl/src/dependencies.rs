@@ -1,6 +1,6 @@
 use crate::{
     AttributeSelector, CameraView, ColorFormat, EditState, FillMode, Format, GridResolution,
-    HierarchyViews, MaterialMode, MeshFormat, PaletteListFields, PaletteListLayout,
+    HierarchyViews, MaterialMode, MeshFormat, MeshMethod, PaletteListFields, PaletteListLayout,
     PaletteReduction, PaletteShowLayout, PatternView, ReportLayout, Result, SelectIndex,
     VoxjEncoding, VoxjFormat, Width,
 };
@@ -108,6 +108,53 @@ pub trait Dependencies {
         reduction: PaletteReduction,
         encoding: VoxjEncoding,
         format: VoxjFormat,
+    ) -> Result<()>;
+
+    /// Resolves the object selectors against the voxel file at `input` to the
+    /// indices of the matching objects, in document order and deduplicated. The
+    /// caller applies its own policy to the result. With neither selector every
+    /// object matches.
+    ///
+    /// # Arguments
+    /// * `input` - the voxel file to read, in any supported format.
+    /// * `from` - source voxel format, inferred from `input`'s extension when
+    ///   `None`.
+    /// * `select` - hierarchy-path globs, gitignore-style, matched as
+    ///   `hierarchy show` matches node paths; a matched node contributes its
+    ///   subtree, a matched object contributes itself.
+    /// * `select_index` - object-index selectors, an integer or an `a-b` range.
+    fn resolve_objects(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        select: &[String],
+        select_index: &[SelectIndex],
+    ) -> Result<Vec<usize>>;
+
+    /// Meshes the object at index `object` of the voxel file at `input` into a
+    /// glTF or GLB mesh at `output`, as pure geometry with no hierarchy-node
+    /// transform.
+    ///
+    /// # Arguments
+    /// * `input` - the voxel file to read, in any supported format.
+    /// * `from` - source voxel format, inferred from `input`'s extension when
+    ///   `None`.
+    /// * `output` - the `.gltf` or `.glb` mesh to write.
+    /// * `format` - the target mesh container.
+    /// * `scale` - meters per voxel, applied as a uniform scale to every vertex.
+    /// * `method` - the meshing strategy.
+    /// * `object` - the object's index into the document, as
+    ///   [`resolve_objects`](Self::resolve_objects) returns.
+    #[allow(clippy::too_many_arguments)]
+    fn mesh_object(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        output: &Path,
+        format: MeshFormat,
+        scale: f64,
+        method: MeshMethod,
+        object: usize,
     ) -> Result<()>;
 
     /// Reports what the voxel file at `input` contains: a document summary, its
