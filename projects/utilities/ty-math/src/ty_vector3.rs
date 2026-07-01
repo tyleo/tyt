@@ -38,6 +38,15 @@ impl<T: Add<Output = T> + Copy + Mul<Output = T> + Sub<Output = T>> TyVector3<T>
     pub fn dot(&self, other: &Self) -> T {
         self.x * other.x + self.y * other.y + self.z * other.z
     }
+
+    /// Returns the component-wise (Hadamard) product of `self` and `other`.
+    pub fn componentwise_multiply(&self, other: &Self) -> Self {
+        Self {
+            x: self.x * other.x,
+            y: self.y * other.y,
+            z: self.z * other.z,
+        }
+    }
 }
 
 impl<T: Add<Output = T>> Add for TyVector3<T> {
@@ -85,6 +94,15 @@ macro_rules! impl_ty_vector3_float {
             pub fn magnitude(&self) -> $t {
                 (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
             }
+
+            /// Returns the component-wise absolute value of this vector.
+            pub fn abs(&self) -> Self {
+                Self {
+                    x: self.x.abs(),
+                    y: self.y.abs(),
+                    z: self.z.abs(),
+                }
+            }
         }
 
         impl Mul<TyVector3<$t>> for $t {
@@ -103,3 +121,21 @@ macro_rules! impl_ty_vector3_float {
 
 impl_ty_vector3_float!(f32);
 impl_ty_vector3_float!(f64);
+
+#[cfg(test)]
+mod tests {
+    use crate::TyVector3F64;
+
+    #[test]
+    fn componentwise_multiply_is_the_hadamard_product() {
+        let product = TyVector3F64::new(2.0, 3.0, 4.0)
+            .componentwise_multiply(&TyVector3F64::new(5.0, 6.0, 7.0));
+        assert_eq!(product, TyVector3F64::new(10.0, 18.0, 28.0));
+    }
+
+    #[test]
+    fn abs_takes_each_component() {
+        let abs = TyVector3F64::new(-1.0, 2.0, -3.0).abs();
+        assert_eq!(abs, TyVector3F64::new(1.0, 2.0, 3.0));
+    }
+}
