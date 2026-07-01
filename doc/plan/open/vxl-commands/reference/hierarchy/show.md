@@ -29,10 +29,10 @@ shows its name and its referenced child objects. See
 4. `--show-extents [space] [precision]`: append an extents subtree
    (`max - min`), with the same arguments as `--show-bounds`.
 5. `--collapse-ancestors` (flag): with a `pattern`, hide the ancestor chain
-   above each match and replace it with an `(ANCESTORS)` marker, omitted when
+   above each match and replace it with an `[Ancestors]` marker, omitted when
    the match is a root. No effect without a `pattern`.
 6. `--collapse-descendants` (flag): with a `pattern`, hide the descendants of
-   each match and replace them with a `(DESCENDANTS)` marker, omitted when the
+   each match and replace them with a `[Descendants]` marker, omitted when the
    match has no descendants. No effect without a `pattern`.
 7. `--collapse-instances` (flag): expand each shared node's first placement and
    print each later placement as a non-expanded stub, rather than expanding every

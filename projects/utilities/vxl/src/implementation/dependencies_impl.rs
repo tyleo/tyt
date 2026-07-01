@@ -94,9 +94,19 @@ impl Dependencies for DependenciesImpl {
         &self,
         input: &Path,
         from: Option<Format>,
+        pattern: Option<String>,
         collapse_instances: bool,
+        collapse_ancestors: bool,
+        collapse_descendants: bool,
     ) -> Result<()> {
-        implementation::hierarchy_show(input, from, collapse_instances)
+        implementation::hierarchy_show(
+            input,
+            from,
+            pattern,
+            collapse_instances,
+            collapse_ancestors,
+            collapse_descendants,
+        )
     }
 
     fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {

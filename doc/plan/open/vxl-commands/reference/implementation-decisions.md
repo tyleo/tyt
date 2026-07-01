@@ -335,10 +335,10 @@ layout.
 
 ## hierarchy show
 
-This is the first of three iterations: the core tree with its instancing and
-unplaced marks and the `--collapse-instances` flag land here; the `pattern` glob
-with the `--collapse-ancestors`/`--collapse-descendants` flags, and the
-`--show-transforms`/`--show-bounds`/`--show-extents` subtrees, follow.
+This is built in three iterations. The first landed the core tree with its
+instancing and unplaced marks and `--collapse-instances`; the second the
+`pattern` glob with `--collapse-ancestors`/`--collapse-descendants`; the
+`--show-transforms`/`--show-bounds`/`--show-extents` subtrees follow.
 
 `Dependencies::hierarchy_show` carries the load, render, and print together like
 the other read reports, so the command struct only parses flags. Its core is a
@@ -394,6 +394,35 @@ the other read reports with their `pretty-json` and `compact-json` forms. The
 scene graph reads as a tree, so a JSON layout was dropped for this command, which
 also keeps it off the shared `ReportLayout` and its `serde_json` path. A
 machine-readable graph can return later if a caller needs one.
+
+The `pattern` glob resolves against per-placement node paths. `enumerate_node_paths`
+walks the roots then the unplaced nodes depth first, building each node's path as
+the chain of node names from its section root, and records one entry per
+placement, so an instanced node matched on one route shows only on that route. The
+same branch set that guards the render guards the walk, so a cyclic document still
+terminates. The paths go to the shared `match_glob` engine; the matched paths and
+their proper prefixes become the filter's matched and ancestor sets. A pattern
+that matches nothing is an error, exiting non-zero, matching the tyt hierarchy
+command. `PathGlob` normalizes the pattern with a leading `**/`, the same type and
+rule the `--select` glob uses, so a bare pattern matches at any depth.
+
+Rendering threads an in-match flag and the current path. Above a match the walk
+keeps only the child nodes whose path leads to a match and drops child objects,
+which no node path names; in or below a match the whole subtree shows. Orphan
+objects, which have no node path, drop entirely under a filter, though objects
+still show under a matched node. Both the `Root` and `Unplaced` sections filter
+this way, and an emptied section, header included, is omitted.
+
+`--collapse-ancestors` prints the matches as a flat list rather than in their
+sections, each behind an `[Ancestors]` marker, dropped when the match is a section
+root with no chain to hide. `--collapse-descendants` replaces a matched node's
+children with a `[Descendants]` marker. The markers are bracketed to match the
+`[Node ...]` tag family and to read as placeholders rather than node names; the
+earlier `(ANCESTORS)`/`(DESCENDANTS)` spelling followed the FBX view, before the
+tag redesign. Both flags act only with a pattern. The recursion moved onto a
+`Walk` struct so the growing option set does not bloat a parameter list: the
+graph, the collapse flags, and the filter are fields, while the per-branch prefix,
+path, in-match flag, and cycle set stay method arguments.
 
 `branded-id` is a dev-dependency, used only by the tests to build hierarchy nodes
 from returned ids and to fabricate a cyclic state for the cycle guard. The shipped

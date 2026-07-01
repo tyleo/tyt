@@ -149,13 +149,22 @@ pub trait Dependencies {
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.
     /// * `from` - source format, inferred from `input`'s extension when `None`.
+    /// * `pattern` - a glob matched against node paths; when set, only matched
+    ///   nodes and their ancestors print.
     /// * `collapse_instances` - when true, expand a shared node's first
     ///   placement and print each later placement as a non-expanded stub.
+    /// * `collapse_ancestors` - with `pattern`, hide the ancestor chain above
+    ///   each match behind a marker.
+    /// * `collapse_descendants` - with `pattern`, hide the descendants of each
+    ///   match behind a marker.
     fn hierarchy_show(
         &self,
         input: &Path,
         from: Option<Format>,
+        pattern: Option<String>,
         collapse_instances: bool,
+        collapse_ancestors: bool,
+        collapse_descendants: bool,
     ) -> Result<()>;
 
     /// Matches `pattern` against each candidate hierarchy path, returning one

@@ -179,3 +179,13 @@ Rationale for the non-obvious choices, for reviewers.
 3. A dry-run or preview mode for the destructive palette operations.
 4. Additional mesh formats beyond glTF, such as `fbx` and `obj`, as needed, for
    both `mesh` output and `voxelize` input.
+5. Gitignore-style multiple patterns for `hierarchy show` and the `--select`
+   glob: an ordered list of include and exclude patterns with `!` negation and
+   last-match-wins, so a selection can subtract as well as add. Come back to this
+   after the last commit of the current hierarchy work. Build it on a Rust
+   gitignore engine rather than custom matching: the `ignore` crate's `gitignore`
+   module, which layers on the `globset` already in use, or the leaner
+   `gix-ignore`. The one rule to settle at the tree layer is git's
+   parent-directory behavior, where an excluded directory blocks re-including its
+   contents; a tree view likely wants to skip it and judge each node on its own,
+   keeping ancestors for context.
