@@ -18,6 +18,7 @@ goxl = { version = "0.1.0", optional = true }
 goxl-codec = { version = "0.1.0", optional = true }
 mvox = { version = "0.1.0", optional = true }
 mvox-codec = { version = "0.1.0", optional = true }
+png = { version = "0.18.1", optional = true }
 qbcl = { version = "0.1.0", optional = true }
 qbcl-codec = { version = "0.1.0", optional = true }
 serde = { version = "1", features = ["derive"] }
@@ -45,10 +46,10 @@ voxj = ["dep:voxj", "dep:voxj-codec", "_codec"]
 # glTF meshing both ways. The reader (`dep:gltf`) loads a `Mesh` and the private
 # `_mesh` marker gates the format-independent `Mesh` type and the voxelizer; the
 # `VoxObject`-to-glTF mesher and its `.gltf` / `.glb` writer add `serde_json` to
-# build the document and `base64` to embed the buffer in text glTF. Unlike the
-# codec features it is a front/back end, not a load/save converter, so it does
-# not turn on `_codec`.
-gltf = ["dep:gltf", "dep:base64", "dep:serde_json", "_mesh"]
+# build the document, `base64` to embed the buffer in text glTF, and `png` to
+# encode the baked material atlas images. Unlike the codec features it is a
+# front/back end, not a load/save converter, so it does not turn on `_codec`.
+gltf = ["dep:gltf", "dep:base64", "dep:png", "dep:serde_json", "_mesh"]
 
 # Private, auto-enabled by the codecs that need them; not meant to be enabled
 # directly. `_codec` marks that at least one codec is on (voxsmith errors at
