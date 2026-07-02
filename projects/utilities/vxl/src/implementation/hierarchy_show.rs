@@ -1,12 +1,12 @@
 use crate::{BoundsView, Format, PatternView, Result, TransformView, implementation};
 use branded_id::{IdVec, U32Id};
+use pathspec::GitIgnoreRegex;
 use std::{
     collections::HashSet,
     f64::consts::PI,
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use ty_gitignore::GitIgnoreRegex;
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain};
 
@@ -320,7 +320,7 @@ impl<'a> Scene<'a> {
             .iter()
             .filter(|placement| {
                 let is_dir = matches!(placement.entity, Entity::Node(_));
-                ty_gitignore::is_path_match(&patterns, &placement.path, is_dir) == Some(true)
+                pathspec::is_path_match(&patterns, &placement.path, is_dir) == Some(true)
             })
             .map(|placement| placement.path.clone())
             .collect();

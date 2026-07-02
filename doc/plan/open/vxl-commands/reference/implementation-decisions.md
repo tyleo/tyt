@@ -51,7 +51,7 @@ unioning the selectors is resolution-time work that lands with the commands.
 Superseded: `match_glob` and `PathGlob` were removed when the shared gitignore
 engine landed; see
 [Gitignore-style pattern matching](#gitignore-style-pattern-matching). `--select`
-will match with `ty-gitignore` when the object selectors are built.
+will match with `pathspec` when the object selectors are built.
 
 ## Material packing model
 
@@ -438,7 +438,7 @@ and records one entry per placement, so an instanced node matched on one route
 shows only on that route; the orphan objects follow with their bare names. The
 same branch set that guards the render guards the walk, so a cyclic document still
 terminates. Each placement, tagged node or object, goes to
-`ty_gitignore::is_path_match` with its directory-ness; the selected paths and their
+`pathspec::is_path_match` with its directory-ness; the selected paths and their
 proper prefixes become the filter's `selected` and `visible` sets. A pattern set
 that selects nothing is an error, exiting non-zero, matching the tyt hierarchy
 command.
@@ -514,7 +514,7 @@ that dropped the `u32` projection moved it into the shipped crate.
 
 `hierarchy show` takes several patterns matched with `.gitignore` rules,
 replacing the single `match_glob`/`PathGlob` glob. The matcher is a new
-dependency-light crate, `ty-gitignore`, a Rust port of the C#
+dependency-light crate, `pathspec`, a Rust port of the C#
 `com.tyleo.gitignore` package the game uses to enable loggers by hierarchical
 name. It keeps that package's shape one-to-one: an `UnsignedGitIgnoreRegex` (a
 compiled pattern plus its directory-or-file kind), a signed `GitIgnoreRegex` (the
@@ -532,7 +532,7 @@ tools and must stay free of `tyt-common` and `tyt-injection`, the same
 independence rule vxl keeps; it sits in `projects/utilities` beside `ty-math` and
 depends only on `globset`. `match_glob`, `PathGlob`, and the
 `Dependencies::match_glob` method were removed with the switch, and vxl's direct
-`globset` dependency gave way to `ty-gitignore`.
+`globset` dependency gave way to `pathspec`.
 
 Two deliberate refinements over the C# reference. `is_path_match` gained an
 `is_dir` argument: the C# had none and folded the whole leaf path into the

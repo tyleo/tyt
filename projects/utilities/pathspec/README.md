@@ -1,6 +1,6 @@
-# ty-gitignore
+# pathspec
 
-Gitignore-style glob pattern matching for Tyleo's projects.
+Gitignore-style glob pattern matching over logical paths.
 
 Patterns follow `.gitignore` rules and match against logical paths, strings
 whose segments are separated by `/`. A path need not exist on disk; the caller

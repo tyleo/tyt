@@ -31,7 +31,7 @@ These hold across the commands and match the existing `to` commands.
 
 Patterns follow `.gitignore` rules, not grep substring matching. The
 [`hierarchy show`](hierarchy/show.md) patterns and the `--select` path glob share
-one rule set, matched by the `ty-gitignore` engine:
+one rule set, matched by the `pathspec` engine:
 
 1. A pattern is a full match against a whole path segment, not a substring. `door`
    matches the name `door`, not `backdoor`; write `*door*` for a substring match.

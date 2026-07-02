@@ -182,7 +182,7 @@ Rationale for the non-obvious choices, for reviewers.
 5. Gitignore-style multiple patterns shipped for `hierarchy show`: an ordered
    list of select and deselect patterns with `!` negation, trailing-slash
    node-only matching, and last-match-wins, so a selection subtracts as well as
-   adds. It is built on a new dependency-light `ty-gitignore` crate, a Rust port
+   adds. It is built on a new dependency-light `pathspec` crate, a Rust port
    of the C# `com.tyleo.gitignore` package layered on the `globset` already in
    use, rather than the heavier `ignore` crate. The parent-directory rule was
    settled git-faithful: an excluded node prunes its subtree, matching the
