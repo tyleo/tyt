@@ -1,19 +1,7 @@
 use crate::{Error, Mesh, MeshMaterial, MeshTriangle, Result};
 use gltf::{Material, Node, buffer::Data, import_slice, mesh::Mode};
 use std::collections::HashMap;
-use ty_math::{TyLinearRgbaColorF64, TyVector3F64};
-
-/// A 4x4 transform in column-major order (`matrix[column][row]`), matching how
-/// glTF stores node matrices.
-type Matrix = [[f64; 4]; 4];
-
-/// The identity transform.
-const IDENTITY: Matrix = [
-    [1.0, 0.0, 0.0, 0.0],
-    [0.0, 1.0, 0.0, 0.0],
-    [0.0, 0.0, 1.0, 0.0],
-    [0.0, 0.0, 0.0, 1.0],
-];
+use ty_math::{TyLinearRgbaColorF64, TyMatrix4x4F64, TyVector3F64};
 
 /// Reads a glTF or GLB byte slice into a [`Mesh`]: every triangle in world
 /// space, tagged with its per-primitive material, with glTF's Y-up axes
@@ -44,8 +32,10 @@ pub fn from_gltf_bytes(bytes: &[u8]) -> Result<Mesh> {
 
     let mut slots: HashMap<Option<usize>, u32> = HashMap::new();
 
+    let identity = TyMatrix4x4F64::identity();
+
     for node in scene.nodes() {
-        collect_node(&node, &IDENTITY, &buffers, &mut mesh, &mut slots);
+        collect_node(&node, &identity, &buffers, &mut mesh, &mut slots);
     }
 
     Ok(mesh)
@@ -55,12 +45,17 @@ pub fn from_gltf_bytes(bytes: &[u8]) -> Result<Mesh> {
 /// `parent` is the accumulated world transform of `node`'s parent.
 fn collect_node(
     node: &Node,
-    parent: &Matrix,
+    parent: &TyMatrix4x4F64,
     buffers: &[Data],
     mesh: &mut Mesh,
     slots: &mut HashMap<Option<usize>, u32>,
 ) {
-    let world = multiply(parent, &to_matrix(node.transform().matrix()));
+    let local = TyMatrix4x4F64::from_column_arrays(
+        node.transform()
+            .matrix()
+            .map(|column| column.map(f64::from)),
+    );
+    let world = *parent * local;
 
     if let Some(node_mesh) = node.mesh() {
         // Name the object after the first mesh-bearing node, its own name
@@ -177,35 +172,10 @@ fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
 /// Transforms `point` by `world` (glTF Y-up) and converts the result to the
 /// Voxel Json Z-up axes, a +90 degree rotation about X that sends glTF +Y to
 /// +Z, preserving the right-handedness both formats use.
-fn world_z_up(world: &Matrix, point: [f64; 3]) -> TyVector3F64 {
-    let [x, y, z] = transform_point(world, point);
-    TyVector3F64::new(x, -z, y)
-}
-
-/// Applies a column-major transform to a point, treating it as `[x, y, z, 1]`.
-fn transform_point(matrix: &Matrix, point: [f64; 3]) -> [f64; 3] {
+fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
     let [x, y, z] = point;
-    [
-        matrix[0][0] * x + matrix[1][0] * y + matrix[2][0] * z + matrix[3][0],
-        matrix[0][1] * x + matrix[1][1] * y + matrix[2][1] * z + matrix[3][1],
-        matrix[0][2] * x + matrix[1][2] * y + matrix[2][2] * z + matrix[3][2],
-    ]
-}
-
-/// Widens a glTF `f32` matrix to `f64`.
-fn to_matrix(matrix: [[f32; 4]; 4]) -> Matrix {
-    matrix.map(|column| column.map(|value| value as f64))
-}
-
-/// The column-major product `a * b`.
-fn multiply(a: &Matrix, b: &Matrix) -> Matrix {
-    let mut out = [[0.0f64; 4]; 4];
-    for (column, out_column) in out.iter_mut().enumerate() {
-        for (row, out_cell) in out_column.iter_mut().enumerate() {
-            *out_cell = (0..4).map(|k| a[k][row] * b[column][k]).sum();
-        }
-    }
-    out
+    let world = world.transform_point(TyVector3F64::new(x, y, z));
+    TyVector3F64::new(world.x, -world.z, world.y)
 }
 
 #[cfg(test)]

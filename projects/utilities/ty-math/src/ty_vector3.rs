@@ -1,11 +1,7 @@
-use crate::TyFloatExt;
-use std::ops::{Add, Mul, Sub};
+use crate::{TyFloatExt, TyQuaternion, ty_array_conversions};
+use std::ops::{Add, Div, Mul, Neg, Sub};
 
-/// A 3D vector generic over its component type `T`.
-///
-/// The component type defaults to `f64`, so `TyVector3` is the `f64` vector;
-/// see `TyVector3F32`, `TyVector3F64`, `TyVector3I32`, and `TyVector3U32` for
-/// the common instantiations.
+/// A 3D vector with component type `T`.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TyVector3<T = f64> {
     /// The `x` component.
@@ -25,6 +21,8 @@ impl<T> TyVector3<T> {
     }
 }
 
+ty_array_conversions!(TyVector3, 3, x, y, z);
+
 impl<T: Copy> TyVector3<T> {
     /// A vector with every component set to `value`.
     pub fn splat(value: T) -> Self {
@@ -33,11 +31,6 @@ impl<T: Copy> TyVector3<T> {
             y: value,
             z: value,
         }
-    }
-
-    /// The components as an `[x, y, z]` array, for indexing by axis.
-    pub fn to_array(&self) -> [T; 3] {
-        [self.x, self.y, self.z]
     }
 
     /// The component on `axis`, where `0` is `x`, `1` is `y`, and `2` is `z`.
@@ -110,21 +103,43 @@ impl<T: Copy + Mul<Output = T>> Mul<T> for TyVector3<T> {
     }
 }
 
+impl<T: Copy + Div<Output = T>> Div<T> for TyVector3<T> {
+    type Output = Self;
+
+    fn div(self, rhs: T) -> Self {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+            z: self.z / rhs,
+        }
+    }
+}
+
+impl<T: Neg<Output = T>> Neg for TyVector3<T> {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self {
+            x: -self.x,
+            y: -self.y,
+            z: -self.z,
+        }
+    }
+}
+
 /// Implements the float-only vector operations (magnitude and scalar-on-the-left
 /// multiplication) for a concrete floating-point component type.
 macro_rules! impl_ty_vector3_float {
     ($t:ty) => {
         impl TyVector3<$t> {
-            /// A vector with every component positive infinity, the starting
-            /// value for a component-wise minimum accumulation.
+            /// A vector with every component positive infinity.
             pub const INFINITY: Self = Self {
                 x: <$t>::INFINITY,
                 y: <$t>::INFINITY,
                 z: <$t>::INFINITY,
             };
 
-            /// A vector with every component negative infinity, the starting
-            /// value for a component-wise maximum accumulation.
+            /// A vector with every component negative infinity.
             pub const NEG_INFINITY: Self = Self {
                 x: <$t>::NEG_INFINITY,
                 y: <$t>::NEG_INFINITY,
@@ -136,8 +151,7 @@ macro_rules! impl_ty_vector3_float {
                 self.magnitude_squared().sqrt()
             }
 
-            /// Returns the squared Euclidean length, the length without the
-            /// square root: cheaper, and enough to compare or minimize lengths.
+            /// Returns the squared Euclidean length.
             pub fn magnitude_squared(&self) -> $t {
                 self.x * self.x + self.y * self.y + self.z * self.z
             }
@@ -179,6 +193,187 @@ macro_rules! impl_ty_vector3_float {
                     z: self.z.abs(),
                 }
             }
+
+            /// The zero vector.
+            pub const ZERO: Self = Self {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            };
+
+            /// The vector with every component `1`.
+            pub const ONE: Self = Self {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+            };
+
+            /// The unit vector along the `x` axis.
+            pub const UNIT_X: Self = Self {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+            };
+
+            /// The unit vector along the `y` axis.
+            pub const UNIT_Y: Self = Self {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+            };
+
+            /// The unit vector along the `z` axis.
+            pub const UNIT_Z: Self = Self {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+            };
+
+            /// The unit vector along the negative `x` axis.
+            pub const UNIT_NEG_X: Self = Self {
+                x: -1.0,
+                y: 0.0,
+                z: 0.0,
+            };
+
+            /// The unit vector along the negative `y` axis.
+            pub const UNIT_NEG_Y: Self = Self {
+                x: 0.0,
+                y: -1.0,
+                z: 0.0,
+            };
+
+            /// The unit vector along the negative `z` axis.
+            pub const UNIT_NEG_Z: Self = Self {
+                x: 0.0,
+                y: 0.0,
+                z: -1.0,
+            };
+
+            /// A vector with the given `x` and zero `y` and `z`.
+            pub fn from_x(x: $t) -> Self {
+                Self { x, y: 0.0, z: 0.0 }
+            }
+
+            /// A vector with the given `y` and zero `x` and `z`.
+            pub fn from_y(y: $t) -> Self {
+                Self { x: 0.0, y, z: 0.0 }
+            }
+
+            /// A vector with the given `z` and zero `x` and `y`.
+            pub fn from_z(z: $t) -> Self {
+                Self { x: 0.0, y: 0.0, z }
+            }
+
+            /// Returns this vector scaled to unit length. A zero vector yields
+            /// non-finite components.
+            pub fn normalized(&self) -> Self {
+                *self * (1.0 / self.magnitude())
+            }
+
+            /// Linearly interpolates from `self` towards `other` by `t`, with `t`
+            /// of `0` returning `self` and `1` returning `other`.
+            pub fn lerp(self, other: Self, t: $t) -> Self {
+                self + (other - self) * t
+            }
+
+            /// This vector as a pure quaternion `(x, y, z, 0)`.
+            pub fn to_pure_quaternion(self) -> TyQuaternion<$t> {
+                TyQuaternion::new(self.x, self.y, self.z, 0.0)
+            }
+
+            /// A rotation of `angle` radians about this vector as the axis.
+            pub fn rotation_around(self, angle: $t) -> TyQuaternion<$t> {
+                TyQuaternion::<$t>::from_axis_angle(self, angle)
+            }
+
+            /// This vector's `x`, taken as a uniform scale factor. Assumes the
+            /// components are equal.
+            pub fn to_scale(self) -> $t {
+                self.x
+            }
+
+            /// The shortest-arc rotation carrying `self` onto `target`, both taken
+            /// to be unit length.
+            pub fn rotate_towards(self, target: Self) -> TyQuaternion<$t> {
+                const TOLERANCE: $t = 1.0e-5;
+
+                let dot = self.dot(&target);
+
+                // Already aligned: no rotation.
+                if dot >= 1.0 - TOLERANCE {
+                    return TyQuaternion::<$t>::identity();
+                }
+
+                // Nearly opposite: a half turn about any orthogonal axis.
+                if dot <= -1.0 + TOLERANCE {
+                    let axis = if self.x.abs() <= self.y.abs() && self.x.abs() <= self.z.abs() {
+                        Self::UNIT_X
+                    } else if self.y.abs() <= self.z.abs() {
+                        Self::UNIT_Y
+                    } else {
+                        Self::UNIT_Z
+                    };
+                    let axis = self.cross(&axis).normalized();
+                    return TyQuaternion::<$t>::from_axis_angle(axis, core::f64::consts::PI as $t);
+                }
+
+                let cross = self.cross(&target);
+                TyQuaternion::new(cross.x, cross.y, cross.z, 1.0 + dot).normalized()
+            }
+
+            /// True when `self` and `other` point in approximately the same
+            /// direction, within `tolerance` on the cosine of the angle between
+            /// them. Works for non-unit vectors; a near-zero vector is never
+            /// approximately equal.
+            pub fn is_approximately_equal(&self, other: &Self, tolerance: $t) -> bool {
+                const DEGENERATE: $t = 1.0e-8;
+
+                let dot = self.dot(other);
+                if dot <= 0.0 {
+                    return false;
+                }
+
+                let length_squared_a = self.magnitude_squared();
+                let length_squared_b = other.magnitude_squared();
+                if length_squared_a <= DEGENERATE || length_squared_b <= DEGENERATE {
+                    return false;
+                }
+
+                let cos_min = 1.0 - tolerance;
+                dot * dot >= length_squared_a * length_squared_b * (cos_min * cos_min)
+            }
+
+            /// True when `self` and `other`, both taken to be unit length, point
+            /// in approximately the same direction, within `tolerance` on their
+            /// dot product.
+            pub fn is_normalized_approximately_equal(&self, other: &Self, tolerance: $t) -> bool {
+                self.dot(other) >= 1.0 - tolerance
+            }
+
+            /// The position on the uniform Catmull-Rom spline between `p1` and
+            /// `p2`, with neighbours `p0` and `p3`, at parameter `t` in `[0, 1]`.
+            pub fn catmull_rom_position(p0: Self, p1: Self, p2: Self, p3: Self, t: $t) -> Self {
+                let t2 = t * t;
+                let t3 = t2 * t;
+
+                (p1 * 2.0
+                    + (p2 - p0) * t
+                    + (p0 * 2.0 - p1 * 5.0 + p2 * 4.0 - p3) * t2
+                    + (p1 * 3.0 - p0 - p2 * 3.0 + p3) * t3)
+                    * 0.5
+            }
+
+            /// The tangent of the uniform Catmull-Rom spline between `p1` and
+            /// `p2`, with neighbours `p0` and `p3`, at parameter `t` in `[0, 1]`.
+            pub fn catmull_rom_tangent(p0: Self, p1: Self, p2: Self, p3: Self, t: $t) -> Self {
+                let t2 = t * t;
+
+                ((p2 - p0)
+                    + (p0 * 4.0 - p1 * 10.0 + p2 * 8.0 - p3 * 2.0) * t
+                    + (p1 * 9.0 - p0 * 3.0 - p2 * 9.0 + p3 * 3.0) * t2)
+                    * 0.5
+            }
         }
 
         impl Mul<TyVector3<$t>> for $t {
@@ -189,6 +384,20 @@ macro_rules! impl_ty_vector3_float {
                     x: self * rhs.x,
                     y: self * rhs.y,
                     z: self * rhs.z,
+                }
+            }
+        }
+
+        impl Div<TyVector3<$t>> for $t {
+            type Output = TyVector3<$t>;
+
+            /// The component-wise reciprocal scale `self / rhs`, one scalar over
+            /// each component.
+            fn div(self, rhs: TyVector3<$t>) -> TyVector3<$t> {
+                TyVector3 {
+                    x: self / rhs.x,
+                    y: self / rhs.y,
+                    z: self / rhs.z,
                 }
             }
         }
@@ -213,5 +422,12 @@ mod tests {
     fn abs_takes_each_component() {
         let abs = TyVector3F64::new(-1.0, 2.0, -3.0).abs();
         assert_eq!(abs, TyVector3F64::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn scalar_over_vector_is_the_component_wise_reciprocal() {
+        // The inverse-scale of a per-axis scale vector.
+        let inverse = 1.0 / TyVector3F64::new(2.0, 4.0, 8.0);
+        assert_eq!(inverse, TyVector3F64::new(0.5, 0.25, 0.125));
     }
 }

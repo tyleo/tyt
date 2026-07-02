@@ -1,9 +1,7 @@
-use crate::TyVector3;
-use std::ops::Mul;
+use crate::{TyMatrix4x4, TyVector3, ty_array_conversions};
+use std::ops::{Add, Mul, Neg, Sub};
 
-/// A quaternion `(x, y, z, w)` generic over its component type `T`.
-///
-/// See `TyQuaternionF32` and `TyQuaternionF64` for the common instantiations.
+/// A quaternion `(x, y, z, w)` with component type `T`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TyQuaternion<T> {
     /// The `x` component.
@@ -25,6 +23,8 @@ impl<T> TyQuaternion<T> {
         Self { x, y, z, w }
     }
 }
+
+ty_array_conversions!(TyQuaternion, 4, x, y, z, w);
 
 /// Implements the float-only quaternion operations for a concrete
 /// floating-point component type.
@@ -114,6 +114,166 @@ macro_rules! impl_ty_quaternion_float {
                     r20.abs() * extents.x + r21.abs() * extents.y + r22.abs() * extents.z,
                 )
             }
+
+            /// Returns the length of this quaternion.
+            pub fn magnitude(&self) -> $t {
+                self.magnitude_squared().sqrt()
+            }
+
+            /// Returns the squared length of this quaternion.
+            pub fn magnitude_squared(&self) -> $t {
+                self.x * self.x + self.y * self.y + self.z * self.z + self.w * self.w
+            }
+
+            /// Returns this quaternion scaled to unit length.
+            pub fn normalized(self) -> Self {
+                self * (1.0 / self.magnitude())
+            }
+
+            /// Returns the conjugate. For a unit quaternion this is the inverse
+            /// rotation.
+            pub fn conjugate(self) -> Self {
+                Self::new(-self.x, -self.y, -self.z, self.w)
+            }
+
+            /// Returns the canonical form, with non-negative `w`.
+            pub fn canonicalized(self) -> Self {
+                if self.w >= 0.0 { self } else { -self }
+            }
+
+            /// Returns the inverse rotation, valid for a non-unit quaternion.
+            pub fn inverse(self) -> Self {
+                let inverse_squared = 1.0 / self.magnitude_squared();
+                Self::new(
+                    -self.x * inverse_squared,
+                    -self.y * inverse_squared,
+                    -self.z * inverse_squared,
+                    self.w * inverse_squared,
+                )
+            }
+
+            /// Returns the vector part.
+            pub fn vector_part(self) -> TyVector3<$t> {
+                TyVector3::new(self.x, self.y, self.z)
+            }
+
+            /// Returns the dot product of `self` and `other`.
+            pub fn dot(self, other: Self) -> $t {
+                self.x * other.x + self.y * other.y + self.z * other.z + self.w * other.w
+            }
+
+            /// Builds a rotation from orthonormal `right`, `up`, and `forward`
+            /// basis vectors.
+            pub fn from_basis_vectors(
+                right: TyVector3<$t>,
+                up: TyVector3<$t>,
+                forward: TyVector3<$t>,
+            ) -> Self {
+                let trace = right.x + up.y + forward.z;
+                if trace > 0.0 {
+                    let s = (trace + 1.0).sqrt() * 2.0;
+                    Self::new(
+                        (up.z - forward.y) / s,
+                        (forward.x - right.z) / s,
+                        (right.y - up.x) / s,
+                        0.25 * s,
+                    )
+                } else if right.x > up.y && right.x > forward.z {
+                    let s = (1.0 + right.x - up.y - forward.z).sqrt() * 2.0;
+                    Self::new(
+                        0.25 * s,
+                        (right.y + up.x) / s,
+                        (forward.x + right.z) / s,
+                        (up.z - forward.y) / s,
+                    )
+                } else if up.y > forward.z {
+                    let s = (1.0 + up.y - right.x - forward.z).sqrt() * 2.0;
+                    Self::new(
+                        (right.y + up.x) / s,
+                        0.25 * s,
+                        (up.z + forward.y) / s,
+                        (forward.x - right.z) / s,
+                    )
+                } else {
+                    let s = (1.0 + forward.z - right.x - up.y).sqrt() * 2.0;
+                    Self::new(
+                        (forward.x + right.z) / s,
+                        (up.z + forward.y) / s,
+                        0.25 * s,
+                        (right.y - up.x) / s,
+                    )
+                }
+            }
+
+            /// Builds a rotation from `right` and `forward` basis vectors,
+            /// deriving `up` in a left-handed frame.
+            pub fn from_right_forward(right: TyVector3<$t>, forward: TyVector3<$t>) -> Self {
+                let up = forward.cross(&right).normalized();
+                Self::from_basis_vectors(right, up, forward)
+            }
+
+            /// Builds a rotation from `right` and `up` basis vectors, deriving
+            /// `forward` in a left-handed frame.
+            pub fn from_right_up(right: TyVector3<$t>, up: TyVector3<$t>) -> Self {
+                let forward = right.cross(&up).normalized();
+                Self::from_basis_vectors(right, up, forward)
+            }
+
+            /// Returns this rotation with a further rotation of `angle` radians
+            /// about `axis` applied after it.
+            pub fn rotate_around_axis(self, axis: TyVector3<$t>, angle: $t) -> Self {
+                Self::from_axis_angle(axis, angle) * self
+            }
+
+            /// True when `self` and `other` are approximately the same rotation,
+            /// within `tolerance` on the absolute dot product. Both are taken to
+            /// be unit length; the sign is ignored since `q` and `-q` are one
+            /// rotation.
+            pub fn is_approximately_equal(self, other: Self, tolerance: $t) -> bool {
+                self.dot(other).abs() >= 1.0 - tolerance
+            }
+
+            /// Spherically interpolates from `self` towards `to` by `t` in
+            /// `[0, 1]`, taking the shortest arc. Falls back to a normalized
+            /// linear blend when the rotations are nearly aligned.
+            pub fn slerp_towards(self, to: Self, t: $t) -> Self {
+                const DOT_THRESHOLD: $t = 0.9995;
+
+                let mut to = to;
+                let mut dot = self.dot(to);
+
+                // q and -q are the same rotation; flip to take the shortest arc.
+                if dot < 0.0 {
+                    to = -to;
+                    dot = -dot;
+                }
+
+                if dot > DOT_THRESHOLD {
+                    return (self * (1.0 - t) + to * t).normalized();
+                }
+
+                let dot = dot.clamp(-1.0, 1.0);
+                let theta_0 = dot.acos();
+                let sin_theta_0 = theta_0.sin();
+
+                // Guard the division for a degenerate angle between the rotations.
+                if sin_theta_0 < 1.0e-5 {
+                    return (self * (1.0 - t) + to * t).normalized();
+                }
+
+                let theta = theta_0 * t;
+                let sin_theta = theta.sin();
+
+                let s0 = theta.cos() - dot * sin_theta / sin_theta_0;
+                let s1 = sin_theta / sin_theta_0;
+
+                self * s0 + to * s1
+            }
+
+            /// Returns the rotation matrix of this unit quaternion.
+            pub fn to_matrix4x4(self) -> TyMatrix4x4<$t> {
+                TyMatrix4x4::<$t>::from_quaternion(self)
+            }
         }
 
         impl Default for TyQuaternion<$t> {
@@ -134,6 +294,56 @@ macro_rules! impl_ty_quaternion_float {
                     z: self.w * other.z + self.x * other.y - self.y * other.x + self.z * other.w,
                     w: self.w * other.w - self.x * other.x - self.y * other.y - self.z * other.z,
                 }
+            }
+        }
+
+        impl Neg for TyQuaternion<$t> {
+            type Output = Self;
+
+            fn neg(self) -> Self {
+                Self::new(-self.x, -self.y, -self.z, -self.w)
+            }
+        }
+
+        impl Add for TyQuaternion<$t> {
+            type Output = Self;
+
+            fn add(self, rhs: Self) -> Self {
+                Self::new(
+                    self.x + rhs.x,
+                    self.y + rhs.y,
+                    self.z + rhs.z,
+                    self.w + rhs.w,
+                )
+            }
+        }
+
+        impl Sub for TyQuaternion<$t> {
+            type Output = Self;
+
+            fn sub(self, rhs: Self) -> Self {
+                Self::new(
+                    self.x - rhs.x,
+                    self.y - rhs.y,
+                    self.z - rhs.z,
+                    self.w - rhs.w,
+                )
+            }
+        }
+
+        impl Mul<$t> for TyQuaternion<$t> {
+            type Output = Self;
+
+            fn mul(self, rhs: $t) -> Self {
+                Self::new(self.x * rhs, self.y * rhs, self.z * rhs, self.w * rhs)
+            }
+        }
+
+        impl Mul<TyQuaternion<$t>> for $t {
+            type Output = TyQuaternion<$t>;
+
+            fn mul(self, rhs: TyQuaternion<$t>) -> TyQuaternion<$t> {
+                rhs * self
             }
         }
     };
@@ -263,5 +473,81 @@ mod tests {
         // The identity leaves extents unchanged.
         let same = TyQuaternionF64::identity().rotate_extents_abs(TyVector3F64::new(2.0, 3.0, 4.0));
         assert!(close(same.x, 2.0) && close(same.y, 3.0) && close(same.z, 4.0));
+    }
+
+    #[test]
+    fn normalized_has_unit_length() {
+        let quaternion = TyQuaternionF64::new(1.0, 2.0, 3.0, 4.0).normalized();
+        assert!(close(quaternion.magnitude(), 1.0));
+    }
+
+    #[test]
+    fn inverse_undoes_a_rotation() {
+        // A rotation composed with its inverse is the identity, so it leaves a
+        // vector unchanged.
+        let quaternion = about_z(0.7);
+        let composed = quaternion * quaternion.inverse();
+        let point = TyVector3F64::new(1.0, 2.0, 3.0);
+        let rotated = composed.rotate(point);
+        assert!(close(rotated.x, 1.0) && close(rotated.y, 2.0) && close(rotated.z, 3.0));
+    }
+
+    #[test]
+    fn conjugate_is_the_inverse_of_a_unit_quaternion() {
+        let quaternion = about_z(0.7);
+        let conjugate = quaternion.conjugate();
+        let inverse = quaternion.inverse();
+        assert!(
+            close(conjugate.x, inverse.x)
+                && close(conjugate.y, inverse.y)
+                && close(conjugate.z, inverse.z)
+                && close(conjugate.w, inverse.w)
+        );
+    }
+
+    #[test]
+    fn canonicalized_makes_w_non_negative() {
+        let flipped = -about_z(0.7);
+        assert!(flipped.w < 0.0);
+        assert!(flipped.canonicalized().w >= 0.0);
+    }
+
+    #[test]
+    fn slerp_hits_its_endpoints() {
+        let from = about_z(0.2);
+        let to = about_z(1.3);
+        let start = from.slerp_towards(to, 0.0);
+        let end = from.slerp_towards(to, 1.0);
+        assert!(start.is_approximately_equal(from, 1e-9));
+        assert!(end.is_approximately_equal(to, 1e-9));
+    }
+
+    #[test]
+    fn slerp_midpoint_is_the_halfway_rotation() {
+        // Halfway from 0 to a half turn about z is a quarter turn about z.
+        let mid = about_z(0.0).slerp_towards(about_z(PI), 0.5);
+        assert!(mid.is_approximately_equal(about_z(PI / 2.0), 1e-9));
+    }
+
+    #[test]
+    fn from_basis_vectors_of_the_identity_frame_is_the_identity() {
+        let quaternion = TyQuaternionF64::from_basis_vectors(
+            TyVector3F64::new(1.0, 0.0, 0.0),
+            TyVector3F64::new(0.0, 1.0, 0.0),
+            TyVector3F64::new(0.0, 0.0, 1.0),
+        );
+        assert!(quaternion.is_approximately_equal(TyQuaternionF64::identity(), 1e-9));
+    }
+
+    #[test]
+    fn from_basis_vectors_recovers_a_rotations_own_axes() {
+        // Take a rotation, read its rotated axes off its matrix columns, and
+        // rebuild it from those basis vectors.
+        let quaternion = TyQuaternionF64::from_axis_angle(TyVector3F64::new(1.0, 2.0, 3.0), 0.9);
+        let right = quaternion.rotate(TyVector3F64::new(1.0, 0.0, 0.0));
+        let up = quaternion.rotate(TyVector3F64::new(0.0, 1.0, 0.0));
+        let forward = quaternion.rotate(TyVector3F64::new(0.0, 0.0, 1.0));
+        let rebuilt = TyQuaternionF64::from_basis_vectors(right, up, forward);
+        assert!(rebuilt.is_approximately_equal(quaternion, 1e-9));
     }
 }

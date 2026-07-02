@@ -1,9 +1,7 @@
-use crate::{TyQuaternion, TyVector3};
+use crate::{TyPose, TyQuaternion, TyUniformTrs, TyVector3};
 
-/// A node transform generic over its component type `T`, composing as
+/// A node transform with component type `T`, composing as
 /// `Translation * Rotation * Scale`.
-///
-/// See `TyTransformF32` and `TyTransformF64` for the common instantiations.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TyTransform<T> {
     /// The translation, which may be fractional.
@@ -52,6 +50,17 @@ macro_rules! impl_ty_transform_float {
                     rotation: self.rotation * child.rotation,
                     scale: self.scale.componentwise_multiply(&child.scale),
                 }
+            }
+
+            /// This transform as a [`TyPose`], dropping the scale.
+            pub fn to_pose(&self) -> TyPose<$t> {
+                TyPose::new(self.position, self.rotation)
+            }
+
+            /// This transform as a [`TyUniformTrs`], taking `scale.x` as the
+            /// uniform factor. Assumes the scale is uniform.
+            pub fn to_uniform_trs(&self) -> TyUniformTrs<$t> {
+                TyUniformTrs::new(self.position, self.rotation, self.scale.x)
             }
         }
 

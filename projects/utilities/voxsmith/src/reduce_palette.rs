@@ -475,21 +475,12 @@ fn nearest_centroid(coords: TyVector3F64, centroids: &[TyVector3F64]) -> usize {
 /// the naive distance on the stored sRGB components; `oklab` and `lab` decode to
 /// linear light first.
 fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
-    let [r, g, b, a] = rgba;
-    let color = TySrgbaColor::new(r, g, b, a);
+    let color = TySrgbaColor::from_array(rgba);
 
     match space {
-        ColorSpace::Rgb => TyVector3F64::new(r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0),
-
-        ColorSpace::Oklab => {
-            let oklab = color.to_linear_rgba().to_oklab();
-            TyVector3F64::new(oklab.l, oklab.a, oklab.b)
-        }
-
-        ColorSpace::Lab => {
-            let lab = color.to_linear_rgba().to_cielab();
-            TyVector3F64::new(lab.l, lab.a, lab.b)
-        }
+        ColorSpace::Rgb => color.to_rgba().to_vector3(),
+        ColorSpace::Oklab => color.to_linear_rgba().to_oklab().to_vector3(),
+        ColorSpace::Lab => color.to_linear_rgba().to_cielab().to_vector3(),
     }
 }
 

@@ -1,13 +1,8 @@
-use crate::{TyCielabColorF64, TyOklabColorF64, TySrgbaColor};
+use crate::{TyCielabColorF64, TyOklabColorF64, TySrgbaColor, ty_array_conversions};
 
-/// A color in linear RGB with straight alpha, generic over its component type
-/// `T`. Linear light is the space perceptual conversions build on; components
-/// are nominally `[0, 1]` but may exceed it out of gamut.
-///
-/// The component type defaults to `f32`, so `TyLinearRgbaColor` is the `f32`
-/// color; see `TyLinearRgbaColorF32` and `TyLinearRgbaColorF64`. The conversions
-/// are defined on the `f64` instantiation, where the perceptual math keeps full
-/// precision.
+/// A linear-RGB color with straight alpha and component type `T`. Components are
+/// nominally `[0, 1]` and may exceed it out of gamut. Conversions are defined on
+/// the `f64` instantiation.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TyLinearRgbaColor<T = f32> {
     /// The red component.
@@ -29,6 +24,8 @@ impl<T> TyLinearRgbaColor<T> {
         Self { r, g, b, a }
     }
 }
+
+ty_array_conversions!(TyLinearRgbaColor, 4, r, g, b, a);
 
 impl TyLinearRgbaColor<f64> {
     /// Encodes to the 8-bit sRGB storage color: `r` / `g` / `b` through the sRGB
