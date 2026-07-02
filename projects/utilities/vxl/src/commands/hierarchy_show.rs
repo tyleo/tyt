@@ -77,6 +77,11 @@ pub struct HierarchyShow {
         num_args = 0..=2,
     )]
     show_extents: Option<Vec<String>>,
+
+    /// Append each object's referenced palettes as a nested subtree, one child
+    /// per palette showing its index and cell count.
+    #[arg(value_name = "show-palettes", long = "show-palettes")]
+    show_palettes: bool,
 }
 
 impl HierarchyShow {
@@ -115,6 +120,7 @@ impl HierarchyShow {
             transforms,
             bounds,
             extents,
+            self.show_palettes,
         )
     }
 }

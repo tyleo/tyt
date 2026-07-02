@@ -8,7 +8,7 @@ use std::{
     path::Path,
 };
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain};
+use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 
 /// A hierarchy-node id in the loaded [`VoxMain`], aliased so signatures stay
 /// short and a node id never mixes with an object id.
@@ -31,6 +31,7 @@ const EXTENSION_LAST: &str = "  ";
 const EXTENSION_MID: &str = "\u{2502} ";
 
 /// Loads the voxel file at `input` and prints its scene graph as a tree.
+#[allow(clippy::too_many_arguments)]
 pub fn hierarchy_show(
     input: &Path,
     from: Option<Format>,
@@ -39,6 +40,7 @@ pub fn hierarchy_show(
     transforms: Option<TransformView>,
     bounds: Option<BoundsView>,
     extents: Option<BoundsView>,
+    palettes: bool,
 ) -> Result<()> {
     let state = implementation::load_state(input, from)?;
 
@@ -48,6 +50,7 @@ pub fn hierarchy_show(
         transforms,
         bounds,
         extents,
+        palettes,
     };
 
     let output = render(&state, &options)?;
@@ -73,6 +76,9 @@ struct RenderOptions {
 
     /// When set, append each object's extents as a subtree.
     extents: Option<BoundsView>,
+
+    /// When true, append each object's referenced palettes as a subtree.
+    palettes: bool,
 }
 
 /// Renders the scene graph of `state` under `options`, the testable core of
@@ -91,6 +97,7 @@ fn render(state: &VoxMain, options: &RenderOptions) -> Result<String> {
         transforms: options.transforms,
         bounds: options.bounds,
         extents: options.extents,
+        palettes: options.palettes,
         filter,
         seen_nodes: IdVec::from_vec(vec![0; state.hierarchy_node_count()]),
         seen_objects: IdVec::from_vec(vec![0; state.object_count()]),
@@ -472,6 +479,9 @@ struct Walk<'a> {
 
     /// When set, append each object's extents as a subtree.
     extents: Option<BoundsView>,
+
+    /// When true, append each object's referenced palettes as a subtree.
+    palettes: bool,
 
     /// The path filter, when a `pattern` was given.
     filter: Option<Filter>,
@@ -950,11 +960,12 @@ impl Walk<'_> {
         let child_prefix = format!("{prefix}{extension}");
         let bounds = self.bounds;
         let extents = self.extents;
+        let palettes = self.palettes;
 
         if let Some(view) = bounds {
             self.render_bounds(
                 &child_prefix,
-                extents.is_none(),
+                extents.is_none() && !palettes,
                 object_box,
                 placing_world,
                 view,
@@ -962,7 +973,11 @@ impl Walk<'_> {
         }
 
         if let Some(view) = extents {
-            self.render_extents(&child_prefix, true, object_box, placing_world, view);
+            self.render_extents(&child_prefix, !palettes, object_box, placing_world, view);
+        }
+
+        if palettes {
+            self.render_palettes(&child_prefix, true, object);
         }
     }
 
@@ -1029,6 +1044,60 @@ impl Walk<'_> {
             format_vec3(max - min, view.precision)
         ));
     }
+
+    /// Appends the `palettes` subtree: one child per palette the object
+    /// references, in reference order, each `index: {cells: <count>}`. An object
+    /// that references no palette prints `palettes: []`, and a reference to a
+    /// palette the state does not hold prints a `missing palette` marker.
+    fn render_palettes(&mut self, prefix: &str, is_last: bool, object: &VoxObject) {
+        let connector = if is_last {
+            CONNECTOR_LAST
+        } else {
+            CONNECTOR_MID
+        };
+
+        let total = object.palette_ref_count();
+
+        if total == 0 {
+            self.output
+                .push_str(&format!("{prefix}{connector} palettes: []\n"));
+            return;
+        }
+
+        self.output
+            .push_str(&format!("{prefix}{connector} palettes\n"));
+
+        let extension = if is_last {
+            EXTENSION_LAST
+        } else {
+            EXTENSION_MID
+        };
+
+        let inner = format!("{prefix}{extension}");
+
+        for (index, (_, palette_id)) in object.iter_palette_refs().enumerate() {
+            let child_connector = if index + 1 == total {
+                CONNECTOR_LAST
+            } else {
+                CONNECTOR_MID
+            };
+
+            let line = match self.scene.state.palette(palette_id) {
+                Some(palette) => format!(
+                    "{inner}{child_connector} {}: {{cells: {}}}\n",
+                    palette_id.to_u32(),
+                    palette.cell_count()
+                ),
+
+                None => format!(
+                    "{inner}{child_connector} missing palette {}\n",
+                    palette_id.to_u32()
+                ),
+            };
+
+            self.output.push_str(&line);
+        }
+    }
 }
 
 /// The min and max corners of `object_box`, in world space when `world_space`,
@@ -1082,7 +1151,9 @@ mod tests {
     };
     use branded_id::U32Id;
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
-    use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject};
+    use voxcore::{
+        BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValue,
+    };
 
     /// Renders `state` with the given pattern and collapse flags, unwrapping.
     fn show(
@@ -1162,6 +1233,7 @@ mod tests {
                 transforms: None,
                 bounds: None,
                 extents: None,
+                palettes: false,
             },
         )
     }
@@ -1181,6 +1253,23 @@ mod tests {
                 transforms,
                 bounds,
                 extents,
+                palettes: false,
+            },
+        )
+        .unwrap()
+    }
+
+    /// Renders `state` with the palettes subtree, no pattern or other views.
+    fn palettes(state: &VoxMain) -> String {
+        render(
+            state,
+            &RenderOptions {
+                pattern: None,
+                collapse_instances: false,
+                transforms: None,
+                bounds: None,
+                extents: None,
+                palettes: true,
             },
         )
         .unwrap()
@@ -1278,6 +1367,39 @@ mod tests {
         let arm_a = state.add_hierarchy_node(node("armA", vec![hand], vec![]));
         let arm_b = state.add_hierarchy_node(node("armB", vec![foot], vec![]));
         let root = state.add_hierarchy_node(node("root", vec![arm_a, arm_b], vec![]));
+        state.set_root_hierarchy_nodes(vec![root]);
+        state
+    }
+
+    /// A palette with `count` `rgba` cells; only the cell count matters to the
+    /// tree, so every color is the same.
+    fn palette_with_cells(count: usize) -> VoxPalette {
+        let mut palette = VoxPalette::default();
+        palette.add_attribute("rgba".to_owned());
+        for _ in 0..count {
+            palette
+                .add_cell(vec![VoxValue::Text("#000000FF".to_owned())])
+                .unwrap();
+        }
+        palette
+    }
+
+    /// A root placing one object `body` that references palette 0 (two cells)
+    /// then palette 1 (three cells).
+    fn palette_ref_state() -> VoxMain {
+        let mut state = VoxMain::default();
+
+        let first = state.add_palette(palette_with_cells(2));
+        let first_cell = state.palette(first).unwrap().iter_cells().next().unwrap();
+        let second = state.add_palette(palette_with_cells(3));
+        let second_cell = state.palette(second).unwrap().iter_cells().next().unwrap();
+
+        let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        body.add_palette_ref(first, first_cell);
+        body.add_palette_ref(second, second_cell);
+        let body_id = state.add_object(body);
+
+        let root = state.add_hierarchy_node(node("root", vec![], vec![body_id]));
         state.set_root_hierarchy_nodes(vec![root]);
         state
     }
@@ -1613,6 +1735,77 @@ mod tests {
         assert!(
             output.contains("position: [11.00, 0.00, 0.00]"),
             "output was:\n{output}"
+        );
+    }
+
+    #[test]
+    fn palettes_list_each_referenced_palette_with_its_cell_count() {
+        let output = palettes(&palette_ref_state());
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} root: {node: 0}\n\
+             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} palettes\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {cells: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {cells: 3}\n"
+        );
+    }
+
+    #[test]
+    fn palettes_are_an_empty_array_when_an_object_references_none() {
+        // `simple_state`'s `body` has no palette reference, so the subtree
+        // collapses to an empty array rather than a childless header.
+        let output = palettes(&simple_state());
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} root: {node: 0}\n\
+             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} palettes: []\n"
+        );
+    }
+
+    #[test]
+    fn palettes_follow_bounds_and_extents_under_an_object() {
+        // With all three object subtrees on, palettes is last, so bounds and
+        // extents keep their non-last connectors.
+        let mut state = VoxMain::default();
+        let palette = state.add_palette(palette_with_cells(1));
+        let cell = state.palette(palette).unwrap().iter_cells().next().unwrap();
+        let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
+        body.add_palette_ref(palette, cell);
+        let body_id = state.add_object(body);
+        let root = state.add_hierarchy_node(node("root", vec![], vec![body_id]));
+        state.set_root_hierarchy_nodes(vec![root]);
+
+        let view = BoundsView {
+            world: false,
+            precision: 2,
+        };
+        let output = render(
+            &state,
+            &RenderOptions {
+                pattern: None,
+                collapse_instances: false,
+                transforms: None,
+                bounds: Some(view),
+                extents: Some(view),
+                palettes: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} root: {node: 0}\n\
+             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} bounds\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{251C} min: [0.00, 0.00, 0.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{2514} max: [2.00, 1.00, 1.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} extents: [2.00, 1.00, 1.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} palettes\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 0: {cells: 1}\n"
         );
     }
 }

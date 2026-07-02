@@ -514,7 +514,7 @@ This is built in three iterations. The first landed the core tree with its
 instancing and unplaced marks and `--collapse-instances`; the second the
 `pattern` glob with `--collapse-ancestors`/`--collapse-descendants`; the third
 the `--show-transforms`/`--show-bounds`/`--show-extents` subtrees, local and
-world.
+world. A later change added the `--show-palettes` subtree.
 
 `Dependencies::hierarchy_show` carries the load, render, and print together like
 the other read reports, so the command struct only parses flags. Its core is a
@@ -673,6 +673,22 @@ about z showing `0, 0, 40` and `30` about y then `40` about z showing `0, 30, 40
 `[space] [precision]`, the FBX arg shape, parsed in the command into the
 `TransformView` and `BoundsView` data structs the trait carries; the growing
 signature takes a `too_many_arguments` allow, the house style beside `voxelize`.
+
+`--show-palettes` is a bare flag rather than a view struct, since a palette
+reference carries no space or precision to tune. It appends a `palettes` subtree
+under each object, beside `bounds` and `extents`, since palettes are referenced
+by an object, not a node. Each child reads `index: {cells: <count>}`, one per
+reference in `iter_palette_refs` order with no dedup, so the subtree mirrors the
+object's real reference list rather than a set. The index is the referenced
+palette's `to_u32`, which equals its position in `iter_palettes` for a freshly
+loaded state that numbers ids `0..count`, the same index `palette show` prints,
+and the palette resolves through `VoxMain::palette`; a reference the state does
+not hold prints a `missing palette <id>` marker like the walk's other missing-id
+lines. The count is the palette's `cell_count`, its size, not how many of its
+cells the object's voxels sample. An object with no reference prints an empty
+`palettes: []` leaf instead of a childless header, which also keeps `palettes`
+an unconditional last child so the `bounds` and `extents` connectors above it
+stay correct.
 
 `branded-id` is an `impl`-gated dependency. The render path names its `U32Id`
 through the `NodeId` and `ObjectId` aliases, and the tests use it to build

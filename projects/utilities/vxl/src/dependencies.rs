@@ -163,6 +163,8 @@ pub trait Dependencies {
     /// * `transforms` - when set, prepend each node's transform as a subtree.
     /// * `bounds` - when set, append each object's grid bounds as a subtree.
     /// * `extents` - when set, append each object's extents as a subtree.
+    /// * `palettes` - when true, append each object's referenced palettes as a
+    ///   subtree, one child per palette showing its index and cell count.
     #[allow(clippy::too_many_arguments)]
     fn hierarchy_show(
         &self,
@@ -173,6 +175,7 @@ pub trait Dependencies {
         transforms: Option<TransformView>,
         bounds: Option<BoundsView>,
         extents: Option<BoundsView>,
+        palettes: bool,
     ) -> Result<()>;
 
     /// Writes `contents` to standard output.

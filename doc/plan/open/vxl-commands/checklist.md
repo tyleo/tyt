@@ -180,6 +180,7 @@ Material sampling (see [voxelize](reference/voxelize.md) and
       `--collapse-instances`. Markdown tree only; no `--layout`.
 - [x] `pattern` glob with `--collapse-ancestors` / `--collapse-descendants`.
 - [x] `--show-transforms` / `--show-bounds` / `--show-extents`, local and world.
+- [x] `--show-palettes`, one child per referenced palette with its cell count.
 
 ### validate ([reference/validate.md](reference/validate.md))
 

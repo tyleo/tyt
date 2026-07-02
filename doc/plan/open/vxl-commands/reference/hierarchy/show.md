@@ -32,12 +32,16 @@ shows its name and its referenced child objects. See
    after the placing node's transform.
 4. `--show-extents [space] [precision]`: append an extents subtree
    (`max - min`), with the same arguments as `--show-bounds`.
-5. `--collapse-ancestors` (flag): hide the ancestor chain above each match root
+5. `--show-palettes` (flag): append each object's referenced palettes as a
+   nested subtree, one child per palette in the object's palette-reference
+   order, reading `index: {cells: <count>}`. An object that references no
+   palette prints an empty `palettes: []` array.
+6. `--collapse-ancestors` (flag): hide the ancestor chain above each match root
    and replace it with an `ancestors` marker, omitted when the match root is a
    top-level node. Requires a `pattern`.
-6. `--collapse-descendants` (flag): hide the descendants of each match root and
+7. `--collapse-descendants` (flag): hide the descendants of each match root and
    replace them with a `descendants` marker, omitted when the match root has no
    descendants. Requires a `pattern`.
-7. `--collapse-instances` (flag): expand each shared node's first placement and
+8. `--collapse-instances` (flag): expand each shared node's first placement and
    print each later placement as a non-expanded stub, rather than expanding every
    placement in full. This command prints only the tree; it has no `--layout`.

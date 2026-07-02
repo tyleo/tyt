@@ -105,6 +105,7 @@ impl Dependencies for DependenciesImpl {
         transforms: Option<TransformView>,
         bounds: Option<BoundsView>,
         extents: Option<BoundsView>,
+        palettes: bool,
     ) -> Result<()> {
         implementation::hierarchy_show(
             input,
@@ -114,6 +115,7 @@ impl Dependencies for DependenciesImpl {
             transforms,
             bounds,
             extents,
+            palettes,
         )
     }
 
