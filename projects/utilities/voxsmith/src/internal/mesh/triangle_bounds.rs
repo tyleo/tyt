@@ -12,8 +12,8 @@ pub(crate) fn triangle_bounds(
     let (mut min, mut max) = (first, first);
 
     for p in points {
-        min = TyVector3F64::new(min.x.min(p.x), min.y.min(p.y), min.z.min(p.z));
-        max = TyVector3F64::new(max.x.max(p.x), max.y.max(p.y), max.z.max(p.z));
+        min = min.component_min_with(&p);
+        max = max.component_max_with(&p);
     }
 
     Some((min, max))

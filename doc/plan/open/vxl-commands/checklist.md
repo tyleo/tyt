@@ -75,9 +75,10 @@ off as they land.
       `palette remap` (space/dither), and `voxelize`'s `--max-palette-cells`, on
       the one material-follows-color rule (a count bounds cells; a merged cell
       takes its cluster representative's whole row). Landed: the
-      `PaletteReductionOptions` group and `reduce_palette` (median-cut in
-      oklab/lab/rgb via `remove_cell`+`gc`). Pending: `octree` / `kmeans` and
-      `--dither` (they error until built); `quantize` / `remap` will reuse it.
+      `PaletteReductionOptions` group and voxsmith's `reduce_palette` with all
+      three methods (`median-cut` / `octree` / `kmeans`) in oklab/lab/rgb via
+      `remove_cell`+`gc`. Pending: `--dither` (errors until built); `quantize` /
+      `remap` will reuse the engine.
 
 ## Commands
 
@@ -149,8 +150,8 @@ Material sampling (see [voxelize](reference/voxelize.md) and
       surface rejection. A `none` interior adopts its nearest surface material.
 - [ ] `--max-palette-cells <n> | none` (default `256`) via the shared reduction
       engine; expose `--method` / `--space` / `--dither` on `voxelize`. Landed for
-      median-cut with a stderr note; `octree` / `kmeans` / `--dither` error until
-      built.
+      all three methods (`median-cut` / `octree` / `kmeans`) with a stderr note;
+      only `--dither` errors until built.
 - [ ] `per-texel`: UV interpolation, image decode, area-average over the voxel
       footprint, epsilon-merge of near-identical tuples, and a `solid`-interior
       fallback to the nearest surface cell. `auto` becomes texture-aware here.

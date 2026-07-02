@@ -295,11 +295,19 @@ Clustering is on the `rgba` color converted to the chosen space (a cell without
 the representative's row. The `branded-id` dependency moved to voxsmith with the
 engine, so vxl no longer depends on it.
 
-Only median-cut is built, in all three spaces (oklab, lab, rgb). `octree`,
-`kmeans`, and any `--dither` but `none` error as not-yet-implemented, but only
-when the reduction actually fires: under the cap the controls are inert, matching
-the spec, so an unbuilt choice on a small palette is silent. The cap fires with a
-note to standard error, never failing.
+All three methods are built, in all three spaces (oklab, lab, rgb). `median-cut`
+recursively splits the widest color axis at its median; `octree` builds a
+fixed-depth octree over the color cube and folds the least-populated all-leaf
+nodes up until the leaf count fits, so it merges the rarest colors first; `kmeans`
+seeds centroids by farthest-point (deterministic, no random start) and runs
+population-weighted Lloyd iterations to a step cap. All cluster on the same
+`Point` set and collapse each cluster to its most-sampled representative, so the
+method only changes the grouping. Octree's eight-way folds are coarser than the
+two-way median split, so it can stop a little under the cap. Only `--dither` other
+than `none` remains unbuilt; it errors as not-yet-implemented, but only when the
+reduction actually fires: under the cap the controls are inert, so an unbuilt
+dither on a small palette is silent. The cap fires with a note to standard error,
+never failing.
 
 ## Typed colors and the generic mesh
 

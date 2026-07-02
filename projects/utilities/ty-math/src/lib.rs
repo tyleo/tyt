@@ -1,6 +1,7 @@
 mod ty_cielab_color;
 mod ty_cielab_color_f32;
 mod ty_cielab_color_f64;
+mod ty_float_ext;
 mod ty_linear_rgba_color;
 mod ty_linear_rgba_color_f32;
 mod ty_linear_rgba_color_f64;
@@ -26,6 +27,7 @@ mod ty_vector3_u32;
 pub use ty_cielab_color::*;
 pub use ty_cielab_color_f32::*;
 pub use ty_cielab_color_f64::*;
+pub use ty_float_ext::*;
 pub use ty_linear_rgba_color::*;
 pub use ty_linear_rgba_color_f32::*;
 pub use ty_linear_rgba_color_f64::*;

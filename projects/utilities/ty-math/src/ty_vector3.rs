@@ -1,3 +1,4 @@
+use crate::TyFloatExt;
 use std::ops::{Add, Mul, Sub};
 
 /// A 3D vector generic over its component type `T`.
@@ -21,6 +22,30 @@ impl<T> TyVector3<T> {
     /// Creates a new vector from `x`, `y`, and `z` components.
     pub fn new(x: T, y: T, z: T) -> Self {
         Self { x, y, z }
+    }
+}
+
+impl<T: Copy> TyVector3<T> {
+    /// A vector with every component set to `value`.
+    pub fn splat(value: T) -> Self {
+        Self {
+            x: value,
+            y: value,
+            z: value,
+        }
+    }
+
+    /// The components as an `[x, y, z]` array, for indexing by axis.
+    pub fn to_array(&self) -> [T; 3] {
+        [self.x, self.y, self.z]
+    }
+
+    /// The component on `axis`, where `0` is `x`, `1` is `y`, and `2` is `z`.
+    ///
+    /// # Panics
+    /// Panics when `axis` is not `0`, `1`, or `2`.
+    pub fn component(&self, axis: usize) -> T {
+        self.to_array()[axis]
     }
 }
 
@@ -90,9 +115,60 @@ impl<T: Copy + Mul<Output = T>> Mul<T> for TyVector3<T> {
 macro_rules! impl_ty_vector3_float {
     ($t:ty) => {
         impl TyVector3<$t> {
+            /// A vector with every component positive infinity, the starting
+            /// value for a component-wise minimum accumulation.
+            pub const INFINITY: Self = Self {
+                x: <$t>::INFINITY,
+                y: <$t>::INFINITY,
+                z: <$t>::INFINITY,
+            };
+
+            /// A vector with every component negative infinity, the starting
+            /// value for a component-wise maximum accumulation.
+            pub const NEG_INFINITY: Self = Self {
+                x: <$t>::NEG_INFINITY,
+                y: <$t>::NEG_INFINITY,
+                z: <$t>::NEG_INFINITY,
+            };
+
             /// Returns the Euclidean length of this vector.
             pub fn magnitude(&self) -> $t {
-                (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
+                self.magnitude_squared().sqrt()
+            }
+
+            /// Returns the squared Euclidean length, the length without the
+            /// square root: cheaper, and enough to compare or minimize lengths.
+            pub fn magnitude_squared(&self) -> $t {
+                self.x * self.x + self.y * self.y + self.z * self.z
+            }
+
+            /// Returns the component-wise minimum of `self` and `other`.
+            pub fn component_min_with(&self, other: &Self) -> Self {
+                Self {
+                    x: self.x.min(other.x),
+                    y: self.y.min(other.y),
+                    z: self.z.min(other.z),
+                }
+            }
+
+            /// Returns the component-wise maximum of `self` and `other`.
+            pub fn component_max_with(&self, other: &Self) -> Self {
+                Self {
+                    x: self.x.max(other.x),
+                    y: self.y.max(other.y),
+                    z: self.z.max(other.z),
+                }
+            }
+
+            /// Quantizes each component into `[0, buckets)` by its position
+            /// between the matching components of `low` and `high`, one bucket
+            /// index per axis.
+            pub fn quantize(&self, low: Self, high: Self, buckets: u32) -> TyVector3<u32> {
+                TyVector3::new(
+                    self.x.quantize(low.x, high.x, buckets),
+                    self.y.quantize(low.y, high.y, buckets),
+                    self.z.quantize(low.z, high.z, buckets),
+                )
             }
 
             /// Returns the component-wise absolute value of this vector.

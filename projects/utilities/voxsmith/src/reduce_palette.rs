@@ -1,7 +1,7 @@
 use crate::{ColorSpace, Dither, Error, ReductionMethod, Result};
 use branded_id::U32Id;
-use std::{cmp::Ordering, collections::HashMap};
-use ty_math::TySrgbaColor;
+use std::{cmp::Ordering, collections::HashMap, mem};
+use ty_math::{TySrgbaColor, TyVector3F64};
 use voxcore::{BVoxPalette, VoxMain, VoxValue};
 
 /// Reduces `palette` in `state` to at most `max_cells` cells on the
@@ -87,18 +87,8 @@ pub fn reduce_palette(
 
     let clusters = match method {
         ReductionMethod::MedianCut => median_cut(points, target),
-
-        ReductionMethod::Octree => {
-            return Err(unsupported(
-                "reduction method `octree` is not yet implemented; only median-cut is available",
-            ));
-        }
-
-        ReductionMethod::Kmeans => {
-            return Err(unsupported(
-                "reduction method `kmeans` is not yet implemented; only median-cut is available",
-            ));
-        }
+        ReductionMethod::Octree => octree(points, target),
+        ReductionMethod::Kmeans => kmeans(points, target),
     };
 
     // Collapse every non-representative cell onto its cluster's representative,
@@ -130,7 +120,7 @@ pub fn reduce_palette(
 struct Point {
     cell: u32,
 
-    coords: [f64; 3],
+    coords: TyVector3F64,
 
     population: u64,
 }
@@ -204,8 +194,9 @@ fn median_cut(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
         let mut cell_box = boxes.swap_remove(index);
 
         cell_box.sort_by(|a, b| {
-            a.coords[axis]
-                .partial_cmp(&b.coords[axis])
+            a.coords
+                .component(axis)
+                .partial_cmp(&b.coords.component(axis))
                 .unwrap_or(Ordering::Equal)
         });
 
@@ -220,23 +211,16 @@ fn median_cut(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
 
 /// The axis of widest spread in a box, and that spread.
 fn longest_axis(cell_box: &[Point]) -> (usize, f64) {
-    let mut low = [f64::INFINITY; 3];
-    let mut high = [f64::NEG_INFINITY; 3];
+    let (low, high) = point_bounds(cell_box);
 
-    for point in cell_box {
-        for axis in 0..3 {
-            low[axis] = low[axis].min(point.coords[axis]);
-            high[axis] = high[axis].max(point.coords[axis]);
-        }
-    }
+    let spread = (high - low).to_array();
 
     let mut axis = 0;
-    let mut extent = high[0] - low[0];
+    let mut extent = spread[0];
 
-    for candidate in 1..3 {
-        let spread = high[candidate] - low[candidate];
-        if spread > extent {
-            extent = spread;
+    for (candidate, &value) in spread.iter().enumerate() {
+        if value > extent {
+            extent = value;
             axis = candidate;
         }
     }
@@ -244,25 +228,267 @@ fn longest_axis(cell_box: &[Point]) -> (usize, f64) {
     (axis, extent)
 }
 
+/// Partitions `points` into at most `target` clusters by octree quantization:
+/// build a fixed-depth octree over the color cube, then repeatedly fold the
+/// least-populated node whose children are all leaves into one leaf, until at
+/// most `target` leaves remain. Folding the least-populated node first merges the
+/// rarest colors first, so common colors keep their own cell.
+fn octree(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
+    const DEPTH: u32 = 8;
+    const BUCKETS: u32 = 1 << DEPTH;
+
+    // The box the color cube is bucketed within; a color's per-axis bucket in
+    // `[0, BUCKETS)` spells its octree path. The box covers the point set rather
+    // than assuming a fixed range, since oklab and lab axes are signed.
+    let (low, high) = point_bounds(&points);
+
+    // A flat node arena; node 0 is the root. Only leaves hold point indices.
+    struct Node {
+        children: [i32; 8],
+        points: Vec<usize>,
+        count: usize,
+    }
+
+    let leaf = || Node {
+        children: [-1; 8],
+        points: Vec::new(),
+        count: 0,
+    };
+
+    let mut nodes = vec![leaf()];
+
+    for (index, point) in points.iter().enumerate() {
+        let q = point.coords.quantize(low, high, BUCKETS).to_array();
+
+        let mut current = 0usize;
+
+        nodes[current].count += 1;
+
+        for level in 0..DEPTH {
+            let shift = DEPTH - 1 - level;
+
+            let octant = ((((q[0] >> shift) & 1) << 2)
+                | (((q[1] >> shift) & 1) << 1)
+                | ((q[2] >> shift) & 1)) as usize;
+
+            current = match nodes[current].children[octant] {
+                child if child >= 0 => child as usize,
+                _ => {
+                    let new = nodes.len();
+
+                    nodes.push(leaf());
+
+                    nodes[current].children[octant] = new as i32;
+
+                    new
+                }
+            };
+
+            nodes[current].count += 1;
+        }
+
+        nodes[current].points.push(index);
+    }
+
+    let is_leaf = |nodes: &[Node], index: usize| nodes[index].children.iter().all(|&c| c < 0);
+
+    let mut leaves = (0..nodes.len()).filter(|&i| is_leaf(&nodes, i)).count();
+
+    // Fold up until the leaf count fits the target.
+    while leaves > target {
+        // The reducible node (all children are leaves) with the fewest points.
+        let mut best: Option<(usize, usize)> = None;
+
+        for index in 0..nodes.len() {
+            let children = nodes[index].children;
+
+            let has_child = children.iter().any(|&c| c >= 0);
+
+            let all_leaf = children
+                .iter()
+                .filter(|&&c| c >= 0)
+                .all(|&c| is_leaf(&nodes, c as usize));
+
+            if has_child && all_leaf && best.is_none_or(|(_, count)| nodes[index].count < count) {
+                best = Some((index, nodes[index].count));
+            }
+        }
+
+        let Some((node, _)) = best else { break };
+
+        let children = nodes[node].children;
+
+        let mut folded = 0;
+
+        for child in children.into_iter().filter(|&c| c >= 0) {
+            let taken = mem::take(&mut nodes[child as usize].points);
+
+            nodes[node].points.extend(taken);
+
+            folded += 1;
+        }
+
+        nodes[node].children = [-1; 8];
+
+        leaves = leaves - folded + 1;
+    }
+
+    let leaf_indices: Vec<usize> = (0..nodes.len())
+        .filter(|&i| is_leaf(&nodes, i) && !nodes[i].points.is_empty())
+        .collect();
+
+    leaf_indices
+        .into_iter()
+        .map(|i| mem::take(&mut nodes[i].points))
+        .map(|indices| indices.into_iter().map(|index| points[index]).collect())
+        .collect()
+}
+
+/// Partitions `points` into at most `target` clusters by k-means: seed centroids
+/// by farthest-point (so the start is deterministic, no random init), then
+/// alternate nearest-centroid assignment and population-weighted centroid updates
+/// until the assignment settles or a step cap is hit. Empty clusters are dropped,
+/// so the result may hold fewer than `target`.
+fn kmeans(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
+    const MAX_STEPS: usize = 32;
+
+    let k = target.min(points.len()).max(1);
+
+    // Seed 0 is the most-sampled point (ties to the lowest cell); each next seed
+    // is the point farthest from the seeds so far.
+    let first = points
+        .iter()
+        .max_by(|a, b| {
+            a.population
+                .cmp(&b.population)
+                .then_with(|| b.cell.cmp(&a.cell))
+        })
+        .expect("kmeans is given at least one point");
+
+    let mut centroids = vec![first.coords];
+
+    while centroids.len() < k {
+        let mut best: Option<(usize, f64)> = None;
+
+        for (index, point) in points.iter().enumerate() {
+            let nearest = centroids
+                .iter()
+                .map(|centroid| (point.coords - *centroid).magnitude_squared())
+                .fold(f64::INFINITY, f64::min);
+
+            if best.is_none_or(|(_, far)| nearest > far) {
+                best = Some((index, nearest));
+            }
+        }
+
+        let (index, distance) = best.expect("points is non-empty");
+
+        if distance <= 0.0 {
+            break; // every remaining point coincides with a seed
+        }
+
+        centroids.push(points[index].coords);
+    }
+
+    // Lloyd iterations: assign, then move each centroid to its cluster's mean.
+    let mut assignment = vec![usize::MAX; points.len()];
+
+    for _ in 0..MAX_STEPS {
+        let mut changed = false;
+
+        for (index, point) in points.iter().enumerate() {
+            let nearest = nearest_centroid(point.coords, &centroids);
+
+            if nearest != assignment[index] {
+                assignment[index] = nearest;
+                changed = true;
+            }
+        }
+
+        if !changed {
+            break;
+        }
+
+        let mut sum = vec![TyVector3F64::default(); centroids.len()];
+
+        let mut weight = vec![0.0f64; centroids.len()];
+
+        for (index, point) in points.iter().enumerate() {
+            let cluster = assignment[index];
+
+            let w = point.population.max(1) as f64;
+
+            sum[cluster] = sum[cluster] + point.coords * w;
+
+            weight[cluster] += w;
+        }
+
+        for (cluster, centroid) in centroids.iter_mut().enumerate() {
+            if weight[cluster] > 0.0 {
+                *centroid = sum[cluster] * (1.0 / weight[cluster]);
+            }
+        }
+    }
+
+    let mut clusters: Vec<Vec<Point>> = vec![Vec::new(); centroids.len()];
+
+    for (index, point) in points.into_iter().enumerate() {
+        clusters[assignment[index]].push(point);
+    }
+
+    clusters.retain(|cluster| !cluster.is_empty());
+
+    clusters
+}
+
+/// The `(min, max)` corners of a point set's coordinates, per axis.
+fn point_bounds(points: &[Point]) -> (TyVector3F64, TyVector3F64) {
+    let mut low = TyVector3F64::INFINITY;
+    let mut high = TyVector3F64::NEG_INFINITY;
+
+    for point in points {
+        low = low.component_min_with(&point.coords);
+        high = high.component_max_with(&point.coords);
+    }
+
+    (low, high)
+}
+
+/// The index of the nearest centroid to `coords`, ties to the lowest index.
+fn nearest_centroid(coords: TyVector3F64, centroids: &[TyVector3F64]) -> usize {
+    let mut best = 0;
+    let mut best_distance = f64::INFINITY;
+
+    for (index, centroid) in centroids.iter().enumerate() {
+        let distance = (coords - *centroid).magnitude_squared();
+        if distance < best_distance {
+            best_distance = distance;
+            best = index;
+        }
+    }
+
+    best
+}
+
 /// A cell's color as a point in the chosen space; alpha is not a clustering
 /// dimension (it rides along with the representative's row). The `rgb` space is
 /// the naive distance on the stored sRGB components; `oklab` and `lab` decode to
 /// linear light first.
-fn to_space(rgba: [u8; 4], space: ColorSpace) -> [f64; 3] {
+fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
     let [r, g, b, a] = rgba;
     let color = TySrgbaColor::new(r, g, b, a);
 
     match space {
-        ColorSpace::Rgb => [r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0],
+        ColorSpace::Rgb => TyVector3F64::new(r as f64 / 255.0, g as f64 / 255.0, b as f64 / 255.0),
 
         ColorSpace::Oklab => {
             let oklab = color.to_linear_rgba().to_oklab();
-            [oklab.l, oklab.a, oklab.b]
+            TyVector3F64::new(oklab.l, oklab.a, oklab.b)
         }
 
         ColorSpace::Lab => {
             let lab = color.to_linear_rgba().to_cielab();
-            [lab.l, lab.a, lab.b]
+            TyVector3F64::new(lab.l, lab.a, lab.b)
         }
     }
 }
@@ -431,54 +657,59 @@ mod tests {
     }
 
     #[test]
-    fn octree_kmeans_and_dither_error_only_when_the_reduction_fires() {
-        // Under the cap: the controls are inert, so no error.
+    fn octree_and_kmeans_reduce_to_the_cap() {
+        // Both methods cluster four colors down to at most the cap of two.
+        for method in [ReductionMethod::Octree, ReductionMethod::Kmeans] {
+            let (mut state, palette, _) =
+                state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF", "#FFFF00FF"], &[]);
+            let outcome = reduce_palette(
+                &mut state,
+                palette,
+                2,
+                method,
+                ColorSpace::Oklab,
+                Dither::None,
+            )
+            .unwrap();
+            let (before, after) = outcome.expect("the reduction fired");
+            assert_eq!(before, 4, "method {method:?}");
+            assert!(
+                (1..=2).contains(&after),
+                "method {method:?} left {after} cells"
+            );
+            assert_eq!(cell_count(&state, palette), after, "method {method:?}");
+            assert_eq!(state.validate(), Ok(()), "method {method:?}");
+        }
+    }
+
+    #[test]
+    fn dither_errors_only_when_the_reduction_fires() {
+        // Under the cap: dither is inert, so no error even though it is unbuilt.
         let (mut state, palette, _) = state_with_colors(&["#FF0000FF", "#00FF00FF"], &[]);
         assert!(
             reduce_palette(
                 &mut state,
                 palette,
                 5,
-                ReductionMethod::Octree,
+                ReductionMethod::MedianCut,
                 ColorSpace::Oklab,
-                Dither::None
+                Dither::FloydSteinberg
             )
             .unwrap()
             .is_none()
         );
 
-        // Over the cap: octree, kmeans, and dither are not yet built.
-        let over = || state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]).0;
+        // Over the cap, dither is not yet built, so it errors.
+        let (mut state, palette, _) =
+            state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
         assert!(
             reduce_palette(
-                &mut over(),
-                palette,
-                2,
-                ReductionMethod::Octree,
-                ColorSpace::Oklab,
-                Dither::None
-            )
-            .is_err()
-        );
-        assert!(
-            reduce_palette(
-                &mut over(),
-                palette,
-                2,
-                ReductionMethod::Kmeans,
-                ColorSpace::Oklab,
-                Dither::None
-            )
-            .is_err()
-        );
-        assert!(
-            reduce_palette(
-                &mut over(),
+                &mut state,
                 palette,
                 2,
                 ReductionMethod::MedianCut,
                 ColorSpace::Oklab,
-                Dither::FloydSteinberg
+                Dither::Ordered
             )
             .is_err()
         );
