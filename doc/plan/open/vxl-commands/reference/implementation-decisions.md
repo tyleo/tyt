@@ -48,6 +48,11 @@ that normalized string to `match_glob` rather than matching itself, because the
 globset engine lives behind `impl`. Expanding a matched node's subtree and
 unioning the selectors is resolution-time work that lands with the commands.
 
+Superseded: `match_glob` and `PathGlob` were removed when the shared gitignore
+engine landed; see
+[Gitignore-style pattern matching](#gitignore-style-pattern-matching). `--select`
+will match with `ty-gitignore` when the object selectors are built.
+
 ## Material packing model
 
 `ChannelSource` holds an attribute key as a `String` rather than a fixed enum,
@@ -425,40 +430,42 @@ scene graph reads as a tree, so a JSON layout was dropped for this command, whic
 also keeps it off the shared `ReportLayout` and its `serde_json` path. A
 machine-readable graph can return later if a caller needs one.
 
-The `pattern` glob resolves against per-placement node paths. `enumerate_node_paths`
-walks the roots then the unplaced nodes depth first, building each node's path as
-the chain of node names from its section root, and records one entry per
-placement, so an instanced node matched on one route shows only on that route. The
+The patterns resolve against per-placement paths, revised from the single glob
+when the gitignore engine landed. `enumerate_placements` walks the roots then the
+unplaced nodes depth first, building each node's path as the chain of names from
+its section root and each object's path as its node's path plus the object name,
+and records one entry per placement, so an instanced node matched on one route
+shows only on that route; the orphan objects follow with their bare names. The
 same branch set that guards the render guards the walk, so a cyclic document still
-terminates. The paths go to the shared `match_glob` engine; the matched paths and
-their proper prefixes become the filter's matched and ancestor sets. A pattern
-that matches nothing is an error, exiting non-zero, matching the tyt hierarchy
-command. `PathGlob` normalizes the pattern with a leading `**/`, the same type and
-rule the `--select` glob uses, so a bare pattern matches at any depth.
+terminates. Each placement, tagged node or object, goes to
+`ty_gitignore::is_path_match` with its directory-ness; the selected paths and their
+proper prefixes become the filter's `selected` and `visible` sets. A pattern set
+that selects nothing is an error, exiting non-zero, matching the tyt hierarchy
+command.
 
-Rendering threads an in-match flag and the current path. Above a match the walk
-keeps only the child nodes whose path leads to a match and drops child objects,
-which no node path names; in or below a match the whole subtree shows. Orphan
-objects, which have no node path, drop entirely under a filter, though objects
-still show under a matched node. Both the `root` and `unplaced` sections filter
-this way, and an emptied section, header included, is omitted.
+Rendering is driven by set membership rather than an in-match flag, so a git
+exclude inside a selected subtree hides only that branch. A node shows when its
+path is in `visible`, selected or leading to a selection; a child object shows when
+its path is in `selected`. Both the `root` and `unplaced` sections filter this way,
+and an emptied section, header included, is omitted. Because selecting a node
+selects its whole subtree, a matched node's objects are selected too and render
+beneath it.
 
-`--collapse-ancestors` prints the matches as a flat list rather than in their
-sections, each behind an `ancestors` marker, dropped when the match is a section
-root with no chain to hide. `--collapse-descendants` replaces a matched node's
-children with a `descendants` marker. The markers print bare, like the `root` and
-`unplaced` section headers, so they read as placeholders rather than node names;
-an earlier spelling bracketed them, before brackets were reserved for collections.
-Because the two collapse flags act only with a pattern, they are
-bundled into the pattern option, a `PatternView` of the glob and the two flags, so
-a collapse flag cannot be set without a pattern; the resolved filter carries them,
-so the walk reads them off it rather than guarding each with a has-filter check.
-The command enforces the same shape at the CLI with a clap `requires`, so passing a
-collapse flag without a pattern is a clear error rather than a silent no-op. The
-recursion moved onto a `Walk` struct so the growing option set does not bloat a
-parameter list: the scene, the instance-collapse flag, the subtree views, and the
-filter are fields, while the per-branch prefix, path, in-match flag, and cycle set
-stay method arguments.
+`--collapse-ancestors` and `--collapse-descendants` act on match roots, the
+selected placements whose parent is not itself selected, the entry point of each
+selected subtree. `--collapse-ancestors` prints the match roots as a flat list,
+each behind an `ancestors` marker, dropped when the root is a top-level node with
+no chain to hide; a root that is an object prints as a leaf, a root that is a node
+prints its subtree. `--collapse-descendants` replaces a match root's children with
+a `descendants` marker. The markers print bare, like the section headers, so they
+read as placeholders rather than names; an earlier spelling bracketed them, before
+brackets were reserved for collections. Because the two collapse flags act only
+with a pattern, they are bundled with the globs in a `PatternView`, so a collapse
+flag cannot be set without a pattern; the resolved filter carries them, and the
+command enforces the same shape at the CLI with a clap `requires`. The recursion
+runs on a `Walk` struct so the growing option set does not bloat a parameter list:
+the scene, the instance-collapse flag, the subtree views, and the filter are
+fields, while the per-branch prefix, path, and cycle set stay method arguments.
 
 `--show-transforms` prepends a `transform` subtree under each node, since a
 transform lives on a node; `--show-bounds` and `--show-extents` append `bounds`
@@ -502,3 +509,44 @@ through the `NodeId` and `ObjectId` aliases, and the tests use it to build
 hierarchy nodes from returned ids and to fabricate a cyclic state for the cycle
 guard. It was dev-only while the render path stayed on `u32`; the `Scene` refactor
 that dropped the `u32` projection moved it into the shipped crate.
+
+## Gitignore-style pattern matching
+
+`hierarchy show` takes several patterns matched with `.gitignore` rules,
+replacing the single `match_glob`/`PathGlob` glob. The matcher is a new
+dependency-light crate, `ty-gitignore`, a Rust port of the C#
+`com.tyleo.gitignore` package the game uses to enable loggers by hierarchical
+name. It keeps that package's shape one-to-one: an `UnsignedGitIgnoreRegex` (a
+compiled pattern plus its directory-or-file kind), a signed `GitIgnoreRegex` (the
+unsigned pattern plus a sign a leading `!` flips), the `GitIgnoreRegexKind` enum,
+and the `is_directory_match`/`is_file_match`/`is_path_match` aggregators, each
+with an unsigned any-match variant. Pattern compilation delegates to `globset`
+rather than the C# hand-built regex, so `*`, `?`, `[...]`, and `**` follow real
+gitignore and the C# restrictive character class and literal `?` are dropped as
+bugs. A pattern with no `/` and no `**` gets a `**/` prefix to float at any depth;
+a leading or interior `/` anchors it. The array-and-span overload pairs collapse
+to one slice function each.
+
+It lives in its own crate rather than in vxl because it is reusable across tyt
+tools and must stay free of `tyt-common` and `tyt-injection`, the same
+independence rule vxl keeps; it sits in `projects/utilities` beside `ty-math` and
+depends only on `globset`. `match_glob`, `PathGlob`, and the
+`Dependencies::match_glob` method were removed with the switch, and vxl's direct
+`globset` dependency gave way to `ty-gitignore`.
+
+Two deliberate refinements over the C# reference. `is_path_match` gained an
+`is_dir` argument: the C# had none and folded the whole leaf path into the
+directory walk, so a directory-only pattern like `*/` could select a leaf object
+by its own name. Threading directory-ness matches the leaf as a directory or a
+file by kind, so a trailing-slash pattern selects nodes but never an object by
+name, while an object still rides in as part of a selected node's subtree. And the
+constructors are fallible, since `globset` rejects a malformed glob, which
+surfaces as a clear invalid-pattern error at the CLI.
+
+The parent-directory rule is git-faithful, the choice the design notes left open:
+`is_path_match` walks the ancestor directories shallowest first and the first
+excluded ancestor prunes the whole subtree, so an excluded node cannot have a
+descendant re-selected. The tree layer selects on the union of node and object
+placements, then shows a node when it is selected or leads to a selection and an
+object when it is selected; the collapse features key on the match roots, the
+selected placements whose parent is unselected.

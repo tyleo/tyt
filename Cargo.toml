@@ -16,6 +16,7 @@ members = [
     "projects/tyt/tyt-preferences",
     "projects/tyt/tyt-vmax",
 
+    "projects/utilities/ty-gitignore",
     "projects/utilities/ty-math",
     "projects/utilities/ty-math-serde",
     "projects/utilities/voxcore",
@@ -53,6 +54,7 @@ tyt-oai = { path = "projects/tyt/tyt-oai" }
 tyt-preferences = { path = "projects/tyt/tyt-preferences" }
 tyt-vmax = { path = "projects/tyt/tyt-vmax" }
 
+ty-gitignore = { path = "projects/utilities/ty-gitignore" }
 ty-math = { path = "projects/utilities/ty-math" }
 ty-math-serde = { path = "projects/utilities/ty-math-serde" }
 voxcore = { path = "projects/utilities/voxcore" }

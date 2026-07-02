@@ -29,16 +29,23 @@ These hold across the commands and match the existing `to` commands.
 
 ## Glob patterns
 
-Globs follow git pathspec rules, not grep substring matching. The
-[`hierarchy show`](hierarchy/show.md) `pattern` and the `--select` path glob
-share one rule set:
+Patterns follow `.gitignore` rules, not grep substring matching. The
+[`hierarchy show`](hierarchy/show.md) patterns and the `--select` path glob share
+one rule set, matched by the `ty-gitignore` engine:
 
-1. A pattern is a full match against the whole candidate, not a substring. `door`
+1. A pattern is a full match against a whole path segment, not a substring. `door`
    matches the name `door`, not `backdoor`; write `*door*` for a substring match.
 2. `*` and `?` match within a segment and never cross `/`; `**` crosses `/`.
    `[...]` is a character class.
-3. `**/` is auto-prepended when the pattern does not already start with it, so a
-   bare pattern matches at any depth.
+3. A pattern with no `/` floats and matches at any depth; a leading or interior
+   `/` anchors it to the root, and `**` also reaches any depth.
+4. A leading `!` negates a pattern, so a later pattern subtracts from an earlier
+   one. A trailing `/` matches nodes (directories) only, never a leaf object by
+   its own name.
+5. Commands take several patterns, and the last one to match a path decides
+   whether it is selected. Selecting a node selects its whole subtree; an
+   excluded node prunes its subtree, so a subtracted branch cannot be re-added
+   piecemeal.
 
 ## Object selectors
 

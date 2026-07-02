@@ -1,0 +1,10 @@
+[package]
+name = "ty-gitignore"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Gitignore-style glob pattern matching over logical paths."
+
+[dependencies]
+globset = "0.4"

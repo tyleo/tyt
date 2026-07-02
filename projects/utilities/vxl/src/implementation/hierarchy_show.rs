@@ -1,4 +1,4 @@
-use crate::{BoundsView, Format, PathGlob, PatternView, Result, TransformView, implementation};
+use crate::{BoundsView, Format, PatternView, Result, TransformView, implementation};
 use branded_id::{IdVec, U32Id};
 use std::{
     collections::HashSet,
@@ -6,6 +6,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
+use ty_gitignore::GitIgnoreRegex;
 use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain};
 
@@ -202,6 +203,14 @@ impl<'a> Scene<'a> {
             .unwrap_or("")
     }
 
+    /// Display name of object `id`, or `""` when it does not resolve.
+    fn object_name(&self, id: ObjectId) -> &str {
+        self.state
+            .object(id)
+            .map(|object| object.name())
+            .unwrap_or("")
+    }
+
     /// Node ids that are neither a root nor a child, in listing order.
     fn unplaced_nodes(&self) -> Vec<NodeId> {
         self.state
@@ -220,13 +229,14 @@ impl<'a> Scene<'a> {
             .collect()
     }
 
-    /// Every node placement: the roots' subtrees then the unplaced nodes'
-    /// subtrees, each carrying its path (the chain of node names from its section
-    /// root) and its parent's world transform. A node reached through several
-    /// parents yields one entry per placement. A node on its own ancestor chain
-    /// is recorded once and not re-entered, so a cyclic document still
-    /// terminates.
-    fn enumerate_node_paths(&self) -> Vec<NodePath> {
+    /// Every placement in the scene: each root subtree then each unplaced-node
+    /// subtree, the node placements and the object placements beneath them, then
+    /// the orphan objects no node places. Each carries its path, the chain of
+    /// names from its section root, and the world transform of whatever places
+    /// it. A node reached through several parents yields one placement per path.
+    /// A node on its own ancestor chain is recorded once and not re-entered, so a
+    /// cyclic document still terminates.
+    fn enumerate_placements(&self) -> Vec<Placement> {
         let mut out = Vec::new();
         let mut branch = HashSet::new();
         let identity = TyTransformF64::default();
@@ -241,28 +251,37 @@ impl<'a> Scene<'a> {
             self.enumerate_from(id, path, identity, &mut branch, &mut out);
         }
 
+        // An orphan object has just its name as a path and no placing node.
+        for id in self.orphan_objects() {
+            out.push(Placement {
+                path: self.object_name(id).to_string(),
+                entity: Entity::Object(id),
+                parent_world: identity,
+            });
+        }
+
         out
     }
 
-    /// Records this placement, then descends into its child nodes unless `id` is
-    /// already on the current branch (a cycle). `parent_world` is the world
-    /// transform of `id`'s parent; `branch` is the set of node ids on the path
-    /// from the section root to here.
+    /// Records this node placement and its child objects, then descends into its
+    /// child nodes unless `id` is already on the current branch, a cycle.
+    /// `parent_world` is the world transform of `id`'s parent; `branch` is the
+    /// set of node ids on the path from the section root to here.
     fn enumerate_from(
         &self,
         id: NodeId,
         path: String,
         parent_world: TyTransformF64,
         branch: &mut HashSet<NodeId>,
-        out: &mut Vec<NodePath>,
+        out: &mut Vec<Placement>,
     ) {
         let Some(node) = self.state.hierarchy_node(id) else {
             return;
         };
 
-        out.push(NodePath {
+        out.push(Placement {
             path: path.clone(),
-            id,
+            entity: Entity::Node(id),
             parent_world,
         });
 
@@ -271,6 +290,15 @@ impl<'a> Scene<'a> {
         }
 
         let world = parent_world.compose(&node.transform);
+
+        for &object in &node.child_objects {
+            out.push(Placement {
+                path: child_path(&path, self.object_name(object)),
+                entity: Entity::Object(object),
+                parent_world: world,
+            });
+        }
+
         for &child in &node.child_nodes {
             let child_path = child_path(&path, self.node_name(child));
             self.enumerate_from(child, child_path, world, branch, out);
@@ -279,75 +307,97 @@ impl<'a> Scene<'a> {
         branch.remove(&id);
     }
 
-    /// Builds the path filter for `pattern`: the node paths its glob matches and
-    /// every proper prefix of a match, plus the pattern's collapse flags. The
-    /// glob is normalized with a leading `**/` through [`PathGlob`]. Errors on a
-    /// malformed glob or when nothing matches.
+    /// Builds the selection filter for `pattern`: every placement its patterns
+    /// select, the node paths that lead to a selection, and the match roots, plus
+    /// the collapse flags. Errors on a malformed pattern or when nothing matches.
     fn build_filter(&self, pattern: &PatternView) -> Result<Filter> {
-        let glob: PathGlob = pattern
-            .glob
-            .parse()
-            .map_err(|message| IOError::new(ErrorKind::InvalidInput, message))?;
+        let patterns = GitIgnoreRegex::from_spans_ignore_inert(&pattern.globs)
+            .map_err(|error| IOError::new(ErrorKind::InvalidInput, error.to_string()))?;
 
-        let paths = self.enumerate_node_paths();
+        let placements = self.enumerate_placements();
 
-        let flags = {
-            let candidates: Vec<&str> = paths.iter().map(|node| node.path.as_str()).collect();
-            implementation::match_glob(glob.pattern(), &candidates)?
-        };
-
-        let matches: Vec<NodePath> = paths
-            .into_iter()
-            .zip(&flags)
-            .filter_map(|(node, &matched)| matched.then_some(node))
+        let selected: HashSet<String> = placements
+            .iter()
+            .filter(|placement| {
+                let is_dir = matches!(placement.entity, Entity::Node(_));
+                ty_gitignore::is_path_match(&patterns, &placement.path, is_dir) == Some(true)
+            })
+            .map(|placement| placement.path.clone())
             .collect();
 
-        if matches.is_empty() {
+        if selected.is_empty() {
             return Err(IOError::new(
                 ErrorKind::NotFound,
-                format!("no node matched pattern '{}'", pattern.glob),
+                format!(
+                    "no node or object matched pattern '{}'",
+                    pattern.globs.join("' '")
+                ),
             )
             .into());
         }
 
-        let matched: HashSet<String> = matches.iter().map(|node| node.path.clone()).collect();
-
-        let mut ancestors = HashSet::new();
-
-        for node in &matches {
-            let parts: Vec<&str> = node.path.split('/').collect();
-
-            for end in 1..parts.len() {
-                ancestors.insert(parts[..end].join("/"));
+        // Every selected path and each of its proper prefixes, so the chain from
+        // a section root down to a selection stays on screen.
+        let mut visible = selected.clone();
+        for path in &selected {
+            for (index, _) in path.match_indices('/') {
+                visible.insert(path[..index].to_string());
             }
         }
 
+        // The selected placements whose parent is not itself selected: the entry
+        // point of each selected subtree.
+        let roots: Vec<Placement> = placements
+            .into_iter()
+            .filter(|placement| selected.contains(&placement.path))
+            .filter(|placement| match parent_path(&placement.path) {
+                Some(parent) => !selected.contains(parent),
+                None => true,
+            })
+            .collect();
+
+        let root_paths: HashSet<String> = roots
+            .iter()
+            .map(|placement| placement.path.clone())
+            .collect();
+
         Ok(Filter {
-            matches,
-            matched,
-            ancestors,
+            selected,
+            visible,
+            roots,
+            root_paths,
             collapse_ancestors: pattern.collapse_ancestors,
             collapse_descendants: pattern.collapse_descendants,
         })
     }
 }
 
-/// One node placement from [`Scene::enumerate_node_paths`]: its path, its node
-/// id, and its parent's world transform.
+/// One placement from [`Scene::enumerate_placements`]: a node or an object, its
+/// path, and the world transform of whatever places it.
 #[derive(Clone)]
-struct NodePath {
-    /// The chain of node names from the section root to this node.
+struct Placement {
+    /// The chain of names from the section root to this placement.
     path: String,
 
-    /// The node id.
-    id: NodeId,
+    /// The node or object placed here.
+    entity: Entity,
 
-    /// The world transform of this node's parent.
+    /// The world transform of the placing parent.
     parent_world: TyTransformF64,
 }
 
-/// Joins `parent` and `name` into a node path, dropping an empty parent so a
-/// path never leads with a separator.
+/// A placement's entity: a hierarchy node or a leaf object.
+#[derive(Clone, Copy)]
+enum Entity {
+    /// A hierarchy node.
+    Node(NodeId),
+
+    /// A leaf object.
+    Object(ObjectId),
+}
+
+/// Joins `parent` and `name` into a path, dropping an empty parent so a path
+/// never leads with a separator.
 fn child_path(parent: &str, name: &str) -> String {
     if parent.is_empty() {
         name.to_string()
@@ -356,19 +406,29 @@ fn child_path(parent: &str, name: &str) -> String {
     }
 }
 
-/// A `pattern`'s resolved matches and its collapse flags. `matches` is every
-/// matched placement, in enumeration order; `matched` and `ancestors` are the
-/// matched paths and their proper prefixes, for `O(1)` lookups while walking. The
-/// collapse flags live here because they act only with a pattern.
+/// The parent path of `path`, or `None` when `path` is at the top level.
+fn parent_path(path: &str) -> Option<&str> {
+    path.rfind('/').map(|index| &path[..index])
+}
+
+/// A `pattern`'s resolved selection and its collapse flags. `selected` is every
+/// path the patterns select, node and object alike; `visible` adds each selected
+/// path's proper prefixes, the node paths that lead to a selection. `roots` and
+/// `root_paths` are the selected placements whose parent is unselected, the entry
+/// point of each selected subtree, for the collapse features. The collapse flags
+/// live here because they act only with a pattern.
 struct Filter {
-    /// Matched placements, in enumeration order.
-    matches: Vec<NodePath>,
+    /// Every selected path, node and object alike.
+    selected: HashSet<String>,
 
-    /// The matched node paths.
-    matched: HashSet<String>,
+    /// Selected paths and every proper prefix, the node paths to show.
+    visible: HashSet<String>,
 
-    /// Every proper prefix of a matched path.
-    ancestors: HashSet<String>,
+    /// Match roots, in enumeration order, for the collapse features.
+    roots: Vec<Placement>,
+
+    /// Match-root paths, for an `O(1)` lookup while walking.
+    root_paths: HashSet<String>,
 
     /// Hide each match's ancestor chain behind an `ancestors` marker.
     collapse_ancestors: bool,
@@ -378,9 +438,19 @@ struct Filter {
 }
 
 impl Filter {
-    /// True if `path` is a match or leads to one, so its subtree stays visible.
-    fn on_path(&self, path: &str) -> bool {
-        self.matched.contains(path) || self.ancestors.contains(path)
+    /// True if node `path` is selected or leads to a selection, so it shows.
+    fn shows_node(&self, path: &str) -> bool {
+        self.visible.contains(path)
+    }
+
+    /// True if object `path` is selected, so it shows.
+    fn shows_object(&self, path: &str) -> bool {
+        self.selected.contains(path)
+    }
+
+    /// True if `path` is a match root.
+    fn is_root(&self, path: &str) -> bool {
+        self.root_paths.contains(path)
     }
 }
 
@@ -484,23 +554,23 @@ impl Walk<'_> {
         self.render_group("unplaced", &unplaced, &orphans, true);
     }
 
-    /// Prints matches as a flat list, each match's subtree behind an
-    /// `ancestors` marker, dropped when the match is a section root. Runs only
-    /// with a filter, so the ancestor chain being hidden is well defined. World
-    /// space still uses the match's stored parent world transform, so the hidden
+    /// Prints the match roots as a flat list, each behind an `ancestors` marker,
+    /// dropped when the root is a top-level node. Runs only with a filter. World
+    /// space still uses each root's stored parent world transform, so the hidden
     /// ancestors' placement is kept.
     fn run_collapsed_ancestors(&mut self) {
-        let matches = match &self.filter {
-            Some(filter) => filter.matches.clone(),
+        let roots = match &self.filter {
+            Some(filter) => filter.roots.clone(),
             None => return,
         };
 
-        let total = matches.len();
-        for (index, node) in matches.iter().enumerate() {
+        let total = roots.len();
+
+        for (index, placement) in roots.iter().enumerate() {
             let is_last = index + 1 == total;
             let mut branch = HashSet::new();
 
-            if node.path.contains('/') {
+            if placement.path.contains('/') {
                 let connector = if is_last {
                     CONNECTOR_LAST
                 } else {
@@ -515,33 +585,45 @@ impl Walk<'_> {
                     EXTENSION_MID
                 };
 
-                self.render_node(
-                    node.id,
-                    extension,
-                    true,
-                    &node.path,
-                    true,
-                    node.parent_world,
-                    &mut branch,
-                );
+                self.render_placement(placement, extension, true, &mut branch);
             } else {
-                self.render_node(
-                    node.id,
-                    "",
-                    is_last,
-                    &node.path,
-                    true,
-                    node.parent_world,
-                    &mut branch,
-                );
+                self.render_placement(placement, "", is_last, &mut branch);
             }
         }
     }
 
+    /// Renders one match root: a node with its subtree, or a leaf object.
+    fn render_placement(
+        &mut self,
+        placement: &Placement,
+        prefix: &str,
+        is_last: bool,
+        branch: &mut HashSet<NodeId>,
+    ) {
+        match placement.entity {
+            Entity::Node(id) => self.render_node(
+                id,
+                prefix,
+                is_last,
+                &placement.path,
+                placement.parent_world,
+                branch,
+            ),
+
+            Entity::Object(id) => self.render_object(id, prefix, is_last, placement.parent_world),
+        }
+    }
+
+    /// Whether the filter marks `path` as a match root.
+    fn is_root(&self, path: &str) -> bool {
+        self.filter.as_ref().is_some_and(|f| f.is_root(path))
+    }
+
     /// Renders one section under `header`: its top-level node ids then object
     /// ids, at prefix depth zero. With a filter, a top-level node shows only when
-    /// it is on the way to a match, and orphan objects, which no node path names,
-    /// are dropped. Nothing prints, header included, when the section is empty.
+    /// it is on the way to a selection, and a section-level object shows only when
+    /// its name is selected. Nothing prints, header included, when the section is
+    /// empty.
     fn render_group(
         &mut self,
         header: &str,
@@ -555,11 +637,11 @@ impl Walk<'_> {
             .filter(|&id| self.top_visible(id))
             .collect();
 
-        let objects: Vec<ObjectId> = if self.filter.is_some() {
-            Vec::new()
-        } else {
-            object_ids.to_vec()
-        };
+        let objects: Vec<ObjectId> = object_ids
+            .iter()
+            .copied()
+            .filter(|&id| self.top_object_visible(id))
+            .collect();
 
         let total = nodes.len() + objects.len();
 
@@ -580,15 +662,7 @@ impl Walk<'_> {
 
         for (index, &id) in nodes.iter().enumerate() {
             let path = self.scene.node_name(id).to_string();
-            self.render_node(
-                id,
-                "",
-                index + 1 == total,
-                &path,
-                false,
-                identity,
-                &mut branch,
-            );
+            self.render_node(id, "", index + 1 == total, &path, identity, &mut branch);
         }
 
         for (index, &id) in objects.iter().enumerate() {
@@ -598,11 +672,20 @@ impl Walk<'_> {
     }
 
     /// Whether a section-root node shows: always without a filter, else only when
-    /// its own path is on the way to a match.
+    /// its own path is on the way to a selection.
     fn top_visible(&self, id: NodeId) -> bool {
         match &self.filter {
             None => true,
-            Some(filter) => filter.on_path(self.scene.node_name(id)),
+            Some(filter) => filter.shows_node(self.scene.node_name(id)),
+        }
+    }
+
+    /// Whether a section-level object shows: always without a filter, else only
+    /// when its name, its whole path in the section, is selected.
+    fn top_object_visible(&self, id: ObjectId) -> bool {
+        match &self.filter {
+            None => true,
+            Some(filter) => filter.shows_object(self.scene.object_name(id)),
         }
     }
 
@@ -614,18 +697,16 @@ impl Walk<'_> {
     /// so a document that skipped validation cannot recurse forever.
     /// `parent_world` is this node's parent's world transform,
     /// composed with the node's local transform for `--show-transforms world` and
-    /// carried down to the children. `in_match` is set once this or an ancestor
-    /// matched: below a match the whole subtree shows, but `collapse_descendants`
-    /// replaces it with a `descendants` marker; above a match a filter keeps
-    /// only the child nodes leading to one.
-    #[allow(clippy::too_many_arguments)]
+    /// carried down to the children. With a filter, a child node shows when it
+    /// leads to a selection and a child object shows when it is selected;
+    /// `collapse_descendants` replaces a match root's subtree with a
+    /// `descendants` marker.
     fn render_node(
         &mut self,
         id: NodeId,
         prefix: &str,
         is_last: bool,
         path: &str,
-        in_match: bool,
         parent_world: TyTransformF64,
         branch: &mut HashSet<NodeId>,
     ) {
@@ -655,13 +736,6 @@ impl Walk<'_> {
         // nonzero instance index already marks it as a repeat.
         let collapsed_stub =
             self.collapse_instances && !is_cycle && instance.is_some_and(|index| index > 0);
-
-        let matched = self
-            .filter
-            .as_ref()
-            .is_some_and(|f| f.matched.contains(path));
-
-        let in_match = in_match || matched;
 
         let mut tag = format!("node: {}", id.to_u32());
 
@@ -700,27 +774,43 @@ impl Walk<'_> {
             children.push(NodeChild::Transform);
         }
 
-        let has_children = !node.child_nodes.is_empty() || !node.child_objects.is_empty();
+        // The child nodes that lead to a selection and the child objects that are
+        // selected; without a filter every child shows.
+        let mut child_nodes: Vec<(NodeId, String)> = Vec::new();
+        for &child in &node.child_nodes {
+            let child_path = child_path(path, scene.node_name(child));
+            if self
+                .filter
+                .as_ref()
+                .is_none_or(|f| f.shows_node(&child_path))
+            {
+                child_nodes.push((child, child_path));
+            }
+        }
 
-        if self.collapse_descendants() && in_match && has_children {
+        let mut child_objects: Vec<ObjectId> = Vec::new();
+        for &object in &node.child_objects {
+            let object_path = child_path(path, scene.object_name(object));
+            if self
+                .filter
+                .as_ref()
+                .is_none_or(|f| f.shows_object(&object_path))
+            {
+                child_objects.push(object);
+            }
+        }
+
+        let has_children = !child_nodes.is_empty() || !child_objects.is_empty();
+
+        if self.collapse_descendants() && self.is_root(path) && has_children {
             children.push(NodeChild::Descendants);
         } else {
-            // In a match, or with no filter, show every child; above a match keep
-            // only the child nodes leading to one, dropping objects, which no
-            // node path names.
-            let show_all = self.filter.is_none() || in_match;
-
-            for &child in &node.child_nodes {
-                let child_path = child_path(path, scene.node_name(child));
-                if show_all || self.filter.as_ref().is_some_and(|f| f.on_path(&child_path)) {
-                    children.push(NodeChild::Node(child, child_path));
-                }
+            for (child, child_path) in child_nodes {
+                children.push(NodeChild::Node(child, child_path));
             }
 
-            if show_all {
-                for &object in &node.child_objects {
-                    children.push(NodeChild::Object(object));
-                }
+            for object in child_objects {
+                children.push(NodeChild::Object(object));
             }
         }
 
@@ -740,19 +830,14 @@ impl Walk<'_> {
                         .push_str(&format!("{child_prefix}{connector} descendants\n"));
                 }
 
-                NodeChild::Node(child_id, child_path) => self.render_node(
-                    child_id,
-                    &child_prefix,
-                    last,
-                    &child_path,
-                    in_match,
-                    world,
-                    branch,
-                ),
+                NodeChild::Node(child_id, child_path) => {
+                    self.render_node(child_id, &child_prefix, last, &child_path, world, branch)
+                }
 
                 NodeChild::Object(object) => self.render_object(object, &child_prefix, last, world),
             }
         }
+
         branch.remove(&id);
     }
 
@@ -1025,10 +1110,47 @@ mod tests {
         collapse_ancestors: bool,
         collapse_descendants: bool,
     ) -> Result<String> {
+        let patterns: Vec<&str> = pattern.into_iter().collect();
+        try_show_many(
+            state,
+            &patterns,
+            collapse_instances,
+            collapse_ancestors,
+            collapse_descendants,
+        )
+    }
+
+    /// Renders `state` with several patterns, unwrapping.
+    fn show_many(
+        state: &VoxMain,
+        patterns: &[&str],
+        collapse_instances: bool,
+        collapse_ancestors: bool,
+        collapse_descendants: bool,
+    ) -> String {
+        try_show_many(
+            state,
+            patterns,
+            collapse_instances,
+            collapse_ancestors,
+            collapse_descendants,
+        )
+        .unwrap()
+    }
+
+    /// Renders `state` with several patterns, returning the error instead of
+    /// unwrapping. An empty slice means no filter.
+    fn try_show_many(
+        state: &VoxMain,
+        patterns: &[&str],
+        collapse_instances: bool,
+        collapse_ancestors: bool,
+        collapse_descendants: bool,
+    ) -> Result<String> {
         // The collapse flags live inside the pattern; without one they are moot,
         // which the command enforces with a clap `requires`.
-        let pattern = pattern.map(|glob| PatternView {
-            glob: glob.to_owned(),
+        let pattern = (!patterns.is_empty()).then(|| PatternView {
+            globs: patterns.iter().map(|glob| glob.to_string()).collect(),
             collapse_ancestors,
             collapse_descendants,
         });
@@ -1264,6 +1386,73 @@ mod tests {
     fn a_pattern_matching_nothing_is_an_error() {
         let result = try_show(&pattern_state(), Some("missing"), false, false, false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn multiple_patterns_union_their_matches() {
+        // `hand` and `foot` each select a branch; both show, objects included.
+        let output = show_many(&pattern_state(), &["hand", "foot"], false, false, false);
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} root: {node: 4}\n\
+             \u{20}\u{20}\u{251C} armA: {node: 2}\n\
+             \u{20}\u{20}\u{2502} \u{2514} hand: {node: 0}\n\
+             \u{20}\u{20}\u{2502} \u{20}\u{20}\u{2514} handMesh: {object: 0}\n\
+             \u{20}\u{20}\u{2514} armB: {node: 3}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} foot: {node: 1}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} footMesh: {object: 1}\n"
+        );
+    }
+
+    #[test]
+    fn a_bang_pattern_deselects_a_subtree() {
+        // `**` selects everything, then `!armB/` prunes the armB branch, leaving
+        // only the armA branch. Git-faithful: the prune is final.
+        let output = show_many(&pattern_state(), &["**", "!armB/"], false, false, false);
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} root: {node: 4}\n\
+             \u{20}\u{20}\u{2514} armA: {node: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} hand: {node: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} handMesh: {object: 0}\n"
+        );
+    }
+
+    #[test]
+    fn an_object_pattern_selects_the_object_and_shows_its_ancestors() {
+        // `**/footMesh` selects only that object; its node chain shows as context
+        // even though no node matched.
+        let output = show_many(&pattern_state(), &["**/footMesh"], false, false, false);
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} root: {node: 4}\n\
+             \u{20}\u{20}\u{2514} armB: {node: 3}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} foot: {node: 1}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} footMesh: {object: 1}\n"
+        );
+    }
+
+    #[test]
+    fn an_orphan_object_is_selectable_by_name() {
+        let mut state = VoxMain::default();
+        let body = state.add_object(object("body"));
+        // `looseMesh` (object 1) is placed by no node: an orphan object.
+        state.add_object(object("looseMesh"));
+        let spare_child = state.add_object(object("spareChild"));
+        let root = state.add_hierarchy_node(node("root", vec![], vec![body]));
+        state.add_hierarchy_node(node("spareNode", vec![], vec![spare_child]));
+        state.set_root_hierarchy_nodes(vec![root]);
+
+        // The orphan object matches; nothing else does, so only it shows.
+        let output = show_many(&state, &["looseMesh"], false, false, false);
+        assert_eq!(
+            output,
+            "unplaced\n\
+             \u{2514} looseMesh: {object: 1}\n"
+        );
     }
 
     #[test]

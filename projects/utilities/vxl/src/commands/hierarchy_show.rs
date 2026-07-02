@@ -14,11 +14,12 @@ pub struct HierarchyShow {
     #[arg(value_name = "input")]
     input: PathBuf,
 
-    /// A glob matched against node paths. When set, only matched nodes and their
-    /// ancestors print. `**/` is auto-prepended unless the pattern already starts
-    /// with it, so a bare pattern matches at any depth.
+    /// Gitignore-style patterns matched against node and object paths. When set,
+    /// only matched nodes and objects and their ancestors print. A plain pattern
+    /// selects, a leading `!` deselects, a trailing `/` matches nodes only, and
+    /// the last matching pattern wins. Repeat to pass several.
     #[arg(value_name = "pattern")]
-    pattern: Option<String>,
+    patterns: Vec<String>,
 
     /// Source format of the input. Inferred from its extension when omitted.
     #[arg(value_name = "from", long)]
@@ -34,7 +35,7 @@ pub struct HierarchyShow {
     #[arg(
         value_name = "collapse-ancestors",
         long = "collapse-ancestors",
-        requires = "pattern"
+        requires = "patterns"
     )]
     collapse_ancestors: bool,
 
@@ -43,7 +44,7 @@ pub struct HierarchyShow {
     #[arg(
         value_name = "collapse-descendants",
         long = "collapse-descendants",
-        requires = "pattern"
+        requires = "patterns"
     )]
     collapse_descendants: bool,
 
@@ -99,9 +100,9 @@ impl HierarchyShow {
             .transpose()?;
 
         // The collapse flags require a pattern, so clap guarantees they are false
-        // when it is absent; bundling them into the pattern keeps that invariant.
-        let pattern = self.pattern.map(|glob| PatternView {
-            glob,
+        // when none is given; bundling them with the globs keeps that invariant.
+        let pattern = (!self.patterns.is_empty()).then_some(PatternView {
+            globs: self.patterns,
             collapse_ancestors: self.collapse_ancestors,
             collapse_descendants: self.collapse_descendants,
         });

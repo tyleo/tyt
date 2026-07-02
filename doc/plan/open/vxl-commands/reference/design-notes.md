@@ -179,13 +179,13 @@ Rationale for the non-obvious choices, for reviewers.
 3. A dry-run or preview mode for the destructive palette operations.
 4. Additional mesh formats beyond glTF, such as `fbx` and `obj`, as needed, for
    both `mesh` output and `voxelize` input.
-5. Gitignore-style multiple patterns for `hierarchy show` and the `--select`
-   glob: an ordered list of include and exclude patterns with `!` negation and
-   last-match-wins, so a selection can subtract as well as add. Come back to this
-   after the last commit of the current hierarchy work. Build it on a Rust
-   gitignore engine rather than custom matching: the `ignore` crate's `gitignore`
-   module, which layers on the `globset` already in use, or the leaner
-   `gix-ignore`. The one rule to settle at the tree layer is git's
-   parent-directory behavior, where an excluded directory blocks re-including its
-   contents; a tree view likely wants to skip it and judge each node on its own,
-   keeping ancestors for context.
+5. Gitignore-style multiple patterns shipped for `hierarchy show`: an ordered
+   list of select and deselect patterns with `!` negation, trailing-slash
+   node-only matching, and last-match-wins, so a selection subtracts as well as
+   adds. It is built on a new dependency-light `ty-gitignore` crate, a Rust port
+   of the C# `com.tyleo.gitignore` package layered on the `globset` already in
+   use, rather than the heavier `ignore` crate. The parent-directory rule was
+   settled git-faithful: an excluded node prunes its subtree, matching the
+   reference engine. The `--select` object selectors will inherit the same engine
+   when they land. See
+   [implementation decisions](implementation-decisions.md#gitignore-style-pattern-matching).

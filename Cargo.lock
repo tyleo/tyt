@@ -1683,6 +1683,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "ty-gitignore"
+version = "0.1.0"
+dependencies = [
+ "globset",
+]
+
+[[package]]
 name = "ty-math"
 version = "0.1.8"
 
@@ -2022,9 +2029,9 @@ dependencies = [
  "branded-id",
  "clap",
  "clap_complete",
- "globset",
  "libc",
  "serde_json",
+ "ty-gitignore",
  "ty-math",
  "vmax-codec",
  "voxcore",

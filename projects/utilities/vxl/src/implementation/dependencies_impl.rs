@@ -112,10 +112,6 @@ impl Dependencies for DependenciesImpl {
         )
     }
 
-    fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
-        implementation::match_glob(pattern, candidates)
-    }
-
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
         implementation::write_stdout(contents)
     }

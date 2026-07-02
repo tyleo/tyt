@@ -16,9 +16,9 @@ required-features = ["bin"]
 branded-id = { version = "0.1.3", optional = true }
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
-globset = { version = "0.4", optional = true }
 libc = { version = "0.2", optional = true }
 serde_json = { version = "1", features = ["preserve_order"], optional = true }
+ty-gitignore = { version = "0.1.0", optional = true }
 ty-math = { version = "0.1.7", optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
 voxcore = { version = "0.1.0", optional = true }
@@ -32,9 +32,9 @@ ty-math = "0.1.7"
 default = ["impl"]
 impl = [
     "dep:branded-id",
-    "dep:globset",
     "dep:libc",
     "dep:serde_json",
+    "dep:ty-gitignore",
     "dep:ty-math",
     "dep:vmax-codec",
     "dep:voxcore",
