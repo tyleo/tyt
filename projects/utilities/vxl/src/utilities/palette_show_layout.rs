@@ -19,8 +19,9 @@ pub enum PaletteShowLayout {
     /// Like `column`, with the header row dropped.
     #[value(name = "column-no-header")]
     ColumnNoHeader,
-    /// The collections as an aligned markdown table, one column per collection
-    /// and one row per cell index.
+    /// The collections as an aligned markdown table led by a `#` column of
+    /// 0-based cell indices, one further column per collection and one row per
+    /// cell index.
     #[value(name = "markdown")]
     Markdown,
     /// The collection records as indented JSON.

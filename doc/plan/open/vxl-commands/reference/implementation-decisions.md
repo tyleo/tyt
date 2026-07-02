@@ -304,6 +304,13 @@ helper with `info`, and the `visible_width` and `pad_right` primitives move to a
 `text_width` module; the shared table measures past ANSI escapes so swatch cells
 align, which `info`'s plain text neither needs nor is hurt by.
 
+The markdown table leads with a `#` column of the 0-based cell index of each row,
+prepended in `render_markdown` rather than in the shared `markdown_table`, so the
+`info` tables stay unchanged. A row maps to a palette cell, so the index reads as
+the cell number a selector or the other layouts refer to; only `markdown` gains
+the column, since `row` and `column` already carry their headers and JSON records
+the values positionally.
+
 `--width` wraps the `row` layouts so a 255-entry palette folds into a block
 instead of one multi-thousand-column line that the terminal mangles when it
 wraps. It is a `Width` of `terminal`, `unlimited`, or a column count, parsed by

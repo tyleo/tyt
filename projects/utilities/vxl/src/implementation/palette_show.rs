@@ -559,9 +559,9 @@ fn render_column(collections: &[Collection], with_header: bool) -> String {
     output
 }
 
-/// The collections as an aligned markdown table, one column per collection, the
-/// headers as the header row, and one row per cell index. A shorter palette
-/// leaves its column blank past its last cell.
+/// The collections as an aligned markdown table led by a `#` column of 0-based
+/// cell indices, then one column per collection and one row per cell index. A
+/// shorter palette leaves its column blank past its last cell.
 fn render_markdown(collections: &[Collection]) -> String {
     if collections.is_empty() {
         return String::new();
@@ -569,16 +569,21 @@ fn render_markdown(collections: &[Collection]) -> String {
     let headers: Vec<String> = collections.iter().map(Collection::header).collect();
     let cells: Vec<Vec<String>> = collections.iter().map(rendered_cells).collect();
     let row_count = cells.iter().map(Vec::len).max().unwrap_or(0);
-    // One row per cell index, drawing each collection's cell or a blank.
+    // One row per cell index, led by the index and then each collection's cell
+    // or a blank.
     let rows: Vec<Vec<String>> = (0..row_count)
         .map(|row| {
-            cells
-                .iter()
-                .map(|column| column.get(row).cloned().unwrap_or_default())
-                .collect()
+            let mut cells_row = vec![row.to_string()];
+            cells_row.extend(
+                cells
+                    .iter()
+                    .map(|column| column.get(row).cloned().unwrap_or_default()),
+            );
+            cells_row
         })
         .collect();
-    let header_refs: Vec<&str> = headers.iter().map(String::as_str).collect();
+    let mut header_refs: Vec<&str> = vec!["#"];
+    header_refs.extend(headers.iter().map(String::as_str));
     implementation::markdown_table(&header_refs, &rows)
 }
 
@@ -830,10 +835,10 @@ mod tests {
         );
         assert_eq!(
             output,
-            "| 0.rgba    | 1.rgba    |\n\
-             | --------- | --------- |\n\
-             | #FF0000FF | #0000FFFF |\n\
-             | #00FF0080 |           |\n"
+            "| #   | 0.rgba    | 1.rgba    |\n\
+             | --- | --------- | --------- |\n\
+             | 0   | #FF0000FF | #0000FFFF |\n\
+             | 1   | #00FF0080 |           |\n"
         );
     }
 
