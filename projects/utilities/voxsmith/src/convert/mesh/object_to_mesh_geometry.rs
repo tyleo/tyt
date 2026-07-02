@@ -1,6 +1,7 @@
 use crate::{MeshGeometry, MeshMethod};
+use branded_id::U32Id;
 use ty_math::{TyVector3F32, TyVector3U32};
-use voxcore::VoxObject;
+use voxcore::{BVoxVoxel, VoxObject};
 
 /// Triangulates `object`'s live voxels into a [`MeshGeometry`] using `method`.
 ///
@@ -11,6 +12,21 @@ use voxcore::VoxObject;
 /// fewest quads. No hierarchy-node transform is applied; placement is the
 /// caller's to add.
 pub fn object_to_mesh_geometry(object: &VoxObject, method: MeshMethod) -> MeshGeometry {
+    // A constant key merges every coplanar face regardless of material and
+    // records no per-vertex material, the fewest-quads pure-geometry mesh.
+    mesh_slices(object, method, &|_| 0, false)
+}
+
+/// Triangulates `object` with a per-voxel material `key`, so greedy meshing
+/// merges only faces whose voxels share a key and every vertex records its key
+/// in [`MeshGeometry::materials`]. `object_to_mesh_geometry` is this with a
+/// constant key and no material tracking.
+pub(crate) fn mesh_slices(
+    object: &VoxObject,
+    method: MeshMethod,
+    key: &dyn Fn(U32Id<BVoxVoxel>) -> u32,
+    track_materials: bool,
+) -> MeshGeometry {
     let bounds = object.bounds();
 
     let bounds = [bounds.x, bounds.y, bounds.z];
@@ -25,7 +41,17 @@ pub fn object_to_mesh_geometry(object: &VoxObject, method: MeshMethod) -> MeshGe
 
     for d in 0..3 {
         for sign in [-1i32, 1] {
-            sweep(object, bounds, d, sign, cull, merge, &mut geometry);
+            sweep(
+                object,
+                bounds,
+                d,
+                sign,
+                cull,
+                merge,
+                key,
+                track_materials,
+                &mut geometry,
+            );
         }
     }
 
@@ -34,7 +60,8 @@ pub fn object_to_mesh_geometry(object: &VoxObject, method: MeshMethod) -> MeshGe
 
 /// Sweeps the slices perpendicular to axis `d`, emitting each voxel's face on
 /// the `sign` side. `cull` drops a face whose neighbor across it is solid;
-/// `merge` fuses the slice's exposed faces into maximal rectangles.
+/// `merge` fuses the slice's exposed faces into maximal rectangles, splitting
+/// where the material key differs.
 #[allow(clippy::too_many_arguments)]
 fn sweep(
     object: &VoxObject,
@@ -43,6 +70,8 @@ fn sweep(
     sign: i32,
     cull: bool,
     merge: bool,
+    key: &dyn Fn(U32Id<BVoxVoxel>) -> u32,
+    track_materials: bool,
     geometry: &mut MeshGeometry,
 ) {
     let u = (d + 1) % 3;
@@ -55,8 +84,9 @@ fn sweep(
     }
 
     for s in 0..bounds[d] {
-        // The exposed-face mask over the slice's (u, v) plane.
-        let mut mask = vec![false; w * h];
+        // Each exposed face carries its voxel's material key; an unexposed cell
+        // is `None`, so merges never cross an empty gap or a key boundary.
+        let mut mask = vec![None; w * h];
 
         for vv in 0..bounds[v] {
             for uu in 0..bounds[u] {
@@ -78,19 +108,53 @@ fn sweep(
                     }
                 }
 
-                mask[vv as usize * w + uu as usize] = true;
+                let voxel = object
+                    .voxel_id(TyVector3U32::new(
+                        position[0] as u32,
+                        position[1] as u32,
+                        position[2] as u32,
+                    ))
+                    .expect("a live voxel is within the grid");
+
+                mask[vv as usize * w + uu as usize] = Some(key(voxel));
             }
         }
 
         if merge {
-            for (u0, u1, v0, v1) in merge_rects(&mask, w, h) {
-                push_face(geometry, d, u, v, sign, s, u0, u1, v0, v1);
+            for (u0, u1, v0, v1, material) in merge_rects(&mask, w, h) {
+                push_face(
+                    geometry,
+                    d,
+                    u,
+                    v,
+                    sign,
+                    s,
+                    u0,
+                    u1,
+                    v0,
+                    v1,
+                    material,
+                    track_materials,
+                );
             }
         } else {
             for vv in 0..h {
                 for uu in 0..w {
-                    if mask[vv * w + uu] {
-                        push_face(geometry, d, u, v, sign, s, uu, uu + 1, vv, vv + 1);
+                    if let Some(material) = mask[vv * w + uu] {
+                        push_face(
+                            geometry,
+                            d,
+                            u,
+                            v,
+                            sign,
+                            s,
+                            uu,
+                            uu + 1,
+                            vv,
+                            vv + 1,
+                            material,
+                            track_materials,
+                        );
                     }
                 }
             }
@@ -119,9 +183,10 @@ fn live_at(object: &VoxObject, position: [i64; 3], bounds: [u32; 3]) -> bool {
 }
 
 /// Greedily fuses a slice `mask` (width `w`, height `h`) into maximal
-/// rectangles, each as `(u0, u1, v0, v1)` with the upper bounds exclusive. Each
-/// true cell belongs to exactly one rectangle.
-fn merge_rects(mask: &[bool], w: usize, h: usize) -> Vec<(usize, usize, usize, usize)> {
+/// rectangles of one material, each as `(u0, u1, v0, v1, material)` with the
+/// upper bounds exclusive. Each set cell belongs to exactly one rectangle, and
+/// a rectangle grows only over cells that share its material key.
+fn merge_rects(mask: &[Option<u32>], w: usize, h: usize) -> Vec<(usize, usize, usize, usize, u32)> {
     let mut consumed = vec![false; w * h];
 
     let mut rects = Vec::new();
@@ -129,15 +194,18 @@ fn merge_rects(mask: &[bool], w: usize, h: usize) -> Vec<(usize, usize, usize, u
     for v0 in 0..h {
         for u0 in 0..w {
             let start = v0 * w + u0;
-            if !mask[start] || consumed[start] {
+            let Some(material) = mask[start] else {
+                continue;
+            };
+            if consumed[start] {
                 continue;
             }
 
-            // Grow the run in +u while the cells stay set and free.
+            // Grow the run in +u while the cells share the material and are free.
             let mut width = 1;
             while u0 + width < w {
                 let i = v0 * w + u0 + width;
-                if !mask[i] || consumed[i] {
+                if mask[i] != Some(material) || consumed[i] {
                     break;
                 }
                 width += 1;
@@ -148,7 +216,7 @@ fn merge_rects(mask: &[bool], w: usize, h: usize) -> Vec<(usize, usize, usize, u
             'grow: while v0 + height < h {
                 for k in 0..width {
                     let i = (v0 + height) * w + u0 + k;
-                    if !mask[i] || consumed[i] {
+                    if mask[i] != Some(material) || consumed[i] {
                         break 'grow;
                     }
                 }
@@ -161,14 +229,15 @@ fn merge_rects(mask: &[bool], w: usize, h: usize) -> Vec<(usize, usize, usize, u
                 }
             }
 
-            rects.push((u0, u0 + width, v0, v0 + height));
+            rects.push((u0, u0 + width, v0, v0 + height, material));
         }
     }
     rects
 }
 
 /// Appends the quad on axis `d`'s `sign` face of slice `s`, spanning `u` in
-/// `[u0, u1]` and `v` in `[v0, v1]`, wound counter-clockwise outward.
+/// `[u0, u1]` and `v` in `[v0, v1]`, wound counter-clockwise outward. When
+/// `track_materials` is set, every vertex records `material`.
 #[allow(clippy::too_many_arguments)]
 fn push_face(
     geometry: &mut MeshGeometry,
@@ -181,6 +250,8 @@ fn push_face(
     u1: usize,
     v0: usize,
     v1: usize,
+    material: u32,
+    track_materials: bool,
 ) {
     // The +side face sits one unit past the slice along `d`, the -side on it.
     let plane = s as f32 + if sign > 0 { 1.0 } else { 0.0 };
@@ -219,6 +290,10 @@ fn push_face(
     for corner in corners {
         geometry.positions.push(corner);
         geometry.normals.push(normal);
+
+        if track_materials {
+            geometry.materials.push(material);
+        }
     }
 
     geometry
@@ -228,7 +303,7 @@ fn push_face(
 
 #[cfg(test)]
 mod tests {
-    use crate::{MeshMethod, object_to_mesh_geometry};
+    use crate::{MeshMethod, mesh_slices, object_to_mesh_geometry};
     use ty_math::TyVector3U32;
     use voxcore::VoxObject;
 
@@ -294,6 +369,41 @@ mod tests {
             object_to_mesh_geometry(&object, MeshMethod::Greedy).quad_count(),
             6
         );
+    }
+
+    #[test]
+    fn material_keys_split_a_merged_run() {
+        let object = object([2, 1, 1], &[[0, 0, 0], [1, 0, 0]]);
+
+        // A uniform key merges the bar into a box: six quads, no per-vertex
+        // materials.
+        let pure = object_to_mesh_geometry(&object, MeshMethod::Greedy);
+        assert_eq!(pure.quad_count(), 6);
+        assert!(pure.materials.is_empty());
+
+        // Two materials along x (voxel id 0 vs 1) split every face that spanned
+        // both voxels: the two end caps stay, the four side faces each split in
+        // two, for ten quads.
+        let keyed = mesh_slices(&object, MeshMethod::Greedy, &|voxel| voxel.to_u32(), true);
+        assert_eq!(keyed.quad_count(), 10);
+        assert_eq!(keyed.materials.len(), keyed.vertex_count());
+        assert!(
+            keyed
+                .materials
+                .iter()
+                .all(|&material| material == 0 || material == 1)
+        );
+    }
+
+    #[test]
+    fn a_uniform_key_merges_yet_records_materials() {
+        let object = object([2, 1, 1], &[[0, 0, 0], [1, 0, 0]]);
+
+        // One material still merges into a box, but every vertex records it.
+        let keyed = mesh_slices(&object, MeshMethod::Greedy, &|_| 0, true);
+        assert_eq!(keyed.quad_count(), 6);
+        assert_eq!(keyed.materials.len(), keyed.vertex_count());
+        assert!(keyed.materials.iter().all(|&material| material == 0));
     }
 
     #[test]

@@ -19,6 +19,12 @@ pub struct MeshGeometry {
 
     /// Triangle indices into [`positions`](Self::positions), three per triangle.
     pub indices: Vec<u32>,
+
+    /// One material index per vertex, aligned with
+    /// [`positions`](Self::positions), when meshed with a material key; empty
+    /// for the pure-geometry mesh. Every vertex of a quad shares one index,
+    /// since material-keyed meshing merges only same-material faces.
+    pub materials: Vec<u32>,
 }
 
 impl MeshGeometry {

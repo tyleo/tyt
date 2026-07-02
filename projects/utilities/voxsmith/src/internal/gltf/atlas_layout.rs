@@ -12,6 +12,19 @@ pub(crate) fn atlas_dimensions(count: usize) -> (u32, u32) {
     (width, height)
 }
 
+/// The UV at the center of texel `index` in a `width` x `height` atlas, so a
+/// face sampling it with nearest filtering reads exactly that texel. The layout
+/// matches [`atlas_dimensions`], row-major from the top-left, glTF's UV origin.
+pub(crate) fn texel_center(index: u32, width: u32, height: u32) -> [f32; 2] {
+    let column = index % width;
+    let row = index / width;
+
+    [
+        (column as f32 + 0.5) / width as f32,
+        (row as f32 + 0.5) / height as f32,
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use crate::atlas_dimensions;

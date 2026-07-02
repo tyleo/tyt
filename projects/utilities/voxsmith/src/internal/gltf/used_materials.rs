@@ -1,6 +1,6 @@
 use branded_id::U32Id;
-use std::collections::HashSet;
-use voxcore::{BVoxPalette, BVoxPaletteCell, BVoxPaletteRef, VoxObject};
+use std::collections::HashMap;
+use voxcore::{BVoxPalette, BVoxPaletteCell, BVoxPaletteRef, BVoxVoxel, VoxObject};
 
 /// The distinct merged materials a meshed object actually uses.
 ///
@@ -17,6 +17,10 @@ pub(crate) struct UsedMaterials {
     /// Distinct materials in first-seen order; each holds the cell sampled from
     /// every reference, aligned with [`references`](Self::references).
     materials: Vec<Vec<U32Id<BVoxPaletteCell>>>,
+
+    /// Per live voxel id, the index into [`materials`](Self::materials) of the
+    /// material it samples.
+    index_of: HashMap<u32, u32>,
 }
 
 impl UsedMaterials {
@@ -35,6 +39,12 @@ impl UsedMaterials {
     pub(crate) fn len(&self) -> usize {
         self.materials.len()
     }
+
+    /// The index into the material set of the material live voxel `voxel`
+    /// samples, or `None` if `voxel` is not a live voxel of the resolved object.
+    pub(crate) fn material_index(&self, voxel: U32Id<BVoxVoxel>) -> Option<u32> {
+        self.index_of.get(&voxel.to_u32()).copied()
+    }
 }
 
 /// Resolves the distinct merged materials `object` uses, first seen in raster
@@ -45,7 +55,8 @@ pub(crate) fn resolve_used_materials(object: &VoxObject) -> UsedMaterials {
         object.iter_palette_refs().collect();
 
     let mut materials: Vec<Vec<U32Id<BVoxPaletteCell>>> = Vec::new();
-    let mut seen: HashSet<Vec<u32>> = HashSet::new();
+    let mut lookup: HashMap<Vec<u32>, u32> = HashMap::new();
+    let mut index_of: HashMap<u32, u32> = HashMap::new();
 
     for voxel in object.iter_live() {
         let cells: Vec<U32Id<BVoxPaletteCell>> = references
@@ -59,13 +70,18 @@ pub(crate) fn resolve_used_materials(object: &VoxObject) -> UsedMaterials {
 
         let key: Vec<u32> = cells.iter().map(|cell| cell.to_u32()).collect();
 
-        if seen.insert(key) {
+        let index = *lookup.entry(key).or_insert_with(|| {
+            let index = materials.len() as u32;
             materials.push(cells);
-        }
+            index
+        });
+
+        index_of.insert(voxel.to_u32(), index);
     }
 
     UsedMaterials {
         references,
         materials,
+        index_of,
     }
 }
