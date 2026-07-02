@@ -513,8 +513,10 @@ layout.
 This is built in three iterations. The first landed the core tree with its
 instancing and unplaced marks and `--collapse-instances`; the second the
 `pattern` glob with `--collapse-ancestors`/`--collapse-descendants`; the third
-the `--show-transforms`/`--show-bounds`/`--show-extents` subtrees, local and
-world. A later change added the `--show-palettes` subtree.
+the object subtrees. A later change added the `--show-palettes` subtree, then
+another replaced the single `--show-bounds`/`--show-extents` pair with the six
+edit/runtime geometry flags; see
+[Edit- and runtime-grid geometry](#edit--and-runtime-grid-geometry).
 
 `Dependencies::hierarchy_show` carries the load, render, and print together like
 the other read reports, so the command struct only parses flags. Its core is a
@@ -638,28 +640,24 @@ the scene, the instance-collapse flag, the subtree views, and the filter are
 fields, while the per-branch prefix, path, and cycle set stay method arguments.
 
 `--show-transforms` prepends a `transform` subtree under each node, since a
-transform lives on a node; `--show-bounds` and `--show-extents` append `bounds`
-and `extents` under each object, since a grid box lives on an object. A bare
-subtree header sits over its value lines, `transform` over `position`/`rotation`/
-`scale`, `bounds` over `min`/`max`, and `extents` as one line, each value naming
-its field and bracketing its vector, as `min: [x, y, z]`. Each vector prints to
-the view's decimal precision, uniform across a local integer grid and a
-world-space float. They fold into the node's ordered children so the
-box-drawing connectors stay correct, the transform ahead of the real children and
-the bounds and extents after the object line.
+transform lives on a node. A bare subtree header sits over its value lines,
+`transform` over `position`/`rotation`/`scale`, each value naming its field and
+bracketing its vector, as `position: [x, y, z]`, to the view's decimal precision.
+It folds into the node's ordered children ahead of the real children so the
+box-drawing connectors stay correct. The object geometry rows and the `palettes`
+subtree fold in after the object line the same way.
 
-World space folds the parent chain into one lossy world transform rather than
-building and decomposing a matrix, matching how the `com.tyleo.game` engine
-composes: rotation is the Hamilton product down the chain, scale the component-wise
-product, and position the running `parentT + parentR.rotate(parentS * childT)`.
-The scale is lossy because a rotation between non-uniform scales introduces shear a
-per-axis scale cannot hold, the same tradeoff the engine names in
-`GetLossyWorldScale`. World bounds apply that transform to the object's grid box
-with the abs-rotation extents trick, so the reported box is the axis-aligned bound
-after placement. The primitives this needs, the quaternion product,
-component-wise multiply, `rotate_extents_abs`, transform compose and
-transform-point, and a quaternion-to-euler, were added to `ty_math` in the prior
-commit.
+A node's world transform folds the parent chain into one lossy world transform
+rather than building and decomposing a matrix, matching how the `com.tyleo.game`
+engine composes: rotation is the Hamilton product down the chain, scale the
+component-wise product, and position the running
+`parentT + parentR.rotate(parentS * childT)`. The scale is lossy because a
+rotation between non-uniform scales introduces shear a per-axis scale cannot
+hold, the same tradeoff the engine names in `GetLossyWorldScale`. A `world`
+transform applies the fold whole; a `world` origin transforms a single grid
+corner through it. The primitives, the quaternion product, component-wise
+multiply, transform compose and transform-point, and a quaternion-to-euler, live
+in `ty_math`.
 
 A node's world transform depends on its route, since an instanced node has one per
 placement, so the fold threads through the walk from the identity at each section
@@ -669,32 +667,78 @@ its hidden chain. Rotation renders as Tait-Bryan euler in `Rz*Ry*Rx` order so a
 single-axis turn reads on its own component; the rotation samples confirm it, `40`
 about z showing `0, 0, 40` and `30` about y then `40` about z showing `0, 30, 40`.
 
-`--show-transforms` takes `[space] [rot-unit] [precision]` and the bounds flags
-`[space] [precision]`, the FBX arg shape, parsed in the command into the
-`TransformView` and `BoundsView` data structs the trait carries; the growing
-signature takes a `too_many_arguments` allow, the house style beside `voxelize`.
+`--show-transforms` takes `[space] [rot-unit] [precision]`, the FBX arg shape,
+parsed in the command into a `TransformView`. All the subtree views bundle into
+one `HierarchyViews` value the trait carries, so the render entry point takes a
+single argument rather than growing a parameter per flag; the earlier flat
+signature had reached a `too_many_arguments` allow.
 
 `--show-palettes` is a bare flag rather than a view struct, since a palette
 reference carries no space or precision to tune. It appends a `palettes` subtree
-under each object, beside `bounds` and `extents`, since palettes are referenced
-by an object, not a node. Each child reads `index: {cells: <count>}`, one per
-reference in `iter_palette_refs` order with no dedup, so the subtree mirrors the
-object's real reference list rather than a set. The index is the referenced
-palette's `to_u32`, which equals its position in `iter_palettes` for a freshly
-loaded state that numbers ids `0..count`, the same index `palette show` prints,
-and the palette resolves through `VoxMain::palette`; a reference the state does
-not hold prints a `missing palette <id>` marker like the walk's other missing-id
-lines. The count is the palette's `cell_count`, its size, not how many of its
-cells the object's voxels sample. An object with no reference prints an empty
-`palettes: []` leaf instead of a childless header, which also keeps `palettes`
-an unconditional last child so the `bounds` and `extents` connectors above it
-stay correct.
+under each object, beside the geometry rows, since palettes are referenced by an
+object, not a node. Each child reads `index: {cells: <count>}`, one per reference
+in `iter_palette_refs` order with no dedup, so the subtree mirrors the object's
+real reference list rather than a set. The index is the referenced palette's
+`to_u32`, which equals its position in `iter_palettes` for a freshly loaded state
+that numbers ids `0..count`, the same index `palette show` prints, and the
+palette resolves through `VoxMain::palette`; a reference the state does not hold
+prints a `missing palette <id>` marker like the walk's other missing-id lines.
+The count is the palette's `cell_count`, its size, not how many of its cells the
+object's voxels sample. An object with no reference prints an empty `palettes: []`
+leaf instead of a childless header, which also keeps `palettes` an unconditional
+last child so the geometry rows above it stay correct.
 
 `branded-id` is an `impl`-gated dependency. The render path names its `U32Id`
 through the `NodeId` and `ObjectId` aliases, and the tests use it to build
 hierarchy nodes from returned ids and to fabricate a cyclic state for the cycle
 guard. It was dev-only while the render path stayed on `u32`; the `Scene` refactor
 that dropped the `u32` projection moved it into the shipped crate.
+
+### Edit- and runtime-grid geometry
+
+The first cut of object geometry had one `--show-bounds`/`--show-extents` pair
+with a `local`/`world` arg, where `world` reported the axis-aligned box after the
+placing node's transform. That conflated two distinct questions: which grid to
+measure and which space to measure it in. An object carries two grids. The
+runtime grid is the tight box around its live voxels, read from
+`VoxObject::live_extent`. The edit grid is the author's build volume,
+`VoxObject::bounds` at `VoxObject::origin`, which a document with `editState`
+records with margin around the runtime grid. So the pair became six flags,
+`--show-{edit,runtime}-{origins,bounds,extents}`, the grid named in the flag.
+
+Each row is measured relative to the placing node, the frame the user asked for:
+bounds' `min` and `max` are the grid's corners offset from that node, extents is
+`max - min`, and origin is the `min` corner alone. Origin is the one value a
+world space is meaningful for, a specific corner as a scene point, so only the
+origin flags keep the `[space]` arg; bounds and extents drop it and take a lone
+`[precision]`, since a `world` axis-aligned box is a different quantity best left
+out until asked for. The edit box always contains the runtime box, the invariant
+the `voxj` spec states, so the world-box math the first cut carried, the
+abs-rotation extents expansion, is gone; a `world` origin is a single
+`transform_point`.
+
+The edit grid can be absent: coincident with the runtime grid, it carries no
+authoring margin. Rather than omit the row, which reads the same as the flag
+being off, an absent edit value prints `null`, the document's own absent marker,
+matching the JSON layouts of `palette show`. `edit_present` reuses the exact
+margin test `info` applies for its edit-bounds column, so the two reports agree
+on when an edit grid is distinct.
+
+The runtime grid is never absent, so runtime rows never print `null`. An object
+with no live voxels still has a runtime grid, a zero-size box; it prints one at
+the object's origin, matching the `0x0x0` bounds and origin `info` reports for an
+empty object. An earlier cut printed `null` here, but an empty object's grid is
+zero, not missing, and the file records that zero. The one loss is the position:
+for an empty object that also has an edit grid, `origin` is the edit origin,
+since a `VoxObject` keeps a single origin and derives the runtime box from live
+voxels, of which an empty object has none.
+
+The rows render through an `ObjectRow` list built per object, a `Value` line or a
+`Bounds` min/max subtree, each carrying its `Option` value so the `null` form is
+one branch. Building the list first lets the object fold its enabled rows and the
+`palettes` subtree into one ordered child sequence, so the last row and the last
+subtree take the closing connector without the per-flag `is_last` juggling the
+first cut used.
 
 ## Gitignore-style pattern matching
 

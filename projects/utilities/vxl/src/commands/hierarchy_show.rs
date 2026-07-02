@@ -1,4 +1,6 @@
-use crate::{BoundsView, Dependencies, Error, Format, PatternView, Result, TransformView};
+use crate::{
+    Dependencies, Error, Format, HierarchyViews, OriginView, PatternView, Result, TransformView,
+};
 use clap::Parser;
 use std::{
     io::{Error as IOError, ErrorKind},
@@ -59,24 +61,46 @@ pub struct HierarchyShow {
     )]
     show_transforms: Option<Vec<String>>,
 
-    /// Append each object's grid bounds as a nested subtree. Up to two positional
-    /// values `[space] [precision]`: `space` is `local` (default) or `world`,
+    /// Append each object's edit-grid origin, its build-volume min corner
+    /// relative to the placing node. Up to two positional values
+    /// `[space] [precision]`: `space` is `local` (default) or `world`,
     /// `precision` is the decimal places (default `2`).
     #[arg(
         value_names = ["space", "precision"],
-        long = "show-bounds",
+        long = "show-edit-origins",
         num_args = 0..=2,
     )]
-    show_bounds: Option<Vec<String>>,
+    show_edit_origins: Option<Vec<String>>,
 
-    /// Append each object's extents (`max - min`) as a nested subtree, with the
-    /// same `[space] [precision]` arguments as `--show-bounds`.
+    /// Append each object's edit-grid bounds as a `min`/`max` subtree, relative
+    /// to the placing node. Optional `[precision]` decimal places (default `2`).
+    #[arg(value_names = ["precision"], long = "show-edit-bounds", num_args = 0..=1)]
+    show_edit_bounds: Option<Vec<String>>,
+
+    /// Append each object's edit-grid extents (`max - min`). Optional
+    /// `[precision]` decimal places (default `2`).
+    #[arg(value_names = ["precision"], long = "show-edit-extents", num_args = 0..=1)]
+    show_edit_extents: Option<Vec<String>>,
+
+    /// Append each object's runtime-grid origin, its tight live-box min corner
+    /// relative to the placing node, with the same `[space] [precision]`
+    /// arguments as `--show-edit-origins`.
     #[arg(
         value_names = ["space", "precision"],
-        long = "show-extents",
+        long = "show-runtime-origins",
         num_args = 0..=2,
     )]
-    show_extents: Option<Vec<String>>,
+    show_runtime_origins: Option<Vec<String>>,
+
+    /// Append each object's runtime-grid bounds as a `min`/`max` subtree,
+    /// relative to the placing node. Optional `[precision]` (default `2`).
+    #[arg(value_names = ["precision"], long = "show-runtime-bounds", num_args = 0..=1)]
+    show_runtime_bounds: Option<Vec<String>>,
+
+    /// Append each object's runtime-grid extents (`max - min`). Optional
+    /// `[precision]` decimal places (default `2`).
+    #[arg(value_names = ["precision"], long = "show-runtime-extents", num_args = 0..=1)]
+    show_runtime_extents: Option<Vec<String>>,
 
     /// Append each object's referenced palettes as a nested subtree, one child
     /// per palette showing its index and cell count.
@@ -86,23 +110,16 @@ pub struct HierarchyShow {
 
 impl HierarchyShow {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let transforms = self
-            .show_transforms
-            .as_deref()
-            .map(parse_transform_view)
-            .transpose()?;
-
-        let bounds = self
-            .show_bounds
-            .as_deref()
-            .map(parse_bounds_view)
-            .transpose()?;
-
-        let extents = self
-            .show_extents
-            .as_deref()
-            .map(parse_bounds_view)
-            .transpose()?;
+        let views = HierarchyViews {
+            transforms: parse(self.show_transforms.as_deref(), parse_transform_view)?,
+            edit_origins: parse(self.show_edit_origins.as_deref(), parse_origin_view)?,
+            edit_bounds: parse(self.show_edit_bounds.as_deref(), parse_precision_arg)?,
+            edit_extents: parse(self.show_edit_extents.as_deref(), parse_precision_arg)?,
+            runtime_origins: parse(self.show_runtime_origins.as_deref(), parse_origin_view)?,
+            runtime_bounds: parse(self.show_runtime_bounds.as_deref(), parse_precision_arg)?,
+            runtime_extents: parse(self.show_runtime_extents.as_deref(), parse_precision_arg)?,
+            palettes: self.show_palettes,
+        };
 
         // The collapse flags require a pattern, so clap guarantees they are false
         // when none is given; bundling them with the globs keeps that invariant.
@@ -117,12 +134,18 @@ impl HierarchyShow {
             self.from,
             pattern,
             self.collapse_instances,
-            transforms,
-            bounds,
-            extents,
-            self.show_palettes,
+            views,
         )
     }
+}
+
+/// Runs `parse` over the flag's raw values when the flag was given, threading
+/// the parse error out.
+fn parse<T>(
+    values: Option<&[String]>,
+    parse: impl Fn(&[String]) -> Result<T>,
+) -> Result<Option<T>> {
+    values.map(parse).transpose()
 }
 
 /// Parses `[space] [rot-unit] [precision]` into a [`TransformView`].
@@ -138,12 +161,17 @@ fn parse_transform_view(values: &[String]) -> Result<TransformView> {
     })
 }
 
-/// Parses `[space] [precision]` into a [`BoundsView`].
-fn parse_bounds_view(values: &[String]) -> Result<BoundsView> {
+/// Parses `[space] [precision]` into an [`OriginView`].
+fn parse_origin_view(values: &[String]) -> Result<OriginView> {
     let world = parse_space(values.first())?;
     let precision = parse_precision(values.get(1))?;
 
-    Ok(BoundsView { world, precision })
+    Ok(OriginView { world, precision })
+}
+
+/// Parses a lone `[precision]` value, defaulting to `2`.
+fn parse_precision_arg(values: &[String]) -> Result<usize> {
+    parse_precision(values.first())
 }
 
 /// Parses the `space` value: `local` (default) is false, `world` is true.
@@ -192,7 +220,7 @@ fn invalid(message: String) -> Error {
 mod tests {
     use crate::commands::{
         HierarchyShow,
-        hierarchy_show::{parse_bounds_view, parse_transform_view},
+        hierarchy_show::{parse_origin_view, parse_precision_arg, parse_transform_view},
     };
     use clap::Parser;
 
@@ -227,17 +255,24 @@ mod tests {
     }
 
     #[test]
-    fn bounds_view_parses_space_and_precision() {
-        let view = parse_bounds_view(&strings(&["world", "3"])).unwrap();
+    fn origin_view_parses_space_and_precision() {
+        let view = parse_origin_view(&strings(&["world", "3"])).unwrap();
         assert!(view.world && view.precision == 3);
-        let default = parse_bounds_view(&[]).unwrap();
+        let default = parse_origin_view(&[]).unwrap();
         assert!(!default.world && default.precision == 2);
+    }
+
+    #[test]
+    fn precision_arg_defaults_to_two_and_parses_a_value() {
+        assert!(parse_precision_arg(&[]).unwrap() == 2);
+        assert!(parse_precision_arg(&strings(&["4"])).unwrap() == 4);
     }
 
     #[test]
     fn a_bad_space_or_unit_is_an_error() {
         assert!(parse_transform_view(&strings(&["sideways"])).is_err());
         assert!(parse_transform_view(&strings(&["local", "turns"])).is_err());
-        assert!(parse_bounds_view(&strings(&["local", "-1"])).is_err());
+        assert!(parse_origin_view(&strings(&["local", "-1"])).is_err());
+        assert!(parse_precision_arg(&strings(&["-1"])).is_err());
     }
 }

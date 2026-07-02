@@ -179,7 +179,11 @@ Material sampling (see [voxelize](reference/voxelize.md) and
 - [x] Tree render with DAG / instancing and unplaced-node markers, plus
       `--collapse-instances`. Markdown tree only; no `--layout`.
 - [x] `pattern` glob with `--collapse-ancestors` / `--collapse-descendants`.
-- [x] `--show-transforms` / `--show-bounds` / `--show-extents`, local and world.
+- [x] `--show-transforms`, local and world.
+- [x] `--show-{edit,runtime}-{origins,bounds,extents}`, the edit and runtime
+      grids relative to the placing node, origins with a local/world space, an
+      absent edit grid printing `null`, an empty object's runtime grid a
+      zero-size box at its origin.
 - [x] `--show-palettes`, one child per referenced palette with its cell count.
 
 ### validate ([reference/validate.md](reference/validate.md))

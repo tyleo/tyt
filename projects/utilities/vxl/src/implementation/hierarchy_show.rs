@@ -1,4 +1,4 @@
-use crate::{BoundsView, Format, PatternView, Result, TransformView, implementation};
+use crate::{Format, HierarchyViews, PatternView, Result, implementation};
 use branded_id::{IdVec, U32Id};
 use pathspec::GitIgnoreRegex;
 use std::{
@@ -31,26 +31,19 @@ const EXTENSION_LAST: &str = "  ";
 const EXTENSION_MID: &str = "\u{2502} ";
 
 /// Loads the voxel file at `input` and prints its scene graph as a tree.
-#[allow(clippy::too_many_arguments)]
 pub fn hierarchy_show(
     input: &Path,
     from: Option<Format>,
     pattern: Option<PatternView>,
     collapse_instances: bool,
-    transforms: Option<TransformView>,
-    bounds: Option<BoundsView>,
-    extents: Option<BoundsView>,
-    palettes: bool,
+    views: HierarchyViews,
 ) -> Result<()> {
     let state = implementation::load_state(input, from)?;
 
     let options = RenderOptions {
         pattern,
         collapse_instances,
-        transforms,
-        bounds,
-        extents,
-        palettes,
+        views,
     };
 
     let output = render(&state, &options)?;
@@ -68,17 +61,8 @@ struct RenderOptions {
     /// Collapse repeat instances to a stub after the first placement.
     collapse_instances: bool,
 
-    /// When set, prepend each node's transform as a subtree.
-    transforms: Option<TransformView>,
-
-    /// When set, append each object's grid bounds as a subtree.
-    bounds: Option<BoundsView>,
-
-    /// When set, append each object's extents as a subtree.
-    extents: Option<BoundsView>,
-
-    /// When true, append each object's referenced palettes as a subtree.
-    palettes: bool,
+    /// The per-node and per-object subtrees to append.
+    views: HierarchyViews,
 }
 
 /// Renders the scene graph of `state` under `options`, the testable core of
@@ -94,10 +78,7 @@ fn render(state: &VoxMain, options: &RenderOptions) -> Result<String> {
     let mut walk = Walk {
         scene: &scene,
         collapse_instances: options.collapse_instances,
-        transforms: options.transforms,
-        bounds: options.bounds,
-        extents: options.extents,
-        palettes: options.palettes,
+        views: options.views,
         filter,
         seen_nodes: IdVec::from_vec(vec![0; state.hierarchy_node_count()]),
         seen_objects: IdVec::from_vec(vec![0; state.object_count()]),
@@ -107,17 +88,6 @@ fn render(state: &VoxMain, options: &RenderOptions) -> Result<String> {
     walk.run();
 
     Ok(walk.output)
-}
-
-/// One object's grid box: its build-volume size and its origin, the offset from
-/// the placing node to the box's min corner, both in voxels.
-#[derive(Clone, Copy)]
-struct ObjectBox {
-    /// Grid size in voxels.
-    bounds: TyVector3U32,
-
-    /// Offset from the placing node to the min corner, in voxels.
-    origin: TyVector3I32,
 }
 
 /// A thin view over the loaded [`VoxMain`], which stays the single source of
@@ -471,17 +441,8 @@ struct Walk<'a> {
     /// Collapse repeat instances to a stub after the first placement.
     collapse_instances: bool,
 
-    /// When set, prepend each node's transform as a subtree.
-    transforms: Option<TransformView>,
-
-    /// When set, append each object's grid bounds as a subtree.
-    bounds: Option<BoundsView>,
-
-    /// When set, append each object's extents as a subtree.
-    extents: Option<BoundsView>,
-
-    /// When true, append each object's referenced palettes as a subtree.
-    palettes: bool,
+    /// The per-node and per-object subtrees to append.
+    views: HierarchyViews,
 
     /// The path filter, when a `pattern` was given.
     filter: Option<Filter>,
@@ -780,7 +741,7 @@ impl Walk<'_> {
         // the collapsed-descendants marker or the filtered real children.
         let mut children: Vec<NodeChild> = Vec::new();
 
-        if self.transforms.is_some() {
+        if self.views.transforms.is_some() {
             children.push(NodeChild::Transform);
         }
 
@@ -860,7 +821,7 @@ impl Walk<'_> {
         local: TyTransformF64,
         world: TyTransformF64,
     ) {
-        let Some(view) = self.transforms else {
+        let Some(view) = self.views.transforms else {
             return;
         };
 
@@ -908,7 +869,7 @@ impl Walk<'_> {
     }
 
     /// Appends object `id` as a leaf line reading `name: {object: <id>, ...}`,
-    /// then its `bounds` and `extents` subtrees when set.
+    /// then its enabled geometry rows and its `palettes` subtree.
     /// `placing_world` is the world transform of the node placing the object.
     fn render_object(
         &mut self,
@@ -946,11 +907,6 @@ impl Walk<'_> {
             object.name()
         ));
 
-        let object_box = ObjectBox {
-            bounds: object.bounds(),
-            origin: object.origin(),
-        };
-
         let extension = if is_last {
             EXTENSION_LAST
         } else {
@@ -958,91 +914,138 @@ impl Walk<'_> {
         };
 
         let child_prefix = format!("{prefix}{extension}");
-        let bounds = self.bounds;
-        let extents = self.extents;
-        let palettes = self.palettes;
 
-        if let Some(view) = bounds {
-            self.render_bounds(
-                &child_prefix,
-                extents.is_none() && !palettes,
-                object_box,
-                placing_world,
-                view,
-            );
+        let rows = self.object_rows(object, placing_world);
+        let total = rows.len() + usize::from(self.views.palettes);
+
+        for (index, row) in rows.iter().enumerate() {
+            self.render_object_row(row, &child_prefix, index + 1 == total);
         }
 
-        if let Some(view) = extents {
-            self.render_extents(&child_prefix, !palettes, object_box, placing_world, view);
-        }
-
-        if palettes {
+        if self.views.palettes {
             self.render_palettes(&child_prefix, true, object);
         }
     }
 
-    /// Appends the `bounds` subtree: the object's grid box as a min and a max
-    /// corner, in local space or, when the view asks, world space.
-    fn render_bounds(
-        &mut self,
-        prefix: &str,
-        is_last: bool,
-        object_box: ObjectBox,
-        world: TyTransformF64,
-        view: BoundsView,
-    ) {
-        let (min, max) = box_min_max(object_box, world, view.world);
+    /// The enabled geometry rows for `object`, in display order: the edit-grid
+    /// origin, bounds, and extents, then the runtime-grid origin, bounds, and
+    /// extents. An edit grid with no authoring margin yields its enabled rows as
+    /// `null`; the runtime grid is always shown, a zero-size box at the object's
+    /// origin when it has no live voxels. `placing_world` folds an origin into
+    /// world space when its view asks.
+    fn object_rows(&self, object: &VoxObject, placing_world: TyTransformF64) -> Vec<ObjectRow> {
+        let origin = vec_i32_to_f64(object.origin());
+        let build = vec_u32_to_f64(object.bounds());
+        let edit = edit_present(object);
 
-        let connector = if is_last {
-            CONNECTOR_LAST
-        } else {
-            CONNECTOR_MID
+        // The runtime grid as (node-relative min corner, size). An object with no
+        // live voxels has a zero-size grid at its origin.
+        let (runtime_min, runtime_size) = match object.live_extent() {
+            Some((min, size)) => (origin + vec_u32_to_f64(min), vec_u32_to_f64(size)),
+            None => (origin, TyVector3F64::new(0.0, 0.0, 0.0)),
         };
 
-        self.output
-            .push_str(&format!("{prefix}{connector} bounds\n"));
+        let views = self.views;
+        let mut rows = Vec::new();
 
-        let extension = if is_last {
-            EXTENSION_LAST
-        } else {
-            EXTENSION_MID
-        };
+        if let Some(view) = views.edit_origins {
+            let value = edit.then(|| origin_value(origin, view.world, placing_world));
+            rows.push(ObjectRow::value("edit-origin", value, view.precision));
+        }
 
-        let inner = format!("{prefix}{extension}");
+        if let Some(precision) = views.edit_bounds {
+            let corners = edit.then(|| (origin, origin + build));
+            rows.push(ObjectRow::bounds("edit-bounds", corners, precision));
+        }
 
-        self.output.push_str(&format!(
-            "{inner}{CONNECTOR_MID} min: [{}]\n",
-            format_vec3(min, view.precision)
-        ));
+        if let Some(precision) = views.edit_extents {
+            rows.push(ObjectRow::value(
+                "edit-extents",
+                edit.then_some(build),
+                precision,
+            ));
+        }
 
-        self.output.push_str(&format!(
-            "{inner}{CONNECTOR_LAST} max: [{}]\n",
-            format_vec3(max, view.precision)
-        ));
+        if let Some(view) = views.runtime_origins {
+            let value = Some(origin_value(runtime_min, view.world, placing_world));
+            rows.push(ObjectRow::value("runtime-origin", value, view.precision));
+        }
+
+        if let Some(precision) = views.runtime_bounds {
+            let corners = Some((runtime_min, runtime_min + runtime_size));
+            rows.push(ObjectRow::bounds("runtime-bounds", corners, precision));
+        }
+
+        if let Some(precision) = views.runtime_extents {
+            rows.push(ObjectRow::value(
+                "runtime-extents",
+                Some(runtime_size),
+                precision,
+            ));
+        }
+
+        rows
     }
 
-    /// Appends the `extents` line: the object's grid box size, `max - min`, in
-    /// local space or, when the view asks, world space.
-    fn render_extents(
-        &mut self,
-        prefix: &str,
-        is_last: bool,
-        object_box: ObjectBox,
-        world: TyTransformF64,
-        view: BoundsView,
-    ) {
-        let (min, max) = box_min_max(object_box, world, view.world);
-
+    /// Appends one geometry row: a `label: [x, y, z]` line, a `label` min/max
+    /// subtree, or, when the value is unavailable, a `label: null` leaf.
+    fn render_object_row(&mut self, row: &ObjectRow, prefix: &str, is_last: bool) {
         let connector = if is_last {
             CONNECTOR_LAST
         } else {
             CONNECTOR_MID
         };
 
-        self.output.push_str(&format!(
-            "{prefix}{connector} extents: [{}]\n",
-            format_vec3(max - min, view.precision)
-        ));
+        match row {
+            ObjectRow::Value {
+                label,
+                value,
+                precision,
+            } => {
+                let text = match value {
+                    Some(vector) => format!("[{}]", format_vec3(*vector, *precision)),
+                    None => "null".to_string(),
+                };
+
+                self.output
+                    .push_str(&format!("{prefix}{connector} {label}: {text}\n"));
+            }
+
+            ObjectRow::Bounds {
+                label,
+                corners: None,
+                ..
+            } => self
+                .output
+                .push_str(&format!("{prefix}{connector} {label}: null\n")),
+
+            ObjectRow::Bounds {
+                label,
+                corners: Some((min, max)),
+                precision,
+            } => {
+                self.output
+                    .push_str(&format!("{prefix}{connector} {label}\n"));
+
+                let extension = if is_last {
+                    EXTENSION_LAST
+                } else {
+                    EXTENSION_MID
+                };
+
+                let inner = format!("{prefix}{extension}");
+
+                self.output.push_str(&format!(
+                    "{inner}{CONNECTOR_MID} min: [{}]\n",
+                    format_vec3(*min, *precision)
+                ));
+
+                self.output.push_str(&format!(
+                    "{inner}{CONNECTOR_LAST} max: [{}]\n",
+                    format_vec3(*max, *precision)
+                ));
+            }
+        }
     }
 
     /// Appends the `palettes` subtree: one child per palette the object
@@ -1100,36 +1103,88 @@ impl Walk<'_> {
     }
 }
 
-/// The min and max corners of `object_box`, in world space when `world_space`,
-/// else in the node-local grid space. World space applies the placing node's
-/// `world` transform to the box: its center moves as a point and its half-extents
-/// grow by the absolute rotation, so the result is the box's axis-aligned bound.
-fn box_min_max(
-    object_box: ObjectBox,
-    world: TyTransformF64,
-    world_space: bool,
-) -> (TyVector3F64, TyVector3F64) {
-    let origin = object_box.origin;
+/// One appended geometry row under an object: a single vector value or a min/max
+/// subtree, each with a `null` form for when the underlying grid is absent.
+enum ObjectRow {
+    /// A `label: [x, y, z]` line, or `label: null` when `value` is `None`.
+    Value {
+        label: &'static str,
+        value: Option<TyVector3F64>,
+        precision: usize,
+    },
 
-    let bounds = object_box.bounds;
+    /// A `label` subtree over a min and a max corner, or `label: null` when
+    /// `corners` is `None`.
+    Bounds {
+        label: &'static str,
+        corners: Option<(TyVector3F64, TyVector3F64)>,
+        precision: usize,
+    },
+}
 
-    let min = TyVector3F64::new(origin.x as f64, origin.y as f64, origin.z as f64);
-
-    let size = TyVector3F64::new(bounds.x as f64, bounds.y as f64, bounds.z as f64);
-
-    if !world_space {
-        return (min, min + size);
+impl ObjectRow {
+    /// A single-line vector row.
+    fn value(label: &'static str, value: Option<TyVector3F64>, precision: usize) -> ObjectRow {
+        ObjectRow::Value {
+            label,
+            value,
+            precision,
+        }
     }
 
-    let half = size * 0.5;
+    /// A min/max subtree row.
+    fn bounds(
+        label: &'static str,
+        corners: Option<(TyVector3F64, TyVector3F64)>,
+        precision: usize,
+    ) -> ObjectRow {
+        ObjectRow::Bounds {
+            label,
+            corners,
+            precision,
+        }
+    }
+}
 
-    let center = world.transform_point(min + half);
+/// Whether `object` has a distinct edit grid: its build volume adds margin around
+/// the tight live extent or offsets it from the grid min corner. This mirrors the
+/// condition `info` uses to report an object's edit bounds. An empty object counts
+/// as having an edit grid when its build volume is non-empty.
+fn edit_present(object: &VoxObject) -> bool {
+    let build = object.bounds();
 
-    let world_half = world
-        .rotation
-        .rotate_extents_abs(world.scale.abs().componentwise_multiply(&half));
+    match object.live_extent() {
+        Some((min, size)) => {
+            min.x != 0
+                || min.y != 0
+                || min.z != 0
+                || size.x != build.x
+                || size.y != build.y
+                || size.z != build.z
+        }
 
-    (center - world_half, center + world_half)
+        None => build.x != 0 || build.y != 0 || build.z != 0,
+    }
+}
+
+/// An origin corner in the space its view asks for: the node-local offset itself,
+/// or that corner as a point through the placing node's `world` transform.
+fn origin_value(corner: TyVector3F64, world: bool, placing_world: TyTransformF64) -> TyVector3F64 {
+    if world {
+        placing_world.transform_point(corner)
+    } else {
+        corner
+    }
+}
+
+/// A signed integer grid vector as floats.
+fn vec_i32_to_f64(vector: TyVector3I32) -> TyVector3F64 {
+    TyVector3F64::new(vector.x as f64, vector.y as f64, vector.z as f64)
+}
+
+/// An unsigned integer grid vector as floats.
+fn vec_u32_to_f64(vector: TyVector3U32) -> TyVector3F64 {
+    TyVector3F64::new(vector.x as f64, vector.y as f64, vector.z as f64)
 }
 
 /// Formats a vector as `x, y, z`, each to `precision` decimal places.
@@ -1146,7 +1201,7 @@ fn format_vec3(vector: TyVector3F64, precision: usize) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BoundsView, PatternView, Result, TransformView,
+        HierarchyViews, OriginView, PatternView, Result, TransformView,
         implementation::hierarchy_show::{RenderOptions, render},
     };
     use branded_id::U32Id;
@@ -1230,46 +1285,19 @@ mod tests {
             &RenderOptions {
                 pattern,
                 collapse_instances,
-                transforms: None,
-                bounds: None,
-                extents: None,
-                palettes: false,
+                views: HierarchyViews::default(),
             },
         )
     }
 
-    /// Renders `state` with the subtree views, no pattern or collapse flags.
-    fn views(
-        state: &VoxMain,
-        transforms: Option<TransformView>,
-        bounds: Option<BoundsView>,
-        extents: Option<BoundsView>,
-    ) -> String {
+    /// Renders `state` with the given views, no pattern or collapse flags.
+    fn render_views(state: &VoxMain, views: HierarchyViews) -> String {
         render(
             state,
             &RenderOptions {
                 pattern: None,
                 collapse_instances: false,
-                transforms,
-                bounds,
-                extents,
-                palettes: false,
-            },
-        )
-        .unwrap()
-    }
-
-    /// Renders `state` with the palettes subtree, no pattern or other views.
-    fn palettes(state: &VoxMain) -> String {
-        render(
-            state,
-            &RenderOptions {
-                pattern: None,
-                collapse_instances: false,
-                transforms: None,
-                bounds: None,
-                extents: None,
-                palettes: true,
+                views,
             },
         )
         .unwrap()
@@ -1280,14 +1308,30 @@ mod tests {
         VoxObject::new(name.to_owned(), TyVector3U32::new(1, 1, 1)).unwrap()
     }
 
-    /// An object with a grid `bounds` size and an `origin` offset.
-    fn object_box(name: &str, bounds: (u32, u32, u32), origin: (i32, i32, i32)) -> VoxObject {
+    /// An object with build volume `bounds`, grid `origin`, and every voxel in
+    /// the inclusive `[lo, hi]` box made live, so its tight runtime extent is that
+    /// box. `lo`/`hi` must lie inside `bounds`.
+    fn object_live(
+        name: &str,
+        bounds: (u32, u32, u32),
+        origin: (i32, i32, i32),
+        lo: (u32, u32, u32),
+        hi: (u32, u32, u32),
+    ) -> VoxObject {
         let mut object = VoxObject::new(
             name.to_owned(),
             TyVector3U32::new(bounds.0, bounds.1, bounds.2),
         )
         .unwrap();
         object.set_origin(TyVector3I32::new(origin.0, origin.1, origin.2));
+        for x in lo.0..=hi.0 {
+            for y in lo.1..=hi.1 {
+                for z in lo.2..=hi.2 {
+                    let id = object.voxel_id(TyVector3U32::new(x, y, z)).unwrap();
+                    object.retain_voxel(id, &[]).unwrap();
+                }
+            }
+        }
         object
     }
 
@@ -1400,6 +1444,23 @@ mod tests {
         let body_id = state.add_object(body);
 
         let root = state.add_hierarchy_node(node("root", vec![], vec![body_id]));
+        state.set_root_hierarchy_nodes(vec![root]);
+        state
+    }
+
+    /// A root placing one object `body` with a distinct edit grid: build volume
+    /// 6x6x6 at origin (-1, -1, -1), live voxels tight in [1, 4] on each axis, so
+    /// the runtime grid is a 4x4x4 box at node-relative origin (0, 0, 0).
+    fn geometry_state() -> VoxMain {
+        let mut state = VoxMain::default();
+        let body = state.add_object(object_live(
+            "body",
+            (6, 6, 6),
+            (-1, -1, -1),
+            (1, 1, 1),
+            (4, 4, 4),
+        ));
+        let root = state.add_hierarchy_node(node("root", vec![], vec![body]));
         state.set_root_hierarchy_nodes(vec![root]);
         state
     }
@@ -1638,7 +1699,13 @@ mod tests {
             degrees: true,
             precision: 2,
         };
-        let output = views(&state, Some(view), None, None);
+        let output = render_views(
+            &state,
+            HierarchyViews {
+                transforms: Some(view),
+                ..HierarchyViews::default()
+            },
+        );
         assert_eq!(
             output,
             "root\n\
@@ -1652,57 +1719,173 @@ mod tests {
     }
 
     #[test]
-    fn bounds_and_extents_local_append_the_grid_box() {
-        let mut state = VoxMain::default();
-        let body = state.add_object(object_box("body", (4, 5, 6), (1, 0, 0)));
-        let root = state.add_hierarchy_node(node("root", vec![], vec![body]));
-        state.set_root_hierarchy_nodes(vec![root]);
-
-        let view = BoundsView {
-            world: false,
-            precision: 2,
+    fn edit_and_runtime_geometry_render_all_six_rows() {
+        // Every geometry flag on, at precision 2 in local space. Edit is the
+        // 6x6x6 build volume at origin (-1, -1, -1); runtime is the tight 4x4x4
+        // live box, node-relative origin (0, 0, 0).
+        let views = HierarchyViews {
+            edit_origins: Some(OriginView {
+                world: false,
+                precision: 2,
+            }),
+            edit_bounds: Some(2),
+            edit_extents: Some(2),
+            runtime_origins: Some(OriginView {
+                world: false,
+                precision: 2,
+            }),
+            runtime_bounds: Some(2),
+            runtime_extents: Some(2),
+            ..HierarchyViews::default()
         };
-        let output = views(&state, None, Some(view), Some(view));
+        let output = render_views(&geometry_state(), views);
         assert_eq!(
             output,
             "root\n\
              \u{2514} root: {node: 0}\n\
              \u{20}\u{20}\u{2514} body: {object: 0}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{251C} bounds\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{251C} min: [1.00, 0.00, 0.00]\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{2514} max: [5.00, 5.00, 6.00]\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} extents: [4.00, 5.00, 6.00]\n"
+             \u{20}\u{20}\u{20}\u{20}\u{251C} edit-origin: [-1.00, -1.00, -1.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} edit-bounds\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{251C} min: [-1.00, -1.00, -1.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{2514} max: [5.00, 5.00, 5.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} edit-extents: [6.00, 6.00, 6.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} runtime-origin: [0.00, 0.00, 0.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} runtime-bounds\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{251C} min: [0.00, 0.00, 0.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{2514} max: [4.00, 4.00, 4.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} runtime-extents: [4.00, 4.00, 4.00]\n"
         );
     }
 
     #[test]
-    fn bounds_world_applies_the_placing_node_transform() {
-        // A 2x1x1 box under a node turned 180 degrees about z. The exact
-        // half-turn quaternion keeps the world corners integer.
+    fn edit_geometry_is_null_without_an_authoring_margin() {
+        // A 2x2x2 object fully live from the corner: build volume equals the tight
+        // extent, so it has no distinct edit grid and every edit row is `null`.
         let mut state = VoxMain::default();
-        let body = state.add_object(object_box("body", (2, 1, 1), (0, 0, 0)));
-        let transform = TyTransformF64::new(
-            TyVector3F64::new(0.0, 0.0, 0.0),
-            TyQuaternionF64::new(0.0, 0.0, 1.0, 0.0),
-            TyVector3F64::new(1.0, 1.0, 1.0),
-        );
-        let root = state.add_hierarchy_node(node_xf("root", transform, vec![], vec![body]));
+        let body = state.add_object(object_live(
+            "body",
+            (2, 2, 2),
+            (0, 0, 0),
+            (0, 0, 0),
+            (1, 1, 1),
+        ));
+        let root = state.add_hierarchy_node(node("root", vec![], vec![body]));
         state.set_root_hierarchy_nodes(vec![root]);
 
-        let view = BoundsView {
-            world: true,
-            precision: 2,
+        let views = HierarchyViews {
+            edit_origins: Some(OriginView {
+                world: false,
+                precision: 2,
+            }),
+            edit_bounds: Some(2),
+            edit_extents: Some(2),
+            runtime_extents: Some(2),
+            ..HierarchyViews::default()
         };
-        let output = views(&state, None, Some(view), Some(view));
+        let output = render_views(&state, views);
+        assert!(
+            output.contains("edit-origin: null"),
+            "output was:\n{output}"
+        );
+        assert!(
+            output.contains("edit-bounds: null"),
+            "output was:\n{output}"
+        );
+        assert!(
+            output.contains("edit-extents: null"),
+            "output was:\n{output}"
+        );
+        assert!(
+            output.contains("runtime-extents: [2.00, 2.00, 2.00]"),
+            "output was:\n{output}"
+        );
+    }
+
+    #[test]
+    fn runtime_geometry_is_a_zero_box_at_the_origin_for_an_empty_object() {
+        // A 3x3x3 build volume at origin (-1, -1, -1) with no live voxels: the
+        // runtime grid is a zero-size box at that origin, never `null`, while the
+        // edit rows read the build volume.
+        let mut state = VoxMain::default();
+        let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(3, 3, 3)).unwrap();
+        body.set_origin(TyVector3I32::new(-1, -1, -1));
+        let body = state.add_object(body);
+        let root = state.add_hierarchy_node(node("root", vec![], vec![body]));
+        state.set_root_hierarchy_nodes(vec![root]);
+
+        let views = HierarchyViews {
+            edit_extents: Some(2),
+            runtime_origins: Some(OriginView {
+                world: false,
+                precision: 2,
+            }),
+            runtime_bounds: Some(2),
+            runtime_extents: Some(2),
+            ..HierarchyViews::default()
+        };
+        let output = render_views(&state, views);
         assert_eq!(
             output,
             "root\n\
              \u{2514} root: {node: 0}\n\
              \u{20}\u{20}\u{2514} body: {object: 0}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{251C} bounds\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{251C} min: [-2.00, -1.00, 0.00]\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{2514} max: [0.00, 0.00, 1.00]\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} extents: [2.00, 1.00, 1.00]\n"
+             \u{20}\u{20}\u{20}\u{20}\u{251C} edit-extents: [3.00, 3.00, 3.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} runtime-origin: [-1.00, -1.00, -1.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} runtime-bounds\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{251C} min: [-1.00, -1.00, -1.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{2514} max: [-1.00, -1.00, -1.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} runtime-extents: [0.00, 0.00, 0.00]\n"
+        );
+    }
+
+    #[test]
+    fn runtime_origins_world_apply_the_node_transform() {
+        // A unit object fully live at the grid corner under a node translated to
+        // +10x. Its runtime origin is (0, 0, 0) locally, (10, 0, 0) in world.
+        let mut state = VoxMain::default();
+        let body = state.add_object(object_live(
+            "body",
+            (1, 1, 1),
+            (0, 0, 0),
+            (0, 0, 0),
+            (0, 0, 0),
+        ));
+        let root = state.add_hierarchy_node(node_xf(
+            "root",
+            xf((10.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
+            vec![],
+            vec![body],
+        ));
+        state.set_root_hierarchy_nodes(vec![root]);
+
+        let local = render_views(
+            &state,
+            HierarchyViews {
+                runtime_origins: Some(OriginView {
+                    world: false,
+                    precision: 2,
+                }),
+                ..HierarchyViews::default()
+            },
+        );
+        assert!(
+            local.contains("runtime-origin: [0.00, 0.00, 0.00]"),
+            "output was:\n{local}"
+        );
+
+        let world = render_views(
+            &state,
+            HierarchyViews {
+                runtime_origins: Some(OriginView {
+                    world: true,
+                    precision: 2,
+                }),
+                ..HierarchyViews::default()
+            },
+        );
+        assert!(
+            world.contains("runtime-origin: [10.00, 0.00, 0.00]"),
+            "output was:\n{world}"
         );
     }
 
@@ -1731,7 +1914,13 @@ mod tests {
             degrees: false,
             precision: 2,
         };
-        let output = views(&state, Some(view), None, None);
+        let output = render_views(
+            &state,
+            HierarchyViews {
+                transforms: Some(view),
+                ..HierarchyViews::default()
+            },
+        );
         assert!(
             output.contains("position: [11.00, 0.00, 0.00]"),
             "output was:\n{output}"
@@ -1740,7 +1929,13 @@ mod tests {
 
     #[test]
     fn palettes_list_each_referenced_palette_with_its_cell_count() {
-        let output = palettes(&palette_ref_state());
+        let output = render_views(
+            &palette_ref_state(),
+            HierarchyViews {
+                palettes: true,
+                ..HierarchyViews::default()
+            },
+        );
         assert_eq!(
             output,
             "root\n\
@@ -1756,7 +1951,13 @@ mod tests {
     fn palettes_are_an_empty_array_when_an_object_references_none() {
         // `simple_state`'s `body` has no palette reference, so the subtree
         // collapses to an empty array rather than a childless header.
-        let output = palettes(&simple_state());
+        let output = render_views(
+            &simple_state(),
+            HierarchyViews {
+                palettes: true,
+                ..HierarchyViews::default()
+            },
+        );
         assert_eq!(
             output,
             "root\n\
@@ -1767,45 +1968,26 @@ mod tests {
     }
 
     #[test]
-    fn palettes_follow_bounds_and_extents_under_an_object() {
-        // With all three object subtrees on, palettes is last, so bounds and
-        // extents keep their non-last connectors.
-        let mut state = VoxMain::default();
-        let palette = state.add_palette(palette_with_cells(1));
-        let cell = state.palette(palette).unwrap().iter_cells().next().unwrap();
-        let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        body.add_palette_ref(palette, cell);
-        let body_id = state.add_object(body);
-        let root = state.add_hierarchy_node(node("root", vec![], vec![body_id]));
-        state.set_root_hierarchy_nodes(vec![root]);
-
-        let view = BoundsView {
-            world: false,
-            precision: 2,
-        };
-        let output = render(
-            &state,
-            &RenderOptions {
-                pattern: None,
-                collapse_instances: false,
-                transforms: None,
-                bounds: Some(view),
-                extents: Some(view),
+    fn palettes_follow_the_geometry_rows_under_an_object() {
+        // With a geometry row and palettes both on, palettes is the last child, so
+        // the geometry row keeps its non-last connector.
+        let output = render_views(
+            &palette_ref_state(),
+            HierarchyViews {
+                edit_extents: Some(2),
                 palettes: true,
+                ..HierarchyViews::default()
             },
-        )
-        .unwrap();
+        );
         assert_eq!(
             output,
             "root\n\
              \u{2514} root: {node: 0}\n\
              \u{20}\u{20}\u{2514} body: {object: 0}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{251C} bounds\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{251C} min: [0.00, 0.00, 0.00]\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2502} \u{2514} max: [2.00, 1.00, 1.00]\n\
-             \u{20}\u{20}\u{20}\u{20}\u{251C} extents: [2.00, 1.00, 1.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} edit-extents: [1.00, 1.00, 1.00]\n\
              \u{20}\u{20}\u{20}\u{20}\u{2514} palettes\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 0: {cells: 1}\n"
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {cells: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {cells: 3}\n"
         );
     }
 }

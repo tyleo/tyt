@@ -27,21 +27,41 @@ shows its name and its referenced child objects. See
    transform as a nested subtree. `space` is `local` (default) or `world`;
    `rot-unit` is `rad` (default) or `deg`; `precision` is the decimal precision
    for alignment (default `2`).
-3. `--show-bounds [space] [precision]`: append each object's grid `bounds`
-   subtree. In `world` space the bounds are reported as the axis-aligned box
-   after the placing node's transform.
-4. `--show-extents [space] [precision]`: append an extents subtree
-   (`max - min`), with the same arguments as `--show-bounds`.
-5. `--show-palettes` (flag): append each object's referenced palettes as a
+
+Each object carries two grids: the runtime grid, the tight box around its live
+voxels, and the edit grid, the author's build volume, which may add margin
+around the runtime grid. The next six flags append one of `origin`, `bounds`, or
+`extents` for one of those grids, each measured relative to the placing node. An
+edit row is `null` when the build volume matches the runtime grid, so there is no
+distinct edit grid. The runtime grid is always shown; an object with no live
+voxels reports a zero-size box at its origin.
+
+3. `--show-edit-origins [space] [precision]`: append each object's edit-grid
+   origin, its build-volume min corner. `space` is `local` (default), the offset
+   from the placing node, or `world`, that corner through the node's world
+   transform. `precision` is the decimal places (default `2`).
+4. `--show-edit-bounds [precision]`: append the edit grid's `min`/`max` subtree,
+   node-relative.
+5. `--show-edit-extents [precision]`: append the edit grid's extents
+   (`max - min`).
+6. `--show-runtime-origins [space] [precision]`: append each object's
+   runtime-grid origin, its tight live-box min corner, with the same
+   `[space] [precision]` arguments as `--show-edit-origins`.
+7. `--show-runtime-bounds [precision]`: append the runtime grid's `min`/`max`
+   subtree, node-relative.
+8. `--show-runtime-extents [precision]`: append the runtime grid's extents
+   (`max - min`).
+9. `--show-palettes` (flag): append each object's referenced palettes as a
    nested subtree, one child per palette in the object's palette-reference
    order, reading `index: {cells: <count>}`. An object that references no
    palette prints an empty `palettes: []` array.
-6. `--collapse-ancestors` (flag): hide the ancestor chain above each match root
-   and replace it with an `ancestors` marker, omitted when the match root is a
-   top-level node. Requires a `pattern`.
-7. `--collapse-descendants` (flag): hide the descendants of each match root and
-   replace them with a `descendants` marker, omitted when the match root has no
-   descendants. Requires a `pattern`.
-8. `--collapse-instances` (flag): expand each shared node's first placement and
-   print each later placement as a non-expanded stub, rather than expanding every
-   placement in full. This command prints only the tree; it has no `--layout`.
+10. `--collapse-ancestors` (flag): hide the ancestor chain above each match root
+    and replace it with an `ancestors` marker, omitted when the match root is a
+    top-level node. Requires a `pattern`.
+11. `--collapse-descendants` (flag): hide the descendants of each match root and
+    replace them with a `descendants` marker, omitted when the match root has no
+    descendants. Requires a `pattern`.
+12. `--collapse-instances` (flag): expand each shared node's first placement and
+    print each later placement as a non-expanded stub, rather than expanding
+    every placement in full. This command prints only the tree; it has no
+    `--layout`.

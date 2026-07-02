@@ -1,7 +1,7 @@
 use crate::{
-    AttributeSelector, BoundsView, CameraView, ColorFormat, EditState, FillMode, Format,
-    GridResolution, MaterialMode, MeshFormat, PaletteReduction, PaletteShowLayout, PatternView,
-    ReportLayout, Result, TransformView, VoxjEncoding, VoxjFormat, Width,
+    AttributeSelector, CameraView, ColorFormat, EditState, FillMode, Format, GridResolution,
+    HierarchyViews, MaterialMode, MeshFormat, PaletteReduction, PaletteShowLayout, PatternView,
+    ReportLayout, Result, VoxjEncoding, VoxjFormat, Width,
 };
 use std::path::Path;
 
@@ -160,22 +160,16 @@ pub trait Dependencies {
     ///   matched nodes and objects and their ancestors print.
     /// * `collapse_instances` - when true, expand a shared node's first
     ///   placement and print each later placement as a non-expanded stub.
-    /// * `transforms` - when set, prepend each node's transform as a subtree.
-    /// * `bounds` - when set, append each object's grid bounds as a subtree.
-    /// * `extents` - when set, append each object's extents as a subtree.
-    /// * `palettes` - when true, append each object's referenced palettes as a
-    ///   subtree, one child per palette showing its index and cell count.
-    #[allow(clippy::too_many_arguments)]
+    /// * `views` - the per-node and per-object subtrees to append: the node
+    ///   transform, each object's edit- and runtime-grid origins, bounds, and
+    ///   extents, and its referenced palettes.
     fn hierarchy_show(
         &self,
         input: &Path,
         from: Option<Format>,
         pattern: Option<PatternView>,
         collapse_instances: bool,
-        transforms: Option<TransformView>,
-        bounds: Option<BoundsView>,
-        extents: Option<BoundsView>,
-        palettes: bool,
+        views: HierarchyViews,
     ) -> Result<()>;
 
     /// Writes `contents` to standard output.
