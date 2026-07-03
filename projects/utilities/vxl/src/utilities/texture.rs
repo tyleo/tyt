@@ -7,34 +7,44 @@ pub enum Texture {
     /// RGBA base color from `rgba`. Four channels.
     #[value(name = "albedo")]
     Albedo,
+
     /// glTF occlusion-roughness-metallic: R = occlusion, G = roughness,
     /// B = metallic. Three channels.
     #[value(name = "orm")]
     Orm,
+
     /// glTF metallic-roughness: R = 0, G = roughness, B = metallic. Three
     /// channels.
     #[value(name = "metallic-roughness")]
     MetallicRoughness,
+
     /// Unity metallic-smoothness: R = metallic, A = smoothness, G and B = 0.
     /// Four channels.
     #[value(name = "metallic-smoothness")]
     MetallicSmoothness,
+
     /// MSE packing: R = metallic, G = smoothness, B = emissive. Three channels.
     #[value(name = "mse")]
     Mse,
-    /// Grayscale `emissive`. One channel.
+
+    /// Grayscale `emissive` strength, written to R, G, and B so the glTF
+    /// emissive slot renders it as a neutral glow. One logical channel.
     #[value(name = "emissive")]
     Emissive,
+
     /// Grayscale `occlusion`. One channel.
     #[value(name = "occlusion")]
     Occlusion,
+
     /// Grayscale occlusion computed from the voxel geometry. One channel; always
     /// an unwrap layout.
     #[value(name = "computed-occlusion")]
     ComputedOcclusion,
+
     /// Grayscale `roughness`. One channel.
     #[value(name = "roughness")]
     Roughness,
+
     /// Grayscale `smoothness`, the derived `1-roughness`. One channel.
     #[value(name = "smoothness")]
     Smoothness,
@@ -45,36 +55,52 @@ impl Texture {
     pub fn bake(self) -> TextureBake {
         match self {
             Texture::Albedo => TextureBake::RgbaColor,
+
             Texture::Orm => packing(
                 attribute("occlusion", false),
                 attribute("roughness", false),
                 attribute("metallic", false),
                 None,
             ),
+
             Texture::MetallicRoughness => packing(
                 Some(ChannelSource::Zero),
                 attribute("roughness", false),
                 attribute("metallic", false),
                 None,
             ),
+
             Texture::MetallicSmoothness => packing(
                 attribute("metallic", false),
                 Some(ChannelSource::Zero),
                 Some(ChannelSource::Zero),
                 attribute("roughness", true),
             ),
+
             Texture::Mse => packing(
                 attribute("metallic", false),
                 attribute("roughness", true),
                 attribute("emissive", false),
                 None,
             ),
-            Texture::Emissive => packing(attribute("emissive", false), None, None, None),
+
+            // Replicated across R, G, B so glTF's RGB emissive slot reads a
+            // neutral grayscale glow rather than a single-channel red tint.
+            Texture::Emissive => packing(
+                attribute("emissive", false),
+                attribute("emissive", false),
+                attribute("emissive", false),
+                None,
+            ),
+
             Texture::Occlusion => packing(attribute("occlusion", false), None, None, None),
+
             Texture::ComputedOcclusion => {
                 packing(Some(ChannelSource::ComputedOcclusion), None, None, None)
             }
+
             Texture::Roughness => packing(attribute("roughness", false), None, None, None),
+
             Texture::Smoothness => packing(attribute("roughness", true), None, None, None),
         }
     }
@@ -147,5 +173,24 @@ mod tests {
             panic!("expected a packing");
         };
         assert_eq!(packing.sources(), vec![ChannelSource::ComputedOcclusion]);
+    }
+
+    #[test]
+    fn emissive_replicates_the_strength_across_rgb() {
+        let TextureBake::Packing(packing) = Texture::Emissive.bake() else {
+            panic!("expected a packing");
+        };
+
+        // R, G, B all carry the emissive strength, so the glTF emissive slot
+        // reads a neutral grayscale glow rather than a red single-channel tint.
+        assert_eq!(packing.channel_count(), 3);
+        assert_eq!(
+            packing.sources(),
+            vec![
+                attribute("emissive", false),
+                attribute("emissive", false),
+                attribute("emissive", false),
+            ]
+        );
     }
 }

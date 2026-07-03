@@ -1,8 +1,8 @@
 use crate::{
     AttributeSelector, CameraView, ColorFormat, EditState, FillMode, Format, GridResolution,
-    HierarchyViews, MaterialMode, MeshFormat, MeshMethod, PaletteListFields, PaletteListLayout,
-    PaletteReduction, PaletteShowLayout, PatternView, ReportLayout, Result, SelectIndex,
-    VoxjEncoding, VoxjFormat, Width,
+    HierarchyViews, MaterialMode, MeshFormat, MeshMethod, MeshTextureMap, PaletteListFields,
+    PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView, ReportLayout,
+    ResourceStorage, Result, SelectIndex, VoxjEncoding, VoxjFormat, Width,
 };
 use std::path::Path;
 
@@ -132,8 +132,9 @@ pub trait Dependencies {
     ) -> Result<Vec<usize>>;
 
     /// Meshes the object at index `object` of the voxel file at `input` into a
-    /// glTF or GLB mesh at `output`, as pure geometry with no hierarchy-node
-    /// transform.
+    /// glTF or GLB mesh at `output`, with no hierarchy-node transform. With no
+    /// `maps` it is pure geometry; otherwise it bakes the palette materials into
+    /// textures the mesh's UVs sample, writing any loose images beside `output`.
     ///
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.
@@ -145,6 +146,9 @@ pub trait Dependencies {
     /// * `method` - the meshing strategy.
     /// * `object` - the object's index into the document, as
     ///   [`resolve_objects`](Self::resolve_objects) returns.
+    /// * `maps` - the material maps to bake, each its own image, in order; empty
+    ///   for pure geometry.
+    /// * `storage` - where the baked images go.
     #[allow(clippy::too_many_arguments)]
     fn mesh_object(
         &self,
@@ -155,6 +159,8 @@ pub trait Dependencies {
         scale: f64,
         method: MeshMethod,
         object: usize,
+        maps: &[MeshTextureMap],
+        storage: ResourceStorage,
     ) -> Result<()>;
 
     /// Reports what the voxel file at `input` contains: a document summary, its
