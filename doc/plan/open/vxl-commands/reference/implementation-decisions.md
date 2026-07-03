@@ -1026,3 +1026,86 @@ impl; `MeshFormat` gains an `extension()` for the defaulted output path, and the
 output format defaults to `glb` when neither `--to` nor the output extension
 picks one. The material, vertex, atlas, computed-occlusion, and storage flags in
 [mesh.md](mesh.md) are unbuilt; the shipped command is the geometry-only subset.
+
+## mesh textures
+
+The `--atlas palette` texture path lives in voxsmith behind the `gltf` feature,
+the same split as the geometry mesher: voxsmith bakes and wires, vxl lowers the
+parsed flags. `object_to_material_glb` and `object_to_material_gltf` return a
+`MeshFiles { mesh, sidecars }`, the mesh bytes plus the loose image files, and a
+geometry-free `object_to_material_atlas` bakes just the images for the future
+`material` command. voxsmith gains `png` (0.18.1) behind `gltf` to encode the
+atlas images.
+
+The palette atlas keys on **used combos**, not the spec's full product. A
+voxel's material is the tuple of cells it samples across the object's palette
+layers; `resolve_used_materials` collects the distinct tuples the object uses,
+first seen in raster order, so the atlas holds one texel per material the mesh
+actually references. This is a deliberate deviation from
+[mesh.md](mesh.md#material-and-texture-maps), which lays out the product of the
+layer sizes so the atlas is shareable byte-for-byte across meshes: the used-combo
+atlas is compact and per-mesh, not shared. The test file's objects are two-layer
+(a 255-cell `rgba` palette and an 8-cell material palette), so the product would
+be 2040 texels where a solid single-material object needs one; used combos keep
+it small (a 210-material sphere bakes a 15x14 image). The shareable product is
+left for a later pass if a mesh needs to reuse another's atlas.
+
+Greedy meshing had to become material-aware: the geometry MVP merged coplanar
+faces regardless of material, but a merged quad samples one texel, so a quad may
+span only one material. `mesh_slices` keys the slice merge on a per-voxel
+material index and records it per vertex in a new `MeshGeometry::materials`;
+`object_to_mesh_geometry` is that with a constant key and no tracking, so the
+pure-geometry path is byte-identical. The document builder adds a `TEXCOORD_0`
+set placing every vertex at its material's texel center in a near-square layout
+(`atlas_dimensions` / `texel_center`), read with a nearest-neighbor sampler and
+`CLAMP_TO_EDGE`, so each face samples exactly its texel. All four corners of a
+quad share the UV, a degenerate UV triangle that is valid and correct under
+nearest sampling.
+
+Reading a material merges its layers, a later layer winning, and fills a missing
+attribute from its spec default (`attribute_defaults`), so a map never fails on
+an omitted attribute. A scalar and a color component both resolve to a `0..1`
+fraction the packing scales to a byte, with inversion as `1 - fraction`, so
+`R=metallic` and `R=rgba.a` inject the same way. `rgba` bakes straight to sRGB
+bytes, correct for `baseColorTexture`; the scalar data maps are linear, correct
+for the data slots; no color conversion is needed. The baker reads each
+`#RRGGBBAA` cell through `ty_math::TySrgbaColor::from_hex`, the one hex parser the
+palette-reduction path also shares, rather than a bespoke one. `computed-occlusion`
+errors, since only an unwrap layout holds a per-face value.
+
+The glTF slot each map fills is flag policy the command owns, mapped to
+voxsmith's `MaterialSlot` in the impl the way `MeshMethod` is: `albedo` to
+`baseColorTexture`, `metallic-roughness` to `metallicRoughnessTexture`, `orm` to
+both `occlusionTexture` and `metallicRoughnessTexture` sharing one image,
+`occlusion` to `occlusionTexture`, and `emissive` to `emissiveTexture` with the
+emissive factor set to full. A preset with no standard slot (`mse`,
+`metallic-smoothness`, the single-channel scalars) and every custom
+`--texture-map` packing carry `MaterialSlot::None` and are listed under the
+material's `extras.vxl.maps` by name, so a generic viewer ignores them and a
+custom pipeline finds them.
+
+`ResourceStorage` chooses where the images go, mapped to voxsmith's own enum in
+the impl. Embedded packs a GLB image into the binary chunk as a buffer view and a
+text-glTF image into a data URI; external writes a loose `.png` the mesh
+references by relative name; both embeds and also writes the loose copy. The
+default follows the target, `embedded` for `.glb` and `external` for `.gltf`, and
+the impl writes each returned sidecar beside the output. The enum also backs the
+deferred `--palette-storage`.
+
+The flag arity is settled per option, since clap groups a repeatable multi-value
+option only at fixed arity. `--texture-map <path> <channels>` is fixed at two
+values chunked by two, the `palette show` pattern. `--texture <name> [path]` and
+`--define-attribute <name> <key> [type]` have an optional trailing token, so each
+occurrence is one whitespace-split value parsed by `FromStr` (matching
+`AttributeBinding`'s form): `--texture albedo` is one token, and the path or type
+override is a quoted `--texture "albedo out.png"`. `AttributeBinding` dropped its
+palette index; a binding now reads the merged value across layers.
+
+The command resolves the `--texture-map` channels against the
+`--define-attribute` bindings and validates them: a binding alias becomes its
+concrete key, a color attribute (a binding typed `color`, or the built-in `rgba`)
+requires a component and a scalar rejects one, matching the mesh reference. The
+`--texture` presets bypass the bindings and read the spec attributes, as the
+reference promises. The resolved maps pass through `mesh_object` as flag-agnostic
+`MeshTextureMap`s, so `implementation/` never sees a flag. `--atlas unwrap` and
+any `computed-occlusion` map error as a later pass.

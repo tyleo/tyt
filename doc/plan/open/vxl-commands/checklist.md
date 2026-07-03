@@ -58,12 +58,13 @@ off as they land.
       reusing the `--texture-map` channel parser and `--define-attribute`; emit
       glTF vertex attributes (`COLOR_0` standard, `_NAME` custom) and write the
       `PaletteData` JSON per `--palette-storage`. See [mesh](reference/mesh.md).
-- [ ] `ResourceStorage` `ValueEnum` (`embedded` | `external` | `both`) backing
+- [x] `ResourceStorage` `ValueEnum` (`embedded` | `external` | `both`) backing
       `--texture-storage` and `--palette-storage`, defaulting per target
       (`embedded` for `.glb`, `external` for `.gltf`): embed images in the glb
       chunk / gltf data URI and the palette JSON under `extras.vxl`, write
       external `.png` and `-palette.json` files, or both. See
-      [mesh](reference/mesh.md).
+      [mesh](reference/mesh.md). (Image storage shipped with `mesh`; the palette
+      JSON reuse lands with the vertex carriers.)
 - [x] Shared voxj encoding options (`--format`, `--encoding-preset`,
       `--position-encoding`, `--sample-encoding`) in `VoxjEncodingOptions`,
       flattened by `to voxj` and `voxelize`; `--ext`/`--edit-state` stay on
@@ -96,12 +97,13 @@ off as they land.
 - [ ] `--atlas` and the `--computed-occlusion-strength` /
       `--computed-occlusion-min-brightness` / `--computed-occlusion-color-space`
       tuning (land with the texture / occlusion maps below).
-- [ ] Material maps: `--texture <name> [path]` presets (albedo, orm,
+- [x] Material maps: `--texture <name> [path]` presets (albedo, orm,
       metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
       computed-occlusion, roughness, smoothness), `--texture-map <path>
       <channels>`, `--define-attribute <name> <key> [type]`, and
       `--texture-storage` (embedded / external / both); default paths from the
-      mesh stem.
+      mesh stem. (The `--atlas palette` path; `computed-occlusion` errors until
+      the unwrap atlas lands.)
 - [ ] Vertex attribute maps: `--vertex <name> [target]` presets (albedo →
       `COLOR_0`, computed-occlusion → `COLOR_0` darken, metallic / roughness /
       emissive / occlusion / smoothness → scalar `_NAME`, orm / mse /
