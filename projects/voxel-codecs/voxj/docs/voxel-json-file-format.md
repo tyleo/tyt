@@ -29,15 +29,15 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
 
   "main": {
     "runtimeState": {
-      "objects": [
-        /* ... */
-      ],
-
       "valuePools": [
         /* ... */
       ],
 
       "palettes": [
+        /* ... */
+      ],
+
+      "objects": [
         /* ... */
       ],
 
@@ -63,7 +63,7 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
 }
 ```
 
-The runtime scene lives under `main.runtimeState`: objects, value pools, palettes, and hierarchy nodes are referenced by their array indices, and `rootHierarchyNodes` lists indices into `hierarchyNodes`. `editState` (optional) and `ext` are siblings of `runtimeState`. `editState` carries per-object editor margin aligned to the runtime objects (see [Edit State](#edit-state)); `ext` is an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
+The runtime scene lives under `main.runtimeState`: value pools, palettes, objects, and hierarchy nodes are referenced by their array indices, and `rootHierarchyNodes` lists indices into `hierarchyNodes`. `editState` (optional) and `ext` are siblings of `runtimeState`. `editState` carries per-object editor margin aligned to the runtime objects (see [Edit State](#edit-state)); `ext` is an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
 
 ## Coordinate System
 
@@ -227,19 +227,19 @@ Value pools live in `main.runtimeState.valuePools`, a shared array referenced by
 
 `kind` is a closed vocabulary tagging the shape of a pool's `values`. Every kind's `values` are plain readable JSON literals; declaring a kind enables validation: a consumer must understand a file's kinds to validate it, and must reject a file whose `kind` it does not recognize (see [Versioning and Extensibility](#versioning-and-extensibility)).
 
-| `kind`              | JSON form            | Constraint                                           | Example `values`               | Typical attributes                                                                            |
-| ------------------- | -------------------- | ---------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
-| `json`              | any JSON, incl. null | none                                                 | `[{"k": 1}, "x", 3]`           | any custom attribute                                                                          |
-| `bool`              | boolean              | `true` / `false`                                     | `[true, false]`                | flags                                                                                         |
-| `float`             | number               | floating-point-valued; within `min`/`max`            | `[0, 0.5, 1]`                  | metallicFactor, roughnessFactor, occlusionStrength, transmissionFactor, emissiveStrength, ior |
-| `int`               | number               | integer-valued, within `min`/`max`                   | `[0, 1, 2, 7]`                 | ids, counts, indices                                                                          |
-| `string`            | string               | must be a string                                     | `["low", "high"]`              | enumerated tags                                                                               |
-| `srgb-float`        | number[3]            | 3 finite numbers; within `min`/`max`, sRGB           | `[[1, 0, 0], [0.5, 0.5, 0]]`   | emissiveFactor, sRGB float / HDR                                                              |
-| `srgb-hex`          | string               | matches `^#[0-9A-F]{6}$`                             | `["#FF0000", "#204080"]`       | emissiveFactor; opaque custom colors                                                          |
-| `srgba-float`       | number[4]            | 4 finite numbers; within `min`/`max`, sRGB           | `[[1, 0, 0, 1]]`               | baseColorFactor, sRGB float                                                                   |
-| `srgba-hex`         | string               | matches `^#[0-9A-F]{8}$`                             | `["#FF0000FF"]`                | baseColorFactor, the default color kind                                                       |
-| `linear-rgb-float`  | number[3]            | 3 finite numbers; within `min`/`max`, linear         | `[[1, 0, 0], [0, 0.5, 1]]`     | emissiveFactor, linear                                                                        |
-| `linear-rgba-float` | number[4]            | 4 finite numbers; within `min`/`max`, linear         | `[[1, 0, 0, 1]]`               | baseColorFactor, linear                                                                       |
+| `kind`              | JSON form            | Constraint                                   | Example `values`             | Typical attributes                                                                            |
+| ------------------- | -------------------- | -------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------- |
+| `json`              | any JSON, incl. null | none                                         | `[{"k": 1}, "x", 3]`         | any custom attribute                                                                          |
+| `bool`              | boolean              | `true` / `false`                             | `[true, false]`              | flags                                                                                         |
+| `float`             | number               | floating-point-valued; within `min`/`max`    | `[0, 0.5, 1]`                | metallicFactor, roughnessFactor, occlusionStrength, transmissionFactor, emissiveStrength, ior |
+| `int`               | number               | integer-valued, within `min`/`max`           | `[0, 1, 2, 7]`               | ids, counts, indices                                                                          |
+| `string`            | string               | must be a string                             | `["low", "high"]`            | enumerated tags                                                                               |
+| `srgb-float`        | number[3]            | 3 finite numbers; within `min`/`max`, sRGB   | `[[1, 0, 0], [0.5, 0.5, 0]]` | emissiveFactor, sRGB float / HDR                                                              |
+| `srgb-hex`          | string               | matches `^#[0-9A-F]{6}$`                     | `["#FF0000", "#204080"]`     | emissiveFactor; opaque custom colors                                                          |
+| `srgba-float`       | number[4]            | 4 finite numbers; within `min`/`max`, sRGB   | `[[1, 0, 0, 1]]`             | baseColorFactor, sRGB float                                                                   |
+| `srgba-hex`         | string               | matches `^#[0-9A-F]{8}$`                     | `["#FF0000FF"]`              | baseColorFactor, the default color kind                                                       |
+| `linear-rgb-float`  | number[3]            | 3 finite numbers; within `min`/`max`, linear | `[[1, 0, 0], [0, 0.5, 1]]`   | emissiveFactor, linear                                                                        |
+| `linear-rgba-float` | number[4]            | 4 finite numbers; within `min`/`max`, linear | `[[1, 0, 0, 1]]`             | baseColorFactor, linear                                                                       |
 
 Notes:
 
@@ -297,16 +297,16 @@ voxj's recommended vocabulary is glTF's, below. The format neither requires nor 
 
 The recommended attribute vocabulary is glTF's metallic-roughness model, so a voxj material maps one-to-one onto a glTF material and the defaults below are glTF's own. Each attribute binds a value pool of one of the kinds listed, and an unbound attribute renders at its default:
 
-| Attribute            | Kind                                                                                         | Range | Default     | Meaning                                                                            |
-| -------------------- | -------------------------------------------------------------------------------------------- | ----- | ----------- | ---------------------------------------------------------------------------------- |
-| `baseColorFactor`    | `srgba-hex` (default), `srgba-float`, or `linear-rgba-float`                                  |       | `#FFFFFFFF` | Base color, straight alpha = opacity (glTF `baseColorFactor`)                      |
-| `metallicFactor`     | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `1`         | Metalness (glTF `metallicFactor`)                                                  |
-| `roughnessFactor`    | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `1`         | Roughness (glTF `roughnessFactor`)                                                 |
-| `occlusionStrength`  | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `1`         | Flat ambient occlusion, 1 = none (glTF `occlusionTexture.strength`)                |
-| `emissiveFactor`     | `srgb-hex` (default), `srgb-float`, or `linear-rgb-float`                                     |       | `#000000`   | Emissive color, black = none (glTF `emissiveFactor`)                               |
-| `emissiveStrength`   | `float`, `min: 0`                                                                            | 0+    | `1`         | Multiplies emissive color in linear space (glTF `KHR_materials_emissive_strength`) |
-| `ior`                | `float`, `min: 1`                                                                            | 1+    | `1.5`       | Index of refraction (glTF `KHR_materials_ior`)                                     |
-| `transmissionFactor` | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `0`         | Light transmission through surface (glTF `KHR_materials_transmission`)             |
+| Attribute            | Kind                                                         | Range | Default     | Meaning                                                                            |
+| -------------------- | ------------------------------------------------------------ | ----- | ----------- | ---------------------------------------------------------------------------------- |
+| `baseColorFactor`    | `srgba-hex` (default), `srgba-float`, or `linear-rgba-float` |       | `#FFFFFFFF` | Base color, straight alpha = opacity (glTF `baseColorFactor`)                      |
+| `metallicFactor`     | `float`, `min: 0`, `max: 1`                                  | 0-1   | `1`         | Metalness (glTF `metallicFactor`)                                                  |
+| `roughnessFactor`    | `float`, `min: 0`, `max: 1`                                  | 0-1   | `1`         | Roughness (glTF `roughnessFactor`)                                                 |
+| `occlusionStrength`  | `float`, `min: 0`, `max: 1`                                  | 0-1   | `1`         | Flat ambient occlusion, 1 = none (glTF `occlusionTexture.strength`)                |
+| `emissiveFactor`     | `srgb-hex` (default), `srgb-float`, or `linear-rgb-float`    |       | `#000000`   | Emissive color, black = none (glTF `emissiveFactor`)                               |
+| `emissiveStrength`   | `float`, `min: 0`                                            | 0+    | `1`         | Multiplies emissive color in linear space (glTF `KHR_materials_emissive_strength`) |
+| `ior`                | `float`, `min: 1`                                            | 1+    | `1.5`       | Index of refraction (glTF `KHR_materials_ior`)                                     |
+| `transmissionFactor` | `float`, `min: 0`, `max: 1`                                  | 0-1   | `0`         | Light transmission through surface (glTF `KHR_materials_transmission`)             |
 
 A color attribute binds a hex or float-component color kind in either the sRGB or linear space (see [Value Pool Kinds](#value-pool-kinds)); hex, which is sRGB only, is the authoring default. Base color takes an alpha-carrying kind and emission an alpha-less one, and all forms carry the same color.
 
@@ -319,13 +319,13 @@ Nodes form a DAG: a node may have multiple parents but no cycles. Each reference
 ```jsonc
 {
   "name": "parent-1",
-  "childNodes": [1],
-  "childObjects": [0],
   "transform": {
     "position": [0, 0, 0],
     "rotation": [0, 0, 0, 1],
     "scale": [1, 1, 1],
   },
+  "childNodes": [1],
+  "childObjects": [0],
 }
 ```
 
@@ -406,32 +406,32 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 4. `null` rejects everywhere except in a `json`-kind pool's `values`: in every structural field, every non-`json` pool's `values`, and every block's `data`.
 5. Unknown keys reject in every closed structure: file, `main`, `runtimeState`, `editState`, object, encoding block, palette, binding, value pool, transform, hierarchy node, and edit object. The only open points are `main.ext` and binding attribute names.
 6. All indices are in range:
-    1. each object `layerPaletteRefs` entry indexes `runtimeState.palettes`.
-    2. each binding `poolRef` indexes `runtimeState.valuePools`.
-    3. each `childNodes` entry indexes `runtimeState.hierarchyNodes`.
-    4. each `childObjects` entry indexes `runtimeState.objects`.
-    5. each `rootHierarchyNodes` entry indexes `runtimeState.hierarchyNodes`.
+   1. each object `layerPaletteRefs` entry indexes `runtimeState.palettes`.
+   2. each binding `poolRef` indexes `runtimeState.valuePools`.
+   3. each `childNodes` entry indexes `runtimeState.hierarchyNodes`.
+   4. each `childObjects` entry indexes `runtimeState.objects`.
+   5. each `rootHierarchyNodes` entry indexes `runtimeState.hierarchyNodes`.
 7. References are unique: no hierarchy node lists the same child node or the same child object twice, and no node appears in `rootHierarchyNodes` twice.
 8. **Objects**, per object:
-    1. `layerPaletteRefs` is present, an array of integers, possibly empty.
-    2. `voxelPositions` and `voxelSamples` are present; the Positions and Samples rules check their structure.
+   1. `layerPaletteRefs` is present, an array of integers, possibly empty.
+   2. `voxelPositions` and `voxelSamples` are present; the Positions and Samples rules check their structure.
 9. **Value pools** (`runtimeState.valuePools`): an array, possibly empty. Each pool's keys are drawn only from { `kind`, `values`, `min`, `max` }.
-    1. `kind` is present and recognized.
-    2. `values` is present, a non-empty array, with no `null` entry unless `kind` is `json`. Every entry is well-formed for `kind`:
-        1. `json`: any JSON value, including `null`.
-        2. `string`: a JSON string.
-        3. `bool`: a JSON boolean.
-        4. `int`: an integer-valued finite number within `min`/`max`.
-        5. `float`: a finite number within `min`/`max`.
-        6. `srgb-hex`: matches `^#[0-9A-F]{6}$`.
-        7. `srgba-hex`: matches `^#[0-9A-F]{8}$`.
-        8. `srgb-float` / `linear-rgb-float`: an array of exactly 3 finite numbers, each within `min`/`max`.
-        9. `srgba-float` / `linear-rgba-float`: an array of exactly 4 finite numbers, each within `min`/`max`.
-    3. `min` and `max`:
-        1. both present when `kind` is `int`, `float`, or one of the four vector color kinds, and both absent for every other kind.
-        2. each is a finite number or the string `none`, meaning unbounded on that side.
-        3. a numeric bound is integer-valued when `kind` is `int`.
-        4. `min <= max` when both are finite numbers.
+   1. `kind` is present and recognized.
+   2. `values` is present, a non-empty array, with no `null` entry unless `kind` is `json`. Every entry is well-formed for `kind`:
+      1. `json`: any JSON value, including `null`.
+      2. `string`: a JSON string.
+      3. `bool`: a JSON boolean.
+      4. `int`: an integer-valued finite number within `min`/`max`.
+      5. `float`: a finite number within `min`/`max`.
+      6. `srgb-hex`: matches `^#[0-9A-F]{6}$`.
+      7. `srgba-hex`: matches `^#[0-9A-F]{8}$`.
+      8. `srgb-float` / `linear-rgb-float`: an array of exactly 3 finite numbers, each within `min`/`max`.
+      9. `srgba-float` / `linear-rgba-float`: an array of exactly 4 finite numbers, each within `min`/`max`.
+   3. `min` and `max`:
+      1. both present when `kind` is `int`, `float`, or one of the four vector color kinds, and both absent for every other kind.
+      2. each is a finite number or the string `none`, meaning unbounded on that side.
+      3. a numeric bound is integer-valued when `kind` is `int`.
+      4. `min <= max` when both are finite numbers.
 10. **Palettes** (`runtimeState.palettes`): an array, possibly empty. Each palette's keys are drawn only from { `bindings`, `materials` }.
     1. `bindings` is a non-empty array; each binding has exactly the keys `attribute`, a non-empty string, and `poolRef`, an integer.
     2. no two bindings share an `attribute`.
@@ -447,9 +447,9 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
     1. `raw-json`: `[x, y, z]` integer triples.
     2. `bitmap-base64`: decodes to exactly `ceil(X * Y * Z / 8)` bytes, its pad bits zero, and the voxel count equals the number of set bits.
     3. `hilbert-delta-varint-base64`:
-        1. `data` decodes to an unsigned LEB128 varint stream of non-negative deltas, every delta after the first strictly positive.
-        2. `bits` derived from `bounds` is `<= 17`, equivalently every `bounds` dimension is `<= 131072`.
-        3. every decoded position lies in `[0, X) x [0, Y) x [0, Z)`.
+       1. `data` decodes to an unsigned LEB128 varint stream of non-negative deltas, every delta after the first strictly positive.
+       2. `bits` derived from `bounds` is `<= 17`, equivalently every `bounds` dimension is `<= 131072`.
+       3. every decoded position lies in `[0, X) x [0, Y) x [0, Z)`.
 14. Every base64 field is canonical RFC 4648: the standard alphabet, not base64url, with correct `=` padding and no whitespace or line breaks.
 15. Voxel positions within an object are unique after decoding.
 16. `bounds` is three non-negative integers, exactly tight around the decoded positions: on each axis the minimum voxel coordinate is `0` and `bounds` is the maximum plus one. An empty object has `bounds = [0, 0, 0]`.
@@ -467,49 +467,25 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
   "version": 1,
   "main": {
     "runtimeState": {
-      "objects": [
+      "valuePools": [
         {
-          "name": "Object A",
-
-          // two layers: palette 0, then palette 1. Layers do not merge; the app
-          // decides what two baseColorFactor layers mean.
-          "layerPaletteRefs": [0, 1],
-
-          // Two voxels at (0, 0, 0) and (1, 0, 0).
-          "bounds": [2, 1, 1],
-
-          "origin": [0, 0, 0],
-
-          "voxelPositions": {
-            "encoding": "raw-json",
-            "data": [
-              [0, 0, 0],
-              [1, 0, 0],
-            ],
-          },
-
-          // one channel per layer, each a material index per voxel:
-          //   layer 0 -> materials 0, 2 of palette 0
-          //   layer 1 -> materials 0, 0 of palette 1
-          "voxelSamples": {
-            "encoding": "raw-json",
-            "data": [
-              [0, 2],
-              [0, 0],
-            ],
-          },
+          "kind": "srgba-hex",
+          "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
         },
 
+        // one shared float pool, bound by both metallicFactor and roughnessFactor
+        { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] },
+
+        { "kind": "srgb-hex", "values": ["#000000", "#FF6600"] },
+
         {
-          "name": "Object B",
-          // single layer
-          "layerPaletteRefs": [1],
-          "bounds": [1, 1, 1],
-          "origin": [0, 0, 0],
-          "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
-          "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
+          "kind": "linear-rgba-float",
+          "min": 0,
+          "max": 1,
+          "values": [[1, 0, 0, 1]],
         },
       ],
+
       "palettes": [
         // value pool 1 is bound twice here, to metallicFactor and roughnessFactor
         {
@@ -537,22 +513,48 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
           "materials": [[0]],
         },
       ],
-      "valuePools": [
+
+      "objects": [
         {
-          "kind": "srgba-hex",
-          "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
+          "name": "Object A",
+
+          // Two voxels at (0, 0, 0) and (1, 0, 0).
+          "bounds": [2, 1, 1],
+
+          "origin": [0, 0, 0],
+
+          "voxelPositions": {
+            "encoding": "raw-json",
+            "data": [
+              [0, 0, 0],
+              [1, 0, 0],
+            ],
+          },
+
+          // two layers: palette 0, then palette 1. Layers do not merge; the app
+          // decides what two baseColorFactor layers mean.
+          "layerPaletteRefs": [0, 1],
+
+          // one channel per layer, each a material index per voxel:
+          //   layer 0 -> materials 0, 2 of palette 0
+          //   layer 1 -> materials 0, 0 of palette 1
+          "voxelSamples": {
+            "encoding": "raw-json",
+            "data": [
+              [0, 2],
+              [0, 0],
+            ],
+          },
         },
 
-        // one shared float pool, bound by both metallicFactor and roughnessFactor
-        { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] },
-
-        { "kind": "srgb-hex", "values": ["#000000", "#FF6600"] },
-
         {
-          "kind": "linear-rgba-float",
-          "min": 0,
-          "max": 1,
-          "values": [[1, 0, 0, 1]],
+          "name": "Object B",
+          "bounds": [1, 1, 1],
+          "origin": [0, 0, 0],
+          "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
+          // single layer
+          "layerPaletteRefs": [1],
+          "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
         },
       ],
 
@@ -560,28 +562,28 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
         {
           "name": "parent-1",
 
-          "childNodes": [1],
-
-          "childObjects": [0],
-
           "transform": {
             "position": [0, 0, 0],
             "rotation": [0, 0, 0, 1],
             "scale": [1, 1, 1],
           },
+
+          "childNodes": [1],
+
+          "childObjects": [0],
         },
 
         {
           "name": "parent-2",
 
-          "childNodes": [],
-          "childObjects": [1],
-
           "transform": {
             "position": [0, 0, 0],
             "rotation": [0, 0, 0, 1],
             "scale": [1, 1, 1],
           },
+
+          "childNodes": [],
+          "childObjects": [1],
         },
       ],
 
@@ -613,12 +615,12 @@ interface Main {
 
 // The runtime scene.
 interface RuntimeState {
-  objects: VoxelObject[];
+  // shared value pools, referenced by index from palette bindings
+  valuePools: ValuePool[];
 
   palettes: Palette[];
 
-  // shared value pools, referenced by index from palette bindings
-  valuePools: ValuePool[];
+  objects: VoxelObject[];
 
   hierarchyNodes: HierarchyNode[];
 
@@ -644,10 +646,6 @@ interface EditObject {
 interface VoxelObject {
   name: string;
 
-  // palette indices, one per layer (see Objects). Layers are independent
-  // material channels; the format defines no merge across them.
-  layerPaletteRefs: number[];
-
   // [X, Y, Z] size in voxels; voxels occupy [0, X) x [0, Y) x [0, Z). Exactly
   // tight: per-axis the min voxel coordinate is 0 and the bound is the max plus
   // one; [0, 0, 0] when empty. No margin here (that is editState). Required to
@@ -659,6 +657,10 @@ interface VoxelObject {
   origin: Vec3;
 
   voxelPositions: PositionBlock;
+
+  // palette indices, one per layer (see Objects). Layers are independent
+  // material channels; the format defines no merge across them.
+  layerPaletteRefs: number[];
 
   voxelSamples: SampleBlock;
 }
@@ -731,7 +733,7 @@ type ValuePool =
     }
   | {
       kind: Exclude<PoolKind, BoundedKind>;
-      values: JsonValue[]
+      values: JsonValue[];
     };
 
 // Closed value-shape vocabulary (see Value Pool Kinds).
@@ -770,13 +772,13 @@ type JsonValue =
 interface HierarchyNode {
   name: string;
 
+  transform: Transform;
+
   // indices into Main.hierarchyNodes (DAG, no cycles)
   childNodes: number[];
 
   // indices into Main.objects
   childObjects: number[];
-
-  transform: Transform;
 }
 
 interface Transform {
