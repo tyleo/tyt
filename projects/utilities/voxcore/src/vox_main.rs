@@ -55,6 +55,16 @@ impl VoxMain {
             .map(move |id| (id, unsafe { self.runtime_state.objects.get(id) }))
     }
 
+    /// The object `id` for mutation, or `None` if not one of this state's.
+    /// Pairs with [`object`](Self::object) for read-only access.
+    pub fn object_mut(&mut self, id: U32Id<BVoxObject>) -> Option<&mut VoxObject> {
+        if !self.runtime_state.object_ids.is_retained(id) {
+            return None;
+        }
+        // Safety: the id is retained, so it has a value.
+        Some(unsafe { self.runtime_state.objects.get_mut(id) })
+    }
+
     /// Adds a shared palette, returning its id (its listing index).
     pub fn add_palette(&mut self, palette: VoxPalette) -> U32Id<BVoxPalette> {
         let id = self.runtime_state.palette_ids.retain();

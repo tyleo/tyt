@@ -303,58 +303,76 @@ seeds centroids by farthest-point (deterministic, no random start) and runs
 population-weighted Lloyd iterations to a step cap. All cluster on the same
 `Point` set and collapse each cluster to its most-sampled representative, so the
 method only changes the grouping. Octree's eight-way folds are coarser than the
-two-way median split, so it can stop a little under the cap. Only `--dither` other
-than `none` remains unbuilt; it errors as not-yet-implemented, but only when the
-reduction actually fires: under the cap the controls are inert, so an unbuilt
-dither on a small palette is silent. The cap fires with a note to standard error,
-never failing.
+two-way median split, so it can stop a little under the cap. `--dither` is built
+too (see [Dithering](#dithering)); every reduction control now applies when the
+reduction fires and is inert when it does not. The cap fires with a note to
+standard error, never failing.
 
-## Planned: dithering
+## Dithering
 
-`--dither` (`floyd-steinberg` | `ordered`, default `none`) is the one reduction
-control still unbuilt; it errors when the reduction fires. It differs from the
-`--method` options in kind, not degree. `median-cut` / `octree` / `kmeans` only
-change how cells cluster; the collapse then repaints every voxel of a merged cell
-onto one representative uniformly, through voxcore's `remove_cell`. Dithering is a
-per-voxel remap: each voxel independently snaps to the nearest representative
-given the diffused error, so voxels of one original color deliberately land on
-different representatives. The material-follows-color rule still holds: a dithered
-voxel adopts the whole representative row, so the pattern lands in the material,
-not just the color.
+`--dither` (`floyd-steinberg` | `ordered`, default `none`) is built for both
+methods. It differs from the `--method` options in kind, not degree.
+`median-cut` / `octree` / `kmeans` only change how cells cluster; the collapse
+then repaints every voxel of a merged cell onto one representative uniformly,
+through voxcore's `remove_cell`. Dithering is a per-voxel remap: each voxel
+independently snaps to the nearest representative given the diffused error, so
+voxels of one original color deliberately land on different representatives. The
+material-follows-color rule still holds: a dithered voxel adopts the whole
+representative row, so the pattern lands in the material, not just the color.
 
-So when `dither != none`, the cell-level `remove_cell` collapse is replaced by a
-per-object pass:
+When `dither != none`, a per-object pass runs after the clusters and their
+representatives are chosen but before the cell-level collapse:
 
 1. Cluster and pick representatives exactly as the no-dither path does. The
-   reduced palette is the representative cells plus the untouched survivors.
+   cluster coordinates are already in the working space, so each colored cell's
+   color and each representative's snap coordinates are read straight off the
+   clusters, once, and shared across objects.
 2. For each object referencing the palette, walk its live voxels in voxcore's
-   voxel-id raster order (`x*Y*Z + y*Z + z`, so `z` varies fastest), reached
-   through `voxel_position` / `voxel_id`.
-3. For each voxel, project its original color into the clustering space (the same
-   `to_space` used to cluster), add the error diffused to it, find the nearest
-   representative by Euclidean distance in that space, and reassign the voxel to
-   that representative's cell with `retain_voxel` (read the voxel's full sample
-   row and swap only this palette's reference).
-4. Diffuse the snapping error to not-yet-visited neighbors.
-5. `gc` drops the now-unused non-representative cells, so the final cell count
-   matches the no-dither path.
+   voxel-id raster order (`x*Y*Z + y*Z + z`, so `z` varies fastest) via
+   `iter_live`, recovering each position with `voxel_position`.
+3. For each voxel, take its original color's clustering-space coordinate, add the
+   diffused error, find the nearest representative by Euclidean distance (ties to
+   the lowest cell id), and, when that differs from the current cell, reassign the
+   voxel with `retain_voxel`: read the voxel's full sample row and swap only this
+   palette reference's cell. A voxel on a colorless survivor is skipped.
+4. Diffuse the snapping error to not-yet-visited neighbors (floyd-steinberg only).
+
+The collapse then runs unchanged: after the pass no live voxel samples a
+non-representative colored cell, so `remove_cell`'s repaint is a no-op and only
+the cell drop takes effect, then `gc` compacts. The reduced palette is the
+representative cells plus the untouched survivors, and every representative
+survives even if the dither left it unused, so the final cell count matches the
+no-dither path.
 
 Error diffusion, per method:
 
-- `ordered` adds a value from a repeating 3D Bayer threshold matrix (e.g.
-  `4x4x4`), scaled to the palette's spacing, to each voxel's color before the
-  nearest-representative snap. No error buffer, fully deterministic, position-only.
-- `floyd-steinberg` carries a per-voxel error buffer over the grid and pushes the
-  snapping error forward to the not-yet-visited neighbors. 2D Floyd-Steinberg has
-  a canonical kernel (`7/16`, `3/16`, `5/16`, `1/16`); 3D has none, so this
-  defines one over the three forward axis neighbors in raster order, weights
-  summing to 1: proposed `(x, y, z+1)` = `3/8`, `(x, y+1, z)` = `3/8`,
-  `(x+1, y, z)` = `2/8`. This is a defined choice to refine during implementation.
+- `ordered` adds a per-axis offset read from a repeating 3D Bayer threshold
+  matrix, scaled to the palette's spacing, before the nearest-representative snap.
+  No error buffer, fully deterministic, position-only. The matrix is side `4` (64
+  levels), one doubling of a 2x2x2 base that numbers the cube corners by parity
+  (the even-parity corners before the odd), the 3D analog of the classic
+  `[[0, 2], [3, 1]]` Bayer base: `M(p) = 8*base(p mod 2) + base(p/2 mod 2)`. Each
+  axis reads the matrix at a rotation of the voxel position so the three channels
+  decorrelate, and a raw threshold maps to `[-0.5, 0.5) * spacing`. `spacing` is
+  the mean distance from each representative to its nearest other representative in
+  the clustering space, so the offset perturbs a color by about one palette step;
+  a lone representative has spacing `0`, disabling the offset.
+- `floyd-steinberg` carries a per-voxel error, sparse (a `HashMap` keyed by voxel
+  id, since only diffused voxels hold one), and pushes the snapping error forward
+  to the not-yet-visited neighbors. 2D Floyd-Steinberg has a canonical kernel
+  (`7/16`, `3/16`, `5/16`, `1/16`); 3D has none, so this defines one over the
+  three raster-forward axis neighbors, weights summing to 1: `(x, y, z+1)` = `3/8`,
+  `(x, y+1, z)` = `3/8`, `(x+1, y, z)` = `2/8`. Error pushed past a grid edge is
+  dropped, as at a 2D image border.
 
 Both diffuse in the clustering space (oklab by default), so the error is
-perceptually meaningful. The error buffer and traversal are per object, since
+perceptually meaningful. The traversal and error buffer are per object, since
 each object is its own grid; the reduction still runs once over the shared
-palette, then dithers each referencing object.
+palette, then dithers each referencing object. The reassignment needs mutable
+object access, so voxcore's `VoxMain` gained an `object_mut` accessor mirroring
+`object`. Determinism holds with no RNG: object order, raster order, the
+nearest-representative tie-break, the Bayer matrix, and the forward diffusion are
+all fixed, so a given input always yields the same pattern.
 
 ## Typed colors and the generic mesh
 

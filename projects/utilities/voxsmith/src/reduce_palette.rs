@@ -1,26 +1,25 @@
-use crate::{ColorSpace, Dither, Error, ReductionMethod, Result};
+use crate::{ColorSpace, Dither, ReductionMethod, Result};
 use branded_id::U32Id;
 use std::{cmp::Ordering, collections::HashMap, mem};
-use ty_math::{TySrgbaColor, TyVector3F64};
-use voxcore::{BVoxPalette, VoxMain, VoxValue};
+use ty_math::{TySrgbaColor, TyVector3F64, TyVector3U32};
+use voxcore::{BVoxObject, BVoxPalette, BVoxPaletteRef, VoxMain, VoxObject, VoxValue};
 
-/// Reduces `palette` in `state` to at most `max_cells` cells on the
-/// material-follows-color rule: the cells are clustered by their `rgba` color
-/// with `method` in `space`, and each cluster collapses onto one real
-/// representative cell, so a merged voxel adopts the representative's whole row
-/// rather than an average. Cells with no `rgba` value are left untouched.
+/// Reduces `palette` in `state` to at most `max_cells` cells: cells cluster by
+/// `rgba` and each cluster collapses onto one real representative, so a merged
+/// voxel takes the representative's whole row, not an average. Colorless cells
+/// are left untouched.
 ///
-/// Returns `Some((before, after))` cell counts when the reduction fired, or
-/// `None` when the palette already fit, in which case `method`, `space`, and
-/// `dither` are inert. The state is left compacted and referentially valid.
+/// Returns `Some((before, after))` when the reduction fired, `None` when the
+/// palette already fit (leaving `method` / `space` / `dither` inert). The state
+/// is left compacted and valid.
 ///
 /// # Arguments
-/// * `state` - the document to reduce in place.
-/// * `palette` - the palette to reduce; every object referencing it is remapped.
-/// * `max_cells` - the cap; the palette ends with at most this many cells.
+/// * `state` - the document, reduced in place.
+/// * `palette` - the palette to reduce; every referencing object is remapped.
+/// * `max_cells` - the cell cap.
 /// * `method` - the clustering algorithm.
-/// * `space` - the color space colors are compared in.
-/// * `dither` - error diffusion applied when snapping samples.
+/// * `space` - the color space compared in.
+/// * `dither` - error diffusion when snapping samples.
 pub fn reduce_palette(
     state: &mut VoxMain,
     palette: U32Id<BVoxPalette>,
@@ -29,8 +28,7 @@ pub fn reduce_palette(
     space: ColorSpace,
     dither: Dither,
 ) -> Result<Option<(usize, usize)>> {
-    // The caller reduces one of the state's palettes; a missing one is a bug,
-    // not a silent no-op.
+    // A missing palette is a caller bug, not a silent no-op.
     let palette_ref = state
         .palette(palette)
         .expect("reduce_palette was given a palette not in the state");
@@ -40,8 +38,7 @@ pub fn reduce_palette(
         return Ok(None);
     }
 
-    // The color of each cell that has a parseable `rgba`; a colorless cell has
-    // nothing to cluster on, so it survives untouched.
+    // The `rgba` attribute; colorless cells have nothing to cluster on.
     let rgba = palette_ref
         .iter_attributes()
         .find(|(_, name)| *name == "rgba")
@@ -63,8 +60,7 @@ pub fn reduce_palette(
         return Ok(None);
     }
 
-    // The palette borrow is released now, so tally per-cell voxel usage and
-    // place each colored cell in the working space.
+    // Tally per-cell voxel usage and place each colored cell in the space.
     let populations = cell_populations(state, palette);
 
     let points: Vec<Point> = colored
@@ -76,13 +72,6 @@ pub fn reduce_palette(
         })
         .collect();
 
-    // The reduction is firing, so the controls now apply.
-    if !matches!(dither, Dither::None) {
-        return Err(unsupported(
-            "dithering is not yet implemented; only no dithering is available",
-        ));
-    }
-
     let target = max_cells.saturating_sub(survivors).max(1);
 
     let clusters = match method {
@@ -91,10 +80,18 @@ pub fn reduce_palette(
         ReductionMethod::Kmeans => kmeans(points, target),
     };
 
-    // Collapse every non-representative cell onto its cluster's representative,
-    // then compact the holes the removals leave.
     let after = clusters.len() + survivors;
 
+    // With the palette chosen, dithering is the per-voxel remap onto it: each
+    // voxel snaps individually, spreading one merged color across several
+    // representatives instead of collapsing onto one.
+    if !matches!(dither, Dither::None) {
+        dither_voxels(state, palette, &clusters, dither);
+    }
+
+    // Drop every non-representative cell onto its representative, then compact.
+    // After dithering no voxel samples a non-representative, so the repaint is a
+    // no-op and only the drop remains.
     for cluster in &clusters {
         let representative = representative(cluster);
 
@@ -114,8 +111,8 @@ pub fn reduce_palette(
     Ok(Some((total, after)))
 }
 
-/// One palette cell as a point to cluster: its id, its color in the working
-/// space, and how many live voxels sample it.
+/// A palette cell as a clustering point: id, color in the working space, and
+/// live-voxel sample count.
 #[derive(Clone, Copy)]
 struct Point {
     cell: u32,
@@ -146,9 +143,14 @@ fn cell_populations(state: &VoxMain, palette: U32Id<BVoxPalette>) -> HashMap<u32
     populations
 }
 
-/// The representative cell of a cluster: the most-sampled, ties broken by the
-/// lowest id, so the choice is deterministic and favors the common color.
+/// A cluster's representative cell: the most-sampled, ties to the lowest id.
 fn representative(cluster: &[Point]) -> u32 {
+    representative_point(cluster).cell
+}
+
+/// The representative (see [`representative`]) as a whole [`Point`], for the
+/// dither pass's snap target.
+fn representative_point(cluster: &[Point]) -> Point {
     cluster
         .iter()
         .copied()
@@ -158,7 +160,6 @@ fn representative(cluster: &[Point]) -> u32 {
                 .then_with(|| b.cell.cmp(&a.cell))
         })
         .expect("a cluster holds at least one point")
-        .cell
 }
 
 /// Partitions `points` into at most `target` clusters by median cut: repeatedly
@@ -229,17 +230,15 @@ fn longest_axis(cell_box: &[Point]) -> (usize, f64) {
 }
 
 /// Partitions `points` into at most `target` clusters by octree quantization:
-/// build a fixed-depth octree over the color cube, then repeatedly fold the
-/// least-populated node whose children are all leaves into one leaf, until at
-/// most `target` leaves remain. Folding the least-populated node first merges the
-/// rarest colors first, so common colors keep their own cell.
+/// build a fixed-depth octree over the color cube, then fold the least-populated
+/// all-leaf node into one leaf until at most `target` leaves remain, so the
+/// rarest colors merge first.
 fn octree(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
     const DEPTH: u32 = 8;
     const BUCKETS: u32 = 1 << DEPTH;
 
-    // The box the color cube is bucketed within; a color's per-axis bucket in
-    // `[0, BUCKETS)` spells its octree path. The box covers the point set rather
-    // than assuming a fixed range, since oklab and lab axes are signed.
+    // The bucketing box; a color's per-axis bucket in `[0, BUCKETS)` spells its
+    // octree path. It covers the point set, since oklab and lab axes are signed.
     let (low, high) = point_bounds(&points);
 
     // A flat node arena; node 0 is the root. Only leaves hold point indices.
@@ -344,11 +343,10 @@ fn octree(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
         .collect()
 }
 
-/// Partitions `points` into at most `target` clusters by k-means: seed centroids
-/// by farthest-point (so the start is deterministic, no random init), then
-/// alternate nearest-centroid assignment and population-weighted centroid updates
-/// until the assignment settles or a step cap is hit. Empty clusters are dropped,
-/// so the result may hold fewer than `target`.
+/// Partitions `points` into at most `target` clusters by k-means: seed by
+/// farthest-point (deterministic, no random init), then alternate assignment and
+/// population-weighted centroid updates until settled or a step cap. Empty
+/// clusters are dropped, so the result may hold fewer than `target`.
 fn kmeans(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
     const MAX_STEPS: usize = 32;
 
@@ -470,10 +468,8 @@ fn nearest_centroid(coords: TyVector3F64, centroids: &[TyVector3F64]) -> usize {
     best
 }
 
-/// A cell's color as a point in the chosen space; alpha is not a clustering
-/// dimension (it rides along with the representative's row). The `rgb` space is
-/// the naive distance on the stored sRGB components; `oklab` and `lab` decode to
-/// linear light first.
+/// A cell's `rgba` as a point in `space`; alpha is dropped. `rgb` uses the
+/// stored sRGB bytes; `oklab` and `lab` decode to linear light first.
 fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
     let color = TySrgbaColor::from_array(rgba);
 
@@ -509,9 +505,231 @@ fn cell_rgba(value: &VoxValue) -> Option<[u8; 4]> {
     ])
 }
 
-/// An error for a reduction control that is accepted but not yet built.
-fn unsupported(message: &str) -> Error {
-    Error::invalid(message)
+/// Snaps every live voxel sampling `palette` to a representative, diffusing the
+/// error per `dither`, so one merged color dithers across several
+/// representatives. Runs per referencing object in raster order.
+fn dither_voxels(
+    state: &mut VoxMain,
+    palette: U32Id<BVoxPalette>,
+    clusters: &[Vec<Point>],
+    dither: Dither,
+) {
+    // Cluster coords are already in the working space; read each cell's color
+    // and the representatives off the clusters once, shared across objects.
+    let coords_of: HashMap<u32, TyVector3F64> = clusters
+        .iter()
+        .flat_map(|cluster| cluster.iter())
+        .map(|point| (point.cell, point.coords))
+        .collect();
+
+    let representatives: Vec<Point> = clusters.iter().map(|c| representative_point(c)).collect();
+
+    let spacing = palette_spacing(&representatives);
+
+    // Objects referencing the palette, collected so the read borrow ends before
+    // the mutation below.
+    let targets: Vec<(U32Id<BVoxObject>, Vec<U32Id<BVoxPaletteRef>>)> = state
+        .iter_objects()
+        .filter_map(|(object_id, object)| {
+            let references: Vec<_> = object
+                .iter_palette_refs()
+                .filter(|&(_, referenced)| referenced == palette)
+                .map(|(reference, _)| reference)
+                .collect();
+            (!references.is_empty()).then_some((object_id, references))
+        })
+        .collect();
+
+    for (object_id, references) in targets {
+        let object = state
+            .object_mut(object_id)
+            .expect("a referencing object is one of the state's");
+
+        for reference in references {
+            dither_reference(
+                object,
+                reference,
+                &coords_of,
+                &representatives,
+                spacing,
+                dither,
+            );
+        }
+    }
+}
+
+/// Dithers one palette reference on one object: walk live voxels in raster
+/// order, snap each to the nearest representative, and reassign via
+/// `retain_voxel`, swapping only this reference's cell.
+fn dither_reference(
+    object: &mut VoxObject,
+    reference: U32Id<BVoxPaletteRef>,
+    coords_of: &HashMap<u32, TyVector3F64>,
+    representatives: &[Point],
+    spacing: f64,
+    dither: Dither,
+) {
+    let bounds = object.bounds();
+
+    // Live voxels ascend by raster id, so every diffusion target is a
+    // not-yet-visited voxel.
+    let voxels: Vec<_> = object.iter_live().collect();
+
+    // Reassignment rewrites the full row, so find the reference order and this
+    // reference's slot once.
+    let references: Vec<_> = object.iter_palette_refs().map(|(id, _)| id).collect();
+    let slot = references
+        .iter()
+        .position(|&id| id == reference)
+        .expect("the reference is one of the object's");
+
+    // Floyd-Steinberg's sparse per-voxel error; ordered needs no buffer.
+    let mut errors: HashMap<u32, TyVector3F64> = HashMap::new();
+
+    for voxel in voxels {
+        let cell = object
+            .voxel_cell(voxel, reference)
+            .expect("a live voxel samples every reference");
+
+        // A colorless survivor was never clustered, so it has no color to snap.
+        let Some(&original) = coords_of.get(&cell.to_u32()) else {
+            continue;
+        };
+
+        let position = object
+            .voxel_position(voxel)
+            .expect("a live voxel is within the grid");
+
+        let target = match dither {
+            Dither::FloydSteinberg => {
+                original
+                    + errors
+                        .get(&voxel.to_u32())
+                        .copied()
+                        .unwrap_or(TyVector3F64::ZERO)
+            }
+            Dither::Ordered => original + ordered_offset(position, spacing),
+            Dither::None => original,
+        };
+
+        let chosen = nearest_representative(target, representatives);
+
+        if matches!(dither, Dither::FloydSteinberg) {
+            diffuse_error(&mut errors, bounds, position, target - chosen.coords);
+        }
+
+        if chosen.cell != cell.to_u32() {
+            let mut row: Vec<_> = references
+                .iter()
+                .map(|&id| {
+                    object
+                        .voxel_cell(voxel, id)
+                        .expect("a live voxel samples every reference")
+                })
+                .collect();
+            row[slot] = U32Id::from_u32(chosen.cell);
+            object
+                .retain_voxel(voxel, &row)
+                .expect("a live voxel takes a full-arity row");
+        }
+    }
+}
+
+/// The representative nearest `coords` by Euclidean distance in the clustering
+/// space, ties broken by the lowest cell id so the snap is deterministic.
+fn nearest_representative(coords: TyVector3F64, representatives: &[Point]) -> Point {
+    representatives
+        .iter()
+        .copied()
+        .min_by(|a, b| {
+            (coords - a.coords)
+                .magnitude_squared()
+                .partial_cmp(&(coords - b.coords).magnitude_squared())
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| a.cell.cmp(&b.cell))
+        })
+        .expect("the palette reduces to at least one representative")
+}
+
+/// Pushes `error` to the three raster-forward neighbors: `+z` and `+y` take
+/// `3/8` each, `+x` takes `2/8`. 2D Floyd-Steinberg's kernel has no 3D standard,
+/// so this defines one; error past a grid edge is dropped.
+fn diffuse_error(
+    errors: &mut HashMap<u32, TyVector3F64>,
+    bounds: TyVector3U32,
+    position: TyVector3U32,
+    error: TyVector3F64,
+) {
+    // Voxel id is the raster index x*Y*Z + y*Z + z, so a forward neighbor's id
+    // shifts by one plane, row, or cell.
+    let plane = bounds.y * bounds.z;
+    let id = position.x * plane + position.y * bounds.z + position.z;
+
+    let mut push = |carry: bool, neighbor: u32, weight: f64| {
+        if carry {
+            let slot = errors.entry(neighbor).or_insert(TyVector3F64::ZERO);
+            *slot = *slot + error * weight;
+        }
+    };
+
+    push(position.z + 1 < bounds.z, id + 1, 3.0 / 8.0);
+    push(position.y + 1 < bounds.y, id + bounds.z, 3.0 / 8.0);
+    push(position.x + 1 < bounds.x, id + plane, 2.0 / 8.0);
+}
+
+/// The mean nearest-neighbor distance between representatives, scaling the
+/// ordered-dither threshold to about one palette step. Zero for a lone
+/// representative, disabling the perturbation.
+fn palette_spacing(representatives: &[Point]) -> f64 {
+    if representatives.len() < 2 {
+        return 0.0;
+    }
+
+    let mut total = 0.0;
+    for (index, representative) in representatives.iter().enumerate() {
+        let mut nearest = f64::INFINITY;
+        for (other_index, other) in representatives.iter().enumerate() {
+            if index != other_index {
+                nearest = nearest.min((representative.coords - other.coords).magnitude());
+            }
+        }
+        total += nearest;
+    }
+
+    total / representatives.len() as f64
+}
+
+/// A per-axis ordered-dither offset from the 3D Bayer matrix, scaled to
+/// `spacing`. Each axis reads a rotation of the position so the channels
+/// decorrelate; a raw threshold maps to `[-0.5, 0.5) * spacing`.
+fn ordered_offset(position: TyVector3U32, spacing: f64) -> TyVector3F64 {
+    let level = |raw: u32| ((raw as f64 + 0.5) / BAYER_LEVELS as f64 - 0.5) * spacing;
+    let (x, y, z) = (position.x, position.y, position.z);
+
+    TyVector3F64::new(
+        level(bayer(x, y, z)),
+        level(bayer(y, z, x)),
+        level(bayer(z, x, y)),
+    )
+}
+
+/// Side of the 3D Bayer matrix, a power of two for the doubling recurrence.
+const BAYER_SIDE: u32 = 4;
+
+/// Distinct threshold levels in the matrix, `BAYER_SIDE^3`.
+const BAYER_LEVELS: u32 = BAYER_SIDE * BAYER_SIDE * BAYER_SIDE;
+
+/// The Bayer threshold at `(x, y, z)` in `[0, BAYER_LEVELS)`, tiling by
+/// [`BAYER_SIDE`]. One doubling of a parity-ordered 2x2x2 base (the 3D analog of
+/// `[[0, 2], [3, 1]]`): `M(p) = 8 * base(p mod 2) + base(p / 2 mod 2)`.
+fn bayer(x: u32, y: u32, z: u32) -> u32 {
+    // The cube corners permuted 0..8, even-parity before odd so successive
+    // thresholds land far apart.
+    const BASE: [[[u32; 2]; 2]; 2] = [[[0, 4], [5, 1]], [[6, 2], [3, 7]]];
+
+    let base = |x: u32, y: u32, z: u32| BASE[(x % 2) as usize][(y % 2) as usize][(z % 2) as usize];
+
+    8 * base(x, y, z) + base(x / 2, y / 2, z / 2)
 }
 
 #[cfg(test)]
@@ -521,10 +739,9 @@ mod tests {
     use ty_math::TyVector3U32;
     use voxcore::{BVoxObject, BVoxPalette, VoxMain, VoxObject, VoxPalette, VoxValue};
 
-    /// A state of one object whose voxels sample a palette of the given
-    /// `#RRGGBBAA` colors, each also carrying a distinct `tag` scalar so a merge
-    /// can be seen to take the representative's whole row. Voxel `i` samples cell
-    /// `colors[i]`, so every cell has population 1 unless `repeats` gives extra.
+    /// One object whose voxels sample a palette of `#RRGGBBAA` `colors`, each
+    /// with a distinct `tag` scalar so a merge's whole-row take is visible. Voxel
+    /// `i` samples cell `i`; `repeats[i]` adds extra voxels on cell `i`.
     fn state_with_colors(
         colors: &[&str],
         repeats: &[usize],
@@ -590,6 +807,62 @@ mod tests {
             .collect()
     }
 
+    /// One object of size `bounds` with an `rgba` palette of `colors` and one
+    /// live voxel per `(position, color-index)` entry, so a dither test can place
+    /// a known color at a known position.
+    fn grid_state(
+        bounds: TyVector3U32,
+        colors: &[&str],
+        voxels: &[(TyVector3U32, usize)],
+    ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
+        let mut palette = VoxPalette::default();
+        palette.add_attribute("rgba".to_owned());
+        let cells: Vec<_> = colors
+            .iter()
+            .map(|color| {
+                palette
+                    .add_cell(vec![VoxValue::Text((*color).to_owned())])
+                    .unwrap()
+            })
+            .collect();
+
+        let mut object = VoxObject::new("o".to_owned(), bounds).unwrap();
+        let mut state = VoxMain::default();
+        let palette_id = state.add_palette(palette);
+        object.add_palette_ref(palette_id, cells[0]);
+
+        for &(position, color) in voxels {
+            let voxel = object.voxel_id(position).unwrap();
+            object.retain_voxel(voxel, &[cells[color]]).unwrap();
+        }
+
+        let object_id = state.add_object(object);
+        (state, palette_id, object_id)
+    }
+
+    /// The `rgba` hex the voxel at `position` samples, through the object's one
+    /// palette reference.
+    fn voxel_color(
+        state: &VoxMain,
+        object: U32Id<BVoxObject>,
+        palette: U32Id<BVoxPalette>,
+        position: TyVector3U32,
+    ) -> String {
+        let object = state.object(object).unwrap();
+        let (reference, _) = object.iter_palette_refs().next().unwrap();
+        let voxel = object.voxel_id(position).unwrap();
+        let cell = object.voxel_cell(voxel, reference).unwrap();
+        let palette = state.palette(palette).unwrap();
+        let (rgba, _) = palette
+            .iter_attributes()
+            .find(|(_, name)| *name == "rgba")
+            .unwrap();
+        match palette.cell_value(cell, rgba) {
+            Some(VoxValue::Text(hex)) => hex.clone(),
+            other => panic!("cell has no rgba text: {other:?}"),
+        }
+    }
+
     #[test]
     fn no_op_when_already_within_the_cap() {
         let (mut state, palette, _) = state_with_colors(&["#FF0000FF", "#00FF00FF"], &[]);
@@ -608,9 +881,8 @@ mod tests {
 
     #[test]
     fn merges_near_colors_and_keeps_a_real_representative_row() {
-        // Two near-identical reds and one blue; cap 2 fuses the reds. The second
-        // red is sampled more, so it is the representative and its whole row
-        // (tag 1) survives, not an average.
+        // Two near reds and a blue; cap 2 fuses the reds onto the more-sampled
+        // second red, whose whole row (tag 1) survives, not an average.
         let (mut state, palette, object) =
             state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
         let outcome = reduce_palette(
@@ -630,8 +902,7 @@ mod tests {
         survivors.sort();
         assert_eq!(survivors, ["#0000FFFF", "#FF0000FF"]);
 
-        // The voxel that sampled the fused first red now samples the survivor,
-        // whose tag is 1 (material followed color, whole row).
+        // The fused first red's voxel now samples the survivor, tag 1.
         let object = state.object(object).unwrap();
         let (reference, _) = object.iter_palette_refs().next().unwrap();
         let palette_ref = state.palette(palette).unwrap();
@@ -674,8 +945,8 @@ mod tests {
     }
 
     #[test]
-    fn dither_errors_only_when_the_reduction_fires() {
-        // Under the cap: dither is inert, so no error even though it is unbuilt.
+    fn dither_is_inert_under_the_cap_and_reduces_over_it() {
+        // Under the cap: dither is inert, so the reduction does not fire.
         let (mut state, palette, _) = state_with_colors(&["#FF0000FF", "#00FF00FF"], &[]);
         assert!(
             reduce_palette(
@@ -690,20 +961,23 @@ mod tests {
             .is_none()
         );
 
-        // Over the cap, dither is not yet built, so it errors.
-        let (mut state, palette, _) =
-            state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
-        assert!(
-            reduce_palette(
+        // Over the cap: both dither methods reduce and leave the state valid.
+        for dither in [Dither::FloydSteinberg, Dither::Ordered] {
+            let (mut state, palette, _) =
+                state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
+            let outcome = reduce_palette(
                 &mut state,
                 palette,
                 2,
                 ReductionMethod::MedianCut,
                 ColorSpace::Oklab,
-                Dither::Ordered
+                dither,
             )
-            .is_err()
-        );
+            .unwrap();
+            assert_eq!(outcome, Some((3, 2)), "dither {dither:?}");
+            assert_eq!(cell_count(&state, palette), 2, "dither {dither:?}");
+            assert_eq!(state.validate(), Ok(()), "dither {dither:?}");
+        }
     }
 
     #[test]
@@ -723,6 +997,96 @@ mod tests {
             assert_eq!(outcome, Some((4, 2)), "space {space:?}");
             assert_eq!(cell_count(&state, palette), 2, "space {space:?}");
             assert_eq!(state.validate(), Ok(()), "space {space:?}");
+        }
+    }
+
+    #[test]
+    fn ordered_dither_lands_a_known_pattern() {
+        // rgb space, so coords are the #-bytes over 255: black (0,0,0), mid
+        // #800000 (~0.502,0,0), red (1,0,0), all on x. The four mid voxels at z=0
+        // are under test; the black and seven red seeds at z=1,2 make black and
+        // red the reps (red outvotes mid 7 to 4, black stands alone).
+        let black = "#000000FF";
+        let mid = "#800000FF";
+        let red = "#FF0000FF";
+        let mut voxels = vec![
+            (TyVector3U32::new(0, 0, 0), 1),
+            (TyVector3U32::new(1, 0, 0), 1),
+            (TyVector3U32::new(2, 0, 0), 1),
+            (TyVector3U32::new(3, 0, 0), 1),
+            (TyVector3U32::new(0, 0, 1), 0),
+        ];
+        for x in 1..4 {
+            voxels.push((TyVector3U32::new(x, 0, 1), 2));
+        }
+        for x in 0..4 {
+            voxels.push((TyVector3U32::new(x, 0, 2), 2));
+        }
+        let (mut state, palette, object) =
+            grid_state(TyVector3U32::new(4, 1, 3), &[black, mid, red], &voxels);
+
+        let outcome = reduce_palette(
+            &mut state,
+            palette,
+            2,
+            ReductionMethod::MedianCut,
+            ColorSpace::Rgb,
+            Dither::Ordered,
+        )
+        .unwrap();
+        assert_eq!(outcome, Some((3, 2)));
+        assert_eq!(state.validate(), Ok(()));
+
+        // Reps differ only on x, so only the x offset decides: bayer(x,0,0) is
+        // 0, 48, 6, 54 for x=0..3, below/above the midpoint 31.5, so mid snaps
+        // black, red, black, red.
+        let expected = [black, red, black, red];
+        for (x, want) in expected.iter().enumerate() {
+            let got = voxel_color(&state, object, palette, TyVector3U32::new(x as u32, 0, 0));
+            assert_eq!(&got, want, "x = {x}");
+        }
+    }
+
+    #[test]
+    fn floyd_steinberg_dither_lands_a_known_pattern() {
+        // Same x-axis palette on a (1,1,10) line: the mid voxels are the highest
+        // ids (z=6..9) so error diffuses only among them; the black and five red
+        // seeds (z=0..5) snap to their own rep with zero residual. Red outvotes
+        // mid 5 to 4, so black and red are the reps.
+        let black = "#000000FF";
+        let mid = "#800000FF";
+        let red = "#FF0000FF";
+        let mut voxels = vec![(TyVector3U32::new(0, 0, 0), 0)];
+        for z in 1..6 {
+            voxels.push((TyVector3U32::new(0, 0, z), 2));
+        }
+        for z in 6..10 {
+            voxels.push((TyVector3U32::new(0, 0, z), 1));
+        }
+        let (mut state, palette, object) =
+            grid_state(TyVector3U32::new(1, 1, 10), &[black, mid, red], &voxels);
+
+        let outcome = reduce_palette(
+            &mut state,
+            palette,
+            2,
+            ReductionMethod::MedianCut,
+            ColorSpace::Rgb,
+            Dither::FloydSteinberg,
+        )
+        .unwrap();
+        assert_eq!(outcome, Some((3, 2)));
+        assert_eq!(state.validate(), Ok(()));
+
+        // On a line only +z carries, at 3/8. Tracing mid = 0.502 from zero error:
+        //   z=6: 0.502          -> red   (residual -0.498, carries -0.187)
+        //   z=7: 0.502 - 0.187  -> black (residual  0.315, carries  0.118)
+        //   z=8: 0.502 + 0.118  -> red   (residual -0.380, carries -0.142)
+        //   z=9: 0.502 - 0.142  -> black
+        let expected = [(6, red), (7, black), (8, red), (9, black)];
+        for (z, want) in expected {
+            let got = voxel_color(&state, object, palette, TyVector3U32::new(0, 0, z));
+            assert_eq!(&got, want, "z = {z}");
         }
     }
 }

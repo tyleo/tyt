@@ -77,8 +77,9 @@ off as they land.
       takes its cluster representative's whole row). Landed: the
       `PaletteReductionOptions` group and voxsmith's `reduce_palette` with all
       three methods (`median-cut` / `octree` / `kmeans`) in oklab/lab/rgb via
-      `remove_cell`+`gc`. Pending: `--dither` (errors until built); `quantize` /
-      `remap` will reuse the engine.
+      `remove_cell`+`gc`, plus `--dither` (`floyd-steinberg` / `ordered`) as a
+      per-voxel remap in 3D raster order. Pending: `quantize` / `remap` will
+      reuse the engine.
 
 ## Commands
 
@@ -148,10 +149,10 @@ Material sampling (see [voxelize](reference/voxelize.md) and
 - [x] `--fill-color none | #RRGGBBAA` (default `none`): the whole object under
       `flat`, the `solid`-fill interior under the sampling modes; drop the
       surface rejection. A `none` interior adopts its nearest surface material.
-- [ ] `--max-palette-cells <n> | none` (default `256`) via the shared reduction
+- [x] `--max-palette-cells <n> | none` (default `256`) via the shared reduction
       engine; expose `--method` / `--space` / `--dither` on `voxelize`. Landed for
-      all three methods (`median-cut` / `octree` / `kmeans`) with a stderr note;
-      only `--dither` errors until built.
+      all three methods (`median-cut` / `octree` / `kmeans`) with a stderr note,
+      and both `--dither` modes (`floyd-steinberg` / `ordered`).
 - [ ] `per-texel`: UV interpolation, image decode, area-average over the voxel
       footprint, epsilon-merge of near-identical tuples, and a `solid`-interior
       fallback to the nearest surface cell. `auto` becomes texture-aware here.
