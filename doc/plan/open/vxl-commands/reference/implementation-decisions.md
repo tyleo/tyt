@@ -131,6 +131,35 @@ function in the implementation module rather than delegating to
 `tyt_injection::write_stdout` the way the prefixed tyt crates do, because vxl
 stays independent of the tyt support crates.
 
+## palette list
+
+`palette list` follows the `info` report template rather than the richer
+`palette show` machinery, since it is a flat per-palette overview with no value
+collections, selectors, or swatches. It takes the shared `ReportLayout`
+(`markdown` default, `pretty-json`, `compact-json`), loads the state, and renders
+a pure function over the `VoxMain`, the same load-render-print split the other
+read reports use. The Markdown layout is one `markdown_table` with the columns
+the spec shows, `index`, `attributes`, `cells`, and `used by`; the JSON layouts
+emit one record per palette with the keys `index`, `attributes`, `cells`, and
+`used_by`, the object indices in place of the Markdown names.
+
+The `used by` column is computed by scanning the objects once per palette and
+keeping those whose `iter_palette_refs` name it. An object appears once however
+many times it references the palette, since the filter is a boolean any-match, so
+an unvalidated document that references one palette twice still lists the object
+once. Markdown shows the referencing object names and JSON their indices, the
+same name-versus-id split `info` draws between its Markdown and JSON.
+
+Building `list` surfaced four helpers already inlined in `info` and, for the JSON
+tail, in `validate` too. They moved to shared `implementation` functions rather
+than being duplicated a third time: `row` and `md_cell` join the `markdown_table`
+module they feed, `attribute_names` and `to_json_string` become their own leaf
+modules. `to_json_string` is the pretty-or-compact serialize plus trailing
+newline that `info`, `validate`, and `list` share, so the read commands' JSON
+stays byte-identical in form. `palette show` keeps its own serialize, since it
+returns the string with an `expect` rather than propagating a `Result`, and
+retyping it was not worth the churn.
+
 ## palette show
 
 The command splits `--attribute` into a key and an optional trailing color

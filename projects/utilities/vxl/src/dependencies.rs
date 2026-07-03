@@ -129,6 +129,16 @@ pub trait Dependencies {
     /// * `layout` - how to lay out the report.
     fn validate(&self, input: &Path, layout: ReportLayout) -> Result<()>;
 
+    /// Prints a one-line-per-palette overview of the voxel file at `input`: each
+    /// palette's index, ordered attribute keys, cell count, and the objects that
+    /// reference it.
+    ///
+    /// # Arguments
+    /// * `input` - the voxel file to read, in any supported format.
+    /// * `from` - source format, inferred from `input`'s extension when `None`.
+    /// * `layout` - how to lay out the listing.
+    fn palette_list(&self, input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()>;
+
     /// Prints the value collections named by `selectors` from the palettes in
     /// the voxel file at `input`.
     ///

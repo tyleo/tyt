@@ -106,16 +106,7 @@ fn render_json(checks: &[VoxjCheck], name: &str, pretty: bool) -> Result<String>
     document.insert("name".to_owned(), json!(name));
     document.insert("valid".to_owned(), json!(failed_count(checks) == 0));
     document.insert("checks".to_owned(), Value::Array(entries));
-    let document = Value::Object(document);
-
-    let mut output = if pretty {
-        serde_json::to_string_pretty(&document)
-    } else {
-        serde_json::to_string(&document)
-    }
-    .map_err(IOError::other)?;
-    output.push('\n');
-    Ok(output)
+    implementation::to_json_string(&Value::Object(document), pretty)
 }
 
 /// How many checks failed.

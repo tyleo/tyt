@@ -83,6 +83,10 @@ impl Dependencies for DependenciesImpl {
         implementation::validate(input, layout)
     }
 
+    fn palette_list(&self, input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()> {
+        implementation::palette_list(input, from, layout)
+    }
+
     fn palette_show(
         &self,
         input: &Path,

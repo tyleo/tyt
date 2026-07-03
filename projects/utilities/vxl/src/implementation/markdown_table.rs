@@ -26,6 +26,16 @@ pub(crate) fn markdown_table(headers: &[&str], rows: &[Vec<String>]) -> String {
     output
 }
 
+/// Collects borrowed cells into one owned [`markdown_table`] row.
+pub(crate) fn row<const N: usize>(cells: [&str; N]) -> Vec<String> {
+    cells.iter().map(|cell| cell.to_string()).collect()
+}
+
+/// `text` safe for one table cell: pipes escaped, newlines flattened to spaces.
+pub(crate) fn md_cell(text: &str) -> String {
+    text.replace('|', "\\|").replace(['\n', '\r'], " ")
+}
+
 /// One `| ... | ... |` row, each column padded to its width, a missing trailing
 /// column left blank.
 fn table_row(cells: &[String], widths: &[usize]) -> String {

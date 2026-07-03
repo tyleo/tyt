@@ -1,7 +1,7 @@
 use crate::{Format, ReportLayout, Result, implementation};
 use serde_json::{Map, Value, json};
-use std::{fs, io::Error as IOError, path::Path};
-use voxcore::{VoxMain, VoxObject, VoxPalette};
+use std::{fs, path::Path};
+use voxcore::{VoxMain, VoxObject};
 use voxj_codec::from_voxj_or_voxjz_file_bytes;
 
 /// Loads the voxel file at `input` and reports what it contains in `layout`.
@@ -54,19 +54,22 @@ fn render_markdown(
     voxj_version: Option<u32>,
     name: &str,
 ) -> String {
-    let mut document_rows = vec![row(["Format", format.name()])];
+    let mut document_rows = vec![implementation::row(["Format", format.name()])];
     if let Some(version) = voxj_version {
-        document_rows.push(row(["Voxj version", &version.to_string()]));
+        document_rows.push(implementation::row(["Voxj version", &version.to_string()]));
     }
-    document_rows.push(row(["Has ext", yes_no(state.ext().is_some())]));
-    document_rows.push(row(["Has edit", yes_no(has_edit(state))]));
+    document_rows.push(implementation::row([
+        "Has ext",
+        yes_no(state.ext().is_some()),
+    ]));
+    document_rows.push(implementation::row(["Has edit", yes_no(has_edit(state))]));
 
     let palette_rows: Vec<Vec<String>> = state
         .iter_palettes()
         .map(|(id, palette)| {
-            row([
+            implementation::row([
                 &id.to_u32().to_string(),
-                &md_cell(&attribute_names(palette).join(", ")),
+                &implementation::md_cell(&implementation::attribute_names(palette).join(", ")),
                 &palette.cell_count().to_string(),
             ])
         })
@@ -80,9 +83,9 @@ fn render_markdown(
                 Some(edit) => dimensions(edit),
                 None => "-".to_string(),
             };
-            row([
+            implementation::row([
                 &id.to_u32().to_string(),
-                &md_cell(object.name()),
+                &implementation::md_cell(object.name()),
                 &dimensions(content_bounds(object)),
                 &edit,
                 &format!("{}, {}, {}", origin.x, origin.y, origin.z),
@@ -119,11 +122,6 @@ fn render_markdown(
     output
 }
 
-/// Collects borrowed cells into one owned table row.
-fn row<const N: usize>(cells: [&str; N]) -> Vec<String> {
-    cells.iter().map(|cell| cell.to_string()).collect()
-}
-
 /// The report as one JSON object, pretty or compact. Keys keep insertion order.
 fn render_json(
     state: &VoxMain,
@@ -136,7 +134,7 @@ fn render_json(
         .map(|(id, palette)| {
             json!({
                 "id": id.to_u32(),
-                "attributes": attribute_names(palette),
+                "attributes": implementation::attribute_names(palette),
                 "cells": palette.cell_count(),
             })
         })
@@ -171,16 +169,7 @@ fn render_json(
     document.insert("has_edit".to_string(), json!(has_edit(state)));
     document.insert("palettes".to_string(), Value::Array(palettes));
     document.insert("objects".to_string(), Value::Array(objects));
-    let document = Value::Object(document);
-
-    let mut output = if pretty {
-        serde_json::to_string_pretty(&document)
-    } else {
-        serde_json::to_string(&document)
-    }
-    .map_err(IOError::other)?;
-    output.push('\n');
-    Ok(output)
+    implementation::to_json_string(&Value::Object(document), pretty)
 }
 
 /// Whether any object has an [`edit_bounds`] build volume.
@@ -188,11 +177,6 @@ fn has_edit(state: &VoxMain) -> bool {
     state
         .iter_objects()
         .any(|(_, object)| edit_bounds(object).is_some())
-}
-
-/// A palette's attribute keys, in id order.
-fn attribute_names(palette: &VoxPalette) -> Vec<&str> {
-    palette.iter_attributes().map(|(_, name)| name).collect()
 }
 
 /// The size of an object's tight live-voxel extent. `(0, 0, 0)` when empty.
@@ -231,11 +215,6 @@ fn dimensions(size: (u32, u32, u32)) -> String {
 /// `yes` or `no` for a flag.
 fn yes_no(flag: bool) -> &'static str {
     if flag { "yes" } else { "no" }
-}
-
-/// `text` safe for one table cell: pipes escaped, newlines flattened to spaces.
-fn md_cell(text: &str) -> String {
-    text.replace('|', "\\|").replace(['\n', '\r'], " ")
 }
 
 #[cfg(test)]

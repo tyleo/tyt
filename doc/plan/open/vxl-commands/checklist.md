@@ -159,7 +159,7 @@ Material sampling (see [voxelize](reference/voxelize.md) and
 
 ### palette ([reference/palette/](reference/palette/))
 
-- [ ] `palette list` (+ `--layout`): index, attributes, cell count, referencing
+- [x] `palette list` (+ `--layout`): index, attributes, cell count, referencing
       objects.
 - [x] `palette show` (+ `--json`): `--index` / `--attribute` / `--format`. See
       the V2 follow-ups in [palette show](reference/palette/show.md) for the
