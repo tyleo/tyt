@@ -201,13 +201,17 @@ Material sampling (see [voxelize](reference/voxelize.md) and
 
 - [ ] Report version, per-object bounds / voxel count / encodings, palette
       attribute sets and cell counts, `editState` and `ext` presence, and root /
-      instanced / unplaced nodes; `--layout`.
+      instanced / unplaced nodes; `--layout`. Landed: the command, dispatch,
+      `Dependencies::info`, and a markdown / pretty-json / compact-json `--layout`
+      report covering version, per-object bounds, voxel count, palette attribute
+      sets and cell counts, and `editState` / `ext` presence, with tests. Pending:
+      per-object encodings and the root / instanced / unplaced node breakdown.
 
 ## Finishing
 
-- [ ] `--layout` output on `list`, `validate`, and `info`; `palette show` keeps
+- [x] `--layout` output on `list`, `validate`, and `info`; `palette show` keeps
       its own `--json`, and `hierarchy show` prints only its tree.
-- [ ] Help text and `clap_complete` completions cover the new commands.
+- [x] Help text and `clap_complete` completions cover the new commands.
 - [ ] Tests per command, following the existing test style.
 
 ## Deferred (see [Future](reference/design-notes.md))
