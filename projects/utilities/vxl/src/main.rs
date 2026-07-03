@@ -21,7 +21,7 @@ enum Command {
     },
 
     #[command(flatten)]
-    Vxl(Vxl),
+    Vxl(Box<Vxl>),
 }
 
 fn main() {
