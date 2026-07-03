@@ -2,8 +2,11 @@ use crate::MeshWrap;
 use ty_math::TySrgbaColor;
 
 /// A decoded texture image: `width` by `height` RGBA8 texels in row-major order,
-/// row `0` at the top to match the glTF texture-coordinate origin. A base-color
-/// image is stored in its sRGB encoding and decoded to linear when sampled.
+/// row `0` at the top to match the glTF texture-coordinate origin. The store is
+/// color-space-neutral raw bytes; the sample site decodes sRGB (base color,
+/// emissive) or straight linear data (metallic-roughness, occlusion) per the map
+/// it feeds, so one image feeding maps of different kinds decodes correctly for
+/// each.
 pub(crate) struct MeshTexture {
     width: u32,
     height: u32,

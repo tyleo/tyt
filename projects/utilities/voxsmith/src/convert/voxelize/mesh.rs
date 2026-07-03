@@ -1,4 +1,4 @@
-use crate::{MeshBaseColorMap, MeshMaterial, MeshTexture, MeshTriangle, triangle_bounds};
+use crate::{MeshMaterial, MeshMaterialMaps, MeshTexture, MeshTriangle, triangle_bounds};
 use ty_math::TyVector3F64;
 
 /// A triangle mesh in world space on the Voxel Json Z-up axes: the geometry to
@@ -16,11 +16,11 @@ pub struct Mesh {
     /// material tag.
     pub(crate) materials: Vec<MeshMaterial>,
 
-    /// Each material's optional base-color texture binding, parallel to
+    /// Each material's optional texture bindings, parallel to
     /// [`materials`](Self::materials).
-    pub(crate) base_colors: Vec<Option<MeshBaseColorMap>>,
+    pub(crate) maps: Vec<MeshMaterialMaps>,
 
-    /// The decoded texture images a base-color binding indexes.
+    /// The decoded texture images a map binding indexes.
     pub(crate) textures: Vec<MeshTexture>,
 
     /// The mesh's name, for the voxelized object; `None` when the source names
@@ -29,10 +29,10 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    /// Whether any material carries a base-color texture, so per-texel sampling
-    /// has something to read and `auto` picks it.
+    /// Whether any material carries a texture map, so per-texel sampling has
+    /// something to read and `auto` picks it.
     pub(crate) fn is_textured(&self) -> bool {
-        self.base_colors.iter().any(Option::is_some)
+        self.maps.iter().any(MeshMaterialMaps::any)
     }
 
     /// The real-world size of the mesh's bounding box, in meters, on the Z-up

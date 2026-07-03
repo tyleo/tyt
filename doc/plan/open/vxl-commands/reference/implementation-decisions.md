@@ -376,12 +376,47 @@ and emits the per-voxel samples. A `solid` interior takes the fill color or, via
 a six-connected flood that carries each filled cell's nearest surface cell index,
 that surface cell's resolved material.
 
-This commit samples base color only. The other four attributes ride the covering
-material's flat factors, so metallic, roughness, emissive, and occlusion textures
-are a later commit on the same sampler pass. The tests embed a synthetic textured
-glTF, encoding the small base-color PNGs with the `png` dev-dependency (already in
-the lock through the gltf image decoder); a sampler unit test asserts every
-textured surface cell resolves, locking in the coverage guarantee.
+The first per-texel commit sampled base color only; a follow-up (below) extends
+the same scatter pass to the other four attributes. The tests embed a synthetic
+textured glTF, encoding small PNGs with the `png` dev-dependency (already in the
+lock through the gltf image decoder); a sampler unit test asserts every textured
+surface cell resolves, locking in the coverage guarantee.
+
+## Per-texel PBR maps
+
+The per-texel sampler was extended from base color to the full material:
+metallic, roughness, emissive, and occlusion each sample their own glTF texture on
+the same scatter pass, so `sample_material` (renamed from `sample_base_color`)
+returns a per-cell `MeshMaterial` rather than a base color and `resolve_materials`
+takes it whole. An attribute whose material has no texture keeps the flat factor
+`mesh` bakes, so the sampler's output is a superset of the per-primitive one.
+
+The color space is decoded at the sample site, not stored on the texture, so one
+image feeding maps of different kinds decodes correctly for each. `MeshTexture` is
+a color-space-neutral RGBA8 store. Base color and emissive decode sRGB
+(`to_linear_rgba`); metallic-roughness and occlusion are straight linear data
+(`to_rgba`, byte over 255, no gamma), since decoding those through the sRGB curve
+would corrupt them (a roughness `128/255 = 0.50` would read `~0.21`). The glTF
+packings: metallic-roughness is blue times the metallic factor and green times the
+roughness factor; occlusion is `1 + strength * (red - 1)`; emissive is the sRGB
+texel times the emissive RGB factor, collapsed to its strongest channel, matching
+the flat path. `KHR_materials_emissive_strength` is still not applied.
+
+Each texture names its own TEXCOORD set (`info.tex_coord()`), so a triangle
+carries one coordinate set per map slot in `MeshTriangleUvs` and the reader
+resolves each slot to the set that map declares, reading each distinct set once.
+The sampler reads its slot's coordinates and never touches set indices; a map
+present without coordinates for its set, or absent, leaves that attribute at the
+flat factor. The four bindings share a `MeshSampler` (image plus wrap modes) and
+group per material in `MeshMaterialMaps`, replacing the lone base-color binding;
+`Mesh::is_textured` now routes `auto` on any map, not only base color.
+
+Each accumulated attribute divides by one shared per-cell sample count, since
+every sample reads all of the covering material's present maps at once; a surface
+cell the scatter grazes point-samples its covering triangle at the cell center,
+covering all its maps together. New synthetic-glTF tests lock in the linear
+metallic-roughness decode, the sRGB emissive collapse, the occlusion strength
+formula, and each map reading its own TEXCOORD set.
 
 ## Palette reduction
 

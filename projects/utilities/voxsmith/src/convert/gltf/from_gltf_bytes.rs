@@ -1,8 +1,10 @@
 use crate::{
-    Error, Mesh, MeshBaseColorMap, MeshMaterial, MeshTexture, MeshTriangle, MeshWrap, Result,
+    Error, Mesh, MeshBaseColorMap, MeshEmissiveMap, MeshMaterial, MeshMaterialMaps,
+    MeshMetallicRoughnessMap, MeshOcclusionMap, MeshSampler, MeshTexture, MeshTriangle,
+    MeshTriangleUvs, MeshWrap, Result,
 };
 use gltf::{
-    Material, Node,
+    Material, Node, Texture,
     buffer::Data,
     image::{Data as ImageData, Format as ImageFormat},
     import_slice,
@@ -23,9 +25,10 @@ use ty_math::{TyLinearRgbaColorF64, TyMatrix4x4F64, TySrgbaColor, TyVector2F64, 
 /// strips and fans are skipped. Distinct glTF materials are deduplicated by
 /// index, so primitives sharing a material share one material entry, and every
 /// primitive with no assigned material shares the glTF default. A material's
-/// base-color texture is decoded once into the mesh texture table for per-texel
-/// sampling. A `.gltf` that references external buffer or image files cannot be
-/// resolved from bytes alone and errors.
+/// base-color, metallic-roughness, emissive, and occlusion textures are each
+/// decoded once into the mesh texture table for per-texel sampling. A `.gltf`
+/// that references external buffer or image files cannot be resolved from bytes
+/// alone and errors.
 pub fn from_gltf_bytes(bytes: &[u8]) -> Result<Mesh> {
     let (document, buffers, images) = import_slice(bytes)?;
 
@@ -37,7 +40,7 @@ pub fn from_gltf_bytes(bytes: &[u8]) -> Result<Mesh> {
     let mut mesh = Mesh {
         triangles: Vec::new(),
         materials: Vec::new(),
-        base_colors: Vec::new(),
+        maps: Vec::new(),
         textures: Vec::new(),
         name: None,
     };
@@ -108,19 +111,37 @@ fn collect_node(
 
             let material = material_slot(&gltf_material, mesh, slots, images, image_slots);
 
-            // Read the texture-coordinate set the base-color texture names, so
-            // per-vertex coordinates align with the map the sampler reads.
-            let uv_set = gltf_material
-                .pbr_metallic_roughness()
-                .base_color_texture()
-                .map(|info| info.tex_coord())
-                .unwrap_or(0);
+            // The TEXCOORD set each map slot declares, in the fixed slot order
+            // base color, metallic-roughness, emissive, occlusion.
+            let pbr = gltf_material.pbr_metallic_roughness();
+            let slot_sets = [
+                pbr.base_color_texture().map(|info| info.tex_coord()),
+                pbr.metallic_roughness_texture()
+                    .map(|info| info.tex_coord()),
+                gltf_material
+                    .emissive_texture()
+                    .map(|info| info.tex_coord()),
+                gltf_material
+                    .occlusion_texture()
+                    .map(|info| info.tex_coord()),
+            ];
 
-            let uvs: Option<Vec<TyVector2F64>> = reader.read_tex_coords(uv_set).map(|coords| {
-                coords
-                    .into_f32()
-                    .map(|uv| TyVector2F64::new(uv[0] as f64, uv[1] as f64))
-                    .collect()
+            // Read each declared set once into per-vertex coordinates, so slots
+            // sharing a set (the common case) do not re-read it.
+            let mut set_cache: HashMap<u32, Option<Vec<TyVector2F64>>> = HashMap::new();
+            let slot_uvs = slot_sets.map(|set| {
+                let set = set?;
+                set_cache
+                    .entry(set)
+                    .or_insert_with(|| {
+                        reader.read_tex_coords(set).map(|coords| {
+                            coords
+                                .into_f32()
+                                .map(|uv| TyVector2F64::new(uv[0] as f64, uv[1] as f64))
+                                .collect()
+                        })
+                    })
+                    .clone()
             });
 
             match reader.read_indices() {
@@ -135,7 +156,7 @@ fn collect_node(
                         ) {
                             mesh.triangles.push(MeshTriangle {
                                 points: [a, b, c],
-                                uvs: face_uvs(uvs.as_deref(), corners),
+                                uvs: face_slot_uvs(&slot_uvs, corners),
                                 material,
                             });
                         }
@@ -149,7 +170,7 @@ fn collect_node(
                         let base = triangle * 3;
                         mesh.triangles.push(MeshTriangle {
                             points: [face[0], face[1], face[2]],
-                            uvs: face_uvs(uvs.as_deref(), [base, base + 1, base + 2]),
+                            uvs: face_slot_uvs(&slot_uvs, [base, base + 1, base + 2]),
                             material,
                         });
                     }
@@ -163,8 +184,20 @@ fn collect_node(
     }
 }
 
+/// The per-map texture coordinates for a face's three vertex indices, one slot
+/// per map in the `slots` order base color, metallic-roughness, emissive,
+/// occlusion.
+fn face_slot_uvs(slots: &[Option<Vec<TyVector2F64>>; 4], corners: [usize; 3]) -> MeshTriangleUvs {
+    MeshTriangleUvs {
+        base_color: face_uvs(slots[0].as_deref(), corners),
+        metallic_roughness: face_uvs(slots[1].as_deref(), corners),
+        emissive: face_uvs(slots[2].as_deref(), corners),
+        occlusion: face_uvs(slots[3].as_deref(), corners),
+    }
+}
+
 /// The texture-coordinate triple for a face's three vertex indices, or `None`
-/// when the primitive carried no coordinates or an index is out of range.
+/// when the slot carried no coordinates or an index is out of range.
 fn face_uvs(uvs: Option<&[TyVector2F64]>, corners: [usize; 3]) -> Option<[TyVector2F64; 3]> {
     let uvs = uvs?;
     Some([
@@ -174,9 +207,8 @@ fn face_uvs(uvs: Option<&[TyVector2F64]>, corners: [usize; 3]) -> Option<[TyVect
     ])
 }
 
-/// The material-table slot for `material`, interning its flat factors and
-/// base-color texture on first sight so primitives sharing a glTF material share
-/// one entry.
+/// The material-table slot for `material`, interning its flat factors and texture
+/// maps on first sight so primitives sharing a glTF material share one entry.
 fn material_slot(
     material: &Material,
     mesh: &mut Mesh,
@@ -192,9 +224,9 @@ fn material_slot(
 
     mesh.materials.push(mesh_material_from_gltf(material));
 
-    let base_color = base_color_map(material, &mut mesh.textures, images, image_slots);
+    let maps = material_maps(material, &mut mesh.textures, images, image_slots);
 
-    mesh.base_colors.push(base_color);
+    mesh.maps.push(maps);
 
     slots.insert(material.index(), slot);
 
@@ -211,15 +243,7 @@ fn material_slot(
 fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
     let pbr = material.pbr_metallic_roughness();
 
-    let base = pbr.base_color_factor();
-
-    let rgba = TyLinearRgbaColorF64::new(
-        base[0] as f64,
-        base[1] as f64,
-        base[2] as f64,
-        base[3] as f64,
-    )
-    .to_srgba();
+    let rgba = linear_rgba(pbr.base_color_factor()).to_srgba();
 
     let emissive = material
         .emissive_factor()
@@ -235,22 +259,57 @@ fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
     }
 }
 
-/// A material's base-color texture binding, decoding its image into `textures`
-/// on first sight and interning it, or `None` when the material has no base-color
-/// texture. The binding carries the linear base-color factor the sampled texel
-/// multiplies.
-fn base_color_map(
+/// A material's texture bindings, decoding each referenced image into `textures`
+/// on first sight and interning it. Absent maps are `None`. Each binding carries
+/// the factor its sampled texel combines with, per the glTF metallic-roughness
+/// model.
+fn material_maps(
     material: &Material,
     textures: &mut Vec<MeshTexture>,
     images: &[ImageData],
     image_slots: &mut HashMap<usize, usize>,
-) -> Option<MeshBaseColorMap> {
+) -> MeshMaterialMaps {
     let pbr = material.pbr_metallic_roughness();
 
-    let info = pbr.base_color_texture()?;
+    let base_color = pbr.base_color_texture().map(|info| MeshBaseColorMap {
+        sampler: sampler_of(&info.texture(), textures, images, image_slots),
+        factor: linear_rgba(pbr.base_color_factor()),
+    });
 
-    let texture = info.texture();
+    let metallic_roughness =
+        pbr.metallic_roughness_texture()
+            .map(|info| MeshMetallicRoughnessMap {
+                sampler: sampler_of(&info.texture(), textures, images, image_slots),
+                metallic: pbr.metallic_factor() as f64,
+                roughness: pbr.roughness_factor() as f64,
+            });
 
+    let emissive = material.emissive_texture().map(|info| MeshEmissiveMap {
+        sampler: sampler_of(&info.texture(), textures, images, image_slots),
+        factor: material.emissive_factor().map(f64::from),
+    });
+
+    let occlusion = material.occlusion_texture().map(|info| MeshOcclusionMap {
+        sampler: sampler_of(&info.texture(), textures, images, image_slots),
+        strength: info.strength() as f64,
+    });
+
+    MeshMaterialMaps {
+        base_color,
+        metallic_roughness,
+        emissive,
+        occlusion,
+    }
+}
+
+/// The sampler for a glTF texture: its image, decoded into `textures` on first
+/// sight and interned by glTF image index, and its wrap modes.
+fn sampler_of(
+    texture: &Texture,
+    textures: &mut Vec<MeshTexture>,
+    images: &[ImageData],
+    image_slots: &mut HashMap<usize, usize>,
+) -> MeshSampler {
     let image_index = texture.source().index();
 
     let image = *image_slots.entry(image_index).or_insert_with(|| {
@@ -260,19 +319,21 @@ fn base_color_map(
 
     let sampler = texture.sampler();
 
-    let base = pbr.base_color_factor();
-
-    Some(MeshBaseColorMap {
+    MeshSampler {
         image,
-        factor: TyLinearRgbaColorF64::new(
-            base[0] as f64,
-            base[1] as f64,
-            base[2] as f64,
-            base[3] as f64,
-        ),
         wrap_s: wrap_of(sampler.wrap_s()),
         wrap_t: wrap_of(sampler.wrap_t()),
-    })
+    }
+}
+
+/// A glTF linear-RGBA factor as a [`TyLinearRgbaColorF64`].
+fn linear_rgba(factor: [f32; 4]) -> TyLinearRgbaColorF64 {
+    TyLinearRgbaColorF64::new(
+        factor[0] as f64,
+        factor[1] as f64,
+        factor[2] as f64,
+        factor[3] as f64,
+    )
 }
 
 /// The [`MeshWrap`] for a glTF wrapping mode.
@@ -653,6 +714,230 @@ mod tests {
         (byte(1), byte(3), byte(5))
     }
 
+    /// One PBR texture map to attach to the test quad, its PNG, the TEXCOORD set
+    /// it samples, and its factors.
+    enum MapSpec<'a> {
+        BaseColor {
+            png: &'a [u8],
+            tex_coord: u32,
+            factor: [f32; 4],
+        },
+        MetallicRoughness {
+            png: &'a [u8],
+            tex_coord: u32,
+            metallic: f32,
+            roughness: f32,
+        },
+        Emissive {
+            png: &'a [u8],
+            tex_coord: u32,
+            factor: [f32; 3],
+        },
+        Occlusion {
+            png: &'a [u8],
+            tex_coord: u32,
+            strength: f32,
+        },
+    }
+
+    impl MapSpec<'_> {
+        /// The map's PNG bytes.
+        fn png(&self) -> &[u8] {
+            match self {
+                MapSpec::BaseColor { png, .. }
+                | MapSpec::MetallicRoughness { png, .. }
+                | MapSpec::Emissive { png, .. }
+                | MapSpec::Occlusion { png, .. } => png,
+            }
+        }
+    }
+
+    /// A binary glTF of a unit quad in the glTF XY plane (Z-up XZ, `y = 0`)
+    /// carrying two TEXCOORD sets, `uv0` and `uv1`, and the given PBR maps. Each
+    /// map is its own image, texture, and sampler, so a map samples the set it
+    /// declares; a voxel spanning the quad averages the texels under it.
+    fn pbr_quad_glb(uv0: [[f32; 2]; 4], uv1: [[f32; 2]; 4], maps: &[MapSpec]) -> Vec<u8> {
+        let positions: [[f32; 3]; 4] = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        ];
+        let indices: [u32; 6] = [0, 1, 2, 0, 2, 3];
+
+        let mut bin = Vec::new();
+        for vertex in positions {
+            for component in vertex {
+                bin.extend_from_slice(&component.to_le_bytes());
+            }
+        }
+        for uv in uv0 {
+            for component in uv {
+                bin.extend_from_slice(&component.to_le_bytes());
+            }
+        }
+        for uv in uv1 {
+            for component in uv {
+                bin.extend_from_slice(&component.to_le_bytes());
+            }
+        }
+        for index in indices {
+            bin.extend_from_slice(&index.to_le_bytes());
+        }
+
+        // One image bufferView per map, appended after the four geometry views.
+        let mut image_bvs = String::new();
+        for map in maps {
+            let offset = bin.len();
+            bin.extend_from_slice(map.png());
+            image_bvs.push_str(&format!(
+                r#",{{"buffer":0,"byteOffset":{offset},"byteLength":{}}}"#,
+                map.png().len()
+            ));
+        }
+
+        let images: Vec<String> = (0..maps.len())
+            .map(|i| format!(r#"{{"bufferView":{},"mimeType":"image/png"}}"#, 4 + i))
+            .collect();
+        let textures: Vec<String> = (0..maps.len())
+            .map(|i| format!(r#"{{"source":{i},"sampler":{i}}}"#))
+            .collect();
+        let samplers: Vec<String> = (0..maps.len()).map(|_| "{}".to_owned()).collect();
+
+        // The material's map references, split into the pbrMetallicRoughness
+        // block and the top-level emissive and occlusion fields.
+        let mut pbr = Vec::new();
+        let mut top = Vec::new();
+        for (i, map) in maps.iter().enumerate() {
+            match *map {
+                MapSpec::BaseColor {
+                    tex_coord, factor, ..
+                } => {
+                    pbr.push(format!(
+                        r#""baseColorFactor":[{},{},{},{}]"#,
+                        factor[0], factor[1], factor[2], factor[3]
+                    ));
+                    pbr.push(format!(
+                        r#""baseColorTexture":{{"index":{i},"texCoord":{tex_coord}}}"#
+                    ));
+                }
+                MapSpec::MetallicRoughness {
+                    tex_coord,
+                    metallic,
+                    roughness,
+                    ..
+                } => {
+                    pbr.push(format!(r#""metallicFactor":{metallic}"#));
+                    pbr.push(format!(r#""roughnessFactor":{roughness}"#));
+                    pbr.push(format!(
+                        r#""metallicRoughnessTexture":{{"index":{i},"texCoord":{tex_coord}}}"#
+                    ));
+                }
+                MapSpec::Emissive {
+                    tex_coord, factor, ..
+                } => {
+                    top.push(format!(
+                        r#""emissiveFactor":[{},{},{}]"#,
+                        factor[0], factor[1], factor[2]
+                    ));
+                    top.push(format!(
+                        r#""emissiveTexture":{{"index":{i},"texCoord":{tex_coord}}}"#
+                    ));
+                }
+                MapSpec::Occlusion {
+                    tex_coord,
+                    strength,
+                    ..
+                } => top.push(format!(
+                    r#""occlusionTexture":{{"index":{i},"texCoord":{tex_coord},"strength":{strength}}}"#
+                )),
+            }
+        }
+        let mut material = Vec::new();
+        if !pbr.is_empty() {
+            material.push(format!(r#""pbrMetallicRoughness":{{{}}}"#, pbr.join(",")));
+        }
+        material.extend(top);
+        let material = format!("{{{}}}", material.join(","));
+
+        let json = format!(
+            concat!(
+                r#"{{"asset":{{"version":"2.0"}},"scene":0,"scenes":[{{"nodes":[0]}}],"#,
+                r#""nodes":[{{"mesh":0}}],"#,
+                r#""meshes":[{{"primitives":[{{"attributes":{{"POSITION":0,"TEXCOORD_0":1,"TEXCOORD_1":2}},"#,
+                r#""indices":3,"mode":4,"material":0}}]}}],"#,
+                r#""materials":[{material}],"textures":[{textures}],"images":[{images}],"#,
+                r#""samplers":[{samplers}],"#,
+                r#""accessors":[{{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3","#,
+                r#""min":[0,0,0],"max":[1,1,0]}},"#,
+                r#"{{"bufferView":1,"componentType":5126,"count":4,"type":"VEC2"}},"#,
+                r#"{{"bufferView":2,"componentType":5126,"count":4,"type":"VEC2"}},"#,
+                r#"{{"bufferView":3,"componentType":5125,"count":6,"type":"SCALAR"}}],"#,
+                r#""bufferViews":[{{"buffer":0,"byteOffset":0,"byteLength":48}},"#,
+                r#"{{"buffer":0,"byteOffset":48,"byteLength":32}},"#,
+                r#"{{"buffer":0,"byteOffset":80,"byteLength":32}},"#,
+                r#"{{"buffer":0,"byteOffset":112,"byteLength":24}}{image_bvs}],"#,
+                r#""buffers":[{{"byteLength":{bin_len}}}]}}"#,
+            ),
+            material = material,
+            textures = textures.join(","),
+            images = images.join(","),
+            samplers = samplers.join(","),
+            image_bvs = image_bvs,
+            bin_len = bin.len(),
+        );
+
+        let mut json_bytes = json.into_bytes();
+        while json_bytes.len() % 4 != 0 {
+            json_bytes.push(b' ');
+        }
+        while bin.len() % 4 != 0 {
+            bin.push(0);
+        }
+        let total = 12 + 8 + json_bytes.len() + 8 + bin.len();
+
+        let mut glb = Vec::new();
+        glb.extend_from_slice(&0x4654_6C67u32.to_le_bytes()); // "glTF"
+        glb.extend_from_slice(&2u32.to_le_bytes());
+        glb.extend_from_slice(&(total as u32).to_le_bytes());
+        glb.extend_from_slice(&(json_bytes.len() as u32).to_le_bytes());
+        glb.extend_from_slice(&0x4E4F_534Au32.to_le_bytes()); // "JSON"
+        glb.extend_from_slice(&json_bytes);
+        glb.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+        glb.extend_from_slice(&0x004E_4942u32.to_le_bytes()); // "BIN\0"
+        glb.extend_from_slice(&bin);
+        glb
+    }
+
+    /// A full square UV layout over the quad, mapping each corner to a texture
+    /// corner.
+    fn full_square() -> [[f32; 2]; 4] {
+        [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
+    }
+
+    /// The value of one attribute on the cell a given voxel samples, through the
+    /// object's one palette reference.
+    fn voxel_value(state: &VoxMain, position: TyVector3U32, attribute: &str) -> VoxValue {
+        let (_, object) = state.iter_objects().next().unwrap();
+        let (reference, _) = object.iter_palette_refs().next().unwrap();
+        let (_, palette) = state.iter_palettes().next().unwrap();
+        let (attribute, _) = palette
+            .iter_attributes()
+            .find(|(_, name)| *name == attribute)
+            .unwrap();
+        let voxel = object.voxel_id(position).unwrap();
+        let cell = object.voxel_cell(voxel, reference).unwrap();
+        palette.cell_value(cell, attribute).unwrap().clone()
+    }
+
+    /// The numeric value of one attribute on the cell a given voxel samples.
+    fn voxel_number(state: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
+        match voxel_value(state, position, attribute) {
+            VoxValue::Number(value) => value,
+            other => panic!("expected a number for {attribute}, got {other:?}"),
+        }
+    }
+
     #[test]
     fn extent_converts_gltf_y_up_to_voxel_json_z_up() {
         // A box tall on glTF +Y should be tall on Voxel Json +Z.
@@ -978,5 +1263,155 @@ mod tests {
             "the blend of grays stays neutral: {r} {g} {b}"
         );
         assert!(r > 0 && r < 255, "a blend, not either extreme: {r}");
+    }
+
+    #[test]
+    fn per_texel_reads_metallic_roughness_as_linear_data() {
+        // glTF packs metallic in blue and roughness in green, both linear data.
+        // A green of 128 is roughness ~0.502 straight, not the ~0.216 an sRGB
+        // decode would give, and the metallic factor scales the blue channel.
+        let mr = png_rgba(1, 1, &[[0, 128, 64, 255]]);
+        let glb = pbr_quad_glb(
+            full_square(),
+            full_square(),
+            &[MapSpec::MetallicRoughness {
+                png: &mr,
+                tex_coord: 0,
+                metallic: 0.5,
+                roughness: 1.0,
+            }],
+        );
+
+        let state = voxelize(
+            &glb,
+            TyVector3U32::new(1, 1, 1),
+            FillMode::Surface,
+            MaterialMode::PerTexel,
+            None,
+            1.0,
+            None,
+            "voxelized",
+        )
+        .unwrap();
+
+        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), "metallic");
+        let roughness = voxel_number(&state, TyVector3U32::new(0, 0, 0), "roughness");
+        assert!(
+            (metallic - 0.5 * 64.0 / 255.0).abs() < 0.01,
+            "metallic {metallic}"
+        );
+        assert!(
+            (roughness - 128.0 / 255.0).abs() < 0.01,
+            "roughness {roughness}"
+        );
+    }
+
+    #[test]
+    fn per_texel_reads_emissive_as_srgb_strongest_channel() {
+        // Emissive is sRGB; a green of 188 decodes to ~0.503 linear, and the
+        // emissive strength is the strongest resulting channel, so a green-only
+        // texel reads ~0.503, not the ~0.737 a straight decode would give.
+        let emissive = png_rgba(1, 1, &[[0, 188, 0, 255]]);
+        let glb = pbr_quad_glb(
+            full_square(),
+            full_square(),
+            &[MapSpec::Emissive {
+                png: &emissive,
+                tex_coord: 0,
+                factor: [1.0, 1.0, 1.0],
+            }],
+        );
+
+        let state = voxelize(
+            &glb,
+            TyVector3U32::new(1, 1, 1),
+            FillMode::Surface,
+            MaterialMode::PerTexel,
+            None,
+            1.0,
+            None,
+            "voxelized",
+        )
+        .unwrap();
+
+        let emissive = voxel_number(&state, TyVector3U32::new(0, 0, 0), "emissive");
+        assert!((emissive - 0.503).abs() < 0.01, "emissive {emissive}");
+    }
+
+    #[test]
+    fn per_texel_reads_occlusion_with_strength() {
+        // Occlusion is linear data in red; a red of 128 is ~0.502 straight, and
+        // strength 0.5 gives 1 + 0.5 * (0.502 - 1) = ~0.751, distinct from the
+        // ~0.608 an sRGB decode would give.
+        let occ = png_rgba(1, 1, &[[128, 0, 0, 255]]);
+        let glb = pbr_quad_glb(
+            full_square(),
+            full_square(),
+            &[MapSpec::Occlusion {
+                png: &occ,
+                tex_coord: 0,
+                strength: 0.5,
+            }],
+        );
+
+        let state = voxelize(
+            &glb,
+            TyVector3U32::new(1, 1, 1),
+            FillMode::Surface,
+            MaterialMode::PerTexel,
+            None,
+            1.0,
+            None,
+            "voxelized",
+        )
+        .unwrap();
+
+        let occlusion = voxel_number(&state, TyVector3U32::new(0, 0, 0), "occlusion");
+        assert!((occlusion - 0.751).abs() < 0.01, "occlusion {occlusion}");
+    }
+
+    #[test]
+    fn per_texel_samples_each_maps_own_texcoord_set() {
+        // Base color reads TEXCOORD_0 and metallic-roughness reads TEXCOORD_1,
+        // with the two sets pointing at different texels: set 0 at the left texel,
+        // set 1 at the right. Base picks the red left half and metallic-roughness
+        // the metal right half, so a shared set would cross the wires.
+        let base = png_rgba(2, 1, &[[255, 0, 0, 255], [0, 0, 255, 255]]);
+        let mr = png_rgba(2, 1, &[[0, 0, 0, 255], [0, 255, 255, 255]]);
+        let left = [[0.25, 0.5]; 4];
+        let right = [[0.75, 0.5]; 4];
+        let glb = pbr_quad_glb(
+            left,
+            right,
+            &[
+                MapSpec::BaseColor {
+                    png: &base,
+                    tex_coord: 0,
+                    factor: [1.0, 1.0, 1.0, 1.0],
+                },
+                MapSpec::MetallicRoughness {
+                    png: &mr,
+                    tex_coord: 1,
+                    metallic: 1.0,
+                    roughness: 1.0,
+                },
+            ],
+        );
+
+        let state = voxelize(
+            &glb,
+            TyVector3U32::new(1, 1, 1),
+            FillMode::Surface,
+            MaterialMode::PerTexel,
+            None,
+            1.0,
+            None,
+            "voxelized",
+        )
+        .unwrap();
+
+        assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
+        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), "metallic");
+        assert!((metallic - 1.0).abs() < 1e-9, "metallic {metallic}");
     }
 }

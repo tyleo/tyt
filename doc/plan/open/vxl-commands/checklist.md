@@ -156,9 +156,11 @@ Material sampling (see [voxelize](reference/voxelize.md) and
 - [x] `per-texel`: UV interpolation, image decode, area-average over the voxel
       footprint, epsilon-merge of near-identical tuples, and a `solid`-interior
       fallback to the nearest surface cell. `auto` becomes texture-aware here.
-      Landed for base color (factor times texel, linear area-averaged); the
-      metallic / roughness / emissive / occlusion textures ride the covering
-      material's flat factors for now, a later commit on the same sampler pass.
+      Base color, metallic, roughness, emissive, and occlusion all sample their
+      own glTF textures on one scatter pass, each map reading the TEXCOORD set it
+      declares (sRGB for base color and emissive, linear data for
+      metallic-roughness and occlusion), area-averaged and merged; a map a
+      material lacks keeps its flat factor.
 
 ### palette ([reference/palette/](reference/palette/))
 

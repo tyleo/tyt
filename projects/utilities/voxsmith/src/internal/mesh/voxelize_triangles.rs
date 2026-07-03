@@ -162,7 +162,7 @@ fn cell_range(grid: &[[f64; 3]; 3], counts: [usize; 3]) -> ([usize; 3], [usize; 
 
 #[cfg(test)]
 mod tests {
-    use crate::{MeshTriangle, voxelize_triangles};
+    use crate::{MeshTriangle, MeshTriangleUvs, voxelize_triangles};
     use ty_math::{TyVector3F64, TyVector3U32};
 
     /// Tags a triangle soup with one material so the geometry tests can build
@@ -172,7 +172,7 @@ mod tests {
             .into_iter()
             .map(|points| MeshTriangle {
                 points: points.map(|[x, y, z]| TyVector3F64::new(x, y, z)),
-                uvs: None,
+                uvs: MeshTriangleUvs::default(),
                 material,
             })
             .collect()

@@ -1,6 +1,6 @@
 use crate::{
     Error, FillMode, MATERIAL_ATTRIBUTES, MaterialMode, Mesh, MeshMaterial, Result, VoxelGrid,
-    sample_base_color, voxelize_triangles,
+    sample_material, voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
@@ -108,9 +108,10 @@ pub fn voxelize_mesh(
 }
 
 /// The material of every filled cell, per the color mode: `flat` paints one fill
-/// color, `per-primitive`/`per-texel` read the covering material (its base color
-/// sampled per-texel), and `auto` samples a textured mesh and reads factors
-/// otherwise.
+/// color, `per-primitive` reads each covering material's flat factors,
+/// `per-texel` samples the covering material's maps per texel, and `auto` samples
+/// a textured mesh and reads factors otherwise. Under the surface modes a `solid`
+/// interior then takes the fill color or its nearest surface cell's material.
 fn resolve_materials(
     mesh: &Mesh,
     grid: &VoxelGrid,
@@ -118,14 +119,21 @@ fn resolve_materials(
     material_mode: MaterialMode,
     fill_color: Option<[u8; 4]>,
 ) -> Vec<Option<MeshMaterial>> {
-    let sample = match material_mode {
+    let mut cell_materials = match material_mode {
         MaterialMode::Flat => return flat_cells(grid, fill_color),
-        MaterialMode::PerPrimitive => false,
-        MaterialMode::PerTexel => true,
-        MaterialMode::Auto => mesh.is_textured(),
+
+        MaterialMode::PerPrimitive => primitive_cells(mesh, grid),
+
+        MaterialMode::PerTexel => sampled_cells(mesh, grid, counts),
+
+        MaterialMode::Auto if mesh.is_textured() => sampled_cells(mesh, grid, counts),
+
+        MaterialMode::Auto => primitive_cells(mesh, grid),
     };
 
-    sampled_cells(mesh, grid, counts, sample, fill_color)
+    fill_interior(grid, counts, fill_color, &mut cell_materials);
+
+    cell_materials
 }
 
 /// Every filled cell takes the one fill color (white when `none`).
@@ -137,42 +145,29 @@ fn flat_cells(grid: &VoxelGrid, fill_color: Option<[u8; 4]>) -> Vec<Option<MeshM
         .collect()
 }
 
-/// Each surface cell takes its covering material's finish, its base color
-/// sampled from the texture when `sample` (over the cell's footprint, or the
-/// flat factor for an untextured material). A `solid` interior takes the fill
-/// color when given, else its nearest surface cell's material.
-fn sampled_cells(
-    mesh: &Mesh,
-    grid: &VoxelGrid,
-    counts: TyVector3U32,
-    sample: bool,
-    fill_color: Option<[u8; 4]>,
-) -> Vec<Option<MeshMaterial>> {
-    let sampled = sample.then(|| {
-        sample_base_color(
-            &mesh.triangles,
-            &mesh.base_colors,
-            &mesh.textures,
-            grid,
-            counts,
-        )
-    });
+/// Each surface cell takes its covering triangle's flat material; interior and
+/// empty cells are `None`.
+fn primitive_cells(mesh: &Mesh, grid: &VoxelGrid) -> Vec<Option<MeshMaterial>> {
+    grid.triangle
+        .iter()
+        .map(|&covering| {
+            covering
+                .map(|triangle| mesh.materials[mesh.triangles[triangle as usize].material as usize])
+        })
+        .collect()
+}
 
-    let mut cell_materials: Vec<Option<MeshMaterial>> = vec![None; grid.filled.len()];
-
-    for (cell, &covering) in grid.triangle.iter().enumerate() {
-        let Some(covering) = covering else { continue };
-        let material = mesh.materials[mesh.triangles[covering as usize].material as usize];
-        let rgba = sampled
-            .as_ref()
-            .and_then(|colors| colors[cell])
-            .unwrap_or(material.rgba);
-        cell_materials[cell] = Some(MeshMaterial { rgba, ..material });
-    }
-
-    fill_interior(grid, counts, fill_color, &mut cell_materials);
-
-    cell_materials
+/// Each surface cell takes its covering material with every present map sampled
+/// per texel over the cell footprint; interior and empty cells are `None`.
+fn sampled_cells(mesh: &Mesh, grid: &VoxelGrid, counts: TyVector3U32) -> Vec<Option<MeshMaterial>> {
+    sample_material(
+        &mesh.triangles,
+        &mesh.materials,
+        &mesh.maps,
+        &mesh.textures,
+        grid,
+        counts,
+    )
 }
 
 /// Paints every filled interior cell (a `solid` body's invented volume, carrying
