@@ -130,7 +130,10 @@ the mesh stem plus the name, the `{stem}-mse.png` style. The names are:
 5. `mse`: the custom MSE packing, R = `metallic`, G = `smoothness`,
    B = `emissive`. Three channels. This is the voxel-native form of the MSE
    texture the material tooling builds from image maps.
-6. `emissive`: grayscale `emissive` strength. One channel.
+6. `emissive`: the emissive color, the `rgba` base color scaled by the
+   `emissive` strength, so the surface glows in its own color rather than a flat
+   white. RGB, for the glTF emissive slot. The raw `emissive` strength stays a
+   scalar for `--texture-map` and the packings that read it, such as `mse`.
 7. `occlusion`: grayscale `occlusion`. One channel.
 8. `computed-occlusion`: grayscale occlusion computed from the voxel geometry
    rather than read from the `occlusion` attribute. One channel. Always bakes

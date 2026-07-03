@@ -116,6 +116,7 @@ fn material_slot(preset: Option<Texture>) -> MaterialSlot {
 fn material_bake(bake: &TextureBake) -> MaterialBake {
     match bake {
         TextureBake::RgbaColor => MaterialBake::RgbaColor,
+        TextureBake::EmissiveColor => MaterialBake::EmissiveColor,
         TextureBake::Packing(packing) => {
             MaterialBake::Packing(packing.sources().iter().map(material_channel).collect())
         }

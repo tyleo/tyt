@@ -1,7 +1,7 @@
 use crate::{
     ColorChannel, Error, MaterialBake, MaterialChannel, Result, UsedMaterials, default_scalar,
 };
-use ty_math::TySrgbaColor;
+use ty_math::{TyLinearRgbaColorF64, TySrgbaColor};
 use voxcore::{VoxMain, VoxValue};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
@@ -40,6 +40,8 @@ fn bake_texel(
 ) -> Result<[u8; 4]> {
     match bake {
         MaterialBake::RgbaColor => Ok(color_bytes(merged_attribute(state, used, index, "rgba"))),
+
+        MaterialBake::EmissiveColor => Ok(emissive_color_bytes(state, used, index)),
 
         MaterialBake::Packing(channels) => {
             // A packing fills R, G, B from its channels; an unnamed channel and
@@ -155,6 +157,31 @@ fn scalar_value(value: Option<&VoxValue>, key: &str) -> f64 {
         Some(VoxValue::Number(number)) => *number,
         _ => default_scalar(key).unwrap_or(0.0),
     }
+}
+
+/// The emissive color for the material at `index`: the `rgba` base color scaled
+/// by the `emissive` strength in linear light, re-encoded to opaque sRGB. glTF's
+/// emissive slot is an RGB color, so the voxel-native strength tints the base
+/// color rather than writing a bare channel; the multiply is done in linear
+/// light through the shared `ty_math` color types, and the alpha is dropped.
+fn emissive_color_bytes(state: &VoxMain, used: &UsedMaterials, index: usize) -> [u8; 4] {
+    let color = color_bytes(merged_attribute(state, used, index, "rgba"));
+
+    let strength =
+        scalar_value(merged_attribute(state, used, index, "emissive"), "emissive").clamp(0.0, 1.0);
+
+    let linear = TySrgbaColor::from_array(color).to_linear_rgba();
+
+    let scaled = TyLinearRgbaColorF64::new(
+        linear.r * strength,
+        linear.g * strength,
+        linear.b * strength,
+        1.0,
+    );
+
+    let srgba = scaled.to_srgba();
+
+    [srgba.r, srgba.g, srgba.b, 255]
 }
 
 #[cfg(test)]
@@ -323,5 +350,51 @@ mod tests {
             bake_atlas_pixels(&state, &used, &MaterialBake::RgbaColor, width, height).unwrap();
         // The `rgba` default is opaque white.
         assert_eq!(&pixels[0..4], &[255, 255, 255, 255]);
+    }
+
+    #[test]
+    fn emissive_color_tints_the_base_color_by_strength() {
+        let mut state = VoxMain::default();
+
+        let mut palette = VoxPalette::default();
+        palette.add_attribute("rgba".to_owned());
+        palette.add_attribute("emissive".to_owned());
+        let blue = palette
+            .add_cell(vec![
+                VoxValue::Text("#0000FFFF".to_owned()),
+                VoxValue::Number(1.0),
+            ])
+            .unwrap();
+        let dim_white = palette
+            .add_cell(vec![
+                VoxValue::Text("#FFFFFFFF".to_owned()),
+                VoxValue::Number(0.5),
+            ])
+            .unwrap();
+        let palette_id = state.add_palette(palette);
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
+        object.add_palette_ref(palette_id, blue);
+        for (x, cell) in [(0, blue), (1, dim_white)] {
+            let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
+            object.retain_voxel(voxel, &[cell]).unwrap();
+        }
+        let object_id = state.add_object(object);
+
+        let used = resolve_used_materials(state.object(object_id).unwrap());
+        let (width, height) = atlas_dimensions(used.len());
+        let pixels =
+            bake_atlas_pixels(&state, &used, &MaterialBake::EmissiveColor, width, height).unwrap();
+
+        // Full-strength blue glows blue: a strength of 1 is the identity round
+        // trip through linear light, and the alpha is dropped to opaque.
+        assert_eq!(&pixels[0..4], &[0, 0, 255, 255]);
+
+        // Half-strength white glows a neutral mid gray (R == G == B), scaled
+        // down from full white but not to black, opaque.
+        let (r, g, b, a) = (pixels[4], pixels[5], pixels[6], pixels[7]);
+        assert!(r == g && g == b);
+        assert!(r > 0 && r < 255);
+        assert_eq!(a, 255);
     }
 }

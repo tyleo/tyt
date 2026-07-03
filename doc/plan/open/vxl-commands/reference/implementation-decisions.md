@@ -1084,6 +1084,17 @@ emissive factor set to full. A preset with no standard slot (`mse`,
 material's `extras.vxl.maps` by name, so a generic viewer ignores them and a
 custom pipeline finds them.
 
+The `emissive` preset is the one preset whose bake is not a literal channel
+copy. Voxel Json models emissive as a strength scaling `rgba`, but glTF's
+`emissiveTexture` is an RGB color, so a bare strength in one channel would glow
+that channel's color (red) and replicating it across RGB would glow a flat
+white. The `MaterialBake::EmissiveColor` bake instead scales the base color by
+the strength in linear light, through the shared `ty_math` `TySrgbaColor` /
+`TyLinearRgbaColorF64` round trip, so a surface glows in its own color and full
+strength round-trips to the base color. The raw `emissive` attribute stays a
+plain scalar channel for `--texture-map` and the `mse` packing; only the preset
+lowers to the color bake, since only the preset targets the color slot.
+
 `ResourceStorage` chooses where the images go, mapped to voxsmith's own enum in
 the impl. Embedded packs a GLB image into the binary chunk as a buffer view and a
 text-glTF image into a data URI; external writes a loose `.png` the mesh

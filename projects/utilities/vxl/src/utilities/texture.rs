@@ -27,8 +27,8 @@ pub enum Texture {
     #[value(name = "mse")]
     Mse,
 
-    /// Grayscale `emissive` strength, written to R, G, and B so the glTF
-    /// emissive slot renders it as a neutral glow. One logical channel.
+    /// The emissive color: the `rgba` base color scaled by the `emissive`
+    /// strength, so the glTF emissive slot glows in the surface's own color.
     #[value(name = "emissive")]
     Emissive,
 
@@ -84,14 +84,7 @@ impl Texture {
                 None,
             ),
 
-            // Replicated across R, G, B so glTF's RGB emissive slot reads a
-            // neutral grayscale glow rather than a single-channel red tint.
-            Texture::Emissive => packing(
-                attribute("emissive", false),
-                attribute("emissive", false),
-                attribute("emissive", false),
-                None,
-            ),
+            Texture::Emissive => TextureBake::EmissiveColor,
 
             Texture::Occlusion => packing(attribute("occlusion", false), None, None, None),
 
@@ -176,21 +169,9 @@ mod tests {
     }
 
     #[test]
-    fn emissive_replicates_the_strength_across_rgb() {
-        let TextureBake::Packing(packing) = Texture::Emissive.bake() else {
-            panic!("expected a packing");
-        };
-
-        // R, G, B all carry the emissive strength, so the glTF emissive slot
-        // reads a neutral grayscale glow rather than a red single-channel tint.
-        assert_eq!(packing.channel_count(), 3);
-        assert_eq!(
-            packing.sources(),
-            vec![
-                attribute("emissive", false),
-                attribute("emissive", false),
-                attribute("emissive", false),
-            ]
-        );
+    fn emissive_is_the_tinted_emissive_color() {
+        // The preset lowers to the emissive-color bake (base color x strength),
+        // so a colored surface glows in its own color rather than white.
+        assert_eq!(Texture::Emissive.bake(), TextureBake::EmissiveColor);
     }
 }

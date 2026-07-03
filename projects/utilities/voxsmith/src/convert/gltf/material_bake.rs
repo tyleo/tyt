@@ -1,11 +1,17 @@
 use crate::MaterialChannel;
 
-/// What one material map writes into its image: the whole base color, or a
-/// channel packing of one [`MaterialChannel`] per RGBA channel.
+/// What one material map writes into its image: the whole base color, the
+/// emissive color, or a channel packing of one [`MaterialChannel`] per RGBA
+/// channel.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MaterialBake {
     /// The straight-RGBA base color from the `rgba` attribute, four channels.
     RgbaColor,
+
+    /// The emissive color: the `rgba` base color scaled by the `emissive`
+    /// strength, so the glTF emissive slot glows in the material's own color.
+    /// Three channels (RGB), opaque.
+    EmissiveColor,
 
     /// A channel packing, one to four [`MaterialChannel`]s in `R`, `G`, `B`,
     /// `A` order. An unnamed trailing channel is `0`, and alpha defaults to
