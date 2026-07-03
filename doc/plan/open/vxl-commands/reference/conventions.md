@@ -20,6 +20,8 @@ These hold across the commands and match the existing `to` commands.
    `quantize` and `remap` operate on a whole attribute and reject a component.
 5. The read-only reports render with `--layout`, `markdown` (default),
    `pretty-json`, or `compact-json`: `palette list`, `validate`, and `info`.
+   [`palette list`](palette/list.md) adds a `hierarchy` value that draws the
+   listing as a tree like [`hierarchy show`](hierarchy/show.md).
    [`palette show`](palette/show.md) has its own rendering options, and
    [`hierarchy show`](hierarchy/show.md) prints only its tree.
 6. Multiple values are passed by repeating the flag, as in

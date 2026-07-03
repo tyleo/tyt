@@ -1,7 +1,8 @@
 use crate::{
     AttributeSelector, CameraView, ColorFormat, Dependencies, EditState, FillMode, Format,
-    GridResolution, HierarchyViews, MaterialMode, MeshFormat, PaletteReduction, PaletteShowLayout,
-    PatternView, ReportLayout, Result, VoxjEncoding, VoxjFormat, Width, implementation,
+    GridResolution, HierarchyViews, MaterialMode, MeshFormat, PaletteListFields, PaletteListLayout,
+    PaletteReduction, PaletteShowLayout, PatternView, ReportLayout, Result, SelectIndex,
+    VoxjEncoding, VoxjFormat, Width, implementation,
 };
 use std::path::Path;
 
@@ -83,8 +84,15 @@ impl Dependencies for DependenciesImpl {
         implementation::validate(input, layout)
     }
 
-    fn palette_list(&self, input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()> {
-        implementation::palette_list(input, from, layout)
+    fn palette_list(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        filters: &[SelectIndex],
+        fields: PaletteListFields,
+        layout: PaletteListLayout,
+    ) -> Result<()> {
+        implementation::palette_list(input, from, filters, fields, layout)
     }
 
     fn palette_show(

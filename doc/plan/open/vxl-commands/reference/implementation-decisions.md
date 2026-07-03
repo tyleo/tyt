@@ -135,13 +135,42 @@ stays independent of the tyt support crates.
 
 `palette list` follows the `info` report template rather than the richer
 `palette show` machinery, since it is a flat per-palette overview with no value
-collections, selectors, or swatches. It takes the shared `ReportLayout`
-(`markdown` default, `pretty-json`, `compact-json`), loads the state, and renders
-a pure function over the `VoxMain`, the same load-render-print split the other
-read reports use. The Markdown layout is one `markdown_table` with the columns
-the spec shows, `index`, `attributes`, `cells`, and `used by`; the JSON layouts
-emit one record per palette with the keys `index`, `attributes`, `cells`, and
+collections, selectors, or swatches. It loads the state and renders a pure
+function over the `VoxMain`, the same load-render-print split the other read
+reports use. The Markdown layout is one `markdown_table` with the columns the
+spec shows, `index`, `attributes`, `cells`, and `used by`; the JSON layouts emit
+one record per palette with the keys `index`, `attributes`, `cells`, and
 `used_by`, the object indices in place of the Markdown names.
+
+Its layout is a command-specific `PaletteListLayout` rather than the shared
+`ReportLayout`, because only `palette list` adds a `hierarchy` value beside
+`markdown` and the two JSON forms, the same reason `palette show` carries its own
+layout enum. The `hierarchy` layout draws the listing as a tree in the
+`hierarchy show` idiom: a `palettes` header over one bare-index branch per
+palette, its cell count a `cellCount: <n>` leaf and its `attributes` and
+`objects` as subtrees. The box-drawing glyphs those two trees share, the four
+connector and extension constants, moved out of `hierarchy_show` into a
+`tree_glyphs` leaf module both draw from, so the connectors cannot drift apart.
+The renderer collects a palette's enabled child branches into a `HierarchyChild`
+list first, then walks it, so the last enabled branch takes the closing connector
+whichever fields are on; an empty subtree prints `objects: []` the way
+`hierarchy show` prints `palettes: []`.
+
+Trailing positional filters reuse `SelectIndex`, the index-or-range selector the
+object selectors already parse, since a palette-index filter is the same grammar,
+`1`, `5-10`, repeatable and unioned. A palette lists when any filter contains its
+index, and none given lists every palette. A filter set that matches no palette
+is an error, matching how `hierarchy show` treats a pattern that selects nothing,
+so a stray index is caught rather than silently listing nothing.
+
+Which fields render is a `PaletteListFields` of three settable booleans,
+`--show-attributes`, `--show-cells`, and `--show-objects`, each defaulting to
+shown in the `--ext` style so a bare `palette list` prints them all and
+`--show-* false` drops one. The index is always shown, as the palette's identity.
+The command parses the three flags and bundles them into the struct the trait
+carries, the same parse-then-bundle split `hierarchy show` uses for its views. A
+dropped field leaves out its Markdown column, its JSON key, and its hierarchy
+branch alike, so the three layouts stay consistent.
 
 The `used by` column is computed by scanning the objects once per palette and
 keeping those whose `iter_palette_refs` name it. An object appears once however

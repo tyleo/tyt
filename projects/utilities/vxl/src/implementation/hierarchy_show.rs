@@ -1,4 +1,7 @@
-use crate::{Format, HierarchyViews, PatternView, Result, implementation};
+use crate::{
+    Format, HierarchyViews, PatternView, Result,
+    implementation::{self, CONNECTOR_LAST, CONNECTOR_MID, EXTENSION_LAST, EXTENSION_MID},
+};
 use branded_id::{IdVec, U32Id};
 use pathspec::GitIgnoreRegex;
 use std::{
@@ -17,18 +20,6 @@ type NodeId = U32Id<BVoxHierarchyNode>;
 /// An object id in the loaded [`VoxMain`], aliased alongside [`NodeId`] to keep
 /// the node-versus-object distinction in the type system.
 type ObjectId = U32Id<BVoxObject>;
-
-/// Box drawings up and right: the connector before a last child.
-const CONNECTOR_LAST: char = '\u{2514}';
-
-/// Box drawings vertical and right: the connector before a non-last child.
-const CONNECTOR_MID: char = '\u{251C}';
-
-/// The prefix extension under a last child: two spaces.
-const EXTENSION_LAST: &str = "  ";
-
-/// The prefix extension under a non-last child: box drawings vertical, a space.
-const EXTENSION_MID: &str = "\u{2502} ";
 
 /// Loads the voxel file at `input` and prints its scene graph as a tree.
 pub fn hierarchy_show(

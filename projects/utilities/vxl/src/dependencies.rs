@@ -1,7 +1,8 @@
 use crate::{
     AttributeSelector, CameraView, ColorFormat, EditState, FillMode, Format, GridResolution,
-    HierarchyViews, MaterialMode, MeshFormat, PaletteReduction, PaletteShowLayout, PatternView,
-    ReportLayout, Result, VoxjEncoding, VoxjFormat, Width,
+    HierarchyViews, MaterialMode, MeshFormat, PaletteListFields, PaletteListLayout,
+    PaletteReduction, PaletteShowLayout, PatternView, ReportLayout, Result, SelectIndex,
+    VoxjEncoding, VoxjFormat, Width,
 };
 use std::path::Path;
 
@@ -136,8 +137,18 @@ pub trait Dependencies {
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.
     /// * `from` - source format, inferred from `input`'s extension when `None`.
+    /// * `filters` - palette-index selectors; a palette lists when any matches,
+    ///   and given none every palette lists.
+    /// * `fields` - which fields to render beside the always-shown index.
     /// * `layout` - how to lay out the listing.
-    fn palette_list(&self, input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()>;
+    fn palette_list(
+        &self,
+        input: &Path,
+        from: Option<Format>,
+        filters: &[SelectIndex],
+        fields: PaletteListFields,
+        layout: PaletteListLayout,
+    ) -> Result<()>;
 
     /// Prints the value collections named by `selectors` from the palettes in
     /// the voxel file at `input`.
