@@ -153,9 +153,12 @@ Material sampling (see [voxelize](reference/voxelize.md) and
       engine; expose `--method` / `--space` / `--dither` on `voxelize`. Landed for
       all three methods (`median-cut` / `octree` / `kmeans`) with a stderr note,
       and both `--dither` modes (`floyd-steinberg` / `ordered`).
-- [ ] `per-texel`: UV interpolation, image decode, area-average over the voxel
+- [x] `per-texel`: UV interpolation, image decode, area-average over the voxel
       footprint, epsilon-merge of near-identical tuples, and a `solid`-interior
       fallback to the nearest surface cell. `auto` becomes texture-aware here.
+      Landed for base color (factor times texel, linear area-averaged); the
+      metallic / roughness / emissive / occlusion textures ride the covering
+      material's flat factors for now, a later commit on the same sampler pass.
 
 ### palette ([reference/palette/](reference/palette/))
 

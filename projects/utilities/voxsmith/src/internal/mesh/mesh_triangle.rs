@@ -1,4 +1,4 @@
-use ty_math::TyVector3F64;
+use ty_math::{TyVector2F64, TyVector3F64};
 
 /// One mesh triangle in world space (Z-up), tagged with the material it was
 /// drawn with. The tag is an index into the [`Mesh`](crate::Mesh) material
@@ -7,6 +7,10 @@ use ty_math::TyVector3F64;
 pub(crate) struct MeshTriangle {
     /// The triangle's three vertices.
     pub points: [TyVector3F64; 3],
+
+    /// The per-vertex texture coordinates, or `None` when the source primitive
+    /// carries none, which leaves the triangle untextured.
+    pub uvs: Option<[TyVector2F64; 3]>,
 
     /// Index into the mesh's material table of the material this triangle uses.
     pub material: u32,

@@ -1,4 +1,5 @@
 use crate::{TyCielabColorF64, TyOklabColorF64, TySrgbaColor, ty_array_conversions};
+use std::ops::Mul;
 
 /// A linear-RGB color with straight alpha and component type `T`. Components are
 /// nominally `[0, 1]` and may exceed it out of gamut. Conversions are defined on
@@ -22,6 +23,19 @@ impl<T> TyLinearRgbaColor<T> {
     /// Creates a color from its components.
     pub fn new(r: T, g: T, b: T, a: T) -> Self {
         Self { r, g, b, a }
+    }
+}
+
+impl<T: Mul<Output = T> + Copy> TyLinearRgbaColor<T> {
+    /// Returns the component-wise (Hadamard) product of `self` and `other`, the
+    /// tint of one color by another (a base color by its factor, say).
+    pub fn componentwise_multiply(&self, other: &Self) -> Self {
+        Self {
+            r: self.r * other.r,
+            g: self.g * other.g,
+            b: self.b * other.b,
+            a: self.a * other.a,
+        }
     }
 }
 
@@ -103,5 +117,17 @@ fn lab_f(t: f64) -> f64 {
         t.cbrt()
     } else {
         t / (3.0 * DELTA * DELTA) + 4.0 / 29.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::TyLinearRgbaColorF64;
+
+    #[test]
+    fn componentwise_multiply_tints_each_channel() {
+        let tinted = TyLinearRgbaColorF64::new(0.5, 0.8, 1.0, 1.0)
+            .componentwise_multiply(&TyLinearRgbaColorF64::new(0.5, 0.0, 0.25, 0.5));
+        assert_eq!(tinted, TyLinearRgbaColorF64::new(0.25, 0.0, 0.25, 0.5));
     }
 }

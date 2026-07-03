@@ -60,3 +60,9 @@ _color = []
 # Marks that a mesh-voxelization front end is on (`gltf`, and future mesh
 # formats); gates the generic `Mesh` type and the voxelizer.
 _mesh = []
+
+[dev-dependencies]
+# Encodes the small base-color PNGs the per-texel voxelizer tests embed in a
+# synthetic glTF. Already in the lock through the gltf `import` feature's image
+# decoder, so it adds no new download.
+png = "0.18"

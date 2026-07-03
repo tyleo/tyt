@@ -1,12 +1,22 @@
+mod grid_space;
+mod mesh_base_color_map;
 mod mesh_material;
+mod mesh_texture;
 mod mesh_triangle;
+mod mesh_wrap;
+mod sample_base_color;
 mod triangle_bounds;
 mod triangle_box_overlap;
 mod voxel_grid;
 mod voxelize_triangles;
 
+pub(crate) use grid_space::*;
+pub(crate) use mesh_base_color_map::*;
 pub(crate) use mesh_material::*;
+pub(crate) use mesh_texture::*;
 pub(crate) use mesh_triangle::*;
+pub(crate) use mesh_wrap::*;
+pub(crate) use sample_base_color::*;
 pub(crate) use triangle_bounds::*;
 pub(crate) use triangle_box_overlap::*;
 pub(crate) use voxel_grid::*;

@@ -2011,6 +2011,7 @@ dependencies = [
  "goxl-codec",
  "mvox",
  "mvox-codec",
+ "png",
  "qbcl",
  "qbcl-codec",
  "serde",

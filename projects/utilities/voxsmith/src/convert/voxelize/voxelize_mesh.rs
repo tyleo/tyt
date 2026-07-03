@@ -1,9 +1,9 @@
 use crate::{
     Error, FillMode, MATERIAL_ATTRIBUTES, MaterialMode, Mesh, MeshMaterial, Result, VoxelGrid,
-    voxelize_triangles,
+    sample_base_color, voxelize_triangles,
 };
 use branded_id::U32Id;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use ty_math::{TySrgbaColor, TyTransformF64, TyVector3, TyVector3U32};
 use voxcore::{BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette};
 
@@ -25,8 +25,9 @@ const DEFAULT_FILL: TySrgbaColor = TySrgbaColor {
 /// * `counts` - grid resolution in voxels per axis, sized by the caller from the
 ///   mesh extent (see [`Mesh::extent`]).
 /// * `fill_mode` - the fill geometry.
-/// * `material_mode` - the color source. Per-texel and `auto` fall back to
-///   per-primitive until the texel sampler lands.
+/// * `material_mode` - the color source: per-primitive flat factors, per-texel
+///   base-color sampling, `flat`, or `auto` (per-texel when the mesh is
+///   textured, else per-primitive).
 /// * `fill_color` - the color of voxels a mode cannot sample, or `None` for the
 ///   `none` default.
 /// * `node_scale` - the placing node's uniform scale.
@@ -56,16 +57,9 @@ pub fn voxelize_mesh(
 
     let grid = voxelize_triangles(&mesh.triangles, counts, fill_mode == FillMode::Solid);
 
-    let (palette, samples, default_cell) = match material_mode {
-        MaterialMode::Flat => flat_palette(&grid, fill_color),
+    let cell_materials = resolve_materials(mesh, &grid, counts, material_mode, fill_color);
 
-        // Per-texel sampling is not built yet; it and `auto` fall back to the
-        // per-primitive path, which reads each material's flat factors. The
-        // texel sampler and texture-aware `auto` land with the per-texel work.
-        MaterialMode::Auto | MaterialMode::PerPrimitive | MaterialMode::PerTexel => {
-            per_primitive_palette(mesh, &grid, counts, fill_color)
-        }
-    };
+    let (palette, samples, default_cell) = build_palette(&cell_materials);
 
     let mut state = VoxMain::default();
     let palette_id = state.add_palette(palette);
@@ -113,69 +107,143 @@ pub fn voxelize_mesh(
     Ok(state)
 }
 
-/// Builds the one-cell flat palette and its per-cell samples: every filled voxel
-/// takes the fill color (white when `none`), with default finish.
-fn flat_palette(
-    grid: &VoxelGrid,
-    fill_color: Option<[u8; 4]>,
-) -> (
-    VoxPalette,
-    Vec<Option<U32Id<BVoxPaletteCell>>>,
-    U32Id<BVoxPaletteCell>,
-) {
-    let mut palette = material_palette();
-    let cell = add_material(&mut palette, MeshMaterial::flat(fill_srgba(fill_color)));
-    let samples = grid.filled.iter().map(|&f| f.then_some(cell)).collect();
-
-    (palette, samples, cell)
-}
-
-/// Builds the per-primitive palette and its per-cell samples: one cell per mesh
-/// material a surface voxel uses, plus a fill cell for a `solid` interior when a
-/// `fill_color` is given. Without one, interior voxels instead adopt their
-/// nearest surface voxel's material.
-fn per_primitive_palette(
+/// The material of every filled cell, per the color mode: `flat` paints one fill
+/// color, `per-primitive`/`per-texel` read the covering material (its base color
+/// sampled per-texel), and `auto` samples a textured mesh and reads factors
+/// otherwise.
+fn resolve_materials(
     mesh: &Mesh,
     grid: &VoxelGrid,
     counts: TyVector3U32,
+    material_mode: MaterialMode,
     fill_color: Option<[u8; 4]>,
+) -> Vec<Option<MeshMaterial>> {
+    let sample = match material_mode {
+        MaterialMode::Flat => return flat_cells(grid, fill_color),
+        MaterialMode::PerPrimitive => false,
+        MaterialMode::PerTexel => true,
+        MaterialMode::Auto => mesh.is_textured(),
+    };
+
+    sampled_cells(mesh, grid, counts, sample, fill_color)
+}
+
+/// Every filled cell takes the one fill color (white when `none`).
+fn flat_cells(grid: &VoxelGrid, fill_color: Option<[u8; 4]>) -> Vec<Option<MeshMaterial>> {
+    let material = MeshMaterial::flat(fill_srgba(fill_color));
+    grid.filled
+        .iter()
+        .map(|&filled| filled.then_some(material))
+        .collect()
+}
+
+/// Each surface cell takes its covering material's finish, its base color
+/// sampled from the texture when `sample` (over the cell's footprint, or the
+/// flat factor for an untextured material). A `solid` interior takes the fill
+/// color when given, else its nearest surface cell's material.
+fn sampled_cells(
+    mesh: &Mesh,
+    grid: &VoxelGrid,
+    counts: TyVector3U32,
+    sample: bool,
+    fill_color: Option<[u8; 4]>,
+) -> Vec<Option<MeshMaterial>> {
+    let sampled = sample.then(|| {
+        sample_base_color(
+            &mesh.triangles,
+            &mesh.base_colors,
+            &mesh.textures,
+            grid,
+            counts,
+        )
+    });
+
+    let mut cell_materials: Vec<Option<MeshMaterial>> = vec![None; grid.filled.len()];
+
+    for (cell, &covering) in grid.triangle.iter().enumerate() {
+        let Some(covering) = covering else { continue };
+        let material = mesh.materials[mesh.triangles[covering as usize].material as usize];
+        let rgba = sampled
+            .as_ref()
+            .and_then(|colors| colors[cell])
+            .unwrap_or(material.rgba);
+        cell_materials[cell] = Some(MeshMaterial { rgba, ..material });
+    }
+
+    fill_interior(grid, counts, fill_color, &mut cell_materials);
+
+    cell_materials
+}
+
+/// Paints every filled interior cell (a `solid` body's invented volume, carrying
+/// no surface material): the fill color when one is given, else the material of
+/// its nearest surface cell. A solid-enclosed interior always reaches a surface
+/// cell, so the white fallback is a defensive guard.
+fn fill_interior(
+    grid: &VoxelGrid,
+    counts: TyVector3U32,
+    fill_color: Option<[u8; 4]>,
+    cell_materials: &mut [Option<MeshMaterial>],
+) {
+    let has_interior = grid
+        .filled
+        .iter()
+        .zip(&grid.triangle)
+        .any(|(&filled, triangle)| filled && triangle.is_none());
+
+    if !has_interior {
+        return;
+    }
+
+    match fill_color {
+        Some([r, g, b, a]) => {
+            let fill = MeshMaterial::flat(TySrgbaColor::new(r, g, b, a));
+            for (cell, triangle) in grid.triangle.iter().enumerate() {
+                if grid.filled[cell] && triangle.is_none() {
+                    cell_materials[cell] = Some(fill);
+                }
+            }
+        }
+        None => {
+            let nearest = nearest_surface_cell(grid, counts);
+            for cell in 0..grid.filled.len() {
+                if grid.filled[cell] && grid.triangle[cell].is_none() {
+                    let resolved = nearest[cell]
+                        .and_then(|source| cell_materials[source])
+                        .unwrap_or_else(|| MeshMaterial::flat(DEFAULT_FILL));
+                    cell_materials[cell] = Some(resolved);
+                }
+            }
+        }
+    }
+}
+
+/// Assembles a palette from a per-cell material list: near-identical materials
+/// merge to one cell, and each filled cell samples the cell of its material. The
+/// default cell is the first built, or a lone white cell for an all-empty grid,
+/// so the palette is never empty.
+fn build_palette(
+    cell_materials: &[Option<MeshMaterial>],
 ) -> (
     VoxPalette,
     Vec<Option<U32Id<BVoxPaletteCell>>>,
     U32Id<BVoxPaletteCell>,
 ) {
-    let keys = resolve_keys(grid, counts, fill_color);
-
     let mut palette = material_palette();
 
-    // A cell per distinct surface material used, in ascending slot order.
-    let mut used: Vec<u32> = keys
+    let mut cells: HashMap<MaterialKey, U32Id<BVoxPaletteCell>> = HashMap::new();
+
+    let samples: Vec<Option<U32Id<BVoxPaletteCell>>> = cell_materials
         .iter()
-        .filter_map(|key| match key {
-            Some(Key::Surface(slot)) => Some(*slot),
-            _ => None,
+        .map(|&material| {
+            material.map(|material| {
+                *cells
+                    .entry(material_key(&material))
+                    .or_insert_with(|| add_material(&mut palette, material))
+            })
         })
         .collect();
 
-    used.sort_unstable();
-
-    used.dedup();
-
-    let mut slot_cells: Vec<(u32, U32Id<BVoxPaletteCell>)> = Vec::with_capacity(used.len());
-    for slot in used {
-        let cell = add_material(&mut palette, mesh.materials[slot as usize]);
-        slot_cells.push((slot, cell));
-    }
-
-    // A single fill cell, shared by every interior voxel that resolved to it.
-    let fill_cell = keys
-        .iter()
-        .any(|key| matches!(key, Some(Key::Fill)))
-        .then(|| add_material(&mut palette, MeshMaterial::flat(fill_srgba(fill_color))));
-
-    // A valid default sample for the empty voxels the reference back-fills; a
-    // mesh that rasterized to nothing gets a lone white cell so the palette is
-    // never empty.
     let first_cell = palette.iter_cells().next();
 
     let default_cell = match first_cell {
@@ -183,130 +251,90 @@ fn per_primitive_palette(
         None => add_material(&mut palette, MeshMaterial::flat(DEFAULT_FILL)),
     };
 
-    let cell_of = |slot: u32| {
-        slot_cells
-            .iter()
-            .find(|(s, _)| *s == slot)
-            .map(|(_, cell)| *cell)
-            .expect("every used surface slot has a cell")
-    };
-
-    let samples = keys
-        .iter()
-        .map(|key| {
-            key.map(|key| match key {
-                Key::Surface(slot) => cell_of(slot),
-                Key::Fill => fill_cell.expect("a fill cell exists when a Fill key does"),
-            })
-        })
-        .collect();
-
     (palette, samples, default_cell)
 }
 
-/// The material each filled voxel samples: a surface voxel takes its own
-/// material, while a `solid` body's interior takes the fill color when one is
-/// given, else the nearest surface voxel's material. Empty cells are `None`.
-fn resolve_keys(
-    grid: &VoxelGrid,
-    counts: TyVector3U32,
-    fill_color: Option<[u8; 4]>,
-) -> Vec<Option<Key>> {
-    let has_interior = grid
-        .filled
-        .iter()
-        .zip(&grid.material)
-        .any(|(&filled, material)| filled && material.is_none());
+/// A hashable identity for a material: its 8-bit color and the bit patterns of
+/// its finish, so cells with the same stored row map to one palette cell.
+type MaterialKey = (u8, u8, u8, u8, u64, u64, u64, u64);
 
-    // The nearest-surface map is only needed to paint a sampled interior, so
-    // skip the flood when a fill color already answers the interior.
-    let nearest = (fill_color.is_none() && has_interior).then(|| nearest_surface(grid, counts));
-
-    grid.filled
-        .iter()
-        .enumerate()
-        .map(|(cell, &filled)| {
-            if !filled {
-                return None;
-            }
-            Some(match grid.material[cell] {
-                Some(slot) => Key::Surface(slot),
-                None => match fill_color {
-                    Some(_) => Key::Fill,
-                    None => match nearest.as_ref().and_then(|map| map[cell]) {
-                        Some(slot) => Key::Surface(slot),
-                        None => Key::Fill,
-                    },
-                },
-            })
-        })
-        .collect()
+/// The [`MaterialKey`] for a material.
+fn material_key(material: &MeshMaterial) -> MaterialKey {
+    let TySrgbaColor { r, g, b, a } = material.rgba;
+    (
+        r,
+        g,
+        b,
+        a,
+        material.metallic.to_bits(),
+        material.roughness.to_bits(),
+        material.emissive.to_bits(),
+        material.occlusion.to_bits(),
+    )
 }
 
-/// For each filled cell, the material slot of its nearest surface cell, by a
+/// For each filled cell, the index of its nearest surface cell, by a
 /// six-connected multi-source flood from every surface cell through filled
-/// cells. Surface cells keep their own slot; an interior region a fill never
+/// cells. Surface cells map to themselves; an interior region a fill never
 /// reaches stays `None`.
-fn nearest_surface(grid: &VoxelGrid, counts: TyVector3U32) -> Vec<Option<u32>> {
+fn nearest_surface_cell(grid: &VoxelGrid, counts: TyVector3U32) -> Vec<Option<usize>> {
     let (nx, ny, nz) = (counts.x as usize, counts.y as usize, counts.z as usize);
 
-    let mut slot = grid.material.clone();
+    let mut source: Vec<Option<usize>> = vec![None; grid.filled.len()];
 
-    let mut queue: VecDeque<usize> = grid
-        .material
-        .iter()
-        .enumerate()
-        .filter_map(|(cell, material)| material.map(|_| cell))
-        .collect();
+    let mut queue: VecDeque<usize> = VecDeque::new();
 
-    while let Some(cell) = queue.pop_front() {
-        let source = slot[cell];
-        for next in neighbors(cell, nx, ny, nz) {
-            if grid.filled[next] && slot[next].is_none() {
-                slot[next] = source;
-                queue.push_back(next);
-            }
+    for (cell, triangle) in grid.triangle.iter().enumerate() {
+        if triangle.is_some() {
+            source[cell] = Some(cell);
+            queue.push_back(cell);
         }
     }
 
-    slot
+    while let Some(cell) = queue.pop_front() {
+        let origin = source[cell];
+        for_each_neighbor(cell, nx, ny, nz, |next| {
+            if grid.filled[next] && source[next].is_none() {
+                source[next] = origin;
+                queue.push_back(next);
+            }
+        });
+    }
+
+    source
 }
 
-/// The six-connected in-grid neighbors of a raster cell index.
-fn neighbors(cell: usize, nx: usize, ny: usize, nz: usize) -> Vec<usize> {
+/// Visits the six-connected in-grid neighbors of a raster cell index.
+fn for_each_neighbor(cell: usize, nx: usize, ny: usize, nz: usize, mut visit: impl FnMut(usize)) {
     let plane = ny * nz;
 
     let (x, rem) = (cell / plane, cell % plane);
 
     let (y, z) = (rem / nz, rem % nz);
 
-    let mut out = Vec::with_capacity(6);
-
     if x > 0 {
-        out.push(cell - plane);
+        visit(cell - plane);
     }
 
     if x + 1 < nx {
-        out.push(cell + plane);
+        visit(cell + plane);
     }
 
     if y > 0 {
-        out.push(cell - nz);
+        visit(cell - nz);
     }
 
     if y + 1 < ny {
-        out.push(cell + nz);
+        visit(cell + nz);
     }
 
     if z > 0 {
-        out.push(cell - 1);
+        visit(cell - 1);
     }
 
     if z + 1 < nz {
-        out.push(cell + 1);
+        visit(cell + 1);
     }
-
-    out
 }
 
 /// An empty palette carrying the five PBR material attributes every mode writes.
@@ -333,16 +361,6 @@ fn fill_srgba(fill_color: Option<[u8; 4]>) -> TySrgbaColor {
         Some([r, g, b, a]) => TySrgbaColor::new(r, g, b, a),
         None => DEFAULT_FILL,
     }
-}
-
-/// One filled voxel's material choice.
-#[derive(Clone, Copy)]
-enum Key {
-    /// The mesh material at this slot.
-    Surface(u32),
-
-    /// The shared fill-color cell.
-    Fill,
 }
 
 /// The error for a grid past voxcore's dense-grid cell limit.

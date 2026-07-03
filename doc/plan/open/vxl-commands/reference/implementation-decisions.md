@@ -321,8 +321,67 @@ six-connected multi-source flood from the surface cells. A hollow `surface`
 shell has no interior, so `--fill-color` is inert there rather than rejected; the
 old guard is gone.
 
-Deferred to later commits: the texel sampler and texture-aware `auto` (both fall
-back to `per-primitive` for now).
+## Per-texel sampling
+
+`per-texel` and texture-aware `auto` add a base-color texel sampler on top of the
+per-primitive path. `Mesh::is_textured` routes `auto`: any material with a
+base-color texture samples per-texel, else per-primitive.
+
+Texture images need no new dependency. The `gltf` crate's `import` feature, which
+voxsmith already enables, pulls the `image` crate and decodes every referenced
+PNG or JPEG, so `import_slice` returns the pixels the reader previously discarded.
+voxsmith stays off `tyt-image` and the standalone `image` crate. A decoded glTF
+image, whatever its channel count and 8 / 16 / float depth, normalizes to a
+row-major RGBA8 `MeshTexture`; base color keeps its sRGB storage and decodes to
+linear per sample. The reader also carries per-vertex texture coordinates (the
+base-color texture's `TEXCOORD` set, `None` when absent) and one base-color
+binding per material (image slot, linear factor, wrap modes), deduplicated by
+glTF image index so shared textures decode once.
+
+`GridSpace` is the shared world-to-grid map: the min corner and per-axis voxel
+size. The rasterizer and the sampler both build it from the same bounds, so a
+sampled surface point floors into the same cell the occupancy grid filled. This
+replaced the rasterizer's inline size math, the one place the two mappings could
+have drifted.
+
+The rasterizer records, per surface cell, the first covering triangle's index
+(not just its material), so the sampler can read that one triangle's texture, and
+its material comes from `triangles[covering].material`. `sample_base_color`
+supersamples each textured triangle rather than point-sampling each cell, so a
+voxel spanning many texels averages them instead of aliasing onto one. Each
+triangle scatters a barycentric lattice, its density tied to the longest
+grid-space edge (about two samples per voxel, floored at two interior points and
+capped at sixteen), each sample seated in a sub-triangle interior off the shared
+vertices. A sample maps to its grid cell and interpolated coordinate, the texel
+decodes to linear and multiplies the linear factor, and the running sum and count
+accumulate. A sample lands only in the cells its own triangle covers (gated on
+`grid.triangle[cell] == this triangle`), so a cell's color, its finish, and its
+fallback all source from the one recorded covering triangle rather than mixing
+whatever grazes it. The per-cell mean re-encodes to sRGB.
+
+A surface cell the scatter's lattice grazes without a sample landing in it (a
+sliver clipped at the cell's edge) would otherwise fall to the flat factor, which
+on a white-`baseColorFactor` mesh painted stray white voxels through the model.
+So a zero-sample surface cell point-samples its covering triangle at the cell
+center (barycentric projection clamped onto the triangle), guaranteeing every
+textured surface cell a texture color. The 8-bit re-encoding is the epsilon
+merge: cells whose color rounds to the same stored row collapse to one palette
+cell, keyed on the color bytes and the finish bit patterns.
+
+The three color modes share one path. `resolve_materials` builds a per-cell
+`MeshMaterial` list (`flat` paints one fill color; the sampling modes read each
+surface cell's covering material, overriding its base color with the sampled
+texel when per-texel), then a single `build_palette` dedups that list into cells
+and emits the per-voxel samples. A `solid` interior takes the fill color or, via
+a six-connected flood that carries each filled cell's nearest surface cell index,
+that surface cell's resolved material.
+
+This commit samples base color only. The other four attributes ride the covering
+material's flat factors, so metallic, roughness, emissive, and occlusion textures
+are a later commit on the same sampler pass. The tests embed a synthetic textured
+glTF, encoding the small base-color PNGs with the `png` dev-dependency (already in
+the lock through the gltf image decoder); a sampler unit test asserts every
+textured surface cell resolves, locking in the coverage guarantee.
 
 ## Palette reduction
 

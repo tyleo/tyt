@@ -1,12 +1,14 @@
-use crate::{MeshTriangle, VoxelGrid, triangle_bounds, triangle_box_overlap};
-use ty_math::{TyVector3F64, TyVector3U32};
+use crate::{
+    GridSpace, MeshTriangle, VoxelGrid, clamp_index, triangle_bounds, triangle_box_overlap,
+};
+use ty_math::TyVector3U32;
 
 /// Rasterizes a soup of material-tagged triangles into a [`VoxelGrid`], one
 /// entry per cell in `x*Y*Z + y*Z + z` raster order (matching
 /// [`VoxObject`](voxcore::VoxObject) voxel ids). A cell is filled when a
-/// triangle passes through it, taking the material of the first triangle to
-/// reach it. The mesh's bounding box is fit tightly to the grid, so the longest
-/// mesh axis spans its full count, and an empty soup yields an all-empty grid.
+/// triangle passes through it, recording the first triangle to reach it. The
+/// mesh's bounding box is fit tightly to the grid, so the longest mesh axis
+/// spans its full count, and an empty soup yields an all-empty grid.
 ///
 /// # Arguments
 /// * `triangles` - the triangles to rasterize, in grid-independent world space.
@@ -14,7 +16,7 @@ use ty_math::{TyVector3F64, TyVector3U32};
 /// * `solid` - when true, fill the volume the surface encloses too, by a flood
 ///   fill from the boundary that fills every cell the outside cannot reach; a
 ///   non-watertight surface leaks, so the fill falls back to the shell. Filled
-///   interior cells carry no material, to be painted by the caller.
+///   interior cells record no triangle, to be painted by the caller.
 pub(crate) fn voxelize_triangles(
     triangles: &[MeshTriangle],
     counts: TyVector3U32,
@@ -24,35 +26,31 @@ pub(crate) fn voxelize_triangles(
 
     let mut filled = vec![false; nx * ny * nz];
 
-    let mut material = vec![None; nx * ny * nz];
+    let mut covering = vec![None; nx * ny * nz];
 
     let points = triangles.iter().flat_map(|triangle| triangle.points);
 
-    let Some((min, max)) = triangle_bounds(points) else {
-        return VoxelGrid { filled, material };
+    // No triangles, or a zero-size grid: an all-empty grid.
+    let Some((min, max)) = triangle_bounds(points).filter(|_| !filled.is_empty()) else {
+        return VoxelGrid {
+            filled,
+            triangle: covering,
+        };
     };
 
-    if filled.is_empty() {
-        return VoxelGrid { filled, material };
-    }
+    // The affine map onto grid space, where each voxel is the unit cube
+    // `[i, i + 1)` on each axis. A zero-extent axis (a flat mesh) collapses to a
+    // single slice, guarded inside the map.
+    let space = GridSpace::from_bounds(min, max, counts);
 
-    // Edge length of one voxel on each axis. A zero-extent axis (a flat mesh)
-    // collapses to a single slice, so guard the divisor.
-    let size = [
-        voxel_size(min.x, max.x, nx),
-        voxel_size(min.y, max.y, ny),
-        voxel_size(min.z, max.z, nz),
-    ];
-
-    for triangle in triangles {
-        // The triangle in grid coordinates, where each voxel is the unit cube
-        // `[i, i + 1)` on each axis. The map onto grid space is affine and
-        // affine maps preserve overlap, so the separating-axis test stays valid
-        // even when `size` differs per axis.
+    for (index, triangle) in triangles.iter().enumerate() {
+        // The triangle in grid coordinates. The map onto grid space is affine
+        // and affine maps preserve overlap, so the separating-axis test stays
+        // valid even when the per-axis voxel size differs.
         let grid = [
-            to_grid(triangle.points[0], min, size),
-            to_grid(triangle.points[1], min, size),
-            to_grid(triangle.points[2], min, size),
+            space.to_grid(triangle.points[0]),
+            space.to_grid(triangle.points[1]),
+            space.to_grid(triangle.points[2]),
         ];
 
         let (lo, hi) = cell_range(&grid, [nx, ny, nz]);
@@ -70,7 +68,7 @@ pub(crate) fn voxelize_triangles(
 
                     if triangle_box_overlap(center, 0.5, &grid) {
                         filled[cell] = true;
-                        material[cell] = Some(triangle.material);
+                        covering[cell] = Some(index as u32);
                     }
                 }
             }
@@ -80,7 +78,11 @@ pub(crate) fn voxelize_triangles(
     if solid {
         fill_enclosed(&mut filled, nx, ny, nz);
     }
-    VoxelGrid { filled, material }
+
+    VoxelGrid {
+        filled,
+        triangle: covering,
+    }
 }
 
 /// Fills every empty cell that the grid boundary cannot reach through empty
@@ -139,26 +141,6 @@ fn fill_enclosed(filled: &mut [bool], nx: usize, ny: usize, nz: usize) {
     }
 }
 
-/// The edge length of one voxel on an axis, or `1.0` for a zero-extent axis.
-fn voxel_size(min: f64, max: f64, count: usize) -> f64 {
-    let extent = max - min;
-    if extent > 0.0 && count > 0 {
-        extent / count as f64
-    } else {
-        1.0
-    }
-}
-
-/// A point in grid coordinates, where one unit is one voxel from the grid's min
-/// corner.
-fn to_grid(point: TyVector3F64, min: TyVector3F64, size: [f64; 3]) -> [f64; 3] {
-    [
-        (point.x - min.x) / size[0],
-        (point.y - min.y) / size[1],
-        (point.z - min.z) / size[2],
-    ]
-}
-
 /// The inclusive voxel-index box a grid-space triangle can touch, clamped to
 /// the grid.
 fn cell_range(grid: &[[f64; 3]; 3], counts: [usize; 3]) -> ([usize; 3], [usize; 3]) {
@@ -178,15 +160,6 @@ fn cell_range(grid: &[[f64; 3]; 3], counts: [usize; 3]) -> ([usize; 3], [usize; 
     (lo, hi)
 }
 
-/// A floored grid coordinate clamped to `0..=last`.
-fn clamp_index(value: f64, last: usize) -> usize {
-    if value < 0.0 {
-        0
-    } else {
-        (value as usize).min(last)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{MeshTriangle, voxelize_triangles};
@@ -199,6 +172,7 @@ mod tests {
             .into_iter()
             .map(|points| MeshTriangle {
                 points: points.map(|[x, y, z]| TyVector3F64::new(x, y, z)),
+                uvs: None,
                 material,
             })
             .collect()
@@ -246,18 +220,18 @@ mod tests {
         let grid = voxelize_triangles(&cube(4.0), TyVector3U32::new(4, 4, 4), false);
         // A 4^3 grid with a one-voxel-thick shell: 4^3 - 2^3.
         assert_eq!(live_count(&grid.filled), 64 - 8);
-        // Every filled cell is a surface cell, so all carry a material.
-        assert!(grid.material.iter().filter(|m| m.is_some()).count() == 64 - 8);
+        // Every filled cell is a surface cell, so all record a triangle.
+        assert!(grid.triangle.iter().filter(|t| t.is_some()).count() == 64 - 8);
     }
 
     #[test]
-    fn solid_fills_the_enclosed_volume_leaving_interior_material_unset() {
+    fn solid_fills_the_enclosed_volume_leaving_interior_triangle_unset() {
         let grid = voxelize_triangles(&cube(4.0), TyVector3U32::new(4, 4, 4), true);
         assert_eq!(live_count(&grid.filled), 64);
         assert!(grid.filled.iter().all(|&filled| filled));
-        // The 2^3 interior cells fill with no material; the 56 shell cells keep
+        // The 2^3 interior cells fill with no triangle; the 56 shell cells keep
         // theirs.
-        assert_eq!(grid.material.iter().filter(|m| m.is_some()).count(), 64 - 8);
+        assert_eq!(grid.triangle.iter().filter(|t| t.is_some()).count(), 64 - 8);
     }
 
     #[test]
@@ -280,27 +254,27 @@ mod tests {
             "an interior cell fills in solid mode"
         );
         assert_eq!(
-            solid.material[interior], None,
-            "an interior cell carries no material"
+            solid.triangle[interior], None,
+            "an interior cell records no triangle"
         );
     }
 
     #[test]
-    fn a_surface_cell_takes_the_first_covering_triangle_material() {
-        // Two quads cover the one cell of a 1x1x1 grid; the first drawn, material
-        // 7, wins over the later material 9.
+    fn a_surface_cell_records_the_first_covering_triangle() {
+        // Two quads cover the one cell of a 1x1x1 grid; the first drawn, triangle
+        // 0, wins over the later triangle 1.
         let first = tagged(vec![[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]]], 7);
         let second = tagged(vec![[[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]]], 9);
         let triangles: Vec<_> = first.into_iter().chain(second).collect();
         let grid = voxelize_triangles(&triangles, TyVector3U32::new(1, 1, 1), false);
-        assert_eq!(grid.material, vec![Some(7)]);
+        assert_eq!(grid.triangle, vec![Some(0)]);
     }
 
     #[test]
     fn empty_soup_yields_empty_grid() {
         let grid = voxelize_triangles(&[], TyVector3U32::new(2, 2, 2), true);
         assert_eq!(live_count(&grid.filled), 0);
-        assert!(grid.material.iter().all(|m| m.is_none()));
+        assert!(grid.triangle.iter().all(|t| t.is_none()));
     }
 
     #[test]
