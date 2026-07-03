@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 /// with the runtime objects.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct VoxjEditObject {
     /// `[X, Y, Z]` size of the edit grid in voxels.
     pub bounds: [u32; 3],

@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 /// The body of a Voxel Json document.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(rename_all = "camelCase", deny_unknown_fields)
+)]
 pub struct VoxjMain {
     /// The runtime scene: objects, palettes, hierarchy, and roots.
     pub runtime_state: VoxjRuntimeState,

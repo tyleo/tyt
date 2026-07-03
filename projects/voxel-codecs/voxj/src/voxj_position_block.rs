@@ -6,7 +6,10 @@ use serde::{Deserialize, Serialize};
 /// `{ "encoding", "data" }`.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
-#[cfg_attr(feature = "serde", serde(tag = "encoding", content = "data"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(tag = "encoding", content = "data", deny_unknown_fields)
+)]
 pub enum VoxjPositionBlock {
     /// One `[x, y, z]` triple per voxel, in listing order.
     #[cfg_attr(feature = "serde", serde(rename = "raw-json"))]

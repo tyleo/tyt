@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 /// [`VoxjMain::edit_state`](crate::VoxjMain::edit_state).
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
 pub struct VoxjEditState {
     /// Edit grids, aligned by index with the runtime objects.
     pub objects: Vec<VoxjEditObject>,

@@ -56,35 +56,40 @@ From the closed decisions, so executors do not re-derive them:
 
 ## Phase 1: `voxj` data model
 
-- [ ] Add `VoxjValuePoolKind`, a closed enum of the eleven wire kinds (`json`,
+- [x] Add `VoxjValuePoolKind`, a closed enum of the eleven wire kinds (`json`,
       `bool`, `float`, `int`, `string`, `srgb-hex`, `srgb-float`, `srgba-hex`,
       `srgba-float`, `linear-rgb-float`, `linear-rgba-float`), serde renamed to
       the kebab-case tags. Unknown tags must fail to deserialize.
-- [ ] Add a bound type for `min`/`max` that serializes as either a finite JSON
+- [x] Add a bound type for `min`/`max` that serializes as either a finite JSON
       number or the literal string `"none"`, never JSON `null`. Round-trip both
       forms.
-- [ ] Add `VoxjValuePool` carrying `kind`, `values: Vec<VoxjValue>`, and the
-      `min`/`max` bounds present only for bounded kinds. Choose between a
-      bounded-versus-unbounded enum split and a struct with optional bounds
-      validated later; record the choice in the decisions log.
-- [ ] Add `VoxjPaletteBinding` with `attribute: String` and `pool_ref: usize`
+- [x] Add `VoxjValuePool` carrying the kind, its values, and the `min`/`max`
+      bounds present only for bounded kinds. Chose the per-kind internally-tagged
+      enum with typed values over the struct-with-optional-bounds; recorded in
+      the decisions log.
+- [x] Add `VoxjPaletteBinding` with `attribute: String` and `pool_ref: usize`
       (serde `poolRef`).
-- [ ] Rewrite `VoxjPalette` to `bindings: Vec<VoxjPaletteBinding>` and
+- [x] Rewrite `VoxjPalette` to `bindings: Vec<VoxjPaletteBinding>` and
       `materials: Vec<Vec<usize>>`, column-major, one inner array per binding.
-- [ ] Add `value_pools: Vec<VoxjValuePool>` to `VoxjRuntimeState` (serde
+- [x] Add `value_pools: Vec<VoxjValuePool>` to `VoxjRuntimeState` (serde
       `valuePools`), positioned per the spec structure.
-- [ ] Rename `VoxjObject.palette_refs` to `layer_palette_refs` (serde
+- [x] Rename `VoxjObject.palette_refs` to `layer_palette_refs` (serde
       `layerPaletteRefs`) and rewrite its and `voxelSamples`'s doc comments to
       the layer and material-index framing.
-- [ ] Remove the `serde(default)` on `VoxjObject.origin`; the redesign dropped
+- [x] Remove the `serde(default)` on `VoxjObject.origin`; the redesign dropped
       the omitted-defaults-to-zero rule, so origin is now required.
-- [ ] Add `#[serde(deny_unknown_fields)]` to every closed struct: file, main,
+- [x] Add `#[serde(deny_unknown_fields)]` to every closed struct: file, main,
       runtime state, edit state, object, palette, binding, value pool, transform,
       hierarchy node, edit object. Leave `ext` and binding attribute names open.
-- [ ] Register the new modules in `lib.rs` and keep `VoxjValue` for the `json`
+      (Also on the adjacently-tagged encoding-block enums; serde 1.0.228 honors
+      it there, closing the encoding block per spec rule 5.)
+- [x] Register the new modules in `lib.rs` and keep `VoxjValue` for the `json`
       pool kind and `ext`.
 
 Gate: `voxj` builds; a hand-written new-shape document round-trips through serde.
+Build and round-trip verified; the in-crate round-trip test moves to Phase 2
+(`voxj-codec`, which owns `from_voxj_file_bytes` and has `serde_json`) to keep
+`voxj` on serde only.
 
 ## Phase 2: `voxj-codec`
 
