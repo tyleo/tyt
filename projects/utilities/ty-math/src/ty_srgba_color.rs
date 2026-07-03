@@ -26,6 +26,34 @@ impl TySrgbaColor {
         Self { r, g, b, a }
     }
 
+    /// Parses a `#RRGGBB` or `#RRGGBBAA` hex string, with or without the leading
+    /// `#`. A missing alpha defaults to opaque. Returns `None` when the value is
+    /// not six or eight hexadecimal digits.
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        let hex = hex.strip_prefix('#').unwrap_or(hex);
+
+        if hex.len() != 6 && hex.len() != 8 {
+            return None;
+        }
+
+        let byte = |index: usize| u8::from_str_radix(hex.get(index * 2..index * 2 + 2)?, 16).ok();
+
+        Some(Self {
+            r: byte(0)?,
+            g: byte(1)?,
+            b: byte(2)?,
+            a: if hex.len() == 8 { byte(3)? } else { 255 },
+        })
+    }
+
+    /// Formats the color as an uppercase `#RRGGBBAA` hex string, the `#RRGGBBAA`
+    /// storage form. Round-trips with [`from_hex`](Self::from_hex).
+    pub fn to_hex(self) -> String {
+        let Self { r, g, b, a } = self;
+
+        format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
+    }
+
     /// Normalizes each 8-bit component straight to `[0, 1]`, without decoding
     /// the sRGB transfer function. This is the gamma-encoded color as floats;
     /// use [`to_linear_rgba`](Self::to_linear_rgba) to compute in linear light.
@@ -85,5 +113,32 @@ mod tests {
             TySrgbaColor::from_slice(&[5, 6, 7, 8, 9]),
             TySrgbaColor::new(5, 6, 7, 8)
         );
+    }
+
+    #[test]
+    fn hex_round_trips_and_defaults_alpha() {
+        // Eight digits carry alpha; six default it to opaque; the `#` is
+        // optional either way.
+        assert_eq!(
+            TySrgbaColor::from_hex("#01020304"),
+            Some(TySrgbaColor::new(1, 2, 3, 4))
+        );
+        assert_eq!(
+            TySrgbaColor::from_hex("FF8000"),
+            Some(TySrgbaColor::new(255, 128, 0, 255))
+        );
+        assert_eq!(TySrgbaColor::new(1, 2, 3, 4).to_hex(), "#01020304");
+        assert_eq!(
+            TySrgbaColor::from_hex(&TySrgbaColor::new(10, 200, 30, 40).to_hex()),
+            Some(TySrgbaColor::new(10, 200, 30, 40))
+        );
+    }
+
+    #[test]
+    fn from_hex_rejects_malformed() {
+        // Wrong length and non-hex digits are both rejected.
+        assert_eq!(TySrgbaColor::from_hex("#12345"), None);
+        assert_eq!(TySrgbaColor::from_hex("#GGGGGG"), None);
+        assert_eq!(TySrgbaColor::from_hex(""), None);
     }
 }

@@ -44,8 +44,7 @@ impl MeshMaterial {
 
     /// The `#RRGGBBAA` hex string for [`rgba`](Self::rgba).
     pub fn hex(&self) -> String {
-        let TySrgbaColor { r, g, b, a } = self.rgba;
-        format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
+        self.rgba.to_hex()
     }
 
     /// One palette-cell row, one value per key in [`MATERIAL_ATTRIBUTES`] order.

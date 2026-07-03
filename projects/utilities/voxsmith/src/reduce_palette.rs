@@ -487,22 +487,7 @@ fn cell_rgba(value: &VoxValue) -> Option<[u8; 4]> {
         return None;
     };
 
-    let hex = hex.strip_prefix('#')?;
-    if hex.len() != 6 && hex.len() != 8 {
-        return None;
-    }
-
-    let byte = |index: usize| {
-        hex.get(index * 2..index * 2 + 2)
-            .and_then(|pair| u8::from_str_radix(pair, 16).ok())
-    };
-
-    Some([
-        byte(0)?,
-        byte(1)?,
-        byte(2)?,
-        if hex.len() == 8 { byte(3)? } else { 255 },
-    ])
+    Some(TySrgbaColor::from_hex(hex)?.to_array())
 }
 
 /// Snaps every live voxel sampling `palette` to a representative, diffusing the
