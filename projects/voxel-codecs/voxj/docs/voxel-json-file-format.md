@@ -26,26 +26,36 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
 ```jsonc
 {
   "version": 1,
+
   "main": {
     "runtimeState": {
       "objects": [
         /* ... */
       ],
+
+      "valuePools": [
+        /* ... */
+      ],
+
       "palettes": [
         /* ... */
       ],
+
       "hierarchyNodes": [
         /* ... */
       ],
+
       "rootHierarchyNodes": [
         /* ... */
       ],
     },
+
     "editState": {
       "objects": [
         /* ... */
       ],
     },
+
     "ext": {
       /* ... */
     },
@@ -53,7 +63,7 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
 }
 ```
 
-The runtime scene lives under `main.runtimeState`: objects, palettes, and hierarchy nodes are referenced by their array index, and `rootHierarchyNodes` lists indices into `hierarchyNodes`. `editState` (optional) and `ext` are siblings of `runtimeState`. `editState` carries per-object editor margin aligned to the runtime objects (see [Edit State](#edit-state)); `ext` is an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
+The runtime scene lives under `main.runtimeState`: objects, value pools, palettes, and hierarchy nodes are referenced by their array indices, and `rootHierarchyNodes` lists indices into `hierarchyNodes`. `editState` (optional) and `ext` are siblings of `runtimeState`. `editState` carries per-object editor margin aligned to the runtime objects (see [Edit State](#edit-state)); `ext` is an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
 
 ## Coordinate System
 
@@ -74,19 +84,22 @@ An object is one voxel volume of pure geometry. Aside from its grid `origin`, it
   "origin": [0, 0, 0],
   "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
 
-  // palette indices, in resolution order
-  "paletteRefs": [0],
+  // palette references, one per layer
+  "layerPaletteRefs": [0],
+  // one channel per layer; each channel is one material index per voxel
   "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
 }
 ```
 
-`voxelPositions` and `voxelSamples` are encoded blocks (see [Voxel Encoding](#voxel-encoding)). Each voxel has a position `(x, y, z)` and one sample per referenced palette. The sample for palette `n` is a cell index into the object's `n`-th palette. The number of voxels is implicit: it is the number of positions decoded from `voxelPositions`. Positions within an object must be unique, and every voxel samples every palette.
+An object carries any number of layers, listed in `layerPaletteRefs` as palette indices. Each layer maps every voxel to one material in its palette. Two layers may reference the same palette; what the overlap means is left to the consuming application.
+
+`voxelPositions` and `voxelSamples` are encoded blocks (see [Voxel Encoding](#voxel-encoding)). Each voxel has a position `(x, y, z)` and one material sample per layer. `voxelSamples` carries one channel per layer, in `layerPaletteRefs` order, and the sample in channel `c` is a material index into the palette `layerPaletteRefs[c]`. The number of voxels is implicit: it is the number of positions decoded from `voxelPositions`. Positions within an object must be unique, and every voxel samples every layer.
 
 `bounds` is `[X, Y, Z]`, the runtime grid's size in voxels along each axis. Voxel positions are 0-based, so every voxel lies in `[0, X) x [0, Y) x [0, Z)`. `bounds` is exactly tight: the grid fits the voxels with no empty margin on any face, so on every axis some voxel reaches `0` and some voxel reaches the bound minus one. An empty object has `bounds = [0, 0, 0]`. Build-volume margin around the geometry is not allowed here; it lives in [`editState`](#edit-state), whose edit grid may be larger than the runtime grid. `bounds` is needed to decode `bitmap-base64` and `hilbert-delta-varint-base64`, where it sets the canonical voxel order and the Hilbert `bits = max(1, bitLength(max(X, Y, Z) - 1))` (see [Voxel Order](#voxel-order)).
 
-`origin` is `[X, Y, Z]`, the translation in voxels from the placing hierarchy node to the grid's min corner; `[0, 0, 0]` puts the min corner at the node's local origin. It shifts where the grid sits relative to its node but does not change the voxel encodings, which stay 0-based within `bounds`. Setting it to about `-bounds / 2` centers the grid on the node, making the node's position the object's pivot so rotation and scale turn the object about its center. Omitted, it defaults to `[0, 0, 0]`.
+`origin` is `[X, Y, Z]`, the translation in voxels from the placing hierarchy node to the grid's min corner; `[0, 0, 0]` puts the min corner at the node's local origin. It shifts where the grid sits relative to its node but does not change the voxel encodings, which stay 0-based within `bounds`. Setting it to about `-bounds / 2` centers the grid on the node, making the node's position the object's pivot so rotation and scale turn the object about its center.
 
-The position block fixes a single voxel order for the object, and the sample channels follow it voxel-for-voxel.
+The position block fixes a single voxel order for the object, and every sample channel follows it voxel-for-voxel.
 
 ## Voxel Encoding
 
@@ -122,43 +135,41 @@ All base64 in this format uses the standard RFC 4648 alphabet, not base64url, wi
 // base64 "AAMBAw==".
 // Those indices decode (in order) to
 // (0, 0, 0), (0, 1, 0), (1, 1, 0), (1, 0, 0). This is a different voxel order
-// than the bitmap's raster order, so the two encodings need their sample
-// channels in different orders.
+// than the bitmap's raster order, so the two encodings need the sample channels
+// in different orders.
 { "encoding": "hilbert-delta-varint-base64", "data": "AAMBAw==" }
 ```
 
 ### Sample Encodings
 
-1. `raw-json`: one channel per palette, each a plain array of that palette's cell index for every voxel, in order: `[[p0v0, p0v1], [p1v0, p1v1], ...]`.
-2. `rle-json`: one channel per palette; each channel is a flat run-length encoding `[value1, count1, value2, count2, ...]`. Counts are positive integers and, in every channel, sum to the number of voxels.
-3. `packed-base64`: one bit-packed channel per palette. For the channel sampling a palette with `c` cells, each voxel's cell index is packed at fixed width `b = max(1, bitLength(c - 1))` bits, MSB-first, 8 per byte, with the final byte zero-padded; the width is derived from `c` and not stored. `data` is one base64 string per palette, in `paletteRefs` order, each encoding exactly `ceil(voxelCount * b / 8)` bytes. This is the same packing scheme as the `bitmap-base64` position encoding, which is its `b = 1` special case. An empty object has one `""` per palette. Best for incoherent or many-color objects, where `rle-json` would approach one run per voxel.
+A sample block holds one channel per layer, in `layerPaletteRefs` order. Each channel gives, for every voxel in the position block's voxel order, a material index into that layer's palette.
 
-#### Example: four voxels in an object whose `paletteRefs` has length 2, with per-voxel samples in the position block's voxel order `[0, 0]`, `[0, 1]`, `[0, 1]`, `[1, 1]`
+1. `raw-json`: one channel per layer, each a plain array of that layer's material index for every voxel: `[[l0v0, l0v1, ...], [l1v0, l1v1, ...], ...]`.
+2. `rle-json`: one channel per layer; each channel is a flat run-length encoding `[value1, count1, value2, count2, ...]`. Counts are positive integers and, in every channel, sum to the number of voxels.
+3. `packed-base64`: one bit-packed channel per layer. For the channel of a layer whose palette has `M` materials, each voxel's material index is packed at fixed width `b = max(1, bitLength(M - 1))` bits, MSB-first, 8 per byte, with the final byte zero-padded; the width is derived from `M` and not stored. `data` is one base64 string per layer, in `layerPaletteRefs` order, each encoding exactly `ceil(voxelCount * b / 8)` bytes. This is the same packing scheme as the `bitmap-base64` position encoding, which is its `b = 1` special case. An empty object has one `""` per layer. Best for incoherent or many-material objects, where `rle-json` would approach one run per voxel.
+
+#### Example: two layers over four voxels; layer 0 material indices `0, 0, 0, 1` (palette `M = 2`) and layer 1 material indices `2, 2, 3, 3` (palette `M = 4`), in the position block's voxel order
 
 ```jsonc
-// raw-json: one [voxel-0 cell, voxel-1 cell, ...] row per palette.
-{ "encoding": "raw-json", "data": [[0, 0, 0, 1], [0, 1, 1, 1]] }
+// raw-json: one array per layer, a material index per voxel.
+{ "encoding": "raw-json", "data": [[0, 0, 0, 1], [2, 2, 3, 3]] }
 
-// rle-json: one channel per palette, each a flat [value, count, ...] run stream
-{ "encoding": "rle-json", "data": [[0, 3, 1, 1], [0, 1, 1, 3]] }
+// rle-json: one flat [value, count, ...] run stream per layer.
+{ "encoding": "rle-json", "data": [[0, 3, 1, 1], [2, 2, 3, 2]] }
 
-// packed-base64: one packed channel per palette.
+// packed-base64: one packed channel per layer.
 //
-// Channel 0 =
-// 0,0,0,1 ->
-// byte 0b0001_0000 = 0x10 ->
-// "EA=="
+// layer 0: M = 2 -> b = 1
+// 0,0,0,1 -> byte 0b0001_0000 = 0x10 -> "EA=="
 //
-// channel 1 =
-// 0,1,1,1 ->
-// byte 0b0111_0000 = 0x70 ->
-// "cA=="
-{ "encoding": "packed-base64", "data": ["EA==", "cA=="] }
+// layer 1: M = 4 -> b = 2
+// 2,2,3,3 -> bits 10 10 11 11 -> byte 0b1010_1111 = 0xAF -> "rw=="
+{ "encoding": "packed-base64", "data": ["EA==", "rw=="] }
 ```
 
 ### Voxel Order
 
-The position block defines the object's single canonical voxel order, and the sample channels are in that same order, voxel-for-voxel, for every combination of position and sample encodings:
+The position block defines the object's single canonical voxel order, and every sample channel is in that same order, voxel-for-voxel, for every combination of position and sample encoding:
 
 1. `raw-json` positions: listing order.
 2. `bitmap-base64` positions: ascending cell index `k` (raster order, z fastest).
@@ -171,7 +182,7 @@ The same geometry generally orders differently under different position encoding
 Position:
 
 1. `bitmap-base64`: dense objects. Smallest geometry when filled, and the fastest to decode.
-2. `hilbert-delta-varint-base64`: sparse objects, and any object whose color is spatially coherent that you want as small as possible. Hilbert order places neighboring voxels next to each other in the stream, which also lengthens the sample channel's runs and improves its compression. It costs more to decode.
+2. `hilbert-delta-varint-base64`: sparse objects, and any object with spatially coherent color that you want as small as possible. Hilbert order places neighboring voxels next to each other in the stream, which also lengthens the sample channels' runs and improves their compression. It costs more to decode.
 3. `raw-json`: hand-authored or tiny objects, where readability matters more than size.
 
 Sample:
@@ -183,71 +194,131 @@ Sample:
 Favored pairs:
 
 1. `bitmap-base64` + `rle-json`: coherent color, dense or speed-sensitive. The fast default.
-2. `hilbert-delta-varint-base64` + `rle-json`: coherent color when you want the smallest (larger or sparser models); slower to decode.
+2. `hilbert-delta-varint-base64` + `rle-json`: coherent color at the smallest size, for larger or sparser models; slower to decode.
 3. `bitmap-base64` + `packed-base64`: incoherent or many-color.
 
 Avoid pairing Hilbert positions with `packed-base64`: Hilbert order only helps by lengthening runs, which `packed-base64` does not use, so it costs decode time for no gain.
 
 Positions and samples interact, so choose them as a pair. Encoding is offline, so you need not trust these rules: build the candidate pairs, compress each the way the file ships, and keep the smallest. All blocks assume whole-file gzip or deflate downstream.
 
-## Palettes
+## Value Pools
 
-A palette declares an attribute set once, then lists its cells as rows of values. `attributes` is the ordered list of attribute keys shared by every cell; `data` holds one row per cell, each row carrying that cell's values positionally aligned to `attributes`. So cell `c`'s value for `attributes[i]` is `data[c][i]`, every row has exactly `attributes.length` values, and a cell is referenced by its row index in `data`.
+Value pools live in `main.runtimeState.valuePools`, a shared array referenced by index, siblings of `objects` and `palettes`. A value pool holds `values`, all of one value-shape given by `kind`. `kind` tags the shape of the values. Palettes reference pools by index (see [Palettes](#palettes)).
 
 ```jsonc
-[
-  // color + metallic
-  { "attributes": ["rgba", "metallic"], "data": [["#FF0000FF", 1]] },
+// a value pool: shared values of one shape
+{
+  // value-shape tag (see Value Pool Kinds)
+  "kind": "srgba-hex",
 
-  // color only
-  { "attributes": ["rgba"], "data": [["#00FF00FF"], ["#0000FFFF"]] },
+  // plain JSON literals, each well-formed for `kind`, indexed by value-index
+  "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
+}
 
-  // PBR only
-  { "attributes": ["metallic", "roughness"], "data": [[1, 0.2]] },
-]
+// int, float, and vector color pools require min/max; each a number or "none"
+{ "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] }
+{ "kind": "float", "min": 1, "max": "none", "values": [1.5, 1.33] } // >= 1
+{ "kind": "int", "min": 0, "max": 255, "values": [0, 128, 255] }
+{ "kind": "srgba-int", "min": 0, "max": 255, "values": [[255, 0, 0, 255]] } // 8-bit
+{ "kind": "srgb-float", "min": 0, "max": "none", "values": [[2, 0, 0]] } // HDR
 ```
 
-A voxel's material is the ordered merge of its sampled cells across the object's palettes; a later palette overrides an earlier one on shared attributes. This allows a shared base palette plus override layers.
+### Value Pool Kinds
 
-### Example: an object with two palette layers, a base layer and a finish layer that share `roughness`, for a voxel sampling cell `0` of each.
+`kind` is a closed vocabulary tagging the shape of a pool's `values`. Every kind's `values` are plain readable JSON literals; declaring a kind enables validation: a consumer must understand a file's kinds to validate it, and must reject a file whose `kind` it does not recognize (see [Versioning and Extensibility](#versioning-and-extensibility)).
 
-Base layer:
+| `kind`              | JSON form            | Constraint                                           | Example `values`               | Typical attributes                                                                            |
+| ------------------- | -------------------- | ---------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
+| `json`              | any JSON, incl. null | none                                                 | `[{"k": 1}, "x", 3]`           | any custom attribute                                                                          |
+| `bool`              | boolean              | `true` / `false`                                     | `[true, false]`                | flags                                                                                         |
+| `float`             | number               | floating-point-valued; within `min`/`max`            | `[0, 0.5, 1]`                  | metallicFactor, roughnessFactor, occlusionStrength, transmissionFactor, emissiveStrength, ior |
+| `int`               | number               | integer-valued, within `min`/`max`                   | `[0, 1, 2, 7]`                 | ids, counts, indices                                                                          |
+| `string`            | string               | must be a string                                     | `["low", "high"]`              | enumerated tags                                                                               |
+| `srgb-float`        | number[3]            | 3 finite numbers; within `min`/`max`, sRGB           | `[[1, 0, 0], [0.5, 0.5, 0]]`   | emissiveFactor, sRGB float / HDR                                                              |
+| `srgb-hex`          | string               | matches `^#[0-9A-F]{6}$`                             | `["#FF0000", "#204080"]`       | emissiveFactor; opaque custom colors                                                          |
+| `srgb-int`          | number[3]            | 3 integer-valued numbers; within `min`/`max`, sRGB   | `[[255, 0, 0], [128, 128, 0]]` | emissiveFactor, sRGB integer                                                                  |
+| `srgba-float`       | number[4]            | 4 finite numbers; within `min`/`max`, sRGB           | `[[1, 0, 0, 1]]`               | baseColorFactor, sRGB float                                                                   |
+| `srgba-hex`         | string               | matches `^#[0-9A-F]{8}$`                             | `["#FF0000FF"]`                | baseColorFactor, the default color kind                                                       |
+| `srgba-int`         | number[4]            | 4 integer-valued numbers; within `min`/`max`, sRGB   | `[[255, 0, 0, 255]]`           | baseColorFactor, sRGB integer                                                                 |
+| `linear-rgb-float`  | number[3]            | 3 finite numbers; within `min`/`max`, linear         | `[[1, 0, 0], [0, 0.5, 1]]`     | emissiveFactor, linear                                                                        |
+| `linear-rgb-int`    | number[3]            | 3 integer-valued numbers; within `min`/`max`, linear | `[[255, 0, 0], [0, 128, 255]]` | emissiveFactor, integer linear                                                                |
+| `linear-rgba-float` | number[4]            | 4 finite numbers; within `min`/`max`, linear         | `[[1, 0, 0, 1]]`               | baseColorFactor, linear                                                                       |
+| `linear-rgba-int`   | number[4]            | 4 integer-valued numbers; within `min`/`max`, linear | `[[255, 0, 0, 255]]`           | baseColorFactor, integer linear                                                               |
 
-```json
-{ "attributes": ["rgba", "roughness"], "data": [["#FF0000FF", 0.9]] }
+Notes:
+
+1. `float` is a continuous, finite number; `int` is its integer-valued sibling. `min` and `max` bounds apply only to `int`, `float`, and the eight vector color kinds (`-int` and `-float` components); on those kinds both are required, and no other kind may carry them.
+2. `min` and `max` each take a finite number or the string `"none"` for unbounded on that side, and both are always written out. A numeric bound must be integer-valued on `int` and the `-int` color kinds; on the vector color kinds a bound applies per component; when both bounds are finite numbers, `min <= max`.
+3. Colors come in hex, integer, and float forms across two color spaces. `srgb-hex` / `srgba-hex` are `#RRGGBB` / `#RRGGBBAA` sRGB strings, the human-editable default. `srgb-int` / `srgba-int` / `srgb-float` / `srgba-float` are sRGB integer or float components; `linear-rgb-int` / `linear-rgba-int` / `linear-rgb-float` / `linear-rgba-float` are the linear components.
+4. `kind` is required and has no default; the bounded kinds require both `min` and `max`. A value pool has no optional fields.
+
+## Palettes
+
+A palette binds attribute names to shared [value pools](#value-pools), then lists the distinct materials it uses as rows over those pools. A voxel samples a material in each layer by its index in that layer's palette. A palette may be referenced by any number of layers and objects (see [Objects](#objects)).
+
+Materials are stored column-major, one column per binding:
+
+```jsonc
+{
+  // ordered bindings; each binds an attribute name to a value pool index. Order
+  // fixes the column order in `materials`. No duplicate attribute.
+  "bindings": [
+    { "attribute": "baseColorFactor", "poolRef": 0 },
+    { "attribute": "metallicFactor", "poolRef": 1 },
+  ],
+
+  // `materials` is column-major: one inner array per binding (a column), in
+  // binding order, so materials.length == bindings.length. Every column has the
+  // same length, the material count M. materials[b][m] is a value-index into the
+  // pool bound by column b. A voxel samples material m in [0, M); resolve it by
+  // reading down the columns:
+  //   material 0 = { baseColorFactor: pool0.values[0], metallicFactor: pool1.values[2] }
+  "materials": [
+    [0, 1, 2], // baseColorFactor value-index for materials 0, 1, 2
+    [2, 0, 1], // metallicFactor value-index for materials 0, 1, 2
+  ],
+}
 ```
 
-Finish layer:
+`materials` is column-major: each inner array is one binding's column of value-indices into a single pool.
 
-```json
-{ "attributes": ["metallic", "roughness"], "data": [[1, 0.2]] }
-```
+To resolve a voxel's material:
 
-Cell `0` of each pairs its row with the palette's `attributes`, giving `{ rgba: "#FF0000FF", roughness: 0.9 }` and `{ metallic: 1, roughness: 0.2 }`. A later palette overrides an earlier one on shared keys, so the finish layer wins `roughness` (`0.9` -> `0.2`) and adds `metallic`:
+1. Read the voxel's sample `m`, a material index.
+2. For each binding `b`, read `materials[b][m]`, a value-index into the pool `bindings[b].poolRef`.
+3. The attribute `bindings[b].attribute` takes `valuePools[bindings[b].poolRef].values[materials[b][m]]`.
+4. Unbound attributes take their default from the [Attributes](#attributes) table.
 
-```json
-{ "rgba": "#FF0000FF", "roughness": 0.2, "metallic": 1 }
-```
+For the palette above, a voxel sampling material `0` resolves to `baseColorFactor = valuePools[0].values[0]` and `metallicFactor = valuePools[1].values[2]`.
 
 ### Attributes
 
-Recommended attributes (the format stores attributes generically; meaning is by convention). Omitted attributes use their default. Consumers ignore attributes they do not recognize. Names follow the glTF metallic-roughness vocabulary.
+An attribute is a named material property, listed in `palette.bindings[].attribute`. The format wires attributes without defining them: the name carries the meaning and the pool carries the values; that pairing is all the format defines. An attribute's meaning and value range are convention between producer and consumer, not part of the wire format. A consumer ignores any attribute name it does not recognize, so extending the vocabulary never breaks an older reader (see [Versioning and Extensibility](#versioning-and-extensibility)).
 
-| Attribute      | Type            | Range | Default     | Meaning                                          |
-| -------------- | --------------- | ----- | ----------- | ------------------------------------------------ |
-| `rgba`         | hex `#RRGGBBAA` |       | `#FFFFFFFF` | sRGB color, straight alpha = opacity             |
-| `metallic`     | number          | 0-1   | 0           | Metalness                                        |
-| `roughness`    | number          | 0-1   | 1           | Roughness                                        |
-| `occlusion`    | number          | 0-1   | 1           | Flat ambient occlusion (1 = none)                |
-| `emissive`     | number          | 0+    | 0           | Emissive strength, scales `rgba` in linear space |
-| `ior`          | number          | 1+    | 1.5         | Index of refraction                              |
-| `transmission` | number          | 0-1   | 0           | Light transmission through surface               |
+voxj's recommended vocabulary is glTF's, below. The format neither requires nor privileges it; it is the convention voxj tools target.
 
-The `rgba` value is a hex string with a leading `#`, uppercase digits, and all eight `RRGGBBAA` digits present (no shorthand); it must match `^#[0-9A-F]{8}$`.
+#### glTF conventions
+
+The recommended attribute vocabulary is glTF's metallic-roughness model, so a voxj material maps one-to-one onto a glTF material and the defaults below are glTF's own. Each attribute binds a value pool of one of the kinds listed, and an unbound attribute renders at its default:
+
+| Attribute            | Kind                                                                                         | Range | Default     | Meaning                                                                            |
+| -------------------- | -------------------------------------------------------------------------------------------- | ----- | ----------- | ---------------------------------------------------------------------------------- |
+| `baseColorFactor`    | `srgba-hex` (default), `srgba-int`, `srgba-float`, `linear-rgba-int`, or `linear-rgba-float` |       | `#FFFFFFFF` | Base color, straight alpha = opacity (glTF `baseColorFactor`)                      |
+| `metallicFactor`     | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `1`         | Metalness (glTF `metallicFactor`)                                                  |
+| `roughnessFactor`    | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `1`         | Roughness (glTF `roughnessFactor`)                                                 |
+| `occlusionStrength`  | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `1`         | Flat ambient occlusion, 1 = none (glTF `occlusionTexture.strength`)                |
+| `emissiveFactor`     | `srgb-hex` (default), `srgb-int`, `srgb-float`, `linear-rgb-int`, or `linear-rgb-float`      |       | `#000000`   | Emissive color, black = none (glTF `emissiveFactor`)                               |
+| `emissiveStrength`   | `float`, `min: 0`                                                                            | 0+    | `1`         | Multiplies emissive color in linear space (glTF `KHR_materials_emissive_strength`) |
+| `ior`                | `float`, `min: 1`                                                                            | 1+    | `1.5`       | Index of refraction (glTF `KHR_materials_ior`)                                     |
+| `transmissionFactor` | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `0`         | Light transmission through surface (glTF `KHR_materials_transmission`)             |
+
+A color attribute binds a hex, integer-component, or float-component color kind in either the sRGB or linear space (see [Value Pool Kinds](#value-pool-kinds)); hex is the authoring default. Base color takes an alpha-carrying kind and emission an alpha-less one, and all forms carry the same color.
+
+Emission is two attributes. `emissiveFactor` is the emitted color, `srgb-hex` by default or a vector form, no alpha, default `#000000` for no emission, authored and linearized like `baseColorFactor`. `emissiveStrength` is a numeric multiplier over that color, `float` with `min: 0`, default `1`; values above `1` push emission into HDR/bloom range. Rendered emission is `linearize(emissiveFactor) * emissiveStrength`. The defaults compose: a black color emits nothing at any strength, and a color left at the default strength `1` emits at face value, so a material that sets only `emissiveFactor` emits that color at strength 1.
 
 ## Hierarchy Nodes
 
-Nodes form a DAG (a node may have multiple parents; no cycles). Each references child nodes and child objects by index and carries a transform.
+Nodes form a DAG: a node may have multiple parents but no cycles. Each references child nodes and child objects by index and carries a transform.
 
 ```jsonc
 {
@@ -262,7 +333,7 @@ Nodes form a DAG (a node may have multiple parents; no cycles). Each references 
 }
 ```
 
-A transform has three fields: `position` is `[x, y, z]` (may be fractional), `rotation` is a unit quaternion `[x, y, z, w]`, and `scale` is `[x, y, z]`.
+A transform has three fields: `position` is a possibly-fractional `[x, y, z]`, `rotation` is a unit quaternion `[x, y, z, w]`, and `scale` is `[x, y, z]`.
 
 1. A transform composes as `Translation * Rotation * Scale`.
 2. A node's world transform is `parentWorld * nodeLocal`; a root, listed in `rootHierarchyNodes`, has world = local. Reached through multiple parents, a node is placed once per path; this is instancing.
@@ -322,34 +393,76 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
 ## Versioning and Extensibility
 
 1. An unrecognized `version` must be rejected.
-2. Unknown **attribute** keys are ignored (attributes are advisory and convention-based), so adding attributes is backward compatible.
-3. An unknown `encoding` (positions or samples) must be rejected; the block cannot be safely decoded.
+2. An unknown `encoding` (positions or samples) must be rejected; the block cannot be safely decoded.
+3. An unrecognized value pool `kind` must be rejected: the pool's values cannot be safely validated, exactly as an unknown `encoding` cannot be safely decoded, and it must never be reinterpreted or downgraded. `kind` is required and has no default.
+4. Unknown **attribute** names in bindings are ignored, since attributes are advisory and convention-based, so adding attributes is backward compatible.
+5. Ignore vs reject: unknown attribute names are ignored; unknown `kind`, `encoding`, and `version`, and unknown object keys in any core structure, are rejected. Each is a contract a consumer must understand to make its guarantees.
 
 ## Validation
 
+Validation is a hard contract, not best-effort. A validator rejects any file that violates a rule below; it never repairs, coerces, or fills in bad or missing input. Every field is required except the two on the optional allowlist: `main.editState`, whose absence means no editor margin, and `main.ext`, whose absence means no extensions. The closed vocabularies `version`, `encoding`, and value pool `kind` reject any unrecognized value and are never reinterpreted or downgraded.
+
+### Rules
+
 1. `version` is recognized.
-2. All indices are in range:
-   1. object `paletteRefs` -> `main.runtimeState.palettes`, and one object references each palette at most once
-   2. each sample cell index -> the cell count of the palette it indexes
-   3. each `childNodes` entry -> `main.runtimeState.hierarchyNodes` and each `childObjects` entry -> `main.runtimeState.objects`, and one hierarchy node lists each child node and each child object at most once
-   4. `rootHierarchyNodes` -> `main.runtimeState.hierarchyNodes`, and each node appears as a root at most once
-3. Position `data` is well-formed:
-   1. `raw-json` is `[x, y, z]` triples
-   2. `bitmap-base64` base64-decodes to exactly `ceil(X * Y * Z / 8)` bytes, its pad bits are zero, and the decoded number of voxels equals the number of set bits
-   3. `hilbert-delta-varint-base64` `data` base64-decodes to an unsigned LEB128 varint stream of non-negative deltas, with every delta after the first strictly positive; `bits` derived from `bounds` is `<= 17` and equivalently every `bounds` dimension `<= 131072`; after decoding, every position lies in `[0, X) x [0, Y) x [0, Z)` and `bounds` is consistent with them
-4. After decoding, voxel positions within an object are unique.
-5. `bounds` is three non-negative integers and is exactly tight around the decoded positions: a non-empty object's voxels reach both ends of every axis, so on each axis the minimum voxel coordinate is `0` and `bounds` equals the maximum plus one; an empty object has `bounds = [0, 0, 0]`.
-6. Sample arity matches `paletteRefs.length`:
-   1. `raw-json` has exactly that many channels (arrays), each holding exactly one cell index per voxel
-   2. `rle-json` has exactly that many channels
-   3. `packed-base64` has exactly that many channels (base64 strings)
-7. Each `raw-json` channel holds exactly one value per voxel. Each `rle-json` channel's run counts are positive and sum to the number of voxels. Each `packed-base64` channel base64-decodes to exactly `ceil(voxelCount * b / 8)` bytes for that channel's width `b = max(1, bitLength(c - 1))`, where `c` is the indexed palette's cell count, and its pad bits are zero.
-8. Sample order matches the position block's voxel order (see [Voxel Order](#voxel-order)). This is an authoring invariant a validator cannot confirm.
-9. In every palette, each `data` row has exactly `attributes.length` values, and `attributes` has no duplicate keys. Where a cell carries `rgba`, its value matches `^#[0-9A-F]{8}$`.
-10. The hierarchy is acyclic.
-11. No transform `scale` component is zero.
-12. Every transform `rotation` has length-squared within `1e-6` of `1`; consumers may renormalize within this tolerance.
-13. When `editState` is present, its `objects` has exactly one entry per runtime object, and each edit grid contains its object's runtime grid: on every axis the edit `origin` is `<=` the runtime `origin`, and the edit `origin + bounds` is `>=` the runtime `origin + bounds`.
+2. Every `encoding`, on both `voxelPositions` and `voxelSamples`, is recognized.
+3. Types are exact and nothing is coerced. A string where a number is expected, or the reverse, rejects. Every integer-valued number has no fractional part, and every number is finite, so `NaN` and `+/-Infinity` reject.
+4. `null` rejects everywhere except in a `json`-kind pool's `values`: in every structural field, every non-`json` pool's `values`, and every block's `data`.
+5. Unknown keys reject in every closed structure: file, `main`, `runtimeState`, `editState`, object, encoding block, palette, binding, value pool, transform, hierarchy node, and edit object. The only open points are `main.ext` and binding attribute names.
+6. All indices are in range:
+    1. each object `layerPaletteRefs` entry indexes `runtimeState.palettes`.
+    2. each binding `poolRef` indexes `runtimeState.valuePools`.
+    3. each `childNodes` entry indexes `runtimeState.hierarchyNodes`.
+    4. each `childObjects` entry indexes `runtimeState.objects`.
+    5. each `rootHierarchyNodes` entry indexes `runtimeState.hierarchyNodes`.
+7. References are unique: no hierarchy node lists the same child node or the same child object twice, and no node appears in `rootHierarchyNodes` twice.
+8. **Objects**, per object:
+    1. `layerPaletteRefs` is present, an array of integers, possibly empty.
+    2. `voxelPositions` and `voxelSamples` are present; the Positions and Samples rules check their structure.
+9. **Value pools** (`runtimeState.valuePools`): an array, possibly empty. Each pool's keys are drawn only from { `kind`, `values`, `min`, `max` }.
+    1. `kind` is present and recognized.
+    2. `values` is present, a non-empty array, with no `null` entry unless `kind` is `json`. Every entry is well-formed for `kind`:
+        1. `json`: any JSON value, including `null`.
+        2. `string`: a JSON string.
+        3. `bool`: a JSON boolean.
+        4. `int`: an integer-valued finite number within `min`/`max`.
+        5. `float`: a finite number within `min`/`max`.
+        6. `srgb-hex`: matches `^#[0-9A-F]{6}$`.
+        7. `srgba-hex`: matches `^#[0-9A-F]{8}$`.
+        8. `srgb-int` / `linear-rgb-int`: an array of exactly 3 integer-valued numbers, each within `min`/`max`.
+        9. `srgba-int` / `linear-rgba-int`: an array of exactly 4 integer-valued numbers, each within `min`/`max`.
+        10. `srgb-float` / `linear-rgb-float`: an array of exactly 3 finite numbers, each within `min`/`max`.
+        11. `srgba-float` / `linear-rgba-float`: an array of exactly 4 finite numbers, each within `min`/`max`.
+    3. `min` and `max`:
+        1. both present when `kind` is `int`, `float`, or one of the eight vector color kinds, and both absent for every other kind.
+        2. each is a finite number or the string `none`, meaning unbounded on that side.
+        3. a numeric bound is integer-valued when `kind` is `int` or an `-int` color kind.
+        4. `min <= max` when both are finite numbers.
+10. **Palettes** (`runtimeState.palettes`): an array, possibly empty. Each palette's keys are drawn only from { `bindings`, `materials` }.
+    1. `bindings` is a non-empty array; each binding has exactly the keys `attribute`, a non-empty string, and `poolRef`, an integer.
+    2. no two bindings share an `attribute`.
+    3. `materials` has exactly `bindings.length` columns, one per binding in binding order.
+    4. every column is an array of the same length `M >= 1`, the material count.
+    5. every `materials[b][m]` is an integer in `[0, valuePools[bindings[b].poolRef].values.length)`.
+11. **Samples**: let `V` be the voxel count from the position block. `voxelSamples.data` has exactly `layerPaletteRefs.length` channels, one per layer in `layerPaletteRefs` order. For channel `c`, let `M` be the material count of palette `layerPaletteRefs[c]`, and by encoding:
+    1. `raw-json`: each channel is a `number[]` of length exactly `V`, every entry an integer in `[0, M)`.
+    2. `rle-json`: each channel is a flat even-length `[value, count, ...]` stream whose values are integers in `[0, M)`, whose counts are positive integers, and whose counts sum to exactly `V`.
+    3. `packed-base64`: each channel is a base64 string decoding to exactly `ceil(V * b / 8)` bytes for `b = max(1, bitLength(M - 1))`, its pad bits zero, every decoded value `< M`.
+12. Sample order matches the position block's voxel order (see [Voxel Order](#voxel-order)). This is an authoring invariant a validator cannot confirm.
+13. **Positions**: `voxelPositions.data` is well-formed for its encoding:
+    1. `raw-json`: `[x, y, z]` integer triples.
+    2. `bitmap-base64`: decodes to exactly `ceil(X * Y * Z / 8)` bytes, its pad bits zero, and the voxel count equals the number of set bits.
+    3. `hilbert-delta-varint-base64`:
+        1. `data` decodes to an unsigned LEB128 varint stream of non-negative deltas, every delta after the first strictly positive.
+        2. `bits` derived from `bounds` is `<= 17`, equivalently every `bounds` dimension is `<= 131072`.
+        3. every decoded position lies in `[0, X) x [0, Y) x [0, Z)`.
+14. Every base64 field is canonical RFC 4648: the standard alphabet, not base64url, with correct `=` padding and no whitespace or line breaks.
+15. Voxel positions within an object are unique after decoding.
+16. `bounds` is three non-negative integers, exactly tight around the decoded positions: on each axis the minimum voxel coordinate is `0` and `bounds` is the maximum plus one. An empty object has `bounds = [0, 0, 0]`.
+17. The hierarchy is acyclic.
+18. No transform `scale` component is zero.
+19. Every transform `rotation` has length-squared within `1e-6` of `1`; consumers may renormalize within this tolerance.
+20. When `editState` is present, its `objects` has exactly one entry per runtime object. Each edit object's `bounds` is three non-negative integers and its `origin` is three integers, and the edit grid contains the runtime grid: on every axis edit `origin` is `<=` runtime `origin`, and edit `origin + bounds` is `>=` runtime `origin + bounds`.
 
 ## Examples
 
@@ -363,16 +476,16 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
       "objects": [
         {
           "name": "Object A",
-          "paletteRefs": [0],
-          "bounds": [1, 1, 1],
-          "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
-          "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
-        },
-        {
-          "name": "Object B",
-          "paletteRefs": [1, 2],
+
+          // two layers: palette 0, then palette 1. Layers do not merge; the app
+          // decides what two baseColorFactor layers mean.
+          "layerPaletteRefs": [0, 1],
+
           // Two voxels at (0, 0, 0) and (1, 0, 0).
           "bounds": [2, 1, 1],
+
+          "origin": [0, 0, 0],
+
           "voxelPositions": {
             "encoding": "raw-json",
             "data": [
@@ -380,36 +493,96 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
               [1, 0, 0],
             ],
           },
-          // Per palette: [voxel-0 cell, voxel-1 cell].
+
+          // one channel per layer, each a material index per voxel:
+          //   layer 0 -> materials 0, 2 of palette 0
+          //   layer 1 -> materials 0, 0 of palette 1
           "voxelSamples": {
             "encoding": "raw-json",
             "data": [
-              [0, 1],
+              [0, 2],
               [0, 0],
             ],
           },
         },
+
+        {
+          "name": "Object B",
+          // single layer
+          "layerPaletteRefs": [1],
+          "bounds": [1, 1, 1],
+          "origin": [0, 0, 0],
+          "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
+          "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
+        },
       ],
       "palettes": [
-        { "attributes": ["rgba", "metallic"], "data": [["#FF0000FF", 1]] },
-        { "attributes": ["rgba"], "data": [["#00FF00FF"], ["#0000FFFF"]] },
-        { "attributes": ["metallic", "roughness"], "data": [[1, 0.2]] },
+        // value pool 1 is bound twice here, to metallicFactor and roughnessFactor
+        {
+          "bindings": [
+            { "attribute": "baseColorFactor", "poolRef": 0 },
+            { "attribute": "metallicFactor", "poolRef": 1 },
+            { "attribute": "roughnessFactor", "poolRef": 1 },
+            { "attribute": "emissiveFactor", "poolRef": 2 },
+          ],
+
+          // column-major, one column per binding. Material 2 resolves to
+          // baseColorFactor #0000FFFF, metallicFactor 0.5, roughnessFactor 0,
+          // emissiveFactor #FF6600.
+          "materials": [
+            [0, 1, 2],
+            [2, 0, 1],
+            [1, 1, 0],
+            [0, 0, 1],
+          ],
+        },
+
+        // base color authored in linear form instead of hex
+        {
+          "bindings": [{ "attribute": "baseColorFactor", "poolRef": 3 }],
+          "materials": [[0]],
+        },
       ],
+      "valuePools": [
+        {
+          "kind": "srgba-hex",
+          "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
+        },
+
+        // one shared float pool, bound by both metallicFactor and roughnessFactor
+        { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] },
+
+        { "kind": "srgb-hex", "values": ["#000000", "#FF6600"] },
+
+        {
+          "kind": "linear-rgba-float",
+          "min": 0,
+          "max": 1,
+          "values": [[1, 0, 0, 1]],
+        },
+      ],
+
       "hierarchyNodes": [
         {
           "name": "parent-1",
+
           "childNodes": [1],
+
           "childObjects": [0],
+
           "transform": {
             "position": [0, 0, 0],
             "rotation": [0, 0, 0, 1],
             "scale": [1, 1, 1],
           },
         },
+
         {
           "name": "parent-2",
+
           "childNodes": [],
           "childObjects": [1],
+
           "transform": {
             "position": [0, 0, 0],
             "rotation": [0, 0, 0, 1],
@@ -417,6 +590,7 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
           },
         },
       ],
+
       "rootHierarchyNodes": [0],
     },
   },
@@ -428,13 +602,16 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
 ```typescript
 interface VoxelJsonFile {
   version: 1;
+
   main: Main;
 }
 
 interface Main {
   runtimeState: RuntimeState;
+
   // optional editor state, aligned by index with the runtime objects
   editState?: EditState;
+
   // user-defined extensions, conventionally vendor-keyed; the core format
   // assigns no meaning and guarantees nothing about its contents
   ext?: { [key: string]: JsonValue };
@@ -443,8 +620,14 @@ interface Main {
 // The runtime scene.
 interface RuntimeState {
   objects: VoxelObject[];
+
   palettes: Palette[];
+
+  // shared value pools, referenced by index from palette bindings
+  valuePools: ValuePool[];
+
   hierarchyNodes: HierarchyNode[];
+
   // indices into hierarchyNodes; the scene's roots
   rootHierarchyNodes: number[];
 }
@@ -458,6 +641,7 @@ interface EditState {
 interface EditObject {
   // [X, Y, Z] size of the edit grid in voxels
   bounds: Vec3;
+
   // [X, Y, Z] translation from the placing node to the edit grid's min corner
   origin: Vec3;
 }
@@ -465,24 +649,30 @@ interface EditObject {
 // Pure geometry; placed only by a hierarchy node that references it.
 interface VoxelObject {
   name: string;
-  // indices into RuntimeState.palettes, in resolution order
-  paletteRefs: number[];
+
+  // palette indices, one per layer (see Objects). Layers are independent
+  // material channels; the format defines no merge across them.
+  layerPaletteRefs: number[];
+
   // [X, Y, Z] size in voxels; voxels occupy [0, X) x [0, Y) x [0, Z). Exactly
   // tight: per-axis the min voxel coordinate is 0 and the bound is the max plus
   // one; [0, 0, 0] when empty. No margin here (that is editState). Required to
   // decode bitmap-base64 and hilbert-delta-varint-base64.
   bounds: Vec3;
-  // [X, Y, Z] translation from the placing node to the grid's min corner;
-  // defaults to [0, 0, 0]. Does not affect the voxel encodings.
+
+  // [X, Y, Z] translation from the placing node to the grid's min corner. Does
+  // not affect the voxel encodings.
   origin: Vec3;
+
   voxelPositions: PositionBlock;
+
   voxelSamples: SampleBlock;
 }
 
 // ## Voxel Encoding
 
 // Both blocks share one voxel order, fixed by the position encoding (see Voxel
-// Order); sample channels are always in that order. The match is an authoring
+// Order); every sample channel is in that order. The match is an authoring
 // invariant that validation cannot verify.
 
 type PositionBlock =
@@ -499,33 +689,87 @@ type PositionBlock =
   | { encoding: "hilbert-delta-varint-base64"; data: string };
 
 type SampleBlock =
-  // One channel per palette: that palette's cell index for every voxel, in
-  // order.
+  // One channel per layer (in `layerPaletteRefs` order): that layer's material index for
+  // every voxel, in voxel order.
   | { encoding: "raw-json"; data: number[][] }
-  // One channel per palette: a flat run stream
-  // [value1, count1, value2, count2, ...].
+  // One channel per layer: a flat run stream [value1, count1, value2, count2, ...].
   | { encoding: "rle-json"; data: number[][] }
-  // One channel per palette: each voxel's cell index bit-packed at width
-  // b = max(1, bitLength(c - 1)) for that palette's cell count
-  // c, MSB-first, base64-encoded (the same packing as the bitmap-base64
-  // position encoding).
+  // One channel per layer: each voxel's material index bit-packed at width
+  // b = max(1, bitLength(M - 1)) for that layer's palette material count M,
+  // MSB-first, base64-encoded (same packing as the bitmap-base64 position encoding).
   | { encoding: "packed-base64"; data: string[] };
 
 // ## Palettes
 
-// A palette declares its attribute keys once, then lists cells as rows of
-// values aligned to those keys: cell c's value for attributes[i] is data[c][i].
-// Every row has attributes.length values; a cell is referenced by its row
-// index.
+// A palette binds attribute names to value pools, then stores its materials
+// column-major: one inner array per binding, in binding order, each of length
+// M, the material count. A voxel samples material m; attribute
+// bindings[b].attribute takes
+// valuePools[bindings[b].poolRef].values[materials[b][m]].
 interface Palette {
-  attributes: string[];
-  data: AttributeValue[][];
+  bindings: Binding[];
+
+  materials: number[][];
 }
 
-// An attribute value is any valid JSON value. The recommended attributes use
-// strings (rgba) and numbers, but the format stores values generically;
-// attribute meaning is by convention and unknown keys are ignored by consumers.
-type AttributeValue = JsonValue;
+// One attribute-to-pool binding; fixes one column of materials.
+interface Binding {
+  // attribute name (see Attributes); advisory, unknown names ignored
+  attribute: string;
+
+  // index into RuntimeState.valuePools
+  poolRef: number;
+}
+
+// A shared pool of values, all of one shape given by kind. The bounded kinds
+// (int, float, and the vector color kinds) require both min and max; every other
+// kind carries neither. Each bound is a finite number or "none" for unbounded on
+// that side.
+type ValuePool =
+  | {
+      kind: BoundedKind;
+
+      min: number | "none";
+
+      max: number | "none";
+
+      values: JsonValue[];
+    }
+  | {
+      kind: Exclude<PoolKind, BoundedKind>;
+      values: JsonValue[]
+    };
+
+// Closed value-shape vocabulary (see Value Pool Kinds).
+type PoolKind =
+  | "json"
+  | "bool"
+  | "float"
+  | "int"
+  | "string"
+  | "srgb-float"
+  | "srgb-hex"
+  | "srgb-int"
+  | "srgba-float"
+  | "srgba-hex"
+  | "srgba-int"
+  | "linear-rgb-float"
+  | "linear-rgb-int"
+  | "linear-rgba-float"
+  | "linear-rgba-int";
+
+// The kinds that carry min/max bounds; see ValuePool.
+type BoundedKind =
+  | "float"
+  | "int"
+  | "srgb-float"
+  | "srgb-int"
+  | "srgba-float"
+  | "srgba-int"
+  | "linear-rgb-float"
+  | "linear-rgb-int"
+  | "linear-rgba-float"
+  | "linear-rgba-int";
 
 type JsonValue =
   | string
@@ -539,23 +783,29 @@ type JsonValue =
 
 interface HierarchyNode {
   name: string;
+
   // indices into Main.hierarchyNodes (DAG, no cycles)
   childNodes: number[];
+
   // indices into Main.objects
   childObjects: number[];
+
   transform: Transform;
 }
 
 interface Transform {
   // [x, y, z]
   position: Vec3;
+
   // unit quaternion [x, y, z, w]
   rotation: Quat;
+
   // [x, y, z]
   scale: Vec3;
 }
 
 type Vec3 = [number, number, number];
+
 type Quat = [number, number, number, number];
 ```
 
@@ -579,13 +829,13 @@ function bitLength(n: number): number {
 }
 
 // Hilbert `bits` per axis from bounds, and packed-base64 channel width from a
-// palette cell count. Both are max(1, ceil(log2(.))) via bitLength.
+// palette material count. Both are max(1, ceil(log2(.))) via bitLength.
 function hilbertBits(bounds: Vec3): number {
   return Math.max(1, bitLength(Math.max(bounds[0], bounds[1], bounds[2]) - 1));
 }
 
-function packedWidth(cellCount: number): number {
-  return Math.max(1, bitLength(cellCount - 1));
+function packedWidth(materialCount: number): number {
+  return Math.max(1, bitLength(materialCount - 1));
 }
 ```
 
@@ -632,7 +882,9 @@ function cellIndex([x, y, z]: Vec3, [, Y, Z]: Vec3): number {
 // to match (sort voxel indices by cellIndex for the same remap that
 // encodeHilbertBlockWithRemap returns).
 function encodeBitmapBlock(positions: Vec3[], bounds: Vec3): string {
-  const occupancy = new Array<number>(bounds[0] * bounds[1] * bounds[2]).fill(0);
+  const occupancy = new Array<number>(bounds[0] * bounds[1] * bounds[2]).fill(
+    0,
+  );
   for (const p of positions) occupancy[cellIndex(p, bounds)] = 1;
   return base64(packBits(occupancy, 1));
 }
@@ -650,32 +902,32 @@ function decodeBitmapBlock(data: string, bounds: Vec3): Vec3[] {
   return out;
 }
 
-// packed-base64: one channel per palette, each voxel's cell index packed at
-// packedWidth(cellCount). `cells` is in the position block's voxel order.
-function encodePackedChannel(cells: number[], cellCount: number): string {
-  return base64(packBits(cells, packedWidth(cellCount)));
+// packed-base64: one layer's channel, each voxel's material index packed at
+// packedWidth(materialCount). `samples` is in the position block's voxel order.
+function encodePackedChannel(samples: number[], materialCount: number): string {
+  return base64(packBits(samples, packedWidth(materialCount)));
 }
 
 function decodePackedChannel(
   data: string,
-  cellCount: number,
+  materialCount: number,
   voxelCount: number,
 ): number[] {
-  return unpackBits(unbase64(data), packedWidth(cellCount), voxelCount);
+  return unpackBits(unbase64(data), packedWidth(materialCount), voxelCount);
 }
 ```
 
 #### Run-Length: `rle-json` samples
 
 ```ts
-// rle-json: one channel per palette as a flat [value, count, ...] run stream;
-// counts are positive and sum to the voxel count.
-function rleEncode(cells: number[]): number[] {
+// rle-json: one layer's channel as a flat [value, count, ...] run stream; counts
+// are positive and sum to the voxel count.
+function rleEncode(samples: number[]): number[] {
   const out: number[] = [];
-  for (let i = 0; i < cells.length; ) {
-    const value = cells[i];
+  for (let i = 0; i < samples.length; ) {
+    const value = samples[i];
     let count = 1;
-    while (cells[i + count] === value) count++;
+    while (samples[i + count] === value) count++;
     out.push(value, count);
     i += count;
   }
@@ -822,8 +1074,8 @@ function varintDecode(bytes: Uint8Array): number[] {
 
 // Compose. base64 / unbase64 are standard (btoa + atob in the browser, Buffer
 // in Node). Voxels are sorted by ascending Hilbert index so the deltas stay
-// positive. `bits` is hilbertBits(object.bounds); packed-base64 channels use
-// packedWidth(cellCount).
+// positive. `bits` is hilbertBits(object.bounds); packed-base64 uses
+// packedWidth(materialCount).
 function encodeHilbertBlock(positions: Vec3[], bits: number): string {
   const idx = positions
     .map((p) => hilbertEncode(p[0], p[1], p[2], bits))
