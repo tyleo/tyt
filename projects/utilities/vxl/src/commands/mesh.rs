@@ -47,16 +47,38 @@ pub struct Mesh {
 
     /// Bake a preset material map, `<name> [path]`, repeatable. Quote the value
     /// to override the default path, as `--texture "albedo model-albedo.png"`.
-    #[arg(value_name = "texture", long)]
+    ///
+    /// Presets:
+    /// - albedo: RGBA base color
+    /// - orm: glTF occlusion, roughness, metallic
+    /// - metallic-roughness: glTF metallic, roughness
+    /// - metallic-smoothness: Unity metallic, smoothness
+    /// - mse: metallic, smoothness, emissive
+    /// - emissive: self-lit base color
+    /// - occlusion: grayscale occlusion
+    /// - roughness: grayscale roughness
+    /// - smoothness: grayscale smoothness
+    #[arg(value_name = "texture", long, verbatim_doc_comment)]
     texture: Vec<String>,
 
     /// Bake a custom material map, `<path> <channels>`, repeatable, where
-    /// `channels` is a comma-separated `R=<expr>,...` list.
+    /// `channels` is a comma-separated `R=<expr>,...` list over the `R`, `G`,
+    /// `B`, `A` channels, at least one named.
+    ///
+    /// Each `<expr>` is one of:
+    /// - <attribute>: a voxel attribute by name, as `metallic` or `rgba`
+    /// - <attribute>.<r|g|b|a>: one component of a color attribute, as `rgba.r`
+    /// - 1-<attribute>: the inverse `1 - value`, as `1-roughness`
+    /// - 0, 1: a constant channel
+    ///
+    /// Attribute keys are voxj attributes or `--define-attribute` aliases;
+    /// `smoothness` is shorthand for `1-roughness`.
     #[arg(
         value_names = ["path", "channels"],
         long = "texture-map",
         num_args = 2,
         action = clap::ArgAction::Append,
+        verbatim_doc_comment,
     )]
     texture_map: Vec<String>,
 
@@ -342,8 +364,9 @@ fn usage(message: &str) -> crate::Error {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_preset, resolve_source};
+    use super::{Mesh, resolve_preset, resolve_source};
     use crate::{AttributeType, ChannelSource, ColorComponent, Texture, TextureBake};
+    use clap::{CommandFactory, ValueEnum};
     use std::collections::HashMap;
 
     fn bindings() -> HashMap<&'static str, (&'static str, AttributeType)> {
@@ -430,5 +453,35 @@ mod tests {
             ChannelSource::One
         );
         assert!(resolve_source(&ChannelSource::ComputedOcclusion, &bindings()).is_err());
+    }
+
+    #[test]
+    fn the_texture_help_lists_every_usable_preset() {
+        let command = Mesh::command();
+        let help = command
+            .get_arguments()
+            .find(|arg| arg.get_id() == "texture")
+            .and_then(|arg| arg.get_long_help())
+            .map(|help| help.to_string())
+            .expect("the --texture argument has long help");
+
+        for texture in Texture::value_variants() {
+            let name = texture
+                .to_possible_value()
+                .expect("every preset has a value")
+                .get_name()
+                .to_owned();
+
+            // `computed-occlusion` needs the unwrap atlas, which `mesh` rejects,
+            // so it stays off the list; every other preset must appear.
+            if let Texture::ComputedOcclusion = texture {
+                assert!(!help.contains(&name), "{name} should not be listed");
+            } else {
+                assert!(
+                    help.contains(&name),
+                    "{name} is missing from --texture help"
+                );
+            }
+        }
     }
 }
