@@ -219,7 +219,7 @@ Value pools live in `main.runtimeState.valuePools`, a shared array referenced by
 { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] }
 { "kind": "float", "min": 1, "max": "none", "values": [1.5, 1.33] } // >= 1
 { "kind": "int", "min": 0, "max": 255, "values": [0, 128, 255] }
-{ "kind": "srgba-int", "min": 0, "max": 255, "values": [[255, 0, 0, 255]] } // 8-bit
+{ "kind": "srgba-float", "min": 0, "max": 1, "values": [[1, 0, 0, 1]] } // 0..1
 { "kind": "srgb-float", "min": 0, "max": "none", "values": [[2, 0, 0]] } // HDR
 ```
 
@@ -236,20 +236,16 @@ Value pools live in `main.runtimeState.valuePools`, a shared array referenced by
 | `string`            | string               | must be a string                                     | `["low", "high"]`              | enumerated tags                                                                               |
 | `srgb-float`        | number[3]            | 3 finite numbers; within `min`/`max`, sRGB           | `[[1, 0, 0], [0.5, 0.5, 0]]`   | emissiveFactor, sRGB float / HDR                                                              |
 | `srgb-hex`          | string               | matches `^#[0-9A-F]{6}$`                             | `["#FF0000", "#204080"]`       | emissiveFactor; opaque custom colors                                                          |
-| `srgb-int`          | number[3]            | 3 integer-valued numbers; within `min`/`max`, sRGB   | `[[255, 0, 0], [128, 128, 0]]` | emissiveFactor, sRGB integer                                                                  |
 | `srgba-float`       | number[4]            | 4 finite numbers; within `min`/`max`, sRGB           | `[[1, 0, 0, 1]]`               | baseColorFactor, sRGB float                                                                   |
 | `srgba-hex`         | string               | matches `^#[0-9A-F]{8}$`                             | `["#FF0000FF"]`                | baseColorFactor, the default color kind                                                       |
-| `srgba-int`         | number[4]            | 4 integer-valued numbers; within `min`/`max`, sRGB   | `[[255, 0, 0, 255]]`           | baseColorFactor, sRGB integer                                                                 |
 | `linear-rgb-float`  | number[3]            | 3 finite numbers; within `min`/`max`, linear         | `[[1, 0, 0], [0, 0.5, 1]]`     | emissiveFactor, linear                                                                        |
-| `linear-rgb-int`    | number[3]            | 3 integer-valued numbers; within `min`/`max`, linear | `[[255, 0, 0], [0, 128, 255]]` | emissiveFactor, integer linear                                                                |
 | `linear-rgba-float` | number[4]            | 4 finite numbers; within `min`/`max`, linear         | `[[1, 0, 0, 1]]`               | baseColorFactor, linear                                                                       |
-| `linear-rgba-int`   | number[4]            | 4 integer-valued numbers; within `min`/`max`, linear | `[[255, 0, 0, 255]]`           | baseColorFactor, integer linear                                                               |
 
 Notes:
 
-1. `float` is a continuous, finite number; `int` is its integer-valued sibling. `min` and `max` bounds apply only to `int`, `float`, and the eight vector color kinds (`-int` and `-float` components); on those kinds both are required, and no other kind may carry them.
-2. `min` and `max` each take a finite number or the string `"none"` for unbounded on that side, and both are always written out. A numeric bound must be integer-valued on `int` and the `-int` color kinds; on the vector color kinds a bound applies per component; when both bounds are finite numbers, `min <= max`.
-3. Colors come in hex, integer, and float forms across two color spaces. `srgb-hex` / `srgba-hex` are `#RRGGBB` / `#RRGGBBAA` sRGB strings, the human-editable default. `srgb-int` / `srgba-int` / `srgb-float` / `srgba-float` are sRGB integer or float components; `linear-rgb-int` / `linear-rgba-int` / `linear-rgb-float` / `linear-rgba-float` are the linear components.
+1. `float` is a continuous, finite number; `int` is its integer-valued sibling. `min` and `max` bounds apply only to `int`, `float`, and the four vector color kinds (the `-float` components); on those kinds both are required, and no other kind may carry them.
+2. `min` and `max` each take a finite number or the string `"none"` for unbounded on that side, and both are always written out. A numeric bound must be integer-valued on `int`; on the vector color kinds a bound applies per component; when both bounds are finite numbers, `min <= max`.
+3. Colors come in hex and float forms across two color spaces. `srgb-hex` / `srgba-hex` are `#RRGGBB` / `#RRGGBBAA` sRGB strings, the human-editable default. `srgb-float` / `srgba-float` are sRGB float components; `linear-rgb-float` / `linear-rgba-float` are the linear components. Hex is sRGB only; a linear color is always written in float form.
 4. `kind` is required and has no default; the bounded kinds require both `min` and `max`. A value pool has no optional fields.
 
 ## Palettes
@@ -303,16 +299,16 @@ The recommended attribute vocabulary is glTF's metallic-roughness model, so a vo
 
 | Attribute            | Kind                                                                                         | Range | Default     | Meaning                                                                            |
 | -------------------- | -------------------------------------------------------------------------------------------- | ----- | ----------- | ---------------------------------------------------------------------------------- |
-| `baseColorFactor`    | `srgba-hex` (default), `srgba-int`, `srgba-float`, `linear-rgba-int`, or `linear-rgba-float` |       | `#FFFFFFFF` | Base color, straight alpha = opacity (glTF `baseColorFactor`)                      |
+| `baseColorFactor`    | `srgba-hex` (default), `srgba-float`, or `linear-rgba-float`                                  |       | `#FFFFFFFF` | Base color, straight alpha = opacity (glTF `baseColorFactor`)                      |
 | `metallicFactor`     | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `1`         | Metalness (glTF `metallicFactor`)                                                  |
 | `roughnessFactor`    | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `1`         | Roughness (glTF `roughnessFactor`)                                                 |
 | `occlusionStrength`  | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `1`         | Flat ambient occlusion, 1 = none (glTF `occlusionTexture.strength`)                |
-| `emissiveFactor`     | `srgb-hex` (default), `srgb-int`, `srgb-float`, `linear-rgb-int`, or `linear-rgb-float`      |       | `#000000`   | Emissive color, black = none (glTF `emissiveFactor`)                               |
+| `emissiveFactor`     | `srgb-hex` (default), `srgb-float`, or `linear-rgb-float`                                     |       | `#000000`   | Emissive color, black = none (glTF `emissiveFactor`)                               |
 | `emissiveStrength`   | `float`, `min: 0`                                                                            | 0+    | `1`         | Multiplies emissive color in linear space (glTF `KHR_materials_emissive_strength`) |
 | `ior`                | `float`, `min: 1`                                                                            | 1+    | `1.5`       | Index of refraction (glTF `KHR_materials_ior`)                                     |
 | `transmissionFactor` | `float`, `min: 0`, `max: 1`                                                                  | 0-1   | `0`         | Light transmission through surface (glTF `KHR_materials_transmission`)             |
 
-A color attribute binds a hex, integer-component, or float-component color kind in either the sRGB or linear space (see [Value Pool Kinds](#value-pool-kinds)); hex is the authoring default. Base color takes an alpha-carrying kind and emission an alpha-less one, and all forms carry the same color.
+A color attribute binds a hex or float-component color kind in either the sRGB or linear space (see [Value Pool Kinds](#value-pool-kinds)); hex, which is sRGB only, is the authoring default. Base color takes an alpha-carrying kind and emission an alpha-less one, and all forms carry the same color.
 
 Emission is two attributes. `emissiveFactor` is the emitted color, `srgb-hex` by default or a vector form, no alpha, default `#000000` for no emission, authored and linearized like `baseColorFactor`. `emissiveStrength` is a numeric multiplier over that color, `float` with `min: 0`, default `1`; values above `1` push emission into HDR/bloom range. Rendered emission is `linearize(emissiveFactor) * emissiveStrength`. The defaults compose: a black color emits nothing at any strength, and a color left at the default strength `1` emits at face value, so a material that sets only `emissiveFactor` emits that color at strength 1.
 
@@ -429,14 +425,12 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
         5. `float`: a finite number within `min`/`max`.
         6. `srgb-hex`: matches `^#[0-9A-F]{6}$`.
         7. `srgba-hex`: matches `^#[0-9A-F]{8}$`.
-        8. `srgb-int` / `linear-rgb-int`: an array of exactly 3 integer-valued numbers, each within `min`/`max`.
-        9. `srgba-int` / `linear-rgba-int`: an array of exactly 4 integer-valued numbers, each within `min`/`max`.
-        10. `srgb-float` / `linear-rgb-float`: an array of exactly 3 finite numbers, each within `min`/`max`.
-        11. `srgba-float` / `linear-rgba-float`: an array of exactly 4 finite numbers, each within `min`/`max`.
+        8. `srgb-float` / `linear-rgb-float`: an array of exactly 3 finite numbers, each within `min`/`max`.
+        9. `srgba-float` / `linear-rgba-float`: an array of exactly 4 finite numbers, each within `min`/`max`.
     3. `min` and `max`:
-        1. both present when `kind` is `int`, `float`, or one of the eight vector color kinds, and both absent for every other kind.
+        1. both present when `kind` is `int`, `float`, or one of the four vector color kinds, and both absent for every other kind.
         2. each is a finite number or the string `none`, meaning unbounded on that side.
-        3. a numeric bound is integer-valued when `kind` is `int` or an `-int` color kind.
+        3. a numeric bound is integer-valued when `kind` is `int`.
         4. `min <= max` when both are finite numbers.
 10. **Palettes** (`runtimeState.palettes`): an array, possibly empty. Each palette's keys are drawn only from { `bindings`, `materials` }.
     1. `bindings` is a non-empty array; each binding has exactly the keys `attribute`, a non-empty string, and `poolRef`, an integer.
@@ -749,27 +743,19 @@ type PoolKind =
   | "string"
   | "srgb-float"
   | "srgb-hex"
-  | "srgb-int"
   | "srgba-float"
   | "srgba-hex"
-  | "srgba-int"
   | "linear-rgb-float"
-  | "linear-rgb-int"
-  | "linear-rgba-float"
-  | "linear-rgba-int";
+  | "linear-rgba-float";
 
 // The kinds that carry min/max bounds; see ValuePool.
 type BoundedKind =
   | "float"
   | "int"
   | "srgb-float"
-  | "srgb-int"
   | "srgba-float"
-  | "srgba-int"
   | "linear-rgb-float"
-  | "linear-rgb-int"
-  | "linear-rgba-float"
-  | "linear-rgba-int";
+  | "linear-rgba-float";
 
 type JsonValue =
   | string
