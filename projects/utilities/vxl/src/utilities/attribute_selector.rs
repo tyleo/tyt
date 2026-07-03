@@ -24,16 +24,13 @@ impl AttributeSelector {
         })
     }
 
-    /// The default selector when no `--attribute` is given: every palette's
-    /// `rgba` as swatches.
-    pub fn default_rgba_swatch() -> Self {
+    /// The default selector when no `--attribute` is given: every palette and
+    /// every attribute in the `auto` format, the same as `'*' '*' auto`.
+    pub fn default_all_auto() -> Self {
         AttributeSelector {
             palette: PaletteRef::All,
-            attribute: AttributeRef::Key {
-                key: "rgba".to_string(),
-                component: None,
-            },
-            format: PaletteShowFormat::Swatch,
+            attribute: AttributeRef::All,
+            format: PaletteShowFormat::Auto,
         }
     }
 }

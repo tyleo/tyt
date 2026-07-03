@@ -21,7 +21,7 @@ pub struct PaletteShow {
     /// `<palette> <attribute> <format>`. The palette is an index or `*`, the
     /// attribute a key with an optional `.r`/`.g`/`.b`/`.a` color component or
     /// `*`, and the format one of `auto`, `swatch`, `value`, `swatch-value`.
-    /// Defaults to `'*' rgba swatch` when omitted.
+    /// Defaults to `'*' '*' auto` when omitted.
     #[arg(
         value_names = ["palette", "attribute", "format"],
         long = "attribute",
@@ -45,7 +45,7 @@ impl PaletteShow {
         // clap fixes each occurrence at three values, so the flattened list
         // chunks cleanly into one selector per occurrence.
         let selectors = if self.attribute.is_empty() {
-            vec![AttributeSelector::default_rgba_swatch()]
+            vec![AttributeSelector::default_all_auto()]
         } else {
             self.attribute
                 .chunks(3)

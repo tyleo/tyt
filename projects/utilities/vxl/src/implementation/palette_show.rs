@@ -790,16 +790,18 @@ mod tests {
     }
 
     #[test]
-    fn default_selector_shows_every_palette_rgba() {
+    fn default_selector_shows_every_palette_and_attribute() {
         let state = sample_state();
         let collections =
-            resolve_collections(&state, &[AttributeSelector::default_rgba_swatch()]).unwrap();
+            resolve_collections(&state, &[AttributeSelector::default_all_auto()]).unwrap();
         let output = render(&collections, PaletteShowLayout::Row, None);
         assert_eq!(
             output,
-            "0.rgba \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n\
+            "0.rgba     \x1b[48;2;255;0;0m  \x1b[0m #FF0000FF \x1b[48;2;0;255;0m  \x1b[0m #00FF0080\n\
              \n\
-             1.rgba \x1b[48;2;0;0;255m  \x1b[0m\n"
+             0.metallic 1 0.2\n\
+             \n\
+             1.rgba     \x1b[48;2;0;0;255m  \x1b[0m #0000FFFF\n"
         );
     }
 
