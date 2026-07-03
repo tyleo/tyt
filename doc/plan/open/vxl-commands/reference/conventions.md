@@ -19,11 +19,11 @@ These hold across the commands and match the existing `to` commands.
    `<key>.component` grammar to read one channel of a color; the mutating
    `quantize` and `remap` operate on a whole attribute and reject a component.
 5. The read-only reports render with `--layout`, `markdown` (default),
-   `pretty-json`, or `compact-json`: `palette list`, `validate`, and `info`.
-   [`palette list`](palette/list.md) adds a `hierarchy` value that draws the
-   listing as a tree like [`hierarchy show`](hierarchy/show.md).
-   [`palette show`](palette/show.md) has its own rendering options, and
-   [`hierarchy show`](hierarchy/show.md) prints only its tree.
+   `pretty-json`, or `compact-json`: `validate` and `info`.
+   [`palette list`](palette/list.md) shares those values but adds a `hierarchy`
+   tree like [`hierarchy show`](hierarchy/show.md) and defaults to it rather than
+   `markdown`. [`palette show`](palette/show.md) has its own rendering options,
+   and [`hierarchy show`](hierarchy/show.md) prints only its tree.
 6. Multiple values are passed by repeating the flag, as in
    `--select-index 0 --select-index 3`, not as one comma-separated argument. The
    exception is the `--texture-map` channel list, where the comma-separated RGBA

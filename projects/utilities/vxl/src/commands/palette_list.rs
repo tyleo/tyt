@@ -20,7 +20,7 @@ pub struct PaletteList {
     from: Option<Format>,
 
     /// How to lay out the listing.
-    #[arg(value_name = "layout", long, default_value = "markdown")]
+    #[arg(value_name = "layout", long, default_value = "hierarchy")]
     layout: PaletteListLayout,
 
     /// Show each palette's attribute keys. `--show-attributes false` drops them.

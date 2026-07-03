@@ -10,13 +10,26 @@ Gives a per-palette overview of the whole document so you can see what is there
 before printing any colors. Each palette shows its index and, unless turned off,
 its ordered attribute keys, its cell count, and which objects reference it, which
 is exactly the index and attribute that [`show`](show.md),
-[`quantize`](quantize.md), and [`remap`](remap.md) ask for. Example:
+[`quantize`](quantize.md), and [`remap`](remap.md) ask for. By default it prints
+a tree:
 
-| index | attributes          | cells | used by            |
-| ----- | ------------------- | ----- | ------------------ |
-| 0     | rgba, metallic      | 12    | Object A, Object B |
-| 1     | rgba                | 2     | Object B           |
-| 2     | metallic, roughness | 1     | Object B           |
+```
+palettes
+├ 0
+│ ├ cellCount: 12
+│ ├ attributes
+│ │ ├ rgba
+│ │ └ metallic
+│ └ objects
+│   ├ Object A
+│   └ Object B
+└ 1
+  ├ cellCount: 2
+  ├ attributes
+  │ └ rgba
+  └ objects
+    └ Object B
+```
 
 From there, `vxl palette show <input> --index 1` prints palette 1's colors.
 
@@ -43,31 +56,20 @@ branch in the tree, and the other two behave the same way.
 
 ## Layout
 
-`--layout` `markdown` | `hierarchy` | `pretty-json` | `compact-json` (default
-`markdown`): how to render the listing.
+`--layout` `hierarchy` | `markdown` | `pretty-json` | `compact-json` (default
+`hierarchy`): how to render the listing.
 
-1. `markdown` (default): the aligned table above, one column per enabled field.
-2. `hierarchy`: an indented tree like [`hierarchy show`](../hierarchy/show.md), a
-   `palettes` header over one branch per palette index, with the cell count as a
-   `cellCount: <n>` leaf and `attributes` and `objects` as subtrees:
+1. `hierarchy` (default): the indented tree above, in the
+   [`hierarchy show`](../hierarchy/show.md) idiom, a `palettes` header over one
+   branch per palette index, with the cell count as a `cellCount: <n>` leaf and
+   `attributes` and `objects` as subtrees.
+2. `markdown`: an aligned table, one column per enabled field:
 
-   ```
-   palettes
-   ├ 0
-   │ ├ cellCount: 12
-   │ ├ attributes
-   │ │ ├ rgba
-   │ │ └ metallic
-   │ └ objects
-   │   ├ Object A
-   │   └ Object B
-   └ 1
-     ├ cellCount: 2
-     ├ attributes
-     │ └ rgba
-     └ objects
-       └ Object B
-   ```
+   | index | attributes          | cells | used by            |
+   | ----- | ------------------- | ----- | ------------------ |
+   | 0     | rgba, metallic      | 12    | Object A, Object B |
+   | 1     | rgba                | 2     | Object B           |
+   | 2     | metallic, roughness | 1     | Object B           |
 
 3. `pretty-json` and `compact-json`: the listing as pretty or compact JSON, one
    record per palette carrying its index and each enabled field, the referencing

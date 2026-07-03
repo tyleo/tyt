@@ -145,10 +145,12 @@ one record per palette with the keys `index`, `attributes`, `cells`, and
 Its layout is a command-specific `PaletteListLayout` rather than the shared
 `ReportLayout`, because only `palette list` adds a `hierarchy` value beside
 `markdown` and the two JSON forms, the same reason `palette show` carries its own
-layout enum. The `hierarchy` layout draws the listing as a tree in the
-`hierarchy show` idiom: a `palettes` header over one bare-index branch per
-palette, its cell count a `cellCount: <n>` leaf and its `attributes` and
-`objects` as subtrees. The box-drawing glyphs those two trees share, the four
+layout enum. `hierarchy` is the default, since the tree reads as the natural
+shape of a palette with its nested attributes and referencing objects; the table
+and JSON are opt-in through `--layout`. The `hierarchy` layout draws the listing
+as a tree in the `hierarchy show` idiom: a `palettes` header over one bare-index
+branch per palette, its cell count a `cellCount: <n>` leaf and its `attributes`
+and `objects` as subtrees. The box-drawing glyphs those two trees share, the four
 connector and extension constants, moved out of `hierarchy_show` into a
 `tree_glyphs` leaf module both draw from, so the connectors cannot drift apart.
 The renderer collects a palette's enabled child branches into a `HierarchyChild`
