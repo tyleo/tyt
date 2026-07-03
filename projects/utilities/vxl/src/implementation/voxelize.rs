@@ -102,9 +102,9 @@ fn resolve_grid(extent: TyVector3<f64>, resolution: GridResolution) -> (TyVector
     }
 }
 
-/// Applies the `--max-palette-cells` cap to voxelize's one generated palette,
-/// noting on standard error when it fires. Inert when the cap is `none` or the
-/// palette already fits.
+/// Applies the `--max-palette-cells` cap to voxelize's one generated palette.
+/// Inert when the cap is `none` or the palette already fits. Reduction is the
+/// designed default, so it fires on nearly every run and stays quiet.
 fn reduce_generated_palette(state: &mut VoxMain, reduction: PaletteReduction) -> Result<()> {
     let Some(max_cells) = reduction.max_cells else {
         return Ok(());
@@ -114,18 +114,14 @@ fn reduce_generated_palette(state: &mut VoxMain, reduction: PaletteReduction) ->
         return Ok(());
     };
 
-    if let Some((before, after)) = reduce_palette(
+    reduce_palette(
         state,
         palette,
         max_cells,
         reduction_method(reduction.method),
         color_space(reduction.space),
         dither(reduction.dither),
-    )? {
-        eprintln!(
-            "note: reduced palette from {before} to {after} cells to fit --max-palette-cells {max_cells}"
-        );
-    }
+    )?;
 
     Ok(())
 }

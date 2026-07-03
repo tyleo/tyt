@@ -459,8 +459,9 @@ population-weighted Lloyd iterations to a step cap. All cluster on the same
 method only changes the grouping. Octree's eight-way folds are coarser than the
 two-way median split, so it can stop a little under the cap. `--dither` is built
 too (see [Dithering](#dithering)); every reduction control now applies when the
-reduction fires and is inert when it does not. The cap fires with a note to
-standard error, never failing.
+reduction fires and is inert when it does not. The cap fires quietly, never
+failing: reduction is the designed default, so a note would print on nearly
+every run.
 
 ## Dithering
 

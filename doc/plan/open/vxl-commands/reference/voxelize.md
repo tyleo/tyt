@@ -57,8 +57,9 @@ size with `--meters-per-voxel`.
 7. `--max-palette-cells` `<n>` | `none` (default `256`): the most cells the
    document's palette may hold. Sampling can yield many distinct materials,
    `per-texel` especially; when the count exceeds `<n>` the palette is reduced
-   to it and a note is written to standard error, never failing and never
-   silently dropping cells. `256` keeps each per-voxel sample index within one
+   to it, never failing and never silently dropping cells. Reduction is the
+   designed default, firing on nearly every run, so it stays quiet. `256` keeps
+   each per-voxel sample index within one
    byte (the format packs it at `ceil(log2(cells))` bits) and matches the
    familiar 256-color ceiling; `none` disables the cap for bit-exact materials.
    Reduction clusters on `rgba` and a merged cell takes its cluster
