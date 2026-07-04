@@ -7,7 +7,7 @@ use serde::{
 use std::fmt::{Formatter, Result as FmtResult};
 
 /// One side of a value pool's `min`/`max` bound: a finite number, or the
-/// literal string `"none"` for unbounded on that side. Never JSON `null`.
+/// literal string `"none"` for unbounded on that side.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VoxjBound {
     /// A finite numeric bound. Serialized as a JSON integer when integral, so a
