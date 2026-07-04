@@ -6,14 +6,14 @@ use crate::VoxMap;
 /// opaque extension namespace. Numbers, integral or not, are held as `f64`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum VoxValue {
+    /// A boolean.
+    Bool(bool),
+
     /// A number.
     Number(f64),
 
     /// A string.
     Text(String),
-
-    /// A boolean.
-    Bool(bool),
 
     /// An ordered list of values.
     Array(Vec<VoxValue>),

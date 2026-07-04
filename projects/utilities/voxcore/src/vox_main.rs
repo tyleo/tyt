@@ -1,6 +1,6 @@
 use crate::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, Error, Result, VoxGcRemap,
-    VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState, VoxValue,
+    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, BVoxValuePool, Error, Result,
+    VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState, VoxValue, VoxValuePool,
 };
 use branded_id::{IdVec, U32Id, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
@@ -93,6 +93,38 @@ impl VoxMain {
             .palette_ids
             .iter()
             .map(move |id| (id, unsafe { self.runtime_state.palettes.get(id) }))
+    }
+
+    /// Adds a shared value pool, returning its id (its listing index).
+    pub fn add_value_pool(&mut self, pool: VoxValuePool) -> U32Id<BVoxValuePool> {
+        let id = self.runtime_state.value_pool_ids.retain();
+        self.runtime_state.value_pools.retain(id, pool);
+        id
+    }
+
+    /// Number of shared value pools.
+    pub fn value_pool_count(&self) -> usize {
+        self.runtime_state.value_pool_ids.len()
+    }
+
+    /// The value pool `id`, or `None` if not one of this state's.
+    pub fn value_pool(&self, id: U32Id<BVoxValuePool>) -> Option<&VoxValuePool> {
+        // Safety: retained ids have a value.
+        self.runtime_state
+            .value_pool_ids
+            .is_retained(id)
+            .then(|| unsafe { self.runtime_state.value_pools.get(id) })
+    }
+
+    /// Value pools in id order, as `(id, pool)`.
+    pub fn iter_value_pools(
+        &self,
+    ) -> impl Iterator<Item = (U32Id<BVoxValuePool>, &VoxValuePool)> + '_ {
+        // Safety: retained ids have a value.
+        self.runtime_state
+            .value_pool_ids
+            .iter()
+            .map(move |id| (id, unsafe { self.runtime_state.value_pools.get(id) }))
     }
 
     /// Adds a hierarchy node, returning its id (its listing index). Its
@@ -556,7 +588,8 @@ impl VoxMain {
 mod tests {
     use crate::{
         BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, BVoxPaletteRef,
-        Error, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValue,
+        BVoxValuePool, Error, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValue,
+        VoxValuePool, VoxValuePoolKind,
     };
     use branded_id::U32Id;
     use ty_math::{TyQuaternion, TyVector3, TyVector3U32};
@@ -612,6 +645,65 @@ mod tests {
         let names: Vec<&str> = state.iter_objects().map(|(_, o)| o.name()).collect();
         assert_eq!(names, ["a", "b"]);
         assert_eq!(b.to_u32(), 1);
+    }
+
+    #[test]
+    fn add_and_read_back_value_pools_in_id_order() {
+        let mut state = VoxMain::default();
+        let colors = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[1.0, 0.0, 0.0, 1.0]],
+        });
+        let metallic = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::Number(1.0),
+            values: vec![0.0, 1.0],
+        });
+
+        assert_eq!(state.value_pool_count(), 2);
+        assert_eq!(colors, U32Id::<BVoxValuePool>::from_u32(0));
+        assert_eq!(metallic.to_u32(), 1);
+        assert_eq!(
+            state.value_pool(colors).map(VoxValuePool::kind),
+            Some(VoxValuePoolKind::Srgba)
+        );
+        assert_eq!(
+            state.value_pool(metallic).map(VoxValuePool::values_len),
+            Some(2)
+        );
+        // An id past the pool is not one of this state's.
+        assert_eq!(state.value_pool(U32Id::<BVoxValuePool>::from_u32(2)), None);
+
+        let kinds: Vec<VoxValuePoolKind> = state
+            .iter_value_pools()
+            .map(|(_, pool)| pool.kind())
+            .collect();
+        assert_eq!(kinds, [VoxValuePoolKind::Srgba, VoxValuePoolKind::Float]);
+    }
+
+    #[test]
+    fn clone_state_deep_copies_value_pools() {
+        let mut state = VoxMain::default();
+        state.add_value_pool(VoxValuePool::Int {
+            min: VoxBound::None,
+            max: VoxBound::None,
+            values: vec![7],
+        });
+
+        let copy = state.clone_state();
+        assert_eq!(copy.value_pool_count(), 1);
+        assert_eq!(
+            copy.value_pool(U32Id::<BVoxValuePool>::from_u32(0)),
+            Some(&VoxValuePool::Int {
+                min: VoxBound::None,
+                max: VoxBound::None,
+                values: vec![7],
+            })
+        );
+
+        // Mutating the original must not touch the copy.
+        state.add_value_pool(VoxValuePool::Bool { values: vec![true] });
+        assert_eq!(state.value_pool_count(), 2);
+        assert_eq!(copy.value_pool_count(), 1);
     }
 
     #[test]

@@ -15,12 +15,12 @@ pub struct VoxHierarchyNode {
     /// Display name.
     pub name: String,
 
+    /// Transform applied to this node and its subtree.
+    pub transform: TyTransformF64,
+
     /// Child nodes.
     pub child_nodes: Vec<U32Id<BVoxHierarchyNode>>,
 
     /// Objects placed by this node.
     pub child_objects: Vec<U32Id<BVoxObject>>,
-
-    /// Transform applied to this node and its subtree.
-    pub transform: TyTransformF64,
 }

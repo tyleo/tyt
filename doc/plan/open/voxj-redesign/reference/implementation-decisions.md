@@ -333,3 +333,39 @@ palettes, and nodes (item 8). `branded_id`'s `scalar_id!` hand-implements
 `Clone`, `Copy`, `Debug`, `Eq`/`PartialEq`, `Hash`, and `Ord` for any
 `TBrand: ?Sized` with no bound leakage, so `VoxPaletteBinding` derives `Eq`
 even though `BVoxValuePool` is a bare marker struct with no derives.
+
+### Chunk 2: the value-pool store lands additively before the palette rewrite
+
+Chunk 2 adds the shared value-pool store to `VoxRuntimeState` and, pulled
+forward from checklist item 6, the additive `VoxMain` accessors that reach it.
+Like chunk 1, the chunk is purely additive: no existing signature or behavior
+changes, so all of `voxcore` stays green and every prior test passes unchanged.
+This keeps the crux (the `VoxPalette` rewrite, which cannot compile in halves)
+as its own reviewable chunk rather than smearing it across this one.
+
+The store is `value_pool_ids: IdStruct<BVoxValuePool>` plus
+`value_pools: IdField<BVoxValuePool, VoxValuePool>`, the same id-pool-plus-column
+shape as the object, palette, and hierarchy-node stores. The checklist offered a
+plain indexed vec instead; the id-pool shape wins because `VoxPaletteBinding.pool`
+is a `U32Id<BVoxValuePool>`, so a pool must be a first-class pooled entity that
+`gc` relabels alongside objects, palettes, and nodes once the rewrite lands. The
+fields lead the struct, so `VoxRuntimeState` now mirrors the wire's
+`valuePools`-first layout (`valuePools, palettes, objects, hierarchyNodes,
+rootHierarchyNodes`, per Phase 1's field-order note); field order has no wire
+effect in `voxcore` (no serde), so this is only for readability.
+
+`clone_runtime_state` clones each pool with a plain `.clone()`, not the
+`.clone_object()`/`.clone_palette()` rebuild the SoA-backed columns need, because
+`VoxValuePool` is plain data and derives `Clone`. `Drop` releases the
+`value_pools` column against `value_pool_ids` like the others, so the pooled
+`Vec`s are freed rather than leaked.
+
+Pulled forward from item 6: `add_value_pool`, `value_pool_count`, `value_pool`,
+and `iter_value_pools`, mirroring the palette accessors, so the store is
+reachable and a round-trip plus a deep-copy test exercise it. Deferred to the
+palette-rewrite chunk (items 3, 6, 8): `validate` gains no pool checks yet, `gc`
+does not compact the pool store yet, and there is no `remove_value_pool`. All
+three are safe to defer here. With no bindings referencing pools and no removals
+possible, the pool ids stay contiguous from zero, so an untouched `gc` leaves
+them correctly numbered; and `validate` ignoring pools cannot admit a state a
+later reader would reject, since nothing reads a pool yet.

@@ -192,8 +192,14 @@ and `packed-base64` round-trips at the material-derived width.
       in `lib.rs`. Deferred: the `BVoxPaletteCell` -> material brand rename moves
       to the `VoxPalette`-rewrite chunk (item 3), so this item stays unchecked
       until then. See the decisions log.)
-- [ ] Add the shared value-pool store to `VoxRuntimeState` (an id pool plus
+- [x] Add the shared value-pool store to `VoxRuntimeState` (an id pool plus
       column, or a plain indexed vec), and extend its clone and `Drop`.
+      (Chunk 2 done: `value_pool_ids: IdStruct<BVoxValuePool>` plus
+      `value_pools: IdField<BVoxValuePool, VoxValuePool>`, the id-pool-plus-column
+      shape the other stores use so bindings resolve and gc can relabel pools;
+      `clone_runtime_state` and `Drop` extended. The additive `VoxMain`
+      value-pool accessors from item 6 landed alongside it, so the store is
+      reachable and tested. See the decisions log.)
 - [ ] Rewrite `VoxPalette` from the attributes-by-cells grid to bindings plus
       column-major materials of value-indices into pools. Rework
       `add_attribute`/`add_cell` into the new build API, `cell_value` into a
@@ -214,6 +220,8 @@ and `packed-base64` round-trips at the material-derived width.
       range, material column arity, and value-index range checks. Add
       `add_value_pool` and iteration accessors. Extend `gc` to compact pools and
       materials.
+      (The `add_value_pool` and iteration accessors landed early with the
+      value-pool store, chunk 2; this item is now the validate and gc work.)
 - [ ] Update `error.rs`: add variants for unknown or invalid kind, missing or
       non-finite bound, malformed value for kind, pool ref out of range, binding
       arity mismatch, and value-index out of range; retire
