@@ -459,3 +459,21 @@ binding's pool (`MaterialValue`). Material *column arity* needs no runtime check
 structurally has a value-index for every binding, which `value_index`'s
 `expect` documents. The duplicate-palette-ref rule is dropped, since two layers
 may share a palette.
+
+### `VoxPalette` carries a stored attribute-name index
+
+`VoxPalette` keeps a `by_attribute: HashMap<String, U32Id<BVoxPaletteBinding>>`
+alongside the SoA columns, exposed as `binding_by_attribute(&str)`, so callers
+resolve a binding by its attribute name in O(1) rather than scanning
+`iter_bindings` (the pattern every converter uses). It is maintained rather than
+scanned by choice: `add_binding` inserts, `clone_palette` clones it, and `gc`
+rebuilds it from the relabeled bindings (a full rebuild is O(bindings) and
+simpler than relabeling each value through the binding remap). `remove_binding`
+drops the entry only when it still points at the removed binding, so a duplicate
+attribute (which `validate` rejects, but which can exist transiently) that
+overwrote the entry with a later binding leaves that later binding's lookup
+intact. The index is therefore exact for a validated palette, whose attribute
+keys are unique, and best-effort otherwise; `validate` still catches duplicates
+by iterating the bindings, not the index. The added `HashMap` is plain data
+outside the unsafe SoA machinery: it drops on its own after `Drop` runs and needs
+no manual release, and Miri confirms the palette stays leak-clean.

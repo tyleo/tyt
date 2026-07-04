@@ -3,6 +3,7 @@ use branded_id::{
     U32Id,
     soa::{IdField, IdRemap, IdStruct},
 };
+use std::collections::HashMap;
 
 /// A palette: an ordered set of attribute-to-pool bindings and a set of
 /// materials, stored column-major. Each binding names an attribute and the
@@ -28,6 +29,12 @@ pub struct VoxPalette {
 
     /// Per material, one value-index per binding.
     materials: IdField<BVoxMaterial, IdField<BVoxPaletteBinding, u32>>,
+
+    /// Attribute-key index into `bindings`, for O(1)
+    /// [`binding_by_attribute`](Self::binding_by_attribute) lookup. Rebuilt by
+    /// [`gc`](Self::gc); exact for a validated palette, whose attribute keys are
+    /// unique.
+    by_attribute: HashMap<String, U32Id<BVoxPaletteBinding>>,
 }
 
 impl VoxPalette {
@@ -42,6 +49,7 @@ impl VoxPalette {
         pool: U32Id<BVoxValuePool>,
     ) -> U32Id<BVoxPaletteBinding> {
         let binding_id = self.binding_ids.retain();
+        self.by_attribute.insert(attribute.clone(), binding_id);
         self.bindings
             .retain(binding_id, VoxPaletteBinding { attribute, pool });
 
@@ -65,6 +73,15 @@ impl VoxPalette {
         self.binding_ids
             .is_retained(id)
             .then(|| unsafe { self.bindings.get(id) })
+    }
+
+    /// The binding bound to `attribute`, or `None` if no binding has that
+    /// attribute key. O(1) through the attribute index. If a palette transiently
+    /// binds the same attribute twice, which
+    /// [`VoxMain::validate`](crate::VoxMain::validate) rejects, this returns the
+    /// last such binding added.
+    pub fn binding_by_attribute(&self, attribute: &str) -> Option<U32Id<BVoxPaletteBinding>> {
+        self.by_attribute.get(attribute).copied()
     }
 
     /// Bindings in id order, as `(id, binding)`. Binding order is the material
@@ -152,6 +169,7 @@ impl VoxPalette {
             bindings,
             material_ids: self.material_ids.clone(),
             materials,
+            by_attribute: self.by_attribute.clone(),
         }
     }
 
@@ -164,6 +182,14 @@ impl VoxPalette {
     pub fn remove_binding(&mut self, id: U32Id<BVoxPaletteBinding>) -> Option<()> {
         if !self.binding_ids.is_retained(id) {
             return None;
+        }
+        // Drop this binding's index entry, but only if the entry still points
+        // here: a duplicate attribute (which validate rejects) may have
+        // overwritten it with a later binding that must keep its lookup.
+        // Safety: a retained binding has a value.
+        let attribute = unsafe { self.bindings.get(id) }.attribute.clone();
+        if self.by_attribute.get(&attribute) == Some(&id) {
+            self.by_attribute.remove(&attribute);
         }
         // A value-index is Copy, so releasing each material's slot at `id` would
         // be a no-op; leave it for gc to compact and only free the binding.
@@ -214,6 +240,16 @@ impl VoxPalette {
         // Safety: the material column was in sync with the pre-gc material pool,
         // and nothing has retained or released since.
         unsafe { self.materials.gc(&material_remap) };
+
+        // Rebuild the attribute index against the relabeled binding ids.
+        self.by_attribute.clear();
+        let binding_ids: Vec<_> = self.binding_ids.iter().collect();
+        for binding_id in binding_ids {
+            // Safety: retained binding ids have a value.
+            let attribute = unsafe { self.bindings.get(binding_id) }.attribute.clone();
+            self.by_attribute.insert(attribute, binding_id);
+        }
+
         material_remap
     }
 
@@ -288,6 +324,26 @@ mod tests {
         // One binding, but two value-indices supplied.
         assert_eq!(palette.add_material(vec![0, 1]), None);
         assert_eq!(palette.material_count(), 0);
+    }
+
+    #[test]
+    fn binding_by_attribute_indexes_and_survives_gc() {
+        let mut palette = VoxPalette::default();
+        let color = palette.add_binding("baseColorFactor".to_owned(), pool(0));
+        let metal = palette.add_binding("metallicFactor".to_owned(), pool(1));
+
+        assert_eq!(palette.binding_by_attribute("baseColorFactor"), Some(color));
+        assert_eq!(palette.binding_by_attribute("metallicFactor"), Some(metal));
+        assert_eq!(palette.binding_by_attribute("missing"), None);
+
+        // Removing a binding drops it from the index; gc renumbers the rest and
+        // the index follows.
+        palette.remove_binding(color);
+        assert_eq!(palette.binding_by_attribute("baseColorFactor"), None);
+        palette.gc();
+        let metal = U32Id::<BVoxPaletteBinding>::from_u32(0);
+        assert_eq!(palette.binding_by_attribute("metallicFactor"), Some(metal));
+        assert_eq!(palette.binding_by_attribute("baseColorFactor"), None);
     }
 
     #[test]
