@@ -5,12 +5,13 @@ use crate::MaterialChannel;
 /// channel.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MaterialBake {
-    /// The straight-RGBA base color from the `rgba` attribute, four channels.
+    /// The straight-RGBA base color from the `baseColorFactor` attribute, four
+    /// channels.
     RgbaColor,
 
-    /// The emissive color: the `rgba` base color scaled by the `emissive`
-    /// strength, so the glTF emissive slot glows in the material's own color.
-    /// Three channels (RGB), opaque.
+    /// The emissive color: the `emissiveFactor` color scaled by the
+    /// `emissiveStrength`, so the glTF emissive slot glows in the emissive
+    /// color. Three channels (RGB), opaque.
     EmissiveColor,
 
     /// A channel packing, one to four [`MaterialChannel`]s in `R`, `G`, `B`,

@@ -10,7 +10,7 @@ pub enum MaterialChannel {
     /// inverted to `1 - value` when `invert` is set. A missing attribute falls
     /// back to its spec default.
     Attribute {
-        /// The voxel attribute key read from the merged material.
+        /// The voxel attribute key read from the material.
         key: String,
 
         /// The color component to read, or `None` to read a scalar.

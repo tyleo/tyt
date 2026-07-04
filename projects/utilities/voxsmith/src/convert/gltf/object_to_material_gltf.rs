@@ -36,34 +36,37 @@ pub fn object_to_material_gltf(
 #[cfg(test)]
 mod tests {
     use crate::{
-        MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest, MaterialSlot, MeshMethod,
-        ResourceStorage, object_to_material_gltf,
+        BASE_COLOR_FACTOR, METALLIC_FACTOR, MaterialBake, MaterialChannel, MaterialMap,
+        MaterialMeshRequest, MaterialSlot, MeshMethod, ResourceStorage, object_to_material_gltf,
     };
     use gltf::Gltf;
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValue};
+    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
-    /// A one-voxel red cube through a single `rgba` palette, and the request the
-    /// test bakes; `maps` and `storage` vary per test.
+    /// A one-voxel red cube through a single `baseColorFactor` palette, and the
+    /// request the test bakes; `maps` and `storage` vary per test.
     fn cube_gltf(maps: Vec<MaterialMap>, storage: ResourceStorage) -> Vec<u8> {
         let mut state = VoxMain::default();
 
+        let base = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[1.0, 0.0, 0.0, 1.0]],
+        });
+
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        let red = palette
-            .add_cell(vec![VoxValue::Text("#FF0000FF".to_owned())])
-            .unwrap();
+        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base);
+        let red = palette.add_material(vec![0]).unwrap();
         let palette_id = state.add_palette(palette);
 
         let mut object = VoxObject::new("cube".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_palette_ref(palette_id, red);
+        let layer = object.add_layer(palette_id, red);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[red]).unwrap();
         let object_id = state.add_object(object);
 
         let request = MaterialMeshRequest {
             method: MeshMethod::Greedy,
+            layer,
             scale: 1.0,
             maps,
             storage,
@@ -113,7 +116,7 @@ mod tests {
                     name: "cube-mse.png".to_owned(),
                     slot: MaterialSlot::None,
                     bake: MaterialBake::Packing(vec![MaterialChannel::Attribute {
-                        key: "metallic".to_owned(),
+                        key: METALLIC_FACTOR.to_owned(),
                         component: None,
                         invert: false,
                     }]),

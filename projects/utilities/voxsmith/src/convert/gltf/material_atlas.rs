@@ -1,8 +1,9 @@
 use crate::{
-    MaterialBake, Result, atlas_dimensions, bake_atlas_pixels, encode_rgba8_png,
+    Error, MaterialBake, Result, atlas_dimensions, bake_atlas_pixels, encode_rgba8_png,
     resolve_used_materials,
 };
-use voxcore::{VoxMain, VoxObject};
+use branded_id::U32Id;
+use voxcore::{BVoxLayer, VoxMain, VoxObject};
 
 /// A baked palette material atlas: the shared texel dimensions and one PNG image
 /// per requested [`MaterialBake`], in request order.
@@ -17,18 +18,20 @@ pub struct MaterialAtlas {
     pub images: Vec<Vec<u8>>,
 }
 
-/// Bakes `bakes` over `object`'s used palette materials into a [`MaterialAtlas`]:
-/// one texel per distinct merged material the object samples, laid out
-/// near-square, each image a PNG. `state` resolves the object's referenced
+/// Bakes `bakes` over the materials `object` uses in layer `layer` into a
+/// [`MaterialAtlas`]: one texel per distinct material the object samples, laid
+/// out near-square, each image a PNG. `state` resolves the object's referenced
 /// palettes. This is the geometry-free material bake the palette atlas shares
 /// with the textured mesh writer, and the surface a bake-only material command
-/// builds on.
+/// builds on. Errors if `layer` is not one of `object`'s layers.
 pub fn object_to_material_atlas(
     state: &VoxMain,
     object: &VoxObject,
+    layer: U32Id<BVoxLayer>,
     bakes: &[MaterialBake],
 ) -> Result<MaterialAtlas> {
-    let used = resolve_used_materials(object);
+    let used = resolve_used_materials(object, layer)
+        .ok_or_else(|| Error::invalid("the selected layer is not one of the object's layers"))?;
 
     let (width, height) = atlas_dimensions(used.len());
 
@@ -49,9 +52,12 @@ pub fn object_to_material_atlas(
 
 #[cfg(test)]
 mod tests {
-    use crate::{MaterialBake, MaterialChannel, object_to_material_atlas};
+    use crate::{
+        BASE_COLOR_FACTOR, MaterialBake, MaterialChannel, ROUGHNESS_FACTOR,
+        object_to_material_atlas,
+    };
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValue};
+    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The 8-byte PNG signature.
     const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
@@ -60,19 +66,17 @@ mod tests {
     fn bakes_one_png_per_requested_map() {
         let mut state = VoxMain::default();
 
+        let base = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[1.0, 0.0, 0.0, 1.0]],
+        });
+
         let mut palette = VoxPalette::default();
-
-        palette.add_attribute("rgba".to_owned());
-
-        let red = palette
-            .add_cell(vec![VoxValue::Text("#FF0000FF".to_owned())])
-            .unwrap();
-
+        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base);
+        let red = palette.add_material(vec![0]).unwrap();
         let palette_id = state.add_palette(palette);
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_palette_ref(palette_id, red);
-
+        let layer = object.add_layer(palette_id, red);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[red]).unwrap();
 
@@ -81,14 +85,15 @@ mod tests {
         let bakes = [
             MaterialBake::RgbaColor,
             MaterialBake::Packing(vec![MaterialChannel::Attribute {
-                key: "roughness".to_owned(),
+                key: ROUGHNESS_FACTOR.to_owned(),
                 component: None,
                 invert: false,
             }]),
         ];
 
         let atlas =
-            object_to_material_atlas(&state, state.object(object_id).unwrap(), &bakes).unwrap();
+            object_to_material_atlas(&state, state.object(object_id).unwrap(), layer, &bakes)
+                .unwrap();
 
         // One texel (one used material), one PNG per bake, each a real PNG.
         assert_eq!((atlas.width, atlas.height), (1, 1));

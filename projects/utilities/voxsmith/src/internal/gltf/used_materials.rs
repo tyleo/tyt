@@ -1,38 +1,40 @@
 use branded_id::U32Id;
 use std::collections::HashMap;
-use voxcore::{BVoxPalette, BVoxPaletteCell, BVoxPaletteRef, BVoxVoxel, VoxObject};
+use voxcore::{BVoxLayer, BVoxMaterial, BVoxPalette, BVoxVoxel, VoxObject};
 
-/// The distinct merged materials a meshed object actually uses.
+/// The distinct materials an object's voxels sample in one layer, the set the
+/// material atlas bakes.
 ///
-/// A voxel's material is the tuple of cells it samples across the object's
-/// palette references. Under the palette atlas each distinct tuple takes one
-/// texel, so this collects the tuples the object uses, first seen in raster
-/// order, giving the compact per-mesh material set. An object with no references
-/// resolves to a single, all-default material every voxel shares.
+/// A layer references a palette that holds many materials, and each live voxel
+/// samples one of them, so across the whole object a single layer uses a set of
+/// materials, not just one. This collects that set, the distinct materials the
+/// object's voxels sample in the read layer, first seen in raster order, and
+/// records which one each voxel sampled. The bake gives each distinct material
+/// one atlas texel ([`len`](Self::len) of them), and each voxel's mesh faces
+/// sample the texel of the material it uses (via
+/// [`material_index`](Self::material_index)).
 pub(crate) struct UsedMaterials {
-    /// The object's palette references in resolution order, paired with the
-    /// palette each names, for reading a material's attribute values.
-    references: Vec<(U32Id<BVoxPaletteRef>, U32Id<BVoxPalette>)>,
+    /// The palette the read layer references.
+    palette: U32Id<BVoxPalette>,
 
-    /// Distinct materials in first-seen order; each holds the cell sampled from
-    /// every reference, aligned with [`references`](Self::references).
-    materials: Vec<Vec<U32Id<BVoxPaletteCell>>>,
+    /// Distinct materials in first-seen order, one per atlas texel.
+    materials: Vec<U32Id<BVoxMaterial>>,
 
-    /// Per live voxel id, the index into [`materials`](Self::materials) of the
-    /// material it samples.
-    index_of: HashMap<u32, u32>,
+    /// Per live voxel, the position in [`materials`](Self::materials), and so the
+    /// atlas texel, of the material it samples.
+    index_of: HashMap<U32Id<BVoxVoxel>, u32>,
 }
 
 impl UsedMaterials {
-    /// The object's palette references in resolution order.
-    pub(crate) fn references(&self) -> &[(U32Id<BVoxPaletteRef>, U32Id<BVoxPalette>)] {
-        &self.references
+    /// The palette the read layer references.
+    pub(crate) fn palette(&self) -> U32Id<BVoxPalette> {
+        self.palette
     }
 
-    /// The cells the material at `index` samples, aligned with
-    /// [`references`](Self::references).
-    pub(crate) fn cells(&self, index: usize) -> &[U32Id<BVoxPaletteCell>] {
-        &self.materials[index]
+    /// The material at position `index` in the used set, or `None` when `index`
+    /// is out of range.
+    pub(crate) fn material(&self, index: usize) -> Option<U32Id<BVoxMaterial>> {
+        self.materials.get(index).copied()
     }
 
     /// Number of distinct materials.
@@ -40,48 +42,47 @@ impl UsedMaterials {
         self.materials.len()
     }
 
-    /// The index into the material set of the material live voxel `voxel`
-    /// samples, or `None` if `voxel` is not a live voxel of the resolved object.
+    /// The atlas texel `voxel` samples, its material's position in the used set,
+    /// or `None` if `voxel` is not a live voxel of the resolved object.
     pub(crate) fn material_index(&self, voxel: U32Id<BVoxVoxel>) -> Option<u32> {
-        self.index_of.get(&voxel.to_u32()).copied()
+        self.index_of.get(&voxel).copied()
     }
 }
 
-/// Resolves the distinct merged materials `object` uses, first seen in raster
-/// order. Every live voxel's cell tuple is folded into the set; two voxels share
-/// a material exactly when they sample the same cell from every reference.
-pub(crate) fn resolve_used_materials(object: &VoxObject) -> UsedMaterials {
-    let references: Vec<(U32Id<BVoxPaletteRef>, U32Id<BVoxPalette>)> =
-        object.iter_palette_refs().collect();
+/// Resolves the distinct materials `object` uses in layer `layer`, first seen in
+/// raster order, or `None` when `layer` is not one of `object`'s layers and so
+/// names no palette. Two voxels share a material exactly when they sample the
+/// same material in that layer.
+pub(crate) fn resolve_used_materials(
+    object: &VoxObject,
+    layer: U32Id<BVoxLayer>,
+) -> Option<UsedMaterials> {
+    let palette = object
+        .iter_layers()
+        .find(|&(id, _)| id == layer)
+        .map(|(_, palette)| palette)?;
 
-    let mut materials: Vec<Vec<U32Id<BVoxPaletteCell>>> = Vec::new();
-    let mut lookup: HashMap<Vec<u32>, u32> = HashMap::new();
-    let mut index_of: HashMap<u32, u32> = HashMap::new();
+    let mut materials: Vec<U32Id<BVoxMaterial>> = Vec::new();
+    let mut lookup: HashMap<U32Id<BVoxMaterial>, u32> = HashMap::new();
+    let mut index_of: HashMap<U32Id<BVoxVoxel>, u32> = HashMap::new();
 
     for voxel in object.iter_live() {
-        let cells: Vec<U32Id<BVoxPaletteCell>> = references
-            .iter()
-            .map(|&(reference, _)| {
-                object
-                    .voxel_cell(voxel, reference)
-                    .expect("a live voxel samples a cell from every reference")
-            })
-            .collect();
+        let material = object
+            .voxel_material(voxel, layer)
+            .expect("a live voxel samples a material in one of the object's layers");
 
-        let key: Vec<u32> = cells.iter().map(|cell| cell.to_u32()).collect();
-
-        let index = *lookup.entry(key).or_insert_with(|| {
+        let index = *lookup.entry(material).or_insert_with(|| {
             let index = materials.len() as u32;
-            materials.push(cells);
+            materials.push(material);
             index
         });
 
-        index_of.insert(voxel.to_u32(), index);
+        index_of.insert(voxel, index);
     }
 
-    UsedMaterials {
-        references,
+    Some(UsedMaterials {
+        palette,
         materials,
         index_of,
-    }
+    })
 }

@@ -37,47 +37,48 @@ pub fn object_to_material_glb(
 #[cfg(test)]
 mod tests {
     use crate::{
-        MaterialBake, MaterialMap, MaterialMeshRequest, MaterialSlot, MeshMethod, ResourceStorage,
-        object_to_material_glb,
+        BASE_COLOR_FACTOR, MaterialBake, MaterialMap, MaterialMeshRequest, MaterialSlot,
+        MeshMethod, ResourceStorage, object_to_material_glb,
     };
     use branded_id::U32Id;
     use gltf::{Gltf, image::Source};
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxObject, VoxMain, VoxObject, VoxPalette, VoxValue};
+    use voxcore::{BVoxLayer, BVoxObject, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The 8-byte PNG signature.
     const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
-    /// A 2x1x1 bar whose two voxels are red and blue through one `rgba` palette,
-    /// so the mesh uses two materials.
-    fn red_blue_bar() -> (VoxMain, U32Id<BVoxObject>) {
+    /// A 2x1x1 bar whose two voxels are red and blue through one
+    /// `baseColorFactor` palette, so the mesh uses two materials.
+    fn red_blue_bar() -> (VoxMain, U32Id<BVoxObject>, U32Id<BVoxLayer>) {
         let mut state = VoxMain::default();
 
+        let base = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]],
+        });
+
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        let red = palette
-            .add_cell(vec![VoxValue::Text("#FF0000FF".to_owned())])
-            .unwrap();
-        let blue = palette
-            .add_cell(vec![VoxValue::Text("#0000FFFF".to_owned())])
-            .unwrap();
+        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base);
+        let red = palette.add_material(vec![0]).unwrap();
+        let blue = palette.add_material(vec![1]).unwrap();
         let palette_id = state.add_palette(palette);
 
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_palette_ref(palette_id, red);
-        for (x, cell) in [(0, red), (1, blue)] {
+        let layer = object.add_layer(palette_id, red);
+        for (x, material) in [(0, red), (1, blue)] {
             let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
-            object.retain_voxel(voxel, &[cell]).unwrap();
+            object.retain_voxel(voxel, &[material]).unwrap();
         }
         let object_id = state.add_object(object);
 
-        (state, object_id)
+        (state, object_id, layer)
     }
 
-    /// An albedo (base-color) request under `storage`.
-    fn albedo_request(storage: ResourceStorage) -> MaterialMeshRequest {
+    /// An albedo (base-color) request under `storage`, reading `layer`.
+    fn albedo_request(storage: ResourceStorage, layer: U32Id<BVoxLayer>) -> MaterialMeshRequest {
         MaterialMeshRequest {
             method: MeshMethod::Greedy,
+            layer,
             scale: 1.0,
             maps: vec![MaterialMap {
                 name: "bar-albedo.png".to_owned(),
@@ -90,11 +91,11 @@ mod tests {
 
     #[test]
     fn embeds_a_base_color_material_and_a_uv_set() {
-        let (state, object_id) = red_blue_bar();
+        let (state, object_id, layer) = red_blue_bar();
         let files = object_to_material_glb(
             &state,
             state.object(object_id).unwrap(),
-            &albedo_request(ResourceStorage::Embedded),
+            &albedo_request(ResourceStorage::Embedded, layer),
         )
         .unwrap();
 
@@ -129,11 +130,11 @@ mod tests {
 
     #[test]
     fn external_storage_writes_a_sidecar_and_references_it() {
-        let (state, object_id) = red_blue_bar();
+        let (state, object_id, layer) = red_blue_bar();
         let files = object_to_material_glb(
             &state,
             state.object(object_id).unwrap(),
-            &albedo_request(ResourceStorage::External),
+            &albedo_request(ResourceStorage::External, layer),
         )
         .unwrap();
 

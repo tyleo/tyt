@@ -323,8 +323,10 @@ files, only in the phase-5/6 modules.
 
 ## Phase 5: `voxsmith` color helpers and glTF pipeline
 
-- [ ] Move the shared attribute-name constants into one module set to the glTF
-      names, imported by every converter, the glTF pipeline, and vxl.
+- [x] Move the shared attribute-name constants into one module set to the glTF
+      names, imported by every converter, the glTF pipeline, and vxl. (Landed as
+      the crate-root, always-compiled, public `gltf_attributes` module, so the
+      non-gltf converters and vxl import it too; see the decisions log.)
 - [ ] Retarget `object_color_ref` to `baseColorFactor`, and generalize
       `cell_color` and `parse_color_hex` to resolve a color through
       material-to-binding-to-pool and decode by pool kind, not hex only.
@@ -333,14 +335,31 @@ files, only in the phase-5/6 modules.
       and set the default-scalar table to the new names with `metallicFactor`
       default 1. Keep writing `metallicFactor` explicitly where voxelize does so
       the matte look is preserved; the flip only bites absent-attribute defaults.
-- [ ] Redefine a material for the atlas as a material index into the selected
+      (Partly done: the `default_scalar` table is retargeted to the glTF names
+      with `metallicFactor` default 1; the `MeshMaterial` rename is on the build
+      path, deferred.)
+- [x] Redefine a material for the atlas as a material index into the selected
       layer (default 0) in `used_materials`; remove the cross-reference merge.
+      (`resolve_used_materials` reads one layer by id and returns
+      `Option<UsedMaterials>`; the merge is gone. The layer is a passed-in id, not
+      a hardcoded 0, and the option is hoisted to the callers. See the log.)
 - [ ] Carry emissive as color plus strength through `sample_material`,
       `mesh_emissive_map`, and the `EmissiveColor` bake
       (`emissiveFactor * emissiveStrength` in linear); keep import and export in
-      sync for glTF round-trips.
+      sync for glTF round-trips. (Partly done: the `EmissiveColor` bake reads
+      `emissiveFactor * emissiveStrength`; the `sample_material` /
+      `mesh_emissive_map` side is on the build path, deferred.)
 - [ ] Update the glTF import (`from_gltf_bytes`) and its tests, and the atlas and
       material-document tests, for the renamed attributes and the color default.
+      (Partly done: the atlas and material-document tests are rebuilt to the
+      pool/binding/material/layer API; the `from_gltf_bytes` importer is
+      deferred.)
+
+Chunk split (see decisions log): this chunk ports the glTF material-atlas
+read/bake path, checklist items 1 and 4 plus the bake-side of items 3, 5, and 6.
+The build path (`MeshMaterial`, `sample_material`, the mesh maps, `voxelize_mesh`,
+and the `from_gltf_bytes` importer) and the color helpers (item 2) are deferred to
+follow-up chunks.
 
 Gate: glTF export and import build and round-trip; a voxelized flat mesh renders
 as before.

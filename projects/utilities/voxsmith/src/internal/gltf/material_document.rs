@@ -1,6 +1,7 @@
 use crate::{
-    MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage, Result, atlas_dimensions,
-    bake_atlas_pixels, encode_rgba8_png, mesh_slices, resolve_used_materials, texel_center,
+    Error, MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage, Result,
+    atlas_dimensions, bake_atlas_pixels, encode_rgba8_png, mesh_slices, resolve_used_materials,
+    texel_center,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
@@ -36,14 +37,16 @@ pub(crate) struct MaterialDocument {
 /// requested map becomes one image and texture; recognized maps fill their glTF
 /// slot and the rest are listed under the material's `extras`. `target` decides
 /// how embedded images travel, and `request.storage` whether they are embedded,
-/// loose, or both. An object with no geometry yields an empty scene.
+/// loose, or both. An object with no geometry yields an empty scene. Errors if
+/// `request.layer` is not one of `object`'s layers.
 pub(crate) fn build_material_document(
     state: &VoxMain,
     object: &VoxObject,
     request: &MaterialMeshRequest,
     target: MeshTarget,
 ) -> Result<MaterialDocument> {
-    let used = resolve_used_materials(object);
+    let used = resolve_used_materials(object, request.layer)
+        .ok_or_else(|| Error::invalid("the selected layer is not one of the object's layers"))?;
 
     let geometry = mesh_slices(
         object,

@@ -591,3 +591,71 @@ Deferred, hostile-input only, and uniform with the existing load path:
    checked `u32::try_from`, a uniform hardening pass better done on its own than
    folded into the palette port. Neither gap affects a well-formed document,
    since a real producer never emits a billion-span origin or a `2^32` index.
+
+## Phase 5: `voxsmith` color helpers and glTF pipeline
+
+### Chunk boundary: the glTF material-atlas read/bake path, verified scoped
+
+Phase 5's `gltf` feature holds two code-independent subsystems. The read/bake
+path (`used_materials`, `bake_atlas`, `material_document`, `material_atlas`, and
+the `object_to_material_*` writers) turns a voxcore palette into a glTF material
+atlas. The build/voxelize path (`MeshMaterial`, `sample_material`, the mesh maps,
+`voxelize_mesh`, and the `from_gltf_bytes` importer) turns a glTF mesh into a
+voxcore palette. They couple only through the `gltf` feature flag, not through
+code: the read path never names `MeshMaterial`. This chunk ports the read/bake
+path. It was verified under `--no-default-features --features gltf,voxj` with the
+build path (`internal/mesh`, `convert/voxelize`, `from_gltf_bytes`) and the
+still-unported `reduce_palette` temporarily cfg-gated out and then reverted, so
+the gating is absent from the staged diff; 51 tests pass. The color helpers
+(`object_color_ref`, `cell_color`, `parse_color_hex`, checklist item 2) are
+deferred to Phase 6, since their only callers are the Phase 6 converters.
+
+### The shared glTF attribute vocab is a crate-root public module
+
+`gltf_attributes.rs` holds `pub const BASE_COLOR_FACTOR` and the rest of the
+glTF metallic-roughness names. It is a top-level, always-compiled, public module
+like `color_space`, not behind the `gltf` feature, because the non-`gltf` format
+converters (Goxel, MagicaVoxel, Qubicle, Voxel Max) and `vxl` also bind palette
+attributes by these names. Being public API, a constant unused in a feature
+subset does not warn as dead code.
+
+### `used_materials` reads one layer by id, returning `Option<UsedMaterials>`
+
+The cross-layer merge is gone. `resolve_used_materials(object, layer:
+U32Id<BVoxLayer>) -> Option<UsedMaterials>` returns `None` when `layer` is not one
+of the object's layers and so names no palette. `UsedMaterials` then carries a
+non-optional `palette: U32Id<BVoxPalette>` and a plain `Vec<U32Id<BVoxMaterial>>`,
+since a live voxel in a valid layer always samples a real material, plus
+`index_of: HashMap<U32Id<BVoxVoxel>, u32>` mapping each voxel to its atlas texel.
+The layer is a passed-in id, not a hardcoded index; resolving a `--layer` ordinal
+to a layer id lives at the CLI boundary in Phase 7. The `Option` is hoisted out of
+the bake machinery: each entry point (`object_to_material_atlas`,
+`build_material_document`) consumes it once with `ok_or_else` into an `Err`, so
+`bake_atlas_pixels` and its helpers take a plain `&UsedMaterials`. An
+unresolvable layer is therefore an error, not the old one-default-texel fallback,
+which was a merge-model vestige; real objects always carry a layer and the CLI
+resolves `--layer` first.
+
+### `material_index` stays a `u32` texel position
+
+The one non-id integer in this surface is `UsedMaterials::material_index -> u32`,
+the dense `0..len` atlas-texel position that `texel_center` indexes and
+`mesh_slices` keys on. It is a positional index into the atlas grid, not a pooled
+entity, so it is not branded.
+
+### The bake decodes colors and scalars by pool kind
+
+`bake_atlas` reads an attribute as `(pool, value_index)` through
+`VoxMain::material_value`, then decodes by the pool's kind: sRGB float components
+in `[0, 1]` scale to bytes, linear components re-encode to sRGB through `ty_math`,
+`float`/`int` pools give scalars, and a missing attribute falls back to
+`default_scalar` (or opaque white for a color). The `default_scalar` table is
+retargeted to the glTF names with `metallicFactor` defaulting to `1`.
+
+### The EmissiveColor bake splits emissive into factor and strength
+
+`MaterialBake::EmissiveColor` now reads `emissiveFactor`, an sRGB color defaulting
+to black, times `emissiveStrength`, a float defaulting to `0`, multiplied in
+linear light, replacing the old base-color-times-scalar form. The
+`sample_material` and `mesh_emissive_map` side of the split lives on the build
+path and is deferred with it.
