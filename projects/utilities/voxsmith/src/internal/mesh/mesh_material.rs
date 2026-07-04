@@ -1,60 +1,47 @@
 use ty_math::TySrgbaColor;
-use voxcore::VoxValue;
 
-/// A mesh material's flat PBR factors, resolved into the Voxel Json attribute
-/// vocabulary a voxel palette cell carries: `rgba`, `metallic`, `roughness`,
-/// `emissive`, and `occlusion`. This is the per-primitive material: one cell per
-/// mesh material, read from its factors alone.
+/// A mesh material's flat PBR factors in the glTF metallic-roughness attribute
+/// vocabulary a voxel palette material carries: `baseColorFactor`,
+/// `metallicFactor`, `roughnessFactor`, `emissiveFactor`, `emissiveStrength`, and
+/// `occlusionStrength`. This is the per-primitive material: one material per mesh
+/// material, read from its factors alone. The voxelizer turns each distinct
+/// material into one palette material over value pools bound by these names.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct MeshMaterial {
-    /// Straight-RGBA base color in the sRGB storage encoding.
-    pub rgba: TySrgbaColor,
+    /// Straight-RGBA base color in the sRGB storage encoding. glTF
+    /// `baseColorFactor`.
+    pub base_color: TySrgbaColor,
 
-    /// Metalness, `0..=1`.
+    /// Metalness, `0..=1`. glTF `metallicFactor`.
     pub metallic: f64,
 
-    /// Roughness, `0..=1`.
+    /// Roughness, `0..=1`. glTF `roughnessFactor`.
     pub roughness: f64,
 
-    /// Emissive strength scaling `rgba`, `0+`.
-    pub emissive: f64,
+    /// Emissive color in the sRGB storage encoding. glTF `emissiveFactor` carries
+    /// no alpha, so the alpha is held opaque and ignored.
+    pub emissive_factor: TySrgbaColor,
 
-    /// Flat ambient occlusion, `0..=1` (`1` = none).
+    /// Emissive strength scaling [`emissive_factor`](Self::emissive_factor), `0+`.
+    /// glTF's `KHR_materials_emissive_strength`.
+    pub emissive_strength: f64,
+
+    /// Flat ambient occlusion, `0..=1` (`1` = none). glTF `occlusionStrength`.
     pub occlusion: f64,
 }
 
-/// The attribute keys a voxelized material writes, in the order
-/// [`MeshMaterial::cell_values`] returns them.
-pub(crate) const MATERIAL_ATTRIBUTES: [&str; 5] =
-    ["rgba", "metallic", "roughness", "emissive", "occlusion"];
-
 impl MeshMaterial {
-    /// A flat opaque material of `rgba` with default finish: matte
+    /// A flat opaque material of `base_color` with default finish: matte
     /// (`roughness 1`), non-metal, non-emissive, unoccluded. This is the whole
     /// body in flat mode, and the invented interior a fill color paints.
-    pub fn flat(rgba: TySrgbaColor) -> Self {
+    pub fn flat(base_color: TySrgbaColor) -> Self {
         Self {
-            rgba,
+            base_color,
             metallic: 0.0,
             roughness: 1.0,
-            emissive: 0.0,
+            emissive_factor: TySrgbaColor::new(0, 0, 0, 255),
+            emissive_strength: 0.0,
             occlusion: 1.0,
         }
-    }
-
-    /// The `#RRGGBBAA` hex string for [`rgba`](Self::rgba).
-    pub fn hex(&self) -> String {
-        self.rgba.to_hex()
-    }
-
-    /// One palette-cell row, one value per key in [`MATERIAL_ATTRIBUTES`] order.
-    pub fn cell_values(&self) -> Vec<VoxValue> {
-        vec![
-            VoxValue::Text(self.hex()),
-            VoxValue::Number(self.metallic),
-            VoxValue::Number(self.roughness),
-            VoxValue::Number(self.emissive),
-            VoxValue::Number(self.occlusion),
-        ]
     }
 }

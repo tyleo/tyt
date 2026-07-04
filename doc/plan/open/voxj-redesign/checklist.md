@@ -330,36 +330,46 @@ files, only in the phase-5/6 modules.
 - [ ] Retarget `object_color_ref` to `baseColorFactor`, and generalize
       `cell_color` and `parse_color_hex` to resolve a color through
       material-to-binding-to-pool and decode by pool kind, not hex only.
-- [ ] Rename `MeshMaterial` fields and `MATERIAL_ATTRIBUTES` to the glTF vocab,
+      (Deferred to Phase 6; these helpers' only callers are the Phase 6 goxl,
+      mvox, qbcl, and vmax converters, so they land with that chunk. See the
+      decisions log.)
+- [x] Rename `MeshMaterial` fields and `MATERIAL_ATTRIBUTES` to the glTF vocab,
       split `emissive` into `emissiveFactor` color and `emissiveStrength` number,
       and set the default-scalar table to the new names with `metallicFactor`
       default 1. Keep writing `metallicFactor` explicitly where voxelize does so
       the matte look is preserved; the flip only bites absent-attribute defaults.
-      (Partly done: the `default_scalar` table is retargeted to the glTF names
-      with `metallicFactor` default 1; the `MeshMaterial` rename is on the build
-      path, deferred.)
+      (Build-path chunk done: `MeshMaterial` now carries `base_color`, `metallic`,
+      `roughness`, `emissive_factor`, `emissive_strength`, and `occlusion` in the
+      glTF vocab; `MATERIAL_ATTRIBUTES` and `cell_values`/`hex` are gone, the
+      six-binding palette build moved into `voxelize_mesh`, which writes every
+      scalar explicitly. The `default_scalar` table was already retargeted in the
+      read/bake chunk.)
 - [x] Redefine a material for the atlas as a material index into the selected
       layer (default 0) in `used_materials`; remove the cross-reference merge.
       (`resolve_used_materials` reads one layer by id and returns
       `Option<UsedMaterials>`; the merge is gone. The layer is a passed-in id, not
       a hardcoded 0, and the option is hoisted to the callers. See the log.)
-- [ ] Carry emissive as color plus strength through `sample_material`,
+- [x] Carry emissive as color plus strength through `sample_material`,
       `mesh_emissive_map`, and the `EmissiveColor` bake
       (`emissiveFactor * emissiveStrength` in linear); keep import and export in
-      sync for glTF round-trips. (Partly done: the `EmissiveColor` bake reads
-      `emissiveFactor * emissiveStrength`; the `sample_material` /
-      `mesh_emissive_map` side is on the build path, deferred.)
-- [ ] Update the glTF import (`from_gltf_bytes`) and its tests, and the atlas and
+      sync for glTF round-trips. (Build-path chunk done: the sampler now overrides
+      the emissive COLOR per texel and leaves `emissiveStrength` as the material's
+      flat scalar; `mesh_emissive_map` returns the linear emissive color instead
+      of collapsing to the strongest channel. The bake side landed in the
+      read/bake chunk.)
+- [x] Update the glTF import (`from_gltf_bytes`) and its tests, and the atlas and
       material-document tests, for the renamed attributes and the color default.
-      (Partly done: the atlas and material-document tests are rebuilt to the
-      pool/binding/material/layer API; the `from_gltf_bytes` importer is
-      deferred.)
+      (Build-path chunk done: `from_gltf_bytes` reads `baseColorFactor` and the
+      split `emissiveFactor`/`emissiveStrength`, and its tests read voxel values
+      through the layer/material/binding/pool API. The atlas and material-document
+      tests landed in the read/bake chunk.)
 
-Chunk split (see decisions log): this chunk ports the glTF material-atlas
-read/bake path, checklist items 1 and 4 plus the bake-side of items 3, 5, and 6.
-The build path (`MeshMaterial`, `sample_material`, the mesh maps, `voxelize_mesh`,
-and the `from_gltf_bytes` importer) and the color helpers (item 2) are deferred to
-follow-up chunks.
+Chunk split (see decisions log): the read/bake chunk ported the glTF
+material-atlas read/bake path, checklist items 1 and 4 plus the bake-side of items
+3, 5, and 6. This build-path chunk finishes items 3, 5, and 6: `MeshMaterial`,
+`sample_material`, `mesh_emissive_map`, `voxelize_mesh`, and the `from_gltf_bytes`
+importer. The color helpers (item 2) remain deferred to Phase 6, where their only
+callers are ported.
 
 Gate: glTF export and import build and round-trip; a voxelized flat mesh renders
 as before.

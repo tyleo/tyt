@@ -1,11 +1,14 @@
 use crate::{
-    Error, FillMode, MATERIAL_ATTRIBUTES, MaterialMode, Mesh, MeshMaterial, Result, VoxelGrid,
+    BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, FillMode, METALLIC_FACTOR,
+    MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, VoxelGrid,
     sample_material, voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
 use ty_math::{TySrgbaColor, TyTransformF64, TyVector3, TyVector3U32};
-use voxcore::{BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette};
+use voxcore::{
+    BVoxMaterial, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
+};
 
 /// The color a body with no sampled surface falls back to when `fill_color` is
 /// `None`: opaque white.
@@ -59,9 +62,10 @@ pub fn voxelize_mesh(
 
     let cell_materials = resolve_materials(mesh, &grid, counts, material_mode, fill_color);
 
-    let (palette, samples, default_cell) = build_palette(&cell_materials);
-
     let mut state = VoxMain::default();
+
+    let (palette, samples, default_material) = build_palette(&mut state, &cell_materials);
+
     let palette_id = state.add_palette(palette);
 
     // The object name: an explicit override, else the mesh's own name, else the
@@ -73,14 +77,14 @@ pub fn voxelize_mesh(
 
     let mut object = VoxObject::new(object_name, counts).ok_or_else(|| grid_too_large(counts))?;
 
-    object.add_palette_ref(palette_id, default_cell);
+    object.add_layer(palette_id, default_material);
 
     for (index, sample) in samples.iter().enumerate() {
-        if let Some(cell) = sample {
+        if let Some(material) = sample {
             let voxel = U32Id::from_u32(index as u32);
             object
-                .retain_voxel(voxel, &[*cell])
-                .expect("a grid index is a live voxel sampling one reference");
+                .retain_voxel(voxel, &[*material])
+                .expect("a grid index is a live voxel sampling the one layer");
         }
     }
 
@@ -214,56 +218,207 @@ fn fill_interior(
 }
 
 /// Assembles a palette from a per-cell material list: near-identical materials
-/// merge to one cell, and each filled cell samples the cell of its material. The
-/// default cell is the first built, or a lone white cell for an all-empty grid,
+/// merge to one palette material, and each filled cell samples the material of
+/// its cell. Each glTF attribute binds a deduplicated value pool, added to
+/// `state`, and each material carries one value-index per binding. The default
+/// material is the first built, or a lone white material for an all-empty grid,
 /// so the palette is never empty.
 fn build_palette(
+    state: &mut VoxMain,
     cell_materials: &[Option<MeshMaterial>],
 ) -> (
     VoxPalette,
-    Vec<Option<U32Id<BVoxPaletteCell>>>,
-    U32Id<BVoxPaletteCell>,
+    Vec<Option<U32Id<BVoxMaterial>>>,
+    U32Id<BVoxMaterial>,
 ) {
-    let mut palette = material_palette();
-
-    let mut cells: HashMap<MaterialKey, U32Id<BVoxPaletteCell>> = HashMap::new();
-
-    let samples: Vec<Option<U32Id<BVoxPaletteCell>>> = cell_materials
+    // Merge near-identical materials into a distinct list, first seen in raster
+    // order, remembering each filled cell's position in it.
+    let mut distinct: Vec<MeshMaterial> = Vec::new();
+    let mut lookup: HashMap<MaterialKey, usize> = HashMap::new();
+    let cell_indices: Vec<Option<usize>> = cell_materials
         .iter()
         .map(|&material| {
             material.map(|material| {
-                *cells
-                    .entry(material_key(&material))
-                    .or_insert_with(|| add_material(&mut palette, material))
+                *lookup.entry(material_key(&material)).or_insert_with(|| {
+                    let index = distinct.len();
+                    distinct.push(material);
+                    index
+                })
             })
         })
         .collect();
 
-    let first_cell = palette.iter_cells().next();
+    // An all-empty grid still needs a non-empty palette so its pools and default
+    // material are valid; give it a lone white material.
+    if distinct.is_empty() {
+        distinct.push(MeshMaterial::flat(DEFAULT_FILL));
+    }
 
-    let default_cell = match first_cell {
-        Some(cell) => cell,
-        None => add_material(&mut palette, MeshMaterial::flat(DEFAULT_FILL)),
-    };
+    // One deduplicated pool per attribute, plus each distinct material's
+    // value-index into it. The bounded scalars clamp to their pool range so the
+    // assembled state validates.
+    let base_color = srgba_pool(&distinct, |material| material.base_color);
+    let metallic = float_pool(&distinct, |material| material.metallic.clamp(0.0, 1.0));
+    let roughness = float_pool(&distinct, |material| material.roughness.clamp(0.0, 1.0));
+    let emissive_factor = srgb_pool(&distinct, |material| material.emissive_factor);
+    let emissive_strength = float_pool(&distinct, |material| material.emissive_strength.max(0.0));
+    let occlusion = float_pool(&distinct, |material| material.occlusion.clamp(0.0, 1.0));
 
-    (palette, samples, default_cell)
+    // Register the pools and bind each attribute. All bindings precede any
+    // material, so no material carries a back-fill placeholder index.
+    let base_color_pool = state.add_value_pool(VoxValuePool::Srgba {
+        values: base_color.values,
+    });
+    let metallic_pool = state.add_value_pool(bounded_float(metallic.values, 0.0, 1.0));
+    let roughness_pool = state.add_value_pool(bounded_float(roughness.values, 0.0, 1.0));
+    let emissive_factor_pool = state.add_value_pool(VoxValuePool::Srgb {
+        values: emissive_factor.values,
+    });
+    let emissive_strength_pool = state.add_value_pool(float_above(emissive_strength.values, 0.0));
+    let occlusion_pool = state.add_value_pool(bounded_float(occlusion.values, 0.0, 1.0));
+
+    let mut palette = VoxPalette::default();
+    palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base_color_pool);
+    palette.add_binding(METALLIC_FACTOR.to_owned(), metallic_pool);
+    palette.add_binding(ROUGHNESS_FACTOR.to_owned(), roughness_pool);
+    palette.add_binding(EMISSIVE_FACTOR.to_owned(), emissive_factor_pool);
+    palette.add_binding(EMISSIVE_STRENGTH.to_owned(), emissive_strength_pool);
+    palette.add_binding(OCCLUSION_STRENGTH.to_owned(), occlusion_pool);
+
+    // One material per distinct mesh material, its value-indices in binding
+    // order.
+    let materials: Vec<U32Id<BVoxMaterial>> = (0..distinct.len())
+        .map(|index| {
+            palette
+                .add_material(vec![
+                    base_color.indices[index],
+                    metallic.indices[index],
+                    roughness.indices[index],
+                    emissive_factor.indices[index],
+                    emissive_strength.indices[index],
+                    occlusion.indices[index],
+                ])
+                .expect("one value-index for each of the six bindings")
+        })
+        .collect();
+
+    let samples = cell_indices
+        .iter()
+        .map(|&index| index.map(|index| materials[index]))
+        .collect();
+
+    let default_material = materials[0];
+
+    (palette, samples, default_material)
 }
 
-/// A hashable identity for a material: its 8-bit color and the bit patterns of
-/// its finish, so cells with the same stored row map to one palette cell.
-type MaterialKey = (u8, u8, u8, u8, u64, u64, u64, u64);
+/// A deduplicated pool column and each distinct material's value-index into it.
+struct PoolColumn<T> {
+    /// The distinct values, in first-seen order.
+    values: Vec<T>,
+
+    /// Per distinct material, its value-index into [`values`](Self::values).
+    indices: Vec<u32>,
+}
+
+/// A four-component sRGB color pool over the extracted color, deduplicated by its
+/// 8-bit bytes and stored as float components in `[0, 1]`.
+fn srgba_pool(
+    materials: &[MeshMaterial],
+    get: impl Fn(&MeshMaterial) -> TySrgbaColor,
+) -> PoolColumn<[f64; 4]> {
+    let mut values = Vec::new();
+    let mut lookup: HashMap<[u8; 4], u32> = HashMap::new();
+    let indices = materials
+        .iter()
+        .map(|material| {
+            let color = get(material);
+            *lookup.entry(color.to_array()).or_insert_with(|| {
+                let index = values.len() as u32;
+                values.push(color.to_rgba().to_array());
+                index
+            })
+        })
+        .collect();
+    PoolColumn { values, indices }
+}
+
+/// A three-component sRGB color pool over the extracted color, deduplicated by
+/// its 8-bit bytes and stored as float components in `[0, 1]`; the alpha is
+/// dropped.
+fn srgb_pool(
+    materials: &[MeshMaterial],
+    get: impl Fn(&MeshMaterial) -> TySrgbaColor,
+) -> PoolColumn<[f64; 3]> {
+    let mut values = Vec::new();
+    let mut lookup: HashMap<[u8; 3], u32> = HashMap::new();
+    let indices = materials
+        .iter()
+        .map(|material| {
+            let color = get(material);
+            *lookup
+                .entry([color.r, color.g, color.b])
+                .or_insert_with(|| {
+                    let index = values.len() as u32;
+                    let [r, g, b, _] = color.to_rgba().to_array();
+                    values.push([r, g, b]);
+                    index
+                })
+        })
+        .collect();
+    PoolColumn { values, indices }
+}
+
+/// A float pool over the extracted scalar, deduplicated by its bit pattern.
+fn float_pool(materials: &[MeshMaterial], get: impl Fn(&MeshMaterial) -> f64) -> PoolColumn<f64> {
+    let mut values = Vec::new();
+    let mut lookup: HashMap<u64, u32> = HashMap::new();
+    let indices = materials
+        .iter()
+        .map(|material| {
+            let value = get(material);
+            *lookup.entry(value.to_bits()).or_insert_with(|| {
+                let index = values.len() as u32;
+                values.push(value);
+                index
+            })
+        })
+        .collect();
+    PoolColumn { values, indices }
+}
+
+/// A float pool bounded on both sides.
+fn bounded_float(values: Vec<f64>, min: f64, max: f64) -> VoxValuePool {
+    VoxValuePool::Float {
+        min: VoxBound::Number(min),
+        max: VoxBound::Number(max),
+        values,
+    }
+}
+
+/// A float pool bounded below and unbounded above.
+fn float_above(values: Vec<f64>, min: f64) -> VoxValuePool {
+    VoxValuePool::Float {
+        min: VoxBound::Number(min),
+        max: VoxBound::None,
+        values,
+    }
+}
+
+/// A hashable identity for a material: its two 8-bit colors and the bit patterns
+/// of its scalar factors, so cells with the same material map to one palette
+/// material.
+type MaterialKey = ([u8; 4], u64, u64, [u8; 3], u64, u64);
 
 /// The [`MaterialKey`] for a material.
 fn material_key(material: &MeshMaterial) -> MaterialKey {
-    let TySrgbaColor { r, g, b, a } = material.rgba;
+    let emissive = material.emissive_factor;
     (
-        r,
-        g,
-        b,
-        a,
+        material.base_color.to_array(),
         material.metallic.to_bits(),
         material.roughness.to_bits(),
-        material.emissive.to_bits(),
+        [emissive.r, emissive.g, emissive.b],
+        material.emissive_strength.to_bits(),
         material.occlusion.to_bits(),
     )
 }
@@ -330,24 +485,6 @@ fn for_each_neighbor(cell: usize, nx: usize, ny: usize, nz: usize, mut visit: im
     if z + 1 < nz {
         visit(cell + 1);
     }
-}
-
-/// An empty palette carrying the five PBR material attributes every mode writes.
-fn material_palette() -> VoxPalette {
-    let mut palette = VoxPalette::default();
-
-    for attribute in MATERIAL_ATTRIBUTES {
-        palette.add_attribute(attribute.to_owned());
-    }
-
-    palette
-}
-
-/// Adds `material` as one cell and returns its id.
-fn add_material(palette: &mut VoxPalette, material: MeshMaterial) -> U32Id<BVoxPaletteCell> {
-    palette
-        .add_cell(material.cell_values())
-        .expect("one value for each of the five material attributes")
 }
 
 /// The fill color as a stored sRGB color, defaulting to opaque white for `none`.

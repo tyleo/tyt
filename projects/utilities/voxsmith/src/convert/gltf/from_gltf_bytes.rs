@@ -235,28 +235,33 @@ fn material_slot(
 
 /// Reads a glTF material's flat factors into a [`MeshMaterial`]. The base color
 /// and metallic and roughness factors come straight from the metallic-roughness
-/// model; the linear base color is sRGB-encoded to the stored `rgba`, while its
-/// alpha, which carries no gamma, is scaled directly. Emissive collapses the
-/// glTF emissive color to its strongest channel, since Voxel Json models
-/// emissive as one strength scaling `rgba`. glTF has no flat occlusion factor
-/// (occlusion is a texture), so it defaults to `1` (none).
+/// model; the linear base color is sRGB-encoded to the stored `baseColorFactor`,
+/// while its alpha, which carries no gamma, is scaled directly. The glTF emissive
+/// color is sRGB-encoded to `emissiveFactor`, and the strength defaults to `1`:
+/// reading `KHR_materials_emissive_strength` is deferred, so a plain
+/// `emissiveFactor` imports as the emissive color at unit strength. glTF has no
+/// flat occlusion factor (occlusion is a texture), so it defaults to `1` (none).
 fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
     let pbr = material.pbr_metallic_roughness();
 
-    let rgba = linear_rgba(pbr.base_color_factor()).to_srgba();
+    let base_color = linear_rgba(pbr.base_color_factor()).to_srgba();
 
-    let emissive = material
-        .emissive_factor()
-        .into_iter()
-        .fold(0.0f32, f32::max) as f64;
+    let emissive_factor = emissive_srgb(material.emissive_factor());
 
     MeshMaterial {
-        rgba,
+        base_color,
         metallic: pbr.metallic_factor() as f64,
         roughness: pbr.roughness_factor() as f64,
-        emissive,
+        emissive_factor,
+        emissive_strength: 1.0,
         occlusion: 1.0,
     }
+}
+
+/// A glTF linear-RGB emissive factor sRGB-encoded to a stored color, its alpha
+/// held opaque since the emissive slot carries none.
+fn emissive_srgb(factor: [f32; 3]) -> TySrgbaColor {
+    TyLinearRgbaColorF64::new(factor[0] as f64, factor[1] as f64, factor[2] as f64, 1.0).to_srgba()
 }
 
 /// A material's texture bindings, decoding each referenced image into `textures`
@@ -447,10 +452,13 @@ fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{FillMode, MaterialMode, Result, from_gltf_bytes, voxelize_mesh};
+    use crate::{
+        BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, FillMode, METALLIC_FACTOR,
+        MaterialMode, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, from_gltf_bytes, voxelize_mesh,
+    };
     use png::{BitDepth, ColorType, Encoder};
-    use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxValue};
+    use ty_math::{TySrgbaColor, TyVector3U32};
+    use voxcore::{VoxMain, VoxValuePool};
 
     /// A minimal binary glTF (GLB) of an axis-aligned box spanning `[0, sx]`,
     /// `[0, sy]`, `[0, sz]` in glTF Y-up space, indexed triangles. When
@@ -594,22 +602,46 @@ mod tests {
         )
     }
 
-    /// The rgba hex of the cell a given voxel samples, through the object's one
-    /// palette reference.
-    fn voxel_hex(state: &VoxMain, position: TyVector3U32) -> String {
+    /// The value pool and value-index one attribute resolves to on the material a
+    /// given voxel samples, through the object's first layer.
+    fn voxel_attribute<'a>(
+        state: &'a VoxMain,
+        position: TyVector3U32,
+        attribute: &str,
+    ) -> (&'a VoxValuePool, u32) {
         let (_, object) = state.iter_objects().next().unwrap();
-        let (reference, _) = object.iter_palette_refs().next().unwrap();
-        let (_, palette) = state.iter_palettes().next().unwrap();
-        let (rgba, _) = palette
-            .iter_attributes()
-            .find(|(_, name)| *name == "rgba")
-            .unwrap();
+        let (layer, palette_id) = object.iter_layers().next().unwrap();
+        let palette = state.palette(palette_id).unwrap();
+        let binding = palette.binding_by_attribute(attribute).unwrap();
         let voxel = object.voxel_id(position).unwrap();
-        let cell = object.voxel_cell(voxel, reference).unwrap();
-        match palette.cell_value(cell, rgba) {
-            Some(VoxValue::Text(hex)) => hex.clone(),
-            other => panic!("unexpected rgba value {other:?}"),
+        let material = object.voxel_material(voxel, layer).unwrap();
+        state.material_value(palette_id, material, binding).unwrap()
+    }
+
+    /// The `#RRGGBBAA` hex of the `baseColorFactor` a given voxel samples.
+    fn voxel_hex(state: &VoxMain, position: TyVector3U32) -> String {
+        let (pool, index) = voxel_attribute(state, position, BASE_COLOR_FACTOR);
+        match pool {
+            VoxValuePool::Srgba { values } => {
+                let [r, g, b, a] = values[index as usize];
+                TySrgbaColor::from_array([byte(r), byte(g), byte(b), byte(a)]).to_hex()
+            }
+            other => panic!("unexpected baseColorFactor pool {other:?}"),
         }
+    }
+
+    /// The numeric value of one float attribute a given voxel samples.
+    fn voxel_number(state: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
+        let (pool, index) = voxel_attribute(state, position, attribute);
+        match pool {
+            VoxValuePool::Float { values, .. } => values[index as usize],
+            other => panic!("expected a float pool for {attribute}, got {other:?}"),
+        }
+    }
+
+    /// One sRGB float component in `[0, 1]` mapped to a byte.
+    fn byte(component: f64) -> u8 {
+        (component.clamp(0.0, 1.0) * 255.0).round() as u8
     }
 
     /// Encodes `texels` (row-major RGBA8) into a PNG of the given size.
@@ -915,29 +947,6 @@ mod tests {
         [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
     }
 
-    /// The value of one attribute on the cell a given voxel samples, through the
-    /// object's one palette reference.
-    fn voxel_value(state: &VoxMain, position: TyVector3U32, attribute: &str) -> VoxValue {
-        let (_, object) = state.iter_objects().next().unwrap();
-        let (reference, _) = object.iter_palette_refs().next().unwrap();
-        let (_, palette) = state.iter_palettes().next().unwrap();
-        let (attribute, _) = palette
-            .iter_attributes()
-            .find(|(_, name)| *name == attribute)
-            .unwrap();
-        let voxel = object.voxel_id(position).unwrap();
-        let cell = object.voxel_cell(voxel, reference).unwrap();
-        palette.cell_value(cell, attribute).unwrap().clone()
-    }
-
-    /// The numeric value of one attribute on the cell a given voxel samples.
-    fn voxel_number(state: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
-        match voxel_value(state, position, attribute) {
-            VoxValue::Number(value) => value,
-            other => panic!("expected a number for {attribute}, got {other:?}"),
-        }
-    }
-
     #[test]
     fn extent_converts_gltf_y_up_to_voxel_json_z_up() {
         // A box tall on glTF +Y should be tall on Voxel Json +Z.
@@ -950,7 +959,7 @@ mod tests {
     }
 
     #[test]
-    fn flat_paints_the_whole_body_one_color_over_five_attributes() {
+    fn flat_paints_the_whole_body_one_color_over_the_gltf_attributes() {
         let state = voxelize(
             &box_glb(1.0, 4.0, 1.0, None, None),
             TyVector3U32::new(1, 1, 4),
@@ -970,15 +979,22 @@ mod tests {
         assert_eq!(object.bounds(), TyVector3U32::new(1, 1, 4));
         assert_eq!(object.live_count(), 4);
 
-        // Every mode writes the five material attributes; flat is one cell.
+        // Every mode binds the glTF material attributes; flat is one material.
         let (_, palette) = state.iter_palettes().next().unwrap();
-        assert_eq!(palette.cell_count(), 1);
+        assert_eq!(palette.material_count(), 1);
         assert_eq!(
             palette
-                .iter_attributes()
-                .map(|(_, n)| n)
+                .iter_bindings()
+                .map(|(_, binding)| binding.attribute.as_str())
                 .collect::<Vec<_>>(),
-            ["rgba", "metallic", "roughness", "emissive", "occlusion"]
+            [
+                BASE_COLOR_FACTOR,
+                METALLIC_FACTOR,
+                ROUGHNESS_FACTOR,
+                EMISSIVE_FACTOR,
+                EMISSIVE_STRENGTH,
+                OCCLUSION_STRENGTH,
+            ]
         );
         assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
 
@@ -1027,16 +1043,12 @@ mod tests {
         assert_eq!(state.validate(), Ok(()));
 
         let (_, palette) = state.iter_palettes().next().unwrap();
-        assert_eq!(palette.cell_count(), 1);
-        let cell = palette.iter_cells().next().unwrap();
-        let value = |name: &str| {
-            let (attribute, _) = palette.iter_attributes().find(|(_, n)| *n == name).unwrap();
-            palette.cell_value(cell, attribute).unwrap().clone()
-        };
-        assert_eq!(value("rgba"), VoxValue::Text("#FFBC00FF".to_owned()));
-        assert_eq!(value("metallic"), VoxValue::Number(0.25));
-        assert_eq!(value("roughness"), VoxValue::Number(0.75));
-        assert_eq!(value("occlusion"), VoxValue::Number(1.0));
+        assert_eq!(palette.material_count(), 1);
+        let origin = TyVector3U32::new(0, 0, 0);
+        assert_eq!(voxel_hex(&state, origin), "#FFBC00FF");
+        assert_eq!(voxel_number(&state, origin, METALLIC_FACTOR), 0.25);
+        assert_eq!(voxel_number(&state, origin, ROUGHNESS_FACTOR), 0.75);
+        assert_eq!(voxel_number(&state, origin, OCCLUSION_STRENGTH), 1.0);
     }
 
     #[test]
@@ -1058,7 +1070,7 @@ mod tests {
         let (_, object) = state.iter_objects().next().unwrap();
         assert_eq!(object.live_count(), 64);
         let (_, palette) = state.iter_palettes().next().unwrap();
-        assert_eq!(palette.cell_count(), 1);
+        assert_eq!(palette.material_count(), 1);
         // A deep interior voxel resolved to the surface color.
         assert_eq!(voxel_hex(&state, TyVector3U32::new(2, 2, 2)), "#FF0000FF");
     }
@@ -1080,7 +1092,7 @@ mod tests {
         .unwrap();
 
         let (_, palette) = state.iter_palettes().next().unwrap();
-        assert_eq!(palette.cell_count(), 2);
+        assert_eq!(palette.material_count(), 2);
         assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
         assert_eq!(voxel_hex(&state, TyVector3U32::new(2, 2, 2)), "#0000FFFF");
     }
@@ -1157,7 +1169,7 @@ mod tests {
         assert_eq!(per_texel.validate(), Ok(()));
         // Every surface voxel samples the one red texel, so one merged cell.
         let (_, palette) = per_texel.iter_palettes().next().unwrap();
-        assert_eq!(palette.cell_count(), 1);
+        assert_eq!(palette.material_count(), 1);
         assert_eq!(
             voxel_hex(&per_texel, TyVector3U32::new(0, 0, 0)),
             "#FF0000FF"
@@ -1294,8 +1306,8 @@ mod tests {
         )
         .unwrap();
 
-        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), "metallic");
-        let roughness = voxel_number(&state, TyVector3U32::new(0, 0, 0), "roughness");
+        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), METALLIC_FACTOR);
+        let roughness = voxel_number(&state, TyVector3U32::new(0, 0, 0), ROUGHNESS_FACTOR);
         assert!(
             (metallic - 0.5 * 64.0 / 255.0).abs() < 0.01,
             "metallic {metallic}"
@@ -1307,10 +1319,12 @@ mod tests {
     }
 
     #[test]
-    fn per_texel_reads_emissive_as_srgb_strongest_channel() {
-        // Emissive is sRGB; a green of 188 decodes to ~0.503 linear, and the
-        // emissive strength is the strongest resulting channel, so a green-only
-        // texel reads ~0.503, not the ~0.737 a straight decode would give.
+    fn per_texel_reads_emissive_as_an_srgb_color() {
+        // Emissive is sampled as a color, not collapsed to a scalar. A green of
+        // 188 sRGB decodes to ~0.503 linear, is tinted by the unit factor, then
+        // re-encodes to ~188 (~0.737 as a float), so the stored emissiveFactor is
+        // green with no red or blue and the strength stays the material's unit
+        // factor.
         let emissive = png_rgba(1, 1, &[[0, 188, 0, 255]]);
         let glb = pbr_quad_glb(
             full_square(),
@@ -1334,8 +1348,19 @@ mod tests {
         )
         .unwrap();
 
-        let emissive = voxel_number(&state, TyVector3U32::new(0, 0, 0), "emissive");
-        assert!((emissive - 0.503).abs() < 0.01, "emissive {emissive}");
+        let origin = TyVector3U32::new(0, 0, 0);
+        let (pool, index) = voxel_attribute(&state, origin, EMISSIVE_FACTOR);
+        let [r, g, b] = match pool {
+            VoxValuePool::Srgb { values } => values[index as usize],
+            other => panic!("expected an sRGB emissiveFactor pool, got {other:?}"),
+        };
+        assert!(r < 0.01 && b < 0.01, "emissiveFactor red {r} blue {b}");
+        assert!((g - 188.0 / 255.0).abs() < 0.01, "emissiveFactor green {g}");
+        assert_eq!(
+            voxel_number(&state, origin, EMISSIVE_STRENGTH),
+            1.0,
+            "emissive strength stays the material's unit factor"
+        );
     }
 
     #[test]
@@ -1366,7 +1391,7 @@ mod tests {
         )
         .unwrap();
 
-        let occlusion = voxel_number(&state, TyVector3U32::new(0, 0, 0), "occlusion");
+        let occlusion = voxel_number(&state, TyVector3U32::new(0, 0, 0), OCCLUSION_STRENGTH);
         assert!((occlusion - 0.751).abs() < 0.01, "occlusion {occlusion}");
     }
 
@@ -1411,7 +1436,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
-        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), "metallic");
+        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), METALLIC_FACTOR);
         assert!((metallic - 1.0).abs() < 1e-9, "metallic {metallic}");
     }
 }

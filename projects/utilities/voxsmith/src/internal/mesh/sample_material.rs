@@ -147,7 +147,7 @@ fn resolve_cell(
 #[derive(Clone, Copy, Default)]
 struct CellAccum {
     /// The linear base color, summed component-wise.
-    rgba: [f64; 4],
+    base_color: [f64; 4],
 
     /// The metallic value, summed.
     metallic: f64,
@@ -155,8 +155,8 @@ struct CellAccum {
     /// The roughness value, summed.
     roughness: f64,
 
-    /// The emissive strength, summed.
-    emissive: f64,
+    /// The linear emissive color, summed component-wise.
+    emissive: [f64; 3],
 
     /// The occlusion value, summed.
     occlusion: f64,
@@ -187,10 +187,10 @@ fn accumulate(
 ) {
     if let (Some(map), Some(uvs)) = (maps.base_color, triangle.uvs.base_color) {
         let color = base_color_linear(texture(textures, map.sampler), bary_uv(uvs, a, b, c), &map);
-        accum.rgba[0] += color[0];
-        accum.rgba[1] += color[1];
-        accum.rgba[2] += color[2];
-        accum.rgba[3] += color[3];
+        accum.base_color[0] += color[0];
+        accum.base_color[1] += color[1];
+        accum.base_color[2] += color[2];
+        accum.base_color[3] += color[3];
     }
 
     if let (Some(map), Some(uvs)) = (maps.metallic_roughness, triangle.uvs.metallic_roughness) {
@@ -201,7 +201,10 @@ fn accumulate(
     }
 
     if let (Some(map), Some(uvs)) = (maps.emissive, triangle.uvs.emissive) {
-        accum.emissive += emissive(texture(textures, map.sampler), bary_uv(uvs, a, b, c), &map);
+        let color = emissive(texture(textures, map.sampler), bary_uv(uvs, a, b, c), &map);
+        accum.emissive[0] += color[0];
+        accum.emissive[1] += color[1];
+        accum.emissive[2] += color[2];
     }
 
     if let (Some(map), Some(uvs)) = (maps.occlusion, triangle.uvs.occlusion) {
@@ -237,11 +240,11 @@ fn apply(
     let n = accum.count as f64;
 
     if maps.base_color.is_some() && triangle.uvs.base_color.is_some() {
-        material.rgba = TyLinearRgbaColorF64::new(
-            accum.rgba[0] / n,
-            accum.rgba[1] / n,
-            accum.rgba[2] / n,
-            accum.rgba[3] / n,
+        material.base_color = TyLinearRgbaColorF64::new(
+            accum.base_color[0] / n,
+            accum.base_color[1] / n,
+            accum.base_color[2] / n,
+            accum.base_color[3] / n,
         )
         .to_srgba();
     }
@@ -251,8 +254,17 @@ fn apply(
         material.roughness = accum.roughness / n;
     }
 
+    // The map overrides the emissive color; the emissive strength stays the
+    // material's flat factor, since it is a per-material scalar the texture does
+    // not carry.
     if maps.emissive.is_some() && triangle.uvs.emissive.is_some() {
-        material.emissive = accum.emissive / n;
+        material.emissive_factor = TyLinearRgbaColorF64::new(
+            accum.emissive[0] / n,
+            accum.emissive[1] / n,
+            accum.emissive[2] / n,
+            1.0,
+        )
+        .to_srgba();
     }
 
     if maps.occlusion.is_some() && triangle.uvs.occlusion.is_some() {
@@ -283,15 +295,17 @@ fn metallic_roughness(
     (map.metallic * texel.b, map.roughness * texel.g)
 }
 
-/// The emissive strength of a texel: the sRGB-decoded texel tinted by the
-/// emissive factor, collapsed to its strongest channel.
-fn emissive(texture: &MeshTexture, uv: TyVector2F64, map: &MeshEmissiveMap) -> f64 {
+/// The linear emissive color of a texel: the sRGB-decoded texel tinted
+/// component-wise by the linear emissive factor.
+fn emissive(texture: &MeshTexture, uv: TyVector2F64, map: &MeshEmissiveMap) -> [f64; 3] {
     let texel = texture
         .sample(uv.x, uv.y, map.sampler.wrap_s, map.sampler.wrap_t)
         .to_linear_rgba();
-    (texel.r * map.factor[0])
-        .max(texel.g * map.factor[1])
-        .max(texel.b * map.factor[2])
+    [
+        texel.r * map.factor[0],
+        texel.g * map.factor[1],
+        texel.b * map.factor[2],
+    ]
 }
 
 /// The occlusion of a texel: straight-decoded red at `1 + strength * (red - 1)`,
@@ -439,7 +453,7 @@ mod tests {
         for (cell, covering) in grid.triangle.iter().enumerate() {
             if covering.is_some() {
                 assert_eq!(
-                    sampled[cell].map(|material| material.rgba),
+                    sampled[cell].map(|material| material.base_color),
                     Some(TySrgbaColor::new(255, 0, 0, 255)),
                     "surface cell {cell} left uncolored"
                 );

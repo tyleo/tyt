@@ -659,3 +659,85 @@ to black, times `emissiveStrength`, a float defaulting to `0`, multiplied in
 linear light, replacing the old base-color-times-scalar form. The
 `sample_material` and `mesh_emissive_map` side of the split lives on the build
 path and is deferred with it.
+
+### Chunk boundary: the glTF build/voxelize path is one chunk
+
+Phase 5's second chunk ports the build/voxelize path, the counterpart to the
+read/bake chunk: `MeshMaterial`, `sample_material`, `mesh_emissive_map`,
+`voxelize_mesh`, and the `from_gltf_bytes` importer. These five files couple
+tightly: `voxelize_mesh` builds a palette from `MeshMaterial`, `from_gltf_bytes`
+constructs `MeshMaterial` and its tests voxelize and read the palette back, so
+renaming `MeshMaterial`'s fields breaks all of them at once and they move
+together. The chunk was verified under `--no-default-features --features
+gltf,voxj`; the still-unported `reduce_palette` straggler (no caller in this
+feature set) was temporarily cfg-gated out and reverted, so the gating is absent
+from the staged diff; 81 tests pass, clippy clean. A four-dimension adversarial
+review (pool/material bookkeeping, color and emissive round-trip, validate and
+API contracts, test fidelity) surfaced no confirmed findings. The color helpers
+(`object_color_ref`, `cell_color`, `parse_color_hex`, checklist item 2) stay
+deferred to Phase 6 with their only callers.
+
+### `MeshMaterial` moves to the glTF vocab; both colors are 8-bit sRGB
+
+`MeshMaterial` drops the old `rgba`/`metallic`/`roughness`/`emissive`/`occlusion`
+row for the glTF names: `base_color`, `metallic`, `roughness`, `emissive_factor`,
+`emissive_strength`, `occlusion`. The old single `emissive` scalar (a strength
+scaling the base color) splits into `emissiveFactor`, a color, and
+`emissiveStrength`, a number, matching the format's split. Both colors are stored
+as `TySrgbaColor`, the codebase-wide 8-bit sRGB type; `emissive_factor` carries
+no alpha in glTF, so its alpha is held opaque and ignored (a 3-component
+quantity in a 4-component type, keeping `flat()`, the material key, and the
+sampler's `to_srgba()` output uniform with `base_color`). `MeshMaterial` also
+loses `cell_values`, `hex`, and `MATERIAL_ATTRIBUTES`: the palette build, now a
+value-pool build, moved into `voxelize_mesh`, so `MeshMaterial` is plain data.
+
+### `emissive_factor` is stored sRGB; the strength stays a per-material scalar
+
+`emissive_factor` is stored in the same sRGB form as `base_color`, matching the
+read/bake chunk's documented convention (`MaterialBake::EmissiveColor` reads an
+sRGB `emissiveFactor`). `from_gltf_bytes` sRGB-encodes glTF's linear
+`emissiveFactor` to the stored color, so the bake decodes it back to linear and
+multiplies by strength there, round-tripping through the 8-bit atlas texel the
+same way base color does. `emissive_strength` defaults to `1` on import: reading
+`KHR_materials_emissive_strength` is deferred, so a plain `emissiveFactor` imports
+as the emissive color at unit strength rather than being lost. In `sample_material`
+the emissive TEXTURE overrides only the color (`CellAccum.emissive` became a
+three-component linear sum, meaned then `to_srgba`); the strength is a
+per-material scalar the texture does not carry, so it stays the material's flat
+value. `mesh_emissive_map`'s `emissive()` returns the linear color instead of
+collapsing to the strongest channel.
+
+### `voxelize_mesh` builds six per-attribute pools, deduped, clamped to validate
+
+`build_palette` takes `&mut VoxMain`, merges near-identical materials into a
+distinct list (the `MaterialKey` now keys on both 8-bit colors and the scalar bit
+patterns, alpha excluded from the emissive key since it is always opaque), then
+builds one deduplicated value pool per attribute and binds the six attributes in
+a fixed order: `baseColorFactor`, `metallicFactor`, `roughnessFactor`,
+`emissiveFactor`, `emissiveStrength`, `occlusionStrength`. Each distinct material
+adds one value-index per binding in that order. Color pools dedup by 8-bit bytes
+and store float components in `[0, 1]` (`Srgba` for base color, `Srgb` for the
+alpha-less emissive); scalar pools dedup by bit pattern. `metallicFactor`,
+`roughnessFactor`, and `occlusionStrength` are `Float` `0..1` and `emissiveStrength`
+is `Float` `0..none`, per the Q5 bounds table; colors carry no bounds. The bounded
+scalars are `clamp`ed to their pool range at extraction, so a malformed glTF (for
+example an `occlusionTexture.strength` above 1 driving `1 + strength * (red - 1)`
+negative) still assembles a state that `VoxMain::validate` accepts, where the old
+inline model stored the raw value unvalidated. For a well-formed glTF the clamp is
+a no-op, so the change only guards hostile input. All bindings precede any
+material, so no material carries `add_binding`'s back-fill placeholder index. The
+object gets one layer (`add_layer` replacing `add_palette_ref`) whose samples are
+`BVoxMaterial` ids.
+
+### The tests read voxel values through the layer/material/binding/pool API
+
+The `from_gltf_bytes` tests read a voxel's attribute by resolving its first layer
+and material, its palette's binding by attribute name, and
+`VoxMain::material_value`, then decoding by pool kind: `voxel_hex` reads the
+`Srgba` base color to a hex string, `voxel_number` reads a `Float` pool, and the
+emissive test reads the `Srgb` `emissiveFactor` color directly and asserts its
+green component (about `0.737`, the sRGB round trip of a linear `0.503`) plus a
+unit `emissiveStrength`. The attribute-list assertion pins the six glTF binding
+names in order. `palette.cell_count`/`iter_cells`/`iter_attributes`/`cell_value`
+and `object.voxel_cell`/`iter_palette_refs` gave way to `material_count`/
+`iter_materials`/`iter_bindings` and `voxel_material`/`iter_layers`.
