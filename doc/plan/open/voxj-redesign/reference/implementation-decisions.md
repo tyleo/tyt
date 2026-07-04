@@ -103,3 +103,25 @@ The eleven-kind enum renders each variant to its kebab-case tag
 (`SrgbaHex` -> `srgba-hex`, `LinearRgbFloat` -> `linear-rgb-float`, and so on),
 which matches every wire tag, rather than eleven explicit `rename` attributes.
 A fieldless enum with no `serde(other)` rejects an unrecognized tag by default.
+
+### Color kinds carry no `min`/`max`; the color space fixes the range
+
+The owner removed bounds from all four vector color kinds. The bounded kinds are
+now only `int` and `float`. The rationale: bounds earn their place when the range
+is a per-attribute choice the format cannot know (`metallicFactor` is 0..1, `ior`
+is 1..none), so the pool must state it. A color's range is not a choice; it is a
+property of the color space, so it belongs to the kind, not the pool. The Q5
+writer table had always emitted the same bounds per color kind (`0..1` for sRGB,
+`0..none` for linear), confirming they carried no per-pool information. Dropping
+them removes boilerplate from every color pool, removes the incoherent case of a
+color pool with an odd declared range, and makes the whole color family uniformly
+unbounded, matching the already-unbounded hex kinds.
+
+In code the four color variants of `VoxjValuePool` lose their `min`/`max` fields
+and become value-only, like the hex variants. The range is enforced intrinsically
+by the kind: sRGB float components in `[0, 1]`, linear float components `>= 0`.
+That per-kind range check is a voxj-codec named check in Phase 2; the wire types
+carry `Vec<[f64; 3]>` / `Vec<[f64; 4]>`, so a non-numeric or wrong-length color
+still rejects at parse. The spec doc, the Q5 table, and the TypeScript schema are
+updated to match, and the TypeScript `ValuePool` is spelled out as a per-kind
+union so each kind shows its own value type instead of `JsonValue[]`.

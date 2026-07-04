@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 /// must understand every kind in a file to validate it and rejects a file whose
 /// `kind` it does not recognize.
 ///
-/// The bounded kinds are `int`, `float`, and the four vector color kinds; they
-/// carry `min`/`max`. Colors span the sRGB and linear spaces in hex and float
-/// forms; hex is sRGB only and a linear color is always float.
+/// The bounded kinds are `int` and `float`; they carry `min`/`max`. Colors
+/// carry no bounds; each color kind's range is fixed by its color space. Colors
+/// span the sRGB and linear spaces in hex and float forms; hex is sRGB only and
+/// a linear color is always float.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "kebab-case"))]
@@ -27,21 +28,21 @@ pub enum VoxjValuePoolKind {
     /// A JSON string.
     String,
 
-    /// Three sRGB float components, each within `min`/`max`.
+    /// Three sRGB float components, each in `[0, 1]`.
     SrgbFloat,
 
     /// An `#RRGGBB` sRGB hex string.
     SrgbHex,
 
-    /// Four sRGB float components, each within `min`/`max`.
+    /// Four sRGB float components, each in `[0, 1]`.
     SrgbaFloat,
 
     /// An `#RRGGBBAA` sRGB hex string.
     SrgbaHex,
 
-    /// Three linear float components, each within `min`/`max`.
+    /// Three linear float components, each `>= 0`.
     LinearRgbFloat,
 
-    /// Four linear float components, each within `min`/`max`.
+    /// Four linear float components, each `>= 0`.
     LinearRgbaFloat,
 }

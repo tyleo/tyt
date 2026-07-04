@@ -215,37 +215,39 @@ Value pools live in `main.runtimeState.valuePools`, a shared array referenced by
   "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
 }
 
-// int, float, and vector color pools require min/max; each a number or "none"
+// only int and float pools carry min/max; each a number or "none"
 { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] }
 { "kind": "float", "min": 1, "max": "none", "values": [1.5, 1.33] } // >= 1
 { "kind": "int", "min": 0, "max": 255, "values": [0, 128, 255] }
-{ "kind": "srgba-float", "min": 0, "max": 1, "values": [[1, 0, 0, 1]] } // 0..1
-{ "kind": "srgb-float", "min": 0, "max": "none", "values": [[2, 0, 0]] } // HDR
+
+// color pools carry no min/max; the color space fixes the range
+{ "kind": "srgba-float", "values": [[1, 0, 0, 1]] } // sRGB, each in [0, 1]
+{ "kind": "linear-rgb-float", "values": [[2, 0, 0]] } // linear, each >= 0 (HDR)
 ```
 
 ### Value Pool Kinds
 
 `kind` is a closed vocabulary tagging the shape of a pool's `values`. Every kind's `values` are plain readable JSON literals; declaring a kind enables validation: a consumer must understand a file's kinds to validate it, and must reject a file whose `kind` it does not recognize (see [Versioning and Extensibility](#versioning-and-extensibility)).
 
-| `kind`              | JSON form            | Constraint                                   | Example `values`             | Typical attributes                                                                            |
-| ------------------- | -------------------- | -------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------- |
-| `json`              | any JSON, incl. null | none                                         | `[{"k": 1}, "x", 3]`         | any custom attribute                                                                          |
-| `bool`              | boolean              | `true` / `false`                             | `[true, false]`              | flags                                                                                         |
-| `float`             | number               | floating-point-valued; within `min`/`max`    | `[0, 0.5, 1]`                | metallicFactor, roughnessFactor, occlusionStrength, transmissionFactor, emissiveStrength, ior |
-| `int`               | number               | integer-valued, within `min`/`max`           | `[0, 1, 2, 7]`               | ids, counts, indices                                                                          |
-| `string`            | string               | must be a string                             | `["low", "high"]`            | enumerated tags                                                                               |
-| `srgb-float`        | number[3]            | 3 finite numbers; within `min`/`max`, sRGB   | `[[1, 0, 0], [0.5, 0.5, 0]]` | emissiveFactor, sRGB float / HDR                                                              |
-| `srgb-hex`          | string               | matches `^#[0-9A-F]{6}$`                     | `["#FF0000", "#204080"]`     | emissiveFactor; opaque custom colors                                                          |
-| `srgba-float`       | number[4]            | 4 finite numbers; within `min`/`max`, sRGB   | `[[1, 0, 0, 1]]`             | baseColorFactor, sRGB float                                                                   |
-| `srgba-hex`         | string               | matches `^#[0-9A-F]{8}$`                     | `["#FF0000FF"]`              | baseColorFactor, the default color kind                                                       |
-| `linear-rgb-float`  | number[3]            | 3 finite numbers; within `min`/`max`, linear | `[[1, 0, 0], [0, 0.5, 1]]`   | emissiveFactor, linear                                                                        |
-| `linear-rgba-float` | number[4]            | 4 finite numbers; within `min`/`max`, linear | `[[1, 0, 0, 1]]`             | baseColorFactor, linear                                                                       |
+| `kind`              | JSON form            | Constraint                                | Example `values`             | Typical attributes                                                                            |
+| ------------------- | -------------------- | ----------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------- |
+| `json`              | any JSON, incl. null | none                                      | `[{"k": 1}, "x", 3]`         | any custom attribute                                                                          |
+| `bool`              | boolean              | `true` / `false`                          | `[true, false]`              | flags                                                                                         |
+| `float`             | number               | floating-point-valued; within `min`/`max` | `[0, 0.5, 1]`                | metallicFactor, roughnessFactor, occlusionStrength, transmissionFactor, emissiveStrength, ior |
+| `int`               | number               | integer-valued, within `min`/`max`        | `[0, 1, 2, 7]`               | ids, counts, indices                                                                          |
+| `string`            | string               | must be a string                          | `["low", "high"]`            | enumerated tags                                                                               |
+| `srgb-float`        | number[3]            | 3 finite numbers in `[0, 1]`, sRGB        | `[[1, 0, 0], [0.5, 0.5, 0]]` | emissiveFactor, sRGB float                                                                    |
+| `srgb-hex`          | string               | matches `^#[0-9A-F]{6}$`                  | `["#FF0000", "#204080"]`     | emissiveFactor; opaque custom colors                                                          |
+| `srgba-float`       | number[4]            | 4 finite numbers in `[0, 1]`, sRGB        | `[[1, 0, 0, 1]]`             | baseColorFactor, sRGB float                                                                   |
+| `srgba-hex`         | string               | matches `^#[0-9A-F]{8}$`                  | `["#FF0000FF"]`              | baseColorFactor, the default color kind                                                       |
+| `linear-rgb-float`  | number[3]            | 3 finite numbers `>= 0`, linear           | `[[1, 0, 0], [0, 0.5, 1]]`   | emissiveFactor, linear                                                                        |
+| `linear-rgba-float` | number[4]            | 4 finite numbers `>= 0`, linear           | `[[1, 0, 0, 1]]`             | baseColorFactor, linear                                                                       |
 
 Notes:
 
-1. `float` is a continuous, finite number; `int` is its integer-valued sibling. `min` and `max` bounds apply only to `int`, `float`, and the four vector color kinds (the `-float` components); on those kinds both are required, and no other kind may carry them.
-2. `min` and `max` each take a finite number or the string `"none"` for unbounded on that side, and both are always written out. A numeric bound must be integer-valued on `int`; on the vector color kinds a bound applies per component; when both bounds are finite numbers, `min <= max`.
-3. Colors come in hex and float forms across two color spaces. `srgb-hex` / `srgba-hex` are `#RRGGBB` / `#RRGGBBAA` sRGB strings, the human-editable default. `srgb-float` / `srgba-float` are sRGB float components; `linear-rgb-float` / `linear-rgba-float` are the linear components. Hex is sRGB only; a linear color is always written in float form.
+1. `float` is a continuous, finite number; `int` is its integer-valued sibling. `min` and `max` bounds apply only to `int` and `float`; on those two both are required, and no other kind may carry them.
+2. `min` and `max` each take a finite number or the string `"none"` for unbounded on that side, and both are always written out. A numeric bound must be integer-valued on `int`; when both bounds are finite numbers, `min <= max`.
+3. Colors come in hex and float forms across two color spaces. `srgb-hex` / `srgba-hex` are `#RRGGBB` / `#RRGGBBAA` sRGB strings, the human-editable default. `srgb-float` / `srgba-float` are sRGB float components in `[0, 1]`; `linear-rgb-float` / `linear-rgba-float` are the linear components `>= 0`, so linear carries HDR. Colors carry no `min`/`max`; each color kind's range is fixed by its color space. Hex is sRGB only; a linear color is always written in float form.
 4. `kind` is required and has no default; the bounded kinds require both `min` and `max`. A value pool has no optional fields.
 
 ## Palettes
@@ -425,10 +427,10 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
       5. `float`: a finite number within `min`/`max`.
       6. `srgb-hex`: matches `^#[0-9A-F]{6}$`.
       7. `srgba-hex`: matches `^#[0-9A-F]{8}$`.
-      8. `srgb-float` / `linear-rgb-float`: an array of exactly 3 finite numbers, each within `min`/`max`.
-      9. `srgba-float` / `linear-rgba-float`: an array of exactly 4 finite numbers, each within `min`/`max`.
+      8. `srgb-float`: an array of exactly 3 finite numbers, each in `[0, 1]`; `linear-rgb-float`: exactly 3 finite numbers, each `>= 0`.
+      9. `srgba-float`: an array of exactly 4 finite numbers, each in `[0, 1]`; `linear-rgba-float`: exactly 4 finite numbers, each `>= 0`.
    3. `min` and `max`:
-      1. both present when `kind` is `int`, `float`, or one of the four vector color kinds, and both absent for every other kind.
+      1. both present when `kind` is `int` or `float`, and both absent for every other kind.
       2. each is a finite number or the string `none`, meaning unbounded on that side.
       3. a numeric bound is integer-valued when `kind` is `int`.
       4. `min <= max` when both are finite numbers.
@@ -478,12 +480,7 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 
         { "kind": "srgb-hex", "values": ["#000000", "#FF6600"] },
 
-        {
-          "kind": "linear-rgba-float",
-          "min": 0,
-          "max": 1,
-          "values": [[1, 0, 0, 1]],
-        },
+        { "kind": "linear-rgba-float", "values": [[1, 0, 0, 1]] },
       ],
 
       "palettes": [
@@ -717,24 +714,33 @@ interface Binding {
   poolRef: number;
 }
 
-// A shared pool of values, all of one shape given by kind. The bounded kinds
-// (int, float, and the vector color kinds) require both min and max; every other
-// kind carries neither. Each bound is a finite number or "none" for unbounded on
-// that side.
+// A shared pool of values, all of one shape given by kind, each kind's values
+// typed to its shape. Only int and float carry min/max, each a finite number or
+// "none"; a color kind's range is fixed by its color space, so no color kind
+// carries bounds.
 type ValuePool =
-  | {
-      kind: BoundedKind;
-
-      min: number | "none";
-
-      max: number | "none";
-
-      values: JsonValue[];
-    }
-  | {
-      kind: Exclude<PoolKind, BoundedKind>;
-      values: JsonValue[];
-    };
+  // arbitrary JSON, including null
+  | { kind: "json"; values: JsonValue[] }
+  // booleans
+  | { kind: "bool"; values: boolean[] }
+  // finite floats within min/max
+  | { kind: "float"; min: number | "none"; max: number | "none"; values: number[] }
+  // integers within min/max
+  | { kind: "int"; min: number | "none"; max: number | "none"; values: number[] }
+  // strings
+  | { kind: "string"; values: string[] }
+  // sRGB float colors, each component in [0, 1]
+  | { kind: "srgb-float"; values: [number, number, number][] }
+  // #RRGGBB sRGB hex strings
+  | { kind: "srgb-hex"; values: string[] }
+  // sRGB float colors with alpha, each component in [0, 1]
+  | { kind: "srgba-float"; values: [number, number, number, number][] }
+  // #RRGGBBAA sRGB hex strings
+  | { kind: "srgba-hex"; values: string[] }
+  // linear float colors, each component >= 0
+  | { kind: "linear-rgb-float"; values: [number, number, number][] }
+  // linear float colors with alpha, each component >= 0
+  | { kind: "linear-rgba-float"; values: [number, number, number, number][] };
 
 // Closed value-shape vocabulary (see Value Pool Kinds).
 type PoolKind =
@@ -747,15 +753,6 @@ type PoolKind =
   | "srgb-hex"
   | "srgba-float"
   | "srgba-hex"
-  | "linear-rgb-float"
-  | "linear-rgba-float";
-
-// The kinds that carry min/max bounds; see ValuePool.
-type BoundedKind =
-  | "float"
-  | "int"
-  | "srgb-float"
-  | "srgba-float"
   | "linear-rgb-float"
   | "linear-rgba-float";
 

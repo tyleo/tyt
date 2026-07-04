@@ -60,14 +60,8 @@ pub enum VoxjValuePool {
         values: Vec<String>,
     },
 
-    /// Three-component sRGB float colors, each component within `min`/`max`.
+    /// Three-component sRGB float colors, each component in `[0, 1]`.
     SrgbFloat {
-        /// Lower bound applied per component.
-        min: VoxjBound,
-
-        /// Upper bound applied per component.
-        max: VoxjBound,
-
         /// The pooled colors.
         values: Vec<[f64; 3]>,
     },
@@ -78,14 +72,8 @@ pub enum VoxjValuePool {
         values: Vec<String>,
     },
 
-    /// Four-component sRGB float colors, each component within `min`/`max`.
+    /// Four-component sRGB float colors, each component in `[0, 1]`.
     SrgbaFloat {
-        /// Lower bound applied per component.
-        min: VoxjBound,
-
-        /// Upper bound applied per component.
-        max: VoxjBound,
-
         /// The pooled colors.
         values: Vec<[f64; 4]>,
     },
@@ -96,26 +84,14 @@ pub enum VoxjValuePool {
         values: Vec<String>,
     },
 
-    /// Three-component linear float colors, each component within `min`/`max`.
+    /// Three-component linear float colors, each component `>= 0`.
     LinearRgbFloat {
-        /// Lower bound applied per component.
-        min: VoxjBound,
-
-        /// Upper bound applied per component.
-        max: VoxjBound,
-
         /// The pooled colors.
         values: Vec<[f64; 3]>,
     },
 
-    /// Four-component linear float colors, each component within `min`/`max`.
+    /// Four-component linear float colors, each component `>= 0`.
     LinearRgbaFloat {
-        /// Lower bound applied per component.
-        min: VoxjBound,
-
-        /// Upper bound applied per component.
-        max: VoxjBound,
-
         /// The pooled colors.
         values: Vec<[f64; 4]>,
     },

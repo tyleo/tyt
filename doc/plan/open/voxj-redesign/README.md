@@ -19,9 +19,11 @@ Four semantic deltas, from the diff of the spec against its previous version:
    closed vocabulary of eleven tags: `json`, `bool`, `float`, `int`, `string`,
    and six color kinds spanning sRGB and linear space in hex and float forms.
    Hex is sRGB only; a linear color is always float. The bounded kinds, meaning
-   `int`, `float`, and the four vector color kinds, require both `min` and `max`,
-   each a finite number or the literal string `"none"`. The unbounded kinds carry
-   neither.
+   `int` and `float`, require both `min` and `max`, each a finite number or the
+   literal string `"none"`. Every other kind, including all color kinds, carries
+   neither; a color's range is fixed by its color space, so sRGB float components
+   are `[0, 1]` and linear float components are `>= 0`. (This dropped color
+   bounds during execution; see the decisions log.)
 
 2. **Palette rewrite.** The old palette was self-contained:
    `{ attributes: string[], data: row[] }`, one inline value per attribute per
@@ -276,12 +278,14 @@ were dropped from the format entirely (see the format-spec change), so hex and
 float are the whole color-encoding vocabulary; explicit linear-space authoring
 stays deferred.
 
-For bounds, the writer uses a per-attribute default table:
-`metallicFactor`, `roughnessFactor`, `occlusionStrength`, `transmissionFactor`
-at `0..1`; `ior` at `1..none`; `emissiveStrength` at `0..none`; color float
-kinds at `0..1` for sRGB and `0..none` for linear to allow HDR; anything
-unrecognized at `none..none`. Values are still validated within the chosen
-bounds.
+For bounds, the writer uses a per-attribute default table, and only the `int`
+and `float` kinds carry bounds: `metallicFactor`, `roughnessFactor`,
+`occlusionStrength`, `transmissionFactor` at `0..1`; `ior` at `1..none`;
+`emissiveStrength` at `0..none`; anything unrecognized at `none..none`. Values
+are still validated within the chosen bounds. Color kinds carry no bounds; a
+color's range is fixed by its color space, validated intrinsically, sRGB float
+components in `[0, 1]` and linear float components `>= 0`. (Color bounds were
+dropped during execution; see the decisions log.)
 
 **Q5a, confirmed.** `voxcore` stores each color as float components in natural
 range: sRGB and srgba at `0..1` with 8-bit hex mapped by dividing by 255, and
