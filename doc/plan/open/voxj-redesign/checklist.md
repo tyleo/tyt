@@ -183,6 +183,15 @@ and `packed-base64` round-trips at the material-derived width.
       wire's number-or-none, and `VoxPaletteBinding` (attribute, pool ref). Add
       brand markers as needed (`BVoxValuePool`, and rename the cell brand to a
       material brand).
+      (Chunk 1 done: the additive leaf types landed as `VoxValuePoolKind` (nine
+      kinds), `VoxBound` (number-or-none, no serde), `VoxValuePool` (a per-kind
+      discriminated union with exact typed values mirroring the wire's
+      `VoxjValuePool`; `min`/`max` only on the `float`/`int` variants; colors as
+      `Vec<[f64; N]>`), `VoxPaletteBinding` (`attribute`,
+      `pool: U32Id<BVoxValuePool>`), and the `BVoxValuePool` brand, all registered
+      in `lib.rs`. Deferred: the `BVoxPaletteCell` -> material brand rename moves
+      to the `VoxPalette`-rewrite chunk (item 3), so this item stays unchecked
+      until then. See the decisions log.)
 - [ ] Add the shared value-pool store to `VoxRuntimeState` (an id pool plus
       column, or a plain indexed vec), and extend its clone and `Drop`.
 - [ ] Rewrite `VoxPalette` from the attributes-by-cells grid to bindings plus

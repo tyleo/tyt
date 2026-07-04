@@ -267,3 +267,69 @@ legal `<< 63` never panics and an 11th continuation byte rejects; a real hilbert
 delta needs at most `3 * 17 = 51` bits, well inside the guard. These are decode
 changes, so they harden the actual decoder used by `from_voxj_file_bytes`, not
 just the validator.
+
+## Phase 3: `voxcore`
+
+### Chunk boundary: additive leaf pool types first; brand rename deferred
+
+Phase 3 is the crux and the largest blast radius: `VoxPalette` is an unsafe
+struct-of-arrays with hand-proved invariants, and the rewrite ripples into
+`VoxObject`, `VoxRuntimeState`, `VoxMain::validate`/`gc`, `error.rs`, and
+`VoxGcRemap`. The first chunk is the smallest thing that compiles and passes on
+its own: the additive leaf types the rest of the phase builds on. It adds
+`VoxValuePoolKind`, `VoxBound`, `VoxValuePool`, `VoxPaletteBinding`, and the
+`BVoxValuePool` brand, and registers them in `lib.rs`. It touches no existing
+code beyond `lib.rs`, so every existing test passes unchanged.
+
+Checklist item 1 also lists "rename the cell brand to a material brand." That is
+deferred to the `VoxPalette`-rewrite chunk, where `BVoxPaletteCell` becomes a
+material brand at the same time the type stops being a rectangular cell grid and
+becomes column-major materials. Renaming the brand now, while the grid semantics
+are unchanged, would churn 30+ downstream files that name `BVoxPaletteCell`
+(across `voxsmith` and `vxl`) and leave a misleading "material" brand describing
+a cell grid. Item 1 stays unchecked until that rename lands with the rewrite.
+
+### `VoxValuePool` is a per-kind discriminated union with exact typed values
+
+At the owner's direction `voxcore`'s pool mirrors the wire's `VoxjValuePool`: a
+per-kind enum, one variant per kind, with every value type spelled out rather
+than a uniform `(kind, Vec<VoxValue>, min, max)` struct. `json` holds
+`Vec<VoxValue>`, `bool` holds `Vec<bool>`, `float` holds `Vec<f64>`, `int` holds
+`Vec<i64>`, `string` holds `Vec<String>`, and the four color kinds hold
+`Vec<[f64; 3]>` or `Vec<[f64; 4]>`. The value shapes are exact at the type level,
+so a color is a fixed-length float array rather than an untyped structure a
+reader must re-check. `min`/`max` live only on the `float` and `int` variants,
+so the discriminated union makes the bounds optional by construction, the same
+shape the wire type uses. A lightweight `VoxValuePoolKind` tag enum is kept and
+`VoxValuePool::kind()` maps a pool to it, for code that needs the kind without
+matching the whole pool, mirroring `voxj`. The only methods are `values_len()`
+and `kind()`, matching the wire's surface; a pool is built by variant literal,
+and the value-well-formed-for-kind and within-bounds checks are
+`VoxMain::validate`'s job (item 6).
+
+### Nine canonical kinds; colors are exact typed float arrays
+
+`VoxValuePoolKind` is the nine canonical kinds `json, bool, float, int, string,
+srgb, srgba, linear-rgb, linear-rgba`. The wire's six color kinds (hex and float
+per space) collapse onto the four color kinds here, since `voxcore` stores a
+color as float components in the space's natural range and does not carry the
+on-wire encoding (per Q1). This settles checklist item 5 a third way: neither a
+`VoxValue` color variant nor colors riding as `VoxValue::Array`, but exact
+`Vec<[f64; N]>` in the color variants themselves, so `VoxValue` is unused for
+colors and backs only the `json` kind and `ext`, exactly as the wire's
+`VoxjValue` does. `int` and `float` are the only kinds that carry bounds, since
+the discriminated union puts `min`/`max` only on those two variants.
+
+### `VoxBound` has no serde; `VoxPaletteBinding.pool` is a branded id
+
+`VoxBound` is `Number(f64) | None`, mirroring the wire's number-or-none bound but
+without the wire type's manual `Serialize`/`Deserialize` (no serde in `voxcore`).
+It does not enforce finiteness at construction; a non-finite numeric bound is a
+`VoxMain::validate` concern (item 6/7), consistent with how `check_transforms`
+leaves finiteness to validation. `VoxPaletteBinding` holds `pool:
+U32Id<BVoxValuePool>`, a branded id, not the wire's plain `usize` `poolRef`, so a
+pool is a first-class cross-reference that gc relabels alongside objects,
+palettes, and nodes (item 8). `branded_id`'s `scalar_id!` hand-implements
+`Clone`, `Copy`, `Debug`, `Eq`/`PartialEq`, `Hash`, and `Ord` for any
+`TBrand: ?Sized` with no bound leakage, so `VoxPaletteBinding` derives `Eq`
+even though `BVoxValuePool` is a bare marker struct with no derives.
