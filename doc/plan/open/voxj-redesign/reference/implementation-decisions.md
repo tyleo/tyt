@@ -790,3 +790,43 @@ layer: `baseColorFactor` is an `Srgba` pool decoded from the test hex strings
 value per material, and each material draws one value-index per binding. A
 material's color reads back to hex through the same byte round trip, so the golden
 hex assertions are unchanged.
+
+### Second chunk: the shared `_color` helpers plus goxl
+
+The goxl chunk lands checklist Phase 6 item 1 and the deferred Phase 5 item 2
+together, because goxl is the first `_color` consumer and the helpers compile and
+are exercised under `--no-default-features --features goxl` (mvox, qbcl, and vmax
+modules are off in that feature set). It was verified there; 15 tests pass,
+including the three byte-exact round-trips, clippy clean. The still-broken mvox,
+qbcl, and vmax converters keep the default build red until their own chunks land.
+
+The three shared color helpers move to the pool/material model with new
+signatures that every converter will adopt in its chunk:
+
+1. `object_color_ref(state, object)` returns `(layer, palette, binding)` ids for
+   the first layer whose palette binds `baseColorFactor`, replacing the old
+   `(reference, &palette, attribute)` that preferred `rgba` over `rgb`. Returning
+   ids, not a borrowed `&VoxPalette`, drops the lifetime entanglement, since the
+   color now resolves through `state`, not the palette alone.
+2. `cell_color` gains a `state` parameter and resolves a voxel's color through
+   `voxel_material` then `VoxMain::material_value` then the pool decode, defaulting
+   to transparent black. It no longer reads an inline hex `VoxValue`.
+3. `parse_color_hex` is renamed to `pool_color` (its file too, per the
+   one-item-per-file rule) and generalized from hex-string parsing to decoding a
+   resolved `(pool, index)` by the pool's kind: sRGB components straight to bytes,
+   linear re-encoded to sRGB through `ty_math`, `None` for a non-color or
+   out-of-range value. This is the same decode `bake_atlas` and reduce_palette use,
+   duplicated across the three feature scopes rather than hoisted to an
+   always-compiled home, matching the faithful-port tradeoff already taken for
+   reduce_palette.
+
+goxl's own paths follow: `from_goxl_file` builds one shared `srgba` pool of the
+distinct block colors (float components, byte / 255) bound to `baseColorFactor`,
+one material per color, and each 16-cube object references it on one layer with
+solid voxels sampling their color material. `to_goxl_file` reads colors back
+through `object_color_ref` plus `cell_color` in both the ext-driven
+`block_from_object` (which now takes `state` and drops its bespoke `voxel_color`,
+`attribute_id`, and `parse_rgba` for the shared helpers) and the synthesized
+`emit_object`. The byte-exact `.gox` round-trip holds because the hex-to-float
+(byte / 255) then float-to-byte (round of component times 255) trip is exact for a
+byte-valued component.

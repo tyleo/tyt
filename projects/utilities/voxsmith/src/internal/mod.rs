@@ -16,7 +16,7 @@ mod cell_color;
 #[cfg(any(feature = "_color", all(feature = "vmax", test)))]
 mod object_color_ref;
 #[cfg(any(feature = "_color", all(feature = "vmax", test)))]
-mod parse_color_hex;
+mod pool_color;
 
 // Tightening a build-volume object to its live extent is wanted only by the
 // Voxel Max writer.
@@ -57,7 +57,7 @@ pub(crate) use cell_color::*;
 #[cfg(any(feature = "_color", all(feature = "vmax", test)))]
 pub(crate) use object_color_ref::*;
 #[cfg(any(feature = "_color", all(feature = "vmax", test)))]
-pub(crate) use parse_color_hex::*;
+pub(crate) use pool_color::*;
 
 #[cfg(feature = "vmax")]
 pub(crate) use grid::*;

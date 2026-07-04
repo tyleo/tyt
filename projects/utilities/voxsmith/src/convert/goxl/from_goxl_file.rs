@@ -1,37 +1,37 @@
 use crate::{
-    Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer, GoxelLight,
-    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, to_vox_value,
+    BASE_COLOR_FACTOR, Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer,
+    GoxelLight, GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, to_vox_value,
 };
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyTransformF64, TyVector3U32};
 use voxcore::{
-    BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
-    VoxValue,
+    BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
+    VoxValuePool,
 };
 
 /// Loads a decoded Goxel [`GoxlFile`] into a [`VoxMain`].
 ///
-/// The shared `BL16` voxel blocks become objects sharing one `rgba` palette,
-/// and the `LAYR` layers become the hierarchy nodes, each placing the blocks it
-/// stamps. The state with no native voxcore home, such as the image metadata,
-/// preview, materials, cameras, light, per-layer metadata, the clone and shape
-/// definitions, the exact block placements, and unknown chunks, rides in a
-/// `goxel` ext so the file can be written back exactly.
+/// The shared `BL16` voxel blocks become objects sharing one `baseColorFactor`
+/// palette, and the `LAYR` layers become the hierarchy nodes, each placing the
+/// blocks it stamps. The state with no native voxcore home, such as the image
+/// metadata, preview, materials, cameras, light, per-layer metadata, the clone
+/// and shape definitions, the exact block placements, and unknown chunks, rides
+/// in a `goxel` ext so the file can be written back exactly.
 ///
 /// Errors on a layer placement that references a block outside the block list,
 /// or if [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
 pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
-    let (palette, cells) = build_palette(file);
+    let (palette, materials) = build_palette(&mut state, file);
     let palette_id = state.add_palette(palette);
 
     for block in &file.blocks {
         // A Goxel block is a fixed 16-cube; it becomes the object's build
         // volume directly, with its live voxels wherever they sit inside it.
-        state.add_object(build_object(block, palette_id, &cells));
+        state.add_object(build_object(block, palette_id, &materials));
     }
 
     let nodes = build_layer_nodes(file, state.object_count())?;
@@ -52,11 +52,15 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
     Ok(state)
 }
 
-/// Builds the one shared palette: a `rgba` cell per distinct color across every
-/// block's solid voxels, plus a map from a color to its cell. A file with no
-/// solid voxels gets a single placeholder cell so objects have a default sample
-/// to reference.
-fn build_palette(file: &GoxlFile) -> (VoxPalette, HashMap<[u8; 4], U32Id<BVoxPaletteCell>>) {
+/// Builds the one shared palette: a color pool of one entry per distinct color
+/// across every block's solid voxels, bound to `baseColorFactor`, with one
+/// material per color and a map from a color to its material. The pool is added
+/// to `state`. A file with no solid voxels gets a single placeholder color so
+/// objects have a default material to sample.
+fn build_palette(
+    state: &mut VoxMain,
+    file: &GoxlFile,
+) -> (VoxPalette, HashMap<[u8; 4], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 4]> = Vec::new();
     let mut seen: HashSet<[u8; 4]> = HashSet::new();
     for block in &file.blocks {
@@ -74,32 +78,38 @@ fn build_palette(file: &GoxlFile) -> (VoxPalette, HashMap<[u8; 4], U32Id<BVoxPal
         order.push([0, 0, 0, 0]);
     }
 
+    // Colors ride in a shared sRGBA pool as float components in `[0, 1]`; each
+    // material draws one value-index into it.
+    let pool = state.add_value_pool(VoxValuePool::Srgba {
+        values: order.iter().map(|&color| color_floats(color)).collect(),
+    });
+
     let mut palette = VoxPalette::default();
-    palette.add_attribute("rgba".to_owned());
-    let mut cells = HashMap::with_capacity(order.len());
-    for color in &order {
-        let cell = palette
-            .add_cell(vec![VoxValue::Text(hex(*color))])
-            .expect("one value per palette attribute");
-        cells.insert(*color, cell);
+    palette.add_binding(BASE_COLOR_FACTOR.to_owned(), pool);
+    let mut materials = HashMap::with_capacity(order.len());
+    for (index, color) in order.iter().enumerate() {
+        let material = palette
+            .add_material(vec![index as u32])
+            .expect("one value-index for the one binding");
+        materials.insert(*color, material);
     }
 
-    (palette, cells)
+    (palette, materials)
 }
 
 /// Builds an object from a block: a dense `16 x 16 x 16` grid referencing the
-/// shared palette, each solid voxel sampling its color cell.
+/// shared palette on one layer, each solid voxel sampling its color material.
 fn build_object(
     block: &GoxlBlock,
     palette: U32Id<BVoxPalette>,
-    cells: &HashMap<[u8; 4], U32Id<BVoxPaletteCell>>,
+    materials: &HashMap<[u8; 4], U32Id<BVoxMaterial>>,
 ) -> VoxObject {
     let size = GoxlBlock::SIZE;
     let mut object = VoxObject::new(String::new(), TyVector3U32::new(size, size, size))
         .expect("a 16-cubed block fits the dense grid");
 
-    // The single reference is the color; solid voxels overwrite cell 0.
-    object.add_palette_ref(palette, U32Id::<BVoxPaletteCell>::from_u32(0));
+    // The single layer is the color; solid voxels overwrite material 0.
+    object.add_layer(palette, U32Id::<BVoxMaterial>::from_u32(0));
 
     for z in 0..size {
         for y in 0..size {
@@ -111,7 +121,7 @@ fn build_object(
                     continue;
                 }
                 let color = [voxel.r, voxel.g, voxel.b, voxel.a];
-                let cell = cells
+                let material = materials
                     .get(&color)
                     .copied()
                     .expect("every solid color is in the palette");
@@ -119,8 +129,8 @@ fn build_object(
                     .voxel_id(TyVector3U32::new(x, y, z))
                     .expect("a coordinate inside the block is inside the grid");
                 object
-                    .retain_voxel(id, &[cell])
-                    .expect("one sample for the one palette reference");
+                    .retain_voxel(id, &[material])
+                    .expect("one sample for the one layer");
             }
         }
     }
@@ -158,12 +168,9 @@ fn build_layer_nodes(file: &GoxlFile, object_count: usize) -> Result<Vec<VoxHier
     Ok(nodes)
 }
 
-/// One `#RRGGBBAA` string for an `[r, g, b, a]` color.
-fn hex(color: [u8; 4]) -> String {
-    format!(
-        "#{:02X}{:02X}{:02X}{:02X}",
-        color[0], color[1], color[2], color[3]
-    )
+/// The float sRGB components in `[0, 1]` of an `[r, g, b, a]` byte color.
+fn color_floats(color: [u8; 4]) -> [f64; 4] {
+    color.map(|byte| byte as f64 / 255.0)
 }
 
 /// Builds the `goxel` ext payload from the state with no native home.
@@ -266,7 +273,7 @@ fn shape_token(shape: GoxlShape) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_goxl_bytes, from_goxl_file, to_goxl_bytes, to_goxl_file};
+    use crate::{BASE_COLOR_FACTOR, from_goxl_bytes, from_goxl_file, to_goxl_bytes, to_goxl_file};
     use branded_id::U32Id;
     use goxl::{
         GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
@@ -275,9 +282,18 @@ mod tests {
     use std::collections::BTreeSet;
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxMap,
-        VoxObject, VoxPalette, VoxValue,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
+        VoxPalette, VoxValue, VoxValuePool,
     };
+
+    /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
+    fn srgba(hex: &str) -> [f64; 4] {
+        let digits = hex.strip_prefix('#').expect("a leading #");
+        let byte = |index: usize| {
+            u8::from_str_radix(&digits[index * 2..index * 2 + 2], 16).expect("two hex digits")
+        };
+        [byte(0), byte(1), byte(2), byte(3)].map(|b| b as f64 / 255.0)
+    }
 
     /// A `4 x 4` matrix with distinct float cells, for transform and box
     /// fields.
@@ -439,39 +455,46 @@ mod tests {
     fn source_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        // One rgba palette: a transparent placeholder, then red, green, blue.
+        // One baseColorFactor palette: a transparent placeholder, then red,
+        // green, blue.
+        let pool = state.add_value_pool(VoxValuePool::Srgba {
+            values: ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
+                .iter()
+                .map(|hex| srgba(hex))
+                .collect(),
+        });
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        for hex in ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"] {
+        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), pool);
+        for index in 0..4 {
             palette
-                .add_cell(vec![VoxValue::Text(hex.to_owned())])
-                .expect("one value per attribute");
+                .add_material(vec![index])
+                .expect("one value-index for the one binding");
         }
         let palette_id = state.add_palette(palette);
-        let cell = |index: u32| U32Id::<BVoxPaletteCell>::from_u32(index);
+        let material = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Object 0: a red then a green voxel along x.
         let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
             .expect("a 2x1x1 grid is within the dense limit");
-        wide.add_palette_ref(palette_id, cell(0));
+        wide.add_layer(palette_id, material(0));
         for (x, color) in [(0u32, 1u32), (1, 2)] {
             let voxel = wide
                 .voxel_id(TyVector3U32::new(x, 0, 0))
                 .expect("a position within the grid");
-            wide.retain_voxel(voxel, &[cell(color)])
-                .expect("one sample for the one reference");
+            wide.retain_voxel(voxel, &[material(color)])
+                .expect("one sample for the one layer");
         }
         state.add_object(wide);
 
         // Object 1: a single blue voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
             .expect("a 1x1x1 grid is within the dense limit");
-        unit.add_palette_ref(palette_id, cell(0));
+        unit.add_layer(palette_id, material(0));
         let voxel = unit
             .voxel_id(TyVector3U32::new(0, 0, 0))
             .expect("a position within the grid");
-        unit.retain_voxel(voxel, &[cell(3)])
-            .expect("one sample for the one reference");
+        unit.retain_voxel(voxel, &[material(3)])
+            .expect("one sample for the one layer");
         state.add_object(unit);
 
         let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);

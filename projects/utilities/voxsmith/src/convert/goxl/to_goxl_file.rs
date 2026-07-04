@@ -8,10 +8,7 @@ use goxl::{
 };
 use std::collections::{BTreeMap, HashSet};
 use ty_math::TyVector3U32;
-use voxcore::{
-    BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPaletteRef, BVoxVoxel, VoxMain, VoxObject,
-    VoxPalette, VoxValue,
-};
+use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 
 /// Writes a [`VoxMain`] to a decoded Goxel [`GoxlFile`].
 ///
@@ -21,7 +18,7 @@ use voxcore::{
 /// 16` block, and the layers, materials, cameras, light, preview, and image
 /// come from the ext. When the ext is absent or names another format, the file
 /// is synthesized from the bare scene instead by `synthesize_goxl`, so any
-/// source can be written to Goxel. An empty cell is written back as the
+/// source can be written to Goxel. An empty voxel is written back as the
 /// transparent zero voxel.
 ///
 /// Errors only when a `goxel` ext is present but cannot be deserialized;
@@ -32,15 +29,12 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
         None => return Ok(synthesize_goxl(state)),
     };
 
-    // The forward path adds exactly one palette and references it from every
-    // object; the colors live in its cells.
-    let palette = state.iter_palettes().next().map(|(_, palette)| palette);
-
     // Each object is the author's build volume (a fixed Goxel 16-cube), so a
-    // block is written from it directly at the original positions.
+    // block is written from it directly at the original positions, its voxel
+    // colors read through the object's `baseColorFactor` layer.
     let blocks = state
         .iter_objects()
-        .map(|(_, object)| block_from_object(object, palette))
+        .map(|(_, object)| block_from_object(state, object))
         .collect();
 
     Ok(GoxlFile {
@@ -220,8 +214,8 @@ impl GoxlBuilder {
             ];
             let index = local[0] + stride * (local[1] + stride * local[2]);
             let rgba = color
-                .map(|(reference, palette, attribute)| {
-                    cell_color(object, voxel, reference, palette, attribute)
+                .map(|(layer, palette, binding)| {
+                    cell_color(state, object, voxel, layer, palette, binding)
                 })
                 .unwrap_or([0, 0, 0, 0]);
             let block = tiles
@@ -263,11 +257,12 @@ fn solid_voxel(rgba: [u8; 4]) -> GoxlVoxel {
     }
 }
 
-/// Rebuilds a `16 x 16 x 16` block from an object: each cell takes its color
-/// from the voxel's palette sample, or the transparent zero voxel when empty.
-fn block_from_object(object: &VoxObject, palette: Option<&VoxPalette>) -> GoxlBlock {
+/// Rebuilds a `16 x 16 x 16` block from an object: each grid cell takes its
+/// color from the voxel's sampled material through the object's
+/// `baseColorFactor` layer, or the transparent zero voxel when empty.
+fn block_from_object(state: &VoxMain, object: &VoxObject) -> GoxlBlock {
     let size = GoxlBlock::SIZE;
-    let reference = object.iter_palette_refs().next().map(|(id, _)| id);
+    let color = object_color_ref(state, object);
     let mut voxels = Vec::with_capacity((size * size * size) as usize);
 
     // Storage order is x fastest, then y, then z, matching the loop nesting.
@@ -277,8 +272,14 @@ fn block_from_object(object: &VoxObject, palette: Option<&VoxPalette>) -> GoxlBl
                 let voxel = object
                     .voxel_id(TyVector3U32::new(x, y, z))
                     .filter(|&id| object.is_live(id))
-                    .and_then(|id| voxel_color(object, palette, reference, id))
-                    .map(|[r, g, b, a]| GoxlVoxel { r, g, b, a })
+                    .map(|id| {
+                        let [r, g, b, a] = color
+                            .map(|(layer, palette, binding)| {
+                                cell_color(state, object, id, layer, palette, binding)
+                            })
+                            .unwrap_or([0, 0, 0, 0]);
+                        GoxlVoxel { r, g, b, a }
+                    })
                     .unwrap_or_default();
                 voxels.push(voxel);
             }
@@ -286,21 +287,6 @@ fn block_from_object(object: &VoxObject, palette: Option<&VoxPalette>) -> GoxlBl
     }
 
     GoxlBlock { voxels }
-}
-
-/// The `[r, g, b, a]` color a live voxel samples from the shared palette, or
-/// `None` if the reference, cell, or `rgba` attribute is missing.
-fn voxel_color(
-    object: &VoxObject,
-    palette: Option<&VoxPalette>,
-    reference: Option<U32Id<BVoxPaletteRef>>,
-    voxel: U32Id<BVoxVoxel>,
-) -> Option<[u8; 4]> {
-    let palette = palette?;
-    let reference = reference?;
-    let cell = object.voxel_cell(voxel, reference)?;
-    let rgba = attribute_id(palette, "rgba")?;
-    Some(parse_rgba(palette.cell_value(cell, rgba)))
 }
 
 /// Rebuilds one layer from its ext provenance, restoring its placements and the
@@ -339,28 +325,4 @@ fn shape_from_token(token: &str) -> Option<GoxlShape> {
         "cylinder" => Some(GoxlShape::Cylinder),
         _ => None,
     }
-}
-
-/// The id of the attribute named `name`, or `None` if the palette has no such
-/// attribute.
-fn attribute_id(palette: &VoxPalette, name: &str) -> Option<U32Id<BVoxAttribute>> {
-    palette
-        .iter_attributes()
-        .find(|(_, attribute)| *attribute == name)
-        .map(|(id, _)| id)
-}
-
-/// Parses a `#RRGGBBAA` color cell into `[r, g, b, a]`, defaulting to
-/// transparent on a missing or malformed value.
-fn parse_rgba(value: Option<&VoxValue>) -> [u8; 4] {
-    let Some(VoxValue::Text(hex)) = value else {
-        return [0, 0, 0, 0];
-    };
-    let hex = hex.strip_prefix('#').unwrap_or(hex);
-    let byte = |index: usize| {
-        hex.get(index * 2..index * 2 + 2)
-            .and_then(|byte| u8::from_str_radix(byte, 16).ok())
-            .unwrap_or(0)
-    };
-    [byte(0), byte(1), byte(2), byte(3)]
 }

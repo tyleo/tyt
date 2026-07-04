@@ -327,12 +327,15 @@ files, only in the phase-5/6 modules.
       names, imported by every converter, the glTF pipeline, and vxl. (Landed as
       the crate-root, always-compiled, public `gltf_attributes` module, so the
       non-gltf converters and vxl import it too; see the decisions log.)
-- [ ] Retarget `object_color_ref` to `baseColorFactor`, and generalize
+- [x] Retarget `object_color_ref` to `baseColorFactor`, and generalize
       `cell_color` and `parse_color_hex` to resolve a color through
       material-to-binding-to-pool and decode by pool kind, not hex only.
-      (Deferred to Phase 6; these helpers' only callers are the Phase 6 goxl,
-      mvox, qbcl, and vmax converters, so they land with that chunk. See the
-      decisions log.)
+      (Landed with the Phase 6 goxl chunk, the first `_color` consumer.
+      `object_color_ref` now returns `(layer, palette, binding)` for the first
+      layer binding `baseColorFactor`; `cell_color` takes `state` and resolves
+      through `voxel_material` and `material_value`; `parse_color_hex` was renamed
+      to `pool_color`, decoding a resolved `(pool, index)` by kind, sRGB straight
+      to bytes and linear re-encoded. See the decisions log.)
 - [x] Rename `MeshMaterial` fields and `MATERIAL_ATTRIBUTES` to the glTF vocab,
       split `emissive` into `emissiveFactor` color and `emissiveStrength` number,
       and set the default-scalar table to the new names with `metallicFactor`
@@ -386,9 +389,16 @@ known-pattern dither tests still pass byte-for-byte. Verified under
 `--no-default-features --features voxj`. This is not one of the listed items below;
 those stay unchecked.
 
-- [ ] goxl: build a color pool bound to `baseColorFactor`, emit materials as
+- [x] goxl: build a color pool bound to `baseColorFactor`, emit materials as
       value-indices, and read color back through the pool-kind helper both in the
-      direct and synthesized paths.
+      direct and synthesized paths. (`from_goxl_file` builds one shared `srgba`
+      pool of the distinct block colors bound to `baseColorFactor`, one material
+      per color, and each object references it on one layer; `to_goxl_file` reads
+      each voxel's color through `object_color_ref` plus `cell_color` in both the
+      ext-driven `block_from_object` path and the synthesized `emit_object` path.
+      The Phase 5 item 2 color helpers landed here too. Verified under
+      `--no-default-features --features goxl`; 15 tests pass, the byte-exact
+      round-trips included.)
 - [ ] qbcl (qb, qbt, qbcl): replace the alpha-less `rgb` attribute with a color
       pool bound to `baseColorFactor`; decide the alpha convention for a
       three-channel source (canonical `srgb`, alpha synthesized as 1 where a
