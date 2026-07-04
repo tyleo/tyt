@@ -15,8 +15,10 @@ pub enum Check {
     /// Layer palette refs, node children, child objects, and roots resolve;
     /// node children, child objects, and roots are each listed at most once.
     Indices,
-    /// Each object's position and sample blocks decode, with matching arity and
-    /// per-channel lengths.
+    /// Each object's position and sample blocks decode: recognized structure,
+    /// canonical base64, exact bitmap and packed byte counts with zero pad
+    /// bits, well-formed run streams and varints, the Hilbert bits cap, and one
+    /// channel per layer with one value per voxel.
     Blocks,
     /// Voxel positions within an object are unique.
     UniquePositions,

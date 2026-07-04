@@ -15,6 +15,7 @@ pub fn validate_voxj_file(file: &VoxjFile) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use crate::validate_voxj_file;
+    use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
         VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
         VoxjPaletteBinding, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
@@ -408,6 +409,93 @@ mod tests {
         file.main.runtime_state.hierarchy_nodes[0]
             .transform
             .rotation = [0.0, 0.0, 0.0, 2.0];
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn accepts_bitmap_positions() {
+        let mut file = valid_file();
+        // Cells 0 and 1 of the [2, 1, 1] grid occupied: bits 11 then six zero
+        // pad bits, byte 0xC0. Two voxels, so the raw samples still fit.
+        file.main.runtime_state.objects[0].voxel_positions =
+            VoxjPositionBlock::BitmapBase64(BASE64.encode([0xC0]));
+        assert!(validate_voxj_file(&file).is_ok());
+    }
+
+    #[test]
+    fn accepts_hilbert_positions() {
+        let mut file = valid_file();
+        // The spec's 2 x 2 x 1 example: Hilbert indices [0, 3, 4, 7] decode to
+        // (0,0,0), (0,1,0), (1,1,0), (1,0,0), so bounds are [2, 2, 1] and there
+        // are four voxels.
+        file.main.runtime_state.objects[0].bounds = [2, 2, 1];
+        file.main.runtime_state.objects[0].voxel_positions =
+            VoxjPositionBlock::HilbertDeltaVarintBase64("AAMBAw==".to_owned());
+        file.main.runtime_state.objects[0].voxel_samples =
+            VoxjSampleBlock::RawJson(vec![vec![0, 1, 2, 3]]);
+        assert!(validate_voxj_file(&file).is_ok());
+    }
+
+    #[test]
+    fn rejects_bitmap_with_nonzero_pad_bits() {
+        let mut file = valid_file();
+        // Byte 0xC1 sets one of the six pad bits past the two occupied cells.
+        file.main.runtime_state.objects[0].voxel_positions =
+            VoxjPositionBlock::BitmapBase64(BASE64.encode([0xC1]));
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_non_canonical_base64_block() {
+        let mut file = valid_file();
+        // '_' is a base64url character, not in the standard alphabet.
+        file.main.runtime_state.objects[0].voxel_positions =
+            VoxjPositionBlock::BitmapBase64("w_==".to_owned());
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_oversized_hilbert_grid() {
+        let mut file = valid_file();
+        // A 131073-wide axis needs 18 Hilbert bits, over the 17-bit cap.
+        file.main.runtime_state.objects[0].bounds = [131073, 1, 1];
+        file.main.runtime_state.objects[0].voxel_positions =
+            VoxjPositionBlock::HilbertDeltaVarintBase64(String::new());
+        file.main.runtime_state.objects[0].voxel_samples =
+            VoxjSampleBlock::RawJson(vec![Vec::new()]);
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_zero_delta_hilbert() {
+        let mut file = valid_file();
+        // Deltas [0, 0] prefix-sum to indices [0, 0], so the second voxel
+        // repeats the first's position; the unique-positions check catches it,
+        // which is how the strictly-positive-delta rule is enforced.
+        file.main.runtime_state.objects[0].bounds = [1, 1, 1];
+        file.main.runtime_state.objects[0].voxel_positions =
+            VoxjPositionBlock::HilbertDeltaVarintBase64(BASE64.encode([0x00, 0x00]));
+        file.main.runtime_state.objects[0].voxel_samples =
+            VoxjSampleBlock::RawJson(vec![vec![0, 0]]);
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_packed_sample_with_nonzero_pad_bits() {
+        let mut file = valid_file();
+        // Palette 0 has four materials, so packed width is 2. Two values fill
+        // the top four bits; 0x71 sets one of the four pad bits.
+        file.main.runtime_state.objects[0].voxel_samples =
+            VoxjSampleBlock::PackedBase64(vec![BASE64.encode([0x71])]);
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_odd_length_rle_sample() {
+        let mut file = valid_file();
+        // A dangling value with no count.
+        file.main.runtime_state.objects[0].voxel_samples =
+            VoxjSampleBlock::RleJson(vec![vec![1, 2, 3]]);
         assert!(validate_voxj_file(&file).is_err());
     }
 }

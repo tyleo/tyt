@@ -17,8 +17,10 @@ use voxj::VoxjFile;
 /// 4. `indices`: layer palette refs, node children, child objects, and roots
 ///    resolve; node children, child objects, and roots each appear at most once
 ///    (a palette may back two layers, so a repeated layer ref is allowed).
-/// 5. `blocks`: each object's position and sample blocks decode, with one
-///    channel per layer and one value per voxel.
+/// 5. `blocks`: each object's position and sample blocks decode: canonical
+///    base64, exact bitmap and packed byte counts with zero pad bits,
+///    well-formed run streams and varints, the Hilbert bits cap, and one
+///    channel per layer with one value per voxel.
 /// 6. `unique-positions`: voxel positions within an object are unique.
 /// 7. `bounds`: positions lie within bounds and bounds are exactly tight.
 /// 8. `sample-materials`: each sample indexes a real material of its layer's
@@ -41,6 +43,7 @@ pub fn check_voxj_file(file: &VoxjFile) -> Vec<VoxjCheck> {
 #[cfg(test)]
 mod tests {
     use crate::{VoxjCheck, VoxjCheckStatus, check_voxj_file};
+    use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
         VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
         VoxjPaletteBinding, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
@@ -237,6 +240,25 @@ mod tests {
         // The referenced palette's own pool is untouched, so palettes still
         // pass: the report is attributed to the right check.
         assert_eq!(*status(&checks, "palettes"), VoxjCheckStatus::Passed);
+    }
+
+    #[test]
+    fn reports_block_internal_failure() {
+        let mut file = valid_file();
+        // A bitmap whose final byte sets a pad bit fails to decode, so the
+        // block-internal fault reports through `blocks`. The later geometry
+        // checks are skipped for the object, so they still read as passed.
+        file.main.runtime_state.objects[0].voxel_positions =
+            VoxjPositionBlock::BitmapBase64(BASE64.encode([0xC1]));
+        let checks = check_voxj_file(&file);
+        assert!(matches!(
+            status(&checks, "blocks"),
+            VoxjCheckStatus::Failed(_)
+        ));
+        assert_eq!(
+            *status(&checks, "sample-materials"),
+            VoxjCheckStatus::Passed
+        );
     }
 
     #[test]

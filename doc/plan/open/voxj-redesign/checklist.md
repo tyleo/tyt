@@ -118,7 +118,7 @@ Chunk split (see decisions log): items 1 to 4 above and the STRUCTURAL parts of
 stricter block-internal rules and their fixtures are deferred to a follow-up
 chunk, so items 5 to 7 stay unchecked until that lands.
 
-- [ ] Rewrite `internal/voxj_validation.rs` to the twenty rules: value-pool kind
+- [x] Rewrite `internal/voxj_validation.rs` to the twenty rules: value-pool kind
       recognized and values well-formed per kind, min/max presence and bounds and
       integer-valued and `min <= max`; palette bindings non-empty and distinct
       attribute and `poolRef` in range, materials column count equals bindings
@@ -136,8 +136,16 @@ chunk, so items 5 to 7 stay unchecked until that lands.
       (rule 9) landed as the new `value-pools` check in `check_value_pools.rs`:
       values non-empty, int/float value within min/max, integer-valued int
       bounds, `min <= max`, hex-color pattern, and float color-component ranges.
-      Deferred: the stricter base64/rle/hilbert block-internal rules (11.2, 11.3,
-      13, 14), which tighten the decode path rather than adding a pool check.)
+      Chunk 3 done: the block-internal rules (11.2, 11.3, 13.2, 13.3, 14) landed
+      by tightening the decode path, so they report through the existing
+      `blocks`, `unique-positions`, and `bounds` checks with no new name. rle
+      streams reject an odd length and a zero count (11.2); packed and bitmap
+      blocks require the exact byte count and zero pad bits (11.3, 13.2); the
+      hilbert path caps `bits` at 17 and errors on a truncated or overlong
+      varint (13.3.2, 13.3.1), while a non-positive delta collapses to a
+      repeated Hilbert index that `unique-positions` catches; base64
+      canonicality (rule 14) was already enforced by the base64 STANDARD engine.
+      All twenty rules are now covered.)
 - [x] Update the named-check list and its doc comment in `check_voxj_file`, plus
       the tests that pin the exact names. (Chunk 1 done: `sample-cells` renamed
       to `sample-materials`; `palettes`/`indices` docs and the name-list test
@@ -146,7 +154,7 @@ chunk, so items 5 to 7 stay unchecked until that lands.
       `reports_every_check_in_order` name-list test. The deferred block-internal
       rules report through the existing `blocks`/`bounds`/`unique-positions`
       checks via a tighter decode, so they add no new name.)
-- [ ] Rebuild all fixtures in `validate_voxj_file`, `check_voxj_file`, and
+- [x] Rebuild all fixtures in `validate_voxj_file`, `check_voxj_file`, and
       `from_voxj_file_bytes`; delete the removed-rule tests (duplicate palette
       ref, rgba-attribute format, rectangular rows) and add pool, min/max, kind,
       column-range, and two-layers-one-palette cases. (Chunk 1 done: fixtures
@@ -157,8 +165,13 @@ chunk, so items 5 to 7 stay unchecked until that lands.
       value-above-max, min>max, non-integer-int-bound, malformed-hex,
       lowercase-hex, srgb-component-range, linear-component-range rejection cases
       plus an unbounded/HDR acceptance case, and `check_voxj_file` gains a
-      report-level `value-pools` failure case. Deferred: block-internal-rule
-      cases, which pair with the deferred rules above.)
+      report-level `value-pools` failure case. Chunk 3 done: decode-level cases
+      in `decode_voxj_object` and `decode_varint` (wrong bitmap/packed byte
+      count, non-zero bitmap/packed pad bits, odd-length and zero-count rle,
+      oversized hilbert grid, truncated and overlong varint) and validate-level
+      cases (those plus non-canonical base64 and a zero-delta hilbert caught as a
+      duplicate position), valid-block positive controls for bitmap and hilbert
+      positions, and a `blocks` report-level case in `check_voxj_file`.)
 
 Gate: `voxj-codec` builds; a new-shape document encodes, decodes, and validates,
 and `packed-base64` round-trips at the material-derived width.

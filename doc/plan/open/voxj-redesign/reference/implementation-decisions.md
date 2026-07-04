@@ -224,3 +224,46 @@ The block-internal rules (11.2, 11.3, 13, 14: rle counts, packed and bitmap pad
 bits, hilbert deltas and bit width, base64 canonicality) remain deferred to the
 final Phase 2 chunk; they tighten the decode path rather than adding a pool
 check, so they stay a separate reviewable unit.
+
+### Final chunk: block-internal rules tighten the decode, no new check name
+
+The last Phase 2 chunk enforces the block-internal rules by hardening
+`decode_voxj_object` and `decode_varint` so a malformed encoded block fails to
+decode. `check_geometry` already decodes every object and reports a decode
+failure as the `blocks` check, so these rules surface there with no new
+`Check` variant, and the report list stays at thirteen. The specific tightenings:
+
+1. rle-json (rule 11.2): `rle_decode` now returns a `Result` and rejects an
+   odd-length stream (a value with no count) and a zero count. The remaining
+   clauses were already covered: value-in-`[0, M)` by the `sample-materials`
+   check over the decoded samples, and counts-sum-to-`V` by the existing
+   per-channel length check in `decode_samples`.
+2. packed-base64 (rule 11.3) and bitmap-base64 (rule 13.2): one shared helper,
+   `check_packed_bytes`, requires the decoded byte length to equal exactly
+   `ceil(bits / 8)` (the old packed check only rejected a short channel, not a
+   long one) and requires the final byte's unused low bits to be zero. Because
+   the packing is MSB-first, the pad bits are the last byte's low `pad` bits, so
+   the mask is `(1 << pad) - 1`; the exact length rules out padding anywhere
+   else. Decoded-value-in-range stays with `sample-materials` (packed) and set
+   bits define the voxel count (bitmap).
+3. hilbert (rule 13.3): the decode caps `bits` at `MAX_HILBERT_BITS = 17`
+   (13.3.2) and errors before touching the data, and `decode_varint` now returns
+   a `Result` that rejects a stream ending mid-value or a value past 64 bits,
+   which previously panicked or wrapped on malformed input (13.3.1, well-formed
+   varint). The strictly-positive-delta clause is enforced implicitly: a
+   non-positive delta after the first repeats a Hilbert index, so it decodes to a
+   duplicate position that `unique-positions` rejects, and Hilbert decode is a
+   bijection so a duplicate position can arise no other way. In-bounds (13.3.3)
+   stays with the `bounds` check.
+4. base64 canonicality (rule 14): needed no code. base64 0.22's
+   `general_purpose::STANDARD` decodes with `RequireCanonical` padding,
+   `decode_allow_trailing_bits = false`, and the standard (non-url) alphabet, so
+   a base64url character, wrong `=` padding, non-zero trailing bits, or embedded
+   whitespace already rejects at decode. Every base64 block field routes through
+   this one engine.
+
+`decode_varint`'s overflow guard checks `shift >= 64` before shifting, so a
+legal `<< 63` never panics and an 11th continuation byte rejects; a real hilbert
+delta needs at most `3 * 17 = 51` bits, well inside the guard. These are decode
+changes, so they harden the actual decoder used by `from_voxj_file_bytes`, not
+just the validator.
