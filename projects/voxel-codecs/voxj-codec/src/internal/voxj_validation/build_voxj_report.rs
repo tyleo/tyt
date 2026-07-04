@@ -2,8 +2,9 @@ use crate::{Check, VoxjCheck, VoxjCheckStatus};
 
 /// Every check, in the order [`check_voxj_file`](crate::check_voxj_file())
 /// reports them.
-const REPORT_ORDER: [Check; 12] = [
+const REPORT_ORDER: [Check; 13] = [
     Check::Version,
+    Check::ValuePools,
     Check::Palettes,
     Check::Indices,
     Check::Blocks,

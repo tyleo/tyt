@@ -9,23 +9,25 @@ use voxj::VoxjFile;
 ///
 /// The checks, in report order, are:
 /// 1. `version`: the version is recognized.
-/// 2. `palettes`: every palette has non-empty bindings with distinct attributes
+/// 2. `value-pools`: every value pool has non-empty values within its kind,
+///    with in-range numeric bounds and in-range color components.
+/// 3. `palettes`: every palette has non-empty bindings with distinct attributes
 ///    and in-range pool refs, and column-major materials with one column per
 ///    binding, a shared length, and in-range value-indices.
-/// 3. `indices`: layer palette refs, node children, child objects, and roots
+/// 4. `indices`: layer palette refs, node children, child objects, and roots
 ///    resolve; node children, child objects, and roots each appear at most once
 ///    (a palette may back two layers, so a repeated layer ref is allowed).
-/// 4. `blocks`: each object's position and sample blocks decode, with one
+/// 5. `blocks`: each object's position and sample blocks decode, with one
 ///    channel per layer and one value per voxel.
-/// 5. `unique-positions`: voxel positions within an object are unique.
-/// 6. `bounds`: positions lie within bounds and bounds are exactly tight.
-/// 7. `sample-materials`: each sample indexes a real material of its layer's
+/// 6. `unique-positions`: voxel positions within an object are unique.
+/// 7. `bounds`: positions lie within bounds and bounds are exactly tight.
+/// 8. `sample-materials`: each sample indexes a real material of its layer's
 ///    palette.
-/// 8. `acyclic`: the hierarchy has no cycle.
-/// 9. `scale`: no transform scale component is zero.
-/// 10. `rotation`: every transform rotation is a unit quaternion within `1e-6`.
-/// 11. `edit-state`: when present, each edit grid contains its runtime grid.
-/// 12. `sample-order`: always unverifiable, an authoring invariant no document
+/// 9. `acyclic`: the hierarchy has no cycle.
+/// 10. `scale`: no transform scale component is zero.
+/// 11. `rotation`: every transform rotation is a unit quaternion within `1e-6`.
+/// 12. `edit-state`: when present, each edit grid contains its runtime grid.
+/// 13. `sample-order`: always unverifiable, an authoring invariant no document
 ///     can witness.
 ///
 /// A check whose work an earlier failure made moot reports no failure rather
@@ -40,8 +42,9 @@ pub fn check_voxj_file(file: &VoxjFile) -> Vec<VoxjCheck> {
 mod tests {
     use crate::{VoxjCheck, VoxjCheckStatus, check_voxj_file};
     use voxj::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjPaletteBinding,
-        VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValuePool,
+        VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
+        VoxjPaletteBinding, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjValuePool,
     };
 
     /// One `srgba-hex` value pool of four colors, enough to back a four-material
@@ -127,6 +130,7 @@ mod tests {
             names,
             [
                 "version",
+                "value-pools",
                 "palettes",
                 "indices",
                 "blocks",
@@ -210,6 +214,29 @@ mod tests {
             status(&checks, "palettes"),
             VoxjCheckStatus::Failed(_)
         ));
+    }
+
+    #[test]
+    fn reports_value_pool_content_failure() {
+        let mut file = valid_file();
+        // An extra, unreferenced float pool whose value sits above its max, so
+        // the value-pools check is the only one that fails.
+        file.main
+            .runtime_state
+            .value_pools
+            .push(VoxjValuePool::Float {
+                min: VoxjBound::Number(0.0),
+                max: VoxjBound::Number(1.0),
+                values: vec![2.0],
+            });
+        let checks = check_voxj_file(&file);
+        assert!(matches!(
+            status(&checks, "value-pools"),
+            VoxjCheckStatus::Failed(_)
+        ));
+        // The referenced palette's own pool is untouched, so palettes still
+        // pass: the report is attributed to the right check.
+        assert_eq!(*status(&checks, "palettes"), VoxjCheckStatus::Passed);
     }
 
     #[test]

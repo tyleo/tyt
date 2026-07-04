@@ -4,6 +4,10 @@
 pub enum Check {
     /// The version is recognized.
     Version,
+    /// Every value pool has non-empty values within its kind: numeric values
+    /// within `min`/`max`, integer-valued int bounds, `min <= max`, hex colors
+    /// matching their pattern, and float color components in range.
+    ValuePools,
     /// Every palette has non-empty bindings with distinct attributes and
     /// in-range pool refs, and column-major materials with one column per
     /// binding, a shared length, and in-range value-indices.
@@ -38,6 +42,7 @@ impl Check {
     pub fn name(self) -> &'static str {
         match self {
             Check::Version => "version",
+            Check::ValuePools => "value-pools",
             Check::Palettes => "palettes",
             Check::Indices => "indices",
             Check::Blocks => "blocks",

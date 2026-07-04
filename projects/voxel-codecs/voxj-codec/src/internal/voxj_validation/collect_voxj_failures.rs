@@ -1,6 +1,6 @@
 use crate::{
     Check, Failures, check_acyclic, check_edit_state, check_geometry, check_indices,
-    check_palettes, check_transforms, check_version,
+    check_palettes, check_transforms, check_value_pools, check_version,
 };
 use voxj::VoxjFile;
 
@@ -17,6 +17,9 @@ pub fn collect_voxj_failures(file: &VoxjFile, fail_fast: bool) -> Vec<(Check, St
     let mut failures = Failures::new(fail_fast);
 
     check_version(file, &mut failures);
+    if failures.go() {
+        check_value_pools(&file.main, &mut failures);
+    }
     if failures.go() {
         check_palettes(&file.main, &mut failures);
     }

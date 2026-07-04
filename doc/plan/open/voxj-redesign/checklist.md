@@ -132,13 +132,20 @@ chunk, so items 5 to 7 stay unchecked until that lands.
       attribute / `poolRef` in range / materials column arity / equal column
       length >= 1 / value-index in pool range; `check_geometry` sample-material
       indices in `[0, M)`; `check_indices` drops the duplicate-palette-ref rule
-      and keeps the layer-ref range check. Deferred: value-pool kind/values
-      content rules, min/max bounds rules, and the stricter base64/rle/hilbert
-      block-internal rules.)
-- [ ] Update the named-check list and its doc comment in `check_voxj_file`, plus
+      and keeps the layer-ref range check. Chunk 2 done: value-pool content rules
+      (rule 9) landed as the new `value-pools` check in `check_value_pools.rs`:
+      values non-empty, int/float value within min/max, integer-valued int
+      bounds, `min <= max`, hex-color pattern, and float color-component ranges.
+      Deferred: the stricter base64/rle/hilbert block-internal rules (11.2, 11.3,
+      13, 14), which tighten the decode path rather than adding a pool check.)
+- [x] Update the named-check list and its doc comment in `check_voxj_file`, plus
       the tests that pin the exact names. (Chunk 1 done: `sample-cells` renamed
       to `sample-materials`; `palettes`/`indices` docs and the name-list test
-      updated. Deferred: adding the new `value-pools` content check to the list.)
+      updated. Chunk 2 done: `value-pools` added between `version` and `palettes`
+      in `Check`, `REPORT_ORDER` (now 13), the `check_voxj_file` doc list, and the
+      `reports_every_check_in_order` name-list test. The deferred block-internal
+      rules report through the existing `blocks`/`bounds`/`unique-positions`
+      checks via a tighter decode, so they add no new name.)
 - [ ] Rebuild all fixtures in `validate_voxj_file`, `check_voxj_file`, and
       `from_voxj_file_bytes`; delete the removed-rule tests (duplicate palette
       ref, rgba-attribute format, rectangular rows) and add pool, min/max, kind,
@@ -146,8 +153,12 @@ chunk, so items 5 to 7 stay unchecked until that lands.
       rebuilt to the value-pool/layer/material shape; removed-rule tests deleted;
       value-index-range, poolRef-range, ragged-column, column-count-mismatch,
       duplicate-binding-attribute, and two-layers-one-palette cases added.
-      Deferred: pool, min/max, and kind content cases, which pair with the
-      deferred rules above.)
+      Chunk 2 done: `validate_voxj_file` gains empty-pool, value-below-min,
+      value-above-max, min>max, non-integer-int-bound, malformed-hex,
+      lowercase-hex, srgb-component-range, linear-component-range rejection cases
+      plus an unbounded/HDR acceptance case, and `check_voxj_file` gains a
+      report-level `value-pools` failure case. Deferred: block-internal-rule
+      cases, which pair with the deferred rules above.)
 
 Gate: `voxj-codec` builds; a new-shape document encodes, decodes, and validates,
 and `packed-base64` round-trips at the material-derived width.

@@ -16,8 +16,9 @@ pub fn validate_voxj_file(file: &VoxjFile) -> Result<()> {
 mod tests {
     use crate::validate_voxj_file;
     use voxj::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjPaletteBinding,
-        VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValuePool,
+        VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
+        VoxjPaletteBinding, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjValuePool,
     };
 
     /// One `srgba-hex` value pool of four colors, enough to back a four-material
@@ -91,6 +92,15 @@ mod tests {
         }
     }
 
+    /// `valid_file` with `pool` appended as an extra, unreferenced value pool.
+    /// No palette binds it, so a content fault in `pool` is the document's only
+    /// failure and isolates the value-pools check.
+    fn file_with_extra_pool(pool: VoxjValuePool) -> VoxjFile {
+        let mut file = valid_file();
+        file.main.runtime_state.value_pools.push(pool);
+        file
+    }
+
     #[test]
     fn accepts_a_valid_document() {
         assert!(validate_voxj_file(&valid_file()).is_ok());
@@ -101,6 +111,113 @@ mod tests {
         let mut file = valid_file();
         file.version = 2;
         assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_empty_value_pool() {
+        let file = file_with_extra_pool(VoxjValuePool::Float {
+            min: VoxjBound::None,
+            max: VoxjBound::None,
+            values: vec![],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_value_below_min() {
+        let file = file_with_extra_pool(VoxjValuePool::Float {
+            min: VoxjBound::Number(0.0),
+            max: VoxjBound::Number(1.0),
+            values: vec![-0.5],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_value_above_max() {
+        let file = file_with_extra_pool(VoxjValuePool::Float {
+            min: VoxjBound::Number(0.0),
+            max: VoxjBound::Number(1.0),
+            values: vec![2.0],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_min_greater_than_max() {
+        let file = file_with_extra_pool(VoxjValuePool::Float {
+            min: VoxjBound::Number(1.0),
+            max: VoxjBound::Number(0.0),
+            values: vec![0.5],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_non_integer_int_bound() {
+        let file = file_with_extra_pool(VoxjValuePool::Int {
+            min: VoxjBound::Number(0.0),
+            max: VoxjBound::Number(2.5),
+            values: vec![1],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_malformed_hex_color() {
+        // 'G' is not a hex digit, so this fails the srgba-hex pattern.
+        let file = file_with_extra_pool(VoxjValuePool::SrgbaHex {
+            values: vec!["#GGGGGGGG".to_owned()],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_lowercase_hex_color() {
+        // The pattern is uppercase-only; a lowercase digit rejects.
+        let file = file_with_extra_pool(VoxjValuePool::SrgbaHex {
+            values: vec!["#ff0000ff".to_owned()],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_srgb_component_out_of_unit_range() {
+        // Alpha 1.5 is outside the sRGB range [0, 1].
+        let file = file_with_extra_pool(VoxjValuePool::SrgbaFloat {
+            values: vec![[1.0, 0.0, 0.0, 1.5]],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_linear_component_below_zero() {
+        let file = file_with_extra_pool(VoxjValuePool::LinearRgbaFloat {
+            values: vec![[1.0, 0.0, 0.0, -0.1]],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn accepts_unbounded_and_hdr_pools() {
+        let mut file = valid_file();
+        // An unbounded-on-one-side float pool and a linear color above 1 (HDR)
+        // are both well-formed.
+        file.main
+            .runtime_state
+            .value_pools
+            .push(VoxjValuePool::Float {
+                min: VoxjBound::Number(1.0),
+                max: VoxjBound::None,
+                values: vec![1.5, 42.0],
+            });
+        file.main
+            .runtime_state
+            .value_pools
+            .push(VoxjValuePool::LinearRgbFloat {
+                values: vec![[2.0, 0.0, 5.0]],
+            });
+        assert!(validate_voxj_file(&file).is_ok());
     }
 
     #[test]

@@ -187,3 +187,40 @@ child nodes, child objects, roots) and drops the no-duplicate-palette-ref rule,
 since two layers may share a palette. `check_geometry` reuses the per-layer M the
 helper already produced instead of re-deriving a count, so the sample-range check
 and the decode width agree by construction.
+
+### Second chunk: value-pool content validation is one `value-pools` check
+
+The deferred rule-9 work lands as a single named check, `value-pools`, in
+`check_value_pools.rs`, reported between `version` and `palettes` to mirror the
+spec's rule order (9 before 10). It runs before `palettes` in the driver, so a
+fail-fast run surfaces a malformed pool before the palette that reads it. The
+report list grows from twelve checks to thirteen.
+
+The check covers only the content rules that the typed pool model cannot enforce
+at parse. Parse already guarantees the value SHAPE: a bound is present only on
+`int` and `float` (the enum variants), `null` is rejected outside a `json` pool
+(the typed `Vec`s), a color array has exactly its kind's length (`[f64; N]`), a
+number is finite (JSON has no NaN or Infinity), and an unknown key or kind
+rejects (`deny_unknown_fields`, tagged enum). Finiteness (spec rule 3) is a
+parse-boundary guarantee the whole validator leans on, the same way
+`check_transforms` never re-guards a non-finite scale, so `value-pools` does not
+re-check it either; a `VoxjFile` built in memory with a non-finite float on an
+unbounded side is out of the parse-then-validate contract these checks assume.
+So the check verifies four things parse leaves open:
+
+1. `values` is non-empty, via `VoxjValuePool::values_len()`, for every kind.
+2. int/float numeric bounds are well-formed: an int pool's numeric bounds are
+   integer-valued (rule 9.3.3), and `min <= max` when both are finite (9.3.4).
+3. every int/float value lies within `min`/`max` (9.2.4, 9.2.5). Both kinds
+   compare through `f64`; the format's numeric ranges are small, so the `i64`
+   widening is exact in practice. A `"none"` bound is unbounded on that side.
+4. hex colors match `#` plus exactly six or eight UPPERCASE hex digits (9.2.6,
+   9.2.7), hand-rolled rather than pulling in a regex dependency; and float color
+   components lie in their space's range, sRGB in `[0, 1]` and linear `>= 0`
+   (9.2.8, 9.2.9), over both the 3- and 4-component arrays via one const-generic
+   helper.
+
+The block-internal rules (11.2, 11.3, 13, 14: rle counts, packed and bitmap pad
+bits, hilbert deltas and bit width, base64 canonicality) remain deferred to the
+final Phase 2 chunk; they tighten the decode path rather than adding a pool
+check, so they stay a separate reviewable unit.
