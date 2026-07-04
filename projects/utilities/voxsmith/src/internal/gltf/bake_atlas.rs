@@ -2,7 +2,7 @@ use crate::{
     BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, MaterialBake,
     MaterialChannel, Result, UsedMaterials, default_scalar,
 };
-use ty_math::{TyLinearRgbaColorF64, TySrgbaColor};
+use ty_math::{TyLinearRgbaColorF64, TyRgbaColorF64, TySrgbaColor};
 use voxcore::{VoxMain, VoxValuePool};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
@@ -135,12 +135,12 @@ fn color_bytes_or(value: Option<(&VoxValuePool, u32)>, default: [u8; 4]) -> [u8;
     match pool {
         VoxValuePool::Srgb { values } => values
             .get(index)
-            .map(|&[r, g, b]| srgb_bytes([r, g, b, 1.0]))
+            .map(|&[r, g, b]| TyRgbaColorF64::new(r, g, b, 1.0).to_srgba().to_array())
             .unwrap_or(default),
 
         VoxValuePool::Srgba { values } => values
             .get(index)
-            .map(|&color| srgb_bytes(color))
+            .map(|&[r, g, b, a]| TyRgbaColorF64::new(r, g, b, a).to_srgba().to_array())
             .unwrap_or(default),
 
         VoxValuePool::LinearRgb { values } => values
@@ -158,11 +158,6 @@ fn color_bytes_or(value: Option<(&VoxValuePool, u32)>, default: [u8; 4]) -> [u8;
             .unwrap_or(default),
         _ => default,
     }
-}
-
-/// Maps sRGB-encoded float components in `[0, 1]` to bytes.
-fn srgb_bytes(color: [f64; 4]) -> [u8; 4] {
-    color.map(|component| (component.clamp(0.0, 1.0) * 255.0).round() as u8)
 }
 
 /// One color component as a byte.

@@ -1,4 +1,4 @@
-use crate::{TyHsvaColor, TyVector3, ty_array_conversions};
+use crate::{TyHsvaColor, TySrgbaColor, TyVector3, ty_array_conversions};
 use std::ops::Mul;
 
 /// An RGBA color with component type `T`, each component in `[0, 1]`.
@@ -30,6 +30,19 @@ impl<T: Copy> TyRgbaColor<T> {
     /// The `r`, `g`, and `b` components as a [`TyVector3`], dropping alpha.
     pub fn to_vector3(&self) -> TyVector3<T> {
         TyVector3::new(self.r, self.g, self.b)
+    }
+}
+
+impl TyRgbaColor<f64> {
+    /// Quantizes to the 8-bit sRGB storage color: each gamma-encoded component
+    /// clamped to `[0, 1]` and scaled to a byte. The inverse of
+    /// [`TySrgbaColor::to_rgba`](crate::TySrgbaColor::to_rgba); no transfer
+    /// function is applied, since the components are already sRGB-encoded.
+    /// Encode from linear light with
+    /// [`TyLinearRgbaColorF64`](crate::TyLinearRgbaColorF64)'s `to_srgba`
+    /// instead.
+    pub fn to_srgba(self) -> TySrgbaColor {
+        TySrgbaColor::new(byte(self.r), byte(self.g), byte(self.b), byte(self.a))
     }
 }
 
@@ -91,3 +104,26 @@ macro_rules! impl_ty_rgba_color_float {
 
 impl_ty_rgba_color_float!(f32);
 impl_ty_rgba_color_float!(f64);
+
+/// Clamps a straight `[0, 1]` component and scales it to an sRGB byte.
+fn byte(value: f64) -> u8 {
+    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{TyRgbaColorF64, TySrgbaColor};
+
+    #[test]
+    fn to_srgba_inverts_to_rgba_and_clamps() {
+        // The byte -> float -> byte path is exact for byte-valued components.
+        let bytes = TySrgbaColor::new(0, 128, 255, 64);
+        assert_eq!(bytes.to_rgba().to_srgba(), bytes);
+
+        // Out-of-range components clamp to the byte endpoints; 0.5 rounds up.
+        assert_eq!(
+            TyRgbaColorF64::new(-0.5, 2.0, 0.5, 1.0).to_srgba(),
+            TySrgbaColor::new(0, 255, 128, 255)
+        );
+    }
+}

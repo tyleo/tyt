@@ -1,7 +1,7 @@
 use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, Result};
 use branded_id::U32Id;
 use std::{cmp::Ordering, collections::HashMap, mem};
-use ty_math::{TyLinearRgbaColorF64, TySrgbaColor, TyVector3F64, TyVector3U32};
+use ty_math::{TyLinearRgbaColorF64, TyRgbaColorF64, TySrgbaColor, TyVector3F64, TyVector3U32};
 use voxcore::{
     BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPaletteBinding, VoxMain, VoxObject,
     VoxValuePool,
@@ -141,8 +141,10 @@ fn material_color(
     match pool {
         VoxValuePool::Srgb { values } => values
             .get(index)
-            .map(|&[r, g, b]| srgb_bytes([r, g, b, 1.0])),
-        VoxValuePool::Srgba { values } => values.get(index).map(|&color| srgb_bytes(color)),
+            .map(|&[r, g, b]| TyRgbaColorF64::new(r, g, b, 1.0).to_srgba().to_array()),
+        VoxValuePool::Srgba { values } => values
+            .get(index)
+            .map(|&[r, g, b, a]| TyRgbaColorF64::new(r, g, b, a).to_srgba().to_array()),
         VoxValuePool::LinearRgb { values } => values.get(index).map(|&[r, g, b]| {
             TyLinearRgbaColorF64::new(r, g, b, 1.0)
                 .to_srgba()
@@ -153,11 +155,6 @@ fn material_color(
             .map(|&[r, g, b, a]| TyLinearRgbaColorF64::new(r, g, b, a).to_srgba().to_array()),
         _ => None,
     }
-}
-
-/// Maps sRGB-encoded float components in `[0, 1]` to bytes.
-fn srgb_bytes(color: [f64; 4]) -> [u8; 4] {
-    color.map(|component| (component.clamp(0.0, 1.0) * 255.0).round() as u8)
 }
 
 /// How many live voxels sample each material of `palette`, across every object

@@ -830,3 +830,18 @@ through `object_color_ref` plus `cell_color` in both the ext-driven
 `emit_object`. The byte-exact `.gox` round-trip holds because the hex-to-float
 (byte / 255) then float-to-byte (round of component times 255) trip is exact for a
 byte-valued component.
+
+### Follow-up: the sRGB-float quantization moves to `ty_math::TyRgbaColor::to_srgba`
+
+`pool_color` stays in voxsmith, since it matches on voxcore's `VoxValuePool` and
+voxcore depends on ty_math, not the reverse, so a `VoxValuePool` match cannot live
+in ty_math. But the primitive it, `reduce_palette`, and `bake_atlas` each
+hand-rolled, sRGB float `[0, 1]` to an 8-bit byte (clamp, times 255, round), is
+ty_math's. ty_math already models an sRGB float color as `TyRgbaColorF64`, which is
+what `TySrgbaColor::to_rgba` returns, and already encodes linear floats to bytes
+via `TyLinearRgbaColorF64::to_srgba`, but the gamma-encoded float-to-byte inverse
+of `to_rgba` was missing. Added `TyRgbaColor<f64>::to_srgba() -> TySrgbaColor` to
+fill that gap and routed all three decoders through it, deleting each private
+`srgb_bytes`; no new type was needed. Landed as its own commit after the goxl
+port. The voxj seam's float-to-hex encoder and the glTF importer's byte encoders
+were left alone; they are different operations, not this same decode.
