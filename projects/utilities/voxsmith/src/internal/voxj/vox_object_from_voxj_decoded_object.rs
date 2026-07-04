@@ -1,21 +1,21 @@
 use crate::{Error, Result};
-use branded_id::U32Id;
+use branded_id::{U32Id, ext::U32Ext};
 use ty_math::{TyVector3I32, TyVector3U32};
-use voxcore::{BVoxPalette, BVoxPaletteCell, VoxObject};
+use voxcore::{BVoxMaterial, BVoxPalette, VoxObject};
 use voxj_codec::VoxjDecodedObject;
 
 /// Builds a [`VoxObject`] from a [`VoxjDecodedObject`] and its optional build
 /// volume.
 ///
 /// The decoded object holds the tight runtime grid. When `edit` is `Some`, the
-/// object is built in that build volume (the author's edit grid) with each
-/// voxel shifted from the runtime grid into it, recovering the margin the
-/// document recorded. When `edit` is `None`, the build volume equals the tight
-/// grid.
+/// object is built in that build volume with each voxel shifted from the
+/// runtime grid into it, recovering the margin the document recorded. When
+/// `edit` is `None`, the build volume equals the tight grid.
 ///
-/// Errors on an oversized grid, a position outside the grid, or ragged sample
-/// rows. Cross-references are checked later by
-/// [`VoxMain::validate`](voxcore::VoxMain::validate).
+/// Each `layerPaletteRefs` entry becomes a layer over that palette, and each
+/// per-layer sample becomes a material index into it. Errors on an oversized
+/// grid, a position outside the grid, or ragged sample rows. Cross-references
+/// are checked later by [`VoxMain::validate`](voxcore::VoxMain::validate).
 pub fn vox_object_from_voxj_decoded_object(
     object: &VoxjDecodedObject,
     edit: Option<([u32; 3], [i32; 3])>,
@@ -50,10 +50,11 @@ pub fn vox_object_from_voxj_decoded_object(
 
     out.set_origin(TyVector3I32::new(origin[0], origin[1], origin[2]));
 
-    // Back-fill cell 0 as a placeholder; live voxels overwrite theirs below.
-    let filler = U32Id::<BVoxPaletteCell>::from_u32(0);
-    for &palette_index in &object.palette_refs {
-        out.add_palette_ref(U32Id::<BVoxPalette>::from_u32(palette_index as u32), filler);
+    // Back-fill material 0 as each layer's placeholder; live voxels overwrite
+    // theirs below.
+    let filler = 0u32.to_u32_id::<BVoxMaterial>();
+    for &palette_index in &object.layer_palette_refs {
+        out.add_layer((palette_index as u32).to_u32_id::<BVoxPalette>(), filler);
     }
 
     if object.samples.len() != object.positions.len() {
@@ -80,14 +81,17 @@ pub fn vox_object_from_voxj_decoded_object(
         // `in_bounds` already confirmed the position fits the grid.
         let voxel_id = out.voxel_id(position).expect("position is within bounds");
 
-        let cells: Vec<U32Id<BVoxPaletteCell>> =
-            row.iter().map(|&cell| U32Id::from_u32(cell)).collect();
-        out.retain_voxel(voxel_id, &cells).ok_or_else(|| {
+        let materials: Vec<U32Id<BVoxMaterial>> = row
+            .iter()
+            .map(|&material| material.to_u32_id::<BVoxMaterial>())
+            .collect();
+
+        out.retain_voxel(voxel_id, &materials).ok_or_else(|| {
             invalid(format!(
-                "object \"{}\" sample row at [{x}, {y}, {z}] has {} values but references {} palettes",
+                "object \"{}\" sample row at [{x}, {y}, {z}] has {} values but references {} layers",
                 object.name,
                 row.len(),
-                object.palette_refs.len()
+                object.layer_palette_refs.len()
             ))
         })?;
     }

@@ -1,13 +1,13 @@
 use crate::{
-    EditStateMode, Result, voxj_decoded_object_from_vox_object,
+    ColorFormat, EditStateMode, Result, voxj_decoded_object_from_vox_object,
     voxj_hierarchy_node_from_vox_hierarchy_node, voxj_palette_from_vox_palette,
-    voxj_value_from_vox_value,
+    voxj_value_from_vox_value, voxj_value_pool_from_vox_value_pool,
 };
 use ty_math::TyVector3U32;
 use voxcore::{VoxMain, VoxObject};
 use voxj::{VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState};
 use voxj_codec::{
-    PositionEncoding, SampleEncoding, encode_voxj_object_optimized, voxj_palette_cell_counts,
+    PositionEncoding, SampleEncoding, encode_voxj_object_optimized, voxj_palette_material_counts,
 };
 
 /// The voxj format version stamped on documents written from a [`VoxMain`],
@@ -18,9 +18,9 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// [`to_voxj_file`](crate::to_voxj_file) and
 /// [`VoxjFileBuilder`](crate::VoxjFileBuilder).
 ///
-/// Objects, palettes, and hierarchy nodes are emitted in id order, so each
-/// lands at its original array index and the cross references carry over
-/// unchanged.
+/// Value pools, palettes, objects, and hierarchy nodes are emitted in id order,
+/// so each lands at its original array index and the cross references carry
+/// over unchanged.
 ///
 /// # Arguments
 /// * `state` - the voxel model to encode.
@@ -29,13 +29,20 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// * `sample` - sample-block encoding, or `None` to search for the smallest.
 /// * `ext` - when false, omits the user-defined `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
+/// * `color_format` - the on-wire encoding for sRGB color pools.
 pub fn write_voxj(
     state: &VoxMain,
     position: Option<PositionEncoding>,
     sample: Option<SampleEncoding>,
     ext: bool,
     edit_state: EditStateMode,
+    color_format: ColorFormat,
 ) -> Result<VoxjFile> {
+    let value_pools = state
+        .iter_value_pools()
+        .map(|(_, pool)| voxj_value_pool_from_vox_value_pool(pool, color_format))
+        .collect::<Vec<_>>();
+
     let palettes = state
         .iter_palettes()
         .map(|(_, palette)| voxj_palette_from_vox_palette(palette))
@@ -45,8 +52,9 @@ pub fn write_voxj(
         .iter_objects()
         .map(|(_, object)| {
             let decoded = voxj_decoded_object_from_vox_object(object);
-            let cell_counts = voxj_palette_cell_counts(&decoded.palette_refs, &palettes)?;
-            encode_voxj_object_optimized(&decoded, &cell_counts, position, sample)
+            let material_counts =
+                voxj_palette_material_counts(&decoded.layer_palette_refs, &palettes)?;
+            encode_voxj_object_optimized(&decoded, &material_counts, position, sample)
         })
         .collect::<voxj_codec::Result<Vec<_>>>()?;
 
@@ -87,8 +95,9 @@ pub fn write_voxj(
         version: VOXJ_FORMAT_VERSION,
         main: VoxjMain {
             runtime_state: VoxjRuntimeState {
-                objects,
+                value_pools,
                 palettes,
+                objects,
                 hierarchy_nodes,
                 root_hierarchy_nodes,
             },

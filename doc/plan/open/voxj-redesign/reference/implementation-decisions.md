@@ -477,3 +477,117 @@ keys are unique, and best-effort otherwise; `validate` still catches duplicates
 by iterating the bindings, not the index. The added `HashMap` is plain data
 outside the unsafe SoA machinery: it drops on its own after `Drop` runs and needs
 no manual release, and Miri confirms the palette stays leak-clean.
+
+## Phase 4: `voxsmith` voxj seam
+
+### The whole seam is one chunk; verified against a scoped `voxj`-only build
+
+Phase 4 lands as a single chunk covering the whole read and write seam. voxsmith
+cannot compile until phases 5 to 7 port the remaining voxcore consumers (the
+converters, the glTF pipeline, the mesh code, and `reduce_palette`), so no
+smaller sub-chunk builds any better, and the read-versus-write round-trip
+symmetry is the reviewable property that a half-ported seam would hide. On
+default features `cargo check -p voxsmith` leaves its errors entirely in the
+phase-5/6 modules and none in `internal/voxj` or `convert/voxj`. To actually run
+the seam tests, the crate was built with `--no-default-features --features voxj`,
+which cfg-gates out every other codec module; the one unconditional straggler,
+`reduce_palette`, was temporarily gated out and then reverted. All 25 seam tests
+pass under that build. `from_voxj_file` runs voxcore's `validate`, not
+voxj-codec's, so the seam validates the palette shape it must build (duplicate
+attribute, column arity, ragged columns, hex form) and defers every range and
+bound check to voxcore.
+
+### Kind-directed value conversion lives at the pool level, not on `VoxValue`
+
+The checklist framed the kind-directed decode and encode as a rework of
+`vox_value_from_voxj_value` and `voxj_value_from_vox_value`. In the full-pool
+model those two functions convert only `json`-pool values and the `ext` block,
+because voxcore's `VoxValue` and the wire's `VoxjValue` now back only `json` and
+`ext`; every other kind stores typed values on its pool variant. So the
+kind-directed conversion is a pool-level concern and landed as two new functions,
+`vox_value_pool_from_voxj_value_pool` and `voxj_value_pool_from_vox_value_pool`,
+one match arm per kind. The named `VoxValue` converters are unchanged and the
+`json` arm calls them per value. Per-value bound and range validation stays
+voxcore's `validate`; the seam only reshapes.
+
+### The palette converter reshapes bindings and materials; pools convert separately
+
+Value pools are shared `VoxRuntimeState` entities, not palette-local, so
+`vox_palette_from_voxj_palette` handles only the bindings and the material
+transpose, and `from_voxj_file` converts each pool once at the `VoxMain`-assembly
+level, adding pools before palettes so bindings resolve. The wire stores
+materials column-major, one column per binding; voxcore stores per-material rows
+of value-indices. The reader transposes columns into rows and the writer reads
+each binding's column back down the materials, so the two are exact inverses. The
+reader rejects a duplicate binding attribute (replacing the old last-wins dedup),
+a `materials` column count that disagrees with the bindings, and a ragged column;
+`add_material`'s arity is then always satisfied, so its `None` path is defensive.
+
+### The write seam is a faithful 1:1 mirror; dedup and the bounds table are converter work
+
+The Q5/Q6 writer duties, one pool per `(kind, bounds)` deduped document-wide, the
+per-attribute min/max default table, and identical-material dedup, were written
+before Q1 chose the full-pool voxcore model. With that model voxcore already
+holds pools as first-class shared entities carrying their own bounds, and the
+converters build the distinct pool and material sets. So the voxj write seam
+mirrors voxcore one to one in id order, exactly as the old `voxj_palette_from_
+vox_palette` mirrored the old cell grid, and emits wire index == voxcore id so
+cross-references map by `id.to_u32()`. Deduping pools by `(kind, bounds)`, the
+per-attribute bounds table, and material dedup move to the converters and the
+voxelizer in phases 5 and 6, where a voxcore pool is first constructed and its
+bounds first chosen. This keeps the seam a pure reshape and avoids re-deduping
+data voxcore already deduplicated.
+
+### `ColorFormat`: float default, hex round-trips exactly, linear is always float
+
+`ColorFormat` is a two-variant enum, `Float` (the default, per Q5) and `Hex`,
+added under `convert/voxj` and threaded through `write_voxj` and
+`VoxjFileBuilder`; the `--color-format` CLI flag that drives it lands in phase 7.
+Because voxcore stores every color as float components, the format only picks the
+on-wire encoding for the two sRGB kinds: `Hex` emits `srgb-hex`/`srgba-hex`,
+`Float` emits `srgb-float`/`srgba-float`. Linear colors have no hex form and
+always serialize as float regardless. Decode divides each hex byte by 255; encode
+clamps to `[0, 1]`, multiplies by 255, and rounds, so a byte-valued component
+round-trips hex to float to hex exactly (the `round` absorbs the `x/255*255`
+float error). Reading an `srgba-hex` document and writing it back at the default
+therefore intentionally changes the on-wire kind to `srgba-float`, the accepted
+Q5 churn.
+
+### A zero-material palette round-trips; wire rule 10.4 is voxj-codec's to enforce
+
+A voxelless object may reference a palette with bindings but no materials, which
+round-trips as `materials: [[]]`, one empty column per binding. voxcore's
+`validate` accepts it (no material means no value-index to range-check), and
+`from_voxj_file` runs only voxcore's validate, so the seam preserves the old
+empty-palette behavior. The wire's stricter rule 10.4 (`M >= 1`) is a
+voxj-codec `validate` rule, applied by `vxl validate`, not by the load path.
+
+### Adversarial review: ragged-column bug fixed; two hostile-input gaps deferred
+
+A multi-agent adversarial review of the seam surfaced three distinct confirmed
+issues. One was a real bug in the new code and is fixed here; two are
+hostile-input-only gaps in the pre-existing load-path convention and are
+deferred.
+
+Fixed: `vox_palette_from_voxj_palette` derived the material count from the first
+`materials` column and only rejected columns SHORTER than it, so a LONGER later
+column was silently truncated, dropping material data on any ragged palette
+(not just hostile input) and contradicting the function's own doc. It now
+rejects any column whose length differs from the first, in either direction, and
+a test covers the longer-non-first orientation the old check missed.
+
+Deferred, hostile-input only, and uniform with the existing load path:
+1. `vox_object_from_voxj_decoded_object` computes the runtime-to-edit offset as
+   `object.origin[i] - origin[i]`, an `i32` subtraction that can overflow when a
+   crafted document sets the object and edit origins about four billion apart.
+   This line is copied verbatim from the pre-port code; `check_edit_state`
+   already widens to `i64`, so the load path could adopt the same widening.
+2. Every wire index reaching an id (`poolRef`, material value-index, layer
+   palette ref, root nodes, hierarchy child nodes) is narrowed with `as u32`, so
+   a value at or above `2^32` truncates into a possibly-in-range id that
+   voxcore's `validate` then accepts. `as u32` is the codebase-wide convention
+   for a wire `usize` becoming a `U32Id`, and the root and child-node sites
+   predate this change; closing the gap means switching every such site to a
+   checked `u32::try_from`, a uniform hardening pass better done on its own than
+   folded into the palette port. Neither gap affects a well-formed document,
+   since a real producer never emits a billion-span origin or a `2^32` index.

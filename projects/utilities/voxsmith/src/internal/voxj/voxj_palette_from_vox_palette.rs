@@ -1,31 +1,43 @@
-use crate::voxj_value_from_vox_value;
 use voxcore::VoxPalette;
-use voxj::VoxjPalette;
+use voxj::{VoxjPalette, VoxjPaletteBinding};
 
-/// Builds a [`VoxjPalette`] from a [`VoxPalette`], emitting attributes and
-/// cells in id order so each lands at its original index.
+/// Builds a [`VoxjPalette`] from a [`VoxPalette`], emitting bindings and
+/// materials in id order so each lands at its original index.
+///
+/// A voxcore binding's value-pool id becomes the wire `poolRef`. voxcore stores
+/// materials as per-material rows of value-indices; the wire wants them
+/// column-major, one column per binding, so this reads each binding's column
+/// down the materials.
 pub fn voxj_palette_from_vox_palette(palette: &VoxPalette) -> VoxjPalette {
-    // Attribute ids, reused for each cell's values.
-    let attribute_ids: Vec<_> = palette.iter_attributes().map(|(id, _)| id).collect();
-    let attributes = palette
-        .iter_attributes()
-        .map(|(_, name)| name.to_owned())
+    let bindings: Vec<VoxjPaletteBinding> = palette
+        .iter_bindings()
+        .map(|(_, binding)| VoxjPaletteBinding {
+            attribute: binding.attribute.clone(),
+            pool_ref: binding.pool.to_u32() as usize,
+        })
         .collect();
 
-    let data = palette
-        .iter_cells()
-        .map(|cell_id| {
-            attribute_ids
+    // Binding and material ids, reused to read each column down the materials.
+    let binding_ids: Vec<_> = palette.iter_bindings().map(|(id, _)| id).collect();
+    let material_ids: Vec<_> = palette.iter_materials().collect();
+
+    let materials = binding_ids
+        .iter()
+        .map(|&binding_id| {
+            material_ids
                 .iter()
-                .map(|&attribute_id| {
-                    let value = palette
-                        .cell_value(cell_id, attribute_id)
-                        .expect("a cell has a value for every attribute");
-                    voxj_value_from_vox_value(value)
+                .map(|&material_id| {
+                    palette
+                        .value_index(material_id, binding_id)
+                        .expect("a material has a value-index for every binding")
+                        as usize
                 })
                 .collect()
         })
         .collect();
 
-    VoxjPalette { attributes, data }
+    VoxjPalette {
+        bindings,
+        materials,
+    }
 }

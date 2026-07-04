@@ -5,8 +5,10 @@ use voxj_codec::VoxjDecodedObject;
 /// runtime grid: one position and sample row per live voxel in ascending raster
 /// order, rebased so the live voxels fill the grid from its origin. The
 /// object's wider build volume, when it has margin, is recorded separately in
-/// the document's edit state. Palette references map back to palette indices
-/// (each id equals its index).
+/// the document's edit state.
+///
+/// Each layer becomes a `layerPaletteRefs` entry (its palette id equals its
+/// index) and contributes one channel of per-voxel material indices.
 pub fn voxj_decoded_object_from_vox_object(object: &VoxObject) -> VoxjDecodedObject {
     let origin = object.origin();
     // The runtime grid is the live voxels' tight extent within the build
@@ -17,10 +19,10 @@ pub fn voxj_decoded_object_from_vox_object(object: &VoxObject) -> VoxjDecodedObj
         None => ([0, 0, 0], [0, 0, 0]),
     };
 
-    // Reference ids, reused for each voxel's sample row.
-    let palette_ref_ids: Vec<_> = object.iter_palette_refs().map(|(id, _)| id).collect();
-    let palette_refs: Vec<usize> = object
-        .iter_palette_refs()
+    // Layer ids, reused for each voxel's sample row.
+    let layer_ids: Vec<_> = object.iter_layers().map(|(id, _)| id).collect();
+    let layer_palette_refs: Vec<usize> = object
+        .iter_layers()
         .map(|(_, palette)| palette.to_u32() as usize)
         .collect();
 
@@ -37,12 +39,12 @@ pub fn voxj_decoded_object_from_vox_object(object: &VoxObject) -> VoxjDecodedObj
             position.z - min[2],
         ]);
 
-        let row = palette_ref_ids
+        let row = layer_ids
             .iter()
-            .map(|&palette_ref_id| {
+            .map(|&layer_id| {
                 object
-                    .voxel_cell(voxel_id, palette_ref_id)
-                    .expect("a live voxel has a sample for every reference")
+                    .voxel_material(voxel_id, layer_id)
+                    .expect("a live voxel has a sample for every layer")
                     .to_u32()
             })
             .collect();
@@ -51,7 +53,7 @@ pub fn voxj_decoded_object_from_vox_object(object: &VoxObject) -> VoxjDecodedObj
 
     VoxjDecodedObject {
         name: object.name().to_owned(),
-        palette_refs,
+        layer_palette_refs,
         bounds: size,
         origin: [
             origin.x + min[0] as i32,

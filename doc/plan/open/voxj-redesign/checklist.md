@@ -271,28 +271,55 @@ gc it, and read a material's resolved values back.
 
 ## Phase 4: `voxsmith` voxj seam
 
-- [ ] Rewrite `vox_palette_from_voxj_palette` to read pools and column-major
-      materials into the voxcore pool model, canonicalizing wire color kinds to
-      the four voxcore color kinds, and reject duplicate attributes rather than
-      last-wins dedup.
-- [ ] Rewrite `voxj_palette_from_vox_palette` and `write_voxj` to build wire
-      value pools from voxcore pools, dedup by `(kind, bounds)` document-wide,
-      emit column-major materials and bindings, apply the `--color-format` choice
-      and the per-attribute bounds table, and dedup identical materials.
-- [ ] Rework `vox_value_from_voxj_value` and `voxj_value_from_vox_value` into
-      kind-directed decode and encode, mapping color hex, int, and float to and
-      from the canonical float form and validating each value against its kind.
-- [ ] Update the decoded-object seam
+- [x] Rewrite `vox_palette_from_voxj_palette` to read column-major materials
+      into the voxcore pool model and reject duplicate attributes rather than
+      last-wins dedup. (Palette conversion now handles only bindings and the
+      column-major-to-row material transpose; wire-color-kind canonicalization
+      moved to the new per-pool `vox_value_pool_from_voxj_value_pool`, since
+      pools are shared runtime-state entities, not per-palette. Recorded in the
+      decisions log.)
+- [x] Rewrite `voxj_palette_from_vox_palette` and `write_voxj` to build wire
+      value pools from voxcore pools, emit column-major materials and bindings,
+      and apply the `--color-format` choice. (Under the full-pool voxcore model
+      the seam is a faithful 1:1 mirror in id order; document-wide `(kind,
+      bounds)` dedup, the per-attribute bounds table, and material dedup are
+      converter concerns for phases 5/6, because voxcore pools already carry
+      bounds and are already the distinct set. `ColorFormat` (hex/float, default
+      float) added and threaded through `write_voxj` and `VoxjFileBuilder`;
+      the `--color-format` CLI flag lands in phase 7. Recorded in the log.)
+- [x] Rework value decode/encode into kind-directed decode and encode, mapping
+      color hex and int and float to and from the canonical float form. (Landed
+      as the new pool-level converters `vox_value_pool_from_voxj_value_pool` and
+      `voxj_value_pool_from_vox_value_pool`, one arm per kind. The named
+      `vox_value_from_voxj_value`/`voxj_value_from_vox_value` stay unchanged and
+      back only the `json` pool kind and `ext`, mirroring how voxcore's
+      `VoxValue` and the wire's `VoxjValue` now back only json and ext. Per-value
+      bound/range validation stays voxcore's `validate` job. Recorded in the
+      log.)
+- [x] Update the decoded-object seam
       (`vox_object_from_voxj_decoded_object`, `voxj_decoded_object_from_vox_object`)
       for layer refs and material-index samples, relying on voxcore now allowing
-      duplicate palette refs.
-- [ ] Point callers at the retargeted material-count helper.
-- [ ] Rebuild the `from_voxj_file` fixtures; add two-layers-one-palette and
+      duplicate palette refs. (`add_layer`/`voxel_material`/`iter_layers` and
+      `BVoxMaterial` samples; two layers may share a palette.)
+- [x] Point callers at the retargeted material-count helper.
+      (`voxj_palette_material_counts` keyed by `layer_palette_refs` in both
+      `from_voxj_file` and `write_voxj`.)
+- [x] Rebuild the `from_voxj_file` fixtures; add two-layers-one-palette and
       min/max-violation cases and a `voxj -> vox -> voxj` round-trip that
-      accounts for color canonicalization and the float default.
+      accounts for color canonicalization and the float default. (All fixtures
+      rebuilt to the pool/binding/material/layer shape; the "tight" object now
+      shares one palette across two layers; added `rejects_value_outside_pool_
+      bounds`, `hex_color_canonicalizes_to_float_by_default`, and
+      `hex_color_format_round_trips_hex`. `vox_palette_from_voxj_palette` gains
+      transpose/dup-attribute/column-arity/ragged-column unit tests.)
 
 Gate: a new-shape `.voxj` loads into `VoxMain` and writes back, stable under the
-color and pool normalization.
+color and pool normalization. Verified: the crate cannot fully build until
+phases 5-7 port the remaining voxcore consumers, so the 25 seam tests were built
+and run against a `--no-default-features --features voxj` build (with the
+old-API `reduce_palette` module temporarily gated out, then reverted); all pass.
+`cargo check -p voxsmith` on default features leaves zero errors in the seam
+files, only in the phase-5/6 modules.
 
 ## Phase 5: `voxsmith` color helpers and glTF pipeline
 

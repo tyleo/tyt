@@ -1,11 +1,11 @@
 use crate::{
     Result, vox_hierarchy_node_from_voxj_hierarchy_node, vox_object_from_voxj_decoded_object,
-    vox_palette_from_voxj_palette, vox_value_from_voxj_value,
+    vox_palette_from_voxj_palette, vox_value_from_voxj_value, vox_value_pool_from_voxj_value_pool,
 };
 use branded_id::U32Id;
 use voxcore::VoxMain;
 use voxj::VoxjFile;
-use voxj_codec::{decode_voxj_object, voxj_palette_cell_counts};
+use voxj_codec::{decode_voxj_object, voxj_palette_material_counts};
 
 /// Loads a [`VoxjFile`] into a [`VoxMain`]. Each object's position and sample
 /// blocks are decoded, then entities take ids in listing order, so each id
@@ -19,15 +19,20 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
     // Build each value before adding it so a failed conversion leaves the state
-    // untouched.
+    // untouched. Value pools land first, so palette bindings resolve against
+    // them.
+    for pool in &main.runtime_state.value_pools {
+        state.add_value_pool(vox_value_pool_from_voxj_value_pool(pool)?);
+    }
+
     for palette in &main.runtime_state.palettes {
         state.add_palette(vox_palette_from_voxj_palette(palette)?);
     }
 
     for (index, object) in main.runtime_state.objects.iter().enumerate() {
-        let cell_counts =
-            voxj_palette_cell_counts(&object.palette_refs, &main.runtime_state.palettes)?;
-        let decoded = decode_voxj_object(object, &cell_counts)?;
+        let material_counts =
+            voxj_palette_material_counts(&object.layer_palette_refs, &main.runtime_state.palettes)?;
+        let decoded = decode_voxj_object(object, &material_counts)?;
         // The build volume, present only when the document recorded margin
         // around the object's live voxels; otherwise the runtime grid is the
         // build volume.
@@ -68,39 +73,62 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        EditStateMode, VoxjFileBuilder, from_voxj_bytes, from_voxj_file, to_voxj_bytes,
-        to_voxj_file, to_voxjz_bytes,
+        ColorFormat, EditStateMode, VoxjFileBuilder, from_voxj_bytes, from_voxj_file,
+        to_voxj_bytes, to_voxj_file, to_voxjz_bytes,
     };
     use branded_id::U32Id;
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
     use voxcore::{BVoxObject, BVoxPalette};
     use voxj::{
-        VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject,
-        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
-        VoxjValue,
+        VoxjBound, VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap,
+        VoxjObject, VoxjPalette, VoxjPaletteBinding, VoxjPositionBlock, VoxjRuntimeState,
+        VoxjSampleBlock, VoxjTransform, VoxjValue, VoxjValuePool,
     };
-    use voxj_codec::{decode_voxj_object, voxj_palette_cell_counts};
+    use voxj_codec::{decode_voxj_object, voxj_palette_material_counts};
 
-    /// `n` single-attribute cells whose value is the cell index.
-    fn numbered_cells(n: usize) -> Vec<Vec<VoxjValue>> {
-        (0..n).map(|i| vec![VoxjValue::Number(i as f64)]).collect()
+    /// An unbounded `float` pool of ascending values `0.0 ..= (n - 1)`, so a
+    /// material reading value-index `m` resolves to `m` as a float.
+    fn numbered_pool(n: usize) -> VoxjValuePool {
+        VoxjValuePool::Float {
+            min: VoxjBound::None,
+            max: VoxjBound::None,
+            values: (0..n).map(|i| i as f64).collect(),
+        }
+    }
+
+    /// A one-binding palette over `pool_ref` with `n` materials, material `m`
+    /// reading value-index `m` (a single column `[0, 1, ..., n - 1]`).
+    fn numbered_palette(attribute: &str, pool_ref: usize, n: usize) -> VoxjPalette {
+        VoxjPalette {
+            bindings: vec![binding(attribute, pool_ref)],
+            materials: vec![(0..n).collect()],
+        }
+    }
+
+    fn binding(attribute: &str, pool_ref: usize) -> VoxjPaletteBinding {
+        VoxjPaletteBinding {
+            attribute: attribute.to_owned(),
+            pool_ref,
+        }
     }
 
     /// One object holding raw-json position and sample blocks, the readable
-    /// form the fixtures author geometry in.
+    /// form the fixtures author geometry in. `samples` is one row of material
+    /// indices per voxel, one entry per layer; transposed into the per-layer
+    /// channels the sample block stores.
     fn object(
         name: &str,
-        palette_refs: Vec<usize>,
+        layer_palette_refs: Vec<usize>,
         bounds: [u32; 3],
         positions: Vec<[u32; 3]>,
         samples: Vec<Vec<u32>>,
     ) -> VoxjObject {
-        let channels = (0..palette_refs.len())
+        let channels = (0..layer_palette_refs.len())
             .map(|p| samples.iter().map(|row| row[p]).collect())
             .collect();
         VoxjObject {
             name: name.to_owned(),
-            palette_refs,
+            layer_palette_refs,
             bounds,
             origin: [0, 0, 0],
             voxel_positions: VoxjPositionBlock::RawJson(positions),
@@ -109,13 +137,40 @@ mod tests {
     }
 
     /// A document exercising every field: a sparse object with margin bounds, a
-    /// tight object sampling two palettes, multi-attribute palette cells, a
-    /// hierarchy with a non-identity transform, roots, and a nested `ext`.
+    /// tight object sampling one palette over two layers, a multi-binding
+    /// palette over a shared bounded pool, a hierarchy with a non-identity
+    /// transform, roots, and a nested `ext`.
     fn sample_file() -> VoxjFile {
         VoxjFile {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
+                    value_pools: vec![
+                        // pool 0: six base values, bound by palette 0.
+                        numbered_pool(6),
+                        // pool 1: metallic in [0, 1].
+                        VoxjValuePool::Float {
+                            min: VoxjBound::Number(0.0),
+                            max: VoxjBound::Number(1.0),
+                            values: vec![0.0, 0.5, 1.0],
+                        },
+                        // pool 2: ior in [1, none).
+                        VoxjValuePool::Float {
+                            min: VoxjBound::Number(1.0),
+                            max: VoxjBound::None,
+                            values: vec![1.5, 2.0],
+                        },
+                    ],
+                    palettes: vec![
+                        numbered_palette("baseColorFactor", 0, 6),
+                        // Two bindings over the bounded pools, column-major:
+                        // material 0 = { metallicFactor: 0.0, ior: 1.5 },
+                        // material 1 = { metallicFactor: 0.5, ior: 2.0 }.
+                        VoxjPalette {
+                            bindings: vec![binding("metallicFactor", 1), binding("ior", 2)],
+                            materials: vec![vec![0, 1], vec![0, 1]],
+                        },
+                    ],
                     objects: vec![
                         object(
                             "sparse",
@@ -124,12 +179,14 @@ mod tests {
                             vec![[0, 0, 0], [3, 1, 2], [1, 3, 0], [2, 2, 3]],
                             vec![vec![1], vec![0], vec![5], vec![2]],
                         ),
+                        // Two layers sharing palette 1: layers do not merge, so
+                        // each voxel samples a material index per layer.
                         object(
                             "tight",
-                            vec![0, 1],
+                            vec![1, 1],
                             [2, 1, 1],
                             vec![[0, 0, 0], [1, 0, 0]],
-                            vec![vec![3, 0], vec![1, 1]],
+                            vec![vec![1, 0], vec![0, 1]],
                         ),
                         object(
                             "no-palette",
@@ -138,19 +195,6 @@ mod tests {
                             vec![[0, 0, 0], [2, 0, 1]],
                             vec![Vec::new(), Vec::new()],
                         ),
-                    ],
-                    palettes: vec![
-                        VoxjPalette {
-                            attributes: vec!["rgba".to_owned()],
-                            data: numbered_cells(6),
-                        },
-                        VoxjPalette {
-                            attributes: vec!["metallic".to_owned(), "ior".to_owned()],
-                            data: vec![
-                                vec![VoxjValue::Bool(false), VoxjValue::Number(1.5)],
-                                vec![VoxjValue::Bool(true), VoxjValue::Number(2.0)],
-                            ],
-                        },
                     ],
                     hierarchy_nodes: vec![
                         VoxjHierarchyNode {
@@ -193,13 +237,15 @@ mod tests {
     /// [`sample_file`] after removing the "tight" object (id 1) and the palette
     /// only it referenced (id 1), then compacting: the two survivors renumber
     /// to objects 0 and 1, the lone palette stays 0, and the "leaf" node loses
-    /// its reference to the removed object.
+    /// its reference to the removed object. The value pools are untouched:
+    /// there is no pool removal, so the now-unreferenced pools stay in place.
     fn sample_file_without_tight() -> VoxjFile {
         let base = sample_file();
         VoxjFile {
             version: base.version,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
+                    value_pools: base.main.runtime_state.value_pools.clone(),
                     objects: vec![
                         base.main.runtime_state.objects[0].clone(),
                         base.main.runtime_state.objects[2].clone(),
@@ -220,13 +266,13 @@ mod tests {
         }
     }
 
-    /// The `(position, samples)` pairs of an object, order-independent, since
-    /// the dense grid re-emits voxels in raster order and the block encodings
-    /// reorder them again. The object's blocks are decoded against the document
-    /// palettes.
+    /// The `(position, samples)` pairs of an object, order-independent: the
+    /// dense grid re-emits voxels in raster order and the block encodings
+    /// reorder them again. The blocks decode against the document palettes.
     fn voxel_set(object: &VoxjObject, palettes: &[VoxjPalette]) -> BTreeSet<([u32; 3], Vec<u32>)> {
-        let cell_counts = voxj_palette_cell_counts(&object.palette_refs, palettes).unwrap();
-        let decoded = decode_voxj_object(object, &cell_counts).unwrap();
+        let material_counts =
+            voxj_palette_material_counts(&object.layer_palette_refs, palettes).unwrap();
+        let decoded = decode_voxj_object(object, &material_counts).unwrap();
         decoded
             .positions
             .iter()
@@ -239,13 +285,17 @@ mod tests {
         assert_eq!(got.main.edit_state, want.main.edit_state);
         assert_eq!(got.main.ext, want.main.ext);
         let (got, want) = (&got.main.runtime_state, &want.main.runtime_state);
+        assert_eq!(got.value_pools, want.value_pools);
         assert_eq!(got.palettes, want.palettes);
         assert_eq!(got.hierarchy_nodes, want.hierarchy_nodes);
         assert_eq!(got.root_hierarchy_nodes, want.root_hierarchy_nodes);
         assert_eq!(got.objects.len(), want.objects.len());
         for (got_object, want_object) in got.objects.iter().zip(&want.objects) {
             assert_eq!(got_object.name, want_object.name);
-            assert_eq!(got_object.palette_refs, want_object.palette_refs);
+            assert_eq!(
+                got_object.layer_palette_refs,
+                want_object.layer_palette_refs
+            );
             assert_eq!(got_object.bounds, want_object.bounds);
             assert_eq!(
                 voxel_set(got_object, &got.palettes),
@@ -261,14 +311,15 @@ mod tests {
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
-    /// A document whose edit grid differs from the runtime grid (carries
-    /// margin) round-trips the edit state through the VoxMain and back.
+    /// A document whose edit grid differs from the runtime grid (has margin)
+    /// round-trips the edit state through the VoxMain and back.
     #[test]
     fn round_trips_edit_state() {
         let file = VoxjFile {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
+                    value_pools: vec![numbered_pool(2)],
                     objects: vec![object(
                         "o",
                         vec![0],
@@ -276,10 +327,7 @@ mod tests {
                         vec![[0, 0, 0], [1, 0, 0]],
                         vec![vec![0], vec![1]],
                     )],
-                    palettes: vec![VoxjPalette {
-                        attributes: vec!["rgba".to_owned()],
-                        data: numbered_cells(2),
-                    }],
+                    palettes: vec![numbered_palette("baseColorFactor", 0, 2)],
                     hierarchy_nodes: Vec::new(),
                     root_hierarchy_nodes: Vec::new(),
                 },
@@ -347,6 +395,7 @@ mod tests {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
+                    value_pools: vec![numbered_pool(2)],
                     objects: vec![object(
                         "o",
                         vec![0],
@@ -354,10 +403,7 @@ mod tests {
                         vec![[0, 0, 0], [1, 0, 0]],
                         vec![vec![0], vec![1]],
                     )],
-                    palettes: vec![VoxjPalette {
-                        attributes: vec!["rgba".to_owned()],
-                        data: numbered_cells(2),
-                    }],
+                    palettes: vec![numbered_palette("baseColorFactor", 0, 2)],
                     hierarchy_nodes: Vec::new(),
                     root_hierarchy_nodes: Vec::new(),
                 },
@@ -460,22 +506,37 @@ mod tests {
     #[test]
     fn rejects_out_of_range_sample() {
         let mut file = sample_file();
-        // One channel (object 0 references one palette); the first voxel
-        // samples cell 99, which is out of range.
+        // One channel (object 0 has one layer); the first voxel samples
+        // material 99, out of range for palette 0's six materials.
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![99, 0, 5, 2]]);
         assert!(from_voxj_file(&file).is_err());
     }
 
-    /// A voxelless object (tight bounds `[0, 0, 0]`) may reference an empty
-    /// palette: no voxel samples it, so it round-trips rather than being
-    /// rejected.
+    /// A `float` pool value outside its declared `min`/`max` is rejected by
+    /// voxcore validation on the assembled state.
+    #[test]
+    fn rejects_value_outside_pool_bounds() {
+        let mut file = sample_file();
+        // pool 1 is metallic in [0, 1]; push a value above the max.
+        file.main.runtime_state.value_pools[1] = VoxjValuePool::Float {
+            min: VoxjBound::Number(0.0),
+            max: VoxjBound::Number(1.0),
+            values: vec![0.0, 0.5, 2.0],
+        };
+        assert!(from_voxj_file(&file).is_err());
+    }
+
+    /// A voxelless object (tight bounds `[0, 0, 0]`) may reference a palette
+    /// with no materials: no voxel samples it, so it round-trips rather than
+    /// being rejected.
     #[test]
     fn round_trips_empty_palette_referenced_by_voxelless_object() {
         let file = VoxjFile {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
+                    value_pools: vec![numbered_pool(1)],
                     objects: vec![object(
                         "empty-ref",
                         vec![0],
@@ -483,9 +544,10 @@ mod tests {
                         Vec::new(),
                         Vec::new(),
                     )],
+                    // One binding, no materials: an empty column per binding.
                     palettes: vec![VoxjPalette {
-                        attributes: vec!["rgba".to_owned()],
-                        data: Vec::new(),
+                        bindings: vec![binding("baseColorFactor", 0)],
+                        materials: vec![Vec::new()],
                     }],
                     hierarchy_nodes: Vec::new(),
                     root_hierarchy_nodes: Vec::new(),
@@ -498,6 +560,64 @@ mod tests {
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
+    /// An `srgba-hex` pool canonicalizes to `srgba-float` on read, and the
+    /// default writer keeps it float, dividing each 8-bit byte by 255.
+    #[test]
+    fn hex_color_canonicalizes_to_float_by_default() {
+        let file = hex_color_file();
+        let state = from_voxj_file(&file).unwrap();
+        let written = to_voxj_file(&state).unwrap();
+        assert_eq!(
+            written.main.runtime_state.value_pools,
+            vec![VoxjValuePool::SrgbaFloat {
+                // 0x80 alpha divides to exactly the decoder's 128.0 / 255.0.
+                values: vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 128.0 / 255.0]],
+            }]
+        );
+    }
+
+    /// With `ColorFormat::Hex` the writer re-encodes an sRGB color pool as hex,
+    /// and byte-valued components round-trip through float exactly.
+    #[test]
+    fn hex_color_format_round_trips_hex() {
+        let file = hex_color_file();
+        let state = from_voxj_file(&file).unwrap();
+        let written = VoxjFileBuilder::new(&state)
+            .color_format(ColorFormat::Hex)
+            .build()
+            .unwrap();
+        assert_eq!(
+            written.main.runtime_state.value_pools,
+            file.main.runtime_state.value_pools
+        );
+    }
+
+    /// A one-voxel object over an `srgba-hex` base-color palette.
+    fn hex_color_file() -> VoxjFile {
+        VoxjFile {
+            version: 1,
+            main: VoxjMain {
+                runtime_state: VoxjRuntimeState {
+                    value_pools: vec![VoxjValuePool::SrgbaHex {
+                        values: vec!["#FF0000FF".to_owned(), "#00FF0080".to_owned()],
+                    }],
+                    objects: vec![object(
+                        "o",
+                        vec![0],
+                        [1, 1, 1],
+                        vec![[0, 0, 0]],
+                        vec![vec![0]],
+                    )],
+                    palettes: vec![numbered_palette("baseColorFactor", 0, 2)],
+                    hierarchy_nodes: Vec::new(),
+                    root_hierarchy_nodes: Vec::new(),
+                },
+                edit_state: None,
+                ext: None,
+            },
+        }
+    }
+
     /// A sparse object with huge bounds is rejected at the volume check, before
     /// it can force a dense multi-gigabyte allocation.
     #[test]
@@ -506,6 +626,7 @@ mod tests {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
+                    value_pools: Vec::new(),
                     objects: vec![object(
                         "huge",
                         Vec::new(),
