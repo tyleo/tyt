@@ -1,357 +1,365 @@
-use crate::{BVoxAttribute, BVoxPaletteCell, VoxValue};
+use crate::{BVoxMaterial, BVoxPaletteBinding, BVoxValuePool, VoxPaletteBinding};
 use branded_id::{
     U32Id,
     soa::{IdField, IdRemap, IdStruct},
 };
 
-/// A palette: a set of attributes and a set of cells, where every cell carries
-/// one [`VoxValue`](crate::VoxValue) per attribute (a rectangular
-/// cells-by-attributes grid). An object's voxels sample cells (see
-/// [`VoxObject`](crate::VoxObject)).
+/// A palette: an ordered set of attribute-to-pool bindings and a set of
+/// materials, stored column-major. Each binding names an attribute and the
+/// [`VoxValuePool`](crate::VoxValuePool) that attribute draws from. Each
+/// material carries one value-index per binding: `value_index(material,
+/// binding)` is an index into the pool bound by `binding`. Resolve a value by
+/// reading that index out of the pool a [`VoxMain`](crate::VoxMain) holds. An
+/// object's voxels sample materials by id (see [`VoxObject`](crate::VoxObject)).
 ///
-/// Build it with [`add_attribute`](Self::add_attribute) then
-/// [`add_cell`](Self::add_cell).
+/// Build it with [`add_binding`](Self::add_binding) then
+/// [`add_material`](Self::add_material). No two bindings share an attribute, a
+/// rule [`VoxMain::validate`](crate::VoxMain::validate) checks.
 #[derive(Debug, Default)]
 pub struct VoxPalette {
-    /// Attribute id pool.
-    attribute_ids: IdStruct<BVoxAttribute>,
+    /// Binding id pool.
+    binding_ids: IdStruct<BVoxPaletteBinding>,
 
-    /// Attribute key names.
-    attributes: IdField<BVoxAttribute, String>,
+    /// The attribute-to-pool bindings, one per column.
+    bindings: IdField<BVoxPaletteBinding, VoxPaletteBinding>,
 
-    /// Cell id pool.
-    palette_cell_ids: IdStruct<BVoxPaletteCell>,
+    /// Material id pool.
+    material_ids: IdStruct<BVoxMaterial>,
 
-    /// Per cell, one value per attribute.
-    palette_cells: IdField<BVoxPaletteCell, IdField<BVoxAttribute, VoxValue>>,
+    /// Per material, one value-index per binding.
+    materials: IdField<BVoxMaterial, IdField<BVoxPaletteBinding, u32>>,
 }
 
 impl VoxPalette {
-    /// Adds an attribute after any existing ones and returns its id,
-    /// back-filling existing cells with [`VoxValue::Null`] so the palette stays
-    /// rectangular. Add all attributes before any cells to avoid the back-fill.
-    pub fn add_attribute(&mut self, name: String) -> U32Id<BVoxAttribute> {
-        let attribute_id = self.attribute_ids.retain();
-        self.attributes.retain(attribute_id, name);
+    /// Adds a binding after any existing ones and returns its id, back-filling
+    /// existing materials with value-index 0 so every material keeps one
+    /// value-index per binding. Add all bindings before any materials to avoid
+    /// the back-fill placeholder, which is a valid index only if the bound pool
+    /// is non-empty.
+    pub fn add_binding(
+        &mut self,
+        attribute: String,
+        pool: U32Id<BVoxValuePool>,
+    ) -> U32Id<BVoxPaletteBinding> {
+        let binding_id = self.binding_ids.retain();
+        self.bindings
+            .retain(binding_id, VoxPaletteBinding { attribute, pool });
 
-        for cell_id in self.palette_cell_ids.iter() {
-            // Safety: retained cell ids have a value column.
-            let cell = unsafe { self.palette_cells.get_mut(cell_id) };
-            cell.retain(attribute_id, VoxValue::Null);
+        for material_id in self.material_ids.iter() {
+            // Safety: retained material ids have a value column.
+            let material = unsafe { self.materials.get_mut(material_id) };
+            material.retain(binding_id, 0);
         }
 
-        attribute_id
+        binding_id
     }
 
-    /// Number of attributes.
-    pub fn attribute_count(&self) -> usize {
-        self.attribute_ids.len()
+    /// Number of bindings.
+    pub fn binding_count(&self) -> usize {
+        self.binding_ids.len()
     }
 
-    /// Key name of attribute `id`, or `None` if not one of this palette's.
-    pub fn attribute(&self, id: U32Id<BVoxAttribute>) -> Option<&str> {
+    /// The binding `id`, or `None` if not one of this palette's.
+    pub fn binding(&self, id: U32Id<BVoxPaletteBinding>) -> Option<&VoxPaletteBinding> {
         // Safety: retained ids have a value.
-        self.attribute_ids
+        self.binding_ids
             .is_retained(id)
-            .then(|| unsafe { self.attributes.get(id) }.as_str())
+            .then(|| unsafe { self.bindings.get(id) })
     }
 
-    /// Attributes in id order, as `(id, name)`.
-    pub fn iter_attributes(&self) -> impl Iterator<Item = (U32Id<BVoxAttribute>, &str)> + '_ {
-        // Safety: retained ids have a value.
-        self.attribute_ids
-            .iter()
-            .map(move |id| (id, unsafe { self.attributes.get(id) }.as_str()))
-    }
-
-    /// Adds a cell with one value per attribute, in
-    /// [`iter_attributes`](Self::iter_attributes) order, and returns its id.
-    /// `None`, changing nothing, if `values` has the wrong length.
-    pub fn add_cell(&mut self, values: Vec<VoxValue>) -> Option<U32Id<BVoxPaletteCell>> {
-        if values.len() != self.attribute_ids.len() {
-            return None;
-        }
-        let cell_id = self.palette_cell_ids.retain();
-        let mut cell = IdField::new();
-        for (attribute_id, value) in self.attribute_ids.iter().zip(values) {
-            cell.retain(attribute_id, value);
-        }
-        self.palette_cells.retain(cell_id, cell);
-        Some(cell_id)
-    }
-
-    /// Number of cells.
-    pub fn cell_count(&self) -> usize {
-        self.palette_cell_ids.len()
-    }
-
-    /// Whether `id` is one of this palette's cells.
-    pub fn contains_cell(&self, id: U32Id<BVoxPaletteCell>) -> bool {
-        self.palette_cell_ids.is_retained(id)
-    }
-
-    /// Value of `cell` for `attribute`, or `None` if either id is not this
-    /// palette's.
-    pub fn cell_value(
+    /// Bindings in id order, as `(id, binding)`. Binding order is the material
+    /// column order.
+    pub fn iter_bindings(
         &self,
-        cell: U32Id<BVoxPaletteCell>,
-        attribute: U32Id<BVoxAttribute>,
-    ) -> Option<&VoxValue> {
-        if !self.palette_cell_ids.is_retained(cell) || !self.attribute_ids.is_retained(attribute) {
-            return None;
-        }
-        // Safety: a retained cell has a value for every attribute.
-        let column = unsafe { self.palette_cells.get(cell) };
-        Some(unsafe { column.get(attribute) })
+    ) -> impl Iterator<Item = (U32Id<BVoxPaletteBinding>, &VoxPaletteBinding)> + '_ {
+        // Safety: retained ids have a value.
+        self.binding_ids
+            .iter()
+            .map(move |id| (id, unsafe { self.bindings.get(id) }))
     }
 
-    /// Cell ids in id order; read values with [`cell_value`](Self::cell_value).
-    pub fn iter_cells(&self) -> impl Iterator<Item = U32Id<BVoxPaletteCell>> + '_ {
-        self.palette_cell_ids.iter()
+    /// Adds a material with one value-index per binding, in
+    /// [`iter_bindings`](Self::iter_bindings) order, and returns its id. `None`,
+    /// changing nothing, if `value_indices` has the wrong length. Each index is
+    /// range-checked against its binding's pool by
+    /// [`VoxMain::validate`](crate::VoxMain::validate), not here.
+    pub fn add_material(&mut self, value_indices: Vec<u32>) -> Option<U32Id<BVoxMaterial>> {
+        if value_indices.len() != self.binding_ids.len() {
+            return None;
+        }
+        let material_id = self.material_ids.retain();
+        let mut column = IdField::new();
+        for (binding_id, index) in self.binding_ids.iter().zip(value_indices) {
+            column.retain(binding_id, index);
+        }
+        self.materials.retain(material_id, column);
+        Some(material_id)
+    }
+
+    /// Number of materials.
+    pub fn material_count(&self) -> usize {
+        self.material_ids.len()
+    }
+
+    /// Whether `id` is one of this palette's materials.
+    pub fn contains_material(&self, id: U32Id<BVoxMaterial>) -> bool {
+        self.material_ids.is_retained(id)
+    }
+
+    /// The value-index `material` draws for `binding`, an index into the pool
+    /// bound by `binding`, or `None` if either id is not this palette's. Read
+    /// the pool a [`VoxMain`](crate::VoxMain) holds by that index for the value.
+    pub fn value_index(
+        &self,
+        material: U32Id<BVoxMaterial>,
+        binding: U32Id<BVoxPaletteBinding>,
+    ) -> Option<u32> {
+        if !self.material_ids.is_retained(material) || !self.binding_ids.is_retained(binding) {
+            return None;
+        }
+        // Safety: a retained material has a value-index for every binding.
+        let column = unsafe { self.materials.get(material) };
+        Some(*unsafe { column.get(binding) })
+    }
+
+    /// Material ids in id order; read value-indices with
+    /// [`value_index`](Self::value_index).
+    pub fn iter_materials(&self) -> impl Iterator<Item = U32Id<BVoxMaterial>> + '_ {
+        self.material_ids.iter()
     }
 
     /// Deep copy. Liveness lives in the id pools, so the columns can't derive
-    /// `Clone`; rebuild them and every cell's values against the cloned pools.
+    /// `Clone`; rebuild them against the cloned pools.
     pub fn clone_palette(&self) -> Self {
-        let mut attributes = IdField::new();
-        for attribute_id in self.attribute_ids.iter() {
+        let mut bindings = IdField::new();
+        for binding_id in self.binding_ids.iter() {
             // Safety: retained ids have a value.
-            let name = unsafe { self.attributes.get(attribute_id) }.clone();
-            attributes.retain(attribute_id, name);
+            let binding = unsafe { self.bindings.get(binding_id) }.clone();
+            bindings.retain(binding_id, binding);
         }
 
-        let mut palette_cells = IdField::new();
-        for cell_id in self.palette_cell_ids.iter() {
-            // Safety: a retained cell has a value for every attribute.
-            let source = unsafe { self.palette_cells.get(cell_id) };
-            let mut cell = IdField::new();
-            for attribute_id in self.attribute_ids.iter() {
-                let value = unsafe { source.get(attribute_id) }.clone();
-                cell.retain(attribute_id, value);
-            }
-            palette_cells.retain(cell_id, cell);
+        let mut materials = IdField::new();
+        for material_id in self.material_ids.iter() {
+            // Safety: a retained material has a value column. Its values are
+            // Copy u32, so the inner column clones bytewise, unlike the bindings
+            // above whose attribute strings are rebuilt.
+            let column = unsafe { self.materials.get(material_id) }.clone();
+            materials.retain(material_id, column);
         }
 
         Self {
-            attribute_ids: self.attribute_ids.clone(),
-            attributes,
-            palette_cell_ids: self.palette_cell_ids.clone(),
-            palette_cells,
+            binding_ids: self.binding_ids.clone(),
+            bindings,
+            material_ids: self.material_ids.clone(),
+            materials,
         }
     }
 
-    /// Removes attribute `id`, dropping its value from every cell so the
-    /// palette stays rectangular (each cell keeps one value per remaining
-    /// attribute). `None`, changing nothing, if `id` is not one of this
-    /// palette's attributes. Leaves a hole until
-    /// [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
-    pub fn remove_attribute(&mut self, id: U32Id<BVoxAttribute>) -> Option<()> {
-        if !self.attribute_ids.is_retained(id) {
+    /// Removes binding `id`, freeing its attribute string. Each material keeps a
+    /// Copy value-index at the removed binding's slot, unreferenced (reads are
+    /// guarded by binding retention) until [`gc`](Self::gc) compacts the
+    /// columns. `None`, changing nothing, if `id` is not one of this palette's
+    /// bindings. Leaves a hole until [`VoxMain::gc`](crate::VoxMain::gc)
+    /// renumbers.
+    pub fn remove_binding(&mut self, id: U32Id<BVoxPaletteBinding>) -> Option<()> {
+        if !self.binding_ids.is_retained(id) {
             return None;
         }
-        let cell_ids: Vec<_> = self.palette_cell_ids.iter().collect();
-        for cell_id in cell_ids {
-            // Safety: a retained cell holds a value for every attribute, `id`
-            // included.
-            let cell = unsafe { self.palette_cells.get_mut(cell_id) };
-            unsafe { cell.release(id) };
-        }
-        // Safety: a retained attribute has a name.
-        unsafe { self.attributes.release(id) };
-        self.attribute_ids.release(id);
+        // A value-index is Copy, so releasing each material's slot at `id` would
+        // be a no-op; leave it for gc to compact and only free the binding.
+        // Safety: a retained binding has a value.
+        unsafe { self.bindings.release(id) };
+        self.binding_ids.release(id);
         Some(())
     }
 
-    /// Drops cell `id` and its per-attribute values. The caller must first
+    /// Drops material `id` and its value-index column. The caller must first
     /// ensure no live voxel still samples it, which is why this is internal and
     /// reached only through
-    /// [`VoxMain::remove_cell`](crate::VoxMain::remove_cell). Leaves a hole
-    /// until [`gc`](Self::gc) renumbers.
-    pub(crate) fn remove_cell(&mut self, id: U32Id<BVoxPaletteCell>) -> Option<()> {
-        if !self.palette_cell_ids.is_retained(id) {
+    /// [`VoxMain::remove_material`](crate::VoxMain::remove_material). Leaves a
+    /// hole until [`gc`](Self::gc) renumbers.
+    pub(crate) fn remove_material(&mut self, id: U32Id<BVoxMaterial>) -> Option<()> {
+        if !self.material_ids.is_retained(id) {
             return None;
         }
-        // Safety: a retained cell holds a value for every attribute; release
-        // each before the inner column so `VoxValue`'s heap data is freed.
-        let cell = unsafe { self.palette_cells.get_mut(id) };
-        unsafe { cell.release_all(&self.attribute_ids) };
-        // Safety: a retained cell has an inner column.
-        unsafe { self.palette_cells.release(id) };
-        self.palette_cell_ids.release(id);
+        // The inner column holds Copy u32 value-indices, so dropping the inner
+        // IdField frees its buffer with nothing to release per binding.
+        // Safety: a retained material has an inner column.
+        unsafe { self.materials.release(id) };
+        self.material_ids.release(id);
         Some(())
     }
 
-    /// Compacts the attribute and cell pools back to a contiguous `0..len`,
-    /// moving every value to its relabeled id, and returns the cell relabeling
-    /// so a [`VoxMain`](crate::VoxMain) can translate the samples that point at
-    /// these cells. Attributes are referenced only within this palette, so
-    /// their relabeling stays internal.
-    pub(crate) fn gc(&mut self) -> IdRemap<BVoxPaletteCell, u32> {
-        let attribute_remap = self.attribute_ids.gc();
-        // Safety: the name column was in sync with the pre-gc attribute pool,
+    /// Compacts the binding and material pools back to a contiguous `0..len`,
+    /// moving every value to its relabeled id, and returns the material
+    /// relabeling so a [`VoxMain`](crate::VoxMain) can translate the samples
+    /// that point at these materials. Bindings are referenced only within this
+    /// palette, so their relabeling stays internal. Value-indices point into the
+    /// bound pools, whose contents gc does not touch, so they stay valid.
+    pub(crate) fn gc(&mut self) -> IdRemap<BVoxMaterial, u32> {
+        let binding_remap = self.binding_ids.gc();
+        // Safety: the binding column was in sync with the pre-gc binding pool,
         // and nothing has retained or released since.
-        unsafe { self.attributes.gc(&attribute_remap) };
+        unsafe { self.bindings.gc(&binding_remap) };
 
-        let cell_ids: Vec<_> = self.palette_cell_ids.iter().collect();
-        for cell_id in cell_ids {
-            // Safety: a retained cell holds a value for every pre-gc attribute
-            // id, and the remap came from this palette's attribute pool.
-            let cell = unsafe { self.palette_cells.get_mut(cell_id) };
-            unsafe { cell.gc(&attribute_remap) };
+        let material_ids: Vec<_> = self.material_ids.iter().collect();
+        for material_id in material_ids {
+            // Safety: a retained material holds a value-index for every pre-gc
+            // binding id, and the remap came from this palette's binding pool.
+            let column = unsafe { self.materials.get_mut(material_id) };
+            unsafe { column.gc(&binding_remap) };
         }
 
-        let cell_remap = self.palette_cell_ids.gc();
-        // Safety: the cell column was in sync with the pre-gc cell pool, and
-        // nothing has retained or released since.
-        unsafe { self.palette_cells.gc(&cell_remap) };
-        cell_remap
+        let material_remap = self.material_ids.gc();
+        // Safety: the material column was in sync with the pre-gc material pool,
+        // and nothing has retained or released since.
+        unsafe { self.materials.gc(&material_remap) };
+        material_remap
+    }
+
+    /// Translates every binding's pool id through `remap`, matching a value-pool
+    /// store a [`VoxMain`](crate::VoxMain) is compacting. Requires a
+    /// referentially valid palette, so every binding names a live pool.
+    pub(crate) fn relabel_value_pools(&mut self, remap: &IdRemap<BVoxValuePool, u32>) {
+        let binding_ids: Vec<_> = self.binding_ids.iter().collect();
+        for binding_id in binding_ids {
+            // Safety: retained binding ids have a value.
+            let binding = unsafe { self.bindings.get_mut(binding_id) };
+            binding.pool = remap
+                .new_id(binding.pool)
+                .expect("a binding names a live value pool in a valid state");
+        }
     }
 }
 
 impl Drop for VoxPalette {
     fn drop(&mut self) {
-        // Release each cell's values first; `VoxValue` owns heap data the inner
-        // columns won't free on their own.
-        for palette_cell_id in &self.palette_cell_ids {
-            // Safety: a retained cell has a value for every attribute.
-            let cell = unsafe { self.palette_cells.get_mut(palette_cell_id) };
-            unsafe { cell.release_all(&self.attribute_ids) };
-        }
-
+        // Each material's inner column is an IdField owning a heap buffer whose
+        // values are Copy u32, so releasing the inner IdField frees the buffer
+        // with nothing to release per binding. The bindings own attribute
+        // strings, freed by releasing them.
         // Safety: both columns hold a value for every id in their pools.
         unsafe {
-            self.palette_cells.release_all(&self.palette_cell_ids);
-            self.attributes.release_all(&self.attribute_ids);
+            self.materials.release_all(&self.material_ids);
+            self.bindings.release_all(&self.binding_ids);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{BVoxAttribute, BVoxPaletteCell, VoxPalette, VoxValue};
+    use crate::{BVoxMaterial, BVoxPaletteBinding, BVoxValuePool, VoxPalette};
     use branded_id::U32Id;
 
+    fn pool(index: u32) -> U32Id<BVoxValuePool> {
+        U32Id::from_u32(index)
+    }
+
     #[test]
-    fn builds_and_reads_a_rectangular_palette() {
+    fn builds_and_reads_a_material_palette() {
         let mut palette = VoxPalette::default();
-        let metallic = palette.add_attribute("metallic".to_owned());
-        let ior = palette.add_attribute("ior".to_owned());
+        let metallic = palette.add_binding("metallic".to_owned(), pool(0));
+        let ior = palette.add_binding("ior".to_owned(), pool(1));
 
-        let cell = palette
-            .add_cell(vec![VoxValue::Bool(true), VoxValue::Number(1.5)])
-            .unwrap();
+        // Two materials, each a value-index per binding, in binding order.
+        let matte = palette.add_material(vec![0, 3]).unwrap();
+        let shiny = palette.add_material(vec![1, 3]).unwrap();
 
-        assert_eq!(palette.attribute_count(), 2);
-        assert_eq!(palette.cell_count(), 1);
-        assert_eq!(palette.attribute(metallic), Some("metallic"));
+        assert_eq!(palette.binding_count(), 2);
+        assert_eq!(palette.material_count(), 2);
+        assert_eq!(palette.binding(metallic).unwrap().attribute, "metallic");
+        assert_eq!(palette.binding(ior).unwrap().pool, pool(1));
+        assert_eq!(palette.value_index(matte, metallic), Some(0));
+        assert_eq!(palette.value_index(matte, ior), Some(3));
+        assert_eq!(palette.value_index(shiny, metallic), Some(1));
         assert_eq!(
-            palette.cell_value(cell, metallic),
-            Some(&VoxValue::Bool(true))
-        );
-        assert_eq!(palette.cell_value(cell, ior), Some(&VoxValue::Number(1.5)));
-        assert_eq!(
-            palette.iter_attributes().collect::<Vec<_>>(),
+            palette
+                .iter_bindings()
+                .map(|(id, b)| (id, b.attribute.as_str()))
+                .collect::<Vec<_>>(),
             [(metallic, "metallic"), (ior, "ior")]
         );
     }
 
     #[test]
-    fn add_cell_rejects_wrong_arity_without_changing_state() {
+    fn add_material_rejects_wrong_arity_without_changing_state() {
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        // One attribute, but two values supplied.
-        assert_eq!(
-            palette.add_cell(vec![VoxValue::Number(0.0), VoxValue::Number(1.0)]),
-            None
-        );
-        assert_eq!(palette.cell_count(), 0);
+        palette.add_binding("baseColorFactor".to_owned(), pool(0));
+        // One binding, but two value-indices supplied.
+        assert_eq!(palette.add_material(vec![0, 1]), None);
+        assert_eq!(palette.material_count(), 0);
     }
 
     #[test]
-    fn add_attribute_back_fills_existing_cells_with_null() {
+    fn add_binding_back_fills_existing_materials_with_zero() {
         let mut palette = VoxPalette::default();
-        let rgba = palette.add_attribute("rgba".to_owned());
-        let cell = palette.add_cell(vec![VoxValue::Number(7.0)]).unwrap();
+        let color = palette.add_binding("baseColorFactor".to_owned(), pool(0));
+        let material = palette.add_material(vec![7]).unwrap();
 
-        let added = palette.add_attribute("metallic".to_owned());
-        assert_eq!(palette.cell_value(cell, rgba), Some(&VoxValue::Number(7.0)));
-        assert_eq!(palette.cell_value(cell, added), Some(&VoxValue::Null));
+        let added = palette.add_binding("metallicFactor".to_owned(), pool(1));
+        assert_eq!(palette.value_index(material, color), Some(7));
+        assert_eq!(palette.value_index(material, added), Some(0));
     }
 
     #[test]
     fn clone_palette_is_an_independent_deep_copy() {
         let mut palette = VoxPalette::default();
-        let attribute = palette.add_attribute("rgba".to_owned());
-        let cell = palette
-            .add_cell(vec![VoxValue::Text("red".to_owned())])
-            .unwrap();
+        let binding = palette.add_binding("baseColorFactor".to_owned(), pool(0));
+        let material = palette.add_material(vec![2]).unwrap();
 
         let copy = palette.clone_palette();
-        assert_eq!(
-            copy.cell_value(cell, attribute),
-            Some(&VoxValue::Text("red".to_owned()))
-        );
+        assert_eq!(copy.value_index(material, binding), Some(2));
+        assert_eq!(copy.binding(binding).unwrap().attribute, "baseColorFactor");
 
         // Mutating the original must not touch the copy.
-        palette
-            .add_cell(vec![VoxValue::Text("blue".to_owned())])
-            .unwrap();
-        assert_eq!(palette.cell_count(), 2);
-        assert_eq!(copy.cell_count(), 1);
+        palette.add_material(vec![5]).unwrap();
+        assert_eq!(palette.material_count(), 2);
+        assert_eq!(copy.material_count(), 1);
     }
 
     #[test]
-    fn remove_attribute_keeps_cells_rectangular_then_gc_renumbers() {
+    fn remove_binding_keeps_materials_then_gc_renumbers() {
         let mut palette = VoxPalette::default();
-        let a = palette.add_attribute("a".to_owned());
-        let b = palette.add_attribute("b".to_owned());
-        let cell = palette
-            .add_cell(vec![VoxValue::Number(1.0), VoxValue::Number(2.0)])
-            .unwrap();
+        let a = palette.add_binding("a".to_owned(), pool(0));
+        let b = palette.add_binding("b".to_owned(), pool(1));
+        let material = palette.add_material(vec![1, 2]).unwrap();
 
-        assert_eq!(palette.remove_attribute(a), Some(()));
-        assert_eq!(palette.attribute_count(), 1);
-        assert_eq!(palette.attribute(a), None); // a hole until gc
-        assert_eq!(palette.cell_value(cell, a), None);
-        assert_eq!(palette.cell_value(cell, b), Some(&VoxValue::Number(2.0)));
-        assert_eq!(palette.remove_attribute(a), None); // already gone
+        assert_eq!(palette.remove_binding(a), Some(()));
+        assert_eq!(palette.binding_count(), 1);
+        assert_eq!(palette.binding(a), None); // a hole until gc
+        assert_eq!(palette.value_index(material, a), None);
+        assert_eq!(palette.value_index(material, b), Some(2));
+        assert_eq!(palette.remove_binding(a), None); // already gone
 
         palette.gc();
-        // The surviving attribute and cell renumber to 0.
-        let attribute = U32Id::<BVoxAttribute>::from_u32(0);
-        let cell = U32Id::<BVoxPaletteCell>::from_u32(0);
-        assert_eq!(palette.attribute(attribute), Some("b"));
-        assert_eq!(
-            palette.cell_value(cell, attribute),
-            Some(&VoxValue::Number(2.0))
-        );
+        // The surviving binding and material renumber to 0.
+        let binding = U32Id::<BVoxPaletteBinding>::from_u32(0);
+        let material = U32Id::<BVoxMaterial>::from_u32(0);
+        assert_eq!(palette.binding(binding).unwrap().attribute, "b");
+        assert_eq!(palette.value_index(material, binding), Some(2));
     }
 
     #[test]
-    fn remove_cell_then_gc_compacts_remaining_cells() {
+    fn remove_material_then_gc_compacts_remaining_materials() {
         let mut palette = VoxPalette::default();
-        palette.add_attribute("v".to_owned());
-        let keep = palette.add_cell(vec![VoxValue::Number(0.0)]).unwrap();
-        let drop = palette.add_cell(vec![VoxValue::Number(1.0)]).unwrap();
-        let last = palette.add_cell(vec![VoxValue::Number(2.0)]).unwrap();
+        let binding = palette.add_binding("v".to_owned(), pool(0));
+        let keep = palette.add_material(vec![0]).unwrap();
+        let drop = palette.add_material(vec![1]).unwrap();
+        let last = palette.add_material(vec![2]).unwrap();
 
-        assert_eq!(palette.remove_cell(drop), Some(()));
-        assert_eq!(palette.cell_count(), 2);
-        assert!(!palette.contains_cell(drop));
-        assert!(palette.contains_cell(keep) && palette.contains_cell(last));
-        assert_eq!(palette.remove_cell(drop), None); // already gone
+        assert_eq!(palette.remove_material(drop), Some(()));
+        assert_eq!(palette.material_count(), 2);
+        assert!(!palette.contains_material(drop));
+        assert!(palette.contains_material(keep) && palette.contains_material(last));
+        assert_eq!(palette.remove_material(drop), None); // already gone
 
         palette.gc();
-        // The two survivors are contiguous; their values are intact.
-        let attribute = U32Id::<BVoxAttribute>::from_u32(0);
-        let values: Vec<f64> = palette
-            .iter_cells()
-            .map(|cell| match palette.cell_value(cell, attribute) {
-                Some(&VoxValue::Number(n)) => n,
-                other => panic!("unexpected value {other:?}"),
-            })
+        // The two survivors are contiguous; their value-indices are intact.
+        let indices: Vec<u32> = palette
+            .iter_materials()
+            .map(|material| palette.value_index(material, binding).unwrap())
             .collect();
-        assert_eq!(palette.cell_count(), 2);
-        assert_eq!(values, [0.0, 2.0]);
+        assert_eq!(palette.material_count(), 2);
+        assert_eq!(indices, [0, 2]);
     }
 }

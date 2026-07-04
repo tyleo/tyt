@@ -1,6 +1,7 @@
 use crate::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, BVoxValuePool, Error, Result,
-    VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState, VoxValue, VoxValuePool,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPaletteBinding, BVoxValuePool,
+    Error, Result, VoxBound, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState,
+    VoxValue, VoxValuePool,
 };
 use branded_id::{IdVec, U32Id, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
@@ -16,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 /// cross-references.
 #[derive(Debug, Default)]
 pub struct VoxMain {
-    /// The runtime scene: objects, shared palettes, hierarchy, and roots.
+    /// The runtime scene: objects.
     runtime_state: VoxRuntimeState,
 
     /// Optional user-extension namespace; the core format assigns it no
@@ -127,6 +128,23 @@ impl VoxMain {
             .map(move |id| (id, unsafe { self.runtime_state.value_pools.get(id) }))
     }
 
+    /// Resolves what `material` in `palette` draws for `binding`: the value pool
+    /// it is bound to and the value-index into that pool. `None` if any id is
+    /// not this state's, `binding` is not `palette`'s, or the binding names a
+    /// pool this state does not hold. Read the value at the index out of the
+    /// returned pool by the pool's kind.
+    pub fn material_value(
+        &self,
+        palette: U32Id<BVoxPalette>,
+        material: U32Id<BVoxMaterial>,
+        binding: U32Id<BVoxPaletteBinding>,
+    ) -> Option<(&VoxValuePool, u32)> {
+        let palette = self.palette(palette)?;
+        let index = palette.value_index(material, binding)?;
+        let pool = self.value_pool(palette.binding(binding)?.pool)?;
+        Some((pool, index))
+    }
+
     /// Adds a hierarchy node, returning its id (its listing index). Its
     /// references are checked by [`validate`](Self::validate), not here.
     pub fn add_hierarchy_node(&mut self, node: VoxHierarchyNode) -> U32Id<BVoxHierarchyNode> {
@@ -218,7 +236,7 @@ impl VoxMain {
         for object_id in object_ids {
             // Safety: retained object ids have a value.
             let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
-            object.remove_palette_refs_to(id);
+            object.remove_layers_to(id);
         }
         // Safety: a retained palette id has a value; its Drop frees its cells.
         unsafe { self.runtime_state.palettes.release(id) };
@@ -249,24 +267,24 @@ impl VoxMain {
         Some(())
     }
 
-    /// Removes `cell` from `palette`, first repainting every live voxel that
+    /// Removes `material` from `palette`, first repainting every live voxel that
     /// samples it onto `replacement` so no voxel is left without a material.
     /// `None`, changing nothing, if `palette` is not one of this state's
-    /// palettes, if `cell` or `replacement` is not one of that palette's cells,
-    /// or if `replacement` is `cell` itself. Leaves a hole until
+    /// palettes, if `material` or `replacement` is not one of that palette's
+    /// materials, or if `replacement` is `material` itself. Leaves a hole until
     /// [`gc`](Self::gc) renumbers.
-    pub fn remove_cell(
+    pub fn remove_material(
         &mut self,
         palette: U32Id<BVoxPalette>,
-        cell: U32Id<BVoxPaletteCell>,
-        replacement: U32Id<BVoxPaletteCell>,
+        material: U32Id<BVoxMaterial>,
+        replacement: U32Id<BVoxMaterial>,
     ) -> Option<()> {
-        if !self.runtime_state.palette_ids.is_retained(palette) || cell == replacement {
+        if !self.runtime_state.palette_ids.is_retained(palette) || material == replacement {
             return None;
         }
         // Safety: the palette id is retained.
         let palette_ref = unsafe { self.runtime_state.palettes.get(palette) };
-        if !palette_ref.contains_cell(cell) || !palette_ref.contains_cell(replacement) {
+        if !palette_ref.contains_material(material) || !palette_ref.contains_material(replacement) {
             return None;
         }
 
@@ -274,11 +292,12 @@ impl VoxMain {
         for object_id in object_ids {
             // Safety: retained object ids have a value.
             let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
-            object.repaint_cell(palette, cell, replacement);
+            object.repaint_material(palette, material, replacement);
         }
 
-        // Safety: the palette id is retained; the cell is one of its cells.
-        unsafe { self.runtime_state.palettes.get_mut(palette) }.remove_cell(cell);
+        // Safety: the palette id is retained; the material is one of its
+        // materials.
+        unsafe { self.runtime_state.palettes.get_mut(palette) }.remove_material(material);
         Some(())
     }
 
@@ -296,17 +315,28 @@ impl VoxMain {
     /// Returns the [`VoxGcRemap`] recording where each id moved, so any ids
     /// held outside the state can be translated to their compacted values.
     pub fn gc(&mut self) -> VoxGcRemap {
-        // Compact each palette's own pools first, so the cell relabelings are
+        // Compact the shared value-pool store first, then relabel every palette
+        // binding's pool ref, so the pool ids are settled before palettes are
+        // compacted. With no pool-removal path today the store is already
+        // contiguous, so this relabel is currently the identity; it keeps gc
+        // uniformly compacting every pool and covers a future removal.
+        let pool_remap = self.runtime_state.value_pool_ids.gc();
+        // Safety: the value-pool column was in sync with the pre-gc pool, and
+        // nothing has retained or released since.
+        unsafe { self.runtime_state.value_pools.gc(&pool_remap) };
+
+        // Compact each palette's own pools, so the material relabelings are
         // ready when object samples are translated below. They are indexed by
         // old palette id, so the column covers the palette pool's whole id
         // space.
         let palette_id_space = self.runtime_state.palette_ids.peek_next_fresh().to_u32() as usize;
-        let mut cell_remaps: IdVec<BVoxPalette, IdRemap<BVoxPaletteCell, u32>> =
+        let mut material_remaps: IdVec<BVoxPalette, IdRemap<BVoxMaterial, u32>> =
             IdVec::from_vec((0..palette_id_space).map(|_| IdRemap::default()).collect());
         for palette_id in self.runtime_state.palette_ids.iter().collect::<Vec<_>>() {
             // Safety: retained palette ids have a value.
-            let cell_remap = unsafe { self.runtime_state.palettes.get_mut(palette_id) }.gc();
-            cell_remaps[palette_id.to_usize_id()] = cell_remap;
+            let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
+            palette.relabel_value_pools(&pool_remap);
+            material_remaps[palette_id.to_usize_id()] = palette.gc();
         }
 
         // Compact the palette pool.
@@ -321,7 +351,7 @@ impl VoxMain {
         for object_id in object_ids {
             // Safety: retained object ids have a value.
             unsafe { self.runtime_state.objects.get_mut(object_id) }
-                .gc(&palette_remap, &cell_remaps);
+                .gc(&palette_remap, &material_remaps);
         }
 
         // Compact the object pool.
@@ -360,22 +390,28 @@ impl VoxMain {
         }
 
         VoxGcRemap {
+            value_pools: pool_remap,
             objects: object_remap,
             palettes: palette_remap,
             hierarchy_nodes: node_remap,
-            cells: cell_remaps,
+            materials: material_remaps,
         }
     }
 
-    /// Checks the cross-references and per-entity rules:
+    /// Checks the value pools, palettes, cross-references, and per-entity rules:
     ///
-    /// 1. every object palette ref resolves, and no object references the same
-    ///    palette twice;
-    /// 2. every live-voxel sample cell is within its palette's cells;
-    /// 3. every node child node and child object resolves, and no node lists
+    /// 1. every value pool is non-empty, its values well-formed for its kind,
+    ///    and its `min`/`max` finite, integer-valued for an `int` pool, and
+    ///    ordered;
+    /// 2. every palette binding names a live value pool, no palette binds the
+    ///    same attribute twice, and every material value-index is within its
+    ///    binding's pool;
+    /// 3. every object layer references a live palette (two layers may share
+    ///    one), and every live-voxel sample material is within its layer's
+    ///    palette;
+    /// 4. every node child node and child object resolves, and no node lists
     ///    the same one twice;
-    /// 4. every root resolves, and no root repeats;
-    /// 5. no palette declares the same attribute key twice;
+    /// 5. every root resolves, and no root repeats;
     /// 6. every node transform has a non-zero scale on each axis and a
     ///    unit-length rotation quaternion within `1e-6`;
     /// 7. the `child_nodes` graph is acyclic.
@@ -387,49 +423,69 @@ impl VoxMain {
         // still count as a unit quaternion.
         const ROTATION_TOLERANCE: f64 = 1e-6;
 
-        // Palette attribute keys are unique within a palette.
+        // Value pools are non-empty and their values and bounds well-formed for
+        // their kind. This runs first, so a palette that reads a malformed pool
+        // is reported after the pool it reads.
+        for (pool_id, pool) in self.iter_value_pools() {
+            check_value_pool(pool_id.to_u32(), pool)?;
+        }
+
+        // Palette bindings resolve their pools, no palette binds an attribute
+        // twice, and every material value-index falls within its binding's
+        // pool.
         for (palette_id, palette) in self.iter_palettes() {
-            let mut seen_attributes = HashSet::with_capacity(palette.attribute_count());
-            for (attribute_id, name) in palette.iter_attributes() {
-                if !seen_attributes.insert(name) {
-                    return Err(Error::DuplicateAttribute {
+            let mut seen_attributes = HashSet::with_capacity(palette.binding_count());
+            for (binding_id, binding) in palette.iter_bindings() {
+                if !seen_attributes.insert(binding.attribute.as_str()) {
+                    return Err(Error::DuplicateBindingAttribute {
                         palette: palette_id.to_u32(),
-                        attribute: attribute_id.to_u32(),
+                        binding: binding_id.to_u32(),
                     });
+                }
+                let pool = self.value_pool(binding.pool).ok_or(Error::BindingPool {
+                    palette: palette_id.to_u32(),
+                    binding: binding_id.to_u32(),
+                    pool: binding.pool.to_u32(),
+                })?;
+                for material_id in palette.iter_materials() {
+                    let index = palette
+                        .value_index(material_id, binding_id)
+                        .expect("a material has a value-index for every binding");
+                    if index as usize >= pool.values_len() {
+                        return Err(Error::MaterialValue {
+                            palette: palette_id.to_u32(),
+                            binding: binding_id.to_u32(),
+                            material: material_id.to_u32(),
+                        });
+                    }
                 }
             }
         }
 
-        // Object palette refs and live-voxel sample cells.
-        // Checks are by id retention, not index range, so they hold whether or
-        // not removals have left the pools with holes.
+        // Object layer palette refs and live-voxel sample materials. Checks are
+        // by id retention, not index range, so they hold whether or not
+        // removals have left the pools with holes. Two layers may reference the
+        // same palette, so there is no duplicate-layer rule.
         for (object_id, object) in self.iter_objects() {
-            let mut ref_palettes = Vec::with_capacity(object.palette_ref_count());
-            let mut seen_palettes = HashSet::with_capacity(object.palette_ref_count());
-            for (palette_ref_id, palette_id) in object.iter_palette_refs() {
+            let mut layer_palettes = Vec::with_capacity(object.layer_count());
+            for (layer_id, palette_id) in object.iter_layers() {
                 let palette = self.palette(palette_id).ok_or(Error::PaletteRef {
                     object: object_id.to_u32(),
                     palette: palette_id.to_u32(),
                 })?;
-                if !seen_palettes.insert(palette_id.to_u32()) {
-                    return Err(Error::DuplicatePaletteRef {
-                        object: object_id.to_u32(),
-                        palette: palette_id.to_u32(),
-                    });
-                }
-                ref_palettes.push((palette_ref_id, palette));
+                layer_palettes.push((layer_id, palette));
             }
-            // Every live voxel samples a cell within each referenced palette.
+            // Every live voxel samples a material within each layer's palette.
             for voxel_id in object.iter_live() {
-                for &(palette_ref_id, palette) in &ref_palettes {
-                    let cell = object
-                        .voxel_cell(voxel_id, palette_ref_id)
-                        .expect("live voxel has a sample for every reference");
-                    if !palette.contains_cell(cell) {
-                        return Err(Error::SampleCell {
+                for &(layer_id, palette) in &layer_palettes {
+                    let material = object
+                        .voxel_material(voxel_id, layer_id)
+                        .expect("a live voxel has a sample for every layer");
+                    if !palette.contains_material(material) {
+                        return Err(Error::SampleMaterial {
                             object: object_id.to_u32(),
                             voxel: voxel_id.to_u32(),
-                            cell: cell.to_u32(),
+                            material: material.to_u32(),
                         });
                     }
                 }
@@ -584,11 +640,120 @@ impl VoxMain {
     }
 }
 
+/// Checks a value pool is non-empty and every value and bound is well-formed for
+/// its kind: int/float bounds finite, integer-valued for `int`, and ordered;
+/// int/float values finite and within bounds; color components within their
+/// space's range. `pool_id` is the pool's listing index, for the error.
+fn check_value_pool(pool_id: u32, pool: &VoxValuePool) -> Result<()> {
+    if pool.values_len() == 0 {
+        return Err(Error::EmptyPool { pool: pool_id });
+    }
+    match pool {
+        VoxValuePool::Float { min, max, values } => {
+            check_numeric_bounds(pool_id, min, max, false)?;
+            for (index, &value) in values.iter().enumerate() {
+                if !value.is_finite() || !value_in_bounds(min, max, value) {
+                    return Err(Error::PoolValue {
+                        pool: pool_id,
+                        index: index as u32,
+                    });
+                }
+            }
+        }
+        VoxValuePool::Int { min, max, values } => {
+            check_numeric_bounds(pool_id, min, max, true)?;
+            for (index, &value) in values.iter().enumerate() {
+                if !value_in_bounds(min, max, value as f64) {
+                    return Err(Error::PoolValue {
+                        pool: pool_id,
+                        index: index as u32,
+                    });
+                }
+            }
+        }
+        VoxValuePool::Srgb { values } => check_color_components(pool_id, values, false)?,
+        VoxValuePool::Srgba { values } => check_color_components(pool_id, values, false)?,
+        VoxValuePool::LinearRgb { values } => check_color_components(pool_id, values, true)?,
+        VoxValuePool::LinearRgba { values } => check_color_components(pool_id, values, true)?,
+        VoxValuePool::Json { .. } | VoxValuePool::Bool { .. } | VoxValuePool::String { .. } => {}
+    }
+    Ok(())
+}
+
+/// Checks a bounded pool's `min`/`max`: each numeric bound is finite (and
+/// integer-valued when `integer`), and `min <= max` when both are finite.
+fn check_numeric_bounds(pool_id: u32, min: &VoxBound, max: &VoxBound, integer: bool) -> Result<()> {
+    let min = bound_number(pool_id, min, integer)?;
+    let max = bound_number(pool_id, max, integer)?;
+    if let (Some(low), Some(high)) = (min, max)
+        && low > high
+    {
+        return Err(Error::PoolBound { pool: pool_id });
+    }
+    Ok(())
+}
+
+/// A bound's finite numeric value, or `None` if unbounded. Rejects a non-finite
+/// bound, or a non-integer bound on an `int` pool.
+fn bound_number(pool_id: u32, bound: &VoxBound, integer: bool) -> Result<Option<f64>> {
+    match bound {
+        VoxBound::None => Ok(None),
+        VoxBound::Number(number) => {
+            if !number.is_finite() || (integer && number.fract() != 0.0) {
+                Err(Error::PoolBound { pool: pool_id })
+            } else {
+                Ok(Some(*number))
+            }
+        }
+    }
+}
+
+/// Whether `value` lies within `min`/`max`, each side unbounded when `None`.
+fn value_in_bounds(min: &VoxBound, max: &VoxBound, value: f64) -> bool {
+    let low_ok = match min {
+        VoxBound::Number(low) => value >= *low,
+        VoxBound::None => true,
+    };
+    let high_ok = match max {
+        VoxBound::Number(high) => value <= *high,
+        VoxBound::None => true,
+    };
+    low_ok && high_ok
+}
+
+/// Checks each color's components lie in its space's range: sRGB in `[0, 1]`,
+/// linear finite and `>= 0`. The sRGB range test rejects any non-finite
+/// component on its own; the linear side is only lower-bounded, so it guards
+/// finiteness explicitly to reject `+Infinity`, which would otherwise pass
+/// `>= 0`.
+fn check_color_components<const N: usize>(
+    pool_id: u32,
+    colors: &[[f64; N]],
+    linear: bool,
+) -> Result<()> {
+    for (index, color) in colors.iter().enumerate() {
+        for &component in color {
+            let in_range = if linear {
+                component.is_finite() && component >= 0.0
+            } else {
+                (0.0..=1.0).contains(&component)
+            };
+            if !in_range {
+                return Err(Error::PoolValue {
+                    pool: pool_id,
+                    index: index as u32,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
-        BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, BVoxPaletteRef,
-        BVoxValuePool, Error, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValue,
+        BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPaletteBinding,
+        BVoxValuePool, Error, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
         VoxValuePool, VoxValuePoolKind,
     };
     use branded_id::U32Id;
@@ -598,7 +763,7 @@ mod tests {
         U32Id::from_u32(index)
     }
 
-    fn cell_id(index: u32) -> U32Id<BVoxPaletteCell> {
+    fn material(index: u32) -> U32Id<BVoxMaterial> {
         U32Id::from_u32(index)
     }
 
@@ -626,11 +791,21 @@ mod tests {
         object
     }
 
-    /// A palette with one attribute and one cell whose value is `value`.
-    fn one_cell_palette(value: f64) -> VoxPalette {
+    /// Adds an unbounded `int` value pool holding `values` and returns its id.
+    fn int_pool(state: &mut VoxMain, values: Vec<i64>) -> U32Id<BVoxValuePool> {
+        state.add_value_pool(VoxValuePool::Int {
+            min: VoxBound::None,
+            max: VoxBound::None,
+            values,
+        })
+    }
+
+    /// A palette with one binding "v" to `pool` and one material drawing
+    /// value-index `index`.
+    fn one_material_palette(pool: U32Id<BVoxValuePool>, index: u32) -> VoxPalette {
         let mut palette = VoxPalette::default();
-        palette.add_attribute("v".to_owned());
-        palette.add_cell(vec![VoxValue::Number(value)]).unwrap();
+        palette.add_binding("v".to_owned(), pool);
+        palette.add_material(vec![index]).unwrap();
         palette
     }
 
@@ -761,32 +936,25 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_a_duplicate_palette_ref() {
+    fn validate_accepts_two_layers_sharing_a_palette() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(one_cell_palette(0.0));
+        let pool = int_pool(&mut state, vec![0]);
+        let palette = state.add_palette(one_material_palette(pool, 0));
         let mut object = unit_object("o");
-        // Two references naming the same palette.
-        object.add_palette_ref(palette, cell_id(0));
-        object.add_palette_ref(palette, cell_id(0));
-        let object = state.add_object(object);
-        assert_eq!(
-            state.validate(),
-            Err(Error::DuplicatePaletteRef {
-                object: object.to_u32(),
-                palette: palette.to_u32(),
-            })
-        );
+        // Two layers referencing the same palette is legal; layers do not merge.
+        // The live voxel keeps the default material 0 in each new layer.
+        object.add_layer(palette, material(0));
+        object.add_layer(palette, material(0));
+        state.add_object(object);
+        assert_eq!(state.validate(), Ok(()));
     }
 
     #[test]
-    fn validate_rejects_dangling_palette_ref() {
+    fn validate_rejects_a_dangling_layer_palette() {
         let mut state = VoxMain::default();
         let mut object = unit_object("o");
         // Reference palette id 0, but the state has no palettes.
-        object.add_palette_ref(
-            U32Id::<BVoxPalette>::from_u32(0),
-            U32Id::<BVoxPaletteCell>::from_u32(0),
-        );
+        object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
         let id = state.add_object(object);
 
         assert_eq!(
@@ -826,17 +994,18 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_a_duplicate_attribute_key() {
+    fn validate_rejects_a_duplicate_binding_attribute() {
         let mut state = VoxMain::default();
+        let pool = int_pool(&mut state, vec![0]);
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        palette.add_attribute("rgba".to_owned());
+        palette.add_binding("baseColorFactor".to_owned(), pool);
+        palette.add_binding("baseColorFactor".to_owned(), pool);
         state.add_palette(palette);
         assert_eq!(
             state.validate(),
-            Err(Error::DuplicateAttribute {
+            Err(Error::DuplicateBindingAttribute {
                 palette: 0,
-                attribute: 1,
+                binding: 1,
             })
         );
     }
@@ -884,17 +1053,19 @@ mod tests {
     #[test]
     fn remove_object_and_palette_then_gc_renumbers_and_resolves() {
         let mut state = VoxMain::default();
-        let palette_a = state.add_palette(one_cell_palette(0.0));
-        let palette_b = state.add_palette(one_cell_palette(1.0));
+        let pool_a = int_pool(&mut state, vec![10]);
+        let pool_b = int_pool(&mut state, vec![20]);
+        let palette_a = state.add_palette(one_material_palette(pool_a, 0));
+        let palette_b = state.add_palette(one_material_palette(pool_b, 0));
 
         let mut a = unit_object("a");
-        a.add_palette_ref(palette_a, cell_id(0));
+        a.add_layer(palette_a, material(0));
         let object_a = state.add_object(a);
 
         let mut b = unit_object("b");
-        b.add_palette_ref(palette_b, cell_id(0));
+        b.add_layer(palette_b, material(0));
         let voxel = b.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        b.retain_voxel(voxel, &[cell_id(0)]).unwrap();
+        b.retain_voxel(voxel, &[material(0)]).unwrap();
         let object_b = state.add_object(b);
 
         let inner = state.add_hierarchy_node(node_with_objects(vec![object_a, object_b]));
@@ -916,28 +1087,29 @@ mod tests {
         // The survivors renumber to 0 and their cross-references follow.
         let object = U32Id::<BVoxObject>::from_u32(0);
         let palette = U32Id::<BVoxPalette>::from_u32(0);
+        let binding = U32Id::<BVoxPaletteBinding>::from_u32(0);
         assert_eq!(state.object(object).unwrap().name(), "b");
-        assert_eq!(
-            state
-                .palette(palette)
-                .unwrap()
-                .cell_value(cell_id(0), U32Id::<BVoxAttribute>::from_u32(0)),
-            Some(&VoxValue::Number(1.0))
-        );
+        // Material 0 resolves through binding 0 to pool B's value 20.
+        match state.material_value(palette, material(0), binding) {
+            Some((VoxValuePool::Int { values, .. }, index)) => {
+                assert_eq!(values[index as usize], 20)
+            }
+            other => panic!("unexpected material value {other:?}"),
+        }
         assert_eq!(
             state
                 .object(object)
                 .unwrap()
-                .iter_palette_refs()
+                .iter_layers()
                 .collect::<Vec<_>>(),
-            [(U32Id::<BVoxPaletteRef>::from_u32(0), palette)]
+            [(U32Id::<BVoxLayer>::from_u32(0), palette)]
         );
         assert_eq!(
             state
                 .object(object)
                 .unwrap()
-                .voxel_cell(voxel, U32Id::<BVoxPaletteRef>::from_u32(0)),
-            Some(cell_id(0))
+                .voxel_material(voxel, U32Id::<BVoxLayer>::from_u32(0)),
+            Some(material(0))
         );
 
         // The inner node dropped `a` and renumbered `b` to 0; the roots are
@@ -953,16 +1125,19 @@ mod tests {
         );
 
         // The returned remap translates the same renumbering for held ids:
-        // removed entities map to None, survivors to their compacted ids.
+        // removed entities map to None, survivors to their compacted ids. Value
+        // pools are never removed, so both map to themselves.
         assert_eq!(remap.objects.new_id(object_a), None);
         assert_eq!(remap.objects.new_id(object_b), Some(object));
         assert_eq!(remap.palettes.new_id(palette_a), None);
         assert_eq!(remap.palettes.new_id(palette_b), Some(palette));
-        assert!(remap.cells[palette_a.to_usize_id()].is_empty());
+        assert!(remap.materials[palette_a.to_usize_id()].is_empty());
         assert_eq!(
-            remap.cells[palette_b.to_usize_id()].new_id(cell_id(0)),
-            Some(cell_id(0))
+            remap.materials[palette_b.to_usize_id()].new_id(material(0)),
+            Some(material(0))
         );
+        assert_eq!(remap.value_pools.new_id(pool_a), Some(pool_a));
+        assert_eq!(remap.value_pools.new_id(pool_b), Some(pool_b));
     }
 
     #[test]
@@ -986,77 +1161,79 @@ mod tests {
     }
 
     #[test]
-    fn remove_cell_repaints_live_voxels_onto_the_replacement() {
+    fn remove_material_repaints_live_voxels_onto_the_replacement() {
         let mut state = VoxMain::default();
+        let pool = int_pool(&mut state, vec![0, 1]);
         let mut palette = VoxPalette::default();
-        palette.add_attribute("v".to_owned());
-        let keep = palette.add_cell(vec![VoxValue::Number(0.0)]).unwrap();
-        let drop = palette.add_cell(vec![VoxValue::Number(1.0)]).unwrap();
+        palette.add_binding("v".to_owned(), pool);
+        let keep = palette.add_material(vec![0]).unwrap();
+        let drop = palette.add_material(vec![1]).unwrap();
         let palette = state.add_palette(palette);
 
         let mut object = unit_object("o");
-        let reference = object.add_palette_ref(palette, keep);
+        let layer = object.add_layer(palette, keep);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[drop]).unwrap();
         let object = state.add_object(object);
 
         // Removing `drop` repaints the voxel that used it onto `keep`.
-        assert_eq!(state.remove_cell(palette, drop, keep), Some(()));
+        assert_eq!(state.remove_material(palette, drop, keep), Some(()));
         assert_eq!(state.validate(), Ok(()));
         assert_eq!(
-            state.object(object).unwrap().voxel_cell(voxel, reference),
+            state.object(object).unwrap().voxel_material(voxel, layer),
             Some(keep)
         );
-        assert!(!state.palette(palette).unwrap().contains_cell(drop));
+        assert!(!state.palette(palette).unwrap().contains_material(drop));
 
         // A no-op replacement and unknown ids are rejected.
-        assert_eq!(state.remove_cell(palette, keep, keep), None);
-        assert_eq!(state.remove_cell(palette, drop, keep), None); // drop is gone
+        assert_eq!(state.remove_material(palette, keep, keep), None);
+        assert_eq!(state.remove_material(palette, drop, keep), None); // drop gone
 
         state.gc();
         assert_eq!(state.validate(), Ok(()));
     }
 
     #[test]
-    fn validate_and_gc_handle_a_high_id_sample_after_a_cell_hole() {
+    fn validate_and_gc_handle_a_high_id_sample_after_a_material_hole() {
         let mut state = VoxMain::default();
+        let pool = int_pool(&mut state, vec![0, 1, 2]);
         let mut palette = VoxPalette::default();
-        palette.add_attribute("v".to_owned());
-        let first = palette.add_cell(vec![VoxValue::Number(0.0)]).unwrap();
-        let second = palette.add_cell(vec![VoxValue::Number(1.0)]).unwrap();
-        let third = palette.add_cell(vec![VoxValue::Number(2.0)]).unwrap();
+        palette.add_binding("v".to_owned(), pool);
+        let first = palette.add_material(vec![0]).unwrap();
+        let second = palette.add_material(vec![1]).unwrap();
+        let third = palette.add_material(vec![2]).unwrap();
         let palette = state.add_palette(palette);
 
         let mut object = unit_object("o");
-        let reference = object.add_palette_ref(palette, first);
+        let layer = object.add_layer(palette, first);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[third]).unwrap(); // samples the highest id
         let object = state.add_object(object);
 
         // Remove `first`; no live voxel used it, so the repaint is a no-op. The
         // palette is now holed: the voxel still samples `third`, whose id
-        // exceeds the live cell count. A range check would wrongly reject this;
-        // the retention check accepts it.
-        assert_eq!(state.remove_cell(palette, first, second), Some(()));
+        // exceeds the live material count. A range check would wrongly reject
+        // this; the retention check accepts it.
+        assert_eq!(state.remove_material(palette, first, second), Some(()));
         assert_eq!(state.validate(), Ok(()));
 
         state.gc();
         assert_eq!(state.validate(), Ok(()));
-        // gc preserves which cell the voxel samples: still the value-2.0 cell,
-        // just renumbered.
+        // gc preserves which material the voxel samples: still the value-2
+        // material, just renumbered.
         let sampled = state
             .object(object)
             .unwrap()
-            .voxel_cell(voxel, reference)
+            .voxel_material(voxel, layer)
             .unwrap();
-        assert_eq!(
-            state
-                .palette(palette)
-                .unwrap()
-                .cell_value(sampled, U32Id::<BVoxAttribute>::from_u32(0)),
-            Some(&VoxValue::Number(2.0))
-        );
-        assert_eq!(state.palette(palette).unwrap().cell_count(), 2);
+        let binding = U32Id::<BVoxPaletteBinding>::from_u32(0);
+        match state.material_value(palette, sampled, binding) {
+            Some((VoxValuePool::Int { values, .. }, index)) => {
+                assert_eq!(values[index as usize], 2)
+            }
+            other => panic!("unexpected material value {other:?}"),
+        }
+        assert_eq!(state.palette(palette).unwrap().material_count(), 2);
     }
 
     #[test]
@@ -1096,6 +1273,200 @@ mod tests {
         assert_eq!(
             object.live_extent(),
             Some((TyVector3U32::new(2, 3, 1), TyVector3U32::new(1, 1, 1)))
+        );
+    }
+
+    #[test]
+    fn two_layer_object_sharing_a_palette_gcs_and_resolves() {
+        // The Phase 3 gate: build a two-layer object that shares one palette,
+        // validate it, gc it, and read a material's resolved values back.
+        let mut state = VoxMain::default();
+        let colors = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]],
+        });
+        let metallic = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::Number(1.0),
+            values: vec![0.0, 1.0],
+        });
+        let mut palette = VoxPalette::default();
+        let color = palette.add_binding("baseColorFactor".to_owned(), colors);
+        let metal = palette.add_binding("metallicFactor".to_owned(), metallic);
+        let matte_red = palette.add_material(vec![0, 0]).unwrap();
+        let shiny_green = palette.add_material(vec![1, 1]).unwrap();
+        let palette = state.add_palette(palette);
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
+        // Two layers on the same palette; each voxel samples one material per
+        // layer.
+        let base = object.add_layer(palette, matte_red);
+        let overlay = object.add_layer(palette, matte_red);
+        let v0 = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        let v1 = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
+        object.retain_voxel(v0, &[matte_red, shiny_green]).unwrap();
+        object.retain_voxel(v1, &[shiny_green, matte_red]).unwrap();
+        state.add_object(object);
+
+        assert_eq!(state.validate(), Ok(()));
+        state.gc();
+        assert_eq!(state.validate(), Ok(()));
+
+        // Resolve the base-layer material at v0: matte_red draws color index 0
+        // (red) and metallic index 0 (0.0).
+        let object = state.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
+        let sampled = object.voxel_material(v0, base).unwrap();
+        match state.material_value(palette, sampled, color) {
+            Some((VoxValuePool::Srgba { values }, index)) => {
+                assert_eq!(values[index as usize], [1.0, 0.0, 0.0, 1.0])
+            }
+            other => panic!("unexpected color {other:?}"),
+        }
+        match state.material_value(palette, sampled, metal) {
+            Some((VoxValuePool::Float { values, .. }, index)) => {
+                assert_eq!(values[index as usize], 0.0)
+            }
+            other => panic!("unexpected metallic {other:?}"),
+        }
+
+        // The overlay layer at v0 samples shiny_green, drawing color index 1
+        // (green), proving the two layers resolve independently.
+        let overlay_sampled = object.voxel_material(v0, overlay).unwrap();
+        match state.material_value(palette, overlay_sampled, color) {
+            Some((VoxValuePool::Srgba { values }, index)) => {
+                assert_eq!(values[index as usize], [0.0, 1.0, 0.0, 1.0])
+            }
+            other => panic!("unexpected overlay color {other:?}"),
+        }
+    }
+
+    #[test]
+    fn validate_rejects_an_empty_pool() {
+        let mut state = VoxMain::default();
+        state.add_value_pool(VoxValuePool::Bool { values: vec![] });
+        assert_eq!(state.validate(), Err(Error::EmptyPool { pool: 0 }));
+    }
+
+    #[test]
+    fn validate_rejects_unordered_pool_bounds() {
+        let mut state = VoxMain::default();
+        state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(1.0),
+            max: VoxBound::Number(0.0),
+            values: vec![0.5],
+        });
+        assert_eq!(state.validate(), Err(Error::PoolBound { pool: 0 }));
+    }
+
+    #[test]
+    fn validate_rejects_a_non_integer_int_bound() {
+        let mut state = VoxMain::default();
+        state.add_value_pool(VoxValuePool::Int {
+            min: VoxBound::Number(0.5),
+            max: VoxBound::None,
+            values: vec![1],
+        });
+        assert_eq!(state.validate(), Err(Error::PoolBound { pool: 0 }));
+    }
+
+    #[test]
+    fn validate_rejects_a_value_out_of_bounds() {
+        let mut state = VoxMain::default();
+        state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::Number(1.0),
+            values: vec![0.0, 2.0],
+        });
+        assert_eq!(
+            state.validate(),
+            Err(Error::PoolValue { pool: 0, index: 1 })
+        );
+    }
+
+    #[test]
+    fn validate_rejects_an_srgb_component_out_of_range() {
+        let mut state = VoxMain::default();
+        state.add_value_pool(VoxValuePool::Srgb {
+            values: vec![[0.0, 0.0, 0.0], [0.0, 1.5, 0.0]],
+        });
+        assert_eq!(
+            state.validate(),
+            Err(Error::PoolValue { pool: 0, index: 1 })
+        );
+    }
+
+    #[test]
+    fn validate_accepts_hdr_linear_components() {
+        let mut state = VoxMain::default();
+        // Linear colors allow components above 1 for HDR.
+        state.add_value_pool(VoxValuePool::LinearRgb {
+            values: vec![[0.0, 4.0, 12.0]],
+        });
+        assert_eq!(state.validate(), Ok(()));
+    }
+
+    #[test]
+    fn validate_rejects_a_negative_linear_component() {
+        let mut state = VoxMain::default();
+        state.add_value_pool(VoxValuePool::LinearRgba {
+            values: vec![[0.0, -0.1, 0.0, 1.0]],
+        });
+        assert_eq!(
+            state.validate(),
+            Err(Error::PoolValue { pool: 0, index: 0 })
+        );
+    }
+
+    #[test]
+    fn validate_rejects_a_non_finite_linear_component() {
+        let mut state = VoxMain::default();
+        // A linear pool is only lower-bounded, so `+Infinity` would pass a bare
+        // `>= 0` test; the finiteness guard must reject it. The wire has no
+        // Infinity, so such a value could never round-trip.
+        state.add_value_pool(VoxValuePool::LinearRgb {
+            values: vec![[0.0, f64::INFINITY, 0.0]],
+        });
+        assert_eq!(
+            state.validate(),
+            Err(Error::PoolValue { pool: 0, index: 0 })
+        );
+    }
+
+    #[test]
+    fn validate_rejects_a_dangling_binding_pool() {
+        let mut state = VoxMain::default();
+        let mut palette = VoxPalette::default();
+        // The binding references pool id 0, but the state holds no pools.
+        palette.add_binding(
+            "baseColorFactor".to_owned(),
+            U32Id::<BVoxValuePool>::from_u32(0),
+        );
+        state.add_palette(palette);
+        assert_eq!(
+            state.validate(),
+            Err(Error::BindingPool {
+                palette: 0,
+                binding: 0,
+                pool: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn validate_rejects_a_material_value_index_out_of_range() {
+        let mut state = VoxMain::default();
+        let pool = int_pool(&mut state, vec![0, 1]);
+        let mut palette = VoxPalette::default();
+        palette.add_binding("v".to_owned(), pool);
+        // Two pool values, but this material draws value-index 2.
+        palette.add_material(vec![2]).unwrap();
+        state.add_palette(palette);
+        assert_eq!(
+            state.validate(),
+            Err(Error::MaterialValue {
+                palette: 0,
+                binding: 0,
+                material: 0,
+            })
         );
     }
 }

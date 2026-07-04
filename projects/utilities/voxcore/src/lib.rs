@@ -2,12 +2,12 @@
 
 //! Core types for working with voxels.
 
-mod b_vox_attribute;
 mod b_vox_hierarchy_node;
+mod b_vox_layer;
+mod b_vox_material;
 mod b_vox_object;
 mod b_vox_palette;
-mod b_vox_palette_cell;
-mod b_vox_palette_ref;
+mod b_vox_palette_binding;
 mod b_vox_value_pool;
 mod b_vox_voxel;
 mod error;
@@ -26,12 +26,12 @@ mod vox_value;
 mod vox_value_pool;
 mod vox_value_pool_kind;
 
-pub use b_vox_attribute::*;
 pub use b_vox_hierarchy_node::*;
+pub use b_vox_layer::*;
+pub use b_vox_material::*;
 pub use b_vox_object::*;
 pub use b_vox_palette::*;
-pub use b_vox_palette_cell::*;
-pub use b_vox_palette_ref::*;
+pub use b_vox_palette_binding::*;
 pub use b_vox_value_pool::*;
 pub use b_vox_voxel::*;
 pub use error::*;

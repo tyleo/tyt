@@ -369,3 +369,93 @@ three are safe to defer here. With no bindings referencing pools and no removals
 possible, the pool ids stay contiguous from zero, so an untouched `gc` leaves
 them correctly numbered; and `validate` ignoring pools cannot admit a state a
 later reader would reject, since nothing reads a pool yet.
+
+### Chunk 3: the `VoxPalette` rewrite lands the whole palette blast radius at once
+
+Phase 3's crux cannot compile in halves: `VoxObject` samples reference palette
+entries, `VoxMain::validate`/`gc` coordinate the palette/object/pool relabelings,
+`error.rs` and `VoxGcRemap` name the palette entities, so the palette rewrite and
+its ripple (checklist items 1 brand rename, 3, 4, 5, 6, 7, 8, 9) land together.
+Every `voxcore` test is rebuilt in the same change. The result is verified
+leak- and UB-clean under Miri as well as green under normal `cargo test`, since
+the rewrite is dense unsafe struct-of-arrays code.
+
+### Material-major SoA mirrors the old cell grid; Copy value-indices simplify it
+
+`VoxPalette` stores `bindings: IdField<BVoxPaletteBinding, VoxPaletteBinding>`
+and `materials: IdField<BVoxMaterial, IdField<BVoxPaletteBinding, u32>>`, the
+same material-major (row-per-material) shape the old grid used, with the inner
+`VoxValue` swapped for a `u32` value-index into the binding's pool. The wire is
+column-major, but the in-memory SoA layout is an implementation choice and the
+voxj seam (Phase 4) will transpose on read/write; keeping the old layout reuses
+the proven unsafe `Drop`/`gc`/`clone`/`remove` logic with type swaps, which is
+the lowest-risk transform. Because the inner value is now `Copy` `u32` rather
+than heap-owning `VoxValue`, three paths simplify: `Drop` and `remove_material`
+skip the per-binding inner release (dropping the inner `IdField` frees its buffer
+and the `u32`s need no drop), `clone_palette` clones each material's inner column
+bytewise via `IdField: Clone` (available only for `TValue: Copy`) instead of
+rebuilding it value by value, and `remove_binding` leaves each material's stale
+`u32` slot in place (a no-op to release) for `gc` to compact, only freeing the
+binding's attribute `String`. Reads of a removed binding are guarded by binding
+retention, and `gc`'s per-material `inner.gc(binding_remap)` never reads a
+removed binding's slot (its remap entry is `None`), so the stale slot is
+invisible and harmless.
+
+### Bindings stay a branded id pool; materials and pools are the cross-referenced ids
+
+Three entities could be branded: bindings, materials, value pools. Materials are
+referenced by object voxel samples and value pools by palette bindings, so both
+must be branded ids that `gc` relabels and other entities hold across the call;
+they are `BVoxMaterial` (renamed from `BVoxPaletteCell`) and the existing
+`BVoxValuePool`. Bindings are referenced only within their palette (they key the
+per-material value-index columns), so they need no cross-reference brand, but
+keeping them a branded id pool (`BVoxPaletteBinding`, renamed from
+`BVoxAttribute`) reuses the old attribute pool's `gc`/`Drop` code verbatim and
+matches the crate's uniform SoA style. The object's per-layer entries become
+`BVoxLayer` (renamed from `BVoxPaletteRef`). The three brand renames ripple into
+`voxsmith` and `vxl`, but those crates are rewritten in later phases and would
+not compile against the new API regardless, so the renames add no net churn and
+keep the brand names honest about the new model.
+
+### `value_index` on the palette, `material_value` resolution on `VoxMain`
+
+The pool a binding draws from lives in `VoxRuntimeState`, not the palette, so
+`VoxPalette` cannot resolve a value on its own. `VoxPalette::value_index(material,
+binding)` returns the raw `u32` index, and `VoxMain::material_value(palette,
+material, binding)` hops palette -> binding pool-ref -> pool, returning
+`(&VoxValuePool, u32)` for the caller to read by kind. This is the checklist's
+"resolve-material-and-attribute-to-value read," split across the two owners of
+the data.
+
+### `gc` compacts the pool store and relabels binding pool-refs
+
+`gc` now compacts `value_pool_ids` first, then calls
+`VoxPalette::relabel_value_pools` on every palette to translate each binding's
+`pool` id through the pool remap, before compacting palettes and objects.
+`VoxGcRemap` gains `value_pools` and renames `cells` to `materials`. With no
+`remove_value_pool` path the pool ids are already contiguous, so the relabel is
+currently the identity; it is implemented in full anyway so `gc` uniformly
+compacts every pool and a future pool removal is covered. Value-indices inside
+materials point at pool *contents*, which `gc` never reorders, so they stay valid
+across a `gc` untouched.
+
+### `validate` value-pool content mirrors the voxj-codec rule-9 check
+
+`VoxMain::validate` runs a value-pool content check first (so a palette that
+reads a malformed pool is reported after the pool), mirroring voxj-codec's
+`value-pools` check as the in-memory types allow: pool non-empty (`EmptyPool`);
+`int`/`float` bounds finite, integer-valued for `int`, and `min <= max`
+(`PoolBound`); each `int`/`float` value finite and within bounds, and each color
+component in its space's range, sRGB `[0, 1]` and linear `>= 0` (`PoolValue`).
+Unlike the wire, `voxcore` has no parse boundary, so finiteness is checked here
+rather than assumed: numeric bounds explicitly, `float` values explicitly, sRGB
+color components by their `[0, 1]` range test (which rejects any non-finite),
+and linear color components by an explicit finiteness guard alongside the `>= 0`
+test, since a bare `>= 0` would let `+Infinity` through. Then per
+palette: binding pool-refs resolve (`BindingPool`), attribute keys are unique
+(`DuplicateBindingAttribute`), and every material value-index is within its
+binding's pool (`MaterialValue`). Material *column arity* needs no runtime check:
+`add_material` retains exactly one value-index per binding, so a material
+structurally has a value-index for every binding, which `value_index`'s
+`expect` documents. The duplicate-palette-ref rule is dropped, since two layers
+may share a palette.

@@ -1,18 +1,18 @@
-use crate::{BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell};
+use crate::{BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePool};
 use branded_id::{IdVec, soa::IdRemap};
 
 /// The id relabelings from a [`VoxMain::gc`](crate::VoxMain::gc), one per pool,
 /// for translating ids held across the call.
-///
-/// `cells` is indexed by each palette's old id, since a cell id is only
-/// meaningful within its palette.
 pub struct VoxGcRemap {
+    /// The value-pool relabeling.
+    pub value_pools: IdRemap<BVoxValuePool, u32>,
+
     /// The palette pool relabeling.
     pub palettes: IdRemap<BVoxPalette, u32>,
 
-    /// Each palette's cell relabeling, indexed by the palette's old id, empty
-    /// where a palette was removed.
-    pub cells: IdVec<BVoxPalette, IdRemap<BVoxPaletteCell, u32>>,
+    /// Each palette's material relabeling, indexed by the palette's old id,
+    /// empty where a palette was removed.
+    pub materials: IdVec<BVoxPalette, IdRemap<BVoxMaterial, u32>>,
 
     /// The object pool relabeling.
     pub objects: IdRemap<BVoxObject, u32>,

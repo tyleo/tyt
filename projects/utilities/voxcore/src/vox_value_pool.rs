@@ -1,7 +1,6 @@
 use crate::{VoxBound, VoxValue, VoxValuePoolKind};
 
-/// A shared pool of values, all of one shape, that palettes reference by id and
-/// read out by value-index. The variant is the pool's
+/// A shared pool of values. The variant is the pool's
 /// [`VoxValuePoolKind`](crate::VoxValuePoolKind): the bounded kinds (`float`,
 /// `int`) carry `min`/`max` and typed numeric values; every other kind carries
 /// only its typed values.
@@ -9,9 +8,8 @@ use crate::{VoxBound, VoxValue, VoxValuePoolKind};
 /// Colors are stored as float components in the color space's natural range,
 /// one canonical kind per space and alpha combination, so the wire format's
 /// separate hex and float color encodings both map onto the matching variant
-/// here. Only the `json` kind holds a [`VoxValue`](crate::VoxValue).
-/// [`VoxMain::validate`](crate::VoxMain::validate) checks each value against its
-/// kind and the bounds.
+/// here. [`VoxMain::validate`](crate::VoxMain::validate) checks each value
+/// against its kind and the bounds.
 #[derive(Clone, Debug, PartialEq)]
 pub enum VoxValuePool {
     /// Arbitrary [`VoxValue`](crate::VoxValue)s, including null.

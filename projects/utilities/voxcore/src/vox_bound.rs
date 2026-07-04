@@ -1,12 +1,8 @@
 /// One side of a bounded value pool's range: a finite number, or unbounded.
 ///
-/// Mirrors the wire format's number-or-none bound, never a null. Only the
-/// `float` and `int` [`VoxValuePool`](crate::VoxValuePool) variants carry
-/// `min`/`max`, each a `VoxBound`; the other kinds have no bounds fields.
-/// [`VoxBound::None`] is unbounded on its side. This type does not enforce
-/// finiteness at construction;
-/// [`VoxMain::validate`](crate::VoxMain::validate) rejects a non-finite numeric
-/// bound.
+/// Mirrors the wire format's number-or-none bound. This type does not enforce
+/// finiteness at construction; [`VoxMain::validate`](crate::VoxMain::validate)
+/// rejects a non-finite numeric bound.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VoxBound {
     /// A finite numeric bound.

@@ -5,11 +5,10 @@ use ty_math::TyTransformF64;
 /// A node in the scene hierarchy: it references child nodes and child objects
 /// by id and carries a transform applied to them.
 ///
-/// Nodes form a DAG, not a tree: a node may have several parents, so the same
-/// node can be reused across the scene. Within one node, though, each direct
-/// child node and child object appears at most once. The ids reference a
-/// [`VoxMain`](crate::VoxMain) and are meaningful only within it;
-/// [`VoxMain::validate`](crate::VoxMain::validate) checks them.
+/// Nodes form a DAG: a node may have several parents, so the same node can be
+/// reused across the scene. Within one node, though, each direct child node and
+/// child object appears at most once. The ids reference a
+/// [`VoxMain`](crate::VoxMain) and are meaningful only within it.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct VoxHierarchyNode {
     /// Display name.

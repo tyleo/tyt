@@ -12,8 +12,8 @@ use branded_id::{
 /// [`VoxMain`](crate::VoxMain) alongside the ext.
 ///
 /// This is the struct-of-arrays backing store. [`VoxMain`](crate::VoxMain)
-/// owns the add/read/remove/gc/validate logic over these fields; they are
-/// crate-private so the pools and columns stay in sync.
+/// owns mutation logic over these fields; they are crate-private so the pools
+/// and columns stay in sync.
 #[derive(Debug, Default)]
 pub struct VoxRuntimeState {
     /// Value-pool id pool.

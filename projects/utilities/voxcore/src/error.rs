@@ -3,19 +3,51 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
-/// An error from voxcore: a [`VoxMain`](crate::VoxMain) whose cross-references
-/// do not resolve, whose hierarchy has a cycle, whose roots, palette refs, node
-/// children, or palette attribute keys repeat an id, or whose node transform
-/// has a zero scale component or a non-unit rotation. See
-/// [`validate`](crate::VoxMain::validate). Ids are reported as their `u32`
-/// listing index.
+/// An error from voxcore: a [`VoxMain`](crate::VoxMain) whose value pools are
+/// malformed, whose bindings or materials do not resolve, whose cross-references
+/// do not resolve, whose hierarchy has a cycle, whose roots, node children, or
+/// binding attribute keys repeat, or whose node transform has a zero scale
+/// component or a non-unit rotation. See [`validate`](crate::VoxMain::validate).
+/// Ids are reported as their `u32` listing index.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
+    /// A value pool has no values.
+    EmptyPool { pool: u32 },
+
+    /// A value pool's `min`/`max` bounds are malformed: non-finite, not
+    /// integer-valued for an `int` pool, or `min` greater than `max`.
+    PoolBound { pool: u32 },
+
+    /// A value pool holds a value that is malformed for its kind or outside its
+    /// bounds, at the given value-index.
+    PoolValue { pool: u32, index: u32 },
+
+    /// A palette binding references a value pool that does not exist.
+    BindingPool {
+        palette: u32,
+        binding: u32,
+        pool: u32,
+    },
+
+    /// A palette declares the same attribute key on more than one binding.
+    DuplicateBindingAttribute { palette: u32, binding: u32 },
+
+    /// A material's value-index for a binding is beyond the bound pool's values.
+    MaterialValue {
+        palette: u32,
+        binding: u32,
+        material: u32,
+    },
+
     /// An object references a palette that does not exist.
     PaletteRef { object: u32, palette: u32 },
 
-    /// A live voxel samples a cell beyond its palette's cells.
-    SampleCell { object: u32, voxel: u32, cell: u32 },
+    /// A live voxel samples a material beyond its palette's materials.
+    SampleMaterial {
+        object: u32,
+        voxel: u32,
+        material: u32,
+    },
 
     /// A node lists a child node that does not exist.
     ChildNode { node: u32, child: u32 },
@@ -29,9 +61,6 @@ pub enum Error {
     /// The hierarchy contains a cycle reaching this node.
     Cycle { node: u32 },
 
-    /// An object references the same palette through more than one reference.
-    DuplicatePaletteRef { object: u32, palette: u32 },
-
     /// A node lists the same child node more than once.
     DuplicateChildNode { node: u32, child: u32 },
 
@@ -40,9 +69,6 @@ pub enum Error {
 
     /// A root lists the same node more than once.
     DuplicateRoot { root: u32 },
-
-    /// A palette declares the same attribute key more than once.
-    DuplicateAttribute { palette: u32, attribute: u32 },
 
     /// A node's transform has a zero scale component.
     ZeroScale { node: u32 },
@@ -54,17 +80,45 @@ pub enum Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
+            Error::EmptyPool { pool } => write!(f, "value pool {pool} has no values"),
+            Error::PoolBound { pool } => {
+                write!(f, "value pool {pool} has malformed min/max bounds")
+            }
+            Error::PoolValue { pool, index } => write!(
+                f,
+                "value pool {pool} value {index} is malformed for its kind or out of bounds"
+            ),
+            Error::BindingPool {
+                palette,
+                binding,
+                pool,
+            } => write!(
+                f,
+                "palette {palette} binding {binding} references value pool {pool}, which does not exist"
+            ),
+            Error::DuplicateBindingAttribute { palette, binding } => write!(
+                f,
+                "palette {palette} binding {binding} declares an attribute key already bound"
+            ),
+            Error::MaterialValue {
+                palette,
+                binding,
+                material,
+            } => write!(
+                f,
+                "palette {palette} material {material} has a value-index for binding {binding} out of the bound pool's range"
+            ),
             Error::PaletteRef { object, palette } => write!(
                 f,
                 "object {object} references palette {palette}, which does not exist"
             ),
-            Error::SampleCell {
+            Error::SampleMaterial {
                 object,
                 voxel,
-                cell,
+                material,
             } => write!(
                 f,
-                "object {object} voxel {voxel} samples cell {cell}, out of range of its palette"
+                "object {object} voxel {voxel} samples material {material}, out of range of its palette"
             ),
             Error::ChildNode { node, child } => write!(
                 f,
@@ -83,10 +137,6 @@ impl Display for Error {
             Error::Cycle { node } => {
                 write!(f, "hierarchy is not acyclic: a cycle reaches node {node}")
             }
-            Error::DuplicatePaletteRef { object, palette } => write!(
-                f,
-                "object {object} references palette {palette} more than once"
-            ),
             Error::DuplicateChildNode { node, child } => write!(
                 f,
                 "hierarchy node {node} lists child node {child} more than once"
@@ -98,10 +148,6 @@ impl Display for Error {
             Error::DuplicateRoot { root } => {
                 write!(f, "root lists hierarchy node {root} more than once")
             }
-            Error::DuplicateAttribute { palette, attribute } => write!(
-                f,
-                "palette {palette} declares attribute {attribute} with a duplicate key"
-            ),
             Error::ZeroScale { node } => write!(
                 f,
                 "hierarchy node {node} has a zero transform scale component"

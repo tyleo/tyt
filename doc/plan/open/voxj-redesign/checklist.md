@@ -178,7 +178,7 @@ and `packed-base64` round-trips at the material-derived width.
 
 ## Phase 3: `voxcore`
 
-- [ ] Add the pool model types: `VoxValuePool` (kind, values, bounds),
+- [x] Add the pool model types: `VoxValuePool` (kind, values, bounds),
       `VoxValuePoolKind` (the nine kinds), a `min`/`max` bound type mirroring the
       wire's number-or-none, and `VoxPaletteBinding` (attribute, pool ref). Add
       brand markers as needed (`BVoxValuePool`, and rename the cell brand to a
@@ -189,9 +189,10 @@ and `packed-base64` round-trips at the material-derived width.
       `VoxjValuePool`; `min`/`max` only on the `float`/`int` variants; colors as
       `Vec<[f64; N]>`), `VoxPaletteBinding` (`attribute`,
       `pool: U32Id<BVoxValuePool>`), and the `BVoxValuePool` brand, all registered
-      in `lib.rs`. Deferred: the `BVoxPaletteCell` -> material brand rename moves
-      to the `VoxPalette`-rewrite chunk (item 3), so this item stays unchecked
-      until then. See the decisions log.)
+      in `lib.rs`. Chunk 3 (palette rewrite) done: `BVoxPaletteCell` renamed to
+      `BVoxMaterial`, and alongside it `BVoxAttribute` -> `BVoxPaletteBinding` and
+      `BVoxPaletteRef` -> `BVoxLayer` so the brands match the new model. See the
+      decisions log.)
 - [x] Add the shared value-pool store to `VoxRuntimeState` (an id pool plus
       column, or a plain indexed vec), and extend its clone and `Drop`.
       (Chunk 2 done: `value_pool_ids: IdStruct<BVoxValuePool>` plus
@@ -200,35 +201,70 @@ and `packed-base64` round-trips at the material-derived width.
       `clone_runtime_state` and `Drop` extended. The additive `VoxMain`
       value-pool accessors from item 6 landed alongside it, so the store is
       reachable and tested. See the decisions log.)
-- [ ] Rewrite `VoxPalette` from the attributes-by-cells grid to bindings plus
+- [x] Rewrite `VoxPalette` from the attributes-by-cells grid to bindings plus
       column-major materials of value-indices into pools. Rework
       `add_attribute`/`add_cell` into the new build API, `cell_value` into a
       resolve-material-and-attribute-to-value read that hops through
       `materials[b][m]` into the bound pool, and `iter_*`, `remove_*`,
       `clone_palette`, `gc`, and `Drop`. Preserve the unsafe struct-of-arrays
       invariants and Drop ordering exactly.
-- [ ] Rename `VoxObject.palette_refs` to layer refs, allow the same palette on
+      (Chunk 3 done: `bindings: IdField<BVoxPaletteBinding, VoxPaletteBinding>`
+      plus material-major `materials: IdField<BVoxMaterial, IdField<
+      BVoxPaletteBinding, u32>>`; `add_binding`/`add_material` build API;
+      `value_index` returns the raw index and `VoxMain::material_value` resolves
+      it through the bound pool; `remove_binding`/`remove_material`/`gc`/`Drop`
+      simplified because value-indices are Copy. Verified leak- and UB-clean
+      under Miri. See the decisions log.)
+- [x] Rename `VoxObject.palette_refs` to layer refs, allow the same palette on
       multiple layers, drop the merge assumption, and change samples from a cell
       id to a material index. Rename `voxel_cell` and friends to material
       terminology and thread the material remap through `gc`.
-- [ ] Store colors canonically: a color pool's values are float-component arrays
+      (Chunk 3 done: `BVoxPaletteRef` -> `BVoxLayer`, `layer_palettes`/`samples`
+      keyed by layer, `add_layer`/`voxel_material`/`iter_layers`/`layer_count`/
+      `remove_layer`/`remove_layers_to`/`repaint_material`; samples are
+      `U32Id<BVoxMaterial>`; no duplicate-layer rule.)
+- [x] Store colors canonically: a color pool's values are float-component arrays
       in the kind's natural range. Decide whether `VoxValue` gains a dedicated
       color variant or colors ride as `VoxValue::Array` interpreted by the pool
       kind, and record it; the array-plus-kind route is lighter.
-- [ ] Update `VoxMain::validate`: drop the duplicate-palette-ref rule, add pool
+      (Settled in chunk 1: neither route; colors are exact `Vec<[f64; N]>` in the
+      four color variants of `VoxValuePool`, so `VoxValue` backs only `json` and
+      `ext`. See the decisions log.)
+- [x] Update `VoxMain::validate`: drop the duplicate-palette-ref rule, add pool
       kind, min/max presence and bounds, value-well-formed-for-kind, binding
       range, material column arity, and value-index range checks. Add
       `add_value_pool` and iteration accessors. Extend `gc` to compact pools and
       materials.
       (The `add_value_pool` and iteration accessors landed early with the
-      value-pool store, chunk 2; this item is now the validate and gc work.)
-- [ ] Update `error.rs`: add variants for unknown or invalid kind, missing or
+      value-pool store, chunk 2. Chunk 3 done: `validate` gained the value-pool
+      content check (non-empty, bounds finite/ordered/integer-valued, values in
+      bounds, color components in range), binding pool-ref resolution, duplicate
+      binding attribute, and material value-index range; column arity is
+      structural (the material build API retains one value-index per binding), so
+      no runtime arity check is needed. `gc` now compacts the value-pool store,
+      relabels every binding pool-ref, and compacts materials.)
+- [x] Update `error.rs`: add variants for unknown or invalid kind, missing or
       non-finite bound, malformed value for kind, pool ref out of range, binding
       arity mismatch, and value-index out of range; retire
       `DuplicatePaletteRef`.
-- [ ] Update `VoxGcRemap` to a material relabeling plus a value-pool relabeling.
-- [ ] Rebuild fixtures and the gc, validate, and remap tests; delete the
+      (Chunk 3 done: added `EmptyPool`, `PoolBound` (non-finite / non-integer /
+      unordered), `PoolValue` (malformed value or out of bounds), `BindingPool`,
+      `MaterialValue`; renamed `SampleCell` -> `SampleMaterial` and
+      `DuplicateAttribute` -> `DuplicateBindingAttribute`; dropped
+      `DuplicatePaletteRef`. Kind is a typed enum, so there is no unknown-kind
+      variant; arity is structural, so there is no arity variant.)
+- [x] Update `VoxGcRemap` to a material relabeling plus a value-pool relabeling.
+      (Chunk 3 done: `cells` -> `materials: IdVec<BVoxPalette, IdRemap<
+      BVoxMaterial, u32>>`; added `value_pools: IdRemap<BVoxValuePool, u32>`.)
+- [x] Rebuild fixtures and the gc, validate, and remap tests; delete the
       duplicate-palette-ref test.
+      (Chunk 3 done: all `voxcore` tests rebuilt to the binding/material/pool
+      shape; the duplicate-palette-ref test is deleted and replaced with a
+      two-layers-sharing-a-palette acceptance test; added pool-content rejection
+      cases (empty, unordered bounds, non-integer int bound, value out of bounds,
+      sRGB component out of range, negative linear component), an HDR-linear
+      acceptance case, dangling-binding-pool and value-index-out-of-range cases,
+      and the Phase 3 gate test. 53 tests pass, 52 under Miri.)
 
 Gate: `voxcore` builds; build a two-layer object sharing a palette, validate it,
 gc it, and read a material's resolved values back.
