@@ -2,17 +2,17 @@ use crate::{Check, Failures};
 use std::collections::HashSet;
 use voxj::VoxjMain;
 
-/// Palette refs, node children, child objects, and roots all resolve and none
-/// repeats within its list.
+/// Layer palette refs, node children, child objects, and roots all resolve;
+/// node children, child objects, and roots each list no index twice. Two layers
+/// may reference the same palette, so a repeated layer ref is allowed.
 pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
 
     for (index, object) in state.objects.iter().enumerate() {
-        if !failures.go() {
-            return;
-        }
-        let mut seen = HashSet::with_capacity(object.palette_refs.len());
-        for &palette_ref in &object.palette_refs {
+        for &palette_ref in &object.layer_palette_refs {
+            if !failures.go() {
+                return;
+            }
             if palette_ref >= state.palettes.len() {
                 failures.report(
                     Check::Indices,
@@ -21,14 +21,6 @@ pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
                         state.palettes.len()
                     ),
                 );
-            } else if !seen.insert(palette_ref) {
-                failures.report(
-                    Check::Indices,
-                    format!("object {index} references palette {palette_ref} more than once"),
-                );
-            }
-            if !failures.go() {
-                return;
             }
         }
     }

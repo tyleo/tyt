@@ -98,6 +98,24 @@ pub enum VoxjValuePool {
 }
 
 impl VoxjValuePool {
+    /// The number of values in the pool, across every kind. A palette's
+    /// value-indices must fall in `[0, values_len)`.
+    pub fn values_len(&self) -> usize {
+        match self {
+            VoxjValuePool::Json { values } => values.len(),
+            VoxjValuePool::Bool { values } => values.len(),
+            VoxjValuePool::Float { values, .. } => values.len(),
+            VoxjValuePool::Int { values, .. } => values.len(),
+            VoxjValuePool::String { values } => values.len(),
+            VoxjValuePool::SrgbFloat { values } => values.len(),
+            VoxjValuePool::SrgbHex { values } => values.len(),
+            VoxjValuePool::SrgbaFloat { values } => values.len(),
+            VoxjValuePool::SrgbaHex { values } => values.len(),
+            VoxjValuePool::LinearRgbFloat { values } => values.len(),
+            VoxjValuePool::LinearRgbaFloat { values } => values.len(),
+        }
+    }
+
     /// The pool's kind tag.
     pub fn kind(&self) -> VoxjValuePoolKind {
         match self {

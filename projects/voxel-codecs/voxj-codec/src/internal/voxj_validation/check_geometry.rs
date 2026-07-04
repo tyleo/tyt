@@ -1,22 +1,24 @@
-use crate::{Check, Failures, VoxjDecodedObject, decode_voxj_object, voxj_palette_cell_counts};
+use crate::{Check, Failures, VoxjDecodedObject, decode_voxj_object, voxj_palette_material_counts};
 use std::collections::HashSet;
 use voxj::{VoxjMain, VoxjObject};
 
-/// Decodes each object whose palette refs resolve and runs the geometry checks
-/// on the result: the blocks decode, samples index real cells, positions are
-/// unique, and bounds are tight. Objects with an out-of-range ref are skipped;
-/// [`check_indices`](crate::check_indices()) already reported the ref.
+/// Decodes each object whose layer palette refs resolve and runs the geometry
+/// checks on the result: the blocks decode, samples index real materials,
+/// positions are unique, and bounds are tight. Objects with an out-of-range ref
+/// are skipped; [`check_indices`](crate::check_indices()) already reported the
+/// ref.
 pub fn check_geometry(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
     for (index, object) in state.objects.iter().enumerate() {
         if !failures.go() {
             return;
         }
-        let Ok(cell_counts) = voxj_palette_cell_counts(&object.palette_refs, &state.palettes)
+        let Ok(material_counts) =
+            voxj_palette_material_counts(&object.layer_palette_refs, &state.palettes)
         else {
             continue;
         };
-        let decoded = match decode_voxj_object(object, &cell_counts) {
+        let decoded = match decode_voxj_object(object, &material_counts) {
             Ok(decoded) => decoded,
             Err(error) => {
                 failures.report(
@@ -27,7 +29,7 @@ pub fn check_geometry(main: &VoxjMain, failures: &mut Failures) {
             }
         };
 
-        check_sample_cells(index, object, &decoded, main, failures);
+        check_sample_materials(index, object, &decoded, &material_counts, failures);
         if !failures.go() {
             return;
         }
@@ -35,26 +37,26 @@ pub fn check_geometry(main: &VoxjMain, failures: &mut Failures) {
     }
 }
 
-/// Each decoded sample indexes a real cell of the palette it samples.
-fn check_sample_cells(
+/// Each decoded sample indexes a real material of its layer's palette.
+fn check_sample_materials(
     index: usize,
     object: &VoxjObject,
     decoded: &VoxjDecodedObject,
-    main: &VoxjMain,
+    material_counts: &[usize],
     failures: &mut Failures,
 ) {
     for (voxel, row) in decoded.samples.iter().enumerate() {
-        // Decoding guarantees one sample per referenced palette, so each
-        // channel indexes the palette named at that position.
-        for (channel, &cell) in row.iter().enumerate() {
-            let palette = object.palette_refs[channel];
-            let cell_count = main.runtime_state.palettes[palette].data.len();
-            if cell as usize >= cell_count {
+        // Decoding guarantees one sample per layer, so each channel indexes the
+        // palette named by that layer.
+        for (channel, &material) in row.iter().enumerate() {
+            let palette = object.layer_palette_refs[channel];
+            let material_count = material_counts[channel];
+            if material as usize >= material_count {
                 failures.report(
-                    Check::SampleCells,
+                    Check::SampleMaterials,
                     format!(
-                        "object {index} voxel {voxel} samples cell {cell} of palette {palette}, \
-                         which has {cell_count} cells"
+                        "object {index} voxel {voxel} samples material {material} of palette \
+                         {palette}, which has {material_count} materials"
                     ),
                 );
                 if !failures.go() {

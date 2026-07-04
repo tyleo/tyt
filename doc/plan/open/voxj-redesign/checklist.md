@@ -93,21 +93,31 @@ Build and round-trip verified; the in-crate round-trip test moves to Phase 2
 
 ## Phase 2: `voxj-codec`
 
-- [ ] Retarget `voxj_palette_cell_counts` to a material-count helper keyed by
+- [x] Retarget `voxj_palette_cell_counts` to a material-count helper keyed by
       `layer_palette_refs`, deriving M from a palette's material column length.
       Validation guarantees bindings are non-empty and every column has length
       M at least 1, so no zero-binding fallback is needed; assert rectangularity
-      or trust the validator, and record which.
-- [ ] Rename `VoxjDecodedObject.palette_refs` to `layer_palette_refs`; reframe
+      or trust the validator, and record which. (Renamed to
+      `voxj_palette_material_counts`; trusts the validator; M is the first
+      column's length. Recorded in the decisions log.)
+- [x] Rename `VoxjDecodedObject.palette_refs` to `layer_palette_refs`; reframe
       `samples` docs from cell index to material index. The field type stays
       `Vec<Vec<u32>>`.
-- [ ] Rename `cell_counts` to `material_counts` and `num_palettes` to
+- [x] Rename `cell_counts` to `material_counts` and `num_palettes` to
       `num_layers` across `encode_voxj_object`, `decode_voxj_object`, and
       `encode_voxj_object_optimized`; keep the channel-per-layer arity check and
       note two layers may share a palette. Encode and decode must derive M
-      identically.
-- [ ] Update `sample_encoding` and `position_encoding` doc comments to the
+      identically. (Both call the one shared helper.)
+- [x] Update `sample_encoding` and `position_encoding` doc comments to the
       material-index and per-layer framing; the codecs themselves do not change.
+      (`sample_encoding` reframed; `position_encoding` needed none, it carries no
+      palette or material framing.)
+
+Chunk split (see decisions log): items 1 to 4 above and the STRUCTURAL parts of
+5 to 7 below landed in one chunk. The value-pool CONTENT validation and the
+stricter block-internal rules and their fixtures are deferred to a follow-up
+chunk, so items 5 to 7 stay unchecked until that lands.
+
 - [ ] Rewrite `internal/voxj_validation.rs` to the twenty rules: value-pool kind
       recognized and values well-formed per kind, min/max presence and bounds and
       integer-valued and `min <= max`; palette bindings non-empty and distinct
@@ -118,12 +128,26 @@ Build and round-trip verified; the in-crate round-trip test moves to Phase 2
       positive after the first and bits at most 17, positions in bounds; drop the
       no-duplicate-palette-ref rule. Decide which failures are serde parse errors
       (unknown keys, coercion) versus named checks and record it.
+      (Chunk 1 done: `check_palettes` rewritten to bindings non-empty / distinct
+      attribute / `poolRef` in range / materials column arity / equal column
+      length >= 1 / value-index in pool range; `check_geometry` sample-material
+      indices in `[0, M)`; `check_indices` drops the duplicate-palette-ref rule
+      and keeps the layer-ref range check. Deferred: value-pool kind/values
+      content rules, min/max bounds rules, and the stricter base64/rle/hilbert
+      block-internal rules.)
 - [ ] Update the named-check list and its doc comment in `check_voxj_file`, plus
-      the tests that pin the exact names.
+      the tests that pin the exact names. (Chunk 1 done: `sample-cells` renamed
+      to `sample-materials`; `palettes`/`indices` docs and the name-list test
+      updated. Deferred: adding the new `value-pools` content check to the list.)
 - [ ] Rebuild all fixtures in `validate_voxj_file`, `check_voxj_file`, and
       `from_voxj_file_bytes`; delete the removed-rule tests (duplicate palette
       ref, rgba-attribute format, rectangular rows) and add pool, min/max, kind,
-      column-range, and two-layers-one-palette cases.
+      column-range, and two-layers-one-palette cases. (Chunk 1 done: fixtures
+      rebuilt to the value-pool/layer/material shape; removed-rule tests deleted;
+      value-index-range, poolRef-range, ragged-column, column-count-mismatch,
+      duplicate-binding-attribute, and two-layers-one-palette cases added.
+      Deferred: pool, min/max, and kind content cases, which pair with the
+      deferred rules above.)
 
 Gate: `voxj-codec` builds; a new-shape document encodes, decodes, and validates,
 and `packed-base64` round-trips at the material-derived width.

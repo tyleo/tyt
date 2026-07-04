@@ -15,11 +15,11 @@ const MAX_HILBERT_BITS: u32 = 17;
 /// Encodes one [`VoxjDecodedObject`] into a [`VoxjObject`], pinning each `Some`
 /// block and searching each `None` block for the smallest deflated result. Both
 /// `None` is the full smallest search; both `Some` is a fixed encoding.
-/// `cell_counts` comes from
-/// [`voxj_palette_cell_counts`](crate::voxj_palette_cell_counts()).
+/// `material_counts` comes from
+/// [`voxj_palette_material_counts`](crate::voxj_palette_material_counts()).
 pub fn encode_voxj_object_optimized(
     object: &VoxjDecodedObject,
-    cell_counts: &[usize],
+    material_counts: &[usize],
     position: Option<PositionEncoding>,
     sample: Option<SampleEncoding>,
 ) -> Result<VoxjObject> {
@@ -28,7 +28,7 @@ pub fn encode_voxj_object_optimized(
         // nothing to search.
         return encode_voxj_object(
             object,
-            cell_counts,
+            material_counts,
             PositionEncoding::RawJson,
             SampleEncoding::RawJson,
         );
@@ -44,7 +44,7 @@ pub fn encode_voxj_object_optimized(
     let smallest = positions
         .into_iter()
         .flat_map(|position| samples.iter().map(move |&sample| (position, sample)))
-        .map(|(position, sample)| encode_voxj_object(object, cell_counts, position, sample))
+        .map(|(position, sample)| encode_voxj_object(object, material_counts, position, sample))
         .collect::<Result<Vec<_>>>()?
         .into_iter()
         .min_by_key(deflated_len)
@@ -93,7 +93,7 @@ mod tests {
     fn object() -> VoxjDecodedObject {
         VoxjDecodedObject {
             name: "o".to_owned(),
-            palette_refs: vec![0],
+            layer_palette_refs: vec![0],
             bounds: [2, 1, 1],
             origin: [0, 0, 0],
             positions: vec![[0, 0, 0], [1, 0, 0]],
@@ -102,13 +102,13 @@ mod tests {
     }
 
     /// The full both-`None` search keeps an object's sample arity even when it
-    /// has voxels but zero palettes, since there are no channels to carry.
+    /// has voxels but zero layers, since there are no channels to carry.
     #[test]
-    fn zero_palette_object_keeps_sample_arity() {
+    fn zero_layer_object_keeps_sample_arity() {
         let object = encode_voxj_object_optimized(
             &VoxjDecodedObject {
                 name: "o".to_owned(),
-                palette_refs: Vec::new(),
+                layer_palette_refs: Vec::new(),
                 bounds: [3, 1, 1],
                 origin: [0, 0, 0],
                 positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],

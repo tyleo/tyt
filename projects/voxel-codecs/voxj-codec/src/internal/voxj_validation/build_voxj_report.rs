@@ -9,7 +9,7 @@ const REPORT_ORDER: [Check; 12] = [
     Check::Blocks,
     Check::UniquePositions,
     Check::Bounds,
-    Check::SampleCells,
+    Check::SampleMaterials,
     Check::Acyclic,
     Check::Scale,
     Check::Rotation,

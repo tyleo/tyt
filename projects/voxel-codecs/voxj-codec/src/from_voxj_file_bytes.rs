@@ -23,15 +23,16 @@ mod tests {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
+                    value_pools: Vec::new(),
+                    palettes: Vec::new(),
                     objects: vec![VoxjObject {
                         name: "o".to_owned(),
-                        palette_refs: vec![0],
+                        layer_palette_refs: vec![0],
                         bounds: [2, 1, 1],
                         origin: [0, 0, 0],
                         voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
                         voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1, 2]]),
                     }],
-                    palettes: Vec::new(),
                     hierarchy_nodes: vec![VoxjHierarchyNode {
                         name: "o".to_owned(),
                         child_nodes: Vec::new(),

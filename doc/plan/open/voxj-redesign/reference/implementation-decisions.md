@@ -125,3 +125,65 @@ carry `Vec<[f64; 3]>` / `Vec<[f64; 4]>`, so a non-numeric or wrong-length color
 still rejects at parse. The spec doc, the Q5 table, and the TypeScript schema are
 updated to match, and the TypeScript `ValuePool` is spelled out as a per-kind
 union so each kind shows its own value type instead of `JsonValue[]`.
+
+## Phase 2: `voxj-codec`
+
+### Chunk boundary: codec path plus structural validation now, content rules later
+
+Phase 2 is one compilation unit and cannot be split along a codec-versus-
+validation seam: validation reads the palette shape, so it has to compile against
+the new types the moment the codec does. This first chunk ports the codec path
+(checklist items 1 to 4) and the STRUCTURAL palette, index, and geometry
+validation (the palette-binding, materials-column, value-index-range, and
+sample-material-index parts of the twenty rules, plus dropping the removed
+no-duplicate-palette-ref rule). It defers the value-pool CONTENT validation (spec
+rule 9: kind well-formedness, values non-empty, value within min/max,
+integer-valued, color component ranges) and the stricter block-internal rules
+(rules 11.2, 11.3, 13, and 14: rle counts, packed pad bits, bitmap/hilbert pad
+and delta rules, base64 canonicality) to a follow-up chunk. Those are additive
+named checks and tighter decode; they do not block compilation, so splitting them
+off keeps each commit reviewable.
+
+### `voxj_palette_material_counts`: M is the first materials column's length
+
+The helper, renamed from `voxj_palette_cell_counts`, derives each layer's
+material count M as `palette.materials.first().map_or(0, Vec::len)`. Column-major
+materials store one column per binding, each of length M, so any column's length
+is M and the first is authoritative. The `palettes` check separately guarantees
+bindings are non-empty and every column shares the length M at least 1, so the
+helper trusts the validator rather than asserting rectangularity, and it stays
+panic-free when run pre-validation on a ragged or empty palette. encode and
+decode both call this one helper, so packed-base64 widths derive identically on
+both sides.
+
+### Renames follow the cell-to-material and palette-to-layer model
+
+Per Q7: `cell_counts` becomes `material_counts`, `num_palettes` becomes
+`num_layers`, `VoxjDecodedObject.palette_refs` becomes `layer_palette_refs`, and
+the sample docs reframe a sample from a cell index to a per-layer material index.
+The internal raster helpers `cell_index` and `cell_to_position` keep their names:
+they address grid cells of the dense occupancy bitmap, unrelated to palette
+materials. `position_encoding.rs` needed no change; a position encoding carries
+no palette or material framing to reframe.
+
+### `VoxjValuePool::values_len()` added to voxj
+
+The `palettes` check validates that every materials value-index falls in
+`[0, pool.values.len())`, which needs the pooled value count independent of kind.
+That accessor belongs on the pool, so `VoxjValuePool::values_len()` was added to
+voxj alongside `kind()`, a small additive helper downstream crates will also
+want, rather than re-matching all eleven variants inside voxj-codec.
+
+### Named checks: `sample-cells` becomes `sample-materials`; poolRef range in `palettes`
+
+`Check::SampleCells` becomes `Check::SampleMaterials` (report name
+`sample-materials`). The check set otherwise keeps its shape and count for this
+chunk; the new value-pool content check arrives with the deferred rule-9 work.
+Binding `poolRef` range (spec rule 6.2) is validated in `check_palettes`, not
+`check_indices`: `check_palettes` must resolve each binding's pool anyway to
+range-check its value-indices, so co-locating the poolRef check keeps that logic
+together. `check_indices` keeps the runtime-state-level refs (layer palette refs,
+child nodes, child objects, roots) and drops the no-duplicate-palette-ref rule,
+since two layers may share a palette. `check_geometry` reuses the per-layer M the
+helper already produced instead of re-deriving a count, so the sample-range check
+and the decode width agree by construction.

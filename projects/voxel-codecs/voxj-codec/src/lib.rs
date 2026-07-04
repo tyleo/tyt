@@ -19,7 +19,7 @@ mod validate_voxj_file;
 mod voxj_check;
 mod voxj_check_status;
 mod voxj_decoded_object;
-mod voxj_palette_cell_counts;
+mod voxj_palette_material_counts;
 
 pub use check_voxj_file::*;
 pub use decode_voxj_object::*;
@@ -39,4 +39,4 @@ pub use validate_voxj_file::*;
 pub use voxj_check::*;
 pub use voxj_check_status::*;
 pub use voxj_decoded_object::*;
-pub use voxj_palette_cell_counts::*;
+pub use voxj_palette_material_counts::*;
