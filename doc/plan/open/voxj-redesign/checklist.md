@@ -376,6 +376,16 @@ as before.
 
 ## Phase 6: `voxsmith` goxl, mvox, qbcl, vmax converters
 
+First chunk (see decisions log): the unconditionally-compiled `reduce_palette`
+straggler was ported to the pool/material model ahead of the listed items, since
+it blocks every scoped converter build and phases 4 and 5 only worked around it by
+temporarily cfg-gating it out. It clusters by `baseColorFactor` read through the
+value-pool API, merges via `VoxMain::remove_material`, and dithers across layers;
+its in-file tests were rebuilt to pools plus bindings plus materials, and both
+known-pattern dither tests still pass byte-for-byte. Verified under
+`--no-default-features --features voxj`. This is not one of the listed items below;
+those stay unchecked.
+
 - [ ] goxl: build a color pool bound to `baseColorFactor`, emit materials as
       value-indices, and read color back through the pool-kind helper both in the
       direct and synthesized paths.

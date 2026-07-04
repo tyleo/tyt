@@ -741,3 +741,52 @@ unit `emissiveStrength`. The attribute-list assertion pins the six glTF binding
 names in order. `palette.cell_count`/`iter_cells`/`iter_attributes`/`cell_value`
 and `object.voxel_cell`/`iter_palette_refs` gave way to `material_count`/
 `iter_materials`/`iter_bindings` and `voxel_material`/`iter_layers`.
+
+## Phase 6: `voxsmith` goxl, mvox, qbcl, vmax converters
+
+### First chunk: the unconditional `reduce_palette` straggler, ported before the converters
+
+`reduce_palette` is compiled unconditionally (a crate-root `mod`, not behind any
+codec feature), so it blocks every scoped build the converter chunks need; phases
+4 and 5 worked around it by temporarily cfg-gating it out and reverting. Porting
+it first is the smallest coherent chunk that compiles and passes on its own: it
+is self-contained, carries its own color reading rather than the `_color`-gated
+helpers (checklist item 2, still deferred), and verifies under
+`--no-default-features --features voxj`, where it was the sole remaining error and
+the voxj seam is already green. Doing it first retires the temporary-gate hack for
+every later converter chunk. It is not a listed Phase 6 item, but it is a real
+prerequisite the checklist omits.
+
+### `reduce_palette` clusters materials by `baseColorFactor`, merges through `remove_material`
+
+The port maps the cell-grid palette reduction onto the pool/material model one
+concept at a time, preserving behavior (both known-pattern dither tests pass
+byte-for-byte):
+
+1. It reduces the material count, not a cell count; `max_cells` becomes
+   `max_materials` and the cell-to-material rename runs through the file
+   (`Point.material`, `material_populations`, `dither_layer`), matching Q7 and
+   voxcore's `BVoxMaterial`. The public signature change is safe because vxl, its
+   only caller, does not compile until Phase 7 and adopts the new name there.
+2. The clustering attribute moves from an inline `rgba` hex string to
+   `baseColorFactor` resolved through `binding_by_attribute` and
+   `VoxMain::material_value`. A new `material_color` decodes the bound pool to
+   sRGB bytes exactly as the atlas bake does, sRGB components to bytes and linear
+   re-encoded through `ty_math`, returning `None` for a non-color or absent value
+   so a colorless material is left untouched, mirroring the old colorless-cell
+   skip. Clustering in sRGB bytes keeps the reduction math and the `Rgb`-space
+   dither tests identical to the old inline-hex path.
+3. Merging a cluster onto its representative is
+   `VoxMain::remove_material(palette, dropped, representative)` then one `gc`,
+   replacing the old `remove_cell`; the model's repaint-then-drop is what the
+   cell removal did.
+4. Dithering rewrites one layer's sample per voxel via `retain_voxel`, reading
+   `voxel_material`/`iter_layers` in place of `voxel_cell`/`iter_palette_refs`;
+   `BVoxPaletteRef` becomes `BVoxLayer`.
+
+The in-file tests rebuild their fixtures to pools, bindings, materials, and one
+layer: `baseColorFactor` is an `Srgba` pool decoded from the test hex strings
+(byte / 255), the `tag` scalar is an unbounded `float` pool with one distinct
+value per material, and each material draws one value-index per binding. A
+material's color reads back to hex through the same byte round trip, so the golden
+hex assertions are unchanged.

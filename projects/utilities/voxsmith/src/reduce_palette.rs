@@ -1,13 +1,16 @@
-use crate::{ColorSpace, Dither, ReductionMethod, Result};
+use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, Result};
 use branded_id::U32Id;
 use std::{cmp::Ordering, collections::HashMap, mem};
-use ty_math::{TySrgbaColor, TyVector3F64, TyVector3U32};
-use voxcore::{BVoxObject, BVoxPalette, BVoxPaletteRef, VoxMain, VoxObject, VoxValue};
+use ty_math::{TyLinearRgbaColorF64, TySrgbaColor, TyVector3F64, TyVector3U32};
+use voxcore::{
+    BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPaletteBinding, VoxMain, VoxObject,
+    VoxValuePool,
+};
 
-/// Reduces `palette` in `state` to at most `max_cells` cells: cells cluster by
-/// `rgba` and each cluster collapses onto one real representative, so a merged
-/// voxel takes the representative's whole row, not an average. Colorless cells
-/// are left untouched.
+/// Reduces `palette` in `state` to at most `max_materials` materials: materials
+/// cluster by `baseColorFactor` and each cluster collapses onto one real
+/// representative, so a merged voxel takes the representative's whole material,
+/// not an average. Colorless materials are left untouched.
 ///
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
 /// palette already fit (leaving `method` / `space` / `dither` inert). The state
@@ -16,14 +19,14 @@ use voxcore::{BVoxObject, BVoxPalette, BVoxPaletteRef, VoxMain, VoxObject, VoxVa
 /// # Arguments
 /// * `state` - the document, reduced in place.
 /// * `palette` - the palette to reduce; every referencing object is remapped.
-/// * `max_cells` - the cell cap.
+/// * `max_materials` - the material cap.
 /// * `method` - the clustering algorithm.
 /// * `space` - the color space compared in.
 /// * `dither` - error diffusion when snapping samples.
 pub fn reduce_palette(
     state: &mut VoxMain,
     palette: U32Id<BVoxPalette>,
-    max_cells: usize,
+    max_materials: usize,
     method: ReductionMethod,
     space: ColorSpace,
     dither: Dither,
@@ -33,26 +36,25 @@ pub fn reduce_palette(
         .palette(palette)
         .expect("reduce_palette was given a palette not in the state");
 
-    let total = palette_ref.cell_count();
-    if total <= max_cells {
+    let total = palette_ref.material_count();
+    if total <= max_materials {
         return Ok(None);
     }
 
-    // The `rgba` attribute; colorless cells have nothing to cluster on.
-    let rgba = palette_ref
-        .iter_attributes()
-        .find(|(_, name)| *name == "rgba")
-        .map(|(attribute, _)| attribute);
+    // The `baseColorFactor` binding; colorless materials have nothing to
+    // cluster on.
+    let color_binding = palette_ref.binding_by_attribute(BASE_COLOR_FACTOR);
 
-    let colored: Vec<(u32, [u8; 4])> = palette_ref
-        .iter_cells()
-        .filter_map(|cell| {
-            let color = rgba
-                .and_then(|attribute| palette_ref.cell_value(cell, attribute))
-                .and_then(cell_rgba)?;
-            Some((cell.to_u32(), color))
-        })
-        .collect();
+    let colored: Vec<(u32, [u8; 4])> = match color_binding {
+        Some(binding) => palette_ref
+            .iter_materials()
+            .filter_map(|material| {
+                let color = material_color(state, palette, material, binding)?;
+                Some((material.to_u32(), color))
+            })
+            .collect(),
+        None => Vec::new(),
+    };
 
     let survivors = total - colored.len();
 
@@ -60,19 +62,20 @@ pub fn reduce_palette(
         return Ok(None);
     }
 
-    // Tally per-cell voxel usage and place each colored cell in the space.
-    let populations = cell_populations(state, palette);
+    // Tally per-material voxel usage and place each colored material in the
+    // space.
+    let populations = material_populations(state, palette);
 
     let points: Vec<Point> = colored
         .into_iter()
-        .map(|(cell, color)| Point {
-            cell,
+        .map(|(material, color)| Point {
+            material,
             coords: to_space(color, space),
-            population: populations.get(&cell).copied().unwrap_or(0),
+            population: populations.get(&material).copied().unwrap_or(0),
         })
         .collect();
 
-    let target = max_cells.saturating_sub(survivors).max(1);
+    let target = max_materials.saturating_sub(survivors).max(1);
 
     let clusters = match method {
         ReductionMethod::MedianCut => median_cut(points, target),
@@ -89,17 +92,17 @@ pub fn reduce_palette(
         dither_voxels(state, palette, &clusters, dither);
     }
 
-    // Drop every non-representative cell onto its representative, then compact.
-    // After dithering no voxel samples a non-representative, so the repaint is a
-    // no-op and only the drop remains.
+    // Drop every non-representative material onto its representative, then
+    // compact. After dithering no voxel samples a non-representative, so the
+    // repaint is a no-op and only the drop remains.
     for cluster in &clusters {
         let representative = representative(cluster);
 
         for point in cluster {
-            if point.cell != representative {
-                state.remove_cell(
+            if point.material != representative {
+                state.remove_material(
                     palette,
-                    U32Id::from_u32(point.cell),
+                    U32Id::from_u32(point.material),
                     U32Id::from_u32(representative),
                 );
             }
@@ -111,31 +114,66 @@ pub fn reduce_palette(
     Ok(Some((total, after)))
 }
 
-/// A palette cell as a clustering point: id, color in the working space, and
-/// live-voxel sample count.
+/// A palette material as a clustering point: id, color in the working space,
+/// and live-voxel sample count.
 #[derive(Clone, Copy)]
 struct Point {
-    cell: u32,
+    material: u32,
 
     coords: TyVector3F64,
 
     population: u64,
 }
 
-/// How many live voxels sample each cell of `palette`, across every object
+/// The sRGB bytes of a material's `baseColorFactor`, or `None` if the value is
+/// absent or its bound pool is not a color kind. Mirrors the atlas bake's color
+/// decode: an sRGB pool's components map straight to bytes, a linear pool's
+/// re-encode to sRGB.
+fn material_color(
+    state: &VoxMain,
+    palette: U32Id<BVoxPalette>,
+    material: U32Id<BVoxMaterial>,
+    binding: U32Id<BVoxPaletteBinding>,
+) -> Option<[u8; 4]> {
+    let (pool, index) = state.material_value(palette, material, binding)?;
+    let index = index as usize;
+
+    match pool {
+        VoxValuePool::Srgb { values } => values
+            .get(index)
+            .map(|&[r, g, b]| srgb_bytes([r, g, b, 1.0])),
+        VoxValuePool::Srgba { values } => values.get(index).map(|&color| srgb_bytes(color)),
+        VoxValuePool::LinearRgb { values } => values.get(index).map(|&[r, g, b]| {
+            TyLinearRgbaColorF64::new(r, g, b, 1.0)
+                .to_srgba()
+                .to_array()
+        }),
+        VoxValuePool::LinearRgba { values } => values
+            .get(index)
+            .map(|&[r, g, b, a]| TyLinearRgbaColorF64::new(r, g, b, a).to_srgba().to_array()),
+        _ => None,
+    }
+}
+
+/// Maps sRGB-encoded float components in `[0, 1]` to bytes.
+fn srgb_bytes(color: [f64; 4]) -> [u8; 4] {
+    color.map(|component| (component.clamp(0.0, 1.0) * 255.0).round() as u8)
+}
+
+/// How many live voxels sample each material of `palette`, across every object
 /// referencing it.
-fn cell_populations(state: &VoxMain, palette: U32Id<BVoxPalette>) -> HashMap<u32, u64> {
+fn material_populations(state: &VoxMain, palette: U32Id<BVoxPalette>) -> HashMap<u32, u64> {
     let mut populations = HashMap::new();
 
     for (_, object) in state.iter_objects() {
-        for (reference, referenced) in object.iter_palette_refs() {
+        for (layer, referenced) in object.iter_layers() {
             if referenced != palette {
                 continue;
             }
 
             for voxel in object.iter_live() {
-                if let Some(cell) = object.voxel_cell(voxel, reference) {
-                    *populations.entry(cell.to_u32()).or_insert(0) += 1;
+                if let Some(material) = object.voxel_material(voxel, layer) {
+                    *populations.entry(material.to_u32()).or_insert(0) += 1;
                 }
             }
         }
@@ -143,9 +181,10 @@ fn cell_populations(state: &VoxMain, palette: U32Id<BVoxPalette>) -> HashMap<u32
     populations
 }
 
-/// A cluster's representative cell: the most-sampled, ties to the lowest id.
+/// A cluster's representative material: the most-sampled, ties to the lowest
+/// id.
 fn representative(cluster: &[Point]) -> u32 {
-    representative_point(cluster).cell
+    representative_point(cluster).material
 }
 
 /// The representative (see [`representative`]) as a whole [`Point`], for the
@@ -157,7 +196,7 @@ fn representative_point(cluster: &[Point]) -> Point {
         .max_by(|a, b| {
             a.population
                 .cmp(&b.population)
-                .then_with(|| b.cell.cmp(&a.cell))
+                .then_with(|| b.material.cmp(&a.material))
         })
         .expect("a cluster holds at least one point")
 }
@@ -173,12 +212,12 @@ fn median_cut(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
         // widest single axis.
         let mut widest: Option<(usize, usize, f64)> = None;
 
-        for (index, cell_box) in boxes.iter().enumerate() {
-            if cell_box.len() < 2 {
+        for (index, color_box) in boxes.iter().enumerate() {
+            if color_box.len() < 2 {
                 continue;
             }
 
-            let (axis, extent) = longest_axis(cell_box);
+            let (axis, extent) = longest_axis(color_box);
             if extent <= 0.0 {
                 continue;
             }
@@ -192,18 +231,18 @@ fn median_cut(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
             break;
         };
 
-        let mut cell_box = boxes.swap_remove(index);
+        let mut color_box = boxes.swap_remove(index);
 
-        cell_box.sort_by(|a, b| {
+        color_box.sort_by(|a, b| {
             a.coords
                 .component(axis)
                 .partial_cmp(&b.coords.component(axis))
                 .unwrap_or(Ordering::Equal)
         });
 
-        let high = cell_box.split_off(cell_box.len() / 2);
+        let high = color_box.split_off(color_box.len() / 2);
 
-        boxes.push(cell_box);
+        boxes.push(color_box);
         boxes.push(high);
     }
 
@@ -211,8 +250,8 @@ fn median_cut(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
 }
 
 /// The axis of widest spread in a box, and that spread.
-fn longest_axis(cell_box: &[Point]) -> (usize, f64) {
-    let (low, high) = point_bounds(cell_box);
+fn longest_axis(color_box: &[Point]) -> (usize, f64) {
+    let (low, high) = point_bounds(color_box);
 
     let spread = (high - low).to_array();
 
@@ -352,14 +391,14 @@ fn kmeans(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
 
     let k = target.min(points.len()).max(1);
 
-    // Seed 0 is the most-sampled point (ties to the lowest cell); each next seed
-    // is the point farthest from the seeds so far.
+    // Seed 0 is the most-sampled point (ties to the lowest material); each next
+    // seed is the point farthest from the seeds so far.
     let first = points
         .iter()
         .max_by(|a, b| {
             a.population
                 .cmp(&b.population)
-                .then_with(|| b.cell.cmp(&a.cell))
+                .then_with(|| b.material.cmp(&a.material))
         })
         .expect("kmeans is given at least one point");
 
@@ -468,7 +507,7 @@ fn nearest_centroid(coords: TyVector3F64, centroids: &[TyVector3F64]) -> usize {
     best
 }
 
-/// A cell's `rgba` as a point in `space`; alpha is dropped. `rgb` uses the
+/// An sRGB byte color as a point in `space`; alpha is dropped. `rgb` uses the
 /// stored sRGB bytes; `oklab` and `lab` decode to linear light first.
 fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
     let color = TySrgbaColor::from_array(rgba);
@@ -480,16 +519,6 @@ fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
     }
 }
 
-/// The straight RGBA of a cell's `rgba` value, or `None` if it is not a
-/// `#RRGGBB` / `#RRGGBBAA` hex string.
-fn cell_rgba(value: &VoxValue) -> Option<[u8; 4]> {
-    let VoxValue::Text(hex) = value else {
-        return None;
-    };
-
-    Some(TySrgbaColor::from_hex(hex)?.to_array())
-}
-
 /// Snaps every live voxel sampling `palette` to a representative, diffusing the
 /// error per `dither`, so one merged color dithers across several
 /// representatives. Runs per referencing object in raster order.
@@ -499,12 +528,13 @@ fn dither_voxels(
     clusters: &[Vec<Point>],
     dither: Dither,
 ) {
-    // Cluster coords are already in the working space; read each cell's color
-    // and the representatives off the clusters once, shared across objects.
+    // Cluster coords are already in the working space; read each material's
+    // color and the representatives off the clusters once, shared across
+    // objects.
     let coords_of: HashMap<u32, TyVector3F64> = clusters
         .iter()
         .flat_map(|cluster| cluster.iter())
-        .map(|point| (point.cell, point.coords))
+        .map(|point| (point.material, point.coords))
         .collect();
 
     let representatives: Vec<Point> = clusters.iter().map(|c| representative_point(c)).collect();
@@ -513,42 +543,35 @@ fn dither_voxels(
 
     // Objects referencing the palette, collected so the read borrow ends before
     // the mutation below.
-    let targets: Vec<(U32Id<BVoxObject>, Vec<U32Id<BVoxPaletteRef>>)> = state
+    let targets: Vec<(U32Id<BVoxObject>, Vec<U32Id<BVoxLayer>>)> = state
         .iter_objects()
         .filter_map(|(object_id, object)| {
-            let references: Vec<_> = object
-                .iter_palette_refs()
+            let layers: Vec<_> = object
+                .iter_layers()
                 .filter(|&(_, referenced)| referenced == palette)
-                .map(|(reference, _)| reference)
+                .map(|(layer, _)| layer)
                 .collect();
-            (!references.is_empty()).then_some((object_id, references))
+            (!layers.is_empty()).then_some((object_id, layers))
         })
         .collect();
 
-    for (object_id, references) in targets {
+    for (object_id, layers) in targets {
         let object = state
             .object_mut(object_id)
             .expect("a referencing object is one of the state's");
 
-        for reference in references {
-            dither_reference(
-                object,
-                reference,
-                &coords_of,
-                &representatives,
-                spacing,
-                dither,
-            );
+        for layer in layers {
+            dither_layer(object, layer, &coords_of, &representatives, spacing, dither);
         }
     }
 }
 
-/// Dithers one palette reference on one object: walk live voxels in raster
-/// order, snap each to the nearest representative, and reassign via
-/// `retain_voxel`, swapping only this reference's cell.
-fn dither_reference(
+/// Dithers one layer on one object: walk live voxels in raster order, snap each
+/// to the nearest representative, and reassign via `retain_voxel`, swapping
+/// only this layer's material.
+fn dither_layer(
     object: &mut VoxObject,
-    reference: U32Id<BVoxPaletteRef>,
+    layer: U32Id<BVoxLayer>,
     coords_of: &HashMap<u32, TyVector3F64>,
     representatives: &[Point],
     spacing: f64,
@@ -560,24 +583,24 @@ fn dither_reference(
     // not-yet-visited voxel.
     let voxels: Vec<_> = object.iter_live().collect();
 
-    // Reassignment rewrites the full row, so find the reference order and this
-    // reference's slot once.
-    let references: Vec<_> = object.iter_palette_refs().map(|(id, _)| id).collect();
-    let slot = references
+    // Reassignment rewrites the full sample row, so find the layer order and
+    // this layer's slot once.
+    let layers: Vec<_> = object.iter_layers().map(|(id, _)| id).collect();
+    let slot = layers
         .iter()
-        .position(|&id| id == reference)
-        .expect("the reference is one of the object's");
+        .position(|&id| id == layer)
+        .expect("the layer is one of the object's");
 
     // Floyd-Steinberg's sparse per-voxel error; ordered needs no buffer.
     let mut errors: HashMap<u32, TyVector3F64> = HashMap::new();
 
     for voxel in voxels {
-        let cell = object
-            .voxel_cell(voxel, reference)
-            .expect("a live voxel samples every reference");
+        let material = object
+            .voxel_material(voxel, layer)
+            .expect("a live voxel samples every layer");
 
         // A colorless survivor was never clustered, so it has no color to snap.
-        let Some(&original) = coords_of.get(&cell.to_u32()) else {
+        let Some(&original) = coords_of.get(&material.to_u32()) else {
             continue;
         };
 
@@ -603,16 +626,16 @@ fn dither_reference(
             diffuse_error(&mut errors, bounds, position, target - chosen.coords);
         }
 
-        if chosen.cell != cell.to_u32() {
-            let mut row: Vec<_> = references
+        if chosen.material != material.to_u32() {
+            let mut row: Vec<_> = layers
                 .iter()
                 .map(|&id| {
                     object
-                        .voxel_cell(voxel, id)
-                        .expect("a live voxel samples every reference")
+                        .voxel_material(voxel, id)
+                        .expect("a live voxel samples every layer")
                 })
                 .collect();
-            row[slot] = U32Id::from_u32(chosen.cell);
+            row[slot] = U32Id::from_u32(chosen.material);
             object
                 .retain_voxel(voxel, &row)
                 .expect("a live voxel takes a full-arity row");
@@ -621,7 +644,7 @@ fn dither_reference(
 }
 
 /// The representative nearest `coords` by Euclidean distance in the clustering
-/// space, ties broken by the lowest cell id so the snap is deterministic.
+/// space, ties broken by the lowest material id so the snap is deterministic.
 fn nearest_representative(coords: TyVector3F64, representatives: &[Point]) -> Point {
     representatives
         .iter()
@@ -631,7 +654,7 @@ fn nearest_representative(coords: TyVector3F64, representatives: &[Point]) -> Po
                 .magnitude_squared()
                 .partial_cmp(&(coords - b.coords).magnitude_squared())
                 .unwrap_or(Ordering::Equal)
-                .then_with(|| a.cell.cmp(&b.cell))
+                .then_with(|| a.material.cmp(&b.material))
         })
         .expect("the palette reduces to at least one representative")
 }
@@ -719,30 +742,77 @@ fn bayer(x: u32, y: u32, z: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ColorSpace, Dither, ReductionMethod, reduce_palette};
+    use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, reduce_palette};
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxObject, BVoxPalette, VoxMain, VoxObject, VoxPalette, VoxValue};
+    use voxcore::{
+        BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxMain, VoxObject, VoxPalette,
+        VoxValuePool,
+    };
+
+    /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
+    fn srgba(hex: &str) -> [f64; 4] {
+        let digits = hex.strip_prefix('#').expect("a leading #");
+        let byte = |index: usize| {
+            u8::from_str_radix(&digits[index * 2..index * 2 + 2], 16).expect("two hex digits")
+        };
+        [byte(0), byte(1), byte(2), byte(3)].map(|b| b as f64 / 255.0)
+    }
+
+    /// The `#RRGGBBAA` hex of a material's `baseColorFactor`, uppercase.
+    fn material_hex(
+        state: &VoxMain,
+        palette: U32Id<BVoxPalette>,
+        material: U32Id<BVoxMaterial>,
+    ) -> String {
+        let binding = state
+            .palette(palette)
+            .unwrap()
+            .binding_by_attribute(BASE_COLOR_FACTOR)
+            .unwrap();
+        match state.material_value(palette, material, binding) {
+            Some((VoxValuePool::Srgba { values }, index)) => hex_of(values[index as usize]),
+            other => panic!("material has no srgba baseColorFactor: {other:?}"),
+        }
+    }
+
+    /// A `#RRGGBBAA` uppercase hex string of float sRGB components in `[0, 1]`.
+    fn hex_of(color: [f64; 4]) -> String {
+        let bytes = color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
+        format!(
+            "#{:02X}{:02X}{:02X}{:02X}",
+            bytes[0], bytes[1], bytes[2], bytes[3]
+        )
+    }
 
     /// One object whose voxels sample a palette of `#RRGGBBAA` `colors`, each
-    /// with a distinct `tag` scalar so a merge's whole-row take is visible. Voxel
-    /// `i` samples cell `i`; `repeats[i]` adds extra voxels on cell `i`.
+    /// material with a distinct `tag` scalar so a merge's whole-material take
+    /// is visible. Voxel `i` samples material `i`; `repeats[i]` adds extra
+    /// voxels on material `i`.
     fn state_with_colors(
         colors: &[&str],
         repeats: &[usize],
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
+        let mut state = VoxMain::default();
+
+        // baseColorFactor draws from an sRGBA color pool; tag draws from an
+        // unbounded float pool with one distinct value per material.
+        let base = state.add_value_pool(VoxValuePool::Srgba {
+            values: colors.iter().map(|color| srgba(color)).collect(),
+        });
+        let tag = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::None,
+            max: VoxBound::None,
+            values: (0..colors.len()).map(|index| index as f64).collect(),
+        });
+
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        palette.add_attribute("tag".to_owned());
-        let cells: Vec<_> = colors
-            .iter()
-            .enumerate()
-            .map(|(index, color)| {
+        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base);
+        palette.add_binding("tag".to_owned(), tag);
+        let materials: Vec<_> = (0..colors.len())
+            .map(|index| {
                 palette
-                    .add_cell(vec![
-                        VoxValue::Text((*color).to_owned()),
-                        VoxValue::Number(index as f64),
-                    ])
+                    .add_material(vec![index as u32, index as u32])
                     .unwrap()
             })
             .collect();
@@ -750,83 +820,77 @@ mod tests {
         let count: usize = colors.len() + repeats.iter().sum::<usize>();
         let mut object =
             VoxObject::new("o".to_owned(), TyVector3U32::new(count as u32, 1, 1)).unwrap();
-        let mut state = VoxMain::default();
         let palette_id = state.add_palette(palette);
-        object.add_palette_ref(palette_id, cells[0]);
+        object.add_layer(palette_id, materials[0]);
 
-        // One voxel per color, plus `repeats[i]` extra voxels sampling cell i.
+        // One voxel per color, plus `repeats[i]` extra voxels sampling material
+        // i.
         let mut voxel = 0u32;
-        let mut retain = |object: &mut VoxObject, cell| {
+        let mut retain = |object: &mut VoxObject, material| {
             object
-                .retain_voxel(U32Id::from_u32(voxel), &[cell])
+                .retain_voxel(U32Id::from_u32(voxel), &[material])
                 .unwrap();
             voxel += 1;
         };
-        for (index, &cell) in cells.iter().enumerate() {
-            retain(&mut object, cell);
+        for (index, &material) in materials.iter().enumerate() {
+            retain(&mut object, material);
             for _ in 0..repeats.get(index).copied().unwrap_or(0) {
-                retain(&mut object, cell);
+                retain(&mut object, material);
             }
         }
         let object_id = state.add_object(object);
         (state, palette_id, object_id)
     }
 
-    fn cell_count(state: &VoxMain, palette: U32Id<BVoxPalette>) -> usize {
-        state.palette(palette).unwrap().cell_count()
+    fn material_count(state: &VoxMain, palette: U32Id<BVoxPalette>) -> usize {
+        state.palette(palette).unwrap().material_count()
     }
 
-    /// The set of rgba hexes still in the palette.
+    /// The set of baseColorFactor hexes still in the palette.
     fn colors(state: &VoxMain, palette: U32Id<BVoxPalette>) -> Vec<String> {
-        let palette = state.palette(palette).unwrap();
-        let (rgba, _) = palette
-            .iter_attributes()
-            .find(|(_, name)| *name == "rgba")
-            .unwrap();
-        palette
-            .iter_cells()
-            .filter_map(|cell| match palette.cell_value(cell, rgba) {
-                Some(VoxValue::Text(hex)) => Some(hex.clone()),
-                _ => None,
-            })
+        state
+            .palette(palette)
+            .unwrap()
+            .iter_materials()
+            .map(|material| material_hex(state, palette, material))
             .collect()
     }
 
-    /// One object of size `bounds` with an `rgba` palette of `colors` and one
-    /// live voxel per `(position, color-index)` entry, so a dither test can place
-    /// a known color at a known position.
+    /// One object of size `bounds` with a `baseColorFactor` palette of `colors`
+    /// and one live voxel per `(position, color-index)` entry, so a dither test
+    /// can place a known color at a known position.
     fn grid_state(
         bounds: TyVector3U32,
         colors: &[&str],
         voxels: &[(TyVector3U32, usize)],
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
+        let mut state = VoxMain::default();
+
+        let base = state.add_value_pool(VoxValuePool::Srgba {
+            values: colors.iter().map(|color| srgba(color)).collect(),
+        });
+
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        let cells: Vec<_> = colors
-            .iter()
-            .map(|color| {
-                palette
-                    .add_cell(vec![VoxValue::Text((*color).to_owned())])
-                    .unwrap()
-            })
+        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base);
+        let materials: Vec<_> = (0..colors.len())
+            .map(|index| palette.add_material(vec![index as u32]).unwrap())
             .collect();
 
         let mut object = VoxObject::new("o".to_owned(), bounds).unwrap();
-        let mut state = VoxMain::default();
         let palette_id = state.add_palette(palette);
-        object.add_palette_ref(palette_id, cells[0]);
+        object.add_layer(palette_id, materials[0]);
 
         for &(position, color) in voxels {
             let voxel = object.voxel_id(position).unwrap();
-            object.retain_voxel(voxel, &[cells[color]]).unwrap();
+            object.retain_voxel(voxel, &[materials[color]]).unwrap();
         }
 
         let object_id = state.add_object(object);
         (state, palette_id, object_id)
     }
 
-    /// The `rgba` hex the voxel at `position` samples, through the object's one
-    /// palette reference.
+    /// The baseColorFactor hex the voxel at `position` samples, through the
+    /// object's one layer.
     fn voxel_color(
         state: &VoxMain,
         object: U32Id<BVoxObject>,
@@ -834,18 +898,10 @@ mod tests {
         position: TyVector3U32,
     ) -> String {
         let object = state.object(object).unwrap();
-        let (reference, _) = object.iter_palette_refs().next().unwrap();
+        let (layer, _) = object.iter_layers().next().unwrap();
         let voxel = object.voxel_id(position).unwrap();
-        let cell = object.voxel_cell(voxel, reference).unwrap();
-        let palette = state.palette(palette).unwrap();
-        let (rgba, _) = palette
-            .iter_attributes()
-            .find(|(_, name)| *name == "rgba")
-            .unwrap();
-        match palette.cell_value(cell, rgba) {
-            Some(VoxValue::Text(hex)) => hex.clone(),
-            other => panic!("cell has no rgba text: {other:?}"),
-        }
+        let material = object.voxel_material(voxel, layer).unwrap();
+        material_hex(state, palette, material)
     }
 
     #[test]
@@ -861,13 +917,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(outcome, None);
-        assert_eq!(cell_count(&state, palette), 2);
+        assert_eq!(material_count(&state, palette), 2);
     }
 
     #[test]
-    fn merges_near_colors_and_keeps_a_real_representative_row() {
+    fn merges_near_colors_and_keeps_a_real_representative_material() {
         // Two near reds and a blue; cap 2 fuses the reds onto the more-sampled
-        // second red, whose whole row (tag 1) survives, not an average.
+        // second red, whose whole material (tag 1) survives, not an average.
         let (mut state, palette, object) =
             state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
         let outcome = reduce_palette(
@@ -880,7 +936,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(outcome, Some((3, 2)));
-        assert_eq!(cell_count(&state, palette), 2);
+        assert_eq!(material_count(&state, palette), 2);
         assert_eq!(state.validate(), Ok(()));
 
         let mut survivors = colors(&state, palette);
@@ -889,18 +945,17 @@ mod tests {
 
         // The fused first red's voxel now samples the survivor, tag 1.
         let object = state.object(object).unwrap();
-        let (reference, _) = object.iter_palette_refs().next().unwrap();
+        let (layer, _) = object.iter_layers().next().unwrap();
         let palette_ref = state.palette(palette).unwrap();
-        let (tag, _) = palette_ref
-            .iter_attributes()
-            .find(|(_, name)| *name == "tag")
-            .unwrap();
+        let tag = palette_ref.binding_by_attribute("tag").unwrap();
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        let cell = object.voxel_cell(voxel, reference).unwrap();
-        assert_eq!(
-            palette_ref.cell_value(cell, tag),
-            Some(&VoxValue::Number(1.0))
-        );
+        let material = object.voxel_material(voxel, layer).unwrap();
+        match state.material_value(palette, material, tag) {
+            Some((VoxValuePool::Float { values, .. }, index)) => {
+                assert_eq!(values[index as usize], 1.0)
+            }
+            other => panic!("unexpected tag value {other:?}"),
+        }
     }
 
     #[test]
@@ -922,9 +977,9 @@ mod tests {
             assert_eq!(before, 4, "method {method:?}");
             assert!(
                 (1..=2).contains(&after),
-                "method {method:?} left {after} cells"
+                "method {method:?} left {after} materials"
             );
-            assert_eq!(cell_count(&state, palette), after, "method {method:?}");
+            assert_eq!(material_count(&state, palette), after, "method {method:?}");
             assert_eq!(state.validate(), Ok(()), "method {method:?}");
         }
     }
@@ -960,7 +1015,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(outcome, Some((3, 2)), "dither {dither:?}");
-            assert_eq!(cell_count(&state, palette), 2, "dither {dither:?}");
+            assert_eq!(material_count(&state, palette), 2, "dither {dither:?}");
             assert_eq!(state.validate(), Ok(()), "dither {dither:?}");
         }
     }
@@ -980,7 +1035,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(outcome, Some((4, 2)), "space {space:?}");
-            assert_eq!(cell_count(&state, palette), 2, "space {space:?}");
+            assert_eq!(material_count(&state, palette), 2, "space {space:?}");
             assert_eq!(state.validate(), Ok(()), "space {space:?}");
         }
     }
