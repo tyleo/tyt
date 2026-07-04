@@ -8,10 +8,7 @@ use qbcl::qbcl::{
     QbclThumbnail, QbclVoxel,
 };
 use std::collections::HashSet;
-use voxcore::{
-    BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPaletteRef, BVoxVoxel, VoxHierarchyNode,
-    VoxMain, VoxObject, VoxPalette, VoxValue,
-};
+use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject};
 
 /// Writes a [`VoxMain`] to a decoded Qubicle Construction Library [`QbclFile`].
 ///
@@ -48,8 +45,7 @@ pub fn to_qbcl_file(state: &VoxMain) -> Result<QbclFile> {
         )));
     };
 
-    let palette = state.iter_palettes().next().map(|(_, palette)| palette);
-    let root = rebuild_node(*root, state, &ext.nodes, palette)?;
+    let root = rebuild_node(*root, state, &ext.nodes)?;
 
     Ok(QbclFile {
         program_version: ext.program_version,
@@ -84,7 +80,6 @@ fn rebuild_node(
     id: U32Id<BVoxHierarchyNode>,
     state: &VoxMain,
     nodes: &[QubicleQbclNode],
-    palette: Option<&VoxPalette>,
 ) -> Result<QbclNode> {
     let hierarchy = state
         .hierarchy_node(id)
@@ -99,15 +94,15 @@ fn rebuild_node(
     let body = match &provenance.body {
         QubicleQbclNodeBody::Model { transform } => QbclNodeBody::Model(QbclModel {
             transform: model_transform(transform)?,
-            children: rebuild_children(hierarchy, state, nodes, palette)?,
+            children: rebuild_children(hierarchy, state, nodes)?,
         }),
         QubicleQbclNodeBody::Matrix {
             position,
             pivot,
             masks,
         } => QbclNodeBody::Matrix(matrix_from_object(
+            state,
             matrix_object(hierarchy, state)?,
-            palette,
             *position,
             *pivot,
             masks,
@@ -118,15 +113,15 @@ fn rebuild_node(
             masks,
         } => {
             let matrix = matrix_from_object(
+                state,
                 matrix_object(hierarchy, state)?,
-                palette,
                 *position,
                 *pivot,
                 masks,
             )?;
             QbclNodeBody::Compound(QbclCompound {
                 matrix,
-                children: rebuild_children(hierarchy, state, nodes, palette)?,
+                children: rebuild_children(hierarchy, state, nodes)?,
             })
         }
     };
@@ -144,12 +139,11 @@ fn rebuild_children(
     hierarchy: &VoxHierarchyNode,
     state: &VoxMain,
     nodes: &[QubicleQbclNode],
-    palette: Option<&VoxPalette>,
 ) -> Result<Vec<QbclNode>> {
     hierarchy
         .child_nodes
         .iter()
-        .map(|&child| rebuild_node(child, state, nodes, palette))
+        .map(|&child| rebuild_node(child, state, nodes))
         .collect()
 }
 
@@ -167,12 +161,12 @@ fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result
 }
 
 /// Rebuilds a matrix grid from an object: each solid voxel's color comes from
-/// the palette and its mask from the aligned ext mask list, placed in `.qbcl`
-/// storage order. Errors if the mask count does not match the object's solid
-/// voxels.
+/// the object's `baseColorFactor` layer and its mask from the aligned ext mask
+/// list, placed in `.qbcl` storage order. Errors if the mask count does not
+/// match the object's solid voxels.
 fn matrix_from_object(
+    state: &VoxMain,
     object: &VoxObject,
-    palette: Option<&VoxPalette>,
     position: [i32; 3],
     pivot: [f32; 3],
     masks: &[u8],
@@ -182,7 +176,7 @@ fn matrix_from_object(
     let volume = size_x as usize * size_y as usize * size_z as usize;
     let mut voxels = vec![QbclVoxel::default(); volume];
 
-    let reference = object.iter_palette_refs().next().map(|(id, _)| id);
+    let color = object_color_ref(state, object);
     let live: Vec<_> = object.iter_live().collect();
     if live.len() != masks.len() {
         return Err(Error::invalid(format!(
@@ -196,7 +190,13 @@ fn matrix_from_object(
         let position = object
             .voxel_position(voxel)
             .expect("a live voxel is within the grid");
-        let [r, g, b] = voxel_color(object, palette, reference, voxel);
+        // A Qubicle voxel stores no alpha, so the sampled color's alpha is
+        // dropped.
+        let [r, g, b, _] = color
+            .map(|(layer, palette, binding)| {
+                cell_color(state, object, voxel, layer, palette, binding)
+            })
+            .unwrap_or([0, 0, 0, 0]);
         // Storage order: index = y + size_y * (z + size_z * x).
         let index = position.y as usize
             + size_y as usize * (position.z as usize + size_z as usize * position.x as usize);
@@ -211,24 +211,6 @@ fn matrix_from_object(
     })
 }
 
-/// The `[r, g, b]` color a live voxel samples from the shared palette, or black
-/// if the reference, cell, or `rgb` attribute is missing.
-fn voxel_color(
-    object: &VoxObject,
-    palette: Option<&VoxPalette>,
-    reference: Option<U32Id<BVoxPaletteRef>>,
-    voxel: U32Id<BVoxVoxel>,
-) -> [u8; 3] {
-    let lookup = || -> Option<[u8; 3]> {
-        let palette = palette?;
-        let reference = reference?;
-        let cell = object.voxel_cell(voxel, reference)?;
-        let rgb = attribute_id(palette, "rgb")?;
-        Some(parse_rgb(palette.cell_value(cell, rgb)))
-    };
-    lookup().unwrap_or([0, 0, 0])
-}
-
 /// Converts a stored model-transform chunk into its fixed 36-byte array.
 fn model_transform(bytes: &[u8]) -> Result<[u8; 36]> {
     <[u8; 36]>::try_from(bytes).map_err(|_| {
@@ -237,29 +219,6 @@ fn model_transform(bytes: &[u8]) -> Result<[u8; 36]> {
             bytes.len()
         ))
     })
-}
-
-/// The id of the attribute named `name`, or `None`.
-fn attribute_id(palette: &VoxPalette, name: &str) -> Option<U32Id<BVoxAttribute>> {
-    palette
-        .iter_attributes()
-        .find(|(_, attribute)| *attribute == name)
-        .map(|(id, _)| id)
-}
-
-/// Parses a `#RRGGBB` color cell into `[r, g, b]`, defaulting to black on a
-/// missing or malformed value.
-fn parse_rgb(value: Option<&VoxValue>) -> [u8; 3] {
-    let Some(VoxValue::Text(hex)) = value else {
-        return [0, 0, 0];
-    };
-    let hex = hex.strip_prefix('#').unwrap_or(hex);
-    let byte = |index: usize| {
-        hex.get(index * 2..index * 2 + 2)
-            .and_then(|byte| u8::from_str_radix(byte, 16).ok())
-            .unwrap_or(0)
-    };
-    [byte(0), byte(1), byte(2)]
 }
 
 /// The visibility mask written for every synthesized solid voxel. Qubicle reads
@@ -429,15 +388,17 @@ impl QbclBuilder {
             let cell = object
                 .voxel_position(voxel)
                 .expect("a live voxel is within the grid");
-            let rgba = color
-                .map(|(reference, palette, attribute)| {
-                    cell_color(object, voxel, reference, palette, attribute)
+            // A Qubicle voxel stores no alpha, so the sampled color's alpha is
+            // dropped.
+            let [r, g, b, _] = color
+                .map(|(layer, palette, binding)| {
+                    cell_color(state, object, voxel, layer, palette, binding)
                 })
                 .unwrap_or([0, 0, 0, 0]);
             // Storage order: index = y + size_y * (z + size_z * x).
             let index = cell.y as usize
                 + size_y as usize * (cell.z as usize + size_z as usize * cell.x as usize);
-            voxels[index] = QbclVoxel::new(rgba[0], rgba[1], rgba[2], SOLID_MASK);
+            voxels[index] = QbclVoxel::new(r, g, b, SOLID_MASK);
         }
 
         QbclMatrix {

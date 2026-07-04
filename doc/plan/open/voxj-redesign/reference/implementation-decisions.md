@@ -845,3 +845,47 @@ fill that gap and routed all three decoders through it, deleting each private
 `srgb_bytes`; no new type was needed. Landed as its own commit after the goxl
 port. The voxj seam's float-to-hex encoder and the glTF importer's byte encoders
 were left alone; they are different operations, not this same decode.
+
+### Third chunk: the Qubicle family maps three channels to a shared `Srgb` pool
+
+The `qb`, `qbt`, and `qbcl` converters are three near-duplicate file pairs that
+all built the old inline `rgb` cell palette (one `#RRGGBB` hex `VoxValue::Text`
+per cell) the same way. The port applies one uniform shape to all six files,
+mirroring the goxl port but with a three-channel color kind, since a Qubicle
+voxel stores no alpha:
+
+1. Each `from_*_file`'s `build_palette` gains a `&mut VoxMain`, collects the
+   distinct `[u8; 3]` block colors in first-seen order exactly as before, then
+   builds one shared `VoxValuePool::Srgb` of those colors as float components in
+   `[0, 1]` (byte / 255) added to the runtime state, binds it to
+   `baseColorFactor`, and adds one material per color. It returns the palette and
+   a `[u8; 3] -> U32Id<BVoxMaterial>` map, replacing the old
+   `[u8; 3] -> U32Id<BVoxPaletteCell>` map. This settles the checklist's alpha
+   question: a three-channel source is canonical `srgb`, not `srgba` with a
+   synthesized alpha, so the pool is the narrower kind and no alpha is invented on
+   read.
+2. Each `build_object` / `build_node` calls `add_layer` + `retain_voxel` with the
+   resolved material id instead of `add_palette_ref` + the old cell id; the grid
+   sizing, storage-order loops, and oversized-grid error are untouched.
+3. Each `to_*_file` reads a voxel's color through the shared `object_color_ref` +
+   `cell_color` helpers (the same ones goxl adopted) and drops the fourth
+   component with `let [r, g, b, _] = ...`, since a Qubicle voxel is alpha-less.
+   This deletes each file's bespoke `voxel_color`, `attribute_id`, and `parse_rgb`
+   plus the `hex` writer. Because `cell_color` resolves color through `state`, the
+   writers no longer thread a borrowed `&VoxPalette`: `to_qb` drops the `palette`
+   local, and `to_qbt` / `to_qbcl` drop the `palette` parameter from
+   `rebuild_node` / `rebuild_children` / `matrix_from_object` and pass `state`
+   instead. `to_qbcl`'s synthesis path (`synthesize_matrix`) moves to the new
+   `cell_color(state, object, voxel, layer, palette, binding)` signature the same
+   way.
+
+The byte-exact `.qb` / `.qbt` / `.qbcl` round-trips hold because the color makes a
+byte -> float (byte / 255) -> byte (`round(component * 255)`) trip that is exact
+for a byte-valued component, the same argument the goxl port relies on;
+`pool_color` returns opaque alpha for an `Srgb` pool, which the writers discard.
+Only `from_qbcl_file` carries an in-file voxcore-level fixture (`source_state`);
+it was rebuilt to the pool / binding / material / layer shape with a local `srgb`
+hex-to-float helper, and the format-level `qb` / `qbt` fixtures needed no change.
+Verified under `--no-default-features --features qbcl`; 26 tests pass. On default
+features the crate still fails to build only in the unported `mvox` and `vmax`
+modules, the remaining Phase 6 items; nothing in `qbcl` errors.

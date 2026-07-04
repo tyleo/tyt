@@ -1,12 +1,12 @@
-use crate::{Error, QubicleQbtExtWrapper, QubicleQbtNode, Result, from_vox_value};
+use crate::{
+    Error, QubicleQbtExtWrapper, QubicleQbtNode, Result, cell_color, from_vox_value,
+    object_color_ref,
+};
 use branded_id::U32Id;
 use qbcl::qbt::{
     QbtColor, QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtUnknownNode, QbtVoxel,
 };
-use voxcore::{
-    BVoxAttribute, BVoxHierarchyNode, BVoxPaletteRef, BVoxVoxel, VoxHierarchyNode, VoxMain,
-    VoxObject, VoxPalette, VoxValue,
-};
+use voxcore::{BVoxHierarchyNode, VoxHierarchyNode, VoxMain, VoxObject};
 
 /// Writes a [`VoxMain`] back to a decoded Qubicle Binary Tree [`QbtFile`], the
 /// inverse of [`from_qbt_file`](crate::from_qbt_file).
@@ -45,8 +45,7 @@ pub fn to_qbt_file(state: &VoxMain) -> Result<QbtFile> {
         )));
     };
 
-    let palette = state.iter_palettes().next().map(|(_, palette)| palette);
-    let root = rebuild_node(*root, state, &ext.nodes, palette)?;
+    let root = rebuild_node(*root, state, &ext.nodes)?;
 
     Ok(QbtFile {
         version: ext.version,
@@ -66,7 +65,6 @@ fn rebuild_node(
     id: U32Id<BVoxHierarchyNode>,
     state: &VoxMain,
     nodes: &[QubicleQbtNode],
-    palette: Option<&VoxPalette>,
 ) -> Result<QbtNode> {
     let hierarchy = state
         .hierarchy_node(id)
@@ -80,7 +78,7 @@ fn rebuild_node(
 
     let node = match provenance {
         QubicleQbtNode::Model => QbtNode::Model(QbtModel {
-            children: rebuild_children(hierarchy, state, nodes, palette)?,
+            children: rebuild_children(hierarchy, state, nodes)?,
         }),
         QubicleQbtNode::Matrix {
             name,
@@ -89,8 +87,8 @@ fn rebuild_node(
             pivot,
             masks,
         } => QbtNode::Matrix(matrix_from_object(
+            state,
             matrix_object(hierarchy, state)?,
-            palette,
             name.clone(),
             *position,
             *local_scale,
@@ -105,8 +103,8 @@ fn rebuild_node(
             masks,
         } => {
             let matrix = matrix_from_object(
+                state,
                 matrix_object(hierarchy, state)?,
-                palette,
                 name.clone(),
                 *position,
                 *local_scale,
@@ -115,7 +113,7 @@ fn rebuild_node(
             )?;
             QbtNode::Compound(QbtCompound {
                 matrix,
-                children: rebuild_children(hierarchy, state, nodes, palette)?,
+                children: rebuild_children(hierarchy, state, nodes)?,
             })
         }
         QubicleQbtNode::Unknown { type_id, data } => QbtNode::Unknown(QbtUnknownNode {
@@ -132,12 +130,11 @@ fn rebuild_children(
     hierarchy: &VoxHierarchyNode,
     state: &VoxMain,
     nodes: &[QubicleQbtNode],
-    palette: Option<&VoxPalette>,
 ) -> Result<Vec<QbtNode>> {
     hierarchy
         .child_nodes
         .iter()
-        .map(|&child| rebuild_node(child, state, nodes, palette))
+        .map(|&child| rebuild_node(child, state, nodes))
         .collect()
 }
 
@@ -155,13 +152,13 @@ fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result
 }
 
 /// Rebuilds a matrix grid from an object: each solid voxel's color comes from
-/// the palette and its mask from the aligned ext mask list, placed in `.qbt`
-/// storage order. Errors if the mask count does not match the object's solid
-/// voxels.
+/// the object's `baseColorFactor` layer and its mask from the aligned ext mask
+/// list, placed in `.qbt` storage order. Errors if the mask count does not
+/// match the object's solid voxels.
 #[allow(clippy::too_many_arguments)]
 fn matrix_from_object(
+    state: &VoxMain,
     object: &VoxObject,
-    palette: Option<&VoxPalette>,
     name: String,
     position: [i32; 3],
     local_scale: [u32; 3],
@@ -173,7 +170,7 @@ fn matrix_from_object(
     let volume = size_x as usize * size_y as usize * size_z as usize;
     let mut voxels = vec![QbtVoxel::default(); volume];
 
-    let reference = object.iter_palette_refs().next().map(|(id, _)| id);
+    let color = object_color_ref(state, object);
     let live: Vec<_> = object.iter_live().collect();
     if live.len() != masks.len() {
         return Err(Error::invalid(format!(
@@ -187,7 +184,13 @@ fn matrix_from_object(
         let position = object
             .voxel_position(voxel)
             .expect("a live voxel is within the grid");
-        let [r, g, b] = voxel_color(object, palette, reference, voxel);
+        // A Qubicle voxel stores no alpha, so the sampled color's alpha is
+        // dropped.
+        let [r, g, b, _] = color
+            .map(|(layer, palette, binding)| {
+                cell_color(state, object, voxel, layer, palette, binding)
+            })
+            .unwrap_or([0, 0, 0, 0]);
         // Storage order: index = y + size_y * (z + size_z * x).
         let index = position.y as usize
             + size_y as usize * (position.z as usize + size_z as usize * position.x as usize);
@@ -202,45 +205,4 @@ fn matrix_from_object(
         size: [size_x, size_y, size_z],
         voxels,
     })
-}
-
-/// The `[r, g, b]` color a live voxel samples from the shared palette, or black
-/// if the reference, cell, or `rgb` attribute is missing.
-fn voxel_color(
-    object: &VoxObject,
-    palette: Option<&VoxPalette>,
-    reference: Option<U32Id<BVoxPaletteRef>>,
-    voxel: U32Id<BVoxVoxel>,
-) -> [u8; 3] {
-    let lookup = || -> Option<[u8; 3]> {
-        let palette = palette?;
-        let reference = reference?;
-        let cell = object.voxel_cell(voxel, reference)?;
-        let rgb = attribute_id(palette, "rgb")?;
-        Some(parse_rgb(palette.cell_value(cell, rgb)))
-    };
-    lookup().unwrap_or([0, 0, 0])
-}
-
-/// The id of the attribute named `name`, or `None`.
-fn attribute_id(palette: &VoxPalette, name: &str) -> Option<U32Id<BVoxAttribute>> {
-    palette
-        .iter_attributes()
-        .find(|(_, attribute)| *attribute == name)
-        .map(|(id, _)| id)
-}
-
-/// Parses a `#RRGGBB` color cell into `[r, g, b]`, defaulting to black on a
-/// missing or malformed value.
-fn parse_rgb(value: Option<&VoxValue>) -> [u8; 3] {
-    let Some(VoxValue::Text(hex)) = value else {
-        return [0, 0, 0];
-    };
-    let hex = hex.strip_prefix('#').unwrap_or(hex);
-    let byte = |index: usize| {
-        hex.get(index * 2..index * 2 + 2)
-            .and_then(|byte| u8::from_str_radix(byte, 16).ok())
-            .unwrap_or(0)
-    };
-    [byte(0), byte(1), byte(2)]
 }

@@ -399,11 +399,22 @@ those stay unchecked.
       The Phase 5 item 2 color helpers landed here too. Verified under
       `--no-default-features --features goxl`; 15 tests pass, the byte-exact
       round-trips included.)
-- [ ] qbcl (qb, qbt, qbcl): replace the alpha-less `rgb` attribute with a color
+- [x] qbcl (qb, qbt, qbcl): replace the alpha-less `rgb` attribute with a color
       pool bound to `baseColorFactor`; decide the alpha convention for a
       three-channel source (canonical `srgb`, alpha synthesized as 1 where a
       four-channel consumer needs it) and apply it uniformly across the three
-      near-duplicate files.
+      near-duplicate files. (Done: each `from_*_file`'s `build_palette` builds one
+      shared `Srgb` pool of the distinct block colors, byte / 255, bound to
+      `baseColorFactor`, one material per color; objects reference it on one layer
+      via `add_layer` / `retain_voxel`. Each `to_*_file` reads color back through
+      the shared `object_color_ref` + `cell_color` helpers and drops the
+      synthesized opaque alpha, replacing the bespoke `voxel_color` /
+      `attribute_id` / `parse_rgb`. `to_qbt` / `to_qbcl` dropped the now-unused
+      `palette` threading through `rebuild_node` and thread `state` instead, and
+      `to_qbcl`'s synthesis path moved to the new `cell_color` signature. The qbcl
+      in-file `source_state` fixture was rebuilt to the pool / binding / material /
+      layer shape. Verified under `--no-default-features --features qbcl`; 26 tests
+      pass, the three byte-exact `.qb` / `.qbt` / `.qbcl` round-trips included.)
 - [ ] mvox: map color to a color pool, the material scalars to float pools, and
       the type token to a string pool; represent absent optionals with the
       attribute's default value rather than null, since pools are non-null; keep

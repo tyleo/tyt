@@ -1,16 +1,19 @@
-use crate::{Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result, to_vox_value};
+use crate::{
+    BASE_COLOR_FACTOR, Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result,
+    to_vox_value,
+};
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbZAxisOrientation};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
-    BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValue,
+    BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
 };
 
 /// Loads a decoded Qubicle Binary [`QbFile`] into a [`VoxMain`].
 ///
-/// Each matrix becomes an object sharing one `rgb` palette, placed by a
-/// hierarchy node at the matrix's scene position. The state with no native
+/// Each matrix becomes an object sharing one `baseColorFactor` palette, placed
+/// by a hierarchy node at the matrix's scene position. The state with no native
 /// voxcore home, such as the header flags, matrix names, positions, and the
 /// per-voxel visibility bytes, rides in a `qubicle-qb` ext so the file can be
 /// written back exactly.
@@ -20,7 +23,7 @@ use voxcore::{
 pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
-    let (palette, cells) = build_palette(file);
+    let (palette, materials) = build_palette(&mut state, file);
     let palette_id = state.add_palette(palette);
 
     let mut matrices = Vec::with_capacity(file.matrices.len());
@@ -29,7 +32,7 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
         // The matrix grid becomes the object's build volume directly; it may
         // carry empty margin around the live voxels. The visibility bytes are
         // read from that same grid.
-        let object = build_object(matrix, palette_id, &cells)?;
+        let object = build_object(matrix, palette_id, &materials)?;
         let visibility = visibility_of(&object, matrix);
         let object_id = state.add_object(object);
         let node = VoxHierarchyNode {
@@ -63,11 +66,15 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
     Ok(state)
 }
 
-/// Builds the one shared palette: an `rgb` cell per distinct color across every
-/// matrix's solid voxels, plus a map from a color to its cell. A file with no
-/// solid voxels gets a single placeholder cell so objects have a default sample
-/// to reference.
-fn build_palette(file: &QbFile) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxPaletteCell>>) {
+/// Builds the one shared palette: a color pool of one entry per distinct color
+/// across every matrix's solid voxels, bound to `baseColorFactor`, with one
+/// material per color and a map from a color to its material. The pool is added
+/// to `state`. A file with no solid voxels gets a single placeholder color so
+/// objects have a default material to sample.
+fn build_palette(
+    state: &mut VoxMain,
+    file: &QbFile,
+) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();
     let mut seen: HashSet<[u8; 3]> = HashSet::new();
     for matrix in &file.matrices {
@@ -85,26 +92,32 @@ fn build_palette(file: &QbFile) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxPalet
         order.push([0, 0, 0]);
     }
 
+    // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB pool as
+    // float components in `[0, 1]`; each material draws one value-index into it.
+    let pool = state.add_value_pool(VoxValuePool::Srgb {
+        values: order.iter().map(|&color| color_floats(color)).collect(),
+    });
+
     let mut palette = VoxPalette::default();
-    palette.add_attribute("rgb".to_owned());
-    let mut cells = HashMap::with_capacity(order.len());
-    for color in &order {
-        let cell = palette
-            .add_cell(vec![VoxValue::Text(hex(*color))])
-            .expect("one value per palette attribute");
-        cells.insert(*color, cell);
+    palette.add_binding(BASE_COLOR_FACTOR.to_owned(), pool);
+    let mut materials = HashMap::with_capacity(order.len());
+    for (index, color) in order.iter().enumerate() {
+        let material = palette
+            .add_material(vec![index as u32])
+            .expect("one value-index for the one binding");
+        materials.insert(*color, material);
     }
 
-    (palette, cells)
+    (palette, materials)
 }
 
 /// Builds an object from a matrix: a dense grid sized by the matrix,
-/// referencing the shared palette, each solid voxel sampling its color cell.
-/// Errors on an oversized grid.
+/// referencing the shared palette on one layer, each solid voxel sampling its
+/// color material. Errors on an oversized grid.
 fn build_object(
     matrix: &QbMatrix,
     palette: U32Id<BVoxPalette>,
-    cells: &HashMap<[u8; 3], U32Id<BVoxPaletteCell>>,
+    materials: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
 ) -> Result<VoxObject> {
     let [size_x, size_y, size_z] = matrix.size;
     let mut object = VoxObject::new(String::new(), TyVector3U32::new(size_x, size_y, size_z))
@@ -115,7 +128,7 @@ fn build_object(
             ))
         })?;
 
-    object.add_palette_ref(palette, U32Id::<BVoxPaletteCell>::from_u32(0));
+    object.add_layer(palette, U32Id::<BVoxMaterial>::from_u32(0));
 
     for z in 0..size_z {
         for y in 0..size_y {
@@ -126,7 +139,7 @@ fn build_object(
                 if voxel.is_empty() {
                     continue;
                 }
-                let cell = cells
+                let material = materials
                     .get(&[voxel.r, voxel.g, voxel.b])
                     .copied()
                     .expect("every solid color is in the palette");
@@ -134,8 +147,8 @@ fn build_object(
                     .voxel_id(TyVector3U32::new(x, y, z))
                     .expect("a coordinate inside the matrix is inside the grid");
                 object
-                    .retain_voxel(id, &[cell])
-                    .expect("one sample for the one palette reference");
+                    .retain_voxel(id, &[material])
+                    .expect("one sample for the one layer");
             }
         }
     }
@@ -168,9 +181,9 @@ fn translation(position: [i32; 3]) -> TyTransformF64 {
     )
 }
 
-/// One `#RRGGBB` string for an `[r, g, b]` color.
-fn hex(color: [u8; 3]) -> String {
-    format!("#{:02X}{:02X}{:02X}", color[0], color[1], color[2])
+/// The float sRGB components in `[0, 1]` of an `[r, g, b]` byte color.
+fn color_floats(color: [u8; 3]) -> [f64; 3] {
+    color.map(|byte| byte as f64 / 255.0)
 }
 
 #[cfg(test)]
