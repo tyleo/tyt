@@ -3,10 +3,9 @@ use std::str::FromStr;
 /// The `--max-palette-cells` value: a cap on the number of cells a palette may
 /// hold, or `none` for no cap. Shared by `voxelize` and the palette-reduction
 /// commands, which reduce a palette to at most this many cells.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaxPaletteCells {
     /// `none`: no cap; the palette keeps every cell.
-    #[default]
     Unlimited,
 
     /// At most this many cells; at least one.

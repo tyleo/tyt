@@ -1,11 +1,10 @@
 use clap::ValueEnum;
 
 /// The strategy `mesh` uses to turn a voxel grid into quads.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum MeshMethod {
     /// Merge coplanar, same-material faces into the fewest quads. Lowest
     /// triangle count.
-    #[default]
     #[value(name = "greedy")]
     Greedy,
 

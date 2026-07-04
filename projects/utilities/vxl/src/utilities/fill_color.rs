@@ -3,10 +3,9 @@ use std::str::FromStr;
 /// The `--fill-color` value: the color of voxels `voxelize` cannot sample from
 /// the mesh. `None` is the `none` default, standing for white under `flat` and
 /// the nearest surface for a sampled `solid` interior.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FillColor {
     /// `none`: no explicit color; the mode's own default fills in.
-    #[default]
     None,
 
     /// A straight-RGBA color from a `#RRGGBB` or `#RRGGBBAA` hex.

@@ -1,13 +1,14 @@
 use std::str::FromStr;
 
 /// The line width budget for the `row` layouts.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Width {
     /// Wrap to the terminal width, or not at all when stdout is not a terminal.
-    #[default]
     Terminal,
+
     /// Never wrap; one line per collection.
     Unlimited,
+
     /// Wrap to a fixed number of columns.
     Columns(usize),
 }

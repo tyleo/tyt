@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// object; this holds the name, placement, scale, pivot, and per-voxel
 /// visibility masks the voxcore object cannot represent. Aligned by index with
 /// the hierarchy nodes.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum QubicleQbtNode {
     /// A matrix node: a single voxel grid. Its size is the object's grid
     /// bounds.
@@ -31,7 +31,6 @@ pub enum QubicleQbtNode {
     },
 
     /// A model node: groups child nodes, which are native.
-    #[default]
     Model,
 
     /// A compound node: a baked voxel grid plus child nodes.

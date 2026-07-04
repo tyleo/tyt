@@ -1,8 +1,7 @@
 /// The color space a palette reduction compares colors in.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ColorSpace {
     /// OKLab perceptual distance.
-    #[default]
     Oklab,
 
     /// CIELAB distance.

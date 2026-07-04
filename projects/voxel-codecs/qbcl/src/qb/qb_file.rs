@@ -28,8 +28,8 @@ impl Default for QbFile {
     fn default() -> Self {
         Self {
             version: 257,
-            color_format: QbColorFormat::default(),
-            z_axis_orientation: QbZAxisOrientation::default(),
+            color_format: QbColorFormat::Rgba,
+            z_axis_orientation: QbZAxisOrientation::LeftHanded,
             compressed: false,
             visibility_mask_encoded: false,
             matrices: Vec::new(),

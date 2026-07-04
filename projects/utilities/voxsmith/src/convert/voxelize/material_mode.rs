@@ -1,9 +1,8 @@
 /// Where each voxelized voxel's color and material come from. Independent of
 /// [`FillMode`](crate::FillMode), which chooses the geometry.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MaterialMode {
     /// Sample per-texel when the mesh carries textures, else per-primitive.
-    #[default]
     Auto,
 
     /// One cell per glTF material, read from its flat PBR factors.
