@@ -564,13 +564,19 @@ updates (7) live in files that still compile and are deferred to later chunks.
       Phase 5 builds the value pools and adds the fill color to the
       `baseColorFactor` pool, so no vxl-side change was needed for that clause.
       See the decisions log.)
-- [ ] Update `validate` output and tests for the new check names; rebuild the
+- [x] Update `validate` output and tests for the new check names; rebuild the
       palette, info, and hierarchy fixtures. (Chunk 1 rebuilt the `info`,
       `palette list`, `palette show`, and `hierarchy show` fixtures onto value
       pools plus bindings plus materials plus layers, keeping the old attribute
       names so only the terminology goldens moved; the `validate` check-name
       updates are deferred, as `validate.rs` already compiles and surfaces
-      whatever names the codec supplies.)
+      whatever names the codec supplies. Seventh chunk closes it: `validate`
+      needed no change, since it renders whatever names the codec supplies and
+      its synthetic tests already name current checks; and the four read-command
+      fixtures flipped from `rgba`/`metallic` to `baseColorFactor`/
+      `metallicFactor`, regenerating the width-sensitive goldens and reworking two
+      `palette show` layout-demo tests built around the short names. `shadows`
+      stays custom per Q3. See the decisions log.)
 
 Gate: `vxl` builds; `info`, `palette list`, `palette show`, `validate`, `mesh`,
 and `to voxj` work end to end on a new-shape document.

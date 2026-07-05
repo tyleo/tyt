@@ -1378,3 +1378,44 @@ standalone `VoxObject` and drop its backing `VoxMain`; this is sound because a
 reads only those object-local structures, never dereferencing the palette or
 material ids back into the dropped state. 148 `vxl` tests pass, workspace
 clippy-clean.
+
+### Seventh chunk: the read-command fixtures flip to the glTF vocab; validate needs no change
+
+This closes the last Phase 7 item (item 8). It has two halves, and the first is a
+no-op the checklist already anticipated:
+
+- `validate` needed no code or test change. `implementation/validate.rs` renders
+  whatever check names the codec supplies, mapping over `check_voxj_file`'s
+  `VoxjCheck` list, so the Phase 2 codec renames (`sample-cells` ->
+  `sample-materials`, the added `value-pools` check) surface with no vxl edit. Its
+  unit tests build synthetic `VoxjCheck`s named `version`, `indices`, and
+  `sample-order`, all still-current codec names, so they need no update either.
+  No vxl golden pins the real thirteen-check output, so there is nothing there to
+  rebuild. This is why the item stayed a fixtures cleanup once the terminology
+  landed in chunk 1.
+
+- The read-command fixtures flip to the glTF attribute vocab. Chunks 1 and 3
+  parked this here because flipping the names realigns width-sensitive
+  Markdown-table goldens across the modules. The `info`, `palette list`,
+  `palette show`, and `hierarchy show` fixtures bound the pre-port names (`rgba`,
+  `metallic`); this chunk renames `rgba` -> `baseColorFactor` and
+  `metallic` -> `metallicFactor` in the four fixtures and regenerates the goldens
+  they feed. `shadows` stays a custom attribute (no glTF name, per Q3), so the one
+  `palette show` bool test that uses it is untouched. `palette show` classifies by
+  pool kind, not attribute name, so the rename is a pure label change: every color
+  and scalar value is unchanged and only the label text and its column padding
+  move. `hierarchy show` prints `{materials: <count>}` and never the attribute
+  name, so its flip is a one-line fixture rename with zero golden churn.
+
+Two `palette show` layout-demo tests were deliberately built around the short
+names and needed more than a golden refresh. `row_wraps_cells_to_the_width` set
+width 20 so exactly one 9-wide hex fit after the `0.rgba ` seven-char prefix; the
+new `0.baseColorFactor ` prefix is eighteen chars, leaving no room at width 20, so
+the test moves to width 30 (twelve columns after the prefix, still one hex per
+line) with its comment updated. `row_pads_only_the_header_not_the_values` flips
+which header is wider, since `baseColorFactor` is now longer than
+`metallicFactor`, so its comment is reworded while the demonstrated behavior
+(headers pad, values stay compact) is unchanged. The width-sensitive text and
+Markdown goldens were regenerated from the test runner's actual output rather than
+hand-padded, to keep the column arithmetic exact. 148 `vxl` tests pass, workspace
+clippy-clean. This is Phase 7's final chunk; only the Phase 8 doc sweep remains.

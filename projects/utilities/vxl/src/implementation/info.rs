@@ -224,14 +224,15 @@ mod tests {
     use ty_math::TyVector3U32;
     use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
-    /// One `rgba` palette and one tight 1x1x1 object sampling its one material.
+    /// One `baseColorFactor` palette and one tight 1x1x1 object sampling its one
+    /// material.
     fn tight_state() -> VoxMain {
         let mut state = VoxMain::default();
         let pool = state.add_value_pool(VoxValuePool::Srgba {
             values: vec![[1.0, 0.0, 0.0, 1.0]],
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding("rgba".to_owned(), pool);
+        palette.add_binding("baseColorFactor".to_owned(), pool);
         let material = palette.add_material(vec![0]).unwrap();
         let palette = state.add_palette(palette);
 
@@ -264,9 +265,9 @@ mod tests {
              | Has ext      | no    |\n\
              | Has edit     | no    |\n\
              \n## Palettes\n\n\
-             | Id  | Attributes | Materials |\n\
-             | --- | ---------- | --------- |\n\
-             | 0   | rgba       | 1         |\n\
+             | Id  | Attributes      | Materials |\n\
+             | --- | --------------- | --------- |\n\
+             | 0   | baseColorFactor | 1         |\n\
              \n## Objects\n\n\
              | Id  | Name | Bounds | Edit bounds | Origin  | Voxels | Layers |\n\
              | --- | ---- | ------ | ----------- | ------- | ------ | ------ |\n\
@@ -287,7 +288,7 @@ mod tests {
         assert_eq!(
             output,
             "{\"format\":\"voxj\",\"voxj_version\":2,\"has_ext\":false,\"has_edit\":false,\
-             \"palettes\":[{\"id\":0,\"attributes\":[\"rgba\"],\"materials\":1}],\
+             \"palettes\":[{\"id\":0,\"attributes\":[\"baseColorFactor\"],\"materials\":1}],\
              \"objects\":[{\"id\":0,\"name\":\"body\",\"bounds\":[1,1,1],\"origin\":[0,0,0],\
              \"voxels\":1,\"layers\":1}]}\n"
         );

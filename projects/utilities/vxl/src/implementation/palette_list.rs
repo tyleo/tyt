@@ -277,8 +277,8 @@ mod tests {
     }
 
     /// Two palettes and two objects: `a` samples palette 0, `b` samples both.
-    /// Palette 0 carries `rgba` and `metallic` with two materials, palette 1
-    /// carries `rgba` with one material.
+    /// Palette 0 carries `baseColorFactor` and `metallicFactor` with two
+    /// materials, palette 1 carries `baseColorFactor` with one material.
     fn shared_state() -> VoxMain {
         let mut state = VoxMain::default();
 
@@ -299,14 +299,14 @@ mod tests {
         });
 
         let mut zero = VoxPalette::default();
-        zero.add_binding("rgba".to_owned(), colors);
-        zero.add_binding("metallic".to_owned(), metallic);
+        zero.add_binding("baseColorFactor".to_owned(), colors);
+        zero.add_binding("metallicFactor".to_owned(), metallic);
         let zero_material = zero.add_material(vec![0, 0]).unwrap();
         zero.add_material(vec![1, 1]).unwrap();
         let zero = state.add_palette(zero);
 
         let mut one = VoxPalette::default();
-        one.add_binding("rgba".to_owned(), colors);
+        one.add_binding("baseColorFactor".to_owned(), colors);
         let one_material = one.add_material(vec![2]).unwrap();
         let one = state.add_palette(one);
 
@@ -332,10 +332,10 @@ mod tests {
     fn markdown_lists_one_row_per_palette() {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::Markdown),
-            "| index | attributes     | materials | used by |\n\
-             | ----- | -------------- | --------- | ------- |\n\
-             | 0     | rgba, metallic | 2         | a, b    |\n\
-             | 1     | rgba           | 1         | b       |\n"
+            "| index | attributes                      | materials | used by |\n\
+             | ----- | ------------------------------- | --------- | ------- |\n\
+             | 0     | baseColorFactor, metallicFactor | 2         | a, b    |\n\
+             | 1     | baseColorFactor                 | 1         | b       |\n"
         );
     }
 
@@ -351,10 +351,10 @@ mod tests {
         let output = render(&state, &palettes, fields, PaletteListLayout::Markdown).unwrap();
         assert_eq!(
             output,
-            "| index | attributes     | materials |\n\
-             | ----- | -------------- | --------- |\n\
-             | 0     | rgba, metallic | 2         |\n\
-             | 1     | rgba           | 1         |\n"
+            "| index | attributes                      | materials |\n\
+             | ----- | ------------------------------- | --------- |\n\
+             | 0     | baseColorFactor, metallicFactor | 2         |\n\
+             | 1     | baseColorFactor                 | 1         |\n"
         );
     }
 
@@ -366,15 +366,15 @@ mod tests {
              ├ 0\n\
              │ ├ materialCount: 2\n\
              │ ├ attributes\n\
-             │ │ ├ rgba\n\
-             │ │ └ metallic\n\
+             │ │ ├ baseColorFactor\n\
+             │ │ └ metallicFactor\n\
              │ └ objects\n\
              │   ├ a\n\
              │   └ b\n\
              └ 1\n\
              \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}├ attributes\n\
-             \u{20}\u{20}│ └ rgba\n\
+             \u{20}\u{20}│ └ baseColorFactor\n\
              \u{20}\u{20}└ objects\n\
              \u{20}\u{20}\u{20}\u{20}└ b\n"
         );
@@ -409,8 +409,8 @@ mod tests {
     fn compact_json_records_indices_attributes_materials_and_users() {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::CompactJson),
-            "[{\"index\":0,\"attributes\":[\"rgba\",\"metallic\"],\"materials\":2,\"used_by\":[0,1]},\
-             {\"index\":1,\"attributes\":[\"rgba\"],\"materials\":1,\"used_by\":[1]}]\n"
+            "[{\"index\":0,\"attributes\":[\"baseColorFactor\",\"metallicFactor\"],\"materials\":2,\"used_by\":[0,1]},\
+             {\"index\":1,\"attributes\":[\"baseColorFactor\"],\"materials\":1,\"used_by\":[1]}]\n"
         );
     }
 
@@ -433,9 +433,9 @@ mod tests {
         let output = render(&state, &palettes, all_fields(), PaletteListLayout::Markdown).unwrap();
         assert_eq!(
             output,
-            "| index | attributes | materials | used by |\n\
-             | ----- | ---------- | --------- | ------- |\n\
-             | 1     | rgba       | 1         | b       |\n"
+            "| index | attributes      | materials | used by |\n\
+             | ----- | --------------- | --------- | ------- |\n\
+             | 1     | baseColorFactor | 1         | b       |\n"
         );
     }
 
@@ -461,20 +461,20 @@ mod tests {
             values: vec![[1.0, 1.0, 1.0, 1.0]],
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding("rgba".to_owned(), colors);
+        palette.add_binding("baseColorFactor".to_owned(), colors);
         palette.add_material(vec![0]).unwrap();
         state.add_palette(palette);
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Markdown),
-            "| index | attributes | materials | used by |\n\
-             | ----- | ---------- | --------- | ------- |\n\
-             | 0     | rgba       | 1         |         |\n"
+            "| index | attributes      | materials | used by |\n\
+             | ----- | --------------- | --------- | ------- |\n\
+             | 0     | baseColorFactor | 1         |         |\n"
         );
 
         assert_eq!(
             render_all(&state, PaletteListLayout::CompactJson),
-            "[{\"index\":0,\"attributes\":[\"rgba\"],\"materials\":1,\"used_by\":[]}]\n"
+            "[{\"index\":0,\"attributes\":[\"baseColorFactor\"],\"materials\":1,\"used_by\":[]}]\n"
         );
     }
 
@@ -485,7 +485,7 @@ mod tests {
             values: vec![[1.0, 1.0, 1.0, 1.0]],
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding("rgba".to_owned(), colors);
+        palette.add_binding("baseColorFactor".to_owned(), colors);
         palette.add_material(vec![0]).unwrap();
         state.add_palette(palette);
 
@@ -495,7 +495,7 @@ mod tests {
              └ 0\n\
              \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}├ attributes\n\
-             \u{20}\u{20}│ └ rgba\n\
+             \u{20}\u{20}│ └ baseColorFactor\n\
              \u{20}\u{20}└ objects: []\n"
         );
     }

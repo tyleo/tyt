@@ -881,8 +881,9 @@ mod tests {
         state.add_value_pool(VoxValuePool::Srgba { values })
     }
 
-    /// A document with two palettes: palette 0 has `rgba` and `metallic` with
-    /// two materials, palette 1 has `rgba` with one material.
+    /// A document with two palettes: palette 0 has `baseColorFactor` and
+    /// `metallicFactor` with two materials, palette 1 has `baseColorFactor` with
+    /// one material.
     fn sample_state() -> VoxMain {
         let mut state = VoxMain::default();
 
@@ -895,14 +896,14 @@ mod tests {
         let colors_one = srgba_pool(&mut state, &[[0, 0, 255, 255]]);
 
         let mut first = VoxPalette::default();
-        first.add_binding("rgba".to_owned(), colors_zero);
-        first.add_binding("metallic".to_owned(), metallic);
+        first.add_binding("baseColorFactor".to_owned(), colors_zero);
+        first.add_binding("metallicFactor".to_owned(), metallic);
         first.add_material(vec![0, 0]).unwrap();
         first.add_material(vec![1, 1]).unwrap();
         state.add_palette(first);
 
         let mut second = VoxPalette::default();
-        second.add_binding("rgba".to_owned(), colors_one);
+        second.add_binding("baseColorFactor".to_owned(), colors_one);
         second.add_material(vec![0]).unwrap();
         state.add_palette(second);
 
@@ -926,25 +927,37 @@ mod tests {
     #[test]
     fn value_layout_prints_canonical_hex_with_a_header() {
         let state = sample_state();
-        let output = show(&state, &[("0", "rgba", "value")], PaletteShowLayout::Row);
-        assert_eq!(output, "0.rgba #FF0000FF #00FF0080\n");
+        let output = show(
+            &state,
+            &[("0", "baseColorFactor", "value")],
+            PaletteShowLayout::Row,
+        );
+        assert_eq!(output, "0.baseColorFactor #FF0000FF #00FF0080\n");
     }
 
     #[test]
     fn extracts_a_color_component_as_a_byte() {
         let state = sample_state();
-        let output = show(&state, &[("0", "rgba.a", "value")], PaletteShowLayout::Row);
+        let output = show(
+            &state,
+            &[("0", "baseColorFactor.a", "value")],
+            PaletteShowLayout::Row,
+        );
         // Alpha bytes FF and 80 as 0..255 integers.
-        assert_eq!(output, "0.rgba.a 255 128\n");
+        assert_eq!(output, "0.baseColorFactor.a 255 128\n");
     }
 
     #[test]
     fn swatch_layout_abuts_swatches_into_a_strip() {
         let state = sample_state();
-        let output = show(&state, &[("0", "rgba", "swatch")], PaletteShowLayout::Row);
+        let output = show(
+            &state,
+            &[("0", "baseColorFactor", "swatch")],
+            PaletteShowLayout::Row,
+        );
         assert_eq!(
             output,
-            "0.rgba \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
+            "0.baseColorFactor \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
         );
     }
 
@@ -974,18 +987,21 @@ mod tests {
     fn row_pads_only_the_header_not_the_values() {
         let state = sample_state();
         // The headers pad to the longest so each row's first value aligns, but
-        // the values are not column-aligned: `metallic` stays compact rather
-        // than padding out to the wider `rgba` columns.
+        // the values are not column-aligned: `metallicFactor` stays compact
+        // rather than padding out to the wider `baseColorFactor` columns.
         let output = show(
             &state,
-            &[("0", "rgba", "value"), ("0", "metallic", "value")],
+            &[
+                ("0", "baseColorFactor", "value"),
+                ("0", "metallicFactor", "value"),
+            ],
             PaletteShowLayout::Row,
         );
         assert_eq!(
             output,
-            "0.rgba     #FF0000FF #00FF0080\n\
+            "0.baseColorFactor #FF0000FF #00FF0080\n\
              \n\
-             0.metallic 1 0.2\n"
+             0.metallicFactor  1 0.2\n"
         );
     }
 
@@ -993,11 +1009,14 @@ mod tests {
     fn row_wraps_cells_to_the_width() {
         let state = sample_state();
         let collections =
-            resolve_collections(&state, &selectors(&[("0", "rgba", "value")])).unwrap();
-        // Width 20 leaves 13 columns after the `0.rgba ` prefix: one 9-wide hex
-        // fits per line, so the second wraps under the first.
-        let output = render(&collections, PaletteShowLayout::Row, Some(20));
-        assert_eq!(output, "0.rgba #FF0000FF\n       #00FF0080\n");
+            resolve_collections(&state, &selectors(&[("0", "baseColorFactor", "value")])).unwrap();
+        // Width 30 leaves 12 columns after the `0.baseColorFactor ` prefix: one
+        // 9-wide hex fits per line, so the second wraps under the first.
+        let output = render(&collections, PaletteShowLayout::Row, Some(30));
+        assert_eq!(
+            output,
+            "0.baseColorFactor #FF0000FF\n                  #00FF0080\n"
+        );
     }
 
     #[test]
@@ -1005,7 +1024,7 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[("0", "rgba", "value")],
+            &[("0", "baseColorFactor", "value")],
             PaletteShowLayout::RowNoHeader,
         );
         assert_eq!(output, "#FF0000FF #00FF0080\n");
@@ -1019,11 +1038,11 @@ mod tests {
         let output = render(&collections, PaletteShowLayout::Row, None);
         assert_eq!(
             output,
-            "0.rgba     \x1b[48;2;255;0;0m  \x1b[0m #FF0000FF \x1b[48;2;0;255;0m  \x1b[0m #00FF0080\n\
+            "0.baseColorFactor \x1b[48;2;255;0;0m  \x1b[0m #FF0000FF \x1b[48;2;0;255;0m  \x1b[0m #00FF0080\n\
              \n\
-             0.metallic 1 0.2\n\
+             0.metallicFactor  1 0.2\n\
              \n\
-             1.rgba     \x1b[48;2;0;0;255m  \x1b[0m #0000FFFF\n"
+             1.baseColorFactor \x1b[48;2;0;0;255m  \x1b[0m #0000FFFF\n"
         );
     }
 
@@ -1032,10 +1051,16 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[("0", "rgba.a", "value"), ("1", "rgba.a", "value")],
+            &[
+                ("0", "baseColorFactor.a", "value"),
+                ("1", "baseColorFactor.a", "value"),
+            ],
             PaletteShowLayout::Column,
         );
-        assert_eq!(output, "0.rgba.a 1.rgba.a\n255      255\n128\n");
+        assert_eq!(
+            output,
+            "0.baseColorFactor.a 1.baseColorFactor.a\n255                 255\n128\n"
+        );
     }
 
     #[test]
@@ -1043,7 +1068,10 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[("0", "rgba.a", "value"), ("1", "rgba.a", "value")],
+            &[
+                ("0", "baseColorFactor.a", "value"),
+                ("1", "baseColorFactor.a", "value"),
+            ],
             PaletteShowLayout::ColumnNoHeader,
         );
         assert_eq!(output, "255 255\n128\n");
@@ -1054,15 +1082,15 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[("*", "rgba", "value")],
+            &[("*", "baseColorFactor", "value")],
             PaletteShowLayout::Markdown,
         );
         assert_eq!(
             output,
-            "| #   | 0.rgba    | 1.rgba    |\n\
-             | --- | --------- | --------- |\n\
-             | 0   | #FF0000FF | #0000FFFF |\n\
-             | 1   | #00FF0080 |           |\n"
+            "| #   | 0.baseColorFactor | 1.baseColorFactor |\n\
+             | --- | ----------------- | ----------------- |\n\
+             | 0   | #FF0000FF         | #0000FFFF         |\n\
+             | 1   | #00FF0080         |                   |\n"
         );
     }
 
@@ -1071,20 +1099,26 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[("0", "rgba", "value"), ("0", "rgba.a", "value")],
+            &[
+                ("0", "baseColorFactor", "value"),
+                ("0", "baseColorFactor.a", "value"),
+            ],
             PaletteShowLayout::CompactJson,
         );
         assert_eq!(
             output,
-            "[{\"palette\":0,\"attribute\":\"rgba\",\"values\":[\"#FF0000FF\",\"#00FF0080\"]},\
-             {\"palette\":0,\"attribute\":\"rgba.a\",\"values\":[255,128]}]\n"
+            "[{\"palette\":0,\"attribute\":\"baseColorFactor\",\"values\":[\"#FF0000FF\",\"#00FF0080\"]},\
+             {\"palette\":0,\"attribute\":\"baseColorFactor.a\",\"values\":[255,128]}]\n"
         );
     }
 
     #[test]
     fn pretty_json_is_indented_and_matches_compact() {
         let state = sample_state();
-        let fields: &[(&str, &str, &str)] = &[("0", "rgba", "value"), ("0", "rgba.a", "value")];
+        let fields: &[(&str, &str, &str)] = &[
+            ("0", "baseColorFactor", "value"),
+            ("0", "baseColorFactor.a", "value"),
+        ];
         let pretty = show(&state, fields, PaletteShowLayout::PrettyJson);
         let compact = show(&state, fields, PaletteShowLayout::CompactJson);
         // Indented, and carrying the same data as the compact form.
@@ -1099,23 +1133,25 @@ mod tests {
         let state = sample_state();
         let collections = resolve_collections(&state, &selectors(&[("0", "*", "value")])).unwrap();
         let headers: Vec<String> = collections.iter().map(|c| c.header()).collect();
-        assert_eq!(headers, ["0.rgba", "0.metallic"]);
+        assert_eq!(headers, ["0.baseColorFactor", "0.metallicFactor"]);
     }
 
     #[test]
     fn star_palette_skips_a_palette_lacking_a_named_attribute() {
         let state = sample_state();
-        // Only palette 0 has `metallic`; palette 1 is skipped, not an error.
+        // Only palette 0 has `metallicFactor`; palette 1 is skipped, not an error.
         let collections =
-            resolve_collections(&state, &selectors(&[("*", "metallic", "value")])).unwrap();
+            resolve_collections(&state, &selectors(&[("*", "metallicFactor", "value")])).unwrap();
         let headers: Vec<String> = collections.iter().map(|c| c.header()).collect();
-        assert_eq!(headers, ["0.metallic"]);
+        assert_eq!(headers, ["0.metallicFactor"]);
     }
 
     #[test]
     fn named_palette_out_of_range_is_an_error() {
         let state = sample_state();
-        assert!(resolve_collections(&state, &selectors(&[("5", "rgba", "value")])).is_err());
+        assert!(
+            resolve_collections(&state, &selectors(&[("5", "baseColorFactor", "value")])).is_err()
+        );
     }
 
     #[test]
@@ -1127,16 +1163,26 @@ mod tests {
     #[test]
     fn a_component_on_a_scalar_is_an_error() {
         let state = sample_state();
-        assert!(resolve_collections(&state, &selectors(&[("0", "metallic.r", "value")])).is_err());
+        assert!(
+            resolve_collections(&state, &selectors(&[("0", "metallicFactor.r", "value")])).is_err()
+        );
     }
 
     #[test]
     fn auto_swatches_colors_but_prints_scalars_and_components_as_numbers() {
         let state = sample_state();
-        let scalar = show(&state, &[("0", "metallic", "auto")], PaletteShowLayout::Row);
-        assert_eq!(scalar, "0.metallic 1 0.2\n");
-        let component = show(&state, &[("0", "rgba.r", "auto")], PaletteShowLayout::Row);
-        assert_eq!(component, "0.rgba.r 255 0\n");
+        let scalar = show(
+            &state,
+            &[("0", "metallicFactor", "auto")],
+            PaletteShowLayout::Row,
+        );
+        assert_eq!(scalar, "0.metallicFactor 1 0.2\n");
+        let component = show(
+            &state,
+            &[("0", "baseColorFactor.r", "auto")],
+            PaletteShowLayout::Row,
+        );
+        assert_eq!(component, "0.baseColorFactor.r 255 0\n");
     }
 
     /// One palette binding `tint` to a three-component `Srgb` pool holding a red.
