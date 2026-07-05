@@ -5,7 +5,7 @@ use crate::{
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TyTransformF64, TyVector3U32};
+use ty_math::{TySrgbaColor, TyTransformF64, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -81,7 +81,10 @@ fn build_palette(
     // Colors ride in a shared sRGBA pool as float components in `[0, 1]`; each
     // material draws one value-index into it.
     let pool = state.add_value_pool(VoxValuePool::Srgba {
-        values: order.iter().map(|&color| color_floats(color)).collect(),
+        values: order
+            .iter()
+            .map(|&color| TySrgbaColor::from_array(color).to_rgba().to_array())
+            .collect(),
     });
 
     let mut palette = VoxPalette::default();
@@ -166,11 +169,6 @@ fn build_layer_nodes(file: &GoxlFile, object_count: usize) -> Result<Vec<VoxHier
         });
     }
     Ok(nodes)
-}
-
-/// The float sRGB components in `[0, 1]` of an `[r, g, b, a]` byte color.
-fn color_floats(color: [u8; 4]) -> [f64; 4] {
-    color.map(|byte| byte as f64 / 255.0)
 }
 
 /// Builds the `goxel` ext payload from the state with no native home.
@@ -280,7 +278,7 @@ mod tests {
         GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
     };
     use std::collections::BTreeSet;
-    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
         VoxPalette, VoxValue, VoxValuePool,
@@ -288,11 +286,10 @@ mod tests {
 
     /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
     fn srgba(hex: &str) -> [f64; 4] {
-        let digits = hex.strip_prefix('#').expect("a leading #");
-        let byte = |index: usize| {
-            u8::from_str_radix(&digits[index * 2..index * 2 + 2], 16).expect("two hex digits")
-        };
-        [byte(0), byte(1), byte(2), byte(3)].map(|b| b as f64 / 255.0)
+        TySrgbaColor::from_hex(hex)
+            .expect("a valid hex color")
+            .to_rgba()
+            .to_array()
     }
 
     /// A `4 x 4` matrix with distinct float cells, for transform and box

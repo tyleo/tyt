@@ -92,7 +92,7 @@ pub fn voxelize_mesh(
 
     // One root node placing the object and carrying the real-world scale.
     let transform = TyTransformF64 {
-        scale: TyVector3::new(node_scale, node_scale, node_scale),
+        scale: TyVector3::splat(node_scale),
         ..Default::default()
     };
 

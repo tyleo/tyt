@@ -30,22 +30,22 @@ No `ty-math` change.
 
 ### A1: non-vmax converters
 
-- [ ] Replace the four-component `color_floats` with `TySrgbaColor::from_array` and
+- [x] Replace the four-component `color_floats` with `TySrgbaColor::from_array` and
       `to_rgba`/`to_array` in `convert/goxl/from_goxl_file.rs:172` (called `:84`)
       and `convert/mvox/from_mvox_file.rs:196` (called `:106`); delete both
       helpers.
-- [ ] Replace the test hex parsers with `TySrgbaColor::from_hex` in
+- [x] Replace the test hex parsers with `TySrgbaColor::from_hex` in
       `convert/gltf/from_gltf_bytes.rs:839` (`rgb`),
       `convert/goxl/from_goxl_file.rs:289` (`srgba`),
       `convert/mvox/from_mvox_file.rs:565` (`srgba`), and
       `convert/qbcl/from_qbcl_file.rs:401` (`srgb`, three-component: use
       `from_hex(..).to_rgba().to_vector3().to_array()`).
-- [ ] Replace `TyVector3::new(node_scale, node_scale, node_scale)` with
+- [x] Replace `TyVector3::new(node_scale, node_scale, node_scale)` with
       `splat(node_scale)` in `convert/voxelize/voxelize_mesh.rs:95`.
-- [ ] Replace `TyVector3F64::default()` with `ZERO` in `convert/voxelize/mesh.rs:46`
+- [x] Replace `TyVector3F64::default()` with `ZERO` in `convert/voxelize/mesh.rs:46`
       (the zero-size-box branch), and the mvox scale literal
       `TyVector3F64::new(1.0, 1.0, 1.0)` with `ONE` where it is not later mutated.
-- [ ] Replace the `[bounds.x, bounds.y, bounds.z]` rebuilds with
+- [x] Replace the `[bounds.x, bounds.y, bounds.z]` rebuilds with
       `bounds.to_array()` in `convert/qbcl/to_qb_file.rs:71`,
       `convert/qbcl/to_qbcl_file.rs:175` and `:382`, and
       `convert/qbcl/to_qbt_file.rs:169`.

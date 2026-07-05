@@ -317,7 +317,7 @@ mod tests {
         QbclNodeBody, QbclThumbnail, QbclVoxel,
     };
     use std::collections::BTreeSet;
-    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
         VoxPalette, VoxValue, VoxValuePool,
@@ -399,11 +399,11 @@ mod tests {
 
     /// The float sRGB components in `[0, 1]` of a `#RRGGBB` hex string.
     fn srgb(hex: &str) -> [f64; 3] {
-        let digits = hex.strip_prefix('#').expect("a leading #");
-        let byte = |index: usize| {
-            u8::from_str_radix(&digits[index * 2..index * 2 + 2], 16).expect("two hex digits")
-        };
-        [byte(0), byte(1), byte(2)].map(|b| b as f64 / 255.0)
+        TySrgbaColor::from_hex(hex)
+            .expect("a valid hex color")
+            .to_rgba()
+            .to_vector3()
+            .to_array()
     }
 
     /// A state carrying no format ext, built straight from voxcore: a red-green

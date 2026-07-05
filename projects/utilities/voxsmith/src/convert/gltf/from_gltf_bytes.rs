@@ -837,8 +837,8 @@ mod tests {
 
     /// The `(r, g, b)` bytes of a `#RRGGBBAA` hex string.
     fn rgb(hex: &str) -> (u8, u8, u8) {
-        let byte = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap();
-        (byte(1), byte(3), byte(5))
+        let color = TySrgbaColor::from_hex(hex).expect("a valid hex color");
+        (color.r, color.g, color.b)
     }
 
     /// One PBR texture map to attach to the test quad, its PNG, the TEXCOORD set

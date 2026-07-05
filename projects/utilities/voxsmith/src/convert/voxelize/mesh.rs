@@ -43,7 +43,7 @@ impl Mesh {
 
         match triangle_bounds(points) {
             Some((min, max)) => max - min,
-            None => TyVector3F64::default(),
+            None => TyVector3F64::ZERO,
         }
     }
 }

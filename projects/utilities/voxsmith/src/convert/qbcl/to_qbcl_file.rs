@@ -172,7 +172,7 @@ fn matrix_from_object(
     masks: &[u8],
 ) -> Result<QbclMatrix> {
     let bounds = object.bounds();
-    let [size_x, size_y, size_z] = [bounds.x, bounds.y, bounds.z];
+    let [size_x, size_y, size_z] = bounds.to_array();
     let volume = size_x as usize * size_y as usize * size_z as usize;
     let mut voxels = vec![QbclVoxel::default(); volume];
 
@@ -379,7 +379,7 @@ impl QbclBuilder {
         self.placed.insert(object_id.to_u32());
 
         let bounds = object.bounds();
-        let [size_x, size_y, size_z] = [bounds.x, bounds.y, bounds.z];
+        let [size_x, size_y, size_z] = bounds.to_array();
         let volume = size_x as usize * size_y as usize * size_z as usize;
         let mut voxels = vec![QbclVoxel::default(); volume];
 

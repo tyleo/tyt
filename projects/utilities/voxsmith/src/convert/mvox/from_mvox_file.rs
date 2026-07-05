@@ -12,7 +12,7 @@ use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
 };
-use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode, VoxMain,
     VoxObject, VoxPalette, VoxValuePool,
@@ -101,7 +101,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     let color_pool = state.add_value_pool(VoxValuePool::Srgba {
         values: distinct_colors
             .iter()
-            .map(|&color| color_floats(color))
+            .map(|&color| TySrgbaColor::from_array(color).to_rgba().to_array())
             .collect(),
     });
     palette.add_binding(BASE_COLOR_FACTOR.to_owned(), color_pool);
@@ -190,11 +190,6 @@ fn intern<T: Clone, K: Eq + Hash>(values: &[T], key: impl Fn(&T) -> K) -> (Vec<T
         })
         .collect();
     (distinct, indices)
-}
-
-/// The float sRGB components in `[0, 1]` of an `[r, g, b, a]` byte color.
-fn color_floats(color: [u8; 4]) -> [f64; 4] {
-    color.map(|byte| byte as f64 / 255.0)
 }
 
 /// The `_type` token for a material shading model. Known variants map to their
@@ -552,7 +547,7 @@ mod tests {
         MVoxShapeNode, MVoxTransformNode, MVoxUnknownChunk, MVoxVoxel,
     };
     use std::{array, collections::BTreeSet};
-    use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
         VoxPalette, VoxValue, VoxValuePool,
@@ -564,11 +559,10 @@ mod tests {
 
     /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
     fn srgba(hex: &str) -> [f64; 4] {
-        let digits = hex.strip_prefix('#').expect("a leading #");
-        let byte = |index: usize| {
-            u8::from_str_radix(&digits[index * 2..index * 2 + 2], 16).expect("two hex digits")
-        };
-        [byte(0), byte(1), byte(2), byte(3)].map(|b| b as f64 / 255.0)
+        TySrgbaColor::from_hex(hex)
+            .expect("a valid hex color")
+            .to_rgba()
+            .to_array()
     }
 
     /// A file exercising every modeled chunk: two models, a custom palette, a
@@ -780,7 +774,7 @@ mod tests {
             TyTransformF64::new(
                 TyVector3F64::new(x, y, z),
                 TyQuaternionF64::identity(),
-                TyVector3F64::new(1.0, 1.0, 1.0),
+                TyVector3F64::ONE,
             )
         };
 
