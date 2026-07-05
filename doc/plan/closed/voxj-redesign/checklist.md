@@ -594,5 +594,17 @@ and `to voxj` work end to end on a new-shape document.
       voxj-writing commands. The dated `implementation-decisions.md` log is kept
       as a historical record with one forward-pointer note rather than rewritten.
       See the decisions log.)
-- [ ] Confirm the format spec and every crate README describe the shipped
-      behavior, and move the plan to `doc/plan/` closed status when done.
+- [x] Confirm the format spec and every crate README describe the shipped
+      behavior, and move the plan to `doc/plan/` closed status when done. (Done:
+      a fan-out verification workflow checked each format-spec section and every
+      crate README against the shipped `voxj`/`voxj-codec`/`voxsmith` source,
+      adversarially confirming each drift. The spec was accurate on every section
+      but the `emissiveStrength` default; per the owner the code was fixed to the
+      spec's glTF default of `1` rather than the reverse, so the spec needed no
+      edit. `voxj-codec/README.md` gained three fixes: the
+      `voxj_palette_cell_counts` -> `voxj_palette_material_counts` rename and its
+      "cell" -> "material" wording, "per-palette" -> "per-layer" samples, and a
+      validate summary that now names the value-pool and palette binding/material
+      checks. The other four blast-radius READMEs are accurate one-liners, and no
+      out-of-scope README mentions the voxj palette model. The plan moved to
+      `doc/plan/closed/`. See the decisions log.)

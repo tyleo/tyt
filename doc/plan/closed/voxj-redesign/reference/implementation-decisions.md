@@ -1474,3 +1474,65 @@ forward-pointer note near the top listing the renames (cell to material, the glT
 attribute vocabulary, non-merging layers and `--layer`, the flag renames, and
 `--color-format`) and linking here. This matches the repo's practice of describing
 current design in living docs while leaving historical logs intact.
+
+### Final chunk: crate READMEs and the format spec confirmed against shipped code
+
+Phase 8 item 2 confirms the format spec and every crate README describe the
+shipped behavior, then closes the plan. A verification workflow fanned out one
+agent per format-spec section (structure, encoding, value pools, palettes and
+attributes, hierarchy and edit state, validation rules, the file example, the
+TypeScript schema, the reference code) plus one over the five blast-radius crate
+READMEs and one scanning every out-of-scope README, each reading the shipped
+`voxj`/`voxj-codec`/`voxsmith` source for its slice and returning typed drift
+findings. Every claimed drift was then re-checked by an independent adversarial
+agent against the code before it was trusted, and a completeness critic swept the
+confirmed set for gaps and found none.
+
+The spec came back accurate on every section but one, and the READMEs held three
+stale bullets, all in `voxj-codec`:
+
+1. `voxj-codec/README.md` named `voxj_palette_cell_counts` returning "the cell
+   count per referenced palette"; the shipped symbol is
+   `voxj_palette_material_counts` returning the material count M
+   (voxj_palette_material_counts.rs:14,33). Renamed both.
+2. The same README described `decode_voxj_object` as producing "per-palette
+   samples"; the decoder keys one sample channel per layer, and two layers may
+   share a palette (voxj_decoded_object.rs:11-13,27-29). Changed to per-layer.
+3. Its `validate_voxj_file` summary listed only the pre-redesign checks and
+   omitted the two redesign-central ones, value-pool content and palette
+   binding/material-index resolution (collect_voxj_failures.rs:21,24). Added
+   both.
+
+The other four blast-radius READMEs (`voxj`, `voxcore`, `voxsmith`, `vxl`) are
+one-line generic descriptions that remain accurate, and the out-of-scope scan
+found no other README describing the voxj palette model, since the binary-format
+codec crates never mention it.
+
+### `emissiveStrength` default flipped from `0` to `1` to match glTF
+
+The lone confirmed spec drift was the `emissiveStrength` default. The spec's
+attribute table and prose say an unbound `emissiveStrength` defaults to `1`,
+glTF's `KHR_materials_emissive_strength` default, but the shipped bake defaulted
+it to `0` (attribute_defaults.rs:14), so a material that bound `emissiveFactor`
+without a strength baked to black instead of emitting at unit strength,
+contradicting glTF. At the owner's direction the resolution is to fix the code to
+the spec rather than the spec to the code, since matching glTF is the intended
+behavior: the default scalar for `emissiveStrength` is now `1.0`, and the
+`emissive_color_bytes` doc reframes to "an absent `emissiveStrength` defaults to
+`1`, matching glTF."
+
+The change is confined to the unbound-attribute bake default and touches nothing
+else. `mesh_material_from_gltf` already imports a plain `emissiveFactor` at unit
+strength (from_gltf_bytes.rs:256), so the import path was already glTF-consistent
+and now agrees with the render default too. Every shipped converter that binds
+`emissiveFactor` also binds `emissiveStrength` (the voxelizer binds all six
+attributes, vmax binds both), so no converter round-trip or golden changed; the
+new default only affects a hand-authored or foreign voxj document that binds an
+`emissiveFactor` without a strength. `MeshMaterial::flat` keeps its explicit
+`emissive_strength: 0.0`: it is a deliberately non-emissive material with a black
+`emissiveFactor`, so its strength never renders, and raising it would churn the
+voxelizer's `emissiveStrength` pool contents for no visible effect. No test
+depended on the old default (the bake's missing-attribute test uses
+`occlusionStrength`, and the emissive-scaling test binds the strength
+explicitly), so `cargo test -p voxsmith --features gltf` stays green at 160. The
+spec needed no edit, since it already documented the glTF default.

@@ -1,12 +1,14 @@
 # Voxj Redesign Migration Plan
 
-Status: **stage 3, finalizing.** All eight decisions are closed; see
-[Decisions](#decisions). The executable steps live in
+Status: **closed.** All eight phases have landed and the workspace builds, lints,
+and tests green on the redesigned format; the format spec and the crate READMEs
+were confirmed against the shipped code. All eight decisions are closed; see
+[Decisions](#decisions). The executable steps lived in
 [checklist.md](checklist.md). Everything above the decisions is settled fact from
 the format diff and a survey of the current code.
 
 The target format is defined in
-[voxel-json-file-format.md](../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md),
+[voxel-json-file-format.md](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md),
 already rewritten on this branch in commit `b853623`. Only the spec doc changed;
 no Rust code has moved yet.
 
