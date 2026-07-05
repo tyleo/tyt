@@ -24,7 +24,6 @@ mod vox_palette_binding;
 mod vox_runtime_state;
 mod vox_value;
 mod vox_value_pool;
-mod vox_value_pool_kind;
 
 pub use b_vox_hierarchy_node::*;
 pub use b_vox_layer::*;
@@ -48,4 +47,3 @@ pub use vox_palette_binding::*;
 pub use vox_runtime_state::*;
 pub use vox_value::*;
 pub use vox_value_pool::*;
-pub use vox_value_pool_kind::*;

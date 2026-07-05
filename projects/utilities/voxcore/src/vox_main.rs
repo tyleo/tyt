@@ -821,7 +821,7 @@ mod tests {
     use crate::{
         BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPaletteBinding,
         BVoxValuePool, Error, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
-        VoxValuePool, VoxValuePoolKind,
+        VoxValuePool,
     };
     use branded_id::U32Id;
     use ty_math::{TyQuaternion, TyVector3, TyVector3U32};
@@ -904,10 +904,10 @@ mod tests {
         assert_eq!(state.value_pool_count(), 2);
         assert_eq!(colors, U32Id::<BVoxValuePool>::from_u32(0));
         assert_eq!(metallic.to_u32(), 1);
-        assert_eq!(
-            state.value_pool(colors).map(VoxValuePool::kind),
-            Some(VoxValuePoolKind::Srgba)
-        );
+        assert!(matches!(
+            state.value_pool(colors),
+            Some(VoxValuePool::Srgba { .. })
+        ));
         assert_eq!(
             state.value_pool(metallic).map(VoxValuePool::values_len),
             Some(2)
@@ -915,11 +915,16 @@ mod tests {
         // An id past the pool is not one of this state's.
         assert_eq!(state.value_pool(U32Id::<BVoxValuePool>::from_u32(2)), None);
 
-        let kinds: Vec<VoxValuePoolKind> = state
-            .iter_value_pools()
-            .map(|(_, pool)| pool.kind())
-            .collect();
-        assert_eq!(kinds, [VoxValuePoolKind::Srgba, VoxValuePoolKind::Float]);
+        let mut pools = state.iter_value_pools();
+        assert!(matches!(
+            pools.next(),
+            Some((_, VoxValuePool::Srgba { .. }))
+        ));
+        assert!(matches!(
+            pools.next(),
+            Some((_, VoxValuePool::Float { .. }))
+        ));
+        assert!(pools.next().is_none());
     }
 
     #[test]

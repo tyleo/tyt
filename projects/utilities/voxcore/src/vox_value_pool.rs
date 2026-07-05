@@ -1,9 +1,8 @@
-use crate::{VoxBound, VoxValue, VoxValuePoolKind};
+use crate::{VoxBound, VoxValue};
 
-/// A shared pool of values. The variant is the pool's
-/// [`VoxValuePoolKind`](crate::VoxValuePoolKind): the bounded kinds (`float`,
-/// `int`) carry `min`/`max` and typed numeric values; every other kind carries
-/// only its typed values.
+/// A shared pool of values. The variant is the pool's kind: the bounded kinds
+/// (`float`, `int`) carry `min`/`max` and typed numeric values; every other kind
+/// carries only its typed values.
 ///
 /// Colors are stored as float components in the color space's natural range,
 /// one canonical kind per space and alpha combination, so the wire format's
@@ -117,36 +116,20 @@ impl VoxValuePool {
             VoxValuePool::LinearRgba { values } => *values = picked(values, keep),
         }
     }
-
-    /// The pool's kind.
-    pub fn kind(&self) -> VoxValuePoolKind {
-        match self {
-            VoxValuePool::Json { .. } => VoxValuePoolKind::Json,
-            VoxValuePool::Bool { .. } => VoxValuePoolKind::Bool,
-            VoxValuePool::Float { .. } => VoxValuePoolKind::Float,
-            VoxValuePool::Int { .. } => VoxValuePoolKind::Int,
-            VoxValuePool::String { .. } => VoxValuePoolKind::String,
-            VoxValuePool::Srgb { .. } => VoxValuePoolKind::Srgb,
-            VoxValuePool::Srgba { .. } => VoxValuePoolKind::Srgba,
-            VoxValuePool::LinearRgb { .. } => VoxValuePoolKind::LinearRgb,
-            VoxValuePool::LinearRgba { .. } => VoxValuePoolKind::LinearRgba,
-        }
-    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{VoxBound, VoxValuePool, VoxValuePoolKind};
+    use crate::{VoxBound, VoxValuePool};
 
     #[test]
-    fn bounded_float_pool_reports_kind_and_values_len() {
+    fn bounded_float_pool_reports_values_len() {
         let pool = VoxValuePool::Float {
             min: VoxBound::Number(0.0),
             max: VoxBound::None,
             values: vec![0.0, 0.5, 1.0],
         };
 
-        assert_eq!(pool.kind(), VoxValuePoolKind::Float);
         assert_eq!(pool.values_len(), 3);
     }
 
@@ -156,7 +139,6 @@ mod tests {
             values: vec![[1.0, 0.0, 0.0, 1.0]],
         };
 
-        assert_eq!(pool.kind(), VoxValuePoolKind::Srgba);
         assert_eq!(pool.values_len(), 1);
     }
 }

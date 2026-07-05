@@ -16,7 +16,6 @@ mod voxj_sample_block;
 mod voxj_transform;
 mod voxj_value;
 mod voxj_value_pool;
-mod voxj_value_pool_kind;
 
 pub use voxj_bound::*;
 pub use voxj_edit_object::*;
@@ -34,4 +33,3 @@ pub use voxj_sample_block::*;
 pub use voxj_transform::*;
 pub use voxj_value::*;
 pub use voxj_value_pool::*;
-pub use voxj_value_pool_kind::*;

@@ -1,4 +1,4 @@
-use crate::{VoxjBound, VoxjValue, VoxjValuePoolKind};
+use crate::{VoxjBound, VoxjValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -113,23 +113,6 @@ impl VoxjValuePool {
             VoxjValuePool::SrgbaHex { values } => values.len(),
             VoxjValuePool::LinearRgbFloat { values } => values.len(),
             VoxjValuePool::LinearRgbaFloat { values } => values.len(),
-        }
-    }
-
-    /// The pool's kind tag.
-    pub fn kind(&self) -> VoxjValuePoolKind {
-        match self {
-            VoxjValuePool::Json { .. } => VoxjValuePoolKind::Json,
-            VoxjValuePool::Bool { .. } => VoxjValuePoolKind::Bool,
-            VoxjValuePool::Float { .. } => VoxjValuePoolKind::Float,
-            VoxjValuePool::Int { .. } => VoxjValuePoolKind::Int,
-            VoxjValuePool::String { .. } => VoxjValuePoolKind::String,
-            VoxjValuePool::SrgbFloat { .. } => VoxjValuePoolKind::SrgbFloat,
-            VoxjValuePool::SrgbHex { .. } => VoxjValuePoolKind::SrgbHex,
-            VoxjValuePool::SrgbaFloat { .. } => VoxjValuePoolKind::SrgbaFloat,
-            VoxjValuePool::SrgbaHex { .. } => VoxjValuePoolKind::SrgbaHex,
-            VoxjValuePool::LinearRgbFloat { .. } => VoxjValuePoolKind::LinearRgbFloat,
-            VoxjValuePool::LinearRgbaFloat { .. } => VoxjValuePoolKind::LinearRgbaFloat,
         }
     }
 }
