@@ -63,29 +63,33 @@ is a separate mode left for a later pass.
 10. `--select-index <index>`: choose the object by position, an integer or an
    `a-b` range. Repeatable; unions with `--select` as above. See
    [Object selectors](conventions.md#object-selectors).
+11. `--layer <index>` (default `0`): the object layer whose materials this mesh
+   bakes, a 0-based index into the object's layers in reference order, defaulting
+   to the first. Only the material and texture bakes read it; pure-geometry
+   meshing ignores it, and selecting a layer past the object's last errors.
 
 ## Material and texture maps
 
 A material map is one image whose channels are filled from a material's
 attributes, so maps that read attributes share one atlas and differ only in
-which attributes they read. Attributes a cell omits fall back to their spec defaults from
+which attributes they read. Attributes a material omits fall back to their spec defaults from
 [Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
 so a map never fails for a missing attribute. Wherever an attribute is read,
-`smoothness` names the derived `1 - roughness`, so `smoothness` and `1-roughness`
-are interchangeable, as are `1-smoothness` and `roughness`. `--atlas` sets how
+`smoothness` names the derived `1 - roughnessFactor`, so `smoothness` and
+`1-roughnessFactor` are interchangeable, as are `1-smoothness` and
+`roughnessFactor`. `--atlas` sets how
 the atlas is laid out and how the mesh's UVs index it:
 
-1. `palette` (default): one texel per palette material, placed at its palette
+1. `palette` (default): one texel per palette material, placed at its material
    index. The atlas depends only on the palette set, not the geometry, so every
    mesh on those palettes gets a byte-identical texture and identical UVs, and
    meshes that share a palette share its maps. Many faces sample one texel. This
-   is the compact, shareable form. An object that references several palette
-   layers has its material in the merge of one cell per layer, so the atlas keys
-   on the merged material: one texel per combination of layer cells, the product
-   of the layer sizes, which stays a pure function of the palette set and so
-   stays shareable. The product grows with the layers, so a many-layer object is
-   better served by `unwrap` or by `--vertex palette-layers`; a single-layer
-   object is just one texel per cell.
+   is the compact, shareable form. `mesh` bakes a single layer, the one `--layer`
+   selects and the object's first by default, so the atlas is just one texel per
+   material of that layer's palette; the object's other layers never multiply into
+   it, and it stays a pure function of the baked palette and shareable across
+   every mesh baking that palette. A many-layer object that needs every layer is
+   better served by `--vertex palette-layers`.
 2. `unwrap`: each face takes its own texel from a per-mesh UV unwrap, so the
    atlas is unique to one mesh and larger. Use it for spatially varying data
    that one texel per material cannot hold, such as `computed-occlusion`
@@ -237,20 +241,21 @@ The names reuse the texture presets and pack the same way:
    into `_ORM`, `_MSE`, and so on, packed across the attribute's components
    exactly as the texture preset packs them across channels. Custom attributes.
 5. `palette-index`: one index per vertex into a flattened table of the distinct
-   merged materials this mesh uses, written as a scalar into `_PALETTEINDEX` with
+   materials the baked layer uses, written as a scalar into `_PALETTEINDEX` with
    that table shipped as [palette data](#palette-data). A custom shader looks the
    material up by index rather than sampling a texture: the most compact carrier
-   and the exact-value alternative to the palette atlas. The table is the used
-   combinations, so it is per-mesh, not shared across meshes. Custom; not read by
-   a generic viewer.
+   and the exact-value alternative to the palette atlas. The table is the distinct
+   materials used, so it is per-mesh, not shared across meshes. Custom; not read
+   by a generic viewer.
 6. `palette-layers`: one index per referenced palette layer per vertex, written
    as scalars `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on, with each layer's
-   palette shipped verbatim as [palette data](#palette-data). A custom shader merges the
-   indexed cells the way the spec defines, later layers winning. Its data sums
-   the layer sizes rather than multiplying them and depends only on the palette
-   set, so it stays shareable across meshes and is the compact carrier for a
-   many-layer object; it is also the only carrier that keeps a layer value the
-   merge would otherwise drop. A single-layer object reduces to one
+   palette shipped verbatim as [palette data](#palette-data). A custom shader
+   combines the indexed materials however the consuming application defines, since
+   the voxel-json format no longer merges layers. Its data sums the layer sizes
+   rather than multiplying them and depends only on the palette set, so it stays
+   shareable across meshes and is the compact carrier for a many-layer object; it
+   is also the only carrier that preserves every layer's material rather than
+   collapsing to a single selected layer. A single-layer object reduces to one
    `_PALETTEINDEX0` and the one palette. Custom; not read by a generic viewer.
 
 `--vertex-map <target> <channels>` writes a custom packing to a named attribute,
@@ -297,7 +302,7 @@ An unrecognized `version` is rejected.
 
 ### `kind: "palette-index"`
 
-`_PALETTEINDEX` on each vertex indexes `materials`, one entry per distinct merged
+`_PALETTEINDEX` on each vertex indexes `materials`, one entry per distinct
 material the mesh uses:
 
 ```jsonc
@@ -305,9 +310,9 @@ material the mesh uses:
   "version": 1,
   "kind": "palette-index",
   "materials": [
-    { "rgba": "#FF0000FF", "roughness": 0.9 }, // index 0
-    { "rgba": "#FF0000FF", "roughness": 0.1 }, // index 1
-    { "rgba": "#0000FFFF", "roughness": 0.1 }  // index 2
+    { "baseColorFactor": "#FF0000FF", "roughnessFactor": 0.9 }, // index 0
+    { "baseColorFactor": "#FF0000FF", "roughnessFactor": 0.1 }, // index 1
+    { "baseColorFactor": "#0000FFFF", "roughnessFactor": 0.1 }  // index 2
   ]
 }
 ```
@@ -315,9 +320,9 @@ material the mesh uses:
 ### `kind: "palette-layers"`
 
 `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on index `layers[0]`, `layers[1]`, and
-so on in the object's `paletteRefs` order. A custom shader merges the indexed
-cells, a later layer overriding an earlier one on a shared key, the same merge
-the voxel-json format defines:
+so on in the object's `layerPaletteRefs` order. A custom shader combines the
+indexed materials however the consuming application defines, since the voxel-json
+format no longer merges layers:
 
 ```jsonc
 {
@@ -325,12 +330,12 @@ the voxel-json format defines:
   "kind": "palette-layers",
   "layers": [
     [ // layer 0 (base), indexed by _PALETTEINDEX0
-      { "rgba": "#FF0000FF", "tint": "#880000FF" },
-      { "rgba": "#0000FFFF", "tint": "#000088FF" }
+      { "baseColorFactor": "#FF0000FF", "tint": "#880000FF" },
+      { "baseColorFactor": "#0000FFFF", "tint": "#000088FF" }
     ],
     [ // layer 1 (finish), indexed by _PALETTEINDEX1
-      { "roughness": 0.9, "tint": "#FFFFFFFF" },
-      { "roughness": 0.1, "tint": "#FFFF00FF" }
+      { "roughnessFactor": 0.9, "tint": "#FFFFFFFF" },
+      { "roughnessFactor": 0.1, "tint": "#FFFF00FF" }
     ]
   ]
 }
@@ -352,7 +357,7 @@ interface PaletteIndexData {
   version: 1;
   kind: "palette-index";
   // _PALETTEINDEX on each vertex indexes this array; one entry per distinct
-  // merged material the mesh uses.
+  // material the mesh uses.
   materials: Material[];
 }
 
@@ -360,8 +365,8 @@ interface PaletteLayersData {
   version: 1;
   kind: "palette-layers";
   // _PALETTEINDEX0, _PALETTEINDEX1, ... index layers[0], layers[1], ... in the
-  // object's paletteRefs order; a later layer overrides an earlier one on a
-  // shared key.
+  // object's layerPaletteRefs order; the voxel-json format no longer merges
+  // layers, so a consumer combines them however it defines.
   layers: Material[][];
 }
 

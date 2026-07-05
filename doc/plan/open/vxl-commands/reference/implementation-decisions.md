@@ -6,6 +6,20 @@ Code-level decisions made while building these commands, recorded as they land.
 Command-design rationale lives in [design notes](design-notes.md); this log is
 for implementation choices a reviewer of the Rust would want explained.
 
+> **Note.** The entries below predate the voxel-json format redesign and record
+> what was decided at the time; they are a historical record and are not rewritten
+> to the new model. The redesign later renamed the palette entry "cell" to
+> "material", moved the recommended PBR attribute names to the glTF
+> metallic-roughness vocabulary (`rgba` became `baseColorFactor`, and so on, with
+> `emissive` split into `emissiveFactor` and `emissiveStrength`), replaced the
+> cross-layer merge with non-merging `layerPaletteRefs` selected by `mesh`'s
+> `--layer`, renamed `--max-palette-cells` to `--max-palette-materials` and
+> `--show-palettes` to `--show-layers`, and added a `--color-format`
+> (`hex` | `float`, default `float`) encoding option. Where an entry below names
+> an older term, read it against that rename; the redesign's own code-level
+> decisions are logged in
+> [voxj-redesign](../../voxj-redesign/reference/implementation-decisions.md).
+
 ## MeshFormat
 
 `MeshFormat` carries the two glTF variants, `Gltf` (`.gltf`) and `Glb` (`.glb`),

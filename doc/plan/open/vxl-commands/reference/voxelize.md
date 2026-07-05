@@ -29,9 +29,10 @@ size with `--meters-per-voxel`.
 5. `--material-mode` `auto` | `per-primitive` | `per-texel` | `flat` (default
    `auto`): where each voxel's color and material come from. `--fill-mode` sets
    the geometry; this sets the color, the two are independent.
-   1. `per-primitive` reads each mesh material's flat factors (base color,
-      metallic, roughness, emissive, occlusion), giving one palette cell per
-      material, so an untextured or stylized mesh stays exact with a tiny palette.
+   1. `per-primitive` reads each mesh material's flat factors (`baseColorFactor`,
+      `metallicFactor`, `roughnessFactor`, `emissiveFactor`, `emissiveStrength`,
+      `occlusionStrength`), giving one material per mesh material, so an untextured
+      or stylized mesh stays exact with a tiny palette.
    2. `per-texel` samples those maps at each voxel's surface point, area-averaged
       over the voxel's footprint rather than point-sampled so fine texture does
       not alias into a muddy palette, capturing spatial detail at the cost of a
@@ -40,9 +41,10 @@ size with `--meters-per-voxel`.
    4. `auto`, the default, picks `per-texel` when the mesh carries textures and
       `per-primitive` when it does not.
 
-   Every mode writes the same attributes [`mesh`](mesh.md) bakes back, `rgba`,
-   `metallic`, `roughness`, `emissive`, and `occlusion`, so a voxelized model
-   round-trips through `mesh`.
+   Every mode writes the same attributes [`mesh`](mesh.md) bakes back,
+   `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
+   `emissiveStrength`, and `occlusionStrength`, so a voxelized model round-trips
+   through `mesh`.
 6. `--fill-color` `none` | `<#RRGGBBAA>` (default `none`): the color of voxels
    that have no sampled surface. Its role depends on `--material-mode`:
 
@@ -54,23 +56,23 @@ size with `--meters-per-voxel`.
    Only the interior voxels a `--fill-mode solid` body invents have no surface; a
    hollow `--fill-mode surface` shell is all surface, so under the sampling modes
    `--fill-color` does nothing there.
-7. `--max-palette-cells` `<n>` | `none` (default `256`): the most cells the
-   document's palette may hold. Sampling can yield many distinct materials,
+7. `--max-palette-materials` `<n>` | `none` (default `256`): the most materials
+   the document's palette may hold. Sampling can yield many distinct materials,
    `per-texel` especially; when the count exceeds `<n>` the palette is reduced
-   to it, never failing and never silently dropping cells. Reduction is the
+   to it, never failing and never silently dropping materials. Reduction is the
    designed default, firing on nearly every run, so it stays quiet. `256` keeps
    each per-voxel sample index within one
-   byte (the format packs it at `ceil(log2(cells))` bits) and matches the
+   byte (the format packs it at `ceil(log2(materials))` bits) and matches the
    familiar 256-color ceiling; `none` disables the cap for bit-exact materials.
-   Reduction clusters on `rgba` and a merged cell takes its cluster
-   representative's whole row, so material follows color: materials that land in
-   one color cluster collapse to one real representative cell, not an averaged
-   one. This is the same reduction [`palette quantize`](palette/quantize.md)
-   runs, so `--max-palette-cells <n>` matches piping the output through
-   `palette quantize --max-palette-cells <n>`.
+   Reduction clusters on `baseColorFactor` and a merged material takes its cluster
+   representative's whole set of values, so material follows color: materials that
+   land in one color cluster collapse to one real representative material, not an
+   averaged one. This is the same reduction [`palette quantize`](palette/quantize.md)
+   runs, so `--max-palette-materials <n>` matches piping the output through
+   `palette quantize --max-palette-materials <n>`.
 8. `--method`, `--space`, and `--dither`: the palette-reduction controls shared
    with [`palette quantize`](palette/quantize.md), defaulting the same way
-   (`median-cut`, `oklab`, `none`). They shape the `--max-palette-cells`
+   (`median-cut`, `oklab`, `none`). They shape the `--max-palette-materials`
    reduction and are inert when it does not fire; `--dither` diffuses the
    snapping error across the voxels in 3D order.
 9. `--name <name>`: the voxelized object's name. Defaults to the mesh's own name,
@@ -90,7 +92,7 @@ dimensions; `--voxel-grid-length` has no real-world size to record. See
 [Coordinate System](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#coordinate-system).
 
 `voxelize` writes a voxel-json document and shares `to voxj`'s encoding options:
-`--format`, `--encoding-preset`, `--position-encoding`, and `--sample-encoding`,
-which default the same way they do there. It does not take `--ext` or
+`--format`, `--color-format`, `--encoding-preset`, `--position-encoding`, and
+`--sample-encoding`, which default the same way they do there. It does not take `--ext` or
 `--edit-state`: a voxelized mesh has no source `ext` block to carry and no
 editor build volume to record.

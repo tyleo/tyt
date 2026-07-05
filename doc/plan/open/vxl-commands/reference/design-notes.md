@@ -19,12 +19,13 @@ Rationale for the non-obvious choices, for reviewers.
    while `--texture-map` expresses any channel-to-attribute packing without a
    code change. Each flag takes its parts as separate arguments, the preset name
    and an optional path, or the output path and the channel list, rather than
-   packing a filename, channel count, palette index, and cell list into one
+   packing a filename, channel count, palette index, and material list into one
    argument as the original `--texture` flag did. The channel list keeps its
    commas because the RGBA packing is one structured value, and an arity that
    varied with a layout token would need a greedy parser that swallows the
    optional `output` positional. `smoothness` is accepted as the derived
-   `1 - roughness`, so it need not be spelled `1-roughness`. The same flags back
+   `1 - roughnessFactor`, so it need not be spelled `1-roughnessFactor`. The same
+   flags back
    the standalone `material` command so textures can be re-baked without
    re-meshing; both derive the same atlas, so the maps stay aligned to the mesh
    UVs.
@@ -46,14 +47,15 @@ Rationale for the non-obvious choices, for reviewers.
    would be ambiguous. `mesh` errors when the selection is not exactly one object;
    how to output several, and whether to bake a node's subtree, transforms, and
    instancing into one placed mesh, is a deferred, separate mode.
-6. Quantize, remap, and `voxelize`'s `--max-palette-cells` share one reduction rule:
-   material follows color. Reducing the compared attribute (`rgba` by default)
-   clusters cells by it and collapses each cluster to one representative cell, so
-   a cell's other attributes ride along with its color and a count bounds the
-   cell count, not just the attribute's distinct values. The earlier rule kept
-   same-color/different-material cells distinct; it was dropped so a count
-   actually bounds the palette, the representative stays a real cell rather than
-   an average, and the three commands share one engine and its `--method` /
+6. Quantize, remap, and `voxelize`'s `--max-palette-materials` share one reduction
+   rule: material follows color. Reducing the compared attribute
+   (`baseColorFactor` by default) clusters materials by it and collapses each
+   cluster to one representative material, so a material's other attributes ride
+   along with its color and a count bounds the material count, not just the
+   attribute's distinct values. The earlier rule kept materials that share a color
+   but differ in their other attributes distinct; it was dropped so a count
+   actually bounds the palette, the representative stays a real material rather
+   than an average, and the three commands share one engine and its `--method` /
    `--space` / `--dither` controls. The accepted cost is that fusing two colors
    fuses their materials too.
 7. Quantize and remap take either a full document or a bare palette JSON, the
@@ -72,26 +74,26 @@ Rationale for the non-obvious choices, for reviewers.
    `name.component`, and the name is reusable across channels, images, and vertex
    attributes. It shadows a built-in on collision, scoped to the custom packings
    so a binding never silently changes a `--texture` or `--vertex` preset. The
-   binding reads the key's merged value across the object's palette layers, the
-   same merge the rest of `mesh` walks, rather than naming a layer: the merge
-   already resolves a shared key to one winner, so a layer index would only buy
-   the rare case of reading a deliberately overridden value, not worth the extra
-   argument and the `paletteRefs`-order concept it forces on the user; reaching a
-   non-winning layer is left to a later flag if it is ever wanted. The built-in
-   `rgba` is itself a color, so `rgba.a` and an RGBA split need no binding,
+   binding reads the key from the meshed layer's material, the layer `mesh`
+   selects with `--layer` and the first by default, the same layer the rest of
+   `mesh` bakes, rather than naming a separate source. Layers no longer merge, so
+   each layer is one palette and every voxel samples one material per layer;
+   reaching another layer's value is just another `--layer`. The built-in
+   `baseColorFactor` is itself a color, so `baseColorFactor.a` and an RGBA split
+   need no binding,
    complementing the whole-color `albedo` preset. Inline `N:` and `.component`
    qualifiers with no declaration were dropped: they cannot carry an explicit
    type, leaving an ambiguous custom value no home, and they give no reusable
    name.
-9. `palette show` infers the attribute type from the stored value, a `#RRGGBBAA`
-   string for a color and a number for a scalar, where mesh's
+9. `palette show` reads the attribute type from its bound value pool's kind, a
+   color kind for a color and a scalar kind for a number, where mesh's
    `--define-attribute` must be told the type. The difference is that `show`
-   reads concrete cells and the value names its own type, while a `--texture-map`
-   packing is compiled before any cell is read and cannot. `--type` stays as an
+   reads concrete materials whose pool names its own kind, while a `--texture-map`
+   packing is compiled before any material is read and cannot. `--type` stays as an
    optional override so a preview can assert the same type a `--define-attribute`
    binding declares and read a custom key exactly as the mesh packing will. The
-   `.component` grammar is reused from `--texture-map`, so `rgba.a` means one
-   thing across show, mesh, and the packings; it is read-only inspection sugar,
+   `.component` grammar is reused from `--texture-map`, so `baseColorFactor.a`
+   means one thing across show, mesh, and the packings; it is read-only inspection sugar,
    scoped to show, so the mutating palette commands keep whole-attribute
    semantics. `auto` keeps numeric output for scalars and swatches only true
    colors, beside their hex. `swatch` and `swatch-value` extend swatches to
@@ -103,7 +105,8 @@ Rationale for the non-obvious choices, for reviewers.
     or a hollow shell; `--material-mode` chooses where color comes from and
     defaults to `auto`, sampling `per-texel` when the mesh is textured and
     `per-primitive` when it is not. Per-primitive reads each material's flat
-    factors into one cell per material, exact and tiny for stylized meshes;
+    factors into one palette material per material, exact and tiny for stylized
+    meshes;
     per-texel samples the maps at each voxel's surface point, area-averaged so
     fine texture does not alias into a muddy palette; `flat` ignores the mesh for
     a one-color body. Per-primitive is not a rival of per-texel but a part of it:
@@ -118,15 +121,16 @@ Rationale for the non-obvious choices, for reviewers.
     while the explicit modes override that guess. The flat color mode is named
     `flat`, not `solid`, so it does not collide with `--fill-mode solid`, which is
     geometry.
-11. `voxelize --max-palette-cells` bounds the generated palette, defaulting to 256 (a
+11. `voxelize --max-palette-materials` bounds the generated palette, defaulting to 256 (a
     one-byte sample index and the familiar color ceiling). It auto-reduces with a
     warning rather than erroring or truncating, since a textured mesh exceeding
     the cap is the normal case, and reuses the `palette quantize` engine and its
     `--method` / `--space` / `--dither` controls rather than inventing its own, so
     the inline cap and the standalone command cannot diverge; `none` disables it
     for bit-exact materials. Sampling drops no PBR: voxelize writes the same
-    `rgba`, `metallic`, `roughness`, `emissive`, and `occlusion` attributes
-    `mesh` bakes, so the two are inverses.
+    `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
+    `emissiveStrength`, and `occlusionStrength` attributes `mesh` bakes, so the
+    two are inverses.
 12. Vertex attribute maps share the texture maps' source grammar and add only a
     carrier. A map resolves a material value the same way whether it lands in a
     texel or on a vertex, so `--vertex` and `--vertex-map` reuse the
@@ -140,19 +144,18 @@ Rationale for the non-obvious choices, for reviewers.
     glTF's only per-vertex PBR slot, so per-vertex color is portable while
     per-vertex metallic, roughness, and the palette presets go in
     application-specific `_NAME` attributes only a custom shader reads. The
-    palette indirection comes in two shapes because a multi-layer object's
-    material is the merge of one cell per layer, which no single index names:
-    `palette-index` flattens to the distinct merged materials the mesh uses, one
-    `_PALETTEINDEX` into a per-mesh table, the smallest carrier; `palette-layers`
-    keeps the layers, one `_PALETTEINDEXn` per layer plus each layer's palette,
-    summing rather than multiplying the layer sizes, staying shareable across
-    meshes, and alone preserving a layer value the merge would drop. Their
-    product, one index over every layer combination, was rejected:
-    `palette-layers` is both smaller and shareable, so the product never wins.
-    The texture `--atlas palette` keeps the merged-product keying instead, since
-    per-layer textures would need a custom shader and forfeit the atlas's
-    portability, so per-layer and used-combos compactness live on the vertex
-    carrier.
+    palette indirection comes in two shapes because an object keeps a palette
+    per layer, which no single index spans: `palette-index` flattens to the
+    distinct materials of the layer `mesh` bakes, one `_PALETTEINDEX` into a
+    per-mesh table, the smallest carrier; `palette-layers` keeps every layer, one
+    `_PALETTEINDEXn` per layer plus each layer's palette, summing rather than
+    multiplying the layer sizes, staying shareable across meshes, and alone
+    preserving every layer's material rather than only the baked one. A product
+    index over every layer combination was rejected: `palette-layers` is both
+    smaller and shareable, so the product never wins. The texture
+    `--atlas palette` keys on the baked layer's palette instead, since per-layer
+    textures would need a custom shader and forfeit the atlas's portability, so
+    per-layer material lives on the vertex carrier.
 13. Texture images and the palette data each store `embedded`, `external`, or
     `both`, with a format-driven default: `embedded` for a `.glb`, `external`
     for a `.gltf`, so zero-config output matches what each glTF form normally

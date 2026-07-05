@@ -18,8 +18,8 @@ the map name.
 
 `material` and `mesh` derive the atlas identically under the same `--atlas`
 mode, so the maps `material` writes are byte-for-byte the maps a `mesh` run with
-the same input, object selection, and atlas mode would produce, and they line up
-with that mesh's UVs. With `--atlas palette` the maps depend only on the palette
+the same input, object selection, atlas mode, and layer would produce, and they
+line up with that mesh's UVs. With `--atlas palette` the maps depend only on the palette
 and are shareable across every mesh on it; with `--atlas unwrap` they are
 unwrapped per mesh. Either way you can iterate on materials without re-meshing.
 
@@ -37,6 +37,10 @@ unwrapped per mesh. Either way you can iterate on materials without re-meshing.
    Repeatable; unions with `--select`. See
    [Object selectors](conventions.md#object-selectors). Given no selector of
    either kind, the default covers every object.
+5. `--layer <index>` (default `0`): the object layer whose materials this bake
+   reads, a 0-based index into the object's layers in reference order, the same
+   selector as `mesh`. Layers no longer merge, so the bake reads one layer,
+   defaulting to the first.
 
 At least one map must be requested; with no `--texture` or `--texture-map` the
 command reports the available presets and exits non-zero, since there is nothing

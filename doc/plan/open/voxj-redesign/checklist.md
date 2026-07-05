@@ -583,8 +583,16 @@ and `to voxj` work end to end on a new-shape document.
 
 ## Phase 8: docs
 
-- [ ] Update `doc/plan/open/vxl-commands` so its palette model, the `--attribute`
+- [x] Update `doc/plan/open/vxl-commands` so its palette model, the `--attribute`
       default, the merge-to-layer-selection change, the cell-to-material rename,
-      and the new `--color-format` and `--layer` options match the code.
+      and the new `--color-format` and `--layer` options match the code. (Done:
+      the 16 forward-looking files were rewritten to value pools plus bindings
+      plus column-major materials, the glTF attribute vocabulary, non-merging
+      layers with `mesh`/`material` `--layer` selection, the cell-to-material,
+      `--show-palettes` to `--show-layers`, and `--max-palette-cells` to
+      `--max-palette-materials` renames, and the new `--color-format` flag on the
+      voxj-writing commands. The dated `implementation-decisions.md` log is kept
+      as a historical record with one forward-pointer note rather than rewritten.
+      See the decisions log.)
 - [ ] Confirm the format spec and every crate README describe the shipped
       behavior, and move the plan to `doc/plan/` closed status when done.

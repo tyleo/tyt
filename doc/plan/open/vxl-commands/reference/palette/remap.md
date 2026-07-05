@@ -7,31 +7,32 @@ vxl palette remap <input> [output] (--target <file> | --target-index <n>) [optio
 ```
 
 Remaps each voxel to its nearest entry in a target palette and rewrites the
-sample channel. Because samples are cell indices into a palette, the target
+sample channel. Because samples are material indices into a palette, the target
 must name another palette, so a target is required: either an external palette
 file with `--target`, or a palette already in the input with `--target-index`.
 
 The input supplies the palette to remap and is either a full voxj/voxjz
-document or a bare palette JSON file, a top-level `palettes` array of the same
-shape as a `--target` file. A document carries the voxels that sample the
+document or a bare palette JSON file of the same shape as a `--target` file, its
+`palettes` and the `valuePools` they reference. A document carries the voxels
+that sample the
 palette, so every such voxel is remapped and `--dither` can diffuse the snapping
 error in 3D voxel order, narrowed to chosen objects by `--select` and
 `--select-index`. A bare palette has no voxels, so its entries are remapped in
 place and dithering does not apply. The output mirrors the input, a document in
 its own format or a bare palette JSON.
 
-1. `--target <file>`: a JSON file holding a voxel-json `palettes` array, the
-   same shape as a document's `palettes`. The target is its palette at
-   `--target-index`.
+1. `--target <file>`: a JSON file holding a voxel-json `palettes` array and the
+   `valuePools` those palettes reference, the same shape as a document's
+   `runtimeState`. The target is its palette at `--target-index`.
 2. `--target-index <n>` (default `0`): which palette is the target. Indexes the
    `--target` file's array when `--target` is given, otherwise a palette in the
    input document itself. Without `--target` it must name a palette other than
    the `--index` one being remapped.
-3. `--target-attribute <key>` (default `rgba`): the attribute compared when
-   finding the nearest entry, in the target.
+3. `--target-attribute <key>` (default `baseColorFactor`): the attribute compared
+   when finding the nearest entry, in the target.
 4. `--index <n>` (default `0`): which palette in the input to remap from.
-5. `--attribute <key>` (default `rgba`): which attribute in the input to
-   compare.
+5. `--attribute <key>` (default `baseColorFactor`): which attribute in the input
+   to compare.
 6. `--space` `oklab` | `lab` | `rgb` (default `oklab`): distance metric for the
    nearest-value search.
 7. `--dither` `none` | `floyd-steinberg` | `ordered` (default `none`): error
@@ -46,21 +47,26 @@ its own format or a bare palette JSON.
    unions with `--select`. Given no selector of either kind, every object is
    dithered. See [Object selectors](../conventions.md#object-selectors).
 
-When several input cells land on the same target entry they merge into it, each
-remapped voxel adopting the target entry's whole row, so material follows color
-(the compared attribute), the same rule [`quantize`](quantize.md) and
-[`voxelize`](../voxelize.md) follow.
+When several input materials land on the same target entry they merge into it,
+each remapped voxel adopting the target material's every attribute value, so
+material follows color (the compared attribute), the same rule
+[`quantize`](quantize.md) and [`voxelize`](../voxelize.md) follow.
 
 ## Example
 
-A `--target` file is a JSON document whose top-level value is a voxel-json
-`palettes` array, the same shape as a document's `palettes`. A single-palette
-target file:
+A `--target` file is a JSON document carrying a voxel-json `palettes` array and
+the `valuePools` those palettes reference, since value literals now live in
+shared pools rather than inline in each palette. A single-palette target file:
 
 ```json
-[
-  { "attributes": ["rgba"], "data": [["#1D2B53FF"], ["#7E2553FF"], ["#008751FF"]] }
-]
+{
+  "valuePools": [
+    { "kind": "srgba-hex", "values": ["#1D2B53FF", "#7E2553FF", "#008751FF"] }
+  ],
+  "palettes": [
+    { "bindings": [{ "attribute": "baseColorFactor", "poolRef": 0 }], "materials": [[0, 1, 2]] }
+  ]
+}
 ```
 
 Remap a model onto it:
@@ -70,18 +76,25 @@ vxl palette remap model.voxj out.voxj --target target.json
 ```
 
 A target file may hold several palettes; `--target-index` picks one. Reusing
-the palette array from the format spec:
+the palette set from the format spec:
 
 ```json
-[
-  { "attributes": ["rgba", "metallic"], "data": [["#FF0000FF", 1]] },
-  { "attributes": ["rgba"], "data": [["#00FF00FF"], ["#0000FFFF"]] },
-  { "attributes": ["metallic", "roughness"], "data": [[1, 0.2]] }
-]
+{
+  "valuePools": [
+    { "kind": "srgba-hex", "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"] },
+    { "kind": "float", "min": 0, "max": 1, "values": [1.0] },
+    { "kind": "float", "min": 0, "max": 1, "values": [0.2] }
+  ],
+  "palettes": [
+    { "bindings": [{ "attribute": "baseColorFactor", "poolRef": 0 }, { "attribute": "metallicFactor", "poolRef": 1 }], "materials": [[0], [0]] },
+    { "bindings": [{ "attribute": "baseColorFactor", "poolRef": 0 }], "materials": [[1, 2]] },
+    { "bindings": [{ "attribute": "metallicFactor", "poolRef": 1 }, { "attribute": "roughnessFactor", "poolRef": 2 }], "materials": [[0], [0]] }
+  ]
+}
 ```
 
-`--target-index 1` selects the second palette, the two-color `rgba` layer, as
-the target.
+`--target-index 1` selects the second palette, the two-color `baseColorFactor`
+layer, as the target.
 
 The input may itself be a bare palette file, since it has the same shape as a
 `--target` file, so a palette can sit on either side of a remap:

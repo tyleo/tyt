@@ -11,8 +11,9 @@ Checks a voxel-json document against the spec's
 checklist and exits non-zero on any failure. The checks include a recognized
 `version`; all indices in range; well-formed position data with correct decoded
 byte lengths and zero pad bits; unique voxel positions; tight `bounds`; sample
-arity matching `paletteRefs` and correct per-channel lengths; well-formed
-palette rows and `rgba` strings; an acyclic hierarchy; no zero `scale`
+arity matching `layerPaletteRefs` and correct per-channel lengths; well-formed
+`valuePools` whose values match their declared `kind` and column-major palette
+`materials` with value indices in range; an acyclic hierarchy; no zero `scale`
 component; unit `rotation` quaternions within tolerance; and, when present, an
 `editState` whose edit grid contains each runtime grid. The one item a
 validator cannot confirm, that sample order matches the position block's voxel

@@ -27,35 +27,36 @@ palettes in a single command:
    `value`, and `swatch-value`.
 
 When no `--attribute` is given the command defaults to a single
-`--attribute '*' rgba swatch`, every palette's colors as swatches, so a bare
+`--attribute '*' '*' auto`, every palette's every attribute auto-rendered, so a bare
 `vxl palette show <file>` is useful on its own. The default applies only in the
 absence of any `--attribute`; one or more selectors replace it rather than adding
 to it. Examples:
 
 ```
-vxl palette show model.voxj                    # every palette's rgba as swatches
-vxl palette show model.voxj --attribute 0 rgba value
+vxl palette show model.voxj                    # every attribute, auto-rendered
+vxl palette show model.voxj --attribute 0 baseColorFactor value
 vxl palette show model.voxj \
-  --attribute 0 rgba swatch-value \
-  --attribute 0 metallic value \
-  --attribute '*' roughness value
+  --attribute 0 baseColorFactor swatch-value \
+  --attribute 0 metallicFactor value \
+  --attribute '*' roughnessFactor value
 ```
 
 Three required values is deliberate. clap groups a repeated option per occurrence
 only at a fixed arity, so three fixed fields parse unambiguously where an
 optional trailing field would not, and only `*` needs quoting against the shell.
 
-There is no type field. `show` reads concrete cells, so it always infers a color
-from a `#RRGGBBAA` value and a scalar from a number, and a number prints as it
-reads.
+There is no type field. `show` reads concrete materials and classifies each by
+its bound value pool's kind, a color from a color-kind pool and a scalar from a
+number pool, and a number prints as it reads.
 
 ## Value collections and headers
 
 Each selector resolves to one or more value collections. A `*` palette or `*`
-attribute expands to one collection per match, so `'*' rgba` yields a collection
-for every palette that carries `rgba`. Each collection is labeled by a header
-reading `{palette}.{attribute}`, with the component appended when one is read, as
-in `0.rgba`, `1.rgba`, and `0.rgba.a`.
+attribute expands to one collection per match, so `'*' baseColorFactor` yields a
+collection for every palette that carries `baseColorFactor`. Each collection is
+labeled by a header reading `{palette}.{attribute}`, with the component appended
+when one is read, as in `0.baseColorFactor`, `1.baseColorFactor`, and
+`0.baseColorFactor.a`.
 
 Collections come out in selector order, then palette order, then attribute order
 within a palette. A `*` that matches nothing yields no collection, while a named
@@ -102,7 +103,8 @@ directly and ignore the format.
 4. `column-no-header`: `column` with the header row dropped.
 5. `markdown`: the collections fill an aligned markdown table, one column per
    collection, the `{palette}.{attribute}` labels as the header row, and one row
-   per cell index. A shorter palette leaves its column blank past its last cell.
+   per material index. A shorter palette leaves its column blank past its last
+   material.
 6. `pretty-json`: the collection records as indented JSON.
 7. `compact-json`: the collection records as single-line JSON.
 
@@ -118,8 +120,8 @@ resolved palette index even when the selector used `*`:
 
 ```json
 [
-  { "palette": 0, "attribute": "rgba", "values": ["#FF0000FF", "#00FF0080"] },
-  { "palette": 0, "attribute": "rgba.a", "values": [255, 128] }
+  { "palette": 0, "attribute": "baseColorFactor", "values": ["#FF0000FF", "#00FF0080"] },
+  { "palette": 0, "attribute": "baseColorFactor.a", "values": [255, 128] }
 ]
 ```
 
@@ -157,7 +159,7 @@ read commands so they are settled once and shared:
 
 - [x] Replace `--index`, `--attribute`, `--type`, and `--format` with one
       repeatable `--attribute <palette> <attribute> <format>` selector, three
-      required fields, defaulting to a single `'*' rgba swatch` only when no
+      required fields, defaulting to a single `'*' '*' auto` only when no
       `--attribute` is given at all.
 - [x] Support `*` in the palette and attribute fields, expanding to one labeled
       collection per match, under `{palette}.{attribute}[.component]` headers.

@@ -1419,3 +1419,58 @@ which header is wider, since `baseColorFactor` is now longer than
 Markdown goldens were regenerated from the test runner's actual output rather than
 hand-padded, to keep the column arithmetic exact. 148 `vxl` tests pass, workspace
 clippy-clean. This is Phase 7's final chunk; only the Phase 8 doc sweep remains.
+
+## Phase 8: docs
+
+### Chunk boundary: the whole `vxl-commands` spec surface lands as one chunk
+
+Phase 8 item 1 realigns the separate `doc/plan/open/vxl-commands` plan with the
+shipped code. Unlike a code phase, a doc plan has no compile gate; its analog is
+internal consistency, and a half-updated plan is worse than an un-updated one (a
+README that describes value pools while `mesh.md` still describes the layer merge
+contradicts itself). The plan's pages also cross-link and share one palette-model
+narrative, so they are reviewed together. This chunk therefore edits all 16
+forward-looking files at once (README, conventions, design-notes, the per-command
+reference pages, and the checklist) plus one note on the historical log, and
+leaves Phase 8 item 2 (crate READMEs, the format spec, and closing the plan) for
+a follow-up chunk.
+
+### Discovery via a survey workflow, edits authored by hand
+
+The change surface was found with a two-phase workflow: two ground-truth agents
+read the shipped `vxl` CLI source and the redesigned format spec, then nineteen
+agents surveyed one plan file each against that ground truth and returned a typed
+per-file change-list, 138 findings tagged `spec-must-update` (109) or
+`historical-record` (29). The edits themselves were authored by hand rather than
+farmed out, because the merge-to-layer prose recurs across seven files and had to
+tell one consistent story (layers no longer merge; a consumer selects a layer;
+`mesh` and the planned `material` select it with `--layer`, defaulting to the
+first).
+
+### Scope: the five aspects, shipped-accurate, no adjacent reconciliation
+
+The checklist scopes five aspects: palette model, `--attribute` default,
+merge-to-layer selection, cell-to-material rename, and the new `--color-format`
+and `--layer` flags. The survey surfaced adjacent plan-vs-code drift outside those
+aspects (a shared `--index` addressing the shipped `list`/`show` do not use, and
+`quantize`/`remap`/`material` pages for commands not yet built). The ruling:
+apply the five aspects with shipped-accurate wording; keep the unbuilt commands as
+forward specs updated to the new pool/binding/material model rather than deleting
+them; and correct the read-command addressing to shipped reality only where the
+retired `rgba` default forces it (so `palette show`'s documented default becomes
+its real `'*' '*' auto`). The `remap`/`quantize` bare-palette examples move to the
+new `{ valuePools, palettes }` shape, flagging that a bare palette file now
+carries its value pools; fully re-speccing that unbuilt input format is left out.
+Deferred and noted: `palette show`'s float-versus-byte color-component rendering
+for linear pools, which the survey judged underspecified.
+
+### The `vxl-commands` implementation-decisions log is preserved, not rewritten
+
+That plan's own `implementation-decisions.md` is a dated, per-commit historical
+record of choices made while building the CLI, all predating this redesign.
+Rewriting its entries would falsify what was decided when, and this redesign's own
+log already records the supersession. So it keeps every entry and gains a single
+forward-pointer note near the top listing the renames (cell to material, the glTF
+attribute vocabulary, non-merging layers and `--layer`, the flag renames, and
+`--color-format`) and linking here. This matches the repo's practice of describing
+current design in living docs while leaving historical logs intact.

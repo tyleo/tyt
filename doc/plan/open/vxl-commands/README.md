@@ -17,14 +17,20 @@ by leading bytes (`{` versus `PK`) rather than by extension, as the spec
 requires in [File Extensions](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#file-extensions).
 The reference writes `.voxj` for brevity.
 
-A document holds an ordered `palettes` array. Each palette declares an ordered
-set of `attributes` (`rgba`, `metallic`, `roughness`, and so on) and lists its
-cells as rows of values, one value per attribute. A voxel samples one cell per
-palette its object references, and its material is the ordered merge of those
-cells, with later palettes overriding earlier ones on shared attributes. This
-model is defined in [Palettes](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).
-Palette commands address a target with two shared options, `--index` (which
-palette, default `0`) and `--attribute` (which attribute key, default `rgba`).
+A document holds an ordered `palettes` array and a shared
+`runtimeState.valuePools` array the palettes reference by index. Each palette
+pairs an ordered set of `bindings`, each naming an attribute (`baseColorFactor`,
+`metallicFactor`, `roughnessFactor`, and so on) with a value pool it draws from,
+and a column-major `materials` table holding one column of value-indices per
+binding. A voxel samples one material index per layer its object references
+through `layerPaletteRefs`, indexing that layer's palette `materials` columns.
+Layers do not merge, so the meaning of overlapping layers is left to the
+consuming application, and a consumer that needs one effective material reads a
+single selected layer, the object's first (index `0`) by default. This model is
+defined in [Palettes](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).
+The palette commands address a target their own way, described under
+[`vxl palette`](reference/palette/README.md); attribute keys are the glTF names
+such as `baseColorFactor`, not the old `rgba`.
 
 > Notation: `<required>`, `[optional]`, `[optional=default]`, and `flag` for a
 > presence or settable boolean.

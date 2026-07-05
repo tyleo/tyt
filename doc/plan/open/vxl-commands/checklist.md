@@ -37,9 +37,9 @@ off as they land.
 - [x] `--select` hierarchy-path glob object selector: a node path selects its
       subtree, repeatable, union over all values. See
       [conventions](reference/conventions.md).
-- [x] `--atlas` layout `ValueEnum`: palette (one texel per merged material;
-      product over the object's layers, shareable) and unwrap (per-mesh UV)
-      layouts. See [mesh](reference/mesh.md).
+- [x] `--atlas` layout `ValueEnum`: palette (one texel per material of the baked
+      layer's palette, placed at its material index, shared by every mesh on that
+      palette) and unwrap (per-mesh UV) layouts. See [mesh](reference/mesh.md).
 - [x] `--texture-map` channel parser: channel sources (`R`/`G`/`B`/`A` = `attr`
       | `1-attr` | `attr.r`/`.g`/`.b`/`.a` color component | `0` | `1` |
       `computed-occlusion`) and the RGBA packing, with `smoothness` accepted as
@@ -48,9 +48,12 @@ off as they land.
       metallic-smoothness, mse, emissive, occlusion, computed-occlusion,
       roughness, smoothness). See [mesh](reference/mesh.md).
 - [x] `--define-attribute` binding types: `ColorComponent`, `AttributeType`
-      (`scalar` | `color`), and `AttributeBinding` (`name key [type]`; bindings
-      read the merged value, so the former palette-index field is dropped). The
-      clap multi-value wiring lands with `mesh`. See [mesh](reference/mesh.md).
+      (`srgb` | `srgba` | `linear-rgb` | `linear-rgba` | `float` | `int` | `bool`,
+      with `color` an alias for `srgba` and `scalar` for `float`, defaulting to
+      `float`), and `AttributeBinding` (`name key [type]`; bindings read the
+      meshed layer's palette, the layer `mesh`'s `--layer` selects and the first
+      by default, so the former palette-index field is dropped). The clap
+      multi-value wiring lands with `mesh`. See [mesh](reference/mesh.md).
 - [ ] `--vertex` / `--vertex-map` carrier: preset-to-attribute-name mapping
       (`albedo`/`computed-occlusion` → `COLOR_0`, the scalar/packed presets →
       `_NAME`, `palette-index` → `_PALETTEINDEX` over a per-mesh used-combos
@@ -66,19 +69,19 @@ off as they land.
       [mesh](reference/mesh.md). (Image storage shipped with `mesh`; the palette
       JSON reuse lands with the vertex carriers.)
 - [x] Shared voxj encoding options (`--format`, `--encoding-preset`,
-      `--position-encoding`, `--sample-encoding`) in `VoxjEncodingOptions`,
-      flattened by `to voxj` and `voxelize`; `--ext`/`--edit-state` stay on
-      `to voxj`.
+      `--position-encoding`, `--sample-encoding`, `--color-format`) in
+      `VoxjEncodingOptions`, flattened by `to voxj` and `voxelize`;
+      `--ext`/`--edit-state` stay on `to voxj`.
 - [x] `ValueEnum`s for the palette ops: quantize method, color space, dither,
       and `palette show` format (`auto` | `swatch` | `swatch-value` | `value`).
 - [ ] Shared palette-reduction engine and a flattened options group
       (`--method` / `--space` / `--dither`), reused by `palette quantize`,
-      `palette remap` (space/dither), and `voxelize`'s `--max-palette-cells`, on
-      the one material-follows-color rule (a count bounds cells; a merged cell
-      takes its cluster representative's whole row). Landed: the
+      `palette remap` (space/dither), and `voxelize`'s `--max-palette-materials`,
+      on the one material-follows-color rule (a count bounds materials; a merged
+      material takes its cluster representative's whole material). Landed: the
       `PaletteReductionOptions` group and voxsmith's `reduce_palette` with all
       three methods (`median-cut` / `octree` / `kmeans`) in oklab/lab/rgb via
-      `remove_cell`+`gc`, plus `--dither` (`floyd-steinberg` / `ordered`) as a
+      `remove_material`+`gc`, plus `--dither` (`floyd-steinberg` / `ordered`) as a
       per-voxel remap in 3D raster order. Pending: `quantize` / `remap` will
       reuse the engine.
 
@@ -100,7 +103,8 @@ off as they land.
 - [x] Material maps: `--texture <name> [path]` presets (albedo, orm,
       metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
       computed-occlusion, roughness, smoothness), `--texture-map <path>
-      <channels>`, `--define-attribute <name> <key> [type]`, and
+      <channels>`, `--define-attribute <name> <key> [type]`, `--layer` (0-based
+      object-layer index whose materials this mesh bakes, default `0`), and
       `--texture-storage` (embedded / external / both); default paths from the
       mesh stem. (The `--atlas palette` path; `computed-occlusion` errors until
       the unwrap atlas lands.)
@@ -150,19 +154,20 @@ Material sampling (see [voxelize](reference/voxelize.md) and
       `--fill-color`-with-`--fill-mode surface` guard. `per-texel` and
       texture-aware `auto` still fall back to `per-primitive` until the texel
       sampler lands below.
-- [x] `per-primitive`: one cell per material from the PBR factors (`rgba`,
-      `metallic`, `roughness`, `emissive`, `occlusion`), matching what `mesh`
-      bakes.
+- [x] `per-primitive`: one material per source glTF material from the PBR factors
+      (`baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
+      `emissiveStrength`, `occlusionStrength`), matching what `mesh` bakes.
 - [x] `--fill-color none | #RRGGBBAA` (default `none`): the whole object under
       `flat`, the `solid`-fill interior under the sampling modes; drop the
       surface rejection. A `none` interior adopts its nearest surface material.
-- [x] `--max-palette-cells <n> | none` (default `256`) via the shared reduction
-      engine; expose `--method` / `--space` / `--dither` on `voxelize`. Landed for
+- [x] `--max-palette-materials <n> | none` (default `256`) via the shared
+      reduction engine; expose `--method` / `--space` / `--dither` on `voxelize`.
+      Landed for
       all three methods (`median-cut` / `octree` / `kmeans`) with a stderr note,
       and both `--dither` modes (`floyd-steinberg` / `ordered`).
 - [x] `per-texel`: UV interpolation, image decode, area-average over the voxel
       footprint, epsilon-merge of near-identical tuples, and a `solid`-interior
-      fallback to the nearest surface cell. `auto` becomes texture-aware here.
+      fallback to the nearest surface material. `auto` becomes texture-aware here.
       Base color, metallic, roughness, emissive, and occlusion all sample their
       own glTF textures on one scatter pass, each map reading the TEXCOORD set it
       declares (sRGB for base color and emissive, linear data for
@@ -171,21 +176,22 @@ Material sampling (see [voxelize](reference/voxelize.md) and
 
 ### palette ([reference/palette/](reference/palette/))
 
-- [x] `palette list` (+ `--layout`): index, attributes, cell count, referencing
-      objects.
+- [x] `palette list` (+ `--layout`): index, attributes, material count,
+      referencing objects.
 - [x] `palette show` (+ `--json`): `--index` / `--attribute` / `--format`. See
       the V2 follow-ups in [palette show](reference/palette/show.md) for the
       broader version.
 - [ ] `palette quantize`: `--count` with median-cut / octree / kmeans, space,
       dither with `--select` / `--select-index`, and the material-follows-color
-      reduction rule (`--count` bounds cells; a merged cell takes its cluster
-      representative's whole row). Accept a full document or a bare palette JSON;
-      dither only with a document.
+      reduction rule (`--count` bounds materials; a merged material takes its
+      cluster representative's whole material). Accept a full document or a bare
+      palette JSON; dither only with a document.
 - [ ] `palette remap`: `--target` (JSON `palettes` array) or `--target-index`,
       `--target-attribute`, space, dither with `--select` / `--select-index`,
       and the same material-follows-color rule (a remapped voxel adopts the
-      target entry's whole row). Accept a full document or a bare palette JSON
-      input, the `--target` shape; dither only with a document.
+      target material's whole set of attribute values). Accept a full document or
+      a bare palette JSON input, the `--target` shape; dither only with a
+      document.
 
 ### hierarchy show ([reference/hierarchy/show.md](reference/hierarchy/show.md))
 
@@ -197,7 +203,8 @@ Material sampling (see [voxelize](reference/voxelize.md) and
       grids relative to the placing node, origins with a local/world space, an
       absent edit grid printing `null`, an empty object's runtime grid a
       zero-size box at its origin.
-- [x] `--show-palettes`, one child per referenced palette with its cell count.
+- [x] `--show-layers`, one child per layer labeled by its palette index with its
+      material count.
 
 ### validate ([reference/validate.md](reference/validate.md))
 
@@ -207,11 +214,11 @@ Material sampling (see [voxelize](reference/voxelize.md) and
 ### info ([reference/info.md](reference/info.md))
 
 - [ ] Report version, per-object bounds / voxel count / encodings, palette
-      attribute sets and cell counts, `editState` and `ext` presence, and root /
+      attribute sets and material counts, `editState` and `ext` presence, and root /
       instanced / unplaced nodes; `--layout`. Landed: the command, dispatch,
       `Dependencies::info`, and a markdown / pretty-json / compact-json `--layout`
       report covering version, per-object bounds, voxel count, palette attribute
-      sets and cell counts, and `editState` / `ext` presence, with tests. Pending:
+      sets and material counts, and `editState` / `ext` presence, with tests. Pending:
       per-object encodings and the root / instanced / unplaced node breakdown.
 
 ## Finishing

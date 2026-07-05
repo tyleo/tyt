@@ -12,12 +12,16 @@ These hold across the commands and match the existing `to` commands.
    `.voxjz`.
 3. Settable booleans follow the `--ext` style: a bare flag means `true`, an
    explicit `--flag false` turns it off, and the option has a default.
-4. Palette addressing is one pair of options everywhere it appears, `--index`
-   (default `0`) and `--attribute` (default `rgba`), rather than positional
-   arguments, so optional values never trail required ones. Only the read-only
-   [`palette show`](palette/show.md) extends `--attribute` with the
-   `<key>.component` grammar to read one channel of a color; the mutating
-   `quantize` and `remap` operate on a whole attribute and reject a component.
+4. Palette addressing differs by command. [`palette list`](palette/list.md)
+   takes repeatable positional index filters such as `1` or `1-5`.
+   [`palette show`](palette/show.md) takes a repeatable
+   `--attribute <palette> <attribute> <format>` selector, defaulting to the
+   whole-document wildcard `'*' '*' auto`, and extends `--attribute` with the
+   `<key>.component` grammar to read one channel of a color. The mutating
+   `quantize` and `remap` address a palette with `--index` (default `0`) and
+   `--attribute` (default `baseColorFactor`), operate on a whole attribute, and
+   reject a component. Attribute keys are the glTF names such as `baseColorFactor`,
+   not the old `rgba`.
 5. The read-only reports render with `--layout`, `markdown` (default),
    `pretty-json`, or `compact-json`: `validate` and `info`.
    [`palette list`](palette/list.md) shares those values but adds a `hierarchy`

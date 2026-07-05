@@ -51,10 +51,11 @@ voxels reports a zero-size box at its origin.
    subtree, node-relative.
 8. `--show-runtime-extents [precision]`: append the runtime grid's extents
    (`max - min`).
-9. `--show-palettes` (flag): append each object's referenced palettes as a
-   nested subtree, one child per palette in the object's palette-reference
-   order, reading `index: {cells: <count>}`. An object that references no
-   palette prints an empty `palettes: []` array.
+9. `--show-layers` (flag): append each object's referenced layers as a
+   nested subtree, one child per layer in the object's layer-reference
+   order, reading `<palette index>: {materials: <count>}`. Two layers may share
+   a palette, and layers do not merge. An object that references no layer prints
+   an empty `layers: []` array.
 10. `--collapse-ancestors` (flag): hide the ancestor chain above each match root
     and replace it with an `ancestors` marker, omitted when the match root is a
     top-level node. Requires a `pattern`.
