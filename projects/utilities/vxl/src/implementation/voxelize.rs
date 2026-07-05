@@ -123,6 +123,7 @@ fn reduce_generated_palette(state: &mut VoxMain, reduction: PaletteReduction) ->
         reduction_method(reduction.method),
         color_space(reduction.space),
         dither(reduction.dither),
+        reduction.keep_unused_values,
     )?;
 
     Ok(())

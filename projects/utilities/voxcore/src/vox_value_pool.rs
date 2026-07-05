@@ -96,6 +96,28 @@ impl VoxValuePool {
         }
     }
 
+    /// Keeps only the values at `keep`, in that order, dropping the rest. Each
+    /// `keep` entry is a value-index below [`values_len`](Self::values_len).
+    pub(crate) fn retain_values(&mut self, keep: &[u32]) {
+        fn picked<T: Clone>(values: &[T], keep: &[u32]) -> Vec<T> {
+            keep.iter()
+                .map(|&index| values[index as usize].clone())
+                .collect()
+        }
+
+        match self {
+            VoxValuePool::Json { values } => *values = picked(values, keep),
+            VoxValuePool::Bool { values } => *values = picked(values, keep),
+            VoxValuePool::Float { values, .. } => *values = picked(values, keep),
+            VoxValuePool::Int { values, .. } => *values = picked(values, keep),
+            VoxValuePool::String { values } => *values = picked(values, keep),
+            VoxValuePool::Srgb { values } => *values = picked(values, keep),
+            VoxValuePool::Srgba { values } => *values = picked(values, keep),
+            VoxValuePool::LinearRgb { values } => *values = picked(values, keep),
+            VoxValuePool::LinearRgba { values } => *values = picked(values, keep),
+        }
+    }
+
     /// The pool's kind.
     pub fn kind(&self) -> VoxValuePoolKind {
         match self {

@@ -253,6 +253,28 @@ impl VoxPalette {
         material_remap
     }
 
+    /// Maps each material's value-index `i` to `remap[i]` for every binding on
+    /// `pool`. `remap` covers every pre-prune index of `pool`.
+    pub(crate) fn remap_pool_value_indices(&mut self, pool: U32Id<BVoxValuePool>, remap: &[u32]) {
+        let binding_ids: Vec<_> = self.binding_ids.iter().collect();
+        for binding_id in binding_ids {
+            // Safety: retained binding ids have a value.
+            let bound = unsafe { self.bindings.get(binding_id) }.pool == pool;
+            if !bound {
+                continue;
+            }
+
+            let material_ids: Vec<_> = self.material_ids.iter().collect();
+            for material_id in material_ids {
+                // Safety: a retained material holds a value-index for every
+                // binding, and the value-index column is keyed by binding id.
+                let column = unsafe { self.materials.get_mut(material_id) };
+                let slot = unsafe { column.get_mut(binding_id) };
+                *slot = remap[*slot as usize];
+            }
+        }
+    }
+
     /// Translates every binding's pool id through `remap`, matching a value-pool
     /// store a [`VoxMain`](crate::VoxMain) is compacting. Requires a
     /// referentially valid palette, so every binding names a live pool.

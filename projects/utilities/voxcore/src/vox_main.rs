@@ -4,7 +4,7 @@ use crate::{
     VoxValue, VoxValuePool,
 };
 use branded_id::{IdVec, U32Id, soa::IdRemap};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// The in-memory state of a voxel model: its objects, shared palettes, scene
 /// hierarchy, and roots.
@@ -395,6 +395,73 @@ impl VoxMain {
             palettes: palette_remap,
             hierarchy_nodes: node_remap,
             materials: material_remaps,
+        }
+    }
+
+    /// Drops value-pool entries no material references, renumbers the survivors
+    /// densely from `0`, and rewrites the value-indices at them. The pool-value
+    /// counterpart to [`gc`](Self::gc), which compacts the id pools but not the
+    /// values inside a pool.
+    ///
+    /// 1. references union across palettes, so a shared entry survives while any
+    ///    one material uses it;
+    /// 2. a pool no material references is left whole, since
+    ///    [`validate`](Self::validate) requires every pool non-empty;
+    /// 3. the state stays referentially valid.
+    pub fn prune_value_pools(&mut self) {
+        // The value-indices each pool still has a material referencing,
+        // ascending so the kept order stays stable.
+        let pool_ids: Vec<_> = self.runtime_state.value_pool_ids.iter().collect();
+        let mut referenced: HashMap<U32Id<BVoxValuePool>, BTreeSet<u32>> =
+            pool_ids.iter().map(|&id| (id, BTreeSet::new())).collect();
+
+        let palette_ids: Vec<_> = self.runtime_state.palette_ids.iter().collect();
+        for &palette_id in &palette_ids {
+            // Safety: retained palette ids have a value.
+            let palette = unsafe { self.runtime_state.palettes.get(palette_id) };
+            for (binding_id, binding) in palette.iter_bindings() {
+                let uses = referenced
+                    .get_mut(&binding.pool)
+                    .expect("a binding names a live value pool in a valid state");
+                for material in palette.iter_materials() {
+                    let index = palette
+                        .value_index(material, binding_id)
+                        .expect("a retained material has a value-index for every binding");
+                    uses.insert(index);
+                }
+            }
+        }
+
+        // Prune each pool with unreferenced entries, recording where its
+        // survivors moved. A pool no material references is left whole.
+        let mut remaps: HashMap<U32Id<BVoxValuePool>, Vec<u32>> = HashMap::new();
+        for &pool_id in &pool_ids {
+            let keep: Vec<u32> = referenced[&pool_id].iter().copied().collect();
+            // Safety: retained pool ids have a value.
+            let pool = unsafe { self.runtime_state.value_pools.get_mut(pool_id) };
+            if keep.is_empty() || keep.len() == pool.values_len() {
+                continue;
+            }
+
+            let mut remap = vec![0u32; pool.values_len()];
+            for (new_index, &old_index) in keep.iter().enumerate() {
+                remap[old_index as usize] = new_index as u32;
+            }
+            pool.retain_values(&keep);
+            remaps.insert(pool_id, remap);
+        }
+
+        if remaps.is_empty() {
+            return;
+        }
+
+        // Follow the new numbering in every material that drew on a pruned pool.
+        for &palette_id in &palette_ids {
+            // Safety: retained palette ids have a value.
+            let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
+            for (pool_id, remap) in &remaps {
+                palette.remap_pool_value_indices(*pool_id, remap);
+            }
         }
     }
 
@@ -879,6 +946,102 @@ mod tests {
         state.add_value_pool(VoxValuePool::Bool { values: vec![true] });
         assert_eq!(state.value_pool_count(), 2);
         assert_eq!(copy.value_pool_count(), 1);
+    }
+
+    #[test]
+    fn prune_value_pools_drops_unreferenced_entries_and_remaps() {
+        let mut state = VoxMain::default();
+        // Four colors; the palette references only the middle two.
+        let colors = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![
+                [1.0, 0.0, 0.0, 1.0], // 0 red, unused
+                [0.0, 1.0, 0.0, 1.0], // 1 green, used
+                [0.0, 0.0, 1.0, 1.0], // 2 blue, unused
+                [1.0, 1.0, 1.0, 1.0], // 3 white, used
+            ],
+        });
+        let mut palette = VoxPalette::default();
+        let binding = palette.add_binding("baseColorFactor".to_owned(), colors);
+        let green = palette.add_material(vec![1]).unwrap();
+        let white = palette.add_material(vec![3]).unwrap();
+        let palette_id = state.add_palette(palette);
+        state.validate().unwrap();
+
+        state.prune_value_pools();
+
+        // The pool keeps green then white in ascending old-index order.
+        assert_eq!(
+            state.value_pool(colors),
+            Some(&VoxValuePool::Srgba {
+                values: vec![[0.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]],
+            })
+        );
+        // The materials follow the dense numbering: green to 0, white to 1.
+        let palette = state.palette(palette_id).unwrap();
+        assert_eq!(palette.value_index(green, binding), Some(0));
+        assert_eq!(palette.value_index(white, binding), Some(1));
+        state.validate().unwrap();
+    }
+
+    #[test]
+    fn prune_value_pools_keeps_entries_any_palette_still_uses() {
+        let mut state = VoxMain::default();
+        let ints = int_pool(&mut state, vec![10, 20, 30]);
+        // Palette a draws index 0, palette b draws index 2; index 1 is unused.
+        let mut a = VoxPalette::default();
+        let a_binding = a.add_binding("v".to_owned(), ints);
+        let a_material = a.add_material(vec![0]).unwrap();
+        let a_id = state.add_palette(a);
+        let mut b = VoxPalette::default();
+        let b_binding = b.add_binding("v".to_owned(), ints);
+        let b_material = b.add_material(vec![2]).unwrap();
+        let b_id = state.add_palette(b);
+        state.validate().unwrap();
+
+        state.prune_value_pools();
+
+        // 10 and 30 survive (indices 0 and 2 used); 20 (index 1) is dropped.
+        assert_eq!(
+            state.value_pool(ints),
+            Some(&VoxValuePool::Int {
+                min: VoxBound::None,
+                max: VoxBound::None,
+                values: vec![10, 30],
+            })
+        );
+        assert_eq!(
+            state
+                .palette(a_id)
+                .unwrap()
+                .value_index(a_material, a_binding),
+            Some(0)
+        );
+        assert_eq!(
+            state
+                .palette(b_id)
+                .unwrap()
+                .value_index(b_material, b_binding),
+            Some(1)
+        );
+        state.validate().unwrap();
+    }
+
+    #[test]
+    fn prune_value_pools_leaves_a_fully_referenced_pool() {
+        let mut state = VoxMain::default();
+        let ints = int_pool(&mut state, vec![1, 2]);
+        let mut palette = VoxPalette::default();
+        palette.add_binding("v".to_owned(), ints);
+        palette.add_material(vec![0]).unwrap();
+        palette.add_material(vec![1]).unwrap();
+        state.add_palette(palette);
+
+        state.prune_value_pools();
+
+        assert_eq!(
+            state.value_pool(ints).map(VoxValuePool::values_len),
+            Some(2)
+        );
     }
 
     #[test]

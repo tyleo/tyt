@@ -78,25 +78,47 @@ losing those factors and round-trips back out.
 A verification track: run the pipelines over real assets, prove materials survive,
 and file any gap as a new item. No production change unless a gap is found.
 
-- [ ] Identify a representative `.vmax` with rich materials (metallic, roughness,
+- [x] Identify a representative `.vmax` with rich materials (metallic, roughness,
       emission/`sic`, the dispersion-derived `ior` and `transmission`, and the
       vmax-only `shadows` and `absorption`) and a textured `.glb`; note where the
-      assets live.
-- [ ] Run `vmax -> voxj -> vmax`: `vxl to voxj model.vmax out.voxj`, then
+      assets live. `scratch/energy-reactor.vmax` (palette 1 binds `ior`,
+      `transmissionFactor`, `absorption`) and `scratch/energy-turret.glb`; neither
+      is committed.
+- [x] Run `vmax -> voxj -> vmax`: `vxl to voxj model.vmax out.voxj`, then
       `vxl to vmax out.voxj rebuilt.vmax`. Confirm the voxj palette folds color
       and the material attributes into one palette, and the rebuilt vmax restores
-      the exact `VoxelMaxMaterial` list from the `voxel-max` ext.
-- [ ] Run `glb -> voxj -> vmax`: `vxl voxelize model.glb out.voxj`, then
+      the exact `VoxelMaxMaterial` list from the `voxel-max` ext. Rebuilt values
+      match the source and the ext `palettes` block is byte-identical.
+- [x] Run `glb -> voxj -> vmax`: `vxl voxelize model.glb out.voxj`, then
       `vxl to vmax out.voxj from_glb.vmax`. Confirm the synthesized derive path
       maps baseColor, metallic, roughness, and emissive into vmax materials within
-      the 256-material budget.
-- [ ] Compare materials at each hop and record which attributes survive, which are
+      the 256-material budget. Surfaced the color-budget gap below; fixed, so a
+      `voxelize --max-palette-materials 255` now writes vmax cleanly.
+- [x] Compare materials at each hop and record which attributes survive, which are
       vmax-only (`shadows`, `absorption`, dispersion), and which depend on Track B
-      (`ior` and `transmission` from a glb source).
+      (`ior` and `transmission` from a glb source). Recorded in
+      [reference/implementation-decisions.md](reference/implementation-decisions.md).
 - [ ] Turn both pipelines into end-to-end tests, at the converter or command
-      level, so the round-trips stay covered.
-- [ ] File any fidelity gap found as a new checklist item under the track it
-      belongs to.
+      level, so the round-trips stay covered. Prune behavior is covered by unit
+      and integration tests; the command-level pipeline tests remain.
+- [x] File any fidelity gap found as a new checklist item under the track it
+      belongs to. Filed as the color-budget item below.
+
+### Gap: voxelized colors overflow the vmax palette (filed and fixed)
+
+`glb -> voxj -> vmax` errored because `voxelize`'s material reduction never
+compacted the value pools, so the folded `baseColorFactor` pool kept every
+sampled color (thousands) and overflowed Voxel Max's 255-color budget, at every
+material cap. The owner directed fixing it in-session rather than leaving it
+filed. Fixed by:
+
+- [x] Add `VoxMain::prune_value_pools` to `voxcore`: drop pool entries no
+      material references, renumber densely, and rewrite the value-indices.
+- [x] Give `voxsmith`'s `reduce_palette` a `keep_unused_values` argument that
+      prunes after reducing unless set.
+- [x] Add `voxelize`'s `--keep-unused-values` opt-out flag (off by default, so
+      the reduction drops), threaded through `PaletteReduction`.
 
 Gate: both pipelines run clean and materials are shown to survive each hop, or the
-gaps are filed with a reproduction.
+gaps are filed with a reproduction. The vmax round-trip is byte-exact; the glb
+pipeline runs clean at `--max-palette-materials 255` and the filed gap is fixed.

@@ -7,14 +7,20 @@ use voxcore::{
     VoxValuePool,
 };
 
-/// Reduces `palette` in `state` to at most `max_materials` materials: materials
-/// cluster by `baseColorFactor` and each cluster collapses onto one real
-/// representative, so a merged voxel takes the representative's whole material,
-/// not an average. Colorless materials are left untouched.
+/// Reduces `palette` in `state` to at most `max_materials` materials, then,
+/// unless `keep_unused_values`, prunes the pool values the reduction leaves
+/// unreferenced.
 ///
-/// Returns `Some((before, after))` when the reduction fired, `None` when the
-/// palette already fit (leaving `method` / `space` / `dither` inert). The state
-/// is left compacted and valid.
+/// Materials cluster by `baseColorFactor` and each cluster collapses onto one
+/// real representative, so a merged voxel takes the representative's whole
+/// material, not an average. Colorless materials are left untouched. Returns
+/// `Some((before, after))` when the reduction fired, `None` when the palette
+/// already fit.
+///
+/// The prune runs state-wide through [`VoxMain::prune_value_pools`], compacting
+/// the pools to fit a small budget such as Voxel Max's 255 colors;
+/// `keep_unused_values` leaves every value. The state is compacted and valid
+/// either way.
 ///
 /// # Arguments
 /// * `state` - the document, reduced in place.
@@ -23,7 +29,32 @@ use voxcore::{
 /// * `method` - the clustering algorithm.
 /// * `space` - the color space compared in.
 /// * `dither` - error diffusion when snapping samples.
+/// * `keep_unused_values` - keep pool values left unreferenced.
 pub fn reduce_palette(
+    state: &mut VoxMain,
+    palette: U32Id<BVoxPalette>,
+    max_materials: usize,
+    method: ReductionMethod,
+    space: ColorSpace,
+    dither: Dither,
+    keep_unused_values: bool,
+) -> Result<Option<(usize, usize)>> {
+    let outcome = reduce_materials(state, palette, max_materials, method, space, dither)?;
+    if !keep_unused_values {
+        state.prune_value_pools();
+    }
+    Ok(outcome)
+}
+
+/// Reduces `palette` in `state` to at most `max_materials` materials: materials
+/// cluster by `baseColorFactor` and each cluster collapses onto one real
+/// representative, so a merged voxel takes the representative's whole material,
+/// not an average. Colorless materials are left untouched.
+///
+/// Returns `Some((before, after))` when the reduction fired, `None` when the
+/// palette already fit (leaving `method` / `space` / `dither` inert). The state
+/// is left compacted and valid.
+fn reduce_materials(
     state: &mut VoxMain,
     palette: U32Id<BVoxPalette>,
     max_materials: usize,
@@ -911,6 +942,7 @@ mod tests {
             ReductionMethod::MedianCut,
             ColorSpace::Oklab,
             Dither::None,
+            false,
         )
         .unwrap();
         assert_eq!(outcome, None);
@@ -930,6 +962,7 @@ mod tests {
             ReductionMethod::MedianCut,
             ColorSpace::Oklab,
             Dither::None,
+            false,
         )
         .unwrap();
         assert_eq!(outcome, Some((3, 2)));
@@ -968,6 +1001,7 @@ mod tests {
                 method,
                 ColorSpace::Oklab,
                 Dither::None,
+                false,
             )
             .unwrap();
             let (before, after) = outcome.expect("the reduction fired");
@@ -992,7 +1026,8 @@ mod tests {
                 5,
                 ReductionMethod::MedianCut,
                 ColorSpace::Oklab,
-                Dither::FloydSteinberg
+                Dither::FloydSteinberg,
+                false
             )
             .unwrap()
             .is_none()
@@ -1009,6 +1044,7 @@ mod tests {
                 ReductionMethod::MedianCut,
                 ColorSpace::Oklab,
                 dither,
+                false,
             )
             .unwrap();
             assert_eq!(outcome, Some((3, 2)), "dither {dither:?}");
@@ -1029,6 +1065,7 @@ mod tests {
                 ReductionMethod::MedianCut,
                 space,
                 Dither::None,
+                false,
             )
             .unwrap();
             assert_eq!(outcome, Some((4, 2)), "space {space:?}");
@@ -1069,6 +1106,7 @@ mod tests {
             ReductionMethod::MedianCut,
             ColorSpace::Rgb,
             Dither::Ordered,
+            false,
         )
         .unwrap();
         assert_eq!(outcome, Some((3, 2)));
@@ -1110,6 +1148,7 @@ mod tests {
             ReductionMethod::MedianCut,
             ColorSpace::Rgb,
             Dither::FloydSteinberg,
+            false,
         )
         .unwrap();
         assert_eq!(outcome, Some((3, 2)));
@@ -1125,5 +1164,69 @@ mod tests {
             let got = voxel_color(&state, object, palette, TyVector3U32::new(0, 0, z));
             assert_eq!(&got, want, "z = {z}");
         }
+    }
+
+    /// The number of values in the pool bound to `attribute` in the first
+    /// palette that binds it.
+    fn pool_len(state: &VoxMain, attribute: &str) -> usize {
+        for (_, palette) in state.iter_palettes() {
+            if let Some(binding) = palette.binding_by_attribute(attribute) {
+                let pool = palette.binding(binding).unwrap().pool;
+                return state.value_pool(pool).unwrap().values_len();
+            }
+        }
+        panic!("no palette binds {attribute}");
+    }
+
+    #[test]
+    fn pruning_drops_the_merged_away_values() {
+        // Three colors fused to two; with keep_unused_values off, the reduction
+        // prunes the merged-away color and its tag from the pools rather than
+        // leaving them unreferenced.
+        let (mut state, palette, _) =
+            state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
+        assert_eq!(pool_len(&state, BASE_COLOR_FACTOR), 3);
+
+        let outcome = reduce_palette(
+            &mut state,
+            palette,
+            2,
+            ReductionMethod::MedianCut,
+            ColorSpace::Oklab,
+            Dither::None,
+            false,
+        )
+        .unwrap();
+        assert_eq!(outcome, Some((3, 2)));
+
+        // Both pools now carry only the two survivors' values.
+        assert_eq!(pool_len(&state, BASE_COLOR_FACTOR), 2);
+        assert_eq!(pool_len(&state, "tag"), 2);
+        assert_eq!(state.validate(), Ok(()));
+        // The survivors still resolve to their original colors.
+        let mut survivors = colors(&state, palette);
+        survivors.sort();
+        assert_eq!(survivors, ["#0000FFFF", "#FF0000FF"]);
+    }
+
+    #[test]
+    fn keep_unused_values_leaves_the_pools_whole() {
+        // The same reduction with keep_unused_values keeps the merged-away color
+        // in the pool, unreferenced.
+        let (mut state, palette, _) =
+            state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
+        reduce_palette(
+            &mut state,
+            palette,
+            2,
+            ReductionMethod::MedianCut,
+            ColorSpace::Oklab,
+            Dither::None,
+            true,
+        )
+        .unwrap();
+        assert_eq!(material_count(&state, palette), 2);
+        assert_eq!(pool_len(&state, BASE_COLOR_FACTOR), 3);
+        assert_eq!(state.validate(), Ok(()));
     }
 }

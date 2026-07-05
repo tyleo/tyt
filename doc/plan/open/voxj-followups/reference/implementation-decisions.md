@@ -109,4 +109,50 @@ writes the three back as flat KHR extensions on the material.
 
 ## Track C: vmax material round-trip verification
 
-_Pending._
+Verified both pipelines against real assets in `scratch/`: `energy-reactor.vmax`,
+whose second palette carries `ior`, `transmissionFactor`, and `absorption`
+alongside metallic, roughness, emissive, and shadows, and `energy-turret.glb`, a
+textured mesh. Neither asset is committed, so the durable coverage is the unit
+and integration tests below rather than a fixture check.
+
+- **vmax -> voxj -> vmax round-trips materials byte-exactly.** `to voxj` folds
+  color and every material attribute into the palette and also stores the exact
+  `VoxelMaxMaterial` list in the `voxel-max` ext; `to vmax` restores from that
+  ext rather than re-deriving, so the rebuilt palette values match the source
+  and the ext's `palettes` block is byte-identical across a second conversion.
+  The folded palette holds one entry per used (color, material) pair, so its
+  count exceeds the ext's raw material count; an unused Voxel Max slot survives
+  in the ext but never enters the fold.
+- **glb -> voxj -> vmax hit a color-budget gap, now fixed.** A voxelized glb
+  folds thousands of sampled colors into `baseColorFactor`. `voxelize`'s material
+  reduction (`reduce_palette`) clustered materials but never compacted the value
+  pools, and `VoxMain::gc` compacts only id pools, never the values inside a
+  pool, so the color pool kept every sampled color and overflowed Voxel Max's
+  255-color budget. `to vmax` errored on the first voxel referencing a color cell
+  past 255, at every material cap.
+- **The fix is a pool-prune primitive the reduction opts into.** `voxcore` gains
+  `VoxMain::prune_value_pools`, which drops every pool entry no material
+  references, renumbers the survivors densely, and rewrites the value-indices
+  that point at them. References union across every palette, so a shared entry
+  survives while any one material uses it. A pool no material references is left
+  whole, since `validate` requires every pool non-empty. `reduce_palette` gains a
+  `keep_unused_values` argument and prunes after reducing unless it is set;
+  `to voxj` never reduces, so faithful loads keep every value they were given.
+- **The CLI knob is `--keep-unused-values`, off by default.** `voxelize` gains
+  `--keep-unused-values`, default false, so the reduction drops unused values
+  unless asked to keep them. The one `keep_unused_values` name threads through
+  the flag, `PaletteReduction`, and `reduce_palette`, so no polarity flips.
+  Dropping is the expected default; passing `--keep-unused-values` keeps every
+  sampled value, reproducing the old overflow. The prune runs inside the
+  reduction, so it pairs with `--max-palette-materials`: capping to 255 and
+  dropping yields at most 255 colors, which writes vmax cleanly.
+- **Coverage.** `voxcore` tests prune-and-remap, cross-palette union retention,
+  and the fully-referenced no-op; `voxsmith` tests that a fused-away color and its
+  tag leave the pools under `drop_unused` and stay under the opt-out; `vxl` tests
+  the reduction drops by default and that `--keep-unused-values` opts out. End to
+  end, `voxelize --max-palette-materials 255 energy-turret.glb` then `to vmax`
+  writes a 255-color vmax, while `--keep-unused-values` still overflows.
+- **Left for a follow-up.** Command-level end-to-end tests that drive `voxelize`,
+  `to voxj`, and `to vmax` as a pipeline (checklist item 5) are not yet added; the
+  round-trips are proven by the unit and integration tests plus the manual runs
+  recorded here.
