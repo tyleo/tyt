@@ -1,10 +1,9 @@
 use clap::ValueEnum;
 
 /// The Meshy `model_type`, selecting the generation pipeline.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum ModelType {
     /// Regular high-detail mesh generation.
-    #[default]
     Standard,
 
     /// Low-poly mesh optimized for cleaner polygons.

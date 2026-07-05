@@ -1,10 +1,9 @@
 use clap::ValueEnum;
 
 /// Render engine used by the `render` command.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum Renderer {
     /// Blender's real-time rasterizer. Fast; suitable for previews.
-    #[default]
     Eevee,
     /// Blender's path tracer. Slow; photorealistic output.
     Cycles,

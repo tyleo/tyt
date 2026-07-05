@@ -216,7 +216,7 @@ impl Mesh {
         let model = if lowpoly {
             None
         } else {
-            Some(model.unwrap_or_default())
+            Some(model.unwrap_or(Model::Meshy6))
         };
         let is_meshy6 = model.map(Model::is_meshy6).unwrap_or(true);
 
@@ -300,7 +300,7 @@ impl Mesh {
 
         // Texture phase fields, present only when texturing.
         let (enable_pbr, hd_texture, texture_prompt) = if texture {
-            let quality = texture_quality.unwrap_or_default();
+            let quality = texture_quality.unwrap_or(TextureQuality::Normal);
             if quality.is_hd() && !is_meshy6 {
                 return Err(Error::HdTextureUnavailable);
             }
@@ -326,7 +326,10 @@ impl Mesh {
 
         // Remesh phase fields, present only when remeshing.
         let (topology, target_polycount, save_pre_remeshed_model) = if remesh_on {
-            let topology = topology.unwrap_or_default().as_api_str().to_owned();
+            let topology = topology
+                .unwrap_or(Topology::Triangle)
+                .as_api_str()
+                .to_owned();
             // The default polycount is dropped when a decimation mode is set.
             let polycount = if decimation_mode.is_some() {
                 None

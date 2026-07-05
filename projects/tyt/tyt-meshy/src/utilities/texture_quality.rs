@@ -1,10 +1,9 @@
 use clap::ValueEnum;
 
 /// The resolution of the generated base color texture.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum TextureQuality {
     /// Normal-quality base color texture.
-    #[default]
     Normal,
 
     /// HD (4096×4096) base color texture. Only supported on Meshy 6.

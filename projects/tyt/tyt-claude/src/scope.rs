@@ -3,14 +3,13 @@ use clap::ValueEnum;
 use std::path::PathBuf;
 
 /// Which config file `add-profile` / `set-profile` should write to.
-#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+#[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum Scope {
     /// `~/.tytconfig`
     User,
     /// `<git-root>/.tytconfig` (checked into the repo)
     Repo,
     /// `<git-root>/.tytusrconfig` (user-local, not checked in)
-    #[default]
     RepoUser,
 }
 

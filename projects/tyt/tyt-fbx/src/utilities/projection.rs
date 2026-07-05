@@ -1,9 +1,8 @@
 use clap::ValueEnum;
 
 /// Camera projection used by the `render` command.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum Projection {
-    #[default]
     Perspective,
     Orthographic,
 }

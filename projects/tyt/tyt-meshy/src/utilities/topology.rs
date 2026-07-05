@@ -1,13 +1,12 @@
 use clap::ValueEnum;
 
 /// The topology of a remeshed model.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum Topology {
     /// Quad-dominant mesh.
     Quad,
 
     /// Decimated triangle mesh.
-    #[default]
     Triangle,
 }
 

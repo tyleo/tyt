@@ -1,11 +1,10 @@
 use clap::ValueEnum;
 
 /// Lighting preset used by the `render` command.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum Lighting {
     /// Even world-background illumination so every face reads clearly. No
     /// directional shadows.
-    #[default]
     Environment,
     /// Key / fill / rim area lights. Strong contrast.
     ThreePoint,

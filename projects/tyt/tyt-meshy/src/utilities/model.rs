@@ -1,14 +1,13 @@
 use clap::ValueEnum;
 
 /// The Meshy `ai_model` used for generation.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
 pub enum Model {
     /// Meshy 5.
     #[value(name = "meshy-5")]
     Meshy5,
 
     /// Meshy 6.
-    #[default]
     #[value(name = "meshy-6")]
     Meshy6,
 
