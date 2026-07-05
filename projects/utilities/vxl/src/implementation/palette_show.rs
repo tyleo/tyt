@@ -1,13 +1,14 @@
 use crate::{
-    AttributeRef, AttributeSelector, AttributeType, ColorComponent, Format, PaletteRef,
-    PaletteShowFormat, PaletteShowLayout, Result, Width, implementation,
+    AttributeRef, AttributeSelector, ColorComponent, Format, PaletteRef, PaletteShowFormat,
+    PaletteShowLayout, Result, Width, implementation,
 };
 use serde_json::{Value, json};
 use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use voxcore::{VoxMain, VoxPalette, VoxValue};
+use ty_math::{TyLinearRgbaColorF64, TyRgbaColorF64};
+use voxcore::{VoxMain, VoxPalette, VoxValue, VoxValuePool};
 
 /// Loads the voxel file at `input` and prints the value collections named by
 /// `selectors`. Each selector resolves to one or more collections, an
@@ -70,7 +71,7 @@ struct Collection {
     attribute: String,
     /// How each value renders.
     format: PaletteShowFormat,
-    /// One sample per palette cell, in cell order.
+    /// One sample per palette material, in material order.
     samples: Vec<Sample>,
 }
 
@@ -82,22 +83,40 @@ impl Collection {
     }
 }
 
-/// One rendered cell value: a whole color, a color component byte, a scalar
-/// number, or a raw fallback for a value that matches neither its inferred type
-/// nor a number.
-enum Sample {
-    Color(Rgba),
-    Component(u8),
-    Scalar(f64),
-    Raw(String),
+/// One rendered material value: its display text, JSON form, and the swatch it
+/// carries. Sampling reads a value through its bound pool's kind and
+/// precomputes all three so every layout renders uniformly.
+struct Sample {
+    /// The value as text: a hex color, a color component, a number, a bool, a
+    /// string, or a JSON value.
+    text: String,
+    /// The value in its native JSON type.
+    json: Value,
+    /// The swatch this value renders, or none for a value with no swatch.
+    swatch: Swatch,
 }
 
-/// A straight-alpha color decoded from a `#RRGGBBAA` string.
-struct Rgba {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
+/// The swatch a [`Sample`] renders: a true-color block for a whole color, a
+/// grayscale block for a scalar or color component, or none for a value with no
+/// meaningful swatch, such as a bool or string.
+enum Swatch {
+    Color([u8; 3]),
+    Gray(u8),
+    None,
+}
+
+/// How a bound pool's kind renders in `palette show`: a color, in sRGB or
+/// linear space and with three or four components; a plain number; or any other
+/// value shown as text with no swatch.
+#[derive(Clone, Copy)]
+enum Kind {
+    /// A color pool: `srgb` distinguishes sRGB from linear space, `components`
+    /// is 3 or 4.
+    Color { srgb: bool, components: usize },
+    /// A `float` or `int` pool.
+    Number,
+    /// A `bool`, `string`, or `json` pool.
+    Other,
 }
 
 /// Resolves the selectors against the document's palettes into collections in
@@ -116,6 +135,7 @@ fn resolve_collections(
             PaletteRef::All => {
                 for (index, palette) in palettes.iter().enumerate() {
                     expand_attribute(
+                        state,
                         index,
                         palette,
                         &selector.attribute,
@@ -136,6 +156,7 @@ fn resolve_collections(
                     )
                 })?;
                 expand_attribute(
+                    state,
                     index,
                     palette,
                     &selector.attribute,
@@ -153,6 +174,7 @@ fn resolve_collections(
 /// collections. A `palette_is_wild` palette, one from a `*`, skips a named
 /// attribute it lacks instead of erroring.
 fn expand_attribute(
+    state: &VoxMain,
     index: usize,
     palette: &VoxPalette,
     attribute: &AttributeRef,
@@ -163,16 +185,17 @@ fn expand_attribute(
     match attribute {
         AttributeRef::All => {
             let names: Vec<String> = palette
-                .iter_attributes()
-                .map(|(_, name)| name.to_string())
+                .iter_bindings()
+                .map(|(_, binding)| binding.attribute.to_string())
                 .collect();
             for name in names {
-                collections.push(build_collection(index, palette, &name, None, format)?);
+                collections.push(build_collection(
+                    state, index, palette, &name, None, format,
+                )?);
             }
         }
         AttributeRef::Key { key, component } => {
-            let present = palette.iter_attributes().any(|(_, name)| name == key);
-            if !present {
+            if palette.binding_by_attribute(key).is_none() {
                 if palette_is_wild {
                     return Ok(());
                 }
@@ -185,57 +208,76 @@ fn expand_attribute(
                 )
                 .into());
             }
-            collections.push(build_collection(index, palette, key, *component, format)?);
+            collections.push(build_collection(
+                state, index, palette, key, *component, format,
+            )?);
         }
     }
     Ok(())
 }
 
-/// Builds one collection from a present attribute: reads each cell's value,
-/// infers the type, rejects a color component on a scalar, and samples each
-/// value.
+/// Builds one collection from a present attribute: classifies the bound pool by
+/// kind, rejects a color component on a non-color and `.a` on a three-component
+/// color, then samples each material's value.
 fn build_collection(
+    state: &VoxMain,
     index: usize,
     palette: &VoxPalette,
     key: &str,
     component: Option<ColorComponent>,
     format: PaletteShowFormat,
 ) -> Result<Collection> {
-    let attribute_id = palette
-        .iter_attributes()
-        .find(|(_, name)| *name == key)
-        .map(|(id, _)| id)
+    let binding_id = palette
+        .binding_by_attribute(key)
         .expect("caller verified the attribute is present");
+    let binding = palette
+        .binding(binding_id)
+        .expect("a binding id from this palette resolves");
+    let pool = state
+        .value_pool(binding.pool)
+        .expect("a binding references a pool the state holds");
+    let kind = classify(pool);
 
-    // A retained cell holds a value for every attribute, so the lookup with
-    // this palette's own id always resolves.
-    let values: Vec<&VoxValue> = palette
-        .iter_cells()
-        .map(|cell| {
-            palette
-                .cell_value(cell, attribute_id)
-                .expect("a cell holds a value for every attribute")
+    // A color component names one channel: it applies only to a color, and `.a`
+    // only to a four-component color.
+    if let Some(component) = component {
+        match kind {
+            Kind::Color { components, .. } => {
+                if component == ColorComponent::A && components < 4 {
+                    return Err(IOError::new(
+                        ErrorKind::InvalidInput,
+                        format!(
+                            "attribute `{key}` is a three-component color and has no `.a` component"
+                        ),
+                    )
+                    .into());
+                }
+            }
+            Kind::Number | Kind::Other => {
+                return Err(IOError::new(
+                    ErrorKind::InvalidInput,
+                    format!(
+                        "attribute `{key}` is not a color and has no `.{}` component",
+                        component_letter(component)
+                    ),
+                )
+                .into());
+            }
+        }
+    }
+
+    // A material holds one value-index per binding, so the lookup with this
+    // palette's own binding id always resolves.
+    let samples = palette
+        .iter_materials()
+        .map(|material| {
+            let value_index = palette
+                .value_index(material, binding_id)
+                .expect("a material holds a value for every binding");
+            sample(pool, value_index, kind, component)
         })
         .collect();
 
-    let inferred = infer_type(&values);
-    if let Some(component) = component
-        && inferred == AttributeType::Scalar
-    {
-        return Err(IOError::new(
-            ErrorKind::InvalidInput,
-            format!(
-                "attribute `{key}` is a scalar and has no `.{}` color component",
-                component_letter(component)
-            ),
-        )
-        .into());
-    }
-
-    let samples = values
-        .iter()
-        .map(|&value| sample(value, inferred, component))
-        .collect();
     let attribute = match component {
         Some(component) => format!("{key}.{}", component_letter(component)),
         None => key.to_string(),
@@ -248,68 +290,228 @@ fn build_collection(
     })
 }
 
-/// The sample for one value under the inferred `r#type` and `component`:
-/// a color or its `component` byte, a scalar's number, else a raw fallback.
-fn sample(value: &VoxValue, r#type: AttributeType, component: Option<ColorComponent>) -> Sample {
-    match r#type {
-        AttributeType::Color => match value {
-            VoxValue::Text(text) => match parse_rgba(text) {
-                Some(rgba) => match component {
-                    Some(component) => Sample::Component(component_byte(&rgba, component)),
-                    None => Sample::Color(rgba),
-                },
-                None => Sample::Raw(value_to_string(value)),
-            },
-            _ => Sample::Raw(value_to_string(value)),
+/// How a pool's kind renders: a color with its space and component count, a
+/// number, or any other value.
+fn classify(pool: &VoxValuePool) -> Kind {
+    match pool {
+        VoxValuePool::Srgb { .. } => Kind::Color {
+            srgb: true,
+            components: 3,
         },
-        AttributeType::Scalar => match value {
-            VoxValue::Number(number) => Sample::Scalar(*number),
-            _ => Sample::Raw(value_to_string(value)),
+        VoxValuePool::Srgba { .. } => Kind::Color {
+            srgb: true,
+            components: 4,
         },
-    }
-}
-
-/// The type inferred from the first concrete value: a string is a color, a
-/// number a scalar, defaulting to scalar when no value names a type.
-fn infer_type(values: &[&VoxValue]) -> AttributeType {
-    for value in values {
-        match value {
-            VoxValue::Text(_) => return AttributeType::Color,
-            VoxValue::Number(_) => return AttributeType::Scalar,
-            _ => {}
+        VoxValuePool::LinearRgb { .. } => Kind::Color {
+            srgb: false,
+            components: 3,
+        },
+        VoxValuePool::LinearRgba { .. } => Kind::Color {
+            srgb: false,
+            components: 4,
+        },
+        VoxValuePool::Float { .. } | VoxValuePool::Int { .. } => Kind::Number,
+        VoxValuePool::Bool { .. } | VoxValuePool::String { .. } | VoxValuePool::Json { .. } => {
+            Kind::Other
         }
     }
-    AttributeType::Scalar
 }
 
-/// Decodes a `#RRGGBBAA` string, or `None` when it is not eight hex digits with
-/// a leading `#`.
-fn parse_rgba(text: &str) -> Option<Rgba> {
-    let hex = text.strip_prefix('#')?;
-    if hex.len() != 8 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return None;
+/// The sample for the value at `value_index` under its pool `kind` and an
+/// optional color `component`.
+fn sample(
+    pool: &VoxValuePool,
+    value_index: u32,
+    kind: Kind,
+    component: Option<ColorComponent>,
+) -> Sample {
+    match kind {
+        Kind::Color { srgb, .. } => sample_color(pool, value_index, srgb, component),
+        Kind::Number => sample_number(pool, value_index),
+        Kind::Other => sample_other(pool, value_index),
     }
-    Some(Rgba {
-        r: u8::from_str_radix(&hex[0..2], 16).ok()?,
-        g: u8::from_str_radix(&hex[2..4], 16).ok()?,
-        b: u8::from_str_radix(&hex[4..6], 16).ok()?,
-        a: u8::from_str_radix(&hex[6..8], 16).ok()?,
-    })
 }
 
-/// One color component as a `0..255` byte, the value as stored in the hex.
-fn component_byte(rgba: &Rgba, component: ColorComponent) -> u8 {
+/// The sample for a color value: a whole color as a swatch plus a hex string
+/// (sRGB) or float components (linear), or, with a `component`, one channel as a
+/// byte (sRGB) or float (linear) with a grayscale swatch.
+fn sample_color(
+    pool: &VoxValuePool,
+    value_index: u32,
+    srgb: bool,
+    component: Option<ColorComponent>,
+) -> Sample {
+    let index = value_index as usize;
+    let bytes = color_bytes(pool, index);
     match component {
-        ColorComponent::R => rgba.r,
-        ColorComponent::G => rgba.g,
-        ColorComponent::B => rgba.b,
-        ColorComponent::A => rgba.a,
+        Some(component) => {
+            let channel = component_index(component);
+            if srgb {
+                let byte = bytes[channel];
+                Sample {
+                    text: byte.to_string(),
+                    json: json!(byte),
+                    swatch: Swatch::Gray(byte),
+                }
+            } else {
+                let value = color_floats(pool, index)[channel];
+                Sample {
+                    text: format_number(value),
+                    json: number_json(value),
+                    swatch: Swatch::Gray(scalar_level(value)),
+                }
+            }
+        }
+        None => {
+            let swatch = Swatch::Color([bytes[0], bytes[1], bytes[2]]);
+            if srgb {
+                let text = srgb_hex(&bytes, alpha_component(pool));
+                Sample {
+                    json: Value::String(text.clone()),
+                    text,
+                    swatch,
+                }
+            } else {
+                let floats = color_floats(pool, index);
+                let text = floats
+                    .iter()
+                    .map(|value| format_number(*value))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let json = Value::Array(floats.iter().map(|value| number_json(*value)).collect());
+                Sample { text, json, swatch }
+            }
+        }
     }
 }
 
-/// The canonical uppercase `#RRGGBBAA` for a color.
-fn hex(rgba: &Rgba) -> String {
-    format!("#{:02X}{:02X}{:02X}{:02X}", rgba.r, rgba.g, rgba.b, rgba.a)
+/// The sample for a `float` or `int` value: its number, with a grayscale swatch
+/// mapping its `0..1` range onto `0..255`.
+fn sample_number(pool: &VoxValuePool, value_index: u32) -> Sample {
+    let index = value_index as usize;
+    let value = match pool {
+        VoxValuePool::Float { values, .. } => values[index],
+        VoxValuePool::Int { values, .. } => values[index] as f64,
+        // classify() routes only Float and Int here.
+        _ => 0.0,
+    };
+    Sample {
+        text: format_number(value),
+        json: number_json(value),
+        swatch: Swatch::Gray(scalar_level(value)),
+    }
+}
+
+/// The sample for a `bool`, `string`, or `json` value: its text and native JSON
+/// with no swatch.
+fn sample_other(pool: &VoxValuePool, value_index: u32) -> Sample {
+    let index = value_index as usize;
+    match pool {
+        VoxValuePool::Bool { values } => {
+            let value = values[index];
+            Sample {
+                text: value.to_string(),
+                json: Value::Bool(value),
+                swatch: Swatch::None,
+            }
+        }
+        VoxValuePool::String { values } => {
+            let value = values[index].clone();
+            Sample {
+                json: Value::String(value.clone()),
+                text: value,
+                swatch: Swatch::None,
+            }
+        }
+        VoxValuePool::Json { values } => {
+            let json = vox_value_to_json(&values[index]);
+            Sample {
+                text: json_text(&json),
+                json,
+                swatch: Swatch::None,
+            }
+        }
+        // classify() routes only Bool, String, and Json here.
+        _ => Sample {
+            text: "null".to_string(),
+            json: Value::Null,
+            swatch: Swatch::None,
+        },
+    }
+}
+
+/// The sRGB `[r, g, b, a]` bytes for the color at `index`, mirroring the shared
+/// pool color decode: sRGB components map straight to bytes, linear components
+/// re-encode to sRGB, and a three-component color takes opaque alpha.
+fn color_bytes(pool: &VoxValuePool, index: usize) -> [u8; 4] {
+    match pool {
+        VoxValuePool::Srgb { values } => {
+            let [r, g, b] = values[index];
+            TyRgbaColorF64::new(r, g, b, 1.0).to_srgba().to_array()
+        }
+        VoxValuePool::Srgba { values } => {
+            let [r, g, b, a] = values[index];
+            TyRgbaColorF64::new(r, g, b, a).to_srgba().to_array()
+        }
+        VoxValuePool::LinearRgb { values } => {
+            let [r, g, b] = values[index];
+            TyLinearRgbaColorF64::new(r, g, b, 1.0)
+                .to_srgba()
+                .to_array()
+        }
+        VoxValuePool::LinearRgba { values } => {
+            let [r, g, b, a] = values[index];
+            TyLinearRgbaColorF64::new(r, g, b, a).to_srgba().to_array()
+        }
+        // classify() routes only color kinds here.
+        _ => [0, 0, 0, 0],
+    }
+}
+
+/// The natural-range float components of the color at `index`, three or four
+/// long by kind.
+fn color_floats(pool: &VoxValuePool, index: usize) -> Vec<f64> {
+    match pool {
+        VoxValuePool::Srgb { values } | VoxValuePool::LinearRgb { values } => {
+            values[index].to_vec()
+        }
+        VoxValuePool::Srgba { values } | VoxValuePool::LinearRgba { values } => {
+            values[index].to_vec()
+        }
+        // classify() routes only color kinds here.
+        _ => Vec::new(),
+    }
+}
+
+/// Whether a color pool carries an alpha component.
+fn alpha_component(pool: &VoxValuePool) -> bool {
+    matches!(
+        pool,
+        VoxValuePool::Srgba { .. } | VoxValuePool::LinearRgba { .. }
+    )
+}
+
+/// The canonical uppercase hex for a color, `#RRGGBBAA` with alpha or `#RRGGBB`
+/// without.
+fn srgb_hex(bytes: &[u8; 4], alpha: bool) -> String {
+    if alpha {
+        format!(
+            "#{:02X}{:02X}{:02X}{:02X}",
+            bytes[0], bytes[1], bytes[2], bytes[3]
+        )
+    } else {
+        format!("#{:02X}{:02X}{:02X}", bytes[0], bytes[1], bytes[2])
+    }
+}
+
+/// The `0..3` index of a color component into an `[r, g, b, a]` array.
+fn component_index(component: ColorComponent) -> usize {
+    match component {
+        ColorComponent::R => 0,
+        ColorComponent::G => 1,
+        ColorComponent::B => 2,
+        ColorComponent::A => 3,
+    }
 }
 
 /// The lowercase letter naming a color component.
@@ -322,25 +524,51 @@ fn component_letter(component: ColorComponent) -> char {
     }
 }
 
+/// A number as text, an integral value with no fractional part, matching the
+/// number layouts.
+fn format_number(value: f64) -> String {
+    format!("{value}")
+}
+
+/// A number as JSON: an integer when it is integral and fits `i64`, else a
+/// float, so it reads as it does in the text layouts.
+fn number_json(value: f64) -> Value {
+    if value.fract() == 0.0 && value.abs() < i64::MAX as f64 {
+        json!(value as i64)
+    } else {
+        json!(value)
+    }
+}
+
+/// A [`VoxValue`] from a `json` pool as a [`serde_json::Value`].
+fn vox_value_to_json(value: &VoxValue) -> Value {
+    match value {
+        VoxValue::Bool(boolean) => Value::Bool(*boolean),
+        VoxValue::Number(number) => number_json(*number),
+        VoxValue::Text(text) => Value::String(text.clone()),
+        VoxValue::Null => Value::Null,
+        VoxValue::Array(items) => Value::Array(items.iter().map(vox_value_to_json).collect()),
+        VoxValue::Object(map) => Value::Object(
+            map.0
+                .iter()
+                .map(|(key, value)| (key.clone(), vox_value_to_json(value)))
+                .collect(),
+        ),
+    }
+}
+
+/// A JSON value as its compact text, the string a `json`-pool value renders to.
+fn json_text(value: &Value) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "null".to_string())
+}
+
 /// The palette's attribute keys joined for a not-found message.
 fn available_keys(palette: &VoxPalette) -> String {
     palette
-        .iter_attributes()
-        .map(|(_, name)| name)
+        .iter_bindings()
+        .map(|(_, binding)| binding.attribute.as_str())
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-/// A `VoxValue` as plain text, the raw fallback for a value that is neither a
-/// color nor a number. Arrays and objects, which no recommended attribute uses,
-/// render as `null`.
-fn value_to_string(value: &VoxValue) -> String {
-    match value {
-        VoxValue::Number(number) => format!("{number}"),
-        VoxValue::Text(text) => text.clone(),
-        VoxValue::Bool(boolean) => format!("{boolean}"),
-        VoxValue::Null | VoxValue::Array(_) | VoxValue::Object(_) => "null".to_string(),
-    }
 }
 
 /// Renders the collections under `layout`, wrapping the `row` layouts to the
@@ -357,43 +585,31 @@ fn render(collections: &[Collection], layout: PaletteShowLayout, width: Option<u
     }
 }
 
-/// One cell's text under its collection's `format`. A raw fallback prints its
-/// text under every format, with no swatch.
+/// One material's text under its collection's `format`. A value with no swatch
+/// prints its text under every format.
 fn render_cell(sample: &Sample, format: PaletteShowFormat) -> String {
-    match (format, sample) {
-        (PaletteShowFormat::Auto, Sample::Color(rgba)) => {
-            format!("{} {}", color_swatch(rgba), hex(rgba))
-        }
-        (PaletteShowFormat::Auto, Sample::Component(byte)) => format!("{byte}"),
-        (PaletteShowFormat::Auto, Sample::Scalar(value)) => format!("{value}"),
-        (PaletteShowFormat::Auto, Sample::Raw(text)) => text.clone(),
-
-        (PaletteShowFormat::Swatch, Sample::Color(rgba)) => color_swatch(rgba),
-        (PaletteShowFormat::Swatch, Sample::Component(byte)) => gray_swatch(*byte),
-        (PaletteShowFormat::Swatch, Sample::Scalar(value)) => gray_swatch(scalar_level(*value)),
-        (PaletteShowFormat::Swatch, Sample::Raw(text)) => text.clone(),
-
-        (PaletteShowFormat::SwatchValue, Sample::Color(rgba)) => {
-            format!("{} {}", color_swatch(rgba), hex(rgba))
-        }
-        (PaletteShowFormat::SwatchValue, Sample::Component(byte)) => {
-            format!("{} {byte}", gray_swatch(*byte))
-        }
-        (PaletteShowFormat::SwatchValue, Sample::Scalar(value)) => {
-            format!("{} {value}", gray_swatch(scalar_level(*value)))
-        }
-        (PaletteShowFormat::SwatchValue, Sample::Raw(text)) => text.clone(),
-
-        (PaletteShowFormat::Value, Sample::Color(rgba)) => hex(rgba),
-        (PaletteShowFormat::Value, Sample::Component(byte)) => format!("{byte}"),
-        (PaletteShowFormat::Value, Sample::Scalar(value)) => format!("{value}"),
-        (PaletteShowFormat::Value, Sample::Raw(text)) => text.clone(),
+    match format {
+        PaletteShowFormat::Auto => match &sample.swatch {
+            Swatch::Color(rgb) => format!("{} {}", color_swatch(rgb), sample.text),
+            Swatch::Gray(_) | Swatch::None => sample.text.clone(),
+        },
+        PaletteShowFormat::Swatch => match &sample.swatch {
+            Swatch::Color(rgb) => color_swatch(rgb),
+            Swatch::Gray(level) => gray_swatch(*level),
+            Swatch::None => sample.text.clone(),
+        },
+        PaletteShowFormat::SwatchValue => match &sample.swatch {
+            Swatch::Color(rgb) => format!("{} {}", color_swatch(rgb), sample.text),
+            Swatch::Gray(level) => format!("{} {}", gray_swatch(*level), sample.text),
+            Swatch::None => sample.text.clone(),
+        },
+        PaletteShowFormat::Value => sample.text.clone(),
     }
 }
 
-/// A two-cell truecolor swatch of a color's rgb.
-fn color_swatch(rgba: &Rgba) -> String {
-    format!("\x1b[48;2;{};{};{}m  \x1b[0m", rgba.r, rgba.g, rgba.b)
+/// A two-cell truecolor swatch of an rgb color.
+fn color_swatch(rgb: &[u8; 3]) -> String {
+    format!("\x1b[48;2;{};{};{}m  \x1b[0m", rgb[0], rgb[1], rgb[2])
 }
 
 /// A two-cell truecolor grayscale swatch of a `0..255` gray level.
@@ -407,14 +623,14 @@ fn scalar_level(value: f64) -> u8 {
 }
 
 /// Whether a collection's cells abut into a strip: a `swatch` collection whose
-/// every value is a real swatch. A value with no swatch, a raw fallback like a
-/// bool, keeps the one-space separator so it does not run together.
+/// every value carries a swatch. A value with no swatch, such as a bool, keeps
+/// the one-space separator so it does not run together.
 fn abuts(collection: &Collection) -> bool {
     matches!(collection.format, PaletteShowFormat::Swatch)
-        && !collection
+        && collection
             .samples
             .iter()
-            .any(|sample| matches!(sample, Sample::Raw(_)))
+            .all(|sample| !matches!(sample.swatch, Swatch::None))
 }
 
 /// Each collection on one row, the rows separated by a blank line. A swatch
@@ -560,8 +776,8 @@ fn render_column(collections: &[Collection], with_header: bool) -> String {
 }
 
 /// The collections as an aligned markdown table led by a `#` column of 0-based
-/// cell indices, then one column per collection and one row per cell index. A
-/// shorter palette leaves its column blank past its last cell.
+/// material indices, then one column per collection and one row per material
+/// index. A shorter palette leaves its column blank past its last material.
 fn render_markdown(collections: &[Collection]) -> String {
     if collections.is_empty() {
         return String::new();
@@ -569,8 +785,8 @@ fn render_markdown(collections: &[Collection]) -> String {
     let headers: Vec<String> = collections.iter().map(Collection::header).collect();
     let cells: Vec<Vec<String>> = collections.iter().map(rendered_cells).collect();
     let row_count = cells.iter().map(Vec::len).max().unwrap_or(0);
-    // One row per cell index, led by the index and then each collection's cell
-    // or a blank.
+    // One row per material index, led by the index and then each collection's
+    // cell or a blank.
     let rows: Vec<Vec<String>> = (0..row_count)
         .map(|row| {
             let mut cells_row = vec![row.to_string()];
@@ -609,14 +825,18 @@ fn rendered_cells(collection: &Collection) -> Vec<String> {
 
 /// The collections as JSON, one record per collection in render order: its
 /// resolved palette index, its attribute label, and its values in native JSON
-/// types. The format and layout are ignored; a color is a hex string, a
-/// component its byte, and a scalar a number. `pretty` selects indented output,
-/// matching the shared report JSON.
+/// types. The format and layout are ignored; a color is a hex string or a float
+/// array, a component its byte or float, and a scalar a number. `pretty` selects
+/// indented output, matching the shared report JSON.
 fn render_json(collections: &[Collection], pretty: bool) -> String {
     let records: Vec<Value> = collections
         .iter()
         .map(|collection| {
-            let values: Vec<Value> = collection.samples.iter().map(sample_value).collect();
+            let values: Vec<Value> = collection
+                .samples
+                .iter()
+                .map(|sample| sample.json.clone())
+                .collect();
             json!({
                 "palette": collection.palette,
                 "attribute": collection.attribute,
@@ -634,57 +854,56 @@ fn render_json(collections: &[Collection], pretty: bool) -> String {
     format!("{text}\n")
 }
 
-/// One sample as a JSON value: a hex string for a color, a component byte, a
-/// number for a scalar, a string for a raw fallback. An integral scalar emits
-/// as an integer so it reads as it does in the text layouts.
-fn sample_value(sample: &Sample) -> Value {
-    match sample {
-        Sample::Color(rgba) => Value::String(hex(rgba)),
-        Sample::Component(byte) => json!(byte),
-        Sample::Scalar(number) if number.fract() == 0.0 && number.abs() < i64::MAX as f64 => {
-            json!(*number as i64)
-        }
-        Sample::Scalar(number) => json!(number),
-        Sample::Raw(text) => Value::String(text.clone()),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
         AttributeSelector, PaletteShowLayout,
         implementation::palette_show::{render, resolve_collections},
     };
+    use branded_id::U32Id;
     use serde_json::Value;
-    use voxcore::{VoxMain, VoxPalette, VoxValue};
+    use voxcore::{BVoxValuePool, VoxBound, VoxMain, VoxPalette, VoxValue, VoxValuePool};
+
+    /// An `Srgba` pool of the given 8-bit colors, each byte divided by 255, the
+    /// way the converters store colors.
+    fn srgba_pool(state: &mut VoxMain, colors: &[[u8; 4]]) -> U32Id<BVoxValuePool> {
+        let values = colors
+            .iter()
+            .map(|color| {
+                [
+                    color[0] as f64 / 255.0,
+                    color[1] as f64 / 255.0,
+                    color[2] as f64 / 255.0,
+                    color[3] as f64 / 255.0,
+                ]
+            })
+            .collect();
+        state.add_value_pool(VoxValuePool::Srgba { values })
+    }
 
     /// A document with two palettes: palette 0 has `rgba` and `metallic` with
-    /// two cells, palette 1 has `rgba` with one cell.
+    /// two materials, palette 1 has `rgba` with one material.
     fn sample_state() -> VoxMain {
         let mut state = VoxMain::default();
 
+        let colors_zero = srgba_pool(&mut state, &[[255, 0, 0, 255], [0, 255, 0, 128]]);
+        let metallic = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::Number(1.0),
+            values: vec![1.0, 0.2],
+        });
+        let colors_one = srgba_pool(&mut state, &[[0, 0, 255, 255]]);
+
         let mut first = VoxPalette::default();
-        first.add_attribute("rgba".to_owned());
-        first.add_attribute("metallic".to_owned());
-        first
-            .add_cell(vec![
-                VoxValue::Text("#FF0000FF".to_owned()),
-                VoxValue::Number(1.0),
-            ])
-            .unwrap();
-        first
-            .add_cell(vec![
-                VoxValue::Text("#00FF0080".to_owned()),
-                VoxValue::Number(0.2),
-            ])
-            .unwrap();
+        first.add_binding("rgba".to_owned(), colors_zero);
+        first.add_binding("metallic".to_owned(), metallic);
+        first.add_material(vec![0, 0]).unwrap();
+        first.add_material(vec![1, 1]).unwrap();
         state.add_palette(first);
 
         let mut second = VoxPalette::default();
-        second.add_attribute("rgba".to_owned());
-        second
-            .add_cell(vec![VoxValue::Text("#0000FFFF".to_owned())])
-            .unwrap();
+        second.add_binding("rgba".to_owned(), colors_one);
+        second.add_material(vec![0]).unwrap();
         state.add_palette(second);
 
         state
@@ -732,10 +951,13 @@ mod tests {
     #[test]
     fn swatch_spaces_values_with_no_swatch() {
         let mut state = VoxMain::default();
+        let shadows = state.add_value_pool(VoxValuePool::Bool {
+            values: vec![true, false],
+        });
         let mut palette = VoxPalette::default();
-        palette.add_attribute("shadows".to_owned());
-        palette.add_cell(vec![VoxValue::Bool(true)]).unwrap();
-        palette.add_cell(vec![VoxValue::Bool(false)]).unwrap();
+        palette.add_binding("shadows".to_owned(), shadows);
+        palette.add_material(vec![0]).unwrap();
+        palette.add_material(vec![1]).unwrap();
         state.add_palette(palette);
 
         // Bools have no swatch, so swatch format spaces them rather than
@@ -915,5 +1137,101 @@ mod tests {
         assert_eq!(scalar, "0.metallic 1 0.2\n");
         let component = show(&state, &[("0", "rgba.r", "auto")], PaletteShowLayout::Row);
         assert_eq!(component, "0.rgba.r 255 0\n");
+    }
+
+    /// One palette binding `tint` to a three-component `Srgb` pool holding a red.
+    fn three_component_state() -> VoxMain {
+        let mut state = VoxMain::default();
+        let pool = state.add_value_pool(VoxValuePool::Srgb {
+            values: vec![[1.0, 0.0, 0.0]],
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_binding("tint".to_owned(), pool);
+        palette.add_material(vec![0]).unwrap();
+        state.add_palette(palette);
+        state
+    }
+
+    #[test]
+    fn a_three_component_color_renders_hex_without_alpha() {
+        let state = three_component_state();
+        let output = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Row);
+        // Six hex digits, no alpha pair.
+        assert_eq!(output, "0.tint #FF0000\n");
+    }
+
+    #[test]
+    fn a_three_component_color_has_no_alpha_component() {
+        let state = three_component_state();
+        // `.a` is out of range on a three-component color, but `.r` reads.
+        assert!(resolve_collections(&state, &selectors(&[("0", "tint.a", "value")])).is_err());
+        let red = show(&state, &[("0", "tint.r", "value")], PaletteShowLayout::Row);
+        assert_eq!(red, "0.tint.r 255\n");
+    }
+
+    #[test]
+    fn a_linear_color_renders_float_components() {
+        let mut state = VoxMain::default();
+        // A linear pool carries HDR components above 1 that no hex can hold.
+        let pool = state.add_value_pool(VoxValuePool::LinearRgba {
+            values: vec![[2.0, 1.0, 0.5, 1.0]],
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_binding("emissiveFactor".to_owned(), pool);
+        palette.add_material(vec![0]).unwrap();
+        state.add_palette(palette);
+
+        let output = show(
+            &state,
+            &[("0", "emissiveFactor", "value")],
+            PaletteShowLayout::Row,
+        );
+        assert_eq!(output, "0.emissiveFactor 2 1 0.5 1\n");
+    }
+
+    #[test]
+    fn an_int_pool_renders_integers() {
+        let mut state = VoxMain::default();
+        let pool = state.add_value_pool(VoxValuePool::Int {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::None,
+            values: vec![3, 7],
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_binding("count".to_owned(), pool);
+        palette.add_material(vec![0]).unwrap();
+        palette.add_material(vec![1]).unwrap();
+        state.add_palette(palette);
+
+        let output = show(&state, &[("0", "count", "value")], PaletteShowLayout::Row);
+        assert_eq!(output, "0.count 3 7\n");
+    }
+
+    #[test]
+    fn a_json_pool_renders_arrays_rather_than_null() {
+        let mut state = VoxMain::default();
+        let pool = state.add_value_pool(VoxValuePool::Json {
+            values: vec![VoxValue::Array(vec![
+                VoxValue::Number(1.0),
+                VoxValue::Number(2.0),
+            ])],
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_binding("extra".to_owned(), pool);
+        palette.add_material(vec![0]).unwrap();
+        state.add_palette(palette);
+
+        // The array survives into both the text and JSON layouts.
+        let text = show(&state, &[("0", "extra", "value")], PaletteShowLayout::Row);
+        assert_eq!(text, "0.extra [1,2]\n");
+        let json = show(
+            &state,
+            &[("0", "extra", "value")],
+            PaletteShowLayout::CompactJson,
+        );
+        assert_eq!(
+            json,
+            "[{\"palette\":0,\"attribute\":\"extra\",\"values\":[[1,2]]}]\n"
+        );
     }
 }

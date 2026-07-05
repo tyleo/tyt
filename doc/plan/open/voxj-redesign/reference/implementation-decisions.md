@@ -1080,3 +1080,94 @@ low severity and both faithful to the old code, and both fixed here:
 The review's other reported items were the same wrap re-reported per lens, or
 were refuted as unreachable from a well-formed document or a state the converter
 itself produces.
+
+## Phase 7: `vxl`
+
+### First chunk: the read/inspection commands, because vxl cannot compile in halves
+
+Unlike the additive early phases, `vxl` is a single lib+bin crate with no
+per-command feature gates, so a partial port leaves compile errors that block
+the whole crate and every test. The hard compile errors (the removed voxcore
+methods `cell_count`, `iter_cells`, `cell_value`, `iter_attributes`,
+`palette_ref_count`, `iter_palette_refs`, and voxsmith's new
+`MaterialMeshRequest.layer` field) fall in exactly six files:
+`implementation/{attribute_names,info,hierarchy_show,palette_list,palette_show,
+mesh}.rs`. That set is the read/inspection command cluster plus a one-field mesh
+fix, so it is both the smallest compiling unit and a coherent reviewable chunk.
+The mesh vocab and `AttributeType` rework (items 3-5), the `--color-format` flag
+(item 6), and the `max_palette_cells`/doc updates (item 7) live in files that
+still compile as-is and are deferred to later chunks. Verified: the whole
+workspace compiles clean for the first time since the port began, clippy
+`-D warnings` passes workspace-wide, and 138 `vxl` tests pass.
+
+### `palette show` classifies by pool kind and precomputes text, JSON, and swatch
+
+The rework replaces the old inline-`VoxValue` type sniffing (a string is a
+color, a number a scalar) with classification by the bound pool's kind. Each
+attribute resolves its binding once (`binding_by_attribute` ->
+`state.value_pool(binding.pool)`), reads the pool's variant into a small `Kind`
+(color with space and component count, number, or other), then samples each
+material's value-index. A `Sample` precomputes three things so every layout
+renders uniformly: the display `text`, the native `json` value, and a `Swatch`
+(a true-color block for a whole color, a grayscale block for a scalar or color
+component, or none). This collapsed the old sixteen-arm format-by-sample-type
+`render_cell` to a swatch-directed match and made `abuts` key off "every sample
+carries a swatch" rather than "no sample is a raw fallback," preserving the
+bool-spacing behavior.
+
+Colors decode the same way voxsmith's `pool_color` does, replicated in vxl
+because that helper is `pub(crate)` in voxsmith and unreachable here (the same
+faithful-port duplication the converters already accept): sRGB components map
+straight to bytes via `TyRgbaColorF64::to_srgba`, linear components re-encode
+through `TyLinearRgbaColorF64::to_srgba`, and a three-component color takes
+opaque alpha. Rendering then splits on space and encoding per the deferred-color
+policy: an sRGB color prints `#RRGGBB` or `#RRGGBBAA` hex and byte components, a
+linear color prints its natural-range float components (which no hex can hold),
+`.a` on a three-component color errors, and `float`/`int`/`bool`/`string`/`json`
+pools each render their native value rather than collapsing to null. Because
+every existing fixture is sRGB, all the old hex/byte goldens are preserved
+byte-for-byte; new tests cover the three-component, linear, int, and json-array
+cases.
+
+### Terminology: material and layer where the model changed, `palettes` header kept
+
+`info` renames the palette table's `Cells` column and JSON `cells` key to
+`Materials`/`materials` (now `material_count`), and the object table's
+`Palettes` column and `palettes` key to `Layers`/`layers` (now `layer_count`,
+since two layers may share a palette so it is a layer count, not a distinct
+palette count). `palette list` renames the `--show-cells` flag to
+`--show-materials`, the `cells` column and JSON key to `materials`, and the
+`cellCount` leaf to `materialCount`. `hierarchy show`'s per-object subtree and
+its flag are renamed from `palettes`/`--show-palettes` to `layers`/
+`--show-layers`; it now enumerates the object's layers (`iter_layers`, one child
+per layer as the old `iter_palette_refs` gave one per ref), each labeled by its
+palette index and `{materials: <count>}`. `layers` is the honest name for the
+new model: the subtree is per-layer, and two layers may share a palette, so
+`palettes` would wrongly imply a distinct-palette set. (`palette list`'s own
+`palettes` header is unchanged: it genuinely lists the document's palettes, not
+an object's layers.)
+
+### Fixtures keep the old attribute names; the glTF-vocab flip is item 4's
+
+The rebuilt `info`/`palette_list`/`palette_show`/`hierarchy_show` fixtures move
+onto value pools plus bindings plus materials plus layers but keep the old
+attribute names (`rgba`, `metallic`, `shadows`) and the same color/scalar
+values, so the only golden churn is the terminology rename, not an attribute
+revocabulary. `palette show` classifies by pool kind, not by attribute name, so
+the name is a pure label and `rgba` is valid test data; flipping fixtures to the
+glTF names (`baseColorFactor`, `metallicFactor`) is deferred to item 4 with the
+production mesh/texture vocab. Colors are stored as byte/255 float components (a
+shared `srgba_pool` test helper), so a color still round-trips its old hex
+exactly through the `pool_color` quantization.
+
+### Minimal `mesh` fix: default the required layer to the object's first
+
+`MaterialMeshRequest` gained a required `layer: U32Id<BVoxLayer>` on the
+voxsmith side. `mesh_object` resolves it inside the function
+(`object.iter_layers().next()`, per Q2a the first layer) rather than adding a
+`--layer` CLI parameter, so `commands/mesh.rs` and the `Dependencies` trait are
+untouched and the CLI layer selector (item 5) stays deferred. The resolution
+runs only on the material path, after the pure-geometry early return, and errors
+with a clear message when the object carries no layers; that matches voxsmith's
+new contract, which already dropped the old merge-model one-default-texel
+fallback in favor of erroring on an unresolvable layer.

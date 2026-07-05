@@ -26,6 +26,6 @@ pub struct HierarchyViews {
     /// Append each object's runtime-grid extents at this precision.
     pub runtime_extents: Option<usize>,
 
-    /// Append each object's referenced palettes subtree.
-    pub palettes: bool,
+    /// Append each object's layers subtree, one child per layer.
+    pub layers: bool,
 }

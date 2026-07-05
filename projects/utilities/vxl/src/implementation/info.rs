@@ -70,7 +70,7 @@ fn render_markdown(
             implementation::row([
                 &id.to_u32().to_string(),
                 &implementation::md_cell(&implementation::attribute_names(palette).join(", ")),
-                &palette.cell_count().to_string(),
+                &palette.material_count().to_string(),
             ])
         })
         .collect();
@@ -90,7 +90,7 @@ fn render_markdown(
                 &edit,
                 &format!("{}, {}, {}", origin.x, origin.y, origin.z),
                 &object.live_count().to_string(),
-                &object.palette_ref_count().to_string(),
+                &object.layer_count().to_string(),
             ])
         })
         .collect();
@@ -103,7 +103,7 @@ fn render_markdown(
     ));
     output.push_str("\n## Palettes\n\n");
     output.push_str(&implementation::markdown_table(
-        &["Id", "Attributes", "Cells"],
+        &["Id", "Attributes", "Materials"],
         &palette_rows,
     ));
     output.push_str("\n## Objects\n\n");
@@ -115,7 +115,7 @@ fn render_markdown(
             "Edit bounds",
             "Origin",
             "Voxels",
-            "Palettes",
+            "Layers",
         ],
         &object_rows,
     ));
@@ -135,7 +135,7 @@ fn render_json(
             json!({
                 "id": id.to_u32(),
                 "attributes": implementation::attribute_names(palette),
-                "cells": palette.cell_count(),
+                "materials": palette.material_count(),
             })
         })
         .collect();
@@ -155,7 +155,7 @@ fn render_json(
             }
             entry.insert("origin".to_string(), json!([origin.x, origin.y, origin.z]));
             entry.insert("voxels".to_string(), json!(object.live_count()));
-            entry.insert("palettes".to_string(), json!(object.palette_ref_count()));
+            entry.insert("layers".to_string(), json!(object.layer_count()));
             Value::Object(entry)
         })
         .collect();
@@ -222,22 +222,23 @@ mod tests {
     use crate::{Format, ReportLayout, implementation::info::render};
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValue};
+    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
-    /// One `rgba` palette and one tight 1x1x1 object sampling its one cell.
+    /// One `rgba` palette and one tight 1x1x1 object sampling its one material.
     fn tight_state() -> VoxMain {
         let mut state = VoxMain::default();
+        let pool = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[1.0, 0.0, 0.0, 1.0]],
+        });
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        let cell = palette
-            .add_cell(vec![VoxValue::Text("#FF0000FF".to_owned())])
-            .unwrap();
+        palette.add_binding("rgba".to_owned(), pool);
+        let material = palette.add_material(vec![0]).unwrap();
         let palette = state.add_palette(palette);
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_palette_ref(palette, cell);
+        object.add_layer(palette, material);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        object.retain_voxel(voxel, &[cell]).unwrap();
+        object.retain_voxel(voxel, &[material]).unwrap();
         state.add_object(object);
         state
     }
@@ -263,13 +264,13 @@ mod tests {
              | Has ext      | no    |\n\
              | Has edit     | no    |\n\
              \n## Palettes\n\n\
-             | Id  | Attributes | Cells |\n\
-             | --- | ---------- | ----- |\n\
-             | 0   | rgba       | 1     |\n\
+             | Id  | Attributes | Materials |\n\
+             | --- | ---------- | --------- |\n\
+             | 0   | rgba       | 1         |\n\
              \n## Objects\n\n\
-             | Id  | Name | Bounds | Edit bounds | Origin  | Voxels | Palettes |\n\
-             | --- | ---- | ------ | ----------- | ------- | ------ | -------- |\n\
-             | 0   | body | 1x1x1  | -           | 0, 0, 0 | 1      | 1        |\n"
+             | Id  | Name | Bounds | Edit bounds | Origin  | Voxels | Layers |\n\
+             | --- | ---- | ------ | ----------- | ------- | ------ | ------ |\n\
+             | 0   | body | 1x1x1  | -           | 0, 0, 0 | 1      | 1      |\n"
         );
     }
 
@@ -286,9 +287,9 @@ mod tests {
         assert_eq!(
             output,
             "{\"format\":\"voxj\",\"voxj_version\":2,\"has_ext\":false,\"has_edit\":false,\
-             \"palettes\":[{\"id\":0,\"attributes\":[\"rgba\"],\"cells\":1}],\
+             \"palettes\":[{\"id\":0,\"attributes\":[\"rgba\"],\"materials\":1}],\
              \"objects\":[{\"id\":0,\"name\":\"body\",\"bounds\":[1,1,1],\"origin\":[0,0,0],\
-             \"voxels\":1,\"palettes\":1}]}\n"
+             \"voxels\":1,\"layers\":1}]}\n"
         );
     }
 
@@ -363,9 +364,8 @@ mod tests {
         assert!(markdown.contains("| Has edit     | yes   |\n"));
         // Content 1x1x1, edit build volume 3x1x1, origin spaced.
         assert!(
-            markdown.contains(
-                "| 0   | margin | 1x1x1  | 3x1x1       | 0, 0, 0 | 1      | 0        |\n"
-            )
+            markdown
+                .contains("| 0   | margin | 1x1x1  | 3x1x1       | 0, 0, 0 | 1      | 0      |\n")
         );
 
         let json = render(

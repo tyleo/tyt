@@ -860,7 +860,7 @@ impl Walk<'_> {
     }
 
     /// Appends object `id` as a leaf line reading `name: {object: <id>, ...}`,
-    /// then its enabled geometry rows and its `palettes` subtree.
+    /// then its enabled geometry rows and its `layers` subtree.
     /// `placing_world` is the world transform of the node placing the object.
     fn render_object(
         &mut self,
@@ -907,14 +907,14 @@ impl Walk<'_> {
         let child_prefix = format!("{prefix}{extension}");
 
         let rows = self.object_rows(object, placing_world);
-        let total = rows.len() + usize::from(self.views.palettes);
+        let total = rows.len() + usize::from(self.views.layers);
 
         for (index, row) in rows.iter().enumerate() {
             self.render_object_row(row, &child_prefix, index + 1 == total);
         }
 
-        if self.views.palettes {
-            self.render_palettes(&child_prefix, true, object);
+        if self.views.layers {
+            self.render_layers(&child_prefix, true, object);
         }
     }
 
@@ -1039,27 +1039,27 @@ impl Walk<'_> {
         }
     }
 
-    /// Appends the `palettes` subtree: one child per palette the object
-    /// references, in reference order, each `index: {cells: <count>}`. An object
-    /// that references no palette prints `palettes: []`, and a reference to a
-    /// palette the state does not hold prints a `missing palette` marker.
-    fn render_palettes(&mut self, prefix: &str, is_last: bool, object: &VoxObject) {
+    /// Appends the `layers` subtree: one child per layer the object carries, in
+    /// layer order, each `<palette index>: {materials: <count>}`. An object with
+    /// no layer prints `layers: []`, and a layer whose palette the state does
+    /// not hold prints a `missing palette` marker.
+    fn render_layers(&mut self, prefix: &str, is_last: bool, object: &VoxObject) {
         let connector = if is_last {
             CONNECTOR_LAST
         } else {
             CONNECTOR_MID
         };
 
-        let total = object.palette_ref_count();
+        let total = object.layer_count();
 
         if total == 0 {
             self.output
-                .push_str(&format!("{prefix}{connector} palettes: []\n"));
+                .push_str(&format!("{prefix}{connector} layers: []\n"));
             return;
         }
 
         self.output
-            .push_str(&format!("{prefix}{connector} palettes\n"));
+            .push_str(&format!("{prefix}{connector} layers\n"));
 
         let extension = if is_last {
             EXTENSION_LAST
@@ -1069,7 +1069,7 @@ impl Walk<'_> {
 
         let inner = format!("{prefix}{extension}");
 
-        for (index, (_, palette_id)) in object.iter_palette_refs().enumerate() {
+        for (index, (_, palette_id)) in object.iter_layers().enumerate() {
             let child_connector = if index + 1 == total {
                 CONNECTOR_LAST
             } else {
@@ -1078,9 +1078,9 @@ impl Walk<'_> {
 
             let line = match self.scene.state.palette(palette_id) {
                 Some(palette) => format!(
-                    "{inner}{child_connector} {}: {{cells: {}}}\n",
+                    "{inner}{child_connector} {}: {{materials: {}}}\n",
                     palette_id.to_u32(),
-                    palette.cell_count()
+                    palette.material_count()
                 ),
 
                 None => format!(
@@ -1198,7 +1198,8 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValue,
+        BVoxHierarchyNode, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool,
     };
 
     /// Renders `state` with the given pattern and collapse flags, unwrapping.
@@ -1406,32 +1407,43 @@ mod tests {
         state
     }
 
-    /// A palette with `count` `rgba` cells; only the cell count matters to the
-    /// tree, so every color is the same.
-    fn palette_with_cells(count: usize) -> VoxPalette {
+    /// Adds a palette with `count` `rgba` materials to `state`; only the
+    /// material count matters to the tree, so every color is the same.
+    fn add_palette_with_materials(state: &mut VoxMain, count: usize) -> U32Id<BVoxPalette> {
+        let pool = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[0.0, 0.0, 0.0, 1.0]],
+        });
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
+        palette.add_binding("rgba".to_owned(), pool);
         for _ in 0..count {
-            palette
-                .add_cell(vec![VoxValue::Text("#000000FF".to_owned())])
-                .unwrap();
+            palette.add_material(vec![0]).unwrap();
         }
-        palette
+        state.add_palette(palette)
     }
 
-    /// A root placing one object `body` that references palette 0 (two cells)
-    /// then palette 1 (three cells).
+    /// A root placing one object `body` that carries a layer on palette 0 (two
+    /// materials) then a layer on palette 1 (three materials).
     fn palette_ref_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        let first = state.add_palette(palette_with_cells(2));
-        let first_cell = state.palette(first).unwrap().iter_cells().next().unwrap();
-        let second = state.add_palette(palette_with_cells(3));
-        let second_cell = state.palette(second).unwrap().iter_cells().next().unwrap();
+        let first = add_palette_with_materials(&mut state, 2);
+        let first_material = state
+            .palette(first)
+            .unwrap()
+            .iter_materials()
+            .next()
+            .unwrap();
+        let second = add_palette_with_materials(&mut state, 3);
+        let second_material = state
+            .palette(second)
+            .unwrap()
+            .iter_materials()
+            .next()
+            .unwrap();
 
         let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        body.add_palette_ref(first, first_cell);
-        body.add_palette_ref(second, second_cell);
+        body.add_layer(first, first_material);
+        body.add_layer(second, second_material);
         let body_id = state.add_object(body);
 
         let root = state.add_hierarchy_node(node("root", vec![], vec![body_id]));
@@ -1919,11 +1931,11 @@ mod tests {
     }
 
     #[test]
-    fn palettes_list_each_referenced_palette_with_its_cell_count() {
+    fn layers_list_each_referenced_palette_with_its_material_count() {
         let output = render_views(
             &palette_ref_state(),
             HierarchyViews {
-                palettes: true,
+                layers: true,
                 ..HierarchyViews::default()
             },
         );
@@ -1932,20 +1944,20 @@ mod tests {
             "root\n\
              \u{2514} root: {node: 0}\n\
              \u{20}\u{20}\u{2514} body: {object: 0}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} palettes\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {cells: 2}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {cells: 3}\n"
+             \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 3}\n"
         );
     }
 
     #[test]
-    fn palettes_are_an_empty_array_when_an_object_references_none() {
-        // `simple_state`'s `body` has no palette reference, so the subtree
-        // collapses to an empty array rather than a childless header.
+    fn layers_are_an_empty_array_when_an_object_has_none() {
+        // `simple_state`'s `body` has no layer, so the subtree collapses to an
+        // empty array rather than a childless header.
         let output = render_views(
             &simple_state(),
             HierarchyViews {
-                palettes: true,
+                layers: true,
                 ..HierarchyViews::default()
             },
         );
@@ -1954,19 +1966,19 @@ mod tests {
             "root\n\
              \u{2514} root: {node: 0}\n\
              \u{20}\u{20}\u{2514} body: {object: 0}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} palettes: []\n"
+             \u{20}\u{20}\u{20}\u{20}\u{2514} layers: []\n"
         );
     }
 
     #[test]
-    fn palettes_follow_the_geometry_rows_under_an_object() {
-        // With a geometry row and palettes both on, palettes is the last child, so
+    fn layers_follow_the_geometry_rows_under_an_object() {
+        // With a geometry row and layers both on, layers is the last child, so
         // the geometry row keeps its non-last connector.
         let output = render_views(
             &palette_ref_state(),
             HierarchyViews {
                 edit_extents: Some(2),
-                palettes: true,
+                layers: true,
                 ..HierarchyViews::default()
             },
         );
@@ -1976,9 +1988,9 @@ mod tests {
              \u{2514} root: {node: 0}\n\
              \u{20}\u{20}\u{2514} body: {object: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{251C} edit-extents: [1.00, 1.00, 1.00]\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} palettes\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {cells: 2}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {cells: 3}\n"
+             \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 3}\n"
         );
     }
 }

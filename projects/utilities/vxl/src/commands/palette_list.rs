@@ -34,16 +34,16 @@ pub struct PaletteList {
     )]
     show_attributes: bool,
 
-    /// Show each palette's cell count. `--show-cells false` drops it.
+    /// Show each palette's material count. `--show-materials false` drops it.
     #[arg(
-        value_name = "show-cells",
+        value_name = "show-materials",
         long,
         default_value_t = true,
         default_missing_value = "true",
         num_args = 0..=1,
         action = ArgAction::Set
     )]
-    show_cells: bool,
+    show_materials: bool,
 
     /// Show the objects that reference each palette. `--show-objects false`
     /// drops them.
@@ -62,7 +62,7 @@ impl PaletteList {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let fields = PaletteListFields {
             attributes: self.show_attributes,
-            cells: self.show_cells,
+            materials: self.show_materials,
             objects: self.show_objects,
         };
         dependencies.palette_list(&self.input, self.from, &self.filters, fields, self.layout)

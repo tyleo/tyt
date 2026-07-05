@@ -56,8 +56,22 @@ pub fn mesh_object(
         return Ok(());
     }
 
+    // The material path bakes one layer's materials; default to the object's
+    // first layer. An object with no layers has no materials to bake.
+    let layer = object
+        .iter_layers()
+        .next()
+        .map(|(layer, _)| layer)
+        .ok_or_else(|| {
+            IOError::new(
+                ErrorKind::InvalidInput,
+                format!("object `{}` has no layers to mesh", object.name()),
+            )
+        })?;
+
     let request = MaterialMeshRequest {
         method,
+        layer,
         scale,
         maps: maps.iter().map(material_map).collect(),
         storage: resource_storage(storage),

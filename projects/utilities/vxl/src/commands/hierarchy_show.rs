@@ -102,10 +102,10 @@ pub struct HierarchyShow {
     #[arg(value_names = ["precision"], long = "show-runtime-extents", num_args = 0..=1)]
     show_runtime_extents: Option<Vec<String>>,
 
-    /// Append each object's referenced palettes as a nested subtree, one child
-    /// per palette showing its index and cell count.
-    #[arg(value_name = "show-palettes", long = "show-palettes")]
-    show_palettes: bool,
+    /// Append each object's layers as a nested subtree, one child per layer
+    /// showing its palette index and material count.
+    #[arg(value_name = "show-layers", long = "show-layers")]
+    show_layers: bool,
 }
 
 impl HierarchyShow {
@@ -118,7 +118,7 @@ impl HierarchyShow {
             runtime_origins: parse(self.show_runtime_origins.as_deref(), parse_origin_view)?,
             runtime_bounds: parse(self.show_runtime_bounds.as_deref(), parse_precision_arg)?,
             runtime_extents: parse(self.show_runtime_extents.as_deref(), parse_precision_arg)?,
-            palettes: self.show_palettes,
+            layers: self.show_layers,
         };
 
         // The collapse flags require a pattern, so clap guarantees they are false

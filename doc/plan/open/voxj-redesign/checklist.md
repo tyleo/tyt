@@ -471,16 +471,43 @@ model. Verified: `cargo test -p voxsmith` passes 104 tests on default features
 
 ## Phase 7: `vxl`
 
+First chunk (see decisions log): `vxl` is one lib+bin crate with no per-command
+features, so it cannot compile in halves. This chunk ports the read/inspection
+commands that carry the hard compile errors, `info`, `palette list`,
+`palette show`, and `hierarchy show`, to the pool/binding/material/layer model,
+plus the one-field minimal `mesh` compile fix. It fully lands item 2 and the
+read-command halves of items 1, 3, and 8; the mesh vocab/`AttributeType` rework
+(rest of 3, 4, 5), the `--color-format` flag (6), and `max_palette_cells`/doc
+updates (7) live in files that still compile and are deferred to later chunks.
+
 - [ ] Rename user-facing cell terminology to material: `--show-cells`, the
       `cells` and `cellCount` columns and JSON keys, and the cell wording in
-      `palette show`, `palette list`, `info`, and `hierarchy show`.
-- [ ] Rework `palette show` color rendering to read the bound pool's kind rather
+      `palette show`, `palette list`, `info`, and `hierarchy show`. (Chunk 1
+      done for the read commands: `info` renames the palette-table `Cells`
+      column and JSON `cells` key to `Materials`/`materials` and the object
+      `Palettes` column and `palettes` key to `Layers`/`layers`; `palette list`
+      renames `--show-cells` to `--show-materials`, the `cells` column and JSON
+      key to `materials`, and the `cellCount` leaf to `materialCount`;
+      `hierarchy show` renames its per-object subtree and `--show-palettes` flag
+      to `layers`/`--show-layers`, now one child per layer, and its `{cells}`
+      leaf to `{materials}`. Deferred: `voxelize`'s `--max-palette-cells` and the
+      `material_mode` doc, which ship with the mesh/voxelize chunk under item 7.)
+- [x] Rework `palette show` color rendering to read the bound pool's kind rather
       than sniffing Text versus Number; handle three-component colors without
       alpha and non-hex encodings; round-trip pooled array, int, float, and bool
       values in the JSON and text layouts instead of collapsing them to null.
+      (Chunk 1: classifies by `VoxValuePool::kind`; sRGB colors render `#RRGGBB`
+      or `#RRGGBBAA` hex and byte components, linear colors render float
+      components, `.a` on a three-component color errors, and `int`/`float`/
+      `bool`/`string`/`json` pools each render their native value. New tests
+      cover the three-component, linear, int, and json-array cases.)
 - [ ] Replace the binary `AttributeType` (Scalar or Color) with a
       kind-and-bounds aware model, and let `ColorComponent` address
-      three-component colors and float or int components.
+      three-component colors and float or int components. (Chunk 1 landed
+      `palette show`'s share: it no longer uses `AttributeType`, classifies by
+      pool kind, and reads three-component and float color components inline.
+      The `AttributeType` type itself and its `mesh`/`attribute_binding`
+      consumers are deferred to the mesh chunk.)
 - [ ] Update `mesh` and the texture presets to the glTF vocab: `baseColorFactor`
       is the color, `emissiveFactor` is also a color, and the presets map
       `metallic`, `roughness`, `occlusion`, and `emissive` to their new names;
@@ -494,7 +521,12 @@ model. Verified: `cargo test -p voxsmith` passes 104 tests on default features
       point `max_palette_cells` at the material count, and route `fill_color`
       into pool population.
 - [ ] Update `validate` output and tests for the new check names; rebuild the
-      palette, info, and hierarchy fixtures.
+      palette, info, and hierarchy fixtures. (Chunk 1 rebuilt the `info`,
+      `palette list`, `palette show`, and `hierarchy show` fixtures onto value
+      pools plus bindings plus materials plus layers, keeping the old attribute
+      names so only the terminology goldens moved; the `validate` check-name
+      updates are deferred, as `validate.rs` already compiles and surfaces
+      whatever names the codec supplies.)
 
 Gate: `vxl` builds; `info`, `palette list`, `palette show`, `validate`, `mesh`,
 and `to voxj` work end to end on a new-shape document.

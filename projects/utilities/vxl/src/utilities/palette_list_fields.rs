@@ -6,8 +6,8 @@
 pub struct PaletteListFields {
     /// The ordered attribute keys.
     pub attributes: bool,
-    /// The cell count.
-    pub cells: bool,
+    /// The material count.
+    pub materials: bool,
     /// The referencing objects.
     pub objects: bool,
 }

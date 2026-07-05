@@ -14,7 +14,7 @@ use voxcore::{BVoxPalette, VoxMain, VoxPalette};
 type Entry<'a> = (U32Id<BVoxPalette>, &'a VoxPalette);
 
 /// Loads the voxel file at `input` and prints a per-palette overview: each
-/// palette's index and, when enabled by `fields`, its attribute keys, cell
+/// palette's index and, when enabled by `fields`, its attribute keys, material
 /// count, and referencing objects. `filters` narrows the palettes and `layout`
 /// chooses the Markdown table, the hierarchy tree, or a JSON form.
 pub fn palette_list(
@@ -75,8 +75,8 @@ fn render_markdown(state: &VoxMain, palettes: &[Entry], fields: PaletteListField
     if fields.attributes {
         headers.push("attributes");
     }
-    if fields.cells {
-        headers.push("cells");
+    if fields.materials {
+        headers.push("materials");
     }
     if fields.objects {
         headers.push("used by");
@@ -85,21 +85,21 @@ fn render_markdown(state: &VoxMain, palettes: &[Entry], fields: PaletteListField
     let rows: Vec<Vec<String>> = palettes
         .iter()
         .map(|(id, palette)| {
-            let mut cells = vec![id.to_u32().to_string()];
+            let mut columns = vec![id.to_u32().to_string()];
             if fields.attributes {
-                cells.push(implementation::md_cell(
+                columns.push(implementation::md_cell(
                     &implementation::attribute_names(palette).join(", "),
                 ));
             }
-            if fields.cells {
-                cells.push(palette.cell_count().to_string());
+            if fields.materials {
+                columns.push(palette.material_count().to_string());
             }
             if fields.objects {
-                cells.push(implementation::md_cell(
+                columns.push(implementation::md_cell(
                     &referencing_names(state, *id).join(", "),
                 ));
             }
-            cells
+            columns
         })
         .collect();
     implementation::markdown_table(&headers, &rows)
@@ -125,8 +125,8 @@ fn render_json(
                     json!(implementation::attribute_names(palette)),
                 );
             }
-            if fields.cells {
-                entry.insert("cells".to_string(), json!(palette.cell_count()));
+            if fields.materials {
+                entry.insert("materials".to_string(), json!(palette.material_count()));
             }
             if fields.objects {
                 let used_by: Vec<u32> = referencing_objects(state, *id)
@@ -143,7 +143,7 @@ fn render_json(
 
 /// The listing as an indented tree, like `hierarchy show`: a `palettes` header
 /// over one bare-index branch per palette, each carrying its enabled fields as
-/// child branches in the order cell count, attributes, objects.
+/// child branches in the order material count, attributes, objects.
 fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> String {
     let mut output = String::from("palettes\n");
     let total = palettes.len();
@@ -154,8 +154,8 @@ fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFiel
 
         let child_prefix = if last { EXTENSION_LAST } else { EXTENSION_MID };
         let mut children = Vec::new();
-        if fields.cells {
-            children.push(HierarchyChild::CellCount(palette.cell_count()));
+        if fields.materials {
+            children.push(HierarchyChild::MaterialCount(palette.material_count()));
         }
         if fields.attributes {
             children.push(HierarchyChild::Names(
@@ -174,13 +174,15 @@ fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFiel
         for (child_index, child) in children.iter().enumerate() {
             let child_last = child_index + 1 == child_total;
             match child {
-                HierarchyChild::CellCount(count) => {
+                HierarchyChild::MaterialCount(count) => {
                     let connector = if child_last {
                         CONNECTOR_LAST
                     } else {
                         CONNECTOR_MID
                     };
-                    output.push_str(&format!("{child_prefix}{connector} cellCount: {count}\n"));
+                    output.push_str(&format!(
+                        "{child_prefix}{connector} materialCount: {count}\n"
+                    ));
                 }
                 HierarchyChild::Names(header, names) => {
                     render_names_subtree(&mut output, child_prefix, child_last, header, names);
@@ -194,8 +196,8 @@ fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFiel
 /// One enabled child under a palette in the `hierarchy` layout. Collected before
 /// rendering so the last enabled child takes the closing connector.
 enum HierarchyChild<'a> {
-    /// A `cellCount: <n>` leaf.
-    CellCount(usize),
+    /// A `materialCount: <n>` leaf.
+    MaterialCount(usize),
     /// A named subtree, `attributes` or `objects`, with one child per name.
     Names(&'static str, Vec<&'a str>),
 }
@@ -238,11 +240,11 @@ fn render_names_subtree(
 }
 
 /// The objects that reference `palette`, in object order, as `(index, name)`.
-/// An object appears once however many times it references the palette.
+/// An object appears once however many of its layers reference the palette.
 fn referencing_objects(state: &VoxMain, palette: U32Id<BVoxPalette>) -> Vec<(u32, &str)> {
     state
         .iter_objects()
-        .filter(|(_, object)| object.iter_palette_refs().any(|(_, id)| id == palette))
+        .filter(|(_, object)| object.iter_layers().any(|(_, id)| id == palette))
         .map(|(id, object)| (id.to_u32(), object.name()))
         .collect()
 }
@@ -263,53 +265,58 @@ mod tests {
     };
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValue};
+    use voxcore::{VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// Every field enabled, the bare-`palette list` default.
     fn all_fields() -> PaletteListFields {
         PaletteListFields {
             attributes: true,
-            cells: true,
+            materials: true,
             objects: true,
         }
     }
 
     /// Two palettes and two objects: `a` samples palette 0, `b` samples both.
-    /// Palette 0 carries `rgba` and `metallic` with two cells, palette 1 carries
-    /// `rgba` with one cell.
+    /// Palette 0 carries `rgba` and `metallic` with two materials, palette 1
+    /// carries `rgba` with one material.
     fn shared_state() -> VoxMain {
         let mut state = VoxMain::default();
 
+        // Colors and metallic values back the bindings; only the attribute
+        // names and material counts reach the listing, so the values are
+        // arbitrary.
+        let colors = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![
+                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0, 1.0],
+            ],
+        });
+        let metallic = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::Number(1.0),
+            values: vec![0.0, 1.0],
+        });
+
         let mut zero = VoxPalette::default();
-        zero.add_attribute("rgba".to_owned());
-        zero.add_attribute("metallic".to_owned());
-        let zero_cell = zero
-            .add_cell(vec![
-                VoxValue::Text("#FF0000FF".to_owned()),
-                VoxValue::Number(0.0),
-            ])
-            .unwrap();
-        zero.add_cell(vec![
-            VoxValue::Text("#00FF00FF".to_owned()),
-            VoxValue::Number(1.0),
-        ])
-        .unwrap();
+        zero.add_binding("rgba".to_owned(), colors);
+        zero.add_binding("metallic".to_owned(), metallic);
+        let zero_material = zero.add_material(vec![0, 0]).unwrap();
+        zero.add_material(vec![1, 1]).unwrap();
         let zero = state.add_palette(zero);
 
         let mut one = VoxPalette::default();
-        one.add_attribute("rgba".to_owned());
-        let one_cell = one
-            .add_cell(vec![VoxValue::Text("#0000FFFF".to_owned())])
-            .unwrap();
+        one.add_binding("rgba".to_owned(), colors);
+        let one_material = one.add_material(vec![2]).unwrap();
         let one = state.add_palette(one);
 
         let mut a = VoxObject::new("a".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        a.add_palette_ref(zero, zero_cell);
+        a.add_layer(zero, zero_material);
         state.add_object(a);
 
         let mut b = VoxObject::new("b".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        b.add_palette_ref(zero, zero_cell);
-        b.add_palette_ref(one, one_cell);
+        b.add_layer(zero, zero_material);
+        b.add_layer(one, one_material);
         state.add_object(b);
 
         state
@@ -325,10 +332,10 @@ mod tests {
     fn markdown_lists_one_row_per_palette() {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::Markdown),
-            "| index | attributes     | cells | used by |\n\
-             | ----- | -------------- | ----- | ------- |\n\
-             | 0     | rgba, metallic | 2     | a, b    |\n\
-             | 1     | rgba           | 1     | b       |\n"
+            "| index | attributes     | materials | used by |\n\
+             | ----- | -------------- | --------- | ------- |\n\
+             | 0     | rgba, metallic | 2         | a, b    |\n\
+             | 1     | rgba           | 1         | b       |\n"
         );
     }
 
@@ -338,16 +345,16 @@ mod tests {
         let palettes = select_palettes(&state, &[]).unwrap();
         let fields = PaletteListFields {
             attributes: true,
-            cells: true,
+            materials: true,
             objects: false,
         };
         let output = render(&state, &palettes, fields, PaletteListLayout::Markdown).unwrap();
         assert_eq!(
             output,
-            "| index | attributes     | cells |\n\
-             | ----- | -------------- | ----- |\n\
-             | 0     | rgba, metallic | 2     |\n\
-             | 1     | rgba           | 1     |\n"
+            "| index | attributes     | materials |\n\
+             | ----- | -------------- | --------- |\n\
+             | 0     | rgba, metallic | 2         |\n\
+             | 1     | rgba           | 1         |\n"
         );
     }
 
@@ -357,7 +364,7 @@ mod tests {
             render_all(&shared_state(), PaletteListLayout::Hierarchy),
             "palettes\n\
              ├ 0\n\
-             │ ├ cellCount: 2\n\
+             │ ├ materialCount: 2\n\
              │ ├ attributes\n\
              │ │ ├ rgba\n\
              │ │ └ metallic\n\
@@ -365,7 +372,7 @@ mod tests {
              │   ├ a\n\
              │   └ b\n\
              └ 1\n\
-             \u{20}\u{20}├ cellCount: 1\n\
+             \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}├ attributes\n\
              \u{20}\u{20}│ └ rgba\n\
              \u{20}\u{20}└ objects\n\
@@ -379,7 +386,7 @@ mod tests {
         let palettes = select_palettes(&state, &[]).unwrap();
         let fields = PaletteListFields {
             attributes: false,
-            cells: true,
+            materials: true,
             objects: true,
         };
         let output = render(&state, &palettes, fields, PaletteListLayout::Hierarchy).unwrap();
@@ -387,23 +394,23 @@ mod tests {
             output,
             "palettes\n\
              ├ 0\n\
-             │ ├ cellCount: 2\n\
+             │ ├ materialCount: 2\n\
              │ └ objects\n\
              │   ├ a\n\
              │   └ b\n\
              └ 1\n\
-             \u{20}\u{20}├ cellCount: 1\n\
+             \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}└ objects\n\
              \u{20}\u{20}\u{20}\u{20}└ b\n"
         );
     }
 
     #[test]
-    fn compact_json_records_indices_attributes_cells_and_users() {
+    fn compact_json_records_indices_attributes_materials_and_users() {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::CompactJson),
-            "[{\"index\":0,\"attributes\":[\"rgba\",\"metallic\"],\"cells\":2,\"used_by\":[0,1]},\
-             {\"index\":1,\"attributes\":[\"rgba\"],\"cells\":1,\"used_by\":[1]}]\n"
+            "[{\"index\":0,\"attributes\":[\"rgba\",\"metallic\"],\"materials\":2,\"used_by\":[0,1]},\
+             {\"index\":1,\"attributes\":[\"rgba\"],\"materials\":1,\"used_by\":[1]}]\n"
         );
     }
 
@@ -426,9 +433,9 @@ mod tests {
         let output = render(&state, &palettes, all_fields(), PaletteListLayout::Markdown).unwrap();
         assert_eq!(
             output,
-            "| index | attributes | cells | used by |\n\
-             | ----- | ---------- | ----- | ------- |\n\
-             | 1     | rgba       | 1     | b       |\n"
+            "| index | attributes | materials | used by |\n\
+             | ----- | ---------- | --------- | ------- |\n\
+             | 1     | rgba       | 1         | b       |\n"
         );
     }
 
@@ -450,41 +457,43 @@ mod tests {
     #[test]
     fn an_unreferenced_palette_lists_no_users() {
         let mut state = VoxMain::default();
+        let colors = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[1.0, 1.0, 1.0, 1.0]],
+        });
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        palette
-            .add_cell(vec![VoxValue::Text("#FFFFFFFF".to_owned())])
-            .unwrap();
+        palette.add_binding("rgba".to_owned(), colors);
+        palette.add_material(vec![0]).unwrap();
         state.add_palette(palette);
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Markdown),
-            "| index | attributes | cells | used by |\n\
-             | ----- | ---------- | ----- | ------- |\n\
-             | 0     | rgba       | 1     |         |\n"
+            "| index | attributes | materials | used by |\n\
+             | ----- | ---------- | --------- | ------- |\n\
+             | 0     | rgba       | 1         |         |\n"
         );
 
         assert_eq!(
             render_all(&state, PaletteListLayout::CompactJson),
-            "[{\"index\":0,\"attributes\":[\"rgba\"],\"cells\":1,\"used_by\":[]}]\n"
+            "[{\"index\":0,\"attributes\":[\"rgba\"],\"materials\":1,\"used_by\":[]}]\n"
         );
     }
 
     #[test]
     fn an_unreferenced_palette_shows_an_empty_objects_branch() {
         let mut state = VoxMain::default();
+        let colors = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[1.0, 1.0, 1.0, 1.0]],
+        });
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        palette
-            .add_cell(vec![VoxValue::Text("#FFFFFFFF".to_owned())])
-            .unwrap();
+        palette.add_binding("rgba".to_owned(), colors);
+        palette.add_material(vec![0]).unwrap();
         state.add_palette(palette);
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Hierarchy),
             "palettes\n\
              └ 0\n\
-             \u{20}\u{20}├ cellCount: 1\n\
+             \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}├ attributes\n\
              \u{20}\u{20}│ └ rgba\n\
              \u{20}\u{20}└ objects: []\n"
