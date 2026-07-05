@@ -47,9 +47,13 @@ impl FromStr for AttributeBinding {
             _ => return Err(format!("`{value}` is not `name key [type]`")),
         };
         let ty = match ty {
-            Some(ty) => AttributeType::from_str(ty, true)
-                .map_err(|_| format!("`{ty}` is not an attribute type; use scalar or color"))?,
-            None => AttributeType::Scalar,
+            Some(ty) => AttributeType::from_str(ty, true).map_err(|_| {
+                format!(
+                    "`{ty}` is not an attribute type; use a pool kind (srgb, srgba, \
+                     linear-rgb, linear-rgba, float, int, bool) or the scalar/color alias"
+                )
+            })?,
+            None => AttributeType::Float,
         };
         Ok(AttributeBinding::new(name.to_string(), key.to_string(), ty))
     }
@@ -61,10 +65,24 @@ mod tests {
 
     #[test]
     fn parses_with_explicit_type() {
+        // `color` is the alias for `srgba`.
         assert_eq!(
             "tint tint color".parse::<AttributeBinding>().unwrap(),
-            AttributeBinding::new("tint".to_string(), "tint".to_string(), AttributeType::Color)
+            AttributeBinding::new("tint".to_string(), "tint".to_string(), AttributeType::Srgba)
         );
+    }
+
+    #[test]
+    fn parses_pool_kinds_and_aliases() {
+        let ty = |value: &str| value.parse::<AttributeBinding>().unwrap().ty();
+        assert_eq!(ty("c c srgb"), AttributeType::Srgb);
+        assert_eq!(ty("c c linear-rgba"), AttributeType::LinearRgba);
+        assert_eq!(ty("s s float"), AttributeType::Float);
+        assert_eq!(ty("s s int"), AttributeType::Int);
+        assert_eq!(ty("m m bool"), AttributeType::Bool);
+        // The aliases map to their canonical kinds.
+        assert_eq!(ty("s s scalar"), AttributeType::Float);
+        assert_eq!(ty("c c color"), AttributeType::Srgba);
     }
 
     #[test]
@@ -74,7 +92,7 @@ mod tests {
             AttributeBinding::new(
                 "sss".to_string(),
                 "subsurface".to_string(),
-                AttributeType::Scalar
+                AttributeType::Float
             )
         );
     }

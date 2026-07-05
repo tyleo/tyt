@@ -1264,3 +1264,39 @@ belongs with the still-open item-8 fixtures/validate cleanup (item 4's own text
 is scoped to `mesh` and the texture presets). Deferring it there keeps this chunk
 a focused correctness fix. Verified: `cargo test -p vxl` passes 142 tests, and
 the workspace is clippy-clean under `--all-targets -D warnings`.
+
+### Fourth chunk: `AttributeType` becomes the full pool-kind vocabulary
+
+The mesh-vocab chunk kept `AttributeType` the binary `scalar`/`color` and logged
+a richer per-kind `--define-attribute` vocabulary as deferred. At the owner's
+direction that follow-up is now built, so the README's deferred bullet is removed
+and `AttributeType` is the seven channel-usable pool kinds: `srgb`, `srgba`,
+`linear-rgb`, `linear-rgba`, `float`, `int`, `bool`, with `scalar` an alias for
+`float` and `color` for `srgba` (the common cases, and backward-compatible with
+the old two-value flag). `string` and `json` are excluded because neither can be
+a texture channel source.
+
+The nine voxcore kinds collapse to three things the parse-time channel resolver
+can act on: a color needs a component, a three-component color has no `.a`, and a
+scalar takes no component. `AttributeType::is_color`/`has_alpha` drive that in
+`resolve_source`: a color with no component errors, an `.a` on an alpha-less
+color (`srgb`, `linear-rgb`) errors, and a component on a scalar errors. The
+sRGB-versus-linear split and `int`-versus-`float` are inert for this validation
+(the bake decodes the real space and reads either numeric pool), but naming the
+kind keeps the declaration honest, matches what `palette show` reports, and is
+forward-compatible for a space-aware preview or a non-clamped vertex map. This is
+the one place the model gains behavior over the binary: alpha-awareness. It also
+fixes a latent bug the binary `color` hid: `builtin_color` now maps
+`baseColorFactor` to `srgba` and `emissiveFactor` to `srgb`, so `emissiveFactor.a`
+is rejected, since glTF emissive has no alpha and voxcore stores it as an `Srgb`
+pool.
+
+`bool` is the one kind that needed engine support: the atlas bake's `scalar_value`
+read only `float`/`int` pools, so a bool attribute would have silently baked the
+spec default. A `Bool` arm was added, reading `true`/`false` as `1.0`/`0.0`, so a
+boolean attribute packs into a 0/1 mask channel end to end; a bake test covers it.
+This is the small cross-crate piece (voxsmith) the CLI vocabulary depends on to
+keep `bool` from being a footgun. The vxl-commands plan's `mesh.md` is updated to
+the new vocabulary in the same change, partially advancing the Phase 8 doc sweep
+for the `--define-attribute` surface. Verified: `cargo test -p voxsmith --features
+gltf` (160) and `cargo test -p vxl` (144) pass, workspace clippy clean.

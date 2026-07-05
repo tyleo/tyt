@@ -120,25 +120,25 @@ the named presets and `--texture-map` for a custom packing.
 `--texture albedo --texture orm`. The optional `path` overrides the default of
 the mesh stem plus the name, the `{stem}-mse.png` style. The names are:
 
-1. `albedo`: RGBA base color from `rgba`. Four channels.
-2. `orm`: glTF occlusion-roughness-metallic packing, R = `occlusion`,
-   G = `roughness`, B = `metallic`. Three channels.
-3. `metallic-roughness`: glTF metallic-roughness packing, G = `roughness`,
-   B = `metallic`, R = `0`. Three channels.
-4. `metallic-smoothness`: Unity metallic-smoothness packing, R = `metallic`,
+1. `albedo`: RGBA base color from `baseColorFactor`. Four channels.
+2. `orm`: glTF occlusion-roughness-metallic packing, R = `occlusionStrength`,
+   G = `roughnessFactor`, B = `metallicFactor`. Three channels.
+3. `metallic-roughness`: glTF metallic-roughness packing, G = `roughnessFactor`,
+   B = `metallicFactor`, R = `0`. Three channels.
+4. `metallic-smoothness`: Unity metallic-smoothness packing, R = `metallicFactor`,
    A = `smoothness`, G and B = `0`. Four channels.
-5. `mse`: the custom MSE packing, R = `metallic`, G = `smoothness`,
-   B = `emissive`. Three channels. This is the voxel-native form of the MSE
-   texture the material tooling builds from image maps.
-6. `emissive`: the emissive color, the `rgba` base color scaled by the
-   `emissive` strength, so the surface glows in its own color rather than a flat
-   white. RGB, for the glTF emissive slot. The raw `emissive` strength stays a
-   scalar for `--texture-map` and the packings that read it, such as `mse`.
-7. `occlusion`: grayscale `occlusion`. One channel.
+5. `mse`: the custom MSE packing, R = `metallicFactor`, G = `smoothness`,
+   B = `emissiveStrength`. Three channels. This is the voxel-native form of the
+   MSE texture the material tooling builds from image maps.
+6. `emissive`: the emissive color, `emissiveFactor` scaled by `emissiveStrength`,
+   so the surface glows in its own emissive color rather than a flat white. RGB,
+   for the glTF emissive slot. The raw `emissiveStrength` stays a scalar for
+   `--texture-map` and the packings that read it, such as `mse`.
+7. `occlusion`: grayscale `occlusionStrength`. One channel.
 8. `computed-occlusion`: grayscale occlusion computed from the voxel geometry
-   rather than read from the `occlusion` attribute. One channel. Always bakes
-   into an unwrap layout; see the atlas notes above.
-9. `roughness`: grayscale `roughness`. One channel.
+   rather than read from the `occlusionStrength` attribute. One channel. Always
+   bakes into an unwrap layout; see the atlas notes above.
+9. `roughness`: grayscale `roughnessFactor`. One channel.
 10. `smoothness`: grayscale `smoothness`. One channel.
 
 `--texture-map <path> <channels>` writes a custom packing, also repeatable. The
@@ -148,42 +148,46 @@ the mesh stem plus the name, the `{stem}-mse.png` style. The names are:
 `<attribute>.r`, `.g`, `.b`, or `.a`, the constant `0` or `1`, or
 `computed-occlusion` for the geometry-derived occlusion. The channel
 count is the number of channels named; an omitted channel is `0`. For example
-`--texture-map model-mse.png R=metallic,G=smoothness,B=emissive` reproduces
-`--texture mse`, and swapping `G=roughness` writes roughness instead of
-smoothness. A packing that names `computed-occlusion` always bakes into an
-unwrap layout, as `--texture-map ao.png R=computed-occlusion` does.
+`--texture-map model-mse.png R=metallicFactor,G=smoothness,B=emissiveStrength`
+reproduces `--texture mse`, and swapping `G=roughnessFactor` writes roughness
+instead of smoothness. A packing that names `computed-occlusion` always bakes
+into an unwrap layout, as `--texture-map ao.png R=computed-occlusion` does.
 
-A color attribute is read one component at a time. `rgba` is a color, so
-`R=rgba.a` writes its straight alpha and `R=rgba.r,G=rgba.g,B=rgba.b,A=rgba.a`
-splits the color across four channels; the components are the stored sRGB
-values with straight alpha. Naming a color with no component, as in `R=rgba`,
-is an error, and `--texture albedo` is the way to write the whole color. A
-scalar attribute names no component, so `metallic.r` is an error.
+A color attribute is read one component at a time. `baseColorFactor` is a color,
+so `R=baseColorFactor.a` writes its straight alpha and
+`R=baseColorFactor.r,G=baseColorFactor.g,B=baseColorFactor.b,A=baseColorFactor.a`
+splits the color across four channels; a component reads a byte from the stored
+color. Naming a color with no component, as in `R=baseColorFactor`, is an error,
+and `--texture albedo` is the way to write the whole color. A scalar attribute
+names no component, so `metallicFactor.r` is an error, and a color with no alpha
+rejects `.a`: `emissiveFactor` is a three-component color, so `emissiveFactor.a`
+is an error.
 
 `--define-attribute <name> <key> [type=scalar]` names a custom
 attribute so `--texture-map` and `--vertex-map` can read it, repeatable, as in
-`--define-attribute sss subsurface` and `--define-attribute tint tint color`.
+`--define-attribute sss subsurface` and `--define-attribute tint tint srgba`.
 The voxel-json format stores attributes generically, so a palette may
 carry keys beyond the recommended set in
 [Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
 and a binding gives one such key a name a packing can use. A binding reads the
-key's merged value across the object's palette layers, the same merge the rest
-of `mesh` walks, so a key several layers set resolves to the last layer that
-sets it. Its parts are:
+key from the meshed layer's material. Its parts are:
 
 1. `name`: the name used in `--texture-map` and `--vertex-map`. It shadows a
-   built-in attribute name on collision, so `--define-attribute roughness
-   micro-rough` makes `R=roughness` read the merged `micro-rough` instead. The
+   built-in attribute name on collision, so `--define-attribute roughnessFactor
+   micro-rough` makes `R=roughnessFactor` read `micro-rough` instead. The
    shadowing is scoped to the custom packings; the `--texture` and `--vertex`
    presets always read the spec attributes.
-2. `key`: the voxel-json attribute key read from the merged material.
-3. `type` (default `scalar`): `scalar` for a `0..1` number read as a bare
-   `<name>`, or `color` for a `#RRGGBBAA` hex whose `r`, `g`, `b`, and `a`
-   components a packing reads as `<name>.r` and so on.
+2. `key`: the voxel-json attribute key read from the meshed layer's material.
+3. `type` (default `scalar`): the attribute's pool kind, which tells a packing
+   how to read it. The colors are `srgb` and `srgba` and their linear twins
+   `linear-rgb` and `linear-rgba`, whose `r`, `g`, `b`, and (for the four-channel
+   kinds) `a` components a packing reads as `<name>.r` and so on; the scalars are
+   `float` and `int`, read whole; and `bool` packs as a `1` or `0` mask. `color`
+   is an alias for `srgba` and `scalar` for `float`, the common cases.
 
-For example, `--define-attribute tint tint color` then `--texture-map
-paint.png R=tint.r,G=tint.g,B=tint.b,A=rgba.a` packs the custom `tint` color
-into RGB and the base color's alpha into `A`.
+For example, `--define-attribute tint tint srgba` then `--texture-map
+paint.png R=tint.r,G=tint.g,B=tint.b,A=baseColorFactor.a` packs the custom `tint`
+color into RGB and the base color's alpha into `A`.
 
 ## Vertex attribute maps
 
@@ -220,8 +224,8 @@ seam.
 twin of `--texture`. The optional `target` overrides the default attribute name.
 The names reuse the texture presets and pack the same way:
 
-1. `albedo`: RGBA base color from `rgba` into `COLOR_0`. Portable; a glTF viewer
-   renders it as the per-vertex base color with no texture.
+1. `albedo`: RGBA base color from `baseColorFactor` into `COLOR_0`. Portable; a
+   glTF viewer renders it as the per-vertex base color with no texture.
 2. `computed-occlusion`: occlusion computed from the voxel geometry, multiplied
    into `COLOR_0` to darken the base color, tuned by the `--computed-occlusion-*`
    options above. Override the target, as `--vertex computed-occlusion _AO`, to
@@ -252,9 +256,10 @@ The names reuse the texture presets and pack the same way:
 `--vertex-map <target> <channels>` writes a custom packing to a named attribute,
 repeatable, the vertex twin of `--texture-map`. `target` is `COLOR_0` or a custom
 `_NAME`, and `channels` is the same comma-separated `R=<expr>,G=<expr>,...` list,
-so `--vertex-map _ORM R=occlusion,G=roughness,B=metallic` packs ORM into a vec3
-attribute and `--vertex-map COLOR_0 R=rgba.r,G=rgba.g,B=rgba.b,A=rgba.a` writes
-the base color. The component count follows the channels named: one is a scalar,
+so `--vertex-map _ORM R=occlusionStrength,G=roughnessFactor,B=metallicFactor`
+packs ORM into a vec3 attribute and
+`--vertex-map COLOR_0 R=baseColorFactor.r,G=baseColorFactor.g,B=baseColorFactor.b,A=baseColorFactor.a`
+writes the base color. The component count follows the channels named: one is a scalar,
 two a vec2, three a vec3, four a vec4. A packing that names `computed-occlusion`
 resolves it per corner as above.
 

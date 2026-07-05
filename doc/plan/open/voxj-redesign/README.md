@@ -363,10 +363,6 @@ port and captured here for follow-up:
 - Author or convert into non-default color encodings on request, for example
   emitting `linear-rgba-float` for HDR fidelity rather than the `srgba-hex`
   default.
-- A richer `--define-attribute` type vocabulary. The faithful port keeps the
-  binary `scalar`/`color` declaration the mesh channel resolver needs before a
-  document loads; letting a user declare a pool kind (`srgb`, `srgba`, `float`,
-  `int`) or bounds for a custom attribute is deferred.
 
 ## Execution shape
 

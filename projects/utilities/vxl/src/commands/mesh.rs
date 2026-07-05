@@ -1,7 +1,7 @@
 use crate::{
-    Atlas, AttributeBinding, AttributeType, ChannelPacking, ChannelSource, Dependencies, Format,
-    MeshFormat, MeshMethod, MeshTextureMap, ResourceStorage, Result, SelectIndex, Texture,
-    TextureBake,
+    Atlas, AttributeBinding, AttributeType, ChannelPacking, ChannelSource, ColorComponent,
+    Dependencies, Format, MeshFormat, MeshMethod, MeshTextureMap, ResourceStorage, Result,
+    SelectIndex, Texture, TextureBake,
 };
 use clap::{Parser, ValueEnum};
 use std::{
@@ -312,26 +312,35 @@ fn resolve_source(
         return Ok(source.clone());
     };
 
-    // A binding gives the key a concrete voxel attribute key and a type; a bare
-    // key resolves to itself, a color only when it is a built-in glTF color.
+    // A binding gives the key a concrete voxel attribute key and a kind; a bare
+    // key resolves to itself, a color only when it is a built-in glTF color,
+    // else a scalar.
     let (resolved_key, ty) = match bindings.get(key.as_str()) {
         Some((bound_key, ty)) => (bound_key.to_string(), *ty),
-        None if is_builtin_color(key) => (key.clone(), AttributeType::Color),
-        None => (key.clone(), AttributeType::Scalar),
+        None => match builtin_color(key) {
+            Some(ty) => (key.clone(), ty),
+            None => (key.clone(), AttributeType::Float),
+        },
     };
 
-    match ty {
-        AttributeType::Color if component.is_none() => {
-            return Err(usage(&format!(
-                "`{key}` is a color; name a component, as `{key}.r`"
-            )));
+    if ty.is_color() {
+        match component {
+            None => {
+                return Err(usage(&format!(
+                    "`{key}` is a color; name a component, as `{key}.r`"
+                )));
+            }
+            Some(ColorComponent::A) if !ty.has_alpha() => {
+                return Err(usage(&format!(
+                    "`{key}` is a color with no alpha; use r, g, or b"
+                )));
+            }
+            _ => {}
         }
-        AttributeType::Scalar if component.is_some() => {
-            return Err(usage(&format!(
-                "`{key}` is a scalar and has no color component"
-            )));
-        }
-        _ => {}
+    } else if component.is_some() {
+        return Err(usage(&format!(
+            "`{key}` is a scalar and has no color component"
+        )));
     }
 
     Ok(ChannelSource::Attribute {
@@ -341,11 +350,14 @@ fn resolve_source(
     })
 }
 
-/// Whether a bare attribute key names a built-in glTF color, so a channel must
-/// name one of its components. The recommended color attributes are the base
-/// color and the emissive color; every other recommended attribute is a scalar.
-fn is_builtin_color(key: &str) -> bool {
-    key == BASE_COLOR_FACTOR || key == EMISSIVE_FACTOR
+/// The kind of a built-in glTF color attribute, or `None` otherwise. The base
+/// color has alpha (`srgba`); the emissive color does not (`srgb`).
+fn builtin_color(key: &str) -> Option<AttributeType> {
+    match key {
+        BASE_COLOR_FACTOR => Some(AttributeType::Srgba),
+        EMISSIVE_FACTOR => Some(AttributeType::Srgb),
+        _ => None,
+    }
 }
 
 /// The CLI name of a preset, as its default file-name stem.
@@ -382,8 +394,9 @@ mod tests {
 
     fn bindings() -> HashMap<&'static str, (&'static str, AttributeType)> {
         HashMap::from([
-            ("gloss", (ROUGHNESS_FACTOR, AttributeType::Scalar)),
-            ("tint", ("tint", AttributeType::Color)),
+            ("gloss", (ROUGHNESS_FACTOR, AttributeType::Float)),
+            ("tint", ("tint", AttributeType::Srgba)),
+            ("glow", ("glow", AttributeType::Srgb)),
         ])
     }
 
@@ -453,11 +466,12 @@ mod tests {
     }
 
     #[test]
-    fn emissive_factor_is_a_built_in_color() {
+    fn emissive_factor_is_an_alpha_less_built_in_color() {
         use voxsmith::EMISSIVE_FACTOR;
 
         // The emissive color is the second built-in color, so a bare channel
-        // must name one of its components.
+        // must name a component; but glTF emissive has no alpha, so `.a` is
+        // rejected while `.g` is fine.
         assert!(
             resolve_source(
                 &attribute(EMISSIVE_FACTOR, Some(ColorComponent::G), false),
@@ -466,6 +480,32 @@ mod tests {
             .is_ok()
         );
         assert!(resolve_source(&attribute(EMISSIVE_FACTOR, None, false), &bindings()).is_err());
+        assert!(
+            resolve_source(
+                &attribute(EMISSIVE_FACTOR, Some(ColorComponent::A), false),
+                &bindings()
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn a_three_component_color_rejects_alpha() {
+        // `glow` is declared `srgb`, so it has r/g/b but no alpha.
+        assert!(
+            resolve_source(
+                &attribute("glow", Some(ColorComponent::B), false),
+                &bindings()
+            )
+            .is_ok()
+        );
+        assert!(
+            resolve_source(
+                &attribute("glow", Some(ColorComponent::A), false),
+                &bindings()
+            )
+            .is_err()
+        );
     }
 
     #[test]

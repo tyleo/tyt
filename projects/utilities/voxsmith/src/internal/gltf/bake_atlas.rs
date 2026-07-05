@@ -170,9 +170,9 @@ fn component_byte(rgba: [u8; 4], component: ColorChannel) -> u8 {
     }
 }
 
-/// A scalar attribute's value from a `float` or `int` pool, defaulting to its
-/// spec default (or `0` for a key with no standard default) when absent or not a
-/// numeric pool.
+/// A scalar attribute's value from a `float`, `int`, or `bool` pool, defaulting
+/// to its spec default (or `0` for a key with no standard default) when absent or
+/// not one of those pools. A `bool` reads as `1` or `0`.
 fn scalar_value(value: Option<(&VoxValuePool, u32)>, key: &str) -> f64 {
     let fallback = || default_scalar(key).unwrap_or(0.0);
     match value {
@@ -182,6 +182,10 @@ fn scalar_value(value: Option<(&VoxValuePool, u32)>, key: &str) -> f64 {
         Some((VoxValuePool::Int { values, .. }, index)) => values
             .get(index as usize)
             .map(|&value| value as f64)
+            .unwrap_or_else(fallback),
+        Some((VoxValuePool::Bool { values }, index)) => values
+            .get(index as usize)
+            .map(|&value| if value { 1.0 } else { 0.0 })
             .unwrap_or_else(fallback),
         _ => fallback(),
     }
@@ -316,6 +320,37 @@ mod tests {
         assert_eq!(pixels[0], 255);
         assert_eq!(pixels[4], 0);
         assert_eq!(pixels[8], 0);
+    }
+
+    #[test]
+    fn a_bool_packing_reads_one_or_zero() {
+        let mut state = VoxMain::default();
+        let flag = state.add_value_pool(VoxValuePool::Bool {
+            values: vec![true, false],
+        });
+
+        let mut palette = VoxPalette::default();
+        palette.add_binding("flag".to_owned(), flag);
+        let on = palette.add_material(vec![0]).unwrap();
+        let off = palette.add_material(vec![1]).unwrap();
+        let palette_id = state.add_palette(palette);
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
+        let layer = object.add_layer(palette_id, on);
+        for (x, material) in [(0, on), (1, off)] {
+            let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
+            object.retain_voxel(voxel, &[material]).unwrap();
+        }
+        let object_id = state.add_object(object);
+
+        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let (width, height) = atlas_dimensions(used.len());
+
+        let mask = MaterialBake::Packing(vec![scalar("flag", false)]);
+        let pixels = bake_atlas_pixels(&state, &used, &mask, width, height).unwrap();
+        // A true voxel bakes 255, a false voxel bakes 0.
+        assert_eq!(pixels[0], 255);
+        assert_eq!(pixels[4], 0);
     }
 
     #[test]

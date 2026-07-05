@@ -506,15 +506,16 @@ updates (7) live in files that still compile and are deferred to later chunks.
       three-component colors and float or int components. (Chunk 1 landed
       `palette show`'s share: it no longer uses `AttributeType`, classifies by
       pool kind, and reads three-component and float color components inline.
-      Mesh chunk done: `AttributeType` stays the binary `scalar`/`color`
-      `ValueEnum`, because the mesh command parses its maps before loading a
-      document and the channel resolver can only decide statically whether an
-      attribute has color components. The finer pool kind and bounds resolve at
-      document time, already landed in `palette show` and the voxsmith bake; a
-      richer per-kind `--define-attribute` vocabulary is logged as a deferred
-      capability. `attribute_binding`'s merge-model doc is dropped, and the
-      built-in color in `resolve_source` moved to `baseColorFactor` plus a new
-      `emissiveFactor` via `is_builtin_color`. See the decisions log.)
+      Mesh chunk dropped `attribute_binding`'s merge-model doc and moved the
+      built-in color in `resolve_source` to `baseColorFactor` plus a new
+      `emissiveFactor`. A follow-up chunk then expanded `AttributeType` from the
+      binary `scalar`/`color` to the full pool-kind `ValueEnum` (`srgb`, `srgba`,
+      `linear-rgb`, `linear-rgba`, `float`, `int`, `bool`, with `scalar`/`color`
+      as aliases), so a `--define-attribute` declares its pool kind and the
+      channel resolver validates components by kind: a color needs a component,
+      a three-component color (and glTF `emissiveFactor`) rejects `.a`, a scalar
+      rejects any component. `bool` channels as a 0/1 mask, which needed a
+      voxsmith `scalar_value` arm. See the decisions log.)
 - [x] Update `mesh` and the texture presets to the glTF vocab: `baseColorFactor`
       is the color, `emissiveFactor` is also a color, and the presets map
       `metallic`, `roughness`, `occlusion`, and `emissive` to their new names;
