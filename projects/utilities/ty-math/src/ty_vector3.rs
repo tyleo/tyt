@@ -431,6 +431,14 @@ macro_rules! impl_ty_vector3_float {
 impl_ty_vector3_float!(f32);
 impl_ty_vector3_float!(f64);
 
+impl TyVector3<i32> {
+    /// Each component widened to `f64`. The lossless inverse of the truncating
+    /// `to_i32` cast on a float vector.
+    pub fn to_f64(self) -> TyVector3<f64> {
+        TyVector3::new(self.x as f64, self.y as f64, self.z as f64)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{TyVector3F64, TyVector3I32};
@@ -446,6 +454,12 @@ mod tests {
     fn to_i32_truncates_toward_zero() {
         let truncated = TyVector3F64::new(1.9, -1.9, 0.5).to_i32();
         assert_eq!(truncated, TyVector3I32::new(1, -1, 0));
+    }
+
+    #[test]
+    fn to_f64_widens_each_component() {
+        let widened = TyVector3I32::new(1, -2, 3).to_f64();
+        assert_eq!(widened, TyVector3F64::new(1.0, -2.0, 3.0));
     }
 
     #[test]
