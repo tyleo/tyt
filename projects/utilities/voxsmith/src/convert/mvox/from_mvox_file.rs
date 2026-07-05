@@ -1,33 +1,40 @@
 use crate::{
-    Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
-    MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
+    BASE_COLOR_FACTOR, Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelExtWrapper,
+    MagicaVoxelFrame, MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
     MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, to_vox_value,
 };
 use branded_id::U32Id;
 use mvox::{
-    MVoxCamera, MVoxColor, MVoxFile, MVoxFrame, MVoxLayer, MVoxMaterial, MVoxMaterialType,
-    MVoxModel, MVoxSceneNode, MVoxSceneNodeBody,
+    MVoxCamera, MVoxFile, MVoxFrame, MVoxLayer, MVoxMaterial, MVoxMaterialType, MVoxModel,
+    MVoxSceneNode, MVoxSceneNodeBody,
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain,
-    VoxObject, VoxPalette, VoxValue,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode, VoxMain,
+    VoxObject, VoxPalette, VoxValuePool,
 };
 
-/// Cells in a MagicaVoxel palette: one per color index `0..=255`.
+/// Color indices in a MagicaVoxel palette: one material per index `0..=255`.
 const PALETTE_CELLS: usize = 256;
 
-/// The palette attributes a material folds into, after `rgba`, in this order.
-const MATERIAL_ATTRIBUTES: [&str; 7] = ["type", "weight", "rough", "spec", "ior", "att", "flux"];
+/// MagicaVoxel's default shading token, taken by a color slot with no material.
+const DEFAULT_MATERIAL_TYPE: &str = "_diffuse";
+
+/// Reads one scalar material field, for the per-attribute pool build.
+type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 
 /// Loads a decoded MagicaVoxel [`MVoxFile`] into a [`VoxMain`].
 ///
 /// Models become objects, the 256-color palette plus the `MATL` materials
-/// become one shared palette, and the `nTRN` / `nGRP` / `nSHP` scene graph
-/// becomes the hierarchy nodes. The state with no native voxcore home, such as
-/// layers, cameras, render settings, and the exact per-node frames, rides in a
-/// `magica-voxel` ext so the file can be written back exactly.
+/// become one shared palette of value pools, and the `nTRN` / `nGRP` / `nSHP`
+/// scene graph becomes the hierarchy nodes. The state with no native voxcore
+/// home, such as layers, cameras, render settings, the exact per-node frames,
+/// and each material's exact optional fields, rides in a `magica-voxel` ext so
+/// the file can be written back exactly.
 ///
 /// Errors on malformed geometry, a material id outside the palette range, a
 /// dangling scene-node reference, or if
@@ -35,7 +42,8 @@ const MATERIAL_ATTRIBUTES: [&str; 7] = ["type", "weight", "rough", "spec", "ior"
 pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
-    let palette_id = state.add_palette(build_palette(file)?);
+    let palette = build_palette(&mut state, file)?;
+    let palette_id = state.add_palette(palette);
 
     for model in &file.models {
         // The model grid becomes the object's build volume directly; it may
@@ -58,11 +66,13 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
     Ok(state)
 }
 
-/// Builds the one shared palette: a `rgba` cell per color index, plus the
-/// material columns when the file declares any materials. A cell index with no
-/// material gets `Null` in those columns. Errors on a material id outside the
-/// palette range or a duplicate id.
-fn build_palette(file: &MVoxFile) -> Result<VoxPalette> {
+/// Builds the shared palette: one material per color index `0..=255`, so a
+/// material's index is its color index. `baseColorFactor` binds a color pool;
+/// with materials, `type` and the six scalar fields bind their own pools. An
+/// absent or non-finite field takes a default, since a pool holds no null and
+/// validate rejects a non-finite float; the exact optionals ride in the ext.
+/// Errors on a material id outside `0..=255` or a duplicate id.
+fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     let colors = file.resolved_palette().colors;
     let has_materials = !file.materials.is_empty();
 
@@ -85,53 +95,106 @@ fn build_palette(file: &MVoxFile) -> Result<VoxPalette> {
     }
 
     let mut palette = VoxPalette::default();
-    palette.add_attribute("rgba".to_owned());
+
+    let color_bytes: Vec<[u8; 4]> = colors.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
+    let (distinct_colors, color_indices) = intern(&color_bytes, |&color| color);
+    let color_pool = state.add_value_pool(VoxValuePool::Srgba {
+        values: distinct_colors
+            .iter()
+            .map(|&color| color_floats(color))
+            .collect(),
+    });
+    palette.add_binding(BASE_COLOR_FACTOR.to_owned(), color_pool);
+
+    // The scalars are custom MagicaVoxel attributes with no glTF bounds, so
+    // their float pools are unbounded.
+    let mut attribute_indices: Vec<Vec<u32>> = Vec::new();
     if has_materials {
-        for name in MATERIAL_ATTRIBUTES {
-            palette.add_attribute(name.to_owned());
+        const SCALARS: [(&str, ScalarField); 6] = [
+            ("weight", |m| m.weight),
+            ("rough", |m| m.rough),
+            ("spec", |m| m.spec),
+            ("ior", |m| m.ior),
+            ("att", |m| m.att),
+            ("flux", |m| m.flux),
+        ];
+
+        let types: Vec<String> = (0..PALETTE_CELLS)
+            .map(|index| {
+                material_by_id
+                    .get(&(index as i32))
+                    .copied()
+                    .and_then(|material| material.material_type.as_ref())
+                    .map(material_type_token)
+                    .unwrap_or_else(|| DEFAULT_MATERIAL_TYPE.to_owned())
+            })
+            .collect();
+        let (distinct_types, type_indices) = intern(&types, |token| token.clone());
+        let type_pool = state.add_value_pool(VoxValuePool::String {
+            values: distinct_types,
+        });
+        palette.add_binding("type".to_owned(), type_pool);
+        attribute_indices.push(type_indices);
+
+        for (name, read) in SCALARS {
+            let values: Vec<f64> = (0..PALETTE_CELLS)
+                .map(|index| {
+                    material_by_id
+                        .get(&(index as i32))
+                        .copied()
+                        .and_then(read)
+                        // The codec accepts a non-finite scalar, but a Float
+                        // pool must be finite; default it. The ext keeps the
+                        // exact value.
+                        .filter(|value| value.is_finite())
+                        .map_or(0.0, |value| value as f64)
+                })
+                .collect();
+            let (distinct, indices) = intern(&values, |value| value.to_bits());
+            let pool = state.add_value_pool(VoxValuePool::Float {
+                min: VoxBound::None,
+                max: VoxBound::None,
+                values: distinct,
+            });
+            palette.add_binding(name.to_owned(), pool);
+            attribute_indices.push(indices);
         }
     }
 
-    for (index, color) in colors.iter().enumerate() {
-        let mut row = vec![VoxValue::Text(hex(color))];
-        if has_materials {
-            match material_by_id.get(&(index as i32)) {
-                Some(material) => row.extend(material_attribute_values(material)),
-                None => row.extend((0..MATERIAL_ATTRIBUTES.len()).map(|_| VoxValue::Null)),
-            }
+    for index in 0..PALETTE_CELLS {
+        let mut value_indices = vec![color_indices[index]];
+        for column in &attribute_indices {
+            value_indices.push(column[index]);
         }
         palette
-            .add_cell(row)
-            .expect("one value per palette attribute");
+            .add_material(value_indices)
+            .expect("one value-index per binding");
     }
 
     Ok(palette)
 }
 
-/// The material columns for a cell, in [`MATERIAL_ATTRIBUTES`] order. The
-/// `_type` token is text and the scalars are numbers, with `Null` for an absent
-/// field.
-fn material_attribute_values(material: &MVoxMaterial) -> Vec<VoxValue> {
-    vec![
-        match &material.material_type {
-            Some(material_type) => VoxValue::Text(material_type_token(material_type)),
-            None => VoxValue::Null,
-        },
-        number_or_null(material.weight),
-        number_or_null(material.rough),
-        number_or_null(material.spec),
-        number_or_null(material.ior),
-        number_or_null(material.att),
-        number_or_null(material.flux),
-    ]
+/// Deduplicates `values` in first-seen order, returning the distinct list and
+/// each input's index into it. `key` is a value's dedup key.
+fn intern<T: Clone, K: Eq + Hash>(values: &[T], key: impl Fn(&T) -> K) -> (Vec<T>, Vec<u32>) {
+    let mut distinct: Vec<T> = Vec::new();
+    let mut index_of: HashMap<K, u32> = HashMap::new();
+    let indices = values
+        .iter()
+        .map(|value| {
+            *index_of.entry(key(value)).or_insert_with(|| {
+                let index = distinct.len() as u32;
+                distinct.push(value.clone());
+                index
+            })
+        })
+        .collect();
+    (distinct, indices)
 }
 
-/// A [`VoxValue::Number`] from an optional `f32`, or [`VoxValue::Null`].
-fn number_or_null(value: Option<f32>) -> VoxValue {
-    match value {
-        Some(value) => VoxValue::Number(value as f64),
-        None => VoxValue::Null,
-    }
+/// The float sRGB components in `[0, 1]` of an `[r, g, b, a]` byte color.
+fn color_floats(color: [u8; 4]) -> [f64; 4] {
+    color.map(|byte| byte as f64 / 255.0)
 }
 
 /// The `_type` token for a material shading model. Known variants map to their
@@ -146,17 +209,10 @@ fn material_type_token(material_type: &MVoxMaterialType) -> String {
     }
 }
 
-/// One `#RRGGBBAA` string for a color.
-fn hex(color: &MVoxColor) -> String {
-    format!(
-        "#{:02X}{:02X}{:02X}{:02X}",
-        color.r, color.g, color.b, color.a
-    )
-}
-
 /// Builds an object from a model: a dense grid sized by the model, referencing
-/// the shared palette, each voxel sampling its color index. Errors on an
-/// oversized grid or a voxel outside the model bounds.
+/// the shared palette on one layer, each voxel sampling the material at its
+/// color index. Errors on an oversized grid or a voxel outside the model
+/// bounds.
 fn build_object(model: &MVoxModel, palette: U32Id<BVoxPalette>) -> Result<VoxObject> {
     let [size_x, size_y, size_z] = model.size;
     let mut object = VoxObject::new(String::new(), TyVector3U32::new(size_x, size_y, size_z))
@@ -167,8 +223,8 @@ fn build_object(model: &MVoxModel, palette: U32Id<BVoxPalette>) -> Result<VoxObj
             ))
         })?;
 
-    // The single reference is the color index; live voxels overwrite cell 0.
-    object.add_palette_ref(palette, U32Id::<BVoxPaletteCell>::from_u32(0));
+    // The single layer is the color index; live voxels overwrite material 0.
+    object.add_layer(palette, U32Id::<BVoxMaterial>::from_u32(0));
 
     for voxel in &model.voxels {
         let position = TyVector3U32::new(voxel.x as u32, voxel.y as u32, voxel.z as u32);
@@ -181,9 +237,9 @@ fn build_object(model: &MVoxModel, palette: U32Id<BVoxPalette>) -> Result<VoxObj
         object
             .retain_voxel(
                 voxel_id,
-                &[U32Id::<BVoxPaletteCell>::from_u32(voxel.color_index as u32)],
+                &[U32Id::<BVoxMaterial>::from_u32(voxel.color_index as u32)],
             )
-            .expect("one sample for the one palette reference");
+            .expect("one sample for the one layer");
     }
 
     Ok(object)
@@ -382,6 +438,13 @@ fn magica_voxel_ext(file: &MVoxFile) -> MagicaVoxelExt {
             .iter()
             .map(|material| MagicaVoxelMaterial {
                 id: material.id,
+                material_type: material.material_type.as_ref().map(material_type_token),
+                weight: material.weight,
+                rough: material.rough,
+                spec: material.spec,
+                ior: material.ior,
+                att: material.att,
+                flux: material.flux,
                 extra: material.extra.0.clone(),
             })
             .collect(),
@@ -480,7 +543,7 @@ fn invalid(message: String) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use crate::{from_mvox_bytes, from_mvox_file, to_mvox_bytes, to_mvox_file};
+    use crate::{BASE_COLOR_FACTOR, from_mvox_bytes, from_mvox_file, to_mvox_bytes, to_mvox_file};
     use branded_id::U32Id;
     use mvox::{
         MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer,
@@ -491,12 +554,21 @@ mod tests {
     use std::{array, collections::BTreeSet};
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxHierarchyNode, VoxMain, VoxMap,
-        VoxObject, VoxPalette, VoxValue,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
+        VoxPalette, VoxValue, VoxValuePool,
     };
 
     fn pair(key: &str, value: &str) -> (String, String) {
         (key.to_owned(), value.to_owned())
+    }
+
+    /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
+    fn srgba(hex: &str) -> [f64; 4] {
+        let digits = hex.strip_prefix('#').expect("a leading #");
+        let byte = |index: usize| {
+            u8::from_str_radix(&digits[index * 2..index * 2 + 2], 16).expect("two hex digits")
+        };
+        [byte(0), byte(1), byte(2), byte(3)].map(|b| b as f64 / 255.0)
     }
 
     /// A file exercising every modeled chunk: two models, a custom palette, a
@@ -660,39 +732,46 @@ mod tests {
     fn source_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        // One rgba palette: a transparent placeholder, then red, green, blue.
+        // One baseColorFactor palette: a transparent placeholder, then red,
+        // green, blue.
+        let pool = state.add_value_pool(VoxValuePool::Srgba {
+            values: ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
+                .iter()
+                .map(|hex| srgba(hex))
+                .collect(),
+        });
         let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        for hex in ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"] {
+        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), pool);
+        for index in 0..4 {
             palette
-                .add_cell(vec![VoxValue::Text(hex.to_owned())])
-                .expect("one value per attribute");
+                .add_material(vec![index])
+                .expect("one value-index for the one binding");
         }
         let palette_id = state.add_palette(palette);
-        let cell = |index: u32| U32Id::<BVoxPaletteCell>::from_u32(index);
+        let material = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Object 0: a red then a green voxel along x.
         let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
             .expect("a 2x1x1 grid is within the dense limit");
-        wide.add_palette_ref(palette_id, cell(0));
+        wide.add_layer(palette_id, material(0));
         for (x, color) in [(0u32, 1u32), (1, 2)] {
             let voxel = wide
                 .voxel_id(TyVector3U32::new(x, 0, 0))
                 .expect("a position within the grid");
-            wide.retain_voxel(voxel, &[cell(color)])
-                .expect("one sample for the one reference");
+            wide.retain_voxel(voxel, &[material(color)])
+                .expect("one sample for the one layer");
         }
         state.add_object(wide);
 
         // Object 1: a single blue voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
             .expect("a 1x1x1 grid is within the dense limit");
-        unit.add_palette_ref(palette_id, cell(0));
+        unit.add_layer(palette_id, material(0));
         let voxel = unit
             .voxel_id(TyVector3U32::new(0, 0, 0))
             .expect("a position within the grid");
-        unit.retain_voxel(voxel, &[cell(3)])
-            .expect("one sample for the one reference");
+        unit.retain_voxel(voxel, &[material(3)])
+            .expect("one sample for the one layer");
         state.add_object(unit);
 
         let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);
@@ -859,6 +938,23 @@ mod tests {
             ..Default::default()
         };
         assert!(from_mvox_file(&file).is_err());
+    }
+
+    /// The codec accepts a non-finite scalar, but a Float pool must be finite.
+    /// from_mvox_file defaults the pooled copy and the ext keeps the exact
+    /// value, so the material still round-trips.
+    #[test]
+    fn round_trips_a_non_finite_material_scalar() {
+        let file = MVoxFile {
+            materials: vec![MVoxMaterial {
+                id: 1,
+                ior: Some(f32::INFINITY),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let state = from_mvox_file(&file).unwrap();
+        assert_files_eq(&to_mvox_file(&state).unwrap(), &file);
     }
 
     #[test]

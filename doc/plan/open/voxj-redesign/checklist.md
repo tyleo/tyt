@@ -415,10 +415,23 @@ those stay unchecked.
       in-file `source_state` fixture was rebuilt to the pool / binding / material /
       layer shape. Verified under `--no-default-features --features qbcl`; 26 tests
       pass, the three byte-exact `.qb` / `.qbt` / `.qbcl` round-trips included.)
-- [ ] mvox: map color to a color pool, the material scalars to float pools, and
+- [x] mvox: map color to a color pool, the material scalars to float pools, and
       the type token to a string pool; represent absent optionals with the
       attribute's default value rather than null, since pools are non-null; keep
-      the color-index and material.id coupling as the material index.
+      the color-index and material.id coupling as the material index. (Done: the
+      palette is 256 materials, one per color index, so a material's index is its
+      color index and a voxel samples that material directly. `baseColorFactor`
+      binds a deduplicated `Srgba` pool; when the file declares materials, `type`
+      binds a `String` pool and the six scalars bind unbounded `Float` pools. A
+      slot with no material, or a material with a field absent, takes a default
+      (`_diffuse` / `0.0`). Because a pool cannot hold null, the exact optional
+      material fields moved into the ext's `MagicaVoxelMaterial`, so write-back
+      reads materials from the ext and only colors from the pool, keeping the
+      byte-exact round-trip. A four-lens adversarial review of the diff caught one
+      real defect, a non-finite material scalar the codec accepts being rejected by
+      the pool validator; fixed by defaulting it in the neutral pool while the ext
+      keeps the exact value. Verified under `--no-default-features --features
+      mvox`; 19 tests pass. See the decisions log.)
 - [ ] vmax: fold the color palette and material palette into one palette with
       bindings for `baseColorFactor` and the material attributes over separate
       pools, one material per distinct color-plus-material combination the voxels

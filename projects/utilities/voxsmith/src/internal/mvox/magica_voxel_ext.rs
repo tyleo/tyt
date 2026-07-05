@@ -22,9 +22,8 @@ pub struct MagicaVoxelExt {
     #[serde(rename = "palette-present")]
     pub palette_present: bool,
 
-    /// Per-material provenance, in stored order. The scalar and type fields
-    /// fold into the palette cell named by `id`; this keeps the parts that do
-    /// not.
+    /// Per-material provenance, in stored order: the authoritative type and
+    /// scalar fields for write-back.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub materials: Vec<MagicaVoxelMaterial>,
 

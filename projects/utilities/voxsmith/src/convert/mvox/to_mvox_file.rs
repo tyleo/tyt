@@ -1,6 +1,6 @@
 use crate::{
-    Error, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame, MagicaVoxelNodeBody, Result,
-    cell_color, ext_for, from_vox_value, object_color_ref,
+    BASE_COLOR_FACTOR, Error, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
+    MagicaVoxelNodeBody, Result, cell_color, ext_for, from_vox_value, object_color_ref, pool_color,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -11,10 +11,7 @@ use mvox::{
 };
 use std::collections::{BTreeMap, HashMap, HashSet};
 use ty_math::TyVector3F64;
-use voxcore::{
-    BVoxAttribute, BVoxHierarchyNode, BVoxObject, BVoxPaletteCell, VoxMain, VoxObject, VoxPalette,
-    VoxValue,
-};
+use voxcore::{BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxMain, VoxObject};
 
 /// Writes a [`VoxMain`] back to a decoded MagicaVoxel [`MVoxFile`], the inverse
 /// of [`from_mvox_file`](crate::from_mvox_file).
@@ -35,13 +32,13 @@ pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
     };
 
     // The forward path adds exactly one palette and references it from every
-    // object; the colors and material columns live in its cells.
-    let palette = state.iter_palettes().next().map(|(_, palette)| palette);
+    // object on one layer; each material's color resolves through its pool.
+    let palette = state.iter_palettes().next().map(|(id, _)| id);
     let file_palette = ext.palette_present.then(|| MVoxPalette {
-        colors: colors_from_palette(palette),
+        colors: colors_from_palette(state, palette),
     });
 
-    let materials = build_materials(&ext, palette);
+    let materials = build_materials(&ext);
     // Each object is the author's build volume, so the written model keeps its
     // dimensions and voxel positions directly.
     let models = state
@@ -109,44 +106,51 @@ pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
     })
 }
 
-/// The 256 colors from a palette's `rgba` cells, padded with the transparent
-/// empty color where the palette is absent or short.
-fn colors_from_palette(palette: Option<&VoxPalette>) -> [MVoxColor; 256] {
+/// The 256 palette colors read back through `baseColorFactor`: material `index`
+/// gives color index `index`. Transparent where the palette or its color
+/// binding is absent.
+fn colors_from_palette(state: &VoxMain, palette: Option<U32Id<BVoxPalette>>) -> [MVoxColor; 256] {
     let mut colors = [MVoxColor::default(); 256];
     let Some(palette) = palette else {
         return colors;
     };
-    let Some(rgba) = attribute_id(palette, "rgba") else {
+    let Some(binding) = state
+        .palette(palette)
+        .and_then(|palette| palette.binding_by_attribute(BASE_COLOR_FACTOR))
+    else {
         return colors;
     };
-    for (index, cell) in palette.iter_cells().take(colors.len()).enumerate() {
-        colors[index] = parse_rgba(palette.cell_value(cell, rgba));
+    for (index, color) in colors.iter_mut().enumerate() {
+        let material = U32Id::<BVoxMaterial>::from_u32(index as u32);
+        if let Some([r, g, b, a]) = state
+            .material_value(palette, material, binding)
+            .and_then(|(pool, value)| pool_color(pool, value))
+        {
+            *color = MVoxColor::new(r, g, b, a);
+        }
     }
     colors
 }
 
-/// Rebuilds the materials from the ext, reading each one's type and scalar
-/// fields from the palette cell its id names.
-fn build_materials(ext: &MagicaVoxelExt, palette: Option<&VoxPalette>) -> Vec<MVoxMaterial> {
+/// Rebuilds the materials from the ext, which holds each one's exact optional
+/// fields, so an absent field round-trips as absent. The palette pools carry
+/// only a default-substituted neutral copy.
+fn build_materials(ext: &MagicaVoxelExt) -> Vec<MVoxMaterial> {
     ext.materials
         .iter()
-        .map(|material| {
-            let cell = U32Id::<BVoxPaletteCell>::from_u32(material.id as u32);
-            let read = |name: &str| palette.and_then(|palette| cell_value(palette, cell, name));
-            MVoxMaterial {
-                id: material.id,
-                material_type: match read("type") {
-                    Some(VoxValue::Text(token)) => Some(material_type_from_token(token)),
-                    _ => None,
-                },
-                weight: number(read("weight")),
-                rough: number(read("rough")),
-                spec: number(read("spec")),
-                ior: number(read("ior")),
-                att: number(read("att")),
-                flux: number(read("flux")),
-                extra: MVoxDict(material.extra.clone()),
-            }
+        .map(|material| MVoxMaterial {
+            id: material.id,
+            material_type: material
+                .material_type
+                .as_deref()
+                .map(material_type_from_token),
+            weight: material.weight,
+            rough: material.rough,
+            spec: material.spec,
+            ior: material.ior,
+            att: material.att,
+            flux: material.flux,
+            extra: MVoxDict(material.extra.clone()),
         })
         .collect()
 }
@@ -163,20 +167,13 @@ fn material_type_from_token(token: &str) -> MVoxMaterialType {
     }
 }
 
-/// An `f32` from a [`VoxValue::Number`] cell, or `None` for any other value.
-fn number(value: Option<&VoxValue>) -> Option<f32> {
-    match value {
-        Some(VoxValue::Number(number)) => Some(*number as f32),
-        _ => None,
-    }
-}
-
 /// Builds a model from an object: its size from the grid bounds and one voxel
 /// per live cell, in ascending raster order, each taking its color index from
-/// the sample of the object's first palette reference.
+/// the material it samples on the object's first layer. A material's index is
+/// its color index.
 fn model_from_object(object: &VoxObject) -> MVoxModel {
     let bounds = object.bounds();
-    let reference = object.iter_palette_refs().next().map(|(id, _)| id);
+    let layer = object.iter_layers().next().map(|(layer, _)| layer);
 
     let voxels = object
         .iter_live()
@@ -184,9 +181,9 @@ fn model_from_object(object: &VoxObject) -> MVoxModel {
             let position = object
                 .voxel_position(voxel_id)
                 .expect("a live voxel is within the grid");
-            let color_index = reference
-                .and_then(|reference| object.voxel_cell(voxel_id, reference))
-                .map_or(0, |cell| cell.to_u32() as u8);
+            let color_index = layer
+                .and_then(|layer| object.voxel_material(voxel_id, layer))
+                .map_or(0, |material| material.to_u32() as u8);
             MVoxVoxel {
                 x: position.x as u8,
                 y: position.y as u8,
@@ -265,40 +262,6 @@ fn frame_from_provenance(frame: &MagicaVoxelFrame) -> MVoxFrame {
     }
 }
 
-/// The id of the attribute named `name`, or `None` if the palette has no such
-/// attribute.
-fn attribute_id(palette: &VoxPalette, name: &str) -> Option<U32Id<BVoxAttribute>> {
-    palette
-        .iter_attributes()
-        .find(|(_, attribute)| *attribute == name)
-        .map(|(id, _)| id)
-}
-
-/// The value of `cell` for the attribute named `name`, or `None`.
-fn cell_value<'a>(
-    palette: &'a VoxPalette,
-    cell: U32Id<BVoxPaletteCell>,
-    name: &str,
-) -> Option<&'a VoxValue> {
-    let attribute = attribute_id(palette, name)?;
-    palette.cell_value(cell, attribute)
-}
-
-/// Parses a `#RRGGBBAA` color cell into a color, defaulting to transparent on a
-/// missing or malformed value.
-fn parse_rgba(value: Option<&VoxValue>) -> MVoxColor {
-    let Some(VoxValue::Text(hex)) = value else {
-        return MVoxColor::default();
-    };
-    let hex = hex.strip_prefix('#').unwrap_or(hex);
-    let byte = |index: usize| {
-        hex.get(index * 2..index * 2 + 2)
-            .and_then(|byte| u8::from_str_radix(byte, 16).ok())
-            .unwrap_or(0)
-    };
-    MVoxColor::new(byte(0), byte(1), byte(2), byte(3))
-}
-
 /// Synthesizes a MagicaVoxel file from a state that carries no `magica-voxel`
 /// ext, such as one loaded from another format. Builds one model per object, a
 /// single global 256-color palette gathering every distinct color used, and a
@@ -335,11 +298,11 @@ fn synthesize_palette(state: &VoxMain) -> (MVoxPalette, HashMap<[u8; 4], u8>) {
     let mut next = 1usize;
 
     for (_, object) in state.iter_objects() {
-        let Some((reference, palette, attribute)) = object_color_ref(state, object) else {
+        let Some((layer, palette, binding)) = object_color_ref(state, object) else {
             continue;
         };
         for voxel in object.iter_live() {
-            let rgba = cell_color(object, voxel, reference, palette, attribute);
+            let rgba = cell_color(state, object, voxel, layer, palette, binding);
             if color_index.contains_key(&rgba) {
                 continue;
             }
@@ -384,8 +347,8 @@ fn synthesize_model(
                 .voxel_position(voxel)
                 .expect("a live voxel is within the grid");
             let index = color_ref
-                .map(|(reference, palette, attribute)| {
-                    cell_color(object, voxel, reference, palette, attribute)
+                .map(|(layer, palette, binding)| {
+                    cell_color(state, object, voxel, layer, palette, binding)
                 })
                 .and_then(|rgba| color_index.get(&rgba).copied())
                 .unwrap_or(0);

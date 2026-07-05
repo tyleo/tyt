@@ -889,3 +889,84 @@ hex-to-float helper, and the format-level `qb` / `qbt` fixtures needed no change
 Verified under `--no-default-features --features qbcl`; 26 tests pass. On default
 features the crate still fails to build only in the unported `mvox` and `vmax`
 modules, the remaining Phase 6 items; nothing in `qbcl` errors.
+
+### Fourth chunk: MagicaVoxel folds its 256-slot palette into one material per color index
+
+The MagicaVoxel converter is its own chunk, verified under `--no-default-features
+--features mvox` where it is the sole scoped codec; 18 tests pass, clippy clean.
+On default features the crate now fails to build only in the unported `vmax`
+module and its `vmax`-gated `internal/grid.rs` helper, the last Phase 6 item.
+
+The load-bearing shape is that a MagicaVoxel voxel references a palette color
+index `0..=255`, and a `MATL` material's `id` IS a color index. So the port
+builds exactly 256 materials, one per color index, material index == color index.
+A voxel then samples that material directly (its sample is the color index it
+always was), and one material index resolves to both the color and, when present,
+the MagicaVoxel material properties, the same one-material-per-combination fold Q2
+prescribes. `build_object` adds one layer over the shared palette and
+`retain_voxel`s `BVoxMaterial` = the voxel's color index; `model_from_object`
+reads it back through `voxel_material` on the first layer and narrows to a `u8`.
+
+`baseColorFactor` binds a deduplicated `Srgba` pool of the palette colors (byte /
+255), each of the 256 materials drawing the color at its own index; deduping
+matters because a typical file leaves most of the 256 slots on the reserved empty
+color. When the file declares materials, `type` binds a `String` pool and
+`weight`, `rough`, `spec`, `ior`, `att`, `flux` bind `Float` pools, in that fixed
+binding order. The scalars are custom MagicaVoxel attributes the glTF bounds table
+does not cover, so their pools are unbounded (`min`/`max` = `none`); in
+particular `ior` is unbounded here even though it shares glTF's `ior` name, since
+MagicaVoxel stores a value like `0.3` that glTF's `1..none` would reject, and
+validation checks a pool against its own declared bounds, not a name table. All
+bindings are added before any material, so no material carries `add_binding`'s
+back-fill placeholder. A small `intern` helper deduplicates each per-slot value
+list into a pool and returns the per-material value-index, keyed by color bytes,
+float bit pattern, or the token string.
+
+### The exact optional material fields move into the ext; pools carry a default
+
+A value pool cannot hold null, but the old inline palette stored `Null` for an
+absent material field and write-back read it straight back, so an absent `_spec`
+round-tripped as absent. Under the pool model an absent field must take a real
+default (`0.0` for a scalar, `_diffuse` for `type`, MagicaVoxel's default shading
+model), which alone would turn `spec: None` into `spec: Some(0.0)` and break the
+byte-exact round-trip the faithful port requires. Comparing a pool value against
+the default to recover `None` is wrong, since a material may legitimately hold the
+default value, and for `type` the presence of a `_material` key differs on the
+wire from its absence. So the exact optionals moved into the ext:
+`MagicaVoxelMaterial` grew `material_type: Option<String>` (the token) and
+`weight`/`rough`/`spec`/`ior`/`att`/`flux: Option<f32>`, each
+`skip_serializing_if` so an absent field stays absent in the ext too.
+`build_materials` now reads every material field from the ext, dropping the
+palette entirely, so an absent field round-trips as absent; the palette pools
+carry only the default-substituted neutral copy for a cross-format or `vxl`
+consumer. This mirrors the converter's existing design, where the hierarchy nodes
+are the neutral view and the ext holds the exact per-node provenance; materials
+now follow the same split. `colors_from_palette` is the one write-back path still
+reading the palette, resolving material index `i`'s `baseColorFactor` through
+`material_value` + `pool_color` back to slot `i`.
+
+### Adversarial review: a non-finite material scalar is defaulted in the pool
+
+A four-lens adversarial review of the diff confirmed one real defect (found by
+every lens): the mvox codec's `parse_f32` accepts a non-finite scalar such as
+`_ior inf`, `_flux nan`, or an overflowing `_weight 1e40`, so a decodable file
+can carry a non-finite material scalar. Folded verbatim into a `Float` pool that
+`VoxMain::validate` requires to be finite, it made `from_mvox_file` reject a file
+the codec loaded, a spurious rejection the old inline path did not have. The fix
+is the Phase 5 voxelizer's pattern: `build_palette` `.filter(|v| v.is_finite())`
+before the scalar enters the pool, defaulting a non-finite value to `0.0` in the
+neutral pool. The ext keeps the exact `Option<f32>`, and `to_vox_value` builds a
+`VoxValue::Number(f64)` that holds the non-finite value without a JSON round trip
+(the mvox byte path never serializes the ext to JSON), so `build_materials` reads
+it back exactly and the material still round-trips. `round_trips_a_non_finite_
+material_scalar` covers it. A NaN scalar loads the same way but cannot be tested
+by value equality, since `NaN != NaN`, so the test uses `f32::INFINITY`.
+
+The review's other confirmed items were the same finding re-reported per lens.
+Two findings were refuted and left as-is, consistent with the Phase 4 seam's
+deferred hostile-input gaps: `model_from_object` narrows a sampled material id
+with `as u32 as u8`, which only truncates for a hand-built foreign state that
+carries a `magica-voxel` ext and samples a material id at or above 256, a state
+the converter itself never produces (`build_palette` makes exactly 256 materials
+and `build_object` only ever samples those); and `material_type_from_token`
+canonicalizes a reserved token, unreachable from a parsed file.
