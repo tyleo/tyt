@@ -1200,3 +1200,67 @@ is not duplicated across the two callers. Verified end to end: voxelizing a mesh
 writes `srgb-float`/`srgba-float` pools by default and `srgb-hex`/`srgba-hex`
 with `#RRGGBBAA` strings under `--color-format hex`, and both documents pass
 `vxl validate`.
+
+### Third chunk: the mesh material vocabulary moves to the glTF attribute names
+
+This chunk lands checklist items 3 and 4, the mesh/texture half of the deferred
+`vxl` work. It is a correctness fix, not cosmetics: voxsmith's atlas bake
+resolves a `MaterialChannel::Attribute { key }` through
+`palette.binding_by_attribute(key)`, and Phases 5 and 6 renamed every voxcore
+binding to the glTF names, so the old `vxl` channel keys (`rgba`, `metallic`,
+`roughness`, `occlusion`, `emissive`) no longer match any binding and would bake
+the spec default instead of the material's value. The preset packings
+(`texture.rs`), the `smoothness` alias (`channel_source.rs`), and the built-in
+color in `resolve_source` (`commands/mesh.rs`) now name
+`baseColorFactor`/`metallicFactor`/`roughnessFactor`/`occlusionStrength`/
+`emissiveStrength`, imported from voxsmith's `gltf_attributes` constants rather
+than hardcoded, so the CLI and the bake share one source of truth per the Q3
+shared-constant-table decision (voxsmith's module doc already lists the CLI as a
+consumer).
+
+The emissive split is applied. A scalar packing channel that read the old single
+`emissive` now reads `emissiveStrength` (the scalar half): the `mse` preset's `B`
+channel and any `--texture-map` naming `emissive` map to it, matching voxsmith's
+`default_scalar(EMISSIVE_STRENGTH)`. The `Emissive` preset still lowers to
+`TextureBake::EmissiveColor`, which voxsmith redefined in Phase 5 to read
+`emissiveFactor` times `emissiveStrength`, so its doc changes from "base color
+scaled by strength" to "emissiveFactor scaled by emissiveStrength". A second
+built-in color, `emissiveFactor`, joins `baseColorFactor` in `resolve_source`
+via a new `is_builtin_color` helper, so a bare channel naming either color is
+required to name a component (a scalar packing over a color pool would otherwise
+bake the color's scalar fallback). `is_builtin_color` covers the emissive-split
+case the old single-color rule could not.
+
+`AttributeType` stays the binary `scalar`/`color` `ValueEnum`, not a
+kind-and-bounds model. The mesh command parses its `--texture-map` and
+`--define-attribute` maps before loading any document, so the only thing the
+channel resolver can decide statically is whether an attribute has addressable
+color components; that is exactly the scalar-versus-color bit. The finer pool
+awareness item 3 describes, a color's space, `int` versus `float`, and bounds, is
+knowable only once a document is loaded, and it already landed there: `palette
+show` classifies by pool kind and reads three-component and float color
+components (Phase 7 chunk 1), and the voxsmith bake decodes each attribute by its
+pool kind (Phase 5). A richer per-kind `--define-attribute` vocabulary (letting a
+user declare `srgb`/`srgba`/`float`/`int`) would be a new authoring capability
+beyond the faithful port, so it is logged in the README's deferred-capabilities
+list rather than built here. `AttributeType`'s doc is reframed to say it is the
+CLI's parse-time declaration and that the finer kind and bounds resolve at bake
+and inspection time.
+
+`attribute_binding.rs`'s doc dropped its "reads the key's merged value across the
+object's palette layers" claim, which encoded the removed merge model; it now
+says a binding reads the key from the meshed layer's palette, the object's first
+layer today. The actual user-facing `--layer` selector that replaces the merge
+assumption is checklist item 5, deferred to its own chunk because it adds a CLI
+flag threaded through the `Dependencies` trait and both implementations, a
+separately reviewable behavioral change.
+
+Scope kept tight to the mesh/texture production vocabulary and its own unit
+tests. The read-command fixtures (`info`, `palette list`, `palette show`,
+`hierarchy show`) still bind the old attribute names; chunk 1 parked their
+glTF-name flip here, but flipping `rgba` to `baseColorFactor` realigns
+width-sensitive Markdown-table goldens across three test modules, churn that
+belongs with the still-open item-8 fixtures/validate cleanup (item 4's own text
+is scoped to `mesh` and the texture presets). Deferring it there keeps this chunk
+a focused correctness fix. Verified: `cargo test -p vxl` passes 142 tests, and
+the workspace is clippy-clean under `--all-targets -D warnings`.

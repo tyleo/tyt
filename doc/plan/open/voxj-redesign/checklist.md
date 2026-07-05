@@ -501,17 +501,33 @@ updates (7) live in files that still compile and are deferred to later chunks.
       components, `.a` on a three-component color errors, and `int`/`float`/
       `bool`/`string`/`json` pools each render their native value. New tests
       cover the three-component, linear, int, and json-array cases.)
-- [ ] Replace the binary `AttributeType` (Scalar or Color) with a
+- [x] Replace the binary `AttributeType` (Scalar or Color) with a
       kind-and-bounds aware model, and let `ColorComponent` address
       three-component colors and float or int components. (Chunk 1 landed
       `palette show`'s share: it no longer uses `AttributeType`, classifies by
       pool kind, and reads three-component and float color components inline.
-      The `AttributeType` type itself and its `mesh`/`attribute_binding`
-      consumers are deferred to the mesh chunk.)
-- [ ] Update `mesh` and the texture presets to the glTF vocab: `baseColorFactor`
+      Mesh chunk done: `AttributeType` stays the binary `scalar`/`color`
+      `ValueEnum`, because the mesh command parses its maps before loading a
+      document and the channel resolver can only decide statically whether an
+      attribute has color components. The finer pool kind and bounds resolve at
+      document time, already landed in `palette show` and the voxsmith bake; a
+      richer per-kind `--define-attribute` vocabulary is logged as a deferred
+      capability. `attribute_binding`'s merge-model doc is dropped, and the
+      built-in color in `resolve_source` moved to `baseColorFactor` plus a new
+      `emissiveFactor` via `is_builtin_color`. See the decisions log.)
+- [x] Update `mesh` and the texture presets to the glTF vocab: `baseColorFactor`
       is the color, `emissiveFactor` is also a color, and the presets map
       `metallic`, `roughness`, `occlusion`, and `emissive` to their new names;
       split `EmissiveColor` into `emissiveFactor` times `emissiveStrength`.
+      (Done: the preset packings, the `smoothness` alias, and the built-in color
+      now name voxsmith's `gltf_attributes` constants, imported not hardcoded, so
+      the CLI channel key matches the binding the bake resolves by name. A scalar
+      packing's `emissive` maps to `emissiveStrength`; the `Emissive` preset's
+      `EmissiveColor` bake reads `emissiveFactor` times `emissiveStrength` per
+      Phase 5. The read-command fixture glTF-name relabel that chunk 1 parked
+      here moves to the remaining item-8 fixtures/validate cleanup, since it
+      realigns width-sensitive Markdown goldens and item 4's own scope is `mesh`
+      and the texture presets. See the log.)
 - [ ] Give `--define-attribute` and `--texture-map` a layer selector on `mesh`
       and `material`, defaulting to the first layer, replacing the merge
       assumption in `attribute_binding`.

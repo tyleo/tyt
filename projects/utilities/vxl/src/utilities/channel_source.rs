@@ -1,5 +1,6 @@
 use crate::ColorComponent;
 use std::str::FromStr;
+use voxsmith::ROUGHNESS_FACTOR;
 
 /// One channel's value in a material map: an attribute by name, optionally one
 /// color component of it, optionally inverted as `1-<attribute>`, the constant
@@ -28,7 +29,7 @@ impl FromStr for ChannelSource {
     /// Parses one channel expression. `0` and `1` are the constants,
     /// `computed-occlusion` the geometry-derived occlusion, a leading `1-`
     /// inverts an attribute, a trailing `.r`/`.g`/`.b`/`.a` reads one color
-    /// component, and `smoothness` canonicalizes to inverted `roughness`.
+    /// component, and `smoothness` canonicalizes to inverted `roughnessFactor`.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "0" => return Ok(ChannelSource::Zero),
@@ -53,10 +54,10 @@ impl FromStr for ChannelSource {
         if name.is_empty() {
             return Err(format!("`{value}` names no attribute"));
         }
-        // `smoothness` is the derived `1-roughness`, so reading it flips the
-        // inversion against the stored `roughness` attribute.
+        // `smoothness` is the derived `1-roughnessFactor`, so reading it flips
+        // the inversion against the stored `roughnessFactor` attribute.
         let (key, invert) = if name == "smoothness" {
-            ("roughness".to_string(), !invert)
+            (ROUGHNESS_FACTOR.to_string(), !invert)
         } else {
             (name.to_string(), invert)
         };
@@ -71,6 +72,7 @@ impl FromStr for ChannelSource {
 #[cfg(test)]
 mod tests {
     use crate::{ChannelSource, ColorComponent};
+    use voxsmith::{BASE_COLOR_FACTOR, METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
     fn attribute(key: &str, invert: bool) -> ChannelSource {
         ChannelSource::Attribute {
@@ -101,44 +103,44 @@ mod tests {
     #[test]
     fn parses_attribute_and_inverse() {
         assert_eq!(
-            "metallic".parse::<ChannelSource>().unwrap(),
-            attribute("metallic", false)
+            "metallicFactor".parse::<ChannelSource>().unwrap(),
+            attribute(METALLIC_FACTOR, false)
         );
         assert_eq!(
-            "1-metallic".parse::<ChannelSource>().unwrap(),
-            attribute("metallic", true)
+            "1-metallicFactor".parse::<ChannelSource>().unwrap(),
+            attribute(METALLIC_FACTOR, true)
         );
     }
 
     #[test]
     fn smoothness_canonicalizes_to_inverted_roughness() {
         assert_eq!(
-            "roughness".parse::<ChannelSource>().unwrap(),
-            attribute("roughness", false)
+            "roughnessFactor".parse::<ChannelSource>().unwrap(),
+            attribute(ROUGHNESS_FACTOR, false)
         );
         assert_eq!(
-            "1-roughness".parse::<ChannelSource>().unwrap(),
-            attribute("roughness", true)
+            "1-roughnessFactor".parse::<ChannelSource>().unwrap(),
+            attribute(ROUGHNESS_FACTOR, true)
         );
         assert_eq!(
             "smoothness".parse::<ChannelSource>().unwrap(),
-            attribute("roughness", true)
+            attribute(ROUGHNESS_FACTOR, true)
         );
         assert_eq!(
             "1-smoothness".parse::<ChannelSource>().unwrap(),
-            attribute("roughness", false)
+            attribute(ROUGHNESS_FACTOR, false)
         );
     }
 
     #[test]
     fn parses_color_components() {
         assert_eq!(
-            "rgba.r".parse::<ChannelSource>().unwrap(),
-            component("rgba", ColorComponent::R, false)
+            "baseColorFactor.r".parse::<ChannelSource>().unwrap(),
+            component(BASE_COLOR_FACTOR, ColorComponent::R, false)
         );
         assert_eq!(
-            "1-rgba.a".parse::<ChannelSource>().unwrap(),
-            component("rgba", ColorComponent::A, true)
+            "1-baseColorFactor.a".parse::<ChannelSource>().unwrap(),
+            component(BASE_COLOR_FACTOR, ColorComponent::A, true)
         );
     }
 
@@ -158,6 +160,6 @@ mod tests {
 
     #[test]
     fn rejects_unknown_color_component() {
-        assert!("rgba.z".parse::<ChannelSource>().is_err());
+        assert!("baseColorFactor.z".parse::<ChannelSource>().is_err());
     }
 }

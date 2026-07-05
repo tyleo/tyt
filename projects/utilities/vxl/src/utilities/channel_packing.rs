@@ -89,6 +89,7 @@ impl FromStr for ChannelPacking {
 #[cfg(test)]
 mod tests {
     use crate::{ChannelPacking, ChannelSource};
+    use voxsmith::{EMISSIVE_STRENGTH, METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
     fn attribute(key: &str, invert: bool) -> ChannelSource {
         ChannelSource::Attribute {
@@ -100,31 +101,33 @@ mod tests {
 
     #[test]
     fn parses_contiguous_rgb_packing() {
-        let packing = "R=metallic,G=smoothness,B=emissive"
+        let packing = "R=metallicFactor,G=smoothness,B=emissiveStrength"
             .parse::<ChannelPacking>()
             .unwrap();
         assert_eq!(packing.channel_count(), 3);
         assert_eq!(
             packing.sources(),
             vec![
-                attribute("metallic", false),
-                attribute("roughness", true),
-                attribute("emissive", false),
+                attribute(METALLIC_FACTOR, false),
+                attribute(ROUGHNESS_FACTOR, true),
+                attribute(EMISSIVE_STRENGTH, false),
             ]
         );
     }
 
     #[test]
     fn alpha_bumps_count_and_zero_fills_gaps() {
-        let packing = "R=metallic,A=smoothness".parse::<ChannelPacking>().unwrap();
+        let packing = "R=metallicFactor,A=smoothness"
+            .parse::<ChannelPacking>()
+            .unwrap();
         assert_eq!(packing.channel_count(), 4);
         assert_eq!(
             packing.sources(),
             vec![
-                attribute("metallic", false),
+                attribute(METALLIC_FACTOR, false),
                 ChannelSource::Zero,
                 ChannelSource::Zero,
-                attribute("roughness", true),
+                attribute(ROUGHNESS_FACTOR, true),
             ]
         );
     }
@@ -138,9 +141,13 @@ mod tests {
 
     #[test]
     fn rejects_bad_packings() {
-        assert!("R=metallic,R=roughness".parse::<ChannelPacking>().is_err());
-        assert!("X=metallic".parse::<ChannelPacking>().is_err());
-        assert!("metallic".parse::<ChannelPacking>().is_err());
+        assert!(
+            "R=metallicFactor,R=roughnessFactor"
+                .parse::<ChannelPacking>()
+                .is_err()
+        );
+        assert!("X=metallicFactor".parse::<ChannelPacking>().is_err());
+        assert!("metallicFactor".parse::<ChannelPacking>().is_err());
         assert!("".parse::<ChannelPacking>().is_err());
     }
 }

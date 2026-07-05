@@ -1,10 +1,11 @@
 use crate::{ChannelPacking, ChannelSource, TextureBake};
 use clap::ValueEnum;
+use voxsmith::{EMISSIVE_STRENGTH, METALLIC_FACTOR, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR};
 
 /// A named `--texture` preset, a common material-map packing.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum Texture {
-    /// RGBA base color from `rgba`. Four channels.
+    /// RGBA base color from `baseColorFactor`. Four channels.
     #[value(name = "albedo")]
     Albedo,
 
@@ -27,12 +28,12 @@ pub enum Texture {
     #[value(name = "mse")]
     Mse,
 
-    /// The emissive color: the `rgba` base color scaled by the `emissive`
-    /// strength, so the glTF emissive slot glows in the surface's own color.
+    /// The emissive color: `emissiveFactor` scaled by `emissiveStrength`, so the
+    /// glTF emissive slot glows in the surface's own emissive color.
     #[value(name = "emissive")]
     Emissive,
 
-    /// Grayscale `occlusion`. One channel.
+    /// Grayscale `occlusionStrength`. One channel.
     #[value(name = "occlusion")]
     Occlusion,
 
@@ -41,11 +42,11 @@ pub enum Texture {
     #[value(name = "computed-occlusion")]
     ComputedOcclusion,
 
-    /// Grayscale `roughness`. One channel.
+    /// Grayscale `roughnessFactor`. One channel.
     #[value(name = "roughness")]
     Roughness,
 
-    /// Grayscale `smoothness`, the derived `1-roughness`. One channel.
+    /// Grayscale `smoothness`, the derived `1-roughnessFactor`. One channel.
     #[value(name = "smoothness")]
     Smoothness,
 }
@@ -57,44 +58,44 @@ impl Texture {
             Texture::Albedo => TextureBake::RgbaColor,
 
             Texture::Orm => packing(
-                attribute("occlusion", false),
-                attribute("roughness", false),
-                attribute("metallic", false),
+                attribute(OCCLUSION_STRENGTH, false),
+                attribute(ROUGHNESS_FACTOR, false),
+                attribute(METALLIC_FACTOR, false),
                 None,
             ),
 
             Texture::MetallicRoughness => packing(
                 Some(ChannelSource::Zero),
-                attribute("roughness", false),
-                attribute("metallic", false),
+                attribute(ROUGHNESS_FACTOR, false),
+                attribute(METALLIC_FACTOR, false),
                 None,
             ),
 
             Texture::MetallicSmoothness => packing(
-                attribute("metallic", false),
+                attribute(METALLIC_FACTOR, false),
                 Some(ChannelSource::Zero),
                 Some(ChannelSource::Zero),
-                attribute("roughness", true),
+                attribute(ROUGHNESS_FACTOR, true),
             ),
 
             Texture::Mse => packing(
-                attribute("metallic", false),
-                attribute("roughness", true),
-                attribute("emissive", false),
+                attribute(METALLIC_FACTOR, false),
+                attribute(ROUGHNESS_FACTOR, true),
+                attribute(EMISSIVE_STRENGTH, false),
                 None,
             ),
 
             Texture::Emissive => TextureBake::EmissiveColor,
 
-            Texture::Occlusion => packing(attribute("occlusion", false), None, None, None),
+            Texture::Occlusion => packing(attribute(OCCLUSION_STRENGTH, false), None, None, None),
 
             Texture::ComputedOcclusion => {
                 packing(Some(ChannelSource::ComputedOcclusion), None, None, None)
             }
 
-            Texture::Roughness => packing(attribute("roughness", false), None, None, None),
+            Texture::Roughness => packing(attribute(ROUGHNESS_FACTOR, false), None, None, None),
 
-            Texture::Smoothness => packing(attribute("roughness", true), None, None, None),
+            Texture::Smoothness => packing(attribute(ROUGHNESS_FACTOR, true), None, None, None),
         }
     }
 }
@@ -121,6 +122,7 @@ fn packing(
 #[cfg(test)]
 mod tests {
     use crate::{ChannelPacking, ChannelSource, Texture, TextureBake};
+    use voxsmith::{METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
     fn attribute(key: &str, invert: bool) -> ChannelSource {
         ChannelSource::Attribute {
@@ -137,7 +139,7 @@ mod tests {
 
     #[test]
     fn mse_matches_its_texture_map_equivalent() {
-        let manual = "R=metallic,G=smoothness,B=emissive"
+        let manual = "R=metallicFactor,G=smoothness,B=emissiveStrength"
             .parse::<ChannelPacking>()
             .unwrap();
         assert_eq!(Texture::Mse.bake(), TextureBake::Packing(manual));
@@ -152,10 +154,10 @@ mod tests {
         assert_eq!(
             packing.sources(),
             vec![
-                attribute("metallic", false),
+                attribute(METALLIC_FACTOR, false),
                 ChannelSource::Zero,
                 ChannelSource::Zero,
-                attribute("roughness", true),
+                attribute(ROUGHNESS_FACTOR, true),
             ]
         );
     }
@@ -170,8 +172,8 @@ mod tests {
 
     #[test]
     fn emissive_is_the_tinted_emissive_color() {
-        // The preset lowers to the emissive-color bake (base color x strength),
-        // so a colored surface glows in its own color rather than white.
+        // The preset lowers to the emissive-color bake (emissiveFactor x
+        // emissiveStrength), so a surface glows in its own emissive color.
         assert_eq!(Texture::Emissive.bake(), TextureBake::EmissiveColor);
     }
 }

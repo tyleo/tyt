@@ -3,8 +3,8 @@ use clap::ValueEnum;
 use std::str::FromStr;
 
 /// A named, typed binding giving a custom voxel attribute key a name a packing
-/// can read. A binding reads the key's merged value across the object's palette
-/// layers, so it carries no layer index.
+/// can read. A binding reads the key from the meshed layer's palette, the
+/// object's first layer today, so it carries no layer index yet.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AttributeBinding {
     name: String,
@@ -23,7 +23,7 @@ impl AttributeBinding {
         &self.name
     }
 
-    /// The voxel attribute key read from the merged material.
+    /// The voxel attribute key read from the meshed layer's material.
     pub fn key(&self) -> &str {
         &self.key
     }

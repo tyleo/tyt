@@ -9,6 +9,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
 };
+use voxsmith::{BASE_COLOR_FACTOR, EMISSIVE_FACTOR};
 
 /// Triangulates one object's voxels into a glTF or GLB mesh, optionally baking
 /// its palette materials into textures the mesh's UVs sample.
@@ -66,13 +67,15 @@ pub struct Mesh {
     /// `B`, `A` channels, at least one named.
     ///
     /// Each `<expr>` is one of:
-    /// - <attribute>: a voxel attribute by name, as `metallic` or `rgba`
-    /// - <attribute>.<r|g|b|a>: one component of a color attribute, as `rgba.r`
-    /// - 1-<attribute>: the inverse `1 - value`, as `1-roughness`
+    /// - <attribute>: a voxel attribute by name, as `metallicFactor` or
+    ///   `baseColorFactor`
+    /// - <attribute>.<r|g|b|a>: one component of a color attribute, as
+    ///   `baseColorFactor.r`
+    /// - 1-<attribute>: the inverse `1 - value`, as `1-roughnessFactor`
     /// - 0, 1: a constant channel
     ///
     /// Attribute keys are voxj attributes or `--define-attribute` aliases;
-    /// `smoothness` is shorthand for `1-roughness`.
+    /// `smoothness` is shorthand for `1-roughnessFactor`.
     #[arg(
         value_names = ["path", "channels"],
         long = "texture-map",
@@ -310,10 +313,10 @@ fn resolve_source(
     };
 
     // A binding gives the key a concrete voxel attribute key and a type; a bare
-    // key resolves to itself, a color only when it is `rgba`.
+    // key resolves to itself, a color only when it is a built-in glTF color.
     let (resolved_key, ty) = match bindings.get(key.as_str()) {
         Some((bound_key, ty)) => (bound_key.to_string(), *ty),
-        None if key == "rgba" => (key.clone(), AttributeType::Color),
+        None if is_builtin_color(key) => (key.clone(), AttributeType::Color),
         None => (key.clone(), AttributeType::Scalar),
     };
 
@@ -336,6 +339,13 @@ fn resolve_source(
         component: *component,
         invert: *invert,
     })
+}
+
+/// Whether a bare attribute key names a built-in glTF color, so a channel must
+/// name one of its components. The recommended color attributes are the base
+/// color and the emissive color; every other recommended attribute is a scalar.
+fn is_builtin_color(key: &str) -> bool {
+    key == BASE_COLOR_FACTOR || key == EMISSIVE_FACTOR
 }
 
 /// The CLI name of a preset, as its default file-name stem.
@@ -368,10 +378,11 @@ mod tests {
     use crate::{AttributeType, ChannelSource, ColorComponent, Texture, TextureBake};
     use clap::{CommandFactory, ValueEnum};
     use std::collections::HashMap;
+    use voxsmith::{BASE_COLOR_FACTOR, METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
     fn bindings() -> HashMap<&'static str, (&'static str, AttributeType)> {
         HashMap::from([
-            ("gloss", ("roughness", AttributeType::Scalar)),
+            ("gloss", (ROUGHNESS_FACTOR, AttributeType::Scalar)),
             ("tint", ("tint", AttributeType::Color)),
         ])
     }
@@ -407,11 +418,11 @@ mod tests {
 
     #[test]
     fn a_binding_resolves_to_its_concrete_key() {
-        // The scalar binding `gloss` reads the merged `roughness`.
+        // The scalar binding `gloss` reads the layer's `roughnessFactor`.
         let resolved = resolve_source(&attribute("gloss", None, true), &bindings()).unwrap();
-        assert_eq!(resolved, attribute("roughness", None, true));
+        assert_eq!(resolved, attribute(ROUGHNESS_FACTOR, None, true));
 
-        // The color binding `tint` reads a component of the merged `tint`.
+        // The color binding `tint` reads a component of the layer's `tint`.
         let resolved = resolve_source(
             &attribute("tint", Some(ColorComponent::R), false),
             &bindings(),
@@ -421,24 +432,40 @@ mod tests {
     }
 
     #[test]
-    fn a_bare_scalar_and_rgba_color_validate_their_components() {
-        // A scalar takes no component; `rgba` is the one built-in color.
-        assert!(resolve_source(&attribute("metallic", None, false), &bindings()).is_ok());
+    fn a_bare_scalar_and_base_color_validate_their_components() {
+        // A scalar takes no component; `baseColorFactor` is a built-in color.
+        assert!(resolve_source(&attribute(METALLIC_FACTOR, None, false), &bindings()).is_ok());
         assert!(
             resolve_source(
-                &attribute("metallic", Some(ColorComponent::R), false),
+                &attribute(METALLIC_FACTOR, Some(ColorComponent::R), false),
                 &bindings()
             )
             .is_err()
         );
         assert!(
             resolve_source(
-                &attribute("rgba", Some(ColorComponent::A), false),
+                &attribute(BASE_COLOR_FACTOR, Some(ColorComponent::A), false),
                 &bindings()
             )
             .is_ok()
         );
-        assert!(resolve_source(&attribute("rgba", None, false), &bindings()).is_err());
+        assert!(resolve_source(&attribute(BASE_COLOR_FACTOR, None, false), &bindings()).is_err());
+    }
+
+    #[test]
+    fn emissive_factor_is_a_built_in_color() {
+        use voxsmith::EMISSIVE_FACTOR;
+
+        // The emissive color is the second built-in color, so a bare channel
+        // must name one of its components.
+        assert!(
+            resolve_source(
+                &attribute(EMISSIVE_FACTOR, Some(ColorComponent::G), false),
+                &bindings()
+            )
+            .is_ok()
+        );
+        assert!(resolve_source(&attribute(EMISSIVE_FACTOR, None, false), &bindings()).is_err());
     }
 
     #[test]
