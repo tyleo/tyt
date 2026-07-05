@@ -1339,3 +1339,42 @@ row per material"). The pure display-table "cell" vocabulary in `palette_show.rs
 and `markdown_table.rs` (`render_cell`, `md_cell`, swatch cells, wrapped table
 cells) stays: those are grid cells of the rendered table, not palette materials,
 the same distinction Phase 2 drew for voxj-codec's `cell_index` raster helper.
+
+### Sixth chunk: the `--layer` selector, on `mesh` only, since `material` is unbuilt
+
+This chunk lands checklist item 5, the layer selector that replaces the merge
+assumption. The checklist names `mesh` and `material`, but the vxl code has no
+`material` command; `material` is a planned command in the separate vxl-commands
+plan, not part of the faithful port's existing surface. So the selector lands on
+`mesh`, the one command that reads a layer's materials, and `material` is noted
+out of scope until that command is built.
+
+The selector is a `--layer <N>` flag, `N` a 0-based index into the object's
+layers in `iter_layers` order, defaulting to 0, the object's first layer per Q2a.
+The ordinal matches how `hierarchy show` enumerates an object's layers (one child
+per layer in `iter_layers` order) and how the old code already picked the first
+layer, so 0 preserves the prior behavior exactly. Chunk 1 had deferred this,
+resolving the layer inside `mesh_object` as `iter_layers().next()` with no CLI
+knob; this chunk threads a real `layer: usize` through the clap `Mesh` struct,
+`Mesh::execute`, the `Dependencies::mesh_object` trait method, `dependencies_impl`,
+and `implementation::mesh_object`, all at the same argument position after
+`object`.
+
+The inline first-layer resolution became a `resolve_layer(object, layer)` helper:
+`iter_layers().nth(layer)` maps the ordinal to the layer id, and a missing layer
+errors with the object name, the requested index, and its layer count, replacing
+the old empty-only "has no layers to mesh" message with one that also names an
+out-of-range index. The layer is resolved only on the material path, after the
+pure-geometry early return, so the flag is inert for pure geometry, as its trait
+doc states. The `AttributeBinding` doc dropped its "the object's first layer
+today, so it carries no layer index yet" line, the last merge-model vestige in
+the vxl mesh surface, for "the layer chosen by `mesh`'s `--layer`."
+
+Tests: a clap parse test pins the flag's default 0 and an explicit value, and
+three `resolve_layer` unit tests pin ordinal-to-id resolution, an out-of-range
+rejection, and the layerless-object rejection. The `resolve_layer` tests build a
+standalone `VoxObject` and drop its backing `VoxMain`; this is sound because a
+`VoxObject` owns its own layer id-pools and sample columns, and `resolve_layer`
+reads only those object-local structures, never dereferencing the palette or
+material ids back into the dropped state. 148 `vxl` tests pass, workspace
+clippy-clean.

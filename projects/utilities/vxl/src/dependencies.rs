@@ -150,6 +150,8 @@ pub trait Dependencies {
     /// * `method` - the meshing strategy.
     /// * `object` - the object's index into the document, as
     ///   [`resolve_objects`](Self::resolve_objects) returns.
+    /// * `layer` - the object layer whose materials bake, a 0-based index into
+    ///   the object's layers in reference order; ignored for pure geometry.
     /// * `maps` - the material maps to bake, each its own image, in order; empty
     ///   for pure geometry.
     /// * `storage` - where the baked images go.
@@ -163,6 +165,7 @@ pub trait Dependencies {
         scale: f64,
         method: MeshMethod,
         object: usize,
+        layer: usize,
         maps: &[MeshTextureMap],
         storage: ResourceStorage,
     ) -> Result<()>;

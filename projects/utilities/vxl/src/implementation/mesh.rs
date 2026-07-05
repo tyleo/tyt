@@ -2,11 +2,13 @@ use crate::{
     ChannelSource, ColorComponent, Format, MeshFormat, MeshMethod, MeshTextureMap, ResourceStorage,
     Result, Texture, TextureBake, implementation,
 };
+use branded_id::U32Id;
 use std::{
     fs,
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
+use voxcore::{BVoxLayer, VoxObject};
 use voxsmith::{
     ColorChannel, MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest, MaterialSlot,
     MeshMethod as VoxsmithMeshMethod, ResourceStorage as VoxsmithResourceStorage,
@@ -15,9 +17,10 @@ use voxsmith::{
 
 /// Meshes the object at index `object` of the voxel file at `input` into a mesh
 /// at `output`. With no `maps` it writes pure geometry; otherwise it bakes the
-/// object's palette materials into textures the mesh samples, writing any loose
-/// images beside `output`. The index is a position into the document's objects,
-/// as [`resolve_objects`] returns.
+/// materials of the object's layer `layer`, a 0-based index into its layers,
+/// into textures the mesh samples, writing any loose images beside `output`.
+/// The object index is a position into the document's objects, as
+/// [`resolve_objects`] returns.
 ///
 /// [`resolve_objects`]: crate::implementation::resolve_objects
 #[allow(clippy::too_many_arguments)]
@@ -29,6 +32,7 @@ pub fn mesh_object(
     scale: f64,
     method: MeshMethod,
     object: usize,
+    layer: usize,
     maps: &[MeshTextureMap],
     storage: ResourceStorage,
 ) -> Result<()> {
@@ -56,18 +60,8 @@ pub fn mesh_object(
         return Ok(());
     }
 
-    // The material path bakes one layer's materials; default to the object's
-    // first layer. An object with no layers has no materials to bake.
-    let layer = object
-        .iter_layers()
-        .next()
-        .map(|(layer, _)| layer)
-        .ok_or_else(|| {
-            IOError::new(
-                ErrorKind::InvalidInput,
-                format!("object `{}` has no layers to mesh", object.name()),
-            )
-        })?;
+    // The material path bakes one layer's materials, chosen by `--layer`.
+    let layer = resolve_layer(object, layer)?;
 
     let request = MaterialMeshRequest {
         method,
@@ -92,6 +86,27 @@ pub fn mesh_object(
     }
 
     Ok(())
+}
+
+/// Resolves the `--layer` ordinal to the object's layer id, a 0-based index
+/// into its layers in reference order. Errors when the object has no such
+/// layer.
+fn resolve_layer(object: &VoxObject, layer: usize) -> Result<U32Id<BVoxLayer>> {
+    object
+        .iter_layers()
+        .nth(layer)
+        .map(|(id, _)| id)
+        .ok_or_else(|| {
+            IOError::new(
+                ErrorKind::InvalidInput,
+                format!(
+                    "object `{}` has no layer {layer}; it has {} layer(s)",
+                    object.name(),
+                    object.layer_count(),
+                ),
+            )
+            .into()
+        })
 }
 
 /// Maps a CLI meshing method to the voxsmith method.
@@ -173,5 +188,51 @@ fn resource_storage(storage: ResourceStorage) -> VoxsmithResourceStorage {
         ResourceStorage::Embedded => VoxsmithResourceStorage::Embedded,
         ResourceStorage::External => VoxsmithResourceStorage::External,
         ResourceStorage::Both => VoxsmithResourceStorage::Both,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_layer;
+    use ty_math::TyVector3U32;
+    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
+
+    /// A standalone object with `layers` layers over one shared palette. The
+    /// backing state is dropped; the object owns its layer set.
+    fn object_with_layers(layers: usize) -> VoxObject {
+        let mut state = VoxMain::default();
+        let pool = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![[1.0, 0.0, 0.0, 1.0]],
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_binding("baseColorFactor".to_owned(), pool);
+        let material = palette.add_material(vec![0]).unwrap();
+        let palette = state.add_palette(palette);
+
+        let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        for _ in 0..layers {
+            object.add_layer(palette, material);
+        }
+        object
+    }
+
+    #[test]
+    fn resolves_each_layer_by_its_ordinal() {
+        let object = object_with_layers(2);
+        let ids: Vec<_> = object.iter_layers().map(|(id, _)| id).collect();
+        assert_eq!(resolve_layer(&object, 0).unwrap(), ids[0]);
+        assert_eq!(resolve_layer(&object, 1).unwrap(), ids[1]);
+    }
+
+    #[test]
+    fn rejects_a_layer_past_the_last() {
+        let object = object_with_layers(2);
+        assert!(resolve_layer(&object, 2).is_err());
+    }
+
+    #[test]
+    fn rejects_the_default_layer_on_a_layerless_object() {
+        let object = object_with_layers(0);
+        assert!(resolve_layer(&object, 0).is_err());
     }
 }

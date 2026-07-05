@@ -46,6 +46,11 @@ pub struct Mesh {
     #[arg(value_name = "atlas", long, default_value = "palette")]
     atlas: Atlas,
 
+    /// The object layer whose materials this mesh bakes, a 0-based index into
+    /// the object's layers in reference order, defaulting to the first.
+    #[arg(value_name = "layer", long, default_value = "0")]
+    layer: usize,
+
     /// Bake a preset material map, `<name> [path]`, repeatable. Quote the value
     /// to override the default path, as `--texture "albedo model-albedo.png"`.
     ///
@@ -176,6 +181,7 @@ impl Mesh {
             self.scale,
             self.method,
             object,
+            self.layer,
             &maps,
             storage,
         )
@@ -388,7 +394,7 @@ fn usage(message: &str) -> crate::Error {
 mod tests {
     use super::{Mesh, resolve_preset, resolve_source};
     use crate::{AttributeType, ChannelSource, ColorComponent, Texture, TextureBake};
-    use clap::{CommandFactory, ValueEnum};
+    use clap::{CommandFactory, Parser, ValueEnum};
     use std::collections::HashMap;
     use voxsmith::{BASE_COLOR_FACTOR, METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
@@ -520,6 +526,15 @@ mod tests {
             ChannelSource::One
         );
         assert!(resolve_source(&ChannelSource::ComputedOcclusion, &bindings()).is_err());
+    }
+
+    #[test]
+    fn the_layer_selector_defaults_to_the_first_layer_and_parses_a_value() {
+        let default = Mesh::try_parse_from(["mesh", "model.vox"]).unwrap();
+        assert_eq!(default.layer, 0);
+
+        let chosen = Mesh::try_parse_from(["mesh", "model.vox", "--layer", "2"]).unwrap();
+        assert_eq!(chosen.layer, 2);
     }
 
     #[test]

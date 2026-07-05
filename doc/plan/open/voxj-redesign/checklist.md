@@ -534,9 +534,16 @@ updates (7) live in files that still compile and are deferred to later chunks.
       here moves to the remaining item-8 fixtures/validate cleanup, since it
       realigns width-sensitive Markdown goldens and item 4's own scope is `mesh`
       and the texture presets. See the log.)
-- [ ] Give `--define-attribute` and `--texture-map` a layer selector on `mesh`
+- [x] Give `--define-attribute` and `--texture-map` a layer selector on `mesh`
       and `material`, defaulting to the first layer, replacing the merge
-      assumption in `attribute_binding`.
+      assumption in `attribute_binding`. (Done for `mesh`, the only command that
+      exists; `material` is a planned vxl-commands command not yet built, so it
+      is out of the faithful port's scope. Added a `--layer` flag, a 0-based
+      index into the object's layers, default 0 per Q2a, threaded through
+      `Dependencies::mesh_object`, `dependencies_impl`, and
+      `implementation::mesh_object`. The old hardcoded first-layer resolution
+      became a `resolve_layer` helper keyed by the ordinal; `attribute_binding`'s
+      doc drops its "no layer index yet" merge vestige. See the decisions log.)
 - [x] Add a `--color-format` option (`hex` or `float`, default float) to the
       voxj-writing path, following the existing `color_format` utility pattern.
       (Landed as `VoxjColorFormat`, a new `hex`/`float` `ValueEnum`, since the

@@ -110,11 +110,12 @@ impl Dependencies for DependenciesImpl {
         scale: f64,
         method: MeshMethod,
         object: usize,
+        layer: usize,
         maps: &[MeshTextureMap],
         storage: ResourceStorage,
     ) -> Result<()> {
         implementation::mesh_object(
-            input, from, output, format, scale, method, object, maps, storage,
+            input, from, output, format, scale, method, object, layer, maps, storage,
         )
     }
 
