@@ -93,7 +93,7 @@ pub trait Dependencies {
     ///   the `none` default.
     /// * `name` - object-name override; `None` uses the mesh's name, else the
     ///   input stem.
-    /// * `reduction` - the palette cell cap and its clustering controls.
+    /// * `reduction` - the palette material cap and its clustering controls.
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
     /// * `color_format` - the on-wire encoding for sRGB color pools.
@@ -188,8 +188,8 @@ pub trait Dependencies {
     fn validate(&self, input: &Path, layout: ReportLayout) -> Result<()>;
 
     /// Prints a one-line-per-palette overview of the voxel file at `input`: each
-    /// palette's index, ordered attribute keys, cell count, and the objects that
-    /// reference it.
+    /// palette's index, ordered attribute keys, material count, and the objects
+    /// that reference it.
     ///
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.

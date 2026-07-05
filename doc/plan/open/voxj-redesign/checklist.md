@@ -480,7 +480,7 @@ read-command halves of items 1, 3, and 8; the mesh vocab/`AttributeType` rework
 (rest of 3, 4, 5), the `--color-format` flag (6), and `max_palette_cells`/doc
 updates (7) live in files that still compile and are deferred to later chunks.
 
-- [ ] Rename user-facing cell terminology to material: `--show-cells`, the
+- [x] Rename user-facing cell terminology to material: `--show-cells`, the
       `cells` and `cellCount` columns and JSON keys, and the cell wording in
       `palette show`, `palette list`, `info`, and `hierarchy show`. (Chunk 1
       done for the read commands: `info` renames the palette-table `Cells`
@@ -490,8 +490,13 @@ updates (7) live in files that still compile and are deferred to later chunks.
       key to `materials`, and the `cellCount` leaf to `materialCount`;
       `hierarchy show` renames its per-object subtree and `--show-palettes` flag
       to `layers`/`--show-layers`, now one child per layer, and its `{cells}`
-      leaf to `{materials}`. Deferred: `voxelize`'s `--max-palette-cells` and the
-      `material_mode` doc, which ship with the mesh/voxelize chunk under item 7.)
+      leaf to `{materials}`. The mesh/voxelize chunk (with item 7) finished the
+      sweep: `voxelize`'s `--max-palette-cells` flag and its `MaxPaletteCells`
+      type became `--max-palette-materials`/`MaxPaletteMaterials`,
+      `PaletteReduction.max_cells` became `max_materials`, `MaterialMode`'s
+      per-primitive doc reads "one material per glTF material", and the two
+      chunk-1 doc stragglers, `palette list`'s trait-doc "cell count" and
+      `palette show`'s markdown-layout "cell index", moved to material wording.)
 - [x] Rework `palette show` color rendering to read the bound pool's kind rather
       than sniffing Text versus Number; handle three-component colors without
       alpha and non-hex encodings; round-trip pooled array, int, float, and bool
@@ -540,9 +545,18 @@ updates (7) live in files that still compile and are deferred to later chunks.
       voxj` and `voxelize` gain it; it threads through the two `Dependencies`
       methods and `write_voxj_document` to voxsmith's existing
       `VoxjFileBuilder::color_format`. See the decisions log.)
-- [ ] Update `voxj_sample_encoding` docs to the per-layer material-index framing,
+- [x] Update `voxj_sample_encoding` docs to the per-layer material-index framing,
       point `max_palette_cells` at the material count, and route `fill_color`
-      into pool population.
+      into pool population. (Done in the mesh/voxelize chunk with item 1's
+      remainder. `VoxjSampleEncoding`'s doc now mirrors the codec's
+      `SampleEncoding`: one channel per layer, each a material index into that
+      layer's palette. `max_palette_cells` became `--max-palette-materials`,
+      capping the palette's material count via the retargeted voxsmith
+      `reduce_palette(max_materials)`. `fill_color` already routes into pool
+      population: `voxelize` passes it to voxsmith's `voxelize_mesh`, which since
+      Phase 5 builds the value pools and adds the fill color to the
+      `baseColorFactor` pool, so no vxl-side change was needed for that clause.
+      See the decisions log.)
 - [ ] Update `validate` output and tests for the new check names; rebuild the
       palette, info, and hierarchy fixtures. (Chunk 1 rebuilt the `info`,
       `palette list`, `palette show`, and `hierarchy show` fixtures onto value

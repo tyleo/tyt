@@ -1300,3 +1300,42 @@ keep `bool` from being a footgun. The vxl-commands plan's `mesh.md` is updated t
 the new vocabulary in the same change, partially advancing the Phase 8 doc sweep
 for the `--define-attribute` surface. Verified: `cargo test -p voxsmith --features
 gltf` (160) and `cargo test -p vxl` (144) pass, workspace clippy clean.
+
+### Fifth chunk: the palette cap becomes materials, finishing the cell rename
+
+This chunk closes checklist item 1 (the cell-to-material terminology rename) and
+item 7 (the sample-encoding docs and the cap) together, since both concern the
+`voxelize` write path and share one terminology sweep. It changes no behavior
+beyond the deliberate breaking flag rename Q7 sanctions, so its whole diff is a
+rename plus doc reframing; 144 `vxl` tests pass and the workspace is clippy-clean.
+
+The palette cap moves fully to material terminology. `MaxPaletteCells` becomes
+`MaxPaletteMaterials` (its file renamed to match the one-type-per-file rule), the
+`Cells(usize)` variant becomes `Materials(usize)`, and the `--max-palette-cells`
+flag becomes `--max-palette-materials`. `PaletteReduction.max_cells` becomes
+`max_materials`, aligning the vxl field with voxsmith's `reduce_palette`, whose
+parameter Phase 6 already renamed to `max_materials`; `voxelize`'s
+`reduce_generated_palette` threads the renamed field straight through. The flag
+rename is a breaking CLI change, consistent with the `--show-cells` rename chunk 1
+already made, and no test or golden pins the old flag string.
+
+`VoxjSampleEncoding`'s doc is reframed to mirror the codec's `SampleEncoding`
+exactly: every encoding lays out one channel per layer, each a material index
+into that layer's palette, replacing the old "per-palette sample channels"
+wording. This is the CLI-facing counterpart to the Phase 2 codec reframing.
+
+The item's "route `fill_color` into pool population" clause needed no vxl code:
+`voxelize` already passes `fill_color` to voxsmith's `voxelize_mesh`, which since
+the Phase 5 build-path port constructs the value pools and folds the fill color
+into the `baseColorFactor` pool. Pool population is entirely a voxsmith concern,
+reached through the existing pass-through, so the clause was already satisfied
+structurally and only the surrounding docs moved to the pool model.
+
+The rename also swept the two cell stragglers chunk 1 left in read-command docs,
+since they are the same item-1 terminology: `MaterialMode`'s per-primitive doc
+("one material per glTF material"), the `palette_list` trait-method doc ("material
+count"), and `palette show`'s markdown-layout doc ("0-based material indices, one
+row per material"). The pure display-table "cell" vocabulary in `palette_show.rs`
+and `markdown_table.rs` (`render_cell`, `md_cell`, swatch cells, wrapped table
+cells) stays: those are grid cells of the rendered table, not palette materials,
+the same distinction Phase 2 drew for voxj-codec's `cell_index` raster helper.

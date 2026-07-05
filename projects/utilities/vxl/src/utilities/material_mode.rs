@@ -8,7 +8,7 @@ pub enum MaterialMode {
     #[value(name = "auto")]
     Auto,
 
-    /// One cell per glTF material, read from its flat PBR factors.
+    /// One material per glTF material, read from its flat PBR factors.
     #[value(name = "per-primitive")]
     PerPrimitive,
 

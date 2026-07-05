@@ -1,11 +1,11 @@
 use crate::{ColorSpace, Dither, QuantizeMethod};
 
-/// A resolved palette-reduction configuration: the cell cap and the shared
+/// A resolved palette-reduction configuration: the material cap and the shared
 /// method, space, and dither controls. Passed to a reduction operation.
 #[derive(Clone, Copy, Debug)]
 pub struct PaletteReduction {
-    /// Cap on the palette's cell count, or `None` for no cap.
-    pub max_cells: Option<usize>,
+    /// Cap on the palette's material count, or `None` for no cap.
+    pub max_materials: Option<usize>,
 
     /// Clustering algorithm.
     pub method: QuantizeMethod,

@@ -1,4 +1,4 @@
-use crate::{ColorSpace, Dither, MaxPaletteCells, PaletteReduction, QuantizeMethod};
+use crate::{ColorSpace, Dither, MaxPaletteMaterials, PaletteReduction, QuantizeMethod};
 use clap::Args;
 
 /// The shared palette-reduction controls: clustering method, color space, and
@@ -20,10 +20,10 @@ pub struct PaletteReductionOptions {
 }
 
 impl PaletteReductionOptions {
-    /// Pairs these controls with a cell cap into a [`PaletteReduction`].
-    pub fn resolve(&self, max_cells: MaxPaletteCells) -> PaletteReduction {
+    /// Pairs these controls with a material cap into a [`PaletteReduction`].
+    pub fn resolve(&self, max_materials: MaxPaletteMaterials) -> PaletteReduction {
         PaletteReduction {
-            max_cells: max_cells.limit(),
+            max_materials: max_materials.limit(),
             method: self.method,
             space: self.space,
             dither: self.dither,

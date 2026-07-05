@@ -1,18 +1,20 @@
 use clap::ValueEnum;
 
-/// Sample-block encoding for a `to voxj` document.
+/// Sample-block encoding for a `to voxj` document. Every encoding lays out one
+/// channel per layer, each a material index into that layer's palette for every
+/// voxel.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjSampleEncoding {
     /// Search for the smallest deflated result.
     #[value(name = "smallest")]
     Smallest,
-    /// Raw per-palette sample channels in JSON. The most readable.
+    /// One raw JSON channel of material indices per layer. The most readable.
     #[value(name = "raw-json", alias = "prettiest")]
     RawJson,
-    /// Run-length-encoded per-palette sample channels in JSON.
+    /// One run-length-encoded JSON channel per layer.
     #[value(name = "rle-json")]
     RleJson,
-    /// Base64 bit-packed samples. The fastest to decode.
+    /// One bit-packed, base64-encoded channel per layer. The fastest to decode.
     #[value(name = "packed-base64", alias = "fastest")]
     PackedBase64,
 }

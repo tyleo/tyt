@@ -1,6 +1,6 @@
 use crate::{
-    Dependencies, FillColor, FillMode, GridResolution, MaterialMode, MaxPaletteCells, MeshFormat,
-    PaletteReductionOptions, Result, VoxjEncodingOptions,
+    Dependencies, FillColor, FillMode, GridResolution, MaterialMode, MaxPaletteMaterials,
+    MeshFormat, PaletteReductionOptions, Result, VoxjEncodingOptions,
 };
 use clap::{ArgGroup, Parser};
 use std::{
@@ -57,10 +57,10 @@ pub struct Voxelize {
     #[arg(value_name = "name", long)]
     name: Option<String>,
 
-    /// Most cells the palette may hold; sampling over this reduces to it with a
-    /// note. `none` disables the cap.
-    #[arg(value_name = "max-palette-cells", long, default_value = "256")]
-    max_palette_cells: MaxPaletteCells,
+    /// Most materials the palette may hold; sampling over this reduces to it
+    /// with a note. `none` disables the cap.
+    #[arg(value_name = "max-palette-materials", long, default_value = "256")]
+    max_palette_materials: MaxPaletteMaterials,
 
     #[command(flatten)]
     reduction_options: PaletteReductionOptions,
@@ -98,7 +98,7 @@ impl Voxelize {
 
         let color_format = self.encoding_options.color_format();
 
-        let reduction = self.reduction_options.resolve(self.max_palette_cells);
+        let reduction = self.reduction_options.resolve(self.max_palette_materials);
 
         dependencies.voxelize(
             &self.input,

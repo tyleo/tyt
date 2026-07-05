@@ -23,8 +23,8 @@ pub enum PaletteShowLayout {
     ColumnNoHeader,
 
     /// The collections as an aligned markdown table led by a `#` column of
-    /// 0-based cell indices, one further column per collection and one row per
-    /// cell index.
+    /// 0-based material indices, one further column per collection and one row
+    /// per material.
     #[value(name = "markdown")]
     Markdown,
 
