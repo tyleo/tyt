@@ -1,15 +1,14 @@
 # Continue the voxj follow-up capabilities
 
-You are advancing one of three independent follow-up tracks enabled by the
-redesigned voxj format. The predecessor port is closed and this work is additive.
-Unlike that port, the design decisions here are OPEN, so a session either resolves
-a track's decision with the owner or executes a track whose decision is already
-resolved. One reviewable, staged chunk per session, then stop for review.
+You are advancing one of three follow-up tracks the redesigned voxj format
+enabled or exposed. The predecessor port is closed and this work is additive. All
+three plan decisions are settled, so each session executes a track directly. One
+reviewable, staged chunk per session, then stop for review.
 
 ## Orient first, every session
 
 1. Read `doc/plan/open/voxj-followups/README.md` for the three tracks, their
-   blast radius, and the four open decisions.
+   blast radius, and the decisions. All three (Q1, Q2, Q3) are closed.
 2. Read `doc/plan/open/voxj-followups/checklist.md`, the per-track task list, and
    `doc/plan/open/voxj-followups/reference/implementation-decisions.md`, the log
    of code-level choices made so far.
@@ -21,14 +20,12 @@ resolved. One reviewable, staged chunk per session, then stop for review.
 
 ## Pick the work
 
-- If the track you intend to work on still has an unresolved decision (Q1, Q2, or
-  Q3), your job this session is to resolve it: present the framing and
-  recommendation, take the owner's call, and write it into the README as a
-  **Decision** line the way the closed redesign plan records its decisions. Do not
-  start coding a track on an unresolved decision.
-- If the decision is resolved, take the first unchecked `[ ]` item in that track's
-  phase. The three tracks are independent; do them in any order, but do not
-  interleave two tracks in one session.
+- All three tracks are ready to execute; Track B is symmetric per Q2, so its
+  export half is in scope. Take the first unchecked `[ ]` item in the chosen
+  track's phase. The tracks are independent; do them in any order, but do not
+  interleave two in one session.
+- Track C is verification-first: run the pipelines, prove materials survive, and
+  file any gap as a new checklist item rather than fixing it inline.
 - State in one line which track and item you are doing.
 
 ## Do the work
@@ -62,7 +59,7 @@ resolved. One reviewable, staged chunk per session, then stop for review.
 
 ## Do not
 
-- Do not code a track whose decision is still open; resolve it first.
 - Do not run more than one track, or the whole plan, in one session.
 - Do not touch the wire format or the format spec; every track is consumer-side.
+- Do not fix a vmax gap inline under Track C; file it as a new item.
 - Do not commit, push, or amend without explicit approval.
