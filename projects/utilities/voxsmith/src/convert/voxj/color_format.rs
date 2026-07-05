@@ -1,9 +1,6 @@
-/// How a Voxel Json writer encodes an sRGB color value pool on the wire.
-///
-/// voxcore stores every color as float components, so this only picks the
-/// on-wire encoding for the sRGB color kinds, which the format offers in both a
-/// hex and a float form. Linear colors have no hex form and always serialize as
-/// float regardless of this choice.
+/// How a Voxel Json writer encodes a color value pool: color space and numeric
+/// encoding together. Only the two sRGB kinds vary; a linear-kind pool
+/// serializes as float under every choice.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ColorFormat {
     /// Emit sRGB colors as `srgb-float` / `srgba-float` float components, the
@@ -13,4 +10,8 @@ pub enum ColorFormat {
     /// Emit sRGB colors as `srgb-hex` / `srgba-hex` `#RRGGBB` / `#RRGGBBAA`
     /// strings, the human-editable form. Each component is quantized to 8 bits.
     Hex,
+
+    /// Decode sRGB colors to linear light and emit the `linear-rgb-float` /
+    /// `linear-rgba-float` kinds.
+    LinearFloat,
 }

@@ -35,6 +35,7 @@ pub fn write_voxj_document(
         .color_format(match color_format {
             VoxjColorFormat::Float => ColorFormat::Float,
             VoxjColorFormat::Hex => ColorFormat::Hex,
+            VoxjColorFormat::LinearFloat => ColorFormat::LinearFloat,
         })
         .ext(ext)
         .edit_state(edit_state)

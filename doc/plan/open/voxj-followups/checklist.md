@@ -26,18 +26,18 @@ they land, the same way the redesign and vxl-commands plans do.
 
 Per Q1, the color space folds into `--color-format` as new values, not a new flag.
 
-- [ ] Extend `VoxjColorFormat` on `VoxjEncodingOptions` with a linear value (for
+- [x] Extend `VoxjColorFormat` on `VoxjEncodingOptions` with a linear value (for
       example `linear-float`) beside `hex` and `float`, so one flag names both the
       space and the encoding.
-- [ ] Thread the chosen space to the color pool the writer and `voxelize` build,
+- [x] Thread the chosen space to the color pool the writer and `voxelize` build,
       so a linear selection emits a `linear-rgb` or `linear-rgba` pool that always
       serializes as float, and an sRGB selection is unchanged.
-- [ ] Map hex to sRGB only; a linear value implies float, since the format has no
+- [x] Map hex to sRGB only; a linear value implies float, since the format has no
       linear hex kind. Reject an illegal combination clearly if the flag surface
       lets one be expressed.
-- [ ] Reconcile with `--define-attribute`'s existing color kinds so authoring and
+- [x] Reconcile with `--define-attribute`'s existing color kinds so authoring and
       writing agree on one story, and document which surface does which.
-- [ ] Add coverage: an sRGB-to-linear conversion round-trip, an HDR component
+- [x] Add coverage: an sRGB-to-linear conversion round-trip, an HDR component
       above 1 preserved through the linear float encoding, and the sRGB default
       left unchanged.
 

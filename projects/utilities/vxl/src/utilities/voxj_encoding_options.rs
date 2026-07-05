@@ -26,8 +26,8 @@ pub struct VoxjEncodingOptions {
     #[arg(value_name = "sample-encoding", long)]
     sample_encoding: Option<VoxjSampleEncoding>,
 
-    /// On-wire encoding for sRGB color pools: `hex` bytes or `float` components.
-    /// Linear colors have no hex form and always serialize as float.
+    /// Color encoding: `hex` sRGB bytes, `float` sRGB components, or
+    /// `linear-float` sRGB decoded to linear-light float.
     #[arg(value_name = "color-format", long, default_value = "float")]
     color_format: VoxjColorFormat,
 }
@@ -53,7 +53,8 @@ impl VoxjEncodingOptions {
             .unwrap_or(VoxjFormat::Json)
     }
 
-    /// The on-wire encoding for sRGB color pools, defaulting to `float`.
+    /// The color space and encoding for the written color pools, defaulting to
+    /// sRGB `float`.
     pub fn color_format(&self) -> VoxjColorFormat {
         self.color_format
     }
@@ -109,7 +110,17 @@ mod tests {
     }
 
     #[test]
+    fn color_format_parses_linear_float() {
+        let harness = Harness::try_parse_from(["test", "--color-format", "linear-float"]).unwrap();
+        assert!(matches!(
+            harness.options.color_format(),
+            VoxjColorFormat::LinearFloat
+        ));
+    }
+
+    #[test]
     fn color_format_rejects_an_unknown_encoding() {
+        // No bare `linear` value; space and encoding fold into `linear-float`.
         assert!(Harness::try_parse_from(["test", "--color-format", "linear"]).is_err());
     }
 }

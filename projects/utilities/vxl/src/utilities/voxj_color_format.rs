@@ -1,9 +1,9 @@
 use clap::ValueEnum;
 
-/// The on-wire encoding a written voxj document uses for its sRGB color value
-/// pools. voxcore stores every color as float components, so this only picks the
-/// encoding of the sRGB color kinds, which the format offers in a hex and a
-/// float form. Linear colors have no hex form and always serialize as float.
+/// How a written voxj document encodes its color value pools: color space and
+/// numeric encoding in one flag. This is a write-time serialization choice;
+/// `--define-attribute` declares a pool's color kind when authoring. A
+/// linear-kind pool serializes as float whichever value is chosen.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjColorFormat {
     /// Emit sRGB colors as `srgb-float` / `srgba-float` components in `[0, 1]`,
@@ -15,4 +15,9 @@ pub enum VoxjColorFormat {
     /// strings, the human-editable form, quantizing each component to 8 bits.
     #[value(name = "hex")]
     Hex,
+
+    /// Decode sRGB colors to linear light and emit the `linear-rgb-float` /
+    /// `linear-rgba-float` kinds. No hex counterpart; always float.
+    #[value(name = "linear-float")]
+    LinearFloat,
 }
