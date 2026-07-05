@@ -196,8 +196,9 @@ fn scalar_value(value: Option<(&VoxValuePool, u32)>, key: &str) -> f64 {
 /// glTF's emissive slot is an RGB color, so the strength scales the emissive
 /// color rather than writing a bare channel; the multiply is done in linear light
 /// through the shared `ty_math` color types, and the alpha is dropped. An absent
-/// `emissiveFactor` is black and an absent `emissiveStrength` is `0`, so a
-/// material with no emissive attributes bakes to black.
+/// `emissiveFactor` is black, so a material with no emissive color bakes to black
+/// at any strength; an absent `emissiveStrength` defaults to `1`, matching glTF,
+/// so an `emissiveFactor` with no bound strength emits at unit strength.
 fn emissive_color_bytes(state: &VoxMain, used: &UsedMaterials, index: usize) -> [u8; 4] {
     let color = color_bytes_or(
         material_attribute(state, used, index, EMISSIVE_FACTOR),

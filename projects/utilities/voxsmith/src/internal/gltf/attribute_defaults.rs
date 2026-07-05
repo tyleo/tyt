@@ -11,7 +11,7 @@ pub(crate) fn default_scalar(key: &str) -> Option<f64> {
         METALLIC_FACTOR => Some(1.0),
         ROUGHNESS_FACTOR => Some(1.0),
         OCCLUSION_STRENGTH => Some(1.0),
-        EMISSIVE_STRENGTH => Some(0.0),
+        EMISSIVE_STRENGTH => Some(1.0),
         IOR => Some(1.5),
         TRANSMISSION_FACTOR => Some(0.0),
         _ => None,
