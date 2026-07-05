@@ -34,6 +34,19 @@ lands.
 - `TyVector3::splat` and the `ONE`/`ZERO` constants are exact replacements for the
   repeated-argument `new` and `default` forms.
 
+### A2: vmax converter (landed)
+
+- vmax's `color_floats(&[u8; 4]) -> [f64; 4]` in `from_vmax_file.rs` became
+  `TySrgbaColor::from_array(*color).to_rgba().to_array()`. The checklist wrote it
+  as `.to_rgba()` alone, but the `Srgba` pool's `values` is `Vec<[f64; 4]>`, so the
+  trailing `.to_array()` is required to type-check and is byte-identical.
+- The `vec3([f64; 3]) -> TyVector3F64` helper became `TyVector3F64::from_array` at
+  its three call sites (`object_transform` scale, `group_transform` position and
+  scale); both helpers deleted.
+- The `to_vmax_file.rs` test `color_floats(hex)` kept its name and signature; only
+  the body switched to `TySrgbaColor::from_hex(hex).expect(..).to_rgba().to_array()`,
+  which handles the `#RRGGBB` / `#RRGGBBAA` opaque-alpha default the same way.
+
 ## Track B: ty-math additions and adoption
 
 _Pending. Record the final method names against the Q3 recommendations and any

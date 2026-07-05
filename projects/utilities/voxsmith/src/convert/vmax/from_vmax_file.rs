@@ -6,7 +6,9 @@ use crate::{
 };
 use branded_id::U32Id;
 use std::{collections::HashMap, iter};
-use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
+use ty_math::{
+    TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
+};
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
     VMaxSceneJsonFile, VMaxViewBox,
@@ -263,7 +265,10 @@ fn folded_palette(
 
     let mut palette = VoxPalette::default();
     let color_pool = state.add_value_pool(VoxValuePool::Srgba {
-        values: colors.iter().map(color_floats).collect(),
+        values: colors
+            .iter()
+            .map(|color| TySrgbaColor::from_array(*color).to_rgba().to_array())
+            .collect(),
     });
     palette.add_binding(BASE_COLOR_FACTOR.to_owned(), color_pool);
 
@@ -368,17 +373,6 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
         Some(settings) => (settings.name.clone(), settings.materials.clone()),
         None => (String::new(), Vec::new()),
     }
-}
-
-/// The float components of an RGBA color, each byte divided by 255.
-fn color_floats(color: &[u8; 4]) -> [f64; 4] {
-    let [r, g, b, a] = *color;
-    [
-        r as f64 / 255.0,
-        g as f64 / 255.0,
-        b as f64 / 255.0,
-        a as f64 / 255.0,
-    ]
 }
 
 /// An unbounded float pool over `values`, defaulting a non-finite coefficient to
@@ -591,11 +585,6 @@ fn axis_angle(rotation: [f64; 4]) -> TyQuaternionF64 {
     TyQuaternionF64::from_axis_angle(TyVector3F64::new(x, y, z), angle)
 }
 
-/// A [`TyVector3F64`] from a `[f64; 3]`.
-fn vec3(v: [f64; 3]) -> TyVector3F64 {
-    TyVector3F64::new(v[0], v[1], v[2])
-}
-
 /// The node transform that places an object so rotating the node pivots its
 /// grid about the content center. Voxel Max renders a voxel at `t_p + center +
 /// R*S*(voxel - center)`, and a voxel is `box_min + local`, which sits at
@@ -620,16 +609,16 @@ fn object_transform(object: &VMaxObject, box_min: [i32; 3], origin: [i32; 3]) ->
             object.position[2] + center[2] + rotated.z,
         ),
         rotation,
-        vec3(scale),
+        TyVector3F64::from_array(scale),
     )
 }
 
 /// The transform for a scene group, placed directly at its authored position.
 fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
     TyTransformF64::new(
-        vec3(group.position),
+        TyVector3F64::from_array(group.position),
         axis_angle(group.rotation),
-        vec3(group.scale),
+        TyVector3F64::from_array(group.scale),
     )
 }
 

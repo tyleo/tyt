@@ -54,11 +54,11 @@ Gate: `cargo test -p voxsmith` green, no golden change.
 
 ### A2: vmax converter (own commit, last in Track A)
 
-- [ ] Replace `color_floats` with `TySrgbaColor::from_array(*color).to_rgba()` in
+- [x] Replace `color_floats` with `TySrgbaColor::from_array(*color).to_rgba()` in
       `convert/vmax/from_vmax_file.rs:374` (called `:266`) and `vec3` with
       `TyVector3F64::from_array` at `:594` (called `:623`, `:632`, `:633`); delete
       both helpers.
-- [ ] Replace the test `color_floats(hex)` with
+- [x] Replace the test `color_floats(hex)` with
       `TySrgbaColor::from_hex(..).to_rgba().to_array()` in
       `convert/vmax/to_vmax_file.rs:534`.
 
