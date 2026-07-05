@@ -356,10 +356,11 @@ port and captured here for follow-up:
   limited to `hex` and `float`; letting the user author or select linear-space
   color is deferred. (The integer color kinds are not deferred; they were removed
   from the format.)
-- Read `ior` and `transmissionFactor` on glTF import; today the importer drops
-  them.
-- Preserve glTF `KHR_materials_emissive_strength` through import rather than
-  collapsing emissive to a single scalar.
+- Read `ior` and `transmissionFactor` and preserve
+  `KHR_materials_emissive_strength` on glTF import, rather than dropping the first
+  two and collapsing emissive to a unit strength. Tracked under Track B of the
+  [voxj follow-up plan](../../open/voxj-followups/README.md); the import half has
+  landed.
 - A value-pool inspector surface in the CLI, for example `vxl palette pools`,
   showing pool kinds, bounds, and sharing.
 - Author or convert into non-default color encodings on request, for example

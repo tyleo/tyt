@@ -50,7 +50,51 @@ Landed the linear color space as a third `--color-format` value.
 
 ## Track B: glTF import fidelity
 
-_Pending._
+Landed the import half: glTF now reads `ior`, `transmissionFactor`, and
+`KHR_materials_emissive_strength` into the voxelized palette. The symmetric export
+half stays for a follow-up chunk; see the last point.
+
+- **The import half is its own chunk.** Q2's symmetric decision has two
+  independent halves: import reads the three KHR extensions, export writes them
+  back. The import half is the plan's stated floor and closes exactly the two
+  import entries in the redesign deferred log, so it lands first as a
+  self-contained, green change. The export half from `build_material` is a new
+  behavior with real design weight, emitting flat glTF extension values that no
+  other attribute uses and reconciling with how the emissive bake already folds
+  strength into the emissive texture, so it gets its own chunk and decision entry
+  rather than being rushed in alongside import.
+- **The three KHR accessors are feature-gated.** The `gltf` crate hides
+  `Material::ior`, `Material::transmission`, and `Material::emissive_strength`
+  behind `KHR_materials_ior`, `KHR_materials_transmission`, and
+  `KHR_materials_emissive_strength`, so voxsmith's `gltf` dependency now enables
+  those three. They gate only serde fields on `gltf-json`, so no new crate enters
+  the lock.
+- **Absent extensions import as spec neutrals.** Each accessor returns an
+  `Option`, so `mesh_material_from_gltf` falls back to the spec default when the
+  extension is missing: ior `1.5`, transmission `0`, and emissive strength `1`.
+  The strength fallback preserves the prior hardwired `1`, so a plain
+  `emissiveFactor` still imports at unit strength; only an authored strength now
+  survives. `MeshMaterial::flat` seeds the same ior `1.5` and transmission `0`, so
+  a flat or fill material is a neutral dielectric.
+- **`build_palette` binds eight attributes.** Two float pools join the six:
+  `ior` bounded `1..none` through `float_above(1.0)` and clamped with `.max(1.0)`,
+  and `transmissionFactor` bounded `0..1` through `bounded_float(0.0, 1.0)` and
+  clamped with `.clamp(0.0, 1.0)`, matching the redesign plan's per-attribute
+  bounds. `MaterialKey` gains the two scalar bit patterns so materials differing
+  only in ior or transmission stay distinct, the same raw-bits identity the other
+  scalars use. Constant defaults do not split materials, so an ordinary glTF
+  voxelizes to the same material count as before, now over an eight-binding
+  palette.
+- **Deferred-log entries were import-only.** The two redesign entries described
+  the import drop and the pinned strength, both now fixed, so they collapse to a
+  single pointer at the plan rather than staying open. The pointer notes the
+  import half has landed, leaving the symmetric export as the remaining Track B
+  work.
+- **Coverage.** A new glb fixture authors the three extensions and asserts each
+  survives import at its authored value, and a plain glb asserts the neutral ior
+  and transmission defaults. The existing binding-list assertion grows from six
+  attributes to eight. The full import-and-export round-trip fixture (item 6) and
+  the export emission (item 4) are the next chunk.
 
 ## Track C: vmax material round-trip verification
 

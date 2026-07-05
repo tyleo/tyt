@@ -49,13 +49,13 @@ round-trip, with the sRGB default and existing goldens unchanged.
 Both halves are settled: symmetric per Q2, so import reads the extensions and
 export writes them back.
 
-- [ ] Add `ior` and `transmission` fields to `MeshMaterial`, defaulting to the
+- [x] Add `ior` and `transmission` fields to `MeshMaterial`, defaulting to the
       per-attribute table (`ior` `1.5`, `transmission` `0`) so absent glTF factors
       import as the neutral value.
-- [ ] In `mesh_material_from_gltf`, read `KHR_materials_emissive_strength` into
+- [x] In `mesh_material_from_gltf`, read `KHR_materials_emissive_strength` into
       `emissive_strength` instead of the hardwired `1`, and read
       `KHR_materials_ior` and `KHR_materials_transmission` into the new fields.
-- [ ] Bind `ior` and `transmissionFactor` in `build_palette`
+- [x] Bind `ior` and `transmissionFactor` in `build_palette`
       (`voxelize_mesh.rs`) with the per-attribute bounds (`transmissionFactor`
       `0..1`, `ior` `1..none`), extending the six-attribute palette to eight.
 - [ ] Emit `KHR_materials_ior`, `KHR_materials_transmission`, and
@@ -63,7 +63,7 @@ export writes them back.
       (`material_document.rs`) so a `voxelize -> mesh` trip reproduces the source
       glTF's flat factors. This adds flat-factor export, which no attribute uses
       today (all others bake to textures); keep it scoped to these three fields.
-- [ ] Update the deferred-capabilities note in `mesh_material_from_gltf`'s doc
+- [x] Update the deferred-capabilities note in `mesh_material_from_gltf`'s doc
       comment, and remove the two matching entries from the redesign plan's
       deferred log with a pointer here.
 - [ ] Add a glTF import fixture authoring `KHR_materials_emissive_strength`, a

@@ -233,14 +233,14 @@ fn material_slot(
     slot
 }
 
-/// Reads a glTF material's flat factors into a [`MeshMaterial`]. The base color
-/// and metallic and roughness factors come straight from the metallic-roughness
-/// model; the linear base color is sRGB-encoded to the stored `baseColorFactor`,
-/// while its alpha, which carries no gamma, is scaled directly. The glTF emissive
-/// color is sRGB-encoded to `emissiveFactor`, and the strength defaults to `1`:
-/// reading `KHR_materials_emissive_strength` is deferred, so a plain
-/// `emissiveFactor` imports as the emissive color at unit strength. glTF has no
-/// flat occlusion factor (occlusion is a texture), so it defaults to `1` (none).
+/// Reads a glTF material's flat factors into a [`MeshMaterial`]:
+/// 1. base color, metallic, and roughness from the metallic-roughness model;
+///    the base color is sRGB-encoded, its alpha scaled straight.
+/// 2. emissive color sRGB-encoded from `emissiveFactor`.
+/// 3. emissive strength, ior, and transmission from their KHR extensions,
+///    defaulting to 1, 1.5, and 0 when absent.
+///
+/// Occlusion has no flat glTF factor and defaults to 1.
 fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
     let pbr = material.pbr_metallic_roughness();
 
@@ -253,8 +253,13 @@ fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
         metallic: pbr.metallic_factor() as f64,
         roughness: pbr.roughness_factor() as f64,
         emissive_factor,
-        emissive_strength: 1.0,
+        emissive_strength: material.emissive_strength().unwrap_or(1.0) as f64,
         occlusion: 1.0,
+        ior: material.ior().unwrap_or(1.5) as f64,
+        transmission: material
+            .transmission()
+            .map(|transmission| transmission.transmission_factor() as f64)
+            .unwrap_or(0.0),
     }
 }
 
@@ -453,8 +458,9 @@ fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, FillMode, METALLIC_FACTOR,
-        MaterialMode, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, from_gltf_bytes, voxelize_mesh,
+        BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC_FACTOR,
+        MaterialMode, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, TRANSMISSION_FACTOR,
+        from_gltf_bytes, voxelize_mesh,
     };
     use png::{BitDepth, ColorType, Encoder};
     use ty_math::{TySrgbaColor, TyVector3U32};
@@ -551,6 +557,95 @@ mod tests {
             sx = sx,
             sy = sy,
             sz = sz,
+            positions_len = positions_len,
+            indices_len = bin.len() - positions_len,
+            bin_len = bin.len(),
+        );
+
+        let mut json_bytes = json.into_bytes();
+        while json_bytes.len() % 4 != 0 {
+            json_bytes.push(b' ');
+        }
+        while bin.len() % 4 != 0 {
+            bin.push(0);
+        }
+        let total = 12 + 8 + json_bytes.len() + 8 + bin.len();
+
+        let mut glb = Vec::new();
+        glb.extend_from_slice(&0x4654_6C67u32.to_le_bytes()); // "glTF"
+        glb.extend_from_slice(&2u32.to_le_bytes());
+        glb.extend_from_slice(&(total as u32).to_le_bytes());
+        glb.extend_from_slice(&(json_bytes.len() as u32).to_le_bytes());
+        glb.extend_from_slice(&0x4E4F_534Au32.to_le_bytes()); // "JSON"
+        glb.extend_from_slice(&json_bytes);
+        glb.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+        glb.extend_from_slice(&0x004E_4942u32.to_le_bytes()); // "BIN\0"
+        glb.extend_from_slice(&bin);
+        glb
+    }
+
+    /// A binary glTF of a unit box whose material carries the three KHR
+    /// extensions this importer reads, at the given `emissive_strength`, `ior`,
+    /// and `transmission`. Indexed triangles in glTF Y-up space.
+    fn extended_material_glb(ior: f32, transmission: f32, emissive_strength: f32) -> Vec<u8> {
+        let verts = [
+            [0.0f32, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+        ];
+        let faces = [
+            [0u32, 1, 2],
+            [0, 2, 3],
+            [4, 6, 5],
+            [4, 7, 6],
+            [0, 4, 5],
+            [0, 5, 1],
+            [3, 2, 6],
+            [3, 6, 7],
+            [0, 3, 7],
+            [0, 7, 4],
+            [1, 5, 6],
+            [1, 6, 2],
+        ];
+        let mut bin = Vec::new();
+        for vertex in verts {
+            for component in vertex {
+                bin.extend_from_slice(&component.to_le_bytes());
+            }
+        }
+        let positions_len = bin.len();
+        for face in faces {
+            for index in face {
+                bin.extend_from_slice(&index.to_le_bytes());
+            }
+        }
+
+        let json = format!(
+            concat!(
+                r#"{{"asset":{{"version":"2.0"}},"scene":0,"scenes":[{{"nodes":[0]}}],"#,
+                r#""extensionsUsed":["KHR_materials_emissive_strength","KHR_materials_ior","KHR_materials_transmission"],"#,
+                r#""nodes":[{{"mesh":0}}],"#,
+                r#""meshes":[{{"primitives":[{{"attributes":{{"POSITION":0}},"indices":1,"mode":4,"material":0}}]}}],"#,
+                r#""materials":[{{"pbrMetallicRoughness":{{"baseColorFactor":[1,0,0,1]}},"#,
+                r#""emissiveFactor":[0,1,0],"extensions":{{"#,
+                r#""KHR_materials_emissive_strength":{{"emissiveStrength":{emissive_strength}}},"#,
+                r#""KHR_materials_ior":{{"ior":{ior}}},"#,
+                r#""KHR_materials_transmission":{{"transmissionFactor":{transmission}}}}}}}],"#,
+                r#""accessors":[{{"bufferView":0,"componentType":5126,"count":8,"type":"VEC3","#,
+                r#""min":[0,0,0],"max":[1,1,1]}},"#,
+                r#"{{"bufferView":1,"componentType":5125,"count":36,"type":"SCALAR"}}],"#,
+                r#""bufferViews":[{{"buffer":0,"byteOffset":0,"byteLength":{positions_len}}},"#,
+                r#"{{"buffer":0,"byteOffset":{positions_len},"byteLength":{indices_len}}}],"#,
+                r#""buffers":[{{"byteLength":{bin_len}}}]}}"#,
+            ),
+            emissive_strength = emissive_strength,
+            ior = ior,
+            transmission = transmission,
             positions_len = positions_len,
             indices_len = bin.len() - positions_len,
             bin_len = bin.len(),
@@ -994,6 +1089,8 @@ mod tests {
                 EMISSIVE_FACTOR,
                 EMISSIVE_STRENGTH,
                 OCCLUSION_STRENGTH,
+                IOR,
+                TRANSMISSION_FACTOR,
             ]
         );
         assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
@@ -1049,6 +1146,49 @@ mod tests {
         assert_eq!(voxel_number(&state, origin, METALLIC_FACTOR), 0.25);
         assert_eq!(voxel_number(&state, origin, ROUGHNESS_FACTOR), 0.75);
         assert_eq!(voxel_number(&state, origin, OCCLUSION_STRENGTH), 1.0);
+    }
+
+    #[test]
+    fn per_primitive_reads_the_khr_material_extensions() {
+        // The three KHR extension factors import at their authored values.
+        let state = voxelize(
+            &extended_material_glb(1.4, 0.5, 3.0),
+            TyVector3U32::new(1, 1, 1),
+            FillMode::Solid,
+            MaterialMode::PerPrimitive,
+            None,
+            1.0,
+            None,
+            "voxelized",
+        )
+        .unwrap();
+        assert_eq!(state.validate(), Ok(()));
+
+        let origin = TyVector3U32::new(0, 0, 0);
+        // glTF factors are f32, widened to f64 on store.
+        assert_eq!(voxel_number(&state, origin, IOR), 1.4f32 as f64);
+        assert_eq!(voxel_number(&state, origin, TRANSMISSION_FACTOR), 0.5);
+        assert_eq!(voxel_number(&state, origin, EMISSIVE_STRENGTH), 3.0);
+    }
+
+    #[test]
+    fn a_plain_gltf_imports_the_neutral_ior_and_transmission_defaults() {
+        // No KHR extensions imports the defaults: ior 1.5, transmission 0.
+        let state = voxelize(
+            &box_glb(1.0, 1.0, 1.0, Some(([1.0, 0.0, 0.0, 1.0], 0.0, 1.0)), None),
+            TyVector3U32::new(1, 1, 1),
+            FillMode::Solid,
+            MaterialMode::PerPrimitive,
+            None,
+            1.0,
+            None,
+            "voxelized",
+        )
+        .unwrap();
+
+        let origin = TyVector3U32::new(0, 0, 0);
+        assert_eq!(voxel_number(&state, origin, IOR), 1.5);
+        assert_eq!(voxel_number(&state, origin, TRANSMISSION_FACTOR), 0.0);
     }
 
     #[test]

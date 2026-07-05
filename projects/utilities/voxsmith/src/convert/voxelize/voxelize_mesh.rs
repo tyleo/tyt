@@ -1,7 +1,7 @@
 use crate::{
-    BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, FillMode, METALLIC_FACTOR,
-    MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, VoxelGrid,
-    sample_material, voxelize_triangles,
+    BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, FillMode, IOR, METALLIC_FACTOR,
+    MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result,
+    TRANSMISSION_FACTOR, VoxelGrid, sample_material, voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
@@ -263,6 +263,8 @@ fn build_palette(
     let emissive_factor = srgb_pool(&distinct, |material| material.emissive_factor);
     let emissive_strength = float_pool(&distinct, |material| material.emissive_strength.max(0.0));
     let occlusion = float_pool(&distinct, |material| material.occlusion.clamp(0.0, 1.0));
+    let ior = float_pool(&distinct, |material| material.ior.max(1.0));
+    let transmission = float_pool(&distinct, |material| material.transmission.clamp(0.0, 1.0));
 
     // Register the pools and bind each attribute. All bindings precede any
     // material, so no material carries a back-fill placeholder index.
@@ -276,6 +278,8 @@ fn build_palette(
     });
     let emissive_strength_pool = state.add_value_pool(float_above(emissive_strength.values, 0.0));
     let occlusion_pool = state.add_value_pool(bounded_float(occlusion.values, 0.0, 1.0));
+    let ior_pool = state.add_value_pool(float_above(ior.values, 1.0));
+    let transmission_pool = state.add_value_pool(bounded_float(transmission.values, 0.0, 1.0));
 
     let mut palette = VoxPalette::default();
     palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base_color_pool);
@@ -284,6 +288,8 @@ fn build_palette(
     palette.add_binding(EMISSIVE_FACTOR.to_owned(), emissive_factor_pool);
     palette.add_binding(EMISSIVE_STRENGTH.to_owned(), emissive_strength_pool);
     palette.add_binding(OCCLUSION_STRENGTH.to_owned(), occlusion_pool);
+    palette.add_binding(IOR.to_owned(), ior_pool);
+    palette.add_binding(TRANSMISSION_FACTOR.to_owned(), transmission_pool);
 
     // One material per distinct mesh material, its value-indices in binding
     // order.
@@ -297,8 +303,10 @@ fn build_palette(
                     emissive_factor.indices[index],
                     emissive_strength.indices[index],
                     occlusion.indices[index],
+                    ior.indices[index],
+                    transmission.indices[index],
                 ])
-                .expect("one value-index for each of the six bindings")
+                .expect("one value-index for each of the eight bindings")
         })
         .collect();
 
@@ -408,7 +416,7 @@ fn float_above(values: Vec<f64>, min: f64) -> VoxValuePool {
 /// A hashable identity for a material: its two 8-bit colors and the bit patterns
 /// of its scalar factors, so cells with the same material map to one palette
 /// material.
-type MaterialKey = ([u8; 4], u64, u64, [u8; 3], u64, u64);
+type MaterialKey = ([u8; 4], u64, u64, [u8; 3], u64, u64, u64, u64);
 
 /// The [`MaterialKey`] for a material.
 fn material_key(material: &MeshMaterial) -> MaterialKey {
@@ -420,6 +428,8 @@ fn material_key(material: &MeshMaterial) -> MaterialKey {
         [emissive.r, emissive.g, emissive.b],
         material.emissive_strength.to_bits(),
         material.occlusion.to_bits(),
+        material.ior.to_bits(),
+        material.transmission.to_bits(),
     )
 }
 
