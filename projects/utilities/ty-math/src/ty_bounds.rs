@@ -48,6 +48,29 @@ impl<T: Copy + Mul<Output = T>> TyBounds<T> {
 macro_rules! impl_ty_bounds_float {
     ($t:ty) => {
         impl TyBounds<$t> {
+            /// The smallest box containing every point in `points`, or `None`
+            /// when the iterator is empty.
+            pub fn from_points(points: impl IntoIterator<Item = TyVector3<$t>>) -> Option<Self> {
+                let mut points = points.into_iter();
+                let first = points.next()?;
+                let (min, max) = points.fold((first, first), |(min, max), point| {
+                    (
+                        min.component_min_with(&point),
+                        max.component_max_with(&point),
+                    )
+                });
+
+                Some(Self {
+                    center: (min + max) * 0.5,
+                    extents: (max - min) * 0.5,
+                })
+            }
+
+            /// The full size on each axis, `extents * 2`.
+            pub fn size(&self) -> TyVector3<$t> {
+                self.extents * 2.0
+            }
+
             /// The smallest box containing both `self` and `other`.
             pub fn encapsulate(&self, other: &Self) -> Self {
                 let min = self.min().component_min_with(&other.min());
@@ -68,6 +91,27 @@ impl_ty_bounds_float!(f64);
 #[cfg(test)]
 mod tests {
     use crate::{TyBoundsF64, TyVector3F64};
+
+    #[test]
+    fn from_points_bounds_the_cloud_and_size_is_the_full_extent() {
+        let bounds = TyBoundsF64::from_points([
+            TyVector3F64::new(-1.0, 0.0, 2.0),
+            TyVector3F64::new(3.0, -2.0, 2.0),
+            TyVector3F64::new(1.0, 4.0, 5.0),
+        ])
+        .expect("a non-empty cloud");
+        assert_eq!(bounds.min(), TyVector3F64::new(-1.0, -2.0, 2.0));
+        assert_eq!(bounds.max(), TyVector3F64::new(3.0, 4.0, 5.0));
+        assert_eq!(bounds.size(), TyVector3F64::new(4.0, 6.0, 3.0));
+    }
+
+    #[test]
+    fn from_points_of_an_empty_cloud_is_none() {
+        assert_eq!(
+            TyBoundsF64::from_points(core::iter::empty::<TyVector3F64>()),
+            None
+        );
+    }
 
     #[test]
     fn min_and_max_are_the_corners() {

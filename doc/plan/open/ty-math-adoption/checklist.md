@@ -71,23 +71,26 @@ adopt. Confirm final method names against Q3 and record them in the decision log
 
 ### B1: ty-math additions
 
-- [ ] `TyVector3::round` (`ty_vector3.rs` float macro) and a `to_i32` truncating
+- [x] `TyVector3::round` (`ty_vector3.rs` float macro) and a `to_i32` truncating
       cast to `TyVector3<i32>`, so `round().to_i32()` rounds; unit test both.
-- [ ] `TyTransform::from_translation` (`ty_transform.rs` float macro): identity
+- [x] `TyTransform::from_translation` (`ty_transform.rs` float macro): identity
       rotation, unit scale; unit test.
-- [ ] `TyBounds::from_points` and `size` (`ty_bounds.rs` float macro), the min/max
+- [x] `TyBounds::from_points` and `size` (`ty_bounds.rs` float macro), the min/max
       fold and the full extent; unit test both, including the empty-iterator
       `None`.
-- [ ] `TyVector3::triangle_normal(a, b, c)` (`ty_vector3.rs`, generic over the
+- [x] `TyVector3::triangle_normal(a, b, c)` (`ty_vector3.rs`, generic over the
       cross bound); unit test against a known winding.
-- [ ] `TyQuaternion::from_rotation_matrix` (`ty_quaternion.rs` float macro),
-      wrapping `from_basis_vectors` on the matrix columns with a normalize and an
-      identity fallback for a degenerate matrix; unit test that it inverts
-      `TyMatrix4x4::from_quaternion`.
-- [ ] `TyFloatExt::to_unorm8` (`ty_float_ext.rs`), `(x.clamp(0, 1) * 255).round()
+- [x] `TyQuaternion::from_rotation_matrix -> Option<Self>` (`ty_quaternion.rs`
+      float macro), wrapping `from_basis_vectors` on the normalized matrix columns
+      and returning `None` for a degenerate matrix (revises the plan's identity
+      fallback); unit test that it inverts `TyMatrix4x4::from_quaternion` and that a
+      degenerate matrix is `None`.
+- [x] `TyFloatExt::to_unorm8` (`ty_float_ext.rs`), `(x.clamp(0, 1) * 255).round()
       as u8`; unit test the clamp and rounding.
-- [ ] `TySrgbaColor::to_rgb -> TyVector3<f64>` (`ty_srgba_color.rs`), the
-      alpha-dropping companion to `to_rgba`; unit test.
+- [x] `TySrgbaColor::to_vector3 -> TyVector3<f64>` (`ty_srgba_color.rs`), the
+      alpha-dropping companion to `to_rgba`, named `to_vector3` to mirror
+      `TyRgbaColor::to_vector3` (see the color-type follow-up in the README); unit
+      test.
 
 Gate: `cargo test -p ty-math` green with the new tests, and `cargo check` the
 workspace so the patched consumers pick up the new methods.
@@ -101,8 +104,12 @@ workspace so the patched consumers pick up the new methods.
 - [ ] Replace mvox's `quaternion_from_matrix` (`from_mvox_file.rs:387`) and
       `determinant` (`:379`) with `TyQuaternion::from_rotation_matrix`, extracting
       the columns from the frame matrix; keep the mirror-detection that negates a
-      column and sets `scale.x = -1.0`.
-- [ ] Replace the three-component `color_floats` with `TySrgbaColor::to_rgb` in
+      column and sets `scale.x = -1.0`. `from_rotation_matrix` now returns
+      `Option`, so `.expect("the frame is a proper rotation")` at the call site
+      (the frame is always a proper rotation, so the old identity fallback was dead
+      code).
+- [ ] Replace the three-component `color_floats` with `TySrgbaColor::to_vector3`
+      (then `.to_array()` for the `[f64; 3]` pool) in
       `convert/qbcl/from_qb_file.rs:185`, `convert/qbcl/from_qbt_file.rs:284`, and
       `convert/qbcl/from_qbcl_file.rs:307`; delete the helpers.
 - [ ] Replace the inline `round() as i32` world-position accumulation with

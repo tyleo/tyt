@@ -49,9 +49,42 @@ lands.
 
 ## Track B: ty-math additions and adoption
 
-_Pending. Record the final method names against the Q3 recommendations and any
-signature that differed from the plan (for example whether the vector cast landed
-as `to_i32`, `as_i32`, or a combined `round_to_i32`)._
+### B1: ty-math additions (landed)
+
+All seven landed with the Q3 names, each in its file's float-macro form (except
+`triangle_normal`, which is generic, and `to_unorm8`, a trait method) with a doc
+comment and a unit test in that file's `tests` module.
+
+- `TyVector3::round(self) -> Self` and `TyVector3::to_i32(self) -> TyVector3<i32>`,
+  both in the float macro. The cast landed as `to_i32` (not `as_i32` or a combined
+  `round_to_i32`); `round` is half-away-from-zero, `to_i32` truncates toward zero,
+  and `v.round().to_i32()` composes to nearest-integer rounding.
+- `TyVector3::triangle_normal(a, b, c) -> Self`, an associated function in the
+  generic `impl<T: Add + Copy + Mul + Sub>` block beside `cross`, computing
+  `(b - a).cross(&(c - a))`.
+- `TyTransform::from_translation(position) -> Self`, written as
+  `Self { position, ..Self::default() }` so it inherits Default's identity rotation
+  and unit scale.
+- `TyBounds::from_points(impl IntoIterator<Item = TyVector3>) -> Option<Self>` and
+  `TyBounds::size(&self) -> TyVector3` (`extents * 2`). `from_points` folds the
+  first point as the seed and returns `None` on an empty iterator.
+- `TyQuaternion::from_rotation_matrix(TyMatrix4x4) -> Option<Self>`. It truncates
+  the first three columns to `TyVector3` and returns `None` when any column is
+  shorter than `1e-12` (the degenerate guard); otherwise it feeds the normalized
+  columns to `from_basis_vectors`, wrapped in `Some`. This revises the Q3
+  "identity fallback": a collapsed matrix is not meaningfully the identity, so the
+  honest result is `None` (and it parallels the `from_points` `Option`). Callers
+  that know the matrix is a proper rotation `.expect(..)`; the mvox adoption does.
+  The single "normalize" is on the columns (to strip scale); an orthonormal input
+  already yields a unit quaternion, so the output is not re-normalized.
+- `TyFloatExt::to_unorm8(self) -> u8`, `(self.clamp(0.0, 1.0) * 255.0).round() as
+  u8`, added to the trait and both macro impls; `ty_float_ext.rs` gained its first
+  `tests` module.
+- `TySrgbaColor::to_vector3(self) -> TyVector3<f64>`, `self.to_rgba().to_vector3()`.
+  Named `to_vector3` (not the Q3 `to_rgb`) because the crate has no 3-component RGB
+  type, so the honest return is a vector and this mirrors
+  `TyRgbaColor::to_vector3`. The RGB-vs-RGBA type asymmetry is deferred to a
+  documented follow-up in the [README](../README.md#follow-up-the-rgb-color-type-model).
 
 ## Track C: heavier logic under internal/
 

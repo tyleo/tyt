@@ -18,6 +18,10 @@ pub trait TyFloatExt {
     /// Linearly interpolates from `self` towards `other` by `t`, with `t` of `0`
     /// returning `self` and `1` returning `other`.
     fn lerp(self, other: Self, t: Self) -> Self;
+
+    /// Clamps `self` to `[0, 1]` and scales it to an 8-bit unsigned-normalized
+    /// byte, rounding a half away from zero.
+    fn to_unorm8(self) -> u8;
 }
 
 macro_rules! impl_ty_float_ext {
@@ -44,9 +48,30 @@ macro_rules! impl_ty_float_ext {
             fn lerp(self, other: $t, t: $t) -> $t {
                 self + (other - self) * t
             }
+
+            fn to_unorm8(self) -> u8 {
+                (self.clamp(0.0, 1.0) * 255.0).round() as u8
+            }
         }
     };
 }
 
 impl_ty_float_ext!(f32);
 impl_ty_float_ext!(f64);
+
+#[cfg(test)]
+mod tests {
+    use crate::TyFloatExt;
+
+    #[test]
+    fn to_unorm8_clamps_and_rounds() {
+        // The endpoints map to the byte range, and a half rounds up.
+        assert_eq!(0.0_f64.to_unorm8(), 0);
+        assert_eq!(1.0_f64.to_unorm8(), 255);
+        assert_eq!((0.5_f64 / 255.0).to_unorm8(), 1);
+
+        // Out-of-range values clamp to the endpoints, on f32 too.
+        assert_eq!((-1.0_f64).to_unorm8(), 0);
+        assert_eq!(2.0_f32.to_unorm8(), 255);
+    }
+}

@@ -1,4 +1,4 @@
-use crate::{TyLinearRgbaColorF64, TyRgbaColorF64, ty_array_conversions};
+use crate::{TyLinearRgbaColorF64, TyRgbaColorF64, TyVector3, ty_array_conversions};
 
 /// An 8-bit sRGB color with straight alpha, the `#RRGGBBAA` storage form:
 /// `r` / `g` / `b` gamma-encoded, `a` linear. Decode with
@@ -66,6 +66,14 @@ impl TySrgbaColor {
         )
     }
 
+    /// Normalizes the `r` / `g` / `b` components straight to `[0, 1]` as a
+    /// [`TyVector3`], dropping alpha and without decoding the sRGB transfer
+    /// function. The 8-bit parallel to
+    /// [`TyRgbaColor::to_vector3`](crate::TyRgbaColor::to_vector3).
+    pub fn to_vector3(self) -> TyVector3<f64> {
+        self.to_rgba().to_vector3()
+    }
+
     /// Decodes to linear RGB: the sRGB transfer function inverted on `r` / `g` /
     /// `b`, and `a` scaled straight since alpha carries no gamma.
     pub fn to_linear_rgba(self) -> TyLinearRgbaColorF64 {
@@ -91,7 +99,13 @@ fn srgb_to_linear(byte: u8) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::TySrgbaColor;
+    use crate::{TySrgbaColor, TyVector3F64};
+
+    #[test]
+    fn to_vector3_normalizes_and_drops_alpha() {
+        let rgb = TySrgbaColor::new(255, 128, 0, 64).to_vector3();
+        assert_eq!(rgb, TyVector3F64::new(1.0, 128.0 / 255.0, 0.0));
+    }
 
     #[test]
     fn array_converts_both_ways() {

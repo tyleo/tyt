@@ -30,6 +30,15 @@ impl<T> TyTransform<T> {
 macro_rules! impl_ty_transform_float {
     ($t:ty) => {
         impl TyTransform<$t> {
+            /// A translation-only transform: `position` with identity rotation
+            /// and unit scale.
+            pub fn from_translation(position: TyVector3<$t>) -> Self {
+                Self {
+                    position,
+                    ..Self::default()
+                }
+            }
+
             /// Transforms `point` by this transform: scale, then rotate, then
             /// translate, matching the `Translation * Rotation * Scale` order.
             pub fn transform_point(&self, point: TyVector3<$t>) -> TyVector3<$t> {
@@ -86,6 +95,19 @@ mod tests {
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-9
+    }
+
+    #[test]
+    fn from_translation_places_position_with_identity_rotation_and_unit_scale() {
+        let transform = TyTransformF64::from_translation(TyVector3F64::new(1.0, 2.0, 3.0));
+        assert_eq!(
+            transform,
+            TyTransformF64::new(
+                TyVector3F64::new(1.0, 2.0, 3.0),
+                TyQuaternionF64::identity(),
+                TyVector3F64::new(1.0, 1.0, 1.0),
+            )
+        );
     }
 
     #[test]

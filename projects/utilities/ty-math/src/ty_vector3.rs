@@ -65,6 +65,13 @@ impl<T: Add<Output = T> + Copy + Mul<Output = T> + Sub<Output = T>> TyVector3<T>
             z: self.z * other.z,
         }
     }
+
+    /// The unnormalized normal of the triangle `a`, `b`, `c`: the cross product
+    /// `(b - a) x (c - a)`. Its length is twice the triangle area, and its
+    /// direction follows the right-hand rule for the winding.
+    pub fn triangle_normal(a: Self, b: Self, c: Self) -> Self {
+        (b - a).cross(&(c - a))
+    }
 }
 
 impl<T: Add<Output = T>> Add for TyVector3<T> {
@@ -192,6 +199,23 @@ macro_rules! impl_ty_vector3_float {
                     y: self.y.abs(),
                     z: self.z.abs(),
                 }
+            }
+
+            /// Rounds each component to the nearest integer, rounding a half away
+            /// from zero.
+            pub fn round(self) -> Self {
+                Self {
+                    x: self.x.round(),
+                    y: self.y.round(),
+                    z: self.z.round(),
+                }
+            }
+
+            /// Each component cast to `i32`, truncating toward zero. Compose with
+            /// [`round`](Self::round) as `v.round().to_i32()` to round to the
+            /// nearest integer vector.
+            pub fn to_i32(self) -> TyVector3<i32> {
+                TyVector3::new(self.x as i32, self.y as i32, self.z as i32)
             }
 
             /// The zero vector.
@@ -409,7 +433,32 @@ impl_ty_vector3_float!(f64);
 
 #[cfg(test)]
 mod tests {
-    use crate::TyVector3F64;
+    use crate::{TyVector3F64, TyVector3I32};
+
+    #[test]
+    fn round_then_to_i32_rounds_to_the_nearest_integer_vector() {
+        // round is half-away-from-zero, then to_i32 truncates the exact integers.
+        let rounded = TyVector3F64::new(1.4, 2.5, -0.6).round().to_i32();
+        assert_eq!(rounded, TyVector3I32::new(1, 3, -1));
+    }
+
+    #[test]
+    fn to_i32_truncates_toward_zero() {
+        let truncated = TyVector3F64::new(1.9, -1.9, 0.5).to_i32();
+        assert_eq!(truncated, TyVector3I32::new(1, -1, 0));
+    }
+
+    #[test]
+    fn triangle_normal_follows_the_winding() {
+        // A counter-clockwise triangle in the z = 0 plane has a +z normal whose
+        // length is twice its area.
+        let normal = TyVector3F64::triangle_normal(
+            TyVector3F64::new(0.0, 0.0, 0.0),
+            TyVector3F64::new(2.0, 0.0, 0.0),
+            TyVector3F64::new(0.0, 2.0, 0.0),
+        );
+        assert_eq!(normal, TyVector3F64::new(0.0, 0.0, 4.0));
+    }
 
     #[test]
     fn componentwise_multiply_is_the_hadamard_product() {

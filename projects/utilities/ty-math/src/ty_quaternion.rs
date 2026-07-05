@@ -205,6 +205,33 @@ macro_rules! impl_ty_quaternion_float {
                 }
             }
 
+            /// A rotation from the upper-left 3x3 of `matrix`, taking its first
+            /// three columns as the right, up, and forward basis vectors and
+            /// normalizing each to strip any embedded scale. Returns `None` for a
+            /// degenerate matrix, one with a near-zero column that cannot form a
+            /// basis. Inverts
+            /// [`TyMatrix4x4::from_quaternion`](crate::TyMatrix4x4::from_quaternion).
+            pub fn from_rotation_matrix(matrix: TyMatrix4x4<$t>) -> Option<Self> {
+                const DEGENERATE: $t = 1e-12;
+
+                let right = matrix.columns[0].truncate();
+                let up = matrix.columns[1].truncate();
+                let forward = matrix.columns[2].truncate();
+
+                if right.magnitude() < DEGENERATE
+                    || up.magnitude() < DEGENERATE
+                    || forward.magnitude() < DEGENERATE
+                {
+                    return None;
+                }
+
+                Some(Self::from_basis_vectors(
+                    right.normalized(),
+                    up.normalized(),
+                    forward.normalized(),
+                ))
+            }
+
             /// Builds a rotation from `right` and `forward` basis vectors,
             /// deriving `up` in a left-handed frame.
             pub fn from_right_forward(right: TyVector3<$t>, forward: TyVector3<$t>) -> Self {
@@ -354,7 +381,7 @@ impl_ty_quaternion_float!(f64);
 
 #[cfg(test)]
 mod tests {
-    use crate::{TyQuaternionF64, TyVector3F64};
+    use crate::{TyMatrix4x4F64, TyQuaternionF64, TyVector3F64};
     use std::f64::consts::{FRAC_1_SQRT_2, PI};
 
     fn close(a: f64, b: f64) -> bool {
@@ -537,6 +564,20 @@ mod tests {
             TyVector3F64::new(0.0, 0.0, 1.0),
         );
         assert!(quaternion.is_approximately_equal(TyQuaternionF64::identity(), 1e-9));
+    }
+
+    #[test]
+    fn from_rotation_matrix_inverts_from_quaternion() {
+        let quaternion = TyQuaternionF64::from_axis_angle(TyVector3F64::new(1.0, 2.0, 3.0), 0.9);
+        let matrix = TyMatrix4x4F64::from_quaternion(quaternion);
+        let recovered = TyQuaternionF64::from_rotation_matrix(matrix).expect("a proper rotation");
+        assert!(recovered.is_approximately_equal(quaternion, 1e-9));
+    }
+
+    #[test]
+    fn from_rotation_matrix_of_a_degenerate_matrix_is_none() {
+        let zero = TyMatrix4x4F64::from_column_arrays([[0.0; 4]; 4]);
+        assert_eq!(TyQuaternionF64::from_rotation_matrix(zero), None);
     }
 
     #[test]

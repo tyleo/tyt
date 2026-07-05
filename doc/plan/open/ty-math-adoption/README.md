@@ -148,13 +148,15 @@ confirm at the keyboard and record in
   and `size(&self) -> TyVector3` (the full extent, `extents * 2`).
 - `TyVector3::triangle_normal(a, b, c) -> Self`, the unnormalized `(b - a) x
   (c - a)`.
-- `TyQuaternion<f32|f64>::from_rotation_matrix(TyMatrix4x4) -> Self`, wrapping
-  `from_basis_vectors` on the upper-left columns with a normalize and an identity
-  fallback.
+- `TyQuaternion<f32|f64>::from_rotation_matrix(TyMatrix4x4) -> Option<Self>`,
+  wrapping `from_basis_vectors` on the normalized upper-left columns and returning
+  `None` for a degenerate matrix. (Landed as `Option`, not the identity fallback
+  first sketched here; see the decision log.)
 - `TyFloatExt::to_unorm8(self) -> u8`, the `(x.clamp(0, 1) * 255).round() as u8`
   idiom, beside the existing `quantize`.
-- `TySrgbaColor::to_rgb(self) -> TyVector3<f64>`, the alpha-dropping companion to
-  `to_rgba`, for the three-component sRGB pools.
+- `TySrgbaColor::to_vector3(self) -> TyVector3<f64>`, the alpha-dropping companion
+  to `to_rgba`, for the three-component sRGB pools. (Landed as `to_vector3`, not
+  `to_rgb`; see the color-type follow-up below.)
 
 ## Execution shape
 
@@ -176,3 +178,48 @@ known-value assertion). Track C adds coverage only where it changes behavior, fo
 example a `from_points` adoption in `triangle_bounds` asserted against the prior
 tuple result, or a signature change to `cell_color` exercised through the readers
 that consume it. No wire fixtures are rebuilt.
+
+## Follow-up: the RGB color type model
+
+> **Deferred from Track B.** `ty-math` treats RGBA as a first-class type family
+> (`TyRgbaColor<T>`, `TyLinearRgbaColor<T>`, and the 8-bit `TySrgbaColor`) but has
+> no 3-component RGB type: dropping alpha yields a bare `TyVector3<T>`, through
+> `TyRgbaColor::to_vector3` and the `TySrgbaColor::to_vector3` this plan added. So
+> RGBA is a color but RGB is a vector, which is the asymmetry to resolve. We took
+> the path of least resistance for now (`to_vector3`) and box the real decision
+> here.
+
+Investigate one of:
+
+1. **Add `TyRgbColor<T>`** as a first-class 3-component color, parallel to
+   `TyRgbaColor<T>`: `new` / `from_array` / `to_array`, the `ty_array_conversions!`
+   macro, componentwise arithmetic, `to_vector3`, and `to_rgba(alpha)` /
+   `from_rgba` (drop-alpha) conversions. Then `TySrgbaColor::to_rgb -> TyRgbColor`
+   sits beside `to_vector3`, and the three-component `VoxValuePool::Srgb` pool can
+   carry `TyRgbColor` instead of raw `[f64; 3]`.
+2. **Collapse the color structs toward vectors:** represent color as `TyVector3` /
+   `TyVector4` throughout and drop the dedicated `Ty*Color` structs. Fewer types,
+   but it loses the compile-time sRGB-vs-linear distinction the types encode today.
+3. **Keep the status quo, documented:** RGBA is a type, RGB is a vector; accept the
+   asymmetry and stop here.
+
+Points to weigh:
+
+- Which color operations need a type identity (the sRGB <-> linear decode on
+  `TySrgbaColor` / `TyLinearRgbaColor`, HSVA conversion, alpha semantics) versus
+  which are plain componentwise math a vector already serves.
+- The `VoxValuePool` split in voxcore: `Srgb` is `[f64; 3]`, `Srgba` is `[f64; 4]`.
+  Whether the pools should carry typed colors is a voxcore-model change, outside
+  this plan's consumer-side scope, so it would be its own decision.
+- Blast radius across `ty-math`, `voxsmith`, `voxcore`, and `vxl`, and whether a
+  `TyRgbColor` earns its keep or is just a near-duplicate of `TyVector3`.
+- The sRGB-vs-linear split must survive: `TyRgbaColor` (gamma-encoded floats) and
+  `TyLinearRgbaColor` (linear light) are distinct types today; any RGB type or
+  vector collapse has to preserve that distinction or state where it goes.
+- `TyRgbaColor` already carries `Mul<T>`, `to_hsva`, and `to_srgba`; a new
+  `TyRgbColor` would want the matching subset, so scope which operations are worth
+  duplicating before adding the type.
+
+Landing point: pick one. If it is (1), do it in a pass that also revisits
+`TySrgbaColor::to_vector3` so `to_rgb` (typed) and `to_vector3` (raw) return the
+right things together, and migrate the three-component pool callers in one step.
