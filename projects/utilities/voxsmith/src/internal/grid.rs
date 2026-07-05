@@ -1,6 +1,6 @@
 use branded_id::U32Id;
 use ty_math::{TyVector3I32, TyVector3U32};
-use voxcore::{BVoxPaletteCell, VoxObject};
+use voxcore::{BVoxMaterial, VoxObject};
 
 /// Re-bases a build-volume object to the tight extent of its live voxels,
 /// returning the tight object and the original build volume as
@@ -19,7 +19,7 @@ pub fn tighten(object: &VoxObject) -> (VoxObject, (TyVector3U32, TyVector3I32)) 
         let mut tight = VoxObject::new(object.name().to_owned(), TyVector3U32::new(0, 0, 0))
             .expect("an empty grid is within the dense limit");
         tight.set_origin(origin);
-        copy_palette_refs(object, &mut tight);
+        copy_layers(object, &mut tight);
         return (tight, build_volume);
     };
     let mut tight = VoxObject::new(object.name().to_owned(), size)
@@ -29,7 +29,7 @@ pub fn tighten(object: &VoxObject) -> (VoxObject, (TyVector3U32, TyVector3I32)) 
         origin.y + min.y as i32,
         origin.z + min.z as i32,
     ));
-    copy_palette_refs(object, &mut tight);
+    copy_layers(object, &mut tight);
     copy_voxels(
         object,
         &mut tight,
@@ -38,23 +38,20 @@ pub fn tighten(object: &VoxObject) -> (VoxObject, (TyVector3U32, TyVector3I32)) 
     (tight, build_volume)
 }
 
-/// Mirrors `from`'s palette references onto `to`, back-filling every voxel with
-/// cell `0`. The filler is overwritten when a voxel is re-lived and is never
-/// read for an empty voxel, so a uniform filler suffices.
-fn copy_palette_refs(from: &VoxObject, to: &mut VoxObject) {
-    for (_, palette) in from.iter_palette_refs() {
-        to.add_palette_ref(palette, U32Id::<BVoxPaletteCell>::from_u32(0));
+/// Mirrors `from`'s layers onto `to`, back-filling every voxel with material
+/// `0`. The filler is overwritten when a voxel is re-lived and is never read for
+/// an empty voxel, so a uniform filler suffices.
+fn copy_layers(from: &VoxObject, to: &mut VoxObject) {
+    for (_, palette) in from.iter_layers() {
+        to.add_layer(palette, U32Id::<BVoxMaterial>::from_u32(0));
     }
 }
 
 /// Re-lives `from`'s live voxels on `to`, each shifted by `offset` and carrying
-/// its samples. `to` must already share `from`'s palette references and contain
-/// every shifted position.
+/// its samples. `to` must already share `from`'s layers and contain every
+/// shifted position.
 fn copy_voxels(from: &VoxObject, to: &mut VoxObject, offset: [i32; 3]) {
-    let references: Vec<_> = from
-        .iter_palette_refs()
-        .map(|(reference, _)| reference)
-        .collect();
+    let layers: Vec<_> = from.iter_layers().map(|(layer, _)| layer).collect();
     for voxel in from.iter_live() {
         let p = from
             .voxel_position(voxel)
@@ -67,14 +64,13 @@ fn copy_voxels(from: &VoxObject, to: &mut VoxObject, offset: [i32; 3]) {
         let id = to
             .voxel_id(position)
             .expect("the shifted voxel is within the target grid");
-        let samples: Vec<_> = references
+        let samples: Vec<_> = layers
             .iter()
-            .map(|&reference| {
-                from.voxel_cell(voxel, reference)
-                    .expect("a live voxel samples every reference")
+            .map(|&layer| {
+                from.voxel_material(voxel, layer)
+                    .expect("a live voxel samples every layer")
             })
             .collect();
-        to.retain_voxel(id, &samples)
-            .expect("one sample per reference");
+        to.retain_voxel(id, &samples).expect("one sample per layer");
     }
 }

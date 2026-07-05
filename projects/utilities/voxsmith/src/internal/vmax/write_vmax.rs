@@ -1,6 +1,8 @@
 use crate::{
-    Error, Result, SceneCameraSource, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
-    VoxelMaxNode, VoxelMaxPalette, ext_for, from_vox_value, tighten,
+    ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
+    ROUGHNESS_FACTOR, Result, SHADOWS, SceneCameraSource, TRANSMISSION_FACTOR, VoxelMaxColorFormat,
+    VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, ext_for,
+    from_vox_value, pool_color, tighten,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, HashMap};
@@ -13,8 +15,8 @@ use vmax::{
 };
 use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
-    BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteRef, VoxHierarchyNode, VoxMain,
-    VoxObject, VoxPalette, VoxValue,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPaletteBinding, VoxHierarchyNode,
+    VoxMain, VoxObject, VoxPalette, VoxValuePool,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`
@@ -22,6 +24,10 @@ use voxcore::{
 /// 0-based; a `palette*.png` appends a transparent terminator (256 entries),
 /// the plist `colors` table does not (255 entries).
 const PALETTE_COLORS: usize = 255;
+
+/// The most materials a Voxel Max object can hold: a voxel's `material_idx` is a
+/// single byte, so indices run 0..=255.
+const MAX_MATERIALS: usize = 256;
 
 /// Codable version stamped on a rebuilt contents file when the state carries no
 /// preserved object version.
@@ -127,7 +133,11 @@ pub fn write_vmax(
             let object_ref = *object_ref;
             let object_id = object_ref.to_u32() as usize;
             let object = state.object(object_ref).expect("a valid node child object");
-            let (color, material) = object_palette_refs(state, object);
+            let folded = folded_ref(state, object);
+            let plan = match folded.as_ref() {
+                Some(folded) => material_plan(state, folded, &voxel_max.palettes)?,
+                None => MaterialPlan::default(),
+            };
             let suffix = suffix(object_id);
             // The node's ext places its first object; an extra object gets a
             // per-object variant with a distinct id and its own bounds.
@@ -155,7 +165,13 @@ pub fn write_vmax(
             let data = match contents_by_object.get(&object_id) {
                 Some(data) => data.clone(),
                 None => {
-                    let voxels = reconstruct_voxels(&tight, color, material, placement.box_min)?;
+                    let voxels = reconstruct_voxels(
+                        state,
+                        &tight,
+                        folded.as_ref(),
+                        &plan,
+                        placement.box_min,
+                    )?;
                     let data = format!("contents{suffix}.vmaxb");
                     // Voxels re-encode into snapshots; serde-only state the
                     // decoded voxcore object does not model (`pal`) stays
@@ -200,9 +216,8 @@ pub fn write_vmax(
 
             let pal = build_palette(
                 state,
-                &voxel_max.palettes,
-                color.map(|(_, palette)| palette),
-                material.map(|(_, palette)| palette),
+                folded.as_ref(),
+                &plan,
                 &mut palette_files,
                 &mut palette_settings_files,
                 &mut palette_png_files,
@@ -599,112 +614,339 @@ fn object_view_box(origin: [i32; 3], size: TyVector3U32) -> VMaxViewBox {
     }
 }
 
-/// A reference into one of an object's palettes: the sample reference id and
-/// the palette id it names.
-type PaletteRef = (U32Id<BVoxPaletteRef>, U32Id<BVoxPalette>);
+/// The folded palette an object references: the palette id, the optional
+/// `baseColorFactor` binding, and the material bindings in order.
+struct FoldedRef {
+    palette: U32Id<BVoxPalette>,
+    color: Option<U32Id<BVoxPaletteBinding>>,
+    materials: Vec<(String, U32Id<BVoxPaletteBinding>)>,
+}
 
-/// The color and material palette references for an object, identified by the
-/// `rgba` and `metallic` attributes.
-fn object_palette_refs(
+/// The one folded palette an object references on its single layer, or `None`
+/// when it references no layer.
+fn folded_ref(state: &VoxMain, object: &VoxObject) -> Option<FoldedRef> {
+    let (_, palette_id) = object.iter_layers().next()?;
+    let palette = state.palette(palette_id)?;
+    let color = palette.binding_by_attribute(BASE_COLOR_FACTOR);
+    let materials = palette
+        .iter_bindings()
+        .filter(|(id, _)| Some(*id) != color)
+        .map(|(id, binding)| (binding.attribute.clone(), id))
+        .collect();
+    Some(FoldedRef {
+        palette: palette_id,
+        color,
+        materials,
+    })
+}
+
+/// The material reconstruction for a folded palette: each folded material's
+/// Voxel Max `material_idx`, the exact material list for the settings sidecar,
+/// and the sidecar display name.
+#[derive(Default)]
+struct MaterialPlan {
+    name: String,
+    material_idx: HashMap<U32Id<BVoxMaterial>, u8>,
+    materials: Vec<VMaxMaterial>,
+}
+
+/// Reconstructs the Voxel Max materials for a folded palette. A Voxel-Max-origin
+/// state carries the exact list in its ext, whose pools hold one value per
+/// material so a material's index is its value-index into the first material
+/// binding; a state loaded from another format has no such list, so the
+/// materials are derived from the pools, one per distinct material signature.
+fn material_plan(
+    state: &VoxMain,
+    folded: &FoldedRef,
+    ext_palettes: &[Option<VoxelMaxPalette>],
+) -> Result<MaterialPlan> {
+    let provenance = ext_palettes
+        .get(folded.palette.to_u32() as usize)
+        .and_then(|palette| palette.as_ref());
+    let name = provenance
+        .map(|palette| palette.name.clone())
+        .unwrap_or_default();
+    let palette = state.palette(folded.palette).expect("a referenced palette");
+
+    // A color-only palette folds no materials; every material writes index 0.
+    if folded.materials.is_empty() {
+        let material_idx = palette
+            .iter_materials()
+            .map(|material| (material, 0))
+            .collect();
+        return Ok(MaterialPlan {
+            name,
+            material_idx,
+            materials: Vec::new(),
+        });
+    }
+
+    // A Voxel-Max-origin list came from a real document, so it is within budget;
+    // the value-index is the original `material_idx`, always below the material
+    // count.
+    if let Some(provenance) = provenance.filter(|palette| !palette.materials.is_empty()) {
+        let first = folded.materials[0].1;
+        let material_idx = palette
+            .iter_materials()
+            .map(|material| {
+                (
+                    material,
+                    palette.value_index(material, first).unwrap_or(0) as u8,
+                )
+            })
+            .collect();
+        let materials = provenance
+            .materials
+            .iter()
+            .enumerate()
+            .map(|(slot, material)| vmax_material(slot, material))
+            .collect();
+        return Ok(MaterialPlan {
+            name,
+            material_idx,
+            materials,
+        });
+    }
+
+    derive_materials(state, folded, palette, name)
+}
+
+/// Derives a Voxel Max material per distinct signature of the material bindings,
+/// for a state that carries no exact material list. The signature index is the
+/// `material_idx`, and each material reads its coefficients from the pools.
+/// Errors when the distinct materials exceed [`MAX_MATERIALS`], since a voxel's
+/// `material_idx` is a single byte, so a cross-format source with too many
+/// materials cannot be represented rather than silently wrapping.
+fn derive_materials(
+    state: &VoxMain,
+    folded: &FoldedRef,
+    palette: &VoxPalette,
+    name: String,
+) -> Result<MaterialPlan> {
+    let mut signatures: Vec<Vec<u32>> = Vec::new();
+    let mut index_of: HashMap<Vec<u32>, u8> = HashMap::new();
+    let mut material_idx = HashMap::new();
+    for material in palette.iter_materials() {
+        let signature: Vec<u32> = folded
+            .materials
+            .iter()
+            .map(|(_, binding)| palette.value_index(material, *binding).unwrap_or(0))
+            .collect();
+        let idx = match index_of.get(&signature) {
+            Some(&idx) => idx,
+            None => {
+                if signatures.len() >= MAX_MATERIALS {
+                    return Err(Error::invalid(format!(
+                        "an object needs more than {MAX_MATERIALS} materials, but a Voxel Max \
+                         voxel indexes its material with a single byte"
+                    )));
+                }
+                let idx = signatures.len() as u8;
+                signatures.push(signature.clone());
+                index_of.insert(signature, idx);
+                idx
+            }
+        };
+        material_idx.insert(material, idx);
+    }
+    let materials = signatures
+        .iter()
+        .enumerate()
+        .map(|(slot, signature)| {
+            derived_material(state, folded.palette, &folded.materials, slot, signature)
+        })
+        .collect();
+    Ok(MaterialPlan {
+        name,
+        material_idx,
+        materials,
+    })
+}
+
+/// One derived Voxel Max material, reading each bound coefficient from the pool
+/// at the signature's value-index for that binding.
+fn derived_material(
+    state: &VoxMain,
+    palette: U32Id<BVoxPalette>,
+    bindings: &[(String, U32Id<BVoxPaletteBinding>)],
+    slot: usize,
+    signature: &[u32],
+) -> VMaxMaterial {
+    let scalar = |attribute: &str| -> Option<f64> {
+        let position = bindings.iter().position(|(name, _)| name == attribute)?;
+        pool_scalar(
+            state,
+            palette,
+            bindings[position].1,
+            signature[position] as usize,
+        )
+    };
+    let flag = |attribute: &str| -> Option<bool> {
+        let position = bindings.iter().position(|(name, _)| name == attribute)?;
+        pool_flag(
+            state,
+            palette,
+            bindings[position].1,
+            signature[position] as usize,
+        )
+    };
+    let dispersed = bindings
+        .iter()
+        .any(|(name, _)| name == IOR || name == TRANSMISSION_FACTOR || name == ABSORPTION);
+    VMaxMaterial {
+        mi: (slot + 1).to_string(),
+        mc: scalar(METALLIC_FACTOR).unwrap_or(0.0),
+        rc: scalar(ROUGHNESS_FACTOR).unwrap_or(0.0),
+        sic: scalar(EMISSIVE_STRENGTH).unwrap_or(0.0),
+        sh: flag(SHADOWS).unwrap_or(false),
+        tc: None,
+        md: dispersed.then(|| VMaxMaterialDispersion {
+            absorption: scalar(ABSORPTION).unwrap_or(0.0),
+            ior: scalar(IOR).unwrap_or(1.5),
+            transmission: scalar(TRANSMISSION_FACTOR).unwrap_or(0.0),
+        }),
+    }
+}
+
+/// Rebuilds a Voxel Max material from its exact ext copy. The `mi` token is
+/// derived from the 1-based slot and the transparency color `tc` is dropped,
+/// matching the writer's behavior.
+fn vmax_material(slot: usize, material: &VoxelMaxMaterial) -> VMaxMaterial {
+    VMaxMaterial {
+        mi: (slot + 1).to_string(),
+        mc: material.metallic,
+        rc: material.roughness,
+        sic: material.emissive,
+        sh: material.shadows,
+        tc: material.transmission_color,
+        md: material
+            .dispersion
+            .as_ref()
+            .map(|dispersion| VMaxMaterialDispersion {
+                absorption: dispersion.absorption,
+                ior: dispersion.ior,
+                transmission: dispersion.transmission,
+            }),
+    }
+}
+
+/// The `f64` value at `index` in a binding's `float` pool, or `None`.
+fn pool_scalar(
+    state: &VoxMain,
+    palette: U32Id<BVoxPalette>,
+    binding: U32Id<BVoxPaletteBinding>,
+    index: usize,
+) -> Option<f64> {
+    match binding_pool(state, palette, binding)? {
+        VoxValuePool::Float { values, .. } => values.get(index).copied(),
+        _ => None,
+    }
+}
+
+/// The `bool` value at `index` in a binding's `bool` pool, or `None`.
+fn pool_flag(
+    state: &VoxMain,
+    palette: U32Id<BVoxPalette>,
+    binding: U32Id<BVoxPaletteBinding>,
+    index: usize,
+) -> Option<bool> {
+    match binding_pool(state, palette, binding)? {
+        VoxValuePool::Bool { values } => values.get(index).copied(),
+        _ => None,
+    }
+}
+
+/// The value pool a binding draws from.
+fn binding_pool(
+    state: &VoxMain,
+    palette: U32Id<BVoxPalette>,
+    binding: U32Id<BVoxPaletteBinding>,
+) -> Option<&VoxValuePool> {
+    let pool = state.palette(palette)?.binding(binding)?.pool;
+    state.value_pool(pool)
+}
+
+/// Re-bases the tight object's voxels to absolute model space, recovering each
+/// one's `color_idx` from its material's `baseColorFactor` value-index and its
+/// `material_idx` from the material plan. A colorless voxel takes index 1.
+fn reconstruct_voxels(
     state: &VoxMain,
     object: &VoxObject,
-) -> (Option<PaletteRef>, Option<PaletteRef>) {
-    let mut color = None;
-    let mut material = None;
-    for (reference, palette) in object.iter_palette_refs() {
-        let Some(palette_value) = state.palette(palette) else {
-            continue;
-        };
-        if has_attribute(palette_value, "rgba") || has_attribute(palette_value, "rgb") {
-            color = Some((reference, palette));
-        } else if has_attribute(palette_value, "metallic") {
-            material = Some((reference, palette));
-        }
-    }
-    (color, material)
-}
-
-/// Whether `palette` declares an attribute named `name`.
-fn has_attribute(palette: &VoxPalette, name: &str) -> bool {
-    palette
-        .iter_attributes()
-        .any(|(_, attribute)| attribute == name)
-}
-
-/// Re-bases an object's voxels to absolute model space, reading the color and
-/// material indices from their sample references. A voxel's `color_idx` is the
-/// 1-based `cell + 1`; a colorless voxel takes index 1.
-///
-/// Errors when a voxel's color cell reaches [`PALETTE_COLORS`], one past the
-/// last usable color, so a padded source palette (such as MagicaVoxel's fixed
-/// 256) is fine as long as its referenced colors fit.
-fn reconstruct_voxels(
-    object: &VoxObject,
-    color: Option<PaletteRef>,
-    material: Option<PaletteRef>,
+    folded: Option<&FoldedRef>,
+    plan: &MaterialPlan,
     box_min: [i32; 3],
 ) -> Result<Vec<VMaxVoxel>> {
+    let layer = object.iter_layers().next().map(|(layer, _)| layer);
     object
         .iter_live()
         .map(|voxel| {
             let position = object
                 .voxel_position(voxel)
                 .expect("a live voxel is within the grid");
-            let cell = |reference: Option<PaletteRef>| {
-                reference.map(|(reference, _)| {
-                    object
-                        .voxel_cell(voxel, reference)
-                        .expect("a live voxel samples every reference")
-                        .to_u32()
-                })
+            let material = layer.and_then(|layer| object.voxel_material(voxel, layer));
+            let color_idx = match (folded, material) {
+                (Some(folded), Some(material)) => color_index(state, folded, material)?,
+                // A colorless voxel still needs a non-empty index, so it takes 1,
+                // not the empty index 0.
+                _ => 1,
             };
-            let color_idx = match cell(color) {
-                Some(cell) if cell >= PALETTE_COLORS as u32 => {
-                    return Err(Error::invalid(format!(
-                        "a voxel references color cell {cell}, but a Voxel Max palette holds \
-                         only {PALETTE_COLORS} colors, so the source has more colors than fit"
-                    )));
-                }
-                Some(cell) => cell + 1,
-                // A colorless voxel still needs a non-empty index, so it takes
-                // the borrowed palette's first color (1), not the empty index
-                // 0.
-                None => 1,
-            };
+            let material_idx = material
+                .and_then(|material| plan.material_idx.get(&material).copied())
+                .unwrap_or(0);
             Ok(VMaxVoxel {
                 position: [
                     position.x as i32 + box_min[0],
                     position.y as i32 + box_min[1],
                     position.z as i32 + box_min[2],
                 ],
-                material_idx: cell(material).unwrap_or(0) as u8,
-                color_idx: color_idx as u8,
+                material_idx,
+                color_idx,
             })
         })
         .collect()
 }
 
+/// The 1-based Voxel Max color index a `material` samples through
+/// `baseColorFactor`. Errors when the color value-index reaches
+/// [`PALETTE_COLORS`], one past the last usable color, so a padded source
+/// palette is fine as long as its referenced colors fit.
+fn color_index(state: &VoxMain, folded: &FoldedRef, material: U32Id<BVoxMaterial>) -> Result<u8> {
+    let Some(color) = folded.color else {
+        return Ok(1);
+    };
+    let index = state
+        .palette(folded.palette)
+        .and_then(|palette| palette.value_index(material, color))
+        .unwrap_or(0);
+    if index >= PALETTE_COLORS as u32 {
+        return Err(Error::invalid(format!(
+            "a voxel references color cell {index}, but a Voxel Max palette holds only \
+             {PALETTE_COLORS} colors, so the source has more colors than fit"
+        )));
+    }
+    Ok(index as u8 + 1)
+}
+
 /// Returns the `pal` filename for an object, building its color image and
-/// material sidecar the first time the color palette is seen. An object with no
-/// color palette borrows the default palette name and writes no file.
+/// material sidecar the first time the folded palette is seen. An object with no
+/// color binding borrows the default palette name and writes no file.
 #[allow(clippy::too_many_arguments)]
 fn build_palette(
     state: &VoxMain,
-    palette_names: &[Option<VoxelMaxPalette>],
-    color: Option<U32Id<BVoxPalette>>,
-    material: Option<U32Id<BVoxPalette>>,
+    folded: Option<&FoldedRef>,
+    plan: &MaterialPlan,
     palette_files: &mut HashMap<usize, String>,
     palette_settings_files: &mut BTreeMap<String, VMaxPaletteSettingsVmaxpsbFile>,
     palette_png_files: &mut BTreeMap<String, VMaxPalettePngFile>,
     voxel_max_color_format: VoxelMaxColorFormat,
 ) -> String {
-    let Some(color) = color else {
-        // An object with no color palette borrows the default palette name; an
-        // empty reference is one Voxel Max cannot resolve. No file is written
-        // for it.
+    // An object with no color binding borrows the default palette name; an empty
+    // reference is one Voxel Max cannot resolve. No file is written for it.
+    let Some((palette, color)) = folded.and_then(|folded| Some((folded.palette, folded.color?)))
+    else {
         return FALLBACK_PALETTE.to_owned();
     };
-    let color_id = color.to_u32() as usize;
+    let color_id = palette.to_u32() as usize;
     if let Some(name) = palette_files.get(&color_id) {
         return name.clone();
     }
@@ -714,7 +956,7 @@ fn build_palette(
     };
     let pal = format!("palette{stem}.png");
 
-    let colors = color_palette_colors(state, color);
+    let colors = color_palette_colors(state, palette, color);
     if matches!(
         voxel_max_color_format,
         VoxelMaxColorFormat::Png | VoxelMaxColorFormat::All
@@ -724,21 +966,12 @@ fn build_palette(
         cells.push([0, 0, 0, 0]);
         palette_png_files.insert(pal.clone(), VMaxPalettePngFile(cells));
     }
-    // The settings sidecar carries the material, and the colors when no image
-    // does. Plist mode writes no image, so even a color-only object with no
-    // material writes its colors here rather than dropping them.
+    // The settings sidecar carries the materials, and the colors when no image
+    // does. Plist mode writes no image, so even a color-only object writes its
+    // colors here rather than dropping them.
     let write_sidecar =
-        material.is_some() || matches!(voxel_max_color_format, VoxelMaxColorFormat::Plist);
+        !plan.materials.is_empty() || matches!(voxel_max_color_format, VoxelMaxColorFormat::Plist);
     if write_sidecar {
-        let name = material
-            .and_then(|material| {
-                palette_names
-                    .get(material.to_u32() as usize)
-                    .cloned()
-                    .flatten()
-            })
-            .map(|palette| palette.name)
-            .unwrap_or_default();
         let sidecar = format!("palette{stem}.settings.vmaxpsb");
         // The plist `colors` table is the 255 colors with no terminator.
         let sidecar_colors = match voxel_max_color_format {
@@ -747,89 +980,39 @@ fn build_palette(
         };
         palette_settings_files.insert(
             sidecar,
-            material_settings(state, material, name, sidecar_colors),
+            material_settings(plan.name.clone(), plan.materials.clone(), sidecar_colors),
         );
     }
     palette_files.insert(color_id, pal.clone());
     pal
 }
 
-/// A color palette's cells as exactly [`PALETTE_COLORS`] 0-based RGBA entries,
-/// padded with transparent cells or truncated to that count. Cells past the
-/// budget are dropped; a voxel that would reference one is rejected by
+/// A color binding's pool decoded to exactly [`PALETTE_COLORS`] 0-based RGBA
+/// entries, padded with transparent entries or truncated to that count. Colors
+/// past the budget are dropped; a voxel that would reference one is rejected by
 /// [`reconstruct_voxels`].
-fn color_palette_colors(state: &VoxMain, palette: U32Id<BVoxPalette>) -> Vec<[u8; 4]> {
-    let palette = state.palette(palette).expect("a referenced palette");
-    let rgba = palette
-        .iter_attributes()
-        .find(|(_, name)| *name == "rgba" || *name == "rgb")
-        .map(|(id, _)| id);
+fn color_palette_colors(
+    state: &VoxMain,
+    palette: U32Id<BVoxPalette>,
+    color: U32Id<BVoxPaletteBinding>,
+) -> Vec<[u8; 4]> {
     let mut cells: Vec<[u8; 4]> = Vec::new();
-    if let Some(rgba) = rgba {
-        cells.extend(
-            palette
-                .iter_cells()
-                .take(PALETTE_COLORS)
-                .map(|cell| parse_rgba(palette.cell_value(cell, rgba))),
-        );
+    if let Some(pool) = binding_pool(state, palette, color) {
+        for index in 0..pool.values_len().min(PALETTE_COLORS) {
+            cells.push(pool_color(pool, index as u32).unwrap_or([0, 0, 0, 0]));
+        }
     }
     cells.resize(PALETTE_COLORS, [0, 0, 0, 0]);
     cells
 }
 
-/// Builds a settings sidecar carrying `colors` and, when `palette` names a
-/// material palette, a material per cell read from its
-/// `metallic`/`roughness`/`emissive`/`shadows` attributes and the optional
-/// dispersion columns. A color-only palette passes `None` and gets no
-/// materials. The editor-state keys are filled with the defaults Voxel Max
-/// expects, and each slot's `mi` token from its 1-based position.
+/// Builds a settings sidecar carrying `colors` and `materials`. The editor-state
+/// keys are filled with the defaults Voxel Max expects.
 fn material_settings(
-    state: &VoxMain,
-    palette: Option<U32Id<BVoxPalette>>,
     name: String,
+    materials: Vec<VMaxMaterial>,
     colors: Vec<[u8; 4]>,
 ) -> VMaxPaletteSettingsVmaxpsbFile {
-    let materials = palette
-        .map(|palette| {
-            let palette = state.palette(palette).expect("a referenced palette");
-            let attributes: HashMap<String, _> = palette
-                .iter_attributes()
-                .map(|(id, attribute)| (attribute.to_owned(), id))
-                .collect();
-            palette
-                .iter_cells()
-                .enumerate()
-                .map(|(slot, cell)| {
-                    let value = |name: &str| {
-                        attributes
-                            .get(name)
-                            .and_then(|&id| palette.cell_value(cell, id))
-                    };
-                    let number = |name: &str, default: f64| match value(name) {
-                        Some(VoxValue::Number(n)) => *n,
-                        _ => default,
-                    };
-                    let dispersed = ["ior", "transmission", "absorption"]
-                        .iter()
-                        .any(|name| matches!(value(name), Some(VoxValue::Number(_))));
-                    VMaxMaterial {
-                        mi: (slot + 1).to_string(),
-                        mc: number("metallic", 0.0),
-                        rc: number("roughness", 0.0),
-                        sic: number("emissive", 0.0),
-                        sh: matches!(value("shadows"), Some(VoxValue::Bool(true))),
-                        tc: None,
-                        md: dispersed.then(|| VMaxMaterialDispersion {
-                            absorption: number("absorption", 0.0),
-                            ior: number("ior", 1.5),
-                            transmission: number("transmission", 0.0),
-                        }),
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
     VMaxPaletteSettingsVmaxpsbFile {
         name,
         materials,
@@ -846,25 +1029,6 @@ fn material_settings(
         voxmats: Vec::new(),
         ls: Vec::new(),
     }
-}
-
-/// Parses a `#RRGGBB` or `#RRGGBBAA` color cell into RGBA bytes. A missing
-/// alpha, as in the 6-hex form an `rgb` source carries, defaults to opaque.
-fn parse_rgba(cell: Option<&VoxValue>) -> [u8; 4] {
-    let Some(VoxValue::Text(hex)) = cell else {
-        return [0, 0, 0, 0];
-    };
-    let hex = hex.strip_prefix('#').unwrap_or(hex);
-    let byte = |i: usize| {
-        hex.get(i * 2..i * 2 + 2)
-            .and_then(|h| u8::from_str_radix(h, 16).ok())
-    };
-    [
-        byte(0).unwrap_or(0),
-        byte(1).unwrap_or(0),
-        byte(2).unwrap_or(0),
-        byte(3).unwrap_or(255),
-    ]
 }
 
 /// Builds a scene object from its node and preserved provenance.

@@ -432,21 +432,42 @@ those stay unchecked.
       the pool validator; fixed by defaulting it in the neutral pool while the ext
       keeps the exact value. Verified under `--no-default-features --features
       mvox`; 19 tests pass. See the decisions log.)
-- [ ] vmax: fold the color palette and material palette into one palette with
+- [x] vmax: fold the color palette and material palette into one palette with
       bindings for `baseColorFactor` and the material attributes over separate
       pools, one material per distinct color-plus-material combination the voxels
       use; keep `shadows` and `absorption` as custom attributes; on write-back
       reconstruct the distinct color and material sets and each voxel's original
-      color and material indices.
-- [ ] Update `voxelize_mesh` to build pools, bindings, and column-major materials
+      color and material indices. (Done: the color pool is the full 255-color
+      table in order so `baseColorFactor` value-index is `color_idx - 1`, and the
+      material scalar pools hold one value per material so a value-index is the
+      `material_idx`; both original indices thus round-trip as pool value-indices
+      with no per-material provenance. `emissiveStrength` carries `sic`; `ior` and
+      `transmissionFactor` map from the dispersion block; scalars are unbounded
+      per the MagicaVoxel precedent. The exact material list moves into
+      `VoxelMaxPalette.materials` for a byte-exact write-back, and write-back
+      resolves materials two ways: the exact list for a vmax-origin state, a
+      signature-join derive for a synthesized one. See the decisions log. An
+      adversarial review added `tc` to the ext copy and a `>256`-materials error
+      to the derive path.)
+- [x] Update `voxelize_mesh` to build pools, bindings, and column-major materials
       instead of `add_attribute` plus `add_cell`, and fold the split emissive into
-      its material key.
-- [ ] Rebuild every converter's fixtures and keep the byte-exact round-trip tests
+      its material key. (Landed in Phase 5's glTF build-path chunk, where
+      `build_palette` moved into `voxelize_mesh` and builds six per-attribute
+      pools with the split emissive in the `MaterialKey`; verified again here
+      under `--features gltf`.)
+- [x] Rebuild every converter's fixtures and keep the byte-exact round-trip tests
       passing by making pool ordering, dedup, and color-kind choice deterministic;
       regenerate goldens where the float default or the vmax fold changes bytes.
+      (Every converter's fixtures were rebuilt in its own chunk: goxl, mvox, qbcl,
+      and now vmax, plus the glTF voxelizer in Phase 5. The byte-exact `.gox` /
+      `.qb` / `.qbt` / `.qbcl` and `.vmax` round-trips all pass, and vmax gains a
+      rich-material round-trip covering dispersion optionality, `tc`, and a
+      non-finite coefficient. No external golden files needed regeneration.)
 
 Gate: all five converters build; each format round-trips through the new voxcore
-model.
+model. Verified: `cargo test -p voxsmith` passes 104 tests on default features
+(goxl, mvox, qbcl, vmax, voxj) and the crate is clippy-clean with and without
+`gltf`; the only workspace crate that does not yet compile is `vxl` (Phase 7).
 
 ## Phase 7: `vxl`
 

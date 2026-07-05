@@ -970,3 +970,113 @@ carries a `magica-voxel` ext and samples a material id at or above 256, a state
 the converter itself never produces (`build_palette` makes exactly 256 materials
 and `build_object` only ever samples those); and `material_type_from_token`
 canonicalizes a reserved token, unreachable from a parsed file.
+
+### Fifth chunk: Voxel Max folds its two palettes with a full color pool and one-per-material scalar pools
+
+Voxel Max is the load-bearing fold case: a voxel carries an independent
+`color_idx` (1-based, into a 255-color palette) and `material_idx` (into a
+separate material list), which the old model held as two palettes on one object.
+Q2 folds them into one palette with one material per distinct
+color-and-material combination the voxels use. The two indices are independent,
+so the fold is a two-dimensional cross product, unlike MagicaVoxel where the
+material index *is* the color index.
+
+The fold is designed so both original indices round-trip as pool value-indices,
+avoiding any per-folded-material provenance:
+
+1. The color pool is the object's full color table (255 colors) as `Srgba`,
+   undeduped and in order, so a material's `baseColorFactor` value-index is
+   exactly `color_idx - 1`, and the whole table (unused colors included)
+   reconstructs by iterating the pool. `color_cells` returns the png pixels
+   (terminator dropped), else the sidecar `colors`, else 255 placeholders.
+2. The material scalar pools hold one value per vmax material, undeduped and in
+   order, so every material binding's value-index of a folded material is that
+   material's `material_idx`. Bindings, in fixed order: `metallicFactor` (mc),
+   `roughnessFactor` (rc), `emissiveStrength` (sic, the scalar half of the
+   emissive split), `shadows` (sh, a `Bool` pool), and when any material carries
+   an `md` block `ior`, `transmissionFactor`, `absorption`. `shadows` and
+   `absorption` have no glTF name and stay custom, in `voxel_max_attributes.rs`.
+3. The scalar pools are UNBOUNDED, mirroring the MagicaVoxel converter: a Voxel
+   Max coefficient need not sit in the glTF range its name implies, and validation
+   checks a pool against its own bounds, not a name table. A non-finite
+   coefficient (a crafted bplist real) is defaulted to `0.0` in the pool so
+   validation accepts it; the exact value rides in the ext.
+
+The exact material list moves into the ext, the same split the MagicaVoxel
+converter uses for its optionals: `VoxelMaxPalette` grows `materials:
+Vec<VoxelMaxMaterial>` (mc/rc/sic/sh and an optional `VoxelMaxMaterialDispersion`),
+aligned by `material_idx`. This is needed because a pool cannot hold the
+absent-dispersion case, and because two materials with identical coefficients
+must stay distinct on write-back. The `mi` token is re-derived as `(slot + 1)`
+and `tc` is dropped, both matching the old writer. On write-back the material
+list comes from the ext (byte-exact); the pools are the finite-defaulted neutral
+copy for a cross-format or `vxl` consumer.
+
+The write path (`write_vmax`) resolves materials two ways, branching on whether
+the ext carries an exact list for the palette (`material_plan`):
+
+- Voxel-Max-origin (ext has materials): `material_idx` is the value-index into
+  the first material binding, which equals the original `material_idx` because
+  the pools are one-per-material; the material list is the ext's, so unused
+  materials and absent dispersion survive.
+- Synthesized, no ext (a state loaded from another format, e.g. the
+  material-palette synthesis test or a glTF-to-vmax conversion):
+  `derive_materials` builds one `VMaxMaterial` per distinct SIGNATURE of the
+  material bindings' value-indices, reading each coefficient from its pool, and
+  `material_idx` is the signature's first-seen index. This is correct for
+  deduped per-attribute pools where no single value-index is a coherent material
+  index, and reduces to the identity for the one-per-material case.
+
+`color_index` recovers `color_idx = baseColorFactor value-index + 1`, rejecting a
+value-index at or past 255 with the same over-budget error the old path raised.
+`color_palette_colors` reads the `baseColorFactor` pool through `pool_color`, so
+an `Srgb` pool (a Qubicle-to-vmax state) decodes with opaque alpha just as an
+`Srgba` one does.
+
+Palettes are no longer deduped across objects by source filename, because the
+folded materials depend on which combinations each object's voxels use. Each
+distinct object builds its own folded palette (instances still share via their
+shared object), so `ext.palettes` stays aligned by palette id: `build_object`
+adds exactly one palette and pushes exactly one provenance entry, and an empty
+object adds neither. A scene of several distinct objects that shared one
+`palette.png` therefore round-trips to per-object palette files rather than the
+one shared file; this is an accepted byte change of the fold (the byte-exact
+tests use single objects), not a fidelity loss, since each object reconstructs
+its own colors and materials.
+
+`vmax` now enables the `_color` feature (its write path samples colors in
+production, not just tests), so the `all(feature = "vmax", test)` special case on
+the shared color helpers in `internal/mod.rs` collapses to plain `feature =
+"_color"`. `internal/grid.rs` (`tighten`, vmax-only) is ported to layers and
+`BVoxMaterial` samples. Verified under `--no-default-features --features vmax`
+and, since every default-feature converter is now ported, under default features:
+`cargo test -p voxsmith` passes and clippy is clean with and without `gltf`.
+
+### Adversarial review: the ext gains `tc`, the derive path gains a material cap
+
+A four-lens adversarial review of the port (round-trip fidelity, the two material
+paths, color invariants, edge/validation) confirmed two distinct defects, both
+low severity and both faithful to the old code, and both fixed here:
+
+1. `VMaxMaterial.tc` (a transmission color the codec documents on some real
+   documents, such as MagicaVoxel exports) had no home in the ext copy, so a
+   material carrying `tc` lost it on write-back. Since the ext is meant to be the
+   exact material, `VoxelMaxMaterial` grew `transmission_color: Option<f64>`,
+   populated on read and read back on write. The old writer also hardcoded `tc:
+   None`, so this closes a pre-existing byte-exactness gap rather than a
+   regression. `round_trips_rich_materials` covers it alongside dispersion
+   optionality and a non-finite `mc`.
+2. `derive_materials` assigned `material_idx = signatures.len() as u8`, so a
+   synthesized cross-format state (no ext) with 257 or more distinct material
+   signatures, reachable from a voxelized textured mesh, wrapped the 257th index
+   to 0 and silently mis-assigned voxels. A Voxel Max voxel indexes its material
+   with a single byte, so this now errors at `MAX_MATERIALS = 256`, symmetric
+   with the over-budget error `color_index` raises past 255; `material_plan`
+   became fallible and the one call site propagates it.
+   `errors_when_derived_materials_exceed_the_byte_budget` covers it. The
+   Voxel-Max-origin path needs no cap: its value-indices come from a real
+   document's material list, always within a byte.
+
+The review's other reported items were the same wrap re-reported per lens, or
+were refuted as unreachable from a well-formed document or a state the converter
+itself produces.

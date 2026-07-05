@@ -24,13 +24,13 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
     use vmax::{
-        VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxObject, VMaxPalettePngFile,
-        VMaxSceneCamera, VMaxSceneJsonFile,
+        VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
+        VMaxObject, VMaxPalettePngFile, VMaxSceneCamera, VMaxSceneJsonFile,
     };
     use vmax_codec::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots};
     use voxcore::{
-        BVoxHierarchyNode, BVoxObject, BVoxPalette, BVoxPaletteCell, VoxHierarchyNode, VoxMain,
-        VoxMap, VoxObject, VoxPalette, VoxValue,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode,
+        VoxMain, VoxMap, VoxObject, VoxPalette, VoxValue, VoxValuePool,
     };
 
     fn material(
@@ -207,6 +207,77 @@ mod tests {
         assert_eq!(rebuilt, original);
     }
 
+    /// A material carrying dispersion, a transmission color (`tc`), and a
+    /// non-finite coefficient round-trips exactly, alongside a plain material.
+    /// The pools carry a finite-defaulted neutral copy, but the ext keeps the
+    /// exact values, so the rebuilt document matches byte for byte. The
+    /// non-finite `mc` is infinity, not NaN, so it compares equal.
+    #[test]
+    fn round_trips_rich_materials() {
+        let mut original = sample();
+        original
+            .palette_settings_files
+            .get_mut("palette.settings.vmaxpsb")
+            .unwrap()
+            .materials = vec![
+            VMaxMaterial {
+                mi: "1".to_owned(),
+                mc: f64::INFINITY,
+                rc: 0.25,
+                sic: 1.0,
+                sh: true,
+                tc: Some(0.6),
+                md: Some(VMaxMaterialDispersion {
+                    absorption: 0.1,
+                    ior: 1.4,
+                    transmission: 0.3,
+                }),
+            },
+            material("2", 0.5, 0.25, 2.0, false),
+        ];
+        let state = from_vmax_file(&original).unwrap();
+        let rebuilt = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
+        assert_eq!(rebuilt, original);
+    }
+
+    /// A synthesized state whose folded palette needs more than 256 distinct
+    /// materials cannot be represented, since a voxel's material index is a
+    /// single byte, so the writer errors rather than silently wrapping the
+    /// index.
+    #[test]
+    fn errors_when_derived_materials_exceed_the_byte_budget() {
+        let mut state = VoxMain::default();
+        let color = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![color_floats("#FF0000FF")],
+        });
+        // 257 distinct metallic values give 257 distinct material signatures,
+        // one past the byte budget; the color pool stays a single in-range color.
+        let metallic = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::None,
+            max: VoxBound::None,
+            values: (0..257u32).map(f64::from).collect(),
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_binding("baseColorFactor".to_owned(), color);
+        palette.add_binding("metallicFactor".to_owned(), metallic);
+        for index in 0..257u32 {
+            palette.add_material(vec![0, index]).unwrap();
+        }
+        let palette_id = state.add_palette(palette);
+        let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object
+            .retain_voxel(voxel, &[U32Id::<BVoxMaterial>::from_u32(0)])
+            .unwrap();
+        state.add_object(object);
+        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
+        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state.validate().unwrap();
+
+        assert!(to_vmax_file(&state, VoxelMaxColorFormat::Png).is_err());
+    }
+
     /// A state carrying no format ext, built straight from voxcore: a red-green
     /// object and a blue object sharing one `rgba` palette, placed by a small
     /// hierarchy of a nested group and two roots. The writer must synthesize
@@ -216,39 +287,32 @@ mod tests {
     fn source_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        // One rgba palette whose first real color is cell 0: red, green, blue.
-        let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        for hex in ["#FF0000FF", "#00FF00FF", "#0000FFFF"] {
-            palette
-                .add_cell(vec![VoxValue::Text(hex.to_owned())])
-                .expect("one value per attribute");
-        }
-        let palette_id = state.add_palette(palette);
-        let cell = |index: u32| U32Id::<BVoxPaletteCell>::from_u32(index);
+        // One palette whose first real color is material 0: red, green, blue.
+        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF", "#0000FFFF"]);
+        let material = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
-        // Object 0: a red (cell 0) then a green (cell 1) voxel along x.
+        // Object 0: a red (material 0) then a green (material 1) voxel along x.
         let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
             .expect("a 2x1x1 grid is within the dense limit");
-        wide.add_palette_ref(palette_id, cell(0));
+        wide.add_layer(palette_id, material(0));
         for (x, color) in [(0u32, 0u32), (1, 1)] {
             let voxel = wide
                 .voxel_id(TyVector3U32::new(x, 0, 0))
                 .expect("a position within the grid");
-            wide.retain_voxel(voxel, &[cell(color)])
-                .expect("one sample for the one reference");
+            wide.retain_voxel(voxel, &[material(color)])
+                .expect("one sample for the one layer");
         }
         state.add_object(wide);
 
-        // Object 1: a single blue (cell 2) voxel.
+        // Object 1: a single blue (material 2) voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
             .expect("a 1x1x1 grid is within the dense limit");
-        unit.add_palette_ref(palette_id, cell(0));
+        unit.add_layer(palette_id, material(0));
         let voxel = unit
             .voxel_id(TyVector3U32::new(0, 0, 0))
             .expect("a position within the grid");
-        unit.retain_voxel(voxel, &[cell(2)])
-            .expect("one sample for the one reference");
+        unit.retain_voxel(voxel, &[material(2)])
+            .expect("one sample for the one layer");
         state.add_object(unit);
 
         let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);
@@ -320,8 +384,8 @@ mod tests {
                         translation[1] + object_origin.y + grid.y as i32,
                         translation[2] + object_origin.z + grid.z as i32,
                     ];
-                    let rgba = color.map_or([0, 0, 0, 0], |(reference, palette, attribute)| {
-                        cell_color(object, voxel, reference, palette, attribute)
+                    let rgba = color.map_or([0, 0, 0, 0], |(layer, palette, binding)| {
+                        cell_color(state, object, voxel, layer, palette, binding)
                     });
                     voxels.insert((world, rgba));
                 }
@@ -380,7 +444,7 @@ mod tests {
     #[test]
     fn synthesizes_distinct_node_ind() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -420,27 +484,20 @@ mod tests {
     fn synthesizes_a_node_placing_several_objects() {
         let mut state = VoxMain::default();
 
-        let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        for hex in ["#FF0000FF", "#00FF00FF"] {
-            palette
-                .add_cell(vec![VoxValue::Text(hex.to_owned())])
-                .expect("one value per attribute");
-        }
-        let palette_id = state.add_palette(palette);
-        let cell = |index: u32| U32Id::<BVoxPaletteCell>::from_u32(index);
+        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
+        let material = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
-        // Two unit objects, a red one (cell 0) and a green one (cell 1).
+        // Two unit objects, a red one (material 0) and a green one (material 1).
         for color in [0u32, 1] {
             let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
                 .expect("a 1x1x1 grid is within the dense limit");
-            object.add_palette_ref(palette_id, cell(0));
+            object.add_layer(palette_id, material(0));
             let voxel = object
                 .voxel_id(TyVector3U32::new(0, 0, 0))
                 .expect("a position within the grid");
             object
-                .retain_voxel(voxel, &[cell(color)])
-                .expect("one sample for the one reference");
+                .retain_voxel(voxel, &[material(color)])
+                .expect("one sample for the one layer");
             state.add_object(object);
         }
 
@@ -472,34 +529,53 @@ mod tests {
         );
     }
 
-    /// An `rgba` palette holding the given colors.
-    fn rgba_palette(hexes: &[&str]) -> VoxPalette {
-        let mut palette = VoxPalette::default();
-        palette.add_attribute("rgba".to_owned());
-        for hex in hexes {
-            palette
-                .add_cell(vec![VoxValue::Text((*hex).to_owned())])
-                .expect("one value per attribute");
-        }
-        palette
+    /// The `[f64; 4]` components of a `#RRGGBB` or `#RRGGBBAA` color, each byte
+    /// over 255. A missing alpha defaults to opaque.
+    fn color_floats(hex: &str) -> [f64; 4] {
+        let hex = hex.strip_prefix('#').unwrap_or(hex);
+        let byte = |i: usize| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).expect("hex byte");
+        let alpha = if hex.len() >= 8 { byte(3) } else { 255 };
+        [
+            byte(0) as f64 / 255.0,
+            byte(1) as f64 / 255.0,
+            byte(2) as f64 / 255.0,
+            alpha as f64 / 255.0,
+        ]
     }
 
-    /// An object of `bounds` whose live voxels each sample one color cell,
-    /// given as `(position, cell)` pairs.
+    /// Adds a folded palette binding `baseColorFactor` to a pool of the given
+    /// colors, with one material per color so a material's index is its color
+    /// index, and returns the palette id.
+    fn add_rgba_palette(state: &mut VoxMain, hexes: &[&str]) -> U32Id<BVoxPalette> {
+        let pool = state.add_value_pool(VoxValuePool::Srgba {
+            values: hexes.iter().map(|hex| color_floats(hex)).collect(),
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_binding("baseColorFactor".to_owned(), pool);
+        for index in 0..hexes.len() {
+            palette
+                .add_material(vec![index as u32])
+                .expect("one value-index per binding");
+        }
+        state.add_palette(palette)
+    }
+
+    /// An object of `bounds` whose live voxels each sample one material, given as
+    /// `(position, material)` pairs.
     fn color_object(
         palette: U32Id<BVoxPalette>,
         bounds: TyVector3U32,
         voxels: &[([u32; 3], u32)],
     ) -> VoxObject {
         let mut object = VoxObject::new(String::new(), bounds).expect("within the dense limit");
-        object.add_palette_ref(palette, U32Id::<BVoxPaletteCell>::from_u32(0));
-        for &([x, y, z], cell) in voxels {
+        object.add_layer(palette, U32Id::<BVoxMaterial>::from_u32(0));
+        for &([x, y, z], material) in voxels {
             let id = object
                 .voxel_id(TyVector3U32::new(x, y, z))
                 .expect("a position within the grid");
             object
-                .retain_voxel(id, &[U32Id::<BVoxPaletteCell>::from_u32(cell)])
-                .expect("one sample for the one reference");
+                .retain_voxel(id, &[U32Id::<BVoxMaterial>::from_u32(material)])
+                .expect("one sample for the one layer");
         }
         object
     }
@@ -547,7 +623,7 @@ mod tests {
     #[test]
     fn synthesizes_colors_zero_based_with_a_terminator() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(2, 1, 1),
@@ -583,7 +659,7 @@ mod tests {
         hexes.extend((0..253).map(|_| "#00FF00FF".to_owned()));
         hexes.push("#0000FFFF".to_owned());
         let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
-        let palette = state.add_palette(rgba_palette(&refs));
+        let palette = add_rgba_palette(&mut state, &refs);
         // A voxel on the first color (cell 0) and one on the last (cell 254).
         state.add_object(color_object(
             palette,
@@ -633,7 +709,7 @@ mod tests {
             let mut state = VoxMain::default();
             let hexes: Vec<String> = (0..count).map(|i| format!("#{:06X}FF", i)).collect();
             let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
-            let palette = state.add_palette(rgba_palette(&refs));
+            let palette = add_rgba_palette(&mut state, &refs);
             let voxels: Vec<([u32; 3], u32)> = (0..count).map(|i| ([i, 0, 0], i)).collect();
             state.add_object(color_object(
                 palette,
@@ -661,7 +737,7 @@ mod tests {
     #[test]
     fn synthesizes_a_colorless_object_sharing_the_default_palette() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         // Object 0: a single red voxel. Object 1: an empty, colorless object,
         // whose tight grid is [0, 0, 0].
         state.add_object(color_object(
@@ -702,7 +778,7 @@ mod tests {
     #[test]
     fn synthesizes_colorless_voxels_on_a_non_empty_index() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         // Object 0: a colored voxel, so a `palette.png` exists to borrow.
         // Object 1: a colorless object that nonetheless has a live voxel.
         state.add_object(color_object(
@@ -740,7 +816,7 @@ mod tests {
     #[test]
     fn synthesizes_a_node_placing_objects_and_child_nodes() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF", "#0000FFFF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF", "#0000FFFF"]);
         for cell in 0..3 {
             state.add_object(color_object(
                 palette,
@@ -814,7 +890,7 @@ mod tests {
     #[test]
     fn synthesizes_instances_sharing_one_contents_file() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -846,7 +922,7 @@ mod tests {
     #[test]
     fn synthesizes_a_shared_subtree_at_every_parent() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -878,7 +954,7 @@ mod tests {
     #[test]
     fn synthesizes_a_node_that_is_root_and_child() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -908,7 +984,7 @@ mod tests {
     #[test]
     fn drops_a_node_unreachable_from_the_roots() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -939,7 +1015,7 @@ mod tests {
     #[test]
     fn keeps_rotation_scale_and_translation() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -995,32 +1071,34 @@ mod tests {
         ];
         for format in formats {
             let mut state = VoxMain::default();
-            let color = state.add_palette(rgba_palette(&["#FF0000FF"]));
-            let mut materials = VoxPalette::default();
-            for attribute in ["metallic", "roughness", "emissive", "shadows"] {
-                materials.add_attribute(attribute.to_owned());
-            }
-            materials
-                .add_cell(vec![
-                    VoxValue::Number(0.5),
-                    VoxValue::Number(0.25),
-                    VoxValue::Number(2.0),
-                    VoxValue::Bool(true),
-                ])
-                .unwrap();
-            let material = state.add_palette(materials);
+            // One folded palette binding a color plus the four material
+            // attributes, with a single material. No ext, so the writer derives
+            // the Voxel Max material from the pools.
+            let color = state.add_value_pool(VoxValuePool::Srgba {
+                values: vec![color_floats("#FF0000FF")],
+            });
+            let float = |value: f64| VoxValuePool::Float {
+                min: VoxBound::None,
+                max: VoxBound::None,
+                values: vec![value],
+            };
+            let metallic = state.add_value_pool(float(0.5));
+            let roughness = state.add_value_pool(float(0.25));
+            let emissive = state.add_value_pool(float(2.0));
+            let shadows = state.add_value_pool(VoxValuePool::Bool { values: vec![true] });
+            let mut palette = VoxPalette::default();
+            palette.add_binding("baseColorFactor".to_owned(), color);
+            palette.add_binding("metallicFactor".to_owned(), metallic);
+            palette.add_binding("roughnessFactor".to_owned(), roughness);
+            palette.add_binding("emissiveStrength".to_owned(), emissive);
+            palette.add_binding("shadows".to_owned(), shadows);
+            palette.add_material(vec![0, 0, 0, 0, 0]).unwrap();
+            let palette_id = state.add_palette(palette);
             let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
-            object.add_palette_ref(color, U32Id::<BVoxPaletteCell>::from_u32(0));
-            object.add_palette_ref(material, U32Id::<BVoxPaletteCell>::from_u32(0));
+            object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
             let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
             object
-                .retain_voxel(
-                    voxel,
-                    &[
-                        U32Id::<BVoxPaletteCell>::from_u32(0),
-                        U32Id::<BVoxPaletteCell>::from_u32(0),
-                    ],
-                )
+                .retain_voxel(voxel, &[U32Id::<BVoxMaterial>::from_u32(0)])
                 .unwrap();
             state.add_object(object);
             state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
@@ -1036,42 +1114,47 @@ mod tests {
             );
 
             let reloaded = from_vmax_file(&file).unwrap();
-            let material = reloaded
+            let (palette_id, material_palette) = reloaded
                 .iter_palettes()
-                .map(|(_, palette)| palette)
-                .find(|palette| {
-                    palette
-                        .iter_attributes()
-                        .any(|(_, name)| name == "metallic")
-                })
+                .find(|(_, palette)| palette.binding_by_attribute("metallicFactor").is_some())
                 .expect("a material palette survives");
-            let cell = material.iter_cells().next().expect("one material cell");
-            let value = |name: &str| {
-                let id = material
-                    .iter_attributes()
-                    .find(|(_, attribute)| *attribute == name)
-                    .map(|(id, _)| id)
-                    .unwrap();
-                material.cell_value(cell, id).cloned()
+            let material = material_palette
+                .iter_materials()
+                .next()
+                .expect("one material");
+            let scalar = |attribute: &str| -> f64 {
+                let binding = material_palette.binding_by_attribute(attribute).unwrap();
+                match reloaded
+                    .material_value(palette_id, material, binding)
+                    .unwrap()
+                {
+                    (VoxValuePool::Float { values, .. }, index) => values[index as usize],
+                    _ => panic!("a scalar attribute is a float pool"),
+                }
             };
-            assert_eq!(value("metallic"), Some(VoxValue::Number(0.5)));
-            assert_eq!(value("roughness"), Some(VoxValue::Number(0.25)));
-            assert_eq!(value("emissive"), Some(VoxValue::Number(2.0)));
-            assert_eq!(value("shadows"), Some(VoxValue::Bool(true)));
+            let flag = |attribute: &str| -> bool {
+                let binding = material_palette.binding_by_attribute(attribute).unwrap();
+                match reloaded
+                    .material_value(palette_id, material, binding)
+                    .unwrap()
+                {
+                    (VoxValuePool::Bool { values }, index) => values[index as usize],
+                    _ => panic!("shadows is a bool pool"),
+                }
+            };
+            assert_eq!(scalar("metallicFactor"), 0.5);
+            assert_eq!(scalar("roughnessFactor"), 0.25);
+            assert_eq!(scalar("emissiveStrength"), 2.0);
+            assert!(flag("shadows"));
         }
     }
 
-    /// An `rgb` source palette carrying 6-hex colors widens to opaque RGBA: the
-    /// missing alpha defaults to fully opaque rather than transparent.
+    /// A 6-hex source color widens to opaque RGBA: the missing alpha defaults to
+    /// fully opaque rather than transparent.
     #[test]
     fn widens_rgb_source_to_opaque() {
         let mut state = VoxMain::default();
-        let mut palette = VoxPalette::default();
-        palette.add_attribute("rgb".to_owned());
-        palette
-            .add_cell(vec![VoxValue::Text("#3366CC".to_owned())])
-            .unwrap();
-        let palette = state.add_palette(palette);
+        let palette = add_rgba_palette(&mut state, &["#3366CC"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -1099,7 +1182,7 @@ mod tests {
     #[test]
     fn is_idempotent_for_a_colored_object() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(2, 1, 1),
@@ -1120,7 +1203,7 @@ mod tests {
     #[test]
     fn synthesizes_a_deep_hierarchy() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -1158,7 +1241,7 @@ mod tests {
     #[test]
     fn derives_a_group_content_box_from_its_subtree() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         // Two [2, 2, 2] objects, each tight (voxels reach both ends of every
         // axis).
         for _ in 0..2 {
@@ -1232,7 +1315,7 @@ mod tests {
     #[test]
     fn round_trips_a_transparent_color() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#11223300"]));
+        let palette = add_rgba_palette(&mut state, &["#11223300"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),
@@ -1270,7 +1353,7 @@ mod tests {
         let mut state = VoxMain::default();
         let hexes: Vec<String> = (0..256).map(|i| format!("#{:06X}FF", i)).collect();
         let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
-        let palette = state.add_palette(rgba_palette(&refs));
+        let palette = add_rgba_palette(&mut state, &refs);
         // One voxel references a low cell; the other 255 cells are padding.
         state.add_object(color_object(
             palette,
@@ -1295,7 +1378,7 @@ mod tests {
     #[test]
     fn synthesizes_a_color_only_object_in_plist() {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF", "#00FF00FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(2, 1, 1),
@@ -1323,7 +1406,7 @@ mod tests {
     /// input the synthesis path takes.
     fn one_object_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let palette = state.add_palette(rgba_palette(&["#FF0000FF"]));
+        let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         state.add_object(color_object(
             palette,
             TyVector3U32::new(1, 1, 1),

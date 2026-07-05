@@ -40,7 +40,7 @@ default = ["goxl", "mvox", "qbcl", "vmax", "voxj"]
 goxl = ["dep:goxl", "dep:goxl-codec", "_codec", "_ext", "_color"]
 mvox = ["dep:mvox", "dep:mvox-codec", "_codec", "_ext", "_color"]
 qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec", "_ext", "_color"]
-vmax = ["dep:vmax", "dep:vmax-codec", "_codec", "_ext"]
+vmax = ["dep:vmax", "dep:vmax-codec", "_codec", "_ext", "_color"]
 voxj = ["dep:voxj", "dep:voxj-codec", "_codec"]
 
 # glTF meshing both ways. The reader (`dep:gltf`) loads a `Mesh` and the private
@@ -56,7 +56,7 @@ gltf = ["dep:gltf", "dep:base64", "dep:png", "dep:serde_json", "_mesh"]
 # compile time otherwise). `_ext` gates the ext-block serde helpers shared by
 # every format that stashes a lossless ext (all but Voxel Json). `_color` gates
 # the palette-color sampling helpers shared by the formats that re-sample
-# colors per voxel (Goxel, MagicaVoxel, Qubicle).
+# colors per voxel (Goxel, MagicaVoxel, Qubicle, Voxel Max).
 _codec = []
 _ext = []
 _color = []
