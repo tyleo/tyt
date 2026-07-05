@@ -1171,3 +1171,32 @@ runs only on the material path, after the pure-geometry early return, and errors
 with a clear message when the object carries no layers; that matches voxsmith's
 new contract, which already dropped the old merge-model one-default-texel
 fallback in favor of erroring on an unresolvable layer.
+
+### Second chunk: the `--color-format` flag threads to voxsmith's existing setter
+
+This chunk lands checklist item 6 alone, the smallest self-contained unit left
+now that `vxl` compiles: adding the flag touches only the voxj-writing path and
+needs none of the mesh vocab or `AttributeType` rework. Phase 4 already added
+voxsmith's `ColorFormat` (float default, hex round-trips exactly) and
+`VoxjFileBuilder::color_format`, so the CLI work is pure plumbing to a proven
+setter, not new color logic.
+
+The CLI type is a new `VoxjColorFormat`, a `hex`/`float` `ValueEnum`, not a reuse
+of `ColorFormat`: that name is the unrelated `to vmax` png/plist/all utility, and
+the two share a `--color-format` flag string but sit on different subcommands, so
+there is no collision. Per the no-enum-defaults rule `VoxjColorFormat` derives no
+`Default`; the flag's `default_value = "float"` sets the default and each mapping
+site names a variant explicitly.
+
+The flag lives on the shared `VoxjEncodingOptions`, which both `to voxj` and
+`voxelize` flatten, so "the voxj-writing path" gets it in one place rather than
+two per-command copies. It threads through both `Dependencies` methods
+(`to_voxj`, `voxelize`) and both implementations into `write_voxj_document`,
+which owns the single `VoxjFileBuilder` call. `write_voxj_document` takes the vxl
+`VoxjColorFormat` and maps it to voxsmith's `ColorFormat` inline at the
+`.color_format(...)` call, matching how it already maps the vxl `VoxjEncoding`
+and `VoxjFormat` internally rather than pre-lowering in each caller, so the map
+is not duplicated across the two callers. Verified end to end: voxelizing a mesh
+writes `srgb-float`/`srgba-float` pools by default and `srgb-hex`/`srgba-hex`
+with `#RRGGBBAA` strings under `--color-format hex`, and both documents pass
+`vxl validate`.

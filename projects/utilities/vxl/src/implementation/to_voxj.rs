@@ -1,4 +1,4 @@
-use crate::{EditState, Format, Result, VoxjEncoding, VoxjFormat, implementation};
+use crate::{EditState, Format, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat, implementation};
 use std::path::Path;
 use voxsmith::EditStateMode;
 
@@ -13,6 +13,7 @@ pub fn to_voxj(
     output: &Path,
     encoding: VoxjEncoding,
     format: VoxjFormat,
+    color_format: VoxjColorFormat,
     ext: bool,
     edit_state: EditState,
 ) -> Result<()> {
@@ -22,6 +23,7 @@ pub fn to_voxj(
         output,
         encoding,
         format,
+        color_format,
         ext,
         edit_state_mode(edit_state),
     )

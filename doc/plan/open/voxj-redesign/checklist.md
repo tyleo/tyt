@@ -515,8 +515,14 @@ updates (7) live in files that still compile and are deferred to later chunks.
 - [ ] Give `--define-attribute` and `--texture-map` a layer selector on `mesh`
       and `material`, defaulting to the first layer, replacing the merge
       assumption in `attribute_binding`.
-- [ ] Add a `--color-format` option (`hex` or `float`, default float) to the
+- [x] Add a `--color-format` option (`hex` or `float`, default float) to the
       voxj-writing path, following the existing `color_format` utility pattern.
+      (Landed as `VoxjColorFormat`, a new `hex`/`float` `ValueEnum`, since the
+      existing `ColorFormat` name is the unrelated `to vmax` png/plist/all
+      utility. The flag lives on the shared `VoxjEncodingOptions`, so both `to
+      voxj` and `voxelize` gain it; it threads through the two `Dependencies`
+      methods and `write_voxj_document` to voxsmith's existing
+      `VoxjFileBuilder::color_format`. See the decisions log.)
 - [ ] Update `voxj_sample_encoding` docs to the per-layer material-index framing,
       point `max_palette_cells` at the material count, and route `fill_color`
       into pool population.

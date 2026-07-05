@@ -1,6 +1,6 @@
 use crate::{
     ColorSpace, Dither, FillMode, GridResolution, MaterialMode, MeshFormat, PaletteReduction,
-    QuantizeMethod, Result, VoxjEncoding, VoxjFormat, implementation,
+    QuantizeMethod, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat, implementation,
 };
 use std::{fs, path::Path};
 use ty_math::{TyVector3, TyVector3U32};
@@ -29,6 +29,7 @@ pub fn voxelize(
     reduction: PaletteReduction,
     encoding: VoxjEncoding,
     format: VoxjFormat,
+    color_format: VoxjColorFormat,
 ) -> Result<()> {
     let bytes = fs::read(input)?;
 
@@ -62,6 +63,7 @@ pub fn voxelize(
         output,
         encoding,
         format,
+        color_format,
         false,
         EditStateMode::Never,
     )

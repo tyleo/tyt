@@ -2,7 +2,7 @@ use crate::{
     AttributeSelector, CameraView, ColorFormat, EditState, FillMode, Format, GridResolution,
     HierarchyViews, MaterialMode, MeshFormat, MeshMethod, MeshTextureMap, PaletteListFields,
     PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView, ReportLayout,
-    ResourceStorage, Result, SelectIndex, VoxjEncoding, VoxjFormat, Width,
+    ResourceStorage, Result, SelectIndex, VoxjColorFormat, VoxjEncoding, VoxjFormat, Width,
 };
 use std::path::Path;
 
@@ -61,6 +61,7 @@ pub trait Dependencies {
     /// * `output` - the `.voxj` or `.voxjz` document to write.
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
+    /// * `color_format` - the on-wire encoding for sRGB color pools.
     /// * `ext` - when false, omits the user-defined `ext` extension block.
     /// * `edit_state` - when to record each object's editor build volume.
     #[allow(clippy::too_many_arguments)]
@@ -71,6 +72,7 @@ pub trait Dependencies {
         output: &Path,
         encoding: VoxjEncoding,
         format: VoxjFormat,
+        color_format: VoxjColorFormat,
         ext: bool,
         edit_state: EditState,
     ) -> Result<()>;
@@ -94,6 +96,7 @@ pub trait Dependencies {
     /// * `reduction` - the palette cell cap and its clustering controls.
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
+    /// * `color_format` - the on-wire encoding for sRGB color pools.
     #[allow(clippy::too_many_arguments)]
     fn voxelize(
         &self,
@@ -108,6 +111,7 @@ pub trait Dependencies {
         reduction: PaletteReduction,
         encoding: VoxjEncoding,
         format: VoxjFormat,
+        color_format: VoxjColorFormat,
     ) -> Result<()>;
 
     /// Resolves the object selectors against the voxel file at `input` to the

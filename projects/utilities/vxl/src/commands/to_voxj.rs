@@ -43,6 +43,7 @@ impl ToVoxj {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let encoding = self.encoding_options.encoding();
         let format = self.encoding_options.resolve_format(self.output.as_deref());
+        let color_format = self.encoding_options.color_format();
         let output = self
             .output
             .unwrap_or_else(|| self.input.with_extension(format.extension()));
@@ -52,6 +53,7 @@ impl ToVoxj {
             &output,
             encoding,
             format,
+            color_format,
             self.ext,
             self.edit_state,
         )

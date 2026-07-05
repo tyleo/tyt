@@ -96,6 +96,8 @@ impl Voxelize {
 
         let encoding = self.encoding_options.encoding();
 
+        let color_format = self.encoding_options.color_format();
+
         let reduction = self.reduction_options.resolve(self.max_palette_cells);
 
         dependencies.voxelize(
@@ -110,6 +112,7 @@ impl Voxelize {
             reduction,
             encoding,
             format,
+            color_format,
         )
     }
 }
