@@ -50,19 +50,16 @@ Landed the linear color space as a third `--color-format` value.
 
 ## Track B: glTF import fidelity
 
-Landed the import half: glTF now reads `ior`, `transmissionFactor`, and
-`KHR_materials_emissive_strength` into the voxelized palette. The symmetric export
-half stays for a follow-up chunk; see the last point.
+Landed both halves. Import: glTF reads `ior`, `transmissionFactor`, and
+`KHR_materials_emissive_strength` into the voxelized palette. Export: the mesh
+writes the three back as flat KHR extensions on the material.
 
-- **The import half is its own chunk.** Q2's symmetric decision has two
+- **The two halves landed as two chunks.** Q2's symmetric decision has two
   independent halves: import reads the three KHR extensions, export writes them
-  back. The import half is the plan's stated floor and closes exactly the two
-  import entries in the redesign deferred log, so it lands first as a
-  self-contained, green change. The export half from `build_material` is a new
-  behavior with real design weight, emitting flat glTF extension values that no
-  other attribute uses and reconciling with how the emissive bake already folds
-  strength into the emissive texture, so it gets its own chunk and decision entry
-  rather than being rushed in alongside import.
+  back. Import landed first as the plan's stated floor, closing the two import
+  entries in the redesign deferred log. Export followed as its own chunk, since
+  it emits flat glTF extension values no other attribute uses and it reworks the
+  emissive bake.
 - **The three KHR accessors are feature-gated.** The `gltf` crate hides
   `Material::ior`, `Material::transmission`, and `Material::emissive_strength`
   behind `KHR_materials_ior`, `KHR_materials_transmission`, and
@@ -87,14 +84,28 @@ half stays for a follow-up chunk; see the last point.
   palette.
 - **Deferred-log entries were import-only.** The two redesign entries described
   the import drop and the pinned strength, both now fixed, so they collapse to a
-  single pointer at the plan rather than staying open. The pointer notes the
-  import half has landed, leaving the symmetric export as the remaining Track B
-  work.
-- **Coverage.** A new glb fixture authors the three extensions and asserts each
-  survives import at its authored value, and a plain glb asserts the neutral ior
-  and transmission defaults. The existing binding-list assertion grows from six
-  attributes to eight. The full import-and-export round-trip fixture (item 6) and
-  the export emission (item 4) are the next chunk.
+  single pointer at the plan rather than staying open.
+- **Emissive strength: unfold, not fold.** The owner chose to emit strength as a
+  flat factor over the old fold-into-texture. `emissive_color_bytes` now bakes
+  the raw `emissiveFactor` color and the material carries
+  `KHR_materials_emissive_strength`, so glTF applies the strength. An HDR
+  strength above `1` now survives instead of clamping into the `[0, 1]` texel;
+  the tradeoff is that per-material strength collapses to one flat value.
+- **Flat factors from the first used material.** glTF carries `ior`,
+  `transmissionFactor`, and `emissiveStrength` per material, not per texel, so
+  `material_extensions` reads the first used material as the representative and
+  writes one flat value for the whole mesh. `material_scalar` reuses the bake's
+  attribute reader.
+- **Emitted only when non-default.** Each extension is written only when its
+  value differs from the spec default (ior `1.5`, transmission `0`, strength
+  `1`), so a plain export carries no redundant extensions, and `extensionsUsed`
+  lists only what is written.
+- **Coverage.** Import: a glb fixture authors the three extensions and asserts
+  each survives import, and a plain glb asserts the neutral ior and transmission
+  defaults. Export: the same fixture voxelizes, meshes back out with no maps, and
+  re-imports, confirming each factor rides on the exported material. The
+  emissive-bake test flips to assert the raw factor bakes without strength, and
+  the binding-list assertion grows from six attributes to eight.
 
 ## Track C: vmax material round-trip verification
 

@@ -1192,6 +1192,50 @@ mod tests {
     }
 
     #[test]
+    fn khr_extension_factors_round_trip_through_a_mesh_export() {
+        use crate::{MaterialMeshRequest, MeshMethod, ResourceStorage, object_to_material_glb};
+        use gltf::Gltf;
+
+        // Import the three KHR factors, voxelize, then mesh back out: each factor
+        // rides on the exported material as its flat KHR extension.
+        let state = voxelize(
+            &extended_material_glb(1.4, 0.5, 3.0),
+            TyVector3U32::new(1, 1, 1),
+            FillMode::Solid,
+            MaterialMode::PerPrimitive,
+            None,
+            1.0,
+            None,
+            "voxelized",
+        )
+        .unwrap();
+
+        let (_, object) = state.iter_objects().next().unwrap();
+        let layer = object.iter_layers().next().unwrap().0;
+        let request = MaterialMeshRequest {
+            method: MeshMethod::Greedy,
+            layer,
+            scale: 1.0,
+            maps: Vec::new(),
+            storage: ResourceStorage::Embedded,
+        };
+
+        let files = object_to_material_glb(&state, object, &request).unwrap();
+        let gltf = Gltf::from_slice(&files.mesh).unwrap();
+        let material = gltf.materials().next().unwrap();
+
+        assert!((material.ior().unwrap() - 1.4).abs() < 1e-4, "ior");
+        assert!(
+            (material.transmission().unwrap().transmission_factor() - 0.5).abs() < 1e-6,
+            "transmission"
+        );
+        assert!(
+            (material.emissive_strength().unwrap() - 3.0).abs() < 1e-6,
+            "emissive strength"
+        );
+    }
+
+    #[test]
     fn per_primitive_fills_a_solid_interior_from_the_nearest_surface() {
         // A one-material solid box: with fill none, the invented interior adopts
         // the surface material, so the whole body is that one color and cell.

@@ -9,9 +9,9 @@ pub enum MaterialBake {
     /// channels.
     RgbaColor,
 
-    /// The emissive color: the `emissiveFactor` color scaled by the
-    /// `emissiveStrength`, so the glTF emissive slot glows in the emissive
-    /// color. Three channels (RGB), opaque.
+    /// The `emissiveFactor` color, three channels (RGB), opaque. The
+    /// `emissiveStrength` rides on the material as a flat
+    /// `KHR_materials_emissive_strength` factor, not folded into the texel.
     EmissiveColor,
 
     /// A channel packing, one to four [`MaterialChannel`]s in `R`, `G`, `B`,

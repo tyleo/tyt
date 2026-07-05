@@ -1,6 +1,7 @@
 use crate::{
-    Error, MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage, Result,
-    atlas_dimensions, bake_atlas_pixels, encode_rgba8_png, mesh_slices, resolve_used_materials,
+    EMISSIVE_STRENGTH, Error, IOR, MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage,
+    Result, TRANSMISSION_FACTOR, UsedMaterials, atlas_dimensions, bake_atlas_pixels,
+    default_scalar, encode_rgba8_png, material_scalar, mesh_slices, resolve_used_materials,
     texel_center,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -167,9 +168,11 @@ pub(crate) fn build_material_document(
         images.push(image);
     }
 
-    let material = build_material(&request.maps);
+    let extensions = material_extensions(state, &used);
 
-    let document = json!({
+    let material = build_material(&request.maps, &extensions);
+
+    let mut document = json!({
         "asset": { "version": "2.0", "generator": "voxsmith" },
         "scene": 0,
         "scenes": [ { "nodes": [0] } ],
@@ -201,11 +204,51 @@ pub(crate) fn build_material_document(
         } ]
     });
 
+    // Declare any extension the material writes back.
+    if !extensions.is_empty() {
+        let names: Vec<&String> = extensions.keys().collect();
+        document
+            .as_object_mut()
+            .expect("json! builds a document object")
+            .insert("extensionsUsed".to_owned(), json!(names));
+    }
+
     Ok(MaterialDocument {
         document,
         blob,
         sidecars,
     })
+}
+
+/// The KHR material extensions the mesh's representative material writes back,
+/// each emitted only when it differs from the glTF spec default so a plain
+/// export stays clean. glTF carries `ior`, `transmissionFactor`, and
+/// `emissiveStrength` per material rather than per texel, so the first used
+/// material supplies the one flat factor for the whole mesh.
+fn material_extensions(state: &VoxMain, used: &UsedMaterials) -> Map<String, Value> {
+    let mut extensions = Map::new();
+
+    for (key, extension, field) in [
+        (IOR, "KHR_materials_ior", "ior"),
+        (
+            TRANSMISSION_FACTOR,
+            "KHR_materials_transmission",
+            "transmissionFactor",
+        ),
+        (
+            EMISSIVE_STRENGTH,
+            "KHR_materials_emissive_strength",
+            "emissiveStrength",
+        ),
+    ] {
+        let value = material_scalar(state, used, 0, key);
+
+        if value != default_scalar(key).unwrap_or(0.0) {
+            extensions.insert(extension.to_owned(), json!({ field: value }));
+        }
+    }
+
+    extensions
 }
 
 /// How one image is carried, given the storage mode and container.
@@ -237,8 +280,9 @@ fn writes_sidecar(storage: ResourceStorage) -> bool {
 }
 
 /// Builds the one glTF material, wiring each map that has a standard slot into
-/// it and listing the rest under `extras.vxl.maps` by name.
-fn build_material(maps: &[MaterialMap]) -> Value {
+/// it, listing the rest under `extras.vxl.maps` by name, and attaching the flat
+/// KHR `extensions` the mesh writes back.
+fn build_material(maps: &[MaterialMap], extensions: &Map<String, Value>) -> Value {
     let mut material = Map::new();
     let mut pbr = Map::new();
     let mut extras_maps = Map::new();
@@ -284,6 +328,10 @@ fn build_material(maps: &[MaterialMap]) -> Value {
             "extras".to_owned(),
             json!({ "vxl": { "maps": Value::Object(extras_maps) } }),
         );
+    }
+
+    if !extensions.is_empty() {
+        material.insert("extensions".to_owned(), Value::Object(extensions.clone()));
     }
 
     Value::Object(material)

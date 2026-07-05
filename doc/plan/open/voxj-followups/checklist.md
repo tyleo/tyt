@@ -58,7 +58,7 @@ export writes them back.
 - [x] Bind `ior` and `transmissionFactor` in `build_palette`
       (`voxelize_mesh.rs`) with the per-attribute bounds (`transmissionFactor`
       `0..1`, `ior` `1..none`), extending the six-attribute palette to eight.
-- [ ] Emit `KHR_materials_ior`, `KHR_materials_transmission`, and
+- [x] Emit `KHR_materials_ior`, `KHR_materials_transmission`, and
       `KHR_materials_emissive_strength` from `build_material`
       (`material_document.rs`) so a `voxelize -> mesh` trip reproduces the source
       glTF's flat factors. This adds flat-factor export, which no attribute uses
@@ -66,7 +66,7 @@ export writes them back.
 - [x] Update the deferred-capabilities note in `mesh_material_from_gltf`'s doc
       comment, and remove the two matching entries from the redesign plan's
       deferred log with a pointer here.
-- [ ] Add a glTF import fixture authoring `KHR_materials_emissive_strength`, a
+- [x] Add a glTF import fixture authoring `KHR_materials_emissive_strength`, a
       transmission factor, and an `ior`, asserting each survives import and a
       subsequent export.
 

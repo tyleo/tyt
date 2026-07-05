@@ -1,8 +1,8 @@
 use crate::{
-    BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, MaterialBake,
-    MaterialChannel, Result, UsedMaterials, default_scalar,
+    BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, Error, MaterialBake, MaterialChannel, Result,
+    UsedMaterials, default_scalar,
 };
-use ty_math::{TyLinearRgbaColorF64, TyRgbaColorF64, TySrgbaColor};
+use ty_math::{TyLinearRgbaColorF64, TyRgbaColorF64};
 use voxcore::{VoxMain, VoxValuePool};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
@@ -191,38 +191,30 @@ fn scalar_value(value: Option<(&VoxValuePool, u32)>, key: &str) -> f64 {
     }
 }
 
-/// The emissive color for the material at `index`: the `emissiveFactor` color
-/// scaled by the `emissiveStrength` in linear light, re-encoded to opaque sRGB.
-/// glTF's emissive slot is an RGB color, so the strength scales the emissive
-/// color rather than writing a bare channel; the multiply is done in linear light
-/// through the shared `ty_math` color types, and the alpha is dropped. An absent
-/// `emissiveFactor` is black, so a material with no emissive color bakes to black
-/// at any strength; an absent `emissiveStrength` defaults to `1`, matching glTF,
-/// so an `emissiveFactor` with no bound strength emits at unit strength.
+/// The opaque sRGB `emissiveFactor` color for the material at `index`. The
+/// `emissiveStrength` is not folded in; it rides on the material as a flat
+/// `KHR_materials_emissive_strength` factor, so a strength above `1` survives
+/// rather than clamping into the `[0, 1]` texel. An absent `emissiveFactor` is
+/// black.
 fn emissive_color_bytes(state: &VoxMain, used: &UsedMaterials, index: usize) -> [u8; 4] {
-    let color = color_bytes_or(
+    let [r, g, b, _] = color_bytes_or(
         material_attribute(state, used, index, EMISSIVE_FACTOR),
         [0, 0, 0, 255],
     );
 
-    let strength = scalar_value(
-        material_attribute(state, used, index, EMISSIVE_STRENGTH),
-        EMISSIVE_STRENGTH,
-    )
-    .max(0.0);
+    [r, g, b, 255]
+}
 
-    let linear = TySrgbaColor::from_array(color).to_linear_rgba();
-
-    let scaled = TyLinearRgbaColorF64::new(
-        linear.r * strength,
-        linear.g * strength,
-        linear.b * strength,
-        1.0,
-    );
-
-    let srgba = scaled.to_srgba();
-
-    [srgba.r, srgba.g, srgba.b, 255]
+/// The scalar attribute `key` of the material at `index` in `used`, or its spec
+/// default when the material omits it. The flat factor the material document
+/// writes back for the KHR extension attributes.
+pub(crate) fn material_scalar(
+    state: &VoxMain,
+    used: &UsedMaterials,
+    index: usize,
+    key: &str,
+) -> f64 {
+    scalar_value(material_attribute(state, used, index, key), key)
 }
 
 #[cfg(test)]
@@ -409,10 +401,11 @@ mod tests {
     }
 
     #[test]
-    fn emissive_color_scales_the_factor_by_strength() {
+    fn emissive_color_bakes_the_raw_factor_without_strength() {
         let mut state = VoxMain::default();
 
-        // emissiveFactor is an sRGB color (no alpha); emissiveStrength scales it.
+        // emissiveFactor is an sRGB color (no alpha); emissiveStrength no longer
+        // folds in, so the bound strengths must not touch the baked texel.
         let factor = state.add_value_pool(VoxValuePool::Srgb {
             values: vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]],
         });
@@ -442,15 +435,11 @@ mod tests {
         let pixels =
             bake_atlas_pixels(&state, &used, &MaterialBake::EmissiveColor, width, height).unwrap();
 
-        // Full-strength blue glows blue: a strength of 1 is the identity round
-        // trip through linear light, and the alpha is dropped to opaque.
+        // Blue bakes blue, opaque.
         assert_eq!(&pixels[0..4], &[0, 0, 255, 255]);
 
-        // Half-strength white glows a neutral mid gray (R == G == B), scaled
-        // down from full white but not to black, opaque.
-        let (r, g, b, a) = (pixels[4], pixels[5], pixels[6], pixels[7]);
-        assert!(r == g && g == b);
-        assert!(r > 0 && r < 255);
-        assert_eq!(a, 255);
+        // White at strength 0.5 still bakes full white: the strength is a flat
+        // KHR factor now, not folded into the texel.
+        assert_eq!(&pixels[4..8], &[255, 255, 255, 255]);
     }
 }
