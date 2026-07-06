@@ -219,9 +219,12 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       `check_transforms.rs` site is DEFERRED: voxj-codec has no `ty-math`
       dependency, so adopting there means adding a cross-layer dep to a lean codec
       crate -- an owner decision, pending.
-- [ ] **C5** the six swizzle accessors (`xyz`/`xzy`/`yxz`/`yzx`/`zxy`/`zyx`) on
-      `impl<T: Copy> TyVector3<T>`; adopt in the three glTF sites, keeping the
-      local sign flip (the conversion is a rotation, not a pure permutation).
+- [x] **C5** `zup_to_yup` / `yup_to_zup` axis rotations (`(x,z,-y)` / `(x,-z,y)`,
+      permutation + sign) on `impl<T: Copy + Neg> TyVector3<T>`; adopted at the
+      three glTF sites (`from_gltf_bytes` import, `object_to_gltf_document` and
+      `material_document` export, the scale folding into the existing `Mul<T>`).
+      Superseded the pure-swizzle idea: the sites are +/-90 rotations about X, so a
+      bare permutation never fit.
 - [ ] **C7** `componentwise_divide` on `impl<T: Div + Copy> TyVector3<T>`; adopt in
       `internal/mesh/grid_space.rs:36-42` (`to_grid`, retype `size`).
 - [ ] **C8** `TyRgbaColorF64::to_linear_rgba` (float sRGB decode, reuse the private

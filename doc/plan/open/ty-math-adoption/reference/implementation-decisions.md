@@ -353,3 +353,20 @@ means constructing a `TyQuaternion` from the array and adding `ty-math` as a
 dependency to a deliberately lean codec crate. That is a layering decision for the
 owner, not a mechanical adoption, so the hand-rolled `length_squared` check stays
 until that call is made.
+
+### C5: glTF axis rotation, not swizzles (landed)
+
+The audit and an early owner preference framed C5 as the six GLSL swizzle
+accessors (`.xyz`/`.xzy`/...). Reading the actual call sites reversed that: every
+glTF site is a +/-90 rotation about X, a permutation PLUS one sign flip
+(`(x, z, -y)` on export, `(x, -z, y)` on import), so a pure permutation never
+produces the negation and would need a trailing negate, no cleaner than the
+explicit `new(x, z, -y)`. No pure-permutation site exists in the tree, so the
+swizzles had no clean consumer. The owner chose sign-aware, domain-named helpers
+instead: `TyVector3::zup_to_yup` (`(x, z, -y)`) and `yup_to_zup` (`(x, -z, y)`),
+generic over `T: Copy + Neg<Output = T>` so both f32 and f64 grids use them.
+Adopted at all three glTF sites: `from_gltf_bytes` (`world.yup_to_zup()` after the
+`transform_point`), and the `object_to_gltf_document` / `material_document` export
+closures (`p.zup_to_yup() * scale` for positions, `n.zup_to_yup()` for the unit
+normals, the `* scale` staying the existing `Mul<T>`). Pure component reorder plus
+negate, so the baked glTF bytes are unchanged.

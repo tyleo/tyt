@@ -64,22 +64,21 @@ where noted), with a doc comment and a unit test in that file's `tests` module.
     (components are loose; build `TyQuaternion::new(..)` first).
   - Verdict: confirmed.
 
-- **C5. Component swizzle accessors** on `impl<T: Copy> TyVector3<T>` (generic,
-  no float macro): the six permutations named by output order, `xyz`, `xzy`,
-  `yxz`, `yzx`, `zxy`, `zyx`, e.g. `fn xzy(&self) -> Self { Self::new(self.x,
-  self.z, self.y) }`. Owner's preference: GLSL-style swizzles, not domain-named
-  `zup_to_yup`/`yup_to_zup`. General reusable primitive, applies to every
-  component type at once.
-  - Nuance: the Z-up grid <-> Y-up glTF conversion is a rotation, a swizzle PLUS
-    one sign flip, not a pure permutation. `zup_to_yup = (x, z, -y)` is `.xzy()`
-    with the 3rd component negated; `yup_to_zup = (x, -z, y)` is `.xzy()` with the
-    2nd negated. So the swizzle is the reusable part and the sign stays local at
-    the call site (a `componentwise_multiply` by a sign vector, or a bare negate).
-  - `convert/gltf/from_gltf_bytes.rs:454-457` (import, `yup_to_zup`).
-  - `internal/gltf/object_to_gltf_document.rs:27`, `:28` (export, `zup_to_yup`;
-    the `* scale` stays the existing `Mul<T>`).
-  - `internal/gltf/material_document.rs:77-78` (export).
-  - Verdict: confirmed (swizzles are general; the sign flip is the domain part).
+- **C5. Axis-rotation helpers `zup_to_yup` / `yup_to_zup`** on
+  `impl<T: Copy + Neg<Output = T>> TyVector3<T>` (generic, covers f32 and f64):
+  `zup_to_yup = (x, z, -y)` (a +90 rotation about X) and its inverse
+  `yup_to_zup = (x, -z, y)`. Landed as sign-aware named helpers, NOT the six
+  GLSL swizzles first sketched here: the glTF conversions are +/-90 rotations
+  about X (a permutation PLUS a sign flip), so a pure permutation like `.xzy() =
+  (x, z, y)` never produces the `-y`/`-z` and would need a trailing negate at the
+  call site, no cleaner than the explicit `new(x, z, -y)`. There is no
+  pure-permutation site in the tree, so the swizzles had no clean consumer; the
+  owner chose the domain-named rotation instead.
+  - `convert/gltf/from_gltf_bytes.rs:457` (import, `world.yup_to_zup()`).
+  - `internal/gltf/object_to_gltf_document.rs:27-28` (export, `p.zup_to_yup() *
+    scale` and `n.zup_to_yup()`; the `* scale` stays the existing `Mul<T>`).
+  - `internal/gltf/material_document.rs:77-78` (export, same pair).
+  - Verdict: confirmed, with a real consumer at all three sites.
 
 - **C6. `TyBounds::from_min_size(min, size) -> Self`** (extents = size * 0.5,
   center = min + extents). (`from_min_max` was a lone one-off; dropped.)

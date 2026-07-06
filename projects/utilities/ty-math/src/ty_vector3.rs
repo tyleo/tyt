@@ -74,6 +74,22 @@ impl<T: Add<Output = T> + Copy + Mul<Output = T> + Sub<Output = T>> TyVector3<T>
     }
 }
 
+impl<T: Copy + Neg<Output = T>> TyVector3<T> {
+    /// This vector rotated from Z-up to Y-up axes, `(x, y, z) -> (x, z, -y)`: a
+    /// +90 degree rotation about X. The inverse of
+    /// [`yup_to_zup`](Self::yup_to_zup).
+    pub fn zup_to_yup(self) -> Self {
+        Self::new(self.x, self.z, -self.y)
+    }
+
+    /// This vector rotated from Y-up to Z-up axes, `(x, y, z) -> (x, -z, y)`: a
+    /// -90 degree rotation about X. The inverse of
+    /// [`zup_to_yup`](Self::zup_to_yup).
+    pub fn yup_to_zup(self) -> Self {
+        Self::new(self.x, -self.z, self.y)
+    }
+}
+
 impl<T: Add<Output = T>> Add for TyVector3<T> {
     type Output = Self;
 
@@ -515,6 +531,14 @@ mod tests {
     fn u32_to_f64_widens_each_component() {
         let widened = TyVector3U32::new(1, 2, 3).to_f64();
         assert_eq!(widened, TyVector3F64::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn zup_yup_axis_rotations_are_inverses() {
+        let v = TyVector3F64::new(1.0, 2.0, 3.0);
+        assert_eq!(v.zup_to_yup(), TyVector3F64::new(1.0, 3.0, -2.0));
+        assert_eq!(v.yup_to_zup(), TyVector3F64::new(1.0, -3.0, 2.0));
+        assert_eq!(v.zup_to_yup().yup_to_zup(), v);
     }
 
     #[test]

@@ -454,7 +454,7 @@ impl Depth {
 fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
     let [x, y, z] = point;
     let world = world.transform_point(TyVector3F64::new(x, y, z));
-    TyVector3F64::new(world.x, -world.z, world.y)
+    world.yup_to_zup()
 }
 
 #[cfg(test)]

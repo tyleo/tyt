@@ -24,8 +24,8 @@ pub(crate) fn object_to_gltf_document(
     // Bake Z-up grid space to Y-up meter space: rotate then scale positions,
     // rotate the already-unit normals. `(x, y, z) -> (x, z, -y)` is the inverse
     // of the voxelizer's Y-up-to-Z-up mapping.
-    let position = |p: TyVector3F32| TyVector3F32::new(p.x * scale, p.z * scale, -p.y * scale);
-    let direction = |n: TyVector3F32| TyVector3F32::new(n.x, n.z, -n.y);
+    let position = |p: TyVector3F32| p.zup_to_yup() * scale;
+    let direction = |n: TyVector3F32| n.zup_to_yup();
 
     if geometry.indices.is_empty() {
         let empty = json!({

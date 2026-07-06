@@ -76,9 +76,9 @@ first and may land as more than one commit.
 voxsmith `convert/` + `internal/`, `vxl`, `voxcore`, `voxj-codec`) that deduped 54
 findings into 30 verified proposals and subsumes the remaining Track C
 investigation. The owner approved building every proposed new `ty-math` method
-(with swizzles as GLSL-style `.xyz`/`.xzy`/... accessors), keeping the qbcl
-3-component color helpers deferred, and staging each chunk for review before it
-lands. The full record is
+(the glTF axis conversion landing as sign-aware `zup_to_yup`/`yup_to_zup` helpers,
+not swizzles), keeping the qbcl 3-component color helpers deferred, and staging
+each chunk for review before it lands. The full record is
 [reference/reuse-audit-findings.md](reference/reuse-audit-findings.md); the
 actionable chunks (D1 new methods, D2 adopt-existing non-vmax, D3 vmax) are in
 [checklist.md](checklist.md).

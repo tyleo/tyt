@@ -74,8 +74,8 @@ pub(crate) fn build_material_document(
 
     // Bake Z-up grid space to Y-up meter space, the inverse of the voxelizer's
     // mapping: rotate then scale positions, rotate the unit normals.
-    let position = |p: TyVector3F32| TyVector3F32::new(p.x * scale, p.z * scale, -p.y * scale);
-    let direction = |n: TyVector3F32| TyVector3F32::new(n.x, n.z, -n.y);
+    let position = |p: TyVector3F32| p.zup_to_yup() * scale;
+    let direction = |n: TyVector3F32| n.zup_to_yup();
 
     // Positions, then normals, then UVs, then indices, each a buffer view. All
     // are 4-byte quantities, so the regions stay naturally aligned.
