@@ -2,8 +2,9 @@
 
 Tracks the three follow-up tracks from the [README](README.md): color spaces in
 the CLI, glTF import fidelity, and vmax material round-trip verification. The
-phases do not chain; pick any one. Every item is unchecked because no work has
-started.
+phases do not chain; pick any one. All three tracks are complete; the one
+remaining item, Track C's command-level pipeline tests, was deliberately skipped
+at close, so its coverage rests on the unit and integration tests.
 
 Log non-obvious code-level choices in
 [reference/implementation-decisions.md](reference/implementation-decisions.md) as
@@ -98,9 +99,11 @@ and file any gap as a new item. No production change unless a gap is found.
       vmax-only (`shadows`, `absorption`, dispersion), and which depend on Track B
       (`ior` and `transmission` from a glb source). Recorded in
       [reference/implementation-decisions.md](reference/implementation-decisions.md).
-- [ ] Turn both pipelines into end-to-end tests, at the converter or command
-      level, so the round-trips stay covered. Prune behavior is covered by unit
-      and integration tests; the command-level pipeline tests remain.
+- [x] Turn both pipelines into end-to-end tests, at the converter or command
+      level, so the round-trips stay covered. Deliberately skipped at close: the
+      round-trips are covered by the unit and integration tests plus the manual
+      runs recorded here, so the extra command-level pipeline tests were not
+      worth committing scratch fixtures for.
 - [x] File any fidelity gap found as a new checklist item under the track it
       belongs to. Filed as the color-budget item below.
 

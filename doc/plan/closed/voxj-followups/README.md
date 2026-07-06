@@ -1,14 +1,21 @@
 # Voxj Follow-Up Capabilities Plan
 
-Status: **open.** This plan captures the follow-up work the voxj redesign enabled
-or exposed but the faithful port left out. It began from the redesign plan's
-[deferred capabilities log](../../closed/voxj-redesign/README.md#deferred-capabilities-log)
-and now covers three tracks: exposing color spaces in the CLI, closing the glTF
+Status: **closed.** All three tracks landed and the workspace builds, lints, and
+tests green. Track A extended `--color-format` with a linear value; Track B made
+glTF material import and export symmetric across `ior`, `transmission`, and
+emissive strength; and Track C verified both vmax round-trips and fixed the
+color-budget gap it surfaced. Track C's optional command-level pipeline tests
+were deliberately skipped at close; the round-trips are covered by the unit and
+integration tests. All three decisions were resolved; see [Decisions](#decisions).
+
+This plan captured the follow-up work the voxj redesign enabled or exposed but
+the faithful port left out. It began from the redesign plan's
+[deferred capabilities log](../voxj-redesign/README.md#deferred-capabilities-log)
+and covered three tracks: exposing color spaces in the CLI, closing the glTF
 import fidelity gap, and verifying vmax material round-trips end to end. The
 value-pool inspector from the deferred log is deliberately dropped; see
-[Not in scope](#not-in-scope). All three decisions are resolved. The executable
-steps live in [checklist.md](checklist.md), with a per-session resume prompt in
-[continue-voxj-followups.md](continue-voxj-followups.md).
+[Not in scope](#not-in-scope). The executable steps lived in
+[checklist.md](checklist.md).
 
 The predecessor port is closed: every crate builds, lints, and tests green on the
 redesigned format. This plan is additive and each track is independent, so this is

@@ -152,7 +152,8 @@ and integration tests below rather than a fixture check.
   the reduction drops by default and that `--keep-unused-values` opts out. End to
   end, `voxelize --max-palette-materials 255 energy-turret.glb` then `to vmax`
   writes a 255-color vmax, while `--keep-unused-values` still overflows.
-- **Left for a follow-up.** Command-level end-to-end tests that drive `voxelize`,
-  `to voxj`, and `to vmax` as a pipeline (checklist item 5) are not yet added; the
-  round-trips are proven by the unit and integration tests plus the manual runs
-  recorded here.
+- **Command-level pipeline tests skipped at close.** End-to-end tests that drive
+  `voxelize`, `to voxj`, and `to vmax` as a pipeline (checklist item 5) were
+  deliberately not added: they would need committed vmax and glb fixtures, and
+  the round-trips are already proven by the unit and integration tests plus the
+  manual runs recorded here. The owner closed the plan on this basis.
