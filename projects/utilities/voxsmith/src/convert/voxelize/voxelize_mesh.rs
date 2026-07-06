@@ -368,8 +368,7 @@ fn srgb_pool(
                 .entry([color.r, color.g, color.b])
                 .or_insert_with(|| {
                     let index = values.len() as u32;
-                    let [r, g, b, _] = color.to_rgba().to_array();
-                    values.push([r, g, b]);
+                    values.push(color.to_vector3().to_array());
                     index
                 })
         })
