@@ -187,12 +187,8 @@ impl VoxObject {
         let first = live.next()?;
         let (mut min, mut max) = (first, first);
         for p in live {
-            min.x = min.x.min(p.x);
-            min.y = min.y.min(p.y);
-            min.z = min.z.min(p.z);
-            max.x = max.x.max(p.x);
-            max.y = max.y.max(p.y);
-            max.z = max.z.max(p.z);
+            min = min.component_min_with(&p);
+            max = max.component_max_with(&p);
         }
 
         Some((

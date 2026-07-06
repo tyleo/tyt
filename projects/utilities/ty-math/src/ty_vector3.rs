@@ -431,6 +431,38 @@ macro_rules! impl_ty_vector3_float {
 impl_ty_vector3_float!(f32);
 impl_ty_vector3_float!(f64);
 
+/// Implements the ordered-integer vector operations for a concrete integer
+/// component type. The component min/max mirror the float macro's, but live on
+/// the concrete integer types rather than a generic `impl<T: Ord>`: the compiler
+/// cannot rule out a future `Ord` impl for `f64`, so a generic version would be
+/// treated as a duplicate of the float methods (E0592).
+macro_rules! impl_ty_vector3_int {
+    ($t:ty) => {
+        impl TyVector3<$t> {
+            /// Returns the component-wise minimum of `self` and `other`.
+            pub fn component_min_with(&self, other: &Self) -> Self {
+                Self {
+                    x: self.x.min(other.x),
+                    y: self.y.min(other.y),
+                    z: self.z.min(other.z),
+                }
+            }
+
+            /// Returns the component-wise maximum of `self` and `other`.
+            pub fn component_max_with(&self, other: &Self) -> Self {
+                Self {
+                    x: self.x.max(other.x),
+                    y: self.y.max(other.y),
+                    z: self.z.max(other.z),
+                }
+            }
+        }
+    };
+}
+
+impl_ty_vector3_int!(i32);
+impl_ty_vector3_int!(u32);
+
 impl TyVector3<i32> {
     /// Each component widened to `f64`. The lossless inverse of the truncating
     /// `to_i32` cast on a float vector.
@@ -441,7 +473,7 @@ impl TyVector3<i32> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{TyVector3F64, TyVector3I32};
+    use crate::{TyVector3F64, TyVector3I32, TyVector3U32};
 
     #[test]
     fn round_then_to_i32_rounds_to_the_nearest_integer_vector() {
@@ -485,6 +517,20 @@ mod tests {
     fn abs_takes_each_component() {
         let abs = TyVector3F64::new(-1.0, 2.0, -3.0).abs();
         assert_eq!(abs, TyVector3F64::new(1.0, 2.0, 3.0));
+    }
+
+    #[test]
+    fn integer_component_min_and_max_with_fold_each_axis() {
+        let a = TyVector3U32::new(3, 1, 4);
+        let b = TyVector3U32::new(1, 5, 9);
+        assert_eq!(a.component_min_with(&b), TyVector3U32::new(1, 1, 4));
+        assert_eq!(a.component_max_with(&b), TyVector3U32::new(3, 5, 9));
+
+        // Signed integers fold the same way, including across zero.
+        let c = TyVector3I32::new(-2, 7, -5);
+        let d = TyVector3I32::new(3, -1, -9);
+        assert_eq!(c.component_min_with(&d), TyVector3I32::new(-2, -1, -9));
+        assert_eq!(c.component_max_with(&d), TyVector3I32::new(3, 7, -5));
     }
 
     #[test]

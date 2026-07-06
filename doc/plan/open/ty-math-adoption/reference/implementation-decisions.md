@@ -290,3 +290,20 @@ Rejected proposals (not built): the quaternion `normalized` adoption, a
 the `f32 -> f64` widen family (raw gltf arrays, not ty-math types), a
 `TyVector3F64::to_u32`, and a test-only `/255` helper. Rationale per item is in
 the findings file.
+
+### D1c: integer component min/max (landed)
+
+The audit proposed a generic `impl<T: Copy + Ord> TyVector3<T>` for the integer
+`component_min_with`/`component_max_with`, on the theory it could not collide with
+the float methods since `f32`/`f64` are not `Ord`. That is wrong for inherent
+methods: the compiler rejects it with E0592 (duplicate definitions), because
+coherence cannot rule out an upstream `Ord` impl for `f64`, so the generic and the
+concrete float methods are treated as a potential duplicate. The fix keeps the
+same method names but defines them on the concrete integer types through a new
+`impl_ty_vector3_int!` macro (invoked for `i32` and `u32`), mirroring the existing
+`impl_ty_vector3_float!`. Float `min`/`max` semantics (NaN-ignoring) are untouched;
+the integer methods use `Ord::min`/`Ord::max`, bit-identical to the hand-rolled
+fold. Adopted in voxcore `live_extent`, replacing the six per-axis
+`min.x.min(p.x)` lines with `min.component_min_with(&p)` /
+`max.component_max_with(&p)`; the `max - min + 1` size still follows. Future
+integer-vector methods (C2 `to_i32`/`to_u32`) can extend the same macro.

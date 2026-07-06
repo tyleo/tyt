@@ -203,9 +203,10 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
 - [ ] **C2** `TyVector3<u32>::to_i32` and `TyVector3<i32>::to_u32`; adopt in
       `internal/grid.rs`, `voxj_decoded_object_from_vox_object.rs`,
       `convert/goxl/to_goxl_file.rs:201`, `convert/mvox/to_mvox_file.rs:462`.
-- [ ] **C1** integer `component_min_with`/`component_max_with` on
-      `impl<T: Copy + Ord> TyVector3<T>`; adopt in voxcore
-      `vox_object.rs:188-196` (`live_extent`). vmax `min_corner` trails in D3.
+- [x] **C1** integer `component_min_with`/`component_max_with` via a concrete
+      `impl_ty_vector3_int!` macro over `i32`/`u32` (a generic `impl<T: Ord>`
+      fails E0592 against the float methods); adopted in voxcore
+      `vox_object.rs` (`live_extent`). vmax `min_corner` trails in D3.
 - [ ] **C4** `TyQuaternion::is_normalized(self, tolerance)`; adopt in voxcore
       `vox_main.rs:602-611` and voxj-codec `check_transforms.rs:27-36`.
 - [ ] **C5** the six swizzle accessors (`xyz`/`xzy`/`yxz`/`yzx`/`zxy`/`zyx`) on
