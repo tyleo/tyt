@@ -1,0 +1,5 @@
+[submodule "submodules/tyt-assets"]
+	path = submodules/tyt-assets
+	url = https://github.com/tyleo/tyt-assets.git
+	branch = main
+	update = none
