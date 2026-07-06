@@ -110,13 +110,11 @@ workspace so the patched consumers pick up the new methods.
       code). `ty-math` has no determinant, so the mirror check now uses the scalar
       triple product of the columns via `dot`/`cross` (exact for the
       signed-permutation frame).
-- [ ] **Deferred to the [color-model follow-up](README.md#follow-up-the-rgb-color-type-model).**
-      Replace the three-component `color_floats` with `TySrgbaColor::to_vector3` in
-      `convert/qbcl/from_qb_file.rs:185`, `convert/qbcl/from_qbt_file.rs:284`, and
-      `convert/qbcl/from_qbcl_file.rs:307`. The source colors are `[u8; 3]` with no
-      alpha, so `to_vector3` would need a synthetic throwaway alpha; that is the
-      exact RGB-vs-RGBA smell the follow-up resolves, so the helpers stay until a
-      3-component color path lands.
+- [ ] **Moved to the [ty-color-model plan](../ty-color-model/README.md).** The
+      three-component qbcl `color_floats` in `convert/qbcl/from_qb_file.rs:185`,
+      `from_qbt_file.rs:284`, and `from_qbcl_file.rs:307` resolve there with the new
+      color types (their `[u8; 3]` sources needed a synthetic alpha, the RGB-vs-RGBA
+      smell that plan owns), not here.
 - [x] Replace the inline `round() as i32` world-position accumulation with
       `parent + position.round().to_i32()` in `convert/goxl/to_goxl_file.rs:153`,
       `convert/qbcl/to_qbcl_file.rs:298`, and mvox's `translation_of`
@@ -230,9 +228,10 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       `TyVector3F64`, so `to_grid` is `(point -
       min).componentwise_divide(&size).to_array()` and `cell_center` folds through
       the existing `componentwise_multiply`.
-- [ ] **C8** `TyRgbaColorF64::to_linear_rgba` (float sRGB decode, reuse the private
-      `srgb_to_linear`); adopt in
-      `voxj_value_pool_from_vox_value_pool.rs:104-132`.
+- [ ] **C8 (moved)** -> [ty-color-model plan](../ty-color-model/README.md) step S9.
+      The `to_linear_rgba` sRGB decode re-lands there as `TySrgba<f64>::to_lin_srgba`
+      and adopts at the voxj `decode_rgb`/`decode_rgba` against the new color types;
+      C8 was reverted from this plan.
 - [ ] **C6** `TyBounds::from_min_size(min, size)`; add with a test. Adoption is
       vmax-only (`write_vmax` content/object box), so it trails in D3.
 
@@ -240,12 +239,15 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
 
 - [ ] **A1** route `triangle_box_overlap.rs:55-71` through `TyVector3F64`
       `Sub`/`dot`/`cross`; delete the three private free fns.
-- [ ] **A2** retype `sample_material.rs`'s private `CellAccum` onto
-      `TyVector4F64`/`TyVector3F64` (`Add` + `Div<T>` + `to_array`/`from_array`).
+- [ ] **A2 (moved)** -> [ty-color-model plan](../ty-color-model/README.md). The
+      `sample_material.rs` `CellAccum` retype accumulates color values and shares
+      `sample_material` with the color-type migration, so it lands there (step S6)
+      to avoid touching the file twice.
 - [ ] **A3** `TyVector3I32::to_f64` + `from_array`: vxl `hierarchy_show.rs:1172`
       (delete `vec_i32_to_f64`) and mvox `from_mvox_file.rs:348`.
-- [ ] **A4** `TySrgbaColor::from_hex` + `From<TySrgbaColor> for [u8;4]`: vxl
-      `fill_color.rs:39` (delete `parse_rgba_hex`).
+- [ ] **A4 (moved)** -> [ty-color-model plan](../ty-color-model/README.md). vxl
+      `fill_color.rs:39`'s `parse_rgba_hex` -> `from_hex` adopts the sRGB color type,
+      so it lands there (step S6) once `from_hex` is on `TySrgba<u8>`.
 - [ ] **A5** `TyVector3F32::INFINITY`/`NEG_INFINITY` consts at the two glTF AABB
       seeds (`object_to_gltf_document.rs:43-44`, `material_document.rs:83-84`).
 - [ ] **A6** `to_array`/`from_array`/`From<[T;N]>` packing at the 6 voxj pack/

@@ -192,7 +192,37 @@ that consume it. No wire fixtures are rebuilt.
 
 ## Follow-up: the RGB color type model
 
-> **Deferred from Track B.** `ty-math` treats RGBA as a first-class type family
+### Decision (2026-07-06): restructure the color types palette-style
+
+The owner chose to model ty-math's colors like the `palette` crate: the ENCODING
+is the type identity and the component type is a separate parameter, replacing
+today's confusing split where `TySrgbaColor` (sRGB, 8-bit) and `TyRgbaColor`
+(documented `[0, 1]` but actually treated as sRGB float by `to_srgba` and the
+proposed `to_linear_rgba`) are the same color space in two storages under
+unrelated names. Direction:
+
+1. Collapse the two sRGB storages into one sRGB-encoded type generic over
+   component, so `u8` and `f64` sRGB are one `Srgb`-style type, not `TySrgbaColor`
+   plus `TyRgbaColor`.
+2. Keep the linear color as its own type, renamed toward the `palette` name the
+   owner likes: `LinSrgb` (e.g. `TyLinSrgba`), replacing `TyLinearRgbaColor`.
+3. Stop letting raw non-color `[0, 1]` channels (metallic / roughness / occlusion)
+   borrow a color type; read them as plain scalars.
+
+A design study (census + prior art + critique) confirmed the shape: the owner chose
+the **full palette-style generic `TySrgba<T>`** (with `TyLinSrgba<T>` for the linear
+type), over the study's lighter recommendation, accepting the larger churn. The
+plan, blast radius, friction (`Eq`/`Hash` on the hash-key type, the fbx serde wire,
+the dead HSV family), and ordered steps live in the dedicated
+[ty-color-model plan](../ty-color-model/README.md); the study record is
+[there too](../ty-color-model/reference/color-model-study.md).
+
+This is a FOLLOW-UP after the current adoption pass. It supersedes the "investigate
+one of" options below and subsumes both the 3-component-RGB question and the "is
+`TyRgbaColor` sRGB?" ambiguity the C8 `to_linear_rgba` work exposed. C8 was reverted
+and re-lands there as `TySrgba<f64>::to_lin_srgba`.
+
+> **Original framing (superseded by the decision above).** `ty-math` treats RGBA as a first-class type family
 > (`TyRgbaColor<T>`, `TyLinearRgbaColor<T>`, and the 8-bit `TySrgbaColor`) but has
 > no 3-component RGB type: dropping alpha yields a bare `TyVector3<T>`, through
 > `TyRgbaColor::to_vector3` and the `TySrgbaColor::to_vector3` this plan added. So
