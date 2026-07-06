@@ -151,9 +151,12 @@ Investigation first. Read, catalog against the three patterns, adopt what fits, 
 file the larger primitives as new items before building them. May span more than
 one commit.
 
-- [ ] Read `internal/mesh/triangle_bounds.rs`, `internal/mesh/voxelize_triangles.rs`
+- [x] Read `internal/mesh/triangle_bounds.rs`, `internal/mesh/voxelize_triangles.rs`
       (and `triangle_box_overlap`, `clamp_index`), and `internal/mesh/sample_material.rs`;
-      record where the three patterns appear.
+      record where the three patterns appear. Cataloged in the decision log: pattern
+      map per file plus the `ty-math` surface gates (items 2/3 are safe drop-ins;
+      the `to_grid`, SAT overlap, `CellAccum` color sums, and barycentric blends
+      need a `ty-math` addition first, to be filed in item 4).
 - [ ] Adopt `TyBounds::from_points` in `triangle_bounds.rs` so it returns a
       `TyBounds` (or keeps the tuple but folds through the constructor), and adopt
       `TyVector3::triangle_normal` in the rasterizer where the geometric normal is

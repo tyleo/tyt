@@ -134,5 +134,99 @@ comment and a unit test in that file's `tests` module.
 
 ## Track C: heavier logic under internal/
 
-_Pending. Record the catalog of the three patterns per file, which adoptions were
-safe, and each larger primitive filed as a new item with its target type._
+### Item 1: catalog the three patterns in internal/mesh (landed)
+
+The three patterns from the [README](../README.md): (1) duplicated color scaling,
+the 8-bit<->float normalize and its reverse-direction accumulate/average; (2)
+array-shaped vector math, `[f64; 3]`/`[f64; 4]` where a `TyVector3`/color op would
+serve; (3) hoistable primitives, reusable geometry or color operations `ty-math`
+could own. Read `triangle_bounds.rs`, `triangle_box_overlap.rs`,
+`voxelize_triangles.rs`, `sample_material.rs`, and the supporting `grid_space.rs`
+(which holds `to_grid`, `cell_index`, `cell_center`, `clamp_index`).
+
+**triangle_bounds.rs**
+
+- Pattern 3, a direct duplicate of a landed Track B primitive. The whole function
+  is `TyBounds::from_points`: it seeds on the first point and folds the rest with
+  `component_min_with`/`component_max_with`, exactly `from_points`'s body, then
+  returns a `(min, max)` tuple instead of a `TyBounds`. `TyBounds<f64>` already
+  exposes `min()`/`max()`, so a tuple-shaped caller keeps working after the switch.
+  No new `ty-math` needed. Adopt in item 2.
+- No pattern 1; no stray array math (already `TyVector3F64`).
+
+**triangle_box_overlap.rs**
+
+- Pattern 2: the local `sub`/`dot`/`cross` free functions on `[f64; 3]`, plus
+  `center: [f64; 3]`, `triangle: &[[f64; 3]; 3]`, and `axes: [[f64; 3]; 3]`. All
+  three ops exist on `TyVector3F64` (`dot`, `cross`, `Sub`). The SAT projection in
+  `separates` also needs the L1 norm `axis[0].abs() + axis[1].abs() +
+  axis[2].abs()` (the box radius) and the min/max over the three vertex
+  projections; `TyVector3` has `abs()` but no component-sum accessor, so the radius
+  stays `.x + .y + .z`.
+- Pattern 3: `triangle_box_overlap` itself is the triangle-box SAT overlap
+  primitive the README names as a filing candidate (item 4); `separates` is its
+  SAT-internal helper.
+- Adoption gate: the `[f64; 3]` arrays flow in from `voxelize_triangles`' `grid:
+  [[f64; 3]; 3]`, which is `GridSpace::to_grid`'s `[f64; 3]` return. Routing the
+  overlap test through `TyVector3F64` ripples into `to_grid`'s return type, so this
+  is a file-first primitive (item 4), not a drop-in.
+
+**voxelize_triangles.rs**
+
+- Pattern 2: `grid` is `[[f64; 3]; 3]` (from `to_grid`); `center = [x + 0.5, y +
+  0.5, z + 0.5]`; `cell_range` folds per-axis min/max/floor over the three
+  `[f64; 3]` corners. Array-shaped, but the arrays are grid coordinates tied to
+  `to_grid`'s `[f64; 3]` return and the `[usize; 3]` cell-index math, so a clean
+  `TyVector3` adoption waits on `to_grid` (see grid_space below).
+- `fill_enclosed` is a pure integer-index flood fill: no vector math, no `ty-math`
+  fit.
+- `clamp_index` (defined in grid_space) is a float-floor-to-clamped-`usize` index
+  helper: integer-index specific, a weak `ty-math` fit; not a candidate.
+
+**sample_material.rs**
+
+- Pattern 1: `CellAccum.base_color: [f64; 4]` and `emissive: [f64; 3]` accumulate
+  component-wise (`accum.base_color[0] += color[0]` ...) and average (`/ n`) as raw
+  arrays; `apply` repacks the mean into `TyLinearRgbaColorF64::new(.. / n, ..)`, and
+  `base_color_linear`/`emissive` unpack a `TyLinearRgbaColorF64` back to
+  `[f64; 4]`/`[f64; 3]`. This is array-shaped color math a linear color carrying
+  `Add` + scalar `Mul`/`Div` (and `to_array`/`from_array`) would absorb. Gap:
+  `TyLinearRgbaColorF64` today has only `new`, `componentwise_multiply`,
+  `to_srgba`, `to_oklab`, `to_cielab` (accessors `.r/.g/.b/.a`), so adopting needs
+  a `ty-math` extension first, not a drop-in. File in item 4.
+- Pattern 2: `sample_steps`/`edge` compute the distance between two `[f64; 3]` grid
+  points by hand (`dx, dy, dz`, `sqrt`), which `TyVector3F64::magnitude` of a
+  difference would serve, but the inputs are `[f64; 3]` from `to_grid` again.
+  `bary_point`/`bary_uv` do explicit component barycentric blends on
+  `TyVector3F64`/`TyVector2F64`. `barycentric` (the point-onto-plane projection)
+  already uses idiomatic `TyVector3F64` dot ops.
+- Pattern 3: the barycentric blend (`bary_point`, `bary_uv`) and the
+  point-in-triangle projection (`barycentric` + `clamp_barycentric`) are the
+  barycentric-interpolation / point-in-triangle primitives the README names as
+  filing candidates (item 4).
+
+**grid_space.rs** (supporting; holds the array-shaped map both consumers build on)
+
+- Pattern 2: `GridSpace.size: [f64; 3]`, `counts: [usize; 3]`; `to_grid` is the
+  per-axis `(point - min) / size` returning `[f64; 3]`; `cell_center` rebuilds a
+  `TyVector3F64` per axis. `to_grid` is the natural `(point -
+  min).componentwise_divide(&size)`, but `ty-math` has `componentwise_multiply`
+  only, no `componentwise_divide` (its `Div<T>` is scalar). A clean vectorization
+  of `to_grid` (which would in turn let the rasterizer and overlap test go
+  vector-native) waits on a `componentwise_divide` addition. File in item 4.
+- `voxel_size` (the zero-extent guard) is scalar; no `ty-math` fit.
+
+**ty-math surface gates (what item 1 establishes for the later items)**
+
+- Present, safe to adopt now (items 2/3): `TyBounds::from_points`/`min`/`max`/
+  `size`, `TyVector3::triangle_normal`, `magnitude`, `dot`/`cross`/`Sub`.
+- Missing, an addition must land before adoption (item 4 or follow-ups): a
+  `TyVector3::componentwise_divide` (for `to_grid`); `Add` + scalar `Mul`/`Div` +
+  `to_array`/`from_array` on `TyLinearRgbaColor` (for the `CellAccum` color sums); a
+  barycentric-blend primitive on `TyVector3`; a triangle-box SAT overlap primitive.
+  These are named here and formally filed as checklist items in item 4.
+
+### Items 2-5
+
+_Pending. Record which adoptions landed and each larger primitive filed with its
+target type._
