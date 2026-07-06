@@ -228,5 +228,65 @@ could own. Read `triangle_bounds.rs`, `triangle_box_overlap.rs`,
 
 ### Items 2-5
 
-_Pending. Record which adoptions landed and each larger primitive filed with its
-target type._
+Subsumed by the broad reuse audit (Track D below), which read the same
+`internal/` logic as part of a codebase-wide pass and filed the concrete items:
+Track C item 2's `from_points` in `triangle_bounds` is now a documented do-NOT
+(bit-risk), its `triangle_normal`-in-rasterizer maps to the
+`triangle_box_overlap` `Sub`/`dot`/`cross` adoption (D2 A1); item 4's larger
+primitives were evaluated (barycentric rejected in favor of `Mul`+`Add`, the SAT
+overlap kept as an adopt-existing, a swizzle set added); item 5's `write_vmax` is
+Track D3. Item 3 (`cell_color` signature) was not surfaced as high-value and stays
+an open question.
+
+## Track D: broad reuse audit
+
+A codebase-wide audit (2026-07-05), run as a multi-agent workflow (a `ty-math`
+census, twelve subsystem finders over all voxsmith `convert/` + `internal/` plus
+`vxl` and `voxcore`, a dedup/rank synthesis, an adversarial verify pass), deduped
+54 raw findings into 30 verified proposals: 14 confirmed, 9 real but
+scope-narrowed, 7 rejected. The full record with exact sites and per-proposal
+verdicts is in
+[reference/reuse-audit-findings.md](reuse-audit-findings.md); the actionable
+items are Track D in the [checklist](../checklist.md).
+
+Owner decisions:
+
+- **Build every approved new method** (Group C, all eight). Extend `ty-math`
+  freely, per Q1.
+- **Swizzles as GLSL-style accessors**, not domain-named methods: the six
+  permutations `xyz`/`xzy`/`yxz`/`yzx`/`zxy`/`zyx` on `impl<T: Copy>
+  TyVector3<T>`, generic so they cover every component type. The Z-up <-> Y-up
+  glTF conversion is a rotation (a swizzle plus one sign flip), so the swizzle is
+  the reusable primitive and the sign stays local at the call site.
+- **The 3-component qbcl `color_floats` helpers stay deferred.** Routing `[u8;3]`
+  through `TySrgbaColor::to_vector3` needs a synthetic throwaway alpha, the exact
+  RGB-vs-RGBA smell the [color-model
+  follow-up](../README.md#follow-up-the-rgb-color-type-model) owns; the clean
+  `voxelize_mesh` site (color already carries alpha) was adopted in `f2d4d5d`, the
+  three qbcl `[u8;3]` sites were not.
+- **Stage and pause per chunk**, not auto-commit: each Track D `[ ]` is staged and
+  presented for review before it lands.
+
+Verified corrections worth remembering:
+
+- **Do NOT adopt `TyBounds::from_points` inside `triangle_bounds.rs`** (reverses
+  the Track C item-2 sketch). It returns the direct `(min, max)` that sizes voxel
+  cells; `from_points` reconstructs min/max through separately-halved center +/-
+  extents, which is not bit-exact and can nudge a boundary sample into a
+  neighboring cell. `size()` never reconstructs min/max, so the `mesh.rs` extent
+  adoption (D2 A7) is safe; only the direct-corners use in `triangle_bounds` is
+  not.
+- **`TyQuaternion::normalized` is not a drop-in** for the voxj hierarchy
+  quaternion normalize: `normalized()` is `self * (1.0 / magnitude())`
+  (multiply-by-reciprocal), the hand-rolled code is per-component `x / magnitude`
+  (true division); they round differently and could move goldens. Its
+  `magnitude_squared` half is still adopted through the new `is_normalized` (C4).
+- **A `barycentric` method is unwarranted**: the existing scalar `Mul<T>` + `Add`
+  already express `p0*w0 + p1*w1 + p2*w2` bit-identically.
+
+Rejected proposals (not built): the quaternion `normalized` adoption, a
+`barycentric` method, `l1_norm`, an `(a-b).magnitude` edge distance,
+`transform_aabb_conservative` on `TyTransform` (not bit-identical),
+the `f32 -> f64` widen family (raw gltf arrays, not ty-math types), a
+`TyVector3F64::to_u32`, and a test-only `/255` helper. Rationale per item is in
+the findings file.

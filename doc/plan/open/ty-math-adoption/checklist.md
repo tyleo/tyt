@@ -178,3 +178,84 @@ one commit.
 
 Gate: each landed change is covered and asserted against the prior behavior; each
 filed item names its location and its target `ty-math` type.
+
+## Track D: broad ty-math reuse audit (opened 2026-07-05)
+
+A codebase-wide audit (all voxsmith `convert/` + `internal/`, `vxl`, `voxcore`,
+`voxj-codec`) deduped 54 findings into 30 verified proposals. Full record,
+including exact sites, verdicts, and the rejected list, is in
+[reference/reuse-audit-findings.md](reference/reuse-audit-findings.md). Owner
+decisions (see the [decision log](reference/implementation-decisions.md#track-d-broad-reuse-audit)):
+build every approved new method; keep the 3-component qbcl `color_floats` helpers
+deferred; **stage and pause per chunk** (do not auto-commit). Each `[ ]` below is
+one reviewable, staged chunk. vmax edits (Track D3) trail in their own commits.
+
+Shipped in `f2d4d5d`: `TyFloatExt::to_unorm8` (4 sites) and
+`TySrgbaColor::to_vector3` at `voxelize_mesh.rs:371`.
+
+### D1: new ty-math methods, land with adoption (non-vmax first)
+
+Each method lands in its file's float-macro or generic form with a doc comment and
+a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
+
+- [ ] **C3** `TyVector3<u32>::to_f64`; adopt in vxl `hierarchy_show.rs:929,935`
+      (delete `vec_u32_to_f64`).
+- [ ] **C2** `TyVector3<u32>::to_i32` and `TyVector3<i32>::to_u32`; adopt in
+      `internal/grid.rs`, `voxj_decoded_object_from_vox_object.rs`,
+      `convert/goxl/to_goxl_file.rs:201`, `convert/mvox/to_mvox_file.rs:462`.
+- [ ] **C1** integer `component_min_with`/`component_max_with` on
+      `impl<T: Copy + Ord> TyVector3<T>`; adopt in voxcore
+      `vox_object.rs:188-196` (`live_extent`). vmax `min_corner` trails in D3.
+- [ ] **C4** `TyQuaternion::is_normalized(self, tolerance)`; adopt in voxcore
+      `vox_main.rs:602-611` and voxj-codec `check_transforms.rs:27-36`.
+- [ ] **C5** the six swizzle accessors (`xyz`/`xzy`/`yxz`/`yzx`/`zxy`/`zyx`) on
+      `impl<T: Copy> TyVector3<T>`; adopt in the three glTF sites, keeping the
+      local sign flip (the conversion is a rotation, not a pure permutation).
+- [ ] **C7** `componentwise_divide` on `impl<T: Div + Copy> TyVector3<T>`; adopt in
+      `internal/mesh/grid_space.rs:36-42` (`to_grid`, retype `size`).
+- [ ] **C8** `TyRgbaColorF64::to_linear_rgba` (float sRGB decode, reuse the private
+      `srgb_to_linear`); adopt in
+      `voxj_value_pool_from_vox_value_pool.rs:104-132`.
+- [ ] **C6** `TyBounds::from_min_size(min, size)`; add with a test. Adoption is
+      vmax-only (`write_vmax` content/object box), so it trails in D3.
+
+### D2: adopt existing ty-math, non-vmax (no new API)
+
+- [ ] **A1** route `triangle_box_overlap.rs:55-71` through `TyVector3F64`
+      `Sub`/`dot`/`cross`; delete the three private free fns.
+- [ ] **A2** retype `sample_material.rs`'s private `CellAccum` onto
+      `TyVector4F64`/`TyVector3F64` (`Add` + `Div<T>` + `to_array`/`from_array`).
+- [ ] **A3** `TyVector3I32::to_f64` + `from_array`: vxl `hierarchy_show.rs:1172`
+      (delete `vec_i32_to_f64`) and mvox `from_mvox_file.rs:348`.
+- [ ] **A4** `TySrgbaColor::from_hex` + `From<TySrgbaColor> for [u8;4]`: vxl
+      `fill_color.rs:39` (delete `parse_rgba_hex`).
+- [ ] **A5** `TyVector3F32::INFINITY`/`NEG_INFINITY` consts at the two glTF AABB
+      seeds (`object_to_gltf_document.rs:43-44`, `material_document.rs:83-84`).
+- [ ] **A6** `to_array`/`from_array`/`From<[T;N]>` packing at the 6 voxj pack/
+      unpack sites (position-only partial at
+      `vox_hierarchy_node_from_voxj_hierarchy_node.rs:36,75`).
+- [ ] **A7** `TyBounds::from_points` + `size()`/`max()` at
+      `convert/voxelize/mesh.rs:41-48` and the `object_to_glb_bytes.rs:87-88`
+      test. Do NOT touch `triangle_bounds.rs` (bit-risk: separately-halved
+      center +/- extents can shift a cell boundary).
+- [ ] **A8** (optional, cosmetic) `TyVector3F64::ZERO` at vxl
+      `hierarchy_show.rs:936`.
+
+### D3: adopt in vmax (own trailing commits)
+
+- [ ] **B1** delete `write_vmax`'s `vector()` helper -> `to_array`
+      (`write_vmax.rs:1054,1231,1233`).
+- [ ] **B2** `TyTransformF64::transform_point` at `write_vmax.rs:1096` (delete the
+      hand-rolled TRS at `:1180-1193`).
+- [ ] **B3** the round-to-nearest chain at `from_vmax_file.rs:529-535` and
+      `:569-573`.
+- [ ] **B4** `min_corner` integer min fold at `from_vmax_file.rs:474-483` (needs
+      C1).
+- [ ] **B5** `content_box`/`object_box_local` via C6 `from_min_size` in
+      `write_vmax`.
+- [ ] **B6** `extend_bounds` at `write_vmax.rs:1158-1178` via float
+      `component_min_with`/`component_max_with` or `TyBounds::encapsulate`.
+
+Gate: Tracks D1/D2 change no serialized bytes; `cargo test -p` the touched crates
+must stay green with no golden churn. Each new method ships a unit test in its
+`ty-math` file. vmax (D3) edits stand alone in the log.

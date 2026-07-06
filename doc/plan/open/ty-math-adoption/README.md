@@ -72,6 +72,17 @@ rasterizer); and file anything larger (a triangle-box overlap primitive, a
 `to_oklab`/`to_cielab`) as its own checklist item. This track is investigation
 first and may land as more than one commit.
 
+**Track D: the broad reuse audit.** A codebase-wide pass (2026-07-05, all
+voxsmith `convert/` + `internal/`, `vxl`, `voxcore`, `voxj-codec`) that deduped 54
+findings into 30 verified proposals and subsumes the remaining Track C
+investigation. The owner approved building every proposed new `ty-math` method
+(with swizzles as GLSL-style `.xyz`/`.xzy`/... accessors), keeping the qbcl
+3-component color helpers deferred, and staging each chunk for review before it
+lands. The full record is
+[reference/reuse-audit-findings.md](reference/reuse-audit-findings.md); the
+actionable chunks (D1 new methods, D2 adopt-existing non-vmax, D3 vmax) are in
+[checklist.md](checklist.md).
+
 ## vmax runs through all three tracks
 
 Every track touches vmax somewhere: Track A cleans `convert/vmax/from_vmax_file.rs`
