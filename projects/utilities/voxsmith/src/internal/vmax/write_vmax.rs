@@ -1,12 +1,14 @@
 use crate::{
-    ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
+    ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
     ROUGHNESS_FACTOR, Result, SHADOWS, SceneCameraSource, TRANSMISSION_FACTOR, VoxelMaxColorFormat,
     VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, ext_for,
     from_vox_value, pool_color, tighten,
 };
 use branded_id::U32Id;
-use std::collections::{BTreeMap, HashMap};
-use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use ty_math::{
+    TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
+};
 use vmax::{
     VMaxBrush, VMaxBrushColor, VMaxBrushEntry, VMaxBrushState, VMaxCamera, VMaxContentsVmaxbFile,
     VMaxFile, VMaxFlag, VMaxFlagValue, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxMode,
@@ -25,9 +27,16 @@ use voxcore::{
 /// the plist `colors` table does not (255 entries).
 const PALETTE_COLORS: usize = 255;
 
-/// The most materials a Voxel Max object can hold: a voxel's `material_idx` is a
-/// single byte, so indices run 0..=255.
-const MAX_MATERIALS: usize = 256;
+/// The material slots every Voxel Max palette carries. A color cell's material
+/// is a bit in the settings `lc` byte, so at most 8 (0..=7) fit; the sidecar
+/// always lists exactly this many, real materials in the low slots and the rest
+/// padded with the neutral default.
+const MATERIAL_SLOTS: usize = 8;
+
+/// The neutral default material Voxel Max fills unused slots with: matte, not
+/// metallic, shadow-casting.
+const DEFAULT_METALLIC: f64 = 0.1;
+const DEFAULT_ROUGHNESS: f64 = 0.9;
 
 /// Codable version stamped on a rebuilt contents file when the state carries no
 /// preserved object version.
@@ -46,7 +55,7 @@ const DEFAULT_PIVOT_FACE: &str = "8";
 /// The `pal` an object with no color palette borrows. An empty reference makes
 /// Voxel Max read the package directory as a file and abort, so a colorless
 /// object shares the first color palette's name and writes no file of its own.
-const FALLBACK_PALETTE: &str = "palette.png";
+const FALLBACK_PALETTE: &str = "palette1.png";
 
 /// The scene camera a synthesized document opens with, mirroring a fresh Voxel
 /// Max document's neutral rig. Voxel Max needs a valid rig to present an
@@ -681,20 +690,22 @@ fn material_plan(
         });
     }
 
-    // A Voxel-Max-origin list came from a real document, so it is within budget;
-    // the value-index is the original `material_idx`, always below the material
-    // count.
+    // A Voxel-Max-origin list came from a real document, so it is within budget:
+    // the 0-based value-index is the material byte, below the material count. A
+    // hand-edited ext can still exceed the single-byte budget, so it is checked.
     if let Some(provenance) = provenance.filter(|palette| !palette.materials.is_empty()) {
         let first = folded.materials[0].1;
-        let material_idx = palette
-            .iter_materials()
-            .map(|material| {
-                (
-                    material,
-                    palette.value_index(material, first).unwrap_or(0) as u8,
-                )
-            })
-            .collect();
+        let mut material_idx = HashMap::new();
+        for material in palette.iter_materials() {
+            let index = palette.value_index(material, first).unwrap_or(0);
+            if index >= MATERIAL_SLOTS as u32 {
+                return Err(Error::invalid(format!(
+                    "a voxel references material {index}, but a Voxel Max palette holds only \
+                     {MATERIAL_SLOTS} material slots"
+                )));
+            }
+            material_idx.insert(material, index as u8);
+        }
         let materials = provenance
             .materials
             .iter()
@@ -714,8 +725,8 @@ fn material_plan(
 /// Derives a Voxel Max material per distinct signature of the material bindings,
 /// for a state that carries no exact material list. The signature index is the
 /// `material_idx`, and each material reads its coefficients from the pools.
-/// Errors when the distinct materials exceed [`MAX_MATERIALS`], since a voxel's
-/// `material_idx` is a single byte, so a cross-format source with too many
+/// Errors when the distinct materials exceed [`MATERIAL_SLOTS`], since a Voxel
+/// Max palette holds only that many, so a cross-format source with too many
 /// materials cannot be represented rather than silently wrapping.
 fn derive_materials(
     state: &VoxMain,
@@ -735,10 +746,10 @@ fn derive_materials(
         let idx = match index_of.get(&signature) {
             Some(&idx) => idx,
             None => {
-                if signatures.len() >= MAX_MATERIALS {
+                if signatures.len() >= MATERIAL_SLOTS {
                     return Err(Error::invalid(format!(
-                        "an object needs more than {MAX_MATERIALS} materials, but a Voxel Max \
-                         voxel indexes its material with a single byte"
+                        "an object needs more than {MATERIAL_SLOTS} materials, but a Voxel Max \
+                         palette holds only that many material slots"
                     )));
                 }
                 let idx = signatures.len() as u8;
@@ -790,6 +801,18 @@ fn derived_material(
             signature[position] as usize,
         )
     };
+    // The emissive color's linear luminance. Voxel Max has one self-illumination
+    // coefficient and no emissive color, so the glTF `emissiveFactor` folds into
+    // it here: a black factor emits nothing and stays matte, a bright one glows.
+    let emissive_luminance = || -> Option<f64> {
+        let position = bindings
+            .iter()
+            .position(|(name, _)| name == EMISSIVE_FACTOR)?;
+        let pool = binding_pool(state, palette, bindings[position].1)?;
+        let [r, g, b, _] = pool_color(pool, signature[position])?;
+        let linear = TySrgbaColor::from_array([r, g, b, 255]).to_linear_rgba();
+        Some(0.2126 * linear.r + 0.7152 * linear.g + 0.0722 * linear.b)
+    };
     let dispersed = bindings
         .iter()
         .any(|(name, _)| name == IOR || name == TRANSMISSION_FACTOR || name == ABSORPTION);
@@ -797,8 +820,18 @@ fn derived_material(
         mi: (slot + 1).to_string(),
         mc: scalar(METALLIC_FACTOR).unwrap_or(0.0),
         rc: scalar(ROUGHNESS_FACTOR).unwrap_or(0.0),
-        sic: scalar(EMISSIVE_STRENGTH).unwrap_or(0.0),
-        sh: flag(SHADOWS).unwrap_or(false),
+        // With an emissive color, self-illumination is its luminance scaled by
+        // `emissiveStrength` (glTF's default 1.0), so a black factor stays matte.
+        // Without one, the bare strength stands in.
+        sic: match emissive_luminance() {
+            Some(luminance) => {
+                (scalar(EMISSIVE_STRENGTH).unwrap_or(1.0) * luminance).clamp(0.0, 1.0)
+            }
+            None => scalar(EMISSIVE_STRENGTH).unwrap_or(0.0),
+        },
+        // Voxel Max casts shadows by default; a source without a shadows flag,
+        // such as glTF, takes that default.
+        sh: flag(SHADOWS).unwrap_or(true),
         tc: None,
         md: dispersed.then(|| VMaxMaterialDispersion {
             absorption: scalar(ABSORPTION).unwrap_or(0.0),
@@ -890,6 +923,9 @@ fn reconstruct_voxels(
                 // not the empty index 0.
                 _ => 1,
             };
+            // Voxel Max's material byte is 0-based: byte `n` selects
+            // `materials[n]`. The per-color material map in the sidecar (`lc`)
+            // drives what renders, but the byte is kept consistent with it.
             let material_idx = material
                 .and_then(|material| plan.material_idx.get(&material).copied())
                 .unwrap_or(0);
@@ -950,10 +986,10 @@ fn build_palette(
     if let Some(name) = palette_files.get(&color_id) {
         return name.clone();
     }
-    let stem = match palette_files.len() {
-        0 => String::new(),
-        n => n.to_string(),
-    };
+    // Voxel Max numbers palette files 1-based (`palette1`, `palette2`, ...); an
+    // un-numbered `palette.png` breaks the plist color lookup when no image is
+    // written.
+    let stem = palette_files.len() + 1;
     let pal = format!("palette{stem}.png");
 
     let colors = color_palette_colors(state, palette, color);
@@ -978,9 +1014,19 @@ fn build_palette(
             VoxelMaxColorFormat::Png => Vec::new(),
             VoxelMaxColorFormat::Plist | VoxelMaxColorFormat::All => colors,
         };
+        // The per-color material map Voxel Max renders from: each used color
+        // cell carries a bit for the material it draws.
+        let (lc, indices, current) = color_material_map(state, palette, color, plan);
         palette_settings_files.insert(
             sidecar,
-            material_settings(plan.name.clone(), plan.materials.clone(), sidecar_colors),
+            material_settings(
+                material_name(&plan.name),
+                plan.materials.clone(),
+                sidecar_colors,
+                lc,
+                indices,
+                current,
+            ),
         );
     }
     palette_files.insert(color_id, pal.clone());
@@ -1006,29 +1052,136 @@ fn color_palette_colors(
     cells
 }
 
-/// Builds a settings sidecar carrying `colors` and `materials`. The editor-state
-/// keys are filled with the defaults Voxel Max expects.
+/// Builds a settings sidecar carrying `colors`, `materials`, and the per-color
+/// material map (`lc`/`indices`/`current`). The materials are padded to the
+/// fixed slot count and every coefficient f32-rounded, since Voxel Max drops a
+/// palette whose material coefficients are not f32-representable. The remaining
+/// editor-state keys are filled with the defaults Voxel Max expects.
 fn material_settings(
     name: String,
     materials: Vec<VMaxMaterial>,
     colors: Vec<[u8; 4]>,
+    lc: Vec<u8>,
+    indices: Vec<i64>,
+    current: i64,
 ) -> VMaxPaletteSettingsVmaxpsbFile {
     VMaxPaletteSettingsVmaxpsbFile {
         name,
-        materials,
+        materials: pad_materials(materials),
         colors: colors.iter().flatten().copied().collect(),
-        indices: Vec::new(),
-        lc: vec![0u8; 256],
+        indices,
+        lc,
         palette_type: 0,
         transparency: 1.0,
         r: 0,
         rt: "n".to_owned(),
         cmt: "ng".to_owned(),
-        current: 0,
+        current,
         ali: "1".to_owned(),
         voxmats: Vec::new(),
         ls: Vec::new(),
     }
+}
+
+/// The palette display name Voxel Max shows: the preserved name, or its default
+/// when a synthesized palette has none.
+fn material_name(name: &str) -> String {
+    if name.is_empty() {
+        "Palette #1".to_owned()
+    } else {
+        name.to_owned()
+    }
+}
+
+/// F32-rounds every material's coefficients and, for a palette that carries
+/// materials, pads the list to [`MATERIAL_SLOTS`] with the neutral default. A
+/// color-only palette keeps an empty list, since Voxel Max then uses its own
+/// default materials.
+fn pad_materials(materials: Vec<VMaxMaterial>) -> Vec<VMaxMaterial> {
+    if materials.is_empty() {
+        return materials;
+    }
+    let mut out: Vec<VMaxMaterial> = materials.iter().map(f32_material).collect();
+    while out.len() < MATERIAL_SLOTS {
+        out.push(default_material(out.len()));
+    }
+    out
+}
+
+/// A coefficient snapped to an f32-exact value. Voxel Max decodes material
+/// coefficients as 32-bit floats and drops a whole palette whose coefficients
+/// are not f32-representable, so every one passes through here.
+fn to_f32(value: f64) -> f64 {
+    f64::from(value as f32)
+}
+
+/// A copy of `material` with every coefficient f32-rounded by [`to_f32`].
+fn f32_material(material: &VMaxMaterial) -> VMaxMaterial {
+    VMaxMaterial {
+        mi: material.mi.clone(),
+        mc: to_f32(material.mc),
+        rc: to_f32(material.rc),
+        sic: to_f32(material.sic),
+        sh: material.sh,
+        tc: material.tc.map(to_f32),
+        md: material
+            .md
+            .as_ref()
+            .map(|dispersion| VMaxMaterialDispersion {
+                absorption: to_f32(dispersion.absorption),
+                ior: to_f32(dispersion.ior),
+                transmission: to_f32(dispersion.transmission),
+            }),
+    }
+}
+
+/// The neutral default material Voxel Max fills the slot at `slot` with.
+fn default_material(slot: usize) -> VMaxMaterial {
+    VMaxMaterial {
+        mi: (slot + 1).to_string(),
+        mc: to_f32(DEFAULT_METALLIC),
+        rc: to_f32(DEFAULT_ROUGHNESS),
+        sic: 0.0,
+        sh: true,
+        tc: None,
+        md: None,
+    }
+}
+
+/// The per-color material map for a palette's settings sidecar. For each color
+/// cell a material draws, sets that material's bit in `lc` (`1 <<
+/// material_byte`), lists the used cells in `indices`, and takes the first as
+/// `current`. Empty for a palette with no materials, which Voxel Max renders
+/// with its own defaults. Voxel Max reads a voxel's material from this map, not
+/// the per-voxel byte.
+fn color_material_map(
+    state: &VoxMain,
+    palette: U32Id<BVoxPalette>,
+    color: U32Id<BVoxPaletteBinding>,
+    plan: &MaterialPlan,
+) -> (Vec<u8>, Vec<i64>, i64) {
+    let mut lc = vec![0u8; 256];
+    if plan.materials.is_empty() {
+        return (lc, Vec::new(), 0);
+    }
+    let mut cells: BTreeSet<u32> = BTreeSet::new();
+    if let Some(palette_ref) = state.palette(palette) {
+        for material in palette_ref.iter_materials() {
+            let Some(cell) = palette_ref.value_index(material, color) else {
+                continue;
+            };
+            let Some(&byte) = plan.material_idx.get(&material) else {
+                continue;
+            };
+            if let Some(slot) = lc.get_mut(cell as usize) {
+                *slot |= 1 << byte;
+                cells.insert(cell);
+            }
+        }
+    }
+    let indices: Vec<i64> = cells.iter().map(|&cell| i64::from(cell)).collect();
+    let current = indices.first().copied().unwrap_or(0);
+    (lc, indices, current)
 }
 
 /// Builds a scene object from its node and preserved provenance.

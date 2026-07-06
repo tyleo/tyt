@@ -8,7 +8,8 @@ use voxcore::VoxMain;
 use voxsmith::{
     ColorSpace as VoxsmithColorSpace, Dither as VoxsmithDither, EditStateMode,
     FillMode as VoxsmithFillMode, MaterialMode as VoxsmithMaterialMode,
-    ReductionMethod as VoxsmithReductionMethod, from_gltf_bytes, reduce_palette, voxelize_mesh,
+    ReductionMethod as VoxsmithReductionMethod, from_gltf_bytes, order_palette_colors,
+    reduce_palette, voxelize_mesh,
 };
 
 /// Voxelizes the glTF or GLB mesh at `input` into a Voxel Json document at
@@ -57,6 +58,13 @@ pub fn voxelize(
     )?;
 
     reduce_generated_palette(&mut state, reduction)?;
+
+    // Canonicalize the generated palette so its materials reference colors in id
+    // order, `0, 1, 2, ...`, rather than the order voxelize and reduction left.
+    let palette = state.iter_palettes().next().map(|(palette, _)| palette);
+    if let Some(palette) = palette {
+        order_palette_colors(&mut state, palette);
+    }
 
     implementation::write_voxj_document(
         &state,

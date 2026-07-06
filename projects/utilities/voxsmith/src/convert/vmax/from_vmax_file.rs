@@ -35,8 +35,8 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// Max state with no native voxcore home rides in a `voxel-max` ext so the
 /// document can be written back faithfully. Voxel snapshots are decoded to
 /// voxels on the fly and palette color tables unpacked as needed. Color indices
-/// are 1-based in Voxel Max; voxcore holds the colors 0-based, so a voxel's
-/// cell is `color_idx - 1`.
+/// are 1-based in Voxel Max, so a voxel's color cell is `color_idx - 1`; the
+/// material byte is 0-based and used directly.
 ///
 /// Errors on malformed geometry or if
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
@@ -250,9 +250,9 @@ struct FoldedPalette {
 ///
 /// The color pool is the object's full color table in order, so a material's
 /// `baseColorFactor` value-index is `color_idx - 1`. Each material scalar pool
-/// holds one value per material, in order, so a material's value-index is its
-/// `material_idx`. The exact material list rides in the ext provenance for a
-/// byte-exact write-back.
+/// holds one value per Voxel Max material, in order; the material byte is
+/// 0-based, so a voxel's value-index is its `material_idx`. The exact material
+/// list rides in the ext provenance for a byte-exact write-back.
 fn folded_palette(
     serde: &VMaxFile,
     object: &VMaxObject,
@@ -300,16 +300,18 @@ fn folded_palette(
         }
     }
 
-    // One material per distinct combination, first-seen. Every material binding
-    // takes the value-index `material_idx`, the color binding `color_idx - 1`.
+    // One material per distinct combination, first-seen. The color index is
+    // 1-based in Voxel Max, so the color binding takes `color_idx - 1`; the
+    // material byte is 0-based, so every material binding takes it directly.
     let material_bindings = palette.binding_count() - 1;
     let mut combos: HashMap<(u8, u8), U32Id<BVoxMaterial>> = HashMap::new();
     for voxel in voxels {
         let key = combo_key(voxel, has_materials);
         combos.entry(key).or_insert_with(|| {
             let color = u32::from(key.0).saturating_sub(1);
+            let material = u32::from(key.1);
             let mut value_indices = vec![color];
-            value_indices.extend(iter::repeat_n(u32::from(key.1), material_bindings));
+            value_indices.extend(iter::repeat_n(material, material_bindings));
             palette
                 .add_material(value_indices)
                 .expect("one value-index per binding")

@@ -51,25 +51,65 @@ mod tests {
         }
     }
 
-    /// The fixed editor-state defaults the reverse path writes on a rebuilt
-    /// material palette, so a fixture round-trips to equality.
+    /// A coefficient snapped to an f32-exact value, matching what the writer
+    /// stores so a fixture round-trips to equality.
+    fn f32r(value: f64) -> f64 {
+        f64::from(value as f32)
+    }
+
+    /// The neutral default material the writer pads unused slots with.
+    fn default_material(slot: usize) -> VMaxMaterial {
+        VMaxMaterial {
+            mi: (slot + 1).to_string(),
+            mc: f32r(0.1),
+            rc: f32r(0.9),
+            sic: 0.0,
+            sh: true,
+            tc: None,
+            md: None,
+        }
+    }
+
+    /// A 256-byte `lc` usage mask with `1 << material_byte` set at each
+    /// `(color_cell, material_byte)`.
+    fn lc_mask(cells: &[(usize, u8)]) -> Vec<u8> {
+        let mut lc = vec![0u8; 256];
+        for &(cell, byte) in cells {
+            lc[cell] |= 1 << byte;
+        }
+        lc
+    }
+
+    /// The fixed settings sidecar the reverse path writes on a rebuilt material
+    /// palette: the real materials padded to the eight slots, the per-color
+    /// material map (`lc`/`indices`/`current`), and the default editor state, so
+    /// a fixture round-trips to equality.
     fn palette_settings(
         name: &str,
         materials: Vec<VMaxMaterial>,
         colors: Vec<[u8; 4]>,
+        lc: Vec<u8>,
+        indices: Vec<i64>,
+        current: i64,
     ) -> vmax::VMaxPaletteSettingsVmaxpsbFile {
+        let mut materials = materials;
+        if !materials.is_empty() {
+            while materials.len() < 8 {
+                materials.push(default_material(materials.len()));
+            }
+        }
         vmax::VMaxPaletteSettingsVmaxpsbFile {
             name: name.to_owned(),
             materials,
             colors: colors.iter().flatten().copied().collect(),
-            indices: Vec::new(),
-            lc: vec![0u8; 256],
+            indices,
+            lc,
             palette_type: 0,
             transparency: 1.0,
             r: 0,
             rt: "n".to_owned(),
             cmt: "ng".to_owned(),
-            current: 0,
+            current,
             ali: "1".to_owned(),
             voxmats: Vec::new(),
             ls: Vec::new(),
@@ -112,7 +152,7 @@ mod tests {
         let object = VMaxObject {
             name: "obj".to_owned(),
             data: "contents.vmaxb".to_owned(),
-            palette: "palette.png".to_owned(),
+            palette: "palette1.png".to_owned(),
             history: "history.vmaxhb".to_owned(),
             id: "o".to_owned(),
             parent_id: Some("g".to_owned()),
@@ -150,12 +190,12 @@ mod tests {
             snapshots: encode_vmax_snapshots(&[
                 VMaxVoxel {
                     position: [127, 127, 0],
-                    material_idx: 1,
+                    material_idx: 0,
                     color_idx: 5,
                 },
                 VMaxVoxel {
                     position: [128, 128, 1],
-                    material_idx: 0,
+                    material_idx: 1,
                     color_idx: 3,
                 },
             ]),
@@ -171,7 +211,7 @@ mod tests {
         contents_files.insert("contents.vmaxb".to_owned(), contents);
         let mut palette_settings_files = BTreeMap::new();
         palette_settings_files.insert(
-            "palette.settings.vmaxpsb".to_owned(),
+            "palette1.settings.vmaxpsb".to_owned(),
             palette_settings(
                 "mat",
                 vec![
@@ -179,10 +219,15 @@ mod tests {
                     material("2", 0.5, 0.25, 2.0, false),
                 ],
                 Vec::new(),
+                // Voxel 0 (color cell 4) draws material 0; voxel 1 (cell 2)
+                // draws material 1.
+                lc_mask(&[(4, 0), (2, 1)]),
+                vec![2, 4],
+                2,
             ),
         );
         let mut palette_png_files = BTreeMap::new();
-        palette_png_files.insert("palette.png".to_owned(), palette_png());
+        palette_png_files.insert("palette1.png".to_owned(), palette_png());
 
         VMaxFile {
             scene_json_file,
@@ -208,59 +253,64 @@ mod tests {
     }
 
     /// A material carrying dispersion, a transmission color (`tc`), and a
-    /// non-finite coefficient round-trips exactly, alongside a plain material.
-    /// The pools carry a finite-defaulted neutral copy, but the ext keeps the
-    /// exact values, so the rebuilt document matches byte for byte. The
+    /// non-finite coefficient round-trips exactly, alongside a plain material and
+    /// the padded default slots. The pools carry a finite-defaulted neutral copy,
+    /// but the ext keeps the exact values, so the rebuilt document matches byte
+    /// for byte. Coefficients are f32-exact, as Voxel Max stores them, and the
     /// non-finite `mc` is infinity, not NaN, so it compares equal.
     #[test]
     fn round_trips_rich_materials() {
         let mut original = sample();
-        original
-            .palette_settings_files
-            .get_mut("palette.settings.vmaxpsb")
-            .unwrap()
-            .materials = vec![
+        let mut materials = vec![
             VMaxMaterial {
                 mi: "1".to_owned(),
                 mc: f64::INFINITY,
-                rc: 0.25,
-                sic: 1.0,
+                rc: f32r(0.25),
+                sic: f32r(1.0),
                 sh: true,
-                tc: Some(0.6),
+                tc: Some(f32r(0.6)),
                 md: Some(VMaxMaterialDispersion {
-                    absorption: 0.1,
-                    ior: 1.4,
-                    transmission: 0.3,
+                    absorption: f32r(0.1),
+                    ior: f32r(1.4),
+                    transmission: f32r(0.3),
                 }),
             },
-            material("2", 0.5, 0.25, 2.0, false),
+            material("2", f32r(0.5), f32r(0.25), f32r(2.0), false),
         ];
+        for slot in materials.len()..8 {
+            materials.push(default_material(slot));
+        }
+        original
+            .palette_settings_files
+            .get_mut("palette1.settings.vmaxpsb")
+            .unwrap()
+            .materials = materials;
         let state = from_vmax_file(&original).unwrap();
         let rebuilt = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         assert_eq!(rebuilt, original);
     }
 
-    /// A synthesized state whose folded palette needs more than 256 distinct
+    /// A synthesized state whose folded palette needs more than 255 distinct
     /// materials cannot be represented, since a voxel's material index is a
-    /// single byte, so the writer errors rather than silently wrapping the
-    /// index.
+    /// single 1-based byte (0 is the no-material cell), so the writer errors
+    /// rather than silently wrapping the index.
     #[test]
     fn errors_when_derived_materials_exceed_the_byte_budget() {
         let mut state = VoxMain::default();
         let color = state.add_value_pool(VoxValuePool::Srgba {
             values: vec![color_floats("#FF0000FF")],
         });
-        // 257 distinct metallic values give 257 distinct material signatures,
+        // 256 distinct metallic values give 256 distinct material signatures,
         // one past the byte budget; the color pool stays a single in-range color.
         let metallic = state.add_value_pool(VoxValuePool::Float {
             min: VoxBound::None,
             max: VoxBound::None,
-            values: (0..257u32).map(f64::from).collect(),
+            values: (0..256u32).map(f64::from).collect(),
         });
         let mut palette = VoxPalette::default();
         palette.add_binding("baseColorFactor".to_owned(), color);
         palette.add_binding("metallicFactor".to_owned(), metallic);
-        for index in 0..257u32 {
+        for index in 0..256u32 {
             palette.add_material(vec![0, index]).unwrap();
         }
         let palette_id = state.add_palette(palette);
@@ -629,7 +679,7 @@ mod tests {
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
-        let png = &file.palette_png_files["palette.png"].0;
+        let png = &file.palette_png_files["palette1.png"].0;
         assert_eq!(png.len(), 256);
         assert_eq!(png[0], [0xFF, 0, 0, 0xFF]);
         assert_eq!(png[1], [0, 0xFF, 0, 0xFF]);
@@ -667,7 +717,7 @@ mod tests {
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Plist).unwrap();
         // The plist colors are 0-based: red first, blue last.
-        let colors: Vec<[u8; 4]> = file.palette_settings_files["palette.settings.vmaxpsb"]
+        let colors: Vec<[u8; 4]> = file.palette_settings_files["palette1.settings.vmaxpsb"]
             .colors
             .chunks_exact(4)
             .map(|c| [c[0], c[1], c[2], c[3]])
@@ -757,10 +807,10 @@ mod tests {
             .iter()
             .map(|object| object.palette.as_str())
             .collect();
-        assert_eq!(names, BTreeSet::from(["palette.png"]));
+        assert_eq!(names, BTreeSet::from(["palette1.png"]));
         assert_eq!(
             file.palette_png_files.keys().collect::<Vec<_>>(),
-            ["palette.png"]
+            ["palette1.png"]
         );
 
         let reloaded = from_vmax_file(&file).unwrap();
@@ -1101,7 +1151,8 @@ mod tests {
             state.validate().unwrap();
 
             let file = to_vmax_file(&state, format).unwrap();
-            // Materials are not offset: the one voxel keeps material index 0.
+            // The material byte is 0-based and independent of the color offset:
+            // the one material is index 0.
             assert!(
                 contents_voxels(&file, "contents.vmaxb")
                     .iter()
@@ -1161,7 +1212,7 @@ mod tests {
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         assert_eq!(
-            file.palette_png_files["palette.png"].0[0],
+            file.palette_png_files["palette1.png"].0[0],
             [0x33, 0x66, 0xCC, 0xFF]
         );
         let reloaded = from_vmax_file(&file).unwrap();
@@ -1323,10 +1374,10 @@ mod tests {
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
         // The color sits at index 0 (cell 0); the terminator is at the end.
         assert_eq!(
-            file.palette_png_files["palette.png"].0[0],
+            file.palette_png_files["palette1.png"].0[0],
             [0x11, 0x22, 0x33, 0]
         );
-        assert_eq!(file.palette_png_files["palette.png"].0[255], [0, 0, 0, 0]);
+        assert_eq!(file.palette_png_files["palette1.png"].0[255], [0, 0, 0, 0]);
         assert!(
             contents_voxels(&file, "contents.vmaxb")
                 .iter()

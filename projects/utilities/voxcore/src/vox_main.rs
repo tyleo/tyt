@@ -465,6 +465,38 @@ impl VoxMain {
         }
     }
 
+    /// Reorders `pool`'s values to `new_order` and rewrites every material
+    /// value-index that draws on it, so values move without changing what any
+    /// material resolves to. `new_order[new_index]` is the old index landing at
+    /// `new_index`, and must be a permutation of the pool's `0..values_len`. A
+    /// no-op if `pool` is not one of this state's.
+    pub fn reorder_value_pool(&mut self, pool: U32Id<BVoxValuePool>, new_order: &[u32]) {
+        if !self.runtime_state.value_pool_ids.is_retained(pool) {
+            return;
+        }
+        // Safety: the id is retained, so it has a value.
+        let values = unsafe { self.runtime_state.value_pools.get_mut(pool) };
+        debug_assert!(
+            is_permutation(new_order, values.values_len()),
+            "reorder_value_pool needs a permutation of the pool's indices"
+        );
+
+        // The inverse map from old index to its new slot, applied to every
+        // referencing material's value-index.
+        let mut remap = vec![0u32; new_order.len()];
+        for (new_index, &old_index) in new_order.iter().enumerate() {
+            remap[old_index as usize] = new_index as u32;
+        }
+        values.retain_values(new_order);
+
+        let palette_ids: Vec<_> = self.runtime_state.palette_ids.iter().collect();
+        for palette_id in palette_ids {
+            // Safety: retained palette ids have a value.
+            let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
+            palette.remap_pool_value_indices(pool, &remap);
+        }
+    }
+
     /// Checks the value pools, palettes, cross-references, and per-entity rules:
     ///
     /// 1. every value pool is non-empty, its values well-formed for its kind,
@@ -816,6 +848,21 @@ fn check_color_components<const N: usize>(
     Ok(())
 }
 
+/// Whether `order` lists each index in `0..len` exactly once.
+fn is_permutation(order: &[u32], len: usize) -> bool {
+    if order.len() != len {
+        return false;
+    }
+    let mut seen = vec![false; len];
+    for &index in order {
+        match seen.get_mut(index as usize) {
+            Some(slot) if !*slot => *slot = true,
+            _ => return false,
+        }
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -1027,6 +1074,55 @@ mod tests {
                 .unwrap()
                 .value_index(b_material, b_binding),
             Some(1)
+        );
+        state.validate().unwrap();
+    }
+
+    #[test]
+    fn reorder_value_pool_permutes_values_and_follows_indices() {
+        let mut state = VoxMain::default();
+        // Three colors; two palettes bind the pool, each with materials pointing
+        // at scattered indices.
+        let colors = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![
+                [1.0, 0.0, 0.0, 1.0], // 0 red
+                [0.0, 1.0, 0.0, 1.0], // 1 green
+                [0.0, 0.0, 1.0, 1.0], // 2 blue
+            ],
+        });
+        let mut a = VoxPalette::default();
+        let a_binding = a.add_binding("baseColorFactor".to_owned(), colors);
+        let a_blue = a.add_material(vec![2]).unwrap();
+        let a_red = a.add_material(vec![0]).unwrap();
+        let a_id = state.add_palette(a);
+        let mut b = VoxPalette::default();
+        let b_binding = b.add_binding("baseColorFactor".to_owned(), colors);
+        let b_green = b.add_material(vec![1]).unwrap();
+        let b_id = state.add_palette(b);
+        state.validate().unwrap();
+
+        // Move blue to 0, red to 1, green to 2.
+        state.reorder_value_pool(colors, &[2, 0, 1]);
+
+        // The pool follows the new order.
+        assert_eq!(
+            state.value_pool(colors),
+            Some(&VoxValuePool::Srgba {
+                values: vec![
+                    [0.0, 0.0, 1.0, 1.0],
+                    [1.0, 0.0, 0.0, 1.0],
+                    [0.0, 1.0, 0.0, 1.0]
+                ],
+            })
+        );
+        // Every material still resolves to its original color: blue is now 0,
+        // red 1, green 2.
+        let a = state.palette(a_id).unwrap();
+        assert_eq!(a.value_index(a_blue, a_binding), Some(0));
+        assert_eq!(a.value_index(a_red, a_binding), Some(1));
+        assert_eq!(
+            state.palette(b_id).unwrap().value_index(b_green, b_binding),
+            Some(2)
         );
         state.validate().unwrap();
     }
