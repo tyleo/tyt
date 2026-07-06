@@ -469,6 +469,18 @@ impl TyVector3<i32> {
     pub fn to_f64(self) -> TyVector3<f64> {
         TyVector3::new(self.x as f64, self.y as f64, self.z as f64)
     }
+
+    /// Each component cast to `u32` with `as`, wrapping negative values.
+    pub fn to_u32(self) -> TyVector3<u32> {
+        TyVector3::new(self.x as u32, self.y as u32, self.z as u32)
+    }
+}
+
+impl TyVector3<u32> {
+    /// Each component cast to `i32` with `as`, wrapping values above `i32::MAX`.
+    pub fn to_i32(self) -> TyVector3<i32> {
+        TyVector3::new(self.x as i32, self.y as i32, self.z as i32)
+    }
 }
 
 #[cfg(test)]
@@ -531,6 +543,20 @@ mod tests {
         let d = TyVector3I32::new(3, -1, -9);
         assert_eq!(c.component_min_with(&d), TyVector3I32::new(-2, -1, -9));
         assert_eq!(c.component_max_with(&d), TyVector3I32::new(3, 7, -5));
+    }
+
+    #[test]
+    fn integer_casts_between_i32_and_u32_are_componentwise() {
+        assert_eq!(
+            TyVector3U32::new(1, 2, 3).to_i32(),
+            TyVector3I32::new(1, 2, 3)
+        );
+        assert_eq!(
+            TyVector3I32::new(4, 5, 6).to_u32(),
+            TyVector3U32::new(4, 5, 6)
+        );
+        // `as` wraps, matching the hand-rolled casts these replace.
+        assert_eq!(TyVector3I32::new(-1, 0, 7).to_u32().x, u32::MAX);
     }
 
     #[test]

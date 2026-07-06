@@ -459,11 +459,7 @@ impl SceneBuilder {
         let shape = self.allocate();
 
         let bounds = object.bounds();
-        let pivot = [
-            (bounds.x / 2) as i32,
-            (bounds.y / 2) as i32,
-            (bounds.z / 2) as i32,
-        ];
+        let pivot = (bounds / 2).to_i32().to_array();
         self.nodes
             .insert(transform, transform_node(transform, pivot, shape));
         self.nodes

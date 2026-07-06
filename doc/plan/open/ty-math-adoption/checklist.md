@@ -200,9 +200,14 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
 
 - [ ] **C3** `TyVector3<u32>::to_f64`; adopt in vxl `hierarchy_show.rs:929,935`
       (delete `vec_u32_to_f64`).
-- [ ] **C2** `TyVector3<u32>::to_i32` and `TyVector3<i32>::to_u32`; adopt in
-      `internal/grid.rs`, `voxj_decoded_object_from_vox_object.rs`,
-      `convert/goxl/to_goxl_file.rs:201`, `convert/mvox/to_mvox_file.rs:462`.
+- [x] **C2** `TyVector3<u32>::to_i32` and `TyVector3<i32>::to_u32` (concrete
+      `impl` blocks); adopted at the vector-native sites `internal/grid.rs` (both
+      casts, threading `copy_voxels`'s offset as `TyVector3I32`) and
+      `convert/mvox/to_mvox_file.rs` (`(bounds / 2).to_i32()`). The
+      `convert/goxl/to_goxl_file.rs:201` and
+      `voxj_decoded_object_from_vox_object.rs` sites lift an input `[i32;3]` /
+      `[u32;3]` array, so they defer to A6 (packing) where that array becomes a
+      vector.
 - [x] **C1** integer `component_min_with`/`component_max_with` via a concrete
       `impl_ty_vector3_int!` macro over `i32`/`u32` (a generic `impl<T: Ord>`
       fails E0592 against the float methods); adopted in voxcore
@@ -234,7 +239,10 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       seeds (`object_to_gltf_document.rs:43-44`, `material_document.rs:83-84`).
 - [ ] **A6** `to_array`/`from_array`/`From<[T;N]>` packing at the 6 voxj pack/
       unpack sites (position-only partial at
-      `vox_hierarchy_node_from_voxj_hierarchy_node.rs:36,75`).
+      `vox_hierarchy_node_from_voxj_hierarchy_node.rs:36,75`). Also carries the
+      C2 casts deferred here: `to_goxl_file.rs:201` (`world + position.to_i32()`)
+      and `voxj_decoded_object_from_vox_object.rs:58-62` (`origin + min.to_i32()`),
+      once their `min`/`world` arrays become `TyVector3`.
 - [ ] **A7** `TyBounds::from_points` + `size()`/`max()` at
       `convert/voxelize/mesh.rs:41-48` and the `object_to_glb_bytes.rs:87-88`
       test. Do NOT touch `triangle_bounds.rs` (bit-risk: separately-halved

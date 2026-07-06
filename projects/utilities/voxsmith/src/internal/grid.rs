@@ -24,17 +24,9 @@ pub fn tighten(object: &VoxObject) -> (VoxObject, (TyVector3U32, TyVector3I32)) 
     };
     let mut tight = VoxObject::new(object.name().to_owned(), size)
         .expect("a sub-grid of an existing grid is within the dense limit");
-    tight.set_origin(TyVector3I32::new(
-        origin.x + min.x as i32,
-        origin.y + min.y as i32,
-        origin.z + min.z as i32,
-    ));
+    tight.set_origin(origin + min.to_i32());
     copy_layers(object, &mut tight);
-    copy_voxels(
-        object,
-        &mut tight,
-        [-(min.x as i32), -(min.y as i32), -(min.z as i32)],
-    );
+    copy_voxels(object, &mut tight, -min.to_i32());
     (tight, build_volume)
 }
 
@@ -50,17 +42,13 @@ fn copy_layers(from: &VoxObject, to: &mut VoxObject) {
 /// Re-lives `from`'s live voxels on `to`, each shifted by `offset` and carrying
 /// its samples. `to` must already share `from`'s layers and contain every
 /// shifted position.
-fn copy_voxels(from: &VoxObject, to: &mut VoxObject, offset: [i32; 3]) {
+fn copy_voxels(from: &VoxObject, to: &mut VoxObject, offset: TyVector3I32) {
     let layers: Vec<_> = from.iter_layers().map(|(layer, _)| layer).collect();
     for voxel in from.iter_live() {
         let p = from
             .voxel_position(voxel)
             .expect("a live voxel is within the grid");
-        let position = TyVector3U32::new(
-            (p.x as i32 + offset[0]) as u32,
-            (p.y as i32 + offset[1]) as u32,
-            (p.z as i32 + offset[2]) as u32,
-        );
+        let position = (p.to_i32() + offset).to_u32();
         let id = to
             .voxel_id(position)
             .expect("the shifted voxel is within the target grid");

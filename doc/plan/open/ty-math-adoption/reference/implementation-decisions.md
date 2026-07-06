@@ -291,7 +291,7 @@ the `f32 -> f64` widen family (raw gltf arrays, not ty-math types), a
 `TyVector3F64::to_u32`, and a test-only `/255` helper. Rationale per item is in
 the findings file.
 
-### D1c: integer component min/max (landed)
+### C1: integer component min/max (landed)
 
 The audit proposed a generic `impl<T: Copy + Ord> TyVector3<T>` for the integer
 `component_min_with`/`component_max_with`, on the theory it could not collide with
@@ -305,5 +305,22 @@ same method names but defines them on the concrete integer types through a new
 the integer methods use `Ord::min`/`Ord::max`, bit-identical to the hand-rolled
 fold. Adopted in voxcore `live_extent`, replacing the six per-axis
 `min.x.min(p.x)` lines with `min.component_min_with(&p)` /
-`max.component_max_with(&p)`; the `max - min + 1` size still follows. Future
-integer-vector methods (C2 `to_i32`/`to_u32`) can extend the same macro.
+`max.component_max_with(&p)`; the `max - min + 1` size still follows.
+
+### C2: integer casts to_i32 / to_u32 (landed)
+
+`TyVector3<u32>::to_i32` and `TyVector3<i32>::to_u32`, componentwise `as` casts
+(wrapping, matching the hand-rolled code). Unlike the symmetric min/max, casts are
+directional, so they live on the concrete `impl TyVector3<i32>` (`to_u32`, beside
+`to_f64`) and a new `impl TyVector3<u32>` (`to_i32`), not the shared
+`impl_ty_vector3_int!` macro; the float `to_i32` (truncating f64/f32 -> i32) is a
+different concrete type, so no collision. Adopted only at the sites whose source is
+already a `TyVector3`: `internal/grid.rs` vectorizes end to end
+(`origin + min.to_i32()`, `-min.to_i32()`, and `copy_voxels`'s offset threaded as
+`TyVector3I32` so the body is `(p.to_i32() + offset).to_u32()`), and
+`convert/mvox/to_mvox_file.rs` pivots via `(bounds / 2).to_i32().to_array()`. The
+`to_goxl_file.rs:201` and `voxj_decoded_object_from_vox_object.rs:58-62` sites lift
+an input `[i32;3]`/`[u32;3]` array through `from_array`, which is A6 (packing)
+plumbing (voxj even destructures a vector to `[u32;3]` at `:18` just to rebuild it),
+so both defer to A6 rather than round-trip through `from_array` here. All casts are
+byte-identical; no golden moved.
