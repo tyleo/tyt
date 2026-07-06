@@ -214,8 +214,11 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       `impl_ty_vector3_int!` macro over `i32`/`u32` (a generic `impl<T: Ord>`
       fails E0592 against the float methods); adopted in voxcore
       `vox_object.rs` (`live_extent`). vmax `min_corner` trails in D3.
-- [ ] **C4** `TyQuaternion::is_normalized(self, tolerance)`; adopt in voxcore
-      `vox_main.rs:602-611` and voxj-codec `check_transforms.rs:27-36`.
+- [x] **C4** `TyQuaternion::is_normalized(self, tolerance)`; adopted in voxcore
+      `vox_main.rs` (`!rotation.is_normalized(ROTATION_TOLERANCE)`). The voxj-codec
+      `check_transforms.rs` site is DEFERRED: voxj-codec has no `ty-math`
+      dependency, so adopting there means adding a cross-layer dep to a lean codec
+      crate -- an owner decision, pending.
 - [ ] **C5** the six swizzle accessors (`xyz`/`xzy`/`yxz`/`yzx`/`zxy`/`zyx`) on
       `impl<T: Copy> TyVector3<T>`; adopt in the three glTF sites, keeping the
       local sign flip (the conversion is a rotation, not a pure permutation).

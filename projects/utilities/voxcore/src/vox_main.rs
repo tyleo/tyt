@@ -632,11 +632,7 @@ impl VoxMain {
                 });
             }
             let rotation = node.transform.rotation;
-            let length_squared = rotation.x * rotation.x
-                + rotation.y * rotation.y
-                + rotation.z * rotation.z
-                + rotation.w * rotation.w;
-            if (length_squared - 1.0).abs() > ROTATION_TOLERANCE {
+            if !rotation.is_normalized(ROTATION_TOLERANCE) {
                 return Err(Error::NonUnitRotation {
                     node: node_id.to_u32(),
                 });

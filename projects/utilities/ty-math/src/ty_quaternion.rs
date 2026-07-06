@@ -130,6 +130,13 @@ macro_rules! impl_ty_quaternion_float {
                 self * (1.0 / self.magnitude())
             }
 
+            /// True when this quaternion is within `tolerance` of unit length,
+            /// testing the squared magnitude against `1` to avoid the square
+            /// root.
+            pub fn is_normalized(self, tolerance: $t) -> bool {
+                (self.magnitude_squared() - 1.0).abs() <= tolerance
+            }
+
             /// Returns the conjugate. For a unit quaternion this is the inverse
             /// rotation.
             pub fn conjugate(self) -> Self {
@@ -506,6 +513,15 @@ mod tests {
     fn normalized_has_unit_length() {
         let quaternion = TyQuaternionF64::new(1.0, 2.0, 3.0, 4.0).normalized();
         assert!(close(quaternion.magnitude(), 1.0));
+    }
+
+    #[test]
+    fn is_normalized_gates_on_squared_length() {
+        assert!(about_z(0.7).is_normalized(1e-9));
+        // magnitude_squared = 1 + 4 + 9 + 16 = 30, so the deviation is 29.
+        let scaled = TyQuaternionF64::new(1.0, 2.0, 3.0, 4.0);
+        assert!(!scaled.is_normalized(1e-6));
+        assert!(scaled.is_normalized(29.0));
     }
 
     #[test]

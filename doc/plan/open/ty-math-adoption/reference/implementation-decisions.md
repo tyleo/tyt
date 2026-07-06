@@ -335,3 +335,21 @@ by-name use of `TyVector3U32` (the rest are in the test module's own import), so
 came off the line-13 import. The i32 sibling `vec_i32_to_f64` stays until A3
 removes it (its call at `:928` and a second mvox site). `u32 -> f64` is exact, so
 the hierarchy display output is unchanged.
+
+### C4: quaternion is_normalized (landed, one site)
+
+`TyQuaternion::is_normalized(self, tolerance) -> bool`, `(self.magnitude_squared()
+- 1.0).abs() <= tolerance`, in the float macro beside `normalized`. Adopted in
+voxcore `vox_main`'s node-transform check: the four-term `length_squared` fold and
+the `(length_squared - 1.0).abs() > ROTATION_TOLERANCE` gate become
+`!rotation.is_normalized(ROTATION_TOLERANCE)`. `rotation` is already a
+`TyQuaternionF64` and `magnitude_squared` sums `x,y,z,w` in the same order, so the
+error is raised on exactly the same inputs; behavior-preserving.
+
+The second audit site, voxj-codec `check_transforms.rs`, is DEFERRED. voxj-codec's
+dependencies are base64/flate2/serde_json/voxj -- no `ty-math` -- and it validates
+the raw voxj serde transform (`rotation: [f64; 4]`). Adopting `is_normalized` there
+means constructing a `TyQuaternion` from the array and adding `ty-math` as a
+dependency to a deliberately lean codec crate. That is a layering decision for the
+owner, not a mechanical adoption, so the hand-rolled `length_squared` check stays
+until that call is made.
