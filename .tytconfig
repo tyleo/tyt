@@ -1,0 +1,12 @@
+{
+  "fs": {
+    "move-to-scratch": {
+      "scratchDir": "scratch"
+    }
+  },
+  "oai": {
+    "img": {
+      "systemPromptsDir": "src/ai/styles"
+    }
+  }
+}
