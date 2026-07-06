@@ -7,7 +7,7 @@ use ty_math::{TyVector3F64, TyVector3U32};
 /// cell the occupancy grid filled.
 pub(crate) struct GridSpace {
     min: TyVector3F64,
-    size: [f64; 3],
+    size: TyVector3F64,
     counts: [usize; 3],
 }
 
@@ -23,22 +23,20 @@ impl GridSpace {
     /// The grid space for `counts` over the box `[min, max]`.
     pub fn from_bounds(min: TyVector3F64, max: TyVector3F64, counts: TyVector3U32) -> Self {
         let counts = [counts.x as usize, counts.y as usize, counts.z as usize];
-        let size = [
+        let size = TyVector3F64::new(
             voxel_size(min.x, max.x, counts[0]),
             voxel_size(min.y, max.y, counts[1]),
             voxel_size(min.z, max.z, counts[2]),
-        ];
+        );
         Self { min, size, counts }
     }
 
     /// `point` in grid coordinates, where one unit is one voxel from the min
     /// corner.
     pub fn to_grid(&self, point: TyVector3F64) -> [f64; 3] {
-        [
-            (point.x - self.min.x) / self.size[0],
-            (point.y - self.min.y) / self.size[1],
-            (point.z - self.min.z) / self.size[2],
-        ]
+        (point - self.min)
+            .componentwise_divide(&self.size)
+            .to_array()
     }
 
     /// The raster cell index (`x*Y*Z + y*Z + z`) `point` falls in, floored and
@@ -58,11 +56,8 @@ impl GridSpace {
         let plane = ny * nz;
         let (x, remainder) = (cell / plane, cell % plane);
         let (y, z) = (remainder / nz, remainder % nz);
-        TyVector3F64::new(
-            self.min.x + (x as f64 + 0.5) * self.size[0],
-            self.min.y + (y as f64 + 0.5) * self.size[1],
-            self.min.z + (z as f64 + 0.5) * self.size[2],
-        )
+        let offset = TyVector3F64::new(x as f64 + 0.5, y as f64 + 0.5, z as f64 + 0.5);
+        self.min + offset.componentwise_multiply(&self.size)
     }
 }
 

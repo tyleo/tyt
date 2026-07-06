@@ -370,3 +370,17 @@ Adopted at all three glTF sites: `from_gltf_bytes` (`world.yup_to_zup()` after t
 closures (`p.zup_to_yup() * scale` for positions, `n.zup_to_yup()` for the unit
 normals, the `* scale` staying the existing `Mul<T>`). Pure component reorder plus
 negate, so the baked glTF bytes are unchanged.
+
+### C7: componentwise_divide (landed)
+
+`componentwise_divide` on `impl<T: Copy + Div<Output = T>> TyVector3<T>`, the
+companion to `componentwise_multiply` in its own minimal-bound block (Div only, so
+it stays off the Add/Mul/Sub geometry block). Adopted in `internal/mesh/grid_space`
+by retyping the private `size` field from `[f64; 3]` to `TyVector3F64` (a private
+field, nothing serialized): `to_grid` becomes `(point -
+min).componentwise_divide(&size).to_array()`, and `cell_center` builds an
+`(x+0.5, y+0.5, z+0.5)` offset and returns `min +
+offset.componentwise_multiply(&size)` (the existing multiply), replacing the
+per-axis `self.size[i]` indexing the retype forced anyway. Every operation is the
+same per-component subtract/divide/multiply/add in the same order, so the
+rasterizer and sampler are bit-identical.

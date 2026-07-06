@@ -225,8 +225,11 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       `material_document` export, the scale folding into the existing `Mul<T>`).
       Superseded the pure-swizzle idea: the sites are +/-90 rotations about X, so a
       bare permutation never fit.
-- [ ] **C7** `componentwise_divide` on `impl<T: Div + Copy> TyVector3<T>`; adopt in
-      `internal/mesh/grid_space.rs:36-42` (`to_grid`, retype `size`).
+- [x] **C7** `componentwise_divide` on `impl<T: Copy + Div> TyVector3<T>`; adopted
+      in `internal/mesh/grid_space.rs`: retyped the private `size` to
+      `TyVector3F64`, so `to_grid` is `(point -
+      min).componentwise_divide(&size).to_array()` and `cell_center` folds through
+      the existing `componentwise_multiply`.
 - [ ] **C8** `TyRgbaColorF64::to_linear_rgba` (float sRGB decode, reuse the private
       `srgb_to_linear`); adopt in
       `voxj_value_pool_from_vox_value_pool.rs:104-132`.

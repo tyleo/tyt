@@ -74,6 +74,18 @@ impl<T: Add<Output = T> + Copy + Mul<Output = T> + Sub<Output = T>> TyVector3<T>
     }
 }
 
+impl<T: Copy + Div<Output = T>> TyVector3<T> {
+    /// Returns the component-wise quotient of `self` and `other`, the companion
+    /// to [`componentwise_multiply`](Self::componentwise_multiply).
+    pub fn componentwise_divide(&self, other: &Self) -> Self {
+        Self {
+            x: self.x / other.x,
+            y: self.y / other.y,
+            z: self.z / other.z,
+        }
+    }
+}
+
 impl<T: Copy + Neg<Output = T>> TyVector3<T> {
     /// This vector rotated from Z-up to Y-up axes, `(x, y, z) -> (x, z, -y)`: a
     /// +90 degree rotation about X. The inverse of
@@ -558,6 +570,13 @@ mod tests {
         let product = TyVector3F64::new(2.0, 3.0, 4.0)
             .componentwise_multiply(&TyVector3F64::new(5.0, 6.0, 7.0));
         assert_eq!(product, TyVector3F64::new(10.0, 18.0, 28.0));
+    }
+
+    #[test]
+    fn componentwise_divide_is_the_per_axis_quotient() {
+        let quotient = TyVector3F64::new(10.0, 18.0, 28.0)
+            .componentwise_divide(&TyVector3F64::new(5.0, 6.0, 7.0));
+        assert_eq!(quotient, TyVector3F64::new(2.0, 3.0, 4.0));
     }
 
     #[test]
