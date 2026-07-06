@@ -10,7 +10,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
+use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 
 /// A hierarchy-node id in the loaded [`VoxMain`], aliased so signatures stay
@@ -926,13 +926,13 @@ impl Walk<'_> {
     /// world space when its view asks.
     fn object_rows(&self, object: &VoxObject, placing_world: TyTransformF64) -> Vec<ObjectRow> {
         let origin = vec_i32_to_f64(object.origin());
-        let build = vec_u32_to_f64(object.bounds());
+        let build = object.bounds().to_f64();
         let edit = edit_present(object);
 
         // The runtime grid as (node-relative min corner, size). An object with no
         // live voxels has a zero-size grid at its origin.
         let (runtime_min, runtime_size) = match object.live_extent() {
-            Some((min, size)) => (origin + vec_u32_to_f64(min), vec_u32_to_f64(size)),
+            Some((min, size)) => (origin + min.to_f64(), size.to_f64()),
             None => (origin, TyVector3F64::new(0.0, 0.0, 0.0)),
         };
 
@@ -1170,11 +1170,6 @@ fn origin_value(corner: TyVector3F64, world: bool, placing_world: TyTransformF64
 
 /// A signed integer grid vector as floats.
 fn vec_i32_to_f64(vector: TyVector3I32) -> TyVector3F64 {
-    TyVector3F64::new(vector.x as f64, vector.y as f64, vector.z as f64)
-}
-
-/// An unsigned integer grid vector as floats.
-fn vec_u32_to_f64(vector: TyVector3U32) -> TyVector3F64 {
     TyVector3F64::new(vector.x as f64, vector.y as f64, vector.z as f64)
 }
 

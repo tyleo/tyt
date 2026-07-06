@@ -477,6 +477,11 @@ impl TyVector3<i32> {
 }
 
 impl TyVector3<u32> {
+    /// Each component widened to `f64`, losslessly.
+    pub fn to_f64(self) -> TyVector3<f64> {
+        TyVector3::new(self.x as f64, self.y as f64, self.z as f64)
+    }
+
     /// Each component cast to `i32` with `as`, wrapping values above `i32::MAX`.
     pub fn to_i32(self) -> TyVector3<i32> {
         TyVector3::new(self.x as i32, self.y as i32, self.z as i32)
@@ -504,6 +509,12 @@ mod tests {
     fn to_f64_widens_each_component() {
         let widened = TyVector3I32::new(1, -2, 3).to_f64();
         assert_eq!(widened, TyVector3F64::new(1.0, -2.0, 3.0));
+    }
+
+    #[test]
+    fn u32_to_f64_widens_each_component() {
+        let widened = TyVector3U32::new(1, 2, 3).to_f64();
+        assert_eq!(widened, TyVector3F64::new(1.0, 2.0, 3.0));
     }
 
     #[test]

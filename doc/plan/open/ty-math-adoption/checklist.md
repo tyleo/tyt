@@ -198,8 +198,10 @@ Shipped in `f2d4d5d`: `TyFloatExt::to_unorm8` (4 sites) and
 Each method lands in its file's float-macro or generic form with a doc comment and
 a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
 
-- [ ] **C3** `TyVector3<u32>::to_f64`; adopt in vxl `hierarchy_show.rs:929,935`
-      (delete `vec_u32_to_f64`).
+- [x] **C3** `TyVector3<u32>::to_f64`; adopted in vxl `hierarchy_show.rs`
+      (`build`, `runtime_min`, `runtime_size`), deleting `vec_u32_to_f64` and
+      dropping `TyVector3U32` from the module import. The sibling `vec_i32_to_f64`
+      stays for A3.
 - [x] **C2** `TyVector3<u32>::to_i32` and `TyVector3<i32>::to_u32` (concrete
       `impl` blocks); adopted at the vector-native sites `internal/grid.rs` (both
       casts, threading `copy_voxels`'s offset as `TyVector3I32`) and

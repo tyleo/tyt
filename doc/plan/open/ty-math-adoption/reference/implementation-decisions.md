@@ -324,3 +324,14 @@ an input `[i32;3]`/`[u32;3]` array through `from_array`, which is A6 (packing)
 plumbing (voxj even destructures a vector to `[u32;3]` at `:18` just to rebuild it),
 so both defer to A6 rather than round-trip through `from_array` here. All casts are
 byte-identical; no golden moved.
+
+### C3: u32 to_f64 (landed)
+
+`TyVector3<u32>::to_f64`, the lossless widen completing the family (`i32` already
+had it), added to the same `impl TyVector3<u32>` block beside `to_i32`. Adopted in
+vxl `hierarchy_show.rs` object_rows (`object.bounds().to_f64()`, `min.to_f64()`,
+`size.to_f64()`), deleting the `vec_u32_to_f64` helper. That was the module's only
+by-name use of `TyVector3U32` (the rest are in the test module's own import), so it
+came off the line-13 import. The i32 sibling `vec_i32_to_f64` stays until A3
+removes it (its call at `:928` and a second mvox site). `u32 -> f64` is exact, so
+the hierarchy display output is unchanged.
