@@ -8,6 +8,7 @@ use qbcl::qbcl::{
     QbclThumbnail, QbclVoxel,
 };
 use std::collections::HashSet;
+use ty_math::TyVector3I32;
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject};
 
 /// Writes a [`VoxMain`] to a decoded Qubicle Construction Library [`QbclFile`].
@@ -251,7 +252,7 @@ fn synthesize_qbcl(state: &VoxMain) -> QbclFile {
     let mut children: Vec<QbclNode> = state
         .root_hierarchy_nodes()
         .iter()
-        .map(|&root| builder.emit_node(state, root, [0, 0, 0]))
+        .map(|&root| builder.emit_node(state, root, TyVector3I32::new(0, 0, 0)))
         .collect();
     for (id, object) in state.iter_objects() {
         if !builder.placed.contains(&id.to_u32()) {
@@ -289,18 +290,14 @@ impl QbclBuilder {
         &mut self,
         state: &VoxMain,
         node_id: U32Id<BVoxHierarchyNode>,
-        parent: [i32; 3],
+        parent: TyVector3I32,
     ) -> QbclNode {
         let (name, child_objects, child_nodes, world) = {
             let node = state
                 .hierarchy_node(node_id)
                 .expect("a hierarchy id from the state resolves");
             let position = node.transform.position;
-            let world = [
-                parent[0] + position.x.round() as i32,
-                parent[1] + position.y.round() as i32,
-                parent[2] + position.z.round() as i32,
-            ];
+            let world = parent + position.round().to_i32();
             (
                 node.name.clone(),
                 node.child_objects.clone(),
@@ -317,7 +314,7 @@ impl QbclBuilder {
         let first = objects.next();
 
         let mut children: Vec<QbclNode> = objects
-            .map(|(id, object)| self.emit_object_node(state, id, object, world))
+            .map(|(id, object)| self.emit_object_node(state, id, object, world.to_array()))
             .collect();
         for child in child_nodes {
             children.push(self.emit_node(state, child, world));
@@ -331,10 +328,10 @@ impl QbclBuilder {
             // The object is the author's build volume, so the matrix keeps its
             // dimensions and voxel positions directly.
             Some((id, object)) if children.is_empty() => {
-                QbclNodeBody::Matrix(self.synthesize_matrix(id, object, world, state))
+                QbclNodeBody::Matrix(self.synthesize_matrix(id, object, world.to_array(), state))
             }
             Some((id, object)) => QbclNodeBody::Compound(QbclCompound {
-                matrix: self.synthesize_matrix(id, object, world, state),
+                matrix: self.synthesize_matrix(id, object, world.to_array(), state),
                 children,
             }),
         };

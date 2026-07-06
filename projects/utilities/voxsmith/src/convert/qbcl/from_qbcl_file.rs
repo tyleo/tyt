@@ -5,7 +5,7 @@ use crate::{
 use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMatrix, QbclMetadata, QbclNode, QbclNodeBody};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -296,11 +296,7 @@ fn metadata_provenance(metadata: &QbclMetadata) -> QubicleQbclMetadata {
 
 /// A translation-only transform from a scene position.
 fn translation(position: [i32; 3]) -> TyTransformF64 {
-    TyTransformF64::new(
-        TyVector3F64::new(position[0] as f64, position[1] as f64, position[2] as f64),
-        TyQuaternionF64::identity(),
-        TyVector3F64::new(1.0, 1.0, 1.0),
-    )
+    TyTransformF64::from_translation(TyVector3I32::from_array(position).to_f64())
 }
 
 /// The float sRGB components in `[0, 1]` of an `[r, g, b]` byte color.
@@ -317,7 +313,7 @@ mod tests {
         QbclNodeBody, QbclThumbnail, QbclVoxel,
     };
     use std::collections::BTreeSet;
-    use ty_math::{TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
         VoxPalette, VoxValue, VoxValuePool,
@@ -456,13 +452,8 @@ mod tests {
 
         let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
-        let placed_at = |x: f64, y: f64, z: f64| {
-            TyTransformF64::new(
-                TyVector3F64::new(x, y, z),
-                TyQuaternionF64::identity(),
-                TyVector3F64::new(1.0, 1.0, 1.0),
-            )
-        };
+        let placed_at =
+            |x: f64, y: f64, z: f64| TyTransformF64::from_translation(TyVector3F64::new(x, y, z));
 
         // node 0 groups node 1, which places object 0 at +5x; node 2 places
         // object 1 at +3y. Nodes 0 and 2 are the roots.

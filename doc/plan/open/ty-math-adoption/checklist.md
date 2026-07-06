@@ -97,29 +97,34 @@ workspace so the patched consumers pick up the new methods.
 
 ### B2: adopt in the non-vmax converters
 
-- [ ] Replace the triplicated `translation([i32; 3]) -> TyTransformF64` with
+- [x] Replace the triplicated `translation([i32; 3]) -> TyTransformF64` with
       `TyTransform::from_translation` in `convert/qbcl/from_qb_file.rs:176`,
       `convert/qbcl/from_qbcl_file.rs:298`, and `convert/qbcl/from_qbt_file.rs:275`,
       and the `placed_at` test helper at `from_qbcl_file.rs:459`.
-- [ ] Replace mvox's `quaternion_from_matrix` (`from_mvox_file.rs:387`) and
+- [x] Replace mvox's `quaternion_from_matrix` (`from_mvox_file.rs:387`) and
       `determinant` (`:379`) with `TyQuaternion::from_rotation_matrix`, extracting
       the columns from the frame matrix; keep the mirror-detection that negates a
       column and sets `scale.x = -1.0`. `from_rotation_matrix` now returns
       `Option`, so `.expect("the frame is a proper rotation")` at the call site
       (the frame is always a proper rotation, so the old identity fallback was dead
-      code).
-- [ ] Replace the three-component `color_floats` with `TySrgbaColor::to_vector3`
-      (then `.to_array()` for the `[f64; 3]` pool) in
+      code). `ty-math` has no determinant, so the mirror check now uses the scalar
+      triple product of the columns via `dot`/`cross` (exact for the
+      signed-permutation frame).
+- [ ] **Deferred to the [color-model follow-up](README.md#follow-up-the-rgb-color-type-model).**
+      Replace the three-component `color_floats` with `TySrgbaColor::to_vector3` in
       `convert/qbcl/from_qb_file.rs:185`, `convert/qbcl/from_qbt_file.rs:284`, and
-      `convert/qbcl/from_qbcl_file.rs:307`; delete the helpers.
-- [ ] Replace the inline `round() as i32` world-position accumulation with
+      `convert/qbcl/from_qbcl_file.rs:307`. The source colors are `[u8; 3]` with no
+      alpha, so `to_vector3` would need a synthetic throwaway alpha; that is the
+      exact RGB-vs-RGBA smell the follow-up resolves, so the helpers stay until a
+      3-component color path lands.
+- [x] Replace the inline `round() as i32` world-position accumulation with
       `parent + position.round().to_i32()` in `convert/goxl/to_goxl_file.rs:153`,
       `convert/qbcl/to_qbcl_file.rs:298`, and mvox's `translation_of`
       (`to_mvox_file.rs:515`), threading positions as `TyVector3I32` where it stays
       typed end to end.
-- [ ] Replace the float-to-unorm8 idiom with `TyFloatExt::to_unorm8` in
+- [x] Replace the float-to-unorm8 idiom with `TyFloatExt::to_unorm8` in
       `convert/gltf/from_gltf_bytes.rs:443` and the test `byte` at `:738`.
-- [ ] Replace the duplicated triangle-normal winding test with
+- [x] Replace the duplicated triangle-normal winding test with
       `TyVector3::triangle_normal` in `convert/mesh/object_to_mesh_geometry.rs:280`
       and the test at `:440`.
 

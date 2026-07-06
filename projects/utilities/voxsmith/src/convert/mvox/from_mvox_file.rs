@@ -12,7 +12,9 @@ use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
 };
-use ty_math::{TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{
+    TyMatrix4x4F64, TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32,
+};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode, VoxMain,
     VoxObject, VoxPalette, VoxValuePool,
@@ -367,60 +369,25 @@ fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
         scale.x = -1.0;
     }
 
-    TyTransformF64::new(position, quaternion_from_matrix(&matrix), scale)
+    // Read the proper rotation into a column-major matrix and decode it. The
+    // frame is a signed permutation, so after the mirror split it is always a
+    // proper rotation.
+    let rotation = TyMatrix4x4F64::from_column_arrays([
+        [matrix[0][0], matrix[1][0], matrix[2][0], 0.0],
+        [matrix[0][1], matrix[1][1], matrix[2][1], 0.0],
+        [matrix[0][2], matrix[1][2], matrix[2][2], 0.0],
+        [0.0, 0.0, 0.0, 1.0],
+    ]);
+    let rotation = TyQuaternionF64::from_rotation_matrix(rotation)
+        .expect("the frame is a proper rotation after the mirror split");
+
+    TyTransformF64::new(position, rotation, scale)
 }
 
-/// The determinant of a 3x3 matrix.
+/// The determinant of a 3x3 matrix, the scalar triple product of its columns.
 fn determinant(matrix: &[[f64; 3]; 3]) -> f64 {
-    matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
-        - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
-        + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
-}
-
-/// A unit quaternion from a proper rotation matrix, by the standard
-/// largest-diagonal branch. A degenerate matrix falls back to the identity.
-fn quaternion_from_matrix(matrix: &[[f64; 3]; 3]) -> TyQuaternionF64 {
-    let trace = matrix[0][0] + matrix[1][1] + matrix[2][2];
-    let (x, y, z, w) = if trace > 0.0 {
-        let s = (trace + 1.0).sqrt() * 2.0;
-        (
-            (matrix[2][1] - matrix[1][2]) / s,
-            (matrix[0][2] - matrix[2][0]) / s,
-            (matrix[1][0] - matrix[0][1]) / s,
-            s / 4.0,
-        )
-    } else if matrix[0][0] > matrix[1][1] && matrix[0][0] > matrix[2][2] {
-        let s = (1.0 + matrix[0][0] - matrix[1][1] - matrix[2][2]).sqrt() * 2.0;
-        (
-            s / 4.0,
-            (matrix[0][1] + matrix[1][0]) / s,
-            (matrix[0][2] + matrix[2][0]) / s,
-            (matrix[2][1] - matrix[1][2]) / s,
-        )
-    } else if matrix[1][1] > matrix[2][2] {
-        let s = (1.0 + matrix[1][1] - matrix[0][0] - matrix[2][2]).sqrt() * 2.0;
-        (
-            (matrix[0][1] + matrix[1][0]) / s,
-            s / 4.0,
-            (matrix[1][2] + matrix[2][1]) / s,
-            (matrix[0][2] - matrix[2][0]) / s,
-        )
-    } else {
-        let s = (1.0 + matrix[2][2] - matrix[0][0] - matrix[1][1]).sqrt() * 2.0;
-        (
-            (matrix[0][2] + matrix[2][0]) / s,
-            (matrix[1][2] + matrix[2][1]) / s,
-            s / 4.0,
-            (matrix[1][0] - matrix[0][1]) / s,
-        )
-    };
-
-    let magnitude = (x * x + y * y + z * z + w * w).sqrt();
-    if magnitude.is_finite() && magnitude > 0.0 {
-        TyQuaternionF64::new(x / magnitude, y / magnitude, z / magnitude, w / magnitude)
-    } else {
-        TyQuaternionF64::identity()
-    }
+    let column = |c: usize| TyVector3F64::new(matrix[0][c], matrix[1][c], matrix[2][c]);
+    column(0).dot(&column(1).cross(&column(2)))
 }
 
 /// Builds the `magica-voxel` ext payload from the state with no native home.

@@ -514,9 +514,5 @@ fn shape_node(id: i32, model: u32) -> MVoxSceneNode {
 
 /// One scene-frame translation rounded from a node's local position.
 fn translation_of(position: &TyVector3F64) -> [i32; 3] {
-    [
-        position.x.round() as i32,
-        position.y.round() as i32,
-        position.z.round() as i32,
-    ]
+    position.round().to_i32().to_array()
 }

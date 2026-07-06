@@ -220,6 +220,13 @@ Points to weigh:
   `TyRgbColor` would want the matching subset, so scope which operations are worth
   duplicating before adding the type.
 
+Concrete site waiting on this: the three-component `color_floats([u8; 3]) -> [f64;
+3]` helpers in `convert/qbcl/from_qb_file.rs`, `from_qbt_file.rs`, and
+`from_qbcl_file.rs`, which feed the `VoxValuePool::Srgb` pools. Track B left them in
+place because routing a 3-byte color through `TySrgbaColor::to_vector3` needs a
+synthetic throwaway alpha; a real 3-component color path (or a decision to keep the
+helpers) resolves them.
+
 Landing point: pick one. If it is (1), do it in a pass that also revisits
 `TySrgbaColor::to_vector3` so `to_rgb` (typed) and `to_vector3` (raw) return the
 right things together, and migrate the three-component pool callers in one step.

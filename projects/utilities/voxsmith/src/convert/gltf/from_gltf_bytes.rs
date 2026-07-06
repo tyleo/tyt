@@ -12,7 +12,9 @@ use gltf::{
     texture::WrappingMode,
 };
 use std::collections::HashMap;
-use ty_math::{TyLinearRgbaColorF64, TyMatrix4x4F64, TySrgbaColor, TyVector2F64, TyVector3F64};
+use ty_math::{
+    TyFloatExt, TyLinearRgbaColorF64, TyMatrix4x4F64, TySrgbaColor, TyVector2F64, TyVector3F64,
+};
 
 /// Reads a glTF or GLB byte slice into a [`Mesh`]: every triangle in world
 /// space, tagged with its per-primitive material and per-vertex texture
@@ -440,7 +442,7 @@ impl Depth {
                     pixels[offset + 2],
                     pixels[offset + 3],
                 ];
-                (f32::from_le_bytes(bytes).clamp(0.0, 1.0) * 255.0).round() as u8
+                f32::from_le_bytes(bytes).to_unorm8()
             }
         }
     }
@@ -463,7 +465,7 @@ mod tests {
         from_gltf_bytes, voxelize_mesh,
     };
     use png::{BitDepth, ColorType, Encoder};
-    use ty_math::{TySrgbaColor, TyVector3U32};
+    use ty_math::{TyFloatExt, TySrgbaColor, TyVector3U32};
     use voxcore::{VoxMain, VoxValuePool};
 
     /// A minimal binary glTF (GLB) of an axis-aligned box spanning `[0, sx]`,
@@ -736,7 +738,7 @@ mod tests {
 
     /// One sRGB float component in `[0, 1]` mapped to a byte.
     fn byte(component: f64) -> u8 {
-        (component.clamp(0.0, 1.0) * 255.0).round() as u8
+        component.to_unorm8()
     }
 
     /// Encodes `texels` (row-major RGBA8) into a PNG of the given size.

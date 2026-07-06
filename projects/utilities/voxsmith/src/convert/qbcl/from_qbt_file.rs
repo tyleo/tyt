@@ -5,7 +5,7 @@ use crate::{
 use branded_id::U32Id;
 use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -273,11 +273,7 @@ fn masks_of(object: &VoxObject, matrix: &QbtMatrix) -> Vec<u8> {
 
 /// A translation-only transform from a scene position.
 fn translation(position: [i32; 3]) -> TyTransformF64 {
-    TyTransformF64::new(
-        TyVector3F64::new(position[0] as f64, position[1] as f64, position[2] as f64),
-        TyQuaternionF64::identity(),
-        TyVector3F64::new(1.0, 1.0, 1.0),
-    )
+    TyTransformF64::from_translation(TyVector3I32::from_array(position).to_f64())
 }
 
 /// The float sRGB components in `[0, 1]` of an `[r, g, b]` byte color.

@@ -86,6 +86,37 @@ comment and a unit test in that file's `tests` module.
   `TyRgbaColor::to_vector3`. The RGB-vs-RGBA type asymmetry is deferred to a
   documented follow-up in the [README](../README.md#follow-up-the-rgb-color-type-model).
 
+### B2: adopt in the non-vmax converters (landed)
+
+- The triplicated qbcl `translation([i32; 3])` helper now bodies to
+  `TyTransformF64::from_translation(TyVector3I32::from_array(position).to_f64())`,
+  and the qbcl `placed_at` test helper to `from_translation`; this orphaned
+  `TyQuaternionF64` in the three qbcl `from_*` imports (and the `from_qbcl` test
+  import), which were trimmed. The `i32`-vector to `f64`-vector step motivated a new
+  `TyVector3<i32>::to_f64()` in `ty-math` (a dedicated `impl TyVector3<i32>` block),
+  the lossless counterpart to B1's `to_i32`, with its own unit test.
+- mvox's `quaternion_from_matrix` is removed in favor of
+  `TyQuaternion::from_rotation_matrix`, fed a `TyMatrix4x4F64` built column-major
+  from the mirror-stripped 3x3. `from_basis_vectors` on those columns is the same
+  branch-for-branch algorithm `quaternion_from_matrix` used, so the quaternion is
+  identical for the proper (signed-permutation) frame. The call `.expect`s, since
+  the frame is always proper after the mirror split. `ty-math` has no determinant,
+  so the local `determinant` now returns the scalar triple product of the columns
+  (`c0.dot(&c1.cross(&c2))`) via `ty-math`; for a signed-permutation matrix this is
+  exactly +/-1, so the `< 0.0` mirror test is unchanged.
+- The `round() as i32` world-position accumulation in goxl/qbcl `emit_node` now
+  threads `parent`/`world` as `TyVector3I32` (`parent + position.round().to_i32()`),
+  with `.to_array()` at the `emit_object`/`emit_object_node`/`synthesize_matrix`
+  boundaries, where downstream u32 grid math keeps arrays. mvox's `translation_of`
+  leaf helper returns `position.round().to_i32().to_array()`.
+- gltf's byte-encode idiom (main and the test `byte` helper) uses
+  `TyFloatExt::to_unorm8`; the mesh winding test (main and test) uses
+  `TyVector3::triangle_normal`, matching the prior `(b - a).cross(&(c - a))` edge
+  order exactly.
+- **Deferred:** the three-component qbcl `color_floats([u8; 3])` helpers, because
+  `TySrgbaColor::to_vector3` would need a synthetic alpha for a 3-byte source. Left
+  in place pending the color-model follow-up.
+
 ## Track C: heavier logic under internal/
 
 _Pending. Record the catalog of the three patterns per file, which adoptions were

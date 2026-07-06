@@ -7,7 +7,7 @@ use goxl::{
     GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
 };
 use std::collections::{BTreeMap, HashSet};
-use ty_math::TyVector3U32;
+use ty_math::{TyVector3I32, TyVector3U32};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 
 /// Writes a [`VoxMain`] to a decoded Goxel [`GoxlFile`].
@@ -116,7 +116,7 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
 fn synthesize_goxl(state: &VoxMain) -> GoxlFile {
     let mut builder = GoxlBuilder::default();
     for &root in state.root_hierarchy_nodes() {
-        builder.emit_node(state, root, [0, 0, 0]);
+        builder.emit_node(state, root, TyVector3I32::new(0, 0, 0));
     }
     for (id, object) in state.iter_objects() {
         if !builder.placed.contains(&id.to_u32()) {
@@ -145,17 +145,18 @@ impl GoxlBuilder {
     /// Walks one hierarchy node, summing its translation into the world
     /// position, emitting a layer for each object it places, then recursing
     /// into its child nodes.
-    fn emit_node(&mut self, state: &VoxMain, node_id: U32Id<BVoxHierarchyNode>, parent: [i32; 3]) {
+    fn emit_node(
+        &mut self,
+        state: &VoxMain,
+        node_id: U32Id<BVoxHierarchyNode>,
+        parent: TyVector3I32,
+    ) {
         let (name, child_objects, child_nodes, world) = {
             let node = state
                 .hierarchy_node(node_id)
                 .expect("a hierarchy id from the state resolves");
             let position = node.transform.position;
-            let world = [
-                parent[0] + position.x.round() as i32,
-                parent[1] + position.y.round() as i32,
-                parent[2] + position.z.round() as i32,
-            ];
+            let world = parent + position.round().to_i32();
             (
                 node.name.clone(),
                 node.child_objects.clone(),
@@ -166,7 +167,7 @@ impl GoxlBuilder {
 
         for object_id in child_objects {
             if let Some(object) = state.object(object_id) {
-                self.emit_object(state, object_id, object, world, &name);
+                self.emit_object(state, object_id, object, world.to_array(), &name);
             }
         }
         for child in child_nodes {
