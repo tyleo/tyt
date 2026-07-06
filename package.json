@@ -1,15 +1,24 @@
 {
-    "name": "tyt",
-    "version": "0.1.0",
-    "author": "tyleo",
-    "license": "MIT",
-    "type": "module",
-    "sideEffects": false,
-    "scripts": {
-        "setup": "git config core.hooksPath .githooks",
-        "build:release-wasm": "cargo build",
-        "install:tyt": "cargo install --path ./projects/tyt/tyt --features=\"bin\"",
-        "install:vmax": "cargo install --path ./projects/tyt/tyt-vmax --features=\"bin\"",
-        "install:vxl": "cargo install --path ./projects/utilities/vxl --features=\"bin\""
-    }
+  "name": "tyt",
+  "version": "0.1.0",
+  "author": "tyleo",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "scripts": {
+    "setup": "git config core.hooksPath .githooks",
+    "build:release-wasm": "cargo build",
+    "install:tyt": "cargo install --path ./projects/tyt/tyt --features=\"bin\"",
+    "install:vmax": "cargo install --path ./projects/tyt/tyt-vmax --features=\"bin\"",
+    "install:vxl": "cargo install --path ./projects/utilities/vxl --features=\"bin\"",
+    "_": "",
+    "git:submodule:tyt-assets:forget": "npm run internal:git:submodule:tyt-assets:deinit && npm run internal:git:submodule:tyt-assets:exclude",
+    "git:submodule:tyt-assets:pull": "cd submodules/tyt-assets && git pull",
+    "git:submodule:tyt-assets:remember": "npm run internal:git:submodule:tyt-assets:include && npm run internal:git:submodule:tyt-assets:init && npm run internal:git:submodule:tyt-assets:checkout:main",
+    "internal:git:submodule:tyt-assets:checkout:main": "cd submodules/tyt-assets && git checkout main",
+    "internal:git:submodule:tyt-assets:deinit": "git submodule deinit submodules/tyt-assets",
+    "internal:git:submodule:tyt-assets:exclude": "git config --unset submodule.submodules/tyt-assets.update",
+    "internal:git:submodule:tyt-assets:include": "git config submodule.submodules/tyt-assets.update checkout",
+    "internal:git:submodule:tyt-assets:init": "git submodule update --init submodules/tyt-assets"
+  }
 }
