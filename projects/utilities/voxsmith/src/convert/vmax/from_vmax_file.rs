@@ -2,7 +2,7 @@ use crate::{
     ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
     ROUGHNESS_FACTOR, Result, SHADOWS, TRANSMISSION_FACTOR, VoxelMaxExt, VoxelMaxExtWrapper,
     VoxelMaxMaterial, VoxelMaxMaterialDispersion, VoxelMaxNode, VoxelMaxObjectState,
-    VoxelMaxPalette, to_vox_value,
+    VoxelMaxPalette, to_vox_value, vm_coefficient_to_pbr_factor,
 };
 use branded_id::U32Id;
 use std::{collections::HashMap, iter};
@@ -272,14 +272,28 @@ fn folded_palette(
     });
     palette.add_binding(BASE_COLOR_FACTOR.to_owned(), color_pool);
 
-    // Scalars are unbounded, mirroring the MagicaVoxel converter: a Voxel Max
-    // coefficient need not sit in the glTF range its name implies, and
-    // validation checks a pool against its own bounds. `shadows` and
-    // `absorption` have no glTF counterpart and stay custom.
+    // Metalness and roughness convert from Voxel Max's 0.1 to 0.9 slider
+    // coefficient to the 0 to 1 glTF factor the pool name implies; see
+    // [`vm_coefficient_to_pbr_factor`]. The remaining scalars are unbounded and
+    // stay raw: `sic` is an unbounded emission strength, and `shadows` and
+    // `absorption` have no glTF counterpart. The exact coefficients ride in the
+    // ext for a byte-exact write-back.
     if has_materials {
-        let metallic = float_pool(state, materials.iter().map(|m| m.mc).collect());
+        let metallic = float_pool(
+            state,
+            materials
+                .iter()
+                .map(|m| vm_coefficient_to_pbr_factor(m.mc))
+                .collect(),
+        );
         palette.add_binding(METALLIC_FACTOR.to_owned(), metallic);
-        let roughness = float_pool(state, materials.iter().map(|m| m.rc).collect());
+        let roughness = float_pool(
+            state,
+            materials
+                .iter()
+                .map(|m| vm_coefficient_to_pbr_factor(m.rc))
+                .collect(),
+        );
         palette.add_binding(ROUGHNESS_FACTOR.to_owned(), roughness);
         let emissive = float_pool(state, materials.iter().map(|m| m.sic).collect());
         palette.add_binding(EMISSIVE_STRENGTH.to_owned(), emissive);

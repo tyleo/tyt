@@ -2,7 +2,7 @@ use crate::{
     ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
     ROUGHNESS_FACTOR, Result, SHADOWS, SceneCameraSource, TRANSMISSION_FACTOR, VoxelMaxColorFormat,
     VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, ext_for,
-    from_vox_value, pool_color, tighten,
+    from_vox_value, pbr_factor_to_vm_coefficient, pool_color, tighten,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -775,7 +775,9 @@ fn derive_materials(
 }
 
 /// One derived Voxel Max material, reading each bound coefficient from the pool
-/// at the signature's value-index for that binding.
+/// at the signature's value-index for that binding. Metalness and roughness map
+/// from the 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient; see
+/// [`pbr_factor_to_vm_coefficient`].
 fn derived_material(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
@@ -818,8 +820,8 @@ fn derived_material(
         .any(|(name, _)| name == IOR || name == TRANSMISSION_FACTOR || name == ABSORPTION);
     VMaxMaterial {
         mi: (slot + 1).to_string(),
-        mc: scalar(METALLIC_FACTOR).unwrap_or(0.0),
-        rc: scalar(ROUGHNESS_FACTOR).unwrap_or(0.0),
+        mc: pbr_factor_to_vm_coefficient(scalar(METALLIC_FACTOR).unwrap_or(0.0)),
+        rc: pbr_factor_to_vm_coefficient(scalar(ROUGHNESS_FACTOR).unwrap_or(0.0)),
         // With an emissive color, self-illumination is its luminance scaled by
         // `emissiveStrength` (glTF's default 1.0), so a black factor stays matte.
         // Without one, the bare strength stands in.

@@ -1188,8 +1188,12 @@ mod tests {
                     _ => panic!("shadows is a bool pool"),
                 }
             };
-            assert_eq!(scalar("metallicFactor"), 0.5);
-            assert_eq!(scalar("roughnessFactor"), 0.25);
+            // Metalness and roughness round-trip through Voxel Max's 0.1 to 0.9
+            // coefficient range, so they return within f64 rounding of the
+            // linear map rather than bit-exact. Emissive stays a raw scalar.
+            let close = |a: f64, b: f64| (a - b).abs() < 1e-6;
+            assert!(close(scalar("metallicFactor"), 0.5));
+            assert!(close(scalar("roughnessFactor"), 0.25));
             assert_eq!(scalar("emissiveStrength"), 2.0);
             assert!(flag("shadows"));
         }
