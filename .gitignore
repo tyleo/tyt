@@ -1,5 +1,4 @@
-/scratch
-/target
-.claude/
+/.claude/
+/target/
 
 .tytusrconfig
