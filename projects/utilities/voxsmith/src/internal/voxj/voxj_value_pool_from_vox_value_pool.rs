@@ -1,5 +1,6 @@
 use crate::{ColorFormat, voxj_value_from_vox_value};
 use std::fmt::Write;
+use ty_math::TyFloatExt;
 use voxcore::{VoxBound, VoxValuePool};
 use voxj::{VoxjBound, VoxjValuePool};
 
@@ -94,7 +95,7 @@ fn encode_hex<const N: usize>(components: &[f64; N]) -> String {
     let mut hex = String::with_capacity(1 + N * 2);
     hex.push('#');
     for &component in components {
-        let byte = (component.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let byte = component.to_unorm8();
         // Writing to a String is infallible.
         write!(hex, "{byte:02X}").unwrap();
     }

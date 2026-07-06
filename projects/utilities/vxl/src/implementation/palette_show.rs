@@ -7,7 +7,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use ty_math::{TyLinearRgbaColorF64, TyRgbaColorF64};
+use ty_math::{TyFloatExt, TyLinearRgbaColorF64, TyRgbaColorF64};
 use voxcore::{VoxMain, VoxPalette, VoxValue, VoxValuePool};
 
 /// Loads the voxel file at `input` and prints the value collections named by
@@ -619,7 +619,7 @@ fn gray_swatch(level: u8) -> String {
 
 /// The gray level for a scalar, its `0..1` value mapped onto `0..255`.
 fn scalar_level(value: f64) -> u8 {
-    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+    value.to_unorm8()
 }
 
 /// Whether a collection's cells abut into a strip: a `swatch` collection whose

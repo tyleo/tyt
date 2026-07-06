@@ -2,7 +2,7 @@ use crate::{
     BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, Error, MaterialBake, MaterialChannel, Result,
     UsedMaterials, default_scalar,
 };
-use ty_math::{TyLinearRgbaColorF64, TyRgbaColorF64};
+use ty_math::{TyFloatExt, TyLinearRgbaColorF64, TyRgbaColorF64};
 use voxcore::{VoxMain, VoxValuePool};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
@@ -95,7 +95,7 @@ fn channel_byte(
 
             let fraction = if *invert { 1.0 - fraction } else { fraction };
 
-            Ok((fraction.clamp(0.0, 1.0) * 255.0).round() as u8)
+            Ok(fraction.to_unorm8())
         }
     }
 }

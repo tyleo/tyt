@@ -772,7 +772,7 @@ fn bayer(x: u32, y: u32, z: u32) -> u32 {
 mod tests {
     use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, reduce_palette};
     use branded_id::U32Id;
-    use ty_math::TyVector3U32;
+    use ty_math::{TyFloatExt, TyVector3U32};
     use voxcore::{
         BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxMain, VoxObject, VoxPalette,
         VoxValuePool,
@@ -806,7 +806,7 @@ mod tests {
 
     /// A `#RRGGBBAA` uppercase hex string of float sRGB components in `[0, 1]`.
     fn hex_of(color: [f64; 4]) -> String {
-        let bytes = color.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8);
+        let bytes = color.map(|c| c.to_unorm8());
         format!(
             "#{:02X}{:02X}{:02X}{:02X}",
             bytes[0], bytes[1], bytes[2], bytes[3]
