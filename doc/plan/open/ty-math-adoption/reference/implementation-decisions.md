@@ -117,6 +117,21 @@ comment and a unit test in that file's `tests` module.
   `TySrgbaColor::to_vector3` would need a synthetic alpha for a 3-byte source. Left
   in place pending the color-model follow-up.
 
+### B3: adopt in the vmax converter (landed)
+
+- `object_transform` is vectorized: `box_min`/`origin` (`[i32; 3]`) go through
+  `TyVector3I32::from_array(..).to_f64()`, and the offset and world position become
+  `(box_min - center - origin).componentwise_multiply(&scale)` and
+  `object.position + center + rotation.rotate(offset)` on `TyVector3F64`. Same
+  arithmetic, so the vmax round-trips are unchanged. This is the first consumer of
+  the `to_f64` added for B2.
+- Nothing else in the checklist applied: `from_rotation_matrix` is for a matrix,
+  but vmax stores an axis-angle rotation (`axis_angle` -> `from_axis_angle`); the
+  color pool already routes through `to_rgba` (Track A2); and
+  `component_min_with`/`component_max_with` are float-only while `min_corner`
+  (`[i32; 3]`) and `object_bounds` (`[u32; 3]`) are integer, so adopting them would
+  add casts, not remove them. Left as-is.
+
 ## Track C: heavier logic under internal/
 
 _Pending. Record the catalog of the three patterns per file, which adoptions were

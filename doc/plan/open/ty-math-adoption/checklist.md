@@ -132,13 +132,16 @@ Gate: `cargo test -p voxsmith` green, no golden change.
 
 ### B3: adopt in the vmax converter (own commit, last in Track B)
 
-- [ ] Adopt `from_rotation_matrix` and, if landed as part of B1, `to_rgb`/`to_rgba`
-      in `convert/vmax/from_vmax_file.rs`, and vectorize the `object_transform`
-      offset and position math (`:610`) using `componentwise_multiply`, `Sub`, and
-      `Add` on `TyVector3F64`.
-- [ ] Consider `component_min_with`/`component_max_with` for `min_corner` (`:479`)
-      and `object_bounds` (`:491`); these are borderline because of the i32/u32
-      casts, so adopt only if it reads cleaner, and note the call in the log.
+- [x] Vectorize the `object_transform` offset and position math (`:595`) using
+      `to_f64`, `componentwise_multiply`, `Sub`, and `Add` on `TyVector3F64`.
+      `from_rotation_matrix` does not apply (vmax stores an axis-angle rotation, not
+      a matrix), and `to_rgba` was already adopted for the color pool in Track A2,
+      so neither is a new change here.
+- [x] Considered `component_min_with`/`component_max_with` for `min_corner` (`:474`)
+      and `object_bounds` (`:487`): **not adopted.** Both methods are float-only
+      (they live in the `impl_ty_vector3_float` macro), but the two functions work
+      on `[i32; 3]` / `[u32; 3]`, so routing through them would add i32/u32 casts
+      rather than remove any. Left as-is.
 
 Gate: `cargo test -p voxsmith` green; vmax edits stand alone in the log.
 

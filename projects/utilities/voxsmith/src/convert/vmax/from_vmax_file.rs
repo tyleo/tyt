@@ -594,23 +594,17 @@ fn axis_angle(rotation: [f64; 4]) -> TyQuaternionF64 {
 /// rendering stays exact for any integer `origin`.
 fn object_transform(object: &VMaxObject, box_min: [i32; 3], origin: [i32; 3]) -> TyTransformF64 {
     let rotation = axis_angle(object.rotation);
-    let scale = object.scale;
-    let center = object.center;
-    let offset = TyVector3F64::new(
-        (box_min[0] as f64 - center[0] - origin[0] as f64) * scale[0],
-        (box_min[1] as f64 - center[1] - origin[1] as f64) * scale[1],
-        (box_min[2] as f64 - center[2] - origin[2] as f64) * scale[2],
-    );
-    let rotated = rotation.rotate(offset);
-    TyTransformF64::new(
-        TyVector3F64::new(
-            object.position[0] + center[0] + rotated.x,
-            object.position[1] + center[1] + rotated.y,
-            object.position[2] + center[2] + rotated.z,
-        ),
-        rotation,
-        TyVector3F64::from_array(scale),
-    )
+    let scale = TyVector3F64::from_array(object.scale);
+    let center = TyVector3F64::from_array(object.center);
+    let box_min = TyVector3I32::from_array(box_min).to_f64();
+    let origin = TyVector3I32::from_array(origin).to_f64();
+
+    // t_p + center + R*S*(box_min - center - origin); the bracket is the
+    // sub-voxel remainder.
+    let offset = (box_min - center - origin).componentwise_multiply(&scale);
+    let position = TyVector3F64::from_array(object.position) + center + rotation.rotate(offset);
+
+    TyTransformF64::new(position, rotation, scale)
 }
 
 /// The transform for a scene group, placed directly at its authored position.
