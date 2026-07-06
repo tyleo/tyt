@@ -1,4 +1,4 @@
-use crate::{TyCielabColorF64, TyOklabColorF64, TySrgbaColor, ty_array_conversions};
+use crate::{TyCielabColorF64, TyFloatExt, TyOklabColorF64, TySrgbaColor, ty_array_conversions};
 use std::ops::Mul;
 
 /// A linear-RGB color with straight alpha and component type `T`. Components are
@@ -106,7 +106,7 @@ fn linear_to_srgb_byte(linear: f64) -> u8 {
 
 /// Scales a straight `[0, 1]` value (an alpha, which carries no gamma) to a byte.
 fn straight_byte(value: f64) -> u8 {
-    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+    value.to_unorm8()
 }
 
 /// The CIELAB nonlinearity.

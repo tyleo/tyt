@@ -1,4 +1,4 @@
-use crate::{TyHsvaColor, TySrgbaColor, TyVector3, ty_array_conversions};
+use crate::{TyFloatExt, TyHsvaColor, TySrgbaColor, TyVector3, ty_array_conversions};
 use std::ops::Mul;
 
 /// An RGBA color with component type `T`, each component in `[0, 1]`.
@@ -107,7 +107,7 @@ impl_ty_rgba_color_float!(f64);
 
 /// Clamps a straight `[0, 1]` component and scales it to an sRGB byte.
 fn byte(value: f64) -> u8 {
-    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+    value.to_unorm8()
 }
 
 #[cfg(test)]
