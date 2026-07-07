@@ -35,7 +35,7 @@ than adopt the old ones first and redo them:
   voxels; two key a container on the color: the mvox `HashMap` needs `Eq`/`Hash`
   (covered by `TySrgba<u8>`) and the vmax `to_vmax_file.rs:438` `BTreeSet` needs
   `Ord` (NOT currently planned -- derive it on `TySrgba<u8>` or leave that one site
-  on raw bytes). vmax stays in its own trailing commit.
+  on raw bytes).
 - The reverted adoption-plan C8 (`to_linear_rgba` + voxj decode) -> step **S9**.
 
 ## Steps
