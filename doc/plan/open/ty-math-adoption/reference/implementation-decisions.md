@@ -518,3 +518,18 @@ bit-identical (the const is `{ x: 0.0, y: 0.0, z: 0.0 }`); vxl tests stay green
 (152). This closes Track D2: A1/A3/A5/A6/A7/A8 landed, A2/A4 moved to the
 [ty-color-model plan](../ty-color-model/README.md). Remaining work is Track D3
 (vmax, trailing commits).
+
+### D3 B1: write_vmax vector() helper -> to_array (landed)
+
+First Track D3 (vmax) chunk, in its own trailing commit per Q2. The private
+`vector(TyVector3F64) -> [f64; 3]` helper (body `[v.x, v.y, v.z]`) was deleted for
+`TyVector3F64::to_array()`, which `ty_array_conversions!(TyVector3, 3, x, y, z)`
+generates as the same `[self.x, self.y, self.z]`, so the packed `[f64; 3]` is
+byte-identical. Adopted at the three pack sites: `VMaxObject.scale` (`:1209`) and
+`VMaxGroup.position`/`.scale` (`:1386`/`:1388`), all reading
+`node.transform.{position,scale}` off a `TyTransformF64` whose `position`/`scale`
+fields are `TyVector3F64`. The `TyVector3F64` import stays: six other sites in the
+file use it (`from_axis_angle`, the three per-axis scale rotates, the offset
+build). The audit line numbers had shifted (the helper was at `:1466`, not the
+`:1311` the audit recorded), reconfirmed at the keyboard. voxsmith stays green
+(117 tests), no golden moved.

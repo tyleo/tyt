@@ -1206,7 +1206,7 @@ fn object_from_node(
         hidden: None,
         position: unbake_position(&node.transform, ext_rotation(ext_node), placement),
         rotation: ext_node.rotation.unwrap_or(IDENTITY_AXIS_ANGLE),
-        scale: vector(node.transform.scale),
+        scale: node.transform.scale.to_array(),
         ind,
         s: ext_node.selected,
         t_al: ext_node.alignment.clone().unwrap_or_default(),
@@ -1383,9 +1383,9 @@ fn group_from_node(
         id: ext_node.id.clone(),
         parent_id: ext_node.parent_id.clone(),
         hidden: None,
-        position: vector(node.transform.position),
+        position: node.transform.position.to_array(),
         rotation: ext_node.rotation.unwrap_or(IDENTITY_AXIS_ANGLE),
-        scale: vector(node.transform.scale),
+        scale: node.transform.scale.to_array(),
         ind,
         s: ext_node.selected,
         t_al: ext_node.alignment.clone().unwrap_or_default(),
@@ -1460,11 +1460,6 @@ fn unbake_position(
         transform.position.y - center[1] - rotated.y,
         transform.position.z - center[2] - rotated.z,
     ]
-}
-
-/// A `[f64; 3]` from a vector.
-fn vector(vector: TyVector3F64) -> [f64; 3] {
-    [vector.x, vector.y, vector.z]
 }
 
 /// A syntactically valid, deterministic UUID for a synthesized scene node.

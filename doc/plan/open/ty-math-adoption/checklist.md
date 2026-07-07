@@ -268,8 +268,10 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
 
 ### D3: adopt in vmax (own trailing commits)
 
-- [ ] **B1** delete `write_vmax`'s `vector()` helper -> `to_array`
-      (`write_vmax.rs:1054,1231,1233`).
+- [x] **B1** deleted `write_vmax`'s `vector()` helper for `to_array()` at the
+      three `VMax{Object,Group}` pack sites (`write_vmax.rs:1209,1386,1388`); the
+      `TyVector3F64` import stays (six other sites use it). Audit line numbers had
+      shifted; confirmed at the keyboard.
 - [ ] **B2** `TyTransformF64::transform_point` at `write_vmax.rs:1096` (delete the
       hand-rolled TRS at `:1180-1193`).
 - [ ] **B3** the round-to-nearest chain at `from_vmax_file.rs:529-535` and
