@@ -533,3 +533,20 @@ file use it (`from_axis_angle`, the three per-axis scale rotates, the offset
 build). The audit line numbers had shifted (the helper was at `:1466`, not the
 `:1311` the audit recorded), reconfirmed at the keyboard. voxsmith stays green
 (117 tests), no golden moved.
+
+### D3 B2: transform_point method in subtree_box_local (landed)
+
+The local free fn `transform_point(&TyTransformF64, [f64; 3]) -> [f64; 3]` (scale
+componentwise, `rotation.rotate`, then add `position`) was deleted for the
+`TyTransformF64::transform_point` method, which computes `position +
+rotation.rotate(scale.componentwise_multiply(&point))` -- the same TRS in the same
+order. Byte-identical: `componentwise_multiply` is `scale.{x,y,z} * point.{x,y,z}`
+where the free fn wrote `point[i] * scale.{}`, and IEEE-754 multiply is
+commutative bit-for-bit, so the scaled vector matches; the `rotate` input and the
+per-component `position + rotated` add are otherwise identical. The lone call in
+`subtree_box_local` (`:1251`) wraps its `[f64; 3]` `child_center` through
+`TyVector3F64::from_array(..)` and reads the result back with `.to_array()`, both
+byte-identical packing, so the memoized subtree box is unchanged. `transform_half`
+(the sibling AABB half-extent fold) was left as-is: it is a per-column rotate of
+the scaled basis vectors, not a `transform_point`, so no method fits. voxsmith
+stays green (117 tests), no golden moved.

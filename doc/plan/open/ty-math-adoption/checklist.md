@@ -272,8 +272,12 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       three `VMax{Object,Group}` pack sites (`write_vmax.rs:1209,1386,1388`); the
       `TyVector3F64` import stays (six other sites use it). Audit line numbers had
       shifted; confirmed at the keyboard.
-- [ ] **B2** `TyTransformF64::transform_point` at `write_vmax.rs:1096` (delete the
-      hand-rolled TRS at `:1180-1193`).
+- [x] **B2** adopted `TyTransformF64::transform_point` in `subtree_box_local`
+      (`write_vmax.rs:1251`), deleting the local hand-rolled TRS free fn (was
+      `:1336`); the call wraps `child_center` through
+      `TyVector3F64::from_array`/`to_array` at the `[f64;3]` boundary.
+      `transform_half` was left as-is (per-column basis rotate, not a point
+      transform).
 - [ ] **B3** the round-to-nearest chain at `from_vmax_file.rs:529-535` and
       `:569-573`.
 - [ ] **B4** `min_corner` integer min fold at `from_vmax_file.rs:474-483` (needs

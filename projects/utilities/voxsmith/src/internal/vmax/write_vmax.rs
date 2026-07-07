@@ -1248,7 +1248,9 @@ fn subtree_box_local(
             .hierarchy_node(child)
             .expect("a valid child node")
             .transform;
-        let center = transform_point(&transform, child_center);
+        let center = transform
+            .transform_point(TyVector3F64::from_array(child_center))
+            .to_array();
         let half = transform_half(&transform, child_half);
         extend_bounds(&mut bounds, center, half);
     }
@@ -1330,21 +1332,6 @@ fn extend_bounds(bounds: &mut Option<([f64; 3], [f64; 3])>, center: [f64; 3], ha
         }
         None => *bounds = Some((lo, hi)),
     }
-}
-
-/// Maps a point through a node transform: scale, then rotate, then translate.
-fn transform_point(transform: &TyTransformF64, point: [f64; 3]) -> [f64; 3] {
-    let scaled = TyVector3F64::new(
-        point[0] * transform.scale.x,
-        point[1] * transform.scale.y,
-        point[2] * transform.scale.z,
-    );
-    let rotated = transform.rotation.rotate(scaled);
-    [
-        transform.position.x + rotated.x,
-        transform.position.y + rotated.y,
-        transform.position.z + rotated.z,
-    ]
 }
 
 /// The half-extent of the AABB of a box rotated and scaled by a node transform.
