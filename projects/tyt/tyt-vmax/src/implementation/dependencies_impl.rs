@@ -1,8 +1,12 @@
-use crate::{ColorFormat, Dependencies, Result, VoxelMaxSceneNode, VoxjEncoding, VoxjFormat};
+use crate::{
+    ColorFormat, Dependencies, ResolvedNodeTransform, Result, VoxelMaxSceneNode, VoxjEncoding,
+    VoxjFormat,
+};
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
+use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64};
 use tyt_injection::serde_json::Value;
 use vmax_codec::from_scene_json_file_bytes;
 
@@ -50,6 +54,37 @@ fn authored_bounds(
         ]
     };
     Some((corner(min), corner(max)))
+}
+
+/// A node's raw local transform: its stored translation and scale with the
+/// `[x, y, z, angle]` axis-angle rotation decoded to a quaternion.
+fn local_transform(node: &VoxelMaxSceneNode) -> TyTransformF64 {
+    let [x, y, z, angle] = node.rotation;
+    TyTransformF64::new(
+        TyVector3F64::from_array(node.position),
+        TyQuaternionF64::from_axis_angle(TyVector3F64::new(x, y, z), angle),
+        TyVector3F64::from_array(node.scale),
+    )
+}
+
+/// The world transform of node `index`, composing local transforms down the
+/// parent chain in `parent_of` and memoizing each result in `cache`.
+fn world_transform(
+    index: usize,
+    nodes: &[VoxelMaxSceneNode],
+    parent_of: &[Option<usize>],
+    cache: &mut [Option<TyTransformF64>],
+) -> TyTransformF64 {
+    if let Some(cached) = cache[index] {
+        return cached;
+    }
+    let local = local_transform(&nodes[index]);
+    let world = match parent_of[index] {
+        Some(parent) => world_transform(parent, nodes, parent_of, cache).compose(&local),
+        None => local,
+    };
+    cache[index] = Some(world);
+    world
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -121,6 +156,31 @@ impl Dependencies for DependenciesImpl {
             });
         }
         Ok(nodes)
+    }
+
+    fn resolve_node_transforms(
+        &self,
+        nodes: &[VoxelMaxSceneNode],
+        parent_of: &[Option<usize>],
+        world: bool,
+    ) -> Vec<ResolvedNodeTransform> {
+        let mut cache = vec![None; nodes.len()];
+        nodes
+            .iter()
+            .enumerate()
+            .map(|(index, node)| {
+                let transform = if world {
+                    world_transform(index, nodes, parent_of, &mut cache)
+                } else {
+                    local_transform(node)
+                };
+                ResolvedNodeTransform {
+                    position: transform.position.to_array(),
+                    rotation: transform.rotation.to_euler_radians().to_array(),
+                    scale: transform.scale.to_array(),
+                }
+            })
+            .collect()
     }
 
     fn scene_object_refs(&self, scene_bytes: &[u8]) -> Result<Vec<(String, String)>> {
@@ -208,5 +268,67 @@ impl Dependencies for DependenciesImpl {
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_stdout(contents)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Dependencies, DependenciesImpl, VoxelMaxSceneNode};
+    use std::f64::consts::PI;
+
+    /// A group node with the given parent, position, and axis-angle
+    /// rotation and unit scale.
+    fn node(
+        id: &str,
+        parent: Option<&str>,
+        position: [f64; 3],
+        rotation: [f64; 4],
+    ) -> VoxelMaxSceneNode {
+        VoxelMaxSceneNode {
+            id: id.to_string(),
+            name: id.to_string(),
+            parent_id: parent.map(str::to_string),
+            is_group: true,
+            position,
+            rotation,
+            scale: [1.0, 1.0, 1.0],
+            bounds: None,
+        }
+    }
+
+    #[test]
+    fn local_transforms_decode_axis_angle_to_euler() {
+        // A quarter turn about z reads on the z euler component alone.
+        let nodes = vec![node("a", None, [1.0, 2.0, 3.0], [0.0, 0.0, 1.0, PI / 2.0])];
+        let resolved = DependenciesImpl.resolve_node_transforms(&nodes, &[None], false);
+        assert_eq!(resolved[0].position, [1.0, 2.0, 3.0]);
+        assert!(resolved[0].rotation[0].abs() < 1e-9);
+        assert!(resolved[0].rotation[1].abs() < 1e-9);
+        assert!((resolved[0].rotation[2] - PI / 2.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn world_transforms_compose_down_the_parent_chain() {
+        // Parent: a quarter turn about z at +x. Its own +x child sits one unit
+        // along the parent's rotated x, world +y, plus the parent translation,
+        // and inherits the parent's turn.
+        let nodes = vec![
+            node("parent", None, [1.0, 0.0, 0.0], [0.0, 0.0, 1.0, PI / 2.0]),
+            node(
+                "child",
+                Some("parent"),
+                [1.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+            ),
+        ];
+        let parent_of = [None, Some(0)];
+
+        let local = DependenciesImpl.resolve_node_transforms(&nodes, &parent_of, false);
+        assert!((local[1].position[0] - 1.0).abs() < 1e-9 && local[1].position[1].abs() < 1e-9);
+
+        let world = DependenciesImpl.resolve_node_transforms(&nodes, &parent_of, true);
+        assert!((world[1].position[0] - 1.0).abs() < 1e-9);
+        assert!((world[1].position[1] - 1.0).abs() < 1e-9);
+        assert!((world[1].rotation[2] - PI / 2.0).abs() < 1e-9);
     }
 }

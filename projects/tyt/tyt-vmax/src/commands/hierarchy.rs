@@ -1,7 +1,8 @@
-use crate::{Dependencies, Error, Result, VoxelMaxSceneNode};
+use crate::{Dependencies, Error, ResolvedNodeTransform, Result, VoxelMaxSceneNode};
 use clap::Parser;
 use std::{
     collections::{HashMap, HashSet},
+    f64::consts::PI,
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
 };
@@ -45,9 +46,13 @@ pub struct Hierarchy {
     )]
     collapse_descendants: bool,
 
-    /// Append each node's local transform as a nested subtree. An optional
-    /// `=precision` sets the decimal places (default 2). Rotation is axis-angle.
-    #[arg(value_name = "precision", long = "show-transforms", num_args = 0..=1, require_equals = true)]
+    /// Append each node's transform, with rotation as euler angles, as a
+    /// nested subtree. An optional `=space,rot-unit,precision` packs the view,
+    /// each part optional:
+    /// 1. `space`: `local` (default) or `world`.
+    /// 2. `rot-unit`: `rad` (default) or `deg`.
+    /// 3. `precision`: decimal places, default 2.
+    #[arg(value_name = "view", long = "show-transforms", num_args = 0..=1, require_equals = true)]
     show_transforms: Option<Vec<String>>,
 
     /// Append each node's authored voxel bounds as a `min`/`max` subtree, for
@@ -68,7 +73,7 @@ impl Hierarchy {
             show_bounds,
         } = self;
 
-        let show_transforms = parse_precision(show_transforms)?;
+        let show_transforms = parse_transform_view(show_transforms)?;
         let show_bounds = parse_precision(show_bounds)?;
 
         let bytes = dependencies.read_file(&input_vmax.join("scene.json"))?;
@@ -117,6 +122,12 @@ impl Hierarchy {
             (HashSet::new(), HashSet::new(), HashSet::new())
         };
 
+        // Resolve the local or world transform per node up front, while
+        // `parent_of` is still in hand, so the renderer just formats them.
+        let transforms = show_transforms
+            .map(|view| dependencies.resolve_node_transforms(&nodes, &parent_of, view.world))
+            .unwrap_or_default();
+
         let mut renderer = Renderer {
             nodes: &nodes,
             children,
@@ -127,6 +138,7 @@ impl Hierarchy {
             filtering,
             collapse_descendants,
             show_transforms,
+            transforms,
             show_bounds,
             output: String::new(),
         };
@@ -236,31 +248,97 @@ fn select_nodes(
     Ok((selected, visible, match_roots))
 }
 
-/// Parses a `--show-*` flag's optional `=precision`: `None` when the flag is
-/// absent, `Some(precision)` when present (default 2).
-fn parse_precision(values: Option<Vec<String>>) -> Result<Option<usize>> {
+/// Resolved `--show-transforms` view: the space, rotation unit, and precision
+/// to render each node's transform in.
+#[derive(Clone, Copy, Debug)]
+struct TransformView {
+    /// Render in world space rather than local.
+    world: bool,
+    /// Render rotation in degrees rather than radians.
+    degrees: bool,
+    /// Decimal places for each component.
+    precision: usize,
+}
+
+/// Parses `--show-transforms`: `None` when the flag is absent, else a
+/// [`TransformView`]. `require_equals` delivers the arguments packed into one
+/// `=`-attached value as `space,rot-unit,precision`, each part optional and
+/// defaulting to `local`, `rad`, and `2`. Packing keeps the variadic `select`
+/// patterns from being swallowed as flag values.
+fn parse_transform_view(values: Option<Vec<String>>) -> Result<Option<TransformView>> {
     let Some(values) = values else {
         return Ok(None);
     };
 
-    let precision = match values.first() {
-        Some(value) => value.parse::<usize>().map_err(|error| {
-            Error::IO(IOError::new(
-                ErrorKind::InvalidInput,
-                format!("precision must be a non-negative integer: {error}"),
-            ))
+    let packed = values.first().map(String::as_str).unwrap_or_default();
+    let parts: Vec<&str> = packed.split(',').collect();
+
+    let world = parse_space(parts.first().copied())?;
+    let degrees = parse_rot_unit(parts.get(1).copied())?;
+    let precision = parse_precision_value(parts.get(2).copied())?;
+
+    Ok(Some(TransformView {
+        world,
+        degrees,
+        precision,
+    }))
+}
+
+/// Parses the packed `space`: `local` (also empty or absent) or `world`.
+fn parse_space(value: Option<&str>) -> Result<bool> {
+    match value {
+        None | Some("" | "local") => Ok(false),
+        Some("world") => Ok(true),
+        Some(other) => Err(invalid_input(format!(
+            "space must be 'local' or 'world', got '{other}'"
+        ))),
+    }
+}
+
+/// Parses the packed `rot-unit`: `rad` (also empty or absent) or `deg`.
+fn parse_rot_unit(value: Option<&str>) -> Result<bool> {
+    match value {
+        None | Some("" | "rad") => Ok(false),
+        Some("deg") => Ok(true),
+        Some(other) => Err(invalid_input(format!(
+            "rot-unit must be 'rad' or 'deg', got '{other}'"
+        ))),
+    }
+}
+
+/// Parses a `--show-bounds` flag's optional `=precision`: `None` when the flag
+/// is absent, `Some(precision)` when present (default 2).
+fn parse_precision(values: Option<Vec<String>>) -> Result<Option<usize>> {
+    match values {
+        None => Ok(None),
+        Some(values) => Ok(Some(parse_precision_value(
+            values.first().map(String::as_str),
+        )?)),
+    }
+}
+
+/// Parses a precision value, a non-negative integer defaulting to 2 when absent
+/// or empty and capped at [`MAX_PRECISION`].
+fn parse_precision_value(value: Option<&str>) -> Result<usize> {
+    let precision = match value {
+        None | Some("") => 2,
+        Some(text) => text.parse::<usize>().map_err(|error| {
+            invalid_input(format!("precision must be a non-negative integer: {error}"))
         })?,
-        None => 2,
     };
 
     if precision > MAX_PRECISION {
-        return Err(Error::IO(IOError::new(
-            ErrorKind::InvalidInput,
-            format!("precision must be at most {MAX_PRECISION}"),
+        return Err(invalid_input(format!(
+            "precision must be at most {MAX_PRECISION}"
         )));
     }
 
-    Ok(Some(precision))
+    Ok(precision)
+}
+
+/// An invalid-input [`Error`] carrying `message`.
+fn invalid_input(message: String) -> Error {
+    Error::IO(IOError::new(ErrorKind::InvalidInput, message))
 }
 
 /// A row appended under a node, in render order.
@@ -286,7 +364,8 @@ struct Renderer<'a> {
     match_roots: HashSet<usize>,
     filtering: bool,
     collapse_descendants: bool,
-    show_transforms: Option<usize>,
+    show_transforms: Option<TransformView>,
+    transforms: Vec<ResolvedNodeTransform>,
     show_bounds: Option<usize>,
     output: String,
 }
@@ -429,26 +508,40 @@ impl Renderer<'_> {
     }
 
     fn render_transform(&mut self, index: usize, prefix: &str, is_last: bool) {
-        let precision = self.show_transforms.unwrap_or(2);
-        let (position, rotation, scale) = {
-            let node = &self.nodes[index];
-            (node.position, node.rotation, node.scale)
+        let Some(view) = self.show_transforms else {
+            return;
         };
+        let resolved = self.transforms[index];
 
+        // The resolved rotation is euler radians; scale it to degrees
+        // on request.
+        let mut rotation = resolved.rotation;
+        if view.degrees {
+            let factor = 180.0 / PI;
+            rotation = [
+                rotation[0] * factor,
+                rotation[1] * factor,
+                rotation[2] * factor,
+            ];
+        }
+
+        let precision = view.precision;
         let connector = if is_last { '└' } else { '├' };
         let inner = format!("{prefix}{}", if is_last { "  " } else { "│ " });
         self.output
             .push_str(&format!("{prefix}{connector} transform\n"));
         self.output.push_str(&format!(
             "{inner}├ position: {}\n",
-            fmt3(position, precision)
+            fmt3(resolved.position, precision)
         ));
         self.output.push_str(&format!(
             "{inner}├ rotation: {}\n",
-            fmt4(rotation, precision)
+            fmt3(rotation, precision)
         ));
-        self.output
-            .push_str(&format!("{inner}└ scale: {}\n", fmt3(scale, precision)));
+        self.output.push_str(&format!(
+            "{inner}└ scale: {}\n",
+            fmt3(resolved.scale, precision)
+        ));
     }
 
     fn render_bounds(&mut self, index: usize, prefix: &str, is_last: bool) {
@@ -479,14 +572,64 @@ fn fmt3(v: [f64; 3], precision: usize) -> String {
     )
 }
 
-/// Formats a 4-vector as `[x, y, z, w]` with `precision` decimals.
-fn fmt4(v: [f64; 4], precision: usize) -> String {
-    format!(
-        "[{:.prec$}, {:.prec$}, {:.prec$}, {:.prec$}]",
-        v[0],
-        v[1],
-        v[2],
-        v[3],
-        prec = precision
-    )
+#[cfg(test)]
+mod tests {
+    use crate::commands::hierarchy::{
+        parse_precision, parse_rot_unit, parse_space, parse_transform_view,
+    };
+
+    /// Wraps `values` as the flag's parsed `Some(..)` payload.
+    fn packed(values: &[&str]) -> Option<Vec<String>> {
+        Some(values.iter().map(|value| value.to_string()).collect())
+    }
+
+    #[test]
+    fn transform_view_defaults_to_local_radians_precision_two() {
+        // A bare flag parses to an empty value list.
+        let view = parse_transform_view(Some(Vec::new())).unwrap().unwrap();
+        assert!(!view.world && !view.degrees && view.precision == 2);
+    }
+
+    #[test]
+    fn transform_view_parses_the_packed_parts() {
+        let view = parse_transform_view(packed(&["world,deg,4"]))
+            .unwrap()
+            .unwrap();
+        assert!(view.world && view.degrees && view.precision == 4);
+    }
+
+    #[test]
+    fn transform_view_fills_defaults_for_omitted_parts() {
+        // An empty middle part keeps the default rotation unit.
+        let view = parse_transform_view(packed(&["world,,3"]))
+            .unwrap()
+            .unwrap();
+        assert!(view.world && !view.degrees && view.precision == 3);
+    }
+
+    #[test]
+    fn transform_view_is_none_when_the_flag_is_absent() {
+        assert!(parse_transform_view(None).unwrap().is_none());
+    }
+
+    #[test]
+    fn a_bad_space_unit_or_precision_is_an_error() {
+        assert!(parse_transform_view(packed(&["sideways"])).is_err());
+        assert!(parse_transform_view(packed(&["local,turns"])).is_err());
+        assert!(parse_transform_view(packed(&["local,rad,-1"])).is_err());
+    }
+
+    #[test]
+    fn space_and_rot_unit_parse_their_tokens() {
+        assert!(!parse_space(None).unwrap() && !parse_space(Some("local")).unwrap());
+        assert!(parse_space(Some("world")).unwrap());
+        assert!(!parse_rot_unit(Some("rad")).unwrap() && parse_rot_unit(Some("deg")).unwrap());
+    }
+
+    #[test]
+    fn precision_flag_defaults_and_parses() {
+        assert!(parse_precision(None).unwrap().is_none());
+        assert!(parse_precision(Some(Vec::new())).unwrap() == Some(2));
+        assert!(parse_precision(packed(&["4"])).unwrap() == Some(4));
+    }
 }

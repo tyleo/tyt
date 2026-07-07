@@ -1,4 +1,6 @@
-use crate::{ColorFormat, Result, VoxelMaxSceneNode, VoxjEncoding, VoxjFormat};
+use crate::{
+    ColorFormat, ResolvedNodeTransform, Result, VoxelMaxSceneNode, VoxjEncoding, VoxjFormat,
+};
 use std::path::{Path, PathBuf};
 
 /// Dependencies for this crate's operations.
@@ -27,6 +29,19 @@ pub trait Dependencies {
     /// group and object (groups first), exposing only the identity and parentage
     /// the `hierarchy` and `rename-node` commands need.
     fn scene_nodes(&self, scene_bytes: &[u8]) -> Result<Vec<VoxelMaxSceneNode>>;
+
+    /// Resolves each node's transform for the `hierarchy` command's
+    /// `--show-transforms`, one entry per node in `nodes` order, with rotation
+    /// returned as euler angles in radians. With `world` set, each transform is
+    /// composed down its parent chain through `parent_of`, which holds the
+    /// parent index of each node or `None` at a root; otherwise it is the
+    /// node's raw local transform.
+    fn resolve_node_transforms(
+        &self,
+        nodes: &[VoxelMaxSceneNode],
+        parent_of: &[Option<usize>],
+        world: bool,
+    ) -> Vec<ResolvedNodeTransform>;
 
     /// Returns each object's `(data, pal)` reference strings, read leniently
     /// from raw JSON so objects missing optional fields still parse.
