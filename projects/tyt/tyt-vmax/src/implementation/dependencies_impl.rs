@@ -34,6 +34,24 @@ fn hist_for(object_val: &Value) -> String {
         .unwrap_or_else(|| PACKED_HIST.to_owned())
 }
 
+/// Absolute authored box from a `center` and its center-relative `min`/`max`
+/// corners, or `None` when either corner is absent.
+fn authored_bounds(
+    center: [f64; 3],
+    min: Option<[f64; 3]>,
+    max: Option<[f64; 3]>,
+) -> Option<([f64; 3], [f64; 3])> {
+    let (min, max) = (min?, max?);
+    let corner = |offset: [f64; 3]| {
+        [
+            center[0] + offset[0],
+            center[1] + offset[1],
+            center[2] + offset[2],
+        ]
+    };
+    Some((corner(min), corner(max)))
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
@@ -48,6 +66,10 @@ impl Dependencies for DependenciesImpl {
 
     fn match_paths(&self, patterns: &[&str], candidates: &[(&str, bool)]) -> Result<Vec<bool>> {
         Ok(tyt_injection::match_paths(patterns, candidates)?)
+    }
+
+    fn match_subtrees(&self, patterns: &[&str], candidates: &[(&str, bool)]) -> Result<Vec<bool>> {
+        Ok(tyt_injection::match_subtrees(patterns, candidates)?)
     }
 
     fn pack_scene_json(
@@ -80,6 +102,10 @@ impl Dependencies for DependenciesImpl {
                 name: group.name.clone(),
                 parent_id: group.parent_id.clone(),
                 is_group: true,
+                position: group.position,
+                rotation: group.rotation,
+                scale: group.scale,
+                bounds: authored_bounds(group.center, group.bounds_min, group.bounds_max),
             });
         }
         for object in &scene.objects {
@@ -88,6 +114,10 @@ impl Dependencies for DependenciesImpl {
                 name: object.name.clone(),
                 parent_id: object.parent_id.clone(),
                 is_group: false,
+                position: object.position,
+                rotation: object.rotation,
+                scale: object.scale,
+                bounds: authored_bounds(object.center, object.bounds_min, object.bounds_max),
             });
         }
         Ok(nodes)

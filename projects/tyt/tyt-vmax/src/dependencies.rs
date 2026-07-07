@@ -9,6 +9,10 @@ pub trait Dependencies {
 
     fn match_paths(&self, patterns: &[&str], candidates: &[(&str, bool)]) -> Result<Vec<bool>>;
 
+    /// Like [`match_paths`](Self::match_paths) but with real gitignore
+    /// directory semantics: a matched directory pulls in its whole subtree.
+    fn match_subtrees(&self, patterns: &[&str], candidates: &[(&str, bool)]) -> Result<Vec<bool>>;
+
     /// Rewrites `data`/`pal` references according to the supplied `(old, new)`
     /// rename pairs and repoints each object's `hist` at `history{n}.vmaxhb`
     /// matching its renumbered `contents{n}` reference.

@@ -12,6 +12,7 @@ Some examples:
 
 ```sh
 vmax hierarchy my-scene.vmax                                   # Print the scene hierarchy
+vmax hierarchy my-scene.vmax "Cube*"                           # Filter to matching subtrees
 vmax pack my-scene.vmax                                        # Strip history files in-place
 vmax pack my-scene.vmax --output-vmax packed.vmax              # Strip history into a copy
 vmax rename-node my-scene.vmax "Cube*" "Box"                   # Rename matching nodes
@@ -34,7 +35,7 @@ Usage: vmax <command>
 
 Commands:
   completion   Generate shell completions
-  hierarchy    Prints the Voxel Max hierarchy
+  hierarchy    Prints the Voxel Max hierarchy as a tree, optionally filtered to selected nodes and their subtrees
   pack         Packs a .vmax directory by stripping history files
   rename-node  Renames nodes in the Voxel Max scene hierarchy matching a selection pattern
   to-voxj      Converts a .vmax package to a Voxel Json (.voxj / .voxjz) document
