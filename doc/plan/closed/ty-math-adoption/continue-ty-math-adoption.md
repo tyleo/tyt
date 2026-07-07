@@ -8,12 +8,12 @@ staged chunk per session, then stop for review.
 
 ## Orient first, every session
 
-1. Read `doc/plan/open/ty-math-adoption/README.md` for the three tracks, the vmax
+1. Read `doc/plan/closed/ty-math-adoption/README.md` for the three tracks, the vmax
    isolation rule, and the decisions (Q1 extend freely, Q2 isolate vmax, Q3 method
    names).
-2. Read `doc/plan/open/ty-math-adoption/checklist.md` for the per-track items with
+2. Read `doc/plan/closed/ty-math-adoption/checklist.md` for the per-track items with
    line numbers, and
-   `doc/plan/open/ty-math-adoption/reference/implementation-decisions.md` for the
+   `doc/plan/closed/ty-math-adoption/reference/implementation-decisions.md` for the
    code-level choices made so far.
 3. Run `git log --oneline -15` and `git status`. Each track is its own branch off
    `main`; branch if you are on `main` and starting a track. Confirm the audit line

@@ -1,7 +1,7 @@
 # Palette-style color model for ty-math
 
 Status: **open.** A follow-up from the [ty-math adoption
-plan](../ty-math-adoption/README.md), which surfaced that `ty-math`'s RGBA color
+plan](../../closed/ty-math-adoption/README.md), which surfaced that `ty-math`'s RGBA color
 types are ambiguous: `TySrgbaColor` (8-bit) and `TyRgbaColor<T>` (float) are the
 same color space (sRGB) under unrelated names, and `TyRgbaColor` is documented as
 a neutral `[0, 1]` value yet its methods (`to_srgba`, `to_hsva`, the reverted C8

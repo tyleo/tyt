@@ -19,7 +19,7 @@ step is a reviewable, staged chunk; the workspace stays green throughout.
 ## Carried over from the ty-math adoption plan
 
 Color-touching adoptions were moved out of the [ty-math adoption
-plan](../ty-math-adoption/checklist.md) to land here against the new types, rather
+plan](../../closed/ty-math-adoption/checklist.md) to land here against the new types, rather
 than adopt the old ones first and redo them:
 
 - The three-component qbcl `color_floats` (`from_qb_file.rs:185`,

@@ -1,6 +1,12 @@
 # ty-math Adoption in the voxsmith Converters Plan
 
-Status: **open.** This plan captures a math-consolidation pass over the voxsmith
+Status: **closed.** Tracks A, B, C, and D all landed (see the
+[checklist](checklist.md) and [decision log](reference/implementation-decisions.md));
+the only remaining work is the color-touching adoptions explicitly moved to the
+ty-color-model plan, which re-land there against the new color types rather than
+the now-deleted `TySrgbaColor`. The original plan follows.
+
+This plan captures a math-consolidation pass over the voxsmith
 converters, driven by an audit of `projects/utilities/voxsmith/src/convert`
 against the `ty-math` crate. The converters already use `ty-math` well at the
 `voxcore` boundary, but the same hand-rolled color and vector arithmetic recurs
@@ -214,8 +220,8 @@ the **full palette-style generic `TySrgba<T>`** (with `TyLinSrgba<T>` for the li
 type), over the study's lighter recommendation, accepting the larger churn. The
 plan, blast radius, friction (`Eq`/`Hash` on the hash-key type, the fbx serde wire,
 the dead HSV family), and ordered steps live in the dedicated
-[ty-color-model plan](../ty-color-model/README.md); the study record is
-[there too](../ty-color-model/reference/color-model-study.md).
+[ty-color-model plan](../../open/ty-color-model/README.md); the study record is
+[there too](../../open/ty-color-model/reference/color-model-study.md).
 
 This is a FOLLOW-UP after the current adoption pass. It supersedes the "investigate
 one of" options below and subsumes both the 3-component-RGB question and the "is
