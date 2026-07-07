@@ -237,8 +237,9 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
 
 ### D2: adopt existing ty-math, non-vmax (no new API)
 
-- [ ] **A1** route `triangle_box_overlap.rs:55-71` through `TyVector3F64`
-      `Sub`/`dot`/`cross`; delete the three private free fns.
+- [x] **A1** routed `triangle_box_overlap.rs` through `TyVector3F64`
+      `Sub`/`dot`/`cross`; deleted the three private free fns. Kept the
+      `[f64; 3]` public signature (no ripple into `to_grid`).
 - [ ] **A2 (moved)** -> [ty-color-model plan](../ty-color-model/README.md). The
       `sample_material.rs` `CellAccum` retype accumulates color values and shares
       `sample_material` with the color-type migration, so it lands there (step S6)

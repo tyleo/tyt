@@ -397,3 +397,30 @@ unit test mirrors the `from_points` case (same min `(-1, -2, 2)`, size
 compute `half = bounds / 2`, `center = box_min + half`, and return
 `(center, -half, half)`), so the min/size widen and swap land in D3 B5. The
 `from_min_max` sibling the audit floated was dropped as a lone one-off.
+
+### A1: triangle_box_overlap through TyVector3F64 (landed)
+
+`internal/mesh/triangle_box_overlap.rs` now converts its inputs to `TyVector3F64`
+via `from_array` and runs the separating-axis test on the vector `Sub`, `dot`, and
+`cross`, deleting the local `sub`/`dot`/`cross` free functions. The three ops are
+component-for-component identical to the deleted helpers (same operand order and
+`(a + b) + c` associativity in `dot`), so the overlap decision is bit-identical and
+no voxelization golden moved. Notes:
+
+- The public signature stays `triangle_box_overlap(center: [f64; 3], half: f64,
+  triangle: &[[f64; 3]; 3])`. The `[f64; 3]` corners flow in from
+  `voxelize_triangles`' `to_grid` return, so widening the boundary to `TyVector3F64`
+  would ripple into `to_grid`; the conversion stays inside the function.
+- The triangle normal is kept as the explicit `edges[0].cross(&edges[1])`, NOT
+  `TyVector3::triangle_normal`. `triangle_normal(v0, v1, v2)` is `(v1 - v0) x (v2 -
+  v0)`, but the code crosses `(v1 - v0) x (v2 - v1)`; the two are the same plane
+  normal mathematically but computed from different operands, so only the original
+  edge cross is bit-exact.
+- `separates`'s box radius stays the explicit `axis.x.abs() + axis.y.abs() +
+  axis.z.abs()` sum: `TyVector3` has `abs()` but no component-sum accessor, so the
+  scalar sum is the byte-identical form.
+- Verification gotcha: `internal/mesh` is behind `#[cfg(feature = "_mesh")]`, which
+  only the `gltf` feature enables and voxsmith's defaults do not, so the file and
+  its tests compile only under `--features gltf`. The gates were rerun as
+  `cargo {check,clippy,test} -p voxsmith --features gltf` (176 tests green,
+  including the five `triangle_box_overlap` cases).

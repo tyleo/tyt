@@ -1,3 +1,5 @@
+use ty_math::TyVector3F64;
+
 /// Whether a triangle overlaps an axis-aligned cube, by the separating-axis
 /// theorem: the two are disjoint exactly when some axis separates their
 /// projections. The 13 candidate axes are the 3 cube face normals, the triangle
@@ -8,21 +10,26 @@
 /// * `half` - the cube's half-edge length on each axis.
 /// * `triangle` - the triangle's three vertices.
 pub(crate) fn triangle_box_overlap(center: [f64; 3], half: f64, triangle: &[[f64; 3]; 3]) -> bool {
+    let center = TyVector3F64::from_array(center);
     // The triangle relative to the cube center, so the cube is centered at the
     // origin with half-edge `half` on every axis.
     let v = [
-        sub(triangle[0], center),
-        sub(triangle[1], center),
-        sub(triangle[2], center),
+        TyVector3F64::from_array(triangle[0]) - center,
+        TyVector3F64::from_array(triangle[1]) - center,
+        TyVector3F64::from_array(triangle[2]) - center,
     ];
 
-    let edges = [sub(v[1], v[0]), sub(v[2], v[1]), sub(v[0], v[2])];
-    let axes = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+    let edges = [v[1] - v[0], v[2] - v[1], v[0] - v[2]];
+    let axes = [
+        TyVector3F64::new(1.0, 0.0, 0.0),
+        TyVector3F64::new(0.0, 1.0, 0.0),
+        TyVector3F64::new(0.0, 0.0, 1.0),
+    ];
 
     // The 9 cross products of a cube axis with a triangle edge.
     for edge in &edges {
         for axis in &axes {
-            if separates(cross(*axis, *edge), &v, half) {
+            if separates(axis.cross(edge), &v, half) {
                 return false;
             }
         }
@@ -35,39 +42,20 @@ pub(crate) fn triangle_box_overlap(center: [f64; 3], half: f64, triangle: &[[f64
         }
     }
     // The triangle normal.
-    !separates(cross(edges[0], edges[1]), &v, half)
+    !separates(edges[0].cross(&edges[1]), &v, half)
 }
 
 /// Whether `axis` separates the origin-centered cube of half-edge `half` from
 /// triangle `v` (already relative to the cube center). A near-zero axis, as a
 /// degenerate edge cross produces, never separates.
-fn separates(axis: [f64; 3], v: &[[f64; 3]; 3], half: f64) -> bool {
-    let p0 = dot(axis, v[0]);
-    let p1 = dot(axis, v[1]);
-    let p2 = dot(axis, v[2]);
+fn separates(axis: TyVector3F64, v: &[TyVector3F64; 3], half: f64) -> bool {
+    let p0 = axis.dot(&v[0]);
+    let p1 = axis.dot(&v[1]);
+    let p2 = axis.dot(&v[2]);
     let min = p0.min(p1).min(p2);
     let max = p0.max(p1).max(p2);
-    let radius = half * (axis[0].abs() + axis[1].abs() + axis[2].abs());
+    let radius = half * (axis.x.abs() + axis.y.abs() + axis.z.abs());
     min > radius || max < -radius
-}
-
-/// Component-wise `a - b`.
-fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-}
-
-/// The dot product of `a` and `b`.
-fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
-    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-
-/// The cross product `a x b`.
-fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
 }
 
 #[cfg(test)]
