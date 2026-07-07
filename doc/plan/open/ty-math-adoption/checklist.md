@@ -292,8 +292,12 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       back `.center`/`.extents` (and `-extents` for content's min offset). The
       per-component `x / 2.0` becomes `from_min_size`'s `x * 0.5`, an exact
       power-of-two scaling, so it is bit-identical.
-- [ ] **B6** `extend_bounds` at `write_vmax.rs:1158-1178` via float
-      `component_min_with`/`component_max_with` or `TyBounds::encapsulate`.
+- [x] **B6** `extend_bounds` (`write_vmax.rs:1289`) vectorizes onto `TyVector3F64`:
+      `lo = center - half`, `hi = center + half`, and the running `(min, max)`
+      folds through float `component_min_with`/`component_max_with`, keeping the
+      `([f64;3], [f64;3])` tuple representation. `TyBounds::encapsulate` was NOT
+      used: its center/extents round-trip is not bit-exact against the raw min/max
+      the caller reads back.
 
 Gate: Tracks D1/D2 change no serialized bytes; `cargo test -p` the touched crates
 must stay green with no golden churn. Each new method ships a unit test in its

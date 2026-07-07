@@ -617,3 +617,25 @@ order.
   same tuple.
 
 voxsmith stays green (117 tests), no golden moved.
+
+### D3 B6: extend_bounds vectorized min/max fold (landed)
+
+`extend_bounds` grows a running `([f64; 3], [f64; 3])` `(min, max)` AABB by a box
+`(center, half)`. It now converts `center`/`half` to `TyVector3F64` and computes
+`lo = center - half` and `hi = center + half` with the vector `Sub`/`Add` (same
+per-component order), then folds the running corners through the float
+`component_min_with`/`component_max_with` (`self.x.min(other.x)` etc., the same
+`f64::min`/`f64::max` and operand order as the old `min[k].min(lo[k])` loop). The
+`Some` arm reads each corner with `from_array`, mins/maxes against `lo`/`hi`, and
+writes back with `to_array`; the `None` seed is `Some((lo.to_array(),
+hi.to_array()))`. Byte-identical, so the memoized subtree boxes are unchanged.
+
+`TyBounds::encapsulate` was rejected even though the audit floated it: it stores
+center/extents, so a running `encapsulate` fold would decompose to
+`center +/- extents` and recompose via `(min + max) * 0.5` each step, and that
+round-trip is not bit-exact against the raw min/max arrays this function keeps and
+`subtree_box_local` reads directly. The min/max-preserving vectorization is the
+only byte-identical adoption here. voxsmith stays green (117 tests), no golden
+moved. This is the last Track D3 item: Track D (D1/D2/D3) is complete, and the
+only open ty-math-adoption items are those explicitly moved to the
+[ty-color-model plan](../ty-color-model/README.md).

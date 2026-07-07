@@ -1287,24 +1287,20 @@ fn object_box_local(state: &VoxMain, object_id: U32Id<BVoxObject>) -> ([f64; 3],
 /// Grows the running `(min, max)` AABB to include the box centered at `center`
 /// with half-extents `half`.
 fn extend_bounds(bounds: &mut Option<([f64; 3], [f64; 3])>, center: [f64; 3], half: [f64; 3]) {
-    let lo = [
-        center[0] - half[0],
-        center[1] - half[1],
-        center[2] - half[2],
-    ];
-    let hi = [
-        center[0] + half[0],
-        center[1] + half[1],
-        center[2] + half[2],
-    ];
+    let center = TyVector3F64::from_array(center);
+    let half = TyVector3F64::from_array(half);
+    let lo = center - half;
+    let hi = center + half;
     match bounds {
         Some((min, max)) => {
-            for k in 0..3 {
-                min[k] = min[k].min(lo[k]);
-                max[k] = max[k].max(hi[k]);
-            }
+            *min = TyVector3F64::from_array(*min)
+                .component_min_with(&lo)
+                .to_array();
+            *max = TyVector3F64::from_array(*max)
+                .component_max_with(&hi)
+                .to_array();
         }
-        None => *bounds = Some((lo, hi)),
+        None => *bounds = Some((lo.to_array(), hi.to_array())),
     }
 }
 
