@@ -63,8 +63,8 @@ impl Dependencies for DependenciesImpl {
         Ok(tyt_injection::display_image_in_terminal(path)?)
     }
 
-    fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>> {
-        Ok(tyt_injection::match_glob(pattern, candidates)?)
+    fn match_paths(&self, patterns: &[&str], candidates: &[(&str, bool)]) -> Result<Vec<bool>> {
+        Ok(tyt_injection::match_paths(patterns, candidates)?)
     }
 
     fn parse_hierarchy_json(&self, json: &[u8]) -> Result<Vec<(String, String, String)>> {

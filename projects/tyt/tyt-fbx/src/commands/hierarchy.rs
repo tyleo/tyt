@@ -14,12 +14,13 @@ pub struct Hierarchy {
     #[arg(value_name = "input-fbx")]
     input_fbx: PathBuf,
 
-    /// Optional glob pattern to match object hierarchy paths against. When
-    /// set, only matched objects and their ancestors are printed (or only
-    /// matched objects when `--collapse-ancestors` is used). `**/` is
-    /// auto-prepended when the pattern does not already start with it.
-    #[arg(value_name = "pattern")]
-    pattern: Option<String>,
+    /// Optional gitignore-style patterns selecting object hierarchy paths. When
+    /// set, only matched objects and their ancestors are printed, or only
+    /// matched objects when `--collapse-ancestors` is used. A bare name matches
+    /// at any depth, a slashed pattern anchors to a scene root; `**/name/**`
+    /// selects a whole subtree. With none given the whole hierarchy prints.
+    #[arg(value_name = "select")]
+    select: Vec<String>,
 
     /// If set, prepend each object's transform (position, rotation, scale)
     /// as a nested subtree. Accepts up to three positional values:
@@ -59,17 +60,17 @@ pub struct Hierarchy {
     )]
     show_extents: Option<Vec<String>>,
 
-    /// When set with a `pattern`, the ancestor chain above each matched
+    /// When set with `--select`, the ancestor chain above each matched
     /// object is hidden and replaced with an `(ANCESTORS)` marker printed
-    /// directly above the matched object (omitted when the matched object
-    /// is a scene root). Has no effect when `pattern` is omitted.
+    /// directly above the matched object, omitted when the matched object
+    /// is a scene root. Has no effect when `--select` is omitted.
     #[arg(value_name = "collapse-ancestors", long = "collapse-ancestors")]
     collapse_ancestors: bool,
 
-    /// When set with a `pattern`, the descendants of each matched object
+    /// When set with `--select`, the descendants of each matched object
     /// are hidden and replaced with a `(DESCENDANTS)` marker printed as a
-    /// child subtree of the matched object (omitted when the matched
-    /// object has no descendants). Has no effect when `pattern` is omitted.
+    /// child subtree of the matched object, omitted when the matched
+    /// object has no descendants. Has no effect when `--select` is omitted.
     #[arg(value_name = "collapse-descendants", long = "collapse-descendants")]
     collapse_descendants: bool,
 }
@@ -78,7 +79,7 @@ impl Hierarchy {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let Hierarchy {
             input_fbx,
-            pattern,
+            select,
             show_transforms,
             show_bounds,
             show_extents,
@@ -90,9 +91,10 @@ impl Hierarchy {
         let (show_bnd, bnd_prec, bnd_world, bnd_scale) = pack_bounds(show_bounds)?;
         let (show_ext, ext_prec, ext_world, ext_scale) = pack_bounds(show_extents)?;
 
-        let matched_paths = match pattern {
-            Some(pattern) => resolve_matched_paths(&dependencies, &input_fbx, &pattern)?,
-            None => Vec::new(),
+        let matched_paths = if select.is_empty() {
+            Vec::new()
+        } else {
+            resolve_matched_paths(&dependencies, &input_fbx, &select)?
         };
 
         let collapse_anc_arg = bool_arg(collapse_ancestors);
@@ -139,21 +141,15 @@ fn bool_arg(value: bool) -> &'static OsStr {
 fn resolve_matched_paths(
     dependencies: &impl Dependencies,
     input_fbx: &PathBuf,
-    pattern: &str,
+    patterns: &[String],
 ) -> Result<Vec<String>> {
     let args: [&OsStr; 1] = [input_fbx.as_ref()];
     let stdout = dependencies.exec_temp_blender_script(&utilities::FBX_HIERARCHY_JSON_PY, args)?;
     let json = utilities::extract_json(&stdout, b'[', b']')?;
     let entries = dependencies.parse_hierarchy_json(json)?;
 
-    let pattern = if pattern.starts_with("**/") {
-        pattern.to_owned()
-    } else {
-        format!("**/{pattern}")
-    };
-
     let candidate_paths: Vec<&str> = entries.iter().map(|(_, path, _)| path.as_str()).collect();
-    let matched = dependencies.match_glob(&pattern, &candidate_paths)?;
+    let matched = utilities::match_hierarchy_paths(dependencies, patterns, &candidate_paths)?;
 
     let matched_paths: Vec<String> = entries
         .iter()
@@ -165,7 +161,7 @@ fn resolve_matched_paths(
     if matched_paths.is_empty() {
         return Err(Error::IO(IOError::new(
             ErrorKind::NotFound,
-            format!("no object matched pattern '{pattern}'"),
+            format!("no object matched any of: {}", patterns.join(", ")),
         )));
     }
 

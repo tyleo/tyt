@@ -6,21 +6,27 @@ use std::{
     path::PathBuf,
 };
 
-/// Renames every object whose hierarchy path matches `pattern`. The new name
-/// for each matched object is composed as
+/// Renames every object whose hierarchy path matches a selection pattern. The
+/// new name for each matched object is composed as
 /// `{prefix}{name-or-old}{suffix}{suffix-num}`, where any omitted piece is
 /// treated as empty and `name-or-old` is `--name` when set, otherwise the
-/// object's existing name. Matches any object type (MESH, ARMATURE, EMPTY,
-/// LIGHT, CAMERA, ...).
+/// object's existing name. Matches any object type: MESH, ARMATURE, EMPTY,
+/// LIGHT, CAMERA, and so on.
 #[derive(Clone, Debug, Parser)]
 pub struct Rename {
     /// The input FBX file.
     #[arg(value_name = "input-fbx")]
     input_fbx: PathBuf,
 
-    /// Glob pattern to match object hierarchy paths against.
+    /// Gitignore-style pattern selecting object hierarchy paths, with more
+    /// passed via `--select`. A bare name matches at any depth, a slashed
+    /// pattern anchors to a scene root; `**/name/**` selects a whole subtree.
     #[arg(value_name = "pattern")]
     pattern: String,
+
+    /// Additional selection patterns unioned with the positional pattern.
+    #[arg(value_name = "select", long)]
+    select: Vec<String>,
 
     /// The output FBX file to write. If not provided, the input file will be
     /// overwritten.
@@ -58,6 +64,7 @@ impl Rename {
         let Rename {
             input_fbx,
             pattern,
+            select,
             output_fbx,
             name,
             prefix,
@@ -100,15 +107,11 @@ impl Rename {
         let json = utilities::extract_json(&stdout, b'[', b']')?;
         let entries = dependencies.parse_hierarchy_json(json)?;
 
-        // Auto-prepend `**/` unless already present.
-        let pattern = if pattern.starts_with("**/") {
-            pattern
-        } else {
-            format!("**/{pattern}")
-        };
+        let mut patterns = vec![pattern];
+        patterns.extend(select);
 
         let candidate_paths: Vec<&str> = entries.iter().map(|(_, path, _)| path.as_str()).collect();
-        let matched = dependencies.match_glob(&pattern, &candidate_paths)?;
+        let matched = utilities::match_hierarchy_paths(&dependencies, &patterns, &candidate_paths)?;
 
         let matched_names: Vec<&str> = entries
             .iter()
@@ -120,7 +123,7 @@ impl Rename {
         if matched_names.is_empty() {
             return Err(Error::IO(IOError::new(
                 ErrorKind::NotFound,
-                format!("no object matched pattern '{pattern}'"),
+                format!("no object matched any of: {}", patterns.join(", ")),
             )));
         }
 

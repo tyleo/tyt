@@ -26,12 +26,13 @@ use std::{
     ArgGroup::new("auto_frame").multiple(true),
 ))]
 pub struct CameraArgs {
-    /// Glob pattern selecting the object(s) the camera targets. The
-    /// matched objects' combined world bounds drive auto-frame distance,
-    /// look-at, and orbit pivot. `**/` is auto-prepended when the pattern
-    /// does not already start with it.
+    /// Gitignore-style patterns selecting the objects the camera targets,
+    /// repeat `--subject` to pass several. The matched objects' combined
+    /// world bounds drive auto-frame distance, look-at, and orbit pivot. A
+    /// bare name matches at any depth, a slashed pattern anchors to a scene
+    /// root; `**/name/**` selects a whole subtree.
     #[arg(value_name = "subject", long, group = "auto_frame")]
-    pub subject: Option<String>,
+    pub subject: Vec<String>,
 
     /// Horizontal orbit around the subject up axis. Unit from `--rot-unit`.
     #[arg(
@@ -452,7 +453,7 @@ fn format_target_args(args: &CameraArgs, unit_str: &str, precision: usize) -> St
     let angle_out = |value: f64| args.rot_unit.to_radians(value) * rad_to_out;
 
     let mut parts: Vec<String> = Vec::new();
-    if let Some(subject) = &args.subject {
+    for subject in &args.subject {
         parts.push(format!("--subject '{subject}'"));
     }
     if let Some(orbit_h) = args.orbit_h {

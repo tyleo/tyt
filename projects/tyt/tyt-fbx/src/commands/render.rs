@@ -174,9 +174,10 @@ impl Render {
         };
         let ortho_scale_value = ortho_scale.unwrap_or(0.0);
 
-        let subject_names = match &camera.subject {
-            Some(pattern) => resolve_subject_names(&dependencies, &input_fbx, pattern)?,
-            None => Vec::new(),
+        let subject_names = if camera.subject.is_empty() {
+            Vec::new()
+        } else {
+            resolve_subject_names(&dependencies, &input_fbx, &camera.subject)?
         };
 
         let result = (|| -> Result<()> {
@@ -223,21 +224,15 @@ impl Render {
 fn resolve_subject_names(
     dependencies: &impl Dependencies,
     input_fbx: &PathBuf,
-    pattern: &str,
+    select: &[String],
 ) -> Result<Vec<String>> {
     let args: [&OsStr; 1] = [input_fbx.as_ref()];
     let stdout = dependencies.exec_temp_blender_script(&utilities::FBX_HIERARCHY_JSON_PY, args)?;
     let json = utilities::extract_json(&stdout, b'[', b']')?;
     let entries = dependencies.parse_hierarchy_json(json)?;
 
-    let pattern = if pattern.starts_with("**/") {
-        pattern.to_owned()
-    } else {
-        format!("**/{pattern}")
-    };
-
     let candidate_paths: Vec<&str> = entries.iter().map(|(_, path, _)| path.as_str()).collect();
-    let matched = dependencies.match_glob(&pattern, &candidate_paths)?;
+    let matched = utilities::match_hierarchy_paths(dependencies, select, &candidate_paths)?;
 
     let matched_names: Vec<String> = entries
         .iter()
@@ -249,7 +244,7 @@ fn resolve_subject_names(
     if matched_names.is_empty() {
         return Err(Error::IO(IOError::new(
             ErrorKind::NotFound,
-            format!("no object matched pattern '{pattern}'"),
+            format!("no object matched any of: {}", select.join(", ")),
         )));
     }
 

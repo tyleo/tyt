@@ -2,7 +2,7 @@ use crate::{Dependencies, Result};
 use clap::Parser;
 use std::{collections::HashMap, path::PathBuf};
 
-/// Renames nodes in the Voxel Max scene hierarchy matching a glob pattern.
+/// Renames nodes in the Voxel Max scene hierarchy matching a selection pattern.
 #[derive(Clone, Debug, Parser)]
 #[command(name = "rename-node")]
 pub struct RenameNode {
@@ -10,13 +10,19 @@ pub struct RenameNode {
     #[arg(value_name = "input-vmax")]
     input_vmax: PathBuf,
 
-    /// Glob pattern to match hierarchy paths against.
+    /// Gitignore-style pattern selecting hierarchy paths, with more passed via
+    /// `--select`. A bare name matches at any depth, a slashed pattern anchors
+    /// to a scene root; `**/name/**` selects a whole subtree.
     #[arg(value_name = "pattern")]
     pattern: String,
 
     /// The new name to assign to matched nodes.
     #[arg(value_name = "new-name")]
     new_name: String,
+
+    /// Additional selection patterns unioned with the positional pattern.
+    #[arg(value_name = "select", long)]
+    select: Vec<String>,
 }
 
 impl RenameNode {
@@ -48,22 +54,21 @@ impl RenameNode {
             segments.join("/")
         };
 
-        // Compile glob pattern — auto-prepend `**/` unless already present.
-        let pattern = if self.pattern.starts_with("**/") {
-            self.pattern.clone()
-        } else {
-            format!("**/{}", self.pattern)
-        };
-
-        // Build all candidate paths.
+        // Build all candidate paths. A group is a directory, so selecting one
+        // pulls in its whole subtree.
         let mut candidates: Vec<(String, &str, bool)> = Vec::new();
         for node in &nodes {
             let path = build_path(&node.name, node.parent_id.as_deref());
             candidates.push((path, &node.id, node.is_group));
         }
 
-        let candidate_paths: Vec<&str> = candidates.iter().map(|(p, _, _)| p.as_str()).collect();
-        let matched = dependencies.match_glob(&pattern, &candidate_paths)?;
+        let candidate_paths: Vec<(&str, bool)> = candidates
+            .iter()
+            .map(|(path, _, is_group)| (path.as_str(), *is_group))
+            .collect();
+        let mut patterns: Vec<&str> = vec![self.pattern.as_str()];
+        patterns.extend(self.select.iter().map(String::as_str));
+        let matched = dependencies.match_paths(&patterns, &candidate_paths)?;
 
         // Collect matched group/object IDs.
         let mut group_ids: Vec<&str> = Vec::new();
@@ -78,7 +83,7 @@ impl RenameNode {
                 } else {
                     object_ids.push(id);
                 }
-                renamed.push((candidate_paths[i], *is_group));
+                renamed.push((candidate_paths[i].0, *is_group));
             }
         }
 

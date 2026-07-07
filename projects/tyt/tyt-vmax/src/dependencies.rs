@@ -7,7 +7,7 @@ pub trait Dependencies {
 
     fn list_dir(&self, path: &Path) -> Result<Vec<PathBuf>>;
 
-    fn match_glob(&self, pattern: &str, candidates: &[&str]) -> Result<Vec<bool>>;
+    fn match_paths(&self, patterns: &[&str], candidates: &[(&str, bool)]) -> Result<Vec<bool>>;
 
     /// Rewrites `data`/`pal` references according to the supplied `(old, new)`
     /// rename pairs and repoints each object's `hist` at `history{n}.vmaxhb`

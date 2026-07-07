@@ -6,18 +6,26 @@ use std::{
     path::PathBuf,
 };
 
-/// Extracts a single mesh matching `pattern` from the input FBX file, unparents
-/// it keeping the world transform, deletes everything else, and renames the mesh
-/// object and its datablock to `output-mesh-name`. Exactly one mesh must match.
+/// Extracts a single mesh matching a selection pattern from the input FBX file,
+/// unparents it keeping the world transform, deletes everything else, and
+/// renames the mesh object and its datablock to `output-mesh-name`. Exactly one
+/// mesh must match.
 #[derive(Clone, Debug, Parser)]
 pub struct Extract {
     /// The input FBX file to extract from.
     #[arg(value_name = "input-fbx")]
     input_fbx: PathBuf,
 
-    /// Glob pattern to match mesh hierarchy paths against.
+    /// Gitignore-style pattern selecting mesh hierarchy paths, with more passed
+    /// via `--select`. A bare name matches at any depth, a slashed pattern
+    /// anchors to a scene root; `**/name/**` selects a whole subtree. Exactly
+    /// one mesh must match.
     #[arg(value_name = "pattern")]
     pattern: String,
+
+    /// Additional selection patterns unioned with the positional pattern.
+    #[arg(value_name = "select", long)]
+    select: Vec<String>,
 
     /// The output FBX file to write the extracted data to. If not provided,
     /// the input file will be overwritten.
@@ -48,6 +56,7 @@ impl Extract {
         let Extract {
             input_fbx,
             pattern,
+            select,
             output_fbx,
             output_mesh_name_flag,
             output_mesh_name_arg,
@@ -69,15 +78,11 @@ impl Extract {
             .filter(|(_, _, obj_type)| obj_type == "MESH")
             .collect();
 
-        // Auto-prepend `**/` unless already present.
-        let pattern = if pattern.starts_with("**/") {
-            pattern
-        } else {
-            format!("**/{pattern}")
-        };
+        let mut patterns = vec![pattern];
+        patterns.extend(select);
 
         let candidate_paths: Vec<&str> = meshes.iter().map(|(_, path, _)| path.as_str()).collect();
-        let matched = dependencies.match_glob(&pattern, &candidate_paths)?;
+        let matched = utilities::match_hierarchy_paths(&dependencies, &patterns, &candidate_paths)?;
 
         let matched_meshes: Vec<&&(String, String, String)> = meshes
             .iter()
@@ -89,7 +94,7 @@ impl Extract {
         if matched_meshes.is_empty() {
             return Err(Error::IO(IOError::new(
                 ErrorKind::NotFound,
-                format!("no mesh matched pattern '{pattern}'"),
+                format!("no mesh matched any of: {}", patterns.join(", ")),
             )));
         }
 
@@ -101,8 +106,7 @@ impl Extract {
             return Err(Error::IO(IOError::new(
                 ErrorKind::InvalidInput,
                 format!(
-                    "pattern '{}' matched {} meshes (expected 1): {}",
-                    pattern,
+                    "{} meshes matched (expected 1): {}",
                     matched_meshes.len(),
                     names.join(", "),
                 ),

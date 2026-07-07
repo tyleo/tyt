@@ -19,8 +19,8 @@ enum Space {
 }
 
 /// Overwrites individual position, rotation, and scale components on every
-/// object whose hierarchy path matches `pattern`. Unset components are left
-/// untouched.
+/// object whose hierarchy path matches a selection pattern. Unset components
+/// are left untouched.
 #[derive(Clone, Debug, Parser)]
 #[command(group(
     ArgGroup::new("set_args").multiple(true).conflicts_with("mod_args"),
@@ -33,9 +33,15 @@ pub struct Transform {
     #[arg(value_name = "input-fbx")]
     input_fbx: PathBuf,
 
-    /// Glob pattern to match object hierarchy paths against.
+    /// Gitignore-style pattern selecting object hierarchy paths, with more
+    /// passed via `--select`. A bare name matches at any depth, a slashed
+    /// pattern anchors to a scene root; `**/name/**` selects a whole subtree.
     #[arg(value_name = "pattern")]
     pattern: String,
+
+    /// Additional selection patterns unioned with the positional pattern.
+    #[arg(value_name = "select", long)]
+    select: Vec<String>,
 
     /// The output FBX file to write. If not provided, the input file will be
     /// overwritten.
@@ -392,6 +398,7 @@ impl Transform {
         let Transform {
             input_fbx,
             pattern,
+            select,
             output_fbx,
             space,
             rot_unit,
@@ -514,15 +521,11 @@ impl Transform {
         let json = utilities::extract_json(&stdout, b'[', b']')?;
         let entries = dependencies.parse_hierarchy_json(json)?;
 
-        // Auto-prepend `**/` unless already present.
-        let pattern = if pattern.starts_with("**/") {
-            pattern
-        } else {
-            format!("**/{pattern}")
-        };
+        let mut patterns = vec![pattern];
+        patterns.extend(select);
 
         let candidate_paths: Vec<&str> = entries.iter().map(|(_, path, _)| path.as_str()).collect();
-        let matched = dependencies.match_glob(&pattern, &candidate_paths)?;
+        let matched = utilities::match_hierarchy_paths(&dependencies, &patterns, &candidate_paths)?;
 
         let matched_names: Vec<&str> = entries
             .iter()
@@ -534,7 +537,7 @@ impl Transform {
         if matched_names.is_empty() {
             return Err(Error::IO(IOError::new(
                 ErrorKind::NotFound,
-                format!("no object matched pattern '{pattern}'"),
+                format!("no object matched any of: {}", patterns.join(", ")),
             )));
         }
 

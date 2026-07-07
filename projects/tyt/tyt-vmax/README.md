@@ -36,7 +36,7 @@ Commands:
   completion   Generate shell completions
   hierarchy    Prints the Voxel Max hierarchy
   pack         Packs a .vmax directory by stripping history files
-  rename-node  Renames nodes in the Voxel Max scene hierarchy matching a glob pattern
+  rename-node  Renames nodes in the Voxel Max scene hierarchy matching a selection pattern
   to-voxj      Converts a .vmax package to a Voxel Json (.voxj / .voxjz) document
   help         Print this message or the help of the given subcommand(s)
 
