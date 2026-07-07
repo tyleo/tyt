@@ -244,8 +244,9 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       `sample_material.rs` `CellAccum` retype accumulates color values and shares
       `sample_material` with the color-type migration, so it lands there (step S6)
       to avoid touching the file twice.
-- [ ] **A3** `TyVector3I32::to_f64` + `from_array`: vxl `hierarchy_show.rs:1172`
-      (delete `vec_i32_to_f64`) and mvox `from_mvox_file.rs:348`.
+- [x] **A3** `TyVector3I32::to_f64` + `from_array`: vxl `hierarchy_show.rs`
+      (deleted `vec_i32_to_f64`, `object.origin().to_f64()`) and mvox
+      `from_mvox_file.rs` (`TyVector3I32::from_array(frame.translation).to_f64()`).
 - [ ] **A4 (moved)** -> [ty-color-model plan](../ty-color-model/README.md). vxl
       `fill_color.rs:39`'s `parse_rgba_hex` -> `from_hex` adopts the sRGB color type,
       so it lands there (step S6) once `from_hex` is on `TySrgba<u8>`.

@@ -424,3 +424,20 @@ no voxelization golden moved. Notes:
   its tests compile only under `--features gltf`. The gates were rerun as
   `cargo {check,clippy,test} -p voxsmith --features gltf` (176 tests green,
   including the five `triangle_box_overlap` cases).
+
+### A3: i32 grid vectors through to_f64 / from_array (landed)
+
+The two `i32 as f64` widen sites now use the existing `TyVector3I32` casts, both
+lossless and byte-identical to the per-component `as f64`:
+
+- vxl `implementation/hierarchy_show.rs`: `object_rows` reads
+  `object.origin().to_f64()` and the private `vec_i32_to_f64` helper is deleted.
+  That was the module's last by-name use of `TyVector3I32` outside the test module,
+  so it comes off the line-13 import (mirrors the C3 `vec_u32_to_f64` removal). vxl
+  tests stay green (152).
+- mvox `convert/mvox/from_mvox_file.rs`: `transform_from_frame`'s position is
+  `TyVector3I32::from_array(frame.translation).to_f64()` (`translation` is
+  `[i32; 3]`), replacing the three-line `TyVector3F64::new(.. as f64 ..)`;
+  `TyVector3I32` joins the import. mvox is a default feature and its frame
+  round-trips (117 tests) stay green with no golden change. mvox is not vmax, so
+  this is non-vmax D2 work.

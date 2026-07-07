@@ -10,7 +10,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use ty_math::{TyTransformF64, TyVector3F64, TyVector3I32};
+use ty_math::{TyTransformF64, TyVector3F64};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 
 /// A hierarchy-node id in the loaded [`VoxMain`], aliased so signatures stay
@@ -925,7 +925,7 @@ impl Walk<'_> {
     /// origin when it has no live voxels. `placing_world` folds an origin into
     /// world space when its view asks.
     fn object_rows(&self, object: &VoxObject, placing_world: TyTransformF64) -> Vec<ObjectRow> {
-        let origin = vec_i32_to_f64(object.origin());
+        let origin = object.origin().to_f64();
         let build = object.bounds().to_f64();
         let edit = edit_present(object);
 
@@ -1166,11 +1166,6 @@ fn origin_value(corner: TyVector3F64, world: bool, placing_world: TyTransformF64
     } else {
         corner
     }
-}
-
-/// A signed integer grid vector as floats.
-fn vec_i32_to_f64(vector: TyVector3I32) -> TyVector3F64 {
-    TyVector3F64::new(vector.x as f64, vector.y as f64, vector.z as f64)
 }
 
 /// Formats a vector as `x, y, z`, each to `precision` decimal places.

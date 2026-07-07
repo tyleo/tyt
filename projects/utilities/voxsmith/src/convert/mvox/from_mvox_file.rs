@@ -13,7 +13,8 @@ use std::{
     hash::Hash,
 };
 use ty_math::{
-    TyMatrix4x4F64, TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32,
+    TyMatrix4x4F64, TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3I32,
+    TyVector3U32,
 };
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode, VoxMain,
@@ -345,11 +346,7 @@ fn transform_from_frames(frames: &[MVoxFrame]) -> TyTransformF64 {
 /// rotation and a negative x scale so voxcore's unit-quaternion invariant
 /// holds.
 fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
-    let position = TyVector3F64::new(
-        frame.translation[0] as f64,
-        frame.translation[1] as f64,
-        frame.translation[2] as f64,
-    );
+    let position = TyVector3I32::from_array(frame.translation).to_f64();
 
     let signed = frame.rotation.to_matrix();
     let mut matrix = [[0.0f64; 3]; 3];
