@@ -258,10 +258,11 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       deferred here: `to_goxl_file.rs` (`world + position.to_i32()`, threading
       `world` as `TyVector3I32`) and `voxj_decoded_object_from_vox_object.rs`
       (`origin + min.to_i32()`, `min`/`size` kept as `TyVector3U32`).
-- [ ] **A7** `TyBounds::from_points` + `size()`/`max()` at
-      `convert/voxelize/mesh.rs:41-48` and the `object_to_glb_bytes.rs:87-88`
-      test. Do NOT touch `triangle_bounds.rs` (bit-risk: separately-halved
-      center +/- extents can shift a cell boundary).
+- [x] **A7** `TyBounds::from_points` + `size()`/`max()` at
+      `convert/voxelize/mesh.rs` (`extent`, `bounds.size()`) and the
+      `object_to_glb_bytes.rs` test (`bounds.max()`). Left `triangle_bounds.rs`
+      untouched (bit-risk: separately-halved center +/- extents can shift a cell
+      boundary).
 - [ ] **A8** (optional, cosmetic) `TyVector3F64::ZERO` at vxl
       `hierarchy_show.rs:936`.
 

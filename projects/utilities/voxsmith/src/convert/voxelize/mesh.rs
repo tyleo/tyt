@@ -1,5 +1,5 @@
-use crate::{MeshMaterial, MeshMaterialMaps, MeshTexture, MeshTriangle, triangle_bounds};
-use ty_math::TyVector3F64;
+use crate::{MeshMaterial, MeshMaterialMaps, MeshTexture, MeshTriangle};
+use ty_math::{TyBoundsF64, TyVector3F64};
 
 /// A triangle mesh in world space on the Voxel Json Z-up axes: the geometry to
 /// voxelize plus the materials, base-color textures, and texture coordinates its
@@ -41,8 +41,8 @@ impl Mesh {
     pub fn extent(&self) -> TyVector3F64 {
         let points = self.triangles.iter().flat_map(|triangle| triangle.points);
 
-        match triangle_bounds(points) {
-            Some((min, max)) => max - min,
+        match TyBoundsF64::from_points(points) {
+            Some(bounds) => bounds.size(),
             None => TyVector3F64::ZERO,
         }
     }

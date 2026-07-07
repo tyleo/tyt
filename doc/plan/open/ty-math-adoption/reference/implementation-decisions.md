@@ -490,3 +490,22 @@ features and `object_to_mesh_geometry` is behind `gltf`, so the gates ran
   `origin + min.to_i32()` add and the site-5 emit; the goxl block-position fixtures
   (`[-16, 16, -32]`) exercise the site-7 `world + position.to_i32()` add. Both
   vector adds are the same `TyVector3I32 + TyVector3U32::to_i32()` shape.
+
+### A7: TyBounds in mesh extent + the glb test (landed)
+
+- `convert/voxelize/mesh.rs` `extent()` folds the triangle points through
+  `TyBoundsF64::from_points` and returns `bounds.size()` instead of calling
+  `triangle_bounds` and subtracting `max - min`; `triangle_bounds` drops from the
+  import (still used elsewhere in `internal/mesh`, not touched). `size()` is
+  `extents * 2.0 = ((max - min) * 0.5) * 2.0`, which is bit-identical to `max - min`
+  for the normal-range mesh extents here (halving then doubling is exact away from
+  the subnormal floor), so the grid-resolution figure is unchanged. Covered by the
+  tolerance-asserting `extent_converts_gltf_y_up_to_voxel_json_z_up` test.
+- `convert/gltf/object_to_glb_bytes.rs` test `z_up_bar_becomes_y_up_and_scales`
+  builds `TyBoundsF32::from_points` over the exported positions and reads
+  `bounds.max()` for the two axis maxima, replacing the two `fold(f32::MIN,
+  f32::max)` lines. This is a test-only assertion with a `1e-6` tolerance, so the
+  `center + extents` corner reconstruction (not bit-exact in general) is fine, and
+  for the bar's clean integer coordinates it is exact anyway. This is why A7 stops
+  at `size()`/`max()` and does NOT touch `triangle_bounds.rs`, whose direct
+  `(min, max)` corners size voxel cells and must stay bit-exact.

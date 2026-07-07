@@ -33,7 +33,7 @@ pub fn object_to_glb_bytes(object: &VoxObject, method: MeshMethod, scale: f64) -
 mod tests {
     use crate::{MeshMethod, object_to_glb_bytes};
     use gltf::{import_slice, mesh::Mode};
-    use ty_math::TyVector3U32;
+    use ty_math::{TyBoundsF32, TyVector3F32, TyVector3U32};
     use voxcore::VoxObject;
 
     /// A 1x1x2 bar, tall on the voxel-json Z axis.
@@ -84,10 +84,11 @@ mod tests {
         let reader = primitive.reader(|b| Some(&buffers[b.index()][..]));
         let positions: Vec<[f32; 3]> = reader.read_positions().unwrap().collect();
 
-        let max_x = positions.iter().map(|p| p[0]).fold(f32::MIN, f32::max);
-        let max_y = positions.iter().map(|p| p[1]).fold(f32::MIN, f32::max);
-        assert!((max_x - 2.0).abs() < 1e-6, "max x {max_x}");
-        assert!((max_y - 4.0).abs() < 1e-6, "max y {max_y}");
+        let max = TyBoundsF32::from_points(positions.iter().map(|&p| TyVector3F32::from_array(p)))
+            .expect("the bar has vertices")
+            .max();
+        assert!((max.x - 2.0).abs() < 1e-6, "max x {}", max.x);
+        assert!((max.y - 4.0).abs() < 1e-6, "max y {}", max.y);
     }
 
     #[test]
