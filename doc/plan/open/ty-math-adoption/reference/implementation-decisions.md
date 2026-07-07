@@ -509,3 +509,12 @@ features and `object_to_mesh_geometry` is behind `gltf`, so the gates ran
   for the bar's clean integer coordinates it is exact anyway. This is why A7 stops
   at `size()`/`max()` and does NOT touch `triangle_bounds.rs`, whose direct
   `(min, max)` corners size voxel cells and must stay bit-exact.
+
+### A8: TyVector3F64::ZERO in hierarchy_show (landed)
+
+vxl `hierarchy_show.rs` `object_rows`: the empty-object runtime size becomes
+`TyVector3F64::ZERO` instead of `TyVector3F64::new(0.0, 0.0, 0.0)`. Cosmetic and
+bit-identical (the const is `{ x: 0.0, y: 0.0, z: 0.0 }`); vxl tests stay green
+(152). This closes Track D2: A1/A3/A5/A6/A7/A8 landed, A2/A4 moved to the
+[ty-color-model plan](../ty-color-model/README.md). Remaining work is Track D3
+(vmax, trailing commits).

@@ -933,7 +933,7 @@ impl Walk<'_> {
         // live voxels has a zero-size grid at its origin.
         let (runtime_min, runtime_size) = match object.live_extent() {
             Some((min, size)) => (origin + min.to_f64(), size.to_f64()),
-            None => (origin, TyVector3F64::new(0.0, 0.0, 0.0)),
+            None => (origin, TyVector3F64::ZERO),
         };
 
         let views = self.views;

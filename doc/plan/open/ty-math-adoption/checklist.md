@@ -263,8 +263,8 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       `object_to_glb_bytes.rs` test (`bounds.max()`). Left `triangle_bounds.rs`
       untouched (bit-risk: separately-halved center +/- extents can shift a cell
       boundary).
-- [ ] **A8** (optional, cosmetic) `TyVector3F64::ZERO` at vxl
-      `hierarchy_show.rs:936`.
+- [x] **A8** (optional, cosmetic) `TyVector3F64::ZERO` at vxl
+      `hierarchy_show.rs` (the zero-size runtime grid).
 
 ### D3: adopt in vmax (own trailing commits)
 
