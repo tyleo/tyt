@@ -28,6 +28,14 @@ than adopt the old ones first and redo them:
 - vxl `fill_color.rs:39` `parse_rgba_hex` -> `TySrgba<u8>::from_hex` in step **S6**.
 - `sample_material.rs` `CellAccum` retype onto vectors -> step **S6**, done with the
   base-color decode so `sample_material` is touched once.
+- `internal/cell_color.rs` and `internal/pool_color.rs` (both return raw sRGB
+  `[u8; 4]`) -> optionally return `TySrgba<u8>` in step **S6**. `pool_color` is
+  already touched by S5/S6 (its body builds `TyRgbaColorF64`/`TyLinearRgbaColorF64`
+  and calls `to_srgba`). Nine `cell_color` consumers repack the bytes into format
+  voxels; two key a container on the color: the mvox `HashMap` needs `Eq`/`Hash`
+  (covered by `TySrgba<u8>`) and the vmax `to_vmax_file.rs:438` `BTreeSet` needs
+  `Ord` (NOT currently planned -- derive it on `TySrgba<u8>` or leave that one site
+  on raw bytes). vmax stays in its own trailing commit.
 - The reverted adoption-plan C8 (`to_linear_rgba` + voxj decode) -> step **S9**.
 
 ## Steps
@@ -60,7 +68,9 @@ than adopt the old ones first and redo them:
 - [ ] **S6. voxsmith `internal/**`**: base-color decode -> `to_lin_srgba`; the raw
       metallic/roughness/occlusion reads (`sample_material.rs:294,316`) move to
       `TyVector4`/`[f64; 4]` component reads, out of the color namespace. `vxl`
-      color sites -> the new types. Gate: `cargo test -p voxsmith -p vxl` green.
+      color sites -> the new types. Optionally retype `pool_color`/`cell_color` to
+      return `TySrgba<u8>` (see the carried-over note; the vmax `BTreeSet` key needs
+      `Ord`). Gate: `cargo test -p voxsmith -p vxl` green.
 
 ### Phase 3: serde, fbx wire, and removal
 

@@ -155,24 +155,28 @@ one commit.
       map per file plus the `ty-math` surface gates (items 2/3 are safe drop-ins;
       the `to_grid`, SAT overlap, `CellAccum` color sums, and barycentric blends
       need a `ty-math` addition first, to be filed in item 4).
-- [ ] Adopt `TyBounds::from_points` in `triangle_bounds.rs` so it returns a
-      `TyBounds` (or keeps the tuple but folds through the constructor), and adopt
-      `TyVector3::triangle_normal` in the rasterizer where the geometric normal is
-      computed. Assert the results match the prior code.
-- [ ] Inspect `internal/cell_color.rs:10` (`cell_color -> [u8; 4]`): file whether it
-      should return `TySrgbaColor`, and the ripple into the qbcl/goxl `to_*_file.rs`
-      destructures, as its own item with the consumer list before changing the
-      signature.
-- [ ] File any larger geometry primitive the rasterizer wants (a triangle-box SAT
-      overlap, point-in-triangle, or barycentric interpolation on `TyVector3`) as a
-      new checklist item under Track C, with the current location and what it
-      computes; decide per item whether it belongs on an existing type or a new
-      one.
-- [ ] Read `internal/vmax/write_vmax.rs` in its own commit: catalog the
-      reverse-direction color emit (clamp-and-round to byte, a candidate for
-      `TyRgbaColor::to_srgba`) and any nearest-palette color-distance metric (a
-      candidate for a distance on `to_oklab`/`to_cielab`); adopt the safe ones and
-      file the rest.
+- [x] **Resolved by Track D.** `TyBounds::from_points` in `triangle_bounds.rs` is a
+      documented do-NOT (bit-risk; the direct `(min, max)` corners size voxel cells,
+      see the D-audit note), and the rasterizer geometric normal landed as the
+      `triangle_box_overlap` `Sub`/`dot`/`cross` adoption (D2 A1). Both actioned;
+      nothing further here.
+- [ ] **Moved to the [ty-color-model plan](../ty-color-model/README.md).** Inspected
+      `internal/cell_color.rs:10` and its delegate `internal/pool_color.rs` (both
+      return raw sRGB `[u8; 4]`) with the full 9-site consumer catalog (see the
+      decision log). The honest target is `TySrgba<u8>` (the new sRGB color), not
+      `TySrgbaColor`, which that plan deletes, so the retype lands there as an
+      optional S6 enhancement, carrying the mvox `HashMap` (`Eq`/`Hash`) and vmax
+      `BTreeSet` (`Ord`) key frictions.
+- [x] **Filed via Track D.** The larger rasterizer primitives were evaluated in the
+      D audit: the triangle-box SAT overlap was kept as an adopt-existing
+      (`TyVector3F64` `Sub`/`dot`/`cross`, D2 A1), barycentric interpolation was
+      rejected (the existing scalar `Mul`+`Add` already express it bit-identically),
+      and the glTF axis conversion landed as the `zup_to_yup`/`yup_to_zup` helpers.
+- [x] **Done as Track D3.** `internal/vmax/write_vmax.rs` was read and cataloged in
+      its own commits; the safe adoptions landed (D3 B1-B6: `to_array`,
+      `transform_point`, `from_min_size`, the min/max folds). The
+      reverse-direction color emit is a color-type change, so it defers to the
+      [ty-color-model plan](../ty-color-model/README.md) with the item-3 retype.
 
 Gate: each landed change is covered and asserted against the prior behavior; each
 filed item names its location and its target `ty-math` type.

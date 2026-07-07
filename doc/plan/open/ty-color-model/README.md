@@ -74,10 +74,14 @@ load-bearing findings:
 
 ## Friction to resolve (eyes-open costs of the generic)
 
-1. **`Eq` / `Hash`.** `TySrgbaColor` derives `Eq` + `Hash` and is a `MaterialKey`
-   hash key (`voxelize_mesh.rs:424`). A generic `TySrgba<T>` cannot derive them
-   uniformly (`f64` is neither), so impl `Eq` / `Hash` for `TySrgba<u8>` only;
-   `TySrgba<f64>` gets `PartialEq` alone. Keep the dedup key on `TySrgba<u8>`.
+1. **`Eq` / `Hash` (and a contingent `Ord`).** `TySrgbaColor` derives `Eq` + `Hash`
+   and is a `MaterialKey` hash key (`voxelize_mesh.rs:424`). A generic `TySrgba<T>`
+   cannot derive them uniformly (`f64` is neither), so impl `Eq` / `Hash` for
+   `TySrgba<u8>` only; `TySrgba<f64>` gets `PartialEq` alone. Keep the dedup key on
+   `TySrgba<u8>`. If the optional `cell_color` / `pool_color` retype (carried over
+   from the adoption plan) lands, the vmax `to_vmax_file.rs:438`
+   `BTreeSet<([i32; 3], color)>` key also needs `Ord` on `TySrgba<u8>` (a sound
+   derive over its u8 fields); otherwise leave that one site on raw bytes.
 2. **Component conversion.** Replace `TySrgbaColor::to_rgba` (u8 -> f64 normalize)
    and `TyRgbaColorF64::to_srgba` (f64 -> u8 quantize) with a `palette`-style
    `into_format` / `to_u8` / `to_f64` pair between `TySrgba<u8>` and

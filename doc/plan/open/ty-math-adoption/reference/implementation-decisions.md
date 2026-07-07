@@ -226,7 +226,7 @@ could own. Read `triangle_bounds.rs`, `triangle_box_overlap.rs`,
   barycentric-blend primitive on `TyVector3`; a triangle-box SAT overlap primitive.
   These are named here and formally filed as checklist items in item 4.
 
-### Items 2-5
+### Items 2, 4, 5
 
 Subsumed by the broad reuse audit (Track D below), which read the same
 `internal/` logic as part of a codebase-wide pass and filed the concrete items:
@@ -235,8 +235,49 @@ Track C item 2's `from_points` in `triangle_bounds` is now a documented do-NOT
 `triangle_box_overlap` `Sub`/`dot`/`cross` adoption (D2 A1); item 4's larger
 primitives were evaluated (barycentric rejected in favor of `Mul`+`Add`, the SAT
 overlap kept as an adopt-existing, a swizzle set added); item 5's `write_vmax` is
-Track D3. Item 3 (`cell_color` signature) was not surfaced as high-value and stays
-an open question.
+Track D3. Item 3 is resolved separately below.
+
+### Item 3: cell_color signature -> moved to the ty-color-model plan
+
+`internal/cell_color.rs` (and its delegate `internal/pool_color.rs`) return a raw
+sRGB `[u8; 4]`. The checklist item asked whether they should return `TySrgbaColor`
+and to catalog the consumer ripple before changing the signature. Investigated;
+the disposition is to MOVE the change to the
+[ty-color-model plan](../../ty-color-model/README.md), for the same reason A2, A4,
+the 3-component qbcl `color_floats`, and C8 moved there: returning a color type is
+a color-type-model decision, and the honest target is `TySrgba<u8>` (the new sRGB
+color), not `TySrgbaColor`, which that plan DELETES. Adopting `TySrgbaColor` here
+would be throwaway work redone as `TySrgba<u8>` a step later. `pool_color` is
+already inside that plan's blast radius: its body builds `TyRgbaColorF64` /
+`TyLinearRgbaColorF64` and calls `to_srgba().to_array()`, all types and methods the
+color-model migration re-homes.
+
+Consumer catalog (the ripple a signature change touches); every consumer repacks
+the `[u8; 4]` into a format voxel or a palette entry:
+
+- `cell_color -> [u8; 4]`, 9 call sites. qbcl `to_qb_file.rs:93`,
+  `to_qbt_file.rs:191`, `to_qbcl_file.rs:198` / `:392` all destructure
+  `[r, g, b, _]`, dropping alpha into a Qubicle voxel. goxl `to_goxl_file.rs:215`
+  passes the whole array to `solid_voxel([u8; 4])`; `:275` destructures
+  `[r, g, b, a]` into `GoxlVoxel`. mvox `to_mvox_file.rs:305` / `:351` use the array
+  as a `HashMap<[u8; 4], u8>` palette key and read `rgba[0..3]` into
+  `MVoxColor::new`. vmax `to_vmax_file.rs:438` puts the array in a
+  `BTreeSet<([i32; 3], [u8; 4])>` key.
+- `pool_color -> Option<[u8; 4]>`, 3 external call sites plus `cell_color` itself:
+  mvox `to_mvox_file.rs:127`, and vmax `write_vmax.rs:811` / `:1047`.
+
+Two frictions the move carries into the color-model plan:
+
+- The mvox site keys a `HashMap` on the color, so the color type it becomes needs
+  `Eq` + `Hash`. That matches the plan's decision to derive `Eq` / `Hash` on
+  `TySrgba<u8>` (friction #1), so the mvox key stays on `TySrgba<u8>`, consistent
+  with the `MaterialKey` dedup.
+- The vmax `to_vmax_file.rs:438` site keys a `BTreeSet` on `([i32; 3], color)`, so
+  the color type it becomes needs `Ord`, which the plan does NOT currently place on
+  `TySrgba<u8>` (only `Eq` / `Hash`). Deriving `Ord` on `TySrgba<u8>` (its u8 fields
+  are totally ordered, so the derive is sound) or leaving that one site on raw bytes
+  is a choice for that plan; recorded so the migration does not hit it cold. vmax
+  stays isolated in its own trailing commit regardless (Q2).
 
 ## Track D: broad reuse audit
 
