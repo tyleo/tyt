@@ -80,8 +80,8 @@ pub(crate) fn build_material_document(
     // Positions, then normals, then UVs, then indices, each a buffer view. All
     // are 4-byte quantities, so the regions stay naturally aligned.
     let mut blob = Vec::new();
-    let mut min = TyVector3F32::splat(f32::INFINITY);
-    let mut max = TyVector3F32::splat(f32::NEG_INFINITY);
+    let mut min = TyVector3F32::INFINITY;
+    let mut max = TyVector3F32::NEG_INFINITY;
 
     for &point in &geometry.positions {
         let point = position(point);

@@ -40,8 +40,8 @@ pub(crate) fn object_to_gltf_document(
     // separate buffer view. All are 4-byte quantities, so the regions stay
     // naturally aligned with no padding.
     let mut blob = Vec::new();
-    let mut min = TyVector3F32::splat(f32::INFINITY);
-    let mut max = TyVector3F32::splat(f32::NEG_INFINITY);
+    let mut min = TyVector3F32::INFINITY;
+    let mut max = TyVector3F32::NEG_INFINITY;
     for &point in &geometry.positions {
         let point = position(point);
         min = min.component_min_with(&point);

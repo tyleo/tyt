@@ -441,3 +441,14 @@ lossless and byte-identical to the per-component `as f64`:
   `TyVector3I32` joins the import. mvox is a default feature and its frame
   round-trips (117 tests) stay green with no golden change. mvox is not vmax, so
   this is non-vmax D2 work.
+
+### A5: glTF AABB seeds through the INFINITY consts (landed)
+
+The two mesh AABB folds seed their `min`/`max` with `TyVector3F32::INFINITY` /
+`TyVector3F32::NEG_INFINITY` instead of `TyVector3F32::splat(f32::INFINITY)` /
+`splat(f32::NEG_INFINITY)`, in `internal/gltf/object_to_gltf_document.rs` and
+`material_document.rs`. The consts already existed in the `impl_ty_vector3_float!`
+macro (no new API) and expand to `Self { x: INFINITY, y: INFINITY, z: INFINITY }`,
+identical to the `splat` form, so the accessor `min`/`max` bytes are unchanged. Both
+files are behind the `gltf` feature, so the gates ran as `--features gltf`
+(176 tests green, including the glTF export goldens that carry the AABB).

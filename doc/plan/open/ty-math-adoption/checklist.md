@@ -250,8 +250,8 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
 - [ ] **A4 (moved)** -> [ty-color-model plan](../ty-color-model/README.md). vxl
       `fill_color.rs:39`'s `parse_rgba_hex` -> `from_hex` adopts the sRGB color type,
       so it lands there (step S6) once `from_hex` is on `TySrgba<u8>`.
-- [ ] **A5** `TyVector3F32::INFINITY`/`NEG_INFINITY` consts at the two glTF AABB
-      seeds (`object_to_gltf_document.rs:43-44`, `material_document.rs:83-84`).
+- [x] **A5** `TyVector3F32::INFINITY`/`NEG_INFINITY` consts at the two glTF AABB
+      seeds (`object_to_gltf_document.rs`, `material_document.rs`).
 - [ ] **A6** `to_array`/`from_array`/`From<[T;N]>` packing at the 6 voxj pack/
       unpack sites (position-only partial at
       `vox_hierarchy_node_from_voxj_hierarchy_node.rs:36,75`). Also carries the
