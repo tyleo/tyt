@@ -33,11 +33,10 @@ pub fn vox_hierarchy_node_from_voxj_hierarchy_node(
 /// position finite, scale finite and non-zero, rotation finite and non-zero.
 /// The rotation is normalized (tolerating a unit quaternion's float error).
 fn vox_transform_from_voxj_transform(transform: &VoxjTransform) -> Result<TyTransformF64> {
-    let [position_x, position_y, position_z] = transform.position;
     let [rotation_x, rotation_y, rotation_z, rotation_w] = transform.rotation;
     let [scale_x, scale_y, scale_z] = transform.scale;
 
-    for value in [position_x, position_y, position_z] {
+    for value in transform.position {
         if !value.is_finite() {
             return Err(invalid(format!(
                 "transform position component {value} must be finite"
@@ -72,7 +71,7 @@ fn vox_transform_from_voxj_transform(transform: &VoxjTransform) -> Result<TyTran
     }
 
     Ok(TyTransformF64::new(
-        TyVector3::new(position_x, position_y, position_z),
+        TyVector3::from_array(transform.position),
         TyQuaternion::new(
             rotation_x / magnitude,
             rotation_y / magnitude,

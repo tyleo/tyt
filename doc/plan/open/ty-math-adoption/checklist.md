@@ -252,12 +252,12 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       so it lands there (step S6) once `from_hex` is on `TySrgba<u8>`.
 - [x] **A5** `TyVector3F32::INFINITY`/`NEG_INFINITY` consts at the two glTF AABB
       seeds (`object_to_gltf_document.rs`, `material_document.rs`).
-- [ ] **A6** `to_array`/`from_array`/`From<[T;N]>` packing at the 6 voxj pack/
+- [x] **A6** `to_array`/`from_array`/`From<[T;N]>` packing at the 6 voxj pack/
       unpack sites (position-only partial at
-      `vox_hierarchy_node_from_voxj_hierarchy_node.rs:36,75`). Also carries the
-      C2 casts deferred here: `to_goxl_file.rs:201` (`world + position.to_i32()`)
-      and `voxj_decoded_object_from_vox_object.rs:58-62` (`origin + min.to_i32()`),
-      once their `min`/`world` arrays become `TyVector3`.
+      `vox_hierarchy_node_from_voxj_hierarchy_node.rs`). Also carried the C2 casts
+      deferred here: `to_goxl_file.rs` (`world + position.to_i32()`, threading
+      `world` as `TyVector3I32`) and `voxj_decoded_object_from_vox_object.rs`
+      (`origin + min.to_i32()`, `min`/`size` kept as `TyVector3U32`).
 - [ ] **A7** `TyBounds::from_points` + `size()`/`max()` at
       `convert/voxelize/mesh.rs:41-48` and the `object_to_glb_bytes.rs:87-88`
       test. Do NOT touch `triangle_bounds.rs` (bit-risk: separately-halved

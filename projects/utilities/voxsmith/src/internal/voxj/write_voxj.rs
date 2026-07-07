@@ -78,8 +78,8 @@ pub fn write_voxj(
                 let bounds = object.bounds();
                 let origin = object.origin();
                 VoxjEditObject {
-                    bounds: [bounds.x, bounds.y, bounds.z],
-                    origin: [origin.x, origin.y, origin.z],
+                    bounds: bounds.to_array(),
+                    origin: origin.to_array(),
                 }
             })
             .collect(),

@@ -27,9 +27,7 @@ pub(crate) fn mesh_slices(
     key: &dyn Fn(U32Id<BVoxVoxel>) -> u32,
     track_materials: bool,
 ) -> MeshGeometry {
-    let bounds = object.bounds();
-
-    let bounds = [bounds.x, bounds.y, bounds.z];
+    let bounds = object.bounds().to_array();
 
     let (cull, merge) = match method {
         MeshMethod::Naive => (false, false),

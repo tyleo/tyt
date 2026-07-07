@@ -36,19 +36,16 @@ pub fn vox_object_from_voxj_decoded_object(
     };
     let [size_x, size_y, size_z] = bounds;
 
-    let mut out = VoxObject::new(
-        object.name.clone(),
-        TyVector3U32::new(size_x, size_y, size_z),
-    )
-    .ok_or_else(|| {
-        invalid(format!(
-            "object \"{}\" grid {size_x}x{size_y}x{size_z} exceeds the dense limit of {} cells",
-            object.name,
-            VoxObject::MAX_GRID_CELLS
-        ))
-    })?;
+    let mut out = VoxObject::new(object.name.clone(), TyVector3U32::from_array(bounds))
+        .ok_or_else(|| {
+            invalid(format!(
+                "object \"{}\" grid {size_x}x{size_y}x{size_z} exceeds the dense limit of {} cells",
+                object.name,
+                VoxObject::MAX_GRID_CELLS
+            ))
+        })?;
 
-    out.set_origin(TyVector3I32::new(origin[0], origin[1], origin[2]));
+    out.set_origin(TyVector3I32::from_array(origin));
 
     // Back-fill material 0 as each layer's placeholder; live voxels overwrite
     // theirs below.

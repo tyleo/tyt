@@ -24,17 +24,8 @@ pub fn voxj_hierarchy_node_from_vox_hierarchy_node(node: &VoxHierarchyNode) -> V
 /// Converts a [`TyTransformF64`] into a [`VoxjTransform`].
 fn voxj_transform_from_vox_transform(transform: &TyTransformF64) -> VoxjTransform {
     VoxjTransform {
-        position: [
-            transform.position.x,
-            transform.position.y,
-            transform.position.z,
-        ],
-        rotation: [
-            transform.rotation.x,
-            transform.rotation.y,
-            transform.rotation.z,
-            transform.rotation.w,
-        ],
-        scale: [transform.scale.x, transform.scale.y, transform.scale.z],
+        position: transform.position.to_array(),
+        rotation: transform.rotation.to_array(),
+        scale: transform.scale.to_array(),
     }
 }

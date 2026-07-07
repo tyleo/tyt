@@ -1,3 +1,4 @@
+use ty_math::TyVector3U32;
 use voxcore::VoxObject;
 use voxj_codec::VoxjDecodedObject;
 
@@ -14,10 +15,9 @@ pub fn voxj_decoded_object_from_vox_object(object: &VoxObject) -> VoxjDecodedObj
     // The runtime grid is the live voxels' tight extent within the build
     // volume; an empty object collapses to a [0, 0, 0] grid at the build-volume
     // origin.
-    let (min, size) = match object.live_extent() {
-        Some((min, size)) => ([min.x, min.y, min.z], [size.x, size.y, size.z]),
-        None => ([0, 0, 0], [0, 0, 0]),
-    };
+    let (min, size) = object
+        .live_extent()
+        .unwrap_or((TyVector3U32::new(0, 0, 0), TyVector3U32::new(0, 0, 0)));
 
     // Layer ids, reused for each voxel's sample row.
     let layer_ids: Vec<_> = object.iter_layers().map(|(id, _)| id).collect();
@@ -33,11 +33,7 @@ pub fn voxj_decoded_object_from_vox_object(object: &VoxObject) -> VoxjDecodedObj
         let position = object
             .voxel_position(voxel_id)
             .expect("a live voxel id is within the grid");
-        positions.push([
-            position.x - min[0],
-            position.y - min[1],
-            position.z - min[2],
-        ]);
+        positions.push((position - min).to_array());
 
         let row = layer_ids
             .iter()
@@ -54,12 +50,8 @@ pub fn voxj_decoded_object_from_vox_object(object: &VoxObject) -> VoxjDecodedObj
     VoxjDecodedObject {
         name: object.name().to_owned(),
         layer_palette_refs,
-        bounds: size,
-        origin: [
-            origin.x + min[0] as i32,
-            origin.y + min[1] as i32,
-            origin.z + min[2] as i32,
-        ],
+        bounds: size.to_array(),
+        origin: (origin + min.to_i32()).to_array(),
         positions,
         samples,
     }

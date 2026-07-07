@@ -452,3 +452,41 @@ macro (no new API) and expand to `Self { x: INFINITY, y: INFINITY, z: INFINITY }
 identical to the `splat` form, so the accessor `min`/`max` bytes are unchanged. Both
 files are behind the `gltf` feature, so the gates ran as `--features gltf`
 (176 tests green, including the glTF export goldens that carry the AABB).
+
+### A6: voxj/goxl array packing + deferred C2 casts (landed)
+
+Seven sites, all behavior-preserving. The plain `to_array`/`from_array` swaps are
+byte-identical (the macro packs/unpacks `x, y, z[, w]` in order); the two
+vectorizations are the notable ones. mvox/vmax untouched; goxl and voxj are default
+features and `object_to_mesh_geometry` is behind `gltf`, so the gates ran
+`--features gltf` (176 tests green, no golden change).
+
+- `voxj_hierarchy_node_from_vox_hierarchy_node.rs`: the `VoxjTransform` pack is
+  `transform.position.to_array()` / `rotation.to_array()` / `scale.to_array()`
+  (the quaternion `to_array` is `[x, y, z, w]`, matching the old field list).
+- `vox_hierarchy_node_from_voxj_hierarchy_node.rs`: **position only.** The finite
+  check iterates `transform.position` directly and the build is
+  `TyVector3::from_array(transform.position)`; rotation keeps its magnitude
+  normalize and scale keeps its non-zero validation, so both stay destructured.
+- `vox_object_from_voxj_decoded_object.rs`: `TyVector3U32::from_array(bounds)` and
+  `TyVector3I32::from_array(origin)`; the `size_x/y/z` destructure stays for the
+  error messages.
+- `voxj_decoded_object_from_vox_object.rs`: fully vectorized. `live_extent` now
+  keeps its `(min, size)` as `TyVector3U32` (the empty case is
+  `unwrap_or((new(0,0,0), new(0,0,0)))`), so `positions.push((position -
+  min).to_array())` (u32 vector subtract, same wrap/panic as the per-axis form),
+  `bounds: size.to_array()`, and the deferred C2 cast `origin: (origin +
+  min.to_i32()).to_array()`.
+- `write_voxj.rs`: the `VoxjEditObject` is `bounds.to_array()` / `origin.to_array()`.
+- `convert/mesh/object_to_mesh_geometry.rs`: `object.bounds().to_array()` collapses
+  the read-then-repack.
+- `convert/goxl/to_goxl_file.rs`: the deferred C2 cast. `emit_object`'s `world`
+  parameter becomes `TyVector3I32` (already the type in `emit_node`, so its call
+  drops the `.to_array()`; the orphan-object call passes
+  `TyVector3I32::new(0, 0, 0)`), and the body is `let world_position = (world +
+  position.to_i32()).to_array()`.
+- Coverage of the non-zero cast paths: the voxj `never_discards_edit_state_with_
+  margin` round-trip uses `origin: [-1, 0, 0]` (negative), exercising the site-4
+  `origin + min.to_i32()` add and the site-5 emit; the goxl block-position fixtures
+  (`[-16, 16, -32]`) exercise the site-7 `world + position.to_i32()` add. Both
+  vector adds are the same `TyVector3I32 + TyVector3U32::to_i32()` shape.

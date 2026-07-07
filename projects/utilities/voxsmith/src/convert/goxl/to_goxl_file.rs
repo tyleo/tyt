@@ -120,7 +120,7 @@ fn synthesize_goxl(state: &VoxMain) -> GoxlFile {
     }
     for (id, object) in state.iter_objects() {
         if !builder.placed.contains(&id.to_u32()) {
-            builder.emit_object(state, id, object, [0, 0, 0], object.name());
+            builder.emit_object(state, id, object, TyVector3I32::new(0, 0, 0), object.name());
         }
     }
 
@@ -167,7 +167,7 @@ impl GoxlBuilder {
 
         for object_id in child_objects {
             if let Some(object) = state.object(object_id) {
-                self.emit_object(state, object_id, object, world.to_array(), &name);
+                self.emit_object(state, object_id, object, world, &name);
             }
         }
         for child in child_nodes {
@@ -183,7 +183,7 @@ impl GoxlBuilder {
         state: &VoxMain,
         object_id: U32Id<BVoxObject>,
         object: &VoxObject,
-        world: [i32; 3],
+        world: TyVector3I32,
         name: &str,
     ) {
         self.placed.insert(object_id.to_u32());
@@ -198,11 +198,7 @@ impl GoxlBuilder {
             let position = object
                 .voxel_position(voxel)
                 .expect("a live voxel is within the grid");
-            let world_position = [
-                world[0] + position.x as i32,
-                world[1] + position.y as i32,
-                world[2] + position.z as i32,
-            ];
+            let world_position = (world + position.to_i32()).to_array();
             let origin = [
                 world_position[0].div_euclid(edge) * edge,
                 world_position[1].div_euclid(edge) * edge,
