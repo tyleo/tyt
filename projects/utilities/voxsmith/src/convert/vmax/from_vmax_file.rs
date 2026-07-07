@@ -543,11 +543,10 @@ fn view_box<'a>(serde: &'a VMaxFile, object: &VMaxObject) -> Option<&'a VMaxView
 /// transform's position lands on the content center (the pivot); any odd-extent
 /// half-voxel remainder is absorbed by that position, keeping rendering exact.
 fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
-    [
-        (box_min[0] as f64 - center[0]).round() as i32,
-        (box_min[1] as f64 - center[1]).round() as i32,
-        (box_min[2] as f64 - center[2]).round() as i32,
-    ]
+    (TyVector3I32::from_array(box_min).to_f64() - TyVector3F64::from_array(center))
+        .round()
+        .to_i32()
+        .to_array()
 }
 
 /// The object's build volume (the author's `tools.vp`) as `(bounds, origin)` in
@@ -582,11 +581,10 @@ fn edit_grid(
 /// an object's authored Voxel Max bounds, or `None` when it has none.
 fn authored_box(object: &VMaxObject) -> Option<([i32; 3], [u32; 3])> {
     let (min, max) = (object.bounds_min?, object.bounds_max?);
-    let box_min = [
-        (object.center[0] + min[0]).round() as i32,
-        (object.center[1] + min[1]).round() as i32,
-        (object.center[2] + min[2]).round() as i32,
-    ];
+    let box_min = (TyVector3F64::from_array(object.center) + TyVector3F64::from_array(min))
+        .round()
+        .to_i32()
+        .to_array();
     let size = [
         (max[0] - min[0]).round().max(0.0) as u32,
         (max[1] - min[1]).round().max(0.0) as u32,

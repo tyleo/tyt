@@ -550,3 +550,28 @@ byte-identical packing, so the memoized subtree box is unchanged. `transform_hal
 (the sibling AABB half-extent fold) was left as-is: it is a per-column rotate of
 the scaled basis vectors, not a `transform_point`, so no method fits. voxsmith
 stays green (117 tests), no golden moved.
+
+### D3 B3: round-to-nearest chains in from_vmax_file (landed)
+
+Two per-component `(..).round() as i32` chains now fold through the vector
+methods, both byte-identical:
+
+- `pivot_origin` (`:545`) becomes
+  `(TyVector3I32::from_array(box_min).to_f64() -
+  TyVector3F64::from_array(center)).round().to_i32().to_array()`. The `Sub` keeps
+  the `box_min - center` order (non-commutative, preserved); `to_f64` is the exact
+  `as f64` widen, `round` is per-component `f64::round` (half away from zero),
+  `to_i32` truncates an already-integer value.
+- `authored_box`'s `box_min` (`:585`) becomes
+  `(TyVector3F64::from_array(object.center) +
+  TyVector3F64::from_array(min)).round().to_i32().to_array()`.
+
+The sibling `size` in `authored_box` (`(max - min).round().max(0.0) as u32`) is
+LEFT as the per-component array form: it needs a round-then-saturating-`as u32`,
+i.e. the `TyVector3F64::to_u32` the audit explicitly rejected (there is no
+float-vector `to_u32`; the integer `to_u32` is on `TyVector3<i32>`, and routing
+through it would add a clamp-and-cast, not remove one). `min` stays a `[f64; 3]`
+local (used by both the vectorized `box_min` and the array `size`); `from_array`
+copies it, so the later `min[i]` indexing is unaffected. The pure-`Sub` offset at
+`:165` was already a `TyVector3I32` subtract with no rounding, so it is not in
+B3's scope. voxsmith stays green (117 tests), no golden moved.

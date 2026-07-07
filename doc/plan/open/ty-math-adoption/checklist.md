@@ -278,8 +278,11 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       `TyVector3F64::from_array`/`to_array` at the `[f64;3]` boundary.
       `transform_half` was left as-is (per-column basis rotate, not a point
       transform).
-- [ ] **B3** the round-to-nearest chain at `from_vmax_file.rs:529-535` and
-      `:569-573`.
+- [x] **B3** the round-to-nearest chains now fold through
+      `to_f64`/`Sub`/`Add`/`round`/`to_i32`/`from_array`/`to_array` in
+      `pivot_origin` (`from_vmax_file.rs:545`) and `authored_box`'s `box_min`
+      (`:585`). The `authored_box` `size` (`round().max(0.0) as u32`) stays as-is:
+      it is the rejected `TyVector3F64::to_u32` case (no float-vector `to_u32`).
 - [ ] **B4** `min_corner` integer min fold at `from_vmax_file.rs:474-483` (needs
       C1).
 - [ ] **B5** `content_box`/`object_box_local` via C6 `from_min_size` in
