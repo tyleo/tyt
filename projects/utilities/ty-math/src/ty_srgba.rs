@@ -1,4 +1,4 @@
-use crate::ty_array_conversions;
+use crate::{TyFloatExt, ty_array_conversions};
 use std::{
     hash::{Hash, Hasher},
     ops::Mul,
@@ -87,6 +87,33 @@ impl TySrgba<u8> {
 
         format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
     }
+
+    /// Normalizes each 8-bit component straight to `[0, 1]` without the sRGB
+    /// transfer function; the gamma-encoded color as floats. The inverse of
+    /// `to_u8`. Decode to linear light separately.
+    pub fn to_f64(self) -> TySrgba<f64> {
+        TySrgba::new(
+            self.r as f64 / 255.0,
+            self.g as f64 / 255.0,
+            self.b as f64 / 255.0,
+            self.a as f64 / 255.0,
+        )
+    }
+}
+
+impl TySrgba<f64> {
+    /// Quantizes each `[0, 1]` component to a byte (clamped, rounded) without
+    /// the sRGB transfer function, since the components are already
+    /// sRGB-encoded. The inverse of `to_f64`. Encode from linear light on the
+    /// linear type instead.
+    pub fn to_u8(self) -> TySrgba<u8> {
+        TySrgba::new(
+            self.r.to_unorm8(),
+            self.g.to_unorm8(),
+            self.b.to_unorm8(),
+            self.a.to_unorm8(),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -148,6 +175,31 @@ mod tests {
             TySrgbaF64::new(0.25, 0.5, 0.125, 1.0) * 2.0,
             TySrgbaF64::new(0.5, 1.0, 0.25, 2.0)
         );
+    }
+
+    #[test]
+    fn u8_to_f64_normalizes() {
+        // Straight normalize, no transfer function.
+        assert_eq!(
+            TySrgbaU8::new(255, 128, 0, 64).to_f64(),
+            TySrgbaF64::new(1.0, 128.0 / 255.0, 0.0, 64.0 / 255.0)
+        );
+    }
+
+    #[test]
+    fn f64_to_u8_quantizes_and_clamps() {
+        // Out-of-range components clamp to the byte endpoints; a half rounds up.
+        assert_eq!(
+            TySrgbaF64::new(-0.5, 2.0, 0.5, 1.0).to_u8(),
+            TySrgbaU8::new(0, 255, 128, 255)
+        );
+    }
+
+    #[test]
+    fn u8_round_trips_through_f64() {
+        // byte -> float -> byte is exact for byte-valued components.
+        let bytes = TySrgbaU8::new(0, 128, 255, 64);
+        assert_eq!(bytes.to_f64().to_u8(), bytes);
     }
 
     #[test]

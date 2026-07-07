@@ -44,4 +44,36 @@ consistent with; read this before picking up work.
 - **Doc header avoids linking `to_lin_srgba`.** That method lands in S2, so the
   S1 doc describes the decode conceptually ("decode to linear light before
   compositing") rather than with a `[`...`](Self::...)` intra-doc link that would
-  not resolve yet. Add the link in S2.
+  not resolve yet. Add the link when the method exists.
+
+## S2, part 1: component conversions (2026-07-07)
+
+- **S2 is split at the dependency boundary; only the component conversions
+  landed this chunk.** S2 has two independent pieces: the transfer-free
+  component conversions (`to_u8` / `to_f64`), which need nothing new, and
+  `TySrgba<f64>::to_lin_srgba` (the sRGB transfer decode), which needs a linear
+  return type. To have `to_lin_srgba` return `TyLinSrgba<f64>` directly instead
+  of the old `TyLinearRgbaColorF64` (which S8 removes, forcing a re-point),
+  `to_lin_srgba` is deferred to the S3 chunk where `TyLinSrgba` is born. **S2
+  stays unchecked; its remaining piece is `to_lin_srgba`, done with S3.**
+
+- **Concrete `to_u8` / `to_f64`, not a generic `into_format<U>`.** The plan lists
+  the palette vocabulary "`into_format` / `to_u8` / `to_f64`", but a genuine
+  generic `into_format<U>` needs a `FromStimulus`-style component-conversion
+  trait over `{u8, f32, f64}` -- disproportionate machinery for the one pair the
+  census exercises, and against this crate's concrete-`impl` idiom (every type
+  has explicit `F32` / `F64` impls, not generic-over-component). So the two
+  directional methods `TySrgba<u8>::to_f64` (normalize, `/255`) and
+  `TySrgba<f64>::to_u8` (quantize via `TyFloatExt::to_unorm8`, clamp + round) are
+  the whole surface. `into_format` is treated as the concept, not a required
+  method name. If a generic form is wanted later it is additive.
+
+- **u8 <-> f64 only; no f32 conversion.** The census conversion sites are all
+  u8 <-> f64 (`TySrgbaColor::to_rgba` normalizes, `TyRgbaColorF64::to_srgba`
+  quantizes). The fbx `TySrgba<f32>` colors are stored / serialized, never run
+  through these transient conversions, so no `to_f32` is added. Additive if a
+  site turns up.
+
+- **`to_u8` / `to_f64` are additive beside the old `to_rgba` / `to_srgba`.** The
+  old `TySrgbaColor::to_rgba` and `TyRgbaColorF64::to_srgba` still exist and are
+  removed at S8; consumers migrate to the new pair in S5 / S6.

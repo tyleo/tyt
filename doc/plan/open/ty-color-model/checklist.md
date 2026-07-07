@@ -52,6 +52,9 @@ than adopt the old ones first and redo them:
       transfer), and `TySrgba<f64>::to_lin_srgba` (the sRGB decode, re-homing the
       reverted C8 logic). Keep the transfer OFF the plain component cast; name it so
       the sRGB step is explicit. Unit tests including the u8 round-trip.
+      Progress: `to_u8` / `to_f64` landed as the concrete pair (no generic
+      `into_format`); the transfer decode `to_lin_srgba` folds into S3 so it can
+      return `TyLinSrgba<f64>` directly. See reference/implementation-decisions.md.
 - [ ] **S3. Add `TyLinSrgba<T = f32>`** beside `TyLinearRgbaColor`, with
       `to_srgba` (linear -> sRGB encode, returning `TySrgba<u8>` or `TySrgba<f64>`
       per call need), `to_oklab`, `to_cielab`, `componentwise_multiply`. Unit tests.
