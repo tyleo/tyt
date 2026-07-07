@@ -488,14 +488,14 @@ fn node_from_group(group: &VMaxGroup) -> VoxelMaxNode {
 
 /// The minimum `[x, y, z]` corner over `voxels`, or `None` when empty.
 fn min_corner(voxels: &[VMaxVoxel]) -> Option<[i32; 3]> {
-    voxels.iter().fold(None, |acc, v| {
-        let acc = acc.unwrap_or(v.position);
-        Some([
-            acc[0].min(v.position[0]),
-            acc[1].min(v.position[1]),
-            acc[2].min(v.position[2]),
-        ])
-    })
+    voxels
+        .iter()
+        .fold(None, |acc, v| {
+            let position = TyVector3I32::from_array(v.position);
+            let acc = acc.unwrap_or(position);
+            Some(acc.component_min_with(&position))
+        })
+        .map(|corner| corner.to_array())
 }
 
 /// The `[X, Y, Z]` bounds: the per-axis extent of `voxels` relative to

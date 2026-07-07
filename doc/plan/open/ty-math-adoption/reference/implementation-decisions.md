@@ -575,3 +575,18 @@ local (used by both the vectorized `box_min` and the array `size`); `from_array`
 copies it, so the later `min[i]` indexing is unaffected. The pure-`Sub` offset at
 `:165` was already a `TyVector3I32` subtract with no rounding, so it is not in
 B3's scope. voxsmith stays green (117 tests), no golden moved.
+
+### D3 B4: min_corner via integer component_min_with (landed)
+
+`min_corner`'s per-component `acc[i].min(v.position[i])` fold now folds
+`TyVector3I32` through C1's integer `component_min_with`: each `[i32; 3]`
+`v.position` is wrapped with `from_array`, the accumulator is
+`Option<TyVector3I32>` (inferred, no annotation needed), and the final corner is
+read back with `.map(|corner| corner.to_array())`. The structure mirrors the
+original (`acc.unwrap_or(position)` then min), so the None seed self-mins to its
+own position, bit-identical. `component_min_with` is `self.x.min(other.x)` etc.
+over `i32` (`Ord::min`), the same operation and operand order as the hand-rolled
+fold. `object_bounds` (the sibling `bounds[i].max((v.position[i] - box_min[i] +
+1) as u32)` fold) is LEFT as-is: it is a subtract/+1/saturating-u32-cast, not a
+plain component max, so no integer `component_max_with` fits (the C1 audit note
+excludes it). voxsmith stays green (117 tests), no golden moved.

@@ -283,8 +283,10 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       `pivot_origin` (`from_vmax_file.rs:545`) and `authored_box`'s `box_min`
       (`:585`). The `authored_box` `size` (`round().max(0.0) as u32`) stays as-is:
       it is the rejected `TyVector3F64::to_u32` case (no float-vector `to_u32`).
-- [ ] **B4** `min_corner` integer min fold at `from_vmax_file.rs:474-483` (needs
-      C1).
+- [x] **B4** `min_corner` (`from_vmax_file.rs:490`) folds through C1's integer
+      `component_min_with` on `TyVector3I32`, wrapping the `[i32;3]` positions with
+      `from_array` and the result with `to_array`. `object_bounds` stays as-is
+      (a subtract/+1/u32-cast fold, excluded by the C1 note).
 - [ ] **B5** `content_box`/`object_box_local` via C6 `from_min_size` in
       `write_vmax`.
 - [ ] **B6** `extend_bounds` at `write_vmax.rs:1158-1178` via float
