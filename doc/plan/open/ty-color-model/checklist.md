@@ -42,7 +42,7 @@ than adopt the old ones first and redo them:
 
 ### Phase 1: land the new types in ty-math (additive)
 
-- [ ] **S1. Add `TySrgba<T = f32>`** and aliases (`TySrgbaU8 = TySrgba<u8>`,
+- [x] **S1. Add `TySrgba<T = f32>`** and aliases (`TySrgbaU8 = TySrgba<u8>`,
       `TySrgbaF32`, `TySrgbaF64`) beside the existing types. Component-generic RGBA,
       documented as the sRGB-encoded space. `Eq` + `Hash` impl'd for `TySrgba<u8>`
       only (`f64` gets `PartialEq`). Port `from_hex`/`to_hex` to `TySrgba<u8>`, the

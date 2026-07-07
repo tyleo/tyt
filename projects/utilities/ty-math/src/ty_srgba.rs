@@ -1,0 +1,162 @@
+use crate::ty_array_conversions;
+use std::{
+    hash::{Hash, Hasher},
+    ops::Mul,
+};
+
+/// An sRGB (gamma-encoded) color with straight alpha. The color space is the
+/// type identity; `T` is the orthogonal storage axis: `u8` is the `#RRGGBBAA`
+/// byte form, `f32` / `f64` are normalized `[0, 1]`. Decode to linear before
+/// lighting math.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TySrgba<T = f32> {
+    /// The red component, gamma-encoded.
+    pub r: T,
+
+    /// The green component, gamma-encoded.
+    pub g: T,
+
+    /// The blue component, gamma-encoded.
+    pub b: T,
+
+    /// The straight-alpha component (linear, no gamma).
+    pub a: T,
+}
+
+impl<T> TySrgba<T> {
+    /// Creates a color from its components.
+    pub fn new(r: T, g: T, b: T, a: T) -> Self {
+        Self { r, g, b, a }
+    }
+}
+
+ty_array_conversions!(TySrgba, 4, r, g, b, a);
+
+impl<T: Copy + Mul<Output = T>> Mul<T> for TySrgba<T> {
+    type Output = Self;
+
+    fn mul(self, rhs: T) -> Self {
+        Self {
+            r: self.r * rhs,
+            g: self.g * rhs,
+            b: self.b * rhs,
+            a: self.a * rhs,
+        }
+    }
+}
+
+// `Eq` / `Hash` hold only for the integer storage, so the 8-bit color can key a
+// dedup map (the `MaterialKey` palette key); `f32` / `f64` get `PartialEq` from
+// the derive alone. The manual `Hash` mirrors the derived field-order hashing.
+impl Eq for TySrgba<u8> {}
+
+impl Hash for TySrgba<u8> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.r.hash(state);
+        self.g.hash(state);
+        self.b.hash(state);
+        self.a.hash(state);
+    }
+}
+
+impl TySrgba<u8> {
+    /// Parses a `#RRGGBB` or `#RRGGBBAA` hex string, with or without the leading
+    /// `#`. A missing alpha defaults to opaque. Returns `None` when the value is
+    /// not six or eight hexadecimal digits.
+    pub fn from_hex(hex: &str) -> Option<Self> {
+        let hex = hex.strip_prefix('#').unwrap_or(hex);
+
+        if hex.len() != 6 && hex.len() != 8 {
+            return None;
+        }
+
+        let byte = |index: usize| u8::from_str_radix(hex.get(index * 2..index * 2 + 2)?, 16).ok();
+
+        Some(Self {
+            r: byte(0)?,
+            g: byte(1)?,
+            b: byte(2)?,
+            a: if hex.len() == 8 { byte(3)? } else { 255 },
+        })
+    }
+
+    /// Formats the color as an uppercase `#RRGGBBAA` hex string. Round-trips
+    /// with [`from_hex`](Self::from_hex).
+    pub fn to_hex(self) -> String {
+        let Self { r, g, b, a } = self;
+
+        format!("#{r:02X}{g:02X}{b:02X}{a:02X}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{TySrgbaF64, TySrgbaU8};
+    use std::collections::HashSet;
+
+    #[test]
+    fn hex_round_trips_and_defaults_alpha() {
+        // Eight digits carry alpha; six default it to opaque; the `#` is
+        // optional either way.
+        assert_eq!(
+            TySrgbaU8::from_hex("#01020304"),
+            Some(TySrgbaU8::new(1, 2, 3, 4))
+        );
+        assert_eq!(
+            TySrgbaU8::from_hex("FF8000"),
+            Some(TySrgbaU8::new(255, 128, 0, 255))
+        );
+        assert_eq!(TySrgbaU8::new(1, 2, 3, 4).to_hex(), "#01020304");
+        assert_eq!(
+            TySrgbaU8::from_hex(&TySrgbaU8::new(10, 200, 30, 40).to_hex()),
+            Some(TySrgbaU8::new(10, 200, 30, 40))
+        );
+    }
+
+    #[test]
+    fn from_hex_rejects_malformed() {
+        // Wrong length and non-hex digits are both rejected.
+        assert_eq!(TySrgbaU8::from_hex("#12345"), None);
+        assert_eq!(TySrgbaU8::from_hex("#GGGGGG"), None);
+        assert_eq!(TySrgbaU8::from_hex(""), None);
+    }
+
+    #[test]
+    fn array_round_trips() {
+        // The generic array conversions read and write component order.
+        let color = TySrgbaU8::from_array([1, 2, 3, 4]);
+        assert_eq!(color, TySrgbaU8::new(1, 2, 3, 4));
+        assert_eq!(color.to_array(), [1, 2, 3, 4]);
+
+        let from: TySrgbaU8 = [10, 20, 30, 40].into();
+        assert_eq!(from, TySrgbaU8::new(10, 20, 30, 40));
+    }
+
+    #[test]
+    fn from_slice_reads_the_first_components() {
+        assert_eq!(
+            TySrgbaU8::from_slice(&[5, 6, 7, 8, 9]),
+            TySrgbaU8::new(5, 6, 7, 8)
+        );
+    }
+
+    #[test]
+    fn scalar_multiply_scales_each_component() {
+        // `Mul<T>` scales every channel, alpha included; the operands are exact
+        // binary fractions so the equality is precise.
+        assert_eq!(
+            TySrgbaF64::new(0.25, 0.5, 0.125, 1.0) * 2.0,
+            TySrgbaF64::new(0.5, 1.0, 0.25, 2.0)
+        );
+    }
+
+    #[test]
+    fn u8_color_keys_a_hash_set() {
+        // `Eq` + `Hash` on the 8-bit storage let it key a dedup container.
+        let mut set = HashSet::new();
+        set.insert(TySrgbaU8::new(1, 2, 3, 4));
+        set.insert(TySrgbaU8::new(1, 2, 3, 4));
+        set.insert(TySrgbaU8::new(9, 9, 9, 9));
+        assert_eq!(set.len(), 2);
+    }
+}
