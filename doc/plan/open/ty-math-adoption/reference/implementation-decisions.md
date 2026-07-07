@@ -384,3 +384,16 @@ offset.componentwise_multiply(&size)` (the existing multiply), replacing the
 per-axis `self.size[i]` indexing the retype forced anyway. Every operation is the
 same per-component subtract/divide/multiply/add in the same order, so the
 rasterizer and sampler are bit-identical.
+
+### C6: from_min_size (added, adoption trails in D3)
+
+`TyBounds::from_min_size(min, size) -> Self` in the `impl_ty_bounds_float!` macro
+(f32/f64), beside `from_points`: `extents = size * 0.5`, `center = min + extents`.
+Float-only, matching the sibling constructors that all use `* 0.5` / `* 2.0`. The
+unit test mirrors the `from_points` case (same min `(-1, -2, 2)`, size
+`(4, 6, 3)`), so the two constructors are shown to agree, and asserts `center`,
+`min`, `max`, and `size`. No adoption this chunk: both consumers are vmax
+(`write_vmax` `content_box` at `:599` and `object_box_local` at `:1276`, which
+compute `half = bounds / 2`, `center = box_min + half`, and return
+`(center, -half, half)`), so the min/size widen and swap land in D3 B5. The
+`from_min_max` sibling the audit floated was dropped as a lone one-off.

@@ -232,7 +232,7 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       The `to_linear_rgba` sRGB decode re-lands there as `TySrgba<f64>::to_lin_srgba`
       and adopts at the voxj `decode_rgb`/`decode_rgba` against the new color types;
       C8 was reverted from this plan.
-- [ ] **C6** `TyBounds::from_min_size(min, size)`; add with a test. Adoption is
+- [x] **C6** `TyBounds::from_min_size(min, size)`; added with a test. Adoption is
       vmax-only (`write_vmax` content/object box), so it trails in D3.
 
 ### D2: adopt existing ty-math, non-vmax (no new API)

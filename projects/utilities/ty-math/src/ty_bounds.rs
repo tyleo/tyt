@@ -66,6 +66,15 @@ macro_rules! impl_ty_bounds_float {
                 })
             }
 
+            /// A box with minimum corner `min` and full `size` on each axis.
+            pub fn from_min_size(min: TyVector3<$t>, size: TyVector3<$t>) -> Self {
+                let extents = size * 0.5;
+                Self {
+                    center: min + extents,
+                    extents,
+                }
+            }
+
             /// The full size on each axis, `extents * 2`.
             pub fn size(&self) -> TyVector3<$t> {
                 self.extents * 2.0
@@ -100,6 +109,18 @@ mod tests {
             TyVector3F64::new(1.0, 4.0, 5.0),
         ])
         .expect("a non-empty cloud");
+        assert_eq!(bounds.min(), TyVector3F64::new(-1.0, -2.0, 2.0));
+        assert_eq!(bounds.max(), TyVector3F64::new(3.0, 4.0, 5.0));
+        assert_eq!(bounds.size(), TyVector3F64::new(4.0, 6.0, 3.0));
+    }
+
+    #[test]
+    fn from_min_size_sets_the_min_corner_and_full_size() {
+        let bounds = TyBoundsF64::from_min_size(
+            TyVector3F64::new(-1.0, -2.0, 2.0),
+            TyVector3F64::new(4.0, 6.0, 3.0),
+        );
+        assert_eq!(bounds.center, TyVector3F64::new(1.0, 1.0, 3.5));
         assert_eq!(bounds.min(), TyVector3F64::new(-1.0, -2.0, 2.0));
         assert_eq!(bounds.max(), TyVector3F64::new(3.0, 4.0, 5.0));
         assert_eq!(bounds.size(), TyVector3F64::new(4.0, 6.0, 3.0));
