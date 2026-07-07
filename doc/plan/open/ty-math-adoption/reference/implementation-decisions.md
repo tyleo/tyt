@@ -590,3 +590,30 @@ fold. `object_bounds` (the sibling `bounds[i].max((v.position[i] - box_min[i] +
 1) as u32)` fold) is LEFT as-is: it is a subtract/+1/saturating-u32-cast, not a
 plain component max, so no integer `component_max_with` fits (the C1 audit note
 excludes it). voxsmith stays green (117 tests), no golden moved.
+
+### D3 B5: content_box / object_box_local via from_min_size (landed)
+
+The two box builders now construct a `TyBoundsF64::from_min_size(min, size)` and
+read the corners off it (`.center`, `.extents`, and `-extents`), adopting the C6
+constructor. `TyBoundsF64` joined the `ty-math` import.
+
+Byte-identity rests on three exact steps: (1) `from_min_size` computes `extents =
+size * 0.5` where the hand-rolled code wrote `size / 2.0` -- both scale by a power
+of two, which IEEE-754 does exactly (no rounding), so `x * 0.5 == x / 2.0` bit for
+bit; (2) `center = min + extents` matches the `min + half` add in order and
+operands; (3) the min/size widen through `to_f64` (u32 and i32 both per-component
+`as f64`) equals the hand-rolled `as f64`, and `from_array`/`to_array` pack in
+order.
+
+- `content_box` (`:599`): `from_min_size(TyVector3I32::from_array(box_min).to_f64(),
+  bounds.to_f64())`, returning `(center, -extents, extents)` via `to_array`. The
+  `-extents` uses the `TyVector3` `Neg`, componentwise `-x`, matching the old
+  `[-half[0], ..]`.
+- `object_box_local` (`:1276`): both branches (the empty object framing its build
+  volume `edit_origin`/`edit_bounds`, and the normal object framing its tight
+  grid `tight.origin()`/`bounds`) become a `from_min_size`, collapsing the two
+  duplicated `(center, half)` tails into one `if/else` that binds `box_local` and
+  returns `(box_local.center.to_array(), box_local.extents.to_array())`. Same box,
+  same tuple.
+
+voxsmith stays green (117 tests), no golden moved.

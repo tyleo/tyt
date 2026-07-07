@@ -7,7 +7,8 @@ use crate::{
 use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use ty_math::{
-    TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
+    TyBoundsF64, TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3I32,
+    TyVector3U32,
 };
 use vmax::{
     VMaxBrush, VMaxBrushColor, VMaxBrushEntry, VMaxBrushState, VMaxCamera, VMaxContentsVmaxbFile,
@@ -597,17 +598,13 @@ fn object_placement(
 /// half-extents. Voxel Max renders and frames against this and pivots about the
 /// center.
 fn content_box(box_min: [i32; 3], bounds: TyVector3U32) -> ([f64; 3], [f64; 3], [f64; 3]) {
-    let half = [
-        bounds.x as f64 / 2.0,
-        bounds.y as f64 / 2.0,
-        bounds.z as f64 / 2.0,
-    ];
-    let center = [
-        box_min[0] as f64 + half[0],
-        box_min[1] as f64 + half[1],
-        box_min[2] as f64 + half[2],
-    ];
-    (center, [-half[0], -half[1], -half[2]], half)
+    let box_local =
+        TyBoundsF64::from_min_size(TyVector3I32::from_array(box_min).to_f64(), bounds.to_f64());
+    (
+        box_local.center.to_array(),
+        (-box_local.extents).to_array(),
+        box_local.extents.to_array(),
+    )
 }
 
 /// The `tools.vp` partition box for an object: its build volume at `origin`,
@@ -1279,35 +1276,12 @@ fn object_box_local(state: &VoxMain, object_id: U32Id<BVoxObject>) -> ([f64; 3],
     let object = state.object(object_id).expect("a valid child object");
     let (tight, (edit_bounds, edit_origin)) = tighten(object);
     let bounds = tight.bounds();
-    if bounds.x == 0 && bounds.y == 0 && bounds.z == 0 {
-        let half = [
-            edit_bounds.x as f64 / 2.0,
-            edit_bounds.y as f64 / 2.0,
-            edit_bounds.z as f64 / 2.0,
-        ];
-        return (
-            [
-                edit_origin.x as f64 + half[0],
-                edit_origin.y as f64 + half[1],
-                edit_origin.z as f64 + half[2],
-            ],
-            half,
-        );
-    }
-    let half = [
-        bounds.x as f64 / 2.0,
-        bounds.y as f64 / 2.0,
-        bounds.z as f64 / 2.0,
-    ];
-    let origin = tight.origin();
-    (
-        [
-            origin.x as f64 + half[0],
-            origin.y as f64 + half[1],
-            origin.z as f64 + half[2],
-        ],
-        half,
-    )
+    let box_local = if bounds.x == 0 && bounds.y == 0 && bounds.z == 0 {
+        TyBoundsF64::from_min_size(edit_origin.to_f64(), edit_bounds.to_f64())
+    } else {
+        TyBoundsF64::from_min_size(tight.origin().to_f64(), bounds.to_f64())
+    };
+    (box_local.center.to_array(), box_local.extents.to_array())
 }
 
 /// Grows the running `(min, max)` AABB to include the box centered at `center`

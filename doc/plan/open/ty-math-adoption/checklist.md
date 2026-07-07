@@ -287,8 +287,11 @@ a unit test, then adopts at the non-vmax sites; vmax adoption trails in D3.
       `component_min_with` on `TyVector3I32`, wrapping the `[i32;3]` positions with
       `from_array` and the result with `to_array`. `object_bounds` stays as-is
       (a subtract/+1/u32-cast fold, excluded by the C1 note).
-- [ ] **B5** `content_box`/`object_box_local` via C6 `from_min_size` in
-      `write_vmax`.
+- [x] **B5** `content_box` (`write_vmax.rs:599`) and both branches of
+      `object_box_local` (`:1276`) build a `TyBoundsF64::from_min_size`, reading
+      back `.center`/`.extents` (and `-extents` for content's min offset). The
+      per-component `x / 2.0` becomes `from_min_size`'s `x * 0.5`, an exact
+      power-of-two scaling, so it is bit-identical.
 - [ ] **B6** `extend_bounds` at `write_vmax.rs:1158-1178` via float
       `component_min_with`/`component_max_with` or `TyBounds::encapsulate`.
 
