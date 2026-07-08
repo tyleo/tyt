@@ -9,11 +9,14 @@ use voxj::VoxjPalette;
 /// Bindings carry over as attribute-plus-pool-reference, the wire `poolRef`
 /// becoming a value-pool id. The wire stores materials column-major, one column
 /// per binding; this transposes them into voxcore's per-material rows of
-/// value-indices, one index per binding.
+/// value-indices, one index per binding. A binding-less palette instead stores
+/// one empty array per material, each minting one material with no
+/// value-indices.
 ///
 /// Errors on a duplicate attribute, a `materials` column count that disagrees
-/// with the bindings, or a ragged column. Pool-reference and value-index ranges
-/// are checked later by [`VoxMain::validate`](voxcore::VoxMain::validate).
+/// with the bindings, a ragged column, or a non-empty material entry in a
+/// binding-less palette. Pool-reference and value-index ranges are checked
+/// later by [`VoxMain::validate`](voxcore::VoxMain::validate).
 pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette> {
     let mut out = VoxPalette::default();
 
@@ -28,6 +31,23 @@ pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette
             binding.attribute.clone(),
             U32Id::from_u32(binding.pool_ref as u32),
         );
+    }
+
+    // A binding-less palette has no columns to transpose; each entry is an
+    // empty array minting one material.
+    if palette.bindings.is_empty() {
+        for (index, entry) in palette.materials.iter().enumerate() {
+            if !entry.is_empty() {
+                return Err(Error::invalid(format!(
+                    "palette has no bindings, so material {index} must be an empty array, \
+                     not {} value-indices",
+                    entry.len()
+                )));
+            }
+            out.add_material(vec![])
+                .expect("one value-index per binding");
+        }
+        return Ok(out);
     }
 
     if palette.materials.len() != palette.bindings.len() {
@@ -96,6 +116,28 @@ mod tests {
         // Material 2 reads value-index 2 for base color and 1 for metallic.
         assert_eq!(out.value_index(material_2, base), Some(2));
         assert_eq!(out.value_index(material_2, metallic), Some(1));
+    }
+
+    #[test]
+    fn reads_a_binding_less_palette_keeping_its_material_count() {
+        // One empty array per material; each mints a material with no
+        // value-indices.
+        let palette = VoxjPalette {
+            bindings: vec![],
+            materials: vec![vec![], vec![], vec![]],
+        };
+        let out = vox_palette_from_voxj_palette(&palette).unwrap();
+        assert_eq!(out.binding_count(), 0);
+        assert_eq!(out.material_count(), 3);
+    }
+
+    #[test]
+    fn rejects_a_non_empty_material_entry_without_bindings() {
+        let palette = VoxjPalette {
+            bindings: vec![],
+            materials: vec![vec![0]],
+        };
+        assert!(vox_palette_from_voxj_palette(&palette).is_err());
     }
 
     #[test]
