@@ -7,7 +7,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use ty_math::{TyFloatExt, TyLinearRgbaColorF64, TyRgbaColorF64};
+use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64};
 use voxcore::{VoxMain, VoxPalette, VoxValue, VoxValuePool};
 
 /// Loads the voxel file at `input` and prints the value collections named by
@@ -447,21 +447,22 @@ fn color_bytes(pool: &VoxValuePool, index: usize) -> [u8; 4] {
     match pool {
         VoxValuePool::Srgb { values } => {
             let [r, g, b] = values[index];
-            TyRgbaColorF64::new(r, g, b, 1.0).to_srgba().to_array()
+            TySrgbaF64::new(r, g, b, 1.0).to_u8().to_array()
         }
         VoxValuePool::Srgba { values } => {
             let [r, g, b, a] = values[index];
-            TyRgbaColorF64::new(r, g, b, a).to_srgba().to_array()
+            TySrgbaF64::new(r, g, b, a).to_u8().to_array()
         }
         VoxValuePool::LinearRgb { values } => {
             let [r, g, b] = values[index];
-            TyLinearRgbaColorF64::new(r, g, b, 1.0)
+            TyLinSrgbaF64::new(r, g, b, 1.0)
                 .to_srgba()
+                .to_u8()
                 .to_array()
         }
         VoxValuePool::LinearRgba { values } => {
             let [r, g, b, a] = values[index];
-            TyLinearRgbaColorF64::new(r, g, b, a).to_srgba().to_array()
+            TyLinSrgbaF64::new(r, g, b, a).to_srgba().to_u8().to_array()
         }
         // classify() routes only color kinds here.
         _ => [0, 0, 0, 0],

@@ -288,3 +288,17 @@ mesh-pipeline chunk). Three files, byte-identical; `cargo test -p voxsmith` gree
   `TySrgba<u8>` retype is NOT done here.** Only the bodies moved to the new types;
   `pool_color` still returns `[u8; 4]`. That retype (and the vmax `BTreeSet` `Ord`
   question) stays a separate, still-optional decision, left for a later chunk.
+
+## S6, part 2: vxl `palette_show` decode (2026-07-07)
+
+`palette_show::color_bytes` is the same 4-arm pool -> sRGB-byte decode as
+`pool_color` / `bake_atlas`, so it migrated identically:
+`TyRgbaColorF64::new(..).to_srgba().to_array()` ->
+`TySrgbaF64::new(..).to_u8().to_array()`, and
+`TyLinearRgbaColorF64::new(..).to_srgba().to_array()` ->
+`TyLinSrgbaF64::new(..).to_srgba().to_u8().to_array()`. `TyFloatExt` stays in the
+import (line 622, `to_unorm8`). Byte-identical -- character-identical to the
+internal-pools transformation already adversarially verified (the 4M-point
+out-of-gamut sweep), so no fresh proof was needed. `cargo test -p vxl` green
+(152), clippy clean. `vxl` is now fully off the old color types; only top-level
+`reduce_palette` remains for S6.

@@ -103,8 +103,9 @@ than adopt the old ones first and redo them:
       `TySrgbaU8::from_array(..).to_f64().to_lin_srgba()`. The whole `internal/`
       tree is now off the old types. Return types are unchanged: the optional
       `pool_color`/`cell_color` -> `TySrgba<u8>` retype (and the vmax `BTreeSet`
-      `Ord` question) is still deferred. Remaining: the `vxl` sites and top-level
-      `reduce_palette`. See reference/implementation-decisions.md.
+      `Ord` question) is still deferred. The `vxl` `palette_show` pool decode
+      migrated identically (same 4-arm shape, `cargo test -p vxl` green). Remaining:
+      top-level `reduce_palette`. See reference/implementation-decisions.md.
 
 ### Phase 3: serde, fbx wire, and removal
 
