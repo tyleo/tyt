@@ -18,9 +18,10 @@ pub struct Rel {
     #[arg(value_name = "base-name")]
     base_name: String,
 
-    /// The path appended to the resolved base path.
+    /// The path appended to the resolved base path. When omitted, the base
+    /// path itself is returned.
     #[arg(value_name = "relative-path")]
-    relative_path: PathBuf,
+    relative_path: Option<PathBuf>,
 
     /// What the output path is expressed relative to.
     #[arg(
@@ -41,7 +42,10 @@ impl Rel {
             .get(&self.base_name)
             .ok_or_else(|| Error::RelBaseNotFound(self.base_name.clone()))?;
 
-        let joined = base.join(&self.relative_path);
+        let joined = match &self.relative_path {
+            Some(relative_path) => base.join(relative_path),
+            None => base.clone(),
+        };
 
         let reference = match self.relative_to {
             RelativeTo::Cwd => dependencies.current_dir()?,
