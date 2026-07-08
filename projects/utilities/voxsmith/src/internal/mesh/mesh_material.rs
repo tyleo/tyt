@@ -1,4 +1,4 @@
-use ty_math::TySrgbaColor;
+use ty_math::TySrgbaU8;
 
 /// A mesh material's flat PBR factors in the glTF metallic-roughness attribute
 /// vocabulary a voxel palette material carries: `baseColorFactor`,
@@ -11,7 +11,7 @@ use ty_math::TySrgbaColor;
 pub(crate) struct MeshMaterial {
     /// Straight-RGBA base color in the sRGB storage encoding. glTF
     /// `baseColorFactor`.
-    pub base_color: TySrgbaColor,
+    pub base_color: TySrgbaU8,
 
     /// Metalness, `0..=1`. glTF `metallicFactor`.
     pub metallic: f64,
@@ -21,7 +21,7 @@ pub(crate) struct MeshMaterial {
 
     /// Emissive color in the sRGB storage encoding. glTF `emissiveFactor` carries
     /// no alpha, so the alpha is held opaque and ignored.
-    pub emissive_factor: TySrgbaColor,
+    pub emissive_factor: TySrgbaU8,
 
     /// Emissive strength scaling [`emissive_factor`](Self::emissive_factor), `0+`.
     /// glTF's `KHR_materials_emissive_strength`.
@@ -41,12 +41,12 @@ impl MeshMaterial {
     /// A flat opaque material of `base_color` with default finish: non-metal,
     /// matte, non-emissive, unoccluded, dielectric, opaque. This is the whole
     /// body in flat mode, and the invented interior a fill color paints.
-    pub fn flat(base_color: TySrgbaColor) -> Self {
+    pub fn flat(base_color: TySrgbaU8) -> Self {
         Self {
             base_color,
             metallic: 0.0,
             roughness: 1.0,
-            emissive_factor: TySrgbaColor::new(0, 0, 0, 255),
+            emissive_factor: TySrgbaU8::new(0, 0, 0, 255),
             emissive_strength: 0.0,
             occlusion: 1.0,
             ior: 1.5,

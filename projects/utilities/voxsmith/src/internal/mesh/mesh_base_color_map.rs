@@ -1,5 +1,5 @@
 use crate::MeshSampler;
-use ty_math::TyLinearRgbaColorF64;
+use ty_math::TyLinSrgbaF64;
 
 /// A material's base-color texture binding: the sampler and the linear
 /// base-color factor the sampled texel multiplies. The texture is sRGB, decoded
@@ -11,5 +11,5 @@ pub(crate) struct MeshBaseColorMap {
 
     /// The linear base-color factor, multiplied component-wise into the sampled
     /// texel.
-    pub factor: TyLinearRgbaColorF64,
+    pub factor: TyLinSrgbaF64,
 }

@@ -198,3 +198,41 @@ consistent with; read this before picking up work.
   metallic / roughness / occlusion stay plain `f64` scalars (they are single
   values, genuinely not colors); `MeshTexture`'s dual-use store stays neutral
   `[u8; 4]` bytes, re-wrapped in `TySrgbaU8` at the color sample sites.
+
+## Mesh-pipeline migration (2026-07-07)
+
+Atomic migration of the mesh color types + their `convert/` consumers, six
+files. Byte-identical; `cargo test -p voxsmith` stayed green (117 tests).
+
+- **Types.** `MeshMaterial.base_color` / `emissive_factor`: `TySrgbaColor` ->
+  `TySrgbaU8`. `MeshBaseColorMap.factor`: `TyLinearRgbaColorF64` ->
+  `TyLinSrgbaF64`. `MeshTexture` store / `sample()`: `TySrgbaColor` -> neutral
+  `[u8; 4]` (the owner's choice; the store is genuinely dual-use, so it holds
+  raw bytes and each sample site interprets).
+
+- **`sample_material` color sites decode via `.to_f64().to_lin_srgba()`.** The
+  old byte-domain `TySrgbaColor::to_linear_rgba()` becomes
+  `TySrgbaU8::from_array(texel).to_f64().to_lin_srgba()`. Byte-identical: for a
+  `[0, 1]` (in-gamut) input the normalize-then-decode equals the old
+  byte-domain decode. The linear encode `TyLinearRgbaColor::to_srgba()` (u8)
+  becomes `TyLinSrgbaF64::new(...).to_srgba().to_u8()`, also byte-identical.
+
+- **`sample_material` data sites read raw normalized scalars.** metallic /
+  roughness read `texel.map(|b| b as f64 / 255.0)` then index `[2]` / `[1]`;
+  occlusion reads `texel[0] as f64 / 255.0`. No color type, matching the old
+  `.to_rgba().b` / `.g` / `.r` exactly (`to_rgba` was a pure `/255` normalize).
+
+- **`voxelize_mesh` pools.** `srgba_pool` value `color.to_rgba().to_array()` ->
+  `color.to_f64().to_array()`. `srgb_pool` value `color.to_vector3().to_array()`
+  -> `color.to_f64().to_srgb().to_array()` (drop alpha through the `TySrgb` color,
+  not a vector). Dedup keys stay on the raw `[u8; 4]` / `[u8; 3]` bytes;
+  `MaterialKey` still keys `base_color.to_array()` -> `[u8; 4]`.
+
+- **`DEFAULT_FILL` uses the alias in a const struct literal** (`const
+  DEFAULT_FILL: TySrgbaU8 = TySrgbaU8 { r: 255, .. }`), which compiles: a
+  fully-applied type alias is allowed in a struct expression, and the fields are
+  `pub`.
+
+- **`from_gltf_bytes`.** `linear_rgba` returns `TyLinSrgbaF64`; base color and
+  `emissive_srgb` encode with `.to_srgba().to_u8()`; texture texels build a
+  `Vec<[u8; 4]>` (`texels.push([r, g, b, a])`).

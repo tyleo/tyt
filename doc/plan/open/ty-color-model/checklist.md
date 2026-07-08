@@ -75,19 +75,27 @@ than adopt the old ones first and redo them:
       the `TyRgbaColorF64` quantize transients -> `TySrgba<f64>` / `into_format`.
       Keep the `MaterialKey` dedup (`voxelize_mesh.rs:424`) on `TySrgba<u8>`. Gate:
       `cargo test -p voxsmith` green, no golden churn.
-      Progress: the standalone value-pool converters `goxl` / `mvox` / `vmax`
-      (`from_goxl_file`, `from_mvox_file`, `from_vmax_file`, `to_vmax_file`) done
-      via `TySrgbaU8` + `.to_rgba().to_array()` -> `.to_f64().to_array()`.
-      Remaining: `qbcl` (a test helper using `.to_vector3()`), and `gltf` +
-      `voxelize_mesh`, which thread `TySrgbaColor` through the `internal/` mesh
-      types (`MeshMaterial`, `MeshTexture`), so they migrate in a combined
-      mesh-pipeline chunk with S6. See reference/implementation-decisions.md.
+      Progress: `goxl` / `mvox` / `vmax` value-pool converters done via
+      `TySrgbaU8` + `.to_f64()`. `gltf` (`from_gltf_bytes`) and `voxelize_mesh`
+      done in the mesh-pipeline chunk with the S6 mesh types. Remaining: `qbcl`,
+      a test helper only (`.to_rgba().to_vector3()`), pending the reduce_palette
+      to_vector3 decision. See reference/implementation-decisions.md.
 - [ ] **S6. voxsmith `internal/**`**: base-color decode -> `to_lin_srgba`; the raw
       metallic/roughness/occlusion reads (`sample_material.rs:294,316`) move to
       `TyVector4`/`[f64; 4]` component reads, out of the color namespace. `vxl`
       color sites -> the new types. Optionally retype `pool_color`/`cell_color` to
       return `TySrgba<u8>` (see the carried-over note; the vmax `BTreeSet` key needs
       `Ord`). Gate: `cargo test -p voxsmith -p vxl` green.
+      Progress: the `internal/mesh/**` types done in the mesh-pipeline chunk:
+      `MeshMaterial.base_color`/`emissive_factor` -> `TySrgbaU8`,
+      `MeshBaseColorMap.factor` -> `TyLinSrgbaF64`, `MeshTexture` store -> neutral
+      `[u8; 4]`; `sample_material` decodes color sites via
+      `.to_f64().to_lin_srgba()`, encodes via `.to_srgba().to_u8()`, and reads
+      metallic/roughness/occlusion as raw normalized scalars (out of the color
+      namespace, per the owner's finer rule -- scalars, not `TyVector4`).
+      Remaining: `internal/gltf/bake_atlas`, `internal/pool_color`,
+      `internal/vmax/write_vmax`, the `vxl` sites, and top-level `reduce_palette`.
+      See reference/implementation-decisions.md.
 
 ### Phase 3: serde, fbx wire, and removal
 

@@ -5,14 +5,14 @@ use crate::{
 };
 use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
-use ty_math::{TySrgbaColor, TyTransformF64, TyVector3, TyVector3U32};
+use ty_math::{TySrgbaU8, TyTransformF64, TyVector3, TyVector3U32};
 use voxcore::{
     BVoxMaterial, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
 };
 
 /// The color a body with no sampled surface falls back to when `fill_color` is
 /// `None`: opaque white.
-const DEFAULT_FILL: TySrgbaColor = TySrgbaColor {
+const DEFAULT_FILL: TySrgbaU8 = TySrgbaU8 {
     r: 255,
     g: 255,
     b: 255,
@@ -196,7 +196,7 @@ fn fill_interior(
 
     match fill_color {
         Some([r, g, b, a]) => {
-            let fill = MeshMaterial::flat(TySrgbaColor::new(r, g, b, a));
+            let fill = MeshMaterial::flat(TySrgbaU8::new(r, g, b, a));
             for (cell, triangle) in grid.triangle.iter().enumerate() {
                 if grid.filled[cell] && triangle.is_none() {
                     cell_materials[cell] = Some(fill);
@@ -333,7 +333,7 @@ struct PoolColumn<T> {
 /// 8-bit bytes and stored as float components in `[0, 1]`.
 fn srgba_pool(
     materials: &[MeshMaterial],
-    get: impl Fn(&MeshMaterial) -> TySrgbaColor,
+    get: impl Fn(&MeshMaterial) -> TySrgbaU8,
 ) -> PoolColumn<[f64; 4]> {
     let mut values = Vec::new();
     let mut lookup: HashMap<[u8; 4], u32> = HashMap::new();
@@ -343,7 +343,7 @@ fn srgba_pool(
             let color = get(material);
             *lookup.entry(color.to_array()).or_insert_with(|| {
                 let index = values.len() as u32;
-                values.push(color.to_rgba().to_array());
+                values.push(color.to_f64().to_array());
                 index
             })
         })
@@ -356,7 +356,7 @@ fn srgba_pool(
 /// dropped.
 fn srgb_pool(
     materials: &[MeshMaterial],
-    get: impl Fn(&MeshMaterial) -> TySrgbaColor,
+    get: impl Fn(&MeshMaterial) -> TySrgbaU8,
 ) -> PoolColumn<[f64; 3]> {
     let mut values = Vec::new();
     let mut lookup: HashMap<[u8; 3], u32> = HashMap::new();
@@ -368,7 +368,7 @@ fn srgb_pool(
                 .entry([color.r, color.g, color.b])
                 .or_insert_with(|| {
                     let index = values.len() as u32;
-                    values.push(color.to_vector3().to_array());
+                    values.push(color.to_f64().to_srgb().to_array());
                     index
                 })
         })
@@ -497,9 +497,9 @@ fn for_each_neighbor(cell: usize, nx: usize, ny: usize, nz: usize, mut visit: im
 }
 
 /// The fill color as a stored sRGB color, defaulting to opaque white for `none`.
-fn fill_srgba(fill_color: Option<[u8; 4]>) -> TySrgbaColor {
+fn fill_srgba(fill_color: Option<[u8; 4]>) -> TySrgbaU8 {
     match fill_color {
-        Some([r, g, b, a]) => TySrgbaColor::new(r, g, b, a),
+        Some([r, g, b, a]) => TySrgbaU8::new(r, g, b, a),
         None => DEFAULT_FILL,
     }
 }

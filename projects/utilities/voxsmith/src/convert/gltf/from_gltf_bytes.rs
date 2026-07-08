@@ -12,9 +12,7 @@ use gltf::{
     texture::WrappingMode,
 };
 use std::collections::HashMap;
-use ty_math::{
-    TyFloatExt, TyLinearRgbaColorF64, TyMatrix4x4F64, TySrgbaColor, TyVector2F64, TyVector3F64,
-};
+use ty_math::{TyFloatExt, TyLinSrgbaF64, TyMatrix4x4F64, TySrgbaU8, TyVector2F64, TyVector3F64};
 
 /// Reads a glTF or GLB byte slice into a [`Mesh`]: every triangle in world
 /// space, tagged with its per-primitive material and per-vertex texture
@@ -246,7 +244,7 @@ fn material_slot(
 fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
     let pbr = material.pbr_metallic_roughness();
 
-    let base_color = linear_rgba(pbr.base_color_factor()).to_srgba();
+    let base_color = linear_rgba(pbr.base_color_factor()).to_srgba().to_u8();
 
     let emissive_factor = emissive_srgb(material.emissive_factor());
 
@@ -267,8 +265,10 @@ fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
 
 /// A glTF linear-RGB emissive factor sRGB-encoded to a stored color, its alpha
 /// held opaque since the emissive slot carries none.
-fn emissive_srgb(factor: [f32; 3]) -> TySrgbaColor {
-    TyLinearRgbaColorF64::new(factor[0] as f64, factor[1] as f64, factor[2] as f64, 1.0).to_srgba()
+fn emissive_srgb(factor: [f32; 3]) -> TySrgbaU8 {
+    TyLinSrgbaF64::new(factor[0] as f64, factor[1] as f64, factor[2] as f64, 1.0)
+        .to_srgba()
+        .to_u8()
 }
 
 /// A material's texture bindings, decoding each referenced image into `textures`
@@ -338,9 +338,9 @@ fn sampler_of(
     }
 }
 
-/// A glTF linear-RGBA factor as a [`TyLinearRgbaColorF64`].
-fn linear_rgba(factor: [f32; 4]) -> TyLinearRgbaColorF64 {
-    TyLinearRgbaColorF64::new(
+/// A glTF linear-RGBA factor as a [`TyLinSrgbaF64`].
+fn linear_rgba(factor: [f32; 4]) -> TyLinSrgbaF64 {
+    TyLinSrgbaF64::new(
         factor[0] as f64,
         factor[1] as f64,
         factor[2] as f64,
@@ -385,7 +385,7 @@ fn mesh_texture_from_gltf(image: &ImageData) -> MeshTexture {
         };
         let a = if channels >= 4 { channel(3) } else { 255 };
 
-        texels.push(TySrgbaColor::new(r, g, b, a));
+        texels.push([r, g, b, a]);
     }
 
     MeshTexture::new(image.width, image.height, texels)
@@ -465,7 +465,7 @@ mod tests {
         from_gltf_bytes, voxelize_mesh,
     };
     use png::{BitDepth, ColorType, Encoder};
-    use ty_math::{TyFloatExt, TySrgbaColor, TyVector3U32};
+    use ty_math::{TyFloatExt, TySrgbaU8, TyVector3U32};
     use voxcore::{VoxMain, VoxValuePool};
 
     /// A minimal binary glTF (GLB) of an axis-aligned box spanning `[0, sx]`,
@@ -721,7 +721,7 @@ mod tests {
         match pool {
             VoxValuePool::Srgba { values } => {
                 let [r, g, b, a] = values[index as usize];
-                TySrgbaColor::from_array([byte(r), byte(g), byte(b), byte(a)]).to_hex()
+                TySrgbaU8::from_array([byte(r), byte(g), byte(b), byte(a)]).to_hex()
             }
             other => panic!("unexpected baseColorFactor pool {other:?}"),
         }
@@ -839,7 +839,7 @@ mod tests {
 
     /// The `(r, g, b)` bytes of a `#RRGGBBAA` hex string.
     fn rgb(hex: &str) -> (u8, u8, u8) {
-        let color = TySrgbaColor::from_hex(hex).expect("a valid hex color");
+        let color = TySrgbaU8::from_hex(hex).expect("a valid hex color");
         (color.r, color.g, color.b)
     }
 
