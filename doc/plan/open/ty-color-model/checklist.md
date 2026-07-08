@@ -128,10 +128,18 @@ than adopt the old ones first and redo them:
       the exact bytes -- the rename is wire-invisible since serde keys off the
       `r`/`g`/`b`/`a` field names, not the struct name. See
       reference/implementation-decisions.md.
-- [ ] **S8. Remove the old types.** Delete `TySrgbaColor`, `TyRgbaColor`,
+- [x] **S8. Remove the old types.** Delete `TySrgbaColor`, `TyRgbaColor`,
       `TyRgbaColorSerde` (and `TyLinearRgbaColor` once `TyLinSrgba` is adopted
       everywhere); fix `lib.rs` re-exports. Gate: `cargo check --workspace` clean,
       no references remain.
+      Done: deleted the seven old-type files (`ty_srgba_color.rs`,
+      `ty_rgba_color{,_f32,_f64}.rs`, `ty_linear_rgba_color{,_f32,_f64}.rs`) and
+      their fourteen `lib.rs` mod / re-export lines. `TyRgbaColorSerde` was already
+      gone (renamed in S7). Cleared the one dangling comment reference in
+      tyt-injection's `serialize_points_and_colors_json` test. `cargo check
+      --workspace` clean, clippy clean, `cargo test --workspace` green (ty-math 84,
+      down the 7 tests that lived in the deleted files). See
+      reference/implementation-decisions.md.
 - [ ] **S9. Re-land the reverted C8.** Adopt `TySrgba<f64>::to_lin_srgba` at the
       voxj `decode_rgb` / `decode_rgba` in
       `voxj_value_pool_from_vox_value_pool.rs`, now that the 3-component and

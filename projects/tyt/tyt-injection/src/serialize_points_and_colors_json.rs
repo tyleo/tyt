@@ -36,10 +36,9 @@ mod tests {
 
     #[test]
     fn serializes_to_stable_json() {
-        // Pins the wire: the color keys stay `r`/`g`/`b`/`a` as `f32` after the
-        // `TyRgbaColorSerde` -> `TySrgbaSerde` rename, since serde keys off the
-        // field names, not the struct name. Binary-fraction values keep the float
-        // formatting exact.
+        // Pins the wire: the color keys stay `r`/`g`/`b`/`a` as `f32`, since
+        // serde keys off the field names, not the struct name. Binary-fraction
+        // values keep the float formatting exact.
         let points = [TyVector3::new(1.0, 2.0, 3.0)];
         let colors = [vec![TySrgba::new(0.5, 0.25, 0.125, 1.0)]];
 

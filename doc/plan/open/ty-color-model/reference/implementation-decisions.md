@@ -364,3 +364,40 @@ tyt-injection -p tyt-fbx` green; clippy clean.
   `tyt-injection` pins the exact output
   `{"points":[{"x":1.0,"y":2.0,"z":3.0}],"colors":[[{"r":0.5,"g":0.25,"b":0.125,"a":1.0}]]}\n`,
   so the fbx JSON is provably unchanged and the format is now guarded.
+
+## S8: remove the old types (2026-07-07)
+
+Pure removal, no behavior change. Deleted the seven old-type files and their
+`lib.rs` wiring; the workspace compiles because S5-S7 already moved every
+consumer to the new types. `cargo check --workspace` clean, clippy clean, `cargo
+test --workspace` green.
+
+- **Deleted files (7).** `ty_srgba_color.rs`, `ty_rgba_color.rs`,
+  `ty_rgba_color_f32.rs`, `ty_rgba_color_f64.rs`, `ty_linear_rgba_color.rs`,
+  `ty_linear_rgba_color_f32.rs`, `ty_linear_rgba_color_f64.rs`. Each was fully
+  self-contained: its private free functions (`byte`, `srgb_to_linear`,
+  `linear_to_srgb_byte`, `straight_byte`, `lab_f`) and the
+  `impl_ty_rgba_color_float!` macro were defined and used only inside the file, so
+  nothing shared went with them. The shared `ty_array_conversions!` macro lives in
+  `array_conversions.rs` (untouched) and the new types keep using it.
+
+- **`lib.rs`: 14 lines removed** (7 `mod`, 7 `pub use`), leaving only the new
+  `ty_lin_srgba*` / `ty_srgb*` / `ty_srgba*` color modules. Alphabetical order
+  preserved.
+
+- **`TyRgbaColorSerde` was already gone.** S7 renamed the file to
+  `ty_srgba_serde.rs`, so S8's "delete `TyRgbaColorSerde`" was a no-op on code. The
+  only lingering trace was a prose mention in tyt-injection's
+  `serialize_points_and_colors_json` test comment; reworded to state the wire
+  invariant (keys stay `r`/`g`/`b`/`a` f32, keyed off field names) without naming
+  the deleted type, so no dangling reference remains.
+
+- **Test count.** `ty-math` drops 91 -> 84: exactly the 7 tests that lived in the
+  deleted files (5 in `ty_srgba_color.rs`, 1 in `ty_rgba_color.rs`, 1 in
+  `ty_linear_rgba_color.rs`). Those tested the removed types, so they leave with
+  them; the surviving color coverage is on the new types. No golden or wire change.
+
+- **The OKLab / CIELAB duplication introduced in S3 is now resolved.** Deleting
+  `ty_linear_rgba_color.rs` removes the original matrices; `TyLinSrgba::to_oklab` /
+  `to_cielab` (the verbatim copies) are now the single home, as the S3 note
+  intended.
