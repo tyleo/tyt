@@ -271,6 +271,31 @@ mod tests {
     }
 
     #[test]
+    fn accepts_a_binding_less_palette_sampled_by_voxels() {
+        let mut file = valid_file();
+        // A binding-less palette stores one empty array per material, keeping
+        // the material count 4, so the object's samples of materials 1 and 3
+        // stay in range.
+        file.main.runtime_state.palettes[0] = VoxjPalette {
+            bindings: vec![],
+            materials: vec![vec![], vec![], vec![], vec![]],
+        };
+        assert!(validate_voxj_file(&file).is_ok());
+    }
+
+    #[test]
+    fn rejects_a_binding_less_palette_with_value_indices() {
+        let mut file = valid_file();
+        // Without bindings there is no pool to index, so a non-empty material
+        // entry rejects.
+        file.main.runtime_state.palettes[0] = VoxjPalette {
+            bindings: vec![],
+            materials: vec![vec![0], vec![0], vec![0], vec![0]],
+        };
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
     fn rejects_layer_palette_ref_out_of_range() {
         let mut file = valid_file();
         file.main.runtime_state.objects[0].layer_palette_refs = vec![5];

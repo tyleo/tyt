@@ -11,9 +11,10 @@ use voxj::VoxjFile;
 /// 1. `version`: the version is recognized.
 /// 2. `value-pools`: every value pool has non-empty values within its kind,
 ///    with in-range numeric bounds and in-range color components.
-/// 3. `palettes`: every palette has non-empty bindings with distinct attributes
-///    and in-range pool refs, and column-major materials with one column per
-///    binding, a shared length, and in-range value-indices.
+/// 3. `palettes`: every palette has bindings with distinct attributes and
+///    in-range pool refs, and column-major materials with one column per
+///    binding, a shared length, and in-range value-indices; a binding-less
+///    palette stores one empty array per material.
 /// 4. `indices`: layer palette refs, node children, child objects, and roots
 ///    resolve; node children, child objects, and roots each appear at most once
 ///    (a palette may back two layers, so a repeated layer ref is allowed).

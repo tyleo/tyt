@@ -8,9 +8,10 @@ use voxj::VoxjPalette;
 /// width of `packed-base64` samples. A ref outside `palettes` is an error.
 ///
 /// M is the length of the palette's first materials column. Validation
-/// guarantees a palette's bindings are non-empty and every column shares the
-/// same length M at least 1, so the first column is authoritative; a palette
-/// with no materials columns yields M = 0.
+/// guarantees every column shares the same length M, so the first column is
+/// authoritative; a palette with no materials columns yields M = 0. A
+/// binding-less palette has no columns and instead stores one empty array per
+/// material, so its M is the entry count.
 pub fn voxj_palette_material_counts(
     layer_palette_refs: &[usize],
     palettes: &[VoxjPalette],
@@ -29,9 +30,14 @@ pub fn voxj_palette_material_counts(
 }
 
 /// The material count M of a palette: the length of its first materials column,
-/// or 0 when it has none.
+/// or 0 when it has none. A binding-less palette stores one empty array per
+/// material, so its M is the entry count.
 fn material_count(palette: &VoxjPalette) -> usize {
-    palette.materials.first().map_or(0, Vec::len)
+    if palette.bindings.is_empty() {
+        palette.materials.len()
+    } else {
+        palette.materials.first().map_or(0, Vec::len)
+    }
 }
 
 #[cfg(test)]
@@ -63,5 +69,19 @@ mod tests {
     fn errors_on_ref_outside_palettes() {
         let palettes = [palette(6)];
         assert!(voxj_palette_material_counts(&[0, 1], &palettes).is_err());
+    }
+
+    #[test]
+    fn counts_a_binding_less_palette_by_its_material_entries() {
+        // A binding-less palette stores one empty array per material, so M
+        // comes from the entry count, not a column length.
+        let palettes = [VoxjPalette {
+            bindings: vec![],
+            materials: vec![vec![], vec![], vec![]],
+        }];
+        assert_eq!(
+            voxj_palette_material_counts(&[0], &palettes).unwrap(),
+            vec![3]
+        );
     }
 }
