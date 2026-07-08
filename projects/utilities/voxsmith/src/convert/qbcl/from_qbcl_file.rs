@@ -5,7 +5,7 @@ use crate::{
 use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMatrix, QbclMetadata, QbclNode, QbclNodeBody};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TyTransformF64, TyVector3I32, TyVector3U32};
+use ty_math::{TySrgbU8, TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -301,7 +301,7 @@ fn translation(position: [i32; 3]) -> TyTransformF64 {
 
 /// The float sRGB components in `[0, 1]` of an `[r, g, b]` byte color.
 fn color_floats(color: [u8; 3]) -> [f64; 3] {
-    color.map(|byte| byte as f64 / 255.0)
+    TySrgbU8::from_array(color).to_f64().to_array()
 }
 
 #[cfg(test)]
@@ -313,7 +313,7 @@ mod tests {
         QbclNodeBody, QbclThumbnail, QbclVoxel,
     };
     use std::collections::BTreeSet;
-    use ty_math::{TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
         VoxPalette, VoxValue, VoxValuePool,
@@ -395,10 +395,10 @@ mod tests {
 
     /// The float sRGB components in `[0, 1]` of a `#RRGGBB` hex string.
     fn srgb(hex: &str) -> [f64; 3] {
-        TySrgbaColor::from_hex(hex)
+        TySrgbaU8::from_hex(hex)
             .expect("a valid hex color")
-            .to_rgba()
-            .to_vector3()
+            .to_f64()
+            .to_srgb()
             .to_array()
     }
 

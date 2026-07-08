@@ -71,15 +71,19 @@ than adopt the old ones first and redo them:
 
 ### Phase 2: migrate consumers off the old types
 
-- [ ] **S5. voxsmith `convert/**`**: `TySrgbaColor` -> `TySrgba<u8>` (~17 sites),
+- [x] **S5. voxsmith `convert/**`**: `TySrgbaColor` -> `TySrgba<u8>` (~17 sites),
       the `TyRgbaColorF64` quantize transients -> `TySrgba<f64>` / `into_format`.
       Keep the `MaterialKey` dedup (`voxelize_mesh.rs:424`) on `TySrgba<u8>`. Gate:
       `cargo test -p voxsmith` green, no golden churn.
-      Progress: `goxl` / `mvox` / `vmax` value-pool converters done via
-      `TySrgbaU8` + `.to_f64()`. `gltf` (`from_gltf_bytes`) and `voxelize_mesh`
-      done in the mesh-pipeline chunk with the S6 mesh types. Remaining: `qbcl`,
-      a test helper only (`.to_rgba().to_vector3()`), pending the reduce_palette
-      to_vector3 decision. See reference/implementation-decisions.md.
+      Done: `goxl` / `mvox` / `vmax` value-pool converters via `TySrgbaU8` +
+      `.to_f64()`; `gltf` (`from_gltf_bytes`) and `voxelize_mesh` in the
+      mesh-pipeline chunk with the S6 mesh types; `qbcl` in the qbcl chunk -- the
+      `qb` / `qbt` / `qbcl` production `color_floats` adopt
+      `TySrgbU8::from_array(..).to_f64()`, and the `from_qbcl_file` test helper
+      moves off `.to_rgba().to_vector3()` to `.to_f64().to_srgb()`. Added
+      `TySrgb<u8>::to_f64` for the 3-channel byte normalize. No golden churn; the
+      whole `convert/` tree is off the old color types. See
+      reference/implementation-decisions.md.
 - [ ] **S6. voxsmith `internal/**`**: base-color decode -> `to_lin_srgba`; the raw
       metallic/roughness/occlusion reads (`sample_material.rs:294,316`) move to
       `TyVector4`/`[f64; 4]` component reads, out of the color namespace. `vxl`

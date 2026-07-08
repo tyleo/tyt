@@ -236,3 +236,27 @@ files. Byte-identical; `cargo test -p voxsmith` stayed green (117 tests).
 - **`from_gltf_bytes`.** `linear_rgba` returns `TyLinSrgbaF64`; base color and
   `emissive_srgb` encode with `.to_srgba().to_u8()`; texture texels build a
   `Vec<[u8; 4]>` (`texels.push([r, g, b, a])`).
+
+## S5, part 2: qbcl color handling (2026-07-07)
+
+Completes S5: the whole `voxsmith/convert/` tree is off the old color types.
+Byte-identical; `cargo test -p ty-math -p voxsmith` green (90 + 117), clippy clean.
+
+- **Added `TySrgb<u8>::to_f64`** (normalize `/255`, no transfer), the three-channel
+  companion to `TySrgba<u8>::to_f64`. Only the `u8 -> f64` direction is exercised
+  (the qbcl `color_floats` helpers), so no `TySrgb<f64>::to_u8` yet; additive if a
+  site turns up, matching the S2 rule.
+
+- **Production `color_floats` adopt the honest type.** The three identical helpers
+  (`from_qb_file` / `from_qbt_file` / `from_qbcl_file`), each `color.map(|byte|
+  byte as f64 / 255.0)` over a `[u8; 3]`, become
+  `TySrgbU8::from_array(color).to_f64().to_array()`. This resolves the carried-over
+  qbcl `color_floats` item -- no synthetic alpha, since `TySrgb` gives RGB an honest
+  home. Byte-identical: `to_f64` is the exact `/255` normalize, component order
+  preserved through `from_array` / `to_array`.
+
+- **The `from_qbcl_file` test helper `srgb` drops the old chain.**
+  `TySrgbaColor::from_hex(..).to_rgba().to_vector3().to_array()` becomes
+  `TySrgbaU8::from_hex(..).to_f64().to_srgb().to_array()` -- normalize then
+  drop-alpha through the `TySrgb` color, per the `to_vector3`-superseded-by-`TySrgb`
+  decision. Byte-identical; this was the last old-type reference under `convert/`.

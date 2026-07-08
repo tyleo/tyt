@@ -37,9 +37,22 @@ impl Hash for TySrgb<u8> {
     }
 }
 
+impl TySrgb<u8> {
+    /// Normalizes each 8-bit component straight to `[0, 1]` without the sRGB
+    /// transfer function; the gamma-encoded color as floats. The three-component
+    /// companion to [`TySrgba::to_f64`](crate::TySrgba::to_f64).
+    pub fn to_f64(self) -> TySrgb<f64> {
+        TySrgb::new(
+            self.r as f64 / 255.0,
+            self.g as f64 / 255.0,
+            self.b as f64 / 255.0,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{TySrgbU8, TySrgbaU8};
+    use crate::{TySrgbF64, TySrgbU8, TySrgbaU8};
     use std::collections::HashSet;
 
     #[test]
@@ -52,6 +65,15 @@ mod tests {
     #[test]
     fn to_srgb_drops_alpha() {
         assert_eq!(TySrgbaU8::new(1, 2, 3, 4).to_srgb(), TySrgbU8::new(1, 2, 3));
+    }
+
+    #[test]
+    fn u8_to_f64_normalizes() {
+        // Straight normalize, no transfer function.
+        assert_eq!(
+            TySrgbU8::new(255, 128, 0).to_f64(),
+            TySrgbF64::new(1.0, 128.0 / 255.0, 0.0)
+        );
     }
 
     #[test]
