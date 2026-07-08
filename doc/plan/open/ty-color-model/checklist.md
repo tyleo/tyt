@@ -84,7 +84,7 @@ than adopt the old ones first and redo them:
       `TySrgb<u8>::to_f64` for the 3-channel byte normalize. No golden churn; the
       whole `convert/` tree is off the old color types. See
       reference/implementation-decisions.md.
-- [ ] **S6. voxsmith `internal/**`**: base-color decode -> `to_lin_srgba`; the raw
+- [x] **S6. voxsmith `internal/**`**: base-color decode -> `to_lin_srgba`; the raw
       metallic/roughness/occlusion reads (`sample_material.rs:294,316`) move to
       `TyVector4`/`[f64; 4]` component reads, out of the color namespace. `vxl`
       color sites -> the new types. Optionally retype `pool_color`/`cell_color` to
@@ -104,8 +104,13 @@ than adopt the old ones first and redo them:
       tree is now off the old types. Return types are unchanged: the optional
       `pool_color`/`cell_color` -> `TySrgba<u8>` retype (and the vmax `BTreeSet`
       `Ord` question) is still deferred. The `vxl` `palette_show` pool decode
-      migrated identically (same 4-arm shape, `cargo test -p vxl` green). Remaining:
-      top-level `reduce_palette`. See reference/implementation-decisions.md.
+      migrated identically (same 4-arm shape, `cargo test -p vxl` green). Top-level
+      `reduce_palette` done in the reduce-palette chunk: `material_color` is the same
+      4-arm decode, and `to_space` maps a color to a distance coordinate via the new
+      `TySrgb::to_vector3` (owner's call: the RGB arm is a genuine coordinate here,
+      beside the Oklab/Lab vectors). `voxsmith` and `vxl` are now fully off the old
+      color types; the fbx serde chain (S7) and the old type definitions (S8)
+      remain. See reference/implementation-decisions.md.
 
 ### Phase 3: serde, fbx wire, and removal
 

@@ -1,4 +1,4 @@
-use crate::ty_array_conversions;
+use crate::{TyVector3, ty_array_conversions};
 use std::hash::{Hash, Hasher};
 
 /// An sRGB color without alpha, the three-component companion to
@@ -24,6 +24,14 @@ impl<T> TySrgb<T> {
 }
 
 ty_array_conversions!(TySrgb, 3, r, g, b);
+
+impl<T: Copy> TySrgb<T> {
+    /// The `r`, `g`, and `b` channels as a [`TyVector3`], a point in sRGB space
+    /// for distance math.
+    pub fn to_vector3(&self) -> TyVector3<T> {
+        TyVector3::new(self.r, self.g, self.b)
+    }
+}
 
 // `Eq` / `Hash` on the 8-bit storage only, mirroring `TySrgba`, so the byte
 // color can key a dedup map.
@@ -52,7 +60,7 @@ impl TySrgb<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{TySrgbF64, TySrgbU8, TySrgbaU8};
+    use crate::{TySrgbF64, TySrgbU8, TySrgbaU8, TyVector3F64};
     use std::collections::HashSet;
 
     #[test]
@@ -73,6 +81,15 @@ mod tests {
         assert_eq!(
             TySrgbU8::new(255, 128, 0).to_f64(),
             TySrgbF64::new(1.0, 128.0 / 255.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn to_vector3_reads_channels() {
+        // The channels map straight to a point for distance math.
+        assert_eq!(
+            TySrgbF64::new(0.25, 0.5, 0.75).to_vector3(),
+            TyVector3F64::new(0.25, 0.5, 0.75)
         );
     }
 

@@ -302,3 +302,34 @@ internal-pools transformation already adversarially verified (the 4M-point
 out-of-gamut sweep), so no fresh proof was needed. `cargo test -p vxl` green
 (152), clippy clean. `vxl` is now fully off the old color types; only top-level
 `reduce_palette` remains for S6.
+
+## S6, part 3: top-level `reduce_palette` + `TySrgb::to_vector3` (2026-07-07)
+
+Completes S6. `voxsmith` and `vxl` are now fully off the old color types; only the
+fbx serde chain (S7) and the old type definitions (S8) remain.
+
+- **`material_color` is the same 4-arm pool decode** as `pool_color` /
+  `bake_atlas` / `palette_show`, migrated identically (`TySrgbaF64::to_u8`,
+  `TyLinSrgbaF64::to_srgba().to_u8()`). Byte-identical.
+
+- **`to_space` and the new `TySrgb<T>::to_vector3` (owner's choice, 2026-07-07).**
+  `to_space` maps an sRGB byte color to a `TyVector3<f64>` distance coordinate for
+  k-means / nearest-centroid, in one of three spaces. The Oklab / Lab arms are
+  genuine perceptual coordinate vectors; the RGB arm uses the sRGB channels as a
+  coordinate -- the one legitimate color-as-vector case here. The owner chose an
+  explicit `TySrgb<T>::to_vector3()` (mirroring `TyOklabColor` / `TyCielabColor`),
+  so all three arms read uniformly `...to_vector3()`. This is a narrow, opt-in
+  exception to the "to_vector3 superseded by TySrgb" rule: dropping alpha still
+  yields `TySrgb`; turning that color into a coordinate is a separate,
+  explicitly-named step, not a silent color-as-vector.
+  - RGB arm: `TySrgbaColor::from_array(rgba).to_rgba().to_vector3()` ->
+    `TySrgbaU8::from_array(rgba).to_f64().to_srgb().to_vector3()`. Byte-identical
+    (normalize, drop alpha, read channels).
+  - Oklab / Lab arms: `color.to_linear_rgba().to_oklab().to_vector3()` ->
+    `color.to_f64().to_lin_srgba().to_oklab().to_vector3()`. Byte-identical: the
+    decode matches (the write_vmax check, all 256 bytes) and `TyLinSrgba::to_oklab`
+    / `to_cielab` are the verbatim-duplicated matrices from the old linear type
+    (confirmed by an adversarial coefficient diff this chunk).
+
+- **Verified.** `cargo test -p ty-math -p voxsmith` green (91 + 117), clippy clean;
+  `reduces_across_all_color_spaces` exercises all three arms.

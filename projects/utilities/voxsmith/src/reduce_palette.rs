@@ -1,7 +1,7 @@
 use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, Result};
 use branded_id::U32Id;
 use std::{cmp::Ordering, collections::HashMap, mem};
-use ty_math::{TyLinearRgbaColorF64, TyRgbaColorF64, TySrgbaColor, TyVector3F64, TyVector3U32};
+use ty_math::{TyLinSrgbaF64, TySrgbaF64, TySrgbaU8, TyVector3F64, TyVector3U32};
 use voxcore::{
     BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPaletteBinding, VoxMain, VoxObject,
     VoxValuePool,
@@ -172,18 +172,19 @@ fn material_color(
     match pool {
         VoxValuePool::Srgb { values } => values
             .get(index)
-            .map(|&[r, g, b]| TyRgbaColorF64::new(r, g, b, 1.0).to_srgba().to_array()),
+            .map(|&[r, g, b]| TySrgbaF64::new(r, g, b, 1.0).to_u8().to_array()),
         VoxValuePool::Srgba { values } => values
             .get(index)
-            .map(|&[r, g, b, a]| TyRgbaColorF64::new(r, g, b, a).to_srgba().to_array()),
+            .map(|&[r, g, b, a]| TySrgbaF64::new(r, g, b, a).to_u8().to_array()),
         VoxValuePool::LinearRgb { values } => values.get(index).map(|&[r, g, b]| {
-            TyLinearRgbaColorF64::new(r, g, b, 1.0)
+            TyLinSrgbaF64::new(r, g, b, 1.0)
                 .to_srgba()
+                .to_u8()
                 .to_array()
         }),
         VoxValuePool::LinearRgba { values } => values
             .get(index)
-            .map(|&[r, g, b, a]| TyLinearRgbaColorF64::new(r, g, b, a).to_srgba().to_array()),
+            .map(|&[r, g, b, a]| TyLinSrgbaF64::new(r, g, b, a).to_srgba().to_u8().to_array()),
         _ => None,
     }
 }
@@ -538,12 +539,12 @@ fn nearest_centroid(coords: TyVector3F64, centroids: &[TyVector3F64]) -> usize {
 /// An sRGB byte color as a point in `space`; alpha is dropped. `rgb` uses the
 /// stored sRGB bytes; `oklab` and `lab` decode to linear light first.
 fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
-    let color = TySrgbaColor::from_array(rgba);
+    let color = TySrgbaU8::from_array(rgba);
 
     match space {
-        ColorSpace::Rgb => color.to_rgba().to_vector3(),
-        ColorSpace::Oklab => color.to_linear_rgba().to_oklab().to_vector3(),
-        ColorSpace::Lab => color.to_linear_rgba().to_cielab().to_vector3(),
+        ColorSpace::Rgb => color.to_f64().to_srgb().to_vector3(),
+        ColorSpace::Oklab => color.to_f64().to_lin_srgba().to_oklab().to_vector3(),
+        ColorSpace::Lab => color.to_f64().to_lin_srgba().to_cielab().to_vector3(),
     }
 }
 
