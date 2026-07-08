@@ -297,10 +297,7 @@ fn folded_palette(
         palette.add_binding(ROUGHNESS_FACTOR.to_owned(), roughness);
         let emissive = float_pool(state, materials.iter().map(|m| m.sic).collect());
         palette.add_binding(EMISSIVE_STRENGTH.to_owned(), emissive);
-        let shadows = state.add_value_pool(VoxValuePool::Bool {
-            values: materials.iter().map(|m| m.sh).collect(),
-        });
-        palette.add_binding(SHADOWS.to_owned(), shadows);
+
         // Dispersion bindings appear only when some material carries an `md`
         // block; a material without one takes a zero, its absence preserved in
         // the ext.
@@ -312,6 +309,11 @@ fn folded_palette(
             let absorption = float_pool(state, dispersion(&materials, |d| d.absorption));
             palette.add_binding(ABSORPTION.to_owned(), absorption);
         }
+
+        let shadows = state.add_value_pool(VoxValuePool::Bool {
+            values: materials.iter().map(|m| m.sh).collect(),
+        });
+        palette.add_binding(SHADOWS.to_owned(), shadows);
     }
 
     // One material per distinct combination, ordered by color cell then
