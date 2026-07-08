@@ -77,3 +77,46 @@ consistent with; read this before picking up work.
 - **`to_u8` / `to_f64` are additive beside the old `to_rgba` / `to_srgba`.** The
   old `TySrgbaColor::to_rgba` and `TyRgbaColorF64::to_srgba` still exist and are
   removed at S8; consumers migrate to the new pair in S5 / S6.
+
+## S3 + S2 transfer decode (2026-07-07)
+
+- **`TyLinSrgba<f64>::to_srgba` returns `TySrgba<f64>`, transfer only.** The
+  checklist wrote "returning `TySrgba<u8>` or `TySrgba<f64>` per call need". The
+  chosen shape keeps the sRGB transfer (the encode) fully separate from the byte
+  quantize (the component cast), matching README friction 2 ("keep the transfer
+  explicit and off the plain component cast") and palette's linear -> encoded ->
+  format pipeline. So `to_srgba` applies only the transfer and yields
+  `TySrgba<f64>`; a caller needing bytes chains `to_srgba().to_u8()` (that is the
+  "or `TySrgba<u8>`"). An ergonomic byte-returning convenience can be added
+  additively if consumer migration (S5 / S6) wants it.
+
+- **The float transfer odd-extends out-of-gamut (owner decision, 2026-07-07).**
+  The old `TyLinearRgbaColor<f64>::to_srgba` clamped to `[0, 1]` before the
+  transfer because it produced bytes. The new `to_srgba` instead preserves
+  out-of-gamut values via the CSS Color 4 sign extension `sign(x) * f(|x|)`, and
+  `to_lin_srgba` decodes the same way, so the two stay true inverses past the
+  gamut. Both `linear_to_srgb` and `srgb_to_linear` run `x.abs()` through the
+  piecewise curve and restore the sign with `copysign`. The byte path is
+  unchanged: `to_srgba().to_u8()` still equals the old `to_srgba()` for any
+  linear input, since out-of-gamut floats clamp to the same `0` / `255` endpoint
+  at `to_u8`; no golden changes. A naive branch (linear slope for all negatives)
+  was rejected as off-standard below `-0.0031308`.
+
+- **`to_srgba` / `to_lin_srgba` are inverse transfer functions in the float
+  domain.** `to_lin_srgba` (on `TySrgba<f64>`, in `ty_srgba.rs`) inverts the sRGB
+  transfer on `[0, 1]` floats and returns `TyLinSrgba<f64>`; `to_srgba` (on
+  `TyLinSrgba<f64>`) re-encodes. Alpha passes straight both ways (no gamma). The
+  decode re-homes the reverted C8 logic from the byte-domain
+  `TySrgbaColor::to_linear_rgba` into the float domain.
+
+- **OKLab / CIELAB math is copied, not delegated to `TyLinearRgbaColor`.** During
+  the additive phase both linear types coexist; `TyLinSrgba::to_oklab` /
+  `to_cielab` duplicate the matrices from `ty_linear_rgba_color.rs` rather than
+  couple new to old. The old file (and this duplication) is deleted at S8. No
+  `Eq` / `Hash` on `TyLinSrgba` (linear colors are not hash keys), mirroring the
+  old linear type.
+
+- **The `to_lin_srgba` doc uses an intra-doc link `[`TyLinSrgba::to_srgba`]`;**
+  it resolves (verified with `RUSTDOCFLAGS="-D warnings" cargo doc -p ty-math
+  --no-deps`). Cross-instantiation method links like this one resolve against the
+  inherent method, so they are safe to use once the target method exists.

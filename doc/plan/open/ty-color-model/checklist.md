@@ -47,17 +47,20 @@ than adopt the old ones first and redo them:
       documented as the sRGB-encoded space. `Eq` + `Hash` impl'd for `TySrgba<u8>`
       only (`f64` gets `PartialEq`). Port `from_hex`/`to_hex` to `TySrgba<u8>`, the
       array conversions, and `Mul<T>`. Unit tests.
-- [ ] **S2. Component + transfer conversions on `TySrgba`.** `into_format` / `to_u8`
+- [x] **S2. Component + transfer conversions on `TySrgba`.** `into_format` / `to_u8`
       / `to_f64` between `TySrgba<u8>` and `TySrgba<f64>` (normalize / quantize, no
       transfer), and `TySrgba<f64>::to_lin_srgba` (the sRGB decode, re-homing the
       reverted C8 logic). Keep the transfer OFF the plain component cast; name it so
       the sRGB step is explicit. Unit tests including the u8 round-trip.
-      Progress: `to_u8` / `to_f64` landed as the concrete pair (no generic
-      `into_format`); the transfer decode `to_lin_srgba` folds into S3 so it can
-      return `TyLinSrgba<f64>` directly. See reference/implementation-decisions.md.
-- [ ] **S3. Add `TyLinSrgba<T = f32>`** beside `TyLinearRgbaColor`, with
+      Done: `to_u8` / `to_f64` are the concrete pair (no generic `into_format`);
+      `to_lin_srgba` landed with S3, returning `TyLinSrgba<f64>`. See
+      reference/implementation-decisions.md.
+- [x] **S3. Add `TyLinSrgba<T = f32>`** beside `TyLinearRgbaColor`, with
       `to_srgba` (linear -> sRGB encode, returning `TySrgba<u8>` or `TySrgba<f64>`
       per call need), `to_oklab`, `to_cielab`, `componentwise_multiply`. Unit tests.
+      Done: `to_srgba` returns `TySrgba<f64>`, transfer only, out-of-gamut
+      odd-extended by sign per CSS Color 4; byte output is `to_srgba().to_u8()`.
+      Aliases `TyLinSrgbaF32/F64`. See reference/implementation-decisions.md.
 - [ ] **S4. Decide the HSV family.** Either delete `ty_hsva_color{,_f32,_f64}` and
       the `to_hsva` edge (updating the `ty_hsva_color.rs:125` round-trip test), or
       port `to_hsva` onto `TySrgba<f64>` and keep the family. Do not half-remove it.

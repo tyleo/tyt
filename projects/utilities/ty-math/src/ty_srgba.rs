@@ -1,13 +1,12 @@
-use crate::{TyFloatExt, ty_array_conversions};
+use crate::{TyFloatExt, TyLinSrgba, ty_array_conversions};
 use std::{
     hash::{Hash, Hasher},
     ops::Mul,
 };
 
-/// An sRGB (gamma-encoded) color with straight alpha. The color space is the
-/// type identity; `T` is the orthogonal storage axis: `u8` is the `#RRGGBBAA`
-/// byte form, `f32` / `f64` are normalized `[0, 1]`. Decode to linear before
-/// lighting math.
+/// An sRGB color with straight alpha. The color space is the type identity;
+/// `T` is the orthogonal storage axis: `u8` is the `#RRGGBBAA` byte form,
+/// `f32` / `f64` are normalized `[0, 1]`. Decode to linear before lighting math.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct TySrgba<T = f32> {
     /// The red component, gamma-encoded.
@@ -19,7 +18,7 @@ pub struct TySrgba<T = f32> {
     /// The blue component, gamma-encoded.
     pub b: T,
 
-    /// The straight-alpha component (linear, no gamma).
+    /// The straight-alpha component.
     pub a: T,
 }
 
@@ -90,7 +89,7 @@ impl TySrgba<u8> {
 
     /// Normalizes each 8-bit component straight to `[0, 1]` without the sRGB
     /// transfer function; the gamma-encoded color as floats. The inverse of
-    /// `to_u8`. Decode to linear light separately.
+    /// `to_u8`. Decode to linear light with `to_f64` then `to_lin_srgba`.
     pub fn to_f64(self) -> TySrgba<f64> {
         TySrgba::new(
             self.r as f64 / 255.0,
@@ -102,10 +101,9 @@ impl TySrgba<u8> {
 }
 
 impl TySrgba<f64> {
-    /// Quantizes each `[0, 1]` component to a byte (clamped, rounded) without
-    /// the sRGB transfer function, since the components are already
-    /// sRGB-encoded. The inverse of `to_f64`. Encode from linear light on the
-    /// linear type instead.
+    /// Quantizes each `[0, 1]` component to a byte without the sRGB transfer
+    /// function, since the components are already sRGB-encoded. The inverse of
+    /// `to_f64`. Encode from linear light on the linear type instead.
     pub fn to_u8(self) -> TySrgba<u8> {
         TySrgba::new(
             self.r.to_unorm8(),
@@ -114,6 +112,31 @@ impl TySrgba<f64> {
             self.a.to_unorm8(),
         )
     }
+
+    /// Decodes to linear light: the sRGB transfer function inverted on `r` / `g`
+    /// / `b`, with `a` passed straight. The inverse of [`TyLinSrgba::to_srgba`].
+    pub fn to_lin_srgba(self) -> TyLinSrgba<f64> {
+        TyLinSrgba::new(
+            srgb_to_linear(self.r),
+            srgb_to_linear(self.g),
+            srgb_to_linear(self.b),
+            self.a,
+        )
+    }
+}
+
+/// Inverts the sRGB transfer function to linear light, odd-extended by sign so
+/// out-of-gamut inputs decode as `sign(x) * g(|x|)`, per CSS Color 4.
+fn srgb_to_linear(c: f64) -> f64 {
+    let magnitude = c.abs();
+
+    let linear = if magnitude <= 0.040_45 {
+        magnitude / 12.92
+    } else {
+        ((magnitude + 0.055) / 1.055).powf(2.4)
+    };
+
+    linear.copysign(c)
 }
 
 #[cfg(test)]
@@ -200,6 +223,20 @@ mod tests {
         // byte -> float -> byte is exact for byte-valued components.
         let bytes = TySrgbaU8::new(0, 128, 255, 64);
         assert_eq!(bytes.to_f64().to_u8(), bytes);
+    }
+
+    #[test]
+    fn to_lin_srgba_decodes_and_round_trips() {
+        // The endpoints decode exactly and alpha passes straight; a mid channel
+        // survives decode -> re-encode within floating-point tolerance.
+        let decoded = TySrgbaF64::new(0.0, 1.0, 0.5, 0.25).to_lin_srgba();
+        assert_eq!((decoded.r, decoded.g, decoded.a), (0.0, 1.0, 0.25));
+
+        let round = decoded.to_srgba();
+        assert!((round.r - 0.0).abs() < 1e-9);
+        assert!((round.g - 1.0).abs() < 1e-9);
+        assert!((round.b - 0.5).abs() < 1e-9);
+        assert_eq!(round.a, 0.25);
     }
 
     #[test]
