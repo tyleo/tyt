@@ -536,13 +536,13 @@ fn nearest_centroid(coords: TyVector3F64, centroids: &[TyVector3F64]) -> usize {
     best
 }
 
-/// An sRGB byte color as a point in `space`; alpha is dropped. `rgb` uses the
+/// An sRGB byte color as a point in `space`; alpha is dropped. `srgb` uses the
 /// stored sRGB bytes; `oklab` and `lab` decode to linear light first.
 fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
     let color = TySrgbaU8::from_array(rgba);
 
     match space {
-        ColorSpace::Rgb => color.to_f64().to_srgb().to_vector3(),
+        ColorSpace::Srgb => color.to_f64().to_srgb().to_vector3(),
         ColorSpace::Oklab => color.to_f64().to_lin_srgba().to_oklab().to_vector3(),
         ColorSpace::Lab => color.to_f64().to_lin_srgba().to_cielab().to_vector3(),
     }
@@ -1056,7 +1056,7 @@ mod tests {
 
     #[test]
     fn reduces_across_all_color_spaces() {
-        for space in [ColorSpace::Oklab, ColorSpace::Lab, ColorSpace::Rgb] {
+        for space in [ColorSpace::Oklab, ColorSpace::Lab, ColorSpace::Srgb] {
             let (mut state, palette, _) =
                 state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF", "#FFFF00FF"], &[]);
             let outcome = reduce_palette(
@@ -1105,7 +1105,7 @@ mod tests {
             palette,
             2,
             ReductionMethod::MedianCut,
-            ColorSpace::Rgb,
+            ColorSpace::Srgb,
             Dither::Ordered,
             false,
         )
@@ -1147,7 +1147,7 @@ mod tests {
             palette,
             2,
             ReductionMethod::MedianCut,
-            ColorSpace::Rgb,
+            ColorSpace::Srgb,
             Dither::FloydSteinberg,
             false,
         )

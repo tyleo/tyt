@@ -169,7 +169,7 @@ fn color_space(space: ColorSpace) -> VoxsmithColorSpace {
     match space {
         ColorSpace::Oklab => VoxsmithColorSpace::Oklab,
         ColorSpace::Lab => VoxsmithColorSpace::Lab,
-        ColorSpace::Rgb => VoxsmithColorSpace::Rgb,
+        ColorSpace::Srgb => VoxsmithColorSpace::Srgb,
     }
 }
 

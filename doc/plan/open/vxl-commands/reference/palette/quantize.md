@@ -24,7 +24,7 @@ output mirrors the input, a document in its own format or a bare palette JSON.
 3. `--attribute <key>` (default `baseColorFactor`): which attribute to cluster on.
 4. `--method` `median-cut` | `octree` | `kmeans` (default `median-cut`):
    clustering algorithm.
-5. `--space` `oklab` | `lab` | `rgb` (default `oklab`): distance metric used
+5. `--space` `oklab` | `lab` | `srgb` (default `oklab`): distance metric used
    when clustering. Applies to `baseColorFactor`.
 6. `--dither` `none` | `floyd-steinberg` | `ordered` (default `none`): error
    diffusion when snapping values, walking each object's voxels in 3D order, not

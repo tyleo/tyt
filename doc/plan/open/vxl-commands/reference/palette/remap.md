@@ -33,7 +33,7 @@ its own format or a bare palette JSON.
 4. `--index <n>` (default `0`): which palette in the input to remap from.
 5. `--attribute <key>` (default `baseColorFactor`): which attribute in the input
    to compare.
-6. `--space` `oklab` | `lab` | `rgb` (default `oklab`): distance metric for the
+6. `--space` `oklab` | `lab` | `srgb` (default `oklab`): distance metric for the
    nearest-value search.
 7. `--dither` `none` | `floyd-steinberg` | `ordered` (default `none`): error
    diffusion when remapping, walking each object's voxels in 3D order. Needs a

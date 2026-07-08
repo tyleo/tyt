@@ -8,5 +8,5 @@ pub enum ColorSpace {
     Lab,
 
     /// Naive distance on the stored sRGB components.
-    Rgb,
+    Srgb,
 }

@@ -11,7 +11,7 @@ pub enum ColorSpace {
     #[value(name = "lab")]
     Lab,
 
-    /// RGB distance.
-    #[value(name = "rgb")]
-    Rgb,
+    /// sRGB distance.
+    #[value(name = "srgb")]
+    Srgb,
 }
