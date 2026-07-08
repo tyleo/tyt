@@ -9,18 +9,18 @@ for the owner to review.
 
 ## Orient first, every session
 
-1. Read `doc/plan/open/ty-color-model/README.md` for the model, the closed decision
+1. Read `doc/plan/closed/ty-color-model/README.md` for the model, the closed decision
    (`TySrgba<T>` replaces both sRGB storages, `TyLinSrgba<T>` replaces the linear
    type, non-color channels leave the color namespace), the four friction points
    (`Eq`/`Hash`/`Ord`, component conversion, the fbx serde, the HSV family), and the
    blast radius. Treat the decision as fixed; do not reopen the four-option study.
-2. Read `doc/plan/open/ty-color-model/checklist.md` for the nine steps (S1-S9) across
+2. Read `doc/plan/closed/ty-color-model/checklist.md` for the nine steps (S1-S9) across
    three phases and the carried-over items from the closed ty-math adoption plan.
-3. Read `doc/plan/open/ty-color-model/reference/color-model-study.md` for the census
+3. Read `doc/plan/closed/ty-color-model/reference/color-model-study.md` for the census
    and prior art (`palette`, `bevy_color`, `egui`, `kolor`) when the plan leaves a
    detail implicit.
 4. Log every non-obvious code-level decision in
-   `doc/plan/open/ty-color-model/reference/implementation-decisions.md` (a confirmed
+   `doc/plan/closed/ty-color-model/reference/implementation-decisions.md` (a confirmed
    method name, how `into_format` quantizes, the HSV verdict, and so on). If it
    already exists, read it first and stay consistent with the choices recorded there;
    if not, create it the first time you make a call worth recording.

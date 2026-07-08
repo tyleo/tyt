@@ -1,6 +1,9 @@
 # Palette-style color model for ty-math
 
-Status: **open.** A follow-up from the [ty-math adoption
+Status: **closed.** All nine steps (S1-S9) landed; the color types are on the
+palette-style model (`TySrgba<T>` / `TyLinSrgba<T>` / `TySrgb<T>`, non-color
+channels off the color namespace) and the old types are removed. A follow-up
+from the [ty-math adoption
 plan](../../closed/ty-math-adoption/README.md), which surfaced that `ty-math`'s RGBA color
 types are ambiguous: `TySrgbaColor` (8-bit) and `TyRgbaColor<T>` (float) are the
 same color space (sRGB) under unrelated names, and `TyRgbaColor` is documented as

@@ -220,8 +220,8 @@ the **full palette-style generic `TySrgba<T>`** (with `TyLinSrgba<T>` for the li
 type), over the study's lighter recommendation, accepting the larger churn. The
 plan, blast radius, friction (`Eq`/`Hash` on the hash-key type, the fbx serde wire,
 the dead HSV family), and ordered steps live in the dedicated
-[ty-color-model plan](../../open/ty-color-model/README.md); the study record is
-[there too](../../open/ty-color-model/reference/color-model-study.md).
+[ty-color-model plan](../ty-color-model/README.md); the study record is
+[there too](../ty-color-model/reference/color-model-study.md).
 
 This is a FOLLOW-UP after the current adoption pass. It supersedes the "investigate
 one of" options below and subsumes both the 3-component-RGB question and the "is

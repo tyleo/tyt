@@ -243,7 +243,7 @@ Track D3. Item 3 is resolved separately below.
 sRGB `[u8; 4]`. The checklist item asked whether they should return `TySrgbaColor`
 and to catalog the consumer ripple before changing the signature. Investigated;
 the disposition is to MOVE the change to the
-[ty-color-model plan](../../../open/ty-color-model/README.md), for the same reason A2, A4,
+[ty-color-model plan](../../ty-color-model/README.md), for the same reason A2, A4,
 the 3-component qbcl `color_floats`, and C8 moved there: returning a color type is
 a color-type-model decision, and the honest target is `TySrgba<u8>` (the new sRGB
 color), not `TySrgbaColor`, which that plan DELETES. Adopting `TySrgbaColor` here
@@ -557,7 +557,7 @@ vxl `hierarchy_show.rs` `object_rows`: the empty-object runtime size becomes
 `TyVector3F64::ZERO` instead of `TyVector3F64::new(0.0, 0.0, 0.0)`. Cosmetic and
 bit-identical (the const is `{ x: 0.0, y: 0.0, z: 0.0 }`); vxl tests stay green
 (152). This closes Track D2: A1/A3/A5/A6/A7/A8 landed, A2/A4 moved to the
-[ty-color-model plan](../../../open/ty-color-model/README.md). Remaining work is Track D3
+[ty-color-model plan](../../ty-color-model/README.md). Remaining work is Track D3
 (vmax, trailing commits).
 
 ### D3 B1: write_vmax vector() helper -> to_array (landed)
@@ -679,4 +679,4 @@ round-trip is not bit-exact against the raw min/max arrays this function keeps a
 only byte-identical adoption here. voxsmith stays green (117 tests), no golden
 moved. This is the last Track D3 item: Track D (D1/D2/D3) is complete, and the
 only open ty-math-adoption items are those explicitly moved to the
-[ty-color-model plan](../../../open/ty-color-model/README.md).
+[ty-color-model plan](../../ty-color-model/README.md).
