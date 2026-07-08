@@ -18,7 +18,7 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
 | Compressed   | `.voxjz`  | A zip archive containing the document                     | `application/vnd.voxj+zip`  |
 
 1. `.voxj` is the canonical authoring form. It is plain UTF-8 JSON whose top-level value is the object in [Structure](#structure), openable in any JSON-aware editor. Tools that key off the `.json` suffix may also accept `.voxj.json`.
-2. `.voxjz` is the canonical shipping form. It is a standard zip archive holding exactly one `.voxj` member, conventionally named `main.voxj`, stored deflate-compressed. That deflate is the whole-file compression the encodings in [Voxel Encoding](#voxel-encoding) assume. The archive may carry additional resource members; consumers ignore members they do not recognize. Reading a `.voxjz` means opening the archive and parsing its `.voxj` member, which is byte-identical to a standalone `.voxj`. Tools that key off the `.zip` suffix may also accept `.voxjz.zip`.
+2. `.voxjz` is the canonical shipping form. It is a standard zip archive holding exactly one `.voxj` member, conventionally named `main.voxj`, compressed with the deflate method. That deflate is the whole-file compression the encodings in [Voxel Encoding](#voxel-encoding) assume. The archive may carry additional resource members; consumers ignore members they do not recognize. Reading a `.voxjz` means opening the archive and parsing its `.voxj` member, which is byte-identical to a standalone `.voxj`. Tools that key off the `.zip` suffix may also accept `.voxjz.zip`.
 3. Packaging is a transport concern and never changes the document. Recognize the form by leading bytes, not extension. An uncompressed file's first non-whitespace byte is `{`. A zip archive begins with `PK`, the bytes `0x50 0x4B`. Consumers accept either form wherever a voxel json file is expected.
 
 ## Structure
@@ -80,7 +80,7 @@ An object is one voxel volume of pure geometry. Aside from its grid `origin`, it
   // [X, Y, Z] size in voxels
   "bounds": [1, 1, 1],
 
-  // [X, Y, Z] translation from the placing node to the grid's min corner
+  // [X, Y, Z] integer translation from the placing node to the grid's min corner
   "origin": [0, 0, 0],
   "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
 
@@ -95,9 +95,9 @@ An object carries any number of layers, listed in `layerPaletteRefs` as palette 
 
 `voxelPositions` and `voxelSamples` are encoded blocks (see [Voxel Encoding](#voxel-encoding)). Each voxel has a position `(x, y, z)` and one material sample per layer. `voxelSamples` carries one channel per layer, in `layerPaletteRefs` order, and the sample in channel `c` is a material index into the palette `layerPaletteRefs[c]`. The number of voxels is implicit: it is the number of positions decoded from `voxelPositions`. Positions within an object must be unique, and every voxel samples every layer.
 
-`bounds` is `[X, Y, Z]`, the runtime grid's size in voxels along each axis. Voxel positions are 0-based, so every voxel lies in `[0, X) x [0, Y) x [0, Z)`. `bounds` is exactly tight: the grid fits the voxels with no empty margin on any face, so on every axis some voxel reaches `0` and some voxel reaches the bound minus one. An empty object has `bounds = [0, 0, 0]`. Build-volume margin around the geometry is not allowed here; it lives in [`editState`](#edit-state), whose edit grid may be larger than the runtime grid. `bounds` is needed to decode `bitmap-base64` and `hilbert-delta-varint-base64`, where it sets the canonical voxel order and the Hilbert `bits = max(1, bitLength(max(X, Y, Z) - 1))` (see [Voxel Order](#voxel-order)).
+`bounds` is `[X, Y, Z]`, the runtime grid's size in voxels along each axis. Voxel positions are 0-based, so every voxel lies in `[0, X) x [0, Y) x [0, Z)`. `bounds` is exactly tight: the grid fits the voxels with no empty margin on any face, so on every axis some voxel reaches `0` and some voxel reaches the bound minus one. An empty object has `bounds = [0, 0, 0]`: a point at its `origin`. Build-volume margin around the geometry is not allowed here; it lives in [`editState`](#edit-state), whose edit grid may be larger than the runtime grid. `bounds` is needed to decode `bitmap-base64` and `hilbert-delta-varint-base64`, where it sets the canonical voxel order and the Hilbert `bits = max(1, bitLength(max(X, Y, Z) - 1))` (see [Voxel Order](#voxel-order)).
 
-`origin` is `[X, Y, Z]`, the translation in voxels from the placing hierarchy node to the grid's min corner; `[0, 0, 0]` puts the min corner at the node's local origin. It shifts where the grid sits relative to its node but does not change the voxel encodings, which stay 0-based within `bounds`. Setting it to about `-bounds / 2` centers the grid on the node, making the node's position the object's pivot so rotation and scale turn the object about its center.
+`origin` is `[X, Y, Z]`, three integers: the translation in voxels from the placing hierarchy node to the grid's min corner; `[0, 0, 0]` puts the min corner at the node's local origin. It shifts where the grid sits relative to its node but does not change the voxel encodings, which stay 0-based within `bounds`. Setting it to about `-bounds / 2` centers the grid on the node, making the node's position the object's pivot so rotation and scale turn the object about its center.
 
 The position block fixes a single voxel order for the object, and every sample channel follows it voxel-for-voxel.
 
@@ -278,7 +278,7 @@ Materials are stored column-major, one column per binding:
 }
 ```
 
-`materials` is column-major: each inner array is one binding's column of value-indices into a single pool.
+`materials` is column-major: each inner array is one binding's column of value-indices into a single pool. A palette may have no bindings. `materials` is then one empty array per material, so the material count `M` survives as `materials.length`, and every material resolves every attribute to its default.
 
 To resolve a voxel's material:
 
@@ -352,18 +352,18 @@ The scene's roots are exactly the nodes listed in `rootHierarchyNodes`. A node t
       // [X, Y, Z] size of the edit grid in voxels
       "bounds": [6, 6, 6],
 
-      // [X, Y, Z] translation from the placing node to the edit grid's min corner
+      // [X, Y, Z] integer translation from the placing node to the edit grid's min corner
       "origin": [-1, -1, -1],
     },
   ],
 }
 ```
 
-Each edit grid must contain its object's runtime grid: on every axis the edit `origin` is `<=` the runtime `origin`, and the edit `origin + bounds` is `>=` the runtime `origin + bounds`. An edit grid equal to the runtime grid carries no margin. `editState` is omitted when no object has a distinct edit grid; a consumer that ignores it loses only editor margin, never geometry.
+Each edit grid must contain its object's runtime grid: on every axis the edit `origin` is `<=` the runtime `origin`, and the edit `origin + bounds` is `>=` the runtime `origin + bounds`. An empty object is a point at its `origin`, and containment reduces to that point lying inside the edit grid. An edit grid equal to the runtime grid carries no margin. `editState` is omitted when no object has a distinct edit grid; a consumer that ignores it loses only editor margin, never geometry.
 
 ## Extensions
 
-`main.ext` is a reserved namespace for user-defined extensions, conventionally keyed by vendor. The core format assigns it no meaning and makes no compatibility guarantees about its contents; consumers ignore extensions they do not recognize. For example, Voxel Max's camera:
+`main.ext` is a reserved namespace for user-defined extensions, conventionally keyed by vendor. The core format assigns it no meaning and makes no compatibility guarantees about its contents; consumers ignore extensions they do not recognize. Its contents are arbitrary JSON, `null` included. For example, Voxel Max's camera:
 
 ```jsonc
 {
@@ -405,7 +405,7 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 1. `version` is recognized.
 2. Every `encoding`, on both `voxelPositions` and `voxelSamples`, is recognized.
 3. Types are exact and nothing is coerced. A string where a number is expected, or the reverse, rejects. Every integer-valued number has no fractional part, and every number is finite, so `NaN` and `+/-Infinity` reject.
-4. `null` rejects everywhere except in a `json`-kind pool's `values`: in every structural field, every non-`json` pool's `values`, and every block's `data`.
+4. `null` rejects everywhere except in a `json`-kind pool's `values` and inside `main.ext`: in every structural field, every non-`json` pool's `values`, and every block's `data`.
 5. Unknown keys reject in every closed structure: file, `main`, `runtimeState`, `editState`, object, encoding block, palette, binding, value pool, transform, hierarchy node, and edit object. The only open points are `main.ext` and binding attribute names.
 6. All indices are in range:
    1. each object `layerPaletteRefs` entry indexes `runtimeState.palettes`.
@@ -435,10 +435,10 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
       3. a numeric bound is integer-valued when `kind` is `int`.
       4. `min <= max` when both are finite numbers.
 10. **Palettes** (`runtimeState.palettes`): an array, possibly empty. Each palette's keys are drawn only from { `bindings`, `materials` }.
-    1. `bindings` is a non-empty array; each binding has exactly the keys `attribute`, a non-empty string, and `poolRef`, an integer.
+    1. `bindings` is an array, possibly empty; each binding has exactly the keys `attribute`, a non-empty string, and `poolRef`, an integer.
     2. no two bindings share an `attribute`.
-    3. `materials` has exactly `bindings.length` columns, one per binding in binding order.
-    4. every column is an array of the same length `M >= 1`, the material count.
+    3. when `bindings` is non-empty, `materials` has exactly `bindings.length` columns, one per binding in binding order.
+    4. every column is an array of the same length `M >= 0`, the material count. When `bindings` is empty, every `materials` entry is instead an empty array, one per material, and `M = materials.length`.
     5. every `materials[b][m]` is an integer in `[0, valuePools[bindings[b].poolRef].values.length)`.
 11. **Samples**: let `V` be the voxel count from the position block. `voxelSamples.data` has exactly `layerPaletteRefs.length` channels, one per layer in `layerPaletteRefs` order. For channel `c`, let `M` be the material count of palette `layerPaletteRefs[c]`, and by encoding:
     1. `raw-json`: each channel is a `number[]` of length exactly `V`, every entry an integer in `[0, M)`.
@@ -454,11 +454,11 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
        3. every decoded position lies in `[0, X) x [0, Y) x [0, Z)`.
 14. Every base64 field is canonical RFC 4648: the standard alphabet, not base64url, with correct `=` padding and no whitespace or line breaks.
 15. Voxel positions within an object are unique after decoding.
-16. `bounds` is three non-negative integers, exactly tight around the decoded positions: on each axis the minimum voxel coordinate is `0` and `bounds` is the maximum plus one. An empty object has `bounds = [0, 0, 0]`.
+16. `bounds` is three non-negative integers, exactly tight around the decoded positions: on each axis the minimum voxel coordinate is `0` and `bounds` is the maximum plus one. An empty object has `bounds = [0, 0, 0]`. `origin` is three integers.
 17. The hierarchy is acyclic.
 18. No transform `scale` component is zero.
 19. Every transform `rotation` has length-squared within `1e-6` of `1`; consumers may renormalize within this tolerance.
-20. When `editState` is present, its `objects` has exactly one entry per runtime object. Each edit object's `bounds` is three non-negative integers and its `origin` is three integers, and the edit grid contains the runtime grid: on every axis edit `origin` is `<=` runtime `origin`, and edit `origin + bounds` is `>=` runtime `origin + bounds`.
+20. When `editState` is present, its `objects` has exactly one entry per runtime object. Each edit object's `bounds` is three non-negative integers and its `origin` is three integers, and the edit grid contains the runtime grid: on every axis edit `origin` is `<=` runtime `origin`, and edit `origin + bounds` is `>=` runtime `origin + bounds`. For an empty object this reduces to its point lying inside the edit grid.
 
 ## Examples
 
@@ -635,7 +635,8 @@ interface EditObject {
   // [X, Y, Z] size of the edit grid in voxels
   bounds: Vec3;
 
-  // [X, Y, Z] translation from the placing node to the edit grid's min corner
+  // [X, Y, Z] integer translation from the placing node to the edit grid's min
+  // corner
   origin: Vec3;
 }
 
@@ -645,12 +646,13 @@ interface VoxelObject {
 
   // [X, Y, Z] size in voxels; voxels occupy [0, X) x [0, Y) x [0, Z). Exactly
   // tight: per-axis the min voxel coordinate is 0 and the bound is the max plus
-  // one; [0, 0, 0] when empty. No margin here (that is editState). Required to
-  // decode bitmap-base64 and hilbert-delta-varint-base64.
+  // one; [0, 0, 0] when empty, a point at origin. No margin here (that is
+  // editState). Required to decode bitmap-base64 and
+  // hilbert-delta-varint-base64.
   bounds: Vec3;
 
-  // [X, Y, Z] translation from the placing node to the grid's min corner. Does
-  // not affect the voxel encodings.
+  // [X, Y, Z] integer translation from the placing node to the grid's min
+  // corner. Does not affect the voxel encodings.
   origin: Vec3;
 
   voxelPositions: PositionBlock;
@@ -699,6 +701,8 @@ type SampleBlock =
 // M, the material count. A voxel samples material m; attribute
 // bindings[b].attribute takes
 // valuePools[bindings[b].poolRef].values[materials[b][m]].
+// With no bindings, materials is instead one empty array per material, so M
+// survives as materials.length and every attribute resolves to its default.
 interface Palette {
   bindings: Binding[];
 
@@ -724,9 +728,19 @@ type ValuePool =
   // booleans
   | { kind: "bool"; values: boolean[] }
   // finite floats within min/max
-  | { kind: "float"; min: number | "none"; max: number | "none"; values: number[] }
+  | {
+      kind: "float";
+      min: number | "none";
+      max: number | "none";
+      values: number[];
+    }
   // integers within min/max
-  | { kind: "int"; min: number | "none"; max: number | "none"; values: number[] }
+  | {
+      kind: "int";
+      min: number | "none";
+      max: number | "none";
+      values: number[];
+    }
   // strings
   | { kind: "string"; values: string[] }
   // sRGB float colors, each component in [0, 1]
@@ -771,10 +785,10 @@ interface HierarchyNode {
 
   transform: Transform;
 
-  // indices into Main.hierarchyNodes (DAG, no cycles)
+  // indices into RuntimeState.hierarchyNodes (DAG, no cycles)
   childNodes: number[];
 
-  // indices into Main.objects
+  // indices into RuntimeState.objects
   childObjects: number[];
 }
 
