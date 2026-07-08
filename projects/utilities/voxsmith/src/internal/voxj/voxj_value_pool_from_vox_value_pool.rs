@@ -1,6 +1,6 @@
 use crate::{ColorFormat, voxj_value_from_vox_value};
 use std::fmt::Write;
-use ty_math::TyFloatExt;
+use ty_math::{TyFloatExt, TySrgbaF64};
 use voxcore::{VoxBound, VoxValuePool};
 use voxj::{VoxjBound, VoxjValuePool};
 
@@ -102,39 +102,28 @@ fn encode_hex<const N: usize>(components: &[f64; N]) -> String {
     hex
 }
 
-/// Decodes a three-component sRGB color to linear light.
+/// Decodes a three-component sRGB color to linear light through
+/// [`TySrgba::to_lin_srgba`](ty_math::TySrgba::to_lin_srgba). The alpha is a
+/// discarded placeholder, since the linear decode is shared with the 4-channel
+/// form.
 fn decode_rgb(components: &[f64; 3]) -> [f64; 3] {
-    [
-        srgb_to_linear(components[0]),
-        srgb_to_linear(components[1]),
-        srgb_to_linear(components[2]),
-    ]
+    let [r, g, b] = *components;
+    let linear = TySrgbaF64::new(r, g, b, 0.0).to_lin_srgba();
+    [linear.r, linear.g, linear.b]
 }
 
-/// Decodes an sRGBA color's three channels to linear light. Alpha carries no
+/// Decodes an sRGBA color to linear light through
+/// [`TySrgba::to_lin_srgba`](ty_math::TySrgba::to_lin_srgba); alpha carries no
 /// gamma, so it passes through.
 fn decode_rgba(components: &[f64; 4]) -> [f64; 4] {
-    [
-        srgb_to_linear(components[0]),
-        srgb_to_linear(components[1]),
-        srgb_to_linear(components[2]),
-        components[3],
-    ]
-}
-
-/// Inverts the sRGB transfer function for one float component in `[0, 1]` to
-/// linear light: a linear segment below the knee, a 2.4-power curve above it.
-fn srgb_to_linear(component: f64) -> f64 {
-    if component <= 0.040_45 {
-        component / 12.92
-    } else {
-        ((component + 0.055) / 1.055).powf(2.4)
-    }
+    TySrgbaF64::from_array(*components)
+        .to_lin_srgba()
+        .to_array()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{srgb_to_linear, voxj_value_pool_from_vox_value_pool};
+    use super::voxj_value_pool_from_vox_value_pool;
     use crate::ColorFormat;
     use voxcore::VoxValuePool;
     use voxj::VoxjValuePool;
@@ -217,6 +206,16 @@ mod tests {
         match voxj_value_pool_from_vox_value_pool(&pool, ColorFormat::Float) {
             VoxjValuePool::SrgbFloat { values } => assert_eq!(values, vec![[0.1, 0.2, 0.3]]),
             other => panic!("expected srgb-float, got {other:?}"),
+        }
+    }
+
+    /// The sRGB transfer inverse, kept in the test as an independent reference
+    /// for the production decode (`TySrgba::to_lin_srgba`).
+    fn srgb_to_linear(component: f64) -> f64 {
+        if component <= 0.040_45 {
+            component / 12.92
+        } else {
+            ((component + 0.055) / 1.055).powf(2.4)
         }
     }
 

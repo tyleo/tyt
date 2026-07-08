@@ -140,11 +140,19 @@ than adopt the old ones first and redo them:
       --workspace` clean, clippy clean, `cargo test --workspace` green (ty-math 84,
       down the 7 tests that lived in the deleted files). See
       reference/implementation-decisions.md.
-- [ ] **S9. Re-land the reverted C8.** Adopt `TySrgba<f64>::to_lin_srgba` at the
+- [x] **S9. Re-land the reverted C8.** Adopt `TySrgba<f64>::to_lin_srgba` at the
       voxj `decode_rgb` / `decode_rgba` in
       `voxj_value_pool_from_vox_value_pool.rs`, now that the 3-component and
       4-component both have honest homes under the new model. Gate: `cargo test -p
       voxsmith` green.
+      Done: `decode_rgba` = `TySrgbaF64::from_array(..).to_lin_srgba().to_array()`;
+      `decode_rgb` decodes through the same `to_lin_srgba` with a discarded
+      placeholder alpha (no 3-channel linear type exists). Removed the inlined
+      production `srgb_to_linear`; kept it in the test module as an independent
+      reference the pool-decode tests cross-check against. Value-identical for the
+      `[0, 1]` sRGB-float domain (the shared decode adds only CSS Color 4 sign
+      extension, a no-op in gamut). `cargo test -p voxsmith` green (117);
+      `--workspace` green. See reference/implementation-decisions.md.
 
 Gate (whole plan): workspace green, clippy clean, and every wire format identical
 except the deliberately-decided fbx point-color serde. `voxcore` untouched.

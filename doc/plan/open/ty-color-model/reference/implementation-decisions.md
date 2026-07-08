@@ -401,3 +401,38 @@ test --workspace` green.
   `ty_linear_rgba_color.rs` removes the original matrices; `TyLinSrgba::to_oklab` /
   `to_cielab` (the verbatim copies) are now the single home, as the S3 note
   intended.
+
+## S9: re-land the reverted C8 at the voxj decode (2026-07-07)
+
+The last step. Adopted `TySrgba<f64>::to_lin_srgba` at the two voxj sRGB->linear
+decode sites, retiring the inlined `srgb_to_linear`. `cargo test -p voxsmith`
+green (117); `--workspace` green.
+
+- **`decode_rgba` is the clean 4-channel path.**
+  `TySrgbaF64::from_array(*components).to_lin_srgba().to_array()` -- `from_array`
+  reads `[r, g, b, a]`, `to_lin_srgba` decodes r/g/b and passes alpha straight,
+  `to_array` writes `[r, g, b, a]`.
+
+- **`decode_rgb` routes the 3-channel case through the same 4-channel method with
+  a discarded placeholder alpha.** There is no 3-channel linear type (`TyLinSrgb`
+  was never created; only `TyLinSrgba`), and the plan says to adopt `to_lin_srgba`
+  at both sites, so `decode_rgb` builds `TySrgbaF64::new(r, g, b, 0.0)`, decodes,
+  and reads back `.r` / `.g` / `.b`. The `0.0` alpha is inert: it passes straight
+  through untouched and is dropped. Not worth a bespoke 3-channel linear type for
+  one consumer.
+
+- **Value-identity for the real domain, proven by the retained reference.** The
+  shared `srgb_to_linear` in `ty_srgba.rs` uses the identical knee (`0.040_45`)
+  and curve as the old inlined one; it differs only by CSS Color 4 sign extension
+  (`abs` + `copysign`), which is a no-op for the `[0, 1]` in-gamut sRGB-float pool
+  values these paths ever carry. The inlined `srgb_to_linear` moved into the test
+  module as an independent reference (mirroring the existing `linear_to_srgb`
+  reference), so `linear_float_decodes_an_srgb_pool` /
+  `linear_float_keeps_straight_alpha` now cross-check the production `to_lin_srgba`
+  output against the standalone formula -- an adversarial guard on the swap, not
+  just a self-round-trip. No wire change.
+
+- **Plan complete.** All nine steps (S1-S9) are done; the whole-plan gate holds:
+  workspace green, clippy clean, every wire format byte-identical except the
+  deliberately-decided fbx point-color serde rename (S7, itself byte-identical).
+  `voxcore` untouched.
