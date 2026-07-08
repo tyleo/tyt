@@ -97,9 +97,14 @@ than adopt the old ones first and redo them:
       `.to_f64().to_lin_srgba()`, encodes via `.to_srgba().to_u8()`, and reads
       metallic/roughness/occlusion as raw normalized scalars (out of the color
       namespace, per the owner's finer rule -- scalars, not `TyVector4`).
-      Remaining: `internal/gltf/bake_atlas`, `internal/pool_color`,
-      `internal/vmax/write_vmax`, the `vxl` sites, and top-level `reduce_palette`.
-      See reference/implementation-decisions.md.
+      The rest of `internal/**` done in the internal-pools chunk: `pool_color`
+      and `bake_atlas` encode pools via `TySrgbaF64::to_u8` (sRGB) /
+      `TyLinSrgbaF64::to_srgba().to_u8()` (linear); `write_vmax` decodes via
+      `TySrgbaU8::from_array(..).to_f64().to_lin_srgba()`. The whole `internal/`
+      tree is now off the old types. Return types are unchanged: the optional
+      `pool_color`/`cell_color` -> `TySrgba<u8>` retype (and the vmax `BTreeSet`
+      `Ord` question) is still deferred. Remaining: the `vxl` sites and top-level
+      `reduce_palette`. See reference/implementation-decisions.md.
 
 ### Phase 3: serde, fbx wire, and removal
 

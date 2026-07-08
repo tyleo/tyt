@@ -7,7 +7,7 @@ use crate::{
 use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use ty_math::{
-    TyBoundsF64, TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3I32,
+    TyBoundsF64, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32,
     TyVector3U32,
 };
 use vmax::{
@@ -809,7 +809,9 @@ fn derived_material(
             .position(|(name, _)| name == EMISSIVE_FACTOR)?;
         let pool = binding_pool(state, palette, bindings[position].1)?;
         let [r, g, b, _] = pool_color(pool, signature[position])?;
-        let linear = TySrgbaColor::from_array([r, g, b, 255]).to_linear_rgba();
+        let linear = TySrgbaU8::from_array([r, g, b, 255])
+            .to_f64()
+            .to_lin_srgba();
         Some(0.2126 * linear.r + 0.7152 * linear.g + 0.0722 * linear.b)
     };
     let dispersed = bindings

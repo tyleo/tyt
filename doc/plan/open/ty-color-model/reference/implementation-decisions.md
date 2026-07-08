@@ -260,3 +260,31 @@ Byte-identical; `cargo test -p ty-math -p voxsmith` green (90 + 117), clippy cle
   `TySrgbaU8::from_hex(..).to_f64().to_srgb().to_array()` -- normalize then
   drop-alpha through the `TySrgb` color, per the `to_vector3`-superseded-by-`TySrgb`
   decision. Byte-identical; this was the last old-type reference under `convert/`.
+
+## S6, part 1: finish voxsmith `internal/**` (2026-07-07)
+
+The rest of `internal/**` off the old color types (the mesh types went in the
+mesh-pipeline chunk). Three files, byte-identical; `cargo test -p voxsmith` green
+(117), clippy clean. The whole `internal/` tree is now off the old types.
+
+- **`pool_color` and `bake_atlas` are the same pool -> sRGB-byte encoder**, so they
+  migrate identically. The sRGB arms `TyRgbaColorF64::new(..).to_srgba().to_array()`
+  become `TySrgbaF64::new(..).to_u8().to_array()` (the old `to_srgba` was a
+  transfer-free quantize; the new `to_u8` is the same quantize). The linear arms
+  `TyLinearRgbaColorF64::new(..).to_srgba().to_array()` become
+  `TyLinSrgbaF64::new(..).to_srgba().to_u8().to_array()` -- the new `to_srgba` is
+  transfer-only and yields `TySrgba<f64>`, so the byte quantize is the added
+  `.to_u8()`. Byte-identical per the mesh-pipeline note: out-of-gamut floats clamp
+  to the same 0 / 255 endpoint at `to_u8`, so no golden changes.
+
+- **`write_vmax` emissive-luminance decode.**
+  `TySrgbaColor::from_array([r, g, b, 255]).to_linear_rgba()` becomes
+  `TySrgbaU8::from_array([r, g, b, 255]).to_f64().to_lin_srgba()`, returning
+  `TyLinSrgba<f64>` whose `.r` / `.g` / `.b` feed the same luminance dot product.
+  Byte-identical: normalize-then-decode equals the old byte-domain decode for the
+  in-gamut `[0, 1]` byte inputs.
+
+- **Return types unchanged; the optional `pool_color` / `cell_color` ->
+  `TySrgba<u8>` retype is NOT done here.** Only the bodies moved to the new types;
+  `pool_color` still returns `[u8; 4]`. That retype (and the vmax `BTreeSet` `Ord`
+  question) stays a separate, still-optional decision, left for a later chunk.

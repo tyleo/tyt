@@ -1,4 +1,4 @@
-use ty_math::{TyLinearRgbaColorF64, TyRgbaColorF64};
+use ty_math::{TyLinSrgbaF64, TySrgbaF64};
 use voxcore::VoxValuePool;
 
 /// Decodes the color at `index` in a color `pool` to sRGB `[r, g, b, a]` bytes,
@@ -11,18 +11,19 @@ pub fn pool_color(pool: &VoxValuePool, index: u32) -> Option<[u8; 4]> {
     match pool {
         VoxValuePool::Srgb { values } => values
             .get(index)
-            .map(|&[r, g, b]| TyRgbaColorF64::new(r, g, b, 1.0).to_srgba().to_array()),
+            .map(|&[r, g, b]| TySrgbaF64::new(r, g, b, 1.0).to_u8().to_array()),
         VoxValuePool::Srgba { values } => values
             .get(index)
-            .map(|&[r, g, b, a]| TyRgbaColorF64::new(r, g, b, a).to_srgba().to_array()),
+            .map(|&[r, g, b, a]| TySrgbaF64::new(r, g, b, a).to_u8().to_array()),
         VoxValuePool::LinearRgb { values } => values.get(index).map(|&[r, g, b]| {
-            TyLinearRgbaColorF64::new(r, g, b, 1.0)
+            TyLinSrgbaF64::new(r, g, b, 1.0)
                 .to_srgba()
+                .to_u8()
                 .to_array()
         }),
         VoxValuePool::LinearRgba { values } => values
             .get(index)
-            .map(|&[r, g, b, a]| TyLinearRgbaColorF64::new(r, g, b, a).to_srgba().to_array()),
+            .map(|&[r, g, b, a]| TyLinSrgbaF64::new(r, g, b, a).to_srgba().to_u8().to_array()),
         _ => None,
     }
 }

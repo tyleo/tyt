@@ -2,7 +2,7 @@ use crate::{
     BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, Error, MaterialBake, MaterialChannel, Result,
     UsedMaterials, default_scalar,
 };
-use ty_math::{TyFloatExt, TyLinearRgbaColorF64, TyRgbaColorF64};
+use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64};
 use voxcore::{VoxMain, VoxValuePool};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
@@ -135,26 +135,27 @@ fn color_bytes_or(value: Option<(&VoxValuePool, u32)>, default: [u8; 4]) -> [u8;
     match pool {
         VoxValuePool::Srgb { values } => values
             .get(index)
-            .map(|&[r, g, b]| TyRgbaColorF64::new(r, g, b, 1.0).to_srgba().to_array())
+            .map(|&[r, g, b]| TySrgbaF64::new(r, g, b, 1.0).to_u8().to_array())
             .unwrap_or(default),
 
         VoxValuePool::Srgba { values } => values
             .get(index)
-            .map(|&[r, g, b, a]| TyRgbaColorF64::new(r, g, b, a).to_srgba().to_array())
+            .map(|&[r, g, b, a]| TySrgbaF64::new(r, g, b, a).to_u8().to_array())
             .unwrap_or(default),
 
         VoxValuePool::LinearRgb { values } => values
             .get(index)
             .map(|&[r, g, b]| {
-                TyLinearRgbaColorF64::new(r, g, b, 1.0)
+                TyLinSrgbaF64::new(r, g, b, 1.0)
                     .to_srgba()
+                    .to_u8()
                     .to_array()
             })
             .unwrap_or(default),
 
         VoxValuePool::LinearRgba { values } => values
             .get(index)
-            .map(|&[r, g, b, a]| TyLinearRgbaColorF64::new(r, g, b, a).to_srgba().to_array())
+            .map(|&[r, g, b, a]| TyLinSrgbaF64::new(r, g, b, a).to_srgba().to_u8().to_array())
             .unwrap_or(default),
         _ => default,
     }
