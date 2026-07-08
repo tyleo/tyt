@@ -1,4 +1,4 @@
-use crate::{TyFloatExt, TyLinSrgba, ty_array_conversions};
+use crate::{TyFloatExt, TyLinSrgba, TySrgb, ty_array_conversions};
 use std::{
     hash::{Hash, Hasher},
     ops::Mul,
@@ -30,6 +30,13 @@ impl<T> TySrgba<T> {
 }
 
 ty_array_conversions!(TySrgba, 4, r, g, b, a);
+
+impl<T: Copy> TySrgba<T> {
+    /// The `r`, `g`, and `b` components as a [`TySrgb`], dropping alpha.
+    pub fn to_srgb(&self) -> TySrgb<T> {
+        TySrgb::new(self.r, self.g, self.b)
+    }
+}
 
 impl<T: Copy + Mul<Output = T>> Mul<T> for TySrgba<T> {
     type Output = Self;

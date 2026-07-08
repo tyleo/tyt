@@ -175,7 +175,26 @@ consistent with; read this before picking up work.
   `base_color.to_array()` -> `[u8; 4]`, which `TySrgbaU8::to_array` still yields,
   so the dedup stays on the 8-bit bytes as planned.
 
-- **`to_vector3` still deferred.** The remaining `.to_vector3()` sites (the qbcl
-  test helper, `reduce_palette`, `voxelize_mesh`) will decide whether to add
-  `TySrgba<T>::to_vector3` (a generic drop-alpha) or destructure; grouped with
-  the mesh-pipeline chunk where the non-test consumers live.
+- **`to_vector3` superseded by `TySrgb` (owner guidance, 2026-07-07).** The
+  drop-alpha sites do NOT go to a `TyVector3`. The owner prefers more color types
+  over collapsing colors to vectors, so channel-narrowing a color yields a color:
+  a new `TySrgb<T>` (3-channel sRGB, the companion to `TySrgba`, mirroring
+  palette's `Srgb` vs `Srgba`). See [[prefer-color-types-over-vectors]].
+
+## S5/S6 prep: add `TySrgb<T>` (2026-07-07)
+
+- **`TySrgb<T = f32>`** in `ty_srgb.rs`, aliases `TySrgbU8` / `TySrgbF32` /
+  `TySrgbF64`. Three components (`r` / `g` / `b`), no alpha. `new` + array
+  conversions (`ty_array_conversions!(TySrgb, 3, ...)`) + `Eq` / `Hash` on
+  `TySrgb<u8>` only (mirrors `TySrgba`, so a byte RGB can key a dedup map).
+  `TySrgba<T>::to_srgb(&self) -> TySrgb<T>` drops alpha. Additive; no consumers
+  yet (the mesh chunk uses it).
+
+- **This refines the plan's "raw data -> vectors" wording.** The README and S6
+  said the non-color channels move to `TyVector4` / `[f64; 4]`. Per the owner,
+  the rule is finer: a color that loses a channel stays a color (`TySrgb`); only
+  values *actually* used as a vector or raw datum become vectors / scalars. So in
+  the mesh pipeline: the emissive 3-channel pool uses `TySrgb` (not `to_vector3`);
+  metallic / roughness / occlusion stay plain `f64` scalars (they are single
+  values, genuinely not colors); `MeshTexture`'s dual-use store stays neutral
+  `[u8; 4]` bytes, re-wrapped in `TySrgbaU8` at the color sample sites.
