@@ -333,3 +333,34 @@ fbx serde chain (S7) and the old type definitions (S8) remain.
 
 - **Verified.** `cargo test -p ty-math -p voxsmith` green (91 + 117), clippy clean;
   `reduces_across_all_color_spaces` exercises all three arms.
+
+## S7: rename the fbx color serde (2026-07-07)
+
+The one deliberate wire touch, kept byte-identical. Renamed the fbx per-point color
+serde and retyped its chain onto `TySrgba<f32>`. `cargo test -p ty-math-serde -p
+tyt-injection -p tyt-fbx` green; clippy clean.
+
+- **Concrete `TySrgbaSerde`, not generic.** ty-math-serde's parity types are
+  concrete (`TyVector3Serde` = `f64`; the old `TyRgbaColorSerde` = `f32`), so
+  `TySrgbaSerde` follows suit: `f32` `r`/`g`/`b`/`a` fields, `From<TySrgba>` and
+  `From<TySrgbaSerde> for TySrgba` using bare `TySrgba` (defaulting to `f32`,
+  mirroring `TyVector3Serde`'s bare `TyVector3`). The plan's optional generic
+  `TySrgbaSerde<T>` was not needed: only the f32 fbx path serializes a color.
+
+- **File rename.** `ty_rgba_color_serde.rs` -> `ty_srgba_serde.rs`; `lib.rs`
+  mod / re-export updated (alphabetical: `ty_srgba_serde` before `ty_vector3_serde`).
+
+- **The fbx chain uses bare `TySrgba`, not `TySrgbaF32`.** tyt-fbx and tyt-injection
+  already spell their ty-math types bare (`TyRgbaColor`, `TyVector3`), relying on
+  the default component, unlike voxsmith's alias idiom (`TySrgbaU8`). Matching the
+  local style, the retype is bare `TySrgba` in `create_point_cloud.rs`,
+  `dependencies.rs`, `dependencies_impl.rs`, and
+  `serialize_points_and_colors_json.rs`. `sample_texture` still builds the
+  `pixel / 255` f32 texels; only the type name changed.
+
+- **Wire byte-identity, asserted.** Renaming a plain (untagged, no
+  `#[serde(rename)]`) struct changes no JSON: serde emits the field names
+  `r`/`g`/`b`/`a`, not the struct name. The new `serializes_to_stable_json` test in
+  `tyt-injection` pins the exact output
+  `{"points":[{"x":1.0,"y":2.0,"z":3.0}],"colors":[[{"r":0.5,"g":0.25,"b":0.125,"a":1.0}]]}\n`,
+  so the fbx JSON is provably unchanged and the format is now guarded.

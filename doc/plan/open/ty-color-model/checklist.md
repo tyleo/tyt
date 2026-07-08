@@ -114,13 +114,20 @@ than adopt the old ones first and redo them:
 
 ### Phase 3: serde, fbx wire, and removal
 
-- [ ] **S7. Rename the fbx color serde (no wire change).** The fbx per-point colors
+- [x] **S7. Rename the fbx color serde (no wire change).** The fbx per-point colors
       are genuine vertex colors (base-color texels, sRGB float), so retype
       `TyRgbaColor<f32>` -> `TySrgba<f32>` across `tyt-fbx` (`create_point_cloud.rs`,
       `dependencies*.rs`) and `tyt-injection`, and rename `TyRgbaColorSerde` ->
       `TySrgbaSerde` (or a generic `TySrgbaSerde<T>`) keeping the `r`/`g`/`b`/`a`
       keys. They stay a color type -- no `TyVector4Serde`. Assert the fbx JSON is
       byte-identical.
+      Done: concrete `TySrgbaSerde` (f32 keys) in `ty_srgba_serde.rs` replacing
+      `ty_rgba_color_serde.rs`, matching the sibling `TyVector3Serde` shape; the fbx
+      chain uses bare `TySrgba` (the crates' local idiom, defaulting to f32, not the
+      `F32` alias). A new `serializes_to_stable_json` test in `tyt-injection` pins
+      the exact bytes -- the rename is wire-invisible since serde keys off the
+      `r`/`g`/`b`/`a` field names, not the struct name. See
+      reference/implementation-decisions.md.
 - [ ] **S8. Remove the old types.** Delete `TySrgbaColor`, `TyRgbaColor`,
       `TyRgbaColorSerde` (and `TyLinearRgbaColor` once `TyLinSrgba` is adopted
       everywhere); fix `lib.rs` re-exports. Gate: `cargo check --workspace` clean,

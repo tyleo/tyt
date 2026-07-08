@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     result::Result as StdResult,
 };
-use ty_math::{TyRgbaColor, TyVector3};
+use ty_math::{TySrgba, TyVector3};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -48,7 +48,7 @@ impl Dependencies for DependenciesImpl {
     fn serialize_points_and_colors_json(
         &self,
         points: &[TyVector3],
-        colors: &[Vec<TyRgbaColor>],
+        colors: &[Vec<TySrgba>],
     ) -> Result<Vec<u8>> {
         Ok(tyt_injection::serialize_points_and_colors_json(
             points, colors,

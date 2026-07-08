@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
-use ty_math::{TyRgbaColor, TyVector3};
+use ty_math::{TySrgba, TyVector3};
 
 /// Creates a cloud of random points inside a mesh volume (or on the surface with `--surface`) within an FBX file.
 #[derive(Clone, Debug, Parser)]
@@ -82,7 +82,7 @@ impl CreatePointCloud {
             sampled.iter().map(|sp| sp.position).collect()
         };
 
-        let color_layers: Vec<Vec<TyRgbaColor>> = texture
+        let color_layers: Vec<Vec<TySrgba>> = texture
             .iter()
             .map(|texture_path| {
                 let (pixels, img_w, img_h) = dependencies.load_image_rgba(texture_path)?;
@@ -405,7 +405,7 @@ fn sample_texture(
     img_w: u32,
     img_h: u32,
     sample: &SampledPoint,
-) -> TyRgbaColor {
+) -> TySrgba {
     let tri_uvs = &uvs[sample.triangle_index];
     let tex_u = tri_uvs[0][0] * sample.bary_u
         + tri_uvs[1][0] * sample.bary_v
@@ -426,5 +426,5 @@ fn sample_texture(
     let b = pixels[idx + 2] as f32 / 255.0;
     let a = pixels[idx + 3] as f32 / 255.0;
 
-    TyRgbaColor::new(r, g, b, a)
+    TySrgba::new(r, g, b, a)
 }
