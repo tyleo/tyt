@@ -120,3 +120,23 @@ consistent with; read this before picking up work.
   it resolves (verified with `RUSTDOCFLAGS="-D warnings" cargo doc -p ty-math
   --no-deps`). Cross-instantiation method links like this one resolve against the
   inherent method, so they are safe to use once the target method exists.
+
+## S4: delete the HSV family (owner decision, 2026-07-07)
+
+- **Deleted, not ported.** Removed `ty_hsva_color.rs` / `ty_hsva_color_f32.rs` /
+  `ty_hsva_color_f64.rs`, `TyRgbaColor::to_hsva` (and its `TyHsvaColor` import),
+  and the three `lib.rs` mod / re-export lines. The 4 HSV tests went with the
+  file. Nothing else changed: a workspace grep confirmed zero external producers
+  or consumers, so there were no call sites to fix.
+
+- **The README undercounted the family; confirmed at the keyboard.** It framed
+  the HSV surface as just `TyRgbaColor::to_hsva` plus a loop-back test. In fact
+  the family was a self-contained toolkit: `TyHsvaColor::to_rgba` (HSV -> RGB, 2
+  tests), `TyHsvaColor::lerp` (shortest-arc hue lerp, 1 test), and
+  `TyRgbaColor::to_hsva` (RGB -> HSV, 1 round-trip test). All dead. This is the
+  "one-file blast-radius undercount" the study critique flagged; delete-all was
+  still clean because none of it had external users.
+
+- **`impl_ty_rgba_color_float!` now emits only the reverse `Mul` (`scalar *
+  color`).** Left in place; the whole `TyRgbaColor` type is removed at S8, so the
+  now-unused reverse `Mul` is not separately pruned here.

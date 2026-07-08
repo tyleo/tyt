@@ -61,9 +61,13 @@ than adopt the old ones first and redo them:
       Done: `to_srgba` returns `TySrgba<f64>`, transfer only, out-of-gamut
       odd-extended by sign per CSS Color 4; byte output is `to_srgba().to_u8()`.
       Aliases `TyLinSrgbaF32/F64`. See reference/implementation-decisions.md.
-- [ ] **S4. Decide the HSV family.** Either delete `ty_hsva_color{,_f32,_f64}` and
+- [x] **S4. Decide the HSV family.** Either delete `ty_hsva_color{,_f32,_f64}` and
       the `to_hsva` edge (updating the `ty_hsva_color.rs:125` round-trip test), or
       port `to_hsva` onto `TySrgba<f64>` and keep the family. Do not half-remove it.
+      Done: deleted the family (owner decision). Removed `ty_hsva_color{,_f32,_f64}`,
+      `TyRgbaColor::to_hsva` + its import, and the `lib.rs` mod/re-exports. The
+      family was fully dead workspace-wide (also had `to_rgba` + `lerp`, not just
+      `to_hsva`). See reference/implementation-decisions.md.
 
 ### Phase 2: migrate consumers off the old types
 
