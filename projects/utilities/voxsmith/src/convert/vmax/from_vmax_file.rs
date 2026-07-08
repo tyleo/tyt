@@ -314,22 +314,28 @@ fn folded_palette(
         }
     }
 
-    // One material per distinct combination, first-seen. The color index is
-    // 1-based in Voxel Max, so the color binding takes `color_idx - 1`; the
-    // material byte is 0-based, so every material binding takes it directly.
+    // One material per distinct combination, ordered by color cell then
+    // material byte, so the folded rows are canonical rather than voxel-scan
+    // order and the round-trip is stable. The color index is 1-based in Voxel
+    // Max, so the color binding takes `color_idx - 1`; the material byte is
+    // 0-based, so every material binding takes it directly.
     let material_bindings = palette.binding_count() - 1;
+    let mut keys: Vec<(u8, u8)> = voxels
+        .iter()
+        .map(|voxel| combo_key(voxel, has_materials))
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
     let mut combos: HashMap<(u8, u8), U32Id<BVoxMaterial>> = HashMap::new();
-    for voxel in voxels {
-        let key = combo_key(voxel, has_materials);
-        combos.entry(key).or_insert_with(|| {
-            let color = u32::from(key.0).saturating_sub(1);
-            let material = u32::from(key.1);
-            let mut value_indices = vec![color];
-            value_indices.extend(iter::repeat_n(material, material_bindings));
-            palette
-                .add_material(value_indices)
-                .expect("one value-index per binding")
-        });
+    for key in keys {
+        let color = u32::from(key.0).saturating_sub(1);
+        let material = u32::from(key.1);
+        let mut value_indices = vec![color];
+        value_indices.extend(iter::repeat_n(material, material_bindings));
+        let id = palette
+            .add_material(value_indices)
+            .expect("one value-index per binding");
+        combos.insert(key, id);
     }
 
     let palette = state.add_palette(palette);
