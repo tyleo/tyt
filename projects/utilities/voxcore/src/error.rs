@@ -3,12 +3,9 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
-/// An error from voxcore: a [`VoxMain`](crate::VoxMain) whose value pools are
-/// malformed, whose bindings or materials do not resolve, whose cross-references
-/// do not resolve, whose hierarchy has a cycle, whose roots, node children, or
-/// binding attribute keys repeat, or whose node transform has a zero scale
-/// component or a non-unit rotation. See [`validate`](crate::VoxMain::validate).
-/// Ids are reported as their `u32` listing index.
+/// An error from voxcore: a [`VoxMain`](crate::VoxMain) that violates a rule
+/// [`validate`](crate::VoxMain::validate) checks. Ids are reported as their
+/// `u32` listing index.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     /// A value pool has no values.
@@ -69,6 +66,9 @@ pub enum Error {
 
     /// A root lists the same node more than once.
     DuplicateRoot { root: u32 },
+
+    /// A node's transform has a non-finite position or scale component.
+    NonFiniteTransform { node: u32 },
 
     /// A node's transform has a zero scale component.
     ZeroScale { node: u32 },
@@ -148,6 +148,10 @@ impl Display for Error {
             Error::DuplicateRoot { root } => {
                 write!(f, "root lists hierarchy node {root} more than once")
             }
+            Error::NonFiniteTransform { node } => write!(
+                f,
+                "hierarchy node {node} has a non-finite transform position or scale component"
+            ),
             Error::ZeroScale { node } => write!(
                 f,
                 "hierarchy node {node} has a zero transform scale component"

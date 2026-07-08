@@ -174,6 +174,26 @@ impl VoxObject {
         self.liveness.iter_live()
     }
 
+    /// Live voxels' samples in `layer`, as `(voxel id, material)`, in ascending
+    /// raster order, or `None` if `layer` is not one of this object's layers.
+    /// Reads the layer's sample column once, so a full scan skips
+    /// [`voxel_material`](Self::voxel_material)'s per-call lookups.
+    pub fn iter_live_samples(
+        &self,
+        layer: U32Id<BVoxLayer>,
+    ) -> Option<impl Iterator<Item = (U32Id<BVoxVoxel>, U32Id<BVoxMaterial>)> + '_> {
+        if !self.layer_ids.is_retained(layer) {
+            return None;
+        }
+        // Safety: retained layer ids have a sample column.
+        let column = unsafe { self.samples.get(layer) };
+        Some(self.liveness.iter_live().map(move |id| {
+            // Safety: the dense grid gives every layer a slot for every voxel
+            // id.
+            (id, *unsafe { column.get(id) })
+        }))
+    }
+
     /// The tight live-voxel extent as `(min_corner, [X, Y, Z] size)` in this
     /// object's grid, or `None` when it has no live voxels. The object stores
     /// the wider build volume in [`bounds`](Self::bounds); the runtime/tight
@@ -506,6 +526,21 @@ mod tests {
             })
             .collect();
         assert_eq!(live, [(0, [0, 0, 0]), (6, [0, 1, 2]), (23, [1, 2, 3])]);
+    }
+
+    #[test]
+    fn iter_live_samples_walks_a_layer_in_raster_order() {
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
+        let layer = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
+        let first = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        let second = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
+        object.retain_voxel(second, &[material(7)]).unwrap();
+        object.retain_voxel(first, &[material(2)]).unwrap();
+
+        let samples: Vec<_> = object.iter_live_samples(layer).unwrap().collect();
+        assert_eq!(samples, [(first, material(2)), (second, material(7))]);
+        // A layer id the object never minted is rejected.
+        assert!(object.iter_live_samples(U32Id::from_u32(9)).is_none());
     }
 
     #[test]

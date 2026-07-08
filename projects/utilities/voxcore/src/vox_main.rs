@@ -5,6 +5,7 @@ use crate::{
 };
 use branded_id::{IdVec, U32Id, soa::IdRemap};
 use std::collections::{BTreeSet, HashMap, HashSet};
+use ty_math::TyVector3F64;
 
 /// The in-memory state of a voxel model: its objects, shared palettes, scene
 /// hierarchy, and roots.
@@ -468,18 +469,22 @@ impl VoxMain {
     /// Reorders `pool`'s values to `new_order` and rewrites every material
     /// value-index that draws on it, so values move without changing what any
     /// material resolves to. `new_order[new_index]` is the old index landing at
-    /// `new_index`, and must be a permutation of the pool's `0..values_len`. A
-    /// no-op if `pool` is not one of this state's.
-    pub fn reorder_value_pool(&mut self, pool: U32Id<BVoxValuePool>, new_order: &[u32]) {
+    /// `new_index`. `None`, changing nothing, if `pool` is not one of this
+    /// state's or `new_order` is not a permutation of the pool's
+    /// `0..values_len`.
+    pub fn reorder_value_pool(
+        &mut self,
+        pool: U32Id<BVoxValuePool>,
+        new_order: &[u32],
+    ) -> Option<()> {
         if !self.runtime_state.value_pool_ids.is_retained(pool) {
-            return;
+            return None;
         }
         // Safety: the id is retained, so it has a value.
         let values = unsafe { self.runtime_state.value_pools.get_mut(pool) };
-        debug_assert!(
-            is_permutation(new_order, values.values_len()),
-            "reorder_value_pool needs a permutation of the pool's indices"
-        );
+        if !is_permutation(new_order, values.values_len()) {
+            return None;
+        }
 
         // The inverse map from old index to its new slot, applied to every
         // referencing material's value-index.
@@ -495,6 +500,7 @@ impl VoxMain {
             let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
             palette.remap_pool_value_indices(pool, &remap);
         }
+        Some(())
     }
 
     /// Checks the value pools, palettes, cross-references, and per-entity rules:
@@ -511,8 +517,9 @@ impl VoxMain {
     /// 4. every node child node and child object resolves, and no node lists
     ///    the same one twice;
     /// 5. every root resolves, and no root repeats;
-    /// 6. every node transform has a non-zero scale on each axis and a
-    ///    unit-length rotation quaternion within `1e-6`;
+    /// 6. every node transform has finite position and scale components, a
+    ///    non-zero scale on each axis, and a unit-length rotation quaternion
+    ///    within `1e-6`;
     /// 7. the `child_nodes` graph is acyclic.
     ///
     /// A node may have several parents, since the hierarchy is a DAG; that
@@ -575,11 +582,13 @@ impl VoxMain {
                 layer_palettes.push((layer_id, palette));
             }
             // Every live voxel samples a material within each layer's palette.
-            for voxel_id in object.iter_live() {
-                for &(layer_id, palette) in &layer_palettes {
-                    let material = object
-                        .voxel_material(voxel_id, layer_id)
-                        .expect("a live voxel has a sample for every layer");
+            // Layer-major so each layer's sample column is read once, not per
+            // voxel.
+            for &(layer_id, palette) in &layer_palettes {
+                let samples = object
+                    .iter_live_samples(layer_id)
+                    .expect("an iterated layer is one of the object's layers");
+                for (voxel_id, material) in samples {
                     if !palette.contains_material(material) {
                         return Err(Error::SampleMaterial {
                             object: object_id.to_u32(),
@@ -624,8 +633,16 @@ impl VoxMain {
                 }
             }
 
-            // The node transform must be non-degenerate.
+            // The node transform must be finite and non-degenerate. The
+            // rotation needs no finiteness guard of its own: a non-finite
+            // component fails the unit-length check below.
+            let position = node.transform.position;
             let scale = node.transform.scale;
+            if !vector_is_finite(position) || !vector_is_finite(scale) {
+                return Err(Error::NonFiniteTransform {
+                    node: node_id.to_u32(),
+                });
+            }
             if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
                 return Err(Error::ZeroScale {
                     node: node_id.to_u32(),
@@ -758,7 +775,7 @@ fn check_value_pool(pool_id: u32, pool: &VoxValuePool) -> Result<()> {
         VoxValuePool::Int { min, max, values } => {
             check_numeric_bounds(pool_id, min, max, true)?;
             for (index, &value) in values.iter().enumerate() {
-                if !value_in_bounds(min, max, value as f64) {
+                if !int_value_in_bounds(min, max, value) {
                     return Err(Error::PoolValue {
                         pool: pool_id,
                         index: index as u32,
@@ -816,6 +833,49 @@ fn value_in_bounds(min: &VoxBound, max: &VoxBound, value: f64) -> bool {
     low_ok && high_ok
 }
 
+/// Whether integer `value` lies within `min`/`max`, each side unbounded when
+/// `None`. The integer sibling of [`value_in_bounds`]: it compares in the
+/// integer domain, since casting an `i64` past 2^53 to `f64` rounds and could
+/// carry it across a bound. Each numeric bound is finite and integer-valued,
+/// which [`check_numeric_bounds`] establishes first.
+fn int_value_in_bounds(min: &VoxBound, max: &VoxBound, value: i64) -> bool {
+    let low_ok = match min {
+        VoxBound::Number(low) => int_at_least(value, *low),
+        VoxBound::None => true,
+    };
+    let high_ok = match max {
+        VoxBound::Number(high) => int_at_most(value, *high),
+        VoxBound::None => true,
+    };
+    low_ok && high_ok
+}
+
+/// Exact `value >= bound` for a finite integer-valued `bound`. `i64::MAX as
+/// f64` rounds up to 2^63 and `i64::MIN as f64` is exactly -2^63, so the two
+/// range tests filter every bound outside the `i64` range; the remainder
+/// converts to `i64` exactly.
+fn int_at_least(value: i64, bound: f64) -> bool {
+    if bound >= i64::MAX as f64 {
+        false
+    } else if bound < i64::MIN as f64 {
+        true
+    } else {
+        value >= bound as i64
+    }
+}
+
+/// Exact `value <= bound` for a finite integer-valued `bound`. The mirror of
+/// [`int_at_least`].
+fn int_at_most(value: i64, bound: f64) -> bool {
+    if bound >= i64::MAX as f64 {
+        true
+    } else if bound < i64::MIN as f64 {
+        false
+    } else {
+        value <= bound as i64
+    }
+}
+
 /// Checks each color's components lie in its space's range: sRGB in `[0, 1]`,
 /// linear finite and `>= 0`. The sRGB range test rejects any non-finite
 /// component on its own; the linear side is only lower-bounded, so it guards
@@ -842,6 +902,11 @@ fn check_color_components<const N: usize>(
         }
     }
     Ok(())
+}
+
+/// Whether every component of `vector` is finite.
+fn vector_is_finite(vector: TyVector3F64) -> bool {
+    vector.x.is_finite() && vector.y.is_finite() && vector.z.is_finite()
 }
 
 /// Whether `order` lists each index in `0..len` exactly once.
@@ -1098,7 +1163,7 @@ mod tests {
         state.validate().unwrap();
 
         // Move blue to 0, red to 1, green to 2.
-        state.reorder_value_pool(colors, &[2, 0, 1]);
+        assert_eq!(state.reorder_value_pool(colors, &[2, 0, 1]), Some(()));
 
         // The pool follows the new order.
         assert_eq!(
@@ -1121,6 +1186,29 @@ mod tests {
             Some(2)
         );
         state.validate().unwrap();
+    }
+
+    #[test]
+    fn reorder_value_pool_rejects_a_non_permutation_without_changing_state() {
+        let mut state = VoxMain::default();
+        let ints = int_pool(&mut state, vec![10, 20, 30]);
+
+        // A repeated index, a wrong length, and an unknown pool all reject.
+        assert_eq!(state.reorder_value_pool(ints, &[0, 0, 1]), None);
+        assert_eq!(state.reorder_value_pool(ints, &[0, 1]), None);
+        assert_eq!(state.reorder_value_pool(ints, &[0, 1, 3]), None);
+        assert_eq!(
+            state.reorder_value_pool(U32Id::<BVoxValuePool>::from_u32(9), &[0, 1, 2]),
+            None
+        );
+        assert_eq!(
+            state.value_pool(ints),
+            Some(&VoxValuePool::Int {
+                min: VoxBound::None,
+                max: VoxBound::None,
+                values: vec![10, 20, 30],
+            })
+        );
     }
 
     #[test]
@@ -1193,6 +1281,23 @@ mod tests {
                 root: node.to_u32(),
             })
         );
+    }
+
+    #[test]
+    fn validate_accepts_a_palette_with_no_bindings() {
+        let mut state = VoxMain::default();
+        // A binding-less palette still carries materials; each binds nothing
+        // and resolves every attribute to its default. Voxels sample them like
+        // any other material.
+        let mut palette = VoxPalette::default();
+        palette.add_material(vec![]).unwrap();
+        let second = palette.add_material(vec![]).unwrap();
+        let palette = state.add_palette(palette);
+
+        let mut object = unit_object("o");
+        object.add_layer(palette, second);
+        state.add_object(object);
+        assert_eq!(state.validate(), Ok(()));
     }
 
     #[test]
@@ -1279,6 +1384,32 @@ mod tests {
         assert_eq!(
             state.validate(),
             Err(Error::ZeroScale { node: id.to_u32() })
+        );
+    }
+
+    #[test]
+    fn validate_rejects_a_non_finite_scale() {
+        let mut state = VoxMain::default();
+        let mut node = VoxHierarchyNode::default();
+        // NaN slips past the zero-scale check (NaN == 0.0 is false), so the
+        // finiteness check must catch it first.
+        node.transform.scale = TyVector3::new(1.0, f64::NAN, 1.0);
+        let id = state.add_hierarchy_node(node);
+        assert_eq!(
+            state.validate(),
+            Err(Error::NonFiniteTransform { node: id.to_u32() })
+        );
+    }
+
+    #[test]
+    fn validate_rejects_a_non_finite_position() {
+        let mut state = VoxMain::default();
+        let mut node = VoxHierarchyNode::default();
+        node.transform.position = TyVector3::new(0.0, 0.0, f64::INFINITY);
+        let id = state.add_hierarchy_node(node);
+        assert_eq!(
+            state.validate(),
+            Err(Error::NonFiniteTransform { node: id.to_u32() })
         );
     }
 
@@ -1635,6 +1766,24 @@ mod tests {
             min: VoxBound::Number(0.0),
             max: VoxBound::Number(1.0),
             values: vec![0.0, 2.0],
+        });
+        assert_eq!(
+            state.validate(),
+            Err(Error::PoolValue { pool: 0, index: 1 })
+        );
+    }
+
+    #[test]
+    fn validate_compares_int_values_against_bounds_exactly() {
+        // 2^53 + 1 rounds down to 2^53 as f64, so a float comparison would
+        // wrongly accept it against a max of 2^53; the integer-domain
+        // comparison rejects it.
+        const MAX: i64 = 1 << 53;
+        let mut state = VoxMain::default();
+        state.add_value_pool(VoxValuePool::Int {
+            min: VoxBound::None,
+            max: VoxBound::Number(MAX as f64),
+            values: vec![MAX, MAX + 1],
         });
         assert_eq!(
             state.validate(),

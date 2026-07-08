@@ -256,19 +256,25 @@ impl VoxPalette {
     /// Maps each material's value-index `i` to `remap[i]` for every binding on
     /// `pool`. `remap` covers every pre-prune index of `pool`.
     pub(crate) fn remap_pool_value_indices(&mut self, pool: U32Id<BVoxValuePool>, remap: &[u32]) {
-        let binding_ids: Vec<_> = self.binding_ids.iter().collect();
-        for binding_id in binding_ids {
-            // Safety: retained binding ids have a value.
-            let bound = unsafe { self.bindings.get(binding_id) }.pool == pool;
-            if !bound {
-                continue;
-            }
+        // The bindings on `pool`, found once so each material's value-index
+        // column is visited once for all of them.
+        let bound_bindings: Vec<_> = self
+            .binding_ids
+            .iter()
+            .filter(|&binding_id| {
+                // Safety: retained binding ids have a value.
+                unsafe { self.bindings.get(binding_id) }.pool == pool
+            })
+            .collect();
+        if bound_bindings.is_empty() {
+            return;
+        }
 
-            let material_ids: Vec<_> = self.material_ids.iter().collect();
-            for material_id in material_ids {
-                // Safety: a retained material holds a value-index for every
-                // binding, and the value-index column is keyed by binding id.
-                let column = unsafe { self.materials.get_mut(material_id) };
+        for material_id in self.material_ids.iter() {
+            // Safety: a retained material holds a value-index for every
+            // binding, and the value-index column is keyed by binding id.
+            let column = unsafe { self.materials.get_mut(material_id) };
+            for &binding_id in &bound_bindings {
                 let slot = unsafe { column.get_mut(binding_id) };
                 *slot = remap[*slot as usize];
             }

@@ -38,7 +38,9 @@ pub fn order_palette_colors(state: &mut VoxMain, palette: U32Id<BVoxPalette>) {
         }
     }
 
-    state.reorder_value_pool(pool, &new_order);
+    state
+        .reorder_value_pool(pool, &new_order)
+        .expect("the color pool is live and new_order is a permutation by construction");
 }
 
 #[cfg(test)]
