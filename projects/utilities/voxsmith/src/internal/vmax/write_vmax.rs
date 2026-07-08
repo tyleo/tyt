@@ -106,9 +106,9 @@ pub fn write_vmax(
     let mut objects: Vec<VMaxObject> = Vec::new();
     let mut groups: Vec<VMaxGroup> = Vec::new();
     // Color palette id -> the `pal` filename written for it.
-    let mut palette_files: HashMap<usize, String> = HashMap::new();
+    let mut palette_files: HashMap<U32Id<BVoxPalette>, String> = HashMap::new();
     // Object id -> its `data` filename, shared by every node that places it.
-    let mut contents_by_object: HashMap<usize, String> = HashMap::new();
+    let mut contents_by_object: HashMap<U32Id<BVoxObject>, String> = HashMap::new();
 
     let mut contents_files: BTreeMap<String, VMaxContentsVmaxbFile> = BTreeMap::new();
     let mut palette_settings_files: BTreeMap<String, VMaxPaletteSettingsVmaxpsbFile> =
@@ -139,10 +139,9 @@ pub fn write_vmax(
         // exactly. A synthesized node may carry several, such as a Goxel
         // layer's blocks; the extra objects become sibling object-nodes under
         // the same parent.
-        for (slot, object_ref) in node.child_objects.iter().enumerate() {
-            let object_ref = *object_ref;
-            let object_id = object_ref.to_u32() as usize;
-            let object = state.object(object_ref).expect("a valid node child object");
+        for (slot, object_id) in node.child_objects.iter().enumerate() {
+            let object_id = *object_id;
+            let object = state.object(object_id).expect("a valid node child object");
             let folded = folded_ref(state, object);
             let plan = match folded.as_ref() {
                 Some(folded) => material_plan(state, folded, &voxel_max.palettes)?,
@@ -168,7 +167,7 @@ pub fn write_vmax(
                 object_placement(tight.bounds(), tight.origin(), edit_bounds, edit_origin);
             let object_state = voxel_max
                 .object_states
-                .get(object_id)
+                .get(object_id.to_u32() as usize)
                 .and_then(|s| s.clone());
 
             // Instances share one contents file: rebuild it once.
@@ -972,19 +971,18 @@ fn build_palette(
     state: &VoxMain,
     folded: Option<&FoldedRef>,
     plan: &MaterialPlan,
-    palette_files: &mut HashMap<usize, String>,
+    palette_files: &mut HashMap<U32Id<BVoxPalette>, String>,
     palette_settings_files: &mut BTreeMap<String, VMaxPaletteSettingsVmaxpsbFile>,
     palette_png_files: &mut BTreeMap<String, VMaxPalettePngFile>,
     voxel_max_color_format: VoxelMaxColorFormat,
 ) -> String {
     // An object with no color binding borrows the default palette name; an empty
     // reference is one Voxel Max cannot resolve. No file is written for it.
-    let Some((palette, color)) = folded.and_then(|folded| Some((folded.palette, folded.color?)))
+    let Some((palette_id, color)) = folded.and_then(|folded| Some((folded.palette, folded.color?)))
     else {
         return FALLBACK_PALETTE.to_owned();
     };
-    let color_id = palette.to_u32() as usize;
-    if let Some(name) = palette_files.get(&color_id) {
+    if let Some(name) = palette_files.get(&palette_id) {
         return name.clone();
     }
     // Voxel Max numbers palette files 1-based (`palette1`, `palette2`, ...); an
@@ -993,7 +991,7 @@ fn build_palette(
     let stem = palette_files.len() + 1;
     let pal = format!("palette{stem}.png");
 
-    let colors = color_palette_colors(state, palette, color);
+    let colors = color_palette_colors(state, palette_id, color);
     if matches!(
         voxel_max_color_format,
         VoxelMaxColorFormat::Png | VoxelMaxColorFormat::All
@@ -1017,7 +1015,7 @@ fn build_palette(
         };
         // The per-color material map Voxel Max renders from: each used color
         // cell carries a bit for the material it draws.
-        let (lc, indices, current) = color_material_map(state, palette, color, plan);
+        let (lc, indices, current) = color_material_map(state, palette_id, color, plan);
         palette_settings_files.insert(
             sidecar,
             material_settings(
@@ -1030,7 +1028,7 @@ fn build_palette(
             ),
         );
     }
-    palette_files.insert(color_id, pal.clone());
+    palette_files.insert(palette_id, pal.clone());
     pal
 }
 
@@ -1439,8 +1437,9 @@ fn secondary_uuid(node_id: &str, slot: usize) -> String {
     }
 }
 
-/// The filename suffix for object `index`: empty for the first, then the index.
-fn suffix(index: usize) -> String {
+/// The filename suffix for an object: empty for object 0, then its numeric id.
+fn suffix(object: U32Id<BVoxObject>) -> String {
+    let index = object.to_u32();
     if index == 0 {
         String::new()
     } else {
