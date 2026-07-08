@@ -22,7 +22,7 @@ mod tests {
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
-    use ty_math::{TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
     use vmax::{
         VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
         VMaxObject, VMaxPalettePngFile, VMaxSceneCamera, VMaxSceneJsonFile,
@@ -582,9 +582,9 @@ mod tests {
     /// The `[f64; 4]` components of a `#RRGGBB` or `#RRGGBBAA` color, each byte
     /// over 255. A missing alpha defaults to opaque.
     fn color_floats(hex: &str) -> [f64; 4] {
-        TySrgbaColor::from_hex(hex)
+        TySrgbaU8::from_hex(hex)
             .expect("a valid hex color")
-            .to_rgba()
+            .to_f64()
             .to_array()
     }
 

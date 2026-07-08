@@ -5,7 +5,7 @@ use crate::{
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TySrgbaColor, TyTransformF64, TyVector3U32};
+use ty_math::{TySrgbaU8, TyTransformF64, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -83,7 +83,7 @@ fn build_palette(
     let pool = state.add_value_pool(VoxValuePool::Srgba {
         values: order
             .iter()
-            .map(|&color| TySrgbaColor::from_array(color).to_rgba().to_array())
+            .map(|&color| TySrgbaU8::from_array(color).to_f64().to_array())
             .collect(),
     });
 
@@ -278,7 +278,7 @@ mod tests {
         GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
     };
     use std::collections::BTreeSet;
-    use ty_math::{TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
         VoxPalette, VoxValue, VoxValuePool,
@@ -286,9 +286,9 @@ mod tests {
 
     /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
     fn srgba(hex: &str) -> [f64; 4] {
-        TySrgbaColor::from_hex(hex)
+        TySrgbaU8::from_hex(hex)
             .expect("a valid hex color")
-            .to_rgba()
+            .to_f64()
             .to_array()
     }
 

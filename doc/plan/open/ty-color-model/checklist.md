@@ -75,6 +75,13 @@ than adopt the old ones first and redo them:
       the `TyRgbaColorF64` quantize transients -> `TySrgba<f64>` / `into_format`.
       Keep the `MaterialKey` dedup (`voxelize_mesh.rs:424`) on `TySrgba<u8>`. Gate:
       `cargo test -p voxsmith` green, no golden churn.
+      Progress: the standalone value-pool converters `goxl` / `mvox` / `vmax`
+      (`from_goxl_file`, `from_mvox_file`, `from_vmax_file`, `to_vmax_file`) done
+      via `TySrgbaU8` + `.to_rgba().to_array()` -> `.to_f64().to_array()`.
+      Remaining: `qbcl` (a test helper using `.to_vector3()`), and `gltf` +
+      `voxelize_mesh`, which thread `TySrgbaColor` through the `internal/` mesh
+      types (`MeshMaterial`, `MeshTexture`), so they migrate in a combined
+      mesh-pipeline chunk with S6. See reference/implementation-decisions.md.
 - [ ] **S6. voxsmith `internal/**`**: base-color decode -> `to_lin_srgba`; the raw
       metallic/roughness/occlusion reads (`sample_material.rs:294,316`) move to
       `TyVector4`/`[f64; 4]` component reads, out of the color namespace. `vxl`

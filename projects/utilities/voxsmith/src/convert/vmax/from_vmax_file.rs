@@ -7,7 +7,7 @@ use crate::{
 use branded_id::U32Id;
 use std::{collections::HashMap, iter};
 use ty_math::{
-    TyQuaternionF64, TySrgbaColor, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
+    TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
 };
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
@@ -267,7 +267,7 @@ fn folded_palette(
     let color_pool = state.add_value_pool(VoxValuePool::Srgba {
         values: colors
             .iter()
-            .map(|color| TySrgbaColor::from_array(*color).to_rgba().to_array())
+            .map(|color| TySrgbaU8::from_array(*color).to_f64().to_array())
             .collect(),
     });
     palette.add_binding(BASE_COLOR_FACTOR.to_owned(), color_pool);

@@ -140,3 +140,42 @@ consistent with; read this before picking up work.
 - **`impl_ty_rgba_color_float!` now emits only the reverse `Mul` (`scalar *
   color`).** Left in place; the whole `TyRgbaColor` type is removed at S8, so the
   now-unused reverse `Mul` is not separately pruned here.
+
+## S5, part 1: standalone value-pool converters (2026-07-07)
+
+- **Consumers use the alias `TySrgbaU8`, not `TySrgba<u8>`.** The convert code
+  imports the ty-math aliases everywhere (`TyVector3U32`, `TyTransformF64`, ...),
+  never the inline generic form, so the migration follows suit. The plan's
+  `TySrgba<u8>` shorthand maps to `TySrgbaU8` at call sites.
+
+- **The mechanical shape.** `TySrgbaColor` -> `TySrgbaU8`, and the transient
+  `TySrgbaColor::from_array(bytes).to_rgba().to_array()` (u8 -> normalized
+  `[f64; 4]` into a `VoxValuePool::Srgba`) becomes `.from_array(bytes).to_f64()
+  .to_array()`. Same for the `from_hex(...).to_rgba().to_array()` test helpers.
+  Byte-for-byte identical output (`to_f64` is the exact `to_rgba` normalize);
+  `cargo test -p voxsmith` stays green, no golden churn.
+
+- **S5 split; this chunk = `goxl` / `mvox` / `vmax` only.** Those three
+  `from_*_file` converters (plus `to_vmax_file`) use `TySrgbaColor` purely
+  locally to build float pools, so they migrate self-contained. Deferred:
+  - `qbcl/from_qbcl_file.rs`: its production `color_floats` never used
+    `TySrgbaColor`; only a test helper does, and via `.to_vector3()` (RGB ->
+    `[f64; 3]`). That pairs with the `to_vector3` decision below.
+  - `gltf/from_gltf_bytes.rs` and `voxelize/voxelize_mesh.rs`: NOT self-contained.
+
+- **S5/S6 coupling: the mesh types straddle the convert/internal boundary.**
+  `MeshMaterial` (`base_color`/`emissive_factor: TySrgbaColor`, in
+  `internal/mesh/mesh_material.rs`) and `MeshTexture` (`texels:
+  Vec<TySrgbaColor>`, in `internal/mesh/mesh_texture.rs`) are S6 (`internal/**`)
+  but are consumed by `voxelize_mesh` and `gltf` (S5, `convert/**`). So those two
+  convert files cannot fully retype off `TySrgbaColor` without their internal
+  mesh types changing too. They should migrate together with the internal mesh
+  types as one mesh-pipeline chunk that spans S5 + S6, rather than by the strict
+  phase boundary. The `MaterialKey` (`voxelize_mesh.rs`) keys on
+  `base_color.to_array()` -> `[u8; 4]`, which `TySrgbaU8::to_array` still yields,
+  so the dedup stays on the 8-bit bytes as planned.
+
+- **`to_vector3` still deferred.** The remaining `.to_vector3()` sites (the qbcl
+  test helper, `reduce_palette`, `voxelize_mesh`) will decide whether to add
+  `TySrgba<T>::to_vector3` (a generic drop-alpha) or destructure; grouped with
+  the mesh-pipeline chunk where the non-test consumers live.
