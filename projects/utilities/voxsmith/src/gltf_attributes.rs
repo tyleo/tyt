@@ -28,3 +28,17 @@ pub const EMISSIVE_FACTOR: &str = "emissiveFactor";
 /// Emissive strength scaling [`EMISSIVE_FACTOR`], a `0..` scalar. glTF's
 /// `KHR_materials_emissive_strength` `emissiveStrength`.
 pub const EMISSIVE_STRENGTH: &str = "emissiveStrength";
+
+/// The glTF spec default for a recommended scalar attribute, or `None` for a key
+/// with no standard default, such as a custom attribute.
+pub(crate) fn default_scalar(key: &str) -> Option<f64> {
+    match key {
+        METALLIC_FACTOR => Some(1.0),
+        ROUGHNESS_FACTOR => Some(1.0),
+        OCCLUSION_STRENGTH => Some(1.0),
+        EMISSIVE_STRENGTH => Some(1.0),
+        IOR => Some(1.5),
+        TRANSMISSION_FACTOR => Some(0.0),
+        _ => None,
+    }
+}

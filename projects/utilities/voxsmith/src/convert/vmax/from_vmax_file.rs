@@ -1,11 +1,11 @@
 use crate::{
-    ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
+    ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
     ROUGHNESS_FACTOR, Result, SHADOWS, TRANSMISSION_FACTOR, VoxelMaxExt, VoxelMaxExtWrapper,
     VoxelMaxMaterial, VoxelMaxMaterialDispersion, VoxelMaxNode, VoxelMaxObjectState,
-    VoxelMaxPalette, to_vox_value, vm_coefficient_to_pbr_factor,
+    VoxelMaxPalette, default_scalar, to_vox_value, vm_coefficient_to_pbr_factor,
 };
 use branded_id::U32Id;
-use std::{collections::HashMap, iter};
+use std::collections::HashMap;
 use ty_math::{
     TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
 };
@@ -263,7 +263,12 @@ fn folded_palette(
     let (name, materials) = material_list(serde, object);
     let has_materials = !materials.is_empty();
 
+    // `baseColorFactor` and `emissiveFactor` read the voxel's color cell; every
+    // material scalar reads its material byte. `color_axis` records each
+    // binding's axis in binding order, so a folded material gathers one
+    // value-index per binding.
     let mut palette = VoxPalette::default();
+    let mut color_axis: Vec<bool> = Vec::new();
     let color_pool = state.add_value_pool(VoxValuePool::Srgba {
         values: colors
             .iter()
@@ -271,6 +276,7 @@ fn folded_palette(
             .collect(),
     });
     palette.add_binding(BASE_COLOR_FACTOR.to_owned(), color_pool);
+    color_axis.push(true);
 
     // Metalness and roughness convert from Voxel Max's 0.1 to 0.9 slider
     // coefficient to the 0 to 1 glTF factor the pool name implies; see
@@ -287,6 +293,7 @@ fn folded_palette(
                 .collect(),
         );
         palette.add_binding(METALLIC_FACTOR.to_owned(), metallic);
+        color_axis.push(false);
         let roughness = float_pool(
             state,
             materials
@@ -295,25 +302,56 @@ fn folded_palette(
                 .collect(),
         );
         palette.add_binding(ROUGHNESS_FACTOR.to_owned(), roughness);
+        color_axis.push(false);
+        // Voxel Max glows in the voxel's own base color, so an emissive
+        // material's color is its base color. The binding appears only when some
+        // material emits, and rides the color axis like `baseColorFactor`; the
+        // emissive is then `emissiveFactor` times `emissiveStrength` per glTF, so
+        // the color leads the strength that scales it.
+        if materials.iter().any(|m| m.sic > 0.0) {
+            let emissive_color = state.add_value_pool(VoxValuePool::Srgb {
+                values: colors
+                    .iter()
+                    .map(|color| {
+                        let [r, g, b, _] = TySrgbaU8::from_array(*color).to_f64().to_array();
+                        [r, g, b]
+                    })
+                    .collect(),
+            });
+            palette.add_binding(EMISSIVE_FACTOR.to_owned(), emissive_color);
+            color_axis.push(true);
+        }
         let emissive = float_pool(state, materials.iter().map(|m| m.sic).collect());
         palette.add_binding(EMISSIVE_STRENGTH.to_owned(), emissive);
+        color_axis.push(false);
 
         // Dispersion bindings appear only when some material carries an `md`
-        // block; a material without one takes a zero, its absence preserved in
-        // the ext.
+        // block. A material without one takes the glTF default ior and zero
+        // transmission and absorption; its absence rides in the ext.
         if materials.iter().any(|m| m.md.is_some()) {
-            let ior = float_pool(state, dispersion(&materials, |d| d.ior));
+            let default_ior = default_scalar(IOR).expect("ior has a glTF default");
+            let ior = float_pool(
+                state,
+                materials
+                    .iter()
+                    .map(|m| m.md.as_ref().map_or(default_ior, |d| d.ior))
+                    .collect(),
+            );
             palette.add_binding(IOR.to_owned(), ior);
+            color_axis.push(false);
             let transmission = float_pool(state, dispersion(&materials, |d| d.transmission));
             palette.add_binding(TRANSMISSION_FACTOR.to_owned(), transmission);
+            color_axis.push(false);
             let absorption = float_pool(state, dispersion(&materials, |d| d.absorption));
             palette.add_binding(ABSORPTION.to_owned(), absorption);
+            color_axis.push(false);
         }
 
         let shadows = state.add_value_pool(VoxValuePool::Bool {
             values: materials.iter().map(|m| m.sh).collect(),
         });
         palette.add_binding(SHADOWS.to_owned(), shadows);
+        color_axis.push(false);
     }
 
     // One material per distinct combination, ordered by color cell then
@@ -321,7 +359,6 @@ fn folded_palette(
     // order and the round-trip is stable. The color index is 1-based in Voxel
     // Max, so the color binding takes `color_idx - 1`; the material byte is
     // 0-based, so every material binding takes it directly.
-    let material_bindings = palette.binding_count() - 1;
     let mut keys: Vec<(u8, u8)> = voxels
         .iter()
         .map(|voxel| combo_key(voxel, has_materials))
@@ -332,8 +369,10 @@ fn folded_palette(
     for key in keys {
         let color = u32::from(key.0).saturating_sub(1);
         let material = u32::from(key.1);
-        let mut value_indices = vec![color];
-        value_indices.extend(iter::repeat_n(material, material_bindings));
+        let value_indices = color_axis
+            .iter()
+            .map(|&is_color| if is_color { color } else { material })
+            .collect();
         let id = palette
             .add_material(value_indices)
             .expect("one value-index per binding");
