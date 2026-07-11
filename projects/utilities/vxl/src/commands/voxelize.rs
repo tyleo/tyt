@@ -1,9 +1,9 @@
 use crate::{
-    Dependencies, Error, FillMode, GridResolutionOptions, MaterialMode, MaxPaletteMaterials,
-    MeshFormat, PaletteReductionOptions, Result, VoxjEncodingOptions,
+    Dependencies, Error, FillMode, GridResolutionOptions, MaterialMode, MeshFormat, NoneOr,
+    PaletteReductionOptions, PositiveCount, Result, Rgba, VoxjEncodingOptions,
 };
 use clap::Parser;
-use std::{path::PathBuf, result::Result as StdResult};
+use std::path::PathBuf;
 
 /// Rasterizes a mesh into a voxel grid, the inverse of `mesh`.
 #[derive(Clone, Debug, Parser)]
@@ -33,12 +33,12 @@ pub struct Voxelize {
     #[arg(value_name = "material-mode", long, default_value = "auto")]
     material_mode: MaterialMode,
 
-    /// Fill color as a `#RRGGBBAA` hex. Under `--material-mode flat` it paints
-    /// every voxel, white when omitted; under `--fill-mode solid` it paints a
-    /// body's interior, the nearest surface color when omitted. Rejected on a
-    /// sampling-mode surface, which samples every voxel.
-    #[arg(value_name = "fill-color", long, value_parser = parse_hex_rgba)]
-    fill_color: Option<[u8; 4]>,
+    /// Fill color as a `#RRGGBBAA` hex, or `none`. Under `--material-mode flat`
+    /// it paints every voxel, white when `none`; under `--fill-mode solid` it
+    /// paints a body's interior, the nearest surface color when `none`. Rejected
+    /// on a sampling-mode surface, which samples every voxel.
+    #[arg(value_name = "fill-color", long, default_value = "none")]
+    fill_color: NoneOr<Rgba>,
 
     /// Name for the voxelized object. Defaults to the mesh's own name, else the
     /// input file stem.
@@ -48,7 +48,7 @@ pub struct Voxelize {
     /// Most materials the palette may hold; sampling over this reduces to it.
     /// `none` disables the cap.
     #[arg(value_name = "max-palette-materials", long, default_value = "256")]
-    max_palette_materials: MaxPaletteMaterials,
+    max_palette_materials: NoneOr<PositiveCount>,
 
     #[command(flatten)]
     reduction_options: PaletteReductionOptions,
@@ -71,7 +71,9 @@ impl Voxelize {
 
         let color_format = self.encoding_options.color_format();
 
-        let reduction = self.reduction_options.resolve(self.max_palette_materials);
+        let reduction = self
+            .reduction_options
+            .resolve(self.max_palette_materials.value().map(|count| count.0));
 
         dependencies.voxelize(
             &self.input,
@@ -80,7 +82,7 @@ impl Voxelize {
             resolution,
             self.fill_mode,
             self.material_mode,
-            self.fill_color,
+            self.fill_color.value().map(|color| color.0),
             self.name.as_deref(),
             reduction,
             encoding,
@@ -91,7 +93,7 @@ impl Voxelize {
 
     /// Rejects a `--fill-color` that a sampling-mode surface shell would drop.
     fn validate_fill_color(&self) -> Result<()> {
-        if self.fill_color.is_some()
+        if self.fill_color.value().is_some()
             && self.fill_mode == FillMode::Surface
             && self.material_mode != MaterialMode::Flat
         {
@@ -105,31 +107,10 @@ impl Voxelize {
     }
 }
 
-/// Parses a `#RRGGBB` or `#RRGGBBAA` hex `--fill-color` into straight RGBA
-/// bytes, a missing alpha defaulting to opaque.
-fn parse_hex_rgba(value: &str) -> StdResult<[u8; 4], String> {
-    let hex = value
-        .strip_prefix('#')
-        .filter(|hex| hex.len() == 6 || hex.len() == 8)
-        .ok_or_else(|| format!("`{value}` is not a color; use a #RRGGBB or #RRGGBBAA hex"))?;
-
-    let byte = |index: usize| {
-        hex.get(index * 2..index * 2 + 2)
-            .and_then(|pair| u8::from_str_radix(pair, 16).ok())
-            .ok_or_else(|| format!("`{value}` is not a valid hex color"))
-    };
-
-    Ok([
-        byte(0)?,
-        byte(1)?,
-        byte(2)?,
-        if hex.len() == 8 { byte(3)? } else { 255 },
-    ])
-}
-
 #[cfg(test)]
 mod tests {
     use super::Voxelize;
+    use crate::NoneOr;
     use clap::Parser;
 
     /// Parses a `voxelize` invocation with a valid resolution already set, so a
@@ -187,22 +168,6 @@ mod tests {
 
     #[test]
     fn an_omitted_fill_color_is_none() {
-        assert_eq!(parse(&[]).fill_color, None);
-    }
-
-    #[test]
-    fn a_hex_fill_color_parses_to_rgba() {
-        // Six digits default the alpha to opaque; eight carry it through.
-        assert_eq!(super::parse_hex_rgba("#0A0B0C"), Ok([10, 11, 12, 255]));
-        assert_eq!(super::parse_hex_rgba("#0A0B0C0D"), Ok([10, 11, 12, 13]));
-    }
-
-    #[test]
-    fn an_invalid_fill_color_is_rejected() {
-        // A color name, a missing `#`, a bad length, and non-hex digits all fail.
-        assert!(super::parse_hex_rgba("white").is_err());
-        assert!(super::parse_hex_rgba("ff0000").is_err());
-        assert!(super::parse_hex_rgba("#12345").is_err());
-        assert!(super::parse_hex_rgba("#GG0000").is_err());
+        assert_eq!(parse(&[]).fill_color, NoneOr::None);
     }
 }

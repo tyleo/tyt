@@ -1,4 +1,4 @@
-use crate::{ColorSpace, Dither, MaxPaletteMaterials, PaletteReduction, QuantizeMethod};
+use crate::{ColorSpace, Dither, PaletteReduction, QuantizeMethod};
 use clap::{ArgAction, Args};
 
 /// The shared palette-reduction controls: clustering method, color space, and
@@ -35,9 +35,9 @@ pub struct PaletteReductionOptions {
 
 impl PaletteReductionOptions {
     /// Pairs these controls with a material cap into a [`PaletteReduction`].
-    pub fn resolve(&self, max_materials: MaxPaletteMaterials) -> PaletteReduction {
+    pub fn resolve(&self, max_materials: Option<usize>) -> PaletteReduction {
         PaletteReduction {
-            max_materials: max_materials.limit(),
+            max_materials,
             method: self.method,
             space: self.space,
             dither: self.dither,
@@ -48,7 +48,7 @@ impl PaletteReductionOptions {
 
 #[cfg(test)]
 mod tests {
-    use crate::{MaxPaletteMaterials, PaletteReductionOptions};
+    use crate::PaletteReductionOptions;
     use clap::Parser;
 
     /// A throwaway command flattening the reduction options, so their flags
@@ -66,7 +66,7 @@ mod tests {
         Harness::try_parse_from(argv)
             .unwrap()
             .options
-            .resolve(MaxPaletteMaterials::Materials(256))
+            .resolve(Some(256))
             .keep_unused_values
     }
 
