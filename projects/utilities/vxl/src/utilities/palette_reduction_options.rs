@@ -1,22 +1,22 @@
 use crate::{ColorSpace, Dither, PaletteReduction, QuantizeMethod};
 use clap::{ArgAction, Args};
 
-/// The shared palette-reduction controls: clustering method, color space, and
-/// dither. Flattened by the commands that reduce a palette (`voxelize` and the
-/// palette-reduction commands), each pairing it with its own cap flag.
+/// The shared palette-reduction controls: clustering method, color space,
+/// dither, and unused-value policy. Voxelize maps its own `--quantize-*` flags
+/// onto these and pairs in a material cap to resolve a [`PaletteReduction`].
 #[derive(Clone, Debug, Args)]
 pub struct PaletteReductionOptions {
     /// Clustering algorithm for the reduction.
     #[arg(value_name = "method", long, default_value = "median-cut")]
-    method: QuantizeMethod,
+    pub(crate) method: QuantizeMethod,
 
     /// Color space the reduction compares colors in.
     #[arg(value_name = "space", long, default_value = "oklab")]
-    space: ColorSpace,
+    pub(crate) space: ColorSpace,
 
     /// Error diffusion applied when snapping samples to the reduced palette.
     #[arg(value_name = "dither", long, default_value = "none")]
-    dither: Dither,
+    pub(crate) dither: Dither,
 
     /// Keep palette values the reduction leaves unreferenced. Off by default, so
     /// a quantized palette keeps only the colors its materials use, fitting a
@@ -30,7 +30,7 @@ pub struct PaletteReductionOptions {
         num_args = 0..=1,
         action = ArgAction::Set
     )]
-    keep_unused_values: bool,
+    pub(crate) keep_unused_values: bool,
 }
 
 impl PaletteReductionOptions {

@@ -1,6 +1,6 @@
 use crate::{
     Dependencies, Error, FillMode, GridResolutionOptions, MaterialMode, MeshFormat, NoneOr,
-    PaletteReductionOptions, PositiveCount, Result, Rgba, VoxjEncodingOptions,
+    QuantizeOptions, Result, Rgba, VoxjEncodingOptions,
 };
 use clap::Parser;
 use std::path::PathBuf;
@@ -45,13 +45,8 @@ pub struct Voxelize {
     #[arg(value_name = "name", long)]
     name: Option<String>,
 
-    /// Most materials the palette may hold; sampling over this reduces to it.
-    /// `none` disables the cap.
-    #[arg(value_name = "max-palette-materials", long, default_value = "256")]
-    max_palette_materials: NoneOr<PositiveCount>,
-
     #[command(flatten)]
-    reduction_options: PaletteReductionOptions,
+    quantize_options: QuantizeOptions,
 
     #[command(flatten)]
     encoding_options: VoxjEncodingOptions,
@@ -71,9 +66,7 @@ impl Voxelize {
 
         let color_format = self.encoding_options.color_format();
 
-        let reduction = self
-            .reduction_options
-            .resolve(self.max_palette_materials.value().map(|count| count.0));
+        let reduction = self.quantize_options.resolve();
 
         dependencies.voxelize(
             &self.input,
