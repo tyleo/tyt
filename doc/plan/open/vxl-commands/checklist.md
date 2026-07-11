@@ -132,15 +132,15 @@ off as they land.
 ### voxelize ([reference/voxelize.md](reference/voxelize.md))
 
 - [x] `Voxelize` command; `--from` (`gltf` | `glb`), mutually exclusive
-      `--voxel-grid-length` | `--meters-per-voxel` (clap `ArgGroup`,
+      `--resolution` | `--voxel-size` (clap `ArgGroup`,
       `required = true`).
 - [x] `--fill-mode` `solid` (default) | `surface`; `--fill-color` (default
       `white`, a `#RRGGBBAA` hex or name), used by `solid` only and rejected with
       `surface`. Surface is a hollow shell; per-voxel color sampling from the
       glTF material is deferred, so surface uses the flat color for now. (Shipped
       MVP; superseded by the material-mode work below.)
-- [x] Reuse the voxj writer options; record `--meters-per-voxel` (meters per
-      voxel) as the node scale, leaving `--voxel-grid-length` at scale `1`.
+- [x] Reuse the voxj writer options; record `--voxel-size` (meters per
+      voxel) as the node scale, leaving `--resolution` at scale `1`.
 - [x] voxsmith `gltf` feature gating the `gltf` crate and a mesh-to-`VoxMain`
       voxelizer; `Dependencies::voxelize` and its impl call it, then write
       through `VoxjFileBuilder` like `to voxj`. glTF Y-up is converted to the
@@ -157,9 +157,10 @@ Material sampling (see [voxelize](reference/voxelize.md) and
 - [x] `per-primitive`: one material per source glTF material from the PBR factors
       (`baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
       `emissiveStrength`, `occlusionStrength`), matching what `mesh` bakes.
-- [x] `--fill-color none | #RRGGBBAA` (default `none`): the whole object under
-      `flat`, the `solid`-fill interior under the sampling modes; drop the
-      surface rejection. A `none` interior adopts its nearest surface material.
+- [x] `--fill-color #RRGGBBAA` (omitted for the default): the whole object under
+      `flat`, the `solid`-fill interior under the sampling modes; a set color is
+      rejected on a sampling-mode surface. An omitted interior adopts its nearest
+      surface material.
 - [x] `--max-palette-materials <n> | none` (default `256`) via the shared
       reduction engine; expose `--method` / `--space` / `--dither` on `voxelize`.
       Landed for

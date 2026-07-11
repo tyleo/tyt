@@ -3,25 +3,25 @@
 *Part of the [Vxl Command-Line Reference](../README.md).*
 
 ```
-vxl voxelize <input> [output] (--voxel-grid-length <n> | --meters-per-voxel <meters>) [options]
+vxl voxelize <input> [output] (--resolution <n> | --voxel-size <meters>) [options]
 ```
 
 Rasterizes a mesh into a voxel grid. This is the inverse of [`vxl mesh`](mesh.md).
 The input is a glTF mesh, text (`.gltf`) or binary (`.glb`); glTF is the only
 mesh format read for now. The default output path is the input stem with the
 `.voxj` extension. The grid resolution is set exactly one of two mutually
-exclusive ways: a voxel count with `--voxel-grid-length` or a real-world voxel
-size with `--meters-per-voxel`.
+exclusive ways: a voxel count with `--resolution` or a real-world voxel
+size with `--voxel-size`.
 
 1. `--from` `gltf` | `glb`: source mesh format, glTF text or binary. Inferred
    from the input extension when omitted.
-2. `--voxel-grid-length <n>`: grid resolution in voxels along the longest axis.
+2. `--resolution <n>`: grid resolution in voxels along the longest axis.
    The other axes are sized to preserve aspect, and the result is fit tight to
    `bounds`. Use this to cap detail at a known voxel count.
-3. `--meters-per-voxel <meters>`: the edge length of one voxel in meters. Each
+3. `--voxel-size <meters>`: the edge length of one voxel in meters. Each
    axis count is the mesh extent on that axis in meters divided by `<meters>` and
    rounded up, so the same `<meters>` yields a consistent real-world voxel size
-   across meshes of different sizes. Mutually exclusive with `--voxel-grid-length`.
+   across meshes of different sizes. Mutually exclusive with `--resolution`.
 4. `--fill-mode` `solid` | `surface` (default `solid`): how the mesh fills the
    grid. `solid` rasterizes the surface and flood-fills the volume it encloses,
    producing a filled body, and expects a watertight mesh. `surface` rasterizes
@@ -45,17 +45,17 @@ size with `--meters-per-voxel`.
    `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
    `emissiveStrength`, and `occlusionStrength`, so a voxelized model round-trips
    through `mesh`.
-6. `--fill-color` `none` | `<#RRGGBBAA>` (default `none`): the color of voxels
-   that have no sampled surface. Its role depends on `--material-mode`:
+6. `--fill-color <#RRGGBBAA>`: the color of voxels that have no sampled surface,
+   omitted for the default. Its role depends on `--material-mode`:
 
-   |                            | `--fill-color none`                           | `--fill-color #RRGGBBAA`             |
+   |                            | `--fill-color` omitted                        | `--fill-color #RRGGBBAA`             |
    | -------------------------- | --------------------------------------------- | ------------------------------------ |
    | `flat`                     | whole object white                            | whole object that color              |
    | `per-primitive`/`per-texel`| exterior sampled, interior its nearest surface | exterior sampled, interior that color |
 
    Only the interior voxels a `--fill-mode solid` body invents have no surface; a
    hollow `--fill-mode surface` shell is all surface, so under the sampling modes
-   `--fill-color` does nothing there.
+   a set `--fill-color` is rejected there.
 7. `--max-palette-materials` `<n>` | `none` (default `256`): the most materials
    the document's palette may hold. Sampling can yield many distinct materials,
    `per-texel` especially; when the count exceeds `<n>` the palette is reduced
@@ -80,15 +80,15 @@ size with `--meters-per-voxel`.
    back to the input file stem when the glTF names neither.
 
 The format carries no physical units: one unit is one voxel, and real-world
-scale comes from hierarchy-node transforms. `--voxel-grid-length` is a voxel
-count, not an edge length. `--meters-per-voxel` reads the source mesh's
+scale comes from hierarchy-node transforms. `--resolution` is a voxel
+count, not an edge length. `--voxel-size` reads the source mesh's
 real-world size only to choose the grid counts; the written document is still
 unitless. glTF is meter-native, and any scene- or node-level scale on the mesh
 is applied before voxelizing, so two glTF exports of the same object at different
 authored scales voxelize alike, mirroring [`vxl mesh`](mesh.md)'s
-`--meters-per-voxel`. When `--meters-per-voxel` is used, `voxelize` records
+`--meters-per-voxel`. When `--voxel-size` is used, `voxelize` records
 `<meters>` as the placing node's scale so the assembled model keeps its source
-dimensions; `--voxel-grid-length` has no real-world size to record. See
+dimensions; `--resolution` has no real-world size to record. See
 [Coordinate System](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#coordinate-system).
 
 `voxelize` writes a voxel-json document and shares `to voxj`'s encoding options:

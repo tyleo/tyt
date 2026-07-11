@@ -1,7 +1,4 @@
-/// How `voxelize` sizes the voxel grid: exactly one of a voxel count along the
-/// longest axis, or a real-world voxel size. The command's clap `ArgGroup` makes
-/// `--voxel-grid-length` and `--meters-per-voxel` mutually exclusive and
-/// required, and resolves to one of these before handing it on.
+/// How `voxelize` sizes the voxel grid.
 #[derive(Clone, Copy, Debug)]
 pub enum GridResolution {
     /// Voxels along the longest axis; the other axes are sized to preserve

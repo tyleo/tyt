@@ -42,11 +42,10 @@ pub struct ToVoxj {
 impl ToVoxj {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let encoding = self.encoding_options.encoding();
-        let format = self.encoding_options.resolve_format(self.output.as_deref());
         let color_format = self.encoding_options.color_format();
-        let output = self
-            .output
-            .unwrap_or_else(|| self.input.with_extension(format.extension()));
+        let (format, output) = self
+            .encoding_options
+            .resolve_output(&self.input, self.output);
         dependencies.to_voxj(
             &self.input,
             self.from,

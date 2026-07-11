@@ -3,7 +3,7 @@ use crate::{
     VoxjSampleEncoding,
 };
 use clap::Args;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// The voxj output container and block-encoding options, shared by commands that
 /// write a voxj document.
@@ -45,9 +45,16 @@ impl VoxjEncodingOptions {
         }
     }
 
+    /// Resolves the output container and destination path together.
+    pub fn resolve_output(&self, input: &Path, output: Option<PathBuf>) -> (VoxjFormat, PathBuf) {
+        let format = self.resolve_format(output.as_deref());
+        let path = output.unwrap_or_else(|| input.with_extension(format.extension()));
+        (format, path)
+    }
+
     /// Resolves the output container from `--format`, else `output`'s extension,
     /// else compact JSON.
-    pub fn resolve_format(&self, output: Option<&Path>) -> VoxjFormat {
+    fn resolve_format(&self, output: Option<&Path>) -> VoxjFormat {
         self.format
             .or_else(|| output.and_then(VoxjFormat::from_path))
             .unwrap_or(VoxjFormat::Json)

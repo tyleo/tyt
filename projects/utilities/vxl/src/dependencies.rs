@@ -89,8 +89,8 @@ pub trait Dependencies {
     ///   axis, or a real-world voxel size (recorded as the placing node's scale).
     /// * `fill_mode` - a solid body (flood-filled) or a hollow surface shell.
     /// * `material_mode` - where each voxel's color and material come from.
-    /// * `fill_color` - the color of voxels a mode cannot sample, or `None` for
-    ///   the `none` default.
+    /// * `fill_color` - the color of voxels a mode cannot sample, or `None` when
+    ///   the flag is omitted.
     /// * `name` - object-name override; `None` uses the mesh's name, else the
     ///   input stem.
     /// * `reduction` - the palette material cap and its clustering controls.

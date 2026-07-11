@@ -266,8 +266,8 @@ future mesh format adds only its own reader; extent and voxelization are shared.
 The object name resolves override first (`--name`), then the mesh's own name (the
 first mesh-bearing node's, its own preferred over its mesh's), then a
 `fallback_name` the caller passes, which vxl fills with the input file stem. When
-the caller resolved the grid from `--meters-per-voxel` it passes `<meters>` as
-the node scale so the assembled model keeps its source size; `--voxel-grid-length`
+the caller resolved the grid from `--voxel-size` it passes `<meters>` as
+the node scale so the assembled model keeps its source size; `--resolution`
 passes `1`. vxl parses the glTF once, into the `Mesh`, then reads its extent and
 voxelizes it, so the resolution policy stays in vxl with voxsmith taking plain
 counts. `import_slice` auto-detects `.glb` versus `.gltf` from the bytes, so
@@ -275,10 +275,10 @@ counts. `import_slice` auto-detects `.glb` versus `.gltf` from the bytes, so
 `.gltf` with external `.bin` buffers cannot resolve from bytes and errors.
 
 Grid resolution is resolved in vxl's `implementation/voxelize.rs` before the
-voxsmith call, into a single voxel-count triple: `--voxel-grid-length` caps the
-longest axis and sizes the others to preserve aspect, while `--meters-per-voxel`
+voxsmith call, into a single voxel-count triple: `--resolution` caps the
+longest axis and sizes the others to preserve aspect, while `--voxel-size`
 divides each meter extent by `<meters>` and rounds up. The mutual exclusion of
-`--voxel-grid-length` and `--meters-per-voxel` is a clap `ArgGroup` with
+`--resolution` and `--voxel-size` is a clap `ArgGroup` with
 `required = true`, so exactly one is present. The two `Option` flags live only in
 the command struct clap fills; `execute` collapses them into a `GridResolution`
 enum (`VoxelGridLength(u32)` | `MetersPerVoxel(f64)`) that the trait and impl
@@ -327,13 +327,12 @@ strength scaling `rgba` (the `KHR_materials_emissive_strength` multiplier is not
 applied yet); and `occlusion` defaults to `1`, as glTF carries occlusion only in
 a texture, no flat factor.
 
-`--fill-color` parses in vxl to `Option<[u8; 4]>` (a `FillColor` of `none` or a
-`#RRGGBB`/`#RRGGBBAA` hex; the color names the MVP accepted are gone), `None`
-being the `none` default. A `solid` body's interior takes that color through one
-shared fill cell when given, else adopts its nearest surface material by a
-six-connected multi-source flood from the surface cells. A hollow `surface`
-shell has no interior, so `--fill-color` is inert there rather than rejected; the
-old guard is gone.
+`--fill-color` parses in vxl to `Option<[u8; 4]>` through a value parser reading a
+`#RRGGBB` or `#RRGGBBAA` hex; omitting the flag is `None`. A `solid` body's
+interior takes that color through one shared fill cell when given, else adopts its
+nearest surface material by a six-connected multi-source flood from the surface
+cells. A hollow `surface` shell has no interior to fill, so a set `--fill-color`
+under a sampling mode is rejected; `flat` still consults it, painting every voxel.
 
 ## Per-texel sampling
 

@@ -114,9 +114,9 @@ Rationale for the non-obvious choices, for reviewers.
     a `solid` body's interior voxels sit on no surface and fall back to that
     factor regardless, so the two modes share one path and per-texel only adds the
     texel sampler. `--fill-color` is the color the modes cannot sample: the whole
-    body under `flat`, where `none` yields white, or only the invented interior of a
-    `solid` per-* body, leaving the sampled exterior alone; it does nothing for a
-    hollow shell, which is all surface. `auto` engages per-texel on textured
+    body under `flat`, white when omitted, or only the invented interior of a
+    `solid` per-* body, leaving the sampled exterior alone; a set color is rejected
+    for a hollow shell, which is all surface. `auto` engages per-texel on textured
     meshes because importing a textured model implies wanting its surface color,
     while the explicit modes override that guess. The flat color mode is named
     `flat`, not `solid`, so it does not collide with `--fill-mode solid`, which is
