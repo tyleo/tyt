@@ -1,7 +1,7 @@
 use crate::{
     Atlas, AttributeBinding, AttributeType, ChannelPacking, ChannelSource, ColorComponent,
     Dependencies, Format, MeshFormat, MeshMethod, MeshTextureMap, ResourceStorage, Result,
-    SelectIndex, Texture, TextureBake,
+    SelectIndex, Texture, TextureBake, TextureBundle,
 };
 use clap::{Parser, ValueEnum};
 use std::{
@@ -53,8 +53,10 @@ pub struct Mesh {
 
     /// Bake a preset material map, `<name> [path]`, repeatable. Quote the value
     /// to override the default path, as `--texture "albedo model-albedo.png"`.
+    /// The `pbr` bundle expands to several maps and so takes no path.
     ///
     /// Presets:
+    /// - pbr: the glTF PBR set of albedo, orm, and emissive
     /// - albedo: RGBA base color
     /// - orm: glTF occlusion, roughness, metallic
     /// - metallic-roughness: glTF metallic, roughness
@@ -206,7 +208,7 @@ impl Mesh {
         let mut maps = Vec::new();
 
         for texture in &self.texture {
-            maps.push(resolve_preset(texture, stem)?);
+            maps.extend(resolve_preset(texture, stem)?);
         }
 
         for chunk in self.texture_map.chunks(2) {
@@ -217,9 +219,10 @@ impl Mesh {
     }
 }
 
-/// Resolves one `--texture <name> [path]` preset into a map. The default file
-/// name is the mesh stem plus the preset name.
-fn resolve_preset(argument: &str, stem: &str) -> Result<MeshTextureMap> {
+/// Resolves one `--texture <name> [path]` argument into its map or maps. A
+/// single preset yields one map, named from the stem or the given path; the
+/// `pbr` bundle yields several maps and takes no path.
+fn resolve_preset(argument: &str, stem: &str) -> Result<Vec<MeshTextureMap>> {
     let mut tokens = argument.split_whitespace();
 
     let name = tokens
@@ -234,6 +237,19 @@ fn resolve_preset(argument: &str, stem: &str) -> Result<MeshTextureMap> {
         )));
     }
 
+    if let Ok(bundle) = TextureBundle::from_str(name, true) {
+        if path.is_some() {
+            return Err(usage(&format!(
+                "--texture bundle `{name}` expands to several maps and takes no path"
+            )));
+        }
+        return Ok(bundle
+            .textures()
+            .iter()
+            .map(|&texture| preset_map(texture, stem))
+            .collect());
+    }
+
     let texture = Texture::from_str(name, true)
         .map_err(|_| usage(&format!("`{name}` is not a --texture preset")))?;
 
@@ -243,16 +259,20 @@ fn resolve_preset(argument: &str, stem: &str) -> Result<MeshTextureMap> {
         ));
     }
 
-    let file = match path {
-        Some(path) => file_name(path)?,
-        None => format!("{stem}-{}.png", preset_name(texture)),
-    };
+    let mut map = preset_map(texture, stem);
+    if let Some(path) = path {
+        map.name = file_name(path)?;
+    }
+    Ok(vec![map])
+}
 
-    Ok(MeshTextureMap {
-        name: file,
+/// The map a preset bakes, its file name the mesh stem plus the preset name.
+fn preset_map(texture: Texture, stem: &str) -> MeshTextureMap {
+    MeshTextureMap {
+        name: format!("{stem}-{}.png", preset_name(texture)),
         preset: Some(texture),
         bake: texture.bake(),
-    })
+    }
 }
 
 /// Resolves one `--texture-map <path> <channels>` packing into a map, applying
@@ -395,7 +415,7 @@ mod tests {
     use super::{Mesh, resolve_preset, resolve_source};
     use crate::{AttributeType, ChannelSource, ColorComponent, Texture, TextureBake};
     use clap::{CommandFactory, Parser, ValueEnum};
-    use std::collections::HashMap;
+    use std::{collections::HashMap, path::Path};
     use voxsmith::{BASE_COLOR_FACTOR, METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
     fn bindings() -> HashMap<&'static str, (&'static str, AttributeType)> {
@@ -416,16 +436,17 @@ mod tests {
 
     #[test]
     fn a_preset_defaults_its_path_from_the_stem() {
-        let map = resolve_preset("albedo", "model").unwrap();
-        assert_eq!(map.name, "model-albedo.png");
-        assert!(matches!(map.preset, Some(Texture::Albedo)));
-        assert_eq!(map.bake, TextureBake::RgbaColor);
+        let maps = resolve_preset("albedo", "model").unwrap();
+        assert_eq!(maps.len(), 1);
+        assert_eq!(maps[0].name, "model-albedo.png");
+        assert!(matches!(maps[0].preset, Some(Texture::Albedo)));
+        assert_eq!(maps[0].bake, TextureBake::RgbaColor);
     }
 
     #[test]
     fn a_preset_path_overrides_the_default_and_takes_its_file_name() {
-        let map = resolve_preset("orm textures/custom.png", "model").unwrap();
-        assert_eq!(map.name, "custom.png");
+        let maps = resolve_preset("orm textures/custom.png", "model").unwrap();
+        assert_eq!(maps[0].name, "custom.png");
     }
 
     #[test]
@@ -433,6 +454,45 @@ mod tests {
         assert!(resolve_preset("bogus", "model").is_err());
         assert!(resolve_preset("computed-occlusion", "model").is_err());
         assert!(resolve_preset("albedo a b", "model").is_err());
+    }
+
+    #[test]
+    fn the_pbr_bundle_expands_to_albedo_orm_and_emissive() {
+        let maps = resolve_preset("pbr", "model").unwrap();
+        let presets: Vec<Texture> = maps.iter().filter_map(|map| map.preset).collect();
+        assert!(matches!(
+            presets.as_slice(),
+            [Texture::Albedo, Texture::Orm, Texture::Emissive]
+        ));
+    }
+
+    #[test]
+    fn a_bundle_takes_no_path() {
+        assert!(resolve_preset("pbr textures/custom.png", "model").is_err());
+    }
+
+    #[test]
+    fn a_bundle_composes_with_explicit_presets() {
+        let mesh = Mesh::try_parse_from([
+            "mesh",
+            "model.vox",
+            "--texture",
+            "pbr",
+            "--texture",
+            "roughness",
+        ])
+        .unwrap();
+        let maps = mesh.resolve_maps(Path::new("model.glb")).unwrap();
+        let presets: Vec<Texture> = maps.iter().filter_map(|map| map.preset).collect();
+        assert!(matches!(
+            presets.as_slice(),
+            [
+                Texture::Albedo,
+                Texture::Orm,
+                Texture::Emissive,
+                Texture::Roughness
+            ]
+        ));
     }
 
     #[test]
