@@ -1,8 +1,8 @@
 use crate::{
-    BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, Error, MaterialBake, MaterialChannel, Result,
-    UsedMaterials, default_scalar,
+    BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, MaterialBake,
+    MaterialChannel, Result, UsedMaterials, default_scalar,
 };
-use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64};
+use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
 use voxcore::{VoxMain, VoxValuePool};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
@@ -21,8 +21,15 @@ pub(crate) fn bake_atlas_pixels(
 
     let mut pixels = vec![0u8; width * height as usize * 4];
 
+    // The emissive bake normalizes each texel by the mesh's greatest strength,
+    // so a flat KHR strength can restore the absolute scale.
+    let max_strength = match bake {
+        MaterialBake::EmissiveColor => max_emissive_strength(state, used),
+        _ => 0.0,
+    };
+
     for index in 0..used.len() {
-        let rgba = bake_texel(state, used, bake, index)?;
+        let rgba = bake_texel(state, used, bake, index, max_strength)?;
 
         let offset = index * 4;
 
@@ -38,6 +45,7 @@ fn bake_texel(
     used: &UsedMaterials,
     bake: &MaterialBake,
     index: usize,
+    max_strength: f64,
 ) -> Result<[u8; 4]> {
     match bake {
         MaterialBake::RgbaColor => Ok(color_bytes(material_attribute(
@@ -47,7 +55,7 @@ fn bake_texel(
             BASE_COLOR_FACTOR,
         ))),
 
-        MaterialBake::EmissiveColor => Ok(emissive_color_bytes(state, used, index)),
+        MaterialBake::EmissiveColor => Ok(emissive_color_bytes(state, used, index, max_strength)),
 
         MaterialBake::Packing(channels) => {
             // A packing fills R, G, B from its channels; an unnamed channel and
@@ -192,18 +200,47 @@ fn scalar_value(value: Option<(&VoxValuePool, u32)>, key: &str) -> f64 {
     }
 }
 
-/// The opaque sRGB `emissiveFactor` color for the material at `index`. The
-/// `emissiveStrength` is not folded in; it rides on the material as a flat
-/// `KHR_materials_emissive_strength` factor, so a strength above `1` survives
-/// rather than clamping into the `[0, 1]` texel. An absent `emissiveFactor` is
-/// black.
-fn emissive_color_bytes(state: &VoxMain, used: &UsedMaterials, index: usize) -> [u8; 4] {
-    let [r, g, b, _] = color_bytes_or(
+/// The emissive texel for the material at `index`: its `emissiveFactor` color
+/// scaled by its `emissiveStrength` as a fraction of `max_strength`, so the
+/// per-voxel gradient rides the texel while a flat
+/// `KHR_materials_emissive_strength` restores the absolute scale. Scaling is in
+/// linear light. An absent color is black.
+fn emissive_color_bytes(
+    state: &VoxMain,
+    used: &UsedMaterials,
+    index: usize,
+    max_strength: f64,
+) -> [u8; 4] {
+    let color = color_bytes_or(
         material_attribute(state, used, index, EMISSIVE_FACTOR),
         [0, 0, 0, 255],
     );
 
-    [r, g, b, 255]
+    let fraction = if max_strength > 0.0 {
+        material_scalar(state, used, index, EMISSIVE_STRENGTH) / max_strength
+    } else {
+        0.0
+    };
+
+    let linear = TySrgbaU8::from_array(color).to_f64().to_lin_srgba();
+
+    TyLinSrgbaF64::new(
+        linear.r * fraction,
+        linear.g * fraction,
+        linear.b * fraction,
+        1.0,
+    )
+    .to_srgba()
+    .to_u8()
+    .to_array()
+}
+
+/// The greatest `emissiveStrength` among the used materials, the divisor that
+/// normalizes each emissive texel so a flat KHR strength restores it.
+pub(crate) fn max_emissive_strength(state: &VoxMain, used: &UsedMaterials) -> f64 {
+    (0..used.len())
+        .map(|index| material_scalar(state, used, index, EMISSIVE_STRENGTH))
+        .fold(0.0, f64::max)
 }
 
 /// The scalar attribute `key` of the material at `index` in `used`, or its spec
@@ -402,11 +439,12 @@ mod tests {
     }
 
     #[test]
-    fn emissive_color_bakes_the_raw_factor_without_strength() {
+    fn emissive_color_folds_strength_toward_the_mesh_max() {
         let mut state = VoxMain::default();
 
-        // emissiveFactor is an sRGB color (no alpha); emissiveStrength no longer
-        // folds in, so the bound strengths must not touch the baked texel.
+        // emissiveFactor is an sRGB color (no alpha); emissiveStrength folds into
+        // the texel as a fraction of the mesh max (1.0 here), so the per-voxel
+        // gradient rides the atlas.
         let factor = state.add_value_pool(VoxValuePool::Srgb {
             values: vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]],
         });
@@ -436,11 +474,13 @@ mod tests {
         let pixels =
             bake_atlas_pixels(&state, &used, &MaterialBake::EmissiveColor, width, height).unwrap();
 
-        // Blue bakes blue, opaque.
+        // Blue at the max strength stays full blue.
         assert_eq!(&pixels[0..4], &[0, 0, 255, 255]);
 
-        // White at strength 0.5 still bakes full white: the strength is a flat
-        // KHR factor now, not folded into the texel.
-        assert_eq!(&pixels[4..8], &[255, 255, 255, 255]);
+        // White at half the max strength folds to a mid-gray, equal across
+        // channels and well below full white.
+        let [r, g, b, a] = [pixels[4], pixels[5], pixels[6], pixels[7]];
+        assert_eq!((g, b, a), (r, r, 255));
+        assert!((180..=195).contains(&r), "half strength folded to {r}");
     }
 }

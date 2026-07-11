@@ -1,8 +1,8 @@
 use crate::{
     EMISSIVE_STRENGTH, Error, IOR, MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage,
     Result, TRANSMISSION_FACTOR, UsedMaterials, atlas_dimensions, bake_atlas_pixels,
-    default_scalar, encode_rgba8_png, material_scalar, mesh_slices, resolve_used_materials,
-    texel_center,
+    default_scalar, encode_rgba8_png, material_scalar, max_emissive_strength, mesh_slices,
+    resolve_used_materials, texel_center,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
@@ -168,7 +168,7 @@ pub(crate) fn build_material_document(
         images.push(image);
     }
 
-    let extensions = material_extensions(state, &used);
+    let extensions = material_extensions(state, &used, &request.maps);
 
     let material = build_material(&request.maps, &extensions);
 
@@ -220,12 +220,16 @@ pub(crate) fn build_material_document(
     })
 }
 
-/// The KHR material extensions the mesh's representative material writes back,
-/// each emitted only when it differs from the glTF spec default so a plain
-/// export stays clean. glTF carries `ior`, `transmissionFactor`, and
-/// `emissiveStrength` per material rather than per texel, so the first used
-/// material supplies the one flat factor for the whole mesh.
-fn material_extensions(state: &VoxMain, used: &UsedMaterials) -> Map<String, Value> {
+/// The KHR material extensions the material writes back, each emitted only when
+/// it differs from the glTF spec default so a plain export stays clean. `ior`
+/// and `transmissionFactor` are per-material in glTF, taken from the first used
+/// material. `emissiveStrength` is the mesh's greatest strength, restoring the
+/// scale the emissive texel was normalized by.
+fn material_extensions(
+    state: &VoxMain,
+    used: &UsedMaterials,
+    maps: &[MaterialMap],
+) -> Map<String, Value> {
     let mut extensions = Map::new();
 
     for (key, extension, field) in [
@@ -235,16 +239,28 @@ fn material_extensions(state: &VoxMain, used: &UsedMaterials) -> Map<String, Val
             "KHR_materials_transmission",
             "transmissionFactor",
         ),
-        (
-            EMISSIVE_STRENGTH,
-            "KHR_materials_emissive_strength",
-            "emissiveStrength",
-        ),
     ] {
         let value = material_scalar(state, used, 0, key);
 
         if value != default_scalar(key).unwrap_or(0.0) {
             extensions.insert(extension.to_owned(), json!({ field: value }));
+        }
+    }
+
+    // The emissive texel was normalized by the mesh's greatest strength, so a
+    // flat KHR strength restores it and the per-voxel gradient survives one
+    // material. Emitted only with an emissive map, and only when it lifts past
+    // the default 1.
+    if maps
+        .iter()
+        .any(|map| matches!(map.slot, MaterialSlot::Emissive))
+    {
+        let max = max_emissive_strength(state, used);
+        if max > 0.0 && max != default_scalar(EMISSIVE_STRENGTH).unwrap_or(0.0) {
+            extensions.insert(
+                "KHR_materials_emissive_strength".to_owned(),
+                json!({ "emissiveStrength": max }),
+            );
         }
     }
 
