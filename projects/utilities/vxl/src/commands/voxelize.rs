@@ -57,8 +57,8 @@ pub struct Voxelize {
     #[arg(value_name = "name", long)]
     name: Option<String>,
 
-    /// Most materials the palette may hold; sampling over this reduces to it
-    /// with a note. `none` disables the cap.
+    /// Most materials the palette may hold; sampling over this reduces to it.
+    /// `none` disables the cap.
     #[arg(value_name = "max-palette-materials", long, default_value = "256")]
     max_palette_materials: MaxPaletteMaterials,
 

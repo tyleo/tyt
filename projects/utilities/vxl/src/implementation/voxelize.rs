@@ -113,8 +113,7 @@ fn resolve_grid(extent: TyVector3<f64>, resolution: GridResolution) -> (TyVector
 }
 
 /// Applies the `--max-palette-materials` cap to voxelize's one generated
-/// palette. Inert when the cap is `none` or the palette already fits. Reduction
-/// is the designed default, so it fires on nearly every run and stays quiet.
+/// palette. Inert when the cap is `none` or the palette already fits.
 fn reduce_generated_palette(state: &mut VoxMain, reduction: PaletteReduction) -> Result<()> {
     let Some(max_materials) = reduction.max_materials else {
         return Ok(());
