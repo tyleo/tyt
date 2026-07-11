@@ -220,11 +220,10 @@ pub(crate) fn build_material_document(
     })
 }
 
-/// The KHR material extensions the material writes back, each emitted only when
-/// it differs from the glTF spec default so a plain export stays clean. `ior`
-/// and `transmissionFactor` are per-material in glTF, taken from the first used
-/// material. `emissiveStrength` is the mesh's greatest strength, restoring the
-/// scale the emissive texel was normalized by.
+/// The KHR material extensions the material writes back, each emitted only
+/// when it differs from the glTF spec default so a plain export stays clean.
+/// `ior` and `transmissionFactor` come from the first used material;
+/// `emissiveStrength` is the mesh's greatest strength.
 fn material_extensions(
     state: &VoxMain,
     used: &UsedMaterials,
@@ -247,10 +246,9 @@ fn material_extensions(
         }
     }
 
-    // The emissive texel was normalized by the mesh's greatest strength, so a
-    // flat KHR strength restores it and the per-voxel gradient survives one
-    // material. Emitted only with an emissive map, and only when it lifts past
-    // the default 1.
+    // The flat strength that rescales the normalized emissive texels, emitted
+    // only with an emissive map and a positive max that differs from the
+    // default 1.
     if maps
         .iter()
         .any(|map| matches!(map.slot, MaterialSlot::Emissive))

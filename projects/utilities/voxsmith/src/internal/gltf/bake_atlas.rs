@@ -21,8 +21,8 @@ pub(crate) fn bake_atlas_pixels(
 
     let mut pixels = vec![0u8; width * height as usize * 4];
 
-    // The emissive bake normalizes each texel by the mesh's greatest strength,
-    // so a flat KHR strength can restore the absolute scale.
+    // Only the emissive bake normalizes each texel by the mesh's greatest
+    // strength.
     let max_strength = match bake {
         MaterialBake::EmissiveColor => max_emissive_strength(state, used),
         _ => 0.0,
@@ -200,11 +200,11 @@ fn scalar_value(value: Option<(&VoxValuePool, u32)>, key: &str) -> f64 {
     }
 }
 
-/// The emissive texel for the material at `index`: its `emissiveFactor` color
-/// scaled by its `emissiveStrength` as a fraction of `max_strength`, so the
-/// per-voxel gradient rides the texel while a flat
-/// `KHR_materials_emissive_strength` restores the absolute scale. Scaling is in
-/// linear light. An absent color is black.
+/// The emissive texel for the material at `index`: its `emissiveFactor`
+/// scaled in linear light by `emissiveStrength / max_strength`. Per-voxel
+/// strengths survive as a gradient, and a flat
+/// `KHR_materials_emissive_strength` of `max_strength` restores the absolute
+/// scale. An absent color is black.
 fn emissive_color_bytes(
     state: &VoxMain,
     used: &UsedMaterials,
@@ -235,8 +235,7 @@ fn emissive_color_bytes(
     .to_array()
 }
 
-/// The greatest `emissiveStrength` among the used materials, the divisor that
-/// normalizes each emissive texel so a flat KHR strength restores it.
+/// The greatest `emissiveStrength` among the used materials.
 pub(crate) fn max_emissive_strength(state: &VoxMain, used: &UsedMaterials) -> f64 {
     (0..used.len())
         .map(|index| material_scalar(state, used, index, EMISSIVE_STRENGTH))
@@ -442,9 +441,8 @@ mod tests {
     fn emissive_color_folds_strength_toward_the_mesh_max() {
         let mut state = VoxMain::default();
 
-        // emissiveFactor is an sRGB color (no alpha); emissiveStrength folds into
-        // the texel as a fraction of the mesh max (1.0 here), so the per-voxel
-        // gradient rides the atlas.
+        // emissiveFactor is sRGB; strengths 1.0 and 0.5 fold into the texels as
+        // fractions of the mesh max, 1.0.
         let factor = state.add_value_pool(VoxValuePool::Srgb {
             values: vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]],
         });
@@ -477,8 +475,8 @@ mod tests {
         // Blue at the max strength stays full blue.
         assert_eq!(&pixels[0..4], &[0, 0, 255, 255]);
 
-        // White at half the max strength folds to a mid-gray, equal across
-        // channels and well below full white.
+        // White at half the max strength folds in linear light to a light gray,
+        // equal across channels and below full white.
         let [r, g, b, a] = [pixels[4], pixels[5], pixels[6], pixels[7]];
         assert_eq!((g, b, a), (r, r, 255));
         assert!((180..=195).contains(&r), "half strength folded to {r}");
