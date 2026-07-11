@@ -1,7 +1,7 @@
 use clap::{CommandFactory, Parser, Subcommand};
 use clap_complete::Shell;
 use std::{io, process};
-use vxl::{DependenciesImpl, Vxl};
+use vxl::{DependenciesImpl, Error, Vxl};
 
 /// A command-line tool for working with voxels.
 #[derive(Clone, Debug, Parser)]
@@ -32,8 +32,13 @@ fn main() {
         }
         Command::Vxl(cmd) => {
             if let Err(e) = cmd.execute(DependenciesImpl) {
-                eprintln!("error: {e}");
-                process::exit(1);
+                match e {
+                    Error::Usage(clap_error) => clap_error.exit(),
+                    e => {
+                        eprintln!("error: {e}");
+                        process::exit(1);
+                    }
+                }
             }
         }
     }

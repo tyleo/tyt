@@ -1,3 +1,4 @@
+use clap::{Error as ClapError, error::ErrorKind};
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -8,12 +9,27 @@ use std::{
 #[derive(Debug)]
 pub enum Error {
     IO(IOError),
+
+    /// A usage error, rendered and exited like a clap parse failure.
+    Usage(ClapError),
+}
+
+impl Error {
+    /// A usage error for a rule clap cannot express, presented like a clap parse
+    /// failure: clap's formatting and exit code 2.
+    pub(crate) fn usage(message: impl Display) -> Error {
+        Error::Usage(ClapError::raw(
+            ErrorKind::ValueValidation,
+            format!("{message}\n"),
+        ))
+    }
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
             Error::IO(e) => e.fmt(f),
+            Error::Usage(e) => e.fmt(f),
         }
     }
 }
@@ -22,6 +38,7 @@ impl StdError for Error {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match self {
             Error::IO(e) => Some(e),
+            Error::Usage(e) => Some(e),
         }
     }
 }

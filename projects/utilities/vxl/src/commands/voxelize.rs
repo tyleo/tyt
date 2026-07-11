@@ -1,13 +1,9 @@
 use crate::{
-    Dependencies, FillMode, GridResolutionOptions, MaterialMode, MaxPaletteMaterials, MeshFormat,
-    PaletteReductionOptions, Result, VoxjEncodingOptions,
+    Dependencies, Error, FillMode, GridResolutionOptions, MaterialMode, MaxPaletteMaterials,
+    MeshFormat, PaletteReductionOptions, Result, VoxjEncodingOptions,
 };
 use clap::Parser;
-use std::{
-    io::{Error as IOError, ErrorKind},
-    path::PathBuf,
-    result::Result as StdResult,
-};
+use std::{path::PathBuf, result::Result as StdResult};
 
 /// Rasterizes a mesh into a voxel grid, the inverse of `mesh`.
 #[derive(Clone, Debug, Parser)]
@@ -63,7 +59,7 @@ pub struct Voxelize {
 
 impl Voxelize {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let resolution = self.resolution_options.resolve()?;
+        let resolution = self.resolution_options.resolve();
 
         self.validate_fill_color()?;
 
@@ -99,7 +95,7 @@ impl Voxelize {
             && self.fill_mode == FillMode::Surface
             && self.material_mode != MaterialMode::Flat
         {
-            return Err(usage(
+            return Err(Error::usage(
                 "--fill-color has no effect with --fill-mode surface and a sampling \
                  --material-mode; it applies under --material-mode flat or --fill-mode solid",
             ));
@@ -107,12 +103,6 @@ impl Voxelize {
 
         Ok(())
     }
-}
-
-/// A usage error for a rule clap cannot express, exiting non-zero with a
-/// message.
-fn usage(message: &str) -> crate::Error {
-    IOError::new(ErrorKind::InvalidInput, message).into()
 }
 
 /// Parses a `#RRGGBB` or `#RRGGBBAA` hex `--fill-color` into straight RGBA

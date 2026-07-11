@@ -1,12 +1,11 @@
 use crate::{
     Atlas, AttributeBinding, AttributeType, ChannelPacking, ChannelSource, ColorComponent,
-    Dependencies, Format, MeshFormat, MeshMethod, MeshTextureMap, ResourceStorage, Result,
-    SelectIndex, Texture, TextureBake, TextureBundle,
+    Dependencies, Error, Format, MeshFormat, MeshMethod, MeshTextureMap, ResourceStorage, Result,
+    SelectIndex, Texture, TextureBake, TextureBundle, parse_positive_f64,
 };
 use clap::{Parser, ValueEnum};
 use std::{
     collections::HashMap,
-    io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
 };
 use voxsmith::{BASE_COLOR_FACTOR, EMISSIVE_FACTOR};
@@ -35,7 +34,7 @@ pub struct Mesh {
 
     /// Real-world edge length of one voxel in meters, applied as a uniform scale
     /// to every output vertex.
-    #[arg(value_name = "scale", long, default_value = "1.0")]
+    #[arg(value_name = "scale", long, default_value = "1.0", value_parser = parse_positive_f64)]
     scale: f64,
 
     /// Meshing strategy.
@@ -116,10 +115,6 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        if self.scale <= 0.0 || self.scale.is_nan() {
-            return Err(usage("--scale must be greater than 0"));
-        }
-
         let format = self
             .to
             .or_else(|| self.output.as_deref().and_then(MeshFormat::from_path))
@@ -133,7 +128,7 @@ impl Mesh {
         // The unwrap atlas, and the computed-occlusion map it carries, are a
         // later pass; only the palette atlas bakes for now.
         if let Atlas::Unwrap = self.atlas {
-            return Err(usage(
+            return Err(Error::usage(
                 "--atlas unwrap is not yet supported; use --atlas palette",
             ));
         }
@@ -161,13 +156,13 @@ impl Mesh {
             [object] => *object,
 
             [] => {
-                return Err(usage(
+                return Err(Error::usage(
                     "no object matched the selection; check --select and --select-index",
                 ));
             }
 
             objects => {
-                return Err(usage(&format!(
+                return Err(Error::usage(format!(
                     "the selection resolved to {} objects, but `mesh` outputs exactly one; \
                      narrow it with --select or --select-index",
                     objects.len(),
@@ -227,19 +222,19 @@ fn resolve_preset(argument: &str, stem: &str) -> Result<Vec<MeshTextureMap>> {
 
     let name = tokens
         .next()
-        .ok_or_else(|| usage("--texture needs a preset name"))?;
+        .ok_or_else(|| Error::usage("--texture needs a preset name"))?;
 
     let path = tokens.next();
 
     if tokens.next().is_some() {
-        return Err(usage(&format!(
+        return Err(Error::usage(format!(
             "--texture takes `<name> [path]`, but got `{argument}`"
         )));
     }
 
     if let Ok(bundle) = TextureBundle::from_str(name, true) {
         if path.is_some() {
-            return Err(usage(&format!(
+            return Err(Error::usage(format!(
                 "--texture bundle `{name}` expands to several maps and takes no path"
             )));
         }
@@ -251,10 +246,10 @@ fn resolve_preset(argument: &str, stem: &str) -> Result<Vec<MeshTextureMap>> {
     }
 
     let texture = Texture::from_str(name, true)
-        .map_err(|_| usage(&format!("`{name}` is not a --texture preset")))?;
+        .map_err(|_| Error::usage(format!("`{name}` is not a --texture preset")))?;
 
     if let Texture::ComputedOcclusion = texture {
-        return Err(usage(
+        return Err(Error::usage(
             "--texture computed-occlusion requires --atlas unwrap, which is not yet supported",
         ));
     }
@@ -282,9 +277,7 @@ fn resolve_custom(
     channels: &str,
     bindings: &HashMap<&str, (&str, AttributeType)>,
 ) -> Result<MeshTextureMap> {
-    let packing = channels
-        .parse::<ChannelPacking>()
-        .map_err(|message| usage(&message))?;
+    let packing = channels.parse::<ChannelPacking>().map_err(Error::usage)?;
 
     let resolved = resolve_packing(&packing, bindings)?;
 
@@ -331,7 +324,7 @@ fn resolve_source(
     } = source
     else {
         if let ChannelSource::ComputedOcclusion = source {
-            return Err(usage(
+            return Err(Error::usage(
                 "computed-occlusion requires --atlas unwrap, which is not yet supported",
             ));
         }
@@ -352,19 +345,19 @@ fn resolve_source(
     if ty.is_color() {
         match component {
             None => {
-                return Err(usage(&format!(
+                return Err(Error::usage(format!(
                     "`{key}` is a color; name a component, as `{key}.r`"
                 )));
             }
             Some(ColorComponent::A) if !ty.has_alpha() => {
-                return Err(usage(&format!(
+                return Err(Error::usage(format!(
                     "`{key}` is a color with no alpha; use r, g, or b"
                 )));
             }
             _ => {}
         }
     } else if component.is_some() {
-        return Err(usage(&format!(
+        return Err(Error::usage(format!(
             "`{key}` is a scalar and has no color component"
         )));
     }
@@ -401,13 +394,7 @@ fn file_name(path: &str) -> Result<String> {
         .file_name()
         .and_then(|name| name.to_str())
         .map(str::to_owned)
-        .ok_or_else(|| usage(&format!("`{path}` has no file name")))
-}
-
-/// A usage error for a rule clap cannot express, exiting non-zero with a
-/// message.
-fn usage(message: &str) -> crate::Error {
-    IOError::new(ErrorKind::InvalidInput, message).into()
+        .ok_or_else(|| Error::usage(format!("`{path}` has no file name")))
 }
 
 #[cfg(test)]
@@ -595,6 +582,12 @@ mod tests {
 
         let chosen = Mesh::try_parse_from(["mesh", "model.vox", "--layer", "2"]).unwrap();
         assert_eq!(chosen.layer, 2);
+    }
+
+    #[test]
+    fn a_non_positive_scale_is_rejected_at_parse() {
+        assert!(Mesh::try_parse_from(["mesh", "model.vox", "--scale", "0"]).is_err());
+        assert!(Mesh::try_parse_from(["mesh", "model.vox", "--scale", "-1"]).is_err());
     }
 
     #[test]
