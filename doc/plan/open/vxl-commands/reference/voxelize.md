@@ -3,25 +3,28 @@
 *Part of the [Vxl Command-Line Reference](../README.md).*
 
 ```
-vxl voxelize <input> [output] (--resolution <n> | --voxel-size <meters>) [options]
+vxl voxelize <input> [output] [--resolution <axis> <n> | --voxel-size <meters>] [options]
 ```
 
 Rasterizes a mesh into a voxel grid. This is the inverse of [`vxl mesh`](mesh.md).
 The input is a glTF mesh, text (`.gltf`) or binary (`.glb`); glTF is the only
 mesh format read for now. The default output path is the input stem with the
-`.voxj` extension. The grid resolution is set exactly one of two mutually
-exclusive ways: a voxel count with `--resolution` or a real-world voxel
-size with `--voxel-size`.
+`.voxj` extension. The grid resolution is set one of two mutually
+exclusive ways: a voxel count along a chosen axis with `--resolution` or a
+real-world voxel size with `--voxel-size`. When neither is given it defaults to
+`--voxel-size 1`, one voxel per meter.
 
 1. `--from` `gltf` | `glb`: source mesh format, glTF text or binary. Inferred
    from the input extension when omitted.
-2. `--resolution <n>`: grid resolution in voxels along the longest axis.
-   The other axes are sized to preserve aspect, and the result is fit tight to
-   `bounds`. Use this to cap detail at a known voxel count.
-3. `--voxel-size <meters>`: the edge length of one voxel in meters. Each
-   axis count is the mesh extent on that axis in meters divided by `<meters>` and
-   rounded up, so the same `<meters>` yields a consistent real-world voxel size
-   across meshes of different sizes. Mutually exclusive with `--resolution`.
+2. `--resolution <axis> <n>`: pin one axis to a voxel count of `<n>` and size the
+   other axes to preserve aspect, fit tight to `bounds`. `<axis>` selects which
+   axis `<n>` counts along: `long` the longest extent, `short` the shortest, or
+   `x` | `y` | `z` a specific axis. Use this to cap detail at a known voxel count.
+3. `--voxel-size <meters>` (default `1`): the edge length of one voxel in meters.
+   Each axis count is the mesh extent on that axis in meters divided by `<meters>`
+   and rounded up, so the same `<meters>` yields a consistent real-world voxel size
+   across meshes of different sizes. Mutually exclusive with `--resolution`, and
+   used with `<meters>` of `1` when neither flag is given.
 4. `--fill-mode` `solid` | `surface` (default `solid`): how the mesh fills the
    grid. `solid` rasterizes the surface and flood-fills the volume it encloses,
    producing a filled body, and expects a watertight mesh. `surface` rasterizes

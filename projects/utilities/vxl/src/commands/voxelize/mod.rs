@@ -8,6 +8,7 @@ mod palette_reduction;
 mod palette_reduction_options;
 mod quantize_method;
 mod quantize_options;
+mod resolution_axis;
 #[allow(clippy::module_inception)]
 mod voxelize;
 
@@ -21,4 +22,5 @@ pub use palette_reduction::*;
 pub use palette_reduction_options::*;
 pub use quantize_method::*;
 pub use quantize_options::*;
+pub use resolution_axis::*;
 pub use voxelize::*;

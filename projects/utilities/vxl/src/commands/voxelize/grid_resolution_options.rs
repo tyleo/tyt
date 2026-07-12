@@ -1,17 +1,25 @@
-use crate::{PositiveF64, commands::GridResolution};
-use clap::{ArgGroup, Args};
+use crate::{
+    Error, PositiveF64, Result,
+    commands::{GridResolution, ResolutionAxis},
+};
+use clap::{ArgGroup, Args, ValueEnum};
 
-/// The `voxelize` grid-resolution controls. Flattened onto the command,
-/// which requires exactly one of the two flags.
+/// The `voxelize` grid-resolution controls. Flattened onto the command, which
+/// takes at most one of the two flags and defaults to one voxel per meter when
+/// neither is given.
 #[derive(Clone, Debug, Args)]
 #[command(group(
-    ArgGroup::new("grid_resolution").required(true).args(["resolution", "voxel_size"])
+    ArgGroup::new("grid_resolution").args(["resolution", "voxel_size"])
 ))]
 pub struct GridResolutionOptions {
-    /// Grid resolution in voxels along the longest axis; other axes preserve
-    /// aspect.
-    #[arg(value_name = "resolution", long, value_parser = clap::value_parser!(u32).range(1..))]
-    resolution: Option<u32>,
+    /// Voxel count `n` along a chosen axis, the other axes preserving aspect.
+    /// `<axis>` is one of:
+    ///
+    /// 1. `long`: the mesh's longest extent.
+    /// 2. `short`: the mesh's shortest extent.
+    /// 3. `x` | `y` | `z`: that specific axis.
+    #[arg(value_names = ["axis", "n"], long, num_args = 2, verbatim_doc_comment)]
+    resolution: Option<Vec<String>>,
 
     /// Edge length of one voxel in meters, keeping the mesh's real-world size.
     #[arg(value_name = "voxel-size", long)]
@@ -19,22 +27,46 @@ pub struct GridResolutionOptions {
 }
 
 impl GridResolutionOptions {
-    /// Resolves whichever flag is set into a [`GridResolution`]. The required
-    /// `ArgGroup` guarantees exactly one is set.
-    pub fn resolve(&self) -> GridResolution {
-        self.resolution
-            .map(GridResolution::VoxelGridLength)
-            .or_else(|| {
-                self.voxel_size
-                    .map(|size| GridResolution::MetersPerVoxel(size.0))
-            })
-            .expect("the grid_resolution ArgGroup requires one flag")
+    /// Resolves the grid-resolution flags into a [`GridResolution`]. `--resolution`
+    /// pins one axis to a voxel count; `--voxel-size` sets a real-world voxel size;
+    /// with neither it defaults to one voxel per meter. Rejects a `--resolution`
+    /// with an unknown axis or a count below one.
+    pub fn resolve(&self) -> Result<GridResolution> {
+        if let Some(values) = &self.resolution {
+            // `num_args = 2` guarantees exactly two values when the flag is set.
+            let [axis, count] = values.as_slice() else {
+                return Err(Error::usage("--resolution takes an axis and a count"));
+            };
+
+            let axis = ResolutionAxis::from_str(axis, false).map_err(|_| {
+                Error::usage(format!(
+                    "--resolution axis `{axis}` must be one of long, short, x, y, z"
+                ))
+            })?;
+
+            let count = match count.parse::<u32>() {
+                Ok(count) if count >= 1 => count,
+                _ => {
+                    return Err(Error::usage(format!(
+                        "--resolution count `{count}` must be a whole number of at least 1"
+                    )));
+                }
+            };
+
+            return Ok(GridResolution::AxisVoxelCount { axis, count });
+        }
+
+        if let Some(size) = self.voxel_size {
+            return Ok(GridResolution::MetersPerVoxel(size.0));
+        }
+
+        Ok(GridResolution::MetersPerVoxel(1.0))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::commands::{GridResolution, GridResolutionOptions};
+    use crate::commands::{GridResolution, GridResolutionOptions, ResolutionAxis};
     use clap::Parser;
 
     /// A throwaway command flattening the grid-resolution options, so their flags
@@ -45,25 +77,57 @@ mod tests {
         options: GridResolutionOptions,
     }
 
-    /// The resolution `args` resolve to. Panics if they fail to parse.
+    /// The resolution `args` resolve to. Panics if they fail to parse or resolve.
     fn resolve(args: &[&str]) -> GridResolution {
         let mut argv = vec!["test"];
         argv.extend_from_slice(args);
-        Harness::try_parse_from(argv).unwrap().options.resolve()
+        Harness::try_parse_from(argv)
+            .unwrap()
+            .options
+            .resolve()
+            .unwrap()
     }
 
-    /// Whether `args` fail to parse.
+    /// Whether `args` fail to parse or resolve.
     fn rejects(args: &[&str]) -> bool {
         let mut argv = vec!["test"];
         argv.extend_from_slice(args);
-        Harness::try_parse_from(argv).is_err()
+        match Harness::try_parse_from(argv) {
+            Ok(harness) => harness.options.resolve().is_err(),
+            Err(_) => true,
+        }
     }
 
     #[test]
-    fn resolution_resolves_to_a_count() {
+    fn resolution_resolves_to_an_axis_count() {
         assert!(matches!(
-            resolve(&["--resolution", "32"]),
-            GridResolution::VoxelGridLength(32)
+            resolve(&["--resolution", "long", "32"]),
+            GridResolution::AxisVoxelCount {
+                axis: ResolutionAxis::Long,
+                count: 32
+            }
+        ));
+    }
+
+    #[test]
+    fn resolution_accepts_the_short_axis() {
+        assert!(matches!(
+            resolve(&["--resolution", "short", "16"]),
+            GridResolution::AxisVoxelCount {
+                axis: ResolutionAxis::Short,
+                count: 16
+            }
+        ));
+    }
+
+    #[test]
+    fn resolution_accepts_a_named_axis() {
+        assert!(matches!(
+            resolve(&["--resolution", "y", "8"]),
+            GridResolution::AxisVoxelCount {
+                axis: ResolutionAxis::Y,
+                count: 8
+            }
         ));
     }
 
@@ -74,8 +138,23 @@ mod tests {
     }
 
     #[test]
+    fn neither_flag_defaults_to_one_meter_per_voxel() {
+        assert!(matches!(resolve(&[]), GridResolution::MetersPerVoxel(size) if size == 1.0));
+    }
+
+    #[test]
     fn a_zero_count_is_rejected() {
-        assert!(rejects(&["--resolution", "0"]));
+        assert!(rejects(&["--resolution", "long", "0"]));
+    }
+
+    #[test]
+    fn an_unknown_axis_is_rejected() {
+        assert!(rejects(&["--resolution", "diagonal", "4"]));
+    }
+
+    #[test]
+    fn a_lone_axis_without_a_count_is_rejected() {
+        assert!(rejects(&["--resolution", "long"]));
     }
 
     #[test]
@@ -87,11 +166,12 @@ mod tests {
 
     #[test]
     fn the_two_flags_are_mutually_exclusive() {
-        assert!(rejects(&["--resolution", "32", "--voxel-size", "0.25"]));
-    }
-
-    #[test]
-    fn one_flag_is_required() {
-        assert!(rejects(&[]));
+        assert!(rejects(&[
+            "--resolution",
+            "long",
+            "32",
+            "--voxel-size",
+            "0.25"
+        ]));
     }
 }

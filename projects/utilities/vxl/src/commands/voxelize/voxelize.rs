@@ -54,7 +54,7 @@ pub struct Voxelize {
 
 impl Voxelize {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        let resolution = self.resolution_options.resolve();
+        let resolution = self.resolution_options.resolve()?;
 
         self.validate_fill_color()?;
 
@@ -109,7 +109,7 @@ mod tests {
     /// Parses a `voxelize` invocation with a valid resolution already set, so a
     /// test only supplies the flags it exercises.
     fn parse(args: &[&str]) -> Voxelize {
-        let mut argv = vec!["voxelize", "model.glb", "--resolution", "32"];
+        let mut argv = vec!["voxelize", "model.glb", "--resolution", "long", "32"];
         argv.extend_from_slice(args);
         Voxelize::try_parse_from(argv).unwrap()
     }

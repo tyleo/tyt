@@ -2,7 +2,7 @@ use crate::{
     MeshFormat, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat,
     commands::{
         ColorSpace, Dither, FillMode, GridResolution, MaterialMode, PaletteReduction,
-        QuantizeMethod,
+        QuantizeMethod, ResolutionAxis,
     },
     implementation,
 };
@@ -83,8 +83,8 @@ pub fn voxelize(
 
 /// Resolves the grid counts and the placing node's scale from the mesh `extent`
 /// and the chosen `resolution`. `MetersPerVoxel` sizes each axis to a fixed
-/// real-world voxel size and records that size as the node scale;
-/// `VoxelGridLength` caps the longest axis at the given count, preserving aspect,
+/// real-world voxel size and records that size as the node scale; `AxisVoxelCount`
+/// pins the chosen axis at the given count, sizing the others to preserve aspect,
 /// and leaves the node scale at `1`. Every axis is at least one voxel.
 fn resolve_grid(extent: TyVector3<f64>, resolution: GridResolution) -> (TyVector3U32, f64) {
     match resolution {
@@ -96,14 +96,20 @@ fn resolve_grid(extent: TyVector3<f64>, resolution: GridResolution) -> (TyVector
             (counts, meters)
         }
 
-        GridResolution::VoxelGridLength(length) => {
-            let n = length.max(1) as f64;
+        GridResolution::AxisVoxelCount { axis, count } => {
+            let n = count.max(1) as f64;
 
-            let longest = extent.x.max(extent.y).max(extent.z);
+            let reference = match axis {
+                ResolutionAxis::Long => extent.x.max(extent.y).max(extent.z),
+                ResolutionAxis::Short => extent.x.min(extent.y).min(extent.z),
+                ResolutionAxis::X => extent.x,
+                ResolutionAxis::Y => extent.y,
+                ResolutionAxis::Z => extent.z,
+            };
 
             let count = |edge: f64| {
-                if longest > 0.0 {
-                    (edge / longest * n).round().max(1.0) as u32
+                if reference > 0.0 {
+                    (edge / reference * n).round().max(1.0) as u32
                 } else {
                     1
                 }
@@ -188,24 +194,56 @@ fn dither(dither: Dither) -> VoxsmithDither {
 #[cfg(test)]
 mod tests {
     use super::resolve_grid;
-    use crate::commands::GridResolution;
+    use crate::commands::{GridResolution, ResolutionAxis};
     use ty_math::{TyVector3, TyVector3U32};
 
     #[test]
-    fn voxel_grid_length_caps_the_longest_axis_and_preserves_aspect() {
+    fn axis_voxel_count_sizes_the_longest_axis_and_preserves_aspect() {
         let (counts, node_scale) = resolve_grid(
             TyVector3::new(4.0, 2.0, 1.0),
-            GridResolution::VoxelGridLength(4),
+            GridResolution::AxisVoxelCount {
+                axis: ResolutionAxis::Long,
+                count: 4,
+            },
         );
         assert_eq!(counts, TyVector3U32::new(4, 2, 1));
         assert_eq!(node_scale, 1.0);
     }
 
     #[test]
-    fn voxel_grid_length_keeps_a_zero_axis_at_one_voxel() {
+    fn axis_voxel_count_sizes_the_shortest_axis() {
+        // The shortest axis (z, 1 wide) at 4 voxels scales x to 16 and y to 8.
+        let (counts, _) = resolve_grid(
+            TyVector3::new(4.0, 2.0, 1.0),
+            GridResolution::AxisVoxelCount {
+                axis: ResolutionAxis::Short,
+                count: 4,
+            },
+        );
+        assert_eq!(counts, TyVector3U32::new(16, 8, 4));
+    }
+
+    #[test]
+    fn axis_voxel_count_sizes_a_named_axis() {
+        // The y axis (2 wide) at 4 voxels scales x to 8 and z to 2.
+        let (counts, _) = resolve_grid(
+            TyVector3::new(4.0, 2.0, 1.0),
+            GridResolution::AxisVoxelCount {
+                axis: ResolutionAxis::Y,
+                count: 4,
+            },
+        );
+        assert_eq!(counts, TyVector3U32::new(8, 4, 2));
+    }
+
+    #[test]
+    fn axis_voxel_count_keeps_a_zero_axis_at_one_voxel() {
         let (counts, _) = resolve_grid(
             TyVector3::new(4.0, 0.0, 2.0),
-            GridResolution::VoxelGridLength(4),
+            GridResolution::AxisVoxelCount {
+                axis: ResolutionAxis::Long,
+                count: 4,
+            },
         );
         assert_eq!(counts, TyVector3U32::new(4, 1, 2));
     }
