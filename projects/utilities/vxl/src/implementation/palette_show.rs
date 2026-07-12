@@ -68,8 +68,10 @@ fn terminal_columns() -> Option<usize> {
 struct Collection {
     /// The resolved palette index, even when the selector used `*`.
     palette: usize,
-    /// The attribute key, with the color component appended when one is read.
-    attribute: String,
+    /// The attribute key, without any color component.
+    key: String,
+    /// The color component read from the attribute, when one was given.
+    component: Option<ColorComponent>,
     /// How each value renders.
     format: PaletteShowFormat,
     /// One sample per palette material, in material order.
@@ -77,10 +79,29 @@ struct Collection {
 }
 
 impl Collection {
-    /// The `{palette}.{attribute}` header, with the component already folded
-    /// into `attribute`.
+    /// The `{palette}."{key}"` header for the text layouts, with the color
+    /// component appended after the closing quote when one was read.
     fn header(&self) -> String {
-        format!("{}.{}", self.palette, self.attribute)
+        format!(
+            "{}.{}{}",
+            self.palette,
+            implementation::quote_name(&self.key),
+            self.component_suffix()
+        )
+    }
+
+    /// The raw `{key}` or `{key}.{component}` attribute label for the JSON
+    /// records, where the serialization already quotes it.
+    fn attribute(&self) -> String {
+        format!("{}{}", self.key, self.component_suffix())
+    }
+
+    /// The `.{component}` suffix, or empty when no component was read.
+    fn component_suffix(&self) -> String {
+        match self.component {
+            Some(component) => format!(".{}", component_letter(component)),
+            None => String::new(),
+        }
     }
 }
 
@@ -279,13 +300,10 @@ fn build_collection(
         })
         .collect();
 
-    let attribute = match component {
-        Some(component) => format!("{key}.{}", component_letter(component)),
-        None => key.to_string(),
-    };
     Ok(Collection {
         palette: index,
-        attribute,
+        key: key.to_string(),
+        component,
         format,
         samples,
     })
@@ -841,7 +859,7 @@ fn render_json(collections: &[Collection], pretty: bool) -> String {
                 .collect();
             json!({
                 "palette": collection.palette,
-                "attribute": collection.attribute,
+                "attribute": collection.attribute(),
                 "values": values,
             })
         })
@@ -934,7 +952,7 @@ mod tests {
             &[("0", "baseColorFactor", "value")],
             PaletteShowLayout::Row,
         );
-        assert_eq!(output, "0.baseColorFactor #FF0000FF #00FF0080\n");
+        assert_eq!(output, "0.\"baseColorFactor\" #FF0000FF #00FF0080\n");
     }
 
     #[test]
@@ -946,7 +964,7 @@ mod tests {
             PaletteShowLayout::Row,
         );
         // Alpha bytes FF and 80 as 0..255 integers.
-        assert_eq!(output, "0.baseColorFactor.a 255 128\n");
+        assert_eq!(output, "0.\"baseColorFactor\".a 255 128\n");
     }
 
     #[test]
@@ -959,7 +977,7 @@ mod tests {
         );
         assert_eq!(
             output,
-            "0.baseColorFactor \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
+            "0.\"baseColorFactor\" \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
         );
     }
 
@@ -982,7 +1000,7 @@ mod tests {
             &[("0", "shadows", "swatch")],
             PaletteShowLayout::Row,
         );
-        assert_eq!(output, "0.shadows true false\n");
+        assert_eq!(output, "0.\"shadows\" true false\n");
     }
 
     #[test]
@@ -1001,9 +1019,9 @@ mod tests {
         );
         assert_eq!(
             output,
-            "0.baseColorFactor #FF0000FF #00FF0080\n\
+            "0.\"baseColorFactor\" #FF0000FF #00FF0080\n\
              \n\
-             0.metallicFactor  1 0.2\n"
+             0.\"metallicFactor\"  1 0.2\n"
         );
     }
 
@@ -1012,12 +1030,12 @@ mod tests {
         let state = sample_state();
         let collections =
             resolve_collections(&state, &selectors(&[("0", "baseColorFactor", "value")])).unwrap();
-        // Width 30 leaves 12 columns after the `0.baseColorFactor ` prefix: one
+        // Width 30 leaves 10 columns after the `0."baseColorFactor" ` prefix: one
         // 9-wide hex fits per line, so the second wraps under the first.
         let output = render(&collections, PaletteShowLayout::Row, Some(30));
         assert_eq!(
             output,
-            "0.baseColorFactor #FF0000FF\n                  #00FF0080\n"
+            "0.\"baseColorFactor\" #FF0000FF\n                    #00FF0080\n"
         );
     }
 
@@ -1040,11 +1058,11 @@ mod tests {
         let output = render(&collections, PaletteShowLayout::Row, None);
         assert_eq!(
             output,
-            "0.baseColorFactor \x1b[48;2;255;0;0m  \x1b[0m #FF0000FF \x1b[48;2;0;255;0m  \x1b[0m #00FF0080\n\
+            "0.\"baseColorFactor\" \x1b[48;2;255;0;0m  \x1b[0m #FF0000FF \x1b[48;2;0;255;0m  \x1b[0m #00FF0080\n\
              \n\
-             0.metallicFactor  1 0.2\n\
+             0.\"metallicFactor\"  1 0.2\n\
              \n\
-             1.baseColorFactor \x1b[48;2;0;0;255m  \x1b[0m #0000FFFF\n"
+             1.\"baseColorFactor\" \x1b[48;2;0;0;255m  \x1b[0m #0000FFFF\n"
         );
     }
 
@@ -1061,7 +1079,7 @@ mod tests {
         );
         assert_eq!(
             output,
-            "0.baseColorFactor.a 1.baseColorFactor.a\n255                 255\n128\n"
+            "0.\"baseColorFactor\".a 1.\"baseColorFactor\".a\n255                   255\n128\n"
         );
     }
 
@@ -1089,10 +1107,10 @@ mod tests {
         );
         assert_eq!(
             output,
-            "| #   | 0.baseColorFactor | 1.baseColorFactor |\n\
-             | --- | ----------------- | ----------------- |\n\
-             | 0   | #FF0000FF         | #0000FFFF         |\n\
-             | 1   | #00FF0080         |                   |\n"
+            "| #   | 0.\"baseColorFactor\" | 1.\"baseColorFactor\" |\n\
+             | --- | ------------------- | ------------------- |\n\
+             | 0   | #FF0000FF           | #0000FFFF           |\n\
+             | 1   | #00FF0080           |                     |\n"
         );
     }
 
@@ -1135,7 +1153,7 @@ mod tests {
         let state = sample_state();
         let collections = resolve_collections(&state, &selectors(&[("0", "*", "value")])).unwrap();
         let headers: Vec<String> = collections.iter().map(|c| c.header()).collect();
-        assert_eq!(headers, ["0.baseColorFactor", "0.metallicFactor"]);
+        assert_eq!(headers, ["0.\"baseColorFactor\"", "0.\"metallicFactor\""]);
     }
 
     #[test]
@@ -1145,7 +1163,7 @@ mod tests {
         let collections =
             resolve_collections(&state, &selectors(&[("*", "metallicFactor", "value")])).unwrap();
         let headers: Vec<String> = collections.iter().map(|c| c.header()).collect();
-        assert_eq!(headers, ["0.metallicFactor"]);
+        assert_eq!(headers, ["0.\"metallicFactor\""]);
     }
 
     #[test]
@@ -1178,13 +1196,13 @@ mod tests {
             &[("0", "metallicFactor", "auto")],
             PaletteShowLayout::Row,
         );
-        assert_eq!(scalar, "0.metallicFactor 1 0.2\n");
+        assert_eq!(scalar, "0.\"metallicFactor\" 1 0.2\n");
         let component = show(
             &state,
             &[("0", "baseColorFactor.r", "auto")],
             PaletteShowLayout::Row,
         );
-        assert_eq!(component, "0.baseColorFactor.r 255 0\n");
+        assert_eq!(component, "0.\"baseColorFactor\".r 255 0\n");
     }
 
     /// One palette binding `tint` to a three-component `Srgb` pool holding a red.
@@ -1205,7 +1223,7 @@ mod tests {
         let state = three_component_state();
         let output = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Row);
         // Six hex digits, no alpha pair.
-        assert_eq!(output, "0.tint #FF0000\n");
+        assert_eq!(output, "0.\"tint\" #FF0000\n");
     }
 
     #[test]
@@ -1214,7 +1232,7 @@ mod tests {
         // `.a` is out of range on a three-component color, but `.r` reads.
         assert!(resolve_collections(&state, &selectors(&[("0", "tint.a", "value")])).is_err());
         let red = show(&state, &[("0", "tint.r", "value")], PaletteShowLayout::Row);
-        assert_eq!(red, "0.tint.r 255\n");
+        assert_eq!(red, "0.\"tint\".r 255\n");
     }
 
     #[test]
@@ -1234,7 +1252,7 @@ mod tests {
             &[("0", "emissiveFactor", "value")],
             PaletteShowLayout::Row,
         );
-        assert_eq!(output, "0.emissiveFactor 2 1 0.5 1\n");
+        assert_eq!(output, "0.\"emissiveFactor\" 2 1 0.5 1\n");
     }
 
     #[test]
@@ -1252,7 +1270,7 @@ mod tests {
         state.add_palette(palette);
 
         let output = show(&state, &[("0", "count", "value")], PaletteShowLayout::Row);
-        assert_eq!(output, "0.count 3 7\n");
+        assert_eq!(output, "0.\"count\" 3 7\n");
     }
 
     #[test]
@@ -1271,7 +1289,7 @@ mod tests {
 
         // The array survives into both the text and JSON layouts.
         let text = show(&state, &[("0", "extra", "value")], PaletteShowLayout::Row);
-        assert_eq!(text, "0.extra [1,2]\n");
+        assert_eq!(text, "0.\"extra\" [1,2]\n");
         let json = show(
             &state,
             &[("0", "extra", "value")],
@@ -1280,6 +1298,32 @@ mod tests {
         assert_eq!(
             json,
             "[{\"palette\":0,\"attribute\":\"extra\",\"values\":[[1,2]]}]\n"
+        );
+    }
+
+    #[test]
+    fn an_empty_attribute_name_is_quoted_in_the_header_but_raw_in_json() {
+        let mut state = VoxMain::default();
+        let pool = state.add_value_pool(VoxValuePool::Bool { values: vec![true] });
+        let mut palette = VoxPalette::default();
+        // A binding with no attribute name, reached through the `*` attribute.
+        palette.add_binding(String::new(), pool);
+        palette.add_material(vec![0]).unwrap();
+        state.add_palette(palette);
+
+        // An empty name prints quoted as `""` rather than vanishing after the
+        // `0.` prefix.
+        let row = show(&state, &[("0", "*", "value")], PaletteShowLayout::Row);
+        assert_eq!(row, "0.\"\" true\n");
+        // JSON keeps the raw name; its own string quoting is enough there.
+        let json = show(
+            &state,
+            &[("0", "*", "value")],
+            PaletteShowLayout::CompactJson,
+        );
+        assert_eq!(
+            json,
+            "[{\"palette\":0,\"attribute\":\"\",\"values\":[true]}]\n"
         );
     }
 }

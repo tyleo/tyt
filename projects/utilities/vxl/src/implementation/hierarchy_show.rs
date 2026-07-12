@@ -653,7 +653,7 @@ impl Walk<'_> {
     }
 
     /// Appends node `id`'s subtree at `path`. Every line reads
-    /// `name: {node: <id>, ...}`: a shared node adds `instance: <k>`, the count
+    /// `"name": {node: <id>, ...}`: a shared node adds `instance: <k>`, the count
     /// of its placements already shown, so `instance > 0` marks a repeat, and
     /// with `collapse_instances` a repeat outside a cycle stops without
     /// expanding. A node on its own ancestor chain adds `cycle: true` and stops,
@@ -710,8 +710,10 @@ impl Walk<'_> {
             tag.push_str(", cycle: true");
         }
 
-        self.output
-            .push_str(&format!("{prefix}{connector} {}: {{{tag}}}\n", node.name));
+        self.output.push_str(&format!(
+            "{prefix}{connector} {}: {{{tag}}}\n",
+            implementation::quote_name(&node.name)
+        ));
 
         if is_cycle || collapsed_stub {
             return;
@@ -860,8 +862,8 @@ impl Walk<'_> {
         ));
     }
 
-    /// Appends object `id` as a leaf line reading `name: {object: <id>, ...}`,
-    /// then its enabled geometry rows and its `layers` subtree.
+    /// Appends object `id` as a leaf line reading `"name": {object: <id>, ...}`,
+    /// then its enabled rows and its `layers` subtree.
     /// `placing_world` is the world transform of the node placing the object.
     fn render_object(
         &mut self,
@@ -896,7 +898,7 @@ impl Walk<'_> {
 
         self.output.push_str(&format!(
             "{prefix}{connector} {}: {{{tag}}}\n",
-            object.name()
+            implementation::quote_name(object.name())
         ));
 
         let extension = if is_last {
@@ -1481,8 +1483,8 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n"
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n"
         );
     }
 
@@ -1492,13 +1494,13 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 3}\n\
-             \u{20}\u{20}\u{251C} armA: {node: 1}\n\
-             \u{20}\u{20}\u{2502} \u{2514} leaf: {node: 0, instance: 0}\n\
-             \u{20}\u{20}\u{2502} \u{20}\u{20}\u{2514} head: {object: 0}\n\
-             \u{20}\u{20}\u{2514} armB: {node: 2}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} leaf: {node: 0, instance: 1}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} head: {object: 0}\n"
+             \u{2514} \"root\": {node: 3}\n\
+             \u{20}\u{20}\u{251C} \"armA\": {node: 1}\n\
+             \u{20}\u{20}\u{2502} \u{2514} \"leaf\": {node: 0, instance: 0}\n\
+             \u{20}\u{20}\u{2502} \u{20}\u{20}\u{2514} \"head\": {object: 0}\n\
+             \u{20}\u{20}\u{2514} \"armB\": {node: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} \"leaf\": {node: 0, instance: 1}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} \"head\": {object: 0}\n"
         );
     }
 
@@ -1508,12 +1510,12 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 3}\n\
-             \u{20}\u{20}\u{251C} armA: {node: 1}\n\
-             \u{20}\u{20}\u{2502} \u{2514} leaf: {node: 0, instance: 0}\n\
-             \u{20}\u{20}\u{2502} \u{20}\u{20}\u{2514} head: {object: 0}\n\
-             \u{20}\u{20}\u{2514} armB: {node: 2}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} leaf: {node: 0, instance: 1}\n"
+             \u{2514} \"root\": {node: 3}\n\
+             \u{20}\u{20}\u{251C} \"armA\": {node: 1}\n\
+             \u{20}\u{20}\u{2502} \u{2514} \"leaf\": {node: 0, instance: 0}\n\
+             \u{20}\u{20}\u{2502} \u{20}\u{20}\u{2514} \"head\": {object: 0}\n\
+             \u{20}\u{20}\u{2514} \"armB\": {node: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} \"leaf\": {node: 0, instance: 1}\n"
         );
     }
 
@@ -1533,13 +1535,13 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
              \n\
              unplaced\n\
-             \u{251C} spareNode: {node: 1}\n\
-             \u{2502} \u{2514} spareChild: {object: 2}\n\
-             \u{2514} looseMesh: {object: 1}\n"
+             \u{251C} \"spareNode\": {node: 1}\n\
+             \u{2502} \u{2514} \"spareChild\": {object: 2}\n\
+             \u{2514} \"looseMesh\": {object: 1}\n"
         );
     }
 
@@ -1568,10 +1570,10 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 4}\n\
-             \u{20}\u{20}\u{2514} armA: {node: 2}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} hand: {node: 0}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} handMesh: {object: 0}\n"
+             \u{2514} \"root\": {node: 4}\n\
+             \u{20}\u{20}\u{2514} \"armA\": {node: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} \"hand\": {node: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} \"handMesh\": {object: 0}\n"
         );
     }
 
@@ -1588,13 +1590,13 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 4}\n\
-             \u{20}\u{20}\u{251C} armA: {node: 2}\n\
-             \u{20}\u{20}\u{2502} \u{2514} hand: {node: 0}\n\
-             \u{20}\u{20}\u{2502} \u{20}\u{20}\u{2514} handMesh: {object: 0}\n\
-             \u{20}\u{20}\u{2514} armB: {node: 3}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} foot: {node: 1}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} footMesh: {object: 1}\n"
+             \u{2514} \"root\": {node: 4}\n\
+             \u{20}\u{20}\u{251C} \"armA\": {node: 2}\n\
+             \u{20}\u{20}\u{2502} \u{2514} \"hand\": {node: 0}\n\
+             \u{20}\u{20}\u{2502} \u{20}\u{20}\u{2514} \"handMesh\": {object: 0}\n\
+             \u{20}\u{20}\u{2514} \"armB\": {node: 3}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} \"foot\": {node: 1}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} \"footMesh\": {object: 1}\n"
         );
     }
 
@@ -1606,10 +1608,10 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 4}\n\
-             \u{20}\u{20}\u{2514} armA: {node: 2}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} hand: {node: 0}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} handMesh: {object: 0}\n"
+             \u{2514} \"root\": {node: 4}\n\
+             \u{20}\u{20}\u{2514} \"armA\": {node: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} \"hand\": {node: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} \"handMesh\": {object: 0}\n"
         );
     }
 
@@ -1621,10 +1623,10 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 4}\n\
-             \u{20}\u{20}\u{2514} armB: {node: 3}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} foot: {node: 1}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} footMesh: {object: 1}\n"
+             \u{2514} \"root\": {node: 4}\n\
+             \u{20}\u{20}\u{2514} \"armB\": {node: 3}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} \"foot\": {node: 1}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} \"footMesh\": {object: 1}\n"
         );
     }
 
@@ -1644,7 +1646,7 @@ mod tests {
         assert_eq!(
             output,
             "unplaced\n\
-             \u{2514} looseMesh: {object: 1}\n"
+             \u{2514} \"looseMesh\": {object: 1}\n"
         );
     }
 
@@ -1656,8 +1658,8 @@ mod tests {
         assert_eq!(
             output,
             "\u{2514} ancestors\n\
-             \u{20}\u{20}\u{2514} hand: {node: 0}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} handMesh: {object: 0}\n"
+             \u{20}\u{20}\u{2514} \"hand\": {node: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} \"handMesh\": {object: 0}\n"
         );
     }
 
@@ -1667,9 +1669,9 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 4}\n\
-             \u{20}\u{20}\u{2514} armA: {node: 2}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} hand: {node: 0}\n\
+             \u{2514} \"root\": {node: 4}\n\
+             \u{20}\u{20}\u{2514} \"armA\": {node: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} \"hand\": {node: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} descendants\n"
         );
     }
@@ -1680,7 +1682,7 @@ mod tests {
         assert_eq!(
             output,
             "\u{2514} ancestors\n\
-             \u{20}\u{20}\u{2514} hand: {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"hand\": {node: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{2514} descendants\n"
         );
     }
@@ -1719,12 +1721,12 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
+             \u{2514} \"root\": {node: 0}\n\
              \u{20}\u{20}\u{251C} transform\n\
              \u{20}\u{20}\u{2502} \u{251C} position: [1.00, 2.00, 3.00]\n\
              \u{20}\u{20}\u{2502} \u{251C} rotation: [0.00, 0.00, 90.00]\n\
              \u{20}\u{20}\u{2502} \u{2514} scale: [1.00, 1.00, 1.00]\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n"
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n"
         );
     }
 
@@ -1752,8 +1754,8 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{251C} edit-origin: [-1.00, -1.00, -1.00]\n\
              \u{20}\u{20}\u{20}\u{20}\u{251C} edit-bounds\n\
              \u{20}\u{20}\u{20}\u{20}\u{2502} \u{251C} min: [-1.00, -1.00, -1.00]\n\
@@ -1837,8 +1839,8 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{251C} edit-extents: [3.00, 3.00, 3.00]\n\
              \u{20}\u{20}\u{20}\u{20}\u{251C} runtime-origin: [-1.00, -1.00, -1.00]\n\
              \u{20}\u{20}\u{20}\u{20}\u{251C} runtime-bounds\n\
@@ -1949,8 +1951,8 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 2}\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 3}\n"
@@ -1971,8 +1973,8 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{2514} layers: []\n"
         );
     }
@@ -1992,8 +1994,8 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{251C} edit-extents: [1.00, 1.00, 1.00]\n\
              \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 2}\n\
@@ -2015,8 +2017,8 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{2514} voxel-count: 64\n"
         );
     }
@@ -2037,12 +2039,30 @@ mod tests {
         assert_eq!(
             output,
             "root\n\
-             \u{2514} root: {node: 0}\n\
-             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{251C} voxel-count: 0\n\
              \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 2}\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 3}\n"
+        );
+    }
+
+    #[test]
+    fn names_are_quoted_so_empty_and_spaced_names_stay_legible() {
+        // A nameless node and an object whose name carries a space both print
+        // quoted; the `root` section header stays unquoted.
+        let mut state = VoxMain::default();
+        let mesh = state.add_object(object("my mesh"));
+        let root = state.add_hierarchy_node(node("", vec![], vec![mesh]));
+        state.set_root_hierarchy_nodes(vec![root]);
+
+        let output = show(&state, None, false, false, false);
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} \"\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"my mesh\": {object: 0}\n"
         );
     }
 }
