@@ -99,10 +99,10 @@ pub struct Mesh {
     )]
     texture_map: Vec<String>,
 
-    /// Name a custom attribute for `--texture-map`, `<name>=<key>[:<type>]`,
-    /// repeatable, as `--define-attribute gloss=roughnessFactor` or
-    /// `--define-attribute tint=tint:color`. The type defaults to `scalar`.
-    #[arg(value_name = "name=key[:type]", long = "define-attribute")]
+    /// Name a custom attribute for `--texture-map`, `<name>=<key>`, repeatable,
+    /// as `--define-attribute gloss=roughnessFactor`. The attribute's type is
+    /// read from its value pool in the meshed layer's palette, not declared.
+    #[arg(value_name = "name=key", long = "define-attribute")]
     define_attribute: Vec<AttributeBinding>,
 
     /// Where the baked images go. Defaults to `embedded` for `.glb` and

@@ -194,15 +194,14 @@ names no component, so `metallicFactor.r` is an error, and a color with no alpha
 rejects `.a`: `emissiveFactor` is a three-component color, so `emissiveFactor.a`
 is an error.
 
-`--define-attribute <name>=<key>[:<type>]` names a custom
+`--define-attribute <name>=<key>` names a custom
 attribute so `--texture-map` and `--vertex-map` can read it, repeatable, as in
-`--define-attribute sss=subsurface` and `--define-attribute tint=tint:srgba`.
-The voxel-json format stores attributes generically, so a palette may
+`--define-attribute sss=subsurface`. The voxel-json format stores attributes
+generically, so a palette may
 carry keys beyond the recommended set in
 [Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
 and a binding gives one such key a name a packing can use. A binding reads the
-key from the meshed layer's material. Its parts, split on the first `=` then the
-first `:` of the remainder, are:
+key from the meshed layer's material. Its parts, split on the first `=`, are:
 
 1. `name`: the name used in `--texture-map` and `--vertex-map`. It shadows a
    built-in attribute name on collision, so `--define-attribute
@@ -210,14 +209,17 @@ first `:` of the remainder, are:
    instead. The shadowing is scoped to the custom packings; the `--texture` and
    `--vertex` presets always read the spec attributes.
 2. `key`: the voxel-json attribute key read from the meshed layer's material.
-3. `type` (default `scalar`): the attribute's pool kind, which tells a packing
-   how to read it. The colors are `srgb` and `srgba` and their linear twins
-   `linear-rgb` and `linear-rgba`, whose `r`, `g`, `b`, and (for the four-channel
-   kinds) `a` components a packing reads as `<name>.r` and so on; the scalars are
-   `float` and `int`, read whole; and `bool` packs as a `1` or `0` mask. `color`
-   is an alias for `srgba` and `scalar` for `float`, the common cases.
 
-For example, `--define-attribute tint=tint:srgba` then `--texture-map
+The attribute's type is not declared: it is read from the key's value pool in the
+meshed layer's palette when the document loads. A color pool exposes the `r`,
+`g`, `b`, and (with alpha) `a` components a packing reads as `<name>.r` and so
+on; a `float`, `int`, or `bool` pool is a scalar, read whole. An attribute absent
+from that palette follows the format's unbound-default rule: a glTF built-in
+bakes its spec default, so `baseColorFactor.a` and `occlusionStrength` need no
+binding, while a custom key, which has no default, is an error.
+
+For example, with a palette binding `tint` to an `srgba` pool, `--define-attribute
+tint=tint` then `--texture-map
 paint.png R=tint.r,G=tint.g,B=tint.b,A=baseColorFactor.a` packs the custom `tint`
 color into RGB and the base color's alpha into `A`.
 

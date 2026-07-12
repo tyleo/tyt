@@ -1,21 +1,19 @@
-use crate::AttributeType;
-use clap::ValueEnum;
 use std::str::FromStr;
 
-/// A named, typed binding giving a custom voxel attribute key a name a packing
-/// can read. A binding reads the key from the meshed layer's palette, the layer
-/// chosen by `mesh`'s `--layer` (the first by default).
+/// A binding aliasing a custom voxel attribute key to a name a packing can read.
+/// It renames a key from the meshed layer's palette, the layer `mesh`'s
+/// `--layer` selects and the first by default; the value's type is read from
+/// that key's value pool at bake, not declared here.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AttributeBinding {
     name: String,
     key: String,
-    ty: AttributeType,
 }
 
 impl AttributeBinding {
-    /// Binds `name` to attribute `key` of type `ty`.
-    pub fn new(name: String, key: String, ty: AttributeType) -> Self {
-        AttributeBinding { name, key, ty }
+    /// Binds `name` to attribute `key`.
+    pub fn new(name: String, key: String) -> Self {
+        AttributeBinding { name, key }
     }
 
     /// The binding's name, as used in `--texture-map` and the future
@@ -28,94 +26,44 @@ impl AttributeBinding {
     pub fn key(&self) -> &str {
         &self.key
     }
-
-    /// The value's type.
-    pub fn ty(&self) -> AttributeType {
-        self.ty
-    }
 }
 
 impl FromStr for AttributeBinding {
     type Err = String;
 
-    /// Parses `name=key[:type]`, splitting on the first `=` then the first `:`;
-    /// `type` defaults to `scalar`.
+    /// Parses `name=key`, splitting on the first `=`. Both sides are required.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let malformed = || format!("`{value}` is not `name=key[:type]`");
+        let malformed = || format!("`{value}` is not `name=key`");
 
-        let (name, rest) = value.split_once('=').ok_or_else(malformed)?;
-
-        let (key, ty) = match rest.split_once(':') {
-            Some((key, ty)) => (key, Some(ty)),
-            None => (rest, None),
-        };
+        let (name, key) = value.split_once('=').ok_or_else(malformed)?;
 
         if name.is_empty() || key.is_empty() {
             return Err(malformed());
         }
 
-        let ty = match ty {
-            Some(ty) => AttributeType::from_str(ty, true).map_err(|_| {
-                format!(
-                    "`{ty}` is not an attribute type; use a pool kind (srgb, srgba, \
-                     linear-rgb, linear-rgba, float, int, bool) or the scalar/color alias"
-                )
-            })?,
-            None => AttributeType::Float,
-        };
-
-        Ok(AttributeBinding::new(name.to_string(), key.to_string(), ty))
+        Ok(AttributeBinding::new(name.to_string(), key.to_string()))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{AttributeBinding, AttributeType};
+    use crate::AttributeBinding;
 
     #[test]
-    fn parses_with_explicit_type() {
-        // `color` is the alias for `srgba`.
-        assert_eq!(
-            "tint=tint:color".parse::<AttributeBinding>().unwrap(),
-            AttributeBinding::new("tint".to_string(), "tint".to_string(), AttributeType::Srgba)
-        );
-    }
-
-    #[test]
-    fn parses_pool_kinds_and_aliases() {
-        let ty = |value: &str| value.parse::<AttributeBinding>().unwrap().ty();
-        assert_eq!(ty("c=c:srgb"), AttributeType::Srgb);
-        assert_eq!(ty("c=c:linear-rgba"), AttributeType::LinearRgba);
-        assert_eq!(ty("s=s:float"), AttributeType::Float);
-        assert_eq!(ty("s=s:int"), AttributeType::Int);
-        assert_eq!(ty("m=m:bool"), AttributeType::Bool);
-        // The aliases map to their canonical kinds.
-        assert_eq!(ty("s=s:scalar"), AttributeType::Float);
-        assert_eq!(ty("c=c:color"), AttributeType::Srgba);
-    }
-
-    #[test]
-    fn type_defaults_to_scalar() {
-        assert_eq!(
-            "sss=subsurface".parse::<AttributeBinding>().unwrap(),
-            AttributeBinding::new(
-                "sss".to_string(),
-                "subsurface".to_string(),
-                AttributeType::Float
-            )
-        );
-    }
-
-    #[test]
-    fn parses_a_key_that_carries_no_type() {
-        // The key keeps its glTF spelling; only the first `=` and `:` split.
+    fn parses_a_name_and_key() {
         assert_eq!(
             "gloss=roughnessFactor".parse::<AttributeBinding>().unwrap(),
-            AttributeBinding::new(
-                "gloss".to_string(),
-                "roughnessFactor".to_string(),
-                AttributeType::Float
-            )
+            AttributeBinding::new("gloss".to_string(), "roughnessFactor".to_string())
+        );
+    }
+
+    #[test]
+    fn keeps_the_key_verbatim() {
+        // No `:type` split any more, so a key keeps every character, colon
+        // included.
+        assert_eq!(
+            "tint=tint:extra".parse::<AttributeBinding>().unwrap(),
+            AttributeBinding::new("tint".to_string(), "tint:extra".to_string())
         );
     }
 
@@ -124,7 +72,5 @@ mod tests {
         assert!("tint".parse::<AttributeBinding>().is_err());
         assert!("=tint".parse::<AttributeBinding>().is_err());
         assert!("tint=".parse::<AttributeBinding>().is_err());
-        assert!("tint=tint:rgba".parse::<AttributeBinding>().is_err());
-        assert!("tint=tint:color:extra".parse::<AttributeBinding>().is_err());
     }
 }

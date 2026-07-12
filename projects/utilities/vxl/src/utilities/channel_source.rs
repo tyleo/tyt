@@ -1,4 +1,4 @@
-use crate::{AttributeBinding, AttributeType, ColorComponent, Error, Result};
+use crate::{AttributeBinding, ColorComponent, Error, Result};
 use std::{result::Result as StdResult, str::FromStr};
 use voxsmith::ROUGHNESS_FACTOR;
 
@@ -25,8 +25,9 @@ pub enum ChannelSource {
 
 impl ChannelSource {
     /// Resolves this source's attribute key against the `--define-attribute`
-    /// bindings and validates its color component against the key's type,
-    /// rejecting `computed-occlusion` under the palette atlas.
+    /// bindings and rejects `computed-occlusion` under the palette atlas. The
+    /// color component is validated later, once the document loads, against the
+    /// key's pool kind, since the type lives in the file, not the flags.
     pub(crate) fn resolve(&self, bindings: &[AttributeBinding]) -> Result<ChannelSource> {
         let ChannelSource::Attribute {
             key,
@@ -40,39 +41,15 @@ impl ChannelSource {
             return Ok(self.clone());
         };
 
-        // A binding gives the key a concrete voxel attribute key and a kind; a
-        // bare key resolves to itself, a color only when it is a built-in glTF
-        // color, else a scalar.
-        let (resolved_key, ty) = match bindings
+        // A binding renames the key to a concrete voxel attribute key; a bare
+        // key resolves to itself.
+        let resolved_key = match bindings
             .iter()
             .find(|binding| binding.name() == key.as_str())
         {
-            Some(binding) => (binding.key().to_string(), binding.ty()),
-            None => match AttributeType::builtin_color(key) {
-                Some(ty) => (key.clone(), ty),
-                None => (key.clone(), AttributeType::Float),
-            },
+            Some(binding) => binding.key().to_string(),
+            None => key.clone(),
         };
-
-        if ty.is_color() {
-            match component {
-                None => {
-                    return Err(Error::usage(format!(
-                        "`{key}` is a color; name a component, as `{key}.r`"
-                    )));
-                }
-                Some(ColorComponent::A) if !ty.has_alpha() => {
-                    return Err(Error::usage(format!(
-                        "`{key}` is a color with no alpha; use r, g, or b"
-                    )));
-                }
-                _ => {}
-            }
-        } else if component.is_some() {
-            return Err(Error::usage(format!(
-                "`{key}` is a scalar and has no color component"
-            )));
-        }
 
         Ok(ChannelSource::Attribute {
             key: resolved_key,
@@ -141,8 +118,8 @@ impl FromStr for ChannelSource {
 
 #[cfg(test)]
 mod tests {
-    use crate::{AttributeBinding, AttributeType, ChannelSource, ColorComponent};
-    use voxsmith::{BASE_COLOR_FACTOR, EMISSIVE_FACTOR, METALLIC_FACTOR, ROUGHNESS_FACTOR};
+    use crate::{AttributeBinding, ChannelSource, ColorComponent};
+    use voxsmith::{BASE_COLOR_FACTOR, METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
     fn attribute(key: &str, invert: bool) -> ChannelSource {
         ChannelSource::Attribute {
@@ -168,17 +145,11 @@ mod tests {
         }
     }
 
-    /// A scalar, a four-component color, and a three-component color binding, so
-    /// resolution has one of each kind to exercise.
+    /// Two aliases, `gloss` and `tint`, so resolution has a rename to apply.
     fn bindings() -> Vec<AttributeBinding> {
         vec![
-            AttributeBinding::new(
-                "gloss".to_owned(),
-                ROUGHNESS_FACTOR.to_owned(),
-                AttributeType::Float,
-            ),
-            AttributeBinding::new("tint".to_owned(), "tint".to_owned(), AttributeType::Srgba),
-            AttributeBinding::new("glow".to_owned(), "glow".to_owned(), AttributeType::Srgb),
+            AttributeBinding::new("gloss".to_owned(), ROUGHNESS_FACTOR.to_owned()),
+            AttributeBinding::new("tint".to_owned(), "tint".to_owned()),
         ]
     }
 
@@ -257,11 +228,12 @@ mod tests {
 
     #[test]
     fn a_binding_resolves_to_its_concrete_key() {
-        // The scalar binding `gloss` reads the layer's `roughnessFactor`.
+        // The alias `gloss` renames to the layer's `roughnessFactor`.
         let resolved = attribute("gloss", true).resolve(&bindings()).unwrap();
         assert_eq!(resolved, attribute(ROUGHNESS_FACTOR, true));
 
-        // The color binding `tint` reads a component of the layer's `tint`.
+        // A component rides through the rename unchanged; its validity against
+        // the pool kind is checked later, at the bake.
         let resolved = component("tint", ColorComponent::R, false)
             .resolve(&bindings())
             .unwrap();
@@ -269,73 +241,19 @@ mod tests {
     }
 
     #[test]
-    fn a_bare_scalar_and_base_color_validate_their_components() {
-        // A scalar takes no component; `baseColorFactor` is a built-in color.
-        assert!(
-            attribute(METALLIC_FACTOR, false)
-                .resolve(&bindings())
-                .is_ok()
-        );
+    fn resolve_no_longer_validates_the_component() {
+        // The type is unknown until the document loads, so resolve accepts both
+        // a scalar with a component and a color with none; the `mesh`
+        // implementation validates each against its pool kind.
         assert!(
             component(METALLIC_FACTOR, ColorComponent::R, false)
-                .resolve(&bindings())
-                .is_err()
-        );
-        assert!(
-            component(BASE_COLOR_FACTOR, ColorComponent::A, false)
                 .resolve(&bindings())
                 .is_ok()
         );
         assert!(
             attribute_with(BASE_COLOR_FACTOR, None, false)
                 .resolve(&bindings())
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn emissive_factor_is_an_alpha_less_built_in_color() {
-        // The emissive color is the second built-in color, so a bare channel
-        // must name a component; but glTF emissive has no alpha, so `.a` is
-        // rejected while `.g` is fine.
-        assert!(
-            component(EMISSIVE_FACTOR, ColorComponent::G, false)
-                .resolve(&bindings())
                 .is_ok()
-        );
-        assert!(
-            attribute_with(EMISSIVE_FACTOR, None, false)
-                .resolve(&bindings())
-                .is_err()
-        );
-        assert!(
-            component(EMISSIVE_FACTOR, ColorComponent::A, false)
-                .resolve(&bindings())
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn a_three_component_color_rejects_alpha() {
-        // `glow` is declared `srgb`, so it has r/g/b but no alpha.
-        assert!(
-            component("glow", ColorComponent::B, false)
-                .resolve(&bindings())
-                .is_ok()
-        );
-        assert!(
-            component("glow", ColorComponent::A, false)
-                .resolve(&bindings())
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn a_color_binding_needs_a_component() {
-        assert!(
-            attribute_with("tint", None, false)
-                .resolve(&bindings())
-                .is_err()
         );
     }
 

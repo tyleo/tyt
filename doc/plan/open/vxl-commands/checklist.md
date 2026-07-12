@@ -47,13 +47,14 @@ off as they land.
 - [x] `--texture` preset packings (albedo, orm, metallic-roughness,
       metallic-smoothness, mse, emissive, occlusion, computed-occlusion,
       roughness, smoothness). See [mesh](reference/mesh.md).
-- [x] `--define-attribute` binding types: `ColorComponent`, `AttributeType`
-      (`srgb` | `srgba` | `linear-rgb` | `linear-rgba` | `float` | `int` | `bool`,
-      with `color` an alias for `srgba` and `scalar` for `float`, defaulting to
-      `float`), and `AttributeBinding` (`name key [type]`; bindings read the
-      meshed layer's palette, the layer `mesh`'s `--layer` selects and the first
-      by default, so the former palette-index field is dropped). The clap
-      multi-value wiring lands with `mesh`. See [mesh](reference/mesh.md).
+- [x] `--define-attribute` binding: `ColorComponent` and `AttributeBinding`
+      (`name=key`, a pure rename alias). The type is not declared: `mesh` reads it
+      from the key's value pool in the meshed layer's palette at bake, a color
+      pool exposing components and a scalar pool read whole, and an absent
+      attribute follows the format's unbound-default rule (a glTF built-in bakes
+      its spec default, a custom key errors). The former `AttributeType` enum and
+      the `[:type]` suffix are gone; the file is the single source of type truth.
+      See [mesh](reference/mesh.md).
 - [ ] `--vertex` / `--vertex-map` carrier: preset-to-attribute-name mapping
       (`albedo`/`computed-occlusion` → `COLOR_0`, the scalar/packed presets →
       `_NAME`, `palette-index` → `_PALETTEINDEX` over a per-mesh used-combos
@@ -105,7 +106,7 @@ off as they land.
       computed-occlusion, roughness, smoothness) and the `pbr` bundle, repeatable;
       `--texture-name <preset> <file-name>` / `--texture-name-prefix <prefix>`
       naming; `--texture-map <file-name> <channels>`; `--define-attribute
-      <name>=<key>[:<type>]`; `--layer` (0-based
+      <name>=<key>`; `--layer` (0-based
       object-layer index whose materials this mesh bakes, default `0`); and
       `--texture-storage` (embedded / external / both); default names from the
       output stem, unique per bake. (The `--atlas palette` path;

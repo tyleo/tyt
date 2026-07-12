@@ -67,33 +67,35 @@ Rationale for the non-obvious choices, for reviewers.
    palette has nothing to walk and skips both. Reusing the selectors keeps one
    addressing model across mesh, material, quantize, and remap.
 8. Custom attributes reach `--texture-map` and `--vertex-map` through a declared
-   binding, `--define-attribute <name>=<key>[:<type>]`, rather than inline
-   qualifiers. The voxel-json format stores attributes generically, so a packing
-   must read a key the presets do not name, of a type the tool cannot infer: a
-   custom value may be a `0..1` number or a `#RRGGBBAA` color, and only a color
-   exposes `r`/`g`/`b`/`a` components. A binding states the type once and gives
-   the source a name, so the packing grammar stays a flat `name`, `1-name`, or
-   `name.component`, and the name is reusable across channels, images, and vertex
-   attributes. It shadows a built-in on collision, scoped to the custom packings
-   so a binding never silently changes a `--texture` or `--vertex` preset. The
-   binding reads the key from the meshed layer's material, the layer `mesh`
-   selects with `--layer` and the first by default, the same layer the rest of
-   `mesh` bakes, rather than naming a separate source. Layers no longer merge, so
-   each layer is one palette and every voxel samples one material per layer;
-   reaching another layer's value is just another `--layer`. The built-in
-   `baseColorFactor` is itself a color, so `baseColorFactor.a` and an RGBA split
-   need no binding,
+   binding, `--define-attribute <name>=<key>`, rather than inline qualifiers. The
+   voxel-json format stores attributes generically, so a packing must read a key
+   the presets do not name; the binding gives that key a name a packing can use,
+   so the grammar stays a flat `name`, `1-name`, or `name.component`, reusable
+   across channels, images, and vertex attributes. The value's type is not
+   declared but read from the key's value pool when the document loads, since the
+   file already carries it (see note 9): a color pool exposes `r`/`g`/`b`/`a`
+   components, a scalar pool is read whole. It shadows a built-in on collision,
+   scoped to the custom packings so a binding never silently changes a
+   `--texture` or `--vertex` preset. The binding reads the key from the meshed
+   layer's material, the layer `mesh` selects with `--layer` and the first by
+   default, the same layer the rest of `mesh` bakes, rather than naming a
+   separate source. Layers no longer merge, so each layer is one palette and
+   every voxel samples one material per layer; reaching another layer's value is
+   just another `--layer`. The built-in `baseColorFactor` is itself a color, so
+   `baseColorFactor.a` and an RGBA split need no binding,
    complementing the whole-color `albedo` preset. Inline `N:` and `.component`
-   qualifiers with no declaration were dropped: they cannot carry an explicit
-   type, leaving an ambiguous custom value no home, and they give no reusable
-   name.
-9. `palette show` reads the attribute type from its bound value pool's kind, a
-   color kind for a color and a scalar kind for a number, where mesh's
-   `--define-attribute` must be told the type. The difference is that `show`
-   reads concrete materials whose pool names its own kind, while a `--texture-map`
-   packing is compiled before any material is read and cannot. `--type` stays as an
-   optional override so a preview can assert the same type a `--define-attribute`
-   binding declares and read a custom key exactly as the mesh packing will. The
+   qualifiers with no declaration were dropped: they give no reusable name.
+9. `palette show` and `mesh` both read an attribute's type from its bound value
+   pool's kind, a color kind for a color and a scalar kind for a number; the file
+   is the single source of type truth, for a built-in and a custom key alike.
+   `show` reads it inline as it prints concrete materials; `mesh` defers the same
+   read to the bake, since a `--texture-map` packing is compiled before the
+   document loads, and validates each channel's component against the pool kind
+   once the layer's palette is in hand. An attribute absent from that palette
+   follows the format's unbound-default rule: a glTF built-in takes its spec kind
+   and default, a custom key is an error. `--type` stays as an optional override
+   on `show` so a preview can assert a type and read a custom key exactly as the
+   mesh packing will. The
    `.component` grammar is reused from `--texture-map`, so `baseColorFactor.a`
    means one thing across show, mesh, and the packings; it is read-only inspection sugar,
    scoped to show, so the mutating palette commands keep whole-attribute

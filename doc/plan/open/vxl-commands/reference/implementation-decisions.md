@@ -1222,3 +1222,23 @@ resolves, so `implementation/mesh.rs` stops importing the CLI enum and reads the
 slot straight through. `mesh.rs` shrank to flag declarations plus policy: the
 one-object selection, the atlas gate, the name precedence, and the uniqueness
 check.
+
+The `--define-attribute` type declaration was later dropped, and `AttributeType`
+with it: the value pools already carry each attribute's kind in the file, so
+declaring it on the flag duplicated the file and could disagree with it.
+`AttributeBinding` is now a pure `name=key` rename alias, split on the first `=`
+only, so a key keeps any `:`. `ChannelSource::resolve` no longer validates the
+color component; it only renames the alias and rejects `computed-occlusion`,
+since the type is unknown until the document loads. The component check moved to
+`implementation/mesh.rs`, which after `resolve_layer` reads the meshed layer's
+palette and, per attribute channel, classifies the key: a bound key takes its
+value pool's kind (`pool_kind`, a color exposing components and a
+`float`/`int`/`bool` a scalar, a `string`/`json` pool rejected), an unbound key
+follows the voxj unbound-default rule via the new `voxsmith::GltfAttributeKind`
+classifier (a glTF built-in by its spec kind, baking its default; a custom key an
+error). `GltfAttributeKind::of` replaces `AttributeType::builtin_color` and
+centralizes the recommended-vocabulary knowledge in voxsmith, the convention
+layer, rather than a second CLI copy. The validation errors stay `Error::usage`,
+so a bad channel still reads as a usage problem even though catching it now needs
+the file. `palette show`'s inference is unchanged; mesh and show now share the
+one rule, the file's pool kind.
