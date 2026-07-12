@@ -37,7 +37,7 @@ impl Format {
         }
     }
 
-    /// The lowercase name for this format, matching its `--from` value.
+    /// The lowercase name for this format.
     pub fn name(self) -> &'static str {
         match self {
             Format::Voxj => "voxj",

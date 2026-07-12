@@ -1,5 +1,6 @@
 use crate::{
-    Format, HierarchyViews, PatternView, Result,
+    Format, Result,
+    commands::{HierarchyViews, PatternView},
     implementation::{self, CONNECTOR_LAST, CONNECTOR_MID, EXTENSION_LAST, EXTENSION_MID},
 };
 use branded_id::{IdVec, U32Id};
@@ -1182,7 +1183,8 @@ fn format_vec3(vector: TyVector3F64, precision: usize) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        HierarchyViews, OriginView, PatternView, Result, TransformView,
+        Result,
+        commands::{HierarchyViews, OriginView, PatternView, TransformView},
         implementation::hierarchy_show::{RenderOptions, render},
     };
     use branded_id::U32Id;

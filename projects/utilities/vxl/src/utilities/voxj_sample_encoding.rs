@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 
-/// Sample-block encoding for a `to voxj` document. Every encoding lays out one
+/// Sample-block encoding for a voxj document. Every encoding lays out one
 /// channel per layer, each a material index into that layer's palette for every
 /// voxel.
 #[derive(Clone, Copy, Debug, ValueEnum)]

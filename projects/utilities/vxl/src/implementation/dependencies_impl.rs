@@ -1,9 +1,13 @@
 use crate::{
-    AttributeSelector, CameraView, ColorFormat, Dependencies, EditState, FillMode, Format,
-    GridResolution, HierarchyViews, MaterialMode, MeshFormat, MeshMethod, MeshTextureMap,
-    PaletteListFields, PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView,
-    ReportLayout, ResourceStorage, Result, SelectIndex, TextureShape, VoxjColorFormat,
-    VoxjEncoding, VoxjFormat, Width, implementation,
+    Dependencies, Format, MeshFormat, ReportLayout, Result, SelectIndex, VoxjColorFormat,
+    VoxjEncoding, VoxjFormat, Width,
+    commands::{
+        AttributeSelector, CameraView, ColorFormat, EditState, FillMode, GridResolution,
+        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
+        PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView, ResourceStorage,
+        TextureShape,
+    },
+    implementation,
 };
 use std::path::Path;
 

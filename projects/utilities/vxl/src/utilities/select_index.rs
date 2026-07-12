@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-/// One `--select-index` value: a single object index such as `0`, or an
-/// inclusive range `a-b` such as `2-5`, into the document's `objects`.
+/// One index selector: a single index such as `0`, or an inclusive range
+/// `a-b` such as `2-5`.
 #[derive(Clone, Copy, Debug)]
 pub struct SelectIndex {
     start: usize,
@@ -41,11 +41,11 @@ impl FromStr for SelectIndex {
     }
 }
 
-/// Parses one non-negative object index, naming the bad value on failure.
+/// Parses one non-negative index, naming the bad value on failure.
 fn parse_index(value: &str) -> Result<usize, String> {
     value
         .parse::<usize>()
-        .map_err(|_| format!("`{value}` is not an object index"))
+        .map_err(|_| format!("`{value}` is not an index"))
 }
 
 #[cfg(test)]

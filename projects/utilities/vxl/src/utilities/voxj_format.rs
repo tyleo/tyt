@@ -1,7 +1,7 @@
 use clap::ValueEnum;
 use std::path::Path;
 
-/// Output container and printing form for a `to voxj` document.
+/// Output container and printing form for a voxj document.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjFormat {
     /// Compact `.voxj` JSON.

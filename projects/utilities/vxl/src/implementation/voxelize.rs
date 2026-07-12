@@ -1,6 +1,10 @@
 use crate::{
-    ColorSpace, Dither, FillMode, GridResolution, MaterialMode, MeshFormat, PaletteReduction,
-    QuantizeMethod, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat, implementation,
+    MeshFormat, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat,
+    commands::{
+        ColorSpace, Dither, FillMode, GridResolution, MaterialMode, PaletteReduction,
+        QuantizeMethod,
+    },
+    implementation,
 };
 use std::{fs, path::Path};
 use ty_math::{TyVector3, TyVector3U32};
@@ -184,7 +188,7 @@ fn dither(dither: Dither) -> VoxsmithDither {
 #[cfg(test)]
 mod tests {
     use super::resolve_grid;
-    use crate::GridResolution;
+    use crate::commands::GridResolution;
     use ty_math::{TyVector3, TyVector3U32};
 
     #[test]

@@ -1,6 +1,7 @@
 use crate::{
-    AttributeRef, AttributeSelector, ColorComponent, Format, PaletteRef, PaletteShowFormat,
-    PaletteShowLayout, Result, Width, implementation,
+    ColorComponent, Format, Result, Width,
+    commands::{AttributeRef, AttributeSelector, PaletteRef, PaletteShowFormat, PaletteShowLayout},
+    implementation,
 };
 use serde_json::{Value, json};
 use std::{
@@ -858,7 +859,7 @@ fn render_json(collections: &[Collection], pretty: bool) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        AttributeSelector, PaletteShowLayout,
+        commands::{AttributeSelector, PaletteShowLayout},
         implementation::palette_show::{render, resolve_collections},
     };
     use branded_id::U32Id;

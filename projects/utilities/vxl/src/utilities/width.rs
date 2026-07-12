@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-/// The line width budget for the `row` layouts.
+/// A line-width budget for wrapped output.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Width {
     /// Wrap to the terminal width, or not at all when stdout is not a terminal.

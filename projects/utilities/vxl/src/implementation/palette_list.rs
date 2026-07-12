@@ -1,5 +1,6 @@
 use crate::{
-    Format, PaletteListFields, PaletteListLayout, Result, SelectIndex,
+    Format, Result, SelectIndex,
+    commands::{PaletteListFields, PaletteListLayout},
     implementation::{self, CONNECTOR_LAST, CONNECTOR_MID, EXTENSION_LAST, EXTENSION_MID},
 };
 use branded_id::U32Id;
@@ -260,7 +261,8 @@ fn referencing_names(state: &VoxMain, palette: U32Id<BVoxPalette>) -> Vec<&str> 
 #[cfg(test)]
 mod tests {
     use crate::{
-        PaletteListFields, PaletteListLayout, SelectIndex,
+        SelectIndex,
+        commands::{PaletteListFields, PaletteListLayout},
         implementation::palette_list::{render, select_palettes},
     };
     use serde_json::Value;

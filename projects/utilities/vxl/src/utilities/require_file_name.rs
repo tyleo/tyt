@@ -1,6 +1,6 @@
-/// Validates that `value` is a bare file name written beside the mesh: non-empty
-/// and free of any path separator. A path is a mistake rather than something to
-/// silently strip to its file name.
+/// Validates that `value` is a bare file name written beside the output file:
+/// non-empty and free of any path separator. A path is a mistake rather than
+/// something to silently strip to its file name.
 pub(crate) fn require_file_name(value: &str) -> Result<String, String> {
     if value.is_empty() {
         return Err("a file name cannot be empty".to_string());
@@ -8,8 +8,8 @@ pub(crate) fn require_file_name(value: &str) -> Result<String, String> {
 
     if value.contains('/') || value.contains('\\') {
         return Err(format!(
-            "`{value}` is a file name written beside the mesh, so it cannot contain a \
-             path separator"
+            "`{value}` is a file name written beside the output file, so it cannot contain \
+             a path separator"
         ));
     }
 

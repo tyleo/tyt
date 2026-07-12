@@ -1,9 +1,9 @@
 use clap::ValueEnum;
 
 /// How a written voxj document encodes its color value pools: color space and
-/// numeric encoding in one flag. This is a write-time serialization choice;
-/// `--define-attribute` declares a pool's color kind when authoring. A
-/// linear-kind pool serializes as float whichever value is chosen.
+/// numeric encoding in one choice. This is a write-time serialization choice; a
+/// pool's color kind is declared when authoring. A linear-kind pool serializes
+/// as float whichever value is chosen.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjColorFormat {
     /// Emit sRGB colors as `srgb-float` / `srgba-float` components in `[0, 1]`,

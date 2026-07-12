@@ -1,4 +1,6 @@
-use crate::{EditState, Format, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat, implementation};
+use crate::{
+    Format, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat, commands::EditState, implementation,
+};
 use std::path::Path;
 use voxsmith::EditStateMode;
 

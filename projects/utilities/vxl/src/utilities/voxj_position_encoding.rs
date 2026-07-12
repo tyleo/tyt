@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 
-/// Position-block encoding for a `to voxj` document.
+/// Position-block encoding for a voxj document.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum VoxjPositionEncoding {
     /// Search for the smallest deflated result.

@@ -1,7 +1,6 @@
 use clap::ValueEnum;
 
-/// How a read-only report renders: human-readable Markdown or JSON. Shared by
-/// the report commands so `--layout` means the same everywhere.
+/// How a read-only report renders: human-readable Markdown or JSON.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum ReportLayout {
     /// Human-readable Markdown.

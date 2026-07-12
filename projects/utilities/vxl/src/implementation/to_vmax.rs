@@ -1,4 +1,8 @@
-use crate::{CameraView, ColorFormat, Format, Result, implementation};
+use crate::{
+    Format, Result,
+    commands::{CameraView, ColorFormat},
+    implementation,
+};
 use std::{fs, path::Path};
 use vmax_codec::to_vmax_package;
 use voxsmith::{SceneCameraSource, VMaxSceneCamera, VmaxFileBuilder, VoxelMaxColorFormat};

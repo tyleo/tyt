@@ -1,6 +1,9 @@
 use crate::{
-    ChannelSource, ColorComponent, Error, Format, MeshFormat, MeshMethod, MeshTextureMap,
-    ResourceStorage, Result, TextureBake, TextureShape, implementation,
+    ColorComponent, Error, Format, MeshFormat, Result,
+    commands::{
+        ChannelSource, MeshMethod, MeshTextureMap, ResourceStorage, TextureBake, TextureShape,
+    },
+    implementation,
 };
 use branded_id::U32Id;
 use std::{

@@ -1,7 +1,7 @@
 use clap::ValueEnum;
 use std::path::Path;
 
-/// A mesh file format that `mesh` and `voxelize` read or write.
+/// A mesh file format that vxl can read or write.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum MeshFormat {
     /// glTF text, the `.gltf` file.
