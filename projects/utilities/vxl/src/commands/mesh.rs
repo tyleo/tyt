@@ -1,7 +1,7 @@
 use crate::{
     Atlas, AttributeBinding, ChannelSource, Dependencies, Error, Format, MeshFormat, MeshMethod,
     MeshTextureMap, PositiveF64, ResourceStorage, Result, SelectIndex, Texture, TextureArg,
-    TextureMap, TextureName, require_file_name,
+    TextureMap, TextureName, TextureShape, require_file_name,
 };
 use clap::Parser;
 use std::{
@@ -43,6 +43,22 @@ pub struct Mesh {
     /// Material-map atlas layout. Only `palette` is supported for now.
     #[arg(value_name = "atlas", long, default_value = "palette")]
     atlas: Atlas,
+
+    /// Shape of the baked atlas canvas, `pot` by default. Unused cells are
+    /// transparent black the mesh never samples.
+    ///
+    /// 1. `line`: a single row of texels, no padding.
+    /// 2. `fit`: the near-square packing.
+    /// 3. `square`: the smallest square.
+    /// 4. `pot`: the smallest square power-of-two.
+    /// 5. `n`: an exact `n`x`n` canvas, rejected when too small to fit.
+    #[arg(
+        value_name = "texture-shape",
+        long,
+        default_value = "pot",
+        verbatim_doc_comment
+    )]
+    texture_shape: TextureShape,
 
     /// The object layer whose materials this mesh bakes, a 0-based index into
     /// the object's layers in reference order, defaulting to the first.
@@ -192,6 +208,7 @@ impl Mesh {
             self.layer,
             &maps,
             storage,
+            self.texture_shape,
         )
     }
 
@@ -327,6 +344,7 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::Mesh;
+    use crate::TextureShape;
     use clap::{CommandFactory, Parser};
     use std::path::Path;
 
@@ -543,6 +561,28 @@ mod tests {
 
         let chosen = Mesh::try_parse_from(["mesh", "model.vox", "--layer", "2"]).unwrap();
         assert_eq!(chosen.layer, 2);
+    }
+
+    #[test]
+    fn the_texture_shape_defaults_to_pot_and_parses_keywords_and_a_pixel_size() {
+        let default = Mesh::try_parse_from(["mesh", "model.vox"]).unwrap();
+        assert_eq!(default.texture_shape, TextureShape::Pot);
+
+        for (value, expected) in [
+            ("line", TextureShape::Line),
+            ("fit", TextureShape::Fit),
+            ("square", TextureShape::Square),
+            ("pot", TextureShape::Pot),
+            ("256", TextureShape::Exact(256)),
+        ] {
+            let parsed =
+                Mesh::try_parse_from(["mesh", "model.vox", "--texture-shape", value]).unwrap();
+            assert_eq!(parsed.texture_shape, expected);
+        }
+
+        // Neither a stray keyword nor a zero side parses.
+        assert!(Mesh::try_parse_from(["mesh", "model.vox", "--texture-shape", "huge"]).is_err());
+        assert!(Mesh::try_parse_from(["mesh", "model.vox", "--texture-shape", "0"]).is_err());
     }
 
     #[test]

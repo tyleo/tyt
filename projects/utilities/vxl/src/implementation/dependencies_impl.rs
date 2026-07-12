@@ -2,8 +2,8 @@ use crate::{
     AttributeSelector, CameraView, ColorFormat, Dependencies, EditState, FillMode, Format,
     GridResolution, HierarchyViews, MaterialMode, MeshFormat, MeshMethod, MeshTextureMap,
     PaletteListFields, PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView,
-    ReportLayout, ResourceStorage, Result, SelectIndex, VoxjColorFormat, VoxjEncoding, VoxjFormat,
-    Width, implementation,
+    ReportLayout, ResourceStorage, Result, SelectIndex, TextureShape, VoxjColorFormat,
+    VoxjEncoding, VoxjFormat, Width, implementation,
 };
 use std::path::Path;
 
@@ -113,9 +113,20 @@ impl Dependencies for DependenciesImpl {
         layer: usize,
         maps: &[MeshTextureMap],
         storage: ResourceStorage,
+        texture_shape: TextureShape,
     ) -> Result<()> {
         implementation::mesh_object(
-            input, from, output, format, scale, method, object, layer, maps, storage,
+            input,
+            from,
+            output,
+            format,
+            scale,
+            method,
+            object,
+            layer,
+            maps,
+            storage,
+            texture_shape,
         )
     }
 

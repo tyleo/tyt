@@ -36,7 +36,7 @@ pub fn object_to_material_gltf(
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR_FACTOR, METALLIC_FACTOR, MaterialBake, MaterialChannel, MaterialMap,
+        AtlasShape, BASE_COLOR_FACTOR, METALLIC_FACTOR, MaterialBake, MaterialChannel, MaterialMap,
         MaterialMeshRequest, MaterialSlot, MeshMethod, ResourceStorage, object_to_material_gltf,
     };
     use gltf::Gltf;
@@ -70,6 +70,7 @@ mod tests {
             scale: 1.0,
             maps,
             storage,
+            shape: AtlasShape::Fit,
         };
 
         object_to_material_gltf(&state, state.object(object_id).unwrap(), &request)

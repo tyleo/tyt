@@ -68,7 +68,7 @@ pub(crate) fn build_material_document(
         });
     }
 
-    let (atlas_width, atlas_height) = atlas_dimensions(used.len());
+    let (atlas_width, atlas_height) = atlas_dimensions(used.len(), request.shape)?;
 
     let scale = request.scale as f32;
 

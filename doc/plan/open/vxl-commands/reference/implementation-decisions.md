@@ -1242,3 +1242,28 @@ layer, rather than a second CLI copy. The validation errors stay `Error::usage`,
 so a bad channel still reads as a usage problem even though catching it now needs
 the file. `palette show`'s inference is unchanged; mesh and show now share the
 one rule, the file's pool kind.
+
+## mesh atlas shape
+
+`--texture-shape` sizes the baked palette atlas, replacing the fixed near-square
+packing with a `line`, `fit`, `square`, `pot`, or exact-`n` canvas. It defaults
+to `pot`, so a plain export yields the square power-of-two textures graphics
+pipelines expect; this changes the former near-square default dimensions, hence
+the breaking flag. The policy is a value type, `voxsmith::AtlasShape` on
+`MaterialMeshRequest` and shared with the bake-only `object_to_material_atlas`,
+lowered from the CLI `TextureShape`. `TextureShape` parses a keyword or an
+integer side through `FromStr`, the `SelectIndex` house pattern, since a
+`ValueEnum` cannot express a keyword-or-number value; its help lists the modes as
+an ordered `verbatim_doc_comment` because clap emits no possible-values for a
+free-form parser.
+
+`atlas_dimensions(count, shape)` computes the pixel dimensions once as a pure
+function of the texel count: `line` is `count` by one, `fit` the near-square
+`ceil(sqrt(count))` wide, `square` that width to a side, `pot` the next power of
+two, and `n` an exact side. Both the pixel bake and the texel-center UVs read
+that one pair, so the material texels keep their row-major positions, the padded
+cells stay transparent black the mesh never samples, and the two can never
+disagree on where a texel sits. An `n` too small to hold the texels is rejected:
+`atlas_dimensions` errors when `n*n` is below the count, and the parser rejects a
+zero side up front. The `implementation/mesh.rs` file became `mesh_object.rs` to
+match its exported `mesh_object`.

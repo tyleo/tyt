@@ -257,9 +257,9 @@ pub(crate) fn material_scalar(
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, METALLIC_FACTOR,
-        MaterialBake, MaterialChannel, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, atlas_dimensions,
-        bake_atlas_pixels, resolve_used_materials,
+        AtlasShape, BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH,
+        METALLIC_FACTOR, MaterialBake, MaterialChannel, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR,
+        atlas_dimensions, bake_atlas_pixels, resolve_used_materials,
     };
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
@@ -326,7 +326,7 @@ mod tests {
         let used = resolve_used_materials(object, layer).unwrap();
         assert_eq!(used.len(), 3);
 
-        let (width, height) = atlas_dimensions(used.len());
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
         let pixels =
             bake_atlas_pixels(&state, &used, &MaterialBake::RgbaColor, width, height).unwrap();
 
@@ -342,7 +342,7 @@ mod tests {
     fn a_scalar_packing_reads_the_metallic_factor() {
         let (state, object_id, layer) = single_layer_state();
         let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
-        let (width, height) = atlas_dimensions(used.len());
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let metallic = MaterialBake::Packing(vec![scalar(METALLIC_FACTOR, false)]);
         let pixels = bake_atlas_pixels(&state, &used, &metallic, width, height).unwrap();
@@ -374,7 +374,7 @@ mod tests {
         let object_id = state.add_object(object);
 
         let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
-        let (width, height) = atlas_dimensions(used.len());
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let mask = MaterialBake::Packing(vec![scalar("flag", false)]);
         let pixels = bake_atlas_pixels(&state, &used, &mask, width, height).unwrap();
@@ -387,7 +387,7 @@ mod tests {
     fn inversion_turns_roughness_into_smoothness() {
         let (state, object_id, layer) = single_layer_state();
         let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
-        let (width, height) = atlas_dimensions(used.len());
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let smoothness = MaterialBake::Packing(vec![scalar(ROUGHNESS_FACTOR, true)]);
         let pixels = bake_atlas_pixels(&state, &used, &smoothness, width, height).unwrap();
@@ -401,7 +401,7 @@ mod tests {
     fn a_missing_attribute_falls_back_to_its_spec_default() {
         let (state, object_id, layer) = single_layer_state();
         let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
-        let (width, height) = atlas_dimensions(used.len());
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         // The palette carries no `occlusionStrength`, whose spec default is 1.
         let occlusion = MaterialBake::Packing(vec![scalar(OCCLUSION_STRENGTH, false)]);
@@ -415,7 +415,7 @@ mod tests {
     fn a_color_component_reads_one_channel() {
         let (state, object_id, layer) = single_layer_state();
         let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
-        let (width, height) = atlas_dimensions(used.len());
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let red = MaterialBake::Packing(vec![MaterialChannel::Attribute {
             key: BASE_COLOR_FACTOR.to_owned(),
@@ -431,7 +431,7 @@ mod tests {
     fn computed_occlusion_is_rejected_under_the_palette_atlas() {
         let (state, object_id, layer) = single_layer_state();
         let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
-        let (width, height) = atlas_dimensions(used.len());
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let bake = MaterialBake::Packing(vec![MaterialChannel::ComputedOcclusion]);
         assert!(bake_atlas_pixels(&state, &used, &bake, width, height).is_err());
@@ -468,7 +468,7 @@ mod tests {
         let object_id = state.add_object(object);
 
         let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
-        let (width, height) = atlas_dimensions(used.len());
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
         let pixels =
             bake_atlas_pixels(&state, &used, &MaterialBake::EmissiveColor, width, height).unwrap();
 

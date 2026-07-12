@@ -37,8 +37,8 @@ pub fn object_to_material_glb(
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR_FACTOR, MaterialBake, MaterialMap, MaterialMeshRequest, MaterialSlot,
-        MeshMethod, ResourceStorage, object_to_material_glb,
+        AtlasShape, BASE_COLOR_FACTOR, MaterialBake, MaterialMap, MaterialMeshRequest,
+        MaterialSlot, MeshMethod, ResourceStorage, object_to_material_glb,
     };
     use branded_id::U32Id;
     use gltf::{Gltf, image::Source};
@@ -86,6 +86,7 @@ mod tests {
                 bake: MaterialBake::RgbaColor,
             }],
             storage,
+            shape: AtlasShape::Fit,
         }
     }
 

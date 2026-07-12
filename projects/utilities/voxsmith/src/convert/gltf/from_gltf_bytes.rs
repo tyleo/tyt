@@ -1195,7 +1195,9 @@ mod tests {
 
     #[test]
     fn khr_extension_factors_round_trip_through_a_mesh_export() {
-        use crate::{MaterialMeshRequest, MeshMethod, ResourceStorage, object_to_material_glb};
+        use crate::{
+            AtlasShape, MaterialMeshRequest, MeshMethod, ResourceStorage, object_to_material_glb,
+        };
         use gltf::Gltf;
 
         // Import the three KHR factors, voxelize, then mesh back out: each factor
@@ -1220,6 +1222,7 @@ mod tests {
             scale: 1.0,
             maps: Vec::new(),
             storage: ResourceStorage::Embedded,
+            shape: AtlasShape::Fit,
         };
 
         let files = object_to_material_glb(&state, object, &request).unwrap();

@@ -2,7 +2,8 @@ use crate::{
     AttributeSelector, CameraView, ColorFormat, EditState, FillMode, Format, GridResolution,
     HierarchyViews, MaterialMode, MeshFormat, MeshMethod, MeshTextureMap, PaletteListFields,
     PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView, ReportLayout,
-    ResourceStorage, Result, SelectIndex, VoxjColorFormat, VoxjEncoding, VoxjFormat, Width,
+    ResourceStorage, Result, SelectIndex, TextureShape, VoxjColorFormat, VoxjEncoding, VoxjFormat,
+    Width,
 };
 use std::path::Path;
 
@@ -155,6 +156,8 @@ pub trait Dependencies {
     /// * `maps` - the material maps to bake, each its own image, in order; empty
     ///   for pure geometry.
     /// * `storage` - where the baked images go.
+    /// * `texture_shape` - how the baked atlas canvas is shaped around the
+    ///   material texels; ignored for pure geometry.
     #[allow(clippy::too_many_arguments)]
     fn mesh_object(
         &self,
@@ -168,6 +171,7 @@ pub trait Dependencies {
         layer: usize,
         maps: &[MeshTextureMap],
         storage: ResourceStorage,
+        texture_shape: TextureShape,
     ) -> Result<()>;
 
     /// Reports what the voxel file at `input` contains: a document summary, its

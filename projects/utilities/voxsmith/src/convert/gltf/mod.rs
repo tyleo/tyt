@@ -1,3 +1,4 @@
+mod atlas_shape;
 mod color_channel;
 mod from_gltf_bytes;
 mod material_atlas;
@@ -13,6 +14,7 @@ mod object_to_material_glb;
 mod object_to_material_gltf;
 mod resource_storage;
 
+pub use atlas_shape::*;
 pub use color_channel::*;
 pub use from_gltf_bytes::*;
 pub use material_atlas::*;

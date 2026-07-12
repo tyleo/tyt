@@ -1,6 +1,6 @@
 use crate::{
     ChannelSource, ColorComponent, Error, Format, MeshFormat, MeshMethod, MeshTextureMap,
-    ResourceStorage, Result, TextureBake, implementation,
+    ResourceStorage, Result, TextureBake, TextureShape, implementation,
 };
 use branded_id::U32Id;
 use std::{
@@ -10,7 +10,7 @@ use std::{
 };
 use voxcore::{BVoxLayer, BVoxPalette, VoxMain, VoxObject, VoxValuePool};
 use voxsmith::{
-    ColorChannel, GltfAttributeKind, MaterialBake, MaterialChannel, MaterialMap,
+    AtlasShape, ColorChannel, GltfAttributeKind, MaterialBake, MaterialChannel, MaterialMap,
     MaterialMeshRequest, MaterialSlot, MeshMethod as VoxsmithMeshMethod,
     ResourceStorage as VoxsmithResourceStorage, object_to_glb_bytes, object_to_gltf_bytes,
     object_to_material_glb, object_to_material_gltf,
@@ -36,6 +36,7 @@ pub fn mesh_object(
     layer: usize,
     maps: &[MeshTextureMap],
     storage: ResourceStorage,
+    texture_shape: TextureShape,
 ) -> Result<()> {
     let state = implementation::load_state(input, from)?;
 
@@ -80,6 +81,7 @@ pub fn mesh_object(
         scale,
         maps: maps.iter().map(material_map).collect(),
         storage: resource_storage(storage),
+        shape: atlas_shape(texture_shape),
     };
 
     let files = match format {
@@ -305,6 +307,17 @@ fn resource_storage(storage: ResourceStorage) -> VoxsmithResourceStorage {
         ResourceStorage::Embedded => VoxsmithResourceStorage::Embedded,
         ResourceStorage::External => VoxsmithResourceStorage::External,
         ResourceStorage::Both => VoxsmithResourceStorage::Both,
+    }
+}
+
+/// Maps a CLI texture shape to the voxsmith atlas shape.
+fn atlas_shape(shape: TextureShape) -> AtlasShape {
+    match shape {
+        TextureShape::Line => AtlasShape::Line,
+        TextureShape::Fit => AtlasShape::Fit,
+        TextureShape::Square => AtlasShape::Square,
+        TextureShape::Pot => AtlasShape::Pot,
+        TextureShape::Exact(side) => AtlasShape::Exact(side),
     }
 }
 

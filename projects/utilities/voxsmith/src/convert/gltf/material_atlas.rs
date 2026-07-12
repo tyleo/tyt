@@ -1,5 +1,5 @@
 use crate::{
-    Error, MaterialBake, Result, atlas_dimensions, bake_atlas_pixels, encode_rgba8_png,
+    AtlasShape, Error, MaterialBake, Result, atlas_dimensions, bake_atlas_pixels, encode_rgba8_png,
     resolve_used_materials,
 };
 use branded_id::U32Id;
@@ -20,20 +20,22 @@ pub struct MaterialAtlas {
 
 /// Bakes `bakes` over the materials `object` uses in layer `layer` into a
 /// [`MaterialAtlas`]: one texel per distinct material the object samples, laid
-/// out near-square, each image a PNG. `state` resolves the object's referenced
+/// out per `shape`, each image a PNG. `state` resolves the object's referenced
 /// palettes. This is the geometry-free material bake the palette atlas shares
 /// with the textured mesh writer, and the surface a bake-only material command
-/// builds on. Errors if `layer` is not one of `object`'s layers.
+/// builds on. Errors if `layer` is not one of `object`'s layers, or if `shape`
+/// is too small to hold the materials.
 pub fn object_to_material_atlas(
     state: &VoxMain,
     object: &VoxObject,
     layer: U32Id<BVoxLayer>,
     bakes: &[MaterialBake],
+    shape: AtlasShape,
 ) -> Result<MaterialAtlas> {
     let used = resolve_used_materials(object, layer)
         .ok_or_else(|| Error::invalid("the selected layer is not one of the object's layers"))?;
 
-    let (width, height) = atlas_dimensions(used.len());
+    let (width, height) = atlas_dimensions(used.len(), shape)?;
 
     let mut images = Vec::with_capacity(bakes.len());
 
@@ -53,7 +55,7 @@ pub fn object_to_material_atlas(
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR_FACTOR, MaterialBake, MaterialChannel, ROUGHNESS_FACTOR,
+        AtlasShape, BASE_COLOR_FACTOR, MaterialBake, MaterialChannel, ROUGHNESS_FACTOR,
         object_to_material_atlas,
     };
     use ty_math::TyVector3U32;
@@ -91,9 +93,14 @@ mod tests {
             }]),
         ];
 
-        let atlas =
-            object_to_material_atlas(&state, state.object(object_id).unwrap(), layer, &bakes)
-                .unwrap();
+        let atlas = object_to_material_atlas(
+            &state,
+            state.object(object_id).unwrap(),
+            layer,
+            &bakes,
+            AtlasShape::Fit,
+        )
+        .unwrap();
 
         // One texel (one used material), one PNG per bake, each a real PNG.
         assert_eq!((atlas.width, atlas.height), (1, 1));
