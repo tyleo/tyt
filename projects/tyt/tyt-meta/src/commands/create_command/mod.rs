@@ -9,6 +9,8 @@ mod insert_command_mod;
 mod insert_enum_variant;
 mod kebab_to_pascal_case;
 mod kebab_to_snake_case;
+#[cfg(test)]
+mod nested_command_tests;
 mod projects_dir;
 mod register_command_mod;
 mod templates;

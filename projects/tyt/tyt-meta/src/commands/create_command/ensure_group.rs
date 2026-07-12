@@ -1,98 +1,110 @@
 use crate::{Dependencies, Error, Result, commands::create_command};
 use std::path::{Path, PathBuf};
 
-/// Ensures a parent command group exists in a crate's `commands/` directory and
-/// returns the path to its subcommand enum file (where child commands are wired).
+/// Ensures a parent command group exists as a subdirectory of `parent_dir` and
+/// returns its subcommand-enum file (where child commands are wired) and its
+/// directory (the parent of the next level down).
 ///
-/// - If nothing occupies the name, scaffolds the group's `Parser` struct +
-///   `Subcommand` enum and wires the struct into `parent_enum_path` as a variant.
-/// - If a pristine leaf-command stub already occupies the name, converts it into a
-///   group in place (its variant in `parent_enum_path` is reused unchanged).
-/// - If the group already exists, leaves it untouched.
+/// A group `g` under `parent_dir` lives at `parent_dir/<g>/` with its own
+/// `mod.rs`, a `{group}.rs` `Parser` struct, and a `{group}_command.rs`
+/// `Subcommand` enum. `<g>` is the bare segment; the files keep the
+/// ancestor-prefixed snake name so leaves sharing a CLI name under different
+/// groups stay distinct once flattened.
 ///
-/// `ancestors` is the chain of parent groups above this one; the group's type and
-/// file names are prefixed with it so nested groups stay distinct in the flat
-/// `commands/` namespace. The clap `#[command(name)]` keeps the bare CLI name.
+/// - If the group already exists (its enum file is present), it is returned
+///   untouched.
+/// - If nothing occupies the name, the group is scaffolded: its directory,
+///   struct, enum, and `mod.rs` are written, the directory is registered in
+///   `parent_mod`, and the struct is wired as a variant into `parent_enum`.
+/// - If a leaf command or other module already occupies the name, this errors
+///   rather than overwrite it; converting a leaf into a group is a manual step.
+///
+/// `ancestors` is the chain of group segments above this one, used to build the
+/// prefixed type and file names.
 pub fn ensure_group(
     deps: &impl Dependencies,
-    commands_dir: &Path,
-    mod_path: &Path,
-    parent_enum_path: &Path,
+    parent_dir: &Path,
+    parent_mod: &Path,
+    parent_enum: &Path,
     ancestors: &[String],
-    group: &str,
-) -> Result<PathBuf> {
+    segment: &str,
+) -> Result<(PathBuf, PathBuf)> {
+    let segment_snake = create_command::kebab_to_snake_case(segment);
     let group_snake = ancestors
         .iter()
         .map(|ancestor| create_command::kebab_to_snake_case(ancestor))
-        .chain([create_command::kebab_to_snake_case(group)])
+        .chain([segment_snake.clone()])
         .collect::<Vec<_>>()
         .join("_");
     let group_pascal: String = ancestors
         .iter()
         .map(|ancestor| create_command::kebab_to_pascal_case(ancestor))
-        .chain([create_command::kebab_to_pascal_case(group)])
+        .chain([create_command::kebab_to_pascal_case(segment)])
         .collect();
-    let struct_path = commands_dir.join(format!("{group_snake}.rs"));
-    let enum_path = commands_dir.join(format!("{group_snake}_command.rs"));
-    let enum_mod = format!("{group_snake}_command");
-    let description = format!("The `{group}` command group.");
 
-    if !struct_path.exists() {
-        // Brand-new group: scaffold the struct + enum and wire the struct into its parent.
-        deps.write(
-            &struct_path,
-            &create_command::group_struct_template(&group_pascal, group, &description),
-        )?;
-        deps.write(
-            &enum_path,
-            &create_command::group_enum_template(&group_pascal, &description),
-        )?;
-        create_command::register_command_mod(deps, mod_path, &group_snake)?;
-        create_command::register_command_mod(deps, mod_path, &enum_mod)?;
-        create_command::wire_enum_variant(deps, parent_enum_path, &group_pascal, group)?;
-    } else if !enum_path.exists() {
-        // A leaf command already occupies this name — convert it into a group. Its
-        // variant in the parent enum is already present and stays unchanged.
-        convert_leaf_to_group(deps, &struct_path, &group_pascal, group)?;
-        deps.write(
-            &enum_path,
-            &create_command::group_enum_template(&group_pascal, &description),
-        )?;
-        create_command::register_command_mod(deps, mod_path, &enum_mod)?;
+    let dir = parent_dir.join(&segment_snake);
+    let struct_path = dir.join(format!("{group_snake}.rs"));
+    let enum_path = dir.join(format!("{group_snake}_command.rs"));
+    let mod_path = dir.join("mod.rs");
+
+    // The group already exists: leave it and its wiring untouched.
+    if enum_path.is_file() {
+        return Ok((enum_path, dir));
     }
 
-    Ok(enum_path)
-}
+    // The directory is occupied by something that is not a command group (e.g. a
+    // leaf promoted to a directory because it owns types). Do not overwrite it.
+    if dir.exists() {
+        return Err(Error::Meta(format!(
+            "`{segment}` already exists at {} but is not a command group (no {group_snake}_command.rs). \
+             Converting it into a group is a manual step.",
+            dir.display()
+        )));
+    }
 
-/// Rewrites a pristine leaf-command stub as a group struct, preserving its
-/// description. Errors if the command has been customized.
-fn convert_leaf_to_group(
-    deps: &impl Dependencies,
-    struct_path: &Path,
-    name: &str,
-    command: &str,
-) -> Result<()> {
-    let contents = deps.read_to_string(struct_path)?;
-    let description = stub_description(&contents, name, command).ok_or_else(|| {
-        Error::Meta(format!(
-            "command `{command}` already exists with custom code and cannot be \
-             converted into a parent group automatically: {}",
-            struct_path.display()
-        ))
-    })?;
+    // A flat leaf command already occupies the name. Converting a leaf into a
+    // group means relocating it into a directory, which is a manual step.
+    let flat_leaf = parent_dir.join(format!("{group_snake}.rs"));
+    if flat_leaf.is_file() {
+        return Err(Error::Meta(format!(
+            "a leaf command already exists at {}. Converting a leaf into a group is a manual step: \
+             move it into `{segment_snake}/` and add its {group_snake}_command.rs.",
+            flat_leaf.display()
+        )));
+    }
+
+    // Brand-new group: scaffold the directory, then register it upward.
+    let description = format!("The `{segment}` command group.");
+    deps.create_dir_all(&dir)?;
     deps.write(
-        struct_path,
-        &create_command::group_struct_template(name, command, &description),
-    )
+        &struct_path,
+        &create_command::group_struct_template(&group_pascal, segment, &description),
+    )?;
+    deps.write(
+        &enum_path,
+        &create_command::group_enum_template(&group_pascal, &description),
+    )?;
+    deps.write(&mod_path, &group_mod_source(&group_snake, &segment_snake))?;
+    create_command::register_command_mod(deps, parent_mod, &segment_snake)?;
+    create_command::wire_enum_variant(deps, parent_enum, &group_pascal, segment)?;
+
+    Ok((enum_path, dir))
 }
 
-/// Returns the description if `contents` is an unmodified leaf-command stub (safe
-/// to regenerate as a group), or `None` if it has been customized.
-fn stub_description(contents: &str, name: &str, command: &str) -> Option<String> {
-    let description = contents
-        .lines()
-        .find_map(|line| line.trim().strip_prefix("/// "))?
-        .to_string();
-    let expected = create_command::command_file_template(name, command, &description);
-    (contents.trim_end() == expected.trim_end()).then_some(description)
+/// The `mod.rs` for a brand-new group directory: the struct and enum modules and
+/// their re-exports. The struct module shares the directory's name only at the
+/// first level, where `clippy::module_inception` needs allowing.
+fn group_mod_source(group_snake: &str, segment_snake: &str) -> String {
+    let inception = if group_snake == segment_snake {
+        "#[allow(clippy::module_inception)]\n"
+    } else {
+        ""
+    };
+    format!(
+        "{inception}mod {group_snake};\n\
+         mod {group_snake}_command;\n\
+         \n\
+         pub use {group_snake}::*;\n\
+         pub use {group_snake}_command::*;\n"
+    )
 }
