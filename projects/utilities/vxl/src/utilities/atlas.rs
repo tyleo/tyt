@@ -9,7 +9,8 @@ pub enum Atlas {
     #[value(name = "palette")]
     Palette,
 
-    /// A per-mesh UV unwrap with its own texel per face.
-    #[value(name = "unwrap")]
+    /// A per-mesh UV unwrap with its own texel per face. Not yet supported, so
+    /// hidden until it ships.
+    #[value(name = "unwrap", hide = true)]
     Unwrap,
 }

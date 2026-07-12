@@ -1,6 +1,6 @@
 use crate::{
     ChannelSource, ColorComponent, Format, MeshFormat, MeshMethod, MeshTextureMap, ResourceStorage,
-    Result, Texture, TextureBake, implementation,
+    Result, TextureBake, implementation,
 };
 use branded_id::U32Id;
 use std::{
@@ -118,26 +118,13 @@ fn mesh_method(method: MeshMethod) -> VoxsmithMeshMethod {
     }
 }
 
-/// Lowers a resolved map into the voxsmith map, picking its glTF slot from the
-/// preset it came from.
+/// Lowers a resolved map into the voxsmith map. A map with no slot is reached
+/// only through the material's extras.
 fn material_map(map: &MeshTextureMap) -> MaterialMap {
     MaterialMap {
         name: map.name.clone(),
-        slot: material_slot(map.preset),
+        slot: map.slot.unwrap_or(MaterialSlot::None),
         bake: material_bake(&map.bake),
-    }
-}
-
-/// The glTF slot a preset fills; a custom packing (or a preset with no standard
-/// slot) has none and is reached only through the material's extras.
-fn material_slot(preset: Option<Texture>) -> MaterialSlot {
-    match preset {
-        Some(Texture::Albedo) => MaterialSlot::BaseColor,
-        Some(Texture::Orm) => MaterialSlot::OcclusionMetallicRoughness,
-        Some(Texture::MetallicRoughness) => MaterialSlot::MetallicRoughness,
-        Some(Texture::Occlusion) => MaterialSlot::Occlusion,
-        Some(Texture::Emissive) => MaterialSlot::Emissive,
-        _ => MaterialSlot::None,
     }
 }
 

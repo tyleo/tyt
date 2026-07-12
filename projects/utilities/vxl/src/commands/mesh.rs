@@ -1,14 +1,13 @@
 use crate::{
-    Atlas, AttributeBinding, AttributeType, ChannelPacking, ChannelSource, ColorComponent,
-    Dependencies, Error, Format, MeshFormat, MeshMethod, MeshTextureMap, PositiveF64,
-    ResourceStorage, Result, SelectIndex, Texture, TextureBake, TextureBundle,
+    Atlas, AttributeBinding, ChannelSource, Dependencies, Error, Format, MeshFormat, MeshMethod,
+    MeshTextureMap, PositiveF64, ResourceStorage, Result, SelectIndex, Texture, TextureArg,
+    TextureMap, TextureName, require_file_name,
 };
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
-use voxsmith::{BASE_COLOR_FACTOR, EMISSIVE_FACTOR};
 
 /// Triangulates one object's voxels into a glTF or GLB mesh, optionally baking
 /// its palette materials into textures the mesh's UVs sample.
@@ -33,9 +32,9 @@ pub struct Mesh {
     from: Option<Format>,
 
     /// Real-world edge length of one voxel in meters, applied as a uniform scale
-    /// to every output vertex.
-    #[arg(value_name = "scale", long, default_value = "1.0")]
-    scale: PositiveF64,
+    /// to every output vertex. The mesh twin of `voxelize`'s `--voxel-size`.
+    #[arg(value_name = "voxel-size", long, default_value = "1.0")]
+    voxel_size: PositiveF64,
 
     /// Meshing strategy.
     #[arg(value_name = "method", long, default_value = "greedy")]
@@ -50,27 +49,36 @@ pub struct Mesh {
     #[arg(value_name = "layer", long, default_value = "0")]
     layer: usize,
 
-    /// Bake a preset material map, `<name> [path]`, repeatable. Quote the value
-    /// to override the default path, as `--texture "albedo model-albedo.png"`.
-    /// The `pbr` bundle expands to several maps and so takes no path.
-    ///
-    /// Presets:
-    /// - pbr: the glTF PBR set of albedo, orm, and emissive
-    /// - albedo: RGBA base color
-    /// - orm: glTF occlusion, roughness, metallic
-    /// - metallic-roughness: glTF metallic, roughness
-    /// - metallic-smoothness: Unity metallic, smoothness
-    /// - mse: metallic, smoothness, emissive
-    /// - emissive: self-lit base color
-    /// - occlusion: grayscale occlusion
-    /// - roughness: grayscale roughness
-    /// - smoothness: grayscale smoothness
-    #[arg(value_name = "texture", long, verbatim_doc_comment)]
-    texture: Vec<String>,
+    /// Bake a preset material map or bundle, repeatable, as `--texture albedo
+    /// --texture orm` or `--texture pbr`. A bundle expands to several single
+    /// maps.
+    #[arg(value_name = "texture", long)]
+    texture: Vec<TextureArg>,
 
-    /// Bake a custom material map, `<path> <channels>`, repeatable, where
+    /// Name one preset map's file exactly, `<preset> <file-name>`, repeatable,
+    /// as `--texture-name albedo skin.png`. Highest precedence, over
+    /// `--texture-name-prefix` and the default. Errors if the preset is not
+    /// baked or is named twice.
+    #[arg(
+        value_names = ["preset", "file-name"],
+        long,
+        num_args = 2,
+        action = clap::ArgAction::Append,
+    )]
+    texture_name: Vec<String>,
+
+    /// Replace the default `<output-stem>-` prefix on every preset map's file
+    /// name (those without an explicit `--texture-name`); the preset follows
+    /// verbatim, so the prefix carries its own separator: `--texture-name-prefix
+    /// hero-` gives `hero-albedo.png` and `test.` gives `test.albedo.png`. A
+    /// bare file name, no path separator.
+    #[arg(value_name = "file-name", long)]
+    texture_name_prefix: Option<String>,
+
+    /// Bake a custom material map, `<file-name> <channels>`, repeatable, where
     /// `channels` is a comma-separated `R=<expr>,...` list over the `R`, `G`,
-    /// `B`, `A` channels, at least one named.
+    /// `B`, `A` channels, at least one named. The file name is written beside
+    /// the mesh, no path separator.
     ///
     /// Each `<expr>` is one of:
     /// - <attribute>: a voxel attribute by name, as `metallicFactor` or
@@ -83,7 +91,7 @@ pub struct Mesh {
     /// Attribute keys are voxj attributes or `--define-attribute` aliases;
     /// `smoothness` is shorthand for `1-roughnessFactor`.
     #[arg(
-        value_names = ["path", "channels"],
+        value_names = ["file-name", "channels"],
         long = "texture-map",
         num_args = 2,
         action = clap::ArgAction::Append,
@@ -91,9 +99,10 @@ pub struct Mesh {
     )]
     texture_map: Vec<String>,
 
-    /// Name a custom attribute for `--texture-map`, `<name> <key> [type]`,
-    /// repeatable. Quote the whole value, as `--define-attribute "tint tint color"`.
-    #[arg(value_name = "define-attribute", long = "define-attribute")]
+    /// Name a custom attribute for `--texture-map`, `<name>=<key>[:<type>]`,
+    /// repeatable, as `--define-attribute gloss=roughnessFactor` or
+    /// `--define-attribute tint=tint:color`. The type defaults to `scalar`.
+    #[arg(value_name = "name=key[:type]", long = "define-attribute")]
     define_attribute: Vec<AttributeBinding>,
 
     /// Where the baked images go. Defaults to `embedded` for `.glb` and
@@ -125,8 +134,10 @@ impl Mesh {
             .clone()
             .unwrap_or_else(|| self.input.with_extension(format.extension()));
 
-        // The unwrap atlas, and the computed-occlusion map it carries, are a
-        // later pass; only the palette atlas bakes for now.
+        // The unwrap atlas, and the computed-occlusion maps only it can hold, are
+        // a later pass; only the palette atlas bakes for now. This runs before
+        // the maps resolve, so their computed-occlusion checks fire only under
+        // the palette atlas.
         if let Atlas::Unwrap = self.atlas {
             return Err(Error::usage(
                 "--atlas unwrap is not yet supported; use --atlas palette",
@@ -175,7 +186,7 @@ impl Mesh {
             self.from,
             &output,
             format,
-            self.scale.0,
+            self.voxel_size.0,
             self.method,
             object,
             self.layer,
@@ -184,395 +195,345 @@ impl Mesh {
         )
     }
 
-    /// Resolves the `--texture` presets and `--texture-map` packings into the
-    /// maps the writer bakes, in flag order, presets first. Custom packings read
-    /// the `--define-attribute` bindings; presets always read the spec
-    /// attributes.
+    /// Resolves the `--texture` presets, then the `--texture-map` custom maps,
+    /// into the maps the writer bakes. Preset names follow the `--texture-name`
+    /// / `--texture-name-prefix` precedence; custom names are given. Errors on
+    /// two maps with the same file name, so the presets-first order is only a
+    /// layout, not a flag-order guarantee.
     fn resolve_maps(&self, output: &Path) -> Result<Vec<MeshTextureMap>> {
         let stem = output
             .file_stem()
             .and_then(|stem| stem.to_str())
             .unwrap_or("mesh");
 
-        let bindings: HashMap<&str, (&str, AttributeType)> = self
-            .define_attribute
-            .iter()
-            .map(|binding| (binding.name(), (binding.key(), binding.ty())))
-            .collect();
+        let mut maps = self.resolve_presets(stem)?;
+        maps.extend(self.resolve_custom_maps()?);
 
-        let mut maps = Vec::new();
-
-        for texture in &self.texture {
-            maps.extend(resolve_preset(texture, stem)?);
-        }
-
-        for chunk in self.texture_map.chunks(2) {
-            maps.push(resolve_custom(&chunk[0], &chunk[1], &bindings)?);
-        }
+        self.check_unique_names(&maps)?;
 
         Ok(maps)
     }
-}
 
-/// Resolves one `--texture <name> [path]` argument into its map or maps. A
-/// single preset yields one map, named from the stem or the given path; the
-/// `pbr` bundle yields several maps and takes no path.
-fn resolve_preset(argument: &str, stem: &str) -> Result<Vec<MeshTextureMap>> {
-    let mut tokens = argument.split_whitespace();
+    /// Resolves the `--texture` presets into their maps, naming each by the
+    /// three-level precedence and rejecting a `--texture-name` that is unbaked or
+    /// repeated.
+    fn resolve_presets(&self, stem: &str) -> Result<Vec<MeshTextureMap>> {
+        if let Some(prefix) = &self.texture_name_prefix {
+            require_file_name(prefix).map_err(Error::usage)?;
+        }
 
-    let name = tokens
-        .next()
-        .ok_or_else(|| Error::usage("--texture needs a preset name"))?;
+        // The presets to bake, a bundle expanded in place, in `--texture` order.
+        let presets: Vec<Texture> = self.texture.iter().flat_map(|arg| arg.textures()).collect();
 
-    let path = tokens.next();
+        // The explicit `--texture-name` overrides, each occurrence's two tokens
+        // paired into a typed value, keyed by preset and rejecting a preset named
+        // twice.
+        let texture_names = self
+            .texture_name
+            .chunks(2)
+            .map(|pair| TextureName::new(&pair[0], &pair[1]))
+            .collect::<Result<Vec<_>>>()?;
 
-    if tokens.next().is_some() {
-        return Err(Error::usage(format!(
-            "--texture takes `<name> [path]`, but got `{argument}`"
-        )));
-    }
+        let mut names: HashMap<Texture, String> = HashMap::new();
+        for texture_name in &texture_names {
+            if names
+                .insert(texture_name.preset(), texture_name.file_name().to_owned())
+                .is_none()
+            {
+                continue;
+            }
 
-    if let Ok(bundle) = TextureBundle::from_str(name, true) {
-        if path.is_some() {
             return Err(Error::usage(format!(
-                "--texture bundle `{name}` expands to several maps and takes no path"
+                "--texture-name names `{}` twice",
+                texture_name.preset().cli_name()
             )));
         }
-        return Ok(bundle
-            .textures()
-            .iter()
-            .map(|&texture| preset_map(texture, stem))
-            .collect());
-    }
 
-    let texture = Texture::from_str(name, true)
-        .map_err(|_| Error::usage(format!("`{name}` is not a --texture preset")))?;
-
-    if let Texture::ComputedOcclusion = texture {
-        return Err(Error::usage(
-            "--texture computed-occlusion requires --atlas unwrap, which is not yet supported",
-        ));
-    }
-
-    let mut map = preset_map(texture, stem);
-    if let Some(path) = path {
-        map.name = file_name(path)?;
-    }
-    Ok(vec![map])
-}
-
-/// The map a preset bakes, its file name the mesh stem plus the preset name.
-fn preset_map(texture: Texture, stem: &str) -> MeshTextureMap {
-    MeshTextureMap {
-        name: format!("{stem}-{}.png", preset_name(texture)),
-        preset: Some(texture),
-        bake: texture.bake(),
-    }
-}
-
-/// Resolves one `--texture-map <path> <channels>` packing into a map, applying
-/// the custom-attribute bindings and validating each channel.
-fn resolve_custom(
-    path: &str,
-    channels: &str,
-    bindings: &HashMap<&str, (&str, AttributeType)>,
-) -> Result<MeshTextureMap> {
-    let packing = channels.parse::<ChannelPacking>().map_err(Error::usage)?;
-
-    let resolved = resolve_packing(&packing, bindings)?;
-
-    Ok(MeshTextureMap {
-        name: file_name(path)?,
-        preset: None,
-        bake: TextureBake::Packing(resolved),
-    })
-}
-
-/// Resolves every channel of `packing` against the bindings, returning a packing
-/// of the same shape whose attribute keys are concrete.
-fn resolve_packing(
-    packing: &ChannelPacking,
-    bindings: &HashMap<&str, (&str, AttributeType)>,
-) -> Result<ChannelPacking> {
-    let resolved = packing
-        .sources()
-        .iter()
-        .map(|source| resolve_source(source, bindings))
-        .collect::<Result<Vec<_>>>()?;
-
-    let channel = |index: usize| resolved.get(index).cloned();
-
-    Ok(ChannelPacking::new(
-        channel(0),
-        channel(1),
-        channel(2),
-        channel(3),
-    ))
-}
-
-/// Resolves one channel source: a binding alias becomes its concrete key, and a
-/// color component is required on a color attribute and rejected on a scalar.
-/// `computed-occlusion` is rejected under the palette atlas.
-fn resolve_source(
-    source: &ChannelSource,
-    bindings: &HashMap<&str, (&str, AttributeType)>,
-) -> Result<ChannelSource> {
-    let ChannelSource::Attribute {
-        key,
-        component,
-        invert,
-    } = source
-    else {
-        if let ChannelSource::ComputedOcclusion = source {
-            return Err(Error::usage(
-                "computed-occlusion requires --atlas unwrap, which is not yet supported",
-            ));
-        }
-        return Ok(source.clone());
-    };
-
-    // A binding gives the key a concrete voxel attribute key and a kind; a bare
-    // key resolves to itself, a color only when it is a built-in glTF color,
-    // else a scalar.
-    let (resolved_key, ty) = match bindings.get(key.as_str()) {
-        Some((bound_key, ty)) => (bound_key.to_string(), *ty),
-        None => match builtin_color(key) {
-            Some(ty) => (key.clone(), ty),
-            None => (key.clone(), AttributeType::Float),
-        },
-    };
-
-    if ty.is_color() {
-        match component {
-            None => {
-                return Err(Error::usage(format!(
-                    "`{key}` is a color; name a component, as `{key}.r`"
-                )));
+        // A named preset must actually be baked, else the name applies to nothing.
+        let baked: HashSet<Texture> = presets.iter().copied().collect();
+        for texture_name in &texture_names {
+            if baked.contains(&texture_name.preset()) {
+                continue;
             }
-            Some(ColorComponent::A) if !ty.has_alpha() => {
-                return Err(Error::usage(format!(
-                    "`{key}` is a color with no alpha; use r, g, or b"
-                )));
-            }
-            _ => {}
+
+            return Err(Error::usage(format!(
+                "--texture-name names `{}`, which is not being baked; add it to --texture",
+                texture_name.preset().cli_name()
+            )));
         }
-    } else if component.is_some() {
-        return Err(Error::usage(format!(
-            "`{key}` is a scalar and has no color component"
-        )));
+
+        presets
+            .into_iter()
+            .map(|preset| {
+                if let Texture::ComputedOcclusion = preset {
+                    return Err(ChannelSource::computed_occlusion_unsupported());
+                }
+                Ok(preset.map(self.preset_name(&names, preset, stem)))
+            })
+            .collect()
     }
 
-    Ok(ChannelSource::Attribute {
-        key: resolved_key,
-        component: *component,
-        invert: *invert,
-    })
-}
+    /// The file name a preset map takes: an explicit `--texture-name`, else a
+    /// `--texture-name-prefix` with the preset appended verbatim, else the output
+    /// stem plus a `-` and the preset.
+    fn preset_name(&self, names: &HashMap<Texture, String>, preset: Texture, stem: &str) -> String {
+        if let Some(name) = names.get(&preset) {
+            return name.clone();
+        }
 
-/// The kind of a built-in glTF color attribute, or `None` otherwise. The base
-/// color has alpha (`srgba`); the emissive color does not (`srgb`).
-fn builtin_color(key: &str) -> Option<AttributeType> {
-    match key {
-        BASE_COLOR_FACTOR => Some(AttributeType::Srgba),
-        EMISSIVE_FACTOR => Some(AttributeType::Srgb),
-        _ => None,
+        match &self.texture_name_prefix {
+            Some(prefix) => format!("{prefix}{}.png", preset.cli_name()),
+            None => format!("{stem}-{}.png", preset.cli_name()),
+        }
     }
-}
 
-/// The CLI name of a preset, as its default file-name stem.
-fn preset_name(texture: Texture) -> String {
-    texture
-        .to_possible_value()
-        .expect("every texture preset has a value")
-        .get_name()
-        .to_owned()
-}
+    /// Resolves the `--texture-map` custom maps, pairing each occurrence into a
+    /// typed value and resolving its channels against the `--define-attribute`
+    /// bindings.
+    fn resolve_custom_maps(&self) -> Result<Vec<MeshTextureMap>> {
+        // clap's `num_args = 2` guarantees an even length, so each chunk is a
+        // full pair.
+        let maps = self
+            .texture_map
+            .chunks(2)
+            .map(|pair| TextureMap::new(&pair[0], &pair[1]))
+            .collect::<Result<Vec<_>>>()?;
 
-/// The file name of `path`, the map's relative name beside the mesh.
-fn file_name(path: &str) -> Result<String> {
-    Path::new(path)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .map(str::to_owned)
-        .ok_or_else(|| Error::usage(format!("`{path}` has no file name")))
+        maps.iter()
+            .map(|map| map.resolve(&self.define_attribute))
+            .collect()
+    }
+
+    /// Rejects two maps that resolve to the same file name, which would race to
+    /// write one image beside the mesh.
+    fn check_unique_names(&self, maps: &[MeshTextureMap]) -> Result<()> {
+        let mut seen = HashSet::new();
+        for map in maps {
+            if seen.insert(map.name.as_str()) {
+                continue;
+            }
+
+            return Err(Error::usage(format!(
+                "two maps resolve to the file name `{}`; name them apart with \
+                 --texture-name, or drop the duplicate",
+                map.name
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Mesh, resolve_preset, resolve_source};
-    use crate::{AttributeType, ChannelSource, ColorComponent, Texture, TextureBake};
-    use clap::{CommandFactory, Parser, ValueEnum};
-    use std::{collections::HashMap, path::Path};
-    use voxsmith::{BASE_COLOR_FACTOR, METALLIC_FACTOR, ROUGHNESS_FACTOR};
+    use super::Mesh;
+    use clap::{CommandFactory, Parser};
+    use std::path::Path;
 
-    fn bindings() -> HashMap<&'static str, (&'static str, AttributeType)> {
-        HashMap::from([
-            ("gloss", (ROUGHNESS_FACTOR, AttributeType::Float)),
-            ("tint", ("tint", AttributeType::Srgba)),
-            ("glow", ("glow", AttributeType::Srgb)),
-        ])
+    /// The resolved map file names for `args`, meshed to `output`, in order.
+    fn names(args: &[&str], output: &str) -> Vec<String> {
+        let mut argv = vec!["mesh", "model.vox"];
+        argv.extend_from_slice(args);
+        Mesh::try_parse_from(argv)
+            .unwrap()
+            .resolve_maps(Path::new(output))
+            .unwrap()
+            .into_iter()
+            .map(|map| map.name)
+            .collect()
     }
 
-    fn attribute(key: &str, component: Option<ColorComponent>, invert: bool) -> ChannelSource {
-        ChannelSource::Attribute {
-            key: key.to_owned(),
-            component,
-            invert,
-        }
-    }
-
-    #[test]
-    fn a_preset_defaults_its_path_from_the_stem() {
-        let maps = resolve_preset("albedo", "model").unwrap();
-        assert_eq!(maps.len(), 1);
-        assert_eq!(maps[0].name, "model-albedo.png");
-        assert!(matches!(maps[0].preset, Some(Texture::Albedo)));
-        assert_eq!(maps[0].bake, TextureBake::RgbaColor);
+    /// Whether `args` resolve their maps or error, meshed to `model.glb`.
+    fn resolves(args: &[&str]) -> bool {
+        let mut argv = vec!["mesh", "model.vox"];
+        argv.extend_from_slice(args);
+        Mesh::try_parse_from(argv)
+            .unwrap()
+            .resolve_maps(Path::new("model.glb"))
+            .is_ok()
     }
 
     #[test]
-    fn a_preset_path_overrides_the_default_and_takes_its_file_name() {
-        let maps = resolve_preset("orm textures/custom.png", "model").unwrap();
-        assert_eq!(maps[0].name, "custom.png");
+    fn a_preset_defaults_its_name_from_the_output_stem() {
+        assert_eq!(
+            names(&["--texture", "albedo"], "turret.glb"),
+            ["turret-albedo.png"]
+        );
     }
 
     #[test]
-    fn a_preset_rejects_unknown_names_computed_occlusion_and_extra_tokens() {
-        assert!(resolve_preset("bogus", "model").is_err());
-        assert!(resolve_preset("computed-occlusion", "model").is_err());
-        assert!(resolve_preset("albedo a b", "model").is_err());
+    fn the_pbr_bundle_expands_to_albedo_orm_and_emissive_in_order() {
+        assert_eq!(
+            names(&["--texture", "pbr"], "model.glb"),
+            ["model-albedo.png", "model-orm.png", "model-emissive.png",]
+        );
     }
 
     #[test]
-    fn the_pbr_bundle_expands_to_albedo_orm_and_emissive() {
-        let maps = resolve_preset("pbr", "model").unwrap();
-        let presets: Vec<Texture> = maps.iter().filter_map(|map| map.preset).collect();
-        assert!(matches!(
-            presets.as_slice(),
-            [Texture::Albedo, Texture::Orm, Texture::Emissive]
-        ));
+    fn repeated_flags_and_a_bundle_bake_several() {
+        assert_eq!(
+            names(&["--texture", "albedo", "--texture", "orm"], "model.glb"),
+            ["model-albedo.png", "model-orm.png"]
+        );
+        assert_eq!(
+            names(&["--texture", "pbr", "--texture", "roughness"], "model.glb"),
+            [
+                "model-albedo.png",
+                "model-orm.png",
+                "model-emissive.png",
+                "model-roughness.png",
+            ]
+        );
     }
 
     #[test]
-    fn a_bundle_takes_no_path() {
-        assert!(resolve_preset("pbr textures/custom.png", "model").is_err());
+    fn an_explicit_name_beats_a_prefix_beats_the_stem() {
+        // Albedo is named outright; orm and emissive take the prefix.
+        assert_eq!(
+            names(
+                &[
+                    "--texture",
+                    "pbr",
+                    "--texture-name",
+                    "albedo",
+                    "skin.png",
+                    "--texture-name-prefix",
+                    "hero-",
+                ],
+                "turret.glb",
+            ),
+            ["skin.png", "hero-orm.png", "hero-emissive.png"]
+        );
     }
 
     #[test]
-    fn a_bundle_composes_with_explicit_presets() {
-        let mesh = Mesh::try_parse_from([
-            "mesh",
-            "model.vox",
+    fn a_prefix_alone_replaces_the_stem_for_every_preset() {
+        assert_eq!(
+            names(
+                &[
+                    "--texture",
+                    "albedo",
+                    "--texture",
+                    "orm",
+                    "--texture-name-prefix",
+                    "hero-",
+                ],
+                "turret.glb"
+            ),
+            ["hero-albedo.png", "hero-orm.png"]
+        );
+    }
+
+    #[test]
+    fn a_prefix_carries_its_own_separator() {
+        // The preset follows the prefix verbatim, so a trailing `.` stays a `.`
+        // rather than forcing the default `-`.
+        assert_eq!(
+            names(
+                &["--texture", "albedo", "--texture-name-prefix", "test."],
+                "turret.glb"
+            ),
+            ["test.albedo.png"]
+        );
+    }
+
+    #[test]
+    fn a_custom_map_follows_the_presets_and_keeps_its_given_name() {
+        assert_eq!(
+            names(
+                &[
+                    "--texture",
+                    "albedo",
+                    "--texture-map",
+                    "skin.png",
+                    "R=metallicFactor"
+                ],
+                "model.glb",
+            ),
+            ["model-albedo.png", "skin.png"]
+        );
+    }
+
+    #[test]
+    fn a_texture_name_for_an_unbaked_preset_is_rejected() {
+        assert!(!resolves(&[
+            "--texture",
+            "albedo",
+            "--texture-name",
+            "orm",
+            "x.png",
+        ]));
+    }
+
+    #[test]
+    fn a_preset_named_twice_is_rejected() {
+        assert!(!resolves(&[
+            "--texture",
+            "albedo",
+            "--texture-name",
+            "albedo",
+            "a.png",
+            "--texture-name",
+            "albedo",
+            "b.png",
+        ]));
+    }
+
+    #[test]
+    fn two_maps_with_the_same_resolved_name_are_rejected() {
+        // Two albedo presets both default to `model-albedo.png`.
+        assert!(!resolves(&["--texture", "albedo", "--texture", "albedo"]));
+
+        // A custom map can collide with a preset's default name too.
+        assert!(!resolves(&[
+            "--texture",
+            "albedo",
+            "--texture-map",
+            "model-albedo.png",
+            "R=metallicFactor",
+        ]));
+    }
+
+    #[test]
+    fn an_empty_or_path_prefix_is_rejected() {
+        assert!(!resolves(&[
+            "--texture",
+            "albedo",
+            "--texture-name-prefix",
+            ""
+        ]));
+        assert!(!resolves(&[
+            "--texture",
+            "albedo",
+            "--texture-name-prefix",
+            "dir/hero",
+        ]));
+    }
+
+    #[test]
+    fn a_texture_map_with_a_path_name_is_rejected() {
+        assert!(!resolves(&[
+            "--texture-map",
+            "textures/skin.png",
+            "R=metallicFactor",
+        ]));
+    }
+
+    #[test]
+    fn computed_occlusion_is_rejected_under_the_palette_atlas() {
+        assert!(!resolves(&["--texture", "computed-occlusion"]));
+    }
+
+    #[test]
+    fn a_bundle_cannot_be_named_by_texture_name() {
+        // `pbr` is a bundle, not a single-map preset the left side accepts.
+        assert!(!resolves(&[
             "--texture",
             "pbr",
-            "--texture",
-            "roughness",
-        ])
-        .unwrap();
-        let maps = mesh.resolve_maps(Path::new("model.glb")).unwrap();
-        let presets: Vec<Texture> = maps.iter().filter_map(|map| map.preset).collect();
-        assert!(matches!(
-            presets.as_slice(),
-            [
-                Texture::Albedo,
-                Texture::Orm,
-                Texture::Emissive,
-                Texture::Roughness
-            ]
-        ));
-    }
-
-    #[test]
-    fn a_binding_resolves_to_its_concrete_key() {
-        // The scalar binding `gloss` reads the layer's `roughnessFactor`.
-        let resolved = resolve_source(&attribute("gloss", None, true), &bindings()).unwrap();
-        assert_eq!(resolved, attribute(ROUGHNESS_FACTOR, None, true));
-
-        // The color binding `tint` reads a component of the layer's `tint`.
-        let resolved = resolve_source(
-            &attribute("tint", Some(ColorComponent::R), false),
-            &bindings(),
-        )
-        .unwrap();
-        assert_eq!(resolved, attribute("tint", Some(ColorComponent::R), false));
-    }
-
-    #[test]
-    fn a_bare_scalar_and_base_color_validate_their_components() {
-        // A scalar takes no component; `baseColorFactor` is a built-in color.
-        assert!(resolve_source(&attribute(METALLIC_FACTOR, None, false), &bindings()).is_ok());
-        assert!(
-            resolve_source(
-                &attribute(METALLIC_FACTOR, Some(ColorComponent::R), false),
-                &bindings()
-            )
-            .is_err()
-        );
-        assert!(
-            resolve_source(
-                &attribute(BASE_COLOR_FACTOR, Some(ColorComponent::A), false),
-                &bindings()
-            )
-            .is_ok()
-        );
-        assert!(resolve_source(&attribute(BASE_COLOR_FACTOR, None, false), &bindings()).is_err());
-    }
-
-    #[test]
-    fn emissive_factor_is_an_alpha_less_built_in_color() {
-        use voxsmith::EMISSIVE_FACTOR;
-
-        // The emissive color is the second built-in color, so a bare channel
-        // must name a component; but glTF emissive has no alpha, so `.a` is
-        // rejected while `.g` is fine.
-        assert!(
-            resolve_source(
-                &attribute(EMISSIVE_FACTOR, Some(ColorComponent::G), false),
-                &bindings()
-            )
-            .is_ok()
-        );
-        assert!(resolve_source(&attribute(EMISSIVE_FACTOR, None, false), &bindings()).is_err());
-        assert!(
-            resolve_source(
-                &attribute(EMISSIVE_FACTOR, Some(ColorComponent::A), false),
-                &bindings()
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn a_three_component_color_rejects_alpha() {
-        // `glow` is declared `srgb`, so it has r/g/b but no alpha.
-        assert!(
-            resolve_source(
-                &attribute("glow", Some(ColorComponent::B), false),
-                &bindings()
-            )
-            .is_ok()
-        );
-        assert!(
-            resolve_source(
-                &attribute("glow", Some(ColorComponent::A), false),
-                &bindings()
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn a_color_binding_needs_a_component() {
-        assert!(resolve_source(&attribute("tint", None, false), &bindings()).is_err());
-    }
-
-    #[test]
-    fn constants_pass_and_computed_occlusion_is_rejected() {
-        assert_eq!(
-            resolve_source(&ChannelSource::One, &bindings()).unwrap(),
-            ChannelSource::One
-        );
-        assert!(resolve_source(&ChannelSource::ComputedOcclusion, &bindings()).is_err());
+            "--texture-name",
+            "pbr",
+            "x.png"
+        ]));
     }
 
     #[test]
@@ -585,38 +546,27 @@ mod tests {
     }
 
     #[test]
-    fn a_non_positive_scale_is_rejected_at_parse() {
-        assert!(Mesh::try_parse_from(["mesh", "model.vox", "--scale", "0"]).is_err());
-        assert!(Mesh::try_parse_from(["mesh", "model.vox", "--scale", "-1"]).is_err());
-    }
-
-    #[test]
-    fn the_texture_help_lists_every_usable_preset() {
+    fn hidden_variants_are_absent_from_help() {
         let command = Mesh::command();
-        let help = command
-            .get_arguments()
-            .find(|arg| arg.get_id() == "texture")
-            .and_then(|arg| arg.get_long_help())
-            .map(|help| help.to_string())
-            .expect("the --texture argument has long help");
+        let visible = |id: &str| -> Vec<String> {
+            command
+                .get_arguments()
+                .find(|arg| arg.get_id() == id)
+                .expect("the argument exists")
+                .get_possible_values()
+                .into_iter()
+                .filter(|value| !value.is_hide_set())
+                .map(|value| value.get_name().to_owned())
+                .collect()
+        };
 
-        for texture in Texture::value_variants() {
-            let name = texture
-                .to_possible_value()
-                .expect("every preset has a value")
-                .get_name()
-                .to_owned();
+        // The presets and the bundle are listed; computed-occlusion is hidden.
+        let textures = visible("texture");
+        assert!(textures.contains(&"albedo".to_owned()));
+        assert!(textures.contains(&"pbr".to_owned()));
+        assert!(!textures.contains(&"computed-occlusion".to_owned()));
 
-            // `computed-occlusion` needs the unwrap atlas, which `mesh` rejects,
-            // so it stays off the list; every other preset must appear.
-            if let Texture::ComputedOcclusion = texture {
-                assert!(!help.contains(&name), "{name} should not be listed");
-            } else {
-                assert!(
-                    help.contains(&name),
-                    "{name} is missing from --texture help"
-                );
-            }
-        }
+        // Only the shipped palette atlas is listed; unwrap is hidden.
+        assert_eq!(visible("atlas"), ["palette".to_owned()]);
     }
 }

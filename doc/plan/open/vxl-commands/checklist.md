@@ -93,28 +93,31 @@ off as they land.
       error when the selection is not exactly one object. The mesher lives in
       voxsmith (`object_to_mesh_geometry` plus `object_to_glb_bytes` /
       `object_to_gltf_bytes`) behind the `gltf` feature; vxl stays a thin CLI.
-- [x] `--to` / `--from` (`gltf` | `glb`), `--scale` (meters per voxel, default
+- [x] `--to` / `--from` (`gltf` | `glb`), `--voxel-size` (meters per voxel, default
       `1.0`, baked into every vertex; glTF is meter-native), `--method`, and the
       `--select` / `--select-index` object selectors, `--select` matched through
       the shared `pathspec` gitignore engine like `hierarchy show`.
 - [ ] `--atlas` and the `--computed-occlusion-strength` /
       `--computed-occlusion-min-brightness` / `--computed-occlusion-color-space`
       tuning (land with the texture / occlusion maps below).
-- [x] Material maps: `--texture <name> [path]` presets (albedo, orm,
+- [x] Material maps: `--texture <preset>` presets (albedo, orm,
       metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
-      computed-occlusion, roughness, smoothness), `--texture-map <path>
-      <channels>`, `--define-attribute <name> <key> [type]`, `--layer` (0-based
-      object-layer index whose materials this mesh bakes, default `0`), and
-      `--texture-storage` (embedded / external / both); default paths from the
-      mesh stem. (The `--atlas palette` path; `computed-occlusion` errors until
-      the unwrap atlas lands.)
-- [ ] Vertex attribute maps: `--vertex <name> [target]` presets (albedo →
+      computed-occlusion, roughness, smoothness) and the `pbr` bundle, repeatable;
+      `--texture-name <preset> <file-name>` / `--texture-name-prefix <prefix>`
+      naming; `--texture-map <file-name> <channels>`; `--define-attribute
+      <name>=<key>[:<type>]`; `--layer` (0-based
+      object-layer index whose materials this mesh bakes, default `0`); and
+      `--texture-storage` (embedded / external / both); default names from the
+      output stem, unique per bake. (The `--atlas palette` path;
+      `computed-occlusion` errors until the unwrap atlas lands.)
+- [ ] Vertex attribute maps: `--vertex <preset>` presets (albedo →
       `COLOR_0`, computed-occlusion → `COLOR_0` darken, metallic / roughness /
       emissive / occlusion / smoothness → scalar `_NAME`, orm / mse /
       metallic-roughness / metallic-smoothness → packed `_NAME`, palette-index →
       `_PALETTEINDEX` over a per-mesh used-combos table, palette-layers →
       `_PALETTEINDEX0..n` over per-layer palettes), the `PaletteData` JSON
-      written per `--palette-storage` (extras / `-palette.json` / both), and
+      written per `--palette-storage` (extras / `-palette.json` / both),
+      `--vertex-target <preset> <target>` overriding a preset's attribute, and
       `--vertex-map <target> <channels>` reusing the `--texture-map` channel
       grammar and `--define-attribute`.
 - [x] `Dependencies::resolve_objects` and `mesh_object` and their impls, the

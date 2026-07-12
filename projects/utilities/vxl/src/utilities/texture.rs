@@ -1,9 +1,13 @@
-use crate::{ChannelPacking, ChannelSource, TextureBake};
+use crate::{ChannelPacking, ChannelSource, MeshTextureMap, TextureBake};
 use clap::ValueEnum;
-use voxsmith::{EMISSIVE_STRENGTH, METALLIC_FACTOR, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR};
+use voxsmith::{
+    EMISSIVE_STRENGTH, METALLIC_FACTOR, MaterialSlot, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR,
+};
 
-/// A named `--texture` preset, a common material-map packing.
-#[derive(Clone, Copy, Debug, ValueEnum)]
+/// A single-map material preset. The left side of `--texture-name` and each map
+/// a `--texture` bakes; the bundle-inclusive `--texture` value is
+/// [`crate::TextureArg`].
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, ValueEnum)]
 pub enum Texture {
     /// RGBA base color from `baseColorFactor`. Four channels.
     #[value(name = "albedo")]
@@ -38,8 +42,8 @@ pub enum Texture {
     Occlusion,
 
     /// Grayscale occlusion computed from the voxel geometry. One channel; always
-    /// an unwrap layout.
-    #[value(name = "computed-occlusion")]
+    /// an unwrap layout, not yet supported, so hidden until it ships.
+    #[value(name = "computed-occlusion", hide = true)]
     ComputedOcclusion,
 
     /// Grayscale `roughnessFactor`. One channel.
@@ -52,6 +56,42 @@ pub enum Texture {
 }
 
 impl Texture {
+    /// The glTF material slot this preset fills, or [`MaterialSlot::None`] for a
+    /// preset with no standard slot. Resolved here so the implementation never
+    /// sees the CLI preset.
+    pub fn slot(self) -> MaterialSlot {
+        match self {
+            Texture::Albedo => MaterialSlot::BaseColor,
+            Texture::Orm => MaterialSlot::OcclusionMetallicRoughness,
+            Texture::MetallicRoughness => MaterialSlot::MetallicRoughness,
+            Texture::Occlusion => MaterialSlot::Occlusion,
+            Texture::Emissive => MaterialSlot::Emissive,
+            Texture::MetallicSmoothness
+            | Texture::Mse
+            | Texture::ComputedOcclusion
+            | Texture::Roughness
+            | Texture::Smoothness => MaterialSlot::None,
+        }
+    }
+
+    /// This preset's CLI name, as its default file-name component, e.g.
+    /// `albedo`.
+    pub fn cli_name(self) -> String {
+        self.to_possible_value()
+            .expect("every texture preset has a value")
+            .get_name()
+            .to_owned()
+    }
+
+    /// The resolved map this preset bakes under the file `name`.
+    pub fn map(self, name: String) -> MeshTextureMap {
+        MeshTextureMap {
+            name,
+            slot: Some(self.slot()),
+            bake: self.bake(),
+        }
+    }
+
     /// Lowers this preset to the map the bake writes.
     pub fn bake(self) -> TextureBake {
         match self {

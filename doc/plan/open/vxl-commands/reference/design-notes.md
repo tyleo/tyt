@@ -13,19 +13,21 @@ Rationale for the non-obvious choices, for reviewers.
    `to vmax` infer source format, keeps one home for the material options, and
    leaves room for more mesh formats without a subcommand per format. glTF is the
    only mesh format for now. `voxelize` is the conventional verb for the inverse.
-3. Material maps come from `--texture <name> [path]` for the named presets and
-   `--texture-map <path> <channels>` for a custom packing. The presets name the
-   common packings, ORM and MSE included, so the common cases are one flag,
-   while `--texture-map` expresses any channel-to-attribute packing without a
-   code change. Each flag takes its parts as separate arguments, the preset name
-   and an optional path, or the output path and the channel list, rather than
-   packing a filename, channel count, palette index, and material list into one
-   argument as the original `--texture` flag did. The channel list keeps its
-   commas because the RGBA packing is one structured value, and an arity that
-   varied with a layout token would need a greedy parser that swallows the
-   optional `output` positional. `smoothness` is accepted as the derived
-   `1 - roughnessFactor`, so it need not be spelled `1-roughnessFactor`. The same
-   flags back
+3. Material maps come from `--texture <preset>` for the named presets and bundles
+   and `--texture-map <file-name> <channels>` for a custom packing. The presets
+   name the common packings, ORM and MSE included, so the common cases are one
+   flag, while `--texture-map` expresses any channel-to-attribute packing without
+   a code change. No flag packs several tokens into one quoted string: `--texture`
+   is a plain, repeatable value enum clap validates and completes, with a map's
+   file name split out to `--texture-name <preset> <file-name>` and
+   `--texture-name-prefix`, and `--texture-map` takes its file name and channel
+   list as two arguments, rather than packing a filename, channel count, palette
+   index, and material list into one argument as the original `--texture` flag
+   did. The channel list keeps its commas because the RGBA packing is one
+   structured value, and an arity that varied with a layout token would need a
+   greedy parser that swallows the optional `output` positional. `smoothness` is
+   accepted as the derived `1 - roughnessFactor`, so it need not be spelled
+   `1-roughnessFactor`. The same flags back
    the standalone `material` command so textures can be re-baked without
    re-meshing; both derive the same atlas, so the maps stay aligned to the mesh
    UVs.
@@ -65,7 +67,7 @@ Rationale for the non-obvious choices, for reviewers.
    palette has nothing to walk and skips both. Reusing the selectors keeps one
    addressing model across mesh, material, quantize, and remap.
 8. Custom attributes reach `--texture-map` and `--vertex-map` through a declared
-   binding, `--define-attribute <name> <key> [type]`, rather than inline
+   binding, `--define-attribute <name>=<key>[:<type>]`, rather than inline
    qualifiers. The voxel-json format stores attributes generically, so a packing
    must read a key the presets do not name, of a type the tool cannot infer: a
    custom value may be a `0..1` number or a `#RRGGBBAA` color, and only a color

@@ -1,4 +1,5 @@
 use clap::ValueEnum;
+use voxsmith::{BASE_COLOR_FACTOR, EMISSIVE_FACTOR};
 
 /// The pool kind a `--define-attribute` declares for a custom voxel attribute.
 /// The mesh command parses its maps before the document loads, so the user
@@ -50,5 +51,15 @@ impl AttributeType {
     /// Whether a color kind has an alpha component, so `.a` is valid.
     pub fn has_alpha(self) -> bool {
         matches!(self, AttributeType::Srgba | AttributeType::LinearRgba)
+    }
+
+    /// The kind of a built-in glTF color attribute, or `None` otherwise. The
+    /// base color has alpha; the emissive color does not.
+    pub fn builtin_color(key: &str) -> Option<AttributeType> {
+        match key {
+            BASE_COLOR_FACTOR => Some(AttributeType::Srgba),
+            EMISSIVE_FACTOR => Some(AttributeType::Srgb),
+            _ => None,
+        }
     }
 }

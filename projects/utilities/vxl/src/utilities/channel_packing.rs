@@ -1,5 +1,5 @@
-use crate::ChannelSource;
-use std::str::FromStr;
+use crate::{AttributeBinding, ChannelSource, Result};
+use std::{result::Result as StdResult, str::FromStr};
 
 /// A material-map channel packing: a [`ChannelSource`] per named RGBA channel.
 #[derive(Clone, Debug, PartialEq)]
@@ -46,6 +46,25 @@ impl ChannelPacking {
             .map(|slot| slot.clone().unwrap_or(ChannelSource::Zero))
             .collect()
     }
+
+    /// Resolves every channel against the `--define-attribute` bindings into a
+    /// packing with concrete attribute keys.
+    pub(crate) fn resolve(&self, bindings: &[AttributeBinding]) -> Result<ChannelPacking> {
+        let resolved = self
+            .sources()
+            .iter()
+            .map(|source| source.resolve(bindings))
+            .collect::<Result<Vec<_>>>()?;
+
+        let channel = |index: usize| resolved.get(index).cloned();
+
+        Ok(ChannelPacking::new(
+            channel(0),
+            channel(1),
+            channel(2),
+            channel(3),
+        ))
+    }
 }
 
 impl FromStr for ChannelPacking {
@@ -54,7 +73,7 @@ impl FromStr for ChannelPacking {
     /// Parses a comma-separated `R=<expr>,G=<expr>,...` channel list. Each
     /// channel must be one of `R`, `G`, `B`, `A`, set at most once, and at least
     /// one channel must be named.
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
+    fn from_str(value: &str) -> StdResult<Self, Self::Err> {
         let mut packing = ChannelPacking {
             r: None,
             g: None,

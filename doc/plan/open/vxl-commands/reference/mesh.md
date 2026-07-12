@@ -27,9 +27,10 @@ is a separate mode left for a later pass.
    output extension when omitted.
 2. `--from <format>`: source voxel format. Inferred from the input extension
    when omitted.
-3. `--meters-per-voxel <meters>` (default `1.0`): the real-world edge length of
-   one voxel in meters, applied as a uniform scale to every output vertex. The
-   voxel-json format is unitless, with one unit per voxel, so `--meters-per-voxel`
+3. `--voxel-size <meters>` (default `1.0`): the real-world edge length of
+   one voxel in meters, applied as a uniform scale to every output vertex, the
+   mesh twin of `voxelize`'s `--voxel-size`. The voxel-json format is unitless,
+   with one unit per voxel, so `--voxel-size`
    is where that grid gains a physical size: `1.0` sizes a voxel at one meter,
    `0.01` at one
    centimeter, and `0.001` at one millimeter. glTF is meter-native, so the mesh
@@ -117,12 +118,13 @@ matching how each form carries its other resources. Under `both` the mesh reads
 the embedded copy, so the loose files are working copies to edit and re-bake
 from, which is why a texture-heavy mesh is easier to iterate on as `external`.
 
-Maps come from two flags, each repeatable once per output image: `--texture` for
-the named presets and `--texture-map` for a custom packing.
+Maps come from `--texture` for the named presets and `--texture-map` for a custom
+packing, both repeatable once per output image, with `--texture-name` and
+`--texture-name-prefix` naming the preset images.
 
-`--texture <name> [path]` writes a preset map, repeatable, as in
-`--texture albedo --texture orm`. The optional `path` overrides the default of
-the mesh stem plus the name, the `{stem}-mse.png` style. The names are:
+`--texture <preset>` writes a preset map, repeatable, as in
+`--texture albedo --texture orm`. A value is one of the single-map presets or a
+bundle that expands to several; the single presets are:
 
 1. `albedo`: RGBA base color from `baseColorFactor`. Four channels.
 2. `orm`: glTF occlusion-roughness-metallic packing, R = `occlusionStrength`,
@@ -145,8 +147,33 @@ the mesh stem plus the name, the `{stem}-mse.png` style. The names are:
 9. `roughness`: grayscale `roughnessFactor`. One channel.
 10. `smoothness`: grayscale `smoothness`. One channel.
 
-`--texture-map <path> <channels>` writes a custom packing, also repeatable. The
-`channels` argument is a comma-separated list of `R=<expr>`, `G=<expr>`,
+A bundle expands to several single maps in order:
+
+1. `pbr`: the glTF PBR set, `albedo`, `orm`, and `emissive`.
+
+A preset map's file name comes from a three-level precedence, highest first:
+
+1. `--texture-name <preset> <file-name>`, repeatable, names one preset's map
+   exactly, as `--texture-name albedo skin.png`. The preset is a single-map
+   preset, never a bundle, since a bundle names several files and so no single
+   one. Naming a preset that is not being baked, or naming one twice, is an error.
+2. `--texture-name-prefix <prefix>` replaces the default `<output-stem>-` prefix
+   for every preset map with no explicit `--texture-name`; the preset name
+   follows verbatim, so the prefix carries its own separator. `--texture-name-prefix
+   hero-` writes `hero-albedo.png` and `hero-orm.png`, while `test.` writes
+   `test.albedo.png`.
+3. Otherwise the default is the output stem plus the preset, `turret-albedo.png`
+   for `turret.glb`.
+
+Both naming flags compose with a bundle: `--texture pbr --texture-name albedo
+skin.png` names the bundle's albedo map `skin.png` while the prefix or stem names
+the rest. Every map name is a file name written beside the mesh, so a value
+holding a path separator, or an empty prefix, is an error rather than silently
+stripped to its file name, and two maps that resolve to the same file name are an
+error.
+
+`--texture-map <file-name> <channels>` writes a custom packing, also repeatable.
+The `channels` argument is a comma-separated list of `R=<expr>`, `G=<expr>`,
 `B=<expr>`, and optional `A=<expr>`, where `<expr>` is an attribute name,
 `1-<attribute>` for an inverted attribute, one color component as
 `<attribute>.r`, `.g`, `.b`, or `.a`, the constant `0` or `1`, or
@@ -167,20 +194,21 @@ names no component, so `metallicFactor.r` is an error, and a color with no alpha
 rejects `.a`: `emissiveFactor` is a three-component color, so `emissiveFactor.a`
 is an error.
 
-`--define-attribute <name> <key> [type=scalar]` names a custom
+`--define-attribute <name>=<key>[:<type>]` names a custom
 attribute so `--texture-map` and `--vertex-map` can read it, repeatable, as in
-`--define-attribute sss subsurface` and `--define-attribute tint tint srgba`.
+`--define-attribute sss=subsurface` and `--define-attribute tint=tint:srgba`.
 The voxel-json format stores attributes generically, so a palette may
 carry keys beyond the recommended set in
 [Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
 and a binding gives one such key a name a packing can use. A binding reads the
-key from the meshed layer's material. Its parts are:
+key from the meshed layer's material. Its parts, split on the first `=` then the
+first `:` of the remainder, are:
 
 1. `name`: the name used in `--texture-map` and `--vertex-map`. It shadows a
-   built-in attribute name on collision, so `--define-attribute roughnessFactor
-   micro-rough` makes `R=roughnessFactor` read `micro-rough` instead. The
-   shadowing is scoped to the custom packings; the `--texture` and `--vertex`
-   presets always read the spec attributes.
+   built-in attribute name on collision, so `--define-attribute
+   roughnessFactor=micro-rough` makes `R=roughnessFactor` read `micro-rough`
+   instead. The shadowing is scoped to the custom packings; the `--texture` and
+   `--vertex` presets always read the spec attributes.
 2. `key`: the voxel-json attribute key read from the meshed layer's material.
 3. `type` (default `scalar`): the attribute's pool kind, which tells a packing
    how to read it. The colors are `srgb` and `srgba` and their linear twins
@@ -189,7 +217,7 @@ key from the meshed layer's material. Its parts are:
    `float` and `int`, read whole; and `bool` packs as a `1` or `0` mask. `color`
    is an alias for `srgba` and `scalar` for `float`, the common cases.
 
-For example, `--define-attribute tint tint srgba` then `--texture-map
+For example, `--define-attribute tint=tint:srgba` then `--texture-map
 paint.png R=tint.r,G=tint.g,B=tint.b,A=baseColorFactor.a` packs the custom `tint`
 color into RGB and the base color's alpha into `A`.
 
@@ -224,16 +252,16 @@ concave seams split, and when a quad's four corners are uneven the triangle
 diagonal is chosen to keep the darker pair together so interpolation does not
 seam.
 
-`--vertex <name> [target]` writes a preset to vertices, repeatable, the vertex
-twin of `--texture`. The optional `target` overrides the default attribute name.
-The names reuse the texture presets and pack the same way:
+`--vertex <preset>` writes a preset to vertices, repeatable, the vertex twin of
+`--texture`. The names reuse the texture presets and pack the same way:
 
 1. `albedo`: RGBA base color from `baseColorFactor` into `COLOR_0`. Portable; a
    glTF viewer renders it as the per-vertex base color with no texture.
 2. `computed-occlusion`: occlusion computed from the voxel geometry, multiplied
    into `COLOR_0` to darken the base color, tuned by the `--computed-occlusion-*`
-   options above. Override the target, as `--vertex computed-occlusion _AO`, to
-   write it as a standalone custom scalar instead of darkening the color.
+   options above. Override the target with `--vertex-target computed-occlusion
+   _AO` (below) to write it as a standalone custom scalar instead of darkening
+   the color.
 3. `metallic`, `roughness`, `emissive`, `occlusion`, `smoothness`: one scalar
    into `_METALLIC`, `_ROUGHNESS`, and so on, the name a `_` plus the preset
    uppercased. Custom attributes a custom shader reads.
@@ -257,6 +285,13 @@ The names reuse the texture presets and pack the same way:
    is also the only carrier that preserves every layer's material rather than
    collapsing to a single selected layer. A single-layer object reduces to one
    `_PALETTEINDEX0` and the one palette. Custom; not read by a generic viewer.
+
+A preset writes to the default attribute listed above; `--vertex-target
+<preset> <target>` overrides it, repeatable, the vertex twin of `--texture-name`,
+as `--vertex-target computed-occlusion _AO`. A target is a fixed glTF attribute
+name rather than a stem-derived file name, so there is no prefix twin, and
+overriding a preset that is not being written, or overriding one twice, is an
+error.
 
 `--vertex-map <target> <channels>` writes a custom packing to a named attribute,
 repeatable, the vertex twin of `--texture-map`. `target` is `COLOR_0` or a custom

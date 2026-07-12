@@ -1040,6 +1040,9 @@ impl; `MeshFormat` gains an `extension()` for the defaulted output path, and the
 output format defaults to `glb` when neither `--to` nor the output extension
 picks one. The material, vertex, atlas, computed-occlusion, and storage flags in
 [mesh.md](mesh.md) are unbuilt; the shipped command is the geometry-only subset.
+The vertex scale flag was later renamed `--scale` to `--voxel-size` to mirror
+`voxelize`'s flag, since both name the same meters-per-voxel edge length; it
+still lowers to the voxsmith `scale` argument unchanged.
 
 ## mesh textures
 
@@ -1117,14 +1120,12 @@ default follows the target, `embedded` for `.glb` and `external` for `.gltf`, an
 the impl writes each returned sidecar beside the output. The enum also backs the
 deferred `--palette-storage`.
 
-The flag arity is settled per option, since clap groups a repeatable multi-value
-option only at fixed arity. `--texture-map <path> <channels>` is fixed at two
-values chunked by two, the `palette show` pattern. `--texture <name> [path]` and
-`--define-attribute <name> <key> [type]` have an optional trailing token, so each
-occurrence is one whitespace-split value parsed by `FromStr` (matching
-`AttributeBinding`'s form): `--texture albedo` is one token, and the path or type
-override is a quoted `--texture "albedo out.png"`. `AttributeBinding` dropped its
-palette index; a binding now reads the merged value across layers.
+The mesh texture flags shipped with tokens packed into single whitespace-split
+strings, `--texture "<name> [path]"` and `--define-attribute "<name> <key>
+[type]"`, parsed by `FromStr` past clap's validation; they were later redesigned
+into typed clap values (see [mesh texture flag redesign](#mesh-texture-flag-redesign)).
+`AttributeBinding` dropped its palette index; a binding reads the merged value
+across layers.
 
 The command resolves the `--texture-map` channels against the
 `--define-attribute` bindings and validates them: a binding alias becomes its
@@ -1134,3 +1135,90 @@ requires a component and a scalar rejects one, matching the mesh reference. The
 reference promises. The resolved maps pass through `mesh_object` as flag-agnostic
 `MeshTextureMap`s, so `implementation/` never sees a flag. `--atlas unwrap` and
 any `computed-occlusion` map error as a later pass.
+
+## mesh texture flag redesign
+
+A pass over the shipped mesh texture flags replaced the tokens packed into single
+quoted strings with typed clap values, so each parses and validates at parse
+time, and moved the value resolution off the command onto the utilities types
+that own it. Breaking, with no external users to migrate.
+
+The three duplicated `usage` helpers collapse to one `pub(crate) fn usage` in
+`utilities/usage.rs`. Each wrapped an `InvalidInput` `io::Error` into
+`crate::Error` for a rule clap cannot express, in `commands/mesh.rs`,
+`commands/voxelize.rs`, and `utilities/grid_resolution_options.rs`. The utilities
+value resolution that gained runtime checks (`ChannelSource::resolve`,
+`TextureMap::new`) reaches it through the same crate-internal re-export.
+
+`--define-attribute` parses as one unquoted `name=key[:type]` token, splitting on
+the first `=` then the first `:` of the remainder, so `gloss=roughnessFactor` and
+`tint=tint:color` both parse and a key keeps its glTF spelling. The old
+whitespace `name key [type]` form forced a shell quote for what is one logical
+value; the type still defaults to `scalar`.
+
+`--texture` is a repeatable `TextureArg` `ValueEnum`, so `--texture albedo` and
+`--texture pbr` parse as enum values with clap's generated possible-values help
+and shell completion, and several maps repeat the flag (`--texture albedo
+--texture orm`) the way `--select-index` does, not a comma list. This retires the
+hand-split `<name> [path]` string and the hand-maintained preset list in its doc
+comment. `TextureArg` is one flat enum over the single-map
+`Texture` presets and the `TextureBundle` bundles, since a clap `ValueEnum` needs
+unit variants and cannot nest the two existing enums; `TextureArg::textures`
+expands each value to its presets in order. Its single-preset variants are
+duplicated from `Texture`, guarded against drift by a test that round-trips every
+`Texture` name through `TextureArg`. The per-preset path override is gone; a
+map's file name now comes from a three-level precedence.
+
+Preset file names resolve by precedence: an exact `--texture-name <preset>
+<file-name>` wins, else `--texture-name-prefix <prefix>` replaces the
+`<output-stem>-` of the default `<output-stem>-<preset>.png` and the preset
+follows the prefix verbatim (so the prefix carries its own separator, `hero-` or
+`test.`), else the stem stands. `--texture-name` takes its two tokens at `num_args = 2` like
+`--texture-map`, paired into a `TextureName` whose preset is the single-map
+`Texture`, not the bundle-inclusive `TextureArg`, so `--texture-name pbr x.png`
+is rejected: a bundle names several files, not one. Both flags compose with a
+bundle: `--texture pbr --texture-name albedo skin.png` renames the one map while
+the prefix or stem names the rest. The command rejects a `--texture-name` for a
+preset not being baked and a preset named twice; neither flag touches the
+already-named `--texture-map` maps.
+
+Every user-supplied map name or prefix is a file name written beside the mesh,
+not a path, so a `require_file_name` helper rejects an empty value or one holding
+a path separator with a message rather than silently stripping directories
+through `Path::file_name` as before. `--texture-map` and `--texture-name` are
+both fixed two-token `num_args = 2` options whose flat `Vec<String>` pairs into a
+typed `TextureMap` or `TextureName` right after parse, so the pairing is not
+re-derived by `chunks(2)` at the point of use; only `--define-attribute`, whose
+`:type` is optional, keeps a single `name=key[:type]` token. The vague value
+names are gone: `--define-attribute <name=key[:type]>`, `--texture-map
+<file-name> <channels>`, and `--texture-name <preset> <file-name>` each describe
+their value.
+
+The resolved map file names must be unique. The old command silently produced two
+`<stem>-albedo.png` maps from `--texture pbr --texture albedo`, and let a custom
+`--texture-map` name collide with a preset default; the command now errors naming
+the duplicate. The presets-first, then custom-maps order is only how the maps are
+laid out, not a claim that flag order is otherwise preserved, and the
+`resolve_maps` doc comment says so.
+
+The unwrap-atlas rejections centralize. `Atlas::Unwrap` and the
+computed-occlusion `Texture` and `TextureArg` variants are `#[value(hide =
+true)]`, so they stay parseable but out of help until the feature ships. The
+`--atlas unwrap` gate stays in `execute` and runs before the maps resolve, so the
+two computed-occlusion checks, a `--texture` preset that bakes it and a
+`--texture-map` channel that names it, fire only under the palette atlas and
+share one `ChannelSource::computed_occlusion_unsupported` rejection.
+
+The value resolution moved onto the utilities types that own each value, the
+house pattern beside `AttributeBinding` and `ChannelPacking`:
+`AttributeType::builtin_color` (which glTF factors are colors and which carry
+alpha, spec knowledge), `ChannelSource::resolve` and `ChannelPacking::resolve` (a
+channel and a packing against the bindings), `Texture::slot`/`cli_name`/`map`,
+and `TextureMap::resolve`. The resolvers take a `&[AttributeBinding]` slice with
+an inline name lookup rather than a tuple-typed `HashMap<&str, (&str,
+AttributeType)>` threaded through free functions. `MeshTextureMap` dropped its
+`preset: Option<Texture>` for a `slot: Option<MaterialSlot>` the command
+resolves, so `implementation/mesh.rs` stops importing the CLI enum and reads the
+slot straight through. `mesh.rs` shrank to flag declarations plus policy: the
+one-object selection, the atlas gate, the name precedence, and the uniqueness
+check.
