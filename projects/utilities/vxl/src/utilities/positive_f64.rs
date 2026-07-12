@@ -1,35 +1,44 @@
-/// Parses a positive `f64` flag value, rejecting zero, negatives, and NaN so
-/// `--voxel-size` and `--scale` fail at clap parse time.
-pub(crate) fn parse_positive_f64(value: &str) -> Result<f64, String> {
-    let number = value
-        .parse::<f64>()
-        .map_err(|_| format!("`{value}` is not a number"))?;
+use std::str::FromStr;
 
-    if number <= 0.0 || number.is_nan() {
-        return Err(format!("`{value}` must be greater than 0"));
+/// A positive `f64`: greater than zero and not NaN.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PositiveF64(pub f64);
+
+impl FromStr for PositiveF64 {
+    type Err = String;
+
+    /// Parses a number greater than zero, rejecting zero, negatives, and NaN.
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let number = value
+            .parse::<f64>()
+            .map_err(|_| format!("`{value}` is not a number"))?;
+
+        if number <= 0.0 || number.is_nan() {
+            return Err(format!("`{value}` must be greater than 0"));
+        }
+
+        Ok(PositiveF64(number))
     }
-
-    Ok(number)
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::parse_positive_f64;
+    use crate::PositiveF64;
 
     #[test]
     fn accepts_a_positive_number() {
-        assert_eq!(parse_positive_f64("0.25"), Ok(0.25));
+        assert_eq!("0.25".parse::<PositiveF64>(), Ok(PositiveF64(0.25)));
     }
 
     #[test]
     fn rejects_zero_negative_and_nan() {
-        assert!(parse_positive_f64("0").is_err());
-        assert!(parse_positive_f64("-1").is_err());
-        assert!(parse_positive_f64("nan").is_err());
+        assert!("0".parse::<PositiveF64>().is_err());
+        assert!("-1".parse::<PositiveF64>().is_err());
+        assert!("nan".parse::<PositiveF64>().is_err());
     }
 
     #[test]
     fn rejects_a_non_number() {
-        assert!(parse_positive_f64("abc").is_err());
+        assert!("abc".parse::<PositiveF64>().is_err());
     }
 }

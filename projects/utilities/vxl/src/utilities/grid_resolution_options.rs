@@ -1,4 +1,4 @@
-use crate::{GridResolution, parse_positive_f64};
+use crate::{GridResolution, PositiveF64};
 use clap::{ArgGroup, Args};
 
 /// The `voxelize` grid-resolution controls. Flattened onto the command,
@@ -14,8 +14,8 @@ pub struct GridResolutionOptions {
     resolution: Option<u32>,
 
     /// Edge length of one voxel in meters, keeping the mesh's real-world size.
-    #[arg(value_name = "voxel-size", long, value_parser = parse_positive_f64)]
-    voxel_size: Option<f64>,
+    #[arg(value_name = "voxel-size", long)]
+    voxel_size: Option<PositiveF64>,
 }
 
 impl GridResolutionOptions {
@@ -24,7 +24,10 @@ impl GridResolutionOptions {
     pub fn resolve(&self) -> GridResolution {
         self.resolution
             .map(GridResolution::VoxelGridLength)
-            .or_else(|| self.voxel_size.map(GridResolution::MetersPerVoxel))
+            .or_else(|| {
+                self.voxel_size
+                    .map(|size| GridResolution::MetersPerVoxel(size.0))
+            })
             .expect("the grid_resolution ArgGroup requires one flag")
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     Atlas, AttributeBinding, AttributeType, ChannelPacking, ChannelSource, ColorComponent,
-    Dependencies, Error, Format, MeshFormat, MeshMethod, MeshTextureMap, ResourceStorage, Result,
-    SelectIndex, Texture, TextureBake, TextureBundle, parse_positive_f64,
+    Dependencies, Error, Format, MeshFormat, MeshMethod, MeshTextureMap, PositiveF64,
+    ResourceStorage, Result, SelectIndex, Texture, TextureBake, TextureBundle,
 };
 use clap::{Parser, ValueEnum};
 use std::{
@@ -34,8 +34,8 @@ pub struct Mesh {
 
     /// Real-world edge length of one voxel in meters, applied as a uniform scale
     /// to every output vertex.
-    #[arg(value_name = "scale", long, default_value = "1.0", value_parser = parse_positive_f64)]
-    scale: f64,
+    #[arg(value_name = "scale", long, default_value = "1.0")]
+    scale: PositiveF64,
 
     /// Meshing strategy.
     #[arg(value_name = "method", long, default_value = "greedy")]
@@ -175,7 +175,7 @@ impl Mesh {
             self.from,
             &output,
             format,
-            self.scale,
+            self.scale.0,
             self.method,
             object,
             self.layer,
