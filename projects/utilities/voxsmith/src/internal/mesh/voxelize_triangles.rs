@@ -13,10 +13,10 @@ use ty_math::TyVector3U32;
 /// # Arguments
 /// * `triangles` - the triangles to rasterize, in grid-independent world space.
 /// * `counts` - the grid resolution in voxels per axis.
-/// * `solid` - when true, fill the volume the surface encloses too, by a flood
-///   fill from the boundary that fills every cell the outside cannot reach; a
-///   non-watertight surface leaks, so the fill falls back to the shell. Filled
-///   interior cells record no triangle, to be painted by the caller.
+/// * `solid` - when true, occupancy becomes the body the surface bounds, every
+///   voxel whose center lies inside it, replacing the surface shell; see
+///   [`fill_center_inside`]. A non-watertight surface leaks. Filled interior
+///   cells record no triangle, to be painted by the caller.
 pub(crate) fn voxelize_triangles(
     triangles: &[MeshTriangle],
     counts: TyVector3U32,
@@ -76,7 +76,10 @@ pub(crate) fn voxelize_triangles(
     }
 
     if solid {
-        fill_enclosed(&mut filled, nx, ny, nz);
+        // Replace the surface occupancy with the body the surface bounds: every
+        // voxel whose center lies inside it. The surface pass above still stands
+        // as `covering`, so a filled boundary cell keeps the triangle it samples.
+        fill_center_inside(&mut filled, &space, triangles, nx, ny, nz);
     }
 
     VoxelGrid {
@@ -85,60 +88,149 @@ pub(crate) fn voxelize_triangles(
     }
 }
 
-/// Fills every empty cell that the grid boundary cannot reach through empty
-/// cells, so a watertight shell becomes a solid body. Flood-fills the outside
-/// from the boundary, then flips whatever it never reached.
-fn fill_enclosed(filled: &mut [bool], nx: usize, ny: usize, nz: usize) {
-    let mut outside = vec![false; filled.len()];
-    let mut stack: Vec<(usize, usize, usize)> = Vec::new();
+/// Marks every voxel whose center lies inside the surface, so a solid fill is
+/// the body the mesh bounds, not its shell. Per column along x it stabs a ray
+/// through the column center and fills a cell when an odd number of triangle
+/// crossings lie past its center: the even-odd rule for a point in a closed
+/// surface.
+///
+/// Counting crossings is winding independent, unlike a normal-facing test, so a
+/// mesh with mixed or inward winding still fills correctly. A face lying exactly
+/// on a cell boundary is a non-issue: the test asks only whether a center, at the
+/// voxel midpoint, is enclosed, and a midpoint never lands on an axis-aligned
+/// boundary plane. So a one-voxel gap between two bodies stays empty, where a
+/// boundary-inclusive surface raster fills it from both flanking walls.
+///
+/// The ray is nudged a hair off the cell lattice on the two cross axes, by
+/// distinct offsets, so it never grazes a shared edge or the diagonal splitting a
+/// square face into two triangles, either of which would double count. A
+/// watertight surface stabs an even count per column; an open one may stab an odd
+/// count and fill past its last crossing, the documented leak of a non-watertight
+/// solid fill.
+fn fill_center_inside(
+    filled: &mut [bool],
+    space: &GridSpace,
+    triangles: &[MeshTriangle],
+    nx: usize,
+    ny: usize,
+    nz: usize,
+) {
+    // Off-lattice on y and z so a column ray never grazes a lattice-aligned edge;
+    // the two offsets differ so a square face's dividing diagonal, which runs
+    // where y and z advance together, resolves to exactly one of its triangles.
+    const OFFSET_Y: f64 = 1.0e-3;
+    const OFFSET_Z: f64 = 3.0e-3;
 
-    // Seed the flood from every empty boundary cell.
-    for x in 0..nx {
-        for y in 0..ny {
-            for z in 0..nz {
-                let on_face =
-                    x == 0 || y == 0 || z == 0 || x == nx - 1 || y == ny - 1 || z == nz - 1;
-                let cell = x * ny * nz + y * nz + z;
-                if on_face && !filled[cell] && !outside[cell] {
-                    outside[cell] = true;
-                    stack.push((x, y, z));
+    // The surface pass left the shell, and its boundary over-marking, in
+    // `filled`. Clear it so the body is exactly what the ray stab encloses;
+    // every boundary cell whose center is inside is refilled below.
+    filled.iter_mut().for_each(|filled| *filled = false);
+
+    // Each column's crossing x's, indexed `y * nz + z`. Scattering a triangle
+    // into only the columns its y-z projection covers keeps the stab near-linear
+    // in triangles, not one pass over every triangle per column.
+    let mut columns: Vec<Vec<f64>> = vec![Vec::new(); ny * nz];
+
+    for triangle in triangles {
+        let grid = [
+            space.to_grid(triangle.points[0]),
+            space.to_grid(triangle.points[1]),
+            space.to_grid(triangle.points[2]),
+        ];
+
+        let Some((y_first, y_last)) =
+            column_span([grid[0][1], grid[1][1], grid[2][1]], OFFSET_Y, ny)
+        else {
+            continue;
+        };
+        let Some((z_first, z_last)) =
+            column_span([grid[0][2], grid[1][2], grid[2][2]], OFFSET_Z, nz)
+        else {
+            continue;
+        };
+
+        for y in y_first..=y_last {
+            for z in z_first..=z_last {
+                let ray_y = y as f64 + 0.5 + OFFSET_Y;
+                let ray_z = z as f64 + 0.5 + OFFSET_Z;
+                if let Some(x) = column_crossing(&grid, ray_y, ray_z) {
+                    columns[y * nz + z].push(x);
                 }
             }
         }
     }
 
-    while let Some((x, y, z)) = stack.pop() {
-        for (dx, dy, dz) in [
-            (-1i32, 0, 0),
-            (1, 0, 0),
-            (0, -1, 0),
-            (0, 1, 0),
-            (0, 0, -1),
-            (0, 0, 1),
-        ] {
-            let (a, b, c) = (x as i32 + dx, y as i32 + dy, z as i32 + dz);
+    for y in 0..ny {
+        for z in 0..nz {
+            let crossings = &mut columns[y * nz + z];
 
-            if a < 0 || b < 0 || c < 0 || a as usize >= nx || b as usize >= ny || c as usize >= nz {
+            // A column needs an entry and an exit to enclose any cell.
+            if crossings.len() < 2 {
                 continue;
             }
 
-            let (a, b, c) = (a as usize, b as usize, c as usize);
+            crossings.sort_by(|a, b| a.total_cmp(b));
 
-            let cell = a * ny * nz + b * nz + c;
-
-            if !filled[cell] && !outside[cell] {
-                outside[cell] = true;
-                stack.push((a, b, c));
+            for x in 0..nx {
+                let center = x as f64 + 0.5;
+                let before = crossings
+                    .iter()
+                    .filter(|&&crossing| crossing < center)
+                    .count();
+                if before % 2 == 1 {
+                    filled[x * ny * nz + y * nz + z] = true;
+                }
             }
         }
     }
+}
 
-    // Any cell the outside flood never reached is enclosed: fill it.
-    for (cell, fill) in filled.iter_mut().enumerate() {
-        if !outside[cell] {
-            *fill = true;
-        }
+/// The inclusive range of column indices on one cross axis whose center-line ray,
+/// at `index + 0.5 + offset`, can fall within the triangle's span there, clamped
+/// to `0..count`. `None` when the span lies wholly outside the grid, so a
+/// triangle scatters only into the columns it can cross.
+fn column_span(values: [f64; 3], offset: f64, count: usize) -> Option<(usize, usize)> {
+    let low = values[0].min(values[1]).min(values[2]);
+    let high = values[0].max(values[1]).max(values[2]);
+
+    // ray(index) in [low, high] => index in
+    // [low - 0.5 - offset, high - 0.5 - offset].
+    let first = (low - 0.5 - offset).ceil();
+    let last = (high - 0.5 - offset).floor();
+
+    let ceiling = (count - 1) as f64;
+    if last < 0.0 || first > ceiling || first > last {
+        return None;
     }
+
+    Some((first.max(0.0) as usize, last.min(ceiling) as usize))
+}
+
+/// The grid-space x at which the ray through `(ray_y, ray_z)` cast along x
+/// crosses `grid`, or `None` when the column misses the triangle or the triangle
+/// runs parallel to the ray. Solves the triangle's barycentric coordinates at
+/// `(ray_y, ray_z)` in the y-z plane, then interpolates x at that point.
+fn column_crossing(grid: &[[f64; 3]; 3], ray_y: f64, ray_z: f64) -> Option<f64> {
+    let [a, b, c] = grid;
+
+    // The y-z edge matrix determinant; near zero for a face parallel to the ray,
+    // which a column never crosses transversally.
+    let determinant = (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]);
+    if determinant.abs() <= f64::EPSILON {
+        return None;
+    }
+
+    let offset_y = ray_y - a[1];
+    let offset_z = ray_z - a[2];
+
+    let u = (offset_y * (c[2] - a[2]) - offset_z * (c[1] - a[1])) / determinant;
+    let v = ((b[1] - a[1]) * offset_z - (b[2] - a[2]) * offset_y) / determinant;
+    if u < 0.0 || v < 0.0 || u + v > 1.0 {
+        return None;
+    }
+
+    let w = 1.0 - u - v;
+    Some(w * a[0] + u * b[0] + v * c[0])
 }
 
 /// The inclusive voxel-index box a grid-space triangle can touch, clamped to
@@ -268,6 +360,35 @@ mod tests {
         let triangles: Vec<_> = first.into_iter().chain(second).collect();
         let grid = voxelize_triangles(&triangles, TyVector3U32::new(1, 1, 1), false);
         assert_eq!(grid.triangle, vec![Some(0)]);
+    }
+
+    /// A cube spanning `[min, min + edge]` on each axis, offset from the origin,
+    /// so a test can place several with gaps between them.
+    fn cube_at(min: [f64; 3], edge: f64) -> Vec<MeshTriangle> {
+        cube(edge)
+            .into_iter()
+            .map(|mut triangle| {
+                triangle.points = triangle.points.map(|point| {
+                    TyVector3F64::new(point.x + min[0], point.y + min[1], point.z + min[2])
+                });
+                triangle
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_one_voxel_gap_between_two_solids_stays_empty() {
+        // Two unit cubes at x cells 0 and 2 leave a one-voxel gap at cell 1. A
+        // solid fill must preserve it: the cube faces sit exactly on the grid
+        // planes, so a boundary-inclusive raster would fill the gap from both
+        // walls and merge the pair into a solid bar. This is the mesh -> voxelize
+        // round trip of two spaced voxels.
+        let mut triangles = cube_at([0.0, 0.0, 0.0], 1.0);
+        triangles.extend(cube_at([2.0, 0.0, 0.0], 1.0));
+
+        let grid = voxelize_triangles(&triangles, TyVector3U32::new(3, 1, 1), true);
+
+        assert_eq!(grid.filled, vec![true, false, true]);
     }
 
     #[test]

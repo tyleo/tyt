@@ -137,6 +137,18 @@ fn resolve_materials(
 
     fill_interior(grid, counts, fill_color, &mut cell_materials);
 
+    // The surface pass records a covering triangle on every cell a face passes
+    // through, including a boundary-grazed cell a solid fill leaves outside its
+    // enclosed body. Occupancy is `grid.filled`, so drop a material on any cell
+    // the body does not fill, or a one-voxel gap between two solids would still
+    // emit its over-marked walls as voxels.
+    for (cell, material) in cell_materials.iter_mut().enumerate() {
+        if grid.filled[cell] {
+            continue;
+        }
+        *material = None;
+    }
+
     cell_materials
 }
 
