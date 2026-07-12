@@ -18,7 +18,8 @@ impl AttributeBinding {
         AttributeBinding { name, key, ty }
     }
 
-    /// The binding's name, as used in `--texture-map` and `--vertex-map`.
+    /// The binding's name, as used in `--texture-map` and the future
+    /// `--vertex-map`.
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -37,15 +38,22 @@ impl AttributeBinding {
 impl FromStr for AttributeBinding {
     type Err = String;
 
-    /// Parses the whitespace-separated `name key [type]` form; `type` defaults
-    /// to `scalar`.
+    /// Parses `name=key[:type]`, splitting on the first `=` then the first `:`;
+    /// `type` defaults to `scalar`.
     fn from_str(value: &str) -> Result<Self, Self::Err> {
-        let fields: Vec<&str> = value.split_whitespace().collect();
-        let (name, key, ty) = match fields.as_slice() {
-            [name, key] => (name, key, None),
-            [name, key, ty] => (name, key, Some(ty)),
-            _ => return Err(format!("`{value}` is not `name key [type]`")),
+        let malformed = || format!("`{value}` is not `name=key[:type]`");
+
+        let (name, rest) = value.split_once('=').ok_or_else(malformed)?;
+
+        let (key, ty) = match rest.split_once(':') {
+            Some((key, ty)) => (key, Some(ty)),
+            None => (rest, None),
         };
+
+        if name.is_empty() || key.is_empty() {
+            return Err(malformed());
+        }
+
         let ty = match ty {
             Some(ty) => AttributeType::from_str(ty, true).map_err(|_| {
                 format!(
@@ -55,6 +63,7 @@ impl FromStr for AttributeBinding {
             })?,
             None => AttributeType::Float,
         };
+
         Ok(AttributeBinding::new(name.to_string(), key.to_string(), ty))
     }
 }
@@ -67,7 +76,7 @@ mod tests {
     fn parses_with_explicit_type() {
         // `color` is the alias for `srgba`.
         assert_eq!(
-            "tint tint color".parse::<AttributeBinding>().unwrap(),
+            "tint=tint:color".parse::<AttributeBinding>().unwrap(),
             AttributeBinding::new("tint".to_string(), "tint".to_string(), AttributeType::Srgba)
         );
     }
@@ -75,20 +84,20 @@ mod tests {
     #[test]
     fn parses_pool_kinds_and_aliases() {
         let ty = |value: &str| value.parse::<AttributeBinding>().unwrap().ty();
-        assert_eq!(ty("c c srgb"), AttributeType::Srgb);
-        assert_eq!(ty("c c linear-rgba"), AttributeType::LinearRgba);
-        assert_eq!(ty("s s float"), AttributeType::Float);
-        assert_eq!(ty("s s int"), AttributeType::Int);
-        assert_eq!(ty("m m bool"), AttributeType::Bool);
+        assert_eq!(ty("c=c:srgb"), AttributeType::Srgb);
+        assert_eq!(ty("c=c:linear-rgba"), AttributeType::LinearRgba);
+        assert_eq!(ty("s=s:float"), AttributeType::Float);
+        assert_eq!(ty("s=s:int"), AttributeType::Int);
+        assert_eq!(ty("m=m:bool"), AttributeType::Bool);
         // The aliases map to their canonical kinds.
-        assert_eq!(ty("s s scalar"), AttributeType::Float);
-        assert_eq!(ty("c c color"), AttributeType::Srgba);
+        assert_eq!(ty("s=s:scalar"), AttributeType::Float);
+        assert_eq!(ty("c=c:color"), AttributeType::Srgba);
     }
 
     #[test]
     fn type_defaults_to_scalar() {
         assert_eq!(
-            "sss subsurface".parse::<AttributeBinding>().unwrap(),
+            "sss=subsurface".parse::<AttributeBinding>().unwrap(),
             AttributeBinding::new(
                 "sss".to_string(),
                 "subsurface".to_string(),
@@ -98,9 +107,24 @@ mod tests {
     }
 
     #[test]
+    fn parses_a_key_that_carries_no_type() {
+        // The key keeps its glTF spelling; only the first `=` and `:` split.
+        assert_eq!(
+            "gloss=roughnessFactor".parse::<AttributeBinding>().unwrap(),
+            AttributeBinding::new(
+                "gloss".to_string(),
+                "roughnessFactor".to_string(),
+                AttributeType::Float
+            )
+        );
+    }
+
+    #[test]
     fn rejects_bad_bindings() {
         assert!("tint".parse::<AttributeBinding>().is_err());
-        assert!("tint tint rgba".parse::<AttributeBinding>().is_err());
-        assert!("tint tint color extra".parse::<AttributeBinding>().is_err());
+        assert!("=tint".parse::<AttributeBinding>().is_err());
+        assert!("tint=".parse::<AttributeBinding>().is_err());
+        assert!("tint=tint:rgba".parse::<AttributeBinding>().is_err());
+        assert!("tint=tint:color:extra".parse::<AttributeBinding>().is_err());
     }
 }
