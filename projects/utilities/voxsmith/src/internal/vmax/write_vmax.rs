@@ -730,7 +730,23 @@ fn derive_materials(
     palette: &VoxPalette,
     name: String,
 ) -> Result<MaterialPlan> {
+    // The linear luminance of a material's base color, the reference Voxel Max
+    // glows against, or `None` when the palette carries no base color.
+    let base_luminance = |material| -> Option<f64> {
+        let color = folded.color?;
+        let index = palette.value_index(material, color)?;
+        let pool = binding_pool(state, folded.palette, color)?;
+        let [r, g, b, _] = pool_color(pool, index)?;
+        let linear = TySrgbaU8::from_array([r, g, b, 255])
+            .to_f64()
+            .to_lin_srgba();
+        Some(0.2126 * linear.r + 0.7152 * linear.g + 0.0722 * linear.b)
+    };
+
     let mut signatures: Vec<Vec<u32>> = Vec::new();
+    // Parallel to `signatures`: the base luminance of the first material to claim
+    // each slot, the reference its emissive is read against.
+    let mut base_luminances: Vec<Option<f64>> = Vec::new();
     let mut index_of: HashMap<Vec<u32>, u8> = HashMap::new();
     let mut material_idx = HashMap::new();
     for material in palette.iter_materials() {
@@ -750,6 +766,7 @@ fn derive_materials(
                 }
                 let idx = signatures.len() as u8;
                 signatures.push(signature.clone());
+                base_luminances.push(base_luminance(material));
                 index_of.insert(signature, idx);
                 idx
             }
@@ -760,7 +777,14 @@ fn derive_materials(
         .iter()
         .enumerate()
         .map(|(slot, signature)| {
-            derived_material(state, folded.palette, &folded.materials, slot, signature)
+            derived_material(
+                state,
+                folded.palette,
+                &folded.materials,
+                slot,
+                signature,
+                base_luminances[slot],
+            )
         })
         .collect();
     Ok(MaterialPlan {
@@ -780,6 +804,7 @@ fn derived_material(
     bindings: &[(String, U32Id<BVoxPaletteBinding>)],
     slot: usize,
     signature: &[u32],
+    base_luminance: Option<f64>,
 ) -> VMaxMaterial {
     let scalar = |attribute: &str| -> Option<f64> {
         let position = bindings.iter().position(|(name, _)| name == attribute)?;
@@ -799,9 +824,9 @@ fn derived_material(
             signature[position] as usize,
         )
     };
-    // The emissive color's linear luminance. Voxel Max has one self-illumination
-    // coefficient and no emissive color, so the glTF `emissiveFactor` folds into
-    // it here: a black factor emits nothing and stays matte, a bright one glows.
+    // The emissive color's linear luminance at this slot, or `None` when the
+    // binding is absent. Folded into Voxel Max's single self-illumination
+    // coefficient, read relative to the base color the caller supplies.
     let emissive_luminance = || -> Option<f64> {
         let position = bindings
             .iter()
@@ -820,12 +845,21 @@ fn derived_material(
         mi: (slot + 1).to_string(),
         mc: pbr_factor_to_vm_coefficient(scalar(METALLIC_FACTOR).unwrap_or(0.0)),
         rc: pbr_factor_to_vm_coefficient(scalar(ROUGHNESS_FACTOR).unwrap_or(0.0)),
-        // With an emissive color, self-illumination is its luminance scaled by
-        // `emissiveStrength` (glTF's default 1.0), so a black factor stays matte.
-        // Without one, the bare strength stands in.
+        // Voxel Max glows in the voxel's base color at coefficient `sic`, so
+        // the emissive folds to its luminance relative to the base color, times
+        // `emissiveStrength`. This inverts the from-vmax split, which emits the
+        // base color as the emissive color and `sic` as the strength. `sic` is
+        // unbounded; Voxel Max's 0 to 100 slider is `sic` 0 to 20. A black
+        // factor stays matte; a missing or black base color cannot normalize, so
+        // the bare emissive luminance stands in, and with no emissive color the
+        // strength stands alone.
         sic: match emissive_luminance() {
-            Some(luminance) => {
-                (scalar(EMISSIVE_STRENGTH).unwrap_or(1.0) * luminance).clamp(0.0, 1.0)
+            Some(emissive) => {
+                let strength = scalar(EMISSIVE_STRENGTH).unwrap_or(1.0);
+                match base_luminance {
+                    Some(base) if base > 0.0 => strength * emissive / base,
+                    _ => strength * emissive,
+                }
             }
             None => scalar(EMISSIVE_STRENGTH).unwrap_or(0.0),
         },

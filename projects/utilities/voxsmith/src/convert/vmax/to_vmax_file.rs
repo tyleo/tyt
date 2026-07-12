@@ -1199,6 +1199,78 @@ mod tests {
         }
     }
 
+    /// Voxel Max glows in the voxel's base color at coefficient `sic`, so a glTF
+    /// emissive color derives to `emissiveStrength * lum(emissive) / lum(base)`,
+    /// read relative to the base color and left unbounded. A mid-gray base under
+    /// a white emissive at strength 2 lands well above the old `[0, 1]` clamp.
+    #[test]
+    fn derives_emissive_relative_to_the_base_color() {
+        let mut state = VoxMain::default();
+        let color = state.add_value_pool(VoxValuePool::Srgba {
+            values: vec![color_floats("#808080FF")],
+        });
+        let emissive_color = state.add_value_pool(VoxValuePool::Srgb {
+            values: vec![[1.0, 1.0, 1.0]],
+        });
+        let strength = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::None,
+            max: VoxBound::None,
+            values: vec![2.0],
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_binding("baseColorFactor".to_owned(), color);
+        palette.add_binding("emissiveFactor".to_owned(), emissive_color);
+        palette.add_binding("emissiveStrength".to_owned(), strength);
+        palette.add_material(vec![0, 0, 0]).unwrap();
+        let palette_id = state.add_palette(palette);
+        let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object
+            .retain_voxel(voxel, &[U32Id::<BVoxMaterial>::from_u32(0)])
+            .unwrap();
+        state.add_object(object);
+        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
+        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state.validate().unwrap();
+
+        let file = to_vmax_file(&state, VoxelMaxColorFormat::All).unwrap();
+        // from-vmax carries Voxel Max's `sic` back as `emissiveStrength`.
+        let reloaded = from_vmax_file(&file).unwrap();
+        let (palette_id, material_palette) = reloaded
+            .iter_palettes()
+            .find(|(_, palette)| palette.binding_by_attribute("emissiveStrength").is_some())
+            .expect("an emissive palette survives");
+        let material = material_palette.iter_materials().next().unwrap();
+        let binding = material_palette
+            .binding_by_attribute("emissiveStrength")
+            .unwrap();
+        let sic = match reloaded
+            .material_value(palette_id, material, binding)
+            .unwrap()
+        {
+            (VoxValuePool::Float { values, .. }, index) => values[index as usize],
+            _ => panic!("emissiveStrength is a float pool"),
+        };
+
+        // The gray is achromatic, so its linear luminance is one linearized
+        // channel; the white emissive's is 1. sic = 2 * 1 / lum(gray).
+        let linear = |c: f64| {
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let expected = 2.0 / linear(128.0 / 255.0);
+        assert!(
+            (sic - expected).abs() < 1e-3,
+            "sic {sic} vs expected {expected}"
+        );
+        // Unbounded: far above the old clamp ceiling of 1.0.
+        assert!(sic > 2.0, "sic {sic} should exceed the removed clamp");
+    }
+
     /// A 6-hex source color widens to opaque RGBA: the missing alpha defaults to
     /// fully opaque rather than transparent.
     #[test]
