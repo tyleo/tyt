@@ -168,7 +168,7 @@ pub(crate) fn build_material_document(
         images.push(image);
     }
 
-    let extensions = material_extensions(state, &used, &request.maps);
+    let extensions = material_extensions(state, &used);
 
     let material = build_material(&request.maps, &extensions);
 
@@ -224,11 +224,7 @@ pub(crate) fn build_material_document(
 /// when it differs from the glTF spec default so a plain export stays clean.
 /// `ior` and `transmissionFactor` come from the first used material;
 /// `emissiveStrength` is the mesh's greatest strength.
-fn material_extensions(
-    state: &VoxMain,
-    used: &UsedMaterials,
-    maps: &[MaterialMap],
-) -> Map<String, Value> {
+fn material_extensions(state: &VoxMain, used: &UsedMaterials) -> Map<String, Value> {
     let mut extensions = Map::new();
 
     for (key, extension, field) in [
@@ -246,20 +242,15 @@ fn material_extensions(
         }
     }
 
-    // The flat strength that rescales the normalized emissive texels, emitted
-    // only with an emissive map and a positive max that differs from the
-    // default 1.
-    if maps
-        .iter()
-        .any(|map| matches!(map.slot, MaterialSlot::Emissive))
-    {
-        let max = max_emissive_strength(state, used);
-        if max > 0.0 && max != default_scalar(EMISSIVE_STRENGTH).unwrap_or(0.0) {
-            extensions.insert(
-                "KHR_materials_emissive_strength".to_owned(),
-                json!({ "emissiveStrength": max }),
-            );
-        }
+    // With an emissive map the greatest strength restores the scale its texels
+    // were normalized by; without one it carries the flat factor like ior and
+    // transmission. Skipped when it is the default 1 or the mesh emits nothing.
+    let max = max_emissive_strength(state, used);
+    if max > 0.0 && max != default_scalar(EMISSIVE_STRENGTH).unwrap_or(0.0) {
+        extensions.insert(
+            "KHR_materials_emissive_strength".to_owned(),
+            json!({ "emissiveStrength": max }),
+        );
     }
 
     extensions
