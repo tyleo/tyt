@@ -103,6 +103,10 @@ pub struct HierarchyShow {
     #[arg(value_names = ["precision"], long = "show-runtime-extents", num_args = 0..=1)]
     show_runtime_extents: Option<Vec<String>>,
 
+    /// Append each object's filled (live) voxel count as a `voxel-count` leaf.
+    #[arg(value_name = "show-voxel-counts", long = "show-voxel-counts")]
+    show_voxel_counts: bool,
+
     /// Append each object's layers as a nested subtree, one child per layer
     /// showing its palette index and material count.
     #[arg(value_name = "show-layers", long = "show-layers")]
@@ -119,6 +123,7 @@ impl HierarchyShow {
             runtime_origins: parse(self.show_runtime_origins.as_deref(), parse_origin_view)?,
             runtime_bounds: parse(self.show_runtime_bounds.as_deref(), parse_precision_arg)?,
             runtime_extents: parse(self.show_runtime_extents.as_deref(), parse_precision_arg)?,
+            voxel_counts: self.show_voxel_counts,
             layers: self.show_layers,
         };
 

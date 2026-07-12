@@ -919,12 +919,10 @@ impl Walk<'_> {
         }
     }
 
-    /// The enabled geometry rows for `object`, in display order: the edit-grid
-    /// origin, bounds, and extents, then the runtime-grid origin, bounds, and
-    /// extents. An edit grid with no authoring margin yields its enabled rows as
-    /// `null`; the runtime grid is always shown, a zero-size box at the object's
-    /// origin when it has no live voxels. `placing_world` folds an origin into
-    /// world space when its view asks.
+    /// The enabled rows for `object`, in display order. An edit grid with no
+    /// authoring margin yields its rows as `null`; the runtime grid is always
+    /// shown, a zero-size box at the object's origin when it has no live voxels.
+    /// `placing_world` folds an origin into world space when its view asks.
     fn object_rows(&self, object: &VoxObject, placing_world: TyTransformF64) -> Vec<ObjectRow> {
         let origin = object.origin().to_f64();
         let build = object.bounds().to_f64();
@@ -976,6 +974,10 @@ impl Walk<'_> {
             ));
         }
 
+        if views.voxel_counts {
+            rows.push(ObjectRow::count("voxel-count", object.live_count()));
+        }
+
         rows
     }
 
@@ -1002,6 +1004,10 @@ impl Walk<'_> {
                 self.output
                     .push_str(&format!("{prefix}{connector} {label}: {text}\n"));
             }
+
+            ObjectRow::Count { label, value } => self
+                .output
+                .push_str(&format!("{prefix}{connector} {label}: {value}\n")),
 
             ObjectRow::Bounds {
                 label,
@@ -1095,8 +1101,9 @@ impl Walk<'_> {
     }
 }
 
-/// One appended geometry row under an object: a single vector value or a min/max
-/// subtree, each with a `null` form for when the underlying grid is absent.
+/// One appended row under an object: a single vector value, a min/max subtree,
+/// or a scalar count. The vector and subtree rows each have a `null` form for
+/// when the underlying grid is absent.
 enum ObjectRow {
     /// A `label: [x, y, z]` line, or `label: null` when `value` is `None`.
     Value {
@@ -1112,6 +1119,9 @@ enum ObjectRow {
         corners: Option<(TyVector3F64, TyVector3F64)>,
         precision: usize,
     },
+
+    /// A `label: <count>` line for a scalar count.
+    Count { label: &'static str, value: usize },
 }
 
 impl ObjectRow {
@@ -1135,6 +1145,11 @@ impl ObjectRow {
             corners,
             precision,
         }
+    }
+
+    /// A scalar count row.
+    fn count(label: &'static str, value: usize) -> ObjectRow {
+        ObjectRow::Count { label, value }
     }
 }
 
@@ -1980,6 +1995,51 @@ mod tests {
              \u{2514} root: {node: 0}\n\
              \u{20}\u{20}\u{2514} body: {object: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{251C} edit-extents: [1.00, 1.00, 1.00]\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 2}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 3}\n"
+        );
+    }
+
+    #[test]
+    fn voxel_counts_report_the_filled_voxel_count() {
+        // `geometry_state`'s body fills the tight [1, 4] box on each axis, a
+        // 4x4x4 block of 64 live voxels.
+        let output = render_views(
+            &geometry_state(),
+            HierarchyViews {
+                voxel_counts: true,
+                ..HierarchyViews::default()
+            },
+        );
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} root: {node: 0}\n\
+             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} voxel-count: 64\n"
+        );
+    }
+
+    #[test]
+    fn voxel_counts_precede_the_layers_subtree() {
+        // With the voxel count and layers both on, the count is a plain leaf
+        // above the layers subtree, matching info's voxels-then-layers order.
+        // `body` holds no live voxel, so the count is `0`.
+        let output = render_views(
+            &palette_ref_state(),
+            HierarchyViews {
+                voxel_counts: true,
+                layers: true,
+                ..HierarchyViews::default()
+            },
+        );
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} root: {node: 0}\n\
+             \u{20}\u{20}\u{2514} body: {object: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{251C} voxel-count: 0\n\
              \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 2}\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 3}\n"
