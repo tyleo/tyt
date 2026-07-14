@@ -173,7 +173,10 @@ carry the labels structurally):
 - **Selection.** `--select`, `--select-index`, glob filters, collapse
   logic: commands filter first and populate only what shows. `ancestors` /
   `descendants` / instance stubs are ordinary `Bare` nodes the command
-  inserts.
+  inserts. The one shared piece of that upstream logic, the
+  selected / visible / match-roots closure, gets a home beside the
+  matchers in `pathspec` at phase 7 (`TreeSelection`, decision 11);
+  treegrid itself never selects.
 - **Sampling and policy formatting.** Pool classification, precision
   (`fmt3`), space/unit conversion: anything with a knob stays upstream
   and arrives as finished text. The typed constructors own only
@@ -234,7 +237,10 @@ change in phase 2). Phase 5 is the big one -- `tyt fbx hierarchy` renders
 inside Blender today, so adoption moves data (not text) across the
 process boundary; it is severable and can slip without blocking anything
 else. Phase 6 (record tables and the consistency pass) is committed
-scope and closes the plan.
+scope. Phase 7 is a small coda outside the crate: `pathspec` gains the
+`TreeSelection` closure (decision 11), `tyt vmax hierarchy` and
+`vxl hierarchy show` drop their hand-rolled copies so lines go down,
+and S14 builds on it rather than writing a third; it closes the plan.
 
 ## Decisions
 
@@ -298,6 +304,17 @@ scope and closes the plan.
    `json-pretty`, `json-compact`; label modes `none`, `concat`, `header`.
    `json-*` prefixes group the serializations together in `--help` and
    completions.
+11. **The tree-selection closure lands in `pathspec`, not treegrid**
+   (2026-07-14). A query/model-crate split (populate a typed tree
+   once, then select and collapse against it) was investigated and
+   rejected: the glob engine and index grammar are already shared,
+   the residue is per-command policy, and every read command runs one
+   selection known at parse time, so filter-then-populate stays. The
+   one shared win is the selected / visible / match-roots closure,
+   duplicated by `tyt vmax hierarchy` and `vxl hierarchy show` and
+   needed a third time at S14. It is selection, so it lives beside
+   the matchers in `pathspec` as `TreeSelection` (phase 7), and
+   treegrid keeps its no-selection boundary.
 
 ## Documents
 

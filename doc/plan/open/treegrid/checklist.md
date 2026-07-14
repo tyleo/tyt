@@ -171,12 +171,13 @@ items off as they land.
       space/unit/precision/scale (the math stays where the evaluated
       scene is).
 - [ ] **S14. Render in Rust.** Parse the payload, apply select/collapse
-      in Rust (matching logic already lives there), build the `TreeGrid`,
-      render, and delete the tree-printing half of `FBX_HIERARCHY_PY`.
-      Builder tests against fixture JSON so the output is testable
-      without Blender.
+      in Rust (matching logic already lives there; the closure comes
+      from `TreeSelection`, S18, pulled forward if this phase lands
+      first), build the `TreeGrid`, render, and delete the
+      tree-printing half of `FBX_HIERARCHY_PY`. Builder tests against
+      fixture JSON so the output is testable without Blender.
 
-## Phase 6: record tables and consistency (committed -- closes the plan)
+## Phase 6: record tables and consistency (committed)
 
 Owner condition on the series-first tables call (2026-07-12): this phase
 is in scope, not optional. The plan does not close without it.
@@ -206,6 +207,36 @@ is in scope, not optional. The plan does not close without it.
       `a_linear_color_renders_float_components` and the
       [palette show reference](../vxl-commands/reference/palette/show.md)
       wording.
+
+## Phase 7: tree-selection closure in pathspec (committed, closes the plan)
+
+The one shared win from the query-layer investigation (2026-07-14, see
+README decision 11): the selected / visible / match-roots closure that
+`tyt vmax hierarchy` and `vxl hierarchy show` each hand-roll and S14
+would otherwise write a third time. It lives in `pathspec`, not
+treegrid, so the crate keeps its no-selection boundary. Independent of
+every other phase; land it any time, and pull it forward if phase 5
+runs first.
+
+- [ ] **S18. `TreeSelection`.** A new pathspec public struct:
+      `selected` / `visible` per-node flag vectors plus `match_roots`
+      indices, built by `from_matches(matched, parents)`, with
+      `matched` as `match_paths` / `match_subtrees` return it and
+      `parents` a per-node parent index (`None` at a root). Semantics:
+      mark each selected node's ancestor chain visible; a selected
+      node whose parent is unselected is a match root (the rule both
+      existing implementations use, which differs from "no selected
+      ancestor" when a `!` pattern deselects a middle node). Unit
+      tests: a root match, a nested match, several match roots, and
+      the deselected-middle-node divergence case.
+- [ ] **S19. Adopt at both call sites.** One commit per site,
+      byte-identical output:
+      1. `tyt vmax hierarchy`: scatter the `match_subtrees` flags over
+         the full node index range, then replace the hand-built
+         `selected` / `visible` / `match_roots` sets in `select_nodes`.
+      2. `vxl hierarchy show`: record a parent index per placement in
+         `enumerate_placements`, wrap a `TreeSelection` in `Filter`,
+         and delete the path-prefix set assembly in `build_filter`.
 
 ## Deferred
 
