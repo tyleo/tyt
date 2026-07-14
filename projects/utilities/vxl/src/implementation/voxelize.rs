@@ -2,7 +2,7 @@ use crate::{
     MeshFormat, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat,
     commands::{
         ColorSpace, Dither, FillMode, GridResolution, MaterialMode, PaletteReduction,
-        QuantizeMethod, ResolutionAxis,
+        QuantizeMethod, ResolutionAxis, SurfaceMode,
     },
     implementation,
 };
@@ -12,8 +12,8 @@ use voxcore::VoxMain;
 use voxsmith::{
     ColorSpace as VoxsmithColorSpace, Dither as VoxsmithDither, EditStateMode,
     FillMode as VoxsmithFillMode, MaterialMode as VoxsmithMaterialMode,
-    ReductionMethod as VoxsmithReductionMethod, from_gltf_bytes, order_palette_colors,
-    reduce_palette, voxelize_mesh,
+    ReductionMethod as VoxsmithReductionMethod, SurfaceMode as VoxsmithSurfaceMode,
+    from_gltf_bytes, order_palette_colors, reduce_palette, voxelize_mesh,
 };
 
 /// Voxelizes the glTF or GLB mesh at `input` into a Voxel Json document at
@@ -27,6 +27,7 @@ pub fn voxelize(
     _from: Option<MeshFormat>,
     output: &Path,
     resolution: GridResolution,
+    surface_mode: SurfaceMode,
     fill_mode: FillMode,
     material_mode: MaterialMode,
     fill_color: Option<[u8; 4]>,
@@ -53,6 +54,7 @@ pub fn voxelize(
     let mut state = voxelize_mesh(
         &mesh,
         counts,
+        surface_mode_mode(surface_mode),
         fill_mode_mode(fill_mode),
         material_mode_mode(material_mode),
         fill_color,
@@ -151,6 +153,14 @@ fn fill_mode_mode(fill_mode: FillMode) -> VoxsmithFillMode {
     match fill_mode {
         FillMode::Solid => VoxsmithFillMode::Solid,
         FillMode::Surface => VoxsmithFillMode::Surface,
+    }
+}
+
+/// Maps a CLI surface-mode choice to the voxsmith surface mode.
+fn surface_mode_mode(surface_mode: SurfaceMode) -> VoxsmithSurfaceMode {
+    match surface_mode {
+        SurfaceMode::CenterInside => VoxsmithSurfaceMode::CenterInside,
+        SurfaceMode::TriangleCover => VoxsmithSurfaceMode::TriangleCover,
     }
 }
 

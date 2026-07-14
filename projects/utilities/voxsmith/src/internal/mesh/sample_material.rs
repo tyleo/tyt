@@ -438,7 +438,8 @@ mod tests {
             ..Default::default()
         }];
         let counts = TyVector3U32::new(8, 8, 8);
-        let grid = voxelize_triangles(&[triangle], counts, false);
+        // Triangle-cover, hollow: the covering array a texel sampler reads.
+        let grid = voxelize_triangles(&[triangle], counts, false, false);
 
         let sampled = sample_material(&[triangle], &materials, &maps, &textures, &grid, counts);
 

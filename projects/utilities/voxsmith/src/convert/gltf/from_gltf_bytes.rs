@@ -461,8 +461,8 @@ fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
 mod tests {
     use crate::{
         BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC_FACTOR,
-        MaterialMode, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, TRANSMISSION_FACTOR,
-        from_gltf_bytes, voxelize_mesh,
+        MaterialMode, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, SurfaceMode,
+        TRANSMISSION_FACTOR, from_gltf_bytes, voxelize_mesh,
     };
     use png::{BitDepth, ColorType, Encoder};
     use ty_math::{TyFloatExt, TySrgbaU8, TyVector3U32};
@@ -680,6 +680,7 @@ mod tests {
     fn voxelize(
         bytes: &[u8],
         counts: TyVector3U32,
+        surface_mode: SurfaceMode,
         fill_mode: FillMode,
         material_mode: MaterialMode,
         fill_color: Option<[u8; 4]>,
@@ -690,6 +691,7 @@ mod tests {
         voxelize_mesh(
             &from_gltf_bytes(bytes)?,
             counts,
+            surface_mode,
             fill_mode,
             material_mode,
             fill_color,
@@ -1060,6 +1062,7 @@ mod tests {
         let state = voxelize(
             &box_glb(1.0, 4.0, 1.0, None, None),
             TyVector3U32::new(1, 1, 4),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::Flat,
             Some([255, 0, 0, 255]),
@@ -1107,6 +1110,7 @@ mod tests {
         let state = voxelize(
             &box_glb(1.0, 1.0, 1.0, None, None),
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::Flat,
             None,
@@ -1131,6 +1135,7 @@ mod tests {
                 None,
             ),
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::PerPrimitive,
             None,
@@ -1156,6 +1161,7 @@ mod tests {
         let state = voxelize(
             &extended_material_glb(1.4, 0.5, 3.0),
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::PerPrimitive,
             None,
@@ -1179,6 +1185,7 @@ mod tests {
         let state = voxelize(
             &box_glb(1.0, 1.0, 1.0, Some(([1.0, 0.0, 0.0, 1.0], 0.0, 1.0)), None),
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::PerPrimitive,
             None,
@@ -1205,6 +1212,7 @@ mod tests {
         let state = voxelize(
             &extended_material_glb(1.4, 0.5, 3.0),
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::PerPrimitive,
             None,
@@ -1247,6 +1255,7 @@ mod tests {
         let state = voxelize(
             &box_glb(1.0, 1.0, 1.0, Some(([1.0, 0.0, 0.0, 1.0], 0.0, 1.0)), None),
             TyVector3U32::new(4, 4, 4),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::PerPrimitive,
             None,
@@ -1271,6 +1280,7 @@ mod tests {
         let state = voxelize(
             &box_glb(1.0, 1.0, 1.0, Some(([1.0, 0.0, 0.0, 1.0], 0.0, 1.0)), None),
             TyVector3U32::new(4, 4, 4),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::PerPrimitive,
             Some([0, 0, 255, 255]),
@@ -1293,6 +1303,7 @@ mod tests {
         let result = voxelize(
             &box_glb(1.0, 1.0, 1.0, None, None),
             TyVector3U32::new(1024, 1024, 1024),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::Flat,
             None,
@@ -1308,6 +1319,7 @@ mod tests {
         let state = voxelize(
             bytes,
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::Flat,
             None,
@@ -1347,6 +1359,7 @@ mod tests {
         let per_texel = voxelize(
             &glb,
             TyVector3U32::new(2, 1, 2),
+            SurfaceMode::TriangleCover,
             FillMode::Surface,
             MaterialMode::PerTexel,
             None,
@@ -1367,6 +1380,7 @@ mod tests {
         let per_primitive = voxelize(
             &glb,
             TyVector3U32::new(2, 1, 2),
+            SurfaceMode::TriangleCover,
             FillMode::Surface,
             MaterialMode::PerPrimitive,
             None,
@@ -1391,6 +1405,7 @@ mod tests {
         let state = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::TriangleCover,
             FillMode::Surface,
             MaterialMode::PerTexel,
             None,
@@ -1409,6 +1424,7 @@ mod tests {
         let textured = voxelize(
             &textured_quad_glb(&png, [1.0, 1.0, 1.0, 1.0]),
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::TriangleCover,
             FillMode::Surface,
             MaterialMode::Auto,
             None,
@@ -1426,6 +1442,7 @@ mod tests {
         let untextured = voxelize(
             &box_glb(1.0, 1.0, 1.0, Some(([0.0, 1.0, 0.0, 1.0], 0.0, 1.0)), None),
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::CenterInside,
             FillMode::Solid,
             MaterialMode::Auto,
             None,
@@ -1450,6 +1467,7 @@ mod tests {
         let state = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::TriangleCover,
             FillMode::Surface,
             MaterialMode::PerTexel,
             None,
@@ -1486,6 +1504,7 @@ mod tests {
         let state = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::TriangleCover,
             FillMode::Surface,
             MaterialMode::PerTexel,
             None,
@@ -1528,6 +1547,7 @@ mod tests {
         let state = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::TriangleCover,
             FillMode::Surface,
             MaterialMode::PerTexel,
             None,
@@ -1571,6 +1591,7 @@ mod tests {
         let state = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::TriangleCover,
             FillMode::Surface,
             MaterialMode::PerTexel,
             None,
@@ -1615,6 +1636,7 @@ mod tests {
         let state = voxelize(
             &glb,
             TyVector3U32::new(1, 1, 1),
+            SurfaceMode::TriangleCover,
             FillMode::Surface,
             MaterialMode::PerTexel,
             None,

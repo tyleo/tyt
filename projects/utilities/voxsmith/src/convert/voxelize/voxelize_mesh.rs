@@ -1,6 +1,6 @@
 use crate::{
     BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, FillMode, IOR, METALLIC_FACTOR,
-    MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result,
+    MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, SurfaceMode,
     TRANSMISSION_FACTOR, VoxelGrid, sample_material, voxelize_triangles,
 };
 use branded_id::U32Id;
@@ -27,7 +27,9 @@ const DEFAULT_FILL: TySrgbaU8 = TySrgbaU8 {
 /// * `mesh` - the mesh to rasterize, in Z-up world space.
 /// * `counts` - grid resolution in voxels per axis, sized by the caller from the
 ///   mesh extent (see [`Mesh::extent`]).
-/// * `fill_mode` - the fill geometry.
+/// * `surface_mode` - center-inside occupancy or triangle-cover; see
+///   [`SurfaceMode`].
+/// * `fill_mode` - whether the interior is filled or the result is hollow.
 /// * `material_mode` - the color source: per-primitive flat factors, per-texel
 ///   base-color sampling, `flat`, or `auto` (per-texel when the mesh is
 ///   textured, else per-primitive).
@@ -40,6 +42,7 @@ const DEFAULT_FILL: TySrgbaU8 = TySrgbaU8 {
 pub fn voxelize_mesh(
     mesh: &Mesh,
     counts: TyVector3U32,
+    surface_mode: SurfaceMode,
     fill_mode: FillMode,
     material_mode: MaterialMode,
     fill_color: Option<[u8; 4]>,
@@ -58,7 +61,12 @@ pub fn voxelize_mesh(
         return Err(grid_too_large(counts));
     }
 
-    let grid = voxelize_triangles(&mesh.triangles, counts, fill_mode == FillMode::Solid);
+    let grid = voxelize_triangles(
+        &mesh.triangles,
+        counts,
+        surface_mode == SurfaceMode::CenterInside,
+        fill_mode == FillMode::Solid,
+    );
 
     let cell_materials = resolve_materials(mesh, &grid, counts, material_mode, fill_color);
 

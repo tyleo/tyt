@@ -1,6 +1,6 @@
 use crate::{
     Dependencies, Error, MeshFormat, NoneOr, Result, Rgba, VoxjEncodingOptions,
-    commands::{FillMode, GridResolutionOptions, MaterialMode, QuantizeOptions},
+    commands::{FillMode, GridResolutionOptions, MaterialMode, QuantizeOptions, SurfaceMode},
 };
 use clap::Parser;
 use std::path::PathBuf;
@@ -28,6 +28,13 @@ pub struct Voxelize {
     /// How the mesh fills the grid, independent of `--material-mode`.
     #[arg(value_name = "fill-mode", long, default_value = "solid")]
     fill_mode: FillMode,
+
+    /// Whether a cell is occupied by its center lying inside the surface or by
+    /// any triangle passing through it, independent of `--fill-mode`.
+    /// `center-inside` expects a closed mesh; `triangle-cover` handles an open
+    /// one.
+    #[arg(value_name = "surface-mode", long, default_value = "center-inside")]
+    surface_mode: SurfaceMode,
 
     /// Where each voxel's color comes from, independent of `--fill-mode`.
     #[arg(value_name = "material-mode", long, default_value = "auto")]
@@ -73,6 +80,7 @@ impl Voxelize {
             self.from,
             &output,
             resolution,
+            self.surface_mode,
             self.fill_mode,
             self.material_mode,
             self.fill_color.value().map(|color| color.0),

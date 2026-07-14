@@ -5,7 +5,7 @@ use crate::{
         AttributeSelector, CameraView, ColorFormat, EditState, FillMode, GridResolution,
         HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
         PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView, ResourceStorage,
-        TextureShape,
+        SurfaceMode, TextureShape,
     },
 };
 use std::path::Path;
@@ -108,6 +108,7 @@ pub trait Dependencies {
         from: Option<MeshFormat>,
         output: &Path,
         resolution: GridResolution,
+        surface_mode: SurfaceMode,
         fill_mode: FillMode,
         material_mode: MaterialMode,
         fill_color: Option<[u8; 4]>,

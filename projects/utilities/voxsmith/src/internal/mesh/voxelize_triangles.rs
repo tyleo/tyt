@@ -13,14 +13,15 @@ use ty_math::TyVector3U32;
 /// # Arguments
 /// * `triangles` - the triangles to rasterize, in grid-independent world space.
 /// * `counts` - the grid resolution in voxels per axis.
-/// * `solid` - when true, occupancy becomes the body the surface bounds, every
-///   voxel whose center lies inside it, replacing the surface shell; see
-///   [`fill_center_inside`]. A non-watertight surface leaks. Filled interior
-///   cells record no triangle, to be painted by the caller.
+/// * `surface_mode` - when true, a voxel is filled when its center lies inside
+///   the surface; when false, when any triangle passes through it.
+/// * `fill_mode` - when true, fill the interior; when false, leave a hollow
+///   shell.
 pub(crate) fn voxelize_triangles(
     triangles: &[MeshTriangle],
     counts: TyVector3U32,
-    solid: bool,
+    surface_mode: bool,
+    fill_mode: bool,
 ) -> VoxelGrid {
     let (nx, ny, nz) = (counts.x as usize, counts.y as usize, counts.z as usize);
 
@@ -75,11 +76,21 @@ pub(crate) fn voxelize_triangles(
         }
     }
 
-    if solid {
-        // Replace the surface occupancy with the body the surface bounds: every
-        // voxel whose center lies inside it. The surface pass above still stands
-        // as `covering`, so a filled boundary cell keeps the triangle it samples.
-        fill_center_inside(&mut filled, &space, triangles, nx, ny, nz);
+    // The loop left the cover shell in `filled` and the sampled triangle in
+    // `covering`. Resolve occupancy per mode; `covering` persists, so a filled
+    // boundary cell keeps its sampled triangle when the body is recomputed.
+    match (surface_mode, fill_mode) {
+        // Cover shell, hollow: the rasterized shell as-is.
+        (false, false) => {}
+        // Cover shell, filled: flood the volume the shell encloses.
+        (false, true) => fill_enclosed(&mut filled, nx, ny, nz),
+        // Inside-center body, filled: the enclosed body itself.
+        (true, true) => fill_center_inside(&mut filled, &space, triangles, nx, ny, nz),
+        // Inside-center body, hollow: that body eroded to its boundary layer.
+        (true, false) => {
+            fill_center_inside(&mut filled, &space, triangles, nx, ny, nz);
+            strip_interior(&mut filled, nx, ny, nz);
+        }
     }
 
     VoxelGrid {
@@ -88,25 +99,111 @@ pub(crate) fn voxelize_triangles(
     }
 }
 
-/// Marks every voxel whose center lies inside the surface, so a solid fill is
-/// the body the mesh bounds, not its shell. Per column along x it stabs a ray
-/// through the column center and fills a cell when an odd number of triangle
-/// crossings lie past its center: the even-odd rule for a point in a closed
-/// surface.
+/// Flood-fills the volume a cover shell encloses, turning a hollow surface into
+/// a filled body. Floods the outside from the grid boundary, then fills every
+/// cell it never reached. A non-watertight shell leaks, so the fill falls back
+/// to the shell.
+fn fill_enclosed(filled: &mut [bool], nx: usize, ny: usize, nz: usize) {
+    let mut outside = vec![false; filled.len()];
+    let mut stack: Vec<(usize, usize, usize)> = Vec::new();
+
+    // Seed the flood from every empty boundary cell.
+    for x in 0..nx {
+        for y in 0..ny {
+            for z in 0..nz {
+                let on_face =
+                    x == 0 || y == 0 || z == 0 || x == nx - 1 || y == ny - 1 || z == nz - 1;
+                let cell = x * ny * nz + y * nz + z;
+                if !on_face || filled[cell] || outside[cell] {
+                    continue;
+                }
+                outside[cell] = true;
+                stack.push((x, y, z));
+            }
+        }
+    }
+
+    while let Some((x, y, z)) = stack.pop() {
+        for (dx, dy, dz) in [
+            (-1i32, 0, 0),
+            (1, 0, 0),
+            (0, -1, 0),
+            (0, 1, 0),
+            (0, 0, -1),
+            (0, 0, 1),
+        ] {
+            let (a, b, c) = (x as i32 + dx, y as i32 + dy, z as i32 + dz);
+
+            if a < 0 || b < 0 || c < 0 || a as usize >= nx || b as usize >= ny || c as usize >= nz {
+                continue;
+            }
+
+            let (a, b, c) = (a as usize, b as usize, c as usize);
+
+            let cell = a * ny * nz + b * nz + c;
+
+            if filled[cell] || outside[cell] {
+                continue;
+            }
+
+            outside[cell] = true;
+            stack.push((a, b, c));
+        }
+    }
+
+    // Any cell the outside flood never reached is enclosed: fill it.
+    for (cell, fill) in filled.iter_mut().enumerate() {
+        if outside[cell] {
+            continue;
+        }
+        *fill = true;
+    }
+}
+
+/// Erodes a filled body to its one-voxel boundary layer, clearing every cell
+/// whose six axis-neighbors are all in-grid and filled. A cell on the grid edge
+/// keeps its outward exposure, so it stays.
+fn strip_interior(filled: &mut [bool], nx: usize, ny: usize, nz: usize) {
+    let interior: Vec<bool> = (0..filled.len())
+        .map(|cell| filled[cell] && !exposed(filled, cell, nx, ny, nz))
+        .collect();
+
+    for (cell, &is_interior) in interior.iter().enumerate() {
+        if !is_interior {
+            continue;
+        }
+        filled[cell] = false;
+    }
+}
+
+/// Whether a filled cell borders empty space, either an empty axis-neighbor or
+/// the grid edge, which puts it on the body's boundary layer.
+fn exposed(filled: &[bool], cell: usize, nx: usize, ny: usize, nz: usize) -> bool {
+    let plane = ny * nz;
+    let (x, remainder) = (cell / plane, cell % plane);
+    let (y, z) = (remainder / nz, remainder % nz);
+
+    if x == 0 || y == 0 || z == 0 || x + 1 == nx || y + 1 == ny || z + 1 == nz {
+        return true;
+    }
+
+    !filled[cell - plane]
+        || !filled[cell + plane]
+        || !filled[cell - nz]
+        || !filled[cell + nz]
+        || !filled[cell - 1]
+        || !filled[cell + 1]
+}
+
+/// Fills every voxel whose center lies inside the surface, the solid body, not
+/// its shell. Per column along x it stabs a ray and fills a cell when an odd
+/// number of triangle crossings lie past its center. Counting crossings ignores
+/// winding, and a center never lands on a cell boundary, so two bodies a voxel
+/// apart stay separate where a boundary-inclusive raster would merge them.
 ///
-/// Counting crossings is winding independent, unlike a normal-facing test, so a
-/// mesh with mixed or inward winding still fills correctly. A face lying exactly
-/// on a cell boundary is a non-issue: the test asks only whether a center, at the
-/// voxel midpoint, is enclosed, and a midpoint never lands on an axis-aligned
-/// boundary plane. So a one-voxel gap between two bodies stays empty, where a
-/// boundary-inclusive surface raster fills it from both flanking walls.
-///
-/// The ray is nudged a hair off the cell lattice on the two cross axes, by
-/// distinct offsets, so it never grazes a shared edge or the diagonal splitting a
-/// square face into two triangles, either of which would double count. A
-/// watertight surface stabs an even count per column; an open one may stab an odd
-/// count and fill past its last crossing, the documented leak of a non-watertight
-/// solid fill.
+/// The ray is offset a hair off the lattice on y and z by distinct amounts, so
+/// it never grazes a shared edge or a square face's diagonal and double counts.
+/// A non-watertight surface stabs an odd count and leaks to the grid edge.
 fn fill_center_inside(
     filled: &mut [bool],
     space: &GridSpace,
@@ -153,9 +250,10 @@ fn fill_center_inside(
             for z in z_first..=z_last {
                 let ray_y = y as f64 + 0.5 + OFFSET_Y;
                 let ray_z = z as f64 + 0.5 + OFFSET_Z;
-                if let Some(x) = column_crossing(&grid, ray_y, ray_z) {
-                    columns[y * nz + z].push(x);
-                }
+                let Some(x) = column_crossing(&grid, ray_y, ray_z) else {
+                    continue;
+                };
+                columns[y * nz + z].push(x);
             }
         }
     }
@@ -177,9 +275,10 @@ fn fill_center_inside(
                     .iter()
                     .filter(|&&crossing| crossing < center)
                     .count();
-                if before % 2 == 1 {
-                    filled[x * ny * nz + y * nz + z] = true;
+                if before % 2 == 0 {
+                    continue;
                 }
+                filled[x * ny * nz + y * nz + z] = true;
             }
         }
     }
@@ -254,7 +353,7 @@ fn cell_range(grid: &[[f64; 3]; 3], counts: [usize; 3]) -> ([usize; 3], [usize; 
 
 #[cfg(test)]
 mod tests {
-    use crate::{MeshTriangle, MeshTriangleUvs, voxelize_triangles};
+    use crate::{MeshTriangle, MeshTriangleUvs, VoxelGrid, voxelize_triangles};
     use ty_math::{TyVector3F64, TyVector3U32};
 
     /// Tags a triangle soup with one material so the geometry tests can build
@@ -307,9 +406,21 @@ mod tests {
         occupancy.iter().filter(|&&filled| filled).count()
     }
 
+    // Occupancy modes as `(surface_mode, fill_mode)` pairs, naming the four
+    // combinations the tests exercise.
+    const COVER_HOLLOW: (bool, bool) = (false, false);
+    const COVER_FILLED: (bool, bool) = (false, true);
+    const INSIDE_FILLED: (bool, bool) = (true, true);
+    const INSIDE_HOLLOW: (bool, bool) = (true, false);
+
+    /// Voxelizes under a named `(surface_mode, fill_mode)` mode pair.
+    fn voxelize(triangles: &[MeshTriangle], counts: TyVector3U32, mode: (bool, bool)) -> VoxelGrid {
+        voxelize_triangles(triangles, counts, mode.0, mode.1)
+    }
+
     #[test]
     fn surface_of_a_cube_is_a_hollow_shell() {
-        let grid = voxelize_triangles(&cube(4.0), TyVector3U32::new(4, 4, 4), false);
+        let grid = voxelize(&cube(4.0), TyVector3U32::new(4, 4, 4), COVER_HOLLOW);
         // A 4^3 grid with a one-voxel-thick shell: 4^3 - 2^3.
         assert_eq!(live_count(&grid.filled), 64 - 8);
         // Every filled cell is a surface cell, so all record a triangle.
@@ -318,7 +429,7 @@ mod tests {
 
     #[test]
     fn solid_fills_the_enclosed_volume_leaving_interior_triangle_unset() {
-        let grid = voxelize_triangles(&cube(4.0), TyVector3U32::new(4, 4, 4), true);
+        let grid = voxelize(&cube(4.0), TyVector3U32::new(4, 4, 4), INSIDE_FILLED);
         assert_eq!(live_count(&grid.filled), 64);
         assert!(grid.filled.iter().all(|&filled| filled));
         // The 2^3 interior cells fill with no triangle; the 56 shell cells keep
@@ -333,14 +444,14 @@ mod tests {
         let corner = 0; // (0, 0, 0), on the shell
         let interior = 3 * 64 + 3 * 8 + 3; // (3, 3, 3), well inside
 
-        let surface = voxelize_triangles(&cube(8.0), grid_size, false);
+        let surface = voxelize(&cube(8.0), grid_size, COVER_HOLLOW);
         assert!(surface.filled[corner], "the origin corner is on the shell");
         assert!(
             !surface.filled[interior],
             "an interior cell is hollow in surface mode"
         );
 
-        let solid = voxelize_triangles(&cube(8.0), grid_size, true);
+        let solid = voxelize(&cube(8.0), grid_size, INSIDE_FILLED);
         assert!(
             solid.filled[interior],
             "an interior cell fills in solid mode"
@@ -358,7 +469,7 @@ mod tests {
         let first = tagged(vec![[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [1.0, 1.0, 0.0]]], 7);
         let second = tagged(vec![[[0.0, 0.0, 0.0], [1.0, 1.0, 0.0], [0.0, 1.0, 0.0]]], 9);
         let triangles: Vec<_> = first.into_iter().chain(second).collect();
-        let grid = voxelize_triangles(&triangles, TyVector3U32::new(1, 1, 1), false);
+        let grid = voxelize(&triangles, TyVector3U32::new(1, 1, 1), COVER_HOLLOW);
         assert_eq!(grid.triangle, vec![Some(0)]);
     }
 
@@ -386,14 +497,35 @@ mod tests {
         let mut triangles = cube_at([0.0, 0.0, 0.0], 1.0);
         triangles.extend(cube_at([2.0, 0.0, 0.0], 1.0));
 
-        let grid = voxelize_triangles(&triangles, TyVector3U32::new(3, 1, 1), true);
+        let grid = voxelize(&triangles, TyVector3U32::new(3, 1, 1), INSIDE_FILLED);
 
         assert_eq!(grid.filled, vec![true, false, true]);
     }
 
     #[test]
+    fn cover_filled_merges_two_solids_across_the_gap() {
+        // Triangle-cover marks both sides of a boundary-aligned face, so
+        // filling its shell floods the gap and merges the pair into a bar. The
+        // conservative counterpart to the inside-center result above.
+        let mut triangles = cube_at([0.0, 0.0, 0.0], 1.0);
+        triangles.extend(cube_at([2.0, 0.0, 0.0], 1.0));
+
+        let grid = voxelize(&triangles, TyVector3U32::new(3, 1, 1), COVER_FILLED);
+
+        assert_eq!(grid.filled, vec![true, true, true]);
+    }
+
+    #[test]
+    fn inside_hollow_erodes_the_body_to_its_shell() {
+        // The inside-center body of a solid 4^3 cube is all 64 cells; hollowing
+        // it erodes the 2^3 core, leaving the 56-cell boundary shell.
+        let grid = voxelize(&cube(4.0), TyVector3U32::new(4, 4, 4), INSIDE_HOLLOW);
+        assert_eq!(live_count(&grid.filled), 64 - 8);
+    }
+
+    #[test]
     fn empty_soup_yields_empty_grid() {
-        let grid = voxelize_triangles(&[], TyVector3U32::new(2, 2, 2), true);
+        let grid = voxelize(&[], TyVector3U32::new(2, 2, 2), INSIDE_FILLED);
         assert_eq!(live_count(&grid.filled), 0);
         assert!(grid.triangle.iter().all(|t| t.is_none()));
     }
@@ -409,7 +541,7 @@ mod tests {
             ],
             0,
         );
-        let grid = voxelize_triangles(&quad, TyVector3U32::new(4, 4, 1), false);
+        let grid = voxelize(&quad, TyVector3U32::new(4, 4, 1), COVER_HOLLOW);
         assert_eq!(live_count(&grid.filled), 16);
     }
 }
