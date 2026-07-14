@@ -77,16 +77,20 @@ items off as they land.
       including headerless root-level data, a nested two-level parent
       path (`#` then `##`), a non-default `header_level`, and the
       depth-6 clamp.
-- [ ] **S5. `tables` layout (series shape).** Always grouped by parent
-      path: one table per group (`#` index column, one column per data
-      node, leaf-label headers, blank cells past shorter series), under
+- [ ] **S5. `tables` layout.** `TreeGridTableShape` (`Nested` default,
+      `Flat`; `Records` joins at S15). Nested: one table per
+      parent-path group (`#` index column, one column per data node,
+      leaf-label headers, blank cells past shorter series), under
       nested headings carrying the full path (`concat`) or the leaf
-      segment (`header`);
-      `none` -> `TreeGridError::LabelNoneWithTables`. The old vxl
-      single interleaved markdown golden is obsolete by design; write
-      grouped goldens for both label modes, including the
-      hierarchy-shaped worked example from the
-      [rendering spec](reference/rendering-spec.md).
+      segment (`header`). Flat: one table over every data node with
+      concat-path headers, the comparison view; `header` ->
+      `TreeGridError::HeaderLabelWithFlatTables`. `none` ->
+      `TreeGridError::LabelNoneWithTables`; a shape set on a
+      non-`tables` layout -> `TreeGridError::TableShapeWithoutTables`.
+      Goldens: grouped tables in
+      both label modes including the hierarchy-shaped worked example
+      from the [rendering spec](reference/rendering-spec.md), and the
+      flat comparison table.
 - [ ] **S6. JSON layouts.** The record envelope (`label`, optional
       `annotation` / `values` / `children`), pretty and compact, trailing
       newline. Tests: envelope shape, native value types, duplicate
@@ -107,11 +111,13 @@ items off as they land.
       it. Replace `PaletteShowLayout` values with
       `hierarchy | rows | columns | tables | json-pretty | json-compact`
       (default `rows`), add `--label none | concat | header` (default
-      `concat`) and `--header-level` (`1..=6`, heading-emitting renders
-      only, headings start at `#` when unset), keep `--width` and its
-      terminal resolution in vxl. Note in the commit message that
-      `tables` is a grouped redesign of `markdown`, not a rename: the
-      single interleaved table has no equivalent.
+      `concat`), `--header-level` (`1..=6`, heading-emitting renders
+      only, headings start at `#` when unset), and `--table-shape`
+      (`nested` default | `flat`; `records` joins at S15), keep
+      `--width` and its terminal resolution in vxl. Note in the commit
+      message that `tables` defaults to a grouped redesign of
+      `markdown`, and that the old interleaved table is now
+      `--table-shape flat`.
       Delete `render*`, `wrap_cells`, `assemble_row`, `join_padded`,
       `render_cell`, `color_swatch` / `gray_swatch`, `abuts`. Keep
       selector/sampling tests in vxl plus a few end-to-end renders; the
@@ -175,10 +181,14 @@ items off as they land.
 Owner condition on the series-first tables call (2026-07-12): this phase
 is in scope, not optional. The plan does not close without it.
 
-- [ ] **S15. Record-shaped tables and the last adopters.**
-      `TreeGridTableShape::Records` (explicit render option) and the
-      `info` / `validate` / `palette list` markdown + JSON adoption,
-      retiring vxl's `markdown_table` and `to_json_string`; `info`'s
+- [ ] **S15. Record-shaped tables and the last adopters.** Add
+      `Records` to `TreeGridTableShape`: rows are one branch's
+      children, columns the union of relative flattened descendant
+      paths plus the row's own value; settle column naming,
+      multi-valued cells, and heterogeneous-children sparsity here,
+      against the `info` / `validate` / `palette list` markdown + JSON
+      adoption; add `records` to the adopters' `--table-shape`. Retires
+      vxl's `markdown_table` and `to_json_string`; `info`'s
       `##`-sectioned markdown becomes `tables` + `header` with
       `header_level` 2 beneath its command-printed `# {input}` title.
 - [ ] **S16. Layout-name consistency.** `markdown -> tables`,

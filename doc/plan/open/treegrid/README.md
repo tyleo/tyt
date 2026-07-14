@@ -79,7 +79,8 @@ DI. Public types
 follow house style: one per file, `TreeGrid` prefix (`TreeGrid`,
 `TreeGridNode`, `TreeGridLabel`, `TreeGridValue`, `TreeGridSwatch`,
 `TreeGridCellFormat`, `TreeGridLayout`, `TreeGridLabelMode`,
-`TreeGridOptions`, `TreeGridError`, `BTreeGridNode`).
+`TreeGridTableShape`, `TreeGridOptions`, `TreeGridError`,
+`BTreeGridNode`).
 
 ### Populate, then render
 
@@ -124,12 +125,14 @@ as `hierarchy show` already does.
    today's `palette show --layout row`.
 3. `columns`: each data-bearing node is one padded column under its label
    -- today's `column`.
-4. `tables`: aligned markdown tables led by a `#` index column, one
-   table per parent-path group under `concat` or `header` headings -- a
-   grouped redesign of today's `markdown`, whose single interleaved
-   table has no equivalent. (Series shape only in v1; the record shape
-   `info` and `palette list` need lands in phase 6, committed scope --
-   see [design notes](reference/design-notes.md).)
+4. `tables`: aligned markdown tables led by a `#` index column, shaped
+   by `TreeGridOptions::table_shape`: `nested` (default) groups one
+   table per parent path under `concat` or `header` headings; `flat`
+   keeps today's `markdown` -- one table over everything with concat
+   column headers, the cross-palette comparison view; `records`
+   (phase 6, committed scope) transposes to one row per entity with
+   relative-path columns, what `info` and `palette list` need -- see
+   [design notes](reference/design-notes.md).
 5. `json-pretty` / `json-compact`: the generic envelope, one record per
    node: `{"label", "annotation"?, "values"?, "children"?}`.
 
@@ -195,11 +198,12 @@ the no-header variants into `--label`:
 | `--layout row-no-header`     | `--layout rows --label none`     |
 | `--layout column`            | `--layout columns`               |
 | `--layout column-no-header`  | `--layout columns --label none`  |
-| `--layout markdown`          | `--layout tables` (grouped redesign) |
+| `--layout markdown`          | `--layout tables --table-shape flat` |
 | `--layout pretty-json`       | `--layout json-pretty`           |
 | `--layout compact-json`      | `--layout json-compact`          |
 | (new)                        | `--label none \| concat \| header` |
 | (new)                        | `--header-level 1..6`, heading-emitting renders only |
+| (new)                        | `--table-shape nested \| flat` (`records` at S15) |
 | (new)                        | `--layout hierarchy`             |
 
 Default output (`rows` + `concat`) stays byte-identical. The JSON payload
@@ -276,13 +280,16 @@ scope and closes the plan.
    "children"?}`, because sibling labels can repeat (two `door` objects)
    and arbitrary labels would collide with structural keys under
    object-keyed nesting.
-8. **Series tables first, record tables committed.** The record
-   orientation (`info`, `palette list --layout markdown`) is a
-   `TreeGridTableShape` extension in phase 6, chosen explicitly -- never
-   auto-detected from value counts, which would flip on a one-material
-   palette. Phase 6 is committed scope, not optional: the owner accepted
-   series-first on the condition that the record shape lands before the
-   plan closes (2026-07-12).
+8. **Table shapes: `Nested` and `Flat` first, `Records` committed.**
+   `TreeGridTableShape` is `{Nested, Flat, Records}`: `Nested` is the
+   grouped default, `Flat` keeps today's cross-palette comparison table
+   as an explicit shape from S5, and `Records` -- one row per entity,
+   columns the relative flattened descendant paths; what `info` and
+   `palette list --layout markdown` render -- lands in phase 6. Always
+   chosen explicitly, never auto-detected from value counts, which
+   would flip on a one-material palette. Phase 6 is committed scope,
+   not optional: the owner accepted records-later on the condition that
+   the shape lands before the plan closes (2026-07-12).
 9. **`bare_roots` render option** reconciles the two existing top-level
    styles: connectored roots (vmax, collapsed-ancestors lists) versus bare
    section headers (`root` / `unplaced` in `hierarchy show`, `palettes` in

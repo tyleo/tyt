@@ -202,27 +202,37 @@ Today's `palette show --layout column`:
 - Shorter columns leave trailing blanks. Under `header` mode each group
   is its own column block, blocks separated per the header rules.
 
-### tables (series shape)
+### tables
 
-Today's `palette show --layout markdown`:
+`TreeGridOptions::table_shape` (`Option<TreeGridTableShape>`) picks the
+shape; unset means `Nested`. Setting it on a layout other than `tables`
+is `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
 
-- Tables always group (see Labels), under nested headings whose text is
-  the branch's full path (`concat`) or its leaf segment (`header`): one
-  aligned markdown table per group. Columns: `#` (0-based value index) then one column per
-  data node in the group, headed by its leaf label; one row per index
-  up to the group's longest series, shorter series blank past their
-  end. There is no cross-group table: vxl's old `--layout markdown`,
-  one interleaved table over every collection, has no equivalent by
-  design.
+- `Nested`: tables group (see Labels), under nested headings whose text
+  is the branch's full path (`concat`) or its leaf segment (`header`):
+  one aligned markdown table per group. Columns: `#` (0-based value
+  index) then one column per data node in the group, headed by its leaf
+  label; one row per index up to the group's longest series, shorter
+  series blank past their end.
+- `Flat`: one table over every data node, no headings, columns headed
+  by full concat paths -- vxl's old `--layout markdown`, kept as an
+  explicit shape because it is the comparison view: two palettes'
+  colors line up side by side in one table. Requires `concat`;
+  `header` is `TreeGridError::HeaderLabelWithFlatTables`.
+- `Records` (lands in phase 6, committed scope): the transpose for
+  entity-per-row reports, what `info` and `palette list --layout
+  markdown` render today. Rows are one branch's children; columns are
+  the union of their descendant data-node paths flattened *relative to
+  the row*, so a node's `transform.position` is a prefix-free column
+  and the prefix lives in the row label, plus a column for a row's own
+  value. Chosen explicitly, never inferred. Column naming, multi-valued
+  cells, and heterogeneous-children sparsity are settled at S15 against
+  the real adopters.
 - `markdown_table` rules: every column pads to its widest cell, minimum
   width 3 so the dash separator stays valid markdown; cell text escapes
   pipes and flattens newlines (`md_cell`); width is visible width, so
   swatch cells align.
 - `none` label mode is an error (see Labels).
-- The record shape (one row per branch node, one column per single-valued
-  child label -- what `info` and `palette list --layout markdown` render)
-  lands in phase 6 (committed scope): a `TreeGridTableShape::Records`
-  option, chosen explicitly by the caller, never inferred.
 
 ### json-pretty / json-compact
 
@@ -250,8 +260,9 @@ Today's `palette show --layout markdown`:
 ## Errors
 
 `TreeGridError`, one variant per invalid request; the initial set is
-`LabelNoneWithTables`, `HeaderLevelOutOfRange`, and
-`HeaderLevelWithoutHeaders`. Commands map it into their own error types
+`LabelNoneWithTables`, `HeaderLevelOutOfRange`,
+`HeaderLevelWithoutHeaders`, `HeaderLabelWithFlatTables`, and
+`TableShapeWithoutTables`. Commands map it into their own error types
 (vxl: `ErrorKind::InvalidInput`).
 
 ## Worked example
@@ -316,6 +327,16 @@ TreeGrid
 
 - `tables` + `header`: identical structure; the deep heading reads
   `## "baseColorFactor"` instead of `## 1."baseColorFactor"`.
+
+- `tables` + `concat` + `table_shape: Flat` -- the comparison view, one
+  table over everything with concat column headers:
+
+  ```text
+  | #   | 0."baseColorFactor" | 0."metallicFactor" | 1."baseColorFactor".a |
+  | --- | ------------------- | ------------------ | --------------------- |
+  | 0   | #FF0000FF           | 1                  | 255                   |
+  | 1   | #00FF0080           | 0.2                |                       |
+  ```
 
 - `hierarchy` (`bare_roots: false`):
 
@@ -423,6 +444,26 @@ long series like a palette's materials, not here:
 root."energy-tank-1" root."energy-tank-1".transform.position root."energy-tank-1".transform.rotation ...
 {node: 0}            [12.50, 0.50, 10.00]                    [0.00, 0.00, 0.00]                      ...
 ```
+
+`tables` + `Records` (phase 6) is the shape this data actually wants:
+one row per node, descendant paths flattened relative to the row, the
+prefix living in the row label (column names illustrative until S15):
+
+```text
+# root
+
+| node             | value     | transform.position    | transform.rotation | transform.scale    |
+| ---------------- | --------- | --------------------- | ------------------ | ------------------ |
+| "energy-tank-1"  | {node: 0} | [12.50, 0.50, 10.00]  | [0.00, 0.00, 0.00] | [1.00, 1.00, 1.00] |
+| "energy-tank-2"  | {node: 1} | [-11.50, 0.50, 10.00] | [0.00, 0.00, 0.00] | [1.00, 1.00, 1.00] |
+| "energy-reactor" | {node: 2} | [0.50, 14.50, 23.00]  | [0.00, 0.00, 0.00] | [1.00, 1.00, 1.00] |
+| "energy-tank"    | {node: 3} | [0.50, 0.50, 10.00]   | [0.00, 0.00, 0.00] | [1.00, 1.00, 1.00] |
+```
+
+The differently-named object children would add one sparse column per
+name; a command building for records skips or normalizes them. `Flat`
+on this tree is the degenerate 21-column, one-row table that motivated
+grouping in the first place -- available, not advisable.
 
 The `hierarchy` and JSON layouts ignore label modes: the `hierarchy`
 render of this tree is the "Observed shapes" listing above, and the

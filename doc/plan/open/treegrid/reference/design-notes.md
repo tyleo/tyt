@@ -48,12 +48,11 @@ heading text, the branch's full path versus its leaf segment (flat
 same-level concat headings were considered and dropped: a group
 following an unrelated section would visually nest under it); and
 `header_level` defaults to `1` so standalone output reads as its own
-document. Two costs, accepted eyes-open: the old
-interleaved `markdown` table -- palette collections compared
-side-by-side across parents in one table -- has no equivalent (if
-wanted later it is a new explicit option, not a label mode), and
-`--layout markdown -> --layout tables` in the S7 migration is a
-redesign, not a rename.
+document. One cost stands: `--layout markdown -> --layout tables` in
+the S7 migration is a redesign, not a rename. The interleaved table
+itself survives as the explicit `Flat` table shape -- the owner kept
+the palette-comparison view (2026-07-13), demoted from a label mode to
+a `TreeGridTableShape` value.
 
 ### 2. Generic JSON versus today's bespoke records
 
