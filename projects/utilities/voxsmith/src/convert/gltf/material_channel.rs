@@ -1,9 +1,8 @@
 use crate::ColorChannel;
 
 /// One channel's value in a baked material map, the flag-agnostic source the
-/// atlas bake reads. The caller resolves any custom-attribute binding and the
-/// `smoothness` alias before building this, so `key` is always a concrete voxel
-/// attribute key.
+/// atlas bake reads. The caller resolves any custom-attribute binding before
+/// building this, so `key` is always a concrete voxel attribute key.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MaterialChannel {
     /// A material attribute by key, optionally one color `component` of it,

@@ -1,6 +1,5 @@
 use crate::{ColorComponent, Error, Result, commands::AttributeBinding};
 use std::{result::Result as StdResult, str::FromStr};
-use voxsmith::ROUGHNESS_FACTOR;
 
 /// One channel's value in a material map: an attribute by name, optionally one
 /// color component of it, optionally inverted as `1-<attribute>`, the constant
@@ -75,8 +74,8 @@ impl FromStr for ChannelSource {
 
     /// Parses one channel expression. `0` and `1` are the constants,
     /// `computed-occlusion` the geometry-derived occlusion, a leading `1-`
-    /// inverts an attribute, a trailing `.r`/`.g`/`.b`/`.a` reads one color
-    /// component, and `smoothness` canonicalizes to inverted `roughnessFactor`.
+    /// inverts an attribute, and a trailing `.r`/`.g`/`.b`/`.a` reads one
+    /// color component.
     fn from_str(value: &str) -> StdResult<Self, Self::Err> {
         match value {
             "0" => return Ok(ChannelSource::Zero),
@@ -101,15 +100,8 @@ impl FromStr for ChannelSource {
         if name.is_empty() {
             return Err(format!("`{value}` names no attribute"));
         }
-        // `smoothness` is the derived `1-roughnessFactor`, so reading it flips
-        // the inversion against the stored `roughnessFactor` attribute.
-        let (key, invert) = if name == "smoothness" {
-            (ROUGHNESS_FACTOR.to_string(), !invert)
-        } else {
-            (name.to_string(), invert)
-        };
         Ok(ChannelSource::Attribute {
-            key,
+            key: name.to_string(),
             component,
             invert,
         })
@@ -179,7 +171,7 @@ mod tests {
     }
 
     #[test]
-    fn smoothness_canonicalizes_to_inverted_roughness() {
+    fn parses_inverted_roughness() {
         assert_eq!(
             "roughnessFactor".parse::<ChannelSource>().unwrap(),
             attribute(ROUGHNESS_FACTOR, false)
@@ -187,14 +179,6 @@ mod tests {
         assert_eq!(
             "1-roughnessFactor".parse::<ChannelSource>().unwrap(),
             attribute(ROUGHNESS_FACTOR, true)
-        );
-        assert_eq!(
-            "smoothness".parse::<ChannelSource>().unwrap(),
-            attribute(ROUGHNESS_FACTOR, true)
-        );
-        assert_eq!(
-            "1-smoothness".parse::<ChannelSource>().unwrap(),
-            attribute(ROUGHNESS_FACTOR, false)
         );
     }
 

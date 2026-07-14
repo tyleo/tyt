@@ -75,10 +75,7 @@ A material map is one image whose channels are filled from a material's
 attributes, so maps that read attributes share one atlas and differ only in
 which attributes they read. Attributes a material omits fall back to their spec defaults from
 [Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
-so a map never fails for a missing attribute. Wherever an attribute is read,
-`smoothness` names the derived `1 - roughnessFactor`, so `smoothness` and
-`1-roughnessFactor` are interchangeable, as are `1-smoothness` and
-`roughnessFactor`. `--atlas` sets how
+so a map never fails for a missing attribute. `--atlas` sets how
 the atlas is laid out and how the mesh's UVs index it:
 
 1. `palette` (default): one texel per palette material, placed at its material
@@ -179,9 +176,9 @@ The `channels` argument is a comma-separated list of `R=<expr>`, `G=<expr>`,
 `<attribute>.r`, `.g`, `.b`, or `.a`, the constant `0` or `1`, or
 `computed-occlusion` for the geometry-derived occlusion. The channel
 count is the number of channels named; an omitted channel is `0`. For example
-`--texture-map model-mse.png R=metallicFactor,G=smoothness,B=emissiveStrength`
+`--texture-map model-mse.png R=metallicFactor,G=1-roughnessFactor,B=emissiveStrength`
 reproduces `--texture mse`, and swapping `G=roughnessFactor` writes roughness
-instead of smoothness. A packing that names `computed-occlusion` always bakes
+instead of its inverse. A packing that names `computed-occlusion` always bakes
 into an unwrap layout, as `--texture-map ao.png R=computed-occlusion` does.
 
 A color attribute is read one component at a time. `baseColorFactor` is a color,

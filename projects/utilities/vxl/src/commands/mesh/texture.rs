@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn mse_matches_its_texture_map_equivalent() {
-        let manual = "R=metallicFactor,G=smoothness,B=emissiveStrength"
+        let manual = "R=metallicFactor,G=1-roughnessFactor,B=emissiveStrength"
             .parse::<ChannelPacking>()
             .unwrap();
         assert_eq!(Texture::Mse.bake(), TextureBake::Packing(manual));

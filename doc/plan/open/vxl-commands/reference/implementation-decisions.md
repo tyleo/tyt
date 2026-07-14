@@ -1267,3 +1267,20 @@ disagree on where a texel sits. An `n` too small to hold the texels is rejected:
 `atlas_dimensions` errors when `n*n` is below the count, and the parser rejects a
 zero side up front. The `implementation/mesh.rs` file became `mesh_object.rs` to
 match its exported `mesh_object`.
+
+## mesh smoothness shorthand removal
+
+The `--texture-map` parser no longer rewrites `smoothness` to inverted
+`roughnessFactor`; this supersedes the canonicalization described under "Material
+packing model" and "Custom attribute bindings". A channel expression now names
+attributes only by their glTF-aligned keys, so smoothness is spelled
+`1-roughnessFactor`. A bare `smoothness` is now an ordinary attribute name, and
+since it is neither a glTF attribute nor normally bound in a palette, the
+existing `channel_kind` validation rejects it, so an old `G=smoothness` fails
+loudly rather than baking a silent default; only glTF attributes take a spec
+default when absent. The motivation is one vocabulary with no special-cased
+strings: a name means itself, and the only rewrite the grammar keeps is the
+general `1-` inversion. The `--texture` presets `smoothness`,
+`metallic-smoothness`, and `mse` stay; each was already built from
+`attribute(ROUGHNESS_FACTOR, true)` rather than the shorthand string, so dropping
+the parser branch leaves them byte-identical.

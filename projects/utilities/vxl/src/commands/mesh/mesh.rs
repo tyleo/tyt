@@ -107,8 +107,7 @@ pub struct Mesh {
     /// - 1-<attribute>: the inverse `1 - value`, as `1-roughnessFactor`
     /// - 0, 1: a constant channel
     ///
-    /// Attribute keys are voxj attributes or `--define-attribute` aliases;
-    /// `smoothness` is shorthand for `1-roughnessFactor`.
+    /// Attribute keys are voxj attributes or `--define-attribute` aliases.
     #[arg(
         value_names = ["file-name", "channels"],
         long = "texture-map",

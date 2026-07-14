@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn parses_contiguous_rgb_packing() {
-        let packing = "R=metallicFactor,G=smoothness,B=emissiveStrength"
+        let packing = "R=metallicFactor,G=1-roughnessFactor,B=emissiveStrength"
             .parse::<ChannelPacking>()
             .unwrap();
         assert_eq!(packing.channel_count(), 3);
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn alpha_bumps_count_and_zero_fills_gaps() {
-        let packing = "R=metallicFactor,A=smoothness"
+        let packing = "R=metallicFactor,A=1-roughnessFactor"
             .parse::<ChannelPacking>()
             .unwrap();
         assert_eq!(packing.channel_count(), 4);
