@@ -117,11 +117,16 @@ pub struct Mesh {
     )]
     texture_map: Vec<String>,
 
-    /// Name a custom attribute for `--texture-map`, `<name>=<key>`, repeatable,
-    /// as `--define-attribute gloss=roughnessFactor`. The attribute's type is
-    /// read from its value pool in the meshed layer's palette, not declared.
-    #[arg(value_name = "name=key", long = "define-attribute")]
-    define_attribute: Vec<AttributeBinding>,
+    /// Name a custom attribute for `--texture-map`, `<attribute> <name>`,
+    /// repeatable, as `--define-attribute sss subsurface`. The attribute's type
+    /// is read from its value pool in the meshed layer's palette, not declared.
+    #[arg(
+        value_names = ["attribute", "name"],
+        long = "define-attribute",
+        num_args = 2,
+        action = clap::ArgAction::Append,
+    )]
+    define_attribute: Vec<String>,
 
     /// Where the baked images go. Defaults to `embedded` for `.glb` and
     /// `external` for `.gltf`.
@@ -310,6 +315,8 @@ impl Mesh {
     /// typed value and resolving its channels against the `--define-attribute`
     /// bindings.
     fn resolve_custom_maps(&self) -> Result<Vec<MeshTextureMap>> {
+        let bindings = self.attribute_bindings()?;
+
         // clap's `num_args = 2` guarantees an even length, so each chunk is a
         // full pair.
         let maps = self
@@ -318,8 +325,16 @@ impl Mesh {
             .map(|pair| TextureMap::new(&pair[0], &pair[1]))
             .collect::<Result<Vec<_>>>()?;
 
-        maps.iter()
-            .map(|map| map.resolve(&self.define_attribute))
+        maps.iter().map(|map| map.resolve(&bindings)).collect()
+    }
+
+    /// Pairs each `--define-attribute <attribute> <name>` occurrence into a
+    /// typed binding. clap's `num_args = 2` guarantees an even length, so each
+    /// chunk is a full pair.
+    fn attribute_bindings(&self) -> Result<Vec<AttributeBinding>> {
+        self.define_attribute
+            .chunks(2)
+            .map(|pair| AttributeBinding::new(&pair[0], &pair[1]))
             .collect()
     }
 
@@ -536,6 +551,29 @@ mod tests {
             "--texture-map",
             "textures/skin.png",
             "R=metallicFactor",
+        ]));
+    }
+
+    #[test]
+    fn a_define_attribute_alias_reaches_a_spaced_name_in_a_map() {
+        // The two-token form quotes a voxel name with spaces; the space-free
+        // alias then stands in for it in --texture-map.
+        assert!(resolves(&[
+            "--define-attribute",
+            "spark",
+            "super emissive thing",
+            "--texture-map",
+            "spark.png",
+            "R=spark",
+        ]));
+    }
+
+    #[test]
+    fn a_spaced_attribute_typed_straight_into_a_map_is_rejected() {
+        assert!(!resolves(&[
+            "--texture-map",
+            "spark.png",
+            "R=super emissive thing",
         ]));
     }
 

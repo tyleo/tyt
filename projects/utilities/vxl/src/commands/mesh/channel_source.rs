@@ -75,7 +75,7 @@ impl FromStr for ChannelSource {
     /// Parses one channel expression. `0` and `1` are the constants,
     /// `computed-occlusion` the geometry-derived occlusion, a leading `1-`
     /// inverts an attribute, and a trailing `.r`/`.g`/`.b`/`.a` reads one
-    /// color component.
+    /// color component. An attribute reference carries no whitespace.
     fn from_str(value: &str) -> StdResult<Self, Self::Err> {
         match value {
             "0" => return Ok(ChannelSource::Zero),
@@ -99,6 +99,11 @@ impl FromStr for ChannelSource {
         };
         if name.is_empty() {
             return Err(format!("`{value}` names no attribute"));
+        }
+        if name.chars().any(char::is_whitespace) {
+            return Err(format!(
+                "`{value}` names an attribute with whitespace; alias it with --define-attribute"
+            ));
         }
         Ok(ChannelSource::Attribute {
             key: name.to_string(),
@@ -143,8 +148,8 @@ mod tests {
     /// Two aliases, `gloss` and `tint`, so resolution has a rename to apply.
     fn bindings() -> Vec<AttributeBinding> {
         vec![
-            AttributeBinding::new("gloss".to_owned(), ROUGHNESS_FACTOR.to_owned()),
-            AttributeBinding::new("tint".to_owned(), "tint".to_owned()),
+            AttributeBinding::new("gloss", ROUGHNESS_FACTOR).unwrap(),
+            AttributeBinding::new("tint", "tint").unwrap(),
         ]
     }
 
@@ -214,6 +219,14 @@ mod tests {
     }
 
     #[test]
+    fn rejects_a_whitespace_attribute() {
+        // A voxel name with spaces is unreachable here; alias it with
+        // --define-attribute and reference the space-free alias instead.
+        assert!("super emissive thing".parse::<ChannelSource>().is_err());
+        assert!("1-super emissive thing".parse::<ChannelSource>().is_err());
+    }
+
+    #[test]
     fn a_binding_resolves_to_its_concrete_key() {
         // The alias `gloss` renames to the layer's `roughnessFactor`.
         let resolved = attribute("gloss", true).resolve(&bindings()).unwrap();
@@ -225,6 +238,15 @@ mod tests {
             .resolve(&bindings())
             .unwrap();
         assert_eq!(resolved, component("tint", ColorComponent::R, false));
+    }
+
+    #[test]
+    fn a_binding_reaches_a_name_with_spaces() {
+        // The alias is space-free and parses, then resolves to its bound voxel
+        // name, spaces and all.
+        let bindings = vec![AttributeBinding::new("spark", "super emissive thing").unwrap()];
+        let resolved = attribute("spark", false).resolve(&bindings).unwrap();
+        assert_eq!(resolved, attribute("super emissive thing", false));
     }
 
     #[test]
