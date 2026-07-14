@@ -124,11 +124,12 @@ as `hierarchy show` already does.
    today's `palette show --layout row`.
 3. `columns`: each data-bearing node is one padded column under its label
    -- today's `column`.
-4. `tables`: an aligned markdown table led by a `#` index column, one
-   column per data-bearing node -- today's `markdown`. (Series shape only
-   in v1; the record shape `info` and `palette list` need lands in
-   phase 6, committed scope -- see
-   [design notes](reference/design-notes.md).)
+4. `tables`: aligned markdown tables led by a `#` index column, one
+   table per parent-path group under `concat` or `header` headings -- a
+   grouped redesign of today's `markdown`, whose single interleaved
+   table has no equivalent. (Series shape only in v1; the record shape
+   `info` and `palette list` need lands in phase 6, committed scope --
+   see [design notes](reference/design-notes.md).)
 5. `json-pretty` / `json-compact`: the generic envelope, one record per
    node: `{"label", "annotation"?, "values"?, "children"?}`.
 
@@ -144,23 +145,25 @@ carry the labels structurally):
 1. `none`: no labels. Errors under `tables`, which cannot head its columns
    with nothing.
 2. `concat` (default): the full path joined with `.`, each `Quoted`
-   segment quoted -- `0."baseColorFactor".a`. Matches the current `row` / `column`
-   / `markdown` headers (quoting landed in 82e803a).
-3. `header`: group data-bearing nodes by parent path; print `## {parent
-   path, concat-joined}` (one level, never nested), a blank line, then
-   that group's rows / columns / table labeled by leaf label alone. A
-   root-level group (empty parent path) prints with no header.
-   `TreeGridOptions::header_level` (default `2`, valid `1..=6`) sets how
-   many `#`s every header gets, so output embedded in a host markdown
-   document sits at the right depth -- exposed as `--header-level` on
-   adopting commands, and an error when set on a render that emits no
-   headers (any other label mode, or a layout that ignores labels)
-   rather than a silent no-op. This is
-   the layout `vxl info`'s markdown report already has by hand, and the
-   fix for the motivating case: `palette show --layout markdown` on
+   segment quoted -- `0."baseColorFactor".a`. Inline on `rows` /
+   `columns`, matching the current `row` / `column` headers (quoting
+   landed in 82e803a); on `tables`, headings nest exactly like `header`
+   -- same positions, same increasing levels -- but each carries its
+   full path.
+3. `header`: the ancestor chain becomes nested markdown headings --
+   `# root`, `## "energy-tank-1"`, `### transform` -- one per branch
+   segment that leads to data, depth-first, with each group's rows /
+   columns / table under its heading labeled by leaf segment alone.
+   Root-level data nodes print first with no heading.
+   `TreeGridOptions::header_level` (default `1`, valid `1..=6`) sets the
+   shallowest heading's level so embedded output sits at the right
+   depth under a host document's headings -- exposed as `--header-level`
+   on adopting commands, and an error when set on a render that emits
+   no headings rather than a silent no-op. This fixes the motivating
+   case: `palette show --layout markdown` on
    `tyt-assets/src/vmax/energy-reactor.vmax` today emits one 16-column
-   table interleaving palettes 0 and 1; under `tables` + `header` it
-   becomes two per-palette tables under `## 0` and `## 1`.
+   table interleaving palettes 0 and 1; under `tables` it becomes two
+   per-palette tables under `# 0` and `# 1`.
 
 ### Boundaries -- what stays in the commands
 
@@ -192,11 +195,11 @@ the no-header variants into `--label`:
 | `--layout row-no-header`     | `--layout rows --label none`     |
 | `--layout column`            | `--layout columns`               |
 | `--layout column-no-header`  | `--layout columns --label none`  |
-| `--layout markdown`          | `--layout tables`                |
+| `--layout markdown`          | `--layout tables` (grouped redesign) |
 | `--layout pretty-json`       | `--layout json-pretty`           |
 | `--layout compact-json`      | `--layout json-compact`          |
 | (new)                        | `--label none \| concat \| header` |
-| (new)                        | `--header-level 1..6`, requires `--label header` |
+| (new)                        | `--header-level 1..6`, heading-emitting renders only |
 | (new)                        | `--layout hierarchy`             |
 
 Default output (`rows` + `concat`) stays byte-identical. The JSON payload

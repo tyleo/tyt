@@ -67,18 +67,26 @@ items off as they land.
 - [ ] **S4. `rows` and `columns` layouts.** Label modes `none` / `concat`
       / `header`, per-group label padding, blank-line separation,
       right-trimming, `width` wrapping with continuation indent
-      (rows only), `header_level` (default 2, `1..=6` else
-      `HeaderLevelOutOfRange`; set on a headerless render ->
+      (rows only). `header` mode is nested headings via the shared
+      depth-first grouping walk, level `header_level + depth`;
+      `header_level` (default 1, `1..=6` else `HeaderLevelOutOfRange`,
+      nested levels clamp at 6; set on a headerless render ->
       `HeaderLevelWithoutHeaders`). Port the `row` / `row-no-header` /
       `column` / `column-no-header` / wrapping golden tests from
-      `implementation/palette_show.rs`; add `header`-mode tests including
-      a headerless root-level group, a two-level parent path, and a
-      non-default `header_level`.
-- [ ] **S5. `tables` layout (series shape).** `#` index column, one
-      column per data node, per-group tables under `header`, blank cells
-      past shorter series, `none` -> `TreeGridError::LabelNoneWithTables`.
-      Port the markdown golden test; add a `header`-grouped two-table
-      test.
+      `implementation/palette_show.rs`; add `header`-mode tests
+      including headerless root-level data, a nested two-level parent
+      path (`#` then `##`), a non-default `header_level`, and the
+      depth-6 clamp.
+- [ ] **S5. `tables` layout (series shape).** Always grouped by parent
+      path: one table per group (`#` index column, one column per data
+      node, leaf-label headers, blank cells past shorter series), under
+      nested headings carrying the full path (`concat`) or the leaf
+      segment (`header`);
+      `none` -> `TreeGridError::LabelNoneWithTables`. The old vxl
+      single interleaved markdown golden is obsolete by design; write
+      grouped goldens for both label modes, including the
+      hierarchy-shaped worked example from the
+      [rendering spec](reference/rendering-spec.md).
 - [ ] **S6. JSON layouts.** The record envelope (`label`, optional
       `annotation` / `values` / `children`), pretty and compact, trailing
       newline. Tests: envelope shape, native value types, duplicate
@@ -99,9 +107,11 @@ items off as they land.
       it. Replace `PaletteShowLayout` values with
       `hierarchy | rows | columns | tables | json-pretty | json-compact`
       (default `rows`), add `--label none | concat | header` (default
-      `concat`) and `--header-level` (`1..=6`, valid only with
-      `--label header`, headers default to `##` when unset), keep
-      `--width` and its terminal resolution in vxl.
+      `concat`) and `--header-level` (`1..=6`, heading-emitting renders
+      only, headings start at `#` when unset), keep `--width` and its
+      terminal resolution in vxl. Note in the commit message that
+      `tables` is a grouped redesign of `markdown`, not a rename: the
+      single interleaved table has no equivalent.
       Delete `render*`, `wrap_cells`, `assemble_row`, `join_padded`,
       `render_cell`, `color_swatch` / `gray_swatch`, `abuts`. Keep
       selector/sampling tests in vxl plus a few end-to-end renders; the
@@ -169,7 +179,8 @@ is in scope, not optional. The plan does not close without it.
       `TreeGridTableShape::Records` (explicit render option) and the
       `info` / `validate` / `palette list` markdown + JSON adoption,
       retiring vxl's `markdown_table` and `to_json_string`; `info`'s
-      `##`-sectioned markdown becomes `tables` + `header`.
+      `##`-sectioned markdown becomes `tables` + `header` with
+      `header_level` 2 beneath its command-printed `# {input}` title.
 - [ ] **S16. Layout-name consistency.** `markdown -> tables`,
       `pretty-json -> json-pretty`, `compact-json -> json-compact`
       across `list` / `info` / `validate`, one breaking commit, retiring

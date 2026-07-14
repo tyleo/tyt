@@ -32,6 +32,29 @@ condition that the record shape lands before the plan closes
 (2026-07-12). Until then those commands keep their bespoke
 `markdown_table` rendering, which is duplication we accept knowingly.
 
+### 1b. The hierarchy dry-run reshaped the label modes (2026-07-13)
+
+Dry-running `tables` against `vxl hierarchy show --show-transforms` on
+the energy-reactor asset (now a worked example in the
+[rendering spec](rendering-spec.md)) broke the first design twice: the
+single cross-parent `concat` table degenerated to 21 columns and one
+row, and flat `##` group headings carrying long concatenated parents
+read worse than real document structure. Owner revisions: `tables`
+always groups by parent path in every label mode; both modes nest
+headings per segment (level `header_level + depth`, clamped at 6),
+reversing the earlier "depth lives in the concatenated path, never in
+nested heading levels" rule -- `concat` and `header` differ only in
+heading text, the branch's full path versus its leaf segment (flat
+same-level concat headings were considered and dropped: a group
+following an unrelated section would visually nest under it); and
+`header_level` defaults to `1` so standalone output reads as its own
+document. Two costs, accepted eyes-open: the old
+interleaved `markdown` table -- palette collections compared
+side-by-side across parents in one table -- has no equivalent (if
+wanted later it is a new explicit option, not a label mode), and
+`--layout markdown -> --layout tables` in the S7 migration is a
+redesign, not a rename.
+
 ### 2. Generic JSON versus today's bespoke records
 
 `palette show` emits `[{"palette": 0, "attribute": "baseColorFactor",

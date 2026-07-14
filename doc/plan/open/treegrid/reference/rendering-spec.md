@@ -102,23 +102,36 @@ Behind the `ty-math` feature, over the component-generic color family
 - `TreeGridLabelMode` is consumed by `rows`, `columns`, and `tables` only:
   - `none`: no labels anywhere. Under `tables` this is
     `TreeGridError::LabelNoneWithTables`.
-  - `concat` (default): each data node is labeled by its full path.
-  - `header`: data nodes group by **parent path** (the path minus the leaf
-    segment), in order of each group's first data node. Each group with a
-    non-empty parent path prints `## {parent path}`, a blank line, then
-    the group's content labeled by leaf segment alone; a blank line
-    separates a group's content from the next header. The root-level
-    group (empty parent path) prints its content with no header, first.
-    Every header in one render is the same level:
-    `TreeGridOptions::header_level` (`Option<u8>`) `#`s, default `2`,
-    valid `1..=6` (else `TreeGridError::HeaderLevelOutOfRange`), so
-    output embedded in a host markdown document sits at the right depth
-    under its headings. Setting it on a render that emits no headers --
-    a label mode other than `header`, or a layout that ignores label
-    mode -- is `TreeGridError::HeaderLevelWithoutHeaders`, not a silent
-    no-op. Depth within the grid is expressed in the concatenated parent
-    path, never by nesting header levels; the option moves every header
-    together.
+  - `concat` (default): each data node is labeled by its full path. On
+    `rows` and `columns` the label sits inline on the row or column
+    head, with no headings. On `tables`, which cannot spend a column
+    header on a long path, the headings follow the same nested walk as
+    `header` -- same positions, same increasing levels -- but each
+    heading's text is that branch's full concat path instead of its
+    leaf segment, so every heading is self-contained.
+  - `header`: the ancestor chain becomes nested markdown headings:
+    every branch segment that leads to data prints once, depth-first,
+    at level `header_level + depth` (a root segment at `header_level`),
+    and each branch's group block sits directly under its heading,
+    before any deeper subsection headings. Group content is labeled by
+    leaf segment alone.
+- **Grouping and order** (concat `tables`, and every `header` render): a
+  group is one branch's direct data children, in insertion order.
+  Groups emit in a depth-first walk -- a branch's own group first, then
+  its child branches recursively -- so a group never lands inside a
+  deeper subsection's heading. Data nodes that are themselves roots
+  (empty parent path) print first, with no heading. A blank line
+  separates a heading from its content and content from the next
+  heading. A node with both values and children is a column in its
+  parent's group *and* a heading over its own.
+- `TreeGridOptions::header_level` (`Option<u8>`): the level of the
+  shallowest heading, default `1`, valid `1..=6` (else
+  `TreeGridError::HeaderLevelOutOfRange`), so output embedded in a host
+  markdown document sits at the right depth under its headings. Nested
+  `header`-mode levels deeper than `6` clamp to `6`. Setting it on a
+  render that emits no headings -- label mode `none`, `concat` with
+  `rows` / `columns`, or a layout that ignores label mode -- is
+  `TreeGridError::HeaderLevelWithoutHeaders`, not a silent no-op.
 - Annotations never appear in `concat` or `header` labels.
 
 ## Layouts
@@ -193,11 +206,14 @@ Today's `palette show --layout column`:
 
 Today's `palette show --layout markdown`:
 
-- One aligned markdown table per group (`concat`: one group of all data
-  nodes; `header`: one per parent path). Columns: `#` (0-based value
-  index) then one column per data node, headed by its label per the label
-  mode; one row per index up to the longest series, shorter series blank
-  past their end.
+- Tables always group (see Labels), under nested headings whose text is
+  the branch's full path (`concat`) or its leaf segment (`header`): one
+  aligned markdown table per group. Columns: `#` (0-based value index) then one column per
+  data node in the group, headed by its leaf label; one row per index
+  up to the group's longest series, shorter series blank past their
+  end. There is no cross-group table: vxl's old `--layout markdown`,
+  one interleaved table over every collection, has no equivalent by
+  design.
 - `markdown_table` rules: every column pads to its widest cell, minimum
   width 3 so the dash separator stays valid markdown; cell text escapes
   pipes and flattens newlines (`md_cell`); width is visible width, so
@@ -262,28 +278,44 @@ TreeGrid
   1."baseColorFactor".a 255
   ```
 
-- `rows` + `header`:
+- `rows` + `header` (default `header_level` 1):
 
   ```text
-  ## 0
+  # 0
 
   "baseColorFactor" #FF0000FF #00FF0080
 
   "metallicFactor"  1 0.2
 
-  ## 1."baseColorFactor"
+  # 1
+
+  ## "baseColorFactor"
 
   a 255
   ```
 
-- `tables` + `concat`:
+- `tables` + `concat` -- nested, full-path heading text; `# 1` prints
+  bare because the structure needs it even though its group is empty:
 
   ```text
-  | #   | 0."baseColorFactor" | 0."metallicFactor" | 1."baseColorFactor".a |
-  | --- | ------------------- | ------------------ | --------------------- |
-  | 0   | #FF0000FF           | 1                  | 255                   |
-  | 1   | #00FF0080           | 0.2                |                       |
+  # 0
+
+  | #   | "baseColorFactor" | "metallicFactor" |
+  | --- | ----------------- | ---------------- |
+  | 0   | #FF0000FF         | 1                |
+  | 1   | #00FF0080         | 0.2              |
+
+  # 1
+
+  ## 1."baseColorFactor"
+
+  | #   | a   |
+  | --- | --- |
+  | 0   | 255 |
   ```
+
+- `tables` + `header`: identical structure; the deep heading reads
+  `## "baseColorFactor"` instead of `## 1."baseColorFactor"`.
 
 - `hierarchy` (`bare_roots: false`):
 
@@ -301,3 +333,105 @@ TreeGrid
   ```json
   [{"label":"0","children":[{"label":"baseColorFactor","values":["#FF0000FF","#00FF0080"]},{"label":"metallicFactor","values":[1,0.2]}]},{"label":"1","children":[{"label":"baseColorFactor","children":[{"label":"a","values":[255]}]}]}]
   ```
+
+## Worked example: hierarchy data
+
+The dry run that shaped the grouped-tables design (2026-07-13):
+`vxl hierarchy show submodules/tyt-assets/src/vmax/energy-reactor.vmax
+--show-transforms`, whose tree is the `hierarchy`-layout output under
+"Observed shapes" above -- a `root` section over four scene nodes, each
+carrying a tag value, a `transform` branch (`position` / `rotation` /
+`scale`, one pre-formatted value each), and a tag-valued object child.
+Every data node is single-valued, so every table has one data row.
+
+`tables` + `header` (default `header_level` 1; the first node shown, the
+other three repeat the same shape):
+
+```text
+# root
+
+| #   | "energy-tank-1" | "energy-tank-2" | "energy-reactor" | "energy-tank" |
+| --- | --------------- | --------------- | ---------------- | ------------- |
+| 0   | {node: 0}       | {node: 1}       | {node: 2}        | {node: 3}     |
+
+## "energy-tank-1"
+
+| #   | "energy-tank-1"          |
+| --- | ------------------------ |
+| 0   | {object: 0, instance: 0} |
+
+### transform
+
+| #   | position             | rotation           | scale              |
+| --- | -------------------- | ------------------ | ------------------ |
+| 0   | [12.50, 0.50, 10.00] | [0.00, 0.00, 0.00] | [1.00, 1.00, 1.00] |
+
+## "energy-tank-2"
+...
+```
+
+The `root` table holds the four node tags because a node with both
+values and children is a column in its parent's group and a heading
+over its own; the object table precedes `### transform` because a
+branch's own group emits before its child branches (`transform` is a
+branch, the object a direct data child).
+
+`tables` + `concat` is the same walk at the same levels; only the
+heading text changes, each carrying its full path:
+
+```text
+# root
+
+| (the same four-column tag table) |
+
+## root."energy-tank-1"
+
+| (the object-tag table) |
+
+### root."energy-tank-1".transform
+
+| (the transform table) |
+
+## root."energy-tank-2"
+...
+```
+
+The remaining layouts over the same tree. `rows` + `concat` emits no
+headings: one row per data node, labels padded to the longest, and the
+best grep target of the layouts:
+
+```text
+root."energy-tank-1"                     {node: 0}
+
+root."energy-tank-1".transform.position  [12.50, 0.50, 10.00]
+
+root."energy-tank-1".transform.rotation  [0.00, 0.00, 0.00]
+
+root."energy-tank-1".transform.scale     [1.00, 1.00, 1.00]
+
+root."energy-tank-1"."energy-tank-1"     {object: 0, instance: 0}
+
+root."energy-tank-2"                     {node: 1}
+...
+```
+
+`columns` + `concat` is the transpose: twenty single-valued columns
+under full-path headers, one data row -- columns earn their keep on
+long series like a palette's materials, not here:
+
+```text
+root."energy-tank-1" root."energy-tank-1".transform.position root."energy-tank-1".transform.rotation ...
+{node: 0}            [12.50, 0.50, 10.00]                    [0.00, 0.00, 0.00]                      ...
+```
+
+The `hierarchy` and JSON layouts ignore label modes: the `hierarchy`
+render of this tree is the "Observed shapes" listing above, and the
+envelope carries each label structurally.
+
+What this example pins down: single-valued hierarchy data degenerates
+to one-row series tables (the `#` column is all zeros), which is why
+the record shape (phase 6) exists and why `hierarchy show` exposes only
+`hierarchy` + JSON in v1; and the `root` section label leads every
+concat heading, so a command exposing tabular layouts may prefer to
+build a flatter forest for them -- the command owns the tree it
+populates.
