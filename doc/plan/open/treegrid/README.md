@@ -320,6 +320,9 @@ and S14 builds on it rather than writing a third; it closes the plan.
 
 - [Implementation checklist](checklist.md): the phased task list. Start
   here when implementing.
+- [Continue prompt](continue-treegrid.md): the per-session resume
+  prompt; point a fresh session at it to advance the plan by one
+  reviewable chunk.
 - [Rendering spec](reference/rendering-spec.md): the exact contract for
   every layout, label mode, and the value/format matrix. Any behavior
   question is settled here.
