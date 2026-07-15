@@ -17,6 +17,7 @@ members = [
     "projects/tyt/tyt-vmax",
 
     "projects/utilities/pathspec",
+    "projects/utilities/treegrid",
     "projects/utilities/ty-math",
     "projects/utilities/ty-math-serde",
     "projects/utilities/voxcore",
@@ -55,6 +56,7 @@ tyt-preferences = { path = "projects/tyt/tyt-preferences" }
 tyt-vmax = { path = "projects/tyt/tyt-vmax" }
 
 pathspec = { path = "projects/utilities/pathspec" }
+treegrid = { path = "projects/utilities/treegrid" }
 ty-math = { path = "projects/utilities/ty-math" }
 ty-math-serde = { path = "projects/utilities/ty-math-serde" }
 voxcore = { path = "projects/utilities/voxcore" }

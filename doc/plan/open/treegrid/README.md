@@ -51,7 +51,7 @@ an ordered list of values, and children -- and any node may have both
 values and children. A value carries its display text, its native JSON form, and
 an optional swatch (truecolor or grayscale), exactly the shape of
 `palette_show`'s `Sample`; a per-node cell format (`auto` / `swatch` /
-`swatch-value` / `value`) picks how a value renders to a cell. One
+`swatch-value` / `text`) picks how a value renders to a cell. One
 `render(&TreeGridOptions) -> Result<String, TreeGridError>` call arranges
 the same populated grid as a `hierarchy` tree, `rows`, `columns`, series
 `tables`, or `json-pretty` / `json-compact`, and a label mode (`none` /
@@ -92,16 +92,16 @@ let palette = grid.add_root(TreeGridLabel::bare("0"));
 let attribute = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
 let component = grid.add_child(attribute, TreeGridLabel::bare("a"));
 
-grid.node_mut(component).format = TreeGridCellFormat::Value;
+grid.node_mut(component).format = TreeGridCellFormat::Text;
 grid.push_value(component, TreeGridValue::unorm8(255)); // text "255", json 255, gray swatch
 grid.push_value(component, TreeGridValue::unorm8(128));
 
-let output = grid.render(&TreeGridOptions {
-    layout: TreeGridLayout::Rows,
-    label: TreeGridLabelMode::Concat,
-    width: Some(80),
-    ..TreeGridOptions::default()
-})?;
+let output = grid.render(
+    &TreeGridOptions::default()
+        .with_layout(TreeGridLayout::Rows)
+        .with_label(TreeGridLabelMode::Concat)
+        .with_width(80),
+)?;
 // 0."baseColorFactor".a 255 128
 ```
 
@@ -142,8 +142,8 @@ on order.
 ### Label modes
 
 `TreeGridLabelMode`, consumed by `rows`, `columns`, and `tables`; the
-`hierarchy` and JSON layouts ignore it (the tree and the envelope always
-carry the labels structurally):
+`hierarchy` and JSON layouts carry the labels structurally and reject
+a set mode:
 
 1. `none`: no labels. Errors under `tables`, which cannot head its columns
    with nothing.
@@ -158,11 +158,13 @@ carry the labels structurally):
    segment that leads to data, depth-first, with each group's rows /
    columns / table under its heading labeled by leaf segment alone.
    Root-level data nodes print first with no heading.
-   `TreeGridOptions::header_level` (default `1`, valid `1..=6`) sets the
+   `TreeGridOptions::header_level` (default `1`) sets the
    shallowest heading's level so embedded output sits at the right
    depth under a host document's headings -- exposed as `--header-level`
    on adopting commands, and an error when set on a render that emits
-   no headings rather than a silent no-op. This fixes the motivating
+   no headings rather than a silent no-op; a heading that nests past
+   level `6` renders as a bold label (`**label**`) rather than a
+   deeper `#` run. This fixes the motivating
    case: `palette show --layout markdown` on
    `tyt-assets/src/vmax/energy-reactor.vmax` today emits one 16-column
    table interleaving palettes 0 and 1; under `tables` it becomes two
@@ -205,7 +207,7 @@ the no-header variants into `--label`:
 | `--layout pretty-json`       | `--layout json-pretty`           |
 | `--layout compact-json`      | `--layout json-compact`          |
 | (new)                        | `--label none \| concat \| header` |
-| (new)                        | `--header-level 1..6`, heading-emitting renders only |
+| (new)                        | `--header-level`, heading-emitting renders only |
 | (new)                        | `--table-shape nested \| flat` (`records` at S15) |
 | (new)                        | `--layout hierarchy`             |
 
@@ -262,7 +264,7 @@ and S14 builds on it rather than writing a third; it closes the plan.
 5. **Values are pre-rendered, JSON is optional, constructors are typed
    by domain.** `TreeGridValue { text, json: Option<Value>, swatch }` plus
    a per-node `TreeGridCellFormat`; the `auto`/`swatch`/`swatch-value`/
-   `value` matrix and the swatch-strip abutting rule port from
+   `text` matrix and the swatch-strip abutting rule port from
    `palette_show::render_cell` / `abuts` unchanged. Text cannot derive
    from JSON (Rust `Display` versus serde's ryu float rendering,
    precision-rounded `fmt3` text versus full-fidelity numbers), so both

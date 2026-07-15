@@ -1684,6 +1684,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "treegrid"
+version = "0.1.0"
+dependencies = [
+ "branded-id",
+ "serde_json",
+]
+
+[[package]]
 name = "ty-math"
 version = "0.1.8"
 

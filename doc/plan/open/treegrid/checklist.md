@@ -69,14 +69,14 @@ items off as they land.
       right-trimming, `width` wrapping with continuation indent
       (rows only). `header` mode is nested headings via the shared
       depth-first grouping walk, level `header_level + depth`;
-      `header_level` (default 1, `1..=6` else `HeaderLevelOutOfRange`,
-      nested levels clamp at 6; set on a headerless render ->
+      `header_level` (default 1, `NonZeroU8`; a heading past level 6
+      renders as a bold `**label**` line; set on a headerless render ->
       `HeaderLevelWithoutHeaders`). Port the `row` / `row-no-header` /
       `column` / `column-no-header` / wrapping golden tests from
       `implementation/palette_show.rs`; add `header`-mode tests
       including headerless root-level data, a nested two-level parent
       path (`#` then `##`), a non-default `header_level`, and the
-      depth-6 clamp.
+      past-6 bold fallback.
 - [ ] **S5. `tables` layout.** `TreeGridTableShape` (`Nested` default,
       `Flat`; `Records` joins at S15). Nested: one table per
       parent-path group (`#` index column, one column per data node,
@@ -111,8 +111,8 @@ items off as they land.
       it. Replace `PaletteShowLayout` values with
       `hierarchy | rows | columns | tables | json-pretty | json-compact`
       (default `rows`), add `--label none | concat | header` (default
-      `concat`), `--header-level` (`1..=6`, heading-emitting renders
-      only, headings start at `#` when unset), and `--table-shape`
+      `concat`), `--header-level` (heading-emitting renders only,
+      headings start at `#` when unset), and `--table-shape`
       (`nested` default | `flat`; `records` joins at S15), keep
       `--width` and its terminal resolution in vxl. Note in the commit
       message that `tables` defaults to a grouped redesign of

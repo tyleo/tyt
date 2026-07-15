@@ -23,7 +23,7 @@ amended; after adoption, this spec is the single source of truth.
     label, colon, tag -- which is exactly the data-node form, so the tag
     is modeled as the node's single value (text `{node: 0}`).
   - `format: TreeGridCellFormat` -- how this node's values render to cells
-    (`Auto` default, `Swatch`, `SwatchValue`, `Value`).
+    (`Auto` default, `Swatch`, `SwatchValue`, `Text`).
   - `values: Vec<TreeGridValue>` -- the node's data series, possibly empty.
   - children, in insertion order.
 - A `TreeGridValue` is `{ text: String, json: Option<serde_json::Value>,
@@ -47,7 +47,7 @@ Ported from `palette_show::render_cell` / `abuts` / the swatch functions:
 | `Auto` | swatch + space + text | text | text |
 | `Swatch` | swatch | gray swatch | text |
 | `SwatchValue` | swatch + space + text | gray swatch + space + text | text |
-| `Value` | text | text | text |
+| `Text` | text | text | text |
 
 - A color swatch is `\x1b[48;2;{r};{g};{b}m  \x1b[0m` (two cells); a gray
   swatch is the same with `level` on all three channels.
@@ -99,7 +99,10 @@ Behind the `ty-math` feature, over the component-generic color family
 - A segment renders as-is (`Bare`) or `{:?}`-quoted (`Quoted`).
 - A **path** is the segments from a root to a node, joined with `.`:
   `0."baseColorFactor".a`.
-- `TreeGridLabelMode` is consumed by `rows`, `columns`, and `tables` only:
+- `TreeGridLabelMode` (`TreeGridOptions::label`, an `Option`; `None`
+  means `concat`) is consumed by `rows`, `columns`, and `tables`; a
+  mode set with `hierarchy` or the JSON layouts, which carry labels
+  structurally, is `TreeGridError::LabelModeWithoutLabels`:
   - `none`: no labels anywhere. Under `tables` this is
     `TreeGridError::LabelNoneWithTables`.
   - `concat` (default): each data node is labeled by its full path. On
@@ -124,14 +127,17 @@ Behind the `ty-math` feature, over the component-generic color family
   separates a heading from its content and content from the next
   heading. A node with both values and children is a column in its
   parent's group *and* a heading over its own.
-- `TreeGridOptions::header_level` (`Option<u8>`): the level of the
-  shallowest heading, default `1`, valid `1..=6` (else
-  `TreeGridError::HeaderLevelOutOfRange`), so output embedded in a host
-  markdown document sits at the right depth under its headings. Nested
-  `header`-mode levels deeper than `6` clamp to `6`. Setting it on a
-  render that emits no headings -- label mode `none`, `concat` with
-  `rows` / `columns`, or a layout that ignores label mode -- is
-  `TreeGridError::HeaderLevelWithoutHeaders`, not a silent no-op.
+- `TreeGridOptions::header_level` (`Option<NonZeroU8>`): the level of
+  the shallowest heading, default `1`, so output embedded in a host
+  markdown document sits at the right depth under its headings. A
+  heading that lands deeper than `6` -- markdown's deepest level --
+  renders as a bold label on its own line (`**label**`) instead of a
+  `#` run, so depth never errors and never emits invalid `#######`
+  markdown; the zero-heading level is unrepresentable in the type.
+  Setting the option on a render that emits no headings -- label mode
+  `none`, `concat` with `rows` / `columns`, or a layout that takes no
+  label mode -- is `TreeGridError::HeaderLevelWithoutHeaders`, not a
+  silent no-op.
 - Annotations never appear in `concat` or `header` labels.
 
 ## Layouts
@@ -150,7 +156,8 @@ Behind the `ty-math` feature, over the component-generic color family
   `{label}{ annotation?}: {cells}` with the node's cell separator rule.
   Values are not wrapped in this layout.
 - Children render beneath in insertion order.
-- Label mode and `width` are ignored.
+- A set label mode is `TreeGridError::LabelModeWithoutLabels`; `width`
+  is not consumed.
 
 Observed shapes this layout must reproduce (from
 `vxl hierarchy show src/vmax/energy-reactor.vmax --show-transforms
@@ -250,8 +257,9 @@ is `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
   with `annotation`, `values`, and `children` omitted when absent/empty.
   `label` is the raw string, unquoted-extra, whether `Bare` or `Quoted`.
   `values` carries each value's `json` form, falling back to
-  `String(text)` for a value built without one; `swatch`, format, label
-  mode, and `width` are all ignored.
+  `String(text)` for a value built without one; `swatch`, format, and
+  `width` are not consumed, and a set label mode is
+  `TreeGridError::LabelModeWithoutLabels`.
 - Pretty is `serde_json::to_string_pretty`, compact `to_string`, both
   with a trailing `\n` (today's `to_json_string`).
 - Records, not label-keyed objects: sibling labels may repeat and labels
@@ -260,7 +268,7 @@ is `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
 ## Errors
 
 `TreeGridError`, one variant per invalid request; the initial set is
-`LabelNoneWithTables`, `HeaderLevelOutOfRange`,
+`LabelNoneWithTables`, `LabelModeWithoutLabels`,
 `HeaderLevelWithoutHeaders`, `HeaderLabelWithFlatTables`, and
 `TableShapeWithoutTables`. Commands map it into their own error types
 (vxl: `ErrorKind::InvalidInput`).
@@ -279,7 +287,7 @@ TreeGrid
     └ Bare("a")                       values: 255 (Gray swatch)
 ```
 
-- `rows` + `concat` (format `Value`):
+- `rows` + `concat` (format `Text`):
 
   ```text
   0."baseColorFactor"   #FF0000FF #00FF0080
