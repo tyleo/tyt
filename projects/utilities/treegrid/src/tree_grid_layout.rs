@@ -1,20 +1,28 @@
-/// The arrangement a render produces.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+use crate::{
+    TreeGridColumnsOptions, TreeGridHierarchyOptions, TreeGridRowsOptions, TreeGridTableShape,
+};
+
+/// A validated render request: the layout, carrying only the options
+/// it consumes.
+///
+/// Built directly, or from flag-shaped input through
+/// [`TreeGridOptions::resolve`](crate::TreeGridOptions::resolve).
+/// Invalid option combinations are unrepresentable, so a render never
+/// error-checks.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TreeGridLayout {
-    /// A box-glyph tree: annotations show and values print inline
-    /// after the label.
-    Hierarchy,
+    /// The box-glyph tree.
+    Hierarchy(TreeGridHierarchyOptions),
 
     /// One row per data node, labels padded to align, a blank line
     /// between rows.
-    #[default]
-    Rows,
+    Rows(TreeGridRowsOptions),
 
     /// One padded column per data node.
-    Columns,
+    Columns(TreeGridColumnsOptions),
 
     /// Aligned markdown tables led by an index column.
-    Tables,
+    Tables(TreeGridTableShape),
 
     /// The JSON record envelope, pretty-printed.
     #[cfg(feature = "json")]
@@ -23,4 +31,10 @@ pub enum TreeGridLayout {
     /// The JSON record envelope, compact.
     #[cfg(feature = "json")]
     JsonCompact,
+}
+
+impl Default for TreeGridLayout {
+    fn default() -> Self {
+        Self::Rows(TreeGridRowsOptions::default())
+    }
 }

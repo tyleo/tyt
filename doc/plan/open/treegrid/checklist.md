@@ -63,7 +63,7 @@ items off as they land.
 - [ ] **S3. `hierarchy` layout.** Connectors/extensions, `bare_roots`
       both ways, annotations, `label: cells` data lines, values-on-branch
       nodes, and the `value_children` mode (one connector line per
-      value; the hierarchy-only options error on other layouts).
+      value).
       Golden tests shaped on `palette list --layout hierarchy`,
       vmax trees (connectored roots, `(Group)` annotations, marker
       nodes), a section-style forest (`root` / `unplaced` bare
@@ -73,25 +73,26 @@ items off as they land.
       right-trimming, `width` wrapping with continuation indent
       (rows only). `header` mode is nested headings via the shared
       depth-first grouping walk, level `header_level + depth`;
-      `header_level` (default 1, `NonZeroU8`; a heading past level 6
-      renders as a bold `**label**` line; set on a headerless render ->
-      `HeaderLevelWithoutHeaders`). Port the `row` / `row-no-header` /
+      the level carried by `header` labels (default 1; a heading past
+      level 6 renders as a bold `**label**` line; the flag on a
+      headerless render -> `HeaderLevelWithoutHeaders` from
+      `resolve`). Port the `row` / `row-no-header` /
       `column` / `column-no-header` / wrapping golden tests from
       `implementation/palette_show.rs`; add `header`-mode tests
       including headerless root-level data, a nested two-level parent
       path (`#` then `##`), a non-default `header_level`, and the
       past-6 bold fallback.
-- [ ] **S5. `tables` layout.** `TreeGridTableShape` (`Nested` default,
-      `Flat`; `Records` joins at S15). Nested: one table per
+- [ ] **S5. `tables` layout.** The shape types landed with the options
+      restructure (`TreeGridTableShape`: `Nested` default with its
+      label and level payload, `Flat`; `Records` joins at S15); this
+      step is the render. Nested: one table per
       parent-path group (`#` index column, one column per data node,
       leaf-label headers, blank cells past shorter series), under
       nested headings carrying the full path (`concat`) or the leaf
       segment (`header`). Flat: one table over every data node with
-      concat-path headers, the comparison view; `header` ->
-      `TreeGridError::HeaderLabelWithFlatTables`. `none` ->
-      `TreeGridError::LabelNoneWithTables`; a shape set on a
-      non-`tables` layout -> `TreeGridError::TableShapeWithoutTables`.
-      Goldens: grouped tables in
+      concat-path headers, the comparison view (the invalid label and
+      shape combinations are rejected by `resolve`, tested with the
+      restructure). Goldens: grouped tables in
       both label modes including the hierarchy-shaped worked example
       from the [rendering spec](reference/rendering-spec.md), and the
       flat comparison table.

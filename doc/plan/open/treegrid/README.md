@@ -52,10 +52,15 @@ values and children. A value carries its display text, its native JSON form, and
 an optional swatch (truecolor or grayscale), exactly the shape of
 `palette_show`'s `Sample`; a per-node cell format (`auto` / `swatch` /
 `swatch-value` / `text`) picks how a value renders to a cell. One
-`render(&TreeGridOptions) -> Result<String, TreeGridError>` call arranges
-the same populated grid as a `hierarchy` tree, `rows`, `columns`, series
-`tables`, or `json-pretty` / `json-compact`, and a label mode (`none` /
-`concat` / `header`) decides how the text layouts spend the ancestor path.
+`render(&TreeGridLayout) -> String` call arranges the same populated
+grid as a `hierarchy` tree, `rows`, `columns`, series `tables`, or
+`json-pretty` / `json-compact`, and a label mode (`none` / `concat` /
+`header`) decides how the text layouts spend the ancestor path.
+`TreeGridLayout` is structural -- each variant carries only the
+options its layout consumes, so invalid combinations are
+unrepresentable and render cannot fail; flag-shaped input goes
+through `TreeGridOptions::resolve`, which rejects any flag the chosen
+layout does not consume.
 
 ## Design
 
@@ -80,8 +85,9 @@ are pure math and pure serialization, so they ride feature gates, not
 DI. Public types
 follow house style: one per file, `TreeGrid` prefix (`TreeGrid`,
 `TreeGridNode`, `TreeGridLabel`, `TreeGridValue`, `TreeGridSwatch`,
-`TreeGridCellFormat`, `TreeGridLayout`, `TreeGridLabelMode`,
-`TreeGridTableShape`, `TreeGridOptions`, `TreeGridError`,
+`TreeGridCellFormat`, `TreeGridLayout` and its per-layout option
+payloads, `TreeGridLabelMode`, `TreeGridTableShape`, the flag-shaped
+`TreeGridOptions` with its `*Kind` enums, `TreeGridError`,
 `BTreeGridNode`).
 
 ### Populate, then render
@@ -98,12 +104,11 @@ grid.node_mut(component).format = TreeGridCellFormat::Text;
 grid.push_value(component, TreeGridValue::unorm8(255)); // text "255", json 255, gray swatch
 grid.push_value(component, TreeGridValue::unorm8(128));
 
-let output = grid.render(
-    &TreeGridOptions::default()
-        .with_layout(TreeGridLayout::Rows)
-        .with_label(TreeGridLabelMode::Concat)
-        .with_width(80),
-)?;
+let options = TreeGridOptions::default()
+    .with_layout(TreeGridLayoutKind::Rows)
+    .with_label(TreeGridLabelKind::Concat)
+    .with_width(80);
+let output = grid.render(&options.resolve()?);
 // 0."baseColorFactor".a 255 128
 ```
 

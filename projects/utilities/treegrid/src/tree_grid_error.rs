@@ -3,7 +3,8 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
-/// An invalid render request.
+/// An invalid flag combination, reported by
+/// [`TreeGridOptions::resolve`](crate::TreeGridOptions::resolve).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TreeGridError {
     /// The `tables` layout cannot head its columns with nothing; label
@@ -30,6 +31,9 @@ pub enum TreeGridError {
     /// Value children were requested on a layout other than
     /// `hierarchy`.
     ValueChildrenWithoutHierarchy,
+
+    /// A width was set on a layout other than `rows`.
+    WidthWithoutRows,
 }
 
 impl Display for TreeGridError {
@@ -70,6 +74,9 @@ impl Display for TreeGridError {
                     f,
                     "value children were requested, but the layout is not hierarchy"
                 )
+            }
+            TreeGridError::WidthWithoutRows => {
+                write!(f, "a width was set, but the layout is not rows")
             }
         }
     }

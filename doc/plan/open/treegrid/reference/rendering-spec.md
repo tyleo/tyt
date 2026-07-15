@@ -104,10 +104,12 @@ Behind the `ty-math` feature, over the component-generic color family
 - A segment renders as-is (`Bare`) or `{:?}`-quoted (`Quoted`).
 - A **path** is the segments from a root to a node, joined with `.`:
   `0."baseColorFactor".a`.
-- `TreeGridLabelMode` (`TreeGridOptions::label`, an `Option`; `None`
-  means `concat`) is consumed by `rows`, `columns`, and `tables`; a
-  mode set with `hierarchy` or the JSON layouts, which carry labels
-  structurally, is `TreeGridError::LabelModeWithoutLabels`:
+- `TreeGridLabelMode` lives on the `rows` and `columns` payloads
+  (`tables` carries its own two-variant `TreeGridTableLabelMode`);
+  `resolve` maps the flag-shaped `TreeGridOptions::label` kind into
+  them, unset meaning `concat`. A label flag with `hierarchy` or the
+  JSON layouts, which carry labels structurally, is
+  `TreeGridError::LabelModeWithoutLabels`:
   - `none`: no labels anywhere. Under `tables` this is
     `TreeGridError::LabelNoneWithTables`.
   - `concat` (default): each data node is labeled by its full path. On
@@ -132,17 +134,20 @@ Behind the `ty-math` feature, over the component-generic color family
   separates a heading from its content and content from the next
   heading. A node with both values and children is a column in its
   parent's group *and* a heading over its own.
-- `TreeGridOptions::header_level` (`Option<NonZeroU8>`): the level of
-  the shallowest heading, default `1`, so output embedded in a host
+- The heading level: `header` labels carry it
+  (`TreeGridLabelMode::Header(TreeGridHeaderOptions)`), and nested
+  tables carry theirs beside the table label. The shallowest heading
+  prints at that level, default `1`, so output embedded in a host
   markdown document sits at the right depth under its headings. A
   heading that lands deeper than `6` -- markdown's deepest level --
   renders as a bold label on its own line (`**label**`) instead of a
   `#` run, so depth never errors and never emits invalid `#######`
-  markdown; the zero-heading level is unrepresentable in the type.
-  Setting the option on a render that emits no headings -- label mode
-  `none`, `concat` with `rows` / `columns`, or a layout that takes no
-  label mode -- is `TreeGridError::HeaderLevelWithoutHeaders`, not a
-  silent no-op.
+  markdown; the zero level is unrepresentable (`NonZeroU8`). `resolve`
+  folds the flag-shaped `TreeGridOptions::header_level` into those
+  payloads; the flag on a render that emits no headings -- label mode
+  `none`, `concat` with `rows` / `columns`, flat tables, or a layout
+  that takes no label mode -- is
+  `TreeGridError::HeaderLevelWithoutHeaders`, not a silent no-op.
 - Annotations never appear in `concat` or `header` labels.
 
 ## Layouts
@@ -151,8 +156,8 @@ Behind the `ty-math` feature, over the component-generic color family
 
 - Glyphs: connector `├` / `└` before a child, extension `│ ` / `  ` under
   a non-last / last child (today's `tree_glyphs`).
-- `TreeGridOptions::bare_roots` (`true` on a layout other than
-  `hierarchy` is `TreeGridError::BareRootsWithoutHierarchy`):
+- `TreeGridHierarchyOptions::bare_roots` (the flag off `hierarchy` is
+  `TreeGridError::BareRootsWithoutHierarchy`):
   - `false` (default): roots take connectors like any child, siblings of
     one another (`tyt vmax hierarchy`, collapsed-ancestors lists).
   - `true`: each root prints its label alone on an unprefixed line, its
@@ -161,16 +166,15 @@ Behind the `ty-math` feature, over the component-generic color family
 - A node line is `{label}{ annotation?}` when it has no values, else
   `{label}{ annotation?}: {cells}` with the node's cell separator rule.
   Values are not wrapped in this layout.
-- `TreeGridOptions::value_children`: when true, a data node prints
-  `{label}{ annotation?}` alone and each value prints as its own
-  child line beneath, before the node's child nodes -- one cell per
-  line, rendered per the node's format, taking a connector like a
-  child. Default false, the inline form above; `true` on a layout
-  other than `hierarchy` is
-  `TreeGridError::ValueChildrenWithoutHierarchy`.
+- `TreeGridHierarchyOptions::value_children`: when true, a data node
+  prints `{label}{ annotation?}` alone and each value prints as its
+  own child line beneath, before the node's child nodes -- one cell
+  per line, rendered per the node's format, taking a connector like a
+  child. Default false, the inline form above; the flag off
+  `hierarchy` is `TreeGridError::ValueChildrenWithoutHierarchy`.
 - Children render beneath in insertion order.
-- A set label mode is `TreeGridError::LabelModeWithoutLabels`; `width`
-  is not consumed.
+- `resolve` rejects a label flag (`LabelModeWithoutLabels`) and a
+  width (`WidthWithoutRows`) here.
 
 Observed shapes this layout must reproduce (from
 `vxl hierarchy show src/vmax/energy-reactor.vmax --show-transforms
@@ -209,7 +213,9 @@ Today's `palette show --layout row`:
   indented to the first cell's column: cells pack greedily by visible
   width (`wrap_cells` semantics), a cell wider than the remaining budget
   takes a line of its own, and at least one cell is always placed per
-  line. `width: None` never wraps. Only this layout consumes `width`.
+  line. `width: None` never wraps. Only this layout consumes `width`
+  (`TreeGridRowsOptions::width`); `resolve` rejects the flag elsewhere
+  (`TreeGridError::WidthWithoutRows`).
 - Under `header` mode, label padding is computed per group.
 
 ### columns
@@ -224,9 +230,12 @@ Today's `palette show --layout column`:
 
 ### tables
 
-`TreeGridOptions::table_shape` (`Option<TreeGridTableShape>`) picks the
-shape; unset means `Nested`. Setting it on a layout other than `tables`
-is `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
+`TreeGridTableShape` picks the shape:
+`Nested(TreeGridNestedTableOptions)`, carrying the heading label mode
+and level, or `Flat`. `resolve` maps the flag-shaped
+`TreeGridOptions::table_shape` kind into it, unset meaning `Nested`;
+the flag on a layout other than `tables` is
+`TreeGridError::TableShapeWithoutTables`, not a silent no-op.
 
 - `Nested`: tables group (see Labels), under nested headings whose text
   is the branch's full path (`concat`) or its leaf segment (`header`):
@@ -272,9 +281,8 @@ is `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
   with `annotation`, `values`, and `children` omitted when absent/empty.
   `label` is the raw string, unquoted-extra, whether `Bare` or `Quoted`.
   `values` carries each value's `json` form, falling back to
-  `String(text)` for a value built without one; `swatch`, format, and
-  `width` are not consumed, and a set label mode is
-  `TreeGridError::LabelModeWithoutLabels`.
+  `String(text)` for a value built without one; `swatch` and format
+  are not consumed, and `resolve` rejects every option flag here.
 - Pretty is `serde_json::to_string_pretty`, compact `to_string`, both
   with a trailing `\n` (today's `to_json_string`).
 - Records, not label-keyed objects: sibling labels may repeat and labels
@@ -282,12 +290,15 @@ is `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
 
 ## Errors
 
-`TreeGridError`, one variant per invalid request; the initial set is
-`LabelNoneWithTables`, `LabelModeWithoutLabels`,
-`HeaderLevelWithoutHeaders`, `HeaderLabelWithFlatTables`,
-`TableShapeWithoutTables`, `BareRootsWithoutHierarchy`, and
-`ValueChildrenWithoutHierarchy`. Commands map it into their own error
-types (vxl: `ErrorKind::InvalidInput`).
+`TreeGridError`, one variant per invalid flag combination, returned
+by `TreeGridOptions::resolve`; `render` takes the structural
+`TreeGridLayout`, in which every such combination is unrepresentable,
+and cannot fail. The set is `LabelNoneWithTables`,
+`LabelModeWithoutLabels`, `HeaderLevelWithoutHeaders`,
+`HeaderLabelWithFlatTables`, `TableShapeWithoutTables`,
+`BareRootsWithoutHierarchy`, `ValueChildrenWithoutHierarchy`, and
+`WidthWithoutRows`. Commands map it into their own error types (vxl:
+`ErrorKind::InvalidInput`).
 
 ## Worked example
 

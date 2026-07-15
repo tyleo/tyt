@@ -1,21 +1,22 @@
-/// How the `rows`, `columns`, and `tables` layouts spend the ancestor
-/// path.
+use crate::TreeGridHeaderOptions;
+
+/// How the `rows` and `columns` layouts spend the ancestor path.
 ///
-/// The `hierarchy` and JSON layouts carry labels structurally and
-/// take no mode; setting one there is
-/// [`LabelModeWithoutLabels`](crate::TreeGridError::LabelModeWithoutLabels).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Lives on those layouts' option payloads; tables carry the
+/// two-variant [`TreeGridTableLabelMode`](crate::TreeGridTableLabelMode)
+/// instead, and the `hierarchy` and JSON layouts carry labels
+/// structurally with no mode at all.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum TreeGridLabelMode {
-    /// No labels anywhere. Invalid under `tables`, which cannot head
-    /// its columns with nothing
-    /// ([`LabelNoneWithTables`](crate::TreeGridError::LabelNoneWithTables)).
+    /// No labels anywhere.
     None,
 
     /// Each data node is labeled by its full dot-joined path, each
-    /// quoted segment quoted. The default when no mode is set.
+    /// quoted segment quoted.
+    #[default]
     Concat,
 
     /// The ancestor chain becomes nested markdown headings; group
     /// content is labeled by leaf segment alone.
-    Header,
+    Header(TreeGridHeaderOptions),
 }

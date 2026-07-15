@@ -114,3 +114,32 @@ S3 implements the render. With it, `bare_roots` gains the rejection
 rule the other options already follow -- `BareRootsWithoutHierarchy`
 and `ValueChildrenWithoutHierarchy` on a non-hierarchy layout --
 leaving `width` as the one logged open question.
+
+## Two-layer options: flag-shaped resolve into structural layouts (2026-07-15)
+
+Owner design. The options split into two objects with builders on
+both:
+
+- `TreeGridOptions` stays flag-shaped -- one public field per command
+  flag, `Kind` enums for the flag vocabularies (`TreeGridLayoutKind`,
+  `TreeGridLabelKind`, `TreeGridTableShapeKind`), the `with_*` chain
+  -- and gains `resolve() -> Result<TreeGridLayout, TreeGridError>`,
+  the one place invalid combinations are rejected.
+- `TreeGridLayout` becomes the structural render input: each variant
+  carries only the options its layout consumes
+  (`TreeGridHierarchyOptions`, `TreeGridRowsOptions`,
+  `TreeGridColumnsOptions`, `TreeGridTableShape` with
+  `TreeGridNestedTableOptions`), heading levels ride
+  `TreeGridLabelMode::Header(TreeGridHeaderOptions)` and the nested
+  table payload as plain `NonZeroU8`s, and every `TreeGridError`
+  combination is unrepresentable -- render, when it lands at S3,
+  takes `&TreeGridLayout` and returns `String` infallibly.
+
+Consequences: the `width` open question is settled by the structure
+(`WidthWithoutRows`, the eighth and last variant -- width lives only
+on the rows payload, so vxl passes `--width` through only for `rows`
+at S7); the table-shape types moved forward from S5 so `resolve` and
+its tests are complete now, S5 keeping only the render; tables carry
+a two-variant `TreeGridTableLabelMode` (no `None` to reject); and the
+strict payloads drop every set-detection `Option` -- the heading
+level is a plain level wherever it exists.

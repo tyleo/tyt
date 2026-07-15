@@ -16,7 +16,7 @@ let metallic = grid.add_child(palette, TreeGridLabel::quoted("metallicFactor"));
 grid.push_value(metallic, TreeGridValue::new("1"));
 grid.push_value(metallic, TreeGridValue::new("0.2"));
 
-let rows = grid.render(&TreeGridOptions::default())?;
+let rows = grid.render(&TreeGridLayout::default());
 ```
 
 The default `rows` layout renders each data node as one labeled row:
@@ -31,11 +31,9 @@ The `hierarchy` layout renders the same grid as a box-glyph tree;
 `value_children` gives each value its own line:
 
 ```rust
-let tree = grid.render(
-    &TreeGridOptions::default()
-        .with_layout(TreeGridLayout::Hierarchy)
-        .with_value_children(true),
-)?;
+let tree = grid.render(&TreeGridLayout::Hierarchy(
+    TreeGridHierarchyOptions::default().with_value_children(true),
+));
 ```
 
 ```text
@@ -52,6 +50,19 @@ The other layouts arrange the same grid as aligned columns, markdown
 tables, or JSON, and a label mode decides whether the text layouts
 label data with full dot-joined paths, with leaf segments under nested
 markdown headings, or not at all.
+
+A layout only holds the options it consumes, so an invalid
+combination cannot be built and `render` never fails. Options can
+also be gathered loosely, one field at a time, and resolved; the one
+fallible step is `resolve`, which rejects any option the chosen
+layout does not consume:
+
+```rust
+let options = TreeGridOptions::default()
+    .with_layout(TreeGridLayoutKind::Hierarchy)
+    .with_value_children(true);
+let tree = grid.render(&options.resolve()?);
+```
 
 Each value's native JSON form and the `json-pretty` / `json-compact`
 layouts ride the optional `json` feature, which pulls in `serde_json`;
