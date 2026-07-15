@@ -46,6 +46,10 @@ tables, or JSON, and a label mode decides whether the text layouts
 label data with full dot-joined paths, with leaf segments under nested
 markdown headings, or not at all.
 
+Each value's native JSON form and the `json-pretty` / `json-compact`
+layouts ride the optional `json` feature, which pulls in `serde_json`;
+without it the crate renders the text layouts only.
+
 Selection, value sampling, precision policy, terminal-width detection,
 and IO stay with the caller: the crate only arranges and serializes
 what it is handed.

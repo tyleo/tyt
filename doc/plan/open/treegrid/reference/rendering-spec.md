@@ -29,7 +29,9 @@ amended; after adoption, this spec is the single source of truth.
 - A `TreeGridValue` is `{ text: String, json: Option<serde_json::Value>,
   swatch: Option<TreeGridSwatch> }` where `TreeGridSwatch` is
   `Color([u8; 3])` or `Gray(u8)`. A `None` json renders as
-  `String(text)` in the JSON layouts. Values are built through the
+  `String(text)` in the JSON layouts. The `json` field, `with_json`,
+  and the JSON layouts exist behind the crate's non-default `json`
+  feature. Values are built through the
   typed constructors below, or through the escape hatch
   `new(text)` + `with_json` / `with_swatch` for pairs that genuinely
   diverge (precision-rounded text over full-fidelity numbers, the
@@ -61,7 +63,7 @@ Ported from `palette_show::render_cell` / `abuts` / the swatch functions:
 
 Each fills text, JSON, and swatch from one domain-shaped argument.
 
-Core (no features):
+Core (`ty-math` not required):
 
 | constructor | text | json | swatch |
 | --- | --- | --- | --- |
@@ -85,6 +87,9 @@ Behind the `ty-math` feature, over the component-generic color family
 | `lin_rgb(..)` | `lrgb(r, g, b)` | number array | transfer + quantize |
 | `lin_rgba(..)` | `lrgba(r, g, b, a)` | number array | transfer + quantize |
 
+- The `json` column of every constructor, the `json(Value)`
+  constructor itself, and `with_json` ride the non-default `json`
+  feature; without it a constructor fills text and swatch alone.
 - The integral collapse is today's `format_number` / `number_json` rule:
   an integral f64 prints and serializes without a fractional part
   (`1.0` -> `1`), so text and JSON read alike.
@@ -243,6 +248,8 @@ is `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
 
 ### json-pretty / json-compact
 
+- Behind the non-default `json` feature; without it these layout
+  variants do not exist.
 - The envelope: a JSON array of root records, where a record is
 
   ```json

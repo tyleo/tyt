@@ -81,3 +81,20 @@ stays `Option<NonZeroU8>` rather than a `0`-default sentinel -- zero
 is not a markdown level, and set-versus-unset is what lets
 `HeaderLevelWithoutHeaders` reject an explicit level on a headerless
 render without rejecting the default.
+
+## serde_json behind the `json` feature (2026-07-15)
+
+Owner call: serde_json is optional. A non-default feature
+(`json = ["dep:serde_json"]`) gates the `TreeGridValue::json` field,
+`with_json`, the JSON forms of the typed constructors and
+`json(Value)` itself (S1 chunk 2), and the `JsonPretty` /
+`JsonCompact` layout variants, so with the feature off a JSON render
+is unrequestable rather than a runtime error. JSON-rendering adopters
+enable the feature explicitly, like the planned `ty-math` gate.
+Accepted caveat while the crate is unpublished: a cfg-gated public
+field and enum variants are not strictly additive -- feature-off
+struct literals or exhaustive matches can stop compiling when another
+crate in the build graph enables `json`; constructor-built values and
+mapped layouts (the house pattern) are unaffected. The plan README,
+checklist ground rules and S6, continue prompt, and rendering spec
+were amended in the same change.

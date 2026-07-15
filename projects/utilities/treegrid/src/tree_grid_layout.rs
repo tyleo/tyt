@@ -17,8 +17,10 @@ pub enum TreeGridLayout {
     Tables,
 
     /// The JSON record envelope, pretty-printed.
+    #[cfg(feature = "json")]
     JsonPretty,
 
     /// The JSON record envelope, compact.
+    #[cfg(feature = "json")]
     JsonCompact,
 }

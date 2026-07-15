@@ -70,11 +70,13 @@ Unclaimed on crates.io as of 2026-07-12, as were the checked alternates
 draft names `ty-report` / `ty-view`); the owner chose `treegrid` for
 genericity (2026-07-12).
 
-Dependencies: `branded-id` and `serde_json` (with `preserve_order`), plus
-an optional `ty-math` feature gating the typed-color value constructors
-(vxl enables it at no cost; it already depends on ty-math). No clap, no
-libc, no tyt-common. No `Dependencies` trait and no `impl` feature: the
-one optional capability is pure math, so it rides a feature gate, not
+Dependencies: `branded-id`, plus two optional features: `json` gates
+`serde_json` (with `preserve_order`), the value JSON forms, and the
+JSON layouts (JSON-rendering adopters enable it), and `ty-math` gates
+the typed-color value constructors (vxl enables it at no cost; it
+already depends on ty-math). No clap, no libc, no tyt-common. No
+`Dependencies` trait and no `impl` feature: the optional capabilities
+are pure math and pure serialization, so they ride feature gates, not
 DI. Public types
 follow house style: one per file, `TreeGrid` prefix (`TreeGrid`,
 `TreeGridNode`, `TreeGridLabel`, `TreeGridValue`, `TreeGridSwatch`,

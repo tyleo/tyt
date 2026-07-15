@@ -13,11 +13,13 @@ items off as they land.
 - One reviewable chunk per step. `cargo fmt --all`, `cargo clippy
   --workspace --all-targets -- -D warnings`, and `cargo test` before each
   commit; the pre-commit hook enforces fmt + clippy.
-- The crate lives at `projects/utilities/treegrid` with dependencies
-  `branded-id` and `serde_json` (`preserve_order`), plus an optional
-  `ty-math` feature gating the typed-color constructors -- no clap,
-  libc, tyt-common, or tyt-injection. No `Dependencies` trait, no
-  `impl` feature (pure math rides the feature gate, not DI).
+- The crate lives at `projects/utilities/treegrid` with dependency
+  `branded-id`, an optional `json` feature gating `serde_json`
+  (`preserve_order`) with the value JSON forms and the JSON layouts,
+  and an optional `ty-math` feature gating the typed-color
+  constructors -- no clap, libc, tyt-common, or tyt-injection. No
+  `Dependencies` trait, no `impl` feature (pure math and pure
+  serialization ride feature gates, not DI).
   Publishable metadata like the sibling crates (license, repository,
   description); add to workspace `members` and `[patch.crates-io]`.
 - House style: one public type per file, private `mod` + `pub use`
@@ -91,9 +93,10 @@ items off as they land.
       both label modes including the hierarchy-shaped worked example
       from the [rendering spec](reference/rendering-spec.md), and the
       flat comparison table.
-- [ ] **S6. JSON layouts.** The record envelope (`label`, optional
-      `annotation` / `values` / `children`), pretty and compact, trailing
-      newline. Tests: envelope shape, native value types, duplicate
+- [ ] **S6. JSON layouts.** Behind the `json` feature: the record
+      envelope (`label`, optional `annotation` / `values` /
+      `children`), pretty and compact, trailing newline. Tests:
+      envelope shape, native value types, duplicate
       sibling labels surviving, pretty/compact value equality.
 
 ## Phase 2: `vxl palette show` adopts (breaking flags + JSON)

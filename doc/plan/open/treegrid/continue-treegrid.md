@@ -57,9 +57,10 @@ no checklist item is checked yet, the first session starts at S1.
   type, private `mod` declarations with `pub use` re-exports, doc
   comments on public items, comments wrapped to 80 columns, and only
   ASCII in comments and docs (no em dashes or ellipses).
-- The crate's dependencies are `branded-id` and `serde_json`
-  (`preserve_order`), plus the optional `ty-math` feature gating the
-  typed-color constructors. No clap, libc, tyt-common, or
+- The crate's dependency is `branded-id`, plus two optional features:
+  `json` gating `serde_json` (`preserve_order`) with the value JSON
+  forms and the JSON layouts, and `ty-math` gating the typed-color
+  constructors. No clap, libc, tyt-common, or
   tyt-injection; no `Dependencies` trait and no `impl` feature.
   Publishable metadata like the sibling utilities crates; add it to
   workspace `members` and `[patch.crates-io]`, but do not publish --
