@@ -27,18 +27,25 @@ The default `rows` layout renders each data node as one labeled row:
 0."metallicFactor"  1 0.2
 ```
 
-The `hierarchy` layout renders the same grid as a box-glyph tree:
+The `hierarchy` layout renders the same grid as a box-glyph tree;
+`value_children` gives each value its own line:
 
 ```rust
 let tree = grid.render(
-    &TreeGridOptions::default().with_layout(TreeGridLayout::Hierarchy),
+    &TreeGridOptions::default()
+        .with_layout(TreeGridLayout::Hierarchy)
+        .with_value_children(true),
 )?;
 ```
 
 ```text
-├ 0
-│ ├ "baseColorFactor": #FF0000FF #00FF0080
-│ └ "metallicFactor": 1 0.2
+└ 0
+  ├ "baseColorFactor"
+  │ ├ #FF0000FF
+  │ └ #00FF0080
+  └ "metallicFactor"
+    ├ 1
+    └ 0.2
 ```
 
 The other layouts arrange the same grid as aligned columns, markdown

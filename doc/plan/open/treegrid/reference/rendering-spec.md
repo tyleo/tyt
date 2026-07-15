@@ -151,7 +151,8 @@ Behind the `ty-math` feature, over the component-generic color family
 
 - Glyphs: connector `├` / `└` before a child, extension `│ ` / `  ` under
   a non-last / last child (today's `tree_glyphs`).
-- `TreeGridOptions::bare_roots`:
+- `TreeGridOptions::bare_roots` (`true` on a layout other than
+  `hierarchy` is `TreeGridError::BareRootsWithoutHierarchy`):
   - `false` (default): roots take connectors like any child, siblings of
     one another (`tyt vmax hierarchy`, collapsed-ancestors lists).
   - `true`: each root prints its label alone on an unprefixed line, its
@@ -160,6 +161,13 @@ Behind the `ty-math` feature, over the component-generic color family
 - A node line is `{label}{ annotation?}` when it has no values, else
   `{label}{ annotation?}: {cells}` with the node's cell separator rule.
   Values are not wrapped in this layout.
+- `TreeGridOptions::value_children`: when true, a data node prints
+  `{label}{ annotation?}` alone and each value prints as its own
+  child line beneath, before the node's child nodes -- one cell per
+  line, rendered per the node's format, taking a connector like a
+  child. Default false, the inline form above; `true` on a layout
+  other than `hierarchy` is
+  `TreeGridError::ValueChildrenWithoutHierarchy`.
 - Children render beneath in insertion order.
 - A set label mode is `TreeGridError::LabelModeWithoutLabels`; `width`
   is not consumed.
@@ -276,9 +284,10 @@ is `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
 
 `TreeGridError`, one variant per invalid request; the initial set is
 `LabelNoneWithTables`, `LabelModeWithoutLabels`,
-`HeaderLevelWithoutHeaders`, `HeaderLabelWithFlatTables`, and
-`TableShapeWithoutTables`. Commands map it into their own error types
-(vxl: `ErrorKind::InvalidInput`).
+`HeaderLevelWithoutHeaders`, `HeaderLabelWithFlatTables`,
+`TableShapeWithoutTables`, `BareRootsWithoutHierarchy`, and
+`ValueChildrenWithoutHierarchy`. Commands map it into their own error
+types (vxl: `ErrorKind::InvalidInput`).
 
 ## Worked example
 

@@ -118,8 +118,9 @@ as `hierarchy show` already does.
 `TreeGridLayout`, with the semantics specified precisely in
 [reference/rendering-spec.md](reference/rendering-spec.md):
 
-1. `hierarchy`: the box-glyph tree. Annotations show, values print inline
-   after `label: `, `bare_roots` chooses whether roots take connectors
+1. `hierarchy`: the box-glyph tree. Annotations show; values print
+   inline after `label: `, or one connector line each under
+   `value_children`; `bare_roots` chooses whether roots take connectors
    (vmax-style) or print as bare section headers (`root` / `unplaced` /
    `palettes`-style).
 2. `rows`: each data-bearing node is one row, blank line between rows,

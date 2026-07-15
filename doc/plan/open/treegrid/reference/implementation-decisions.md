@@ -98,3 +98,19 @@ crate in the build graph enables `json`; constructor-built values and
 mapped layouts (the house pattern) are unaffected. The plan README,
 checklist ground rules and S6, continue prompt, and rendering spec
 were amended in the same change.
+
+## Hierarchy values can render as child lines (2026-07-15)
+
+Owner request, from the crate README example: inline `label: cells`
+data lines put a palette's whole series on one line. New
+`TreeGridOptions::value_children` (default false): when set, a data
+node prints its label alone and each value prints as its own
+connector line beneath, one cell per line before the node's child
+nodes, so swatches keep working and long series read vertically.
+Inline stays the default because the phase 3 and 4 parity trees
+(`"energy-tank-1": {node: 0}`, `position: [...]`) are inline.
+Per-render, not per-node: no adopter mixes both forms in one tree.
+S3 implements the render. With it, `bare_roots` gains the rejection
+rule the other options already follow -- `BareRootsWithoutHierarchy`
+and `ValueChildrenWithoutHierarchy` on a non-hierarchy layout --
+leaving `width` as the one logged open question.

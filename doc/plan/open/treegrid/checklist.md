@@ -62,10 +62,12 @@ items off as they land.
       sequences, an HDR `lin_rgba` component above 1.
 - [ ] **S3. `hierarchy` layout.** Connectors/extensions, `bare_roots`
       both ways, annotations, `label: cells` data lines, values-on-branch
-      nodes. Golden tests shaped on `palette list --layout hierarchy`,
+      nodes, and the `value_children` mode (one connector line per
+      value; the hierarchy-only options error on other layouts).
+      Golden tests shaped on `palette list --layout hierarchy`,
       vmax trees (connectored roots, `(Group)` annotations, marker
-      nodes), and a section-style forest (`root` / `unplaced` bare
-      roots).
+      nodes), a section-style forest (`root` / `unplaced` bare
+      roots), and a value-children palette tree.
 - [ ] **S4. `rows` and `columns` layouts.** Label modes `none` / `concat`
       / `header`, per-group label padding, blank-line separation,
       right-trimming, `width` wrapping with continuation indent

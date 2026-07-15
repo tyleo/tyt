@@ -23,6 +23,13 @@ pub enum TreeGridError {
 
     /// A table shape was set on a layout other than `tables`.
     TableShapeWithoutTables,
+
+    /// Bare roots were requested on a layout other than `hierarchy`.
+    BareRootsWithoutHierarchy,
+
+    /// Value children were requested on a layout other than
+    /// `hierarchy`.
+    ValueChildrenWithoutHierarchy,
 }
 
 impl Display for TreeGridError {
@@ -51,6 +58,18 @@ impl Display for TreeGridError {
             }
             TreeGridError::TableShapeWithoutTables => {
                 write!(f, "a table shape was set, but the layout is not tables")
+            }
+            TreeGridError::BareRootsWithoutHierarchy => {
+                write!(
+                    f,
+                    "bare roots were requested, but the layout is not hierarchy"
+                )
+            }
+            TreeGridError::ValueChildrenWithoutHierarchy => {
+                write!(
+                    f,
+                    "value children were requested, but the layout is not hierarchy"
+                )
             }
         }
     }
