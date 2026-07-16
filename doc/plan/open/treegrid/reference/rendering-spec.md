@@ -106,9 +106,9 @@ Behind the `ty-math` feature, over the component-generic color family
   `0."baseColorFactor".a`.
 - `TreeGridLabelMode` lives on the `rows` and `columns` payloads
   (`tables` carries its own two-variant `TreeGridTableLabelMode`);
-  `resolve` maps the flag-shaped `TreeGridOptions::label` kind into
-  them, unset meaning `concat`. A label flag with `hierarchy` or the
-  JSON layouts, which carry labels structurally, is
+  the `resolve_*` methods map the loose `TreeGridOptions::label` kind
+  into them, unset meaning `concat`. A label mode with the
+  `hierarchy` or JSON renders, which carry labels structurally, is
   `TreeGridError::LabelModeWithoutLabels`:
   - `none`: no labels anywhere. Under `tables` this is
     `TreeGridError::LabelNoneWithTables`.
@@ -142,11 +142,11 @@ Behind the `ty-math` feature, over the component-generic color family
   heading that lands deeper than `6` -- markdown's deepest level --
   renders as a bold label on its own line (`**label**`) instead of a
   `#` run, so depth never errors and never emits invalid `#######`
-  markdown; the zero level is unrepresentable (`NonZeroU8`). `resolve`
-  folds the flag-shaped `TreeGridOptions::header_level` into those
-  payloads; the flag on a render that emits no headings -- label mode
-  `none`, `concat` with `rows` / `columns`, flat tables, or a layout
-  that takes no label mode -- is
+  markdown; the zero level is unrepresentable (`NonZeroU8`). The
+  `resolve_*` methods fold the loose `TreeGridOptions::header_level`
+  into those payloads; set on a render that emits no headings --
+  label mode `none`, `concat` with `rows` / `columns`, flat tables,
+  or a render that takes no label mode -- it is
   `TreeGridError::HeaderLevelWithoutHeaders`, not a silent no-op.
 - Annotations never appear in `concat` or `header` labels.
 
@@ -154,10 +154,11 @@ Behind the `ty-math` feature, over the component-generic color family
 
 ### hierarchy
 
+- Rendered by `render_hierarchy(&TreeGridHierarchyOptions)`.
 - Glyphs: connector `├` / `└` before a child, extension `│ ` / `  ` under
   a non-last / last child (today's `tree_glyphs`).
-- `TreeGridHierarchyOptions::bare_roots` (the flag off `hierarchy` is
-  `TreeGridError::BareRootsWithoutHierarchy`):
+- `TreeGridHierarchyOptions::bare_roots` (the other `resolve_*`
+  methods reject it as `TreeGridError::BareRootsWithoutHierarchy`):
   - `false` (default): roots take connectors like any child, siblings of
     one another (`tyt vmax hierarchy`, collapsed-ancestors lists).
   - `true`: each root prints its label alone on an unprefixed line, its
@@ -170,11 +171,11 @@ Behind the `ty-math` feature, over the component-generic color family
   prints `{label}{ annotation?}` alone and each value prints as its
   own child line beneath, before the node's child nodes -- one cell
   per line, rendered per the node's format, taking a connector like a
-  child. Default false, the inline form above; the flag off
-  `hierarchy` is `TreeGridError::ValueChildrenWithoutHierarchy`.
+  child. Default false, the inline form above; the other `resolve_*`
+  methods reject it as `TreeGridError::ValueChildrenWithoutHierarchy`.
 - Children render beneath in insertion order.
-- `resolve` rejects a label flag (`LabelModeWithoutLabels`) and a
-  width (`WidthWithoutRows`) here.
+- `resolve_hierarchy` rejects a label mode (`LabelModeWithoutLabels`)
+  and a width (`WidthWithoutRows`).
 
 Observed shapes this layout must reproduce (from
 `vxl hierarchy show src/vmax/energy-reactor.vmax --show-transforms
@@ -203,6 +204,7 @@ and from vmax `hierarchy` (connectored roots, annotation form):
 
 Today's `palette show --layout row`:
 
+- Rendered by `render_rows(&TreeGridRowsOptions)`.
 - One row per data node: `{label} {cells}`.
 - Labels pad to the longest label so every row's first cell aligns; cells
   themselves are never padded. `--label none` drops the label column and
@@ -213,15 +215,16 @@ Today's `palette show --layout row`:
   indented to the first cell's column: cells pack greedily by visible
   width (`wrap_cells` semantics), a cell wider than the remaining budget
   takes a line of its own, and at least one cell is always placed per
-  line. `width: None` never wraps. Only this layout consumes `width`
-  (`TreeGridRowsOptions::width`); `resolve` rejects the flag elsewhere
-  (`TreeGridError::WidthWithoutRows`).
+  line. `width: None` never wraps. Only this render consumes `width`
+  (`TreeGridRowsOptions::width`); the other `resolve_*` methods
+  reject it (`TreeGridError::WidthWithoutRows`).
 - Under `header` mode, label padding is computed per group.
 
 ### columns
 
 Today's `palette show --layout column`:
 
+- Rendered by `render_columns(&TreeGridColumnsOptions)`.
 - One column per data node, cells padded to the column's max visible
   width (the label widens its column too, unless `none`), columns joined
   with one space, lines right-trimmed.
@@ -230,11 +233,12 @@ Today's `palette show --layout column`:
 
 ### tables
 
+Rendered by `render_tables(&TreeGridTableShape)`.
 `TreeGridTableShape` picks the shape:
 `Nested(TreeGridNestedTableOptions)`, carrying the heading label mode
-and level, or `Flat`. `resolve` maps the flag-shaped
+and level, or `Flat`. `resolve_tables` maps the loose
 `TreeGridOptions::table_shape` kind into it, unset meaning `Nested`;
-the flag on a layout other than `tables` is
+the other `resolve_*` methods reject a set shape as
 `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
 
 - `Nested`: tables group (see Labels), under nested headings whose text
@@ -265,8 +269,10 @@ the flag on a layout other than `tables` is
 
 ### json-pretty / json-compact
 
-- Behind the non-default `json` feature; without it these layout
-  variants do not exist.
+- Behind the non-default `json` feature; without it these renders do
+  not exist. Rendered by `render_json_pretty()` /
+  `render_json_compact()` after a `resolve_json()` check that no
+  option is set.
 - The envelope: a JSON array of root records, where a record is
 
   ```json
@@ -282,7 +288,7 @@ the flag on a layout other than `tables` is
   `label` is the raw string, unquoted-extra, whether `Bare` or `Quoted`.
   `values` carries each value's `json` form, falling back to
   `String(text)` for a value built without one; `swatch` and format
-  are not consumed, and `resolve` rejects every option flag here.
+  are not consumed, and `resolve_json` rejects every set option.
 - Pretty is `serde_json::to_string_pretty`, compact `to_string`, both
   with a trailing `\n` (today's `to_json_string`).
 - Records, not label-keyed objects: sibling labels may repeat and labels
@@ -290,9 +296,9 @@ the flag on a layout other than `tables` is
 
 ## Errors
 
-`TreeGridError`, one variant per invalid flag combination, returned
-by `TreeGridOptions::resolve`; `render` takes the structural
-`TreeGridLayout`, in which every such combination is unrepresentable,
+`TreeGridError`, one variant per invalid option combination, returned
+by the `TreeGridOptions` `resolve_*` methods; each render method
+takes a payload in which every such combination is unrepresentable,
 and cannot fail. The set is `LabelNoneWithTables`,
 `LabelModeWithoutLabels`, `HeaderLevelWithoutHeaders`,
 `HeaderLabelWithFlatTables`, `TableShapeWithoutTables`,

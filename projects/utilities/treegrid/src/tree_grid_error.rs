@@ -3,8 +3,8 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
-/// An invalid flag combination, reported by
-/// [`TreeGridOptions::resolve`](crate::TreeGridOptions::resolve).
+/// An invalid option combination, reported by the
+/// [`TreeGridOptions`](crate::TreeGridOptions) `resolve_*` methods.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TreeGridError {
     /// The `tables` layout cannot head its columns with nothing; label

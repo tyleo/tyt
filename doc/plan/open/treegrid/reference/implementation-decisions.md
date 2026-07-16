@@ -143,3 +143,21 @@ its tests are complete now, S5 keeping only the render; tables carry
 a two-variant `TreeGridTableLabelMode` (no `None` to reject); and the
 strict payloads drop every set-detection `Option` -- the heading
 level is a plain level wherever it exists.
+
+## One render and resolve method per layout (2026-07-15)
+
+Owner call, refining the two-layer design: instead of one
+`render(&TreeGridLayout)` dispatching on a layout enum, each layout
+gets its own pair -- `render_hierarchy(&TreeGridHierarchyOptions)`,
+`render_rows(&TreeGridRowsOptions)`,
+`render_columns(&TreeGridColumnsOptions)`,
+`render_tables(&TreeGridTableShape)`, and `render_json_pretty()` /
+`render_json_compact()` behind the `json` feature -- each returning
+`String` infallibly. Calling a method is choosing the layout, so
+`TreeGridLayout` and `TreeGridLayoutKind` are deleted; a command
+dispatches on the clap layout enum it already has. `TreeGridOptions`
+loses its `layout` field and `resolve` splits into
+`resolve_hierarchy` / `resolve_rows` / `resolve_columns` /
+`resolve_tables` / `resolve_json`, each rejecting every option its
+render does not consume (`resolve_json` consumes none and returns
+`Ok(())` when nothing is set).

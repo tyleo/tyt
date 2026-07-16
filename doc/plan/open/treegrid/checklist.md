@@ -44,7 +44,7 @@ items off as they land.
       [rendering spec](reference/rendering-spec.md) table, and the
       `new` + `with_json` / `with_swatch` escape hatch), `TreeGridSwatch`,
       `TreeGridCellFormat`,
-      `TreeGridLayout`, `TreeGridLabelMode`, `TreeGridOptions` (with
+      `TreeGridLabelMode`, `TreeGridOptions` (with
       `Default`), `TreeGridError`. Builder API: `add_root`, `add_child`,
       `node_mut`, `push_value`. Unit tests for the builder and label
       quoting.
@@ -60,7 +60,8 @@ items off as they land.
       swatch bytes, all color math through ty-math. Tests: the matrix,
       abutting with a swatchless value mixed in, visible width past CSI
       sequences, an HDR `lin_rgba` component above 1.
-- [ ] **S3. `hierarchy` layout.** Connectors/extensions, `bare_roots`
+- [ ] **S3. `hierarchy` layout.** `render_hierarchy`:
+      connectors/extensions, `bare_roots`
       both ways, annotations, `label: cells` data lines, values-on-branch
       nodes, and the `value_children` mode (one connector line per
       value).
@@ -68,7 +69,8 @@ items off as they land.
       vmax trees (connectored roots, `(Group)` annotations, marker
       nodes), a section-style forest (`root` / `unplaced` bare
       roots), and a value-children palette tree.
-- [ ] **S4. `rows` and `columns` layouts.** Label modes `none` / `concat`
+- [ ] **S4. `rows` and `columns` layouts.** `render_rows` /
+      `render_columns`: label modes `none` / `concat`
       / `header`, per-group label padding, blank-line separation,
       right-trimming, `width` wrapping with continuation indent
       (rows only). `header` mode is nested headings via the shared
@@ -85,7 +87,7 @@ items off as they land.
 - [ ] **S5. `tables` layout.** The shape types landed with the options
       restructure (`TreeGridTableShape`: `Nested` default with its
       label and level payload, `Flat`; `Records` joins at S15); this
-      step is the render. Nested: one table per
+      step is `render_tables`. Nested: one table per
       parent-path group (`#` index column, one column per data node,
       leaf-label headers, blank cells past shorter series), under
       nested headings carrying the full path (`concat`) or the leaf
@@ -96,7 +98,8 @@ items off as they land.
       both label modes including the hierarchy-shaped worked example
       from the [rendering spec](reference/rendering-spec.md), and the
       flat comparison table.
-- [ ] **S6. JSON layouts.** Behind the `json` feature: the record
+- [ ] **S6. JSON layouts.** Behind the `json` feature,
+      `render_json_pretty` / `render_json_compact`: the record
       envelope (`label`, optional `annotation` / `values` /
       `children`), pretty and compact, trailing newline. Tests:
       envelope shape, native value types, duplicate

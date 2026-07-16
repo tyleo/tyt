@@ -52,15 +52,14 @@ values and children. A value carries its display text, its native JSON form, and
 an optional swatch (truecolor or grayscale), exactly the shape of
 `palette_show`'s `Sample`; a per-node cell format (`auto` / `swatch` /
 `swatch-value` / `text`) picks how a value renders to a cell. One
-`render(&TreeGridLayout) -> String` call arranges the same populated
-grid as a `hierarchy` tree, `rows`, `columns`, series `tables`, or
-`json-pretty` / `json-compact`, and a label mode (`none` / `concat` /
-`header`) decides how the text layouts spend the ancestor path.
-`TreeGridLayout` is structural -- each variant carries only the
-options its layout consumes, so invalid combinations are
-unrepresentable and render cannot fail; flag-shaped input goes
-through `TreeGridOptions::resolve`, which rejects any flag the chosen
-layout does not consume.
+render method per layout (`render_hierarchy`, `render_rows`,
+`render_columns`, `render_tables`, `render_json_pretty`,
+`render_json_compact`) arranges the same populated grid, each taking
+only the options its layout consumes and returning `String`
+infallibly, and a label mode (`none` / `concat` / `header`) decides
+how the text layouts spend the ancestor path. Loose input goes
+through the matching `TreeGridOptions::resolve_*` method, which
+rejects any option that render does not consume.
 
 ## Design
 
@@ -85,8 +84,9 @@ are pure math and pure serialization, so they ride feature gates, not
 DI. Public types
 follow house style: one per file, `TreeGrid` prefix (`TreeGrid`,
 `TreeGridNode`, `TreeGridLabel`, `TreeGridValue`, `TreeGridSwatch`,
-`TreeGridCellFormat`, `TreeGridLayout` and its per-layout option
-payloads, `TreeGridLabelMode`, `TreeGridTableShape`, the flag-shaped
+`TreeGridCellFormat`, the per-layout option payloads
+(`TreeGridHierarchyOptions`, `TreeGridRowsOptions`, and kin),
+`TreeGridLabelMode`, `TreeGridTableShape`, the loose
 `TreeGridOptions` with its `*Kind` enums, `TreeGridError`,
 `BTreeGridNode`).
 
@@ -105,10 +105,9 @@ grid.push_value(component, TreeGridValue::unorm8(255)); // text "255", json 255,
 grid.push_value(component, TreeGridValue::unorm8(128));
 
 let options = TreeGridOptions::default()
-    .with_layout(TreeGridLayoutKind::Rows)
     .with_label(TreeGridLabelKind::Concat)
     .with_width(80);
-let output = grid.render(&options.resolve()?);
+let output = grid.render_rows(&options.resolve_rows()?);
 // 0."baseColorFactor".a 255 128
 ```
 
@@ -120,8 +119,8 @@ as `hierarchy show` already does.
 
 ### Layouts
 
-`TreeGridLayout`, with the semantics specified precisely in
-[reference/rendering-spec.md](reference/rendering-spec.md):
+One render method per layout, with the semantics specified precisely
+in [reference/rendering-spec.md](reference/rendering-spec.md):
 
 1. `hierarchy`: the box-glyph tree. Annotations show; values print
    inline after `label: `, or one connector line each under
