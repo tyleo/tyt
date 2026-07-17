@@ -14,6 +14,15 @@ lists into one ordered `layers` list with channels derived from palette
 shape; the resolutions are folded in below and recorded in the
 [README's decisions](../README.md#decisions).
 
+One rename applies to the entire spec, spliced `[unchanged]` text and
+otherwise-untouched sections included: the binding field and concept
+`attribute` becomes `property` (owner review 2026-07-16). glTF, the
+recommended vocabulary, reserves attribute for per-vertex mesh data and calls
+material parameters properties. The Attributes section retitles to Properties
+and its `#attributes` anchor becomes `#properties`; the glTF conventions
+table's Attribute column and the Value Pool Kinds table's Typical attributes
+column follow.
+
 ## Objects
 
 Replaces the section body.
@@ -48,7 +57,7 @@ ordered back to front. Each layer supplies all of its palette's
 bindings: scalar bindings one value for the whole object, array bindings one
 value per voxel through a sample channel. A palette may appear in `layers`
 any number of times. Layers combine by overriding: contributions apply in
-`layers` order and each attribute takes its value from the last layer that
+`layers` order and each property takes its value from the last layer that
 supplies it, so later layers override earlier ones (see
 [Palettes](#palettes) for the full resolution).
 
@@ -135,20 +144,21 @@ and a scalar binding a single cell of one (see [Palettes](#palettes)).
 
 ## Palettes
 
-Replaces the section body up to the Attributes subsection, and adds a new
-Sharing Idioms subsection before Attributes.
+Replaces the section body up to the Properties subsection, and adds a new
+Sharing Idioms subsection before Properties.
 
 ---
 
-A palette binds attribute names to shared [value pools](#value-pools), then
+A palette binds property names to shared [value pools](#value-pools), then
 lists the distinct materials it uses as rows over those pools. Bindings come
-in two arities, and a palette may carry either, both, or neither. An **array binding**
-binds an attribute to a whole pool and takes one `materials` column of
-value-indices, so the attribute varies per material. A **scalar binding** pins
-an attribute to a single pool cell, `valuePools[poolRef].values[valueRef]`,
-one value for the whole palette. A voxel samples a material in each sampled
-layer by its index in that layer's palette. A palette may be referenced by
-any number of layers and objects (see [Objects](#objects)).
+in two arities, and a palette may carry either, both, or neither. An **array
+binding** binds a property to a whole pool and takes one `materials` column
+of value-indices, so the property varies per material. A **scalar binding**
+pins a property to a single pool cell,
+`valuePools[poolRef].values[valueRef]`, one value for the whole palette. A
+voxel samples a material in each sampled layer by its index in that layer's
+palette. A palette may be referenced by any number of layers and objects (see
+[Objects](#objects)).
 
 "Scalar" means single-valued: a scalar binding may reference a cell of any
 pool kind.
@@ -157,17 +167,17 @@ Materials are stored column-major, one column per array binding:
 
 ```jsonc
 {
-  // ordered array bindings; each binds an attribute name to a value pool
+  // ordered array bindings; each binds a property name to a value pool
   // index. Order fixes the column order in `materials`.
   "arrayBindings": [
-    { "attribute": "baseColorFactor", "poolRef": 0 },
-    { "attribute": "metallicFactor", "poolRef": 1 },
+    { "property": "baseColorFactor", "poolRef": 0 },
+    { "property": "metallicFactor", "poolRef": 1 },
   ],
 
-  // scalar bindings; each pins an attribute to one pool cell, one value for
+  // scalar bindings; each pins a property to one pool cell, one value for
   // the whole palette
   "scalarBindings": [
-    { "attribute": "emissiveStrength", "poolRef": 2, "valueRef": 1 },
+    { "property": "emissiveStrength", "poolRef": 2, "valueRef": 1 },
   ],
 
   // `materials` is column-major: one inner array per array binding (a
@@ -188,32 +198,32 @@ Materials are stored column-major, one column per array binding:
 value-indices into a single pool. A palette may have no array bindings.
 `materials` is then one empty array per material, so the material count `M`
 survives as `materials.length`, and every material resolves every array-bound
-attribute to its default.
+property to its default.
 
-A voxel's attribute values resolve from its object's `layers` as follows:
+A voxel's property values resolve from its object's `layers` as follows:
 
 1. Each layer supplies its palette's bindings. A scalar binding supplies its
-   `attribute` as `valuePools[poolRef].values[valueRef]`, one value for the
-   whole object. An array binding supplies its attribute per voxel: read the
+   `property` as `valuePools[poolRef].values[valueRef]`, one value for the
+   whole object. An array binding supplies its property per voxel: read the
    voxel's sample `m` from the layer's channel, a material index; each array
-   binding `b` supplies `arrayBindings[b].attribute` as
+   binding `b` supplies `arrayBindings[b].property` as
    `valuePools[arrayBindings[b].poolRef].values[materials[b][m]]`. An
    unsampled layer has no channel and supplies only its scalar bindings.
 2. Layers override: contributions apply in `layers` order, back to front,
-   and each attribute takes its value from the last layer that supplies it.
+   and each property takes its value from the last layer that supplies it.
    Three layers supplying `{a, b, c}`, then `{a}`, then `{c}` resolve to `b`
    from the first, `a` from the second, and `c` from the third.
-3. Unbound attributes take their default from the [Attributes](#attributes)
+3. Unbound properties take their default from the [Properties](#properties)
    table.
 
-A scalar binding wires an attribute to a value; any arithmetic, such as
-`emissiveStrength` multiplying `emissiveFactor`, comes from the attribute
-vocabulary. Within one palette an attribute appears in `arrayBindings` or
+A scalar binding wires a property to a value; any arithmetic, such as
+`emissiveStrength` multiplying `emissiveFactor`, comes from the property
+vocabulary. Within one palette a property appears in `arrayBindings` or
 `scalarBindings`, never both, so a single layer never conflicts with itself.
 
 ### Sharing Idioms
 
-One pool cell can supply an attribute at every scope without cloning anything:
+One pool cell can supply a property at every scope without cloning anything:
 
 1. All materials of one palette share a value: put a scalar binding on that
    palette. One `layers` entry supplies both arities; nothing is listed
@@ -224,11 +234,11 @@ One pool cell can supply an attribute at every scope without cloning anything:
    one-integer edit.
 3. Single source of truth: the pool cell. Editing it updates every palette
    that references it.
-4. Per-voxel variation: move the attribute from `scalarBindings` to
+4. Per-voxel variation: move the property from `scalarBindings` to
    `arrayBindings`, giving it a real column and channel.
 5. Whole-object override: list a scalar-binding palette after the layer it
    overrides; the object-wide value replaces the per-voxel values for that
-   attribute.
+   property.
 
 Idiom 2, two lamp objects sharing one base palette but glowing at different
 strengths:
@@ -251,7 +261,7 @@ strengths:
   {
     "arrayBindings": [],
     "scalarBindings": [
-      { "attribute": "emissiveStrength", "poolRef": 0, "valueRef": 1 },
+      { "property": "emissiveStrength", "poolRef": 0, "valueRef": 1 },
     ],
     "materials": [],
   },
@@ -260,7 +270,7 @@ strengths:
   {
     "arrayBindings": [],
     "scalarBindings": [
-      { "attribute": "emissiveStrength", "poolRef": 0, "valueRef": 2 },
+      { "property": "emissiveStrength", "poolRef": 0, "valueRef": 2 },
     ],
     "materials": [],
   },
@@ -278,17 +288,18 @@ strengths:
 
 ---
 
-## Attributes
+## Properties
 
+Retitled from Attributes; the `#attributes` anchor becomes `#properties`.
 Replaces the first sentence of the intro paragraph and adds one sentence to
 the emission paragraph under glTF conventions; everything else in the
-subsection, including the table, is unchanged.
+subsection, including the table, is unchanged apart from the global rename.
 
 ---
 
-An attribute is a named material property, listed in a palette's
-`arrayBindings[].attribute` and `scalarBindings[].attribute`. The format wires
-attributes without defining them: the name carries the meaning and the pool
+A property is a named material parameter, listed in a palette's
+`arrayBindings[].property` and `scalarBindings[].property`. The format wires
+properties without defining them: the name carries the meaning and the pool
 carries the values; that pairing is all the format defines.
 
 [unchanged: the rest of the intro paragraph, the vocabulary paragraph, the
@@ -307,8 +318,8 @@ Replaces item 4; the other items are unchanged.
 
 ---
 
-4. Unknown **attribute** names in array and scalar bindings are ignored, since
-   attributes are advisory and convention-based, so adding attributes is
+4. Unknown **property** names in array and scalar bindings are ignored, since
+   properties are advisory and convention-based, so adding properties is
    backward compatible.
 
 ---
@@ -323,7 +334,7 @@ all other rules, and rule 11's per-encoding sub-items are unchanged.
 5. Unknown keys reject in every closed structure: file, `main`,
    `runtimeState`, `editState`, object, encoding block, palette, array
    binding, scalar binding, value pool, transform, hierarchy node, and edit
-   object. The only open points are `main.ext` and binding attribute names.
+   object. The only open points are `main.ext` and binding property names.
 6. All indices are in range:
    1. each object `layers` entry indexes `runtimeState.palettes`.
    2. each array and scalar binding `poolRef` indexes
@@ -339,11 +350,11 @@ all other rules, and rule 11's per-encoding sub-items are unchanged.
     palette's keys are drawn only from { `arrayBindings`, `scalarBindings`,
     `materials` }.
     1. `arrayBindings` is an array, possibly empty; each array binding has
-       exactly the keys `attribute`, a non-empty string, and `poolRef`, an
+       exactly the keys `property`, a non-empty string, and `poolRef`, an
        integer. `scalarBindings` is an array, possibly empty; each scalar
-       binding has exactly the keys `attribute`, a non-empty string,
+       binding has exactly the keys `property`, a non-empty string,
        `poolRef`, an integer, and `valueRef`, an integer.
-    2. no two bindings share an `attribute`, across `arrayBindings` and
+    2. no two bindings share a `property`, across `arrayBindings` and
        `scalarBindings` together.
     3. when `arrayBindings` is non-empty, `materials` has exactly
        `arrayBindings.length` columns, one per array binding in binding order.
@@ -399,10 +410,10 @@ Replaces the example document.
         // value pool 1 is bound twice, to metallicFactor and roughnessFactor
         {
           "arrayBindings": [
-            { "attribute": "baseColorFactor", "poolRef": 0 },
-            { "attribute": "metallicFactor", "poolRef": 1 },
-            { "attribute": "roughnessFactor", "poolRef": 1 },
-            { "attribute": "emissiveFactor", "poolRef": 2 },
+            { "property": "baseColorFactor", "poolRef": 0 },
+            { "property": "metallicFactor", "poolRef": 1 },
+            { "property": "roughnessFactor", "poolRef": 1 },
+            { "property": "emissiveFactor", "poolRef": 2 },
           ],
 
           "scalarBindings": [],
@@ -420,7 +431,7 @@ Replaces the example document.
 
         // base color authored in linear form instead of hex
         {
-          "arrayBindings": [{ "attribute": "baseColorFactor", "poolRef": 3 }],
+          "arrayBindings": [{ "property": "baseColorFactor", "poolRef": 3 }],
           "scalarBindings": [],
           "materials": [[0]],
         },
@@ -431,7 +442,7 @@ Replaces the example document.
         {
           "arrayBindings": [],
           "scalarBindings": [
-            { "attribute": "emissiveStrength", "poolRef": 4, "valueRef": 1 },
+            { "property": "emissiveStrength", "poolRef": 4, "valueRef": 1 },
           ],
           "materials": [],
         },
@@ -456,7 +467,7 @@ Replaces the example document.
 
           // two layers, back to front: palette 0, then palette 1. Both are
           // sampled and both bind baseColorFactor, so the later layer
-          // supplies it; the other attributes come from layer 0.
+          // supplies it; the other properties come from layer 0.
           "layers": [0, 1],
 
           // one channel per sampled layer, each a material index per voxel:
@@ -573,15 +584,15 @@ type SampleBlock =
 
 // ## Palettes
 
-// A palette binds attribute names to value pools, then stores its materials
+// A palette binds property names to value pools, then stores its materials
 // column-major: one inner array per array binding, in binding order, each of
-// length M, the material count. A voxel samples material m; attribute
-// arrayBindings[b].attribute takes
+// length M, the material count. A voxel samples material m; property
+// arrayBindings[b].property takes
 // valuePools[arrayBindings[b].poolRef].values[materials[b][m]], and each
 // scalar binding takes valuePools[poolRef].values[valueRef], one value for
 // the whole palette. With no array bindings, materials is instead one empty
 // array per material, so M survives as materials.length. Layers apply in
-// `layers` order; each attribute takes its value from the last layer that
+// `layers` order; each property takes its value from the last layer that
 // supplies it.
 interface Palette {
   arrayBindings: ArrayBinding[];
@@ -591,20 +602,20 @@ interface Palette {
   materials: number[][];
 }
 
-// One attribute-to-pool binding; fixes one column of materials.
+// One property-to-pool binding; fixes one column of materials.
 interface ArrayBinding {
-  // attribute name (see Attributes); advisory, unknown names ignored
-  attribute: string;
+  // property name (see Properties); advisory, unknown names ignored
+  property: string;
 
   // index into RuntimeState.valuePools
   poolRef: number;
 }
 
-// One attribute pinned to a single pool cell, one value for the whole
+// One property pinned to a single pool cell, one value for the whole
 // palette.
 interface ScalarBinding {
-  // attribute name (see Attributes); advisory, unknown names ignored
-  attribute: string;
+  // property name (see Properties); advisory, unknown names ignored
+  property: string;
 
   // index into RuntimeState.valuePools
   poolRef: number;

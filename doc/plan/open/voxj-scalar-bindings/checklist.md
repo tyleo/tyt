@@ -30,7 +30,7 @@ here, not in the spec commit.
 - [ ] Owner reads the draft; fold in wording and structure edits until the
       text stands on its own.
 - [x] Resolve open question 1, override order: layers combine by overriding
-      in `layers` order, back to front; each attribute takes its value from
+      in `layers` order, back to front; each property takes its value from
       the last layer that supplies it. (First closed as `scalarLayers` then
       `arrayLayers`; revised by the layer-list merge below.)
 - [x] Resolve open question 2, naming: `arrayBindings` / `scalarBindings`
@@ -44,6 +44,10 @@ here, not in the spec commit.
       `scalarLayers` into one ordered `layers` list; a layer is sampled iff
       its palette's `M > 0`, and only sampled layers carry `voxelSamples`
       channels (README decision 10).
+- [x] Owner review 2026-07-16: rename `attribute` to `property` across the
+      whole format; the bindings' field, the Attributes section retitled
+      Properties, and the glTF and Value Pool Kinds table headers (README
+      decision 11).
 - [x] Fold each resolution into format-design.md (drop its `[OPEN n]`
       marker) and move it to the README's decisions with rationale.
 
@@ -55,22 +59,24 @@ Gate: the owner approves format-design.md.
       `projects/voxel-codecs/voxj/docs/voxel-json-file-format.md` to the
       approved design in one commit. No code changes. Every touched section:
       Objects, the Sample Encodings intro and encoding items and example
-      title, Voxel Order, the Value Pools intro cross-reference, Palettes
-      plus the new Sharing Idioms subsection, Attributes, Validation rules
-      5, 6, 8, 10, and 11, Versioning item 4, the File Example, and the
+      title, Voxel Order, the Value Pools intro cross-reference and the
+      Value Pool Kinds table header, Palettes plus the new Sharing Idioms
+      subsection, Attributes (retitled Properties), Validation rules 5, 6,
+      8, 10, and 11, Versioning item 4, the File Example, and the
       TypeScript schema.
 - [ ] Sweep the whole spec for stale `bindings` / `layerPaletteRefs` /
-      per-layer wording the section list missed.
+      `attribute` / per-layer wording the section list missed.
 
 Gate: the spec matches format-design.md; the reference file stops being
 authoritative.
 
 ## Phase 3: `voxj` (coarse)
 
-- [ ] Rewrite `VoxjPalette` to array plus scalar bindings; add the
-      scalar-binding type; rename `VoxjObject.layer_palette_refs` to the
-      ordered `layers` list; keep `deny_unknown_fields` closure; update doc
-      comments to the new framing; in-crate round-trip coverage.
+- [ ] Rewrite `VoxjPalette` to array plus scalar bindings with `property`
+      fields; add the scalar-binding type; rename
+      `VoxjObject.layer_palette_refs` to the ordered `layers` list; keep
+      `deny_unknown_fields` closure; update doc comments to the new framing;
+      in-crate round-trip coverage.
 
 ## Phase 4: `voxj-codec` (coarse)
 
@@ -99,8 +105,10 @@ authoritative.
 ## Phase 7: `vxl` and docs (coarse)
 
 - [ ] Surface the layer list, sampled vs unsampled, and scalar bindings in
-      `info`, `hierarchy show`, `palette show` / `list`, and `mesh`; add the
-      new `validate` check names; regenerate goldens.
+      `info`, `hierarchy show`, `palette show` / `list`, and `mesh`; align
+      `attribute`-named identifiers and the `--define-attribute` flag with
+      the property rename; add the new `validate` check names; regenerate
+      goldens.
 - [ ] Bring `voxj-codec/README.md`, the other crate READMEs, and the
       vxl-commands plan pages (`README.md`, `reference/mesh.md`,
       `reference/palette/remap.md`, `reference/validate.md`) in line with the

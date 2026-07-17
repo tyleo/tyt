@@ -18,9 +18,11 @@ today's `binding_ids` / `bindings` / `material_ids` / `materials` /
 2. `scalar_binding_ids`
 3. `material_ids`
 4. `materials`
-5. `array_binding_by_attribute`
-6. `scalar_binding_by_attribute`
-7. `binding_by_attribute`, a `HashMap` from attribute `String` to an
+5. `array_binding_by_property`
+6. `scalar_binding_by_property`
+7. `binding_by_property`, a `HashMap` from property `String` to an
    array-or-scalar-tagged binding id
 
-Materials stay column-major over the array-binding ids only.
+Materials stay column-major over the array-binding ids only. The map names
+follow the format-wide attribute-to-property rename (README decision 11,
+2026-07-16); the owner originally specified them as `*_by_attribute`.

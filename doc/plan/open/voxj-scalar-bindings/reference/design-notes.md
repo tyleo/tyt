@@ -14,9 +14,9 @@ Rejected alternatives and the strain noticed while drafting
 2. **Palette-level constants alone, no scalar layers.** Palette state aliases
    across every referencing layer, so per-object variation still forces
    cloning.
-3. **Layer-attached constant refs**, `{ attribute, poolRef, valueRef }` on
-   the layer. Works, but adds a second supply path for attribute values
-   outside palettes; rejected to keep palettes the only attribute carrier.
+3. **Layer-attached constant refs**, `{ property, poolRef, valueRef }` on
+   the layer. Works, but adds a second supply path for property values
+   outside palettes; rejected to keep palettes the only property carrier.
 4. **Knob-as-material with a `composes` palette flag**, a format-defined
    layer merge. Carries the knob in channel content: a phantom `M = 1`
    material whose validator-forced uniform channel must track the voxel
@@ -39,7 +39,7 @@ Rejected alternatives and the strain noticed while drafting
    included.
 9. **App-defined cross-layer combination.** The first draft kept today's
    posture; owner review 2026-07-15 replaced it with a canonical override
-   order, each attribute taken from the last layer that supplies it. (The
+   order, each property taken from the last layer that supplies it. (The
    fixed scalars-then-arrays order it first came with fell with the two-list
    model, alternative 10.)
 10. **Two layer lists, one arity per list** (`arrayLayers` / `scalarLayers`,
@@ -90,3 +90,8 @@ Rejected alternatives and the strain noticed while drafting
    Accepted in owner review 2026-07-15: rule 11 already dereferences each
    channel's palette for `M`, and `M` edits already invalidate referencing
    sample blocks (packed widths and index ranges move with `M`).
+7. **The property rename reaches CLI and identifier surface.** Renaming
+   `attribute` to `property` (README decision 11) implies renaming the
+   by-attribute maps, vxl's `attribute_binding` module, `attribute_ref` /
+   `attribute_selector`, `attribute_names`, and the `--define-attribute`
+   flag; final identifier and flag names settle in the code phases.
