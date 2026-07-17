@@ -48,10 +48,15 @@ either `Bare`, printed as-is for trusted identifiers like `transform` or
 annotation (a hierarchy-layout-only verbatim suffix, vmax's `(Group)`;
 `hierarchy show`'s `: {node: 0}` tags are instead ordinary node values),
 an ordered list of values, and children -- and any node may have both
-values and children. A value carries its display text, its native JSON form, and
-an optional swatch (truecolor or grayscale), exactly the shape of
-`palette_show`'s `Sample`; a per-node cell format (`auto` / `swatch` /
-`swatch-value` / `text`) picks how a value renders to a cell. One
+values and children. Values render through the grid's cell policy
+(`TreeGridCells`: text, an optional opaque visual, and a per-value
+default format), so a grid can store any value type; the default
+policy's `TreeGridValue` carries display text and an optional swatch
+(truecolor or grayscale), and the json-gated `TreeGridJsonValue`
+pairs it with a native JSON form -- together exactly the shape of
+`palette_show`'s `Sample`. A node's cell format (`visual` /
+`visual-text` / `text`) applies to its values; unset, the policy
+picks per value. One
 render method per layout (`render_hierarchy`, `render_rows`,
 `render_columns`, `render_tables`, `render_json_pretty`,
 `render_json_compact`) arranges the same populated grid, each taking
@@ -78,12 +83,17 @@ Dependencies: `branded-id`, plus two optional features: `json` gates
 `serde_json` (with `preserve_order`), the value JSON forms, and the
 JSON layouts (JSON-rendering adopters enable it), and `ty-math` gates
 the typed-color value constructors (vxl enables it at no cost; it
-already depends on ty-math). No clap, no libc, no tyt-common. No
+already depends on ty-math). No clap, no libc, no tyt-common. No IO
 `Dependencies` trait and no `impl` feature: the optional capabilities
-are pure math and pure serialization, so they ride feature gates, not
-DI. Public types
+are pure math and pure serialization, so they ride feature gates; the
+one injection point is the pure `TreeGridCells` cell policy. Public
+types
 follow house style: one per file, `TreeGrid` prefix (`TreeGrid`,
+`TreeGridCells` with the default `TreeGridValueCells` and the
+`json`-gated `TreeGridJsonCells` plus its `TreeGridJsonValue` /
+`TreeGridJsonValueCells` pairing,
 `TreeGridNode`, `TreeGridLabel`, `TreeGridValue`, `TreeGridSwatch`,
+`TreeGridVisual`,
 `TreeGridCellFormat`, the per-layout option payloads
 (`TreeGridHierarchyOptions`, `TreeGridRowsOptions`, and kin),
 `TreeGridLabelMode`, `TreeGridTableShape`, the loose
@@ -93,14 +103,14 @@ follow house style: one per file, `TreeGrid` prefix (`TreeGrid`,
 ### Populate, then render
 
 ```rust
-let mut grid = TreeGrid::default();
+let mut grid = TreeGrid::new();
 
 // 0."baseColorFactor".a  =>  Bare("0") / Quoted("baseColorFactor") / Bare("a")
 let palette = grid.add_root(TreeGridLabel::bare("0"));
 let attribute = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
 let component = grid.add_child(attribute, TreeGridLabel::bare("a"));
 
-grid.node_mut(component).format = TreeGridCellFormat::Text;
+grid.node_mut(component).format = Some(TreeGridCellFormat::Text);
 grid.push_value(component, TreeGridValue::unorm8(255)); // text "255", json 255, gray swatch
 grid.push_value(component, TreeGridValue::unorm8(128));
 
@@ -255,7 +265,10 @@ and S14 builds on it rather than writing a third; it closes the plan.
 
 1. **Owned arena, not a visitor trait.** "Populate with data, then choose
    to render" is the requested shape; it also keeps DAG/instancing
-   expansion in the commands that understand it.
+   expansion in the commands that understand it. Amended 2026-07-16:
+   rendering is injected at the value leaf alone -- the grid is
+   generic over the `TreeGridCells` cell policy -- and the owned
+   arena stands.
 2. **Branded ids, voxcore-style storage.** `U32Id<BTreeGridNode>` into an
    append-only arena; no SoA pools needed since nodes are never removed.
 3. **One label segment per node; suffixes are child nodes.** A composite
@@ -282,7 +295,17 @@ and S14 builds on it rather than writing a third; it closes the plan.
    swatch). A value built with just `new(text)` falls back to
    `String(text)` in the JSON layouts, so tree-only adopters never
    touch the JSON field; `with_json` / `with_swatch` are the escape
-   hatch for genuinely divergent pairs.
+   hatch for genuinely divergent pairs. Amended 2026-07-16: this shape
+   is the default cell policy (`TreeGridValueCells` over
+   `TreeGridValue`), and the grid is generic over `TreeGridCells`;
+   the matrix reads opaque visuals instead of swatches, the format
+   variants rename to what the cell shows (`Visual` / `VisualText` /
+   `Text`, with vxl's `swatch` / `swatch-value` flag vocabulary
+   mapping in at S7), the strip rule is the `Visual` format's
+   definition, and the `auto` row became the unset node format,
+   resolved by the policy per value. The `json` field then split out
+   as the gated `TreeGridJsonValue` pairing, so `TreeGridValue`
+   itself never changes shape with the feature.
 6. **Float-component colors ride the `ty-math` feature.** `srgb` /
    `srgba` / `lin_rgb` / `lin_rgba` constructors take the
    component-generic ty-math color family (T = f32 / f64), rendering

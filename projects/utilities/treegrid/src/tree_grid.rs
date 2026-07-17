@@ -1,8 +1,9 @@
-use crate::{BTreeGridNode, TreeGridLabel, TreeGridNode, TreeGridValue};
+use crate::{BTreeGridNode, TreeGridCells, TreeGridLabel, TreeGridNode, TreeGridValueCells};
 use branded_id::{IdVec, U32Id};
+use std::fmt::{Debug, Formatter, Result as FmtResult};
 
 /// An ordered forest of labeled, data-bearing nodes in an append-only
-/// arena.
+/// arena, rendered through a cell policy.
 ///
 /// Populate with [`add_root`](Self::add_root) and
 /// [`add_child`](Self::add_child), then attach data with
@@ -11,16 +12,46 @@ use branded_id::{IdVec, U32Id};
 /// creation and are never removed or re-parented, so the forest cannot
 /// cycle. Ids are dense indices into this grid and are meaningful only
 /// within it.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct TreeGrid {
+///
+/// The policy `C` decides how the stored values render to cells:
+/// [`new`](Self::new) builds a grid over the default
+/// [`TreeGridValueCells`] and pre-rendered
+/// [`TreeGridValue`](crate::TreeGridValue)s, and
+/// [`with_cells`](Self::with_cells) builds one over a custom policy
+/// and its own value type.
+pub struct TreeGrid<C: TreeGridCells = TreeGridValueCells> {
+    /// The cell policy the renders consult.
+    cells: C,
+
     /// Dense node storage; a node's id is its index.
-    nodes: IdVec<BTreeGridNode, TreeGridNode>,
+    nodes: IdVec<BTreeGridNode, TreeGridNode<C::Value>>,
 
     /// Root ids, in insertion order.
     roots: Vec<U32Id<BTreeGridNode>>,
 }
 
 impl TreeGrid {
+    /// Creates an empty grid over the default cell policy.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<C: TreeGridCells> TreeGrid<C> {
+    /// Creates an empty grid over `cells`.
+    pub fn with_cells(cells: C) -> Self {
+        Self {
+            cells,
+            nodes: IdVec::new(),
+            roots: Vec::new(),
+        }
+    }
+
+    /// The cell policy the renders consult.
+    pub fn cells(&self) -> &C {
+        &self.cells
+    }
+
     /// Appends a root node and returns its id.
     pub fn add_root(&mut self, label: TreeGridLabel) -> U32Id<BTreeGridNode> {
         let id = self.push_node(label);
@@ -48,7 +79,7 @@ impl TreeGrid {
     /// # Panics
     ///
     /// Panics if `id` is not an id of this grid.
-    pub fn node(&self, id: U32Id<BTreeGridNode>) -> &TreeGridNode {
+    pub fn node(&self, id: U32Id<BTreeGridNode>) -> &TreeGridNode<C::Value> {
         &self.nodes[id.to_usize_id()]
     }
 
@@ -58,7 +89,7 @@ impl TreeGrid {
     /// # Panics
     ///
     /// Panics if `id` is not an id of this grid.
-    pub fn node_mut(&mut self, id: U32Id<BTreeGridNode>) -> &mut TreeGridNode {
+    pub fn node_mut(&mut self, id: U32Id<BTreeGridNode>) -> &mut TreeGridNode<C::Value> {
         &mut self.nodes[id.to_usize_id()]
     }
 
@@ -67,7 +98,7 @@ impl TreeGrid {
     /// # Panics
     ///
     /// Panics if `id` is not an id of this grid.
-    pub fn push_value(&mut self, id: U32Id<BTreeGridNode>, value: TreeGridValue) {
+    pub fn push_value(&mut self, id: U32Id<BTreeGridNode>, value: C::Value) {
         self.node_mut(id).values.push(value);
     }
 
@@ -84,13 +115,58 @@ impl TreeGrid {
     }
 }
 
+// Manual impls: a derive would bound only `C`, not the stored
+// `C::Value`.
+
+impl<C: TreeGridCells + Clone> Clone for TreeGrid<C>
+where
+    C::Value: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            cells: self.cells.clone(),
+            nodes: self.nodes.clone(),
+            roots: self.roots.clone(),
+        }
+    }
+}
+
+impl<C: TreeGridCells + Debug> Debug for TreeGrid<C>
+where
+    C::Value: Debug,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        f.debug_struct("TreeGrid")
+            .field("cells", &self.cells)
+            .field("nodes", &self.nodes)
+            .field("roots", &self.roots)
+            .finish()
+    }
+}
+
+impl<C: TreeGridCells + Default> Default for TreeGrid<C> {
+    fn default() -> Self {
+        Self::with_cells(C::default())
+    }
+}
+
+impl<C: TreeGridCells + PartialEq> PartialEq for TreeGrid<C>
+where
+    C::Value: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.cells == other.cells && self.nodes == other.nodes && self.roots == other.roots
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{TreeGrid, TreeGridCellFormat, TreeGridLabel, TreeGridValue};
+    use crate::{TreeGrid, TreeGridCellFormat, TreeGridCells, TreeGridLabel, TreeGridValue};
+    use std::borrow::Cow;
 
     #[test]
     fn adds_roots_in_insertion_order() {
-        let mut grid = TreeGrid::default();
+        let mut grid = TreeGrid::new();
         let first = grid.add_root(TreeGridLabel::bare("0"));
         let second = grid.add_root(TreeGridLabel::bare("1"));
 
@@ -101,7 +177,7 @@ mod tests {
 
     #[test]
     fn attaches_children_in_insertion_order() {
-        let mut grid = TreeGrid::default();
+        let mut grid = TreeGrid::new();
         let root = grid.add_root(TreeGridLabel::bare("root"));
         let first = grid.add_child(root, TreeGridLabel::quoted("energy-tank-1"));
         let second = grid.add_child(root, TreeGridLabel::quoted("energy-tank-2"));
@@ -113,20 +189,20 @@ mod tests {
     }
 
     #[test]
-    fn a_new_node_is_empty_with_the_auto_format() {
-        let mut grid = TreeGrid::default();
+    fn a_new_node_is_empty_with_no_format() {
+        let mut grid = TreeGrid::new();
         let root = grid.add_root(TreeGridLabel::bare("root"));
         let node = grid.node(root);
 
         assert_eq!(node.annotation, None);
-        assert_eq!(node.format, TreeGridCellFormat::Auto);
+        assert_eq!(node.format, None);
         assert!(node.values.is_empty());
         assert!(node.children().is_empty());
     }
 
     #[test]
     fn pushes_values_in_order() {
-        let mut grid = TreeGrid::default();
+        let mut grid = TreeGrid::new();
         let root = grid.add_root(TreeGridLabel::bare("0"));
         grid.push_value(root, TreeGridValue::new("255"));
         grid.push_value(root, TreeGridValue::new("128"));
@@ -142,19 +218,19 @@ mod tests {
 
     #[test]
     fn node_mut_edits_annotation_format_and_values() {
-        let mut grid = TreeGrid::default();
+        let mut grid = TreeGrid::new();
         let root = grid.add_root(TreeGridLabel::bare("energy-tank"));
         let node = grid.node_mut(root);
         node.annotation = Some("(Group)".to_owned());
-        node.format = TreeGridCellFormat::Text;
+        node.format = Some(TreeGridCellFormat::Text);
 
         assert_eq!(grid.node(root).annotation.as_deref(), Some("(Group)"));
-        assert_eq!(grid.node(root).format, TreeGridCellFormat::Text);
+        assert_eq!(grid.node(root).format, Some(TreeGridCellFormat::Text));
     }
 
     #[test]
     fn ids_are_distinct_across_the_forest() {
-        let mut grid = TreeGrid::default();
+        let mut grid = TreeGrid::new();
         let root = grid.add_root(TreeGridLabel::bare("root"));
         let child = grid.add_child(root, TreeGridLabel::bare("transform"));
         let sibling_root = grid.add_root(TreeGridLabel::bare("unplaced"));
@@ -163,5 +239,28 @@ mod tests {
         assert_ne!(root, sibling_root);
         assert_ne!(child, sibling_root);
         assert_eq!(grid.roots(), &[root, sibling_root]);
+    }
+
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+    struct StringCells;
+
+    impl TreeGridCells for StringCells {
+        type Value = String;
+
+        fn text<'a>(&self, value: &'a String) -> Cow<'a, str> {
+            Cow::Borrowed(value)
+        }
+    }
+
+    #[test]
+    fn a_custom_policy_stores_its_own_value_type() {
+        let mut grid = TreeGrid::with_cells(StringCells);
+        let root = grid.add_root(TreeGridLabel::bare("position"));
+        grid.push_value(root, "[12.5, 0.5, 10.0]".to_owned());
+
+        let value = &grid.node(root).values[0];
+        assert_eq!(grid.cells().text(value), "[12.5, 0.5, 10.0]");
+        assert_eq!(grid.cells().visual(value), None);
+        assert_eq!(grid.cells().format(value), TreeGridCellFormat::Text);
     }
 }

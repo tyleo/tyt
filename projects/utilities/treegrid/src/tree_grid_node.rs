@@ -1,14 +1,15 @@
-use crate::{BTreeGridNode, TreeGridCellFormat, TreeGridLabel, TreeGridValue};
+use crate::{BTreeGridNode, TreeGridCellFormat, TreeGridLabel};
 use branded_id::U32Id;
 
-/// A node in a [`TreeGrid`](crate::TreeGrid).
+/// A node in a [`TreeGrid`](crate::TreeGrid), over the grid's value
+/// type `V`.
 ///
 /// A node with at least one value is a data node; a node may have both
 /// values and children. Children attach at creation through
 /// [`TreeGrid::add_child`](crate::TreeGrid::add_child) and are never
 /// re-parented, so the forest cannot cycle.
 #[derive(Clone, Debug, PartialEq)]
-pub struct TreeGridNode {
+pub struct TreeGridNode<V> {
     /// One path segment.
     pub label: TreeGridLabel,
 
@@ -17,23 +18,24 @@ pub struct TreeGridNode {
     /// brackets (for example `(Group)`).
     pub annotation: Option<String>,
 
-    /// How this node's values render to cells.
-    pub format: TreeGridCellFormat,
+    /// How this node's values render to cells; unset defers to the
+    /// grid's cell policy per value.
+    pub format: Option<TreeGridCellFormat>,
 
     /// The node's data series.
-    pub values: Vec<TreeGridValue>,
+    pub values: Vec<V>,
 
     // Crate-private so children attach only at creation, keeping the
     // forest single-parent and acyclic by construction.
     pub(crate) children: Vec<U32Id<BTreeGridNode>>,
 }
 
-impl TreeGridNode {
+impl<V> TreeGridNode<V> {
     pub(crate) fn new(label: TreeGridLabel) -> Self {
         Self {
             label,
             annotation: None,
-            format: TreeGridCellFormat::default(),
+            format: None,
             values: Vec::new(),
             children: Vec::new(),
         }

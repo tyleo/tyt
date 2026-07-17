@@ -134,17 +134,6 @@ impl TreeGridOptions {
         }
     }
 
-    /// Checks the options for the JSON renders, which consume none:
-    /// every set option is rejected.
-    #[cfg(feature = "json")]
-    pub fn resolve_json(&self) -> Result<(), TreeGridError> {
-        self.no_label()?;
-        self.no_width()?;
-        self.no_header_level()?;
-        self.no_table_shape()?;
-        self.no_hierarchy_options()
-    }
-
     /// The rows / columns label mode, with the header level folded
     /// into `header` labels.
     fn text_label(&self) -> Result<TreeGridLabelMode, TreeGridError> {
@@ -167,35 +156,35 @@ impl TreeGridOptions {
         self.header_level.unwrap_or(NonZeroU8::MIN)
     }
 
-    fn no_label(&self) -> Result<(), TreeGridError> {
+    pub(crate) fn no_label(&self) -> Result<(), TreeGridError> {
         if self.label.is_some() {
             return Err(TreeGridError::LabelModeWithoutLabels);
         }
         Ok(())
     }
 
-    fn no_width(&self) -> Result<(), TreeGridError> {
+    pub(crate) fn no_width(&self) -> Result<(), TreeGridError> {
         if self.width.is_some() {
             return Err(TreeGridError::WidthWithoutRows);
         }
         Ok(())
     }
 
-    fn no_header_level(&self) -> Result<(), TreeGridError> {
+    pub(crate) fn no_header_level(&self) -> Result<(), TreeGridError> {
         if self.header_level.is_some() {
             return Err(TreeGridError::HeaderLevelWithoutHeaders);
         }
         Ok(())
     }
 
-    fn no_table_shape(&self) -> Result<(), TreeGridError> {
+    pub(crate) fn no_table_shape(&self) -> Result<(), TreeGridError> {
         if self.table_shape.is_some() {
             return Err(TreeGridError::TableShapeWithoutTables);
         }
         Ok(())
     }
 
-    fn no_hierarchy_options(&self) -> Result<(), TreeGridError> {
+    pub(crate) fn no_hierarchy_options(&self) -> Result<(), TreeGridError> {
         if self.bare_roots {
             return Err(TreeGridError::BareRootsWithoutHierarchy);
         }
@@ -385,16 +374,6 @@ mod tests {
         assert_eq!(
             children.resolve_columns(),
             Err(TreeGridError::ValueChildrenWithoutHierarchy)
-        );
-    }
-
-    #[cfg(feature = "json")]
-    #[test]
-    fn json_resolves_bare_and_rejects_every_option() {
-        assert_eq!(TreeGridOptions::default().resolve_json(), Ok(()));
-        assert_eq!(
-            TreeGridOptions::default().with_width(80).resolve_json(),
-            Err(TreeGridError::WidthWithoutRows)
         );
     }
 }

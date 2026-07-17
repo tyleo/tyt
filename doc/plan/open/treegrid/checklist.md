@@ -17,9 +17,10 @@ items off as they land.
   `branded-id`, an optional `json` feature gating `serde_json`
   (`preserve_order`) with the value JSON forms and the JSON layouts,
   and an optional `ty-math` feature gating the typed-color
-  constructors -- no clap, libc, tyt-common, or tyt-injection. No
+  constructors -- no clap, libc, tyt-common, or tyt-injection. No IO
   `Dependencies` trait, no `impl` feature (pure math and pure
-  serialization ride feature gates, not DI).
+  serialization ride feature gates; the `TreeGridCells` cell policy
+  is the one injection point).
   Publishable metadata like the sibling crates (license, repository,
   description); add to workspace `members` and `[patch.crates-io]`.
 - House style: one public type per file, private `mod` + `pub use`
@@ -38,12 +39,17 @@ items off as they land.
       `TreeGrid` (append-only arena over `U32Id<BTreeGridNode>`, ordered
       roots), `TreeGridNode` (`label`, `annotation`, `format`, `values`,
       children), `TreeGridLabel::{Bare, Quoted}` with `bare` / `quoted`
-      constructors, `TreeGridValue` (`text` + optional `json` + optional
-      `swatch`; core typed constructors `int` / `float` / `unorm` /
-      `unorm8` / `bool` / `json` / `srgb8` / `srgba8` per the
-      [rendering spec](reference/rendering-spec.md) table, and the
-      `new` + `with_json` / `with_swatch` escape hatch), `TreeGridSwatch`,
-      `TreeGridCellFormat`,
+      constructors, `TreeGridValue` (`text` + optional `swatch`) with
+      the `json`-gated `TreeGridJsonValue` pairing (the native JSON
+      form beside a value; core typed constructors `int` / `float` /
+      `unorm` / `unorm8` / `bool` / `json` / `srgb8` / `srgba8` per
+      the [rendering spec](reference/rendering-spec.md) table, and
+      the `new` + `with_swatch` / `with_json` escape hatch),
+      `TreeGridSwatch`
+      (with the canonical `render`), `TreeGridCellFormat`, the
+      `TreeGridCells` cell policy with the default `TreeGridValueCells`
+      and the `json`-gated `TreeGridJsonCells` plus
+      `TreeGridJsonValueCells`, `TreeGridVisual`,
       `TreeGridLabelMode`, `TreeGridOptions` (with
       `Default`), `TreeGridError`. Builder API: `add_root`, `add_child`,
       `node_mut`, `push_value`. Unit tests for the builder and label
@@ -51,15 +57,16 @@ items off as they land.
 - [ ] **S2. Text machinery and cells.** Private modules ported from vxl:
       `visible_width` / `pad_right`, quote formatting, tree glyphs,
       markdown table core with `md_cell` escaping. Cell rendering: the
-      format x swatch matrix and the abutting rule from
-      `palette_show::render_cell` / `abuts`, with the swatch escape
-      builders. The `ty-math` feature and its typed-color constructors
+      resolved-format x visual matrix and the `Visual` strip rule from
+      `palette_show::render_cell` / `abuts` (the swatch escape builder
+      landed at S1 as `TreeGridSwatch::render`). The `ty-math` feature
+      and its typed-color constructors
       (`srgb` / `srgba` / `lin_rgb` / `lin_rgba` over the
       component-generic family, f32 / f64): functional-notation text,
       number-array JSON, quantized (for `lin_*`, transfer-encoded)
       swatch bytes, all color math through ty-math. Tests: the matrix,
-      abutting with a swatchless value mixed in, visible width past CSI
-      sequences, an HDR `lin_rgba` component above 1.
+      the strip with a visual-less value mixed in, visible width past
+      CSI sequences, an HDR `lin_rgba` component above 1.
 - [ ] **S3. `hierarchy` layout.** `render_hierarchy`:
       connectors/extensions, `bare_roots`
       both ways, annotations, `label: cells` data lines, values-on-branch

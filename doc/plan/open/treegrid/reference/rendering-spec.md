@@ -7,7 +7,8 @@ amended; after adoption, this spec is the single source of truth.
 
 ## The model
 
-- A `TreeGrid` is an ordered forest. Each `TreeGridNode` has:
+- A `TreeGrid<C: TreeGridCells = TreeGridValueCells>` is an ordered
+  forest rendered through its cell policy `C`. Each `TreeGridNode` has:
   - `label: TreeGridLabel` -- one path segment. The variants name the
     rendering effect in the text layouts: `Bare(String)` prints as-is,
     for trusted identifiers (`transform`, `0`, `a`, `palettes`);
@@ -22,19 +23,29 @@ amended; after adoption, this spec is the single source of truth.
     *not* annotations: its lines read `"energy-tank-1": {node: 0}` --
     label, colon, tag -- which is exactly the data-node form, so the tag
     is modeled as the node's single value (text `{node: 0}`).
-  - `format: TreeGridCellFormat` -- how this node's values render to cells
-    (`Auto` default, `Swatch`, `SwatchValue`, `Text`).
-  - `values: Vec<TreeGridValue>` -- the node's data series, possibly empty.
+  - `format: Option<TreeGridCellFormat>` -- how this node's values
+    render to cells (`Visual`, `VisualText`, `Text`); unset defers to
+    the policy per value.
+  - `values: Vec<C::Value>` -- the node's data series, possibly empty.
   - children, in insertion order.
-- A `TreeGridValue` is `{ text: String, json: Option<serde_json::Value>,
-  swatch: Option<TreeGridSwatch> }` where `TreeGridSwatch` is
-  `Color([u8; 3])` or `Gray(u8)`. A `None` json renders as
-  `String(text)` in the JSON layouts. The `json` field, `with_json`,
-  and the JSON layouts exist behind the crate's non-default `json`
-  feature. Values are built through the
-  typed constructors below, or through the escape hatch
-  `new(text)` + `with_json` / `with_swatch` for pairs that genuinely
-  diverge (precision-rounded text over full-fidelity numbers, the
+- The policy (`TreeGridCells`) supplies each value's cell pieces:
+  `text`, an optional opaque `visual`
+  (`TreeGridVisual { rendered, width }` -- bytes plus the display
+  columns they occupy), and the format a node with no explicit format
+  uses for that value. `TreeGridJsonCells` adds the value's native
+  JSON form behind the `json` feature; the JSON renders exist only for
+  grids whose policy implements it.
+- A `TreeGridValue`, the default policy's value type, is
+  `{ text: String, swatch: Option<TreeGridSwatch> }` where
+  `TreeGridSwatch` is `Color([u8; 3])` or `Gray(u8)`; its JSON form
+  is always `String(text)`. Behind the crate's non-default `json`
+  feature, `TreeGridJsonValue` pairs a `TreeGridValue` with an
+  optional native JSON form, rendered by `TreeGridJsonValueCells`
+  (text layouts delegate to the default policy; a `None` json
+  renders as `String(text)`). Values are built through the typed
+  constructors below, or through the escape hatch `new(text)` +
+  `with_swatch` / `with_json` for pairs that genuinely diverge
+  (precision-rounded text over full-fidelity numbers, the
   `{node: 0}` tags).
 - A **data node** is a node with at least one value. Data nodes enumerate
   in pre-order in every layout, so all layouts agree on order. A node may
@@ -42,26 +53,36 @@ amended; after adoption, this spec is the single source of truth.
 
 ## Cells
 
-Ported from `palette_show::render_cell` / `abuts` / the swatch functions:
+Ported from `palette_show::render_cell` / `abuts` / the swatch
+functions. The renderer resolves a format per value -- the node's,
+when set, else the policy's -- and builds the cell from the value's
+`text` and optional `visual`:
 
-| format \ swatch | `Color(rgb)` | `Gray(level)` | none |
-| --- | --- | --- | --- |
-| `Auto` | swatch + space + text | text | text |
-| `Swatch` | swatch | gray swatch | text |
-| `SwatchValue` | swatch + space + text | gray swatch + space + text | text |
-| `Text` | text | text | text |
+| resolved format | value with a visual | without |
+| --- | --- | --- |
+| `Visual` | visual | text |
+| `VisualText` | visual + space + text | text |
+| `Text` | text | text |
 
-- A color swatch is `\x1b[48;2;{r};{g};{b}m  \x1b[0m` (two cells); a gray
-  swatch is the same with `level` on all three channels.
-- **Abutting**: a node whose format is `Swatch` and whose every value has
-  a swatch joins its cells with no separator (a continuous strip);
-  otherwise cells join with one space.
-- All alignment measures **visible width**: characters outside ANSI CSI
-  sequences (`text_width::visible_width` moves into the crate).
+- `Visual` is the strip format: a node whose every cell is a bare
+  visual joins them with no separator (a continuous strip); otherwise
+  cells join with one space.
+- The default policy renders a value's swatch through
+  `TreeGridSwatch::render` -- `\x1b[48;2;{r};{g};{b}m  \x1b[0m`, two
+  cells, a gray swatch with `level` on all three channels -- and its
+  per-value format is `VisualText` for a `Color` swatch and `Text`
+  otherwise. The ported `Auto` row is therefore the unset node format:
+  color-swatched values decorate, gray component swatches and
+  swatchless values print text alone.
+- All alignment measures **visible width**: a visual declares its
+  width; text measures characters outside ANSI CSI sequences
+  (`text_width::visible_width` moves into the crate).
 
 ## Value constructors
 
-Each fills text, JSON, and swatch from one domain-shaped argument.
+Each fills text and swatch from one domain-shaped argument; the
+`json` column is `TreeGridJsonValue`'s mirrored constructors, which
+delegate text and swatch and add the native form.
 
 Core (`ty-math` not required):
 
@@ -87,9 +108,10 @@ Behind the `ty-math` feature, over the component-generic color family
 | `lin_rgb(..)` | `lrgb(r, g, b)` | number array | transfer + quantize |
 | `lin_rgba(..)` | `lrgba(r, g, b, a)` | number array | transfer + quantize |
 
-- The `json` column of every constructor, the `json(Value)`
-  constructor itself, and `with_json` ride the non-default `json`
-  feature; without it a constructor fills text and swatch alone.
+- The mirrored json constructors, the `json(Value)` constructor
+  itself, and `with_json` live on `TreeGridJsonValue` behind the
+  non-default `json` feature; `TreeGridValue`'s own constructors
+  fill text and swatch alone.
 - The integral collapse is today's `format_number` / `number_json` rule:
   an integral f64 prints and serializes without a fractional part
   (`1.0` -> `1`), so text and JSON read alike.
@@ -286,9 +308,11 @@ the other `resolve_*` methods reject a set shape as
 
   with `annotation`, `values`, and `children` omitted when absent/empty.
   `label` is the raw string, unquoted-extra, whether `Bare` or `Quoted`.
-  `values` carries each value's `json` form, falling back to
-  `String(text)` for a value built without one; `swatch` and format
-  are not consumed, and `resolve_json` rejects every set option.
+  `values` carries each value's policy JSON form
+  (`TreeGridJsonCells`): `TreeGridJsonValueCells` emits the paired
+  native form, falling back to `String(text)`, and the default
+  policy emits `String(text)` always; visuals and format are not
+  consumed, and `resolve_json` rejects every set option.
 - Pretty is `serde_json::to_string_pretty`, compact `to_string`, both
   with a trailing `\n` (today's `to_json_string`).
 - Records, not label-keyed objects: sibling labels may repeat and labels

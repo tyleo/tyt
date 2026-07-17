@@ -61,7 +61,8 @@ no checklist item is checked yet, the first session starts at S1.
   `json` gating `serde_json` (`preserve_order`) with the value JSON
   forms and the JSON layouts, and `ty-math` gating the typed-color
   constructors. No clap, libc, tyt-common, or
-  tyt-injection; no `Dependencies` trait and no `impl` feature.
+  tyt-injection; no IO `Dependencies` trait and no `impl` feature
+  (the `TreeGridCells` cell policy is the one injection point).
   Publishable metadata like the sibling utilities crates; add it to
   workspace `members` and `[patch.crates-io]`, but do not publish --
   that is a deferred item the owner triggers.

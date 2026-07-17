@@ -161,3 +161,102 @@ loses its `layout` field and `resolve` splits into
 `resolve_tables` / `resolve_json`, each rejecting every option its
 render does not consume (`resolve_json` consumes none and returns
 `Ok(())` when nothing is set).
+
+## Cell policy: TreeGrid is generic over TreeGridCells (2026-07-16)
+
+Owner design, developed over three review rounds. The grid becomes
+`TreeGrid<C: TreeGridCells = TreeGridValueCells>`, storing the policy
+instance and `C::Value` values, so any value type renders -- including
+foreign types an adopter does not own (the orphan rule never bites,
+and one value type can carry different policies). The pattern is the
+stdlib's policy parameter (`HashMap<K, V, S = RandomState>`), with
+`TreeGrid::new()` pinned to the default policy the way `HashMap::new`
+pins `RandomState`; custom policies enter through `with_cells`. It
+deliberately does not reuse the house `Dependencies` name, which
+means injected IO effects, not a pure rendering strategy.
+
+- `TreeGridCells` supplies `text` (a `Cow`, so pre-rendered values
+  lend their strings), an optional `visual`, and the format a node
+  with no explicit format uses for a value; `TreeGridJsonCells` adds
+  `json` behind the `json` feature, so a JSON render is uncallable --
+  not merely rejected -- on a policy without JSON forms. Everything
+  the feature adds collects in the one gated `json` module -- the
+  trait, `TreeGridOptions::resolve_json` (the `no_*` helpers widen
+  to `pub(crate)` for it), and the battery's json side (later
+  entries) -- so the crate's whole cfg surface is that module's two
+  lines in `lib.rs`.
+- `TreeGridVisual` is flag-free opaque content,
+  `{ rendered: String, width: usize }`: the renderer emits the bytes
+  and lays out by the declared width, so any terminal medium works
+  without the crate knowing it exists.
+- The two semantic swatch rules moved to their owners. Abutting is
+  the `Visual` format's definition -- every cell a bare visual makes
+  a continuous strip, a structural check, not a flag -- and the
+  `Auto` rule is the default policy's per-value format (`Color` maps
+  to `VisualText`, everything else to `Text`).
+  `TreeGridCellFormat::Auto` is deleted; `TreeGridNode::format` is
+  `Option<TreeGridCellFormat>`, unset meaning the policy decides per
+  value -- the same Option-expresses-the-default idiom as the label
+  modes. The remaining variants rename to what the cell shows --
+  `Visual` and `VisualText`, the same rule as the earlier `Value` ->
+  `Text` rename -- since the core deals in visuals, not swatches;
+  vxl's `swatch` / `swatch-value` selector vocabulary maps into them
+  at S7, the `FillMode` pattern.
+- `TreeGridValue` and `TreeGridSwatch` survive as the default
+  policy's vocabulary: the battery keeps the typed swatch field
+  (something must remember gray versus color for the unset-format
+  rule) and `TreeGridSwatch::render` owns the canonical ANSI block
+  bytes.
+- `TreeGrid` trades its derives for manual `Clone` / `Debug` /
+  `Default` / `PartialEq` impls, since a derive cannot bound
+  `C::Value`.
+
+README decisions 1 and 5 carry dated amendments, and the spec's
+model, cells, and JSON-layout sections, the checklist ground rules
+and S1 / S2, the continue prompt, and the crate README were amended
+in the same change. S1 chunk 2 (the typed constructors) is unchanged
+in scope: the constructors build the default policy's values.
+
+## The battery specialization lives in its own module (2026-07-17)
+
+Owner request: the crate root holds only the generic shape -- the
+grid, the policy traits, `TreeGridVisual`, the cell formats, labels,
+options, and errors -- and the default-policy specialization moves
+to `src/value/`: `TreeGridValue`, `TreeGridValueCells`, and
+`TreeGridSwatch`, all of it feature-independent; the battery's json
+side lives under the crate's `json` module (`json/value/`, next
+entry). Re-exports stay flat, so the public API is unchanged; the
+layout states that `TreeGridValue` is one specialization among any
+number of adopter policies, not the model. The core still names the
+battery in exactly two places, deliberately: the
+`TreeGrid<C = TreeGridValueCells>` default parameter and the pinned
+`TreeGrid::new`, the `HashMap` / `RandomState` relationship.
+
+## TreeGridJsonValue isolates the json feature (2026-07-17)
+
+Owner request. `TreeGridValue` drops its cfg-gated `json` field and
+`with_json`, becoming `{ text, swatch }` -- no type in the crate
+changes shape with the feature any more, which retires the accepted
+additivity caveat from the serde_json entry: enabling `json`
+elsewhere in a build graph can no longer break a feature-off
+consumer, and the crate's only cfg attributes are the `json`
+module's two lines in `lib.rs`. The battery's json side is
+`json/value/`, inside the one gated module:
+
+- `TreeGridJsonValue` pairs a `TreeGridValue` with the optional
+  native JSON form (the divergence rationale lives on its field),
+  with `new` / `with_json` / `with_swatch` builders.
+- `TreeGridJsonValueCells` renders it: text, visual, and format
+  delegate to `TreeGridValueCells`, and the JSON side emits the
+  paired form with the `String(text)` fallback.
+- The plain battery stays JSON-renderable: `TreeGridValueCells`
+  implements `TreeGridJsonCells` as `String(text)` always -- exactly
+  what the tag-valued tree adopters (`hierarchy show`, vmax) emit.
+
+At S7 the divergent-json adopter builds
+`TreeGrid::with_cells(TreeGridJsonValueCells)`, and chunk 2's
+constructors split accordingly: text + swatch on `TreeGridValue`,
+mirrored json-adding constructors on `TreeGridJsonValue`. The spec's
+model, constructor, and JSON-layout sections, the plan README model
+paragraph and decision 5, the checklist S1, and the crate README
+were amended in the same change.
