@@ -26,3 +26,8 @@ today's `binding_ids` / `bindings` / `material_ids` / `materials` /
 Materials stay column-major over the array-binding ids only. The map names
 follow the format-wide attribute-to-property rename (README decision 11,
 2026-07-16); the owner originally specified them as `*_by_attribute`.
+
+The 2026-07-17 wire rename (`arrayProperties` / `scalarProperties`, `name` /
+`valuePool` / `valueIndex`; README decision 12) postdates this surface;
+whether the Rust names follow (`array_property_ids`, `property_by_name`, and
+so on) settles in phase 5.

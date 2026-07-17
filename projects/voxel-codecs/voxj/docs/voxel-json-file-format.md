@@ -84,16 +84,18 @@ An object is one voxel volume of pure geometry. Aside from its grid `origin`, it
   "origin": [0, 0, 0],
   "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
 
-  // palette references, one per layer
-  "layerPaletteRefs": [0],
-  // one channel per layer; each channel is one material index per voxel
+  // layers: palette references, ordered back to front
+  "layers": [0],
+  // one channel per sampled layer; each is one material index per voxel
   "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
 }
 ```
 
-An object carries any number of layers, listed in `layerPaletteRefs` as palette indices. Each layer maps every voxel to one material in its palette. Two layers may reference the same palette; what the overlap means is left to the consuming application.
+An object carries one layer list, `layers`, an array of palette indices ordered back to front. Each layer supplies all of its palette's properties: scalar properties one value for the whole object, array properties one value per voxel through a sample channel. A palette may appear in `layers` any number of times. Layers combine by overriding: contributions apply in `layers` order and each property takes its value from the last layer that supplies it, so later layers override earlier ones (see [Palettes](#palettes) for the full resolution).
 
-`voxelPositions` and `voxelSamples` are encoded blocks (see [Voxel Encoding](#voxel-encoding)). Each voxel has a position `(x, y, z)` and one material sample per layer. `voxelSamples` carries one channel per layer, in `layerPaletteRefs` order, and the sample in channel `c` is a material index into the palette `layerPaletteRefs[c]`. The number of voxels is implicit: it is the number of positions decoded from `voxelPositions`. Positions within an object must be unique, and every voxel samples every layer.
+A layer is **sampled** when its palette has at least one material, `M > 0` (see [Palettes](#palettes)). A palette with no materials, `materials: []`, is never sampled, so a scalar-only palette carries no per-voxel data. `voxelSamples` carries exactly one channel per sampled layer, in `layers` order: channel `c` belongs to the `c`-th sampled layer, and its samples are material indices into that layer's palette.
+
+`voxelPositions` and `voxelSamples` are encoded blocks (see [Voxel Encoding](#voxel-encoding)). Each voxel has a position `(x, y, z)` and one material sample per sampled layer. The number of voxels is implicit: it is the number of positions decoded from `voxelPositions`. Positions within an object must be unique, and every voxel samples every sampled layer.
 
 `bounds` is `[X, Y, Z]`, the runtime grid's size in voxels along each axis. Voxel positions are 0-based, so every voxel lies in `[0, X) x [0, Y) x [0, Z)`. `bounds` is exactly tight: the grid fits the voxels with no empty margin on any face, so on every axis some voxel reaches `0` and some voxel reaches the bound minus one. An empty object has `bounds = [0, 0, 0]`: a point at its `origin`. Build-volume margin around the geometry is not allowed here; it lives in [`editState`](#edit-state), whose edit grid may be larger than the runtime grid. `bounds` is needed to decode `bitmap-base64` and `hilbert-delta-varint-base64`, where it sets the canonical voxel order and the Hilbert `bits = max(1, bitLength(max(X, Y, Z) - 1))` (see [Voxel Order](#voxel-order)).
 
@@ -142,13 +144,13 @@ All base64 in this format uses the standard RFC 4648 alphabet, not base64url, wi
 
 ### Sample Encodings
 
-A sample block holds one channel per layer, in `layerPaletteRefs` order. Each channel gives, for every voxel in the position block's voxel order, a material index into that layer's palette.
+A sample block holds one channel per sampled layer, in `layers` order. Each channel gives, for every voxel in the position block's voxel order, a material index into that layer's palette.
 
-1. `raw-json`: one channel per layer, each a plain array of that layer's material index for every voxel: `[[l0v0, l0v1, ...], [l1v0, l1v1, ...], ...]`.
-2. `rle-json`: one channel per layer; each channel is a flat run-length encoding `[value1, count1, value2, count2, ...]`. Counts are positive integers and, in every channel, sum to the number of voxels.
-3. `packed-base64`: one bit-packed channel per layer. For the channel of a layer whose palette has `M` materials, each voxel's material index is packed at fixed width `b = max(1, bitLength(M - 1))` bits, MSB-first, 8 per byte, with the final byte zero-padded; the width is derived from `M` and not stored. `data` is one base64 string per layer, in `layerPaletteRefs` order, each encoding exactly `ceil(voxelCount * b / 8)` bytes. This is the same packing scheme as the `bitmap-base64` position encoding, which is its `b = 1` special case. An empty object has one `""` per layer. Best for incoherent or many-material objects, where `rle-json` would approach one run per voxel.
+1. `raw-json`: one channel per sampled layer, each a plain array of that layer's material index for every voxel: `[[l0v0, l0v1, ...], [l1v0, l1v1, ...], ...]`.
+2. `rle-json`: one channel per sampled layer; each channel is a flat run-length encoding `[value1, count1, value2, count2, ...]`. Counts are positive integers and, in every channel, sum to the number of voxels.
+3. `packed-base64`: one bit-packed channel per sampled layer. For the channel of a layer whose palette has `M` materials, each voxel's material index is packed at fixed width `b = max(1, bitLength(M - 1))` bits, MSB-first, 8 per byte, with the final byte zero-padded; the width is derived from `M` and not stored. `data` is one base64 string per sampled layer, in `layers` order, each encoding exactly `ceil(voxelCount * b / 8)` bytes. This is the same packing scheme as the `bitmap-base64` position encoding, which is its `b = 1` special case. An empty object has one `""` per sampled layer. Best for incoherent or many-material objects, where `rle-json` would approach one run per voxel.
 
-#### Example: two layers over four voxels; layer 0 material indices `0, 0, 0, 1` (palette `M = 2`) and layer 1 material indices `2, 2, 3, 3` (palette `M = 4`), in the position block's voxel order
+#### Example: two sampled layers over four voxels; layer 0 material indices `0, 0, 0, 1` (palette `M = 2`) and layer 1 material indices `2, 2, 3, 3` (palette `M = 4`), in the position block's voxel order
 
 ```jsonc
 // raw-json: one array per layer, a material index per voxel.
@@ -169,7 +171,7 @@ A sample block holds one channel per layer, in `layerPaletteRefs` order. Each ch
 
 ### Voxel Order
 
-The position block defines the object's single canonical voxel order, and every sample channel is in that same order, voxel-for-voxel, for every combination of position and sample encoding:
+The position block defines the object's single canonical voxel order, and every sample channel, one per sampled layer, is in that same order, voxel-for-voxel, for every combination of position and sample encoding:
 
 1. `raw-json` positions: listing order.
 2. `bitmap-base64` positions: ascending cell index `k` (raster order, z fastest).
@@ -203,7 +205,7 @@ Positions and samples interact, so choose them as a pair. Encoding is offline, s
 
 ## Value Pools
 
-Value pools live in `main.runtimeState.valuePools`, a shared array referenced by index, siblings of `objects` and `palettes`. A value pool holds `values`, all of one value-shape given by `kind`. `kind` tags the shape of the values. Palettes reference pools by index (see [Palettes](#palettes)).
+Value pools live in `main.runtimeState.valuePools`, a shared array referenced by index, siblings of `objects` and `palettes`. A value pool holds `values`, all of one value-shape given by `kind`. `kind` tags the shape of the values. Palettes reference pools by index: an array property references a whole pool and a scalar property a single cell of one (see [Palettes](#palettes)).
 
 ```jsonc
 // a value pool: shared values of one shape
@@ -229,9 +231,9 @@ Value pools live in `main.runtimeState.valuePools`, a shared array referenced by
 
 `kind` is a closed vocabulary tagging the shape of a pool's `values`. Every kind's `values` are plain readable JSON literals; declaring a kind enables validation: a consumer must understand a file's kinds to validate it, and must reject a file whose `kind` it does not recognize (see [Versioning and Extensibility](#versioning-and-extensibility)).
 
-| `kind`              | JSON form            | Constraint                                | Example `values`             | Typical attributes                                                                            |
+| `kind`              | JSON form            | Constraint                                | Example `values`             | Typical properties                                                                            |
 | ------------------- | -------------------- | ----------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------- |
-| `json`              | any JSON, incl. null | none                                      | `[{"k": 1}, "x", 3]`         | any custom attribute                                                                          |
+| `json`              | any JSON, incl. null | none                                      | `[{"k": 1}, "x", 3]`         | any custom property                                                                           |
 | `bool`              | boolean              | `true` / `false`                          | `[true, false]`              | flags                                                                                         |
 | `float`             | number               | floating-point-valued; within `min`/`max` | `[0, 0.5, 1]`                | metallicFactor, roughnessFactor, occlusionStrength, transmissionFactor, emissiveStrength, ior |
 | `int`               | number               | integer-valued, within `min`/`max`        | `[0, 1, 2, 7]`               | ids, counts, indices                                                                          |
@@ -252,25 +254,36 @@ Notes:
 
 ## Palettes
 
-A palette binds attribute names to shared [value pools](#value-pools), then lists the distinct materials it uses as rows over those pools. A voxel samples a material in each layer by its index in that layer's palette. A palette may be referenced by any number of layers and objects (see [Objects](#objects)).
+A palette binds property names to shared [value pools](#value-pools), then lists the distinct materials it uses as rows over those pools. Properties come in two arities, and a palette may carry either, both, or neither. An **array property** binds to a whole pool and takes one `materials` column of value-indices, so its value varies per material. A **scalar property** is pinned to a single pool cell, `valuePools[valuePool].values[valueIndex]`, one value for the whole palette. A voxel samples a material in each sampled layer by its index in that layer's palette. A palette may be referenced by any number of layers and objects (see [Objects](#objects)).
 
-Materials are stored column-major, one column per binding:
+"Scalar" means single-valued: a scalar property may reference a cell of any pool kind.
+
+Materials are stored column-major, one column per array property:
 
 ```jsonc
 {
-  // ordered bindings; each binds an attribute name to a value pool index. Order
-  // fixes the column order in `materials`. No duplicate attribute.
-  "bindings": [
-    { "attribute": "baseColorFactor", "poolRef": 0 },
-    { "attribute": "metallicFactor", "poolRef": 1 },
+  // ordered array properties; each binds a property name to a value pool
+  // index. Order fixes the column order in `materials`.
+  "arrayProperties": [
+    { "name": "baseColorFactor", "valuePool": 0 },
+    { "name": "metallicFactor", "valuePool": 1 },
   ],
 
-  // `materials` is column-major: one inner array per binding (a column), in
-  // binding order, so materials.length == bindings.length. Every column has the
-  // same length, the material count M. materials[b][m] is a value-index into the
-  // pool bound by column b. A voxel samples material m in [0, M); resolve it by
-  // reading down the columns:
-  //   material 0 = { baseColorFactor: pool0.values[0], metallicFactor: pool1.values[2] }
+  // scalar properties; each pins a property name to one pool cell, one
+  // value for the whole palette
+  "scalarProperties": [
+    { "name": "emissiveStrength", "valuePool": 2, "valueIndex": 1 },
+  ],
+
+  // `materials` is column-major: one inner array per array property (a
+  // column), in property order, so materials.length == arrayProperties.length.
+  // Every column has the same length, the material count M. materials[b][m]
+  // is a value-index into the pool bound by column b. A voxel samples
+  // material m in [0, M); resolve it by reading down the columns:
+  //   material 0 = {
+  //     baseColorFactor: pool0.values[0],
+  //     metallicFactor: pool1.values[2]
+  //   }
   "materials": [
     [0, 1, 2], // baseColorFactor value-index for materials 0, 1, 2
     [2, 0, 1], // metallicFactor value-index for materials 0, 1, 2
@@ -278,28 +291,83 @@ Materials are stored column-major, one column per binding:
 }
 ```
 
-`materials` is column-major: each inner array is one binding's column of value-indices into a single pool. A palette may have no bindings. `materials` is then one empty array per material, so the material count `M` survives as `materials.length`, and every material resolves every attribute to its default.
+`materials` is column-major: each inner array is one array property's column of value-indices into a single pool. A palette may have no array properties. `materials` is then one empty array per material, so the material count `M` survives as `materials.length`, and every material resolves every array property to its default.
 
-To resolve a voxel's material:
+A voxel's property values resolve from its object's `layers` as follows:
 
-1. Read the voxel's sample `m`, a material index.
-2. For each binding `b`, read `materials[b][m]`, a value-index into the pool `bindings[b].poolRef`.
-3. The attribute `bindings[b].attribute` takes `valuePools[bindings[b].poolRef].values[materials[b][m]]`.
-4. Unbound attributes take their default from the [Attributes](#attributes) table.
+1. Each layer supplies its palette's properties. A scalar property supplies its `name` as `valuePools[valuePool].values[valueIndex]`, one value for the whole object. An array property supplies its `name` per voxel: read the voxel's sample `m` from the layer's channel, a material index; array property `b` supplies `arrayProperties[b].name` as `valuePools[arrayProperties[b].valuePool].values[materials[b][m]]`. An unsampled layer has no channel and supplies only its scalar properties.
+2. Layers override: contributions apply in `layers` order, back to front, and each property takes its value from the last layer that supplies it. Three layers supplying `{a, b, c}`, then `{a}`, then `{c}` resolve to `b` from the first, `a` from the second, and `c` from the third.
+3. Unbound properties take their default from the [Properties](#properties) table.
 
-For the palette above, a voxel sampling material `0` resolves to `baseColorFactor = valuePools[0].values[0]` and `metallicFactor = valuePools[1].values[2]`.
+A scalar property wires a name to a value; any arithmetic, such as `emissiveStrength` multiplying `emissiveFactor`, comes from the property vocabulary. Within one palette a name appears in `arrayProperties` or `scalarProperties`, never both, so a single layer never conflicts with itself.
 
-### Attributes
+### Sharing Idioms
 
-An attribute is a named material property, listed in `palette.bindings[].attribute`. The format wires attributes without defining them: the name carries the meaning and the pool carries the values; that pairing is all the format defines. An attribute's meaning and value range are convention between producer and consumer, not part of the wire format. A consumer ignores any attribute name it does not recognize, so extending the vocabulary never breaks an older reader (see [Versioning and Extensibility](#versioning-and-extensibility)).
+One pool cell can supply a property at every scope without cloning anything:
+
+1. All materials of one palette share a value: put a scalar property on that palette. One `layers` entry supplies both arities; nothing is listed twice.
+2. Per-object variation over a shared palette: make small palettes of one scalar property each, with `materials: []` so they are never sampled, and list one after the shared palette. Switching an object's knob is a one-integer edit.
+3. Single source of truth: the pool cell. Editing it updates every palette that references it.
+4. Per-voxel variation: move the property from `scalarProperties` to `arrayProperties`, giving it a real column and channel.
+5. Whole-object override: list a scalar-property palette after the layer it overrides; the object-wide value replaces the per-voxel values for that property.
+
+Idiom 2, two lamp objects sharing one base palette but glowing at different strengths:
+
+```jsonc
+"valuePools": [
+  // 0: emissive strengths, referenced by cell
+  { "kind": "float", "min": 0, "max": "none", "values": [1, 5, 40] },
+],
+
+"palettes": [
+  // 0: the shared base palette; the array side elided
+  {
+    "arrayProperties": [ /* ... */ ],
+    "scalarProperties": [],
+    "materials": [ /* ... */ ],
+  },
+
+  // 1: the lamp-glow knob; no materials, so it is never sampled
+  {
+    "arrayProperties": [],
+    "scalarProperties": [
+      { "name": "emissiveStrength", "valuePool": 0, "valueIndex": 1 },
+    ],
+    "materials": [],
+  },
+
+  // 2: the sign-glow knob: the same pool, the next cell
+  {
+    "arrayProperties": [],
+    "scalarProperties": [
+      { "name": "emissiveStrength", "valuePool": 0, "valueIndex": 2 },
+    ],
+    "materials": [],
+  },
+],
+
+"objects": [
+  // "Lamp A": the shared palette plus its own knob; the knob layer carries
+  // no channel, so voxelSamples has one channel, for palette 0
+  { /* ... */ "layers": [0, 1] },
+
+  // "Neon Sign": the same base palette; switching knobs is a one-integer
+  // edit in layers
+  { /* ... */ "layers": [0, 2] },
+]
+```
+
+### Properties
+
+A property is a named material parameter, listed in a palette's `arrayProperties[].name` and `scalarProperties[].name`. The format wires properties without defining them: the name carries the meaning and the pool carries the values; that pairing is all the format defines. A property's meaning and value range are convention between producer and consumer, not part of the wire format. A consumer ignores any property name it does not recognize, so extending the vocabulary never breaks an older reader (see [Versioning and Extensibility](#versioning-and-extensibility)).
 
 voxj's recommended vocabulary is glTF's, below. The format neither requires nor privileges it; it is the convention voxj tools target.
 
 #### glTF conventions
 
-The recommended attribute vocabulary is glTF's metallic-roughness model, so a voxj material maps one-to-one onto a glTF material and the defaults below are glTF's own. Each attribute binds a value pool of one of the kinds listed, and an unbound attribute renders at its default:
+The recommended property vocabulary is glTF's metallic-roughness model, so a voxj material maps one-to-one onto a glTF material and the defaults below are glTF's own. Each property binds a value pool of one of the kinds listed, and an unbound property renders at its default:
 
-| Attribute            | Kind                                                         | Range | Default     | Meaning                                                                            |
+| Property             | Kind                                                         | Range | Default     | Meaning                                                                            |
 | -------------------- | ------------------------------------------------------------ | ----- | ----------- | ---------------------------------------------------------------------------------- |
 | `baseColorFactor`    | `srgba-hex` (default), `srgba-float`, or `linear-rgba-float` |       | `#FFFFFFFF` | Base color, straight alpha = opacity (glTF `baseColorFactor`)                      |
 | `metallicFactor`     | `float`, `min: 0`, `max: 1`                                  | 0-1   | `1`         | Metalness (glTF `metallicFactor`)                                                  |
@@ -310,9 +378,9 @@ The recommended attribute vocabulary is glTF's metallic-roughness model, so a vo
 | `ior`                | `float`, `min: 1`                                            | 1+    | `1.5`       | Index of refraction (glTF `KHR_materials_ior`)                                     |
 | `transmissionFactor` | `float`, `min: 0`, `max: 1`                                  | 0-1   | `0`         | Light transmission through surface (glTF `KHR_materials_transmission`)             |
 
-A color attribute binds a hex or float-component color kind in either the sRGB or linear space (see [Value Pool Kinds](#value-pool-kinds)); hex, which is sRGB only, is the authoring default. Base color takes an alpha-carrying kind and emission an alpha-less one, and all forms carry the same color.
+A color property binds a hex or float-component color kind in either the sRGB or linear space (see [Value Pool Kinds](#value-pool-kinds)); hex, which is sRGB only, is the authoring default. Base color takes an alpha-carrying kind and emission an alpha-less one, and all forms carry the same color.
 
-Emission is two attributes. `emissiveFactor` is the emitted color, `srgb-hex` by default or a vector form, no alpha, default `#000000` for no emission, authored and linearized like `baseColorFactor`. `emissiveStrength` is a numeric multiplier over that color, `float` with `min: 0`, default `1`; values above `1` push emission into HDR/bloom range. Rendered emission is `linearize(emissiveFactor) * emissiveStrength`. The defaults compose: a black color emits nothing at any strength, and a color left at the default strength `1` emits at face value, so a material that sets only `emissiveFactor` emits that color at strength 1.
+Emission is two properties. `emissiveFactor` is the emitted color, `srgb-hex` by default or a vector form, no alpha, default `#000000` for no emission, authored and linearized like `baseColorFactor`. `emissiveStrength` is a numeric multiplier over that color, `float` with `min: 0`, default `1`; values above `1` push emission into HDR/bloom range. Rendered emission is `linearize(emissiveFactor) * emissiveStrength`. The defaults compose: a black color emits nothing at any strength, and a color left at the default strength `1` emits at face value, so a material that sets only `emissiveFactor` emits that color at strength 1. A strength shared by a whole palette or object is typically wired as a scalar property (see [Palettes](#palettes)).
 
 ## Hierarchy Nodes
 
@@ -393,8 +461,8 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
 1. An unrecognized `version` must be rejected.
 2. An unknown `encoding` (positions or samples) must be rejected; the block cannot be safely decoded.
 3. An unrecognized value pool `kind` must be rejected: the pool's values cannot be safely validated, exactly as an unknown `encoding` cannot be safely decoded, and it must never be reinterpreted or downgraded. `kind` is required and has no default.
-4. Unknown **attribute** names in bindings are ignored, since attributes are advisory and convention-based, so adding attributes is backward compatible.
-5. Ignore vs reject: unknown attribute names are ignored; unknown `kind`, `encoding`, and `version`, and unknown object keys in any core structure, are rejected. Each is a contract a consumer must understand to make its guarantees.
+4. Unknown property **names** in `arrayProperties` and `scalarProperties` are ignored, since properties are advisory and convention-based, so adding properties is backward compatible.
+5. Ignore vs reject: unknown property names are ignored; unknown `kind`, `encoding`, and `version`, and unknown object keys in any core structure, are rejected. Each is a contract a consumer must understand to make its guarantees.
 
 ## Validation
 
@@ -406,16 +474,16 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 2. Every `encoding`, on both `voxelPositions` and `voxelSamples`, is recognized.
 3. Types are exact and nothing is coerced. A string where a number is expected, or the reverse, rejects. Every integer-valued number has no fractional part, and every number is finite, so `NaN` and `+/-Infinity` reject.
 4. `null` rejects everywhere except in a `json`-kind pool's `values` and inside `main.ext`: in every structural field, every non-`json` pool's `values`, and every block's `data`.
-5. Unknown keys reject in every closed structure: file, `main`, `runtimeState`, `editState`, object, encoding block, palette, binding, value pool, transform, hierarchy node, and edit object. The only open points are `main.ext` and binding attribute names.
+5. Unknown keys reject in every closed structure: file, `main`, `runtimeState`, `editState`, object, encoding block, palette, array property, scalar property, value pool, transform, hierarchy node, and edit object. The only open points are `main.ext` and property names.
 6. All indices are in range:
-   1. each object `layerPaletteRefs` entry indexes `runtimeState.palettes`.
-   2. each binding `poolRef` indexes `runtimeState.valuePools`.
+   1. each object `layers` entry indexes `runtimeState.palettes`.
+   2. each array and scalar property `valuePool` indexes `runtimeState.valuePools`.
    3. each `childNodes` entry indexes `runtimeState.hierarchyNodes`.
    4. each `childObjects` entry indexes `runtimeState.objects`.
    5. each `rootHierarchyNodes` entry indexes `runtimeState.hierarchyNodes`.
 7. References are unique: no hierarchy node lists the same child node or the same child object twice, and no node appears in `rootHierarchyNodes` twice.
 8. **Objects**, per object:
-   1. `layerPaletteRefs` is present, an array of integers, possibly empty.
+   1. `layers` is present, an array of integers, possibly empty.
    2. `voxelPositions` and `voxelSamples` are present; the Positions and Samples rules check their structure.
 9. **Value pools** (`runtimeState.valuePools`): an array, possibly empty. Each pool's keys are drawn only from { `kind`, `values`, `min`, `max` }.
    1. `kind` is present and recognized.
@@ -434,13 +502,14 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
       2. each is a finite number or the string `none`, meaning unbounded on that side.
       3. a numeric bound is integer-valued when `kind` is `int`.
       4. `min <= max` when both are finite numbers.
-10. **Palettes** (`runtimeState.palettes`): an array, possibly empty. Each palette's keys are drawn only from { `bindings`, `materials` }.
-    1. `bindings` is an array, possibly empty; each binding has exactly the keys `attribute`, a non-empty string, and `poolRef`, an integer.
-    2. no two bindings share an `attribute`.
-    3. when `bindings` is non-empty, `materials` has exactly `bindings.length` columns, one per binding in binding order.
-    4. every column is an array of the same length `M >= 0`, the material count. When `bindings` is empty, every `materials` entry is instead an empty array, one per material, and `M = materials.length`.
-    5. every `materials[b][m]` is an integer in `[0, valuePools[bindings[b].poolRef].values.length)`.
-11. **Samples**: let `V` be the voxel count from the position block. `voxelSamples.data` has exactly `layerPaletteRefs.length` channels, one per layer in `layerPaletteRefs` order. For channel `c`, let `M` be the material count of palette `layerPaletteRefs[c]`, and by encoding:
+10. **Palettes** (`runtimeState.palettes`): an array, possibly empty. Each palette's keys are drawn only from { `arrayProperties`, `scalarProperties`, `materials` }.
+    1. `arrayProperties` is an array, possibly empty; each array property has exactly the keys `name`, a non-empty string, and `valuePool`, an integer. `scalarProperties` is an array, possibly empty; each scalar property has exactly the keys `name`, a non-empty string, `valuePool`, an integer, and `valueIndex`, an integer.
+    2. no two properties share a `name`, across `arrayProperties` and `scalarProperties` together.
+    3. when `arrayProperties` is non-empty, `materials` has exactly `arrayProperties.length` columns, one per array property in property order.
+    4. every column is an array of the same length `M >= 0`, the material count. When `arrayProperties` is empty, every `materials` entry is instead an empty array, one per material, and `M = materials.length`.
+    5. every `materials[b][m]` is an integer in `[0, valuePools[arrayProperties[b].valuePool].values.length)`.
+    6. every scalar property's `valueIndex` is an integer in `[0, valuePools[valuePool].values.length)`.
+11. **Samples**: let `V` be the voxel count from the position block. A layer is sampled iff the material count `M` of its palette is greater than zero. `voxelSamples.data` has exactly one channel per sampled layer, in `layers` order, so channel `c` belongs to the `c`-th sampled layer. For channel `c`, let `M` be the material count of its layer's palette, and by encoding:
     1. `raw-json`: each channel is a `number[]` of length exactly `V`, every entry an integer in `[0, M)`.
     2. `rle-json`: each channel is a flat even-length `[value, count, ...]` stream whose values are integers in `[0, M)`, whose counts are positive integers, and whose counts sum to exactly `V`.
     3. `packed-base64`: each channel is a base64 string decoding to exactly `ceil(V * b / 8)` bytes for `b = max(1, bitLength(M - 1))`, its pad bits zero, every decoded value `< M`.
@@ -475,27 +544,32 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
           "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
         },
 
-        // one shared float pool, bound by both metallicFactor and roughnessFactor
+        // one shared float pool, bound by metallicFactor and roughnessFactor
         { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] },
 
         { "kind": "srgb-hex", "values": ["#000000", "#FF6600"] },
 
         { "kind": "linear-rgba-float", "values": [[1, 0, 0, 1]] },
+
+        // emissive strengths, referenced by cell from a scalar property
+        { "kind": "float", "min": 0, "max": "none", "values": [1, 5] },
       ],
 
       "palettes": [
-        // value pool 1 is bound twice here, to metallicFactor and roughnessFactor
+        // value pool 1 is bound twice, to metallicFactor and roughnessFactor
         {
-          "bindings": [
-            { "attribute": "baseColorFactor", "poolRef": 0 },
-            { "attribute": "metallicFactor", "poolRef": 1 },
-            { "attribute": "roughnessFactor", "poolRef": 1 },
-            { "attribute": "emissiveFactor", "poolRef": 2 },
+          "arrayProperties": [
+            { "name": "baseColorFactor", "valuePool": 0 },
+            { "name": "metallicFactor", "valuePool": 1 },
+            { "name": "roughnessFactor", "valuePool": 1 },
+            { "name": "emissiveFactor", "valuePool": 2 },
           ],
 
-          // column-major, one column per binding. Material 2 resolves to
-          // baseColorFactor #0000FFFF, metallicFactor 0.5, roughnessFactor 0,
-          // emissiveFactor #FF6600.
+          "scalarProperties": [],
+
+          // column-major, one column per array property. Material 2 resolves
+          // to baseColorFactor #0000FFFF, metallicFactor 0.5, roughnessFactor
+          // 0, emissiveFactor #FF6600.
           "materials": [
             [0, 1, 2],
             [2, 0, 1],
@@ -506,8 +580,20 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 
         // base color authored in linear form instead of hex
         {
-          "bindings": [{ "attribute": "baseColorFactor", "poolRef": 3 }],
+          "arrayProperties": [{ "name": "baseColorFactor", "valuePool": 3 }],
+          "scalarProperties": [],
           "materials": [[0]],
+        },
+
+        // one scalar property and no materials, so a layer referencing it is
+        // never sampled: it supplies one emissive strength to the whole
+        // object and carries no channel
+        {
+          "arrayProperties": [],
+          "scalarProperties": [
+            { "name": "emissiveStrength", "valuePool": 4, "valueIndex": 1 },
+          ],
+          "materials": [],
         },
       ],
 
@@ -528,11 +614,12 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
             ],
           },
 
-          // two layers: palette 0, then palette 1. Layers do not merge; the app
-          // decides what two baseColorFactor layers mean.
-          "layerPaletteRefs": [0, 1],
+          // two layers, back to front: palette 0, then palette 1. Both are
+          // sampled and both bind baseColorFactor, so the later layer
+          // supplies it; the other properties come from layer 0.
+          "layers": [0, 1],
 
-          // one channel per layer, each a material index per voxel:
+          // one channel per sampled layer, each a material index per voxel:
           //   layer 0 -> materials 0, 2 of palette 0
           //   layer 1 -> materials 0, 0 of palette 1
           "voxelSamples": {
@@ -549,9 +636,12 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
           "bounds": [1, 1, 1],
           "origin": [0, 0, 0],
           "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
-          // single layer
-          "layerPaletteRefs": [1],
-          "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
+          // the same shared palette as Object A, plus this object's own
+          // emissive knob: palette 2 has no materials, so it is never
+          // sampled and supplies emissiveStrength 5 to the whole object.
+          // voxelSamples has one channel, for palette 0.
+          "layers": [0, 2],
+          "voxelSamples": { "encoding": "raw-json", "data": [[2]] },
         },
       ],
 
@@ -612,7 +702,7 @@ interface Main {
 
 // The runtime scene.
 interface RuntimeState {
-  // shared value pools, referenced by index from palette bindings
+  // shared value pools, referenced by index from palette properties
   valuePools: ValuePool[];
 
   palettes: Palette[];
@@ -657,9 +747,11 @@ interface VoxelObject {
 
   voxelPositions: PositionBlock;
 
-  // palette indices, one per layer (see Objects). Layers are independent
-  // material channels; the format defines no merge across them.
-  layerPaletteRefs: number[];
+  // palette indices, ordered back to front; each layer supplies all of its
+  // palette's properties and later layers override earlier ones. A layer is
+  // sampled iff its palette has materials (M > 0); each sampled layer
+  // carries one voxelSamples channel (see Objects)
+  layers: number[];
 
   voxelSamples: SampleBlock;
 }
@@ -684,38 +776,58 @@ type PositionBlock =
   | { encoding: "hilbert-delta-varint-base64"; data: string };
 
 type SampleBlock =
-  // One channel per layer (in `layerPaletteRefs` order): that layer's material index for
-  // every voxel, in voxel order.
+  // One channel per sampled layer (in `layers` order): that layer's material
+  // index for every voxel, in voxel order.
   | { encoding: "raw-json"; data: number[][] }
-  // One channel per layer: a flat run stream [value1, count1, value2, count2, ...].
+  // One channel per sampled layer: a flat run stream
+  // [value1, count1, value2, count2, ...].
   | { encoding: "rle-json"; data: number[][] }
-  // One channel per layer: each voxel's material index bit-packed at width
-  // b = max(1, bitLength(M - 1)) for that layer's palette material count M,
-  // MSB-first, base64-encoded (same packing as the bitmap-base64 position encoding).
+  // One channel per sampled layer: each voxel's material index bit-packed at
+  // width b = max(1, bitLength(M - 1)) for that layer's palette material
+  // count M, MSB-first, base64-encoded (same packing as the bitmap-base64
+  // position encoding).
   | { encoding: "packed-base64"; data: string[] };
 
 // ## Palettes
 
-// A palette binds attribute names to value pools, then stores its materials
-// column-major: one inner array per binding, in binding order, each of length
-// M, the material count. A voxel samples material m; attribute
-// bindings[b].attribute takes
-// valuePools[bindings[b].poolRef].values[materials[b][m]].
-// With no bindings, materials is instead one empty array per material, so M
-// survives as materials.length and every attribute resolves to its default.
+// A palette binds property names to value pools, then stores its materials
+// column-major: one inner array per array property, in property order, each
+// of length M, the material count. A voxel samples material m; property
+// arrayProperties[b].name takes
+// valuePools[arrayProperties[b].valuePool].values[materials[b][m]], and each
+// scalar property takes valuePools[valuePool].values[valueIndex], one value
+// for the whole palette. With no array properties, materials is instead one
+// empty array per material, so M survives as materials.length. Layers apply
+// in `layers` order; each property takes its value from the last layer that
+// supplies it.
 interface Palette {
-  bindings: Binding[];
+  arrayProperties: ArrayProperty[];
+
+  scalarProperties: ScalarProperty[];
 
   materials: number[][];
 }
 
-// One attribute-to-pool binding; fixes one column of materials.
-interface Binding {
-  // attribute name (see Attributes); advisory, unknown names ignored
-  attribute: string;
+// One property bound to a whole pool; fixes one column of materials.
+interface ArrayProperty {
+  // property name (see Properties); advisory, unknown names ignored
+  name: string;
 
   // index into RuntimeState.valuePools
-  poolRef: number;
+  valuePool: number;
+}
+
+// One property pinned to a single pool cell, one value for the whole
+// palette.
+interface ScalarProperty {
+  // property name (see Properties); advisory, unknown names ignored
+  name: string;
+
+  // index into RuntimeState.valuePools
+  valuePool: number;
+
+  // index into valuePools[valuePool].values
+  valueIndex: number;
 }
 
 // A shared pool of values, all of one shape given by kind, each kind's values

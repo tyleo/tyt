@@ -48,6 +48,11 @@ here, not in the spec commit.
       whole format; the bindings' field, the Attributes section retitled
       Properties, and the glTF and Value Pool Kinds table headers (README
       decision 11).
+- [x] Owner review 2026-07-17, during the phase 2 review: rename to plain
+      fields; `arrayBindings` / `scalarBindings` become `arrayProperties` /
+      `scalarProperties`, and entry fields are `name` / `valuePool` /
+      `valueIndex`, replacing `property` / `poolRef` / `valueRef` (README
+      decision 12).
 - [x] Fold each resolution into format-design.md (drop its `[OPEN n]`
       marker) and move it to the README's decisions with rationale.
 
@@ -55,7 +60,7 @@ Gate: the owner approves format-design.md. Passed 2026-07-16.
 
 ## Phase 2: spec
 
-- [ ] Rewrite
+- [x] Rewrite
       `projects/voxel-codecs/voxj/docs/voxel-json-file-format.md` to the
       approved design in one commit. No code changes. Every touched section:
       Objects, the Sample Encodings intro and encoding items and example
@@ -64,16 +69,18 @@ Gate: the owner approves format-design.md. Passed 2026-07-16.
       subsection, Attributes (retitled Properties), Validation rules 5, 6,
       8, 10, and 11, Versioning item 4, the File Example, and the
       TypeScript schema.
-- [ ] Sweep the whole spec for stale `bindings` / `layerPaletteRefs` /
-      `attribute` / per-layer wording the section list missed.
+- [x] Sweep the whole spec for stale `bindings` / `layerPaletteRefs` /
+      `attribute` / per-layer wording the section list missed. (Also
+      Versioning item 5 and the glTF conventions intro, color, and emission
+      paragraphs.)
 
 Gate: the spec matches format-design.md; the reference file stops being
-authoritative.
+authoritative. Passed 2026-07-17.
 
 ## Phase 3: `voxj` (coarse)
 
-- [ ] Rewrite `VoxjPalette` to array plus scalar bindings with `property`
-      fields; add the scalar-binding type; rename
+- [ ] Rewrite `VoxjPalette` to array plus scalar properties with `name` /
+      `value_pool` / `value_index` fields; add the scalar-property type; rename
       `VoxjObject.layer_palette_refs` to the ordered `layers` list; keep
       `deny_unknown_fields` closure; update doc comments to the new framing;
       in-crate round-trip coverage.
@@ -82,7 +89,7 @@ authoritative.
 
 - [ ] Re-derive the material-count and channel-arity paths from sampled
       layers (palette `M > 0`); rename `VoxjDecodedObject` fields; rework the
-      validation rules (closures, 10.2 union uniqueness, `valueRef` range,
+      validation rules (closures, 10.2 union uniqueness, `valueIndex` range,
       the sampled-layer channel rule) as named checks; regenerate inline
       fixtures.
 

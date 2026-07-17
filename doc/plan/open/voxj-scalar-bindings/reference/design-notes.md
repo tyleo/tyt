@@ -55,6 +55,15 @@ Rejected alternatives and the strain noticed while drafting
 12. **A channel for every layer**, degenerate for scalar-only palettes.
     Vestigial data, and it resurrects the `M = 0` carve-out in rule 11 that
     decision 3 exists to avoid.
+13. **Binding-flavored names**, `arrayBindings` / `scalarBindings` with
+    `{ property, poolRef }` / `{ property, poolRef, valueRef }` entries, the
+    shape that first closed open question 2. Renamed in owner review
+    2026-07-17: an entry is the property itself, so the lists are
+    `arrayProperties` / `scalarProperties` and the key field is `name`;
+    reference fields name what they point at (`valuePool`), like `layers`
+    and glTF's `"mesh": 0`, and `valueIndex` matches the materials rules'
+    "value-index". Bare `value` was rejected along the way: over a numeric
+    pool an index reads as the bound value itself.
 
 ## Strain noticed while drafting
 
@@ -63,13 +72,14 @@ Rejected alternatives and the strain noticed while drafting
    included, supplying nothing; the format does not police pointlessness.
 2. **Value-pool liveness.** A pool cell referenced only by a scalar binding
    must keep its pool alive: voxcore's gc, remap, and liveness must treat
-   `valueRef` exactly like a materials cell, and `vxl` reporting that counts
+   `valueIndex` exactly like a materials cell, and `vxl` reporting that counts
    pool references gains a second source.
 3. **Rust and TypeScript naming ripple.** Splitting the spec's `Binding` into
-   `ArrayBinding` and `ScalarBinding` implies renaming `VoxjPaletteBinding`
-   and voxcore's `VoxPaletteBinding` (and its brand type); the field names
-   are settled (`array*` / `scalar*`), and the final Rust type names get
-   settled in the code phases.
+   `ArrayProperty` and `ScalarProperty` implies renaming `VoxjPaletteBinding`
+   and voxcore's `VoxPaletteBinding` (and its brand type); the wire names are
+   settled (`arrayProperties` / `scalarProperties`, `name` / `valuePool` /
+   `valueIndex`), and the final Rust type names get settled in the code
+   phases.
 4. **Converter scope is deliberately left at parity.** The format change does
    not require any converter to emit scalar bindings; glTF's
    `KHR_materials_emissive_strength` is the obvious candidate (a shared

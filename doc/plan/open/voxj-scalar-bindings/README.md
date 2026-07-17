@@ -1,11 +1,13 @@
 # voxj scalar bindings: palette-scoped values and scalar layers
 
-Status: **open.** Nothing has landed; this document records a design settled
-with the owner, the former [open questions](#open-questions) included. The
-owner approved [reference/format-design.md](reference/format-design.md), the
-complete target spec text, on 2026-07-16, closing phase 1; the next step is
-the phase 2 spec commit. The executable steps live in
-[checklist.md](checklist.md).
+Status: **open.** This document records a design settled with the owner, the
+former [open questions](#open-questions) included. The owner approved
+[reference/format-design.md](reference/format-design.md), the complete target
+spec text, on 2026-07-16, closing phase 1, and the phase 2 spec commit landed
+2026-07-17, so the
+[spec](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md)
+is now authoritative; the next step is phase 3, the `voxj` crate. The
+executable steps live in [checklist.md](checklist.md).
 
 ## Motivation
 
@@ -31,34 +33,35 @@ the full replacement text is in
 
 ### Palette
 
-`bindings` is renamed `arrayBindings`; its shape (`{ property, poolRef }`,
-one `materials` column per entry) is otherwise unchanged, with the `attribute`
-field renamed `property` (decision 11). A new required sibling
-`scalarBindings` holds `{ property, poolRef, valueRef }` entries, each
-pinning a property to the single value `valuePools[poolRef].values[valueRef]`
-for the whole palette; scalar bindings have no `materials` column. A palette
-may carry array bindings, scalar bindings, both, or neither. The `materials` rules are
-untouched: columns are 1:1 with `arrayBindings` in order; when `arrayBindings`
-is empty, `materials` is one empty array per material and
+`bindings` is renamed `arrayProperties`; its shape (`{ name, valuePool }`,
+one `materials` column per entry) is otherwise unchanged: the `attribute`
+field is renamed `name` and `poolRef` is renamed `valuePool` (decisions 11
+and 12). A new required sibling `scalarProperties` holds
+`{ name, valuePool, valueIndex }` entries, each pinning a property to the
+single value `valuePools[valuePool].values[valueIndex]` for the whole
+palette; scalar properties have no `materials` column. A palette may carry
+array properties, scalar properties, both, or neither. The `materials` rules
+are untouched: columns are 1:1 with `arrayProperties` in order; when
+`arrayProperties` is empty, `materials` is one empty array per material and
 `M = materials.length`, so `materials: []` means `M = 0`.
 
 ### Object
 
 `layerPaletteRefs` is renamed `layers`: still one array of palette indices,
 now ordered back to front, repeats included. Each layer supplies all
-of its palette's bindings: scalar bindings one value for the whole object,
-array bindings one value per voxel. A layer is sampled iff its palette's
+of its palette's properties: scalar properties one value for the whole
+object, array properties one value per voxel. A layer is sampled iff its palette's
 material count `M > 0`; `voxelSamples` carries exactly one channel per sampled
 layer, in `layers` order, so a scalar-only palette (`materials: []`) carries
 no channel.
 
 ### Resolution
 
-1. Each layer supplies its palette's bindings: a scalar binding supplies its
-   property from `pool.values[valueRef]`, one value for the whole object; an
-   array binding reads the voxel's sample `m` from the layer's channel and
-   takes `pool.values[materials[b][m]]`. An unsampled layer supplies only its
-   scalar bindings.
+1. Each layer supplies its palette's properties: a scalar property supplies
+   its name from `pool.values[valueIndex]`, one value for the whole object;
+   an array property reads the voxel's sample `m` from the layer's channel
+   and takes `pool.values[materials[b][m]]`. An unsampled layer supplies
+   only its scalar properties.
 2. Layers override canonically: contributions apply in `layers` order, back
    to front, and each property takes its value from the last layer that
    supplies it. The author orders overrides freely: a scalar layer listed
@@ -67,50 +70,50 @@ no channel.
 
 ### Semantics
 
-A scalar binding wires a property to a value; any arithmetic, such as
+A scalar property wires a name to a value; any arithmetic, such as
 `emissiveStrength` multiplying `emissiveFactor`, comes from the property
-vocabulary. Within one palette a property may appear in `arrayBindings` or
-`scalarBindings`, never both, so a single layer never conflicts with itself.
-"Scalar" means single-valued: a scalar binding may reference a cell of any
-pool kind.
+vocabulary. Within one palette a name may appear in `arrayProperties` or
+`scalarProperties`, never both, so a single layer never conflicts with
+itself. "Scalar" means single-valued: a scalar property may reference a cell
+of any pool kind.
 
 ### Validation deltas
 
 All in existing rule shapes:
 
-1. Palette closed over `{ arrayBindings, scalarBindings, materials }`; scalar
-   binding closed over exactly `{ property, poolRef, valueRef }`; rules
-   10.3/10.4 reworded from `bindings` to `arrayBindings`, content otherwise
-   untouched, including `materials: []` meaning `M = 0`.
-2. Rule 10.2 extends: no duplicate property across `arrayBindings` union
-   `scalarBindings` of one palette.
-3. `scalarBindings[].poolRef` indexes `valuePools`; `valueRef` is an integer
-   in `[0, pool.values.length)`, the same check as a materials cell.
+1. Palette closed over `{ arrayProperties, scalarProperties, materials }`;
+   scalar property closed over exactly `{ name, valuePool, valueIndex }`;
+   rules 10.3/10.4 reworded from `bindings` to `arrayProperties`, content
+   otherwise untouched, including `materials: []` meaning `M = 0`.
+2. Rule 10.2 extends: no duplicate `name` across `arrayProperties` union
+   `scalarProperties` of one palette.
+3. `scalarProperties[].valuePool` indexes `valuePools`; `valueIndex` is an
+   integer in `[0, pool.values.length)`, the same check as a materials cell.
 4. Object closed over the new key; `layers` a required array of palette
    indices, in range; rule 11 rewords to one channel per sampled layer, where
    a layer is sampled iff its palette's `M > 0`. An `M = 0` palette is never
    sampled, so the channel rules need no `M = 0` case.
 
-Unknown property names in `scalarBindings` are ignored, like `arrayBindings`
-(advisory vocabulary). Neither layer overlap nor repeated layer references
+Unknown property names in `scalarProperties` are ignored, like
+`arrayProperties` (advisory vocabulary). Neither layer overlap nor repeated layer references
 are validated: the override order gives both their meaning, and the format
-does not police pointlessness (an empty `scalarBindings` or a fully shadowed
-layer is legal).
+does not police pointlessness (an empty `scalarProperties` or a fully
+shadowed layer is legal).
 
 ## Usage idioms
 
 The spec documents these in a Sharing Idioms subsection:
 
-1. All materials of a palette share a value: `scalarBindings` on that palette;
-   one `layers` entry supplies both arities.
-2. Per-object variation over a shared palette: small one-scalar-binding
+1. All materials of a palette share a value: `scalarProperties` on that
+   palette; one `layers` entry supplies both arities.
+2. Per-object variation over a shared palette: small one-scalar-property
    palettes with no materials, listed after the shared palette; switching an
    object's knob is one integer.
 3. Single source of truth: the pool cell; editing it updates every referencing
    palette.
-4. Per-voxel escape hatch: move the property from `scalarBindings` to
-   `arrayBindings` with a real column and channel.
-5. Whole-object override: a scalar-binding palette listed after an array
+4. Per-voxel escape hatch: move the property from `scalarProperties` to
+   `arrayProperties` with a real column and channel.
+5. Whole-object override: a scalar-property palette listed after an array
    layer replaces its per-voxel values for that property.
 
 ## Decisions
@@ -121,11 +124,11 @@ are in [reference/design-notes.md](reference/design-notes.md).
 1. **Single supply path.** Values reach materials only through palettes, and
    objects only reference palettes. No second reference form; a layer-attached
    constant ref was rejected for exactly this.
-2. **Symmetry names the arity.** `arrayBindings` / `scalarBindings` carry
-   per-voxel sampled data and palette-scoped values respectively; the names
-   state the binding's arity, confirmed as final in owner review 2026-07-15
-   (closed open question 2). The object side is the single `layers` list
-   (decision 10).
+2. **Symmetry names the arity.** `arrayProperties` / `scalarProperties`
+   carry per-voxel sampled data and palette-scoped values respectively; the
+   names state the entry's arity (closed open question 2 as `arrayBindings`
+   / `scalarBindings`, owner review 2026-07-15; renamed by decision 12). The
+   object side is the single `layers` list (decision 10).
 3. **No vestigial data.** A layer whose palette has no materials is never
    sampled and carries no channel, so geometry edits never touch scalar
    machinery and nothing information-free is stored. The sampled-iff-`M > 0`
@@ -136,10 +139,10 @@ are in [reference/design-notes.md](reference/design-notes.md).
 5. **Fixed values, not modifiers.** The format wires properties to values;
    any modifier arithmetic lives in the property vocabulary.
 6. **Just palettes.** There is no palette classification: a palette may carry
-   array bindings, scalar bindings, both, or neither, and `layers` may
-   reference any palette, repeats included. A layer supplies all of its palette's bindings.
-   Replaces the earlier scalar-palette shape rule and, with decision 10, the
-   one-arity-per-list rule (owner reviews, 2026-07-15).
+   array properties, scalar properties, both, or neither, and `layers` may
+   reference any palette, repeats included. A layer supplies all of its
+   palette's properties. Replaces the earlier scalar-palette shape rule and,
+   with decision 10, the one-arity-per-list rule (owner reviews, 2026-07-15).
 7. **Canonical override.** Layers combine by overriding, not app-defined
    merge: contributions apply in `layers` order, back to front, and each
    property takes its value from the last layer that supplies it. The author
@@ -149,7 +152,7 @@ are in [reference/design-notes.md](reference/design-notes.md).
    question 1).
 8. **`M = 0` means unsampled.** A palette with no materials is never sampled:
    a layer referencing it carries no channel and supplies only scalar
-   bindings. Replaces the earlier vacuous-legality posture, moot now that
+   properties. Replaces the earlier vacuous-legality posture, moot now that
    channel count derives from palette shape (owner review 2026-07-15; revised
    from the first closure of open question 3).
 9. **Version stays `1`.** The format changes in place, with no compatibility
@@ -159,18 +162,33 @@ are in [reference/design-notes.md](reference/design-notes.md).
     channel per sampled layer rather than a stated count. Mixed palettes are
     listed once, and the derived rule costs only the palette dereference
     rule 11 already does (owner review 2026-07-15).
-11. **Properties, not attributes.** The binding field and concept are named
-    `property`, and the spec's Attributes section retitles to Properties.
-    glTF, the recommended vocabulary, reserves attribute for per-vertex mesh
-    data and calls material parameters properties, so `attribute` invited
-    collision anywhere materials and meshes are discussed together (owner
-    review 2026-07-16).
+11. **Properties, not attributes.** The concept is named property, and the
+    spec's Attributes section retitles to Properties. glTF, the recommended
+    vocabulary, reserves attribute for per-vertex mesh data and calls
+    material parameters properties, so `attribute` invited collision
+    anywhere materials and meshes are discussed together (owner review
+    2026-07-16; the entry field, first named `property`, became `name` with
+    decision 12).
+12. **Plain-named fields.** The palette lists are `arrayProperties` /
+    `scalarProperties`, their entries `{ name, valuePool }` and
+    `{ name, valuePool, valueIndex }`. An entry is the property itself, so
+    its key field is `name` and the binding noun drops as a second concept.
+    Reference fields name what they point at with no `Ref` marker, like
+    `layers`, `childNodes`, and glTF's `"mesh": 0`. Bare `value` was
+    rejected: over a numeric pool an index reads as the bound value itself,
+    while `valueIndex` matches the "value-index" the materials rules already
+    use (owner review 2026-07-17; revises the `arrayBindings` /
+    `scalarBindings` and `property` / `poolRef` / `valueRef` names of
+    decisions 2 and 11).
 
 ## Open questions
 
 None. All four closed in owner review 2026-07-15; a second review the same
 day merged the layer lists into one (decision 10), revising decisions 3 and
-6 to 8, and a review 2026-07-16 renamed attribute to property (decision 11).
+6 to 8, a review 2026-07-16 renamed attribute to property (decision 11), and
+a review 2026-07-17 renamed the palette lists and fields to
+`arrayProperties` / `scalarProperties` and `name` / `valuePool` /
+`valueIndex` (decision 12).
 
 ## Milestones
 
