@@ -55,6 +55,12 @@ material count `M > 0`; `voxelSamples` carries exactly one channel per sampled
 layer, in `layers` order, so a scalar-only palette (`materials: []`) carries
 no channel.
 
+### Hierarchy
+
+`hierarchyNodes` is renamed `nodes` and `rootHierarchyNodes` is renamed
+`rootNodes` (decision 13); the node shape and `childNodes` / `childObjects`
+are untouched.
+
 ### Resolution
 
 1. Each layer supplies its palette's properties: a scalar property supplies
@@ -180,6 +186,12 @@ are in [reference/design-notes.md](reference/design-notes.md).
     use (owner review 2026-07-17; revises the `arrayBindings` /
     `scalarBindings` and `property` / `poolRef` / `valueRef` names of
     decisions 2 and 11).
+13. **One name for nodes.** The wire fields are `nodes` and `rootNodes`,
+    renamed from `hierarchyNodes` and `rootHierarchyNodes`. voxj has one
+    node kind, `childNodes` already used the short name, and glTF calls the
+    array `nodes`, so the long forms named the same entity two ways. The
+    prose term hierarchy node and the TS `HierarchyNode` interface stay
+    (owner review 2026-07-17).
 
 ## Open questions
 
@@ -188,7 +200,8 @@ day merged the layer lists into one (decision 10), revising decisions 3 and
 6 to 8, a review 2026-07-16 renamed attribute to property (decision 11), and
 a review 2026-07-17 renamed the palette lists and fields to
 `arrayProperties` / `scalarProperties` and `name` / `valuePool` /
-`valueIndex` (decision 12).
+`valueIndex` (decision 12) and the hierarchy fields to `nodes` /
+`rootNodes` (decision 13).
 
 ## Milestones
 

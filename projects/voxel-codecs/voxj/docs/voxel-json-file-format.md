@@ -41,11 +41,11 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
         /* ... */
       ],
 
-      "hierarchyNodes": [
+      "nodes": [
         /* ... */
       ],
 
-      "rootHierarchyNodes": [
+      "rootNodes": [
         /* ... */
       ],
     },
@@ -63,7 +63,7 @@ A voxel json file is a single JSON document. It is stored in one of two intercha
 }
 ```
 
-The runtime scene lives under `main.runtimeState`: value pools, palettes, objects, and hierarchy nodes are referenced by their array indices, and `rootHierarchyNodes` lists indices into `hierarchyNodes`. `editState` (optional) and `ext` are siblings of `runtimeState`. `editState` carries per-object editor margin aligned to the runtime objects (see [Edit State](#edit-state)); `ext` is an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
+The runtime scene lives under `main.runtimeState`: value pools, palettes, objects, and hierarchy nodes are referenced by their array indices, and `rootNodes` lists indices into `nodes`. `editState` (optional) and `ext` are siblings of `runtimeState`. `editState` carries per-object editor margin aligned to the runtime objects (see [Edit State](#edit-state)); `ext` is an optional namespace for user-defined data that the core format ignores (see [Extensions](#extensions)).
 
 ## Coordinate System
 
@@ -402,12 +402,12 @@ Nodes form a DAG: a node may have multiple parents but no cycles. Each reference
 A transform has three fields: `position` is a possibly-fractional `[x, y, z]`, `rotation` is a unit quaternion `[x, y, z, w]`, and `scale` is `[x, y, z]`.
 
 1. A transform composes as `Translation * Rotation * Scale`.
-2. A node's world transform is `parentWorld * nodeLocal`; a root, listed in `rootHierarchyNodes`, has world = local. Reached through multiple parents, a node is placed once per path; this is instancing.
+2. A node's world transform is `parentWorld * nodeLocal`; a root, listed in `rootNodes`, has world = local. Reached through multiple parents, a node is placed once per path; this is instancing.
 3. An object is placed at the world transform of the node referencing it. A voxel at grid position `p` sits at node-local position `origin + p`, so its world position is the node's world transform applied to `origin + p`.
 4. `rotation` must be a unit quaternion; consumers may renormalize within a small tolerance (see [Validation](#validation)).
 5. `scale` is per-axis; a negative component mirrors that axis and flips winding/handedness. A zero component is degenerate and invalid (see [Validation](#validation)).
 
-The scene's roots are exactly the nodes listed in `rootHierarchyNodes`. A node that is neither listed as a root nor referenced as a child is unplaced and does not render, so a file may hold library nodes that are defined without being placed. The format describes placement only; how overlapping or sub-voxel placements are resolved, merged, or rasterized is consumer-defined.
+The scene's roots are exactly the nodes listed in `rootNodes`. A node that is neither listed as a root nor referenced as a child is unplaced and does not render, so a file may hold library nodes that are defined without being placed. The format describes placement only; how overlapping or sub-voxel placements are resolved, merged, or rasterized is consumer-defined.
 
 ## Edit State
 
@@ -478,10 +478,10 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 6. All indices are in range:
    1. each object `layers` entry indexes `runtimeState.palettes`.
    2. each array and scalar property `valuePool` indexes `runtimeState.valuePools`.
-   3. each `childNodes` entry indexes `runtimeState.hierarchyNodes`.
+   3. each `childNodes` entry indexes `runtimeState.nodes`.
    4. each `childObjects` entry indexes `runtimeState.objects`.
-   5. each `rootHierarchyNodes` entry indexes `runtimeState.hierarchyNodes`.
-7. References are unique: no hierarchy node lists the same child node or the same child object twice, and no node appears in `rootHierarchyNodes` twice.
+   5. each `rootNodes` entry indexes `runtimeState.nodes`.
+7. References are unique: no hierarchy node lists the same child node or the same child object twice, and no node appears in `rootNodes` twice.
 8. **Objects**, per object:
    1. `layers` is present, an array of integers, possibly empty.
    2. `voxelPositions` and `voxelSamples` are present; the Positions and Samples rules check their structure.
@@ -645,7 +645,7 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
         },
       ],
 
-      "hierarchyNodes": [
+      "nodes": [
         {
           "name": "parent-1",
 
@@ -674,7 +674,7 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
         },
       ],
 
-      "rootHierarchyNodes": [0],
+      "rootNodes": [0],
     },
   },
 }
@@ -709,10 +709,10 @@ interface RuntimeState {
 
   objects: VoxelObject[];
 
-  hierarchyNodes: HierarchyNode[];
+  nodes: HierarchyNode[];
 
-  // indices into hierarchyNodes; the scene's roots
-  rootHierarchyNodes: number[];
+  // indices into nodes; the scene's roots
+  rootNodes: number[];
 }
 
 // Optional editor state: one edit grid per runtime object, aligned by index.
@@ -897,7 +897,7 @@ interface HierarchyNode {
 
   transform: Transform;
 
-  // indices into RuntimeState.hierarchyNodes (DAG, no cycles)
+  // indices into RuntimeState.nodes (DAG, no cycles)
   childNodes: number[];
 
   // indices into RuntimeState.objects

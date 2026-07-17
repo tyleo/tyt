@@ -31,7 +31,11 @@ property, not binding; reference fields name what they point at, like
 `layers` and glTF's `"mesh": 0`, and `valueIndex` matches the "value-index"
 the materials rules already use (README decision 12). The text below is
 updated in place. The same review dropped the trailing validation note,
-which only restated facts the Objects section and rule 11 already state.
+which only restated facts the Objects section and rule 11 already state,
+and renamed the hierarchy fields: `hierarchyNodes` becomes `nodes` and
+`rootHierarchyNodes` becomes `rootNodes`, matching `childNodes` and glTF's
+`nodes`; the prose term hierarchy node and the TypeScript `HierarchyNode`
+interface are unchanged (README decision 13).
 
 ## Objects
 
@@ -348,9 +352,9 @@ all other rules, and rule 11's per-encoding sub-items are unchanged.
    1. each object `layers` entry indexes `runtimeState.palettes`.
    2. each array and scalar property `valuePool` indexes
       `runtimeState.valuePools`.
-   3. each `childNodes` entry indexes `runtimeState.hierarchyNodes`.
+   3. each `childNodes` entry indexes `runtimeState.nodes`.
    4. each `childObjects` entry indexes `runtimeState.objects`.
-   5. each `rootHierarchyNodes` entry indexes `runtimeState.hierarchyNodes`.
+   5. each `rootNodes` entry indexes `runtimeState.nodes`.
 8. **Objects**, per object:
    1. `layers` is present, an array of integers, possibly empty.
    2. `voxelPositions` and `voxelSamples` are present; the Positions and
@@ -502,7 +506,7 @@ Replaces the example document.
         },
       ],
 
-      "hierarchyNodes": [
+      "nodes": [
         {
           "name": "parent-1",
 
@@ -531,7 +535,7 @@ Replaces the example document.
         },
       ],
 
-      "rootHierarchyNodes": [0],
+      "rootNodes": [0],
     },
   },
 }

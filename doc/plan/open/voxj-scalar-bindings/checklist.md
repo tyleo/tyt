@@ -53,6 +53,10 @@ here, not in the spec commit.
       `scalarProperties`, and entry fields are `name` / `valuePool` /
       `valueIndex`, replacing `property` / `poolRef` / `valueRef` (README
       decision 12).
+- [x] Owner review 2026-07-17, post-spec-commit: rename `hierarchyNodes` /
+      `rootHierarchyNodes` to `nodes` / `rootNodes` (README decision 13),
+      and drop the trailing validation note as restating the Objects
+      section and rule 11.
 - [x] Fold each resolution into format-design.md (drop its `[OPEN n]`
       marker) and move it to the README's decisions with rationale.
 
@@ -81,7 +85,8 @@ authoritative. Passed 2026-07-17.
 
 - [ ] Rewrite `VoxjPalette` to array plus scalar properties with `name` /
       `value_pool` / `value_index` fields; add the scalar-property type; rename
-      `VoxjObject.layer_palette_refs` to the ordered `layers` list; keep
+      `VoxjObject.layer_palette_refs` to the ordered `layers` list; rename
+      the hierarchy fields to `nodes` / `root_nodes`; keep
       `deny_unknown_fields` closure; update doc comments to the new framing;
       in-crate round-trip coverage.
 
