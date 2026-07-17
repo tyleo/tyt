@@ -27,8 +27,8 @@ Iterate [reference/format-design.md](reference/format-design.md) with the
 owner until approved. Nothing else starts first; the format gets perfect
 here, not in the spec commit.
 
-- [ ] Owner reads the draft; fold in wording and structure edits until the
-      text stands on its own.
+- [x] Owner reads the draft; fold in wording and structure edits until the
+      text stands on its own. (Approved 2026-07-16 with no edits.)
 - [x] Resolve open question 1, override order: layers combine by overriding
       in `layers` order, back to front; each property takes its value from
       the last layer that supplies it. (First closed as `scalarLayers` then
@@ -51,7 +51,7 @@ here, not in the spec commit.
 - [x] Fold each resolution into format-design.md (drop its `[OPEN n]`
       marker) and move it to the README's decisions with rationale.
 
-Gate: the owner approves format-design.md.
+Gate: the owner approves format-design.md. Passed 2026-07-16.
 
 ## Phase 2: spec
 

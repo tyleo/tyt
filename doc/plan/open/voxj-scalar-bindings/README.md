@@ -1,10 +1,11 @@
 # voxj scalar bindings: palette-scoped values and scalar layers
 
 Status: **open.** Nothing has landed; this document records a design settled
-with the owner, the former [open questions](#open-questions) included. Phase 1
-iterates [reference/format-design.md](reference/format-design.md), the
-complete target spec text, until the owner approves it; the executable steps
-live in [checklist.md](checklist.md).
+with the owner, the former [open questions](#open-questions) included. The
+owner approved [reference/format-design.md](reference/format-design.md), the
+complete target spec text, on 2026-07-16, closing phase 1; the next step is
+the phase 2 spec commit. The executable steps live in
+[checklist.md](checklist.md).
 
 ## Motivation
 
