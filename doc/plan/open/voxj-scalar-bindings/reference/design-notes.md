@@ -18,10 +18,9 @@ Rejected alternatives and the strain noticed while drafting
    the layer. Works, but adds a second supply path for attribute values
    outside palettes; rejected to keep palettes the only attribute carrier.
 4. **Knob-as-material with a `composes` palette flag**, a format-defined
-   layer merge. Requires cross-layer merge semantics the format deliberately
-   refuses to define, and carries the knob in channel content: a phantom
-   `M = 1` material whose validator-forced uniform channel must track the
-   voxel count.
+   layer merge. Carries the knob in channel content: a phantom `M = 1`
+   material whose validator-forced uniform channel must track the voxel
+   count.
 5. **`M = 0` palettes with an empty-channel carve-out in rule 11.**
    Superseded by the two-list split, which removes the vestigial channel
    structurally instead of by rule exception.
@@ -29,26 +28,48 @@ Rejected alternatives and the strain noticed while drafting
    resolution path-dependent through the instancing DAG and demands
    inheritance rules; out of scope. Nothing in this design forecloses adding
    it later.
-7. **Top-level named constants registry.** Scalar palettes plus their pools
-   are already enumerable; a display name is an editor concern the wire
+7. **Top-level named constants registry.** Scalar-binding palettes plus their
+   pools are already enumerable; a display name is an editor concern the wire
    format does not need.
+8. **Scalar palettes as a palette class** (`arrayBindings: []` plus
+   `materials: []` as the only legal `scalarLayers` target, with dead-data
+   and duplicate-entry rejection). Dropped in owner review 2026-07-15: there
+   are just palettes; a scalar layer uses exactly its palette's scalar
+   bindings, and either layer list may reference any palette, repeats
+   included.
+9. **App-defined cross-layer combination.** The first draft kept today's
+   posture; owner review 2026-07-15 replaced it with a canonical override
+   order, each attribute taken from the last layer that supplies it. (The
+   fixed scalars-then-arrays order it first came with fell with the two-list
+   model, alternative 10.)
+10. **Two layer lists, one arity per list** (`arrayLayers` / `scalarLayers`,
+    the first settled object shape). A mixed palette had to be listed in
+    both lists, and the fixed scalars-then-arrays precedence could not
+    express a whole-object override of a per-voxel value. Replaced in owner
+    review 2026-07-15 by the single ordered `layers` list with channels
+    derived from palette shape (README decision 10).
+11. **An explicit per-layer `sampled` flag** on the single list. Keeps the
+    channel count local to the object but adds a second source of truth that
+    can disagree with the palette's shape; the derived sampled-iff-`M > 0`
+    rule has nothing to disagree with.
+12. **A channel for every layer**, degenerate for scalar-only palettes.
+    Vestigial data, and it resurrects the `M = 0` carve-out in rule 11 that
+    decision 3 exists to avoid.
 
 ## Strain noticed while drafting
 
-1. **Scalar palette is not just "no array bindings".** `arrayBindings: []`
-   with `materials: [[], []]` (`M = 2`, all-default materials) is legal today
-   and stays legal, but is not a scalar palette and cannot sit in
-   `scalarLayers`. The scalar-palette test is `arrayBindings: []` and
-   `materials: []` together; rule 8.2 and the Palettes prose both spell out
-   both halves.
+1. **A fully shadowed layer is legal.** Under the override order a repeated
+   `layers` palette leaves the earlier entry's contributions, channel
+   included, supplying nothing; the format does not police pointlessness.
 2. **Value-pool liveness.** A pool cell referenced only by a scalar binding
    must keep its pool alive: voxcore's gc, remap, and liveness must treat
    `valueRef` exactly like a materials cell, and `vxl` reporting that counts
    pool references gains a second source.
 3. **Rust and TypeScript naming ripple.** Splitting the spec's `Binding` into
    `ArrayBinding` and `ScalarBinding` implies renaming `VoxjPaletteBinding`
-   and voxcore's `VoxPaletteBinding` (and its brand type); the final names
-   follow open question 2 and get settled in the code phases.
+   and voxcore's `VoxPaletteBinding` (and its brand type); the field names
+   are settled (`array*` / `scalar*`), and the final Rust type names get
+   settled in the code phases.
 4. **Converter scope is deliberately left at parity.** The format change does
    not require any converter to emit scalar bindings; glTF's
    `KHR_materials_emissive_strength` is the obvious candidate (a shared
@@ -56,8 +77,16 @@ Rejected alternatives and the strain noticed while drafting
    a capability decision for phase 6, logged in
    [implementation-decisions.md](implementation-decisions.md), not a format
    question.
-5. **An object may carry voxels and only scalar layers.** `arrayLayers: []`
-   with a non-empty position block is legal (it already is today with
-   `layerPaletteRefs: []`); every voxel then takes only scalar contributions
-   and defaults. The draft leaves this implicit since no rule changes; worth
-   an eye during owner review in case it deserves a sentence.
+5. **An object may carry voxels and only unsampled layers.** `layers`
+   referencing only `M = 0` palettes with a non-empty position block is
+   legal (an empty `layers` already is today with `layerPaletteRefs: []`);
+   `voxelSamples` then has no channels, and every voxel takes only scalar
+   contributions and defaults. The draft leaves this implicit since the
+   channel rule covers it; worth an eye during owner review in case it
+   deserves a sentence.
+6. **Channel count is derived.** A reader counts an object's channels by
+   dereferencing each layer's palette, and giving a scalar-only palette its
+   first material changes the channel count of every referencing object.
+   Accepted in owner review 2026-07-15: rule 11 already dereferences each
+   channel's palette for `M`, and `M` edits already invalidate referencing
+   sample blocks (packed widths and index ranges move with `M`).
