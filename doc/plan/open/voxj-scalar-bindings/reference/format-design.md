@@ -54,15 +54,15 @@ the hierarchy node that references it.
 {
   "name": "Object A",
 
-  // [X, Y, Z] size in voxels
+  // `[X, Y, Z]` size in voxels
   "bounds": [1, 1, 1],
 
-  // [X, Y, Z] integer translation from the placing node to the grid's min
-  // corner
+  // `[X, Y, Z]` integer translation from the placing node to the grid's
+  // min corner
   "origin": [0, 0, 0],
   "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
 
-  // layers: palette references, ordered back to front
+  // `layers`: palette references, ordered back to front
   "layers": [0],
   // one channel per sampled layer; each is one material index per voxel
   "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
@@ -202,9 +202,9 @@ row is empty:
   ],
 
   // one row per material, a value-index per array property, in property
-  // order. materials[m][b] is a value-index into the pool bound by
-  // arrayProperties[b]. A voxel samples material m in [0, M); resolve it by
-  // reading across its row:
+  // order. `materials[m][b]` is a value-index into the pool bound by
+  // `arrayProperties[b]`. A voxel samples material `m` in `[0, M)`; resolve
+  // it by reading across its row:
   //   material 0 = {
   //     baseColorFactor: pool0.values[0],
   //     metallicFactor: pool1.values[2]
@@ -290,10 +290,10 @@ strengths:
 
 "objects": [
   // "Lamp A": the shared palette plus its own knob; the knob layer carries
-  // no channel, so voxelSamples has one channel, for palette 0
+  // no channel, so `voxelSamples` has one channel, for palette 0
   { /* ... */ "layers": [0, 1] },
   // "Neon Sign": the same base palette; switching knobs is a one-integer
-  // edit in layers
+  // edit in `layers`
   { /* ... */ "layers": [0, 2] },
 ]
 ```
@@ -401,7 +401,8 @@ Replaces the example document.
           "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
         },
 
-        // one shared float pool, bound by metallicFactor and roughnessFactor
+        // one shared float pool, bound by `metallicFactor` and
+        // `roughnessFactor`
         { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] },
 
         { "kind": "srgb-hex", "values": ["#000000", "#FF6600"] },
@@ -413,7 +414,8 @@ Replaces the example document.
       ],
 
       "palettes": [
-        // value pool 1 is bound twice, to metallicFactor and roughnessFactor
+        // value pool 1 is bound twice, to `metallicFactor` and
+        // `roughnessFactor`
         {
           "arrayProperties": [
             { "name": "baseColorFactor", "valuePool": 0 },
@@ -425,8 +427,8 @@ Replaces the example document.
           "scalarProperties": [],
 
           // one row per material, a value-index per array property. Material
-          // 2 resolves to baseColorFactor #0000FFFF, metallicFactor 0.5,
-          // roughnessFactor 0, emissiveFactor #FF6600.
+          // 2 resolves to `baseColorFactor` #0000FFFF, `metallicFactor` 0.5,
+          // `roughnessFactor` 0, `emissiveFactor` #FF6600.
           "materials": [
             [0, 2, 1, 0],
             [1, 0, 1, 0],
@@ -471,7 +473,7 @@ Replaces the example document.
           },
 
           // two layers, back to front: palette 0, then palette 1. Both are
-          // sampled and both bind baseColorFactor, so the later layer
+          // sampled and both bind `baseColorFactor`, so the later layer
           // supplies it; the other properties come from layer 0.
           "layers": [0, 1],
 
@@ -494,8 +496,8 @@ Replaces the example document.
           "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
           // the same shared palette as Object A, plus this object's own
           // emissive knob: palette 2 has no materials, so it is never
-          // sampled and supplies emissiveStrength 5 to the whole object.
-          // voxelSamples has one channel, for palette 0.
+          // sampled and supplies `emissiveStrength` 5 to the whole object.
+          // `voxelSamples` has one channel, for palette 0.
           "layers": [0, 2],
           "voxelSamples": { "encoding": "raw-json", "data": [[2]] },
         },
@@ -547,19 +549,19 @@ is unchanged.
 
 ---
 
-```typescript
+```ts
 // Pure geometry; placed only by a hierarchy node that references it.
 interface VoxelObject {
   name: string;
 
-  // [X, Y, Z] size in voxels; voxels occupy [0, X) x [0, Y) x [0, Z). Exactly
-  // tight: per-axis the min voxel coordinate is 0 and the bound is the max plus
-  // one; [0, 0, 0] when empty, a point at origin. No margin here (that is
-  // editState). Required to decode bitmap-base64 and
-  // hilbert-delta-varint-base64.
+  // `[X, Y, Z]` size in voxels; voxels occupy `[0, X) x [0, Y) x [0, Z)`.
+  // Exactly tight: per-axis the min voxel coordinate is 0 and the bound is
+  // the max plus one; `[0, 0, 0]` when empty, a point at origin. No margin
+  // here (that is `editState`). Required to decode `bitmap-base64` and
+  // `hilbert-delta-varint-base64`.
   bounds: Vec3;
 
-  // [X, Y, Z] integer translation from the placing node to the grid's min
+  // `[X, Y, Z]` integer translation from the placing node to the grid's min
   // corner. Does not affect the voxel encodings.
   origin: Vec3;
 
@@ -567,8 +569,8 @@ interface VoxelObject {
 
   // palette indices, ordered back to front; each layer supplies all of its
   // palette's properties and later layers override earlier ones. A layer is
-  // sampled iff its palette has materials (M > 0); each sampled layer
-  // carries one voxelSamples channel (see Objects)
+  // sampled iff its palette has materials (`M > 0`); each sampled layer
+  // carries one `voxelSamples` channel (see Objects)
   layers: number[];
 
   voxelSamples: SampleBlock;
@@ -579,24 +581,24 @@ type SampleBlock =
   // index for every voxel, in voxel order.
   | { encoding: "raw-json"; data: number[][] }
   // One channel per sampled layer: a flat run stream
-  // [value1, count1, value2, count2, ...].
+  // `[value1, count1, value2, count2, ...]`.
   | { encoding: "rle-json"; data: number[][] }
   // One channel per sampled layer: each voxel's material index bit-packed at
-  // width b = max(1, bitLength(M - 1)) for that layer's palette material
-  // count M, MSB-first, base64-encoded (same packing as the bitmap-base64
-  // position encoding).
+  // width `b = max(1, bitLength(M - 1))` for that layer's palette material
+  // count `M`, MSB-first, base64-encoded (same packing as the
+  // `bitmap-base64` position encoding).
   | { encoding: "packed-base64"; data: string[] };
 
 // ## Palettes
 
 // A palette binds property names to value pools, then lists its materials:
 // one row per material, a value-index per array property in property order,
-// so the material count M is materials.length. A voxel samples material m;
-// property arrayProperties[b].name takes
-// valuePools[arrayProperties[b].valuePool].values[materials[m][b]], and each
-// scalar property takes valuePools[valuePool].values[valueIndex], one value
-// for the whole palette. Layers apply in `layers` order; each property takes
-// its value from the last layer that supplies it.
+// so the material count `M` is `materials.length`. A voxel samples material
+// `m`; property `arrayProperties[b].name` takes
+// `valuePools[arrayProperties[b].valuePool].values[materials[m][b]]`, and
+// each scalar property takes `valuePools[valuePool].values[valueIndex]`, one
+// value for the whole palette. Layers apply in `layers` order; each property
+// takes its value from the last layer that supplies it.
 interface Palette {
   arrayProperties: ArrayProperty[];
 
@@ -610,7 +612,7 @@ interface ArrayProperty {
   // property name (see Properties); advisory, unknown names ignored
   name: string;
 
-  // index into RuntimeState.valuePools
+  // index into `RuntimeState.valuePools`
   valuePool: number;
 }
 
@@ -620,10 +622,10 @@ interface ScalarProperty {
   // property name (see Properties); advisory, unknown names ignored
   name: string;
 
-  // index into RuntimeState.valuePools
+  // index into `RuntimeState.valuePools`
   valuePool: number;
 
-  // index into valuePools[valuePool].values
+  // index into `valuePools[valuePool].values`
   valueIndex: number;
 }
 ```

@@ -77,14 +77,15 @@ An object is one voxel volume of pure geometry. Aside from its grid `origin`, it
 {
   "name": "Object A",
 
-  // [X, Y, Z] size in voxels
+  // `[X, Y, Z]` size in voxels
   "bounds": [1, 1, 1],
 
-  // [X, Y, Z] integer translation from the placing node to the grid's min corner
+  // `[X, Y, Z]` integer translation from the placing node to the grid's
+  // min corner
   "origin": [0, 0, 0],
   "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
 
-  // layers: palette references, ordered back to front
+  // `layers`: palette references, ordered back to front
   "layers": [0],
   // one channel per sampled layer; each is one material index per voxel
   "voxelSamples": { "encoding": "raw-json", "data": [[0]] },
@@ -120,16 +121,16 @@ All base64 in this format uses the standard RFC 4648 alphabet, not base64url, wi
 #### Example: a 2 x 2 x 1 square in the `z = 0` plane - voxels `(0, 0, 0)`, `(1, 0, 0)`, `(0, 1, 0)`, `(1, 1, 0)` with `bounds = [2, 2, 1]`
 
 ```jsonc
-// raw-json (listing order):
+// `raw-json` (listing order):
 { "encoding": "raw-json", "data": [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0]] }
 
-// bitmap-base64: cells in k-order (0, 0, 0), (0, 1, 0), (1, 0, 0), (1, 1, 0)
-// are all occupied -> bits 1111 + 4 zero pad -> byte 0xF0.
+// `bitmap-base64`: cells in `k`-order (0, 0, 0), (0, 1, 0), (1, 0, 0),
+// (1, 1, 0) are all occupied -> bits 1111 + 4 zero pad -> byte 0xF0.
 { "encoding": "bitmap-base64", "data": "8A==" }
 
-// hilbert-delta-varint-base64:
+// `hilbert-delta-varint-base64`:
 //
-// bits = 1
+// `bits = 1`
 //
 // sorted Hilbert indices [0, 3, 4, 7] ->
 // deltas [0, 3, 1, 3] ->
@@ -153,13 +154,13 @@ A sample block holds one channel per sampled layer, in `layers` order. Each chan
 #### Example: two sampled layers over four voxels; layer 0 material indices `0, 0, 0, 1` (palette `M = 2`) and layer 1 material indices `2, 2, 3, 3` (palette `M = 4`), in the position block's voxel order
 
 ```jsonc
-// raw-json: one array per layer, a material index per voxel.
+// `raw-json`: one array per layer, a material index per voxel.
 { "encoding": "raw-json", "data": [[0, 0, 0, 1], [2, 2, 3, 3]] }
 
-// rle-json: one flat [value, count, ...] run stream per layer.
+// `rle-json`: one flat `[value, count, ...]` run stream per layer.
 { "encoding": "rle-json", "data": [[0, 3, 1, 1], [2, 2, 3, 2]] }
 
-// packed-base64: one packed channel per layer.
+// `packed-base64`: one packed channel per layer.
 //
 // layer 0: M = 2 -> b = 1
 // 0,0,0,1 -> byte 0b0001_0000 = 0x10 -> "EA=="
@@ -217,12 +218,12 @@ Value pools live in `main.runtimeState.valuePools`, a shared array referenced by
   "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
 }
 
-// only int and float pools carry min/max; each a number or "none"
+// only `int` and `float` pools carry `min`/`max`; each a number or "none"
 { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] }
 { "kind": "float", "min": 1, "max": "none", "values": [1.5, 1.33] } // >= 1
 { "kind": "int", "min": 0, "max": 255, "values": [0, 128, 255] }
 
-// color pools carry no min/max; the color space fixes the range
+// color pools carry no `min`/`max`; the color space fixes the range
 { "kind": "srgba-float", "values": [[1, 0, 0, 1]] } // sRGB, each in [0, 1]
 { "kind": "linear-rgb-float", "values": [[2, 0, 0]] } // linear, each >= 0 (HDR)
 ```
@@ -276,9 +277,9 @@ A material is one row of value-indices, one per array property, so the material 
   ],
 
   // one row per material, a value-index per array property, in property
-  // order. materials[m][b] is a value-index into the pool bound by
-  // arrayProperties[b]. A voxel samples material m in [0, M); resolve it by
-  // reading across its row:
+  // order. `materials[m][b]` is a value-index into the pool bound by
+  // `arrayProperties[b]`. A voxel samples material `m` in `[0, M)`; resolve
+  // it by reading across its row:
   //   material 0 = {
   //     baseColorFactor: pool0.values[0],
   //     metallicFactor: pool1.values[2]
@@ -344,11 +345,11 @@ Idiom 2, two lamp objects sharing one base palette but glowing at different stre
 
 "objects": [
   // "Lamp A": the shared palette plus its own knob; the knob layer carries
-  // no channel, so voxelSamples has one channel, for palette 0
+  // no channel, so `voxelSamples` has one channel, for palette 0
   { /* ... */ "layers": [0, 1] },
 
   // "Neon Sign": the same base palette; switching knobs is a one-integer
-  // edit in layers
+  // edit in `layers`
   { /* ... */ "layers": [0, 2] },
 ]
 ```
@@ -413,10 +414,11 @@ The scene's roots are exactly the nodes listed in `rootNodes`. A node that is ne
 {
   "objects": [
     {
-      // [X, Y, Z] size of the edit grid in voxels
+      // `[X, Y, Z]` size of the edit grid in voxels
       "bounds": [6, 6, 6],
 
-      // [X, Y, Z] integer translation from the placing node to the edit grid's min corner
+      // `[X, Y, Z]` integer translation from the placing node to the edit
+      // grid's min corner
       "origin": [-1, -1, -1],
     },
   ],
@@ -539,7 +541,8 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
           "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
         },
 
-        // one shared float pool, bound by metallicFactor and roughnessFactor
+        // one shared float pool, bound by `metallicFactor` and
+        // `roughnessFactor`
         { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] },
 
         { "kind": "srgb-hex", "values": ["#000000", "#FF6600"] },
@@ -551,7 +554,8 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
       ],
 
       "palettes": [
-        // value pool 1 is bound twice, to metallicFactor and roughnessFactor
+        // value pool 1 is bound twice, to `metallicFactor` and
+        // `roughnessFactor`
         {
           "arrayProperties": [
             { "name": "baseColorFactor", "valuePool": 0 },
@@ -563,8 +567,8 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
           "scalarProperties": [],
 
           // one row per material, a value-index per array property. Material
-          // 2 resolves to baseColorFactor #0000FFFF, metallicFactor 0.5,
-          // roughnessFactor 0, emissiveFactor #FF6600.
+          // 2 resolves to `baseColorFactor` #0000FFFF, `metallicFactor` 0.5,
+          // `roughnessFactor` 0, `emissiveFactor` #FF6600.
           "materials": [
             [0, 2, 1, 0],
             [1, 0, 1, 0],
@@ -609,7 +613,7 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
           },
 
           // two layers, back to front: palette 0, then palette 1. Both are
-          // sampled and both bind baseColorFactor, so the later layer
+          // sampled and both bind `baseColorFactor`, so the later layer
           // supplies it; the other properties come from layer 0.
           "layers": [0, 1],
 
@@ -632,8 +636,8 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
           "voxelPositions": { "encoding": "raw-json", "data": [[0, 0, 0]] },
           // the same shared palette as Object A, plus this object's own
           // emissive knob: palette 2 has no materials, so it is never
-          // sampled and supplies emissiveStrength 5 to the whole object.
-          // voxelSamples has one channel, for palette 0.
+          // sampled and supplies `emissiveStrength` 5 to the whole object.
+          // `voxelSamples` has one channel, for palette 0.
           "layers": [0, 2],
           "voxelSamples": { "encoding": "raw-json", "data": [[2]] },
         },
@@ -676,7 +680,7 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 
 ### TypeScript Schema
 
-```typescript
+```ts
 interface VoxelJsonFile {
   version: 1;
 
@@ -705,7 +709,7 @@ interface RuntimeState {
 
   nodes: HierarchyNode[];
 
-  // indices into nodes; the scene's roots
+  // indices into `nodes`; the scene's roots
   rootNodes: number[];
 }
 
@@ -716,11 +720,11 @@ interface EditState {
 
 // One object's edit grid (build volume), which must contain its runtime grid.
 interface EditObject {
-  // [X, Y, Z] size of the edit grid in voxels
+  // `[X, Y, Z]` size of the edit grid in voxels
   bounds: Vec3;
 
-  // [X, Y, Z] integer translation from the placing node to the edit grid's min
-  // corner
+  // `[X, Y, Z]` integer translation from the placing node to the edit grid's
+  // min corner
   origin: Vec3;
 }
 
@@ -728,14 +732,14 @@ interface EditObject {
 interface VoxelObject {
   name: string;
 
-  // [X, Y, Z] size in voxels; voxels occupy [0, X) x [0, Y) x [0, Z). Exactly
-  // tight: per-axis the min voxel coordinate is 0 and the bound is the max plus
-  // one; [0, 0, 0] when empty, a point at origin. No margin here (that is
-  // editState). Required to decode bitmap-base64 and
-  // hilbert-delta-varint-base64.
+  // `[X, Y, Z]` size in voxels; voxels occupy `[0, X) x [0, Y) x [0, Z)`.
+  // Exactly tight: per-axis the min voxel coordinate is 0 and the bound is
+  // the max plus one; `[0, 0, 0]` when empty, a point at origin. No margin
+  // here (that is `editState`). Required to decode `bitmap-base64` and
+  // `hilbert-delta-varint-base64`.
   bounds: Vec3;
 
-  // [X, Y, Z] integer translation from the placing node to the grid's min
+  // `[X, Y, Z]` integer translation from the placing node to the grid's min
   // corner. Does not affect the voxel encodings.
   origin: Vec3;
 
@@ -743,8 +747,8 @@ interface VoxelObject {
 
   // palette indices, ordered back to front; each layer supplies all of its
   // palette's properties and later layers override earlier ones. A layer is
-  // sampled iff its palette has materials (M > 0); each sampled layer
-  // carries one voxelSamples channel (see Objects)
+  // sampled iff its palette has materials (`M > 0`); each sampled layer
+  // carries one `voxelSamples` channel (see Objects)
   layers: number[];
 
   voxelSamples: SampleBlock;
@@ -757,16 +761,16 @@ interface VoxelObject {
 // invariant that validation cannot verify.
 
 type PositionBlock =
-  // One [x, y, z] per voxel, in listing order.
+  // One `[x, y, z]` per voxel, in listing order.
   | { encoding: "raw-json"; data: Vec3[] }
-  // Dense occupancy bitmap over `bounds` (required to decode): one bit per cell
-  // k = x * Y * Z + y * Z + z, packed 8 per byte MSB-first, base64-encoded.
-  // Canonical order is ascending k.
+  // Dense occupancy bitmap over `bounds` (required to decode): one bit per
+  // cell `k = x * Y * Z + y * Z + z`, packed 8 per byte MSB-first,
+  // base64-encoded. Canonical order is ascending `k`.
   | { encoding: "bitmap-base64"; data: string }
   // Prefix-sum deltas of each voxel's 3D Hilbert-curve index (see
-  // hilbertEncode/hilbertDecode), voxels sorted by ascending index; deltas as
-  // an unsigned-LEB128 varint stream, base64-encoded. Requires bits <= 17
-  // (every bounds dimension <= 131072).
+  // `hilbertEncode`/`hilbertDecode`), voxels sorted by ascending index;
+  // deltas as an unsigned-LEB128 varint stream, base64-encoded. Requires
+  // `bits <= 17` (every `bounds` dimension <= 131072).
   | { encoding: "hilbert-delta-varint-base64"; data: string };
 
 type SampleBlock =
@@ -774,24 +778,24 @@ type SampleBlock =
   // index for every voxel, in voxel order.
   | { encoding: "raw-json"; data: number[][] }
   // One channel per sampled layer: a flat run stream
-  // [value1, count1, value2, count2, ...].
+  // `[value1, count1, value2, count2, ...]`.
   | { encoding: "rle-json"; data: number[][] }
   // One channel per sampled layer: each voxel's material index bit-packed at
-  // width b = max(1, bitLength(M - 1)) for that layer's palette material
-  // count M, MSB-first, base64-encoded (same packing as the bitmap-base64
-  // position encoding).
+  // width `b = max(1, bitLength(M - 1))` for that layer's palette material
+  // count `M`, MSB-first, base64-encoded (same packing as the
+  // `bitmap-base64` position encoding).
   | { encoding: "packed-base64"; data: string[] };
 
 // ## Palettes
 
 // A palette binds property names to value pools, then lists its materials:
 // one row per material, a value-index per array property in property order,
-// so the material count M is materials.length. A voxel samples material m;
-// property arrayProperties[b].name takes
-// valuePools[arrayProperties[b].valuePool].values[materials[m][b]], and each
-// scalar property takes valuePools[valuePool].values[valueIndex], one value
-// for the whole palette. Layers apply in `layers` order; each property takes
-// its value from the last layer that supplies it.
+// so the material count `M` is `materials.length`. A voxel samples material
+// `m`; property `arrayProperties[b].name` takes
+// `valuePools[arrayProperties[b].valuePool].values[materials[m][b]]`, and
+// each scalar property takes `valuePools[valuePool].values[valueIndex]`, one
+// value for the whole palette. Layers apply in `layers` order; each property
+// takes its value from the last layer that supplies it.
 interface Palette {
   arrayProperties: ArrayProperty[];
 
@@ -805,7 +809,7 @@ interface ArrayProperty {
   // property name (see Properties); advisory, unknown names ignored
   name: string;
 
-  // index into RuntimeState.valuePools
+  // index into `RuntimeState.valuePools`
   valuePool: number;
 }
 
@@ -815,30 +819,30 @@ interface ScalarProperty {
   // property name (see Properties); advisory, unknown names ignored
   name: string;
 
-  // index into RuntimeState.valuePools
+  // index into `RuntimeState.valuePools`
   valuePool: number;
 
-  // index into valuePools[valuePool].values
+  // index into `valuePools[valuePool].values`
   valueIndex: number;
 }
 
-// A shared pool of values, all of one shape given by kind, each kind's values
-// typed to its shape. Only int and float carry min/max, each a finite number or
-// "none"; a color kind's range is fixed by its color space, so no color kind
-// carries bounds.
+// A shared pool of values, all of one shape given by `kind`, each kind's
+// values typed to its shape. Only `int` and `float` carry `min`/`max`, each
+// a finite number or "none"; a color kind's range is fixed by its color
+// space, so no color kind carries bounds.
 type ValuePool =
-  // arbitrary JSON, including null
+  // arbitrary JSON, including `null`
   | { kind: "json"; values: JsonValue[] }
   // booleans
   | { kind: "bool"; values: boolean[] }
-  // finite floats within min/max
+  // finite floats within `min`/`max`
   | {
       kind: "float";
       min: number | "none";
       max: number | "none";
       values: number[];
     }
-  // integers within min/max
+  // integers within `min`/`max`
   | {
       kind: "int";
       min: number | "none";
@@ -847,15 +851,15 @@ type ValuePool =
     }
   // strings
   | { kind: "string"; values: string[] }
-  // sRGB float colors, each component in [0, 1]
+  // sRGB float colors, each component in `[0, 1]`
   | { kind: "srgb-float"; values: [number, number, number][] }
-  // #RRGGBB sRGB hex strings
+  // `#RRGGBB` sRGB hex strings
   | { kind: "srgb-hex"; values: string[] }
   // sRGB float colors with alpha, each component in [0, 1]
   | { kind: "srgba-float"; values: [number, number, number, number][] }
-  // #RRGGBBAA sRGB hex strings
+  // `#RRGGBBAA` sRGB hex strings
   | { kind: "srgba-hex"; values: string[] }
-  // linear float colors, each component >= 0
+  // linear float colors, each component `>= 0`
   | { kind: "linear-rgb-float"; values: [number, number, number][] }
   // linear float colors with alpha, each component >= 0
   | { kind: "linear-rgba-float"; values: [number, number, number, number][] };
@@ -889,21 +893,21 @@ interface HierarchyNode {
 
   transform: Transform;
 
-  // indices into RuntimeState.nodes (DAG, no cycles)
+  // indices into `RuntimeState.nodes` (DAG, no cycles)
   childNodes: number[];
 
-  // indices into RuntimeState.objects
+  // indices into `RuntimeState.objects`
   childObjects: number[];
 }
 
 interface Transform {
-  // [x, y, z]
+  // `[x, y, z]`
   position: Vec3;
 
-  // unit quaternion [x, y, z, w]
+  // unit quaternion `[x, y, z, w]`
   rotation: Quat;
 
-  // [x, y, z]
+  // `[x, y, z]`
   scale: Vec3;
 }
 
@@ -919,9 +923,9 @@ Reference implementations of the binary encodings, as small independent codecs t
 #### Bit Widths
 
 ```ts
-// Binary digits in a non-negative integer, bitLength(0) = 0. The width formulas
-// call bitLength(x - 1): the bits to index x distinct values, integer-exact
-// with no floating point. Never use Math.log2 for these.
+// Binary digits in a non-negative integer, `bitLength(0) = 0`. The width
+// formulas call `bitLength(x - 1)`: the bits to index `x` distinct values,
+// integer-exact with no floating point. Never use `Math.log2` for these.
 function bitLength(n: number): number {
   let len = 0;
   while (n > 0) {
@@ -931,8 +935,9 @@ function bitLength(n: number): number {
   return len;
 }
 
-// Hilbert `bits` per axis from bounds, and packed-base64 channel width from a
-// palette material count. Both are max(1, ceil(log2(.))) via bitLength.
+// Hilbert `bits` per axis from `bounds`, and `packed-base64` channel width
+// from a palette material count. Both are `max(1, ceil(log2(.)))` via
+// `bitLength`.
 function hilbertBits(bounds: Vec3): number {
   return Math.max(1, bitLength(Math.max(bounds[0], bounds[1], bounds[2]) - 1));
 }
@@ -946,7 +951,7 @@ function packedWidth(materialCount: number): number {
 
 ```ts
 // Pack `values` at a fixed `width` bits each, MSB-first, 8 per byte, final byte
-// zero-padded. bitmap-base64 is the width = 1 case.
+// zero-padded. `bitmap-base64` is the `width = 1` case.
 function packBits(values: number[], width: number): Uint8Array {
   const out = new Uint8Array(Math.ceil((values.length * width) / 8));
   let bit = 0;
@@ -959,7 +964,7 @@ function packBits(values: number[], width: number): Uint8Array {
   return out;
 }
 
-// Inverse of packBits. Bytes past the end read as zero.
+// Inverse of `packBits`. Bytes past the end read as zero.
 function unpackBits(bytes: Uint8Array, width: number, count: number): number[] {
   const out: number[] = [];
   let bit = 0;
@@ -980,10 +985,10 @@ function cellIndex([x, y, z]: Vec3, [, Y, Z]: Vec3): number {
   return x * Y * Z + y * Z + z;
 }
 
-// bitmap-base64: one occupancy bit per cell of `bounds`, packed at width 1. The
-// canonical voxel order is ascending cell index, so reorder each sample channel
-// to match (sort voxel indices by cellIndex for the same remap that
-// encodeHilbertBlockWithRemap returns).
+// `bitmap-base64`: one occupancy bit per cell of `bounds`, packed at width
+// 1. The canonical voxel order is ascending cell index, so reorder each
+// sample channel to match (sort voxel indices by `cellIndex` for the same
+// `remap` that `encodeHilbertBlockWithRemap` returns).
 function encodeBitmapBlock(positions: Vec3[], bounds: Vec3): string {
   const occupancy = new Array<number>(bounds[0] * bounds[1] * bounds[2]).fill(
     0,
@@ -1005,8 +1010,9 @@ function decodeBitmapBlock(data: string, bounds: Vec3): Vec3[] {
   return out;
 }
 
-// packed-base64: one layer's channel, each voxel's material index packed at
-// packedWidth(materialCount). `samples` is in the position block's voxel order.
+// `packed-base64`: one layer's channel, each voxel's material index packed
+// at `packedWidth(materialCount)`. `samples` is in the position block's
+// voxel order.
 function encodePackedChannel(samples: number[], materialCount: number): string {
   return base64(packBits(samples, packedWidth(materialCount)));
 }
@@ -1023,8 +1029,8 @@ function decodePackedChannel(
 #### Run-Length: `rle-json` samples
 
 ```ts
-// rle-json: one layer's channel as a flat [value, count, ...] run stream; counts
-// are positive and sum to the voxel count.
+// `rle-json`: one layer's channel as a flat `[value, count, ...]` run
+// stream; counts are positive and sum to the voxel count.
 function rleEncode(samples: number[]): number[] {
   const out: number[] = [];
   for (let i = 0; i < samples.length; ) {
@@ -1051,13 +1057,13 @@ function rleDecode(rle: number[]): number[] {
 ```ts
 // Three independent encode/decode codecs (hilbert, delta, varint) plus a
 // composition. The block `data` is
-// base64(varintEncode(deltaEncode(sortedHilbertIndices))).
+// `base64(varintEncode(deltaEncode(sortedHilbertIndices)))`.
 //
 // NOTE: indices are assembled with arithmetic, not `<<`, because JS bitwise
 // operators are 32-bit and an index can exceed 31 bits on large grids. The
-// index is exact in a JS `number` only while 3 * bits <= 53, i.e. bits <= 17;
-// the format caps bits at 17 (every bounds dimension <= 131072) for this
-// reason.
+// index is exact in a JS `number` only while `3 * bits <= 53`, i.e.
+// `bits <= 17`; the format caps `bits` at 17 (every `bounds` dimension
+// <= 131072) for this reason.
 
 // 1. Hilbert: a position <-> its 3D Hilbert-curve index (Skilling's transform),
 //    `bits` bits per axis.
@@ -1085,7 +1091,7 @@ function hilbertEncode(x: number, y: number, z: number, bits: number): number {
   }
   for (let i = 0; i < 3; i++) axes[i] ^= t;
 
-  // Interleave into a single index (axes[0] most significant).
+  // Interleave into a single index (`axes[0]` most significant).
   let index = 0;
   for (let k = bits - 1; k >= 0; k--) {
     for (let d = 0; d < 3; d++) {
@@ -1128,8 +1134,8 @@ function hilbertDecode(index: number, bits: number): [number, number, number] {
 }
 
 // 2. Delta: an ascending integer sequence <-> its successive differences.
-//    deltaDecode is the prefix sum; deltaEncode assumes ascending input, which
-//    keeps every delta after the first strictly positive.
+//    `deltaDecode` is the prefix sum; `deltaEncode` assumes ascending
+//    input, which keeps every delta after the first strictly positive.
 function deltaEncode(values: number[]): number[] {
   return values.map((v, i) => (i === 0 ? v : v - values[i - 1]));
 }
@@ -1145,7 +1151,7 @@ function deltaDecode(deltas: number[]): number[] {
 }
 
 // 3. Varint: a non-negative integer array <-> an unsigned-LEB128 byte stream.
-//    Uses arithmetic (not `<<` / `>>`) so values above 2^31 stay exact.
+//    Uses arithmetic (not `<<` / `>>`) so values above `2^31` stay exact.
 function varintEncode(values: number[]): Uint8Array {
   const out: number[] = [];
   for (let v of values) {
@@ -1175,10 +1181,10 @@ function varintDecode(bytes: Uint8Array): number[] {
   return out;
 }
 
-// Compose. base64 / unbase64 are standard (btoa + atob in the browser, Buffer
-// in Node). Voxels are sorted by ascending Hilbert index so the deltas stay
-// positive. `bits` is hilbertBits(object.bounds); packed-base64 uses
-// packedWidth(materialCount).
+// Compose. `base64` / `unbase64` are standard (`btoa` + `atob` in the
+// browser, `Buffer` in Node). Voxels are sorted by ascending Hilbert index
+// so the deltas stay positive. `bits` is `hilbertBits(object.bounds)`;
+// `packed-base64` uses `packedWidth(materialCount)`.
 function encodeHilbertBlock(positions: Vec3[], bits: number): string {
   const idx = positions
     .map((p) => hilbertEncode(p[0], p[1], p[2], bits))
@@ -1191,9 +1197,9 @@ function decodeHilbertBlock(data: string, bits: number): Vec3[] {
   return idx.map((h) => hilbertDecode(h, bits));
 }
 
-// Like encodeHilbertBlock, but also returns `remap`, the permutation from input
-// order to the block's canonical order: remap[oldIndex] = newIndex. Reorder each
-// sample array `s` to match with `out[remap[i]] = s[i]`.
+// Like `encodeHilbertBlock`, but also returns `remap`, the permutation from
+// input order to the block's canonical order: `remap[oldIndex] = newIndex`.
+// Reorder each sample array `s` to match with `out[remap[i]] = s[i]`.
 function encodeHilbertBlockWithRemap(
   positions: Vec3[],
   bits: number,
@@ -1206,7 +1212,7 @@ function encodeHilbertBlockWithRemap(
     indices[i] = hilbertEncode(p[0], p[1], p[2], bits);
   }
 
-  // order[newIndex] = oldIndex, sorted by ascending Hilbert index.
+  // `order[newIndex] = oldIndex`, sorted by ascending Hilbert index.
   const order = new Array<number>(n);
   for (let i = 0; i < n; i++) order[i] = i;
   order.sort((a, b) => indices[a] - indices[b]);
