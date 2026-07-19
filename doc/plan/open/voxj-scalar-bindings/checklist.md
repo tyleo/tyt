@@ -84,15 +84,18 @@ Gate: the owner approves format-design.md. Passed 2026-07-16.
 Gate: the spec matches format-design.md; the reference file stops being
 authoritative. Passed 2026-07-17.
 
-## Phase 3: `voxj` (coarse)
+## Phase 3: `voxj`
 
-- [ ] Rewrite `VoxjPalette` to array plus scalar properties with `name` /
-      `value_pool` / `value_index` fields and row-major `materials`; add the
-      scalar-property type; rename
-      `VoxjObject.layer_palette_refs` to the ordered `layers` list; rename
-      the hierarchy fields to `nodes` / `root_nodes`; keep
-      `deny_unknown_fields` closure; update doc comments to the new framing;
-      in-crate round-trip coverage.
+Refined 2026-07-19: the crate is small enough that the whole phase is one
+commit-sized chunk.
+
+- [x] Rewrite `VoxjPalette` to array plus scalar properties with `name` /
+      `value_pool` / `value_index` fields and row-major `materials`
+      (`VoxjArrayProperty` and the new `VoxjScalarProperty` replace
+      `VoxjPaletteBinding`); rename `VoxjObject.layer_palette_refs` to the
+      ordered `layers` list and the hierarchy fields to `nodes` /
+      `root_nodes`; keep `deny_unknown_fields` closure; update doc comments
+      to the new framing; in-crate round-trip coverage.
 
 ## Phase 4: `voxj-codec` (coarse)
 

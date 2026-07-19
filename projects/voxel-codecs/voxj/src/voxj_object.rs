@@ -2,7 +2,7 @@ use crate::{VoxjPositionBlock, VoxjSampleBlock};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// One object's voxel geometry and per-layer material samples, in encoded
+/// One object's voxel geometry and sampled-layer material samples, in encoded
 /// blocks.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
@@ -29,15 +29,15 @@ pub struct VoxjObject {
     pub voxel_positions: VoxjPositionBlock,
 
     /// Palette indices into
-    /// [`VoxjRuntimeState::palettes`](crate::VoxjRuntimeState::palettes), one
-    /// per layer. Each layer maps every voxel to one material in its palette.
-    /// Two layers may reference the same palette; the meaning of the overlap is
-    /// left to the consuming application.
-    pub layer_palette_refs: Vec<usize>,
+    /// [`VoxjRuntimeState::palettes`](crate::VoxjRuntimeState::palettes),
+    /// ordered back to front, repeats allowed. Each layer supplies all of its
+    /// palette's properties, and each property takes its value from the last
+    /// layer that supplies it.
+    pub layers: Vec<usize>,
 
-    /// Encoded voxel samples: one channel per layer in
-    /// [`layer_palette_refs`](Self::layer_palette_refs) order, each giving a
-    /// material index into that layer's palette for every voxel, in voxel
-    /// order.
+    /// Encoded voxel samples: one channel per sampled layer in
+    /// [`layers`](Self::layers) order, each giving a material index into that
+    /// layer's palette for every voxel, in voxel order. A layer is sampled
+    /// iff its palette has materials.
     pub voxel_samples: VoxjSampleBlock,
 }

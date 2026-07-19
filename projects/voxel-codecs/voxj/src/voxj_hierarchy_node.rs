@@ -17,7 +17,7 @@ pub struct VoxjHierarchyNode {
     pub transform: VoxjTransform,
 
     /// Indices into
-    /// [`VoxjRuntimeState::hierarchy_nodes`](crate::VoxjRuntimeState::hierarchy_nodes).
+    /// [`VoxjRuntimeState::nodes`](crate::VoxjRuntimeState::nodes).
     pub child_nodes: Vec<usize>,
 
     /// Indices into

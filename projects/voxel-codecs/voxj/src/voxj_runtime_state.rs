@@ -24,9 +24,8 @@ pub struct VoxjRuntimeState {
     pub objects: Vec<VoxjObject>,
 
     /// The hierarchy nodes, referenced by array index.
-    pub hierarchy_nodes: Vec<VoxjHierarchyNode>,
+    pub nodes: Vec<VoxjHierarchyNode>,
 
-    /// Indices into [`hierarchy_nodes`](Self::hierarchy_nodes); the scene's
-    /// roots.
-    pub root_hierarchy_nodes: Vec<usize>,
+    /// Indices into [`nodes`](Self::nodes); the scene's roots.
+    pub root_nodes: Vec<usize>,
 }
