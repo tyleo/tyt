@@ -260,3 +260,26 @@ mirrored json-adding constructors on `TreeGridJsonValue`. The spec's
 model, constructor, and JSON-layout sections, the plan README model
 paragraph and decision 5, the checklist S1, and the crate README
 were amended in the same change.
+
+## S1 chunk 2: the typed value constructors (2026-07-19)
+
+The spec's core constructor table lands split per the previous entry:
+`int` / `float` / `unorm` / `unorm8` / `bool` / `srgb8` / `srgba8`
+fill text and swatch on `TreeGridValue`, and `TreeGridJsonValue`
+mirrors each, delegating to the inner constructor and pairing the
+native JSON form. `json(Value)` exists only on `TreeGridJsonValue`,
+since its argument type is serde_json's. This completes S1.
+
+- **`unorm` inlines the unorm8 quantization.** The gray level is
+  `(value.clamp(0.0, 1.0) * 255.0).round() as u8` -- the rule
+  ty-math's `TyFloatExt::to_unorm8` implements and vxl's
+  `scalar_level` applies today -- inlined because the core
+  constructors must build without the `ty-math` feature. The S2
+  typed-color constructors do all color math through ty-math; this
+  scalar gray level is the one duplicated rule, and the two must stay
+  identical.
+- **The integral collapse ports vxl's `number_json` verbatim.** JSON
+  is an integer when the float is integral and its magnitude is below
+  `i64::MAX`, else a float. Text needs no collapse rule of its own:
+  it is plain `Display` (vxl's `format_number`), which already prints
+  integral floats without a fractional part.

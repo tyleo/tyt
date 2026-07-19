@@ -35,7 +35,7 @@ items off as they land.
 
 ## Phase 1: the crate
 
-- [ ] **S1. Scaffold and model.** Crate skeleton; `BTreeGridNode`,
+- [x] **S1. Scaffold and model.** Crate skeleton; `BTreeGridNode`,
       `TreeGrid` (append-only arena over `U32Id<BTreeGridNode>`, ordered
       roots), `TreeGridNode` (`label`, `annotation`, `format`, `values`,
       children), `TreeGridLabel::{Bare, Quoted}` with `bare` / `quoted`
