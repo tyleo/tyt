@@ -1,5 +1,6 @@
 use crate::{
-    PositionEncoding, Result, SampleEncoding, VoxjDecodedObject, encode_voxj_object, hilbert_bits,
+    MAX_HILBERT_BITS, PositionEncoding, Result, SampleEncoding, VoxjDecodedObject,
+    encode_voxj_object, hilbert_bits,
 };
 use flate2::{Compression, write::DeflateEncoder};
 use std::io::Write;
@@ -7,10 +8,6 @@ use voxj::VoxjObject;
 
 /// Skip the dense bitmap candidate above this many cells to bound memory.
 const MAX_BITMAP_CELLS: u64 = 8_000_000;
-
-/// Hilbert positions are only valid for `bits <= 17` (every bounds dimension
-/// `<= 131072`); above that the format requires bitmap or raw instead.
-const MAX_HILBERT_BITS: u32 = 17;
 
 /// Encodes one [`VoxjDecodedObject`] into a [`VoxjObject`], pinning each `Some`
 /// block and searching each `None` block for the smallest deflated result. Both

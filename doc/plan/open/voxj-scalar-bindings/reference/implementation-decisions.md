@@ -87,6 +87,18 @@ check rather than a new named check: they are palette-shape rules like their
 array-side counterparts. The public thirteen-check surface is unchanged, so
 `vxl validate` gains no new check name from voxj-codec.
 
+## The sample-channel layout is one internal type
+
+2026-07-19, phase 4 cleanup. The sampled-iff-`M > 0` rule appeared three
+times (encoder, decoder, geometry check), each deriving channel arity, bit
+widths, or the channel-to-layer mapping ad hoc from the raw material counts.
+`SampleChannels` (`internal/sample_channels.rs`) states the concept once:
+built from the per-layer counts, it carries each channel's layer and
+material count, and all three sites consume it. `MAX_HILBERT_BITS` likewise
+moved to one shared internal constant. Both stay crate-internal; the public
+API still speaks plain material counts, and phase 6 can promote the type if
+the voxsmith seam wants it.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

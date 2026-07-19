@@ -1,4 +1,7 @@
-use crate::{Check, Failures, VoxjDecodedObject, decode_voxj_object, voxj_palette_material_counts};
+use crate::{
+    Check, Failures, SampleChannels, VoxjDecodedObject, decode_voxj_object,
+    voxj_palette_material_counts,
+};
 use std::collections::HashSet;
 use voxj::{VoxjMain, VoxjObject};
 
@@ -28,7 +31,8 @@ pub fn check_geometry(main: &VoxjMain, failures: &mut Failures) {
             }
         };
 
-        check_sample_materials(index, object, &decoded, &material_counts, failures);
+        let layout = SampleChannels::from_material_counts(&material_counts);
+        check_sample_materials(index, object, &decoded, &layout, failures);
         if !failures.go() {
             return;
         }
@@ -41,19 +45,14 @@ fn check_sample_materials(
     index: usize,
     object: &VoxjObject,
     decoded: &VoxjDecodedObject,
-    material_counts: &[usize],
+    layout: &SampleChannels,
     failures: &mut Failures,
 ) {
-    // Decoding guarantees one row entry per sampled layer, so channel `c`
-    // belongs to the `c`-th layer whose palette has materials.
-    let sampled: Vec<usize> = (0..object.layers.len())
-        .filter(|&layer| material_counts[layer] > 0)
-        .collect();
+    // Decoding guarantees one row entry per channel of the layout.
     for (voxel, row) in decoded.samples.iter().enumerate() {
         for (channel, &material) in row.iter().enumerate() {
-            let layer = sampled[channel];
-            let palette = object.layers[layer];
-            let material_count = material_counts[layer];
+            let palette = object.layers[layout.layer(channel)];
+            let material_count = layout.counts()[channel];
             if material as usize >= material_count {
                 failures.report(
                     Check::SampleMaterials,

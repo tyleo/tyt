@@ -1,6 +1,6 @@
 use crate::{
-    Error, PositionEncoding, Result, SampleEncoding, VoxjDecodedObject, encode_hilbert,
-    encode_varint, hilbert_bits, pack_bits, packed_width,
+    Error, PositionEncoding, Result, SampleChannels, SampleEncoding, VoxjDecodedObject,
+    encode_hilbert, encode_varint, hilbert_bits, pack_bits, packed_width,
 };
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
@@ -16,26 +16,20 @@ pub fn encode_voxj_object(
     position: PositionEncoding,
     sample: SampleEncoding,
 ) -> Result<VoxjObject> {
-    // One material count per sampled layer, in `layers` order: the channel
-    // arity and the bit-width source for packed channels.
-    let channel_counts: Vec<usize> = material_counts
-        .iter()
-        .copied()
-        .filter(|&count| count > 0)
-        .collect();
-    validate_object_shape(object, channel_counts.len())?;
+    let layout = SampleChannels::from_material_counts(material_counts);
+    validate_object_shape(object, layout.channels())?;
 
     let (voxel_positions, voxel_samples) = if object.positions.is_empty() {
         // No voxels, but still one (empty) channel per sampled layer so the
         // block's arity matches the sampled layers.
         (
             VoxjPositionBlock::RawJson(Vec::new()),
-            VoxjSampleBlock::RawJson(vec![Vec::new(); channel_counts.len()]),
+            VoxjSampleBlock::RawJson(vec![Vec::new(); layout.channels()]),
         )
     } else {
         let (order, position_block) = encode_positions(object, position);
-        let channels = channels_in_order(&object.samples, &order, channel_counts.len());
-        let sample_block = encode_samples(&channels, sample, &channel_counts);
+        let channels = channels_in_order(&object.samples, &order, layout.channels());
+        let sample_block = encode_samples(&channels, sample, layout.counts());
         (position_block, sample_block)
     };
 

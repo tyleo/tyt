@@ -1,16 +1,10 @@
 use crate::{
-    Error, Result, VoxjDecodedObject, decode_hilbert, decode_varint, hilbert_bits, packed_width,
-    unpack_bits,
+    Error, MAX_HILBERT_BITS, Result, SampleChannels, VoxjDecodedObject, decode_hilbert,
+    decode_varint, hilbert_bits, packed_width, unpack_bits,
 };
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use std::iter;
 use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
-
-/// Largest Hilbert `bits` per axis the format allows: the reference decoder
-/// assembles an index in a JS double, exact only while `3 * bits <= 53`, so
-/// `hilbert-delta-varint-base64` requires `bits <= 17` (every bounds dimension
-/// `<= 131072`). A larger grid must use `bitmap-base64` or `raw-json`.
-const MAX_HILBERT_BITS: u32 = 17;
 
 /// Decodes one [`VoxjObject`] into a [`VoxjDecodedObject`], the inverse of
 /// [`encode_voxj_object`](crate::encode_voxj_object()). `material_counts`
@@ -24,15 +18,9 @@ pub fn decode_voxj_object(
     object: &VoxjObject,
     material_counts: &[usize],
 ) -> Result<VoxjDecodedObject> {
-    // One material count per sampled layer, in `layers` order: the required
-    // channel arity and the bit-width source for packed channels.
-    let channel_counts: Vec<usize> = material_counts
-        .iter()
-        .copied()
-        .filter(|&count| count > 0)
-        .collect();
+    let layout = SampleChannels::from_material_counts(material_counts);
     let positions = decode_positions(&object.voxel_positions, object.bounds)?;
-    let channels = decode_samples(&object.voxel_samples, &channel_counts, positions.len())?;
+    let channels = decode_samples(&object.voxel_samples, layout.counts(), positions.len())?;
     let samples = (0..positions.len())
         .map(|k| channels.iter().map(|channel| channel[k]).collect())
         .collect();
@@ -143,6 +131,10 @@ fn decode_samples(
             .iter()
             .enumerate()
             .map(|(c, base64)| {
+                // Width by `get` with a fallback rather than direct indexing,
+                // unlike the encoder: hostile input may carry more channels
+                // than sampled layers, and the arity check below runs only
+                // after each channel decodes.
                 let width = packed_width(channel_counts.get(c).copied().unwrap_or(1));
                 let bytes = BASE64.decode(base64).map_err(Error::Base64)?;
                 check_packed_bytes(
