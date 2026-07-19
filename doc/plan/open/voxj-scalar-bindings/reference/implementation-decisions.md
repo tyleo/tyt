@@ -55,6 +55,30 @@ reference a freshly parsed file does not have; the branded layer is voxcore,
 where `U32Id<BVoxPalette>` and the `IdField` layer storage already model
 layer-to-palette references.
 
+## voxj-codec derives channel arity from material counts alone
+
+2026-07-19, phase 4. `voxj_palette_material_counts` keeps its
+one-count-per-layer signature (now trivially `materials.len()` per palette),
+and `encode_voxj_object` / `decode_voxj_object` derive the sampled layers
+from it by filtering counts above zero into a `channel_counts` list: the
+channel arity and the packed bit-width source. The codec never rereads
+palettes, and `check_geometry` uses the same per-layer counts to map a
+channel back to its layer and palette for error messages.
+`VoxjDecodedObject.samples` rows hold one entry per sampled layer, in
+`layers` order with unsampled layers skipped, mirroring the wire's channel
+order.
+
+## voxj-codec lands in two commits
+
+2026-07-19, phase 4 refinement. Commit 1 adapts the crate to the new wire
+model: renames, row-major `M`, sampled-layer channels, and `check_palettes`
+rewritten to the array-property and row rules, with scalar properties parsed
+and carried but not content-checked. Commit 2 adds the scalar-property
+checks (union name uniqueness, `valuePool` and `valueIndex` ranges) with
+their failure fixtures. Each commit compiles and tests green on its own; the
+split keeps the mechanical migration and the new validation semantics
+separately reviewable.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

@@ -8,9 +8,10 @@ pub struct VoxjDecodedObject {
     /// Display name of the object.
     pub name: String,
 
-    /// Palette indices into the document's palettes, one per layer. Two layers
-    /// may reference the same palette; layers do not merge.
-    pub layer_palette_refs: Vec<usize>,
+    /// Palette indices into the document's palettes, one per layer, ordered
+    /// back to front. Two layers may reference the same palette; layers do not
+    /// merge.
+    pub layers: Vec<usize>,
 
     /// `[X, Y, Z]` size in voxels, as in
     /// [`VoxjObject::bounds`](voxj::VoxjObject::bounds).
@@ -23,8 +24,10 @@ pub struct VoxjDecodedObject {
     /// Voxel positions `[x, y, z]`, in listing order.
     pub positions: Vec<[u32; 3]>,
 
-    /// One material index per layer, per voxel, aligned to
-    /// [`positions`](Self::positions). Each index addresses a material in that
-    /// layer's palette.
+    /// One material index per sampled layer, per voxel, aligned to
+    /// [`positions`](Self::positions). A layer is sampled iff its palette has
+    /// materials; entries follow [`layers`](Self::layers) order with unsampled
+    /// layers skipped. Each index addresses a material in that layer's
+    /// palette.
     pub samples: Vec<Vec<u32>>,
 }

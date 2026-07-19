@@ -93,7 +93,7 @@ mod tests {
     fn object() -> VoxjDecodedObject {
         VoxjDecodedObject {
             name: "o".to_owned(),
-            layer_palette_refs: vec![0],
+            layers: vec![0],
             bounds: [2, 1, 1],
             origin: [0, 0, 0],
             positions: vec![[0, 0, 0], [1, 0, 0]],
@@ -108,7 +108,7 @@ mod tests {
         let object = encode_voxj_object_optimized(
             &VoxjDecodedObject {
                 name: "o".to_owned(),
-                layer_palette_refs: Vec::new(),
+                layers: Vec::new(),
                 bounds: [3, 1, 1],
                 origin: [0, 0, 0],
                 positions: vec![[0, 0, 0], [1, 0, 0], [2, 0, 0]],

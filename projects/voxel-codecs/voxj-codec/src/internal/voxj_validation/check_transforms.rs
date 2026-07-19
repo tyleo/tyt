@@ -8,7 +8,7 @@ const ROTATION_TOLERANCE: f64 = 1e-6;
 /// No transform scale component is zero and every rotation is a unit
 /// quaternion.
 pub fn check_transforms(main: &VoxjMain, failures: &mut Failures) {
-    for (index, node) in main.runtime_state.hierarchy_nodes.iter().enumerate() {
+    for (index, node) in main.runtime_state.nodes.iter().enumerate() {
         if !failures.go() {
             return;
         }

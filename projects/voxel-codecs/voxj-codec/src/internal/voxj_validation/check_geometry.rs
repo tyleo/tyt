@@ -2,19 +2,18 @@ use crate::{Check, Failures, VoxjDecodedObject, decode_voxj_object, voxj_palette
 use std::collections::HashSet;
 use voxj::{VoxjMain, VoxjObject};
 
-/// Decodes each object whose layer palette refs resolve and runs the geometry
-/// checks on the result: the blocks decode, samples index real materials,
-/// positions are unique, and bounds are tight. Objects with an out-of-range ref
-/// are skipped; [`check_indices`](crate::check_indices()) already reported the
-/// ref.
+/// Decodes each object whose layers resolve and runs the geometry checks on
+/// the result: the blocks decode, samples index real materials, positions are
+/// unique, and bounds are tight. Objects with an out-of-range layer are
+/// skipped; [`check_indices`](crate::check_indices()) already reported the
+/// layer.
 pub fn check_geometry(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
     for (index, object) in state.objects.iter().enumerate() {
         if !failures.go() {
             return;
         }
-        let Ok(material_counts) =
-            voxj_palette_material_counts(&object.layer_palette_refs, &state.palettes)
+        let Ok(material_counts) = voxj_palette_material_counts(&object.layers, &state.palettes)
         else {
             continue;
         };
@@ -45,12 +44,16 @@ fn check_sample_materials(
     material_counts: &[usize],
     failures: &mut Failures,
 ) {
+    // Decoding guarantees one row entry per sampled layer, so channel `c`
+    // belongs to the `c`-th layer whose palette has materials.
+    let sampled: Vec<usize> = (0..object.layers.len())
+        .filter(|&layer| material_counts[layer] > 0)
+        .collect();
     for (voxel, row) in decoded.samples.iter().enumerate() {
-        // Decoding guarantees one sample per layer, so each channel indexes the
-        // palette named by that layer.
         for (channel, &material) in row.iter().enumerate() {
-            let palette = object.layer_palette_refs[channel];
-            let material_count = material_counts[channel];
+            let layer = sampled[channel];
+            let palette = object.layers[layer];
+            let material_count = material_counts[layer];
             if material as usize >= material_count {
                 failures.report(
                     Check::SampleMaterials,

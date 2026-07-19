@@ -17,8 +17,8 @@ mod tests {
     use crate::validate_voxj_file;
     use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
-        VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
-        VoxjPaletteBinding, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjArrayProperty, VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
+        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
         VoxjValuePool,
     };
 
@@ -30,20 +30,22 @@ mod tests {
         }]
     }
 
-    /// A binding of `attribute` to value pool `pool_ref`.
-    fn binding(attribute: &str, pool_ref: usize) -> VoxjPaletteBinding {
-        VoxjPaletteBinding {
-            attribute: attribute.to_owned(),
-            pool_ref,
+    /// An array property of `name` bound to value pool `value_pool`.
+    fn array_property(name: &str, value_pool: usize) -> VoxjArrayProperty {
+        VoxjArrayProperty {
+            name: name.to_owned(),
+            value_pool,
         }
     }
 
-    /// A palette of `materials` materials binding `baseColorFactor` to value
-    /// pool 0, its column the value-indices `0..materials`.
+    /// A palette of `materials` materials with one array property binding
+    /// `baseColorFactor` to value pool 0, its rows the value-indices
+    /// `0..materials`.
     fn palette(materials: usize) -> VoxjPalette {
         VoxjPalette {
-            bindings: vec![binding("baseColorFactor", 0)],
-            materials: vec![(0..materials).collect()],
+            array_properties: vec![array_property("baseColorFactor", 0)],
+            scalar_properties: vec![],
+            materials: (0..materials).map(|i| vec![i]).collect(),
         }
     }
 
@@ -78,14 +80,14 @@ mod tests {
                     palettes: vec![palette(4)],
                     objects: vec![VoxjObject {
                         name: "o".to_owned(),
-                        layer_palette_refs: vec![0],
+                        layers: vec![0],
                         bounds: [2, 1, 1],
                         origin: [0, 0, 0],
                         voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
                         voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1, 3]]),
                     }],
-                    hierarchy_nodes: vec![node(vec![1], vec![0]), node(vec![], vec![])],
-                    root_hierarchy_nodes: vec![0],
+                    nodes: vec![node(vec![1], vec![0]), node(vec![], vec![])],
+                    root_nodes: vec![0],
                 },
                 edit_state: None,
                 ext: None,
@@ -222,22 +224,26 @@ mod tests {
     }
 
     #[test]
-    fn rejects_duplicate_binding_attribute() {
+    fn rejects_duplicate_property_name() {
         let mut file = valid_file();
-        // Two bindings of the same attribute; keep the column count and lengths
-        // valid so the duplicate is the only fault.
+        // Two array properties of the same name; keep the row arity valid so
+        // the duplicate is the only fault.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            bindings: vec![binding("baseColorFactor", 0), binding("baseColorFactor", 0)],
-            materials: vec![vec![0, 1, 2, 3], vec![0, 1, 2, 3]],
+            array_properties: vec![
+                array_property("baseColorFactor", 0),
+                array_property("baseColorFactor", 0),
+            ],
+            scalar_properties: vec![],
+            materials: (0..4).map(|i| vec![i, i]).collect(),
         };
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
-    fn rejects_materials_column_count_mismatch() {
+    fn rejects_material_row_arity_mismatch() {
         let mut file = valid_file();
-        // One binding but two materials columns.
-        file.main.runtime_state.palettes[0].materials = vec![vec![0, 1, 2, 3], vec![0, 1, 2, 3]];
+        // One array property but rows of two value-indices.
+        file.main.runtime_state.palettes[0].materials = (0..4).map(|i| vec![i, i]).collect();
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -245,60 +251,67 @@ mod tests {
     fn rejects_materials_value_index_out_of_range() {
         let mut file = valid_file();
         // Pool 0 has four values, so value-index 9 is out of range.
-        file.main.runtime_state.palettes[0].materials = vec![vec![0, 1, 2, 9]];
+        file.main.runtime_state.palettes[0].materials = vec![vec![0], vec![1], vec![2], vec![9]];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
-    fn rejects_binding_pool_ref_out_of_range() {
+    fn rejects_property_value_pool_out_of_range() {
         let mut file = valid_file();
-        // The document has a single value pool (index 0); pool ref 9 is out of
-        // range.
-        file.main.runtime_state.palettes[0].bindings = vec![binding("baseColorFactor", 9)];
+        // The document has a single value pool (index 0); value pool 9 is out
+        // of range.
+        file.main.runtime_state.palettes[0].array_properties =
+            vec![array_property("baseColorFactor", 9)];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
-    fn rejects_ragged_materials_columns() {
+    fn rejects_ragged_material_rows() {
         let mut file = valid_file();
-        // Two bindings but columns of unequal length; M is column 0's length, so
-        // the short second column violates the shared-length rule.
+        // Two array properties but a short second row; every row must hold
+        // exactly one value-index per array property.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            bindings: vec![binding("baseColorFactor", 0), binding("metallicFactor", 0)],
-            materials: vec![vec![0, 1, 2, 3], vec![0, 1]],
+            array_properties: vec![
+                array_property("baseColorFactor", 0),
+                array_property("metallicFactor", 0),
+            ],
+            scalar_properties: vec![],
+            materials: vec![vec![0, 1], vec![0]],
         };
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
-    fn accepts_a_binding_less_palette_sampled_by_voxels() {
+    fn accepts_a_property_less_palette_sampled_by_voxels() {
         let mut file = valid_file();
-        // A binding-less palette stores one empty array per material, keeping
-        // the material count 4, so the object's samples of materials 1 and 3
-        // stay in range.
+        // With no array properties every row is empty, but each row is still
+        // one material, so M stays 4 and the object's samples of materials 1
+        // and 3 stay in range.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            bindings: vec![],
+            array_properties: vec![],
+            scalar_properties: vec![],
             materials: vec![vec![], vec![], vec![], vec![]],
         };
         assert!(validate_voxj_file(&file).is_ok());
     }
 
     #[test]
-    fn rejects_a_binding_less_palette_with_value_indices() {
+    fn rejects_a_property_less_palette_with_value_indices() {
         let mut file = valid_file();
-        // Without bindings there is no pool to index, so a non-empty material
-        // entry rejects.
+        // Without array properties every row must be empty; a stray
+        // value-index violates the row rule.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            bindings: vec![],
-            materials: vec![vec![0], vec![0], vec![0], vec![0]],
+            array_properties: vec![],
+            scalar_properties: vec![],
+            materials: vec![vec![0]; 4],
         };
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
-    fn rejects_layer_palette_ref_out_of_range() {
+    fn rejects_layer_out_of_range() {
         let mut file = valid_file();
-        file.main.runtime_state.objects[0].layer_palette_refs = vec![5];
+        file.main.runtime_state.objects[0].layers = vec![5];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -307,16 +320,47 @@ mod tests {
         let mut file = valid_file();
         // Two layers may reference the same palette; each carries its own
         // material channel over the two voxels.
-        file.main.runtime_state.objects[0].layer_palette_refs = vec![0, 0];
+        file.main.runtime_state.objects[0].layers = vec![0, 0];
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![1, 3], vec![0, 2]]);
         assert!(validate_voxj_file(&file).is_ok());
     }
 
     #[test]
+    fn accepts_an_unsampled_layer_with_no_channel() {
+        let mut file = valid_file();
+        // Palette 1 has no materials, so the second layer is unsampled and the
+        // single channel belongs to the first layer.
+        file.main.runtime_state.palettes.push(VoxjPalette {
+            array_properties: vec![],
+            scalar_properties: vec![],
+            materials: vec![],
+        });
+        file.main.runtime_state.objects[0].layers = vec![0, 1];
+        assert!(validate_voxj_file(&file).is_ok());
+    }
+
+    #[test]
+    fn rejects_a_channel_for_an_unsampled_layer() {
+        let mut file = valid_file();
+        // A material-less palette is never sampled, so a second channel for
+        // its layer is an arity fault.
+        file.main.runtime_state.palettes.push(VoxjPalette {
+            array_properties: vec![],
+            scalar_properties: vec![],
+            materials: vec![],
+        });
+        file.main.runtime_state.objects[0].layers = vec![0, 1];
+        file.main.runtime_state.objects[0].voxel_samples =
+            VoxjSampleBlock::RawJson(vec![vec![1, 3], vec![0, 0]]);
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
     fn rejects_sample_channel_too_short() {
         let mut file = valid_file();
-        // One channel for the one layer, but only one value for two voxels.
+        // One channel for the one sampled layer, but only one value for two
+        // voxels.
         file.main.runtime_state.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1]]);
         assert!(validate_voxj_file(&file).is_err());
     }
@@ -324,7 +368,7 @@ mod tests {
     #[test]
     fn rejects_sample_channel_count_mismatch() {
         let mut file = valid_file();
-        // Two channels where the object has one layer.
+        // Two channels where the object has one sampled layer.
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![1, 0], vec![3, 0]]);
         assert!(validate_voxj_file(&file).is_err());
@@ -359,42 +403,42 @@ mod tests {
     #[test]
     fn rejects_child_node_out_of_range() {
         let mut file = valid_file();
-        file.main.runtime_state.hierarchy_nodes[0].child_nodes = vec![9];
+        file.main.runtime_state.nodes[0].child_nodes = vec![9];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_child_node() {
         let mut file = valid_file();
-        file.main.runtime_state.hierarchy_nodes[0].child_nodes = vec![1, 1];
+        file.main.runtime_state.nodes[0].child_nodes = vec![1, 1];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_child_object_out_of_range() {
         let mut file = valid_file();
-        file.main.runtime_state.hierarchy_nodes[0].child_objects = vec![9];
+        file.main.runtime_state.nodes[0].child_objects = vec![9];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_child_object() {
         let mut file = valid_file();
-        file.main.runtime_state.hierarchy_nodes[0].child_objects = vec![0, 0];
+        file.main.runtime_state.nodes[0].child_objects = vec![0, 0];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_root_out_of_range() {
         let mut file = valid_file();
-        file.main.runtime_state.root_hierarchy_nodes = vec![9];
+        file.main.runtime_state.root_nodes = vec![9];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_root() {
         let mut file = valid_file();
-        file.main.runtime_state.root_hierarchy_nodes = vec![0, 0];
+        file.main.runtime_state.root_nodes = vec![0, 0];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -402,8 +446,8 @@ mod tests {
     fn rejects_a_cycle() {
         let mut file = valid_file();
         // node 0 -> node 1 -> node 0.
-        file.main.runtime_state.hierarchy_nodes[0].child_nodes = vec![1];
-        file.main.runtime_state.hierarchy_nodes[1].child_nodes = vec![0];
+        file.main.runtime_state.nodes[0].child_nodes = vec![1];
+        file.main.runtime_state.nodes[1].child_nodes = vec![0];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -411,19 +455,19 @@ mod tests {
     fn accepts_a_shared_child_dag() {
         let mut file = valid_file();
         // Both nodes share a third leaf node; legal in a DAG.
-        file.main.runtime_state.hierarchy_nodes = vec![
+        file.main.runtime_state.nodes = vec![
             node(vec![2], vec![]),
             node(vec![2], vec![]),
             node(vec![], vec![]),
         ];
-        file.main.runtime_state.root_hierarchy_nodes = vec![0, 1];
+        file.main.runtime_state.root_nodes = vec![0, 1];
         assert!(validate_voxj_file(&file).is_ok());
     }
 
     #[test]
     fn rejects_zero_scale() {
         let mut file = valid_file();
-        file.main.runtime_state.hierarchy_nodes[0].transform.scale = [1.0, 0.0, 1.0];
+        file.main.runtime_state.nodes[0].transform.scale = [1.0, 0.0, 1.0];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -431,9 +475,7 @@ mod tests {
     fn rejects_non_unit_rotation() {
         let mut file = valid_file();
         // Length squared 4, well outside the unit tolerance.
-        file.main.runtime_state.hierarchy_nodes[0]
-            .transform
-            .rotation = [0.0, 0.0, 0.0, 2.0];
+        file.main.runtime_state.nodes[0].transform.rotation = [0.0, 0.0, 0.0, 2.0];
         assert!(validate_voxj_file(&file).is_err());
     }
 

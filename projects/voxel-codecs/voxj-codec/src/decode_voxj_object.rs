@@ -13,23 +13,32 @@ use voxj::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 const MAX_HILBERT_BITS: u32 = 17;
 
 /// Decodes one [`VoxjObject`] into a [`VoxjDecodedObject`], the inverse of
-/// [`encode_voxj_object`](crate::encode_voxj_object()). `material_counts` comes
-/// from
-/// [`voxj_palette_material_counts`](crate::voxj_palette_material_counts()).
+/// [`encode_voxj_object`](crate::encode_voxj_object()). `material_counts`
+/// comes from
+/// [`voxj_palette_material_counts`](crate::voxj_palette_material_counts()); a
+/// layer is sampled iff its count is above zero, and the sample block must
+/// carry one channel per sampled layer.
 ///
 /// Each returned `positions[k]` pairs with `samples[k]`.
 pub fn decode_voxj_object(
     object: &VoxjObject,
     material_counts: &[usize],
 ) -> Result<VoxjDecodedObject> {
+    // One material count per sampled layer, in `layers` order: the required
+    // channel arity and the bit-width source for packed channels.
+    let channel_counts: Vec<usize> = material_counts
+        .iter()
+        .copied()
+        .filter(|&count| count > 0)
+        .collect();
     let positions = decode_positions(&object.voxel_positions, object.bounds)?;
-    let channels = decode_samples(&object.voxel_samples, material_counts, positions.len())?;
+    let channels = decode_samples(&object.voxel_samples, &channel_counts, positions.len())?;
     let samples = (0..positions.len())
         .map(|k| channels.iter().map(|channel| channel[k]).collect())
         .collect();
     Ok(VoxjDecodedObject {
         name: object.name.clone(),
-        layer_palette_refs: object.layer_palette_refs.clone(),
+        layers: object.layers.clone(),
         bounds: object.bounds,
         origin: object.origin,
         positions,
@@ -115,10 +124,11 @@ fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> Result<Vec<[
 }
 
 /// Decodes the sample block into one channel (`Vec<u32>` of length `n`) per
-/// layer, in the position block's voxel order.
+/// sampled layer, in the position block's voxel order. `channel_counts` holds
+/// one material count per sampled layer.
 fn decode_samples(
     block: &VoxjSampleBlock,
-    material_counts: &[usize],
+    channel_counts: &[usize],
     n: usize,
 ) -> Result<Vec<Vec<u32>>> {
     let channels: Vec<Vec<u32>> = match block {
@@ -132,26 +142,26 @@ fn decode_samples(
         VoxjSampleBlock::PackedBase64(channels) => channels
             .iter()
             .enumerate()
-            .map(|(l, base64)| {
-                let width = packed_width(material_counts.get(l).copied().unwrap_or(1));
+            .map(|(c, base64)| {
+                let width = packed_width(channel_counts.get(c).copied().unwrap_or(1));
                 let bytes = BASE64.decode(base64).map_err(Error::Base64)?;
                 check_packed_bytes(
                     &bytes,
                     n * width as usize,
-                    &format!("packed sample channel {l}"),
+                    &format!("packed sample channel {c}"),
                 )?;
                 Ok(unpack_bits(&bytes, width, n))
             })
             .collect::<Result<Vec<_>>>()?,
     };
 
-    // Every encoding must yield one channel per layer, each holding a value for
-    // every voxel; otherwise the object's samples are malformed.
-    if channels.len() != material_counts.len() {
+    // Every encoding must yield one channel per sampled layer, each holding a
+    // value for every voxel; otherwise the object's samples are malformed.
+    if channels.len() != channel_counts.len() {
         return Err(invalid_data(format!(
-            "sample block has {} channels, expected {} (one per layer)",
+            "sample block has {} channels, expected {} (one per sampled layer)",
             channels.len(),
-            material_counts.len()
+            channel_counts.len()
         )));
     }
     if let Some(channel) = channels.iter().find(|channel| channel.len() != n) {
@@ -203,7 +213,7 @@ mod tests {
     ) -> VoxjObject {
         VoxjObject {
             name: "o".to_owned(),
-            layer_palette_refs: vec![0],
+            layers: vec![0],
             bounds,
             origin: [0, 0, 0],
             voxel_positions,
@@ -228,13 +238,14 @@ mod tests {
         SampleEncoding::PackedBase64,
     ];
 
-    /// Material counts of the two layers' palettes in `sample_object`.
+    /// Material counts of the two layers' palettes in `sample_object`; both
+    /// layers are sampled.
     const MATERIAL_COUNTS: [usize; 2] = [256, 8];
 
     fn sample_object() -> VoxjDecodedObject {
         VoxjDecodedObject {
             name: "o".to_owned(),
-            layer_palette_refs: vec![0, 1],
+            layers: vec![0, 1],
             bounds: [4, 4, 5],
             origin: [0, 0, 0],
             positions: vec![[0, 0, 0], [2, 1, 0], [1, 3, 4], [3, 3, 3]],
@@ -272,11 +283,36 @@ mod tests {
         }
     }
 
+    /// A layer over a palette with no materials is unsampled and carries no
+    /// channel: with counts `[256, 0, 8]` the middle layer contributes
+    /// nothing, and the two-entry sample rows round-trip unchanged.
+    #[test]
+    fn round_trips_object_with_unsampled_layer() {
+        let counts = [256, 0, 8];
+        let mut object = sample_object();
+        object.layers = vec![0, 2, 1];
+        for position in POSITIONS {
+            for sample in SAMPLES {
+                let encoded = encode_voxj_object(&object, &counts, position, sample).unwrap();
+                let decoded = decode_voxj_object(&encoded, &counts).unwrap();
+                assert_eq!(
+                    voxel_set(&decoded),
+                    voxel_set(&object),
+                    "pair {position:?}/{sample:?}"
+                );
+                assert_eq!(
+                    decoded.layers, object.layers,
+                    "pair {position:?}/{sample:?}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn round_trips_empty_object() {
         let object = VoxjDecodedObject {
             name: "o".to_owned(),
-            layer_palette_refs: Vec::new(),
+            layers: Vec::new(),
             bounds: [0, 0, 0],
             origin: [0, 0, 0],
             positions: Vec::new(),
@@ -299,7 +335,7 @@ mod tests {
         for sample in SAMPLES {
             let object = VoxjDecodedObject {
                 name: "o".to_owned(),
-                layer_palette_refs: Vec::new(),
+                layers: Vec::new(),
                 bounds: [2, 1, 1],
                 origin: [0, 0, 0],
                 positions: vec![[0, 0, 0], [1, 0, 0]],
@@ -316,18 +352,27 @@ mod tests {
         }
     }
 
+    /// A channel supplied for an unsampled layer is an arity fault: the layer's
+    /// palette has no materials, so no channel may carry samples for it.
+    #[test]
+    fn rejects_channel_for_unsampled_layer() {
+        let object = object(
+            [2, 1, 1],
+            two_raw_positions(),
+            VoxjSampleBlock::RawJson(vec![vec![0, 0]]),
+        );
+        assert!(decode_voxj_object(&object, &[0]).is_err());
+    }
+
     /// A raw-json sample channel shorter than the voxel count (here one value
     /// for two voxels) is malformed, not silently zero-filled.
     #[test]
     fn rejects_short_raw_json_sample_channel() {
-        let object = VoxjObject {
-            name: "o".to_owned(),
-            layer_palette_refs: vec![0],
-            bounds: [2, 1, 1],
-            origin: [0, 0, 0],
-            voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
-            voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1]]),
-        };
+        let object = object(
+            [2, 1, 1],
+            two_raw_positions(),
+            VoxjSampleBlock::RawJson(vec![vec![1]]),
+        );
         assert!(decode_voxj_object(&object, &[4]).is_err());
     }
 
@@ -335,29 +380,23 @@ mod tests {
     /// require is a truncated block, not zero-padded samples.
     #[test]
     fn rejects_truncated_packed_samples() {
-        let object = VoxjObject {
-            name: "o".to_owned(),
-            layer_palette_refs: vec![0],
-            bounds: [2, 1, 1],
-            origin: [0, 0, 0],
-            voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
-            voxel_samples: VoxjSampleBlock::PackedBase64(vec![String::new()]),
-        };
+        let object = object(
+            [2, 1, 1],
+            two_raw_positions(),
+            VoxjSampleBlock::PackedBase64(vec![String::new()]),
+        );
         assert!(decode_voxj_object(&object, &[4]).is_err());
     }
 
-    /// A sample block carrying more channels than the object has layers is
-    /// rejected rather than packing the extra channel at a guessed width.
+    /// A sample block carrying more channels than the object has sampled layers
+    /// is rejected rather than packing the extra channel at a guessed width.
     #[test]
     fn rejects_channel_count_mismatch() {
-        let object = VoxjObject {
-            name: "o".to_owned(),
-            layer_palette_refs: vec![0],
-            bounds: [1, 1, 1],
-            origin: [0, 0, 0],
-            voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0]]),
-            voxel_samples: VoxjSampleBlock::RleJson(vec![vec![0, 1], vec![0, 1]]),
-        };
+        let object = object(
+            [1, 1, 1],
+            VoxjPositionBlock::RawJson(vec![[0, 0, 0]]),
+            VoxjSampleBlock::RleJson(vec![vec![0, 1], vec![0, 1]]),
+        );
         assert!(decode_voxj_object(&object, &[4]).is_err());
     }
 

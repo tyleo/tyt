@@ -97,13 +97,27 @@ commit-sized chunk.
       `root_nodes`; keep `deny_unknown_fields` closure; update doc comments
       to the new framing; in-crate round-trip coverage.
 
-## Phase 4: `voxj-codec` (coarse)
+## Phase 4: `voxj-codec`
 
-- [ ] Re-derive the material-count and channel-arity paths from sampled
-      layers (palette `M > 0`); rename `VoxjDecodedObject` fields; rework the
-      validation rules (closures, 10.2 union uniqueness, `valueIndex` range,
-      the sampled-layer channel rule) as named checks; regenerate inline
-      fixtures.
+Refined 2026-07-19 into two commits: the wire adaptation first, then the
+scalar-property content checks on top of it.
+
+- [x] Adapt the crate to the new wire model: rename `layers` / `nodes` /
+      `root_nodes` throughout, derive `M = materials.len()` in
+      `voxj_palette_material_counts`, carry one channel per sampled layer
+      (`M > 0`) through `VoxjDecodedObject`, `encode_voxj_object` /
+      `encode_voxj_object_optimized` / `decode_voxj_object`, and
+      `check_geometry`; rewrite `check_palettes` to the array-property and
+      row rules (10.1 array side, 10.3, 10.4); update check and codec doc
+      comments; regenerate inline fixtures, adding sampled-vs-unsampled
+      coverage. Scalar properties parse and round-trip but are not yet
+      content-checked.
+- [ ] Add the scalar-property checks: non-empty names and rule 10.2 name
+      uniqueness across `arrayProperties` union `scalarProperties`, scalar
+      `valuePool` in range, `valueIndex` in `[0, pool.values.length)`
+      (rule 10.5); extend the valid fixtures with scalar properties and add
+      one failure fixture per new check; finalize the `palettes` check
+      wording in `check_voxj_file` and `Check`.
 
 ## Phase 5: `voxcore` (coarse)
 

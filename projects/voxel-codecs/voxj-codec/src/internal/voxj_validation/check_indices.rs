@@ -2,22 +2,22 @@ use crate::{Check, Failures};
 use std::collections::HashSet;
 use voxj::VoxjMain;
 
-/// Layer palette refs, node children, child objects, and roots all resolve;
-/// node children, child objects, and roots each list no index twice. Two layers
-/// may reference the same palette, so a repeated layer ref is allowed.
+/// Object layers, node children, child objects, and roots all resolve; node
+/// children, child objects, and roots each list no index twice. Two layers may
+/// reference the same palette, so a repeated layer entry is allowed.
 pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
 
     for (index, object) in state.objects.iter().enumerate() {
-        for &palette_ref in &object.layer_palette_refs {
+        for &layer in &object.layers {
             if !failures.go() {
                 return;
             }
-            if palette_ref >= state.palettes.len() {
+            if layer >= state.palettes.len() {
                 failures.report(
                     Check::Indices,
                     format!(
-                        "object {index} references palette {palette_ref}, but the document has {} palettes",
+                        "object {index} references palette {layer}, but the document has {} palettes",
                         state.palettes.len()
                     ),
                 );
@@ -25,18 +25,18 @@ pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
         }
     }
 
-    for (index, node) in state.hierarchy_nodes.iter().enumerate() {
+    for (index, node) in state.nodes.iter().enumerate() {
         if !failures.go() {
             return;
         }
         let mut seen_nodes = HashSet::with_capacity(node.child_nodes.len());
         for &child in &node.child_nodes {
-            if child >= state.hierarchy_nodes.len() {
+            if child >= state.nodes.len() {
                 failures.report(
                     Check::Indices,
                     format!(
                         "hierarchy node {index} lists child node {child}, but the document has {} nodes",
-                        state.hierarchy_nodes.len()
+                        state.nodes.len()
                     ),
                 );
             } else if !seen_nodes.insert(child) {
@@ -72,17 +72,17 @@ pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
         }
     }
 
-    let mut seen_roots = HashSet::with_capacity(state.root_hierarchy_nodes.len());
-    for &root in &state.root_hierarchy_nodes {
+    let mut seen_roots = HashSet::with_capacity(state.root_nodes.len());
+    for &root in &state.root_nodes {
         if !failures.go() {
             return;
         }
-        if root >= state.hierarchy_nodes.len() {
+        if root >= state.nodes.len() {
             failures.report(
                 Check::Indices,
                 format!(
                     "root references hierarchy node {root}, but the document has {} nodes",
-                    state.hierarchy_nodes.len()
+                    state.nodes.len()
                 ),
             );
         } else if !seen_roots.insert(root) {

@@ -11,17 +11,17 @@ use voxj::VoxjFile;
 /// 1. `version`: the version is recognized.
 /// 2. `value-pools`: every value pool has non-empty values within its kind,
 ///    with in-range numeric bounds and in-range color components.
-/// 3. `palettes`: every palette has bindings with distinct attributes and
-///    in-range pool refs, and column-major materials with one column per
-///    binding, a shared length, and in-range value-indices; a binding-less
-///    palette stores one empty array per material.
-/// 4. `indices`: layer palette refs, node children, child objects, and roots
+/// 3. `palettes`: every palette's array properties have non-empty, distinct
+///    names and in-range value pools, and its row-major materials hold one row
+///    per material, each of exactly one in-range value-index per array
+///    property.
+/// 4. `indices`: object layers, node children, child objects, and roots
 ///    resolve; node children, child objects, and roots each appear at most once
-///    (a palette may back two layers, so a repeated layer ref is allowed).
+///    (a palette may back two layers, so a repeated layer entry is allowed).
 /// 5. `blocks`: each object's position and sample blocks decode: canonical
 ///    base64, exact bitmap and packed byte counts with zero pad bits,
 ///    well-formed run streams and varints, the Hilbert bits cap, and one
-///    channel per layer with one value per voxel.
+///    channel per sampled layer with one value per voxel.
 /// 6. `unique-positions`: voxel positions within an object are unique.
 /// 7. `bounds`: positions lie within bounds and bounds are exactly tight.
 /// 8. `sample-materials`: each sample indexes a real material of its layer's
@@ -34,9 +34,9 @@ use voxj::VoxjFile;
 ///     can witness.
 ///
 /// A check whose work an earlier failure made moot reports no failure rather
-/// than a spurious one: an object's geometry checks are skipped when its layer
-/// palette refs do not resolve, so they may read as passed while `indices`
-/// carries the real fault.
+/// than a spurious one: an object's geometry checks are skipped when its
+/// layers do not resolve, so they may read as passed while `indices` carries
+/// the real fault.
 pub fn check_voxj_file(file: &VoxjFile) -> Vec<VoxjCheck> {
     build_voxj_report(collect_voxj_failures(file, false))
 }
@@ -46,8 +46,8 @@ mod tests {
     use crate::{VoxjCheck, VoxjCheckStatus, check_voxj_file};
     use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
-        VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
-        VoxjPaletteBinding, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjArrayProperty, VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
+        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
         VoxjValuePool,
     };
 
@@ -59,15 +59,17 @@ mod tests {
         }]
     }
 
-    /// A palette of `materials` materials binding `baseColorFactor` to value
-    /// pool 0, its column the value-indices `0..materials`.
+    /// A palette of `materials` materials with one array property binding
+    /// `baseColorFactor` to value pool 0, its rows the value-indices
+    /// `0..materials`.
     fn palette(materials: usize) -> VoxjPalette {
         VoxjPalette {
-            bindings: vec![VoxjPaletteBinding {
-                attribute: "baseColorFactor".to_owned(),
-                pool_ref: 0,
+            array_properties: vec![VoxjArrayProperty {
+                name: "baseColorFactor".to_owned(),
+                value_pool: 0,
             }],
-            materials: vec![(0..materials).collect()],
+            scalar_properties: vec![],
+            materials: (0..materials).map(|i| vec![i]).collect(),
         }
     }
 
@@ -102,14 +104,14 @@ mod tests {
                     palettes: vec![palette(4)],
                     objects: vec![VoxjObject {
                         name: "o".to_owned(),
-                        layer_palette_refs: vec![0],
+                        layers: vec![0],
                         bounds: [2, 1, 1],
                         origin: [0, 0, 0],
                         voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
                         voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1, 3]]),
                     }],
-                    hierarchy_nodes: vec![node(vec![1], vec![0]), node(vec![], vec![])],
-                    root_hierarchy_nodes: vec![0],
+                    nodes: vec![node(vec![1], vec![0]), node(vec![], vec![])],
+                    root_nodes: vec![0],
                 },
                 edit_state: None,
                 ext: None,
@@ -168,11 +170,9 @@ mod tests {
         let mut file = valid_file();
         // Three faults in three different checks; a fail-fast run would surface
         // only the first.
-        file.main.runtime_state.objects[0].layer_palette_refs = vec![5];
-        file.main.runtime_state.hierarchy_nodes[0].transform.scale = [1.0, 0.0, 1.0];
-        file.main.runtime_state.hierarchy_nodes[1]
-            .transform
-            .rotation = [0.0, 0.0, 0.0, 2.0];
+        file.main.runtime_state.objects[0].layers = vec![5];
+        file.main.runtime_state.nodes[0].transform.scale = [1.0, 0.0, 1.0];
+        file.main.runtime_state.nodes[1].transform.rotation = [0.0, 0.0, 0.0, 2.0];
         let checks = check_voxj_file(&file);
 
         assert!(matches!(
@@ -196,10 +196,10 @@ mod tests {
     #[test]
     fn records_one_message_per_problem_in_a_check() {
         let mut file = valid_file();
-        // Two distinct index faults: an out-of-range layer palette ref and a
-        // duplicate root.
-        file.main.runtime_state.objects[0].layer_palette_refs = vec![5];
-        file.main.runtime_state.root_hierarchy_nodes = vec![0, 0];
+        // Two distinct index faults: an out-of-range layer and a duplicate
+        // root.
+        file.main.runtime_state.objects[0].layers = vec![5];
+        file.main.runtime_state.root_nodes = vec![0, 0];
         let checks = check_voxj_file(&file);
         match status(&checks, "indices") {
             VoxjCheckStatus::Failed(messages) => assert_eq!(messages.len(), 2),
@@ -210,9 +210,9 @@ mod tests {
     #[test]
     fn rejects_materials_value_index_out_of_range() {
         let mut file = valid_file();
-        // Pool 0 has four values, so value-index 9 in the materials column is
-        // out of range.
-        file.main.runtime_state.palettes[0].materials = vec![vec![0, 1, 2, 9]];
+        // Pool 0 has four values, so value-index 9 in material 3's row is out
+        // of range.
+        file.main.runtime_state.palettes[0].materials = vec![vec![0], vec![1], vec![2], vec![9]];
         let checks = check_voxj_file(&file);
         assert!(matches!(
             status(&checks, "palettes"),

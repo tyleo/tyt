@@ -27,13 +27,13 @@ mod tests {
                     palettes: Vec::new(),
                     objects: vec![VoxjObject {
                         name: "o".to_owned(),
-                        layer_palette_refs: vec![0],
+                        layers: vec![0],
                         bounds: [2, 1, 1],
                         origin: [0, 0, 0],
                         voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
                         voxel_samples: VoxjSampleBlock::RawJson(vec![vec![1, 2]]),
                     }],
-                    hierarchy_nodes: vec![VoxjHierarchyNode {
+                    nodes: vec![VoxjHierarchyNode {
                         name: "o".to_owned(),
                         child_nodes: Vec::new(),
                         child_objects: vec![0],
@@ -43,7 +43,7 @@ mod tests {
                             scale: [1.0; 3],
                         },
                     }],
-                    root_hierarchy_nodes: vec![0],
+                    root_nodes: vec![0],
                 },
                 edit_state: None,
                 ext: None,

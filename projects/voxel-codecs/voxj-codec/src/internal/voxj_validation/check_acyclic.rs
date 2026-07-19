@@ -22,7 +22,7 @@ fn first_cycle_node(main: &VoxjMain) -> Option<usize> {
     const GREY: u8 = 1;
     const BLACK: u8 = 2;
 
-    let nodes = &main.runtime_state.hierarchy_nodes;
+    let nodes = &main.runtime_state.nodes;
     let mut colour = vec![WHITE; nodes.len()];
     for start in 0..nodes.len() {
         if colour[start] != WHITE {
