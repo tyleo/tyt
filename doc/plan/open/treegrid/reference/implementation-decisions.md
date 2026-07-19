@@ -283,3 +283,44 @@ since its argument type is serde_json's. This completes S1.
   `i64::MAX`, else a float. Text needs no collapse rule of its own:
   it is plain `Display` (vxl's `format_number`), which already prints
   integral floats without a fractional part.
+
+## S2 chunk 1: text machinery and the cell matrix (2026-07-19)
+
+S2 lands in two chunks. This chunk is the ported text machinery
+(`text_width`, `tree_glyphs`, the markdown table core) and the generic
+cell rendering (the resolved-format x visual matrix and the `Visual`
+strip rule); chunk 2 is the `ty-math` feature and its typed-color
+constructors, which completes S2. Quote formatting needed no port: it
+landed at S1 as `TreeGridLabel::render`.
+
+- **Rendered cells carry their declared width.** The crate-private
+  `Cell { rendered, width }` is the unit alignment lays out by:
+  `Cell::render` resolves the format (the node's, else the policy's
+  per value) and applies the matrix, measuring text past ANSI escapes
+  and taking a visual's declared width verbatim, so an opaque visual
+  is never re-measured -- the contract `TreeGridVisual` promises. The
+  markdown table core therefore takes `Cell` headers and rows rather
+  than vxl's plain strings and pads by the declared widths; vxl's
+  `pad_right` still ports for the label padding the `rows` /
+  `columns` layouts need at S4.
+- **The strip rule is structural over rendered cells.** A `Cell`
+  remembers whether it is a bare visual, and `Cell::separator` joins
+  a node's cells with nothing when every one is (vxl's `abuts`), one
+  space otherwise -- computed from the rendered cells, matching the
+  spec's phrasing, so the policy is consulted once per value.
+- **The machinery lives in the private `render` module.** Like the
+  battery's `src/value/`, the crate root keeps only the model:
+  `src/render/` holds `cell`, `markdown_table`, `text_width`, and
+  `tree_glyphs`, and its `mod.rs` flattens them with `pub(crate)
+  use`, so calls carry the parent prefix -- `render::visible_width`,
+  `render::markdown_table`, `crate::render::Cell` -- vxl's
+  `implementation::` pattern, and the module gives the S3-S5 layout
+  render implementations a home. The table function keeps vxl's
+  `markdown_table` name (no stutter under the `render::` prefix);
+  vxl's `row` const-generic helper is caller convenience that does
+  not port.
+- **The module rides one `#![allow(dead_code)]`** in `render/mod.rs`
+  until the S3-S5 renders reach the machinery from the public API,
+  plus targeted `#[allow(unused_imports)]` on the two re-exports
+  nothing in the crate consumes yet (`markdown_table`,
+  `tree_glyphs`); each allow drops with its first consumer.

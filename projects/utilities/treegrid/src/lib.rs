@@ -7,6 +7,7 @@
 mod b_tree_grid_node;
 #[cfg(feature = "json")]
 mod json;
+mod render;
 mod tree_grid;
 mod tree_grid_cell_format;
 mod tree_grid_cells;
