@@ -10,9 +10,11 @@ pub enum Check {
     /// matching their pattern, and float color components in range.
     ValuePools,
 
-    /// Every palette's array properties have non-empty, distinct names and
-    /// in-range value pools, and its row-major materials hold one row per
-    /// material, each of exactly one in-range value-index per array property.
+    /// Every palette's properties have non-empty names, distinct across array
+    /// and scalar properties together, and in-range value pools; scalar
+    /// properties pin in-range value-indices; and row-major materials hold one
+    /// row per material, each of exactly one in-range value-index per array
+    /// property.
     Palettes,
 
     /// Object layers, node children, child objects, and roots resolve; node

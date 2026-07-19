@@ -79,6 +79,14 @@ their failure fixtures. Each commit compiles and tests green on its own; the
 split keeps the mechanical migration and the new validation semantics
 separately reviewable.
 
+## Scalar-property faults report under the existing palettes check
+
+2026-07-19, phase 4. The scalar checks (empty name, cross-list duplicate,
+`valuePool` and `valueIndex` range) report under the existing `palettes`
+check rather than a new named check: they are palette-shape rules like their
+array-side counterparts. The public thirteen-check surface is unchanged, so
+`vxl validate` gains no new check name from voxj-codec.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

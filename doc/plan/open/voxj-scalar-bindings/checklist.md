@@ -112,7 +112,7 @@ scalar-property content checks on top of it.
       comments; regenerate inline fixtures, adding sampled-vs-unsampled
       coverage. Scalar properties parse and round-trip but are not yet
       content-checked.
-- [ ] Add the scalar-property checks: non-empty names and rule 10.2 name
+- [x] Add the scalar-property checks: non-empty names and rule 10.2 name
       uniqueness across `arrayProperties` union `scalarProperties`, scalar
       `valuePool` in range, `valueIndex` in `[0, pool.values.length)`
       (rule 10.5); extend the valid fixtures with scalar properties and add

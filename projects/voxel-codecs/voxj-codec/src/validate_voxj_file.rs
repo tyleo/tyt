@@ -18,16 +18,24 @@ mod tests {
     use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
         VoxjArrayProperty, VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
-        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
-        VoxjValuePool,
+        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjScalarProperty,
+        VoxjTransform, VoxjValuePool,
     };
 
-    /// One `srgba-hex` value pool of four colors, enough to back a four-material
-    /// palette's value-indices.
+    /// An `srgba-hex` pool of four colors backing the array property's
+    /// value-indices, and a one-value `float` pool backing the scalar
+    /// property.
     fn value_pools() -> Vec<VoxjValuePool> {
-        vec![VoxjValuePool::SrgbaHex {
-            values: vec!["#000000FF".to_owned(); 4],
-        }]
+        vec![
+            VoxjValuePool::SrgbaHex {
+                values: vec!["#000000FF".to_owned(); 4],
+            },
+            VoxjValuePool::Float {
+                min: VoxjBound::None,
+                max: VoxjBound::None,
+                values: vec![1.5],
+            },
+        ]
     }
 
     /// An array property of `name` bound to value pool `value_pool`.
@@ -38,13 +46,24 @@ mod tests {
         }
     }
 
-    /// A palette of `materials` materials with one array property binding
+    /// A scalar property of `name` pinning `value_index` of value pool
+    /// `value_pool`.
+    fn scalar_property(name: &str, value_pool: usize, value_index: usize) -> VoxjScalarProperty {
+        VoxjScalarProperty {
+            name: name.to_owned(),
+            value_pool,
+            value_index,
+        }
+    }
+
+    /// A palette of `materials` materials: one array property binding
     /// `baseColorFactor` to value pool 0, its rows the value-indices
-    /// `0..materials`.
+    /// `0..materials`, and one scalar property pinning `emissiveStrength` to
+    /// value 0 of the float pool.
     fn palette(materials: usize) -> VoxjPalette {
         VoxjPalette {
             array_properties: vec![array_property("baseColorFactor", 0)],
-            scalar_properties: vec![],
+            scalar_properties: vec![scalar_property("emissiveStrength", 1, 0)],
             materials: (0..materials).map(|i| vec![i]).collect(),
         }
     }
@@ -258,10 +277,44 @@ mod tests {
     #[test]
     fn rejects_property_value_pool_out_of_range() {
         let mut file = valid_file();
-        // The document has a single value pool (index 0); value pool 9 is out
-        // of range.
+        // The document has two value pools; value pool 9 is out of range.
         file.main.runtime_state.palettes[0].array_properties =
             vec![array_property("baseColorFactor", 9)];
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_duplicate_name_across_array_and_scalar_properties() {
+        let mut file = valid_file();
+        // The scalar property reuses the array property's name; the palette's
+        // properties share one namespace across both lists.
+        file.main.runtime_state.palettes[0].scalar_properties =
+            vec![scalar_property("baseColorFactor", 1, 0)];
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_empty_scalar_property_name() {
+        let mut file = valid_file();
+        file.main.runtime_state.palettes[0].scalar_properties = vec![scalar_property("", 1, 0)];
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_scalar_value_pool_out_of_range() {
+        let mut file = valid_file();
+        // The document has two value pools; value pool 9 is out of range.
+        file.main.runtime_state.palettes[0].scalar_properties =
+            vec![scalar_property("emissiveStrength", 9, 0)];
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
+    fn rejects_scalar_value_index_out_of_range() {
+        let mut file = valid_file();
+        // Pool 1 has a single value, so value-index 1 is out of range.
+        file.main.runtime_state.palettes[0].scalar_properties =
+            vec![scalar_property("emissiveStrength", 1, 1)];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -326,16 +379,22 @@ mod tests {
         assert!(validate_voxj_file(&file).is_ok());
     }
 
+    /// A scalar-only palette: no array properties and no materials, supplying
+    /// one `emissiveStrength` value for any object layered over it.
+    fn scalar_only_palette() -> VoxjPalette {
+        VoxjPalette {
+            array_properties: vec![],
+            scalar_properties: vec![scalar_property("emissiveStrength", 1, 0)],
+            materials: vec![],
+        }
+    }
+
     #[test]
     fn accepts_an_unsampled_layer_with_no_channel() {
         let mut file = valid_file();
-        // Palette 1 has no materials, so the second layer is unsampled and the
+        // Palette 1 is scalar-only, so the second layer is unsampled and the
         // single channel belongs to the first layer.
-        file.main.runtime_state.palettes.push(VoxjPalette {
-            array_properties: vec![],
-            scalar_properties: vec![],
-            materials: vec![],
-        });
+        file.main.runtime_state.palettes.push(scalar_only_palette());
         file.main.runtime_state.objects[0].layers = vec![0, 1];
         assert!(validate_voxj_file(&file).is_ok());
     }
@@ -343,13 +402,9 @@ mod tests {
     #[test]
     fn rejects_a_channel_for_an_unsampled_layer() {
         let mut file = valid_file();
-        // A material-less palette is never sampled, so a second channel for
-        // its layer is an arity fault.
-        file.main.runtime_state.palettes.push(VoxjPalette {
-            array_properties: vec![],
-            scalar_properties: vec![],
-            materials: vec![],
-        });
+        // A scalar-only palette has no materials and is never sampled, so a
+        // second channel for its layer is an arity fault.
+        file.main.runtime_state.palettes.push(scalar_only_palette());
         file.main.runtime_state.objects[0].layers = vec![0, 1];
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![1, 3], vec![0, 0]]);

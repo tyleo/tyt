@@ -11,10 +11,11 @@ use voxj::VoxjFile;
 /// 1. `version`: the version is recognized.
 /// 2. `value-pools`: every value pool has non-empty values within its kind,
 ///    with in-range numeric bounds and in-range color components.
-/// 3. `palettes`: every palette's array properties have non-empty, distinct
-///    names and in-range value pools, and its row-major materials hold one row
-///    per material, each of exactly one in-range value-index per array
-///    property.
+/// 3. `palettes`: every palette's properties have non-empty names, distinct
+///    across array and scalar properties together, and in-range value pools;
+///    every scalar property pins an in-range value-index; and row-major
+///    materials hold one row per material, each of exactly one in-range
+///    value-index per array property.
 /// 4. `indices`: object layers, node children, child objects, and roots
 ///    resolve; node children, child objects, and roots each appear at most once
 ///    (a palette may back two layers, so a repeated layer entry is allowed).
@@ -47,28 +48,41 @@ mod tests {
     use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
         VoxjArrayProperty, VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
-        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
-        VoxjValuePool,
+        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjScalarProperty,
+        VoxjTransform, VoxjValuePool,
     };
 
-    /// One `srgba-hex` value pool of four colors, enough to back a four-material
-    /// palette's value-indices.
+    /// An `srgba-hex` pool of four colors backing the array property's
+    /// value-indices, and a one-value `float` pool backing the scalar
+    /// property.
     fn value_pools() -> Vec<VoxjValuePool> {
-        vec![VoxjValuePool::SrgbaHex {
-            values: vec!["#000000FF".to_owned(); 4],
-        }]
+        vec![
+            VoxjValuePool::SrgbaHex {
+                values: vec!["#000000FF".to_owned(); 4],
+            },
+            VoxjValuePool::Float {
+                min: VoxjBound::None,
+                max: VoxjBound::None,
+                values: vec![1.5],
+            },
+        ]
     }
 
-    /// A palette of `materials` materials with one array property binding
+    /// A palette of `materials` materials: one array property binding
     /// `baseColorFactor` to value pool 0, its rows the value-indices
-    /// `0..materials`.
+    /// `0..materials`, and one scalar property pinning `emissiveStrength` to
+    /// value 0 of the float pool.
     fn palette(materials: usize) -> VoxjPalette {
         VoxjPalette {
             array_properties: vec![VoxjArrayProperty {
                 name: "baseColorFactor".to_owned(),
                 value_pool: 0,
             }],
-            scalar_properties: vec![],
+            scalar_properties: vec![VoxjScalarProperty {
+                name: "emissiveStrength".to_owned(),
+                value_pool: 1,
+                value_index: 0,
+            }],
             materials: (0..materials).map(|i| vec![i]).collect(),
         }
     }
@@ -213,6 +227,23 @@ mod tests {
         // Pool 0 has four values, so value-index 9 in material 3's row is out
         // of range.
         file.main.runtime_state.palettes[0].materials = vec![vec![0], vec![1], vec![2], vec![9]];
+        let checks = check_voxj_file(&file);
+        assert!(matches!(
+            status(&checks, "palettes"),
+            VoxjCheckStatus::Failed(_)
+        ));
+    }
+
+    #[test]
+    fn rejects_scalar_value_index_out_of_range() {
+        let mut file = valid_file();
+        // Pool 1 has a single value, so the scalar property's value-index 1 is
+        // out of range.
+        file.main.runtime_state.palettes[0].scalar_properties = vec![VoxjScalarProperty {
+            name: "emissiveStrength".to_owned(),
+            value_pool: 1,
+            value_index: 1,
+        }];
         let checks = check_voxj_file(&file);
         assert!(matches!(
             status(&checks, "palettes"),
