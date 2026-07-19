@@ -31,3 +31,7 @@ The 2026-07-17 wire rename (`arrayProperties` / `scalarProperties`, `name` /
 `valuePool` / `valueIndex`; README decision 12) postdates this surface;
 whether the Rust names follow (`array_property_ids`, `property_by_name`, and
 so on) settles in phase 5.
+
+With `materials` row-major on the wire (README decision 14, 2026-07-17),
+voxcore's per-material storage and the wire share one orientation, so the
+phase 6 seam maps material rows one-to-one.

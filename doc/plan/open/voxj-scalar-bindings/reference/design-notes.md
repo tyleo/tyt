@@ -64,6 +64,13 @@ Rejected alternatives and the strain noticed while drafting
     and glTF's `"mesh": 0`, and `valueIndex` matches the materials rules'
     "value-index". Bare `value` was rejected along the way: over a numeric
     pool an index reads as the bound value itself.
+14. **Column-major `materials`**, one column per array property, carried
+    over from the redesign. voxcore stores materials per-material, every
+    producer and reader is row-wise, and the seam transposed both ways
+    behind a ragged-column error class; measured under whole-file deflate
+    the orientations differ by single-digit bytes, rows winning at large
+    `M`. Replaced by one row per material with `M = materials.length`
+    (owner review 2026-07-17, README decision 14).
 
 ## Strain noticed while drafting
 

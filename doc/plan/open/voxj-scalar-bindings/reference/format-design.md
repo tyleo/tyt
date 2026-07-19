@@ -35,7 +35,10 @@ which only restated facts the Objects section and rule 11 already state,
 and renamed the hierarchy fields: `hierarchyNodes` becomes `nodes` and
 `rootHierarchyNodes` becomes `rootNodes`, matching `childNodes` and glTF's
 `nodes`; the prose term hierarchy node and the TypeScript `HierarchyNode`
-interface are unchanged (README decision 13).
+interface are unchanged (README decision 13). A further 2026-07-17 review
+made `materials` row-major: one row per material, a value-index per array
+property in property order, with `M = materials.length` (README decision
+14).
 
 ## Objects
 
@@ -166,22 +169,27 @@ Sharing Idioms subsection before Properties.
 A palette binds property names to shared [value pools](#value-pools), then
 lists the distinct materials it uses as rows over those pools. Properties
 come in two arities, and a palette may carry either, both, or neither. An
-**array property** binds to a whole pool and takes one `materials` column of
-value-indices, so its value varies per material. A **scalar property** is
-pinned to a single pool cell, `valuePools[valuePool].values[valueIndex]`,
-one value for the whole palette. A voxel samples a material in each sampled
-layer by its index in that layer's palette. A palette may be referenced by
-any number of layers and objects (see [Objects](#objects)).
+**array property** binds to a whole pool and takes one value-index per
+material, so its value varies per material. A **scalar property** is pinned
+to a single pool cell of any kind,
+`valuePools[valuePool].values[valueIndex]`, one value for the whole palette.
+A voxel samples a material in each sampled layer by its index in that
+layer's palette. A palette may be referenced by any number of layers and
+objects (see [Objects](#objects)).
 
-"Scalar" means single-valued: a scalar property may reference a cell of any
-pool kind.
+A scalar property wires a name to a value; any arithmetic, such as
+`emissiveStrength` multiplying `emissiveFactor`, comes from the property
+vocabulary. Within one palette a name appears in `arrayProperties` or
+`scalarProperties`, so a single layer never conflicts with itself.
 
-Materials are stored column-major, one column per array property:
+A material is one row of value-indices, one per array property, so the
+material count `M` is `materials.length`; with no array properties every
+row is empty:
 
 ```jsonc
 {
   // ordered array properties; each binds a property name to a value pool
-  // index. Order fixes the column order in `materials`.
+  // index. Order fixes the value-index order in each `materials` row.
   "arrayProperties": [
     { "name": "baseColorFactor", "valuePool": 0 },
     { "name": "metallicFactor", "valuePool": 1 },
@@ -193,25 +201,21 @@ Materials are stored column-major, one column per array property:
     { "name": "emissiveStrength", "valuePool": 2, "valueIndex": 1 },
   ],
 
-  // `materials` is column-major: one inner array per array property (a
-  // column), in property order, so materials.length == arrayProperties.length.
-  // Every column has the same length, the material count M. materials[b][m]
-  // is a value-index into the pool bound by column b. A voxel samples
-  // material m in [0, M); resolve it by reading down the columns:
-  //   material 0 = { baseColorFactor: pool0.values[0],
-  //                  metallicFactor: pool1.values[2] }
+  // one row per material, a value-index per array property, in property
+  // order. materials[m][b] is a value-index into the pool bound by
+  // arrayProperties[b]. A voxel samples material m in [0, M); resolve it by
+  // reading across its row:
+  //   material 0 = {
+  //     baseColorFactor: pool0.values[0],
+  //     metallicFactor: pool1.values[2]
+  //   }
   "materials": [
-    [0, 1, 2], // baseColorFactor value-index for materials 0, 1, 2
-    [2, 0, 1], // metallicFactor value-index for materials 0, 1, 2
+    [0, 2], // material 0
+    [1, 0], // material 1
+    [2, 1], // material 2
   ],
 }
 ```
-
-`materials` is column-major: each inner array is one array property's column
-of value-indices into a single pool. A palette may have no array properties.
-`materials` is then one empty array per material, so the material count `M`
-survives as `materials.length`, and every material resolves every array
-property to its default.
 
 A voxel's property values resolve from its object's `layers` as follows:
 
@@ -220,19 +224,14 @@ A voxel's property values resolve from its object's `layers` as follows:
    the whole object. An array property supplies its `name` per voxel: read
    the voxel's sample `m` from the layer's channel, a material index; array
    property `b` supplies `arrayProperties[b].name` as
-   `valuePools[arrayProperties[b].valuePool].values[materials[b][m]]`. An
+   `valuePools[arrayProperties[b].valuePool].values[materials[m][b]]`. An
    unsampled layer has no channel and supplies only its scalar properties.
 2. Layers override: contributions apply in `layers` order, back to front,
    and each property takes its value from the last layer that supplies it.
    Three layers supplying `{a, b, c}`, then `{a}`, then `{c}` resolve to `b`
    from the first, `a` from the second, and `c` from the third.
-3. Unbound properties take their default from the [Properties](#properties)
-   table.
-
-A scalar property wires a name to a value; any arithmetic, such as
-`emissiveStrength` multiplying `emissiveFactor`, comes from the property
-vocabulary. Within one palette a name appears in `arrayProperties` or
-`scalarProperties`, never both, so a single layer never conflicts with itself.
+3. Unbound properties are left to the vocabulary; the recommended glTF
+   conventions supply a default for each (see [Properties](#properties)).
 
 ### Sharing Idioms
 
@@ -248,7 +247,7 @@ One pool cell can supply a property at every scope without cloning anything:
 3. Single source of truth: the pool cell. Editing it updates every palette
    that references it.
 4. Per-voxel variation: move the property from `scalarProperties` to
-   `arrayProperties`, giving it a real column and channel.
+   `arrayProperties`, giving it a per-material value-index and a channel.
 5. Whole-object override: list a scalar-property palette after the layer it
    overrides; the object-wide value replaces the per-voxel values for that
    property.
@@ -369,15 +368,12 @@ all other rules, and rule 11's per-encoding sub-items are unchanged.
        `valuePool`, an integer, and `valueIndex`, an integer.
     2. no two properties share a `name`, across `arrayProperties` and
        `scalarProperties` together.
-    3. when `arrayProperties` is non-empty, `materials` has exactly
-       `arrayProperties.length` columns, one per array property in property
-       order.
-    4. every column is an array of the same length `M >= 0`, the material
-       count. When `arrayProperties` is empty, every `materials` entry is
-       instead an empty array, one per material, and `M = materials.length`.
-    5. every `materials[b][m]` is an integer in
+    3. `materials` is an array of `M >= 0` rows, the material count; every
+       row is an array of exactly `arrayProperties.length` integers, one
+       value-index per array property in property order.
+    4. every `materials[m][b]` is an integer in
        `[0, valuePools[arrayProperties[b].valuePool].values.length)`.
-    6. every scalar property's `valueIndex` is an integer in
+    5. every scalar property's `valueIndex` is an integer in
        `[0, valuePools[valuePool].values.length)`.
 11. **Samples**: let `V` be the voxel count from the position block. A layer
     is sampled iff the material count `M` of its palette is greater than
@@ -428,14 +424,13 @@ Replaces the example document.
 
           "scalarProperties": [],
 
-          // column-major, one column per array property. Material 2 resolves
-          // to baseColorFactor #0000FFFF, metallicFactor 0.5, roughnessFactor
-          // 0, emissiveFactor #FF6600.
+          // one row per material, a value-index per array property. Material
+          // 2 resolves to baseColorFactor #0000FFFF, metallicFactor 0.5,
+          // roughnessFactor 0, emissiveFactor #FF6600.
           "materials": [
-            [0, 1, 2],
-            [2, 0, 1],
-            [1, 1, 0],
-            [0, 0, 1],
+            [0, 2, 1, 0],
+            [1, 0, 1, 0],
+            [2, 1, 0, 1],
           ],
         },
 
@@ -594,16 +589,14 @@ type SampleBlock =
 
 // ## Palettes
 
-// A palette binds property names to value pools, then stores its materials
-// column-major: one inner array per array property, in property order, each
-// of length M, the material count. A voxel samples material m; property
-// arrayProperties[b].name takes
-// valuePools[arrayProperties[b].valuePool].values[materials[b][m]], and each
+// A palette binds property names to value pools, then lists its materials:
+// one row per material, a value-index per array property in property order,
+// so the material count M is materials.length. A voxel samples material m;
+// property arrayProperties[b].name takes
+// valuePools[arrayProperties[b].valuePool].values[materials[m][b]], and each
 // scalar property takes valuePools[valuePool].values[valueIndex], one value
-// for the whole palette. With no array properties, materials is instead one
-// empty array per material, so M survives as materials.length. Layers apply
-// in `layers` order; each property takes its value from the last layer that
-// supplies it.
+// for the whole palette. Layers apply in `layers` order; each property takes
+// its value from the last layer that supplies it.
 interface Palette {
   arrayProperties: ArrayProperty[];
 
@@ -612,7 +605,7 @@ interface Palette {
   materials: number[][];
 }
 
-// One property bound to a whole pool; fixes one column of materials.
+// One property bound to a whole pool, one value-index per material.
 interface ArrayProperty {
   // property name (see Properties); advisory, unknown names ignored
   name: string;

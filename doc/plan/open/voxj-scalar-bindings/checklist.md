@@ -57,6 +57,9 @@ here, not in the spec commit.
       `rootHierarchyNodes` to `nodes` / `rootNodes` (README decision 13),
       and drop the trailing validation note as restating the Objects
       section and rule 11.
+- [x] Owner review 2026-07-17: `materials` goes row-major; one row per
+      material, a value-index per array property in property order, and
+      `M = materials.length` (README decision 14).
 - [x] Fold each resolution into format-design.md (drop its `[OPEN n]`
       marker) and move it to the README's decisions with rationale.
 
@@ -84,7 +87,8 @@ authoritative. Passed 2026-07-17.
 ## Phase 3: `voxj` (coarse)
 
 - [ ] Rewrite `VoxjPalette` to array plus scalar properties with `name` /
-      `value_pool` / `value_index` fields; add the scalar-property type; rename
+      `value_pool` / `value_index` fields and row-major `materials`; add the
+      scalar-property type; rename
       `VoxjObject.layer_palette_refs` to the ordered `layers` list; rename
       the hierarchy fields to `nodes` / `root_nodes`; keep
       `deny_unknown_fields` closure; update doc comments to the new framing;

@@ -40,10 +40,10 @@ and 12). A new required sibling `scalarProperties` holds
 `{ name, valuePool, valueIndex }` entries, each pinning a property to the
 single value `valuePools[valuePool].values[valueIndex]` for the whole
 palette; scalar properties have no `materials` column. A palette may carry
-array properties, scalar properties, both, or neither. The `materials` rules
-are untouched: columns are 1:1 with `arrayProperties` in order; when
-`arrayProperties` is empty, `materials` is one empty array per material and
-`M = materials.length`, so `materials: []` means `M = 0`.
+array properties, scalar properties, both, or neither. `materials` is row-major
+(decision 14): one row per material, a value-index per array property in
+property order, so `M = materials.length` and `materials: []` means
+`M = 0`.
 
 ### Object
 
@@ -66,21 +66,21 @@ are untouched.
 1. Each layer supplies its palette's properties: a scalar property supplies
    its name from `pool.values[valueIndex]`, one value for the whole object;
    an array property reads the voxel's sample `m` from the layer's channel
-   and takes `pool.values[materials[b][m]]`. An unsampled layer supplies
+   and takes `pool.values[materials[m][b]]`. An unsampled layer supplies
    only its scalar properties.
 2. Layers override canonically: contributions apply in `layers` order, back
    to front, and each property takes its value from the last layer that
    supplies it. The author orders overrides freely: a scalar layer listed
    after an array layer replaces per-voxel values with an object-wide one.
-3. Unbound properties take the vocabulary default.
+3. Unbound properties are left to the vocabulary; the recommended glTF
+   conventions supply a default for each.
 
 ### Semantics
 
 A scalar property wires a name to a value; any arithmetic, such as
 `emissiveStrength` multiplying `emissiveFactor`, comes from the property
 vocabulary. Within one palette a name may appear in `arrayProperties` or
-`scalarProperties`, never both, so a single layer never conflicts with
-itself. "Scalar" means single-valued: a scalar property may reference a cell
+`scalarProperties`, so a single layer never conflicts with itself. "Scalar" means single-valued: a scalar property may reference a cell
 of any pool kind.
 
 ### Validation deltas
@@ -89,8 +89,9 @@ All in existing rule shapes:
 
 1. Palette closed over `{ arrayProperties, scalarProperties, materials }`;
    scalar property closed over exactly `{ name, valuePool, valueIndex }`;
-   rules 10.3/10.4 reworded from `bindings` to `arrayProperties`, content
-   otherwise untouched, including `materials: []` meaning `M = 0`.
+   rule 10.3 is the row rule: `materials` is `M >= 0` rows of exactly
+   `arrayProperties.length` value-indices, so `materials: []` means `M = 0`
+   (decision 14).
 2. Rule 10.2 extends: no duplicate `name` across `arrayProperties` union
    `scalarProperties` of one palette.
 3. `scalarProperties[].valuePool` indexes `valuePools`; `valueIndex` is an
@@ -192,6 +193,13 @@ are in [reference/design-notes.md](reference/design-notes.md).
     array `nodes`, so the long forms named the same entity two ways. The
     prose term hierarchy node and the TS `HierarchyNode` interface stay
     (owner review 2026-07-17).
+14. **Rows are materials.** `materials` is row-major: one row per material,
+    a value-index per array property, so `M = materials.length` and each
+    entry is a material. voxcore already stores materials per-material and
+    every converter and reader works row-wise, so the wire's columns bought
+    only a transposing seam; measured under whole-file deflate the two
+    orientations are within bytes of each other, rows smaller at large `M`
+    (owner review 2026-07-17).
 
 ## Open questions
 
@@ -201,7 +209,7 @@ day merged the layer lists into one (decision 10), revising decisions 3 and
 a review 2026-07-17 renamed the palette lists and fields to
 `arrayProperties` / `scalarProperties` and `name` / `valuePool` /
 `valueIndex` (decision 12) and the hierarchy fields to `nodes` /
-`rootNodes` (decision 13).
+`rootNodes` (decision 13), and made `materials` row-major (decision 14).
 
 ## Milestones
 
