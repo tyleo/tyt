@@ -54,7 +54,7 @@ items off as they land.
       `Default`), `TreeGridError`. Builder API: `add_root`, `add_child`,
       `node_mut`, `push_value`. Unit tests for the builder and label
       quoting.
-- [ ] **S2. Text machinery and cells.** Private modules ported from vxl:
+- [x] **S2. Text machinery and cells.** Private modules ported from vxl:
       `visible_width` / `pad_right`, quote formatting, tree glyphs,
       markdown table core with `md_cell` escaping. Cell rendering: the
       resolved-format x visual matrix and the `Visual` strip rule from

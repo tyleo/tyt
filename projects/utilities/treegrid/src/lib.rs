@@ -5,6 +5,8 @@
 //! mode.
 
 mod b_tree_grid_node;
+#[cfg(feature = "ty-math")]
+mod color;
 #[cfg(feature = "json")]
 mod json;
 mod render;

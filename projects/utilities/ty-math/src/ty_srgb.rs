@@ -1,4 +1,4 @@
-use crate::{TyVector3, ty_array_conversions};
+use crate::{TyFloatExt, TyVector3, ty_array_conversions};
 use std::hash::{Hash, Hasher};
 
 /// An sRGB color without alpha, the three-component companion to
@@ -58,6 +58,15 @@ impl TySrgb<u8> {
     }
 }
 
+impl TySrgb<f64> {
+    /// Quantizes each `[0, 1]` component to a byte without the sRGB transfer
+    /// function, since the components are already sRGB-encoded. The inverse of
+    /// `to_f64`. Encode from linear light on the linear type instead.
+    pub fn to_u8(self) -> TySrgb<u8> {
+        TySrgb::new(self.r.to_unorm8(), self.g.to_unorm8(), self.b.to_unorm8())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{TySrgbF64, TySrgbU8, TySrgbaU8, TyVector3F64};
@@ -81,6 +90,16 @@ mod tests {
         assert_eq!(
             TySrgbU8::new(255, 128, 0).to_f64(),
             TySrgbF64::new(1.0, 128.0 / 255.0, 0.0)
+        );
+    }
+
+    #[test]
+    fn f64_to_u8_quantizes_and_clamps() {
+        // Out-of-range components clamp to the byte endpoints; a half rounds
+        // up, mirroring the four-component type.
+        assert_eq!(
+            TySrgbF64::new(-0.5, 2.0, 0.5).to_u8(),
+            TySrgbU8::new(0, 255, 128)
         );
     }
 

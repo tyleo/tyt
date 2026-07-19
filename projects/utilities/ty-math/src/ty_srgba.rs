@@ -1,4 +1,4 @@
-use crate::{TyFloatExt, TyLinSrgba, TySrgb, ty_array_conversions};
+use crate::{TyFloatExt, TyLinSrgba, TySrgb, srgb_to_linear, ty_array_conversions};
 use std::{
     hash::{Hash, Hasher},
     ops::Mul,
@@ -130,20 +130,6 @@ impl TySrgba<f64> {
             self.a,
         )
     }
-}
-
-/// Inverts the sRGB transfer function to linear light, odd-extended by sign so
-/// out-of-gamut inputs decode as `sign(x) * g(|x|)`, per CSS Color 4.
-fn srgb_to_linear(c: f64) -> f64 {
-    let magnitude = c.abs();
-
-    let linear = if magnitude <= 0.040_45 {
-        magnitude / 12.92
-    } else {
-        ((magnitude + 0.055) / 1.055).powf(2.4)
-    };
-
-    linear.copysign(c)
 }
 
 #[cfg(test)]

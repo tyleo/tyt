@@ -1,4 +1,4 @@
-use crate::{TyCielabColorF64, TyOklabColorF64, TySrgba, ty_array_conversions};
+use crate::{TyCielabColorF64, TyOklabColorF64, TySrgba, linear_to_srgb, ty_array_conversions};
 use std::ops::Mul;
 
 /// A linear-light RGBA color with straight alpha and component type `T`, the
@@ -89,20 +89,6 @@ impl TyLinSrgba<f64> {
             self.a,
         )
     }
-}
-
-/// The sRGB transfer function on one linear component, odd-extended by sign so
-/// out-of-gamut inputs encode as `sign(x) * f(|x|)`, per CSS Color 4.
-fn linear_to_srgb(linear: f64) -> f64 {
-    let magnitude = linear.abs();
-
-    let encoded = if magnitude <= 0.003_130_8 {
-        12.92 * magnitude
-    } else {
-        1.055 * magnitude.powf(1.0 / 2.4) - 0.055
-    };
-
-    encoded.copysign(linear)
 }
 
 /// The CIELAB nonlinearity.

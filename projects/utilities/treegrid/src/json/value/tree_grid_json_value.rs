@@ -119,7 +119,7 @@ impl TreeGridJsonValue {
 
 /// A number as JSON: an integer when it is integral and fits `i64`,
 /// else a float, so it reads as it does in the text layouts.
-fn number_json(value: f64) -> Value {
+pub(crate) fn number_json(value: f64) -> Value {
     if value.fract() == 0.0 && value.abs() < i64::MAX as f64 {
         json!(value as i64)
     } else {

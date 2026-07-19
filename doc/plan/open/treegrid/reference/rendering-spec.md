@@ -99,14 +99,14 @@ Core (`ty-math` not required):
 | `srgba8([u8; 4])` | `#RRGGBBAA` | the hex string | `Color(rgb)` |
 
 Behind the `ty-math` feature, over the component-generic color family
-(T = f32 / f64; exact 3-component type names confirmed at the keyboard):
+(T = f32 / f64):
 
 | constructor | text | json | swatch |
 | --- | --- | --- | --- |
 | `srgb(TySrgb<T>)` | `rgb(r, g, b)` | number array | quantized bytes |
 | `srgba(TySrgba<T>)` | `rgba(r, g, b, a)` | number array | quantized bytes |
-| `lin_rgb(..)` | `lrgb(r, g, b)` | number array | transfer + quantize |
-| `lin_rgba(..)` | `lrgba(r, g, b, a)` | number array | transfer + quantize |
+| `lin_rgb(TyLinSrgb<T>)` | `lrgb(r, g, b)` | number array | transfer + quantize |
+| `lin_rgba(TyLinSrgba<T>)` | `lrgba(r, g, b, a)` | number array | transfer + quantize |
 
 - The mirrored json constructors, the `json(Value)` constructor
   itself, and `with_json` live on `TreeGridJsonValue` behind the
@@ -117,7 +117,8 @@ Behind the `ty-math` feature, over the component-generic color family
   (`1.0` -> `1`), so text and JSON read alike.
 - Functional notation joins `Display` components with `", "`:
   `lrgba(2, 1, 0.5, 1)`. No precision knob; policy-formatted text goes
-  through `new`.
+  through `new`. The number arrays collapse per component the same
+  way: `[2, 1, 0.5, 1]`.
 - All color math (quantization, the linear-to-sRGB transfer, CSS Color 4
   out-of-gamut handling) is ty-math's; the crate never reimplements it.
 

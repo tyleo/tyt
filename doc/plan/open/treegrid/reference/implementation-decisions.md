@@ -324,3 +324,48 @@ landed at S1 as `TreeGridLabel::render`.
   plus targeted `#[allow(unused_imports)]` on the two re-exports
   nothing in the crate consumes yet (`markdown_table`,
   `tree_glyphs`); each allow drops with its first consumer.
+
+## S2 chunk 2: the ty-math feature and typed-color constructors (2026-07-19)
+
+The `ty-math` feature lands with the four float-color constructors,
+completing S2. ty-math itself grows the missing pieces (owner
+authorized adding `TyLinSrgb`): the three-component linear type did
+not exist, and the byte quantize was defined only on the
+four-component sRGB type.
+
+- **ty-math additions, no version bump.** `TyLinSrgb<T>` mirrors
+  `TySrgb` (fields, `new`, array conversions) with `to_srgb` on the
+  f64 instantiation, and `TySrgb<f64>::to_u8` mirrors
+  `TySrgba<f64>::to_u8`. The two sRGB transfer functions move to a
+  crate-private `srgb_transfer` module (the `array_conversions`
+  pattern) so both linear types share one definition. Versions bump
+  at release per repo convention (`chore(release)` commits), not per
+  change. The spec's "exact 3-component type names confirmed at the
+  keyboard" resolved to `TyLinSrgb`; the constructor table was
+  filled in, and its number-array collapse was made explicit, in the
+  same change.
+- **The constructors are generic over
+  `T: Copy + Display + TyFloatExt + Into<f64>`.** The `TyFloatExt`
+  bound pins `T` to f32 / f64, the spec's domain, so the family's
+  8-bit instantiations cannot reach the float quantize (a
+  `TySrgb<u8>` would clamp every nonzero channel to white; the byte
+  forms have `srgb8` / `srgba8`). Text renders each component's own
+  `Display`, keeping an f32's shortest form; the color math widens
+  components losslessly to f64, where ty-math defines the
+  conversions. The swatch drops alpha, like `srgba8`.
+- **The JSON arrays collapse per component through `number_json`.**
+  This is vxl's linear-color rule today (`sample_color` builds a
+  `Value::Array` of `number_json` components), kept so the S17
+  notation flip changes text only; `number_json` widens to
+  `pub(crate)` for it. An f32 component's JSON is its exact f64
+  widening -- full fidelity, the json field's stated principle -- so
+  a non-dyadic f32 serializes long while its text keeps the short
+  form.
+- **All ty-math-gated code collects in `src/color/`**, impl-only
+  files named for the types they extend (the `json/tree_grid_options`
+  precedent), with the `TreeGridJsonValue` mirrors riding one nested
+  `#[cfg(feature = "json")]` line in `color/mod.rs`. This amends the
+  earlier "the crate's whole cfg surface is the json module's two
+  lines" statement: each feature's surface is its gated module's
+  lines in `lib.rs`, plus this one intersection line, placed with the
+  color constructors so they read as one set.
