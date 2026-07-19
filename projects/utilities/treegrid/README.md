@@ -51,10 +51,9 @@ tables, or JSON, and a label mode decides whether the text layouts
 label data with full dot-joined paths, with leaf segments under nested
 markdown headings, or not at all.
 
-Each render method takes only the options its layout consumes, so
-every combination that compiles is valid and rendering always
-succeeds. Options can also be gathered loosely, one field at a time;
-the one
+Each render method takes only the options its layout consumes, so every
+combination that compiles is valid and rendering always succeeds.
+Options can also be gathered loosely, one field at a time; the one
 fallible step is the matching `resolve_*` method, which rejects any
 option that render does not consume:
 
@@ -63,22 +62,47 @@ let options = TreeGridOptions::default().with_value_children(true);
 let tree = grid.render_hierarchy(&options.resolve_hierarchy()?);
 ```
 
-Values can be any type: the grid renders them through its cell
-policy (`TreeGridCells`), and the default policy reads the
-pre-rendered `TreeGridValue`s above. A custom policy stores the
-caller's own value type -- even a foreign one -- by answering three
-questions per value: its text, an optional visual (opaque
-pre-rendered bytes with a declared display width, like the stock ANSI
-color swatches), and the cell format a node with no explicit format
-uses for it.
+Values can be any type: a cell policy (`TreeGridCells`) turns them into
+cells. The default policy reads the pre-rendered `TreeGridValue`s above;
+a custom policy renders the caller's own type:
+
+```rust
+struct TextCells;
+
+impl TreeGridCells for TextCells {
+    type Value = String;
+
+    fn text<'a>(&self, value: &'a String) -> Cow<'a, str> {
+        Cow::Borrowed(value)
+    }
+}
+
+let mut grid = TreeGrid::with_cells(TextCells);
+let position = grid.add_root(TreeGridLabel::bare("position"));
+grid.push_value(position, "[12.5, 0.5, 10.0]".to_owned());
+
+let tree = grid.render_hierarchy(&TreeGridHierarchyOptions::default());
+```
+
+```text
+└ position: [12.5, 0.5, 10.0]
+```
 
 The `json-pretty` / `json-compact` layouts ride the optional `json`
-feature, which pulls in `serde_json`; without it the crate renders
-the text layouts only. The JSON renders exist for grids whose policy
-provides JSON forms (`TreeGridJsonCells`): the default policy emits
-each value's text as a JSON string, and the feature-gated
-`TreeGridJsonValue` / `TreeGridJsonValueCells` pair carries a native
-JSON form beside a value for pairs that genuinely diverge.
+feature, which pulls in `serde_json`; `TreeGridJsonValue` pairs a
+value with a native JSON form when its text and JSON diverge:
+
+```rust
+let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
+let metallic = grid.add_root(TreeGridLabel::quoted("metallicFactor"));
+grid.push_value(metallic, TreeGridJsonValue::new("1.00").with_json(json!(1.0)));
+
+let json = grid.render_json_compact();
+```
+
+```json
+[{"label":"metallicFactor","values":[1.0]}]
+```
 
 Selection, value sampling, precision policy, terminal-width detection,
 and IO stay with the caller: the crate only arranges and serializes

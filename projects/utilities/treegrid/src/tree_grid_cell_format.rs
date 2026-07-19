@@ -1,8 +1,7 @@
 /// How a node's values render to cells in the text layouts.
 ///
-/// A node leaves its format unset
-/// ([`TreeGridNode::format`](crate::TreeGridNode::format) is an
-/// `Option`) to let the grid's cell policy pick a format per value.
+/// An unset [`TreeGridNode::format`](crate::TreeGridNode::format)
+/// defers to the grid's cell policy per value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TreeGridCellFormat {
     /// The bare visual, text for a value without one. The strip

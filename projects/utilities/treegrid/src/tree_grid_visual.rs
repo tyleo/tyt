@@ -1,5 +1,4 @@
-/// One value's non-text cell content: pre-rendered bytes and the
-/// display columns they occupy.
+/// One value's non-text cell content.
 ///
 /// The renderer treats the content as opaque, emitting `rendered` and
 /// laying out by `width`, so any terminal medium works: the stock

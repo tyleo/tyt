@@ -4,7 +4,7 @@ use crate::TreeGridSwatch;
 ///
 /// Its JSON form is always a JSON string of its text; behind the
 /// `json` feature, `TreeGridJsonValue` pairs a value with a native
-/// JSON form for pairs that genuinely diverge.
+/// JSON form when text and JSON diverge.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TreeGridValue {
     /// The pre-rendered display text.

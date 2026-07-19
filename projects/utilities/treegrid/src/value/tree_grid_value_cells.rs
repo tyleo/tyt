@@ -1,8 +1,7 @@
 use crate::{TreeGridCellFormat, TreeGridCells, TreeGridSwatch, TreeGridValue, TreeGridVisual};
 use std::borrow::Cow;
 
-/// The default cell policy, over pre-rendered
-/// [`TreeGridValue`]s.
+/// The default cell policy, over pre-rendered [`TreeGridValue`]s.
 ///
 /// Text is the value's `text` and the visual renders the value's
 /// swatch. A node with no explicit format shows a `Color`-swatched
