@@ -1274,6 +1274,73 @@ mod tests {
         assert!(sic > 2.0, "sic {sic} should exceed the removed clamp");
     }
 
+    /// A palette pinning `emissiveStrength` as a scalar property folds it
+    /// into `sic` like a per-material column would.
+    #[test]
+    fn derives_emissive_from_a_scalar_strength_property() {
+        let mut state = VoxMain::default();
+        let color = state.add_value_pool(VoxValuePool::Srgba {
+            values: IdVec::from_vec(vec![color_floats("#808080FF")]),
+        });
+        let emissive_color = state.add_value_pool(VoxValuePool::Srgb {
+            values: IdVec::from_vec(vec![[1.0, 1.0, 1.0]]),
+        });
+        let strength = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::None,
+            max: VoxBound::None,
+            values: IdVec::from_vec(vec![2.0]),
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_array_property("baseColorFactor".to_owned(), color);
+        palette.add_array_property("emissiveFactor".to_owned(), emissive_color);
+        palette.add_scalar_property("emissiveStrength".to_owned(), strength, U32Id::from_u32(0));
+        palette.add_material(vec![U32Id::from_u32(0); 2]).unwrap();
+        let palette_id = state.add_palette(palette);
+        let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object
+            .retain_voxel(voxel, &[U32Id::<BVoxMaterial>::from_u32(0)])
+            .unwrap();
+        state.add_object(object);
+        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
+        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state.validate().unwrap();
+
+        let file = to_vmax_file(&state, VoxelMaxColorFormat::All).unwrap();
+        // from-vmax carries Voxel Max's `sic` back as `emissiveStrength`.
+        let reloaded = from_vmax_file(&file).unwrap();
+        let (palette_id, material_palette) = reloaded
+            .iter_palettes()
+            .find(|(_, palette)| palette.array_property_by_name("emissiveStrength").is_some())
+            .expect("an emissive palette survives");
+        let material = material_palette.iter_materials().next().unwrap();
+        let array_property = material_palette
+            .array_property_by_name("emissiveStrength")
+            .unwrap();
+        let sic = match reloaded
+            .material_value(palette_id, material, array_property)
+            .unwrap()
+        {
+            (VoxValuePool::Float { values, .. }, index) => values[index.to_usize_id()],
+            _ => panic!("emissiveStrength is a float pool"),
+        };
+
+        // The same fold as the column case: sic = 2 * lum(white) / lum(gray).
+        let linear = |c: f64| {
+            if c <= 0.04045 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let expected = 2.0 / linear(128.0 / 255.0);
+        assert!(
+            (sic - expected).abs() < 1e-3,
+            "sic {sic} vs expected {expected}"
+        );
+    }
+
     /// A 6-hex source color widens to opaque RGBA: the missing alpha defaults to
     /// fully opaque rather than transparent.
     #[test]

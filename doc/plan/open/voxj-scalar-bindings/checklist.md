@@ -174,8 +174,12 @@ decision.
       exporters, the atlas bake's scalar fallback, and reduction coverage
       for scalar-carrying palettes and unsampled layers. See the
       decisions log.)
-- [ ] Decide and log whether glTF import/export wires `emissiveStrength`
-      through scalar properties; implement the decision.
+- [x] Decide and log whether glTF import/export wires `emissiveStrength`
+      through scalar properties; implement the decision. (Import pins a
+      strength every distinct material shares as a scalar property; mixed
+      strengths keep the column. Export already resolved both arities; the
+      vmax material fold gained the scalar fallback so the pin survives
+      glTF to vmax. See the decisions log.)
 
 ## Phase 7: `vxl` and docs (coarse)
 

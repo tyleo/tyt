@@ -741,6 +741,16 @@ mod tests {
         }
     }
 
+    /// The numeric value the first palette's scalar property `attribute` pins.
+    fn palette_scalar(state: &VoxMain, attribute: &str) -> f64 {
+        let (palette_id, palette) = state.iter_palettes().next().unwrap();
+        let property = palette.scalar_property_by_name(attribute).unwrap();
+        match state.scalar_property_value(palette_id, property).unwrap() {
+            (VoxValuePool::Float { values, .. }, value_id) => values[value_id.to_usize_id()],
+            other => panic!("expected a float pool for {attribute}, got {other:?}"),
+        }
+    }
+
     /// One sRGB float component in `[0, 1]` mapped to a byte.
     fn byte(component: f64) -> u8 {
         component.to_unorm8()
@@ -1082,7 +1092,8 @@ mod tests {
         assert_eq!(object.bounds(), TyVector3U32::new(1, 1, 4));
         assert_eq!(object.live_count(), 4);
 
-        // Every mode carries the glTF material properties; flat is one material.
+        // Every mode carries the glTF material properties; flat is one
+        // material, so its strength pins as a scalar property.
         let (_, palette) = state.iter_palettes().next().unwrap();
         assert_eq!(palette.material_count(), 1);
         assert_eq!(
@@ -1095,12 +1106,12 @@ mod tests {
                 METALLIC_FACTOR,
                 ROUGHNESS_FACTOR,
                 EMISSIVE_FACTOR,
-                EMISSIVE_STRENGTH,
                 OCCLUSION_STRENGTH,
                 IOR,
                 TRANSMISSION_FACTOR,
             ]
         );
+        assert_eq!(palette_scalar(&state, EMISSIVE_STRENGTH), 0.0);
         assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
 
         // The root node records the meters-per-voxel scale.
@@ -1179,7 +1190,9 @@ mod tests {
         // glTF factors are f32, widened to f64 on store.
         assert_eq!(voxel_number(&state, origin, IOR), 1.4f32 as f64);
         assert_eq!(voxel_number(&state, origin, TRANSMISSION_FACTOR), 0.5);
-        assert_eq!(voxel_number(&state, origin, EMISSIVE_STRENGTH), 3.0);
+        // One material shares its strength trivially, so it pins as a scalar
+        // property.
+        assert_eq!(palette_scalar(&state, EMISSIVE_STRENGTH), 3.0);
     }
 
     #[test]
@@ -1568,8 +1581,10 @@ mod tests {
         };
         assert!(r < 0.01 && b < 0.01, "emissiveFactor red {r} blue {b}");
         assert!((g - 188.0 / 255.0).abs() < 0.01, "emissiveFactor green {g}");
+        // The one material's unit strength is shared, so it pins as a scalar
+        // property.
         assert_eq!(
-            voxel_number(&state, origin, EMISSIVE_STRENGTH),
+            palette_scalar(&state, EMISSIVE_STRENGTH),
             1.0,
             "emissive strength stays the material's unit factor"
         );

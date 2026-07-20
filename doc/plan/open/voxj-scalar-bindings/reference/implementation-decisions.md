@@ -276,6 +276,36 @@ so both are covered by new tests. Populations keep weighing raw samples
 even when a later layer overrides the color: the merge collapses whole
 materials, so raw usage stays the honest weight.
 
+## glTF import pins a shared emissiveStrength; export was already scalar-aware
+
+2026-07-20, phase 6 commit 3. The README's open scoping question closes as:
+the voxelizer produces scalar properties, the glTF exporter already consumed
+them. `build_palette` (`convert/voxelize/voxelize_mesh.rs`) pins
+`emissiveStrength` as a scalar property over its one-value pool whenever
+every distinct material shares one strength, the one-value-pool contortion
+the README's motivation names; mixed strengths keep the per-material column,
+since glTF's `KHR_materials_emissive_strength` is per-material. Only
+`emissiveStrength` scalarizes: on export it is already palette-scoped (the
+one flat KHR factor and the emissive-atlas normalizer), while colors and the
+other factors stay columns. The export path needed no change because
+`material_attribute` resolves through `property_by_name`, so the existing
+KHR round-trip test now covers a scalar strength end to end.
+
+## The vmax material fold falls back to scalar properties
+
+2026-07-20, phase 6 commit 3. `derived_material`
+(`internal/vmax/write_vmax.rs`) read every coefficient positionally from the
+array-property signature, so a palette pinning `emissiveStrength` would have
+silently lost it on a glTF-to-vmax conversion. Its `scalar` and `flag` reads
+now fall back to the palette's scalar property of the same name when no
+column carries it, and the dispersion gate counts scalar pins of `ior`,
+`transmissionFactor`, and `absorption`. The fallback is name-general rather
+than emissiveStrength-special: the rule is one sentence (read the column at
+the signature, else the palette's pin) and covers hand-authored voxj
+palettes. Color reads (`emissiveFactor`, `baseColorFactor`) stay
+array-only in this fold; no producer pins them and the color sidecar path
+already resolves through `resolve_cell_color`.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

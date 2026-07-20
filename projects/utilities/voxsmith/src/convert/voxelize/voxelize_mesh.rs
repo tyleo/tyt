@@ -238,12 +238,13 @@ fn fill_interior(
     }
 }
 
-/// Assembles a palette from a per-cell material list: near-identical materials
-/// merge to one palette material, and each filled cell samples the material of
-/// its cell. Each glTF attribute binds a deduplicated value pool, added to
-/// `state`, and each material carries one value-index per binding. The default
-/// material is the first built, or a lone white material for an all-empty grid,
-/// so the palette is never empty.
+/// Assembles a palette from a per-cell material list. Near-identical
+/// materials merge to one palette material, and each filled cell samples its
+/// cell's material. Every glTF property draws from a deduplicated value pool
+/// added to `state`: an array property carrying one value id per material,
+/// except that a strength shared by every material pins `emissiveStrength`
+/// as a scalar property. The default material is the first built, or a lone
+/// white material for an all-empty grid, so the palette is never empty.
 fn build_palette(
     state: &mut VoxMain,
     cell_materials: &[Option<MeshMaterial>],
@@ -275,7 +276,7 @@ fn build_palette(
         distinct.push(MeshMaterial::flat(DEFAULT_FILL));
     }
 
-    // One deduplicated pool per attribute, plus each distinct material's
+    // One deduplicated pool per property, plus each distinct material's
     // value id into it. The bounded scalars clamp to their pool range so the
     // assembled state validates.
     let base_color = srgba_pool(&distinct, |material| material.base_color);
@@ -287,8 +288,13 @@ fn build_palette(
     let ior = float_pool(&distinct, |material| material.ior.max(1.0));
     let transmission = float_pool(&distinct, |material| material.transmission.clamp(0.0, 1.0));
 
-    // Register the pools and add each array property. All properties precede
-    // any material, so no material carries a back-fill placeholder value id.
+    // A strength shared by every material pins as a scalar property; its
+    // per-material column drops. Mixed strengths keep the column, since
+    // glTF's extension is per-material.
+    let uniform_strength = emissive_strength.values.len() == 1;
+
+    // Register the pools and add each property. All properties precede any
+    // material, so no material carries a back-fill placeholder value id.
     let base_color_pool = state.add_value_pool(VoxValuePool::Srgba {
         values: IdVec::from_vec(base_color.values),
     });
@@ -307,7 +313,15 @@ fn build_palette(
     palette.add_array_property(METALLIC_FACTOR.to_owned(), metallic_pool);
     palette.add_array_property(ROUGHNESS_FACTOR.to_owned(), roughness_pool);
     palette.add_array_property(EMISSIVE_FACTOR.to_owned(), emissive_factor_pool);
-    palette.add_array_property(EMISSIVE_STRENGTH.to_owned(), emissive_strength_pool);
+    if uniform_strength {
+        palette.add_scalar_property(
+            EMISSIVE_STRENGTH.to_owned(),
+            emissive_strength_pool,
+            U32Id::from_u32(0),
+        );
+    } else {
+        palette.add_array_property(EMISSIVE_STRENGTH.to_owned(), emissive_strength_pool);
+    }
     palette.add_array_property(OCCLUSION_STRENGTH.to_owned(), occlusion_pool);
     palette.add_array_property(IOR.to_owned(), ior_pool);
     palette.add_array_property(TRANSMISSION_FACTOR.to_owned(), transmission_pool);
@@ -316,18 +330,26 @@ fn build_palette(
     // order.
     let materials: Vec<U32Id<BVoxMaterial>> = (0..distinct.len())
         .map(|index| {
+            let mut row = vec![
+                base_color.indices[index],
+                metallic.indices[index],
+                roughness.indices[index],
+                emissive_factor.indices[index],
+            ];
+
+            if !uniform_strength {
+                row.push(emissive_strength.indices[index]);
+            }
+
+            row.extend([
+                occlusion.indices[index],
+                ior.indices[index],
+                transmission.indices[index],
+            ]);
+
             palette
-                .add_material(vec![
-                    base_color.indices[index],
-                    metallic.indices[index],
-                    roughness.indices[index],
-                    emissive_factor.indices[index],
-                    emissive_strength.indices[index],
-                    occlusion.indices[index],
-                    ior.indices[index],
-                    transmission.indices[index],
-                ])
-                .expect("one value id for each of the eight array properties")
+                .add_material(row)
+                .expect("one value id for each array property")
         })
         .collect();
 
@@ -534,4 +556,151 @@ fn grid_too_large(counts: TyVector3U32) -> Error {
         counts.z,
         VoxObject::MAX_GRID_CELLS
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        EMISSIVE_STRENGTH, FillMode, MaterialMode, Mesh, MeshMaterial, MeshTriangle,
+        MeshTriangleUvs, SurfaceMode, voxelize_mesh,
+    };
+    use branded_id::U32Id;
+    use ty_math::{TySrgbaU8, TyVector3F64, TyVector3U32};
+    use voxcore::{VoxMain, VoxValuePool};
+
+    /// A two-cell mesh over a `2x1x1` grid: one triangle inside each unit
+    /// cell, the left tagged material `0` and the right material `1`.
+    fn two_cell_mesh(materials: Vec<MeshMaterial>) -> Mesh {
+        let triangle = |cell: f64, material: u32| MeshTriangle {
+            points: [
+                TyVector3F64::new(cell + 0.2, 0.2, 0.5),
+                TyVector3F64::new(cell + 0.8, 0.2, 0.5),
+                TyVector3F64::new(cell + 0.5, 0.8, 0.5),
+            ],
+            uvs: MeshTriangleUvs::default(),
+            material,
+        };
+
+        Mesh {
+            triangles: vec![triangle(0.0, 0), triangle(1.0, 1)],
+            maps: vec![Default::default(); materials.len()],
+            materials,
+            textures: Vec::new(),
+            name: None,
+        }
+    }
+
+    /// Voxelizes the two-cell mesh per-primitive.
+    fn voxelize(materials: Vec<MeshMaterial>) -> VoxMain {
+        voxelize_mesh(
+            &two_cell_mesh(materials),
+            TyVector3U32::new(2, 1, 1),
+            SurfaceMode::TriangleCover,
+            FillMode::Surface,
+            MaterialMode::PerPrimitive,
+            None,
+            1.0,
+            None,
+            "mesh",
+        )
+        .unwrap()
+    }
+
+    /// The strength the palette's `emissiveStrength` scalar property pins.
+    fn pinned_strength(state: &VoxMain) -> f64 {
+        let (palette_id, palette) = state.iter_palettes().next().unwrap();
+        let property = palette.scalar_property_by_name(EMISSIVE_STRENGTH).unwrap();
+        match state.scalar_property_value(palette_id, property).unwrap() {
+            (VoxValuePool::Float { values, .. }, value_id) => values[value_id.to_usize_id()],
+            other => panic!("expected a float pool, got {other:?}"),
+        }
+    }
+
+    /// The strength the given voxel's material samples from the
+    /// `emissiveStrength` array property.
+    fn sampled_strength(state: &VoxMain, position: TyVector3U32) -> f64 {
+        let (_, object) = state.iter_objects().next().unwrap();
+        let (layer, palette_id) = object.iter_layers().next().unwrap();
+        let palette = state.palette(palette_id).unwrap();
+        let property = palette.array_property_by_name(EMISSIVE_STRENGTH).unwrap();
+        let voxel = object.voxel_id(position).unwrap();
+        let material = object.voxel_material(voxel, layer).unwrap();
+        match state
+            .material_value(palette_id, material, property)
+            .unwrap()
+        {
+            (VoxValuePool::Float { values, .. }, value_id) => values[value_id.to_usize_id()],
+            other => panic!("expected a float pool, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_shared_strength_pins_as_a_scalar_property() {
+        let mut emissive = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+        emissive.emissive_strength = 2.0;
+
+        let mut other = MeshMaterial::flat(TySrgbaU8::new(0, 0, 255, 255));
+        other.emissive_strength = 2.0;
+
+        let state = voxelize(vec![emissive, other]);
+
+        let (_, palette) = state.iter_palettes().next().unwrap();
+        // Two distinct materials share the strength, so it pins once and no
+        // column carries it.
+        assert!(palette.array_property_by_name(EMISSIVE_STRENGTH).is_none());
+        assert_eq!(palette.iter_materials().count(), 2);
+        assert_eq!(pinned_strength(&state), 2.0);
+    }
+
+    #[test]
+    fn mixed_strengths_keep_the_array_property() {
+        let mut dim = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+        dim.emissive_strength = 1.0;
+
+        let mut bright = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+        bright.emissive_strength = 3.0;
+
+        let state = voxelize(vec![dim, bright]);
+
+        let (_, palette) = state.iter_palettes().next().unwrap();
+        assert!(palette.scalar_property_by_name(EMISSIVE_STRENGTH).is_none());
+        assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 1.0);
+        assert_eq!(sampled_strength(&state, TyVector3U32::new(1, 0, 0)), 3.0);
+    }
+
+    #[test]
+    fn a_flat_fill_pins_the_default_strength() {
+        // Flat mode paints one material, so the lone strength pins as a
+        // scalar property even with no source materials.
+        let state = voxelize_mesh(
+            &two_cell_mesh(Vec::new()),
+            TyVector3U32::new(2, 1, 1),
+            SurfaceMode::TriangleCover,
+            FillMode::Surface,
+            MaterialMode::Flat,
+            None,
+            1.0,
+            None,
+            "mesh",
+        )
+        .unwrap();
+
+        assert_eq!(pinned_strength(&state), 0.0);
+    }
+
+    #[test]
+    fn the_scalar_property_pins_the_one_pool_value() {
+        let mut emissive = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+        emissive.emissive_strength = 2.0;
+
+        let state = voxelize(vec![emissive, emissive]);
+
+        let (palette_id, palette) = state.iter_palettes().next().unwrap();
+        let property = palette.scalar_property_by_name(EMISSIVE_STRENGTH).unwrap();
+        let (pool, value_id) = state.scalar_property_value(palette_id, property).unwrap();
+        assert_eq!(value_id, U32Id::from_u32(0));
+        assert!(matches!(pool, VoxValuePool::Float { .. }));
+        // Identical materials merge, so one palette material remains.
+        assert_eq!(palette.iter_materials().count(), 1);
+    }
 }
