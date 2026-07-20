@@ -1,7 +1,7 @@
 use crate::{
-    BVoxArrayProperty, BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
-    BVoxScalarProperty, BVoxValuePool, Error, Result, VoxBound, VoxGcRemap, VoxHierarchyNode,
-    VoxObject, VoxPalette, VoxRuntimeState, VoxValue, VoxValuePool,
+    BVoxArrayProperty, BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette,
+    BVoxPoolValue, BVoxScalarProperty, BVoxValuePool, Error, Result, VoxBound, VoxGcRemap,
+    VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState, VoxValue, VoxValuePool,
 };
 use branded_id::{IdSlice, IdVec, U32Id, soa::IdRemap};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -161,6 +161,37 @@ impl VoxMain {
         let property = palette.scalar_property(scalar_property)?;
         let pool = self.value_pool(property.pool)?;
         Some((pool, property.value_id))
+    }
+
+    /// Whether `layer` of `object` is sampled: a layer is sampled iff its
+    /// palette's material count is above zero. A sampled layer's per-voxel
+    /// samples are meaningful; an unsampled layer supplies only its palette's
+    /// scalar properties. `None` if `object` is not one of this state's,
+    /// `layer` is not one of that object's, or the layer references a palette
+    /// this state does not hold.
+    pub fn layer_is_sampled(
+        &self,
+        object: U32Id<BVoxObject>,
+        layer: U32Id<BVoxLayer>,
+    ) -> Option<bool> {
+        let palette = self.object(object)?.layer_palette(layer)?;
+        Some(self.palette(palette)?.material_count() > 0)
+    }
+
+    /// The sampled layers of `object` in layer order, as `(layer id,
+    /// palette)`: the Voxel Json channel order, one sample channel per
+    /// sampled layer. A layer referencing a palette this state does not hold
+    /// is skipped like an unsampled one; [`validate`](Self::validate) rejects
+    /// such a state. `None` if `object` is not one of this state's.
+    pub fn iter_sampled_layers(
+        &self,
+        object: U32Id<BVoxObject>,
+    ) -> Option<impl Iterator<Item = (U32Id<BVoxLayer>, U32Id<BVoxPalette>)> + '_> {
+        let object = self.object(object)?;
+        Some(object.iter_layers().filter(move |&(_, palette)| {
+            self.palette(palette)
+                .is_some_and(|palette| palette.material_count() > 0)
+        }))
     }
 
     /// Adds a hierarchy node, returning its id (its listing index). Its
@@ -540,8 +571,9 @@ impl VoxMain {
     ///    property's pool, and every scalar property pins a value id within
     ///    its pool;
     /// 3. every object layer references a live palette (two layers may share
-    ///    one), and every live-voxel sample material is within its layer's
-    ///    palette;
+    ///    one), and in every sampled layer (its palette has materials) every
+    ///    live-voxel sample material is within that palette; an unsampled
+    ///    layer's sample cells are ignored;
     /// 4. every node child node and child object resolves, and no node lists
     ///    the same one twice;
     /// 5. every root resolves, and no root repeats;
@@ -637,10 +669,13 @@ impl VoxMain {
                 })?;
                 layer_palettes.push((layer_id, palette));
             }
-            // Every live voxel samples a material within each layer's palette.
-            // Layer-major so each layer's sample column is read once, not per
-            // voxel.
+            // Every live voxel samples a material within each sampled layer's
+            // palette; an unsampled layer's cells are ignored filler.
+            // Layer-major so each layer's sample column is read once.
             for &(layer_id, palette) in &layer_palettes {
+                if palette.material_count() == 0 {
+                    continue;
+                }
                 let samples = object
                     .iter_live_samples(layer_id)
                     .expect("an iterated layer is one of the object's layers");
@@ -1044,6 +1079,14 @@ mod tests {
         palette
     }
 
+    /// A palette with one scalar property "s" pinning `pool`'s value id 0 and
+    /// no materials, so a layer on it is unsampled.
+    fn scalar_only_palette(pool: U32Id<BVoxValuePool>) -> VoxPalette {
+        let mut palette = VoxPalette::default();
+        palette.add_scalar_property("s".to_owned(), pool, value(0));
+        palette
+    }
+
     #[test]
     fn add_and_read_back_in_id_order() {
         let mut state = VoxMain::default();
@@ -1403,6 +1446,101 @@ mod tests {
                 palette: 0,
             })
         );
+    }
+
+    #[test]
+    fn validate_ignores_an_unsampled_layers_sample_cells() {
+        let mut state = VoxMain::default();
+        let pool = int_pool(&mut state, vec![7]);
+        let palette = state.add_palette(scalar_only_palette(pool));
+
+        // The layer back-fills the live voxel with material 9; the palette
+        // has no materials, so the cell is ignored filler.
+        let mut object = unit_object("o");
+        object.add_layer(palette, material(9));
+        state.add_object(object);
+
+        assert_eq!(state.validate(), Ok(()));
+    }
+
+    #[test]
+    fn validate_rejects_a_sampled_layers_bad_sample_material() {
+        let mut state = VoxMain::default();
+        let pool = int_pool(&mut state, vec![7]);
+        let palette = state.add_palette(one_material_palette(pool, 0));
+
+        // The palette has materials, so the layer is sampled and the
+        // back-filled material 9 is a fault.
+        let mut object = unit_object("o");
+        object.add_layer(palette, material(9));
+        let id = state.add_object(object);
+
+        assert_eq!(
+            state.validate(),
+            Err(Error::SampleMaterial {
+                object: id.to_u32(),
+                voxel: 0,
+                material: 9,
+            })
+        );
+    }
+
+    #[test]
+    fn sampled_layers_derive_from_palette_material_counts() {
+        let mut state = VoxMain::default();
+        let pool = int_pool(&mut state, vec![7]);
+        let sampled = state.add_palette(one_material_palette(pool, 0));
+        let scalar_only = state.add_palette(scalar_only_palette(pool));
+
+        let mut object = unit_object("o");
+        let base = object.add_layer(sampled, material(0));
+        let glow = object.add_layer(scalar_only, material(0));
+        let overlay = object.add_layer(sampled, material(0));
+        let object = state.add_object(object);
+        state.validate().unwrap();
+
+        assert_eq!(state.layer_is_sampled(object, base), Some(true));
+        assert_eq!(state.layer_is_sampled(object, glow), Some(false));
+        assert_eq!(state.layer_is_sampled(object, overlay), Some(true));
+        // Unknown ids resolve to None.
+        assert_eq!(state.layer_is_sampled(object, U32Id::from_u32(9)), None);
+        assert_eq!(
+            state.layer_is_sampled(U32Id::<BVoxObject>::from_u32(9), base),
+            None
+        );
+
+        // The view skips the unsampled layer, in layer order: one sample
+        // channel per sampled layer on the wire.
+        let layers: Vec<_> = state.iter_sampled_layers(object).unwrap().collect();
+        assert_eq!(layers, [(base, sampled), (overlay, sampled)]);
+        assert!(
+            state
+                .iter_sampled_layers(U32Id::<BVoxObject>::from_u32(9))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn gc_leaves_an_unsampled_layers_filler_cells() {
+        let mut state = VoxMain::default();
+        let pool = int_pool(&mut state, vec![7]);
+        let sampled = state.add_palette(one_material_palette(pool, 0));
+        let scalar_only = state.add_palette(scalar_only_palette(pool));
+
+        let mut object = unit_object("o");
+        let base = object.add_layer(sampled, material(0));
+        let glow = object.add_layer(scalar_only, material(9));
+        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        let object = state.add_object(object);
+        state.validate().unwrap();
+
+        // gc translates the sampled layer's cells and leaves the unsampled
+        // layer's filler in place.
+        state.gc();
+        assert_eq!(state.validate(), Ok(()));
+        let object = state.object(object).unwrap();
+        assert_eq!(object.voxel_material(voxel, base), Some(material(0)));
+        assert_eq!(object.voxel_material(voxel, glow), Some(material(9)));
     }
 
     #[test]

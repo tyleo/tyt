@@ -54,7 +54,8 @@ pub enum Error {
     /// An object references a palette that does not exist.
     PaletteRef { object: u32, palette: u32 },
 
-    /// A live voxel samples a material beyond its palette's materials.
+    /// A live voxel in a sampled layer samples a material beyond the
+    /// palette's materials.
     SampleMaterial {
         object: u32,
         voxel: u32,

@@ -143,11 +143,13 @@ then scalar-property storage and checks, then sampled-layer derivation.
       property references; `reorder_value_pool` follows them; `validate`
       checks scalar pools, `value_id` range, and name uniqueness across
       both lists; a scalar resolution helper beside `material_value`.
-- [ ] Derive sampledness from the palette: a layer is sampled iff its
+- [x] Derive sampledness from the palette: a layer is sampled iff its
       palette's material count is above zero; scope the live-voxel sample
       checks in `validate` to sampled layers; expose the sampled-layer view
-      the voxsmith seam and vxl need; document unsampled layers' ignored
-      sample cells.
+      the voxsmith seam and vxl need (`layer_is_sampled`,
+      `iter_sampled_layers`, and the `VoxObject::layer_palette` accessor
+      backing them); document unsampled layers' ignored sample cells and
+      exempt them in object gc.
 
 ## Phase 6: `voxsmith` (coarse)
 

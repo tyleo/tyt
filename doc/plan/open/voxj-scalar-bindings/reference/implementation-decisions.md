@@ -166,6 +166,20 @@ property's fault; a duplicate purely among array properties keeps reporting
 is `scalar_property_value(palette, scalar_property)`, returning the same
 `(&VoxValuePool, U32Id<BVoxPoolValue>)` pair.
 
+## Sampledness lives on VoxMain, sample cells stay filler
+
+2026-07-19, phase 5 commit 3. Sampledness needs the palette store, so the
+view lives on `VoxMain`: `layer_is_sampled(object, layer)` and
+`iter_sampled_layers(object)`, the latter yielding `(layer id, palette)` in
+layer order with unsampled layers skipped, the wire's channel order. A new
+`VoxObject::layer_palette(layer)` accessor backs them. `VoxObject` keeps a
+dense sample column for every layer, sampled or not: an unsampled layer's
+cells are filler, ignored like non-live voxels'. `validate` checks sample
+materials only in sampled layers, and object gc skips translating a layer's
+cells when its palette's material remap is empty, the `M = 0` signal, so
+filler stays in place. `iter_sampled_layers` treats a dangling-palette
+layer as unsampled; `validate` rejects such a state.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

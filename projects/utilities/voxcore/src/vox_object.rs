@@ -5,13 +5,17 @@ use branded_id::{
 };
 use ty_math::{TyVector3I32, TyVector3U32};
 
-/// One object's voxel volume: a dense grid, the layers it references, and the
-/// material each voxel samples in each layer.
+/// One object's voxel volume: a dense grid, the ordered layers it references,
+/// and the material each voxel samples in each layer.
 ///
 /// Each layer references a shared [`VoxPalette`](crate::VoxPalette); two layers
-/// may reference the same palette, what overlapping layers mean is left to the
-/// consuming application. Every grid cell has a voxel id equal to its raster
-/// index `x*Y*Z + y*Z + z`, so [`voxel_id`](Self::voxel_id) and
+/// may reference the same palette, and layers override back to front, each
+/// property taking its value from the last layer that supplies it. A layer is
+/// sampled iff its palette has materials (see
+/// [`VoxMain::layer_is_sampled`](crate::VoxMain::layer_is_sampled)); an
+/// unsampled layer supplies only its palette's scalar properties, and its
+/// sample cells are ignored filler. Every grid cell has a voxel id equal to
+/// its raster index `x*Y*Z + y*Z + z`, so [`voxel_id`](Self::voxel_id) and
 /// [`voxel_position`](Self::voxel_position) interconvert.
 /// [`is_live`](Self::is_live) says which cells are filled.
 #[derive(Debug, Default)]
@@ -42,7 +46,8 @@ pub struct VoxObject {
     /// The palette each layer references, in layer order.
     layer_palettes: IdField<BVoxLayer, U32Id<BVoxPalette>>,
 
-    /// Per layer, the material each voxel samples.
+    /// Per layer, the material each voxel samples. Cells of non-live voxels
+    /// and of unsampled layers are ignored filler.
     samples: IdField<BVoxLayer, IdField<BVoxVoxel, U32Id<BVoxMaterial>>>,
 }
 
@@ -152,7 +157,8 @@ impl VoxObject {
     }
 
     /// Material the live voxel `id` samples in `layer`, or `None` if the voxel
-    /// is not live or `layer` is not one of this object's layers.
+    /// is not live or `layer` is not one of this object's layers. For an
+    /// unsampled layer this reads an ignored filler cell.
     pub fn voxel_material(
         &self,
         id: U32Id<BVoxVoxel>,
@@ -177,7 +183,8 @@ impl VoxObject {
     /// Live voxels' samples in `layer`, as `(voxel id, material)`, in ascending
     /// raster order, or `None` if `layer` is not one of this object's layers.
     /// Reads the layer's sample column once, so a full scan skips
-    /// [`voxel_material`](Self::voxel_material)'s per-call lookups.
+    /// [`voxel_material`](Self::voxel_material)'s per-call lookups. For an
+    /// unsampled layer this walks ignored filler cells.
     pub fn iter_live_samples(
         &self,
         layer: U32Id<BVoxLayer>,
@@ -222,6 +229,15 @@ impl VoxObject {
         self.layer_ids.len()
     }
 
+    /// The palette `layer` references, or `None` if `layer` is not one of this
+    /// object's layers.
+    pub fn layer_palette(&self, id: U32Id<BVoxLayer>) -> Option<U32Id<BVoxPalette>> {
+        // Safety: retained layer ids have a `layer_palettes` value.
+        self.layer_ids
+            .is_retained(id)
+            .then(|| *unsafe { self.layer_palettes.get(id) })
+    }
+
     /// Layers in layer order, as `(layer id, palette)`. Pair a layer id with
     /// [`voxel_material`](Self::voxel_material) to read its samples.
     pub fn iter_layers(&self) -> impl Iterator<Item = (U32Id<BVoxLayer>, U32Id<BVoxPalette>)> + '_ {
@@ -235,7 +251,9 @@ impl VoxObject {
     /// its id, back-filling every voxel with `default_material`. Live voxels
     /// keep `default_material` until [`retain_voxel`](Self::retain_voxel)
     /// overwrites it, so widening the layer set never requires re-adding voxels.
-    /// The same palette may back several layers.
+    /// The same palette may back several layers. If `palette` has no
+    /// materials the layer is unsampled and every cell is ignored filler, so
+    /// `default_material` may be any id.
     pub fn add_layer(
         &mut self,
         palette: U32Id<BVoxPalette>,
@@ -255,8 +273,9 @@ impl VoxObject {
     }
 
     /// Makes the voxel at `id` live with one `samples` material per layer, in
-    /// [`add_layer`](Self::add_layer) order. `None`, changing nothing, if `id`
-    /// is outside the grid or `samples` has the wrong length.
+    /// [`add_layer`](Self::add_layer) order, unsampled layers included; their
+    /// entries are stored as ignored filler. `None`, changing nothing, if
+    /// `id` is outside the grid or `samples` has the wrong length.
     pub fn retain_voxel(
         &mut self,
         id: U32Id<BVoxVoxel>,
@@ -376,9 +395,10 @@ impl VoxObject {
     /// Rewrites this object's cross-references to match pools a
     /// [`VoxMain`](crate::VoxMain) is compacting, then compacts its own layer
     /// pool. Each layer's palette is translated through `palette_remap`, and
-    /// each live voxel's sample material through the `material_remaps` entry for
-    /// the referenced palette's pre-gc id. Requires a referentially valid
-    /// object, so every translation resolves.
+    /// each sampled layer's live-voxel sample materials through the
+    /// `material_remaps` entry for the referenced palette's pre-gc id; an
+    /// unsampled layer's cells are filler and left untouched. Requires a
+    /// referentially valid object, so every translation resolves.
     pub(crate) fn gc(
         &mut self,
         palette_remap: &IdRemap<BVoxPalette, u32>,
@@ -397,8 +417,13 @@ impl VoxObject {
             *unsafe { self.layer_palettes.get_mut(layer_id) } = new_palette;
 
             // Translate each live voxel's sample material through that palette's
-            // relabeling; non-live filler is exempt and left untouched.
+            // relabeling. Filler cells are exempt: non-live voxels', and every
+            // cell of an unsampled layer, whose palette has no materials and so
+            // an empty relabeling.
             let material_remap = &material_remaps[old_palette.to_usize_id()];
+            if material_remap.is_empty() {
+                continue;
+            }
             // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };
             for &voxel_id in &live {
@@ -586,6 +611,8 @@ mod tests {
             object.iter_layers().collect::<Vec<_>>(),
             [(first, palette), (second, palette)]
         );
+        assert_eq!(object.layer_palette(first), Some(palette));
+        assert_eq!(object.layer_palette(U32Id::from_u32(9)), None);
     }
 
     #[test]
