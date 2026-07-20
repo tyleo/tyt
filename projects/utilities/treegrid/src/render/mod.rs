@@ -1,6 +1,7 @@
 //! The layout renders and their shared machinery.
 
 mod cell;
+mod columns;
 // `group` re-exports nothing: consumers reach its walk through
 // `TreeGrid` methods, so a `Group` re-export would sit unused.
 mod group;

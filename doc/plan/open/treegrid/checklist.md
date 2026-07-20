@@ -76,7 +76,7 @@ items off as they land.
       vmax trees (connectored roots, `(Group)` annotations, marker
       nodes), a section-style forest (`root` / `unplaced` bare
       roots), and a value-children palette tree.
-- [ ] **S4. `rows` and `columns` layouts.** `render_rows` /
+- [x] **S4. `rows` and `columns` layouts.** `render_rows` /
       `render_columns`: label modes `none` / `concat`
       / `header`, per-group label padding, blank-line separation,
       right-trimming, `width` wrapping with continuation indent
@@ -91,6 +91,25 @@ items off as they land.
       including headerless root-level data, a nested two-level parent
       path (`#` then `##`), a non-default `header_level`, and the
       past-6 bold fallback.
+- [ ] **S4b. Render extension traits and per-layout features.** Owner
+      restructure (2026-07-20). Each layout becomes its own module
+      holding an extension trait on `TreeGrid`
+      (`TreeGridRenderHierarchy`, `TreeGridRenderRows`,
+      `TreeGridRenderColumns`; `TreeGridRenderTables` joins at S5 and
+      `TreeGridRenderJson` at S6), its options payload, and its
+      `resolve_*` impl, gated by a default-on cargo feature
+      (`hierarchy`, `rows`, `columns`, `tables`; `json` and `ty-math`
+      stay non-default), with `render/` reduced to shared
+      crate-private machinery and no type changing shape with a
+      feature. One pub item per file, named for it, across the crate:
+      split `text_width.rs` (`visible_width` / `pad_right`),
+      `markdown_table.rs` (`md_cell` out), `group.rs` (`data_paths` /
+      `groups` out); fold the tree glyphs into the hierarchy render
+      as private consts; rename `json/tree_grid_options.rs` to
+      `resolve_json.rs`. Impl-only constructor-family files
+      (`color/`) keep the extended type's name as the conforming
+      reading. Amend CLAUDE.md's style rule, the plan README, and
+      the rendering spec, and log the decision.
 - [ ] **S5. `tables` layout.** The shape types landed with the options
       restructure (`TreeGridTableShape`: `Nested` default with its
       label and level payload, `Flat`; `Records` joins at S15); this

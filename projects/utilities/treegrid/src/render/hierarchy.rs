@@ -130,7 +130,7 @@ mod tests {
     }
 
     #[test]
-    fn a_bare_root_forest_renders_the_palette_list_shape() {
+    fn a_bare_root_prints_alone_above_its_connectored_subtree() {
         let mut grid = TreeGrid::new();
         let palettes = grid.add_root(TreeGridLabel::bare("palettes"));
         let first = grid.add_child(palettes, TreeGridLabel::bare("0"));
@@ -164,7 +164,7 @@ mod tests {
     }
 
     #[test]
-    fn connectored_roots_render_the_vmax_shape() {
+    fn connectored_roots_render_as_annotated_siblings() {
         let mut grid = TreeGrid::new();
         let group = grid.add_root(TreeGridLabel::bare("energy-tank"));
         grid.node_mut(group).annotation = Some("(Group)".to_owned());

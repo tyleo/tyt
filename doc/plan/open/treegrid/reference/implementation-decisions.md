@@ -443,3 +443,25 @@ renderer) plus `render_rows` over all three label modes; chunk 2 is
   `VoxPalette::binding`, renamed by the voxcore properties change),
   so verification ran `cargo clippy -p treegrid --all-targets
   --all-features` instead of the workspace sweep; treegrid is clean.
+
+## S4 chunk 2: the columns render (2026-07-19)
+
+`render_columns` lands as `src/render/columns.rs`, completing S4. The
+unit is the column block: an optional label line, then one line per
+value index, each column padded to the wider of its widest cell and
+its label. `none` and `concat` render one block over every data node;
+`header` renders one block per group between headings, and blocks
+join like row blocks (blank line between, one trailing newline), so a
+heading over an empty group stands alone exactly as in rows.
+
+- **`join_padded` ports from vxl with the right-trim folded in.**
+  Every line right-trims, so the helper trims once instead of each
+  call site (vxl trimmed at the callers). Padding is `pad_right`,
+  measuring visible width, so decorated swatch columns align past
+  their ANSI escapes.
+- **The strip rule does not reach this layout.** Each cell occupies
+  its own line slot in its column, so `Cell::separator` is never
+  consulted; the format matrix still applies per cell.
+- **The voxsmith clippy failure from chunk 1 persists**, so
+  verification again ran `cargo clippy -p treegrid --all-targets
+  --all-features`; treegrid is clean.
