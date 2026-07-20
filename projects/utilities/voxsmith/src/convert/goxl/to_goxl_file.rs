@@ -1,5 +1,5 @@
 use crate::{
-    GoxelExtWrapper, GoxelLayer, Result, cell_color, ext_for, from_vox_value, object_color_ref,
+    GoxelExtWrapper, GoxelLayer, Result, ext_for, from_vox_value, resolve_cell_color_or_transparent,
 };
 use branded_id::U32Id;
 use goxl::{
@@ -21,12 +21,12 @@ use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 /// source can be written to Goxel. An empty voxel is written back as the
 /// transparent zero voxel.
 ///
-/// Errors only when a `goxel` ext is present but cannot be deserialized;
-/// synthesis itself never errors.
+/// Errors when a `goxel` ext is present but cannot be deserialized, or when
+/// an object's `baseColorFactor` draws from a non-color pool.
 pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
     let ext = match ext_for(state, "goxel") {
         Some(ext) => from_vox_value::<GoxelExtWrapper>(ext)?.goxel,
-        None => return Ok(synthesize_goxl(state)),
+        None => return synthesize_goxl(state),
     };
 
     // Each object is the author's build volume (a fixed Goxel 16-cube), so a
@@ -35,7 +35,7 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
     let blocks = state
         .iter_objects()
         .map(|(_, object)| block_from_object(state, object))
-        .collect();
+        .collect::<Result<_>>()?;
 
     Ok(GoxlFile {
         version: ext.version,
@@ -113,22 +113,22 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
 /// alpha 0 as an absent cell, so a fully transparent live color is written
 /// opaque, and a voxel with no resolvable color is written opaque black; any
 /// other alpha is kept.
-fn synthesize_goxl(state: &VoxMain) -> GoxlFile {
+fn synthesize_goxl(state: &VoxMain) -> Result<GoxlFile> {
     let mut builder = GoxlBuilder::default();
     for &root in state.root_hierarchy_nodes() {
-        builder.emit_node(state, root, TyVector3I32::new(0, 0, 0));
+        builder.emit_node(state, root, TyVector3I32::new(0, 0, 0))?;
     }
     for (id, object) in state.iter_objects() {
         if !builder.placed.contains(&id.to_u32()) {
-            builder.emit_object(state, id, object, TyVector3I32::new(0, 0, 0), object.name());
+            builder.emit_object(state, id, object, TyVector3I32::new(0, 0, 0), object.name())?;
         }
     }
 
-    GoxlFile {
+    Ok(GoxlFile {
         blocks: builder.blocks,
         layers: builder.layers,
         ..GoxlFile::default()
-    }
+    })
 }
 
 /// Accumulates a flattened Goxel scene: the shared blocks, the layers that
@@ -150,7 +150,7 @@ impl GoxlBuilder {
         state: &VoxMain,
         node_id: U32Id<BVoxHierarchyNode>,
         parent: TyVector3I32,
-    ) {
+    ) -> Result<()> {
         let (name, child_objects, child_nodes, world) = {
             let node = state
                 .hierarchy_node(node_id)
@@ -167,12 +167,14 @@ impl GoxlBuilder {
 
         for object_id in child_objects {
             if let Some(object) = state.object(object_id) {
-                self.emit_object(state, object_id, object, world, &name);
+                self.emit_object(state, object_id, object, world, &name)?;
             }
         }
         for child in child_nodes {
-            self.emit_node(state, child, world);
+            self.emit_node(state, child, world)?;
         }
+
+        Ok(())
     }
 
     /// Emits one layer placing `object` at its world position. The grid is
@@ -185,12 +187,12 @@ impl GoxlBuilder {
         object: &VoxObject,
         world: TyVector3I32,
         name: &str,
-    ) {
+    ) -> Result<()> {
         self.placed.insert(object_id.to_u32());
 
         // The object is the author's build volume, so each voxel sits at its
         // original local position directly.
-        let color = object_color_ref(state, object);
+        let cell_color = resolve_cell_color_or_transparent(state, object)?;
         let edge = GoxlBlock::SIZE as i32;
         let stride = GoxlBlock::SIZE as usize;
         let mut tiles: BTreeMap<[i32; 3], Vec<GoxlVoxel>> = BTreeMap::new();
@@ -210,11 +212,7 @@ impl GoxlBuilder {
                 (world_position[2] - origin[2]) as usize,
             ];
             let index = local[0] + stride * (local[1] + stride * local[2]);
-            let rgba = color
-                .map(|(layer, palette, array_property)| {
-                    cell_color(state, object, voxel, layer, palette, array_property)
-                })
-                .unwrap_or([0, 0, 0, 0]);
+            let rgba = cell_color(voxel);
             let block = tiles
                 .entry(origin)
                 .or_insert_with(|| vec![GoxlVoxel::default(); GoxlBlock::SIZE.pow(3) as usize]);
@@ -238,6 +236,8 @@ impl GoxlBuilder {
             blocks,
             ..GoxlLayer::default()
         });
+
+        Ok(())
     }
 }
 
@@ -257,9 +257,9 @@ fn solid_voxel(rgba: [u8; 4]) -> GoxlVoxel {
 /// Rebuilds a `16 x 16 x 16` block from an object: each grid cell takes its
 /// color from the voxel's sampled material through the object's
 /// `baseColorFactor` layer, or the transparent zero voxel when empty.
-fn block_from_object(state: &VoxMain, object: &VoxObject) -> GoxlBlock {
+fn block_from_object(state: &VoxMain, object: &VoxObject) -> Result<GoxlBlock> {
     let size = GoxlBlock::SIZE;
-    let color = object_color_ref(state, object);
+    let cell_color = resolve_cell_color_or_transparent(state, object)?;
     let mut voxels = Vec::with_capacity((size * size * size) as usize);
 
     // Storage order is x fastest, then y, then z, matching the loop nesting.
@@ -270,11 +270,7 @@ fn block_from_object(state: &VoxMain, object: &VoxObject) -> GoxlBlock {
                     .voxel_id(TyVector3U32::new(x, y, z))
                     .filter(|&id| object.is_live(id))
                     .map(|id| {
-                        let [r, g, b, a] = color
-                            .map(|(layer, palette, array_property)| {
-                                cell_color(state, object, id, layer, palette, array_property)
-                            })
-                            .unwrap_or([0, 0, 0, 0]);
+                        let [r, g, b, a] = cell_color(id);
                         GoxlVoxel { r, g, b, a }
                     })
                     .unwrap_or_default();
@@ -283,7 +279,7 @@ fn block_from_object(state: &VoxMain, object: &VoxObject) -> GoxlBlock {
         }
     }
 
-    GoxlBlock { voxels }
+    Ok(GoxlBlock { voxels })
 }
 
 /// Rebuilds one layer from its ext provenance, restoring its placements and the

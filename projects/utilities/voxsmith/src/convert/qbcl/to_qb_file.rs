@@ -1,6 +1,6 @@
 use crate::{
-    Error, QubicleQbExtWrapper, QubicleQbMatrix, Result, cell_color, from_vox_value,
-    object_color_ref,
+    Error, QubicleQbExtWrapper, QubicleQbMatrix, Result, from_vox_value,
+    resolve_cell_color_or_transparent,
 };
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
 use voxcore::{VoxMain, VoxObject};
@@ -72,7 +72,7 @@ fn matrix_from_object(
     let volume = size_x as usize * size_y as usize * size_z as usize;
     let mut voxels = vec![QbVoxel::default(); volume];
 
-    let color = object_color_ref(state, object);
+    let cell_color = resolve_cell_color_or_transparent(state, object)?;
     let live: Vec<_> = object.iter_live().collect();
     if live.len() != provenance.visibility.len() {
         return Err(Error::invalid(format!(
@@ -88,11 +88,7 @@ fn matrix_from_object(
             .expect("a live voxel is within the grid");
         // A Qubicle voxel stores no alpha, so the sampled color's alpha is
         // dropped.
-        let [r, g, b, _] = color
-            .map(|(layer, palette, array_property)| {
-                cell_color(state, object, voxel, layer, palette, array_property)
-            })
-            .unwrap_or([0, 0, 0, 0]);
+        let [r, g, b, _] = cell_color(voxel);
         // Storage order: index = x + size_x * (y + size_y * z).
         let index = position.x as usize
             + size_x as usize * (position.y as usize + size_y as usize * position.z as usize);

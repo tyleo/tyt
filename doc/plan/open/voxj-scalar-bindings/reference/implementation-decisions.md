@@ -220,6 +220,62 @@ fixtures, the raw-json `object()` test helper derives its channel count
 from the sample-row arity, not the layer count, so unsampled layers carry
 no channel.
 
+## Property resolution is one shared helper; the plan misnamed the sampler
+
+2026-07-20, phase 6 commit 2. The spec's Resolution rule lives once in
+`ObjectPropertyRef`: it names a property's winning supplier (`Array`
+with layer, palette, and property ids, or `Scalar` with palette and
+property), and `resolve_object_property_ref` scans the layers back to
+front, taking a scalar property from any layer and an array property
+only from a sampled one. Owner review split every pub item into its own
+file, so the enum, each resolver, and the `CellColor` alias each get
+one. Its `baseColorFactor`
+specialization is `base_color_factor_ref`, renamed from
+`object_color_ref` in owner review: the property should be obvious from
+the name alone. A second owner review moved everything object-invariant
+out of the exporters' inner loops, the arity dispatch included:
+`resolve_cell_color` (`internal/cell_color.rs`) picks the read once per
+object and returns it as a `CellColor` boxed function, the shape
+`mesh_slices` already uses for per-voxel keys. An array winner samples
+the winning layer through a table with each material's color decoded up
+front; a scalar winner returns its pinned color, decoded once. The
+loop body in every color exporter (goxl, mvox, qb, qbt, qbcl, vmax) is
+`cell_color(voxel)`, with `resolve_cell_color_or_transparent` folding
+the no-supplier case into a constant above the loop; only mvox palette
+synthesis keeps the `Option`, skipping unsupplied objects. The checklist's "material sampling"
+files (`internal/mesh/sample_material`, `mesh_material_maps`) turned out
+to sample glTF textures during voxelization; the palette-reading sampler
+is the atlas bake, whose `material_attribute`
+now resolves through `VoxPalette::property_by_name`, feeding scalar
+values (for example a pinned `emissiveStrength`) to every packing
+channel, `material_scalar`, and `max_emissive_strength`.
+
+## Color resolution fails loud
+
+2026-07-20, phase 6 commit 2, owner review. The old `cell_color` read
+transparent black for every miss, conflating three cases that
+`resolve_cell_color` now separates. An unsupplied object stays a call
+site policy: `resolve_cell_color_or_transparent` reads transparent
+black, and mvox palette synthesis skips the object. A `baseColorFactor`
+drawing from a non-color pool is a structurally valid file the export
+now rejects with an error naming the object. The invariants `validate`
+guarantees (value ids in range, sampled materials in the palette) are
+expects. The error path added `Result` plumbing through the goxl and
+qbcl synthesis builders and mvox palette synthesis, and the goxl and
+qbcl writer docs now list the new error condition.
+
+## reduce_palette treats a scalar color as colorless
+
+2026-07-20, phase 6 commit 2. The reduction clusters on the
+`baseColorFactor` array property only: a palette pinning it as a scalar
+property has one palette-wide color, so its materials count as colorless
+and the reduction no-ops. Voxcore already keeps scalar-referenced pool
+values alive through the closing prune and accepts the dither's
+full-arity `retain_voxel` rows around an unsampled layer's filler cells,
+so both are covered by new tests. Populations keep weighing raw samples
+even when a later layer overrides the color: the merge collapses whole
+materials, so raw usage stays the honest weight.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

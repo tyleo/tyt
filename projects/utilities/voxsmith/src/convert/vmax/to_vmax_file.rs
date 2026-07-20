@@ -18,7 +18,7 @@ pub fn to_vmax_file(
 mod tests {
     use crate::{
         SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
-        cell_color, from_vmax_file, object_color_ref, to_vmax_file, to_vox_value,
+        from_vmax_file, resolve_cell_color_or_transparent, to_vmax_file, to_vox_value,
     };
     use branded_id::{IdVec, U32Id};
     use std::collections::{BTreeMap, BTreeSet};
@@ -424,7 +424,8 @@ mod tests {
             ];
             for &object in &node.child_objects {
                 let object = state.object(object).expect("a valid object");
-                let color = object_color_ref(state, object);
+                let cell_color = resolve_cell_color_or_transparent(state, object)
+                    .expect("the test state colors resolve");
                 // A voxel sits at node-local `origin + grid`; these states use
                 // identity rotation and unit scale, so the world position is
                 // the accumulated translation plus that offset.
@@ -436,9 +437,7 @@ mod tests {
                         translation[1] + object_origin.y + grid.y as i32,
                         translation[2] + object_origin.z + grid.z as i32,
                     ];
-                    let rgba = color.map_or([0, 0, 0, 0], |(layer, palette, array_property)| {
-                        cell_color(state, object, voxel, layer, palette, array_property)
-                    });
+                    let rgba = cell_color(voxel);
                     voxels.insert((world, rgba));
                 }
             }

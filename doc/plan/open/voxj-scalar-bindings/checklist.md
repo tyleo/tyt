@@ -166,9 +166,14 @@ decision.
       `VoxMain`), and the `nodes` / `root_nodes` renames; every other
       converter compiles at column parity; regenerate fixtures, adding
       scalar-property and unsampled-layer round-trip coverage.
-- [ ] Extend `reduce_palette` and material sampling
+- [x] Extend `reduce_palette` and material sampling
       (`internal/mesh/sample_material`, `mesh_material_maps`) over scalar
-      contributions and the canonical layer-override order.
+      contributions and the canonical layer-override order. (The named
+      mesh files sample glTF textures, not palettes; the extension landed
+      in the shared `ObjectPropertyRef` resolution behind the color
+      exporters, the atlas bake's scalar fallback, and reduction coverage
+      for scalar-carrying palettes and unsampled layers. See the
+      decisions log.)
 - [ ] Decide and log whether glTF import/export wires `emissiveStrength`
       through scalar properties; implement the decision.
 

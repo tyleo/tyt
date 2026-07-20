@@ -4,7 +4,7 @@ use crate::{
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
-use voxcore::{BVoxPoolValue, VoxMain, VoxValuePool};
+use voxcore::{BVoxPoolValue, VoxMain, VoxPropertyId, VoxValuePool};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
 /// `width` x `height` texels, one texel per material placed row-major from the
@@ -110,8 +110,9 @@ fn channel_byte(
 }
 
 /// What the material at `index` draws for attribute `key`: the value pool the
-/// array property draws from and the value id into it, or `None` when `index`
-/// is out of range or no array property carries `key`.
+/// property draws from and the value id into it. An array property reads the
+/// material's cell; a scalar property pins one value for every material.
+/// `None` when `index` is out of range or no property carries `key`.
 fn material_attribute<'a>(
     state: &'a VoxMain,
     used: &UsedMaterials,
@@ -120,8 +121,10 @@ fn material_attribute<'a>(
 ) -> Option<(&'a VoxValuePool, U32Id<BVoxPoolValue>)> {
     let material = used.material(index)?;
     let palette = used.palette();
-    let array_property = state.palette(palette)?.array_property_by_name(key)?;
-    state.material_value(palette, material, array_property)
+    match state.palette(palette)?.property_by_name(key)? {
+        VoxPropertyId::Array(property) => state.material_value(palette, material, property),
+        VoxPropertyId::Scalar(property) => state.scalar_property_value(palette, property),
+    }
 }
 
 /// A color attribute's RGBA bytes, defaulting to opaque white (the base-color
@@ -400,6 +403,45 @@ mod tests {
         // A true voxel bakes 255, a false voxel bakes 0.
         assert_eq!(pixels[0], 255);
         assert_eq!(pixels[4], 0);
+    }
+
+    #[test]
+    fn a_scalar_property_pins_one_value_for_every_material() {
+        // `emissiveStrength` is a palette-scoped scalar property, so both
+        // materials bake the same pinned half strength.
+        let mut state = VoxMain::default();
+        let base = state.add_value_pool(VoxValuePool::Srgba {
+            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]),
+        });
+        let strength = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::None,
+            values: IdVec::from_vec(vec![0.5]),
+        });
+
+        let mut palette = VoxPalette::default();
+        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette.add_scalar_property(EMISSIVE_STRENGTH.to_owned(), strength, value(0));
+        let red = palette.add_material(vec![value(0)]).unwrap();
+        let blue = palette.add_material(vec![value(1)]).unwrap();
+        let palette_id = state.add_palette(palette);
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
+        let layer = object.add_layer(palette_id, red);
+        for (x, material) in [(0, red), (1, blue)] {
+            let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
+            object.retain_voxel(voxel, &[material]).unwrap();
+        }
+        let object_id = state.add_object(object);
+
+        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
+
+        let bake = MaterialBake::Packing(vec![scalar(EMISSIVE_STRENGTH, false)]);
+        let pixels = bake_atlas_pixels(&state, &used, &bake, width, height).unwrap();
+        // 0.5 scales to the unorm byte 128 in both texels.
+        assert_eq!(pixels[0], 128);
+        assert_eq!(pixels[4], 128);
     }
 
     #[test]

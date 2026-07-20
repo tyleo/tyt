@@ -1,6 +1,6 @@
 use crate::{
-    Error, QubicleQbtExtWrapper, QubicleQbtNode, Result, cell_color, from_vox_value,
-    object_color_ref,
+    Error, QubicleQbtExtWrapper, QubicleQbtNode, Result, from_vox_value,
+    resolve_cell_color_or_transparent,
 };
 use branded_id::U32Id;
 use qbcl::qbt::{
@@ -170,7 +170,7 @@ fn matrix_from_object(
     let volume = size_x as usize * size_y as usize * size_z as usize;
     let mut voxels = vec![QbtVoxel::default(); volume];
 
-    let color = object_color_ref(state, object);
+    let cell_color = resolve_cell_color_or_transparent(state, object)?;
     let live: Vec<_> = object.iter_live().collect();
     if live.len() != masks.len() {
         return Err(Error::invalid(format!(
@@ -186,11 +186,7 @@ fn matrix_from_object(
             .expect("a live voxel is within the grid");
         // A Qubicle voxel stores no alpha, so the sampled color's alpha is
         // dropped.
-        let [r, g, b, _] = color
-            .map(|(layer, palette, array_property)| {
-                cell_color(state, object, voxel, layer, palette, array_property)
-            })
-            .unwrap_or([0, 0, 0, 0]);
+        let [r, g, b, _] = cell_color(voxel);
         // Storage order: index = y + size_y * (z + size_z * x).
         let index = position.y as usize
             + size_y as usize * (position.z as usize + size_z as usize * position.x as usize);

@@ -1,6 +1,7 @@
 use crate::{
     BASE_COLOR_FACTOR, Error, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
-    MagicaVoxelNodeBody, Result, cell_color, ext_for, from_vox_value, object_color_ref, pool_color,
+    MagicaVoxelNodeBody, Result, ext_for, from_vox_value, pool_color, resolve_cell_color,
+    resolve_cell_color_or_transparent,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -273,7 +274,7 @@ fn frame_from_provenance(frame: &MagicaVoxelFrame) -> MVoxFrame {
 /// palette is lossless up to 255 distinct colors; beyond that the table is full
 /// and the excess collapses onto the last slot.
 fn synthesize_mvox(state: &VoxMain) -> Result<MVoxFile> {
-    let (palette, color_index) = synthesize_palette(state);
+    let (palette, color_index) = synthesize_palette(state)?;
     let models = state
         .iter_objects()
         .map(|(_, object)| synthesize_model(state, object, &color_index))
@@ -292,17 +293,17 @@ fn synthesize_mvox(state: &VoxMain) -> Result<MVoxFile> {
 /// table and the matching color-to-index map. Slot 0 is MagicaVoxel's reserved
 /// empty color, so real colors fill `1..=255`; a 256th distinct color and
 /// beyond reuse the last slot.
-fn synthesize_palette(state: &VoxMain) -> (MVoxPalette, HashMap<[u8; 4], u8>) {
+fn synthesize_palette(state: &VoxMain) -> Result<(MVoxPalette, HashMap<[u8; 4], u8>)> {
     let mut colors = [MVoxColor::default(); 256];
     let mut color_index: HashMap<[u8; 4], u8> = HashMap::new();
     let mut next = 1usize;
 
     for (_, object) in state.iter_objects() {
-        let Some((layer, palette, array_property)) = object_color_ref(state, object) else {
+        let Some(cell_color) = resolve_cell_color(state, object)? else {
             continue;
         };
         for voxel in object.iter_live() {
-            let rgba = cell_color(state, object, voxel, layer, palette, array_property);
+            let rgba = cell_color(voxel);
             if color_index.contains_key(&rgba) {
                 continue;
             }
@@ -318,7 +319,7 @@ fn synthesize_palette(state: &VoxMain) -> (MVoxPalette, HashMap<[u8; 4], u8>) {
         }
     }
 
-    (MVoxPalette { colors }, color_index)
+    Ok((MVoxPalette { colors }, color_index))
 }
 
 /// Builds one model from an object: its grid size and one voxel per live cell
@@ -339,19 +340,14 @@ fn synthesize_model(
         )));
     }
 
-    let color_ref = object_color_ref(state, object);
+    let cell_color = resolve_cell_color_or_transparent(state, object)?;
     let voxels = object
         .iter_live()
         .map(|voxel| {
             let position = object
                 .voxel_position(voxel)
                 .expect("a live voxel is within the grid");
-            let index = color_ref
-                .map(|(layer, palette, array_property)| {
-                    cell_color(state, object, voxel, layer, palette, array_property)
-                })
-                .and_then(|rgba| color_index.get(&rgba).copied())
-                .unwrap_or(0);
+            let index = color_index.get(&cell_color(voxel)).copied().unwrap_or(0);
             MVoxVoxel {
                 x: position.x as u8,
                 y: position.y as u8,
