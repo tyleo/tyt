@@ -29,6 +29,20 @@ pub enum Error {
     /// A palette declares the same name on more than one array property.
     DuplicateArrayPropertyName { palette: u32, array_property: u32 },
 
+    /// A palette scalar property references a value pool that does not exist.
+    ScalarPropertyPool {
+        palette: u32,
+        scalar_property: u32,
+        pool: u32,
+    },
+
+    /// A palette declares the same name on a scalar property and another
+    /// property, array or scalar.
+    DuplicateScalarPropertyName { palette: u32, scalar_property: u32 },
+
+    /// A scalar property's pinned value id is beyond the pool's values.
+    ScalarPropertyValue { palette: u32, scalar_property: u32 },
+
     /// A material's value id for an array property is beyond the pool's
     /// values.
     MaterialValue {
@@ -103,6 +117,28 @@ impl Display for Error {
             } => write!(
                 f,
                 "palette {palette} array property {array_property} duplicates another property's name"
+            ),
+            Error::ScalarPropertyPool {
+                palette,
+                scalar_property,
+                pool,
+            } => write!(
+                f,
+                "palette {palette} scalar property {scalar_property} references value pool {pool}, which does not exist"
+            ),
+            Error::DuplicateScalarPropertyName {
+                palette,
+                scalar_property,
+            } => write!(
+                f,
+                "palette {palette} scalar property {scalar_property} duplicates another property's name"
+            ),
+            Error::ScalarPropertyValue {
+                palette,
+                scalar_property,
+            } => write!(
+                f,
+                "palette {palette} scalar property {scalar_property} pins a value id out of the pool's range"
             ),
             Error::MaterialValue {
                 palette,

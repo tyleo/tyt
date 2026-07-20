@@ -135,7 +135,7 @@ then scalar-property storage and checks, then sampled-layer derivation.
       branded value ids: pools store `IdVec<BVoxPoolValue, T>` and every
       pool-value reference is a `U32Id<BVoxPoolValue>` named a value id
       (`value_id`, `remap_pool_value_ids`; the wire keeps `valueIndex`).
-- [ ] Add scalar properties: `VoxScalarProperty` (`name` / `pool` /
+- [x] Add scalar properties: `VoxScalarProperty` (`name` / `pool` /
       `value_id`, brand `BVoxScalarProperty`), palette storage, name
       maps, and API; gc, clone, and removal integration;
       `relabel_value_pools` and `remap_pool_value_ids` cover scalar

@@ -144,6 +144,28 @@ would read as pairing with the `VoxValue` ext type. Errors keep raw
 `u32` listing indices. Commit 2's scalar property carries the same
 `value_id` type and name.
 
+## The combined name map is keyed by an arity-tagged property id
+
+2026-07-19, phase 5 commit 2. The owner's 2026-07-15 surface asked for three
+name maps; the split maps return plain branded ids, and the combined
+`property_by_name` returns `VoxPropertyId`, a public
+`Array(U32Id<BVoxArrayProperty>) | Scalar(U32Id<BVoxScalarProperty>)` enum
+in `vox_property_id.rs`. All three maps share the maintenance story the
+array map already had: inserted on add, removed on remove only where the
+entry still points at the removed id, rebuilt by palette gc.
+
+## Scalar validate faults report as scalar-property errors
+
+2026-07-19, phase 5 commit 2. Three new `Error` variants mirror the array
+side: `ScalarPropertyPool`, `DuplicateScalarPropertyName`, and
+`ScalarPropertyValue` (the pinned `value_id` out of pool range, the analog
+of `MaterialValue`). `validate` checks a palette's array properties before
+its scalar properties, so a cross-list duplicate name reports as the scalar
+property's fault; a duplicate purely among array properties keeps reporting
+`DuplicateArrayPropertyName`. The resolution helper beside `material_value`
+is `scalar_property_value(palette, scalar_property)`, returning the same
+`(&VoxValuePool, U32Id<BVoxPoolValue>)` pair.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new
