@@ -369,3 +369,37 @@ four-component sRGB type.
   lines" statement: each feature's surface is its gated module's
   lines in `lib.rs`, plus this one intersection line, placed with the
   color constructors so they read as one set.
+
+## S3: the hierarchy render (2026-07-19)
+
+`render_hierarchy` lands as `src/render/hierarchy.rs`, an impl-only
+file on `TreeGrid` inside the render module (the
+`json/tree_grid_options` precedent, and where the S2 entry said the
+layout renders would live); S4 and S5 follow the same shape. The
+line grammar is vxl's: `{prefix}{connector} {content}`, the child
+prefix extending by the last / non-last extension glyph.
+
+- **Bare-root sections separate with one blank line.** The spec said
+  nothing; `hierarchy show` prints a blank line between its `root`
+  and `unplaced` sections (the `render_group` gap rule), and the S9
+  parity bar needs it from one grid rendered once. Connectored roots
+  stay contiguous (vmax trees, collapsed-ancestors lists). The spec's
+  `bare_roots` bullet was amended, spec fixed rather than
+  implementation.
+- **Every line ends `\n`; an empty grid renders empty.** The rows
+  layout stated this and the hierarchy section did not; made explicit
+  there in the same commit. Content ends with a label, an
+  annotation, or a cell, so no hierarchy line can end in spaces and
+  there is no right-trim step.
+- **The node-line rule applies to bare roots too.** A bare root with
+  values prints `label: cells` on its unprefixed line, and under
+  `value_children` its values take connector lines at depth zero. No
+  parity adopter puts values on a section root, so this is the
+  uniform reading of "each root prints its label alone", not a
+  divergence.
+- **The S2 allows narrowed to their surviving scope.** The
+  render module's blanket `#![allow(dead_code)]` dropped with its
+  first public consumer; what remains is one targeted allow on the
+  markdown-table module (S5) and one on `pad_right` (S4), each
+  annotated with the step that retires it, plus the S2
+  `unused_imports` allow on the `markdown_table` re-export.

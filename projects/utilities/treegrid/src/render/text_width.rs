@@ -22,6 +22,9 @@ pub(crate) fn visible_width(value: &str) -> usize {
 
 /// Pads `value` on the right with spaces to a visible width of `width`,
 /// measuring past ANSI escapes.
+// Unreachable from the public API until the S4 rows / columns label
+// padding lands.
+#[allow(dead_code)]
 pub(crate) fn pad_right(value: &str, width: usize) -> String {
     let visible = visible_width(value);
     let mut output = value.to_string();

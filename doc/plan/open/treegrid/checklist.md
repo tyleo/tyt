@@ -67,7 +67,7 @@ items off as they land.
       swatch bytes, all color math through ty-math. Tests: the matrix,
       the strip with a visual-less value mixed in, visible width past
       CSI sequences, an HDR `lin_rgba` component above 1.
-- [ ] **S3. `hierarchy` layout.** `render_hierarchy`:
+- [x] **S3. `hierarchy` layout.** `render_hierarchy`:
       connectors/extensions, `bare_roots`
       both ways, annotations, `label: cells` data lines, values-on-branch
       nodes, and the `value_children` mode (one connector line per

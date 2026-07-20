@@ -186,7 +186,9 @@ Behind the `ty-math` feature, over the component-generic color family
     one another (`tyt vmax hierarchy`, collapsed-ancestors lists).
   - `true`: each root prints its label alone on an unprefixed line, its
     children below with connectors (`hierarchy show`'s `root` /
-    `unplaced` sections, `palette list`'s `palettes` line).
+    `unplaced` sections, `palette list`'s `palettes` line). Successive
+    root sections separate with one blank line, today's gap between
+    `root` and `unplaced`.
 - A node line is `{label}{ annotation?}` when it has no values, else
   `{label}{ annotation?}: {cells}` with the node's cell separator rule.
   Values are not wrapped in this layout.
@@ -197,6 +199,7 @@ Behind the `ty-math` feature, over the component-generic color family
   child. Default false, the inline form above; the other `resolve_*`
   methods reject it as `TreeGridError::ValueChildrenWithoutHierarchy`.
 - Children render beneath in insertion order.
+- Every line ends with `\n`; an empty grid renders as an empty string.
 - `resolve_hierarchy` rejects a label mode (`LabelModeWithoutLabels`)
   and a width (`WidthWithoutRows`).
 
