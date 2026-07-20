@@ -403,3 +403,43 @@ prefix extending by the last / non-last extension glyph.
   markdown-table module (S5) and one on `pad_right` (S4), each
   annotated with the step that retires it, plus the S2
   `unused_imports` allow on the `markdown_table` re-export.
+
+## S4 chunk 1: the grouping walk and the rows render (2026-07-19)
+
+S4 lands in two chunks. This chunk is the shared label-mode machinery
+(the grouping walk, the concat path enumeration, and the heading
+renderer) plus `render_rows` over all three label modes; chunk 2 is
+`render_columns`, which completes S4.
+
+- **The label-mode walks are crate-private `TreeGrid` methods in
+  `render/group.rs`.** `data_paths` enumerates data nodes in
+  pre-order with their full concat paths (the `concat` rows; `none`
+  reuses the enumeration and ignores the paths), and `groups` is the
+  spec's depth-first grouping walk, returning
+  `Group { branch, depth, members }` entries: the root-level group
+  first when any root bears values, then one group per branch that
+  leads to data, a branch's own group before its child branches.
+  "Leads to data" is implemented as "is a proper ancestor of a data
+  node", the reading under which the worked example's `# 1` heads an
+  empty group while a childless data node heads nothing. The
+  recursion runs over the public accessors (`roots` / `node` /
+  `children`) rather than one bottom-up arena pass, since the dense
+  storage is private to `tree_grid.rs` and read-command trees are
+  small. `Group` is not re-exported from `render/mod.rs`: every
+  consumer reaches the walk through methods, so a re-export would
+  sit unused and trip the import lint; S5 adds it with the first
+  named use if one appears.
+- **The heading rule lives in `render/heading.rs`.** One function
+  turns level plus depth into a `#` run through markdown's level 6
+  and the bold fallback past it, shared with the S5 nested tables.
+- **Wrapping stays in `rows.rs`.** The port of vxl's `wrap_cells`
+  operates on rendered `Cell` widths, and the block assembly inlines
+  vxl's `assemble_row` without its empty-row arm: a data node always
+  has at least one value, so a block always has a first segment.
+  `pad_right` gains its first consumer (the label columns) and loses
+  its S4 allow.
+- **The workspace clippy gate is failing before this chunk.**
+  `voxsmith` does not compile at the parent commit (it still calls
+  `VoxPalette::binding`, renamed by the voxcore properties change),
+  so verification ran `cargo clippy -p treegrid --all-targets
+  --all-features` instead of the workspace sweep; treegrid is clean.
