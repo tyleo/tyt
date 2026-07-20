@@ -615,3 +615,33 @@ the adopters' `--layout` values still say `hierarchy` / `rows` /
 `columns` / `tables`. The plan README, checklist ground rules, the
 continue prompt, the rendering spec, and the crate README were
 amended in the same change.
+
+## S6: the JSON renders (2026-07-20)
+
+`render_json_pretty` / `render_json_compact` land as
+`TreeGridRenderJson` in `json/tree_grid_render_json.rs`, completing
+phase 1. The blanket impl bounds on `TreeGridJsonCells`, so the
+renders exist only for grids whose policy carries JSON forms -- the
+uncallable-not-rejected rule from the cell-policy entry. The private
+envelope builders ride an inherent impl under the same bound in the
+same file, the S4b helper pattern.
+
+- **Records build as `serde_json::Map`s in envelope order.** `label`,
+  `annotation`, `values`, and `children` insert in the spec's key
+  order and `preserve_order` keeps it. No serde derive: the
+  omit-when-empty rules and the per-value policy call are the whole
+  shape.
+- **The renders stay infallible.** Serializing a built `Value` cannot
+  fail, so the trait methods `expect` on the serde result and keep
+  returning plain `String`s.
+- **An empty grid renders as the empty array.** `[]` plus the
+  trailing newline, not the text layouts' empty string, so a JSON
+  consumer always receives valid JSON. Today vxl's JSON reports emit
+  `[]` for an empty selection. The spec's JSON section gained the
+  sentence and dropped its stale `(S6)` marker, and the plan README's
+  type roster was amended in the same change.
+
+The voxsmith half of the voxcore properties breakage is fixed, but
+vxl still fails the workspace clippy gate. Verification therefore
+stayed scoped to `-p treegrid`, across the empty set, single
+features, json pairings, and `--all-features`.

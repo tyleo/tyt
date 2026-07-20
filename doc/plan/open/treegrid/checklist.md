@@ -128,7 +128,7 @@ items off as they land.
       both label modes including the hierarchy-shaped worked example
       from the [rendering spec](reference/rendering-spec.md), and the
       flat comparison table.
-- [ ] **S6. JSON layouts.** Behind the `json` feature,
+- [x] **S6. JSON layouts.** Behind the `json` feature,
       `render_json_pretty` / `render_json_compact`: the record
       envelope (`label`, optional `annotation` / `values` /
       `children`), pretty and compact, trailing newline. Tests:

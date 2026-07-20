@@ -311,7 +311,7 @@ the other `resolve_*` methods reject a set shape as
 
 - Behind the non-default `json` feature; without it these renders do
   not exist. Rendered by `render_json_pretty()` /
-  `render_json_compact()`, on the `TreeGridRenderJson` trait (S6),
+  `render_json_compact()`, on the `TreeGridRenderJson` trait,
   after a `resolve_json()` check that no option is set.
 - The envelope: a JSON array of root records, where a record is
 
@@ -326,6 +326,7 @@ the other `resolve_*` methods reject a set shape as
 
   with `annotation`, `values`, and `children` omitted when absent/empty.
   `label` is the raw string, unquoted-extra, whether `Bare` or `Quoted`.
+  An empty grid renders as the empty array.
   `values` carries each value's policy JSON form
   (`TreeGridJsonCells`): `TreeGridJsonValueCells` emits the paired
   native form, falling back to `String(text)`, and the default

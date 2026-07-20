@@ -102,8 +102,8 @@ follow house style: one per file, `TreeGrid` prefix (`TreeGrid`,
 `TreeGridVisual`,
 `TreeGridCellFormat`, the render extension traits
 (`TreeGridRenderHierarchy`, `TreeGridRenderRows`,
-`TreeGridRenderColumns`, `TreeGridRenderTables`, with
-`TreeGridRenderJson` at S6), the per-layout option payloads
+`TreeGridRenderColumns`, `TreeGridRenderTables`,
+`TreeGridRenderJson`), the per-layout option payloads
 (`TreeGridHierarchyOptions`, `TreeGridRowsOptions`, and kin),
 `TreeGridLabelMode`, `TreeGridTableShape`, the loose
 `TreeGridOptions` with its `*Kind` enums, `TreeGridError`,
