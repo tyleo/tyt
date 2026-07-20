@@ -271,7 +271,7 @@ Today's `palette show --layout column`:
 ### tables
 
 Rendered by `render_tables(&TreeGridTableShape)`, on the
-`TreeGridRenderTables` trait (S5) behind the `tables` feature.
+`TreeGridRenderTables` trait behind the `tables` feature.
 `TreeGridTableShape` picks the shape:
 `Nested(TreeGridNestedTableOptions)`, carrying the heading label mode
 and level, or `Flat`. `resolve_tables` maps the loose

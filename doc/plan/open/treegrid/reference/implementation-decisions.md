@@ -552,3 +552,52 @@ rules, the continue prompt, the rendering spec (model bullet and
 per-layout render lines), and the crate README were amended in the
 same change. The voxsmith workspace breakage persists, so
 verification stayed scoped to `-p treegrid`.
+
+## S5: the tables render (2026-07-20)
+
+`render_tables` lands as `TreeGridRenderTables` in
+`render_tables/tree_grid_render_tables.rs`, completing the layout the
+shape types were staged for at S4b. Both shapes ride one private
+`table_block` (a `#` index column, one column per node headed by its
+label, one row per value index); `Nested` walks the shared `groups()`
+and `Flat` reuses `data_paths()` for its concat headers.
+
+- **Nested concat paths reconstruct from the walk order.** The arena
+  has no parent links and `Group` carries only the branch id; rather
+  than add a `path` field to `Group` (dead weight and a dead-code
+  warning in every build where `rows` / `columns` compile the label
+  machinery without `tables`), the nested render keeps a
+  depth-indexed stack of cumulative paths. Groups arrive depth-first
+  with parents before children and exact depths -- the walk's
+  documented contract -- so truncating the stack to the group's depth
+  always leaves the parent path on top. S15's relative record columns
+  revisit this if they need real ancestor queries.
+- **The gate unions widened as S4b planned, except `pad_right`.**
+  `tables` joined `cell_render` and `label`, and the markdown
+  dead-code allows dropped with their first consumer. But a
+  tables-only build never pads outside `markdown_table`, so
+  `pad_right` keeps the narrower `columns` / `rows` union on its
+  `mod` line inside `label/` -- the `render/mod.rs` per-module
+  pattern; leaf files still carry no cfg.
+- **Table cells escape after the format matrix.** `markdown_cell`
+  applies to the rendered bytes of every non-bare-visual cell (and to
+  the label headers), with the cell's declared width growing by one
+  per escaped pipe; newline flattening is width-neutral. A bare
+  visual passes verbatim: the spec's rule covers cell *text*, and
+  opaque visual bytes are the adopter's to keep table-safe. ANSI CSI
+  sequences contain no pipes, so a decorated swatch cell is
+  unaffected.
+- **Blocks join like rows and columns.** Headings and tables are
+  blocks joined with one blank line and a single trailing newline;
+  `markdown_table`'s own trailing newline is popped so the join rule
+  stays uniform. An empty grid renders as the empty string in both
+  shapes.
+
+The rendering spec's stale `(S5)` marker and the plan README's type
+roster were amended in the same change. The goldens include both
+worked examples from the spec (the palette forest in both label modes
+plus flat, and the hierarchy-data tree cut to one full scene node in
+both modes), the bold past-level-6 fallback, root-level data with no
+heading, pipe escaping, and a visual cell padding by declared width.
+The voxsmith workspace breakage persists, so verification stayed
+scoped to `-p treegrid`.

@@ -113,7 +113,7 @@ items off as they land.
       (`color/`) keep the extended type's name as the conforming
       reading. Amend CLAUDE.md's style rule, the plan README, and
       the rendering spec, and log the decision.
-- [ ] **S5. `tables` layout.** The shape types landed with the options
+- [x] **S5. `tables` layout.** The shape types landed with the options
       restructure (`TreeGridTableShape`: `Nested` default with its
       label and level payload, `Flat`; `Records` joins at S15); this
       step is `render_tables`. Nested: one table per
