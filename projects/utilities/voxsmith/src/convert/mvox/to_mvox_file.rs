@@ -108,22 +108,22 @@ pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
 
 /// The 256 palette colors read back through `baseColorFactor`: material `index`
 /// gives color index `index`. Transparent where the palette or its color
-/// binding is absent.
+/// property is absent.
 fn colors_from_palette(state: &VoxMain, palette: Option<U32Id<BVoxPalette>>) -> [MVoxColor; 256] {
     let mut colors = [MVoxColor::default(); 256];
     let Some(palette) = palette else {
         return colors;
     };
-    let Some(binding) = state
+    let Some(array_property) = state
         .palette(palette)
-        .and_then(|palette| palette.binding_by_attribute(BASE_COLOR_FACTOR))
+        .and_then(|palette| palette.array_property_by_name(BASE_COLOR_FACTOR))
     else {
         return colors;
     };
     for (index, color) in colors.iter_mut().enumerate() {
         let material = U32Id::<BVoxMaterial>::from_u32(index as u32);
         if let Some([r, g, b, a]) = state
-            .material_value(palette, material, binding)
+            .material_value(palette, material, array_property)
             .and_then(|(pool, value)| pool_color(pool, value))
         {
             *color = MVoxColor::new(r, g, b, a);
@@ -298,11 +298,11 @@ fn synthesize_palette(state: &VoxMain) -> (MVoxPalette, HashMap<[u8; 4], u8>) {
     let mut next = 1usize;
 
     for (_, object) in state.iter_objects() {
-        let Some((layer, palette, binding)) = object_color_ref(state, object) else {
+        let Some((layer, palette, array_property)) = object_color_ref(state, object) else {
             continue;
         };
         for voxel in object.iter_live() {
-            let rgba = cell_color(state, object, voxel, layer, palette, binding);
+            let rgba = cell_color(state, object, voxel, layer, palette, array_property);
             if color_index.contains_key(&rgba) {
                 continue;
             }
@@ -347,8 +347,8 @@ fn synthesize_model(
                 .voxel_position(voxel)
                 .expect("a live voxel is within the grid");
             let index = color_ref
-                .map(|(layer, palette, binding)| {
-                    cell_color(state, object, voxel, layer, palette, binding)
+                .map(|(layer, palette, array_property)| {
+                    cell_color(state, object, voxel, layer, palette, array_property)
                 })
                 .and_then(|rgba| color_index.get(&rgba).copied())
                 .unwrap_or(0);

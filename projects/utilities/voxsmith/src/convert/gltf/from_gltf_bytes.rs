@@ -464,9 +464,10 @@ mod tests {
         MaterialMode, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, SurfaceMode,
         TRANSMISSION_FACTOR, from_gltf_bytes, voxelize_mesh,
     };
+    use branded_id::U32Id;
     use png::{BitDepth, ColorType, Encoder};
     use ty_math::{TyFloatExt, TySrgbaU8, TyVector3U32};
-    use voxcore::{VoxMain, VoxValuePool};
+    use voxcore::{BVoxPoolValue, VoxMain, VoxValuePool};
 
     /// A minimal binary glTF (GLB) of an axis-aligned box spanning `[0, sx]`,
     /// `[0, sy]`, `[0, sz]` in glTF Y-up space, indexed triangles. When
@@ -701,20 +702,22 @@ mod tests {
         )
     }
 
-    /// The value pool and value-index one attribute resolves to on the material a
+    /// The value pool and value id one attribute resolves to on the material a
     /// given voxel samples, through the object's first layer.
     fn voxel_attribute<'a>(
         state: &'a VoxMain,
         position: TyVector3U32,
         attribute: &str,
-    ) -> (&'a VoxValuePool, u32) {
+    ) -> (&'a VoxValuePool, U32Id<BVoxPoolValue>) {
         let (_, object) = state.iter_objects().next().unwrap();
         let (layer, palette_id) = object.iter_layers().next().unwrap();
         let palette = state.palette(palette_id).unwrap();
-        let binding = palette.binding_by_attribute(attribute).unwrap();
+        let array_property = palette.array_property_by_name(attribute).unwrap();
         let voxel = object.voxel_id(position).unwrap();
         let material = object.voxel_material(voxel, layer).unwrap();
-        state.material_value(palette_id, material, binding).unwrap()
+        state
+            .material_value(palette_id, material, array_property)
+            .unwrap()
     }
 
     /// The `#RRGGBBAA` hex of the `baseColorFactor` a given voxel samples.
@@ -722,7 +725,7 @@ mod tests {
         let (pool, index) = voxel_attribute(state, position, BASE_COLOR_FACTOR);
         match pool {
             VoxValuePool::Srgba { values } => {
-                let [r, g, b, a] = values[index as usize];
+                let [r, g, b, a] = values[index.to_usize_id()];
                 TySrgbaU8::from_array([byte(r), byte(g), byte(b), byte(a)]).to_hex()
             }
             other => panic!("unexpected baseColorFactor pool {other:?}"),
@@ -733,7 +736,7 @@ mod tests {
     fn voxel_number(state: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
         let (pool, index) = voxel_attribute(state, position, attribute);
         match pool {
-            VoxValuePool::Float { values, .. } => values[index as usize],
+            VoxValuePool::Float { values, .. } => values[index.to_usize_id()],
             other => panic!("expected a float pool for {attribute}, got {other:?}"),
         }
     }
@@ -1079,13 +1082,13 @@ mod tests {
         assert_eq!(object.bounds(), TyVector3U32::new(1, 1, 4));
         assert_eq!(object.live_count(), 4);
 
-        // Every mode binds the glTF material attributes; flat is one material.
+        // Every mode carries the glTF material properties; flat is one material.
         let (_, palette) = state.iter_palettes().next().unwrap();
         assert_eq!(palette.material_count(), 1);
         assert_eq!(
             palette
-                .iter_bindings()
-                .map(|(_, binding)| binding.attribute.as_str())
+                .iter_array_properties()
+                .map(|(_, property)| property.name.as_str())
                 .collect::<Vec<_>>(),
             [
                 BASE_COLOR_FACTOR,
@@ -1560,7 +1563,7 @@ mod tests {
         let origin = TyVector3U32::new(0, 0, 0);
         let (pool, index) = voxel_attribute(&state, origin, EMISSIVE_FACTOR);
         let [r, g, b] = match pool {
-            VoxValuePool::Srgb { values } => values[index as usize],
+            VoxValuePool::Srgb { values } => values[index.to_usize_id()],
             other => panic!("expected an sRGB emissiveFactor pool, got {other:?}"),
         };
         assert!(r < 0.01 && b < 0.01, "emissiveFactor red {r} blue {b}");

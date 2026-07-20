@@ -89,8 +89,8 @@ fn matrix_from_object(
         // A Qubicle voxel stores no alpha, so the sampled color's alpha is
         // dropped.
         let [r, g, b, _] = color
-            .map(|(layer, palette, binding)| {
-                cell_color(state, object, voxel, layer, palette, binding)
+            .map(|(layer, palette, array_property)| {
+                cell_color(state, object, voxel, layer, palette, array_property)
             })
             .unwrap_or([0, 0, 0, 0]);
         // Storage order: index = x + size_x * (y + size_y * z).

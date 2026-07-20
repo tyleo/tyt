@@ -50,20 +50,19 @@ pub fn write_voxj(
 
     let objects = state
         .iter_objects()
-        .map(|(_, object)| {
-            let decoded = voxj_decoded_object_from_vox_object(object);
-            let material_counts =
-                voxj_palette_material_counts(&decoded.layer_palette_refs, &palettes)?;
+        .map(|(object_id, _)| {
+            let decoded = voxj_decoded_object_from_vox_object(state, object_id);
+            let material_counts = voxj_palette_material_counts(&decoded.layers, &palettes)?;
             encode_voxj_object_optimized(&decoded, &material_counts, position, sample)
         })
         .collect::<voxj_codec::Result<Vec<_>>>()?;
 
-    let hierarchy_nodes = state
+    let nodes = state
         .iter_hierarchy_nodes()
         .map(|(_, node)| voxj_hierarchy_node_from_vox_hierarchy_node(node))
         .collect();
 
-    let root_hierarchy_nodes = state
+    let root_nodes = state
         .root_hierarchy_nodes()
         .iter()
         .map(|id| id.to_u32() as usize)
@@ -98,8 +97,8 @@ pub fn write_voxj(
                 value_pools,
                 palettes,
                 objects,
-                hierarchy_nodes,
-                root_hierarchy_nodes,
+                nodes,
+                root_nodes,
             },
             edit_state,
             ext,

@@ -18,8 +18,8 @@ use vmax::{
 };
 use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPaletteBinding, VoxHierarchyNode,
-    VoxMain, VoxObject, VoxPalette, VoxValuePool,
+    BVoxArrayProperty, BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
+    VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`
@@ -620,11 +620,12 @@ fn object_view_box(origin: [i32; 3], size: TyVector3U32) -> VMaxViewBox {
 }
 
 /// The folded palette an object references: the palette id, the optional
-/// `baseColorFactor` binding, and the material bindings in order.
+/// `baseColorFactor` array property, and the material array properties in
+/// order.
 struct FoldedRef {
     palette: U32Id<BVoxPalette>,
-    color: Option<U32Id<BVoxPaletteBinding>>,
-    materials: Vec<(String, U32Id<BVoxPaletteBinding>)>,
+    color: Option<U32Id<BVoxArrayProperty>>,
+    materials: Vec<(String, U32Id<BVoxArrayProperty>)>,
 }
 
 /// The one folded palette an object references on its single layer, or `None`
@@ -632,11 +633,11 @@ struct FoldedRef {
 fn folded_ref(state: &VoxMain, object: &VoxObject) -> Option<FoldedRef> {
     let (_, palette_id) = object.iter_layers().next()?;
     let palette = state.palette(palette_id)?;
-    let color = palette.binding_by_attribute(BASE_COLOR_FACTOR);
+    let color = palette.array_property_by_name(BASE_COLOR_FACTOR);
     let materials = palette
-        .iter_bindings()
+        .iter_array_properties()
         .filter(|(id, _)| Some(*id) != color)
-        .map(|(id, binding)| (binding.attribute.clone(), id))
+        .map(|(id, property)| (property.name.clone(), id))
         .collect();
     Some(FoldedRef {
         palette: palette_id,
@@ -657,8 +658,8 @@ struct MaterialPlan {
 
 /// Reconstructs the Voxel Max materials for a folded palette. A Voxel-Max-origin
 /// state carries the exact list in its ext, whose pools hold one value per
-/// material so a material's index is its value-index into the first material
-/// binding; a state loaded from another format has no such list, so the
+/// material so a material's index is its value id into the first material
+/// property; a state loaded from another format has no such list, so the
 /// materials are derived from the pools, one per distinct material signature.
 fn material_plan(
     state: &VoxMain,
@@ -687,13 +688,15 @@ fn material_plan(
     }
 
     // A Voxel-Max-origin list came from a real document, so it is within budget:
-    // the 0-based value-index is the material byte, below the material count. A
+    // the 0-based value id is the material byte, below the material count. A
     // hand-edited ext can still exceed the single-byte budget, so it is checked.
     if let Some(provenance) = provenance.filter(|palette| !palette.materials.is_empty()) {
         let first = folded.materials[0].1;
         let mut material_idx = HashMap::new();
         for material in palette.iter_materials() {
-            let index = palette.value_index(material, first).unwrap_or(0);
+            let index = palette
+                .value_id(material, first)
+                .map_or(0, |id| id.to_u32());
             if index >= MATERIAL_SLOTS as u32 {
                 return Err(Error::invalid(format!(
                     "a voxel references material {index}, but a Voxel Max palette holds only \
@@ -718,12 +721,13 @@ fn material_plan(
     derive_materials(state, folded, palette, name)
 }
 
-/// Derives a Voxel Max material per distinct signature of the material bindings,
-/// for a state that carries no exact material list. The signature index is the
-/// `material_idx`, and each material reads its coefficients from the pools.
-/// Errors when the distinct materials exceed [`MATERIAL_SLOTS`], since a Voxel
-/// Max palette holds only that many, so a cross-format source with too many
-/// materials cannot be represented rather than silently wrapping.
+/// Derives a Voxel Max material per distinct signature of the material
+/// properties, for a state that carries no exact material list. The signature
+/// index is the `material_idx`, and each material reads its coefficients from
+/// the pools. Errors when the distinct materials exceed [`MATERIAL_SLOTS`],
+/// since a Voxel Max palette holds only that many, so a cross-format source
+/// with too many materials cannot be represented rather than silently
+/// wrapping.
 fn derive_materials(
     state: &VoxMain,
     folded: &FoldedRef,
@@ -734,26 +738,30 @@ fn derive_materials(
     // glows against, or `None` when the palette carries no base color.
     let base_luminance = |material| -> Option<f64> {
         let color = folded.color?;
-        let index = palette.value_index(material, color)?;
-        let pool = binding_pool(state, folded.palette, color)?;
-        let [r, g, b, _] = pool_color(pool, index)?;
+        let value_id = palette.value_id(material, color)?;
+        let pool = array_property_pool(state, folded.palette, color)?;
+        let [r, g, b, _] = pool_color(pool, value_id)?;
         let linear = TySrgbaU8::from_array([r, g, b, 255])
             .to_f64()
             .to_lin_srgba();
         Some(0.2126 * linear.r + 0.7152 * linear.g + 0.0722 * linear.b)
     };
 
-    let mut signatures: Vec<Vec<u32>> = Vec::new();
+    let mut signatures: Vec<Vec<U32Id<BVoxPoolValue>>> = Vec::new();
     // Parallel to `signatures`: the base luminance of the first material to claim
     // each slot, the reference its emissive is read against.
     let mut base_luminances: Vec<Option<f64>> = Vec::new();
-    let mut index_of: HashMap<Vec<u32>, u8> = HashMap::new();
+    let mut index_of: HashMap<Vec<U32Id<BVoxPoolValue>>, u8> = HashMap::new();
     let mut material_idx = HashMap::new();
     for material in palette.iter_materials() {
-        let signature: Vec<u32> = folded
+        let signature: Vec<U32Id<BVoxPoolValue>> = folded
             .materials
             .iter()
-            .map(|(_, binding)| palette.value_index(material, *binding).unwrap_or(0))
+            .map(|(_, array_property)| {
+                palette
+                    .value_id(material, *array_property)
+                    .unwrap_or(U32Id::from_u32(0))
+            })
             .collect();
         let idx = match index_of.get(&signature) {
             Some(&idx) => idx,
@@ -794,51 +802,41 @@ fn derive_materials(
     })
 }
 
-/// One derived Voxel Max material, reading each bound coefficient from the pool
-/// at the signature's value-index for that binding. Metalness and roughness map
+/// One derived Voxel Max material, reading each coefficient from its
+/// property's pool at the signature's value id. Metalness and roughness map
 /// from the 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient; see
 /// [`pbr_factor_to_vm_coefficient`].
 fn derived_material(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    bindings: &[(String, U32Id<BVoxPaletteBinding>)],
+    properties: &[(String, U32Id<BVoxArrayProperty>)],
     slot: usize,
-    signature: &[u32],
+    signature: &[U32Id<BVoxPoolValue>],
     base_luminance: Option<f64>,
 ) -> VMaxMaterial {
-    let scalar = |attribute: &str| -> Option<f64> {
-        let position = bindings.iter().position(|(name, _)| name == attribute)?;
-        pool_scalar(
-            state,
-            palette,
-            bindings[position].1,
-            signature[position] as usize,
-        )
+    let scalar = |property: &str| -> Option<f64> {
+        let position = properties.iter().position(|(name, _)| name == property)?;
+        pool_scalar(state, palette, properties[position].1, signature[position])
     };
-    let flag = |attribute: &str| -> Option<bool> {
-        let position = bindings.iter().position(|(name, _)| name == attribute)?;
-        pool_flag(
-            state,
-            palette,
-            bindings[position].1,
-            signature[position] as usize,
-        )
+    let flag = |property: &str| -> Option<bool> {
+        let position = properties.iter().position(|(name, _)| name == property)?;
+        pool_flag(state, palette, properties[position].1, signature[position])
     };
     // The emissive color's linear luminance at this slot, or `None` when the
-    // binding is absent. Folded into Voxel Max's single self-illumination
+    // property is absent. Folded into Voxel Max's single self-illumination
     // coefficient, read relative to the base color the caller supplies.
     let emissive_luminance = || -> Option<f64> {
-        let position = bindings
+        let position = properties
             .iter()
             .position(|(name, _)| name == EMISSIVE_FACTOR)?;
-        let pool = binding_pool(state, palette, bindings[position].1)?;
+        let pool = array_property_pool(state, palette, properties[position].1)?;
         let [r, g, b, _] = pool_color(pool, signature[position])?;
         let linear = TySrgbaU8::from_array([r, g, b, 255])
             .to_f64()
             .to_lin_srgba();
         Some(0.2126 * linear.r + 0.7152 * linear.g + 0.0722 * linear.b)
     };
-    let dispersed = bindings
+    let dispersed = properties
         .iter()
         .any(|(name, _)| name == IOR || name == TRANSMISSION_FACTOR || name == ABSORPTION);
     VMaxMaterial {
@@ -897,44 +895,46 @@ fn vmax_material(slot: usize, material: &VoxelMaxMaterial) -> VMaxMaterial {
     }
 }
 
-/// The `f64` value at `index` in a binding's `float` pool, or `None`.
+/// The `f64` value at `value_id` in an array property's `float` pool, or
+/// `None`.
 fn pool_scalar(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    binding: U32Id<BVoxPaletteBinding>,
-    index: usize,
+    array_property: U32Id<BVoxArrayProperty>,
+    value_id: U32Id<BVoxPoolValue>,
 ) -> Option<f64> {
-    match binding_pool(state, palette, binding)? {
-        VoxValuePool::Float { values, .. } => values.get(index).copied(),
+    match array_property_pool(state, palette, array_property)? {
+        VoxValuePool::Float { values, .. } => values.get(value_id.to_usize_id()).copied(),
         _ => None,
     }
 }
 
-/// The `bool` value at `index` in a binding's `bool` pool, or `None`.
+/// The `bool` value at `value_id` in an array property's `bool` pool, or
+/// `None`.
 fn pool_flag(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    binding: U32Id<BVoxPaletteBinding>,
-    index: usize,
+    array_property: U32Id<BVoxArrayProperty>,
+    value_id: U32Id<BVoxPoolValue>,
 ) -> Option<bool> {
-    match binding_pool(state, palette, binding)? {
-        VoxValuePool::Bool { values } => values.get(index).copied(),
+    match array_property_pool(state, palette, array_property)? {
+        VoxValuePool::Bool { values } => values.get(value_id.to_usize_id()).copied(),
         _ => None,
     }
 }
 
-/// The value pool a binding draws from.
-fn binding_pool(
+/// The value pool an array property draws from.
+fn array_property_pool(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    binding: U32Id<BVoxPaletteBinding>,
+    array_property: U32Id<BVoxArrayProperty>,
 ) -> Option<&VoxValuePool> {
-    let pool = state.palette(palette)?.binding(binding)?.pool;
+    let pool = state.palette(palette)?.array_property(array_property)?.pool;
     state.value_pool(pool)
 }
 
 /// Re-bases the tight object's voxels to absolute model space, recovering each
-/// one's `color_idx` from its material's `baseColorFactor` value-index and its
+/// one's `color_idx` from its material's `baseColorFactor` value id and its
 /// `material_idx` from the material plan. A colorless voxel takes index 1.
 fn reconstruct_voxels(
     state: &VoxMain,
@@ -977,7 +977,7 @@ fn reconstruct_voxels(
 }
 
 /// The 1-based Voxel Max color index a `material` samples through
-/// `baseColorFactor`. Errors when the color value-index reaches
+/// `baseColorFactor`. Errors when the color value id reaches
 /// [`PALETTE_COLORS`], one past the last usable color, so a padded source
 /// palette is fine as long as its referenced colors fit.
 fn color_index(state: &VoxMain, folded: &FoldedRef, material: U32Id<BVoxMaterial>) -> Result<u8> {
@@ -986,8 +986,8 @@ fn color_index(state: &VoxMain, folded: &FoldedRef, material: U32Id<BVoxMaterial
     };
     let index = state
         .palette(folded.palette)
-        .and_then(|palette| palette.value_index(material, color))
-        .unwrap_or(0);
+        .and_then(|palette| palette.value_id(material, color))
+        .map_or(0, |id| id.to_u32());
     if index >= PALETTE_COLORS as u32 {
         return Err(Error::invalid(format!(
             "a voxel references color cell {index}, but a Voxel Max palette holds only \
@@ -999,7 +999,7 @@ fn color_index(state: &VoxMain, folded: &FoldedRef, material: U32Id<BVoxMaterial
 
 /// Returns the `pal` filename for an object, building its color image and
 /// material sidecar the first time the folded palette is seen. An object with no
-/// color binding borrows the default palette name and writes no file.
+/// color property borrows the default palette name and writes no file.
 #[allow(clippy::too_many_arguments)]
 fn build_palette(
     state: &VoxMain,
@@ -1010,7 +1010,7 @@ fn build_palette(
     palette_png_files: &mut BTreeMap<String, VMaxPalettePngFile>,
     voxel_max_color_format: VoxelMaxColorFormat,
 ) -> String {
-    // An object with no color binding borrows the default palette name; an empty
+    // An object with no color property borrows the default palette name; an empty
     // reference is one Voxel Max cannot resolve. No file is written for it.
     let Some((palette_id, color)) = folded.and_then(|folded| Some((folded.palette, folded.color?)))
     else {
@@ -1066,19 +1066,19 @@ fn build_palette(
     pal
 }
 
-/// A color binding's pool decoded to exactly [`PALETTE_COLORS`] 0-based RGBA
-/// entries, padded with transparent entries or truncated to that count. Colors
-/// past the budget are dropped; a voxel that would reference one is rejected by
-/// [`reconstruct_voxels`].
+/// The color array property's pool decoded to exactly [`PALETTE_COLORS`]
+/// 0-based RGBA entries, padded with transparent entries or truncated to that
+/// count. Colors past the budget are dropped; a voxel that would reference one
+/// is rejected by [`reconstruct_voxels`].
 fn color_palette_colors(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    color: U32Id<BVoxPaletteBinding>,
+    color: U32Id<BVoxArrayProperty>,
 ) -> Vec<[u8; 4]> {
     let mut cells: Vec<[u8; 4]> = Vec::new();
-    if let Some(pool) = binding_pool(state, palette, color) {
+    if let Some(pool) = array_property_pool(state, palette, color) {
         for index in 0..pool.values_len().min(PALETTE_COLORS) {
-            cells.push(pool_color(pool, index as u32).unwrap_or([0, 0, 0, 0]));
+            cells.push(pool_color(pool, U32Id::from_u32(index as u32)).unwrap_or([0, 0, 0, 0]));
         }
     }
     cells.resize(PALETTE_COLORS, [0, 0, 0, 0]);
@@ -1190,7 +1190,7 @@ fn default_material(slot: usize) -> VMaxMaterial {
 fn color_material_map(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    color: U32Id<BVoxPaletteBinding>,
+    color: U32Id<BVoxArrayProperty>,
     plan: &MaterialPlan,
 ) -> (Vec<u8>, Vec<i64>, i64) {
     let mut lc = vec![0u8; 256];
@@ -1200,7 +1200,7 @@ fn color_material_map(
     let mut cells: BTreeSet<u32> = BTreeSet::new();
     if let Some(palette_ref) = state.palette(palette) {
         for material in palette_ref.iter_materials() {
-            let Some(cell) = palette_ref.value_index(material, color) else {
+            let Some(cell) = palette_ref.value_id(material, color).map(|id| id.to_u32()) else {
                 continue;
             };
             let Some(&byte) = plan.material_idx.get(&material) else {

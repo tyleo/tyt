@@ -1,4 +1,5 @@
 use crate::{Error, Result, vox_value_from_voxj_value};
+use branded_id::IdVec;
 use voxcore::{VoxBound, VoxValuePool};
 use voxj::{VoxjBound, VoxjValuePool};
 
@@ -23,47 +24,47 @@ pub fn vox_value_pool_from_voxj_value_pool(pool: &VoxjValuePool) -> Result<VoxVa
         },
 
         VoxjValuePool::Bool { values } => VoxValuePool::Bool {
-            values: values.clone(),
+            values: IdVec::from_vec(values.clone()),
         },
 
         VoxjValuePool::Float { min, max, values } => VoxValuePool::Float {
             min: vox_bound(*min),
             max: vox_bound(*max),
-            values: values.clone(),
+            values: IdVec::from_vec(values.clone()),
         },
 
         VoxjValuePool::Int { min, max, values } => VoxValuePool::Int {
             min: vox_bound(*min),
             max: vox_bound(*max),
-            values: values.clone(),
+            values: IdVec::from_vec(values.clone()),
         },
 
         VoxjValuePool::String { values } => VoxValuePool::String {
-            values: values.clone(),
+            values: IdVec::from_vec(values.clone()),
         },
 
         VoxjValuePool::SrgbFloat { values } => VoxValuePool::Srgb {
-            values: values.clone(),
+            values: IdVec::from_vec(values.clone()),
         },
 
         VoxjValuePool::SrgbHex { values } => VoxValuePool::Srgb {
-            values: decode_hex_values(values)?,
+            values: IdVec::from_vec(decode_hex_values(values)?),
         },
 
         VoxjValuePool::SrgbaFloat { values } => VoxValuePool::Srgba {
-            values: values.clone(),
+            values: IdVec::from_vec(values.clone()),
         },
 
         VoxjValuePool::SrgbaHex { values } => VoxValuePool::Srgba {
-            values: decode_hex_values(values)?,
+            values: IdVec::from_vec(decode_hex_values(values)?),
         },
 
         VoxjValuePool::LinearRgbFloat { values } => VoxValuePool::LinearRgb {
-            values: values.clone(),
+            values: IdVec::from_vec(values.clone()),
         },
 
         VoxjValuePool::LinearRgbaFloat { values } => VoxValuePool::LinearRgba {
-            values: values.clone(),
+            values: IdVec::from_vec(values.clone()),
         },
     })
 }

@@ -211,8 +211,8 @@ impl GoxlBuilder {
             ];
             let index = local[0] + stride * (local[1] + stride * local[2]);
             let rgba = color
-                .map(|(layer, palette, binding)| {
-                    cell_color(state, object, voxel, layer, palette, binding)
+                .map(|(layer, palette, array_property)| {
+                    cell_color(state, object, voxel, layer, palette, array_property)
                 })
                 .unwrap_or([0, 0, 0, 0]);
             let block = tiles
@@ -271,8 +271,8 @@ fn block_from_object(state: &VoxMain, object: &VoxObject) -> GoxlBlock {
                     .filter(|&id| object.is_live(id))
                     .map(|id| {
                         let [r, g, b, a] = color
-                            .map(|(layer, palette, binding)| {
-                                cell_color(state, object, id, layer, palette, binding)
+                            .map(|(layer, palette, array_property)| {
+                                cell_color(state, object, id, layer, palette, array_property)
                             })
                             .unwrap_or([0, 0, 0, 0]);
                         GoxlVoxel { r, g, b, a }

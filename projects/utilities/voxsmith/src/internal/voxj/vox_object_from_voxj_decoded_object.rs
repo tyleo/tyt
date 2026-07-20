@@ -4,20 +4,25 @@ use ty_math::{TyVector3I32, TyVector3U32};
 use voxcore::{BVoxMaterial, BVoxPalette, VoxObject};
 use voxj_codec::VoxjDecodedObject;
 
-/// Builds a [`VoxObject`] from a [`VoxjDecodedObject`] and its optional build
-/// volume.
+/// Builds a [`VoxObject`] from a [`VoxjDecodedObject`], the material count of
+/// each layer's palette in `layers` order, and its optional build volume.
 ///
 /// The decoded object holds the tight runtime grid. When `edit` is `Some`, the
 /// object is built in that build volume with each voxel shifted from the
 /// runtime grid into it, recovering the margin the document recorded. When
 /// `edit` is `None`, the build volume equals the tight grid.
 ///
-/// Each `layerPaletteRefs` entry becomes a layer over that palette, and each
-/// per-layer sample becomes a material index into it. Errors on an oversized
-/// grid, a position outside the grid, or ragged sample rows. Cross-references
-/// are checked later by [`VoxMain::validate`](voxcore::VoxMain::validate).
+/// Each `layers` entry becomes a layer over that palette. A decoded sample row
+/// holds one material index per sampled layer (material count above zero);
+/// the voxcore object keeps a dense sample column for every layer, so
+/// unsampled layers' cells stay material 0, the filler validation ignores.
+/// Errors on an oversized grid, a position outside the grid, a
+/// `material_counts` length that disagrees with `layers`, or ragged sample
+/// rows. Cross-references are checked later by
+/// [`VoxMain::validate`](voxcore::VoxMain::validate).
 pub fn vox_object_from_voxj_decoded_object(
     object: &VoxjDecodedObject,
+    material_counts: &[usize],
     edit: Option<([u32; 3], [i32; 3])>,
 ) -> Result<VoxObject> {
     // The grid the voxcore object lives in (its build volume), its placing
@@ -47,12 +52,26 @@ pub fn vox_object_from_voxj_decoded_object(
 
     out.set_origin(TyVector3I32::from_array(origin));
 
+    if material_counts.len() != object.layers.len() {
+        return Err(invalid(format!(
+            "object \"{}\" has {} layers but {} material counts",
+            object.name,
+            object.layers.len(),
+            material_counts.len()
+        )));
+    }
+
     // Back-fill material 0 as each layer's placeholder; live voxels overwrite
-    // theirs below.
+    // their sampled layers' cells below.
     let filler = 0u32.to_u32_id::<BVoxMaterial>();
-    for &palette_index in &object.layer_palette_refs {
+    for &palette_index in &object.layers {
         out.add_layer((palette_index as u32).to_u32_id::<BVoxPalette>(), filler);
     }
+
+    // A sample row holds one entry per sampled layer; count them once to
+    // check row arity, and expand each row to full arity with filler in the
+    // unsampled layers' slots.
+    let sampled_count = material_counts.iter().filter(|&&count| count > 0).count();
 
     if object.samples.len() != object.positions.len() {
         return Err(invalid(format!(
@@ -78,19 +97,31 @@ pub fn vox_object_from_voxj_decoded_object(
         // `in_bounds` already confirmed the position fits the grid.
         let voxel_id = out.voxel_id(position).expect("position is within bounds");
 
-        let materials: Vec<U32Id<BVoxMaterial>> = row
-            .iter()
-            .map(|&material| material.to_u32_id::<BVoxMaterial>())
-            .collect();
-
-        out.retain_voxel(voxel_id, &materials).ok_or_else(|| {
-            invalid(format!(
-                "object \"{}\" sample row at [{x}, {y}, {z}] has {} values but references {} layers",
+        if row.len() != sampled_count {
+            return Err(invalid(format!(
+                "object \"{}\" sample row at [{x}, {y}, {z}] has {} values but references {} \
+                 sampled layers",
                 object.name,
                 row.len(),
-                object.layer_palette_refs.len()
-            ))
-        })?;
+                sampled_count
+            )));
+        }
+
+        let mut sampled = row.iter();
+        let materials: Vec<U32Id<BVoxMaterial>> = material_counts
+            .iter()
+            .map(|&count| {
+                if count > 0 {
+                    let &material = sampled.next().expect("one row entry per sampled layer");
+                    material.to_u32_id::<BVoxMaterial>()
+                } else {
+                    filler
+                }
+            })
+            .collect();
+
+        out.retain_voxel(voxel_id, &materials)
+            .expect("the expanded row has one material per layer");
     }
 
     Ok(out)

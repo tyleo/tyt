@@ -79,7 +79,7 @@ fn build_palette(
     }
 
     // Colors ride in a shared sRGBA pool as float components in `[0, 1]`; each
-    // material draws one value-index into it.
+    // material draws one value id into it.
     let pool = state.add_value_pool(VoxValuePool::Srgba {
         values: order
             .iter()
@@ -88,12 +88,12 @@ fn build_palette(
     });
 
     let mut palette = VoxPalette::default();
-    palette.add_binding(BASE_COLOR_FACTOR.to_owned(), pool);
+    palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
     let mut materials = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
         let material = palette
-            .add_material(vec![index as u32])
-            .expect("one value-index for the one binding");
+            .add_material(vec![U32Id::from_u32(index as u32)])
+            .expect("one value id for the one array property");
         materials.insert(*color, material);
     }
 
@@ -461,11 +461,11 @@ mod tests {
                 .collect(),
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
         for index in 0..4 {
             palette
-                .add_material(vec![index])
-                .expect("one value-index for the one binding");
+                .add_material(vec![U32Id::from_u32(index)])
+                .expect("one value id for the one array property");
         }
         let palette_id = state.add_palette(palette);
         let material = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);

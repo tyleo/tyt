@@ -151,14 +151,26 @@ then scalar-property storage and checks, then sampled-layer derivation.
       backing them); document unsampled layers' ignored sample cells and
       exempt them in object gc.
 
-## Phase 6: `voxsmith` (coarse)
+## Phase 6: `voxsmith`
 
-- [ ] Rework the voxj seam (palette and object conversions, `write_voxj`,
-      `voxj_file_builder`) for the new shapes; extend `reduce_palette` and
-      material sampling over scalar contributions and the canonical
-      layer-override order; keep every converter
-      compiling at column parity; decide and log whether glTF wires
-      `emissiveStrength` through scalar bindings; regenerate fixtures.
+Refined 2026-07-19 into three commits: the crate-wide adaptation and seam
+rework first, then scalar-aware reduction and sampling, then the glTF
+decision.
+
+- [x] Adapt the crate to the renamed voxcore and voxj APIs and rework the
+      voxj seam for the new shapes: row-major materials (both transposes
+      drop), scalar properties carried through the palette conversions,
+      one sample channel per sampled layer in the object conversions
+      (`vox_object_from_voxj_decoded_object` takes material counts,
+      `voxj_decoded_object_from_vox_object` reads sampledness off the
+      `VoxMain`), and the `nodes` / `root_nodes` renames; every other
+      converter compiles at column parity; regenerate fixtures, adding
+      scalar-property and unsampled-layer round-trip coverage.
+- [ ] Extend `reduce_palette` and material sampling
+      (`internal/mesh/sample_material`, `mesh_material_maps`) over scalar
+      contributions and the canonical layer-override order.
+- [ ] Decide and log whether glTF import/export wires `emissiveStrength`
+      through scalar properties; implement the decision.
 
 ## Phase 7: `vxl` and docs (coarse)
 

@@ -1,40 +1,46 @@
 use crate::BASE_COLOR_FACTOR;
 use branded_id::U32Id;
-use voxcore::{BVoxPalette, VoxMain};
+use voxcore::{BVoxPalette, BVoxPoolValue, VoxMain};
 
 /// Reorders `palette`'s `baseColorFactor` colors into material id order: the
-/// first material's color moves to index 0, the next new color to 1, and so
+/// first material's color moves to value id 0, the next new color to 1, and so
 /// on, then any unused color. A voxelized palette has one color per material,
-/// so its material color value-indices become 0, 1, 2, and up. A no-op without
-/// a color binding; rendering is unchanged.
+/// so its material color value ids become 0, 1, 2, and up. A no-op without a
+/// color array property; rendering is unchanged.
 pub fn order_palette_colors(state: &mut VoxMain, palette: U32Id<BVoxPalette>) {
     let Some(palette_ref) = state.palette(palette) else {
         return;
     };
-    let Some(color) = palette_ref.binding_by_attribute(BASE_COLOR_FACTOR) else {
+    let Some(color) = palette_ref.array_property_by_name(BASE_COLOR_FACTOR) else {
         return;
     };
-    let Some(pool) = palette_ref.binding(color).map(|binding| binding.pool) else {
+    let Some(pool) = palette_ref
+        .array_property(color)
+        .map(|property| property.pool)
+    else {
         return;
     };
     let len = state.value_pool(pool).map_or(0, |pool| pool.values_len());
 
-    // The used color value-indices in material id order, then the unused ones,
+    // The used color value ids in material id order, then the unused ones,
     // forming a permutation of the pool.
-    let mut new_order: Vec<u32> = Vec::with_capacity(len);
+    let mut new_order: Vec<U32Id<BVoxPoolValue>> = Vec::with_capacity(len);
     let mut seen = vec![false; len];
     for material in palette_ref.iter_materials() {
-        let Some(index) = palette_ref.value_index(material, color) else {
+        let Some(value_id) = palette_ref.value_id(material, color) else {
             continue;
         };
-        if let Some(slot) = seen.get_mut(index as usize).filter(|slot| !**slot) {
+        if let Some(slot) = seen
+            .get_mut(value_id.to_u32() as usize)
+            .filter(|slot| !**slot)
+        {
             *slot = true;
-            new_order.push(index);
+            new_order.push(value_id);
         }
     }
     for (index, used) in seen.iter().enumerate() {
         if !used {
-            new_order.push(index as u32);
+            new_order.push(U32Id::from_u32(index as u32));
         }
     }
 
@@ -46,6 +52,7 @@ pub fn order_palette_colors(state: &mut VoxMain, palette: U32Id<BVoxPalette>) {
 #[cfg(test)]
 mod tests {
     use crate::{BASE_COLOR_FACTOR, order_palette_colors};
+    use branded_id::{IdVec, U32Id};
     use voxcore::{VoxMain, VoxPalette, VoxValuePool};
 
     #[test]
@@ -54,17 +61,17 @@ mod tests {
         // Three colors; materials reference them out of order: blue, red,
         // green.
         let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: vec![
+            values: IdVec::from_vec(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red
                 [0.0, 1.0, 0.0, 1.0], // 1 green
                 [0.0, 0.0, 1.0, 1.0], // 2 blue
-            ],
+            ]),
         });
         let mut palette = VoxPalette::default();
-        let color = palette.add_binding(BASE_COLOR_FACTOR.to_owned(), pool);
-        let blue = palette.add_material(vec![2]).unwrap();
-        let red = palette.add_material(vec![0]).unwrap();
-        let green = palette.add_material(vec![1]).unwrap();
+        let color = palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        let blue = palette.add_material(vec![U32Id::from_u32(2)]).unwrap();
+        let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let green = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
         let palette_id = state.add_palette(palette);
         state.validate().unwrap();
 
@@ -73,17 +80,17 @@ mod tests {
         // The materials now reference colors in id order 0, 1, 2, and the pool
         // is reordered so each still resolves to its own color.
         let palette = state.palette(palette_id).unwrap();
-        assert_eq!(palette.value_index(blue, color), Some(0));
-        assert_eq!(palette.value_index(red, color), Some(1));
-        assert_eq!(palette.value_index(green, color), Some(2));
+        assert_eq!(palette.value_id(blue, color), Some(U32Id::from_u32(0)));
+        assert_eq!(palette.value_id(red, color), Some(U32Id::from_u32(1)));
+        assert_eq!(palette.value_id(green, color), Some(U32Id::from_u32(2)));
         assert_eq!(
             state.value_pool(pool),
             Some(&VoxValuePool::Srgba {
-                values: vec![
+                values: IdVec::from_vec(vec![
                     [0.0, 0.0, 1.0, 1.0],
                     [1.0, 0.0, 0.0, 1.0],
                     [0.0, 1.0, 0.0, 1.0],
-                ],
+                ]),
             })
         );
         state.validate().unwrap();

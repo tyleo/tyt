@@ -1,179 +1,200 @@
 use crate::{Error, Result};
-use branded_id::U32Id;
+use branded_id::{U32Id, ext::U32Ext};
+use std::collections::HashSet;
 use voxcore::VoxPalette;
 use voxj::VoxjPalette;
 
 /// Builds a [`VoxPalette`] from a [`VoxjPalette`], in listing order so each
-/// binding and material id equals its wire index.
+/// property and material id equals its wire index.
 ///
-/// Bindings carry over as attribute-plus-pool-reference, the wire `poolRef`
-/// becoming a value-pool id. The wire stores materials column-major, one column
-/// per binding; this transposes them into voxcore's per-material rows of
-/// value-indices, one index per binding. A binding-less palette instead stores
-/// one empty array per material, each minting one material with no
-/// value-indices.
+/// Array and scalar properties carry over as name plus pool reference, the
+/// wire `valuePool` becoming a value-pool id and a scalar property's
+/// `valueIndex` a value id. `materials` is row-major on both sides, one row
+/// per material with a value-index per array property, so rows map one to one.
 ///
-/// Errors on a duplicate attribute, a `materials` column count that disagrees
-/// with the bindings, a ragged column, or a non-empty material entry in a
-/// binding-less palette. Pool-reference and value-index ranges are checked
-/// later by [`VoxMain::validate`](voxcore::VoxMain::validate).
+/// Errors on a duplicate property name across the two lists or a row whose
+/// length disagrees with the array properties. Pool-reference and value-id
+/// ranges are checked later by
+/// [`VoxMain::validate`](voxcore::VoxMain::validate).
 pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette> {
     let mut out = VoxPalette::default();
 
-    for binding in &palette.bindings {
-        if out.binding_by_attribute(&binding.attribute).is_some() {
-            return Err(Error::invalid(format!(
-                "palette binds attribute \"{}\" more than once",
-                binding.attribute
-            )));
+    let mut names = HashSet::new();
+    for property in &palette.array_properties {
+        if !names.insert(property.name.as_str()) {
+            return Err(duplicate_name(&property.name));
         }
-        out.add_binding(
-            binding.attribute.clone(),
-            U32Id::from_u32(binding.pool_ref as u32),
+        out.add_array_property(
+            property.name.clone(),
+            U32Id::from_u32(property.value_pool as u32),
+        );
+    }
+    for property in &palette.scalar_properties {
+        if !names.insert(property.name.as_str()) {
+            return Err(duplicate_name(&property.name));
+        }
+        out.add_scalar_property(
+            property.name.clone(),
+            U32Id::from_u32(property.value_pool as u32),
+            (property.value_index as u32).to_u32_id(),
         );
     }
 
-    // A binding-less palette has no columns to transpose; each entry is an
-    // empty array minting one material.
-    if palette.bindings.is_empty() {
-        for (index, entry) in palette.materials.iter().enumerate() {
-            if !entry.is_empty() {
-                return Err(Error::invalid(format!(
-                    "palette has no bindings, so material {index} must be an empty array, \
-                     not {} value-indices",
-                    entry.len()
-                )));
-            }
-            out.add_material(vec![])
-                .expect("one value-index per binding");
-        }
-        return Ok(out);
-    }
-
-    if palette.materials.len() != palette.bindings.len() {
-        return Err(Error::invalid(format!(
-            "palette has {} material columns but {} bindings",
-            palette.materials.len(),
-            palette.bindings.len()
-        )));
-    }
-
-    // Column length M, the material count; reject any column that disagrees,
-    // whether shorter or longer, so a ragged palette errors rather than
-    // silently dropping the surplus of a longer column.
-    let material_count = palette.materials.first().map_or(0, Vec::len);
-    if let Some(column) = palette
-        .materials
-        .iter()
-        .find(|column| column.len() != material_count)
-    {
-        return Err(Error::invalid(format!(
-            "palette has a material column of length {} but the material count is {material_count}",
-            column.len()
-        )));
-    }
-
-    for m in 0..material_count {
-        // Every column shares length M, so `column[m]` is in bounds and the row
-        // has one value-index per binding, satisfying `add_material`'s arity.
-        let value_indices = palette
-            .materials
+    for (index, row) in palette.materials.iter().enumerate() {
+        let value_ids = row
             .iter()
-            .map(|column| column[m] as u32)
+            .map(|&value_index| (value_index as u32).to_u32_id())
             .collect();
-        out.add_material(value_indices)
-            .expect("one value-index per binding");
+        out.add_material(value_ids).ok_or_else(|| {
+            Error::Invalid(format!(
+                "palette material {index} has {} value-indices but {} array properties",
+                row.len(),
+                palette.array_properties.len()
+            ))
+        })?;
     }
 
     Ok(out)
 }
 
+/// Invalid-data error for a property name declared twice in one palette.
+fn duplicate_name(name: &str) -> Error {
+    Error::Invalid(format!(
+        "palette declares property \"{name}\" more than once"
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::vox_palette_from_voxj_palette;
-    use voxj::{VoxjPalette, VoxjPaletteBinding};
+    use branded_id::U32Id;
+    use voxj::{VoxjArrayProperty, VoxjPalette, VoxjScalarProperty};
 
-    fn binding(attribute: &str, pool_ref: usize) -> VoxjPaletteBinding {
-        VoxjPaletteBinding {
-            attribute: attribute.to_owned(),
-            pool_ref,
+    fn array_property(name: &str, value_pool: usize) -> VoxjArrayProperty {
+        VoxjArrayProperty {
+            name: name.to_owned(),
+            value_pool,
+        }
+    }
+
+    fn scalar_property(name: &str, value_pool: usize, value_index: usize) -> VoxjScalarProperty {
+        VoxjScalarProperty {
+            name: name.to_owned(),
+            value_pool,
+            value_index,
         }
     }
 
     #[test]
-    fn transposes_column_major_materials_into_rows() {
+    fn maps_material_rows_one_to_one() {
         let palette = VoxjPalette {
-            bindings: vec![binding("baseColorFactor", 0), binding("metallicFactor", 1)],
-            materials: vec![vec![0, 1, 2], vec![2, 0, 1]],
+            array_properties: vec![
+                array_property("baseColorFactor", 0),
+                array_property("metallicFactor", 1),
+            ],
+            scalar_properties: vec![],
+            materials: vec![vec![0, 2], vec![1, 0], vec![2, 1]],
         };
         let out = vox_palette_from_voxj_palette(&palette).unwrap();
-        assert_eq!(out.binding_count(), 2);
+        assert_eq!(out.array_property_count(), 2);
         assert_eq!(out.material_count(), 3);
 
-        let base = out.binding_by_attribute("baseColorFactor").unwrap();
-        let metallic = out.binding_by_attribute("metallicFactor").unwrap();
+        let base = out.array_property_by_name("baseColorFactor").unwrap();
+        let metallic = out.array_property_by_name("metallicFactor").unwrap();
         let material_2 = out.iter_materials().nth(2).unwrap();
-        // Material 2 reads value-index 2 for base color and 1 for metallic.
-        assert_eq!(out.value_index(material_2, base), Some(2));
-        assert_eq!(out.value_index(material_2, metallic), Some(1));
+        // Material 2 reads value id 2 for base color and 1 for metallic.
+        assert_eq!(out.value_id(material_2, base), Some(U32Id::from_u32(2)));
+        assert_eq!(out.value_id(material_2, metallic), Some(U32Id::from_u32(1)));
     }
 
     #[test]
-    fn reads_a_binding_less_palette_keeping_its_material_count() {
-        // One empty array per material; each mints a material with no
-        // value-indices.
+    fn carries_scalar_properties_over() {
         let palette = VoxjPalette {
-            bindings: vec![],
+            array_properties: vec![array_property("baseColorFactor", 0)],
+            scalar_properties: vec![scalar_property("emissiveStrength", 1, 2)],
+            materials: vec![vec![0]],
+        };
+        let out = vox_palette_from_voxj_palette(&palette).unwrap();
+        assert_eq!(out.scalar_property_count(), 1);
+
+        let strength = out.scalar_property_by_name("emissiveStrength").unwrap();
+        let property = out.scalar_property(strength).unwrap();
+        assert_eq!(property.pool, U32Id::from_u32(1));
+        assert_eq!(property.value_id, U32Id::from_u32(2));
+    }
+
+    #[test]
+    fn reads_a_property_less_palette_keeping_its_material_count() {
+        // With no array properties every row is empty; each mints a material
+        // with no value ids.
+        let palette = VoxjPalette {
+            array_properties: vec![],
+            scalar_properties: vec![],
             materials: vec![vec![], vec![], vec![]],
         };
         let out = vox_palette_from_voxj_palette(&palette).unwrap();
-        assert_eq!(out.binding_count(), 0);
+        assert_eq!(out.array_property_count(), 0);
         assert_eq!(out.material_count(), 3);
     }
 
     #[test]
-    fn rejects_a_non_empty_material_entry_without_bindings() {
+    fn reads_a_scalar_only_palette_with_no_materials() {
         let palette = VoxjPalette {
-            bindings: vec![],
+            array_properties: vec![],
+            scalar_properties: vec![scalar_property("emissiveStrength", 0, 0)],
+            materials: vec![],
+        };
+        let out = vox_palette_from_voxj_palette(&palette).unwrap();
+        assert_eq!(out.scalar_property_count(), 1);
+        assert_eq!(out.material_count(), 0);
+    }
+
+    #[test]
+    fn rejects_a_non_empty_row_without_array_properties() {
+        let palette = VoxjPalette {
+            array_properties: vec![],
+            scalar_properties: vec![],
             materials: vec![vec![0]],
         };
         assert!(vox_palette_from_voxj_palette(&palette).is_err());
     }
 
     #[test]
-    fn rejects_duplicate_attribute() {
+    fn rejects_duplicate_array_property_name() {
         let palette = VoxjPalette {
-            bindings: vec![binding("rgba", 0), binding("rgba", 1)],
-            materials: vec![vec![0], vec![0]],
+            array_properties: vec![array_property("rgba", 0), array_property("rgba", 1)],
+            scalar_properties: vec![],
+            materials: vec![vec![0, 0]],
         };
         assert!(vox_palette_from_voxj_palette(&palette).is_err());
     }
 
     #[test]
-    fn rejects_material_column_count_mismatch() {
+    fn rejects_duplicate_name_across_the_two_lists() {
         let palette = VoxjPalette {
-            bindings: vec![binding("a", 0), binding("b", 1)],
+            array_properties: vec![array_property("emissiveStrength", 0)],
+            scalar_properties: vec![scalar_property("emissiveStrength", 0, 0)],
             materials: vec![vec![0]],
         };
         assert!(vox_palette_from_voxj_palette(&palette).is_err());
     }
 
     #[test]
-    fn rejects_ragged_material_columns_shorter_non_first() {
+    fn rejects_a_short_material_row() {
         let palette = VoxjPalette {
-            bindings: vec![binding("a", 0), binding("b", 1)],
+            array_properties: vec![array_property("a", 0), array_property("b", 1)],
+            scalar_properties: vec![],
             materials: vec![vec![0, 1], vec![0]],
         };
         assert!(vox_palette_from_voxj_palette(&palette).is_err());
     }
 
     #[test]
-    fn rejects_ragged_material_columns_longer_non_first() {
-        // The first column sets the material count; a longer later column must
-        // still be rejected rather than silently truncated.
+    fn rejects_a_long_material_row() {
         let palette = VoxjPalette {
-            bindings: vec![binding("a", 0), binding("b", 1)],
-            materials: vec![vec![0], vec![0, 1]],
+            array_properties: vec![array_property("a", 0), array_property("b", 1)],
+            scalar_properties: vec![],
+            materials: vec![vec![0, 1], vec![0, 1, 2]],
         };
         assert!(vox_palette_from_voxj_palette(&palette).is_err());
     }

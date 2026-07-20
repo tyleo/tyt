@@ -3,7 +3,7 @@ use crate::{
     MagicaVoxelFrame, MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
     MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, to_vox_value,
 };
-use branded_id::U32Id;
+use branded_id::{IdVec, U32Id};
 use mvox::{
     MVoxCamera, MVoxFile, MVoxFrame, MVoxLayer, MVoxMaterial, MVoxMaterialType, MVoxModel,
     MVoxSceneNode, MVoxSceneNodeBody,
@@ -107,7 +107,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             .map(|&color| TySrgbaU8::from_array(color).to_f64().to_array())
             .collect(),
     });
-    palette.add_binding(BASE_COLOR_FACTOR.to_owned(), color_pool);
+    palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), color_pool);
 
     // The scalars are custom MagicaVoxel attributes with no glTF bounds, so
     // their float pools are unbounded.
@@ -134,9 +134,9 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             .collect();
         let (distinct_types, type_indices) = intern(&types, |token| token.clone());
         let type_pool = state.add_value_pool(VoxValuePool::String {
-            values: distinct_types,
+            values: IdVec::from_vec(distinct_types),
         });
-        palette.add_binding("type".to_owned(), type_pool);
+        palette.add_array_property("type".to_owned(), type_pool);
         attribute_indices.push(type_indices);
 
         for (name, read) in SCALARS {
@@ -157,21 +157,21 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             let pool = state.add_value_pool(VoxValuePool::Float {
                 min: VoxBound::None,
                 max: VoxBound::None,
-                values: distinct,
+                values: IdVec::from_vec(distinct),
             });
-            palette.add_binding(name.to_owned(), pool);
+            palette.add_array_property(name.to_owned(), pool);
             attribute_indices.push(indices);
         }
     }
 
     for index in 0..PALETTE_CELLS {
-        let mut value_indices = vec![color_indices[index]];
+        let mut value_ids = vec![U32Id::from_u32(color_indices[index])];
         for column in &attribute_indices {
-            value_indices.push(column[index]);
+            value_ids.push(U32Id::from_u32(column[index]));
         }
         palette
-            .add_material(value_indices)
-            .expect("one value-index per binding");
+            .add_material(value_ids)
+            .expect("one value id per array property");
     }
 
     Ok(palette)
@@ -699,10 +699,10 @@ mod tests {
                 .collect(),
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
         for index in 0..4 {
             palette
-                .add_material(vec![index])
+                .add_material(vec![U32Id::from_u32(index)])
                 .expect("one value-index for the one binding");
         }
         let palette_id = state.add_palette(palette);

@@ -180,6 +180,46 @@ cells when its palette's material remap is empty, the `M = 0` signal, so
 filler stays in place. `iter_sampled_layers` treats a dangling-palette
 layer as unsampled; `validate` rejects such a state.
 
+## voxsmith lands in three commits
+
+2026-07-19, phase 6 refinement. Commit 1 adapts the whole crate to the
+renamed voxcore and voxj APIs and reworks the voxj seam for the new shapes,
+with every other converter at column parity. Commit 2 extends
+`reduce_palette` and material sampling over scalar contributions and the
+canonical layer-override order. Commit 3 settles and implements the glTF
+`emissiveStrength` question. Each compiles and tests green in voxsmith
+alone; vxl stays red until phase 7, as the plan expects.
+
+## The object seam takes sampledness from opposite sides
+
+2026-07-19, phase 6 commit 1. The two object conversions learn the
+sampled-layer channel rule differently. Reading,
+`vox_object_from_voxj_decoded_object` gains a `material_counts` parameter,
+the same per-layer counts `from_voxj_file` already computes for
+`decode_voxj_object`; it expands each sampled-only sample row to a
+full-arity `retain_voxel` row, filler material 0 in unsampled layers'
+slots. Writing, `voxj_decoded_object_from_vox_object` takes
+`(&VoxMain, object id)` instead of `&VoxObject` and reads the channel
+order off `VoxMain::iter_sampled_layers`, the accessor phase 5 added for
+this seam. Row-major materials drop both palette transposes, and the old
+property-less special case unifies: with no array properties every row is
+legally empty.
+
+## The seam checks names across both lists; converters stay at parity
+
+2026-07-19, phase 6 commit 1. `vox_palette_from_voxj_palette` extends its
+duplicate check over `arrayProperties` union `scalarProperties` (rule 10.2)
+and carries scalar properties into voxcore storage both ways; ranges stay
+with `VoxMain::validate`. Every other converter compiles at column parity:
+value-index cells become branded value ids at the palette boundary
+(`voxelize_mesh`'s `PoolColumn.indices` and `write_vmax`'s material
+signatures are `U32Id<BVoxPoolValue>` end to end), and no converter emits
+scalar properties yet. The internal `(pool, u32)` value plumbing
+(`pool_color`, `bake_atlas`) now passes the branded id through. In
+fixtures, the raw-json `object()` test helper derives its channel count
+from the sample-row arity, not the layer count, so unsampled layers carry
+no channel.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

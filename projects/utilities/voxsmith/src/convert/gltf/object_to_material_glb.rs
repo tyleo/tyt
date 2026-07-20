@@ -40,7 +40,7 @@ mod tests {
         AtlasShape, BASE_COLOR_FACTOR, MaterialBake, MaterialMap, MaterialMeshRequest,
         MaterialSlot, MeshMethod, ResourceStorage, object_to_material_glb,
     };
-    use branded_id::U32Id;
+    use branded_id::{IdVec, U32Id};
     use gltf::{Gltf, image::Source};
     use ty_math::TyVector3U32;
     use voxcore::{BVoxLayer, BVoxObject, VoxMain, VoxObject, VoxPalette, VoxValuePool};
@@ -54,13 +54,13 @@ mod tests {
         let mut state = VoxMain::default();
 
         let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]],
+            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]),
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base);
-        let red = palette.add_material(vec![0]).unwrap();
-        let blue = palette.add_material(vec![1]).unwrap();
+        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
+        let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let blue = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
         let palette_id = state.add_palette(palette);
 
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();

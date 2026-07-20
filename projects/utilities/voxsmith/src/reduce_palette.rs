@@ -3,7 +3,7 @@ use branded_id::U32Id;
 use std::{cmp::Ordering, collections::HashMap, mem};
 use ty_math::{TyLinSrgbaF64, TySrgbaF64, TySrgbaU8, TyVector3F64, TyVector3U32};
 use voxcore::{
-    BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPaletteBinding, VoxMain, VoxObject,
+    BVoxArrayProperty, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, VoxMain, VoxObject,
     VoxValuePool,
 };
 
@@ -72,15 +72,15 @@ fn reduce_materials(
         return Ok(None);
     }
 
-    // The `baseColorFactor` binding; colorless materials have nothing to
-    // cluster on.
-    let color_binding = palette_ref.binding_by_attribute(BASE_COLOR_FACTOR);
+    // The `baseColorFactor` array property; colorless materials have nothing
+    // to cluster on.
+    let color_property = palette_ref.array_property_by_name(BASE_COLOR_FACTOR);
 
-    let colored: Vec<(u32, [u8; 4])> = match color_binding {
-        Some(binding) => palette_ref
+    let colored: Vec<(u32, [u8; 4])> = match color_property {
+        Some(array_property) => palette_ref
             .iter_materials()
             .filter_map(|material| {
-                let color = material_color(state, palette, material, binding)?;
+                let color = material_color(state, palette, material, array_property)?;
                 Some((material.to_u32(), color))
             })
             .collect(),
@@ -164,26 +164,26 @@ fn material_color(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
     material: U32Id<BVoxMaterial>,
-    binding: U32Id<BVoxPaletteBinding>,
+    array_property: U32Id<BVoxArrayProperty>,
 ) -> Option<[u8; 4]> {
-    let (pool, index) = state.material_value(palette, material, binding)?;
-    let index = index as usize;
+    let (pool, value_id) = state.material_value(palette, material, array_property)?;
+    let value_id = value_id.to_usize_id();
 
     match pool {
         VoxValuePool::Srgb { values } => values
-            .get(index)
+            .get(value_id)
             .map(|&[r, g, b]| TySrgbaF64::new(r, g, b, 1.0).to_u8().to_array()),
         VoxValuePool::Srgba { values } => values
-            .get(index)
+            .get(value_id)
             .map(|&[r, g, b, a]| TySrgbaF64::new(r, g, b, a).to_u8().to_array()),
-        VoxValuePool::LinearRgb { values } => values.get(index).map(|&[r, g, b]| {
+        VoxValuePool::LinearRgb { values } => values.get(value_id).map(|&[r, g, b]| {
             TyLinSrgbaF64::new(r, g, b, 1.0)
                 .to_srgba()
                 .to_u8()
                 .to_array()
         }),
         VoxValuePool::LinearRgba { values } => values
-            .get(index)
+            .get(value_id)
             .map(|&[r, g, b, a]| TyLinSrgbaF64::new(r, g, b, a).to_srgba().to_u8().to_array()),
         _ => None,
     }
@@ -775,9 +775,14 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::{TyFloatExt, TyVector3U32};
     use voxcore::{
-        BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxMain, VoxObject, VoxPalette,
-        VoxValuePool,
+        BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, VoxBound, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool,
     };
+
+    /// The branded value id `index`.
+    fn value(index: usize) -> U32Id<BVoxPoolValue> {
+        U32Id::from_u32(index as u32)
+    }
 
     /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
     fn srgba(hex: &str) -> [f64; 4] {
@@ -794,13 +799,15 @@ mod tests {
         palette: U32Id<BVoxPalette>,
         material: U32Id<BVoxMaterial>,
     ) -> String {
-        let binding = state
+        let array_property = state
             .palette(palette)
             .unwrap()
-            .binding_by_attribute(BASE_COLOR_FACTOR)
+            .array_property_by_name(BASE_COLOR_FACTOR)
             .unwrap();
-        match state.material_value(palette, material, binding) {
-            Some((VoxValuePool::Srgba { values }, index)) => hex_of(values[index as usize]),
+        match state.material_value(palette, material, array_property) {
+            Some((VoxValuePool::Srgba { values }, value_id)) => {
+                hex_of(values[value_id.to_usize_id()])
+            }
             other => panic!("material has no srgba baseColorFactor: {other:?}"),
         }
     }
@@ -836,12 +843,12 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base);
-        palette.add_binding("tag".to_owned(), tag);
+        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette.add_array_property("tag".to_owned(), tag);
         let materials: Vec<_> = (0..colors.len())
             .map(|index| {
                 palette
-                    .add_material(vec![index as u32, index as u32])
+                    .add_material(vec![value(index), value(index)])
                     .unwrap()
             })
             .collect();
@@ -900,9 +907,9 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_binding(BASE_COLOR_FACTOR.to_owned(), base);
+        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
         let materials: Vec<_> = (0..colors.len())
-            .map(|index| palette.add_material(vec![index as u32]).unwrap())
+            .map(|index| palette.add_material(vec![value(index)]).unwrap())
             .collect();
 
         let mut object = VoxObject::new("o".to_owned(), bounds).unwrap();
@@ -978,12 +985,12 @@ mod tests {
         let object = state.object(object).unwrap();
         let (layer, _) = object.iter_layers().next().unwrap();
         let palette_ref = state.palette(palette).unwrap();
-        let tag = palette_ref.binding_by_attribute("tag").unwrap();
+        let tag = palette_ref.array_property_by_name("tag").unwrap();
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         let material = object.voxel_material(voxel, layer).unwrap();
         match state.material_value(palette, material, tag) {
-            Some((VoxValuePool::Float { values, .. }, index)) => {
-                assert_eq!(values[index as usize], 1.0)
+            Some((VoxValuePool::Float { values, .. }, value_id)) => {
+                assert_eq!(values[value_id.to_usize_id()], 1.0)
             }
             other => panic!("unexpected tag value {other:?}"),
         }
@@ -1167,16 +1174,16 @@ mod tests {
         }
     }
 
-    /// The number of values in the pool bound to `attribute` in the first
-    /// palette that binds it.
-    fn pool_len(state: &VoxMain, attribute: &str) -> usize {
+    /// The number of values in the pool the array property `name` draws from
+    /// in the first palette that carries it.
+    fn pool_len(state: &VoxMain, name: &str) -> usize {
         for (_, palette) in state.iter_palettes() {
-            if let Some(binding) = palette.binding_by_attribute(attribute) {
-                let pool = palette.binding(binding).unwrap().pool;
+            if let Some(array_property) = palette.array_property_by_name(name) {
+                let pool = palette.array_property(array_property).unwrap().pool;
                 return state.value_pool(pool).unwrap().values_len();
             }
         }
-        panic!("no palette binds {attribute}");
+        panic!("no palette carries {name}");
     }
 
     #[test]
