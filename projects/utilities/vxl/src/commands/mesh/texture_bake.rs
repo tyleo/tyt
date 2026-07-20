@@ -3,7 +3,7 @@ use crate::commands::ChannelPacking;
 /// The lowered form of a `--texture` preset: what the bake writes.
 #[derive(Clone, Debug, PartialEq)]
 pub enum TextureBake {
-    /// The RGBA base color from the `baseColorFactor` attribute.
+    /// The RGBA base color from the `baseColorFactor` property.
     RgbaColor,
 
     /// The emissive color: `emissiveFactor` scaled by `emissiveStrength`, for

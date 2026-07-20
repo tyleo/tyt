@@ -26,16 +26,16 @@ pub struct PaletteList {
     #[arg(value_name = "layout", long, default_value = "hierarchy")]
     layout: PaletteListLayout,
 
-    /// Show each palette's attribute keys. `--show-attributes false` drops them.
+    /// Show each palette's property keys. `--show-properties false` drops them.
     #[arg(
-        value_name = "show-attributes",
+        value_name = "show-properties",
         long,
         default_value_t = true,
         default_missing_value = "true",
         num_args = 0..=1,
         action = ArgAction::Set
     )]
-    show_attributes: bool,
+    show_properties: bool,
 
     /// Show each palette's material count. `--show-materials false` drops it.
     #[arg(
@@ -64,7 +64,7 @@ pub struct PaletteList {
 impl PaletteList {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let fields = PaletteListFields {
-            attributes: self.show_attributes,
+            properties: self.show_properties,
             materials: self.show_materials,
             objects: self.show_objects,
         };

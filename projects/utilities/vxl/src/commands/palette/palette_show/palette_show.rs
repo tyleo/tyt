@@ -1,6 +1,6 @@
 use crate::{
     Dependencies, Error, Format, Result, Width,
-    commands::{AttributeSelector, PaletteShowLayout},
+    commands::{PaletteShowLayout, PropertySelector},
 };
 use clap::Parser;
 use std::{
@@ -21,17 +21,17 @@ pub struct PaletteShow {
     from: Option<Format>,
 
     /// A repeatable selector naming a value collection, three fields:
-    /// `<palette> <attribute> <format>`. The palette is an index or `*`, the
-    /// attribute a key with an optional `.r`/`.g`/`.b`/`.a` color component or
+    /// `<palette> <property> <format>`. The palette is an index or `*`, the
+    /// property a key with an optional `.r`/`.g`/`.b`/`.a` color component or
     /// `*`, and the format one of `auto`, `swatch`, `value`, `swatch-value`.
     /// Defaults to `'*' '*' auto` when omitted.
     #[arg(
-        value_names = ["palette", "attribute", "format"],
-        long = "attribute",
+        value_names = ["palette", "property", "format"],
+        long = "property",
         num_args = 3,
         action = clap::ArgAction::Append,
     )]
-    attribute: Vec<String>,
+    property: Vec<String>,
 
     /// How to arrange the collections, and the serialization to emit.
     #[arg(value_name = "layout", long, default_value = "row")]
@@ -47,12 +47,12 @@ impl PaletteShow {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         // clap fixes each occurrence at three values, so the flattened list
         // chunks cleanly into one selector per occurrence.
-        let selectors = if self.attribute.is_empty() {
-            vec![AttributeSelector::default_all_auto()]
+        let selectors = if self.property.is_empty() {
+            vec![PropertySelector::default_all_auto()]
         } else {
-            self.attribute
+            self.property
                 .chunks(3)
-                .map(|chunk| AttributeSelector::parse(&chunk[0], &chunk[1], &chunk[2]))
+                .map(|chunk| PropertySelector::parse(&chunk[0], &chunk[1], &chunk[2]))
                 .collect::<std::result::Result<Vec<_>, String>>()
                 .map_err(|message| Error::IO(IOError::new(ErrorKind::InvalidInput, message)))?
         };

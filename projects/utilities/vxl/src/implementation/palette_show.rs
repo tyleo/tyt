@@ -1,6 +1,6 @@
 use crate::{
     ColorComponent, Format, Result, Width,
-    commands::{AttributeRef, AttributeSelector, PaletteRef, PaletteShowFormat, PaletteShowLayout},
+    commands::{PaletteRef, PaletteShowFormat, PaletteShowLayout, PropertyRef, PropertySelector},
     implementation,
 };
 use branded_id::U32Id;
@@ -14,12 +14,12 @@ use voxcore::{BVoxPoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool};
 
 /// Loads the voxel file at `input` and prints the value collections named by
 /// `selectors`. Each selector resolves to one or more collections, an
-/// attribute's values down a palette; `layout` arranges them and chooses the
+/// property's values down a palette; `layout` arranges them and chooses the
 /// serialization, and `width` wraps the `row` layouts.
 pub fn palette_show(
     input: &Path,
     from: Option<Format>,
-    selectors: &[AttributeSelector],
+    selectors: &[PropertySelector],
     layout: PaletteShowLayout,
     width: Width,
 ) -> Result<()> {
@@ -64,14 +64,14 @@ fn terminal_columns() -> Option<usize> {
     None
 }
 
-/// One resolved value collection: an attribute's values down one palette,
-/// labeled by its palette index and attribute, with the format that renders it.
+/// One resolved value collection: a property's values down one palette,
+/// labeled by its palette index and property, with the format that renders it.
 struct Collection {
     /// The resolved palette index, even when the selector used `*`.
     palette: usize,
-    /// The attribute key, without any color component.
+    /// The property key, without any color component.
     key: String,
-    /// The color component read from the attribute, when one was given.
+    /// The color component read from the property, when one was given.
     component: Option<ColorComponent>,
     /// How each value renders.
     format: PaletteShowFormat,
@@ -91,9 +91,9 @@ impl Collection {
         )
     }
 
-    /// The raw `{key}` or `{key}.{component}` attribute label for the JSON
+    /// The raw `{key}` or `{key}.{component}` property label for the JSON
     /// records, where the serialization already quotes it.
-    fn attribute(&self) -> String {
+    fn property(&self) -> String {
         format!("{}{}", self.key, self.component_suffix())
     }
 
@@ -143,25 +143,22 @@ enum Kind {
 }
 
 /// Resolves the selectors against the document's palettes into collections in
-/// render order: selector order, then palette order, then attribute order. A
-/// `*` palette or `*` attribute expands to one collection per match; a named
-/// palette or attribute that is absent is an error, while a `*` palette quietly
-/// skips a palette that lacks a named attribute.
-fn resolve_collections(
-    state: &VoxMain,
-    selectors: &[AttributeSelector],
-) -> Result<Vec<Collection>> {
+/// render order: selector order, then palette order, then property order. A
+/// `*` palette or `*` property expands to one collection per match; a named
+/// palette or property that is absent is an error, while a `*` palette quietly
+/// skips a palette that lacks a named property.
+fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Result<Vec<Collection>> {
     let palettes: Vec<&VoxPalette> = state.iter_palettes().map(|(_, palette)| palette).collect();
     let mut collections = Vec::new();
     for selector in selectors {
         match selector.palette {
             PaletteRef::All => {
                 for (index, palette) in palettes.iter().enumerate() {
-                    expand_attribute(
+                    expand_property(
                         state,
                         index,
                         palette,
-                        &selector.attribute,
+                        &selector.property,
                         selector.format,
                         true,
                         &mut collections,
@@ -178,11 +175,11 @@ fn resolve_collections(
                         ),
                     )
                 })?;
-                expand_attribute(
+                expand_property(
                     state,
                     index,
                     palette,
-                    &selector.attribute,
+                    &selector.property,
                     selector.format,
                     false,
                     &mut collections,
@@ -193,20 +190,20 @@ fn resolve_collections(
     Ok(collections)
 }
 
-/// Expands one selector's attribute against one palette, pushing the resulting
+/// Expands one selector's property against one palette, pushing the resulting
 /// collections. A `palette_is_wild` palette, one from a `*`, skips a named
-/// attribute it lacks instead of erroring.
-fn expand_attribute(
+/// property it lacks instead of erroring.
+fn expand_property(
     state: &VoxMain,
     index: usize,
     palette: &VoxPalette,
-    attribute: &AttributeRef,
+    property: &PropertyRef,
     format: PaletteShowFormat,
     palette_is_wild: bool,
     collections: &mut Vec<Collection>,
 ) -> Result<()> {
-    match attribute {
-        AttributeRef::All => {
+    match property {
+        PropertyRef::All => {
             let names: Vec<String> = palette
                 .iter_array_properties()
                 .map(|(_, property)| property.name.to_string())
@@ -217,7 +214,7 @@ fn expand_attribute(
                 )?);
             }
         }
-        AttributeRef::Key { key, component } => {
+        PropertyRef::Key { key, component } => {
             if palette.array_property_by_name(key).is_none() {
                 if palette_is_wild {
                     return Ok(());
@@ -225,7 +222,7 @@ fn expand_attribute(
                 return Err(IOError::new(
                     ErrorKind::InvalidInput,
                     format!(
-                        "palette {index} has no attribute `{key}`; available attributes: {}",
+                        "palette {index} has no property `{key}`; available properties: {}",
                         available_keys(palette)
                     ),
                 )
@@ -239,7 +236,7 @@ fn expand_attribute(
     Ok(())
 }
 
-/// Builds one collection from a present attribute: classifies the bound pool by
+/// Builds one collection from a present property: classifies the bound pool by
 /// kind, rejects a color component on a non-color and `.a` on a three-component
 /// color, then samples each material's value.
 fn build_collection(
@@ -252,7 +249,7 @@ fn build_collection(
 ) -> Result<Collection> {
     let property_id = palette
         .array_property_by_name(key)
-        .expect("caller verified the attribute is present");
+        .expect("caller verified the property is present");
     let property = palette
         .array_property(property_id)
         .expect("an array-property id from this palette resolves");
@@ -270,7 +267,7 @@ fn build_collection(
                     return Err(IOError::new(
                         ErrorKind::InvalidInput,
                         format!(
-                            "attribute `{key}` is a three-component color and has no `.a` component"
+                            "property `{key}` is a three-component color and has no `.a` component"
                         ),
                     )
                     .into());
@@ -280,7 +277,7 @@ fn build_collection(
                 return Err(IOError::new(
                     ErrorKind::InvalidInput,
                     format!(
-                        "attribute `{key}` is not a color and has no `.{}` component",
+                        "property `{key}` is not a color and has no `.{}` component",
                         component_letter(component)
                     ),
                 )
@@ -585,7 +582,7 @@ fn json_text(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_else(|_| "null".to_string())
 }
 
-/// The palette's attribute keys joined for a not-found message.
+/// The palette's property keys joined for a not-found message.
 fn available_keys(palette: &VoxPalette) -> String {
     palette
         .iter_array_properties()
@@ -847,7 +844,7 @@ fn rendered_cells(collection: &Collection) -> Vec<String> {
 }
 
 /// The collections as JSON, one record per collection in render order: its
-/// resolved palette index, its attribute label, and its values in native JSON
+/// resolved palette index, its property label, and its values in native JSON
 /// types. The format and layout are ignored; a color is a hex string or a float
 /// array, a component its byte or float, and a scalar a number. `pretty` selects
 /// indented output, matching the shared report JSON.
@@ -862,7 +859,7 @@ fn render_json(collections: &[Collection], pretty: bool) -> String {
                 .collect();
             json!({
                 "palette": collection.palette,
-                "attribute": collection.attribute(),
+                "property": collection.property(),
                 "values": values,
             })
         })
@@ -880,7 +877,7 @@ fn render_json(collections: &[Collection], pretty: bool) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        commands::{AttributeSelector, PaletteShowLayout},
+        commands::{PaletteShowLayout, PropertySelector},
         implementation::palette_show::{render, resolve_collections},
     };
     use branded_id::{IdVec, U32Id};
@@ -940,11 +937,11 @@ mod tests {
         state
     }
 
-    fn selectors(fields: &[(&str, &str, &str)]) -> Vec<AttributeSelector> {
+    fn selectors(fields: &[(&str, &str, &str)]) -> Vec<PropertySelector> {
         fields
             .iter()
-            .map(|(palette, attribute, format)| {
-                AttributeSelector::parse(palette, attribute, format).unwrap()
+            .map(|(palette, property, format)| {
+                PropertySelector::parse(palette, property, format).unwrap()
             })
             .collect()
     }
@@ -1061,10 +1058,10 @@ mod tests {
     }
 
     #[test]
-    fn default_selector_shows_every_palette_and_attribute() {
+    fn default_selector_shows_every_palette_and_property() {
         let state = sample_state();
         let collections =
-            resolve_collections(&state, &[AttributeSelector::default_all_auto()]).unwrap();
+            resolve_collections(&state, &[PropertySelector::default_all_auto()]).unwrap();
         let output = render(&collections, PaletteShowLayout::Row, None);
         assert_eq!(
             output,
@@ -1137,8 +1134,8 @@ mod tests {
         );
         assert_eq!(
             output,
-            "[{\"palette\":0,\"attribute\":\"baseColorFactor\",\"values\":[\"#FF0000FF\",\"#00FF0080\"]},\
-             {\"palette\":0,\"attribute\":\"baseColorFactor.a\",\"values\":[255,128]}]\n"
+            "[{\"palette\":0,\"property\":\"baseColorFactor\",\"values\":[\"#FF0000FF\",\"#00FF0080\"]},\
+             {\"palette\":0,\"property\":\"baseColorFactor.a\",\"values\":[255,128]}]\n"
         );
     }
 
@@ -1159,7 +1156,7 @@ mod tests {
     }
 
     #[test]
-    fn star_attribute_expands_to_every_attribute() {
+    fn star_property_expands_to_every_property() {
         let state = sample_state();
         let collections = resolve_collections(&state, &selectors(&[("0", "*", "value")])).unwrap();
         let headers: Vec<String> = collections.iter().map(|c| c.header()).collect();
@@ -1167,7 +1164,7 @@ mod tests {
     }
 
     #[test]
-    fn star_palette_skips_a_palette_lacking_a_named_attribute() {
+    fn star_palette_skips_a_palette_lacking_a_named_property() {
         let state = sample_state();
         // Only palette 0 has `metallicFactor`; palette 1 is skipped, not an error.
         let collections =
@@ -1185,7 +1182,7 @@ mod tests {
     }
 
     #[test]
-    fn named_attribute_absent_on_a_named_palette_is_an_error() {
+    fn named_property_absent_on_a_named_palette_is_an_error() {
         let state = sample_state();
         assert!(resolve_collections(&state, &selectors(&[("0", "missing", "value")])).is_err());
     }
@@ -1307,18 +1304,18 @@ mod tests {
         );
         assert_eq!(
             json,
-            "[{\"palette\":0,\"attribute\":\"extra\",\"values\":[[1,2]]}]\n"
+            "[{\"palette\":0,\"property\":\"extra\",\"values\":[[1,2]]}]\n"
         );
     }
 
     #[test]
-    fn an_empty_attribute_name_is_quoted_in_the_header_but_raw_in_json() {
+    fn an_empty_property_name_is_quoted_in_the_header_but_raw_in_json() {
         let mut state = VoxMain::default();
         let pool = state.add_value_pool(VoxValuePool::Bool {
             values: IdVec::from_vec(vec![true]),
         });
         let mut palette = VoxPalette::default();
-        // A binding with no attribute name, reached through the `*` attribute.
+        // A binding with no property name, reached through the `*` property.
         palette.add_array_property(String::new(), pool);
         palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);
@@ -1335,7 +1332,7 @@ mod tests {
         );
         assert_eq!(
             json,
-            "[{\"palette\":0,\"attribute\":\"\",\"values\":[true]}]\n"
+            "[{\"palette\":0,\"property\":\"\",\"values\":[true]}]\n"
         );
     }
 }

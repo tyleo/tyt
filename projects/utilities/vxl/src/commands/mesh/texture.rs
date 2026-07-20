@@ -98,51 +98,51 @@ impl Texture {
             Texture::Albedo => TextureBake::RgbaColor,
 
             Texture::Orm => packing(
-                attribute(OCCLUSION_STRENGTH, false),
-                attribute(ROUGHNESS_FACTOR, false),
-                attribute(METALLIC_FACTOR, false),
+                property(OCCLUSION_STRENGTH, false),
+                property(ROUGHNESS_FACTOR, false),
+                property(METALLIC_FACTOR, false),
                 None,
             ),
 
             Texture::MetallicRoughness => packing(
                 Some(ChannelSource::Zero),
-                attribute(ROUGHNESS_FACTOR, false),
-                attribute(METALLIC_FACTOR, false),
+                property(ROUGHNESS_FACTOR, false),
+                property(METALLIC_FACTOR, false),
                 None,
             ),
 
             Texture::MetallicSmoothness => packing(
-                attribute(METALLIC_FACTOR, false),
+                property(METALLIC_FACTOR, false),
                 Some(ChannelSource::Zero),
                 Some(ChannelSource::Zero),
-                attribute(ROUGHNESS_FACTOR, true),
+                property(ROUGHNESS_FACTOR, true),
             ),
 
             Texture::Mse => packing(
-                attribute(METALLIC_FACTOR, false),
-                attribute(ROUGHNESS_FACTOR, true),
-                attribute(EMISSIVE_STRENGTH, false),
+                property(METALLIC_FACTOR, false),
+                property(ROUGHNESS_FACTOR, true),
+                property(EMISSIVE_STRENGTH, false),
                 None,
             ),
 
             Texture::Emissive => TextureBake::EmissiveColor,
 
-            Texture::Occlusion => packing(attribute(OCCLUSION_STRENGTH, false), None, None, None),
+            Texture::Occlusion => packing(property(OCCLUSION_STRENGTH, false), None, None, None),
 
             Texture::ComputedOcclusion => {
                 packing(Some(ChannelSource::ComputedOcclusion), None, None, None)
             }
 
-            Texture::Roughness => packing(attribute(ROUGHNESS_FACTOR, false), None, None, None),
+            Texture::Roughness => packing(property(ROUGHNESS_FACTOR, false), None, None, None),
 
-            Texture::Smoothness => packing(attribute(ROUGHNESS_FACTOR, true), None, None, None),
+            Texture::Smoothness => packing(property(ROUGHNESS_FACTOR, true), None, None, None),
         }
     }
 }
 
-/// An attribute channel source by voxj key, inverted when `invert` is set.
-fn attribute(key: &str, invert: bool) -> Option<ChannelSource> {
-    Some(ChannelSource::Attribute {
+/// A property channel source by voxj key, inverted when `invert` is set.
+fn property(key: &str, invert: bool) -> Option<ChannelSource> {
+    Some(ChannelSource::Property {
         key: key.to_string(),
         component: None,
         invert,
@@ -164,8 +164,8 @@ mod tests {
     use crate::commands::{ChannelPacking, ChannelSource, Texture, TextureBake};
     use voxsmith::{METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
-    fn attribute(key: &str, invert: bool) -> ChannelSource {
-        ChannelSource::Attribute {
+    fn property(key: &str, invert: bool) -> ChannelSource {
+        ChannelSource::Property {
             key: key.to_string(),
             component: None,
             invert,
@@ -194,10 +194,10 @@ mod tests {
         assert_eq!(
             packing.sources(),
             vec![
-                attribute(METALLIC_FACTOR, false),
+                property(METALLIC_FACTOR, false),
                 ChannelSource::Zero,
                 ChannelSource::Zero,
-                attribute(ROUGHNESS_FACTOR, true),
+                property(ROUGHNESS_FACTOR, true),
             ]
         );
     }

@@ -68,8 +68,8 @@ pub fn mesh_object(
     // The material path bakes one layer's materials, chosen by `--layer`.
     let layer_id = resolve_layer(object, layer)?;
 
-    // The maps read attributes from that layer's palette, so validate each
-    // channel's component against the attribute's kind before baking.
+    // The maps read properties from that layer's palette, so validate each
+    // channel's component against the property's kind before baking.
     let palette = object
         .iter_layers()
         .nth(layer)
@@ -125,14 +125,14 @@ fn resolve_layer(object: &VoxObject, layer: usize) -> Result<U32Id<BVoxLayer>> {
         })
 }
 
-/// The kind a channel reads an attribute as, fixing whether it may name a color
+/// The kind a channel reads a property as, fixing whether it may name a color
 /// component.
 enum ChannelKind {
     Color { alpha: bool },
     Scalar,
 }
 
-/// Validates every map's attribute channels against the meshed layer's palette;
+/// Validates every map's property channels against the meshed layer's palette;
 /// `layer` is the `--layer` ordinal for the error text.
 fn validate_maps(
     state: &VoxMain,
@@ -146,7 +146,7 @@ fn validate_maps(
         };
 
         for source in packing.sources() {
-            let ChannelSource::Attribute { key, component, .. } = source else {
+            let ChannelSource::Property { key, component, .. } = source else {
                 continue;
             };
 
@@ -157,7 +157,7 @@ fn validate_maps(
     Ok(())
 }
 
-/// Validates one attribute channel against its kind: a color must name a
+/// Validates one property channel against its kind: a color must name a
 /// component and `.a` needs alpha, a scalar must name none.
 fn validate_channel(
     state: &VoxMain,
@@ -187,9 +187,9 @@ fn validate_channel(
     }
 }
 
-/// The kind of the attribute `key` in the meshed layer: its bound pool's kind
+/// The kind of the property `key` in the meshed layer: its bound pool's kind
 /// when present, else the voxj unbound-default rule, a glTF built-in by its spec
-/// kind and a custom attribute an error.
+/// kind and a custom property an error.
 fn channel_kind(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
@@ -203,14 +203,14 @@ fn channel_kind(
     let Some(property_id) = palette.array_property_by_name(key) else {
         // Absent from the palette: the voxj format's unbound-default rule. A
         // glTF built-in takes its spec kind and bakes its default; a custom
-        // attribute has no default, so its type cannot be inferred.
+        // property has no default, so its type cannot be inferred.
         return match GltfAttributeKind::of(key) {
             Some(GltfAttributeKind::ColorRgba) => Ok(ChannelKind::Color { alpha: true }),
             Some(GltfAttributeKind::ColorRgb) => Ok(ChannelKind::Color { alpha: false }),
             Some(GltfAttributeKind::Scalar) => Ok(ChannelKind::Scalar),
             None => Err(Error::usage(format!(
                 "`{key}` is not bound in the meshed layer's palette (layer {layer}), so its type \
-                 cannot be inferred; bind it in the palette or map a glTF attribute"
+                 cannot be inferred; bind it in the palette or map a glTF property"
             ))),
         };
     };
@@ -280,7 +280,7 @@ fn material_channel(source: &ChannelSource) -> MaterialChannel {
         ChannelSource::Zero => MaterialChannel::Zero,
         ChannelSource::One => MaterialChannel::One,
         ChannelSource::ComputedOcclusion => MaterialChannel::ComputedOcclusion,
-        ChannelSource::Attribute {
+        ChannelSource::Property {
             key,
             component,
             invert,
@@ -476,9 +476,9 @@ mod tests {
     }
 
     #[test]
-    fn an_absent_custom_attribute_is_an_error() {
+    fn an_absent_custom_property_is_an_error() {
         let (state, palette) = palette_state();
-        // `subsurface` is neither bound nor a glTF attribute, so its type cannot
+        // `subsurface` is neither bound nor a glTF property, so its type cannot
         // be inferred, whether or not a component is named.
         assert!(!validates(&state, palette, "subsurface", None));
         assert!(!validates(

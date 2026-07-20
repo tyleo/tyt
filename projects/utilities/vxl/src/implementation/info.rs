@@ -69,7 +69,7 @@ fn render_markdown(
         .map(|(id, palette)| {
             implementation::row([
                 &id.to_u32().to_string(),
-                &implementation::md_cell(&implementation::attribute_names(palette).join(", ")),
+                &implementation::md_cell(&implementation::property_names(palette).join(", ")),
                 &palette.material_count().to_string(),
             ])
         })
@@ -103,7 +103,7 @@ fn render_markdown(
     ));
     output.push_str("\n## Palettes\n\n");
     output.push_str(&implementation::markdown_table(
-        &["Id", "Attributes", "Materials"],
+        &["Id", "Properties", "Materials"],
         &palette_rows,
     ));
     output.push_str("\n## Objects\n\n");
@@ -134,7 +134,7 @@ fn render_json(
         .map(|(id, palette)| {
             json!({
                 "id": id.to_u32(),
-                "attributes": implementation::attribute_names(palette),
+                "properties": implementation::property_names(palette),
                 "materials": palette.material_count(),
             })
         })
@@ -266,7 +266,7 @@ mod tests {
              | Has ext      | no    |\n\
              | Has edit     | no    |\n\
              \n## Palettes\n\n\
-             | Id  | Attributes      | Materials |\n\
+             | Id  | Properties      | Materials |\n\
              | --- | --------------- | --------- |\n\
              | 0   | baseColorFactor | 1         |\n\
              \n## Objects\n\n\
@@ -289,7 +289,7 @@ mod tests {
         assert_eq!(
             output,
             "{\"format\":\"voxj\",\"voxj_version\":2,\"has_ext\":false,\"has_edit\":false,\
-             \"palettes\":[{\"id\":0,\"attributes\":[\"baseColorFactor\"],\"materials\":1}],\
+             \"palettes\":[{\"id\":0,\"properties\":[\"baseColorFactor\"],\"materials\":1}],\
              \"objects\":[{\"id\":0,\"name\":\"body\",\"bounds\":[1,1,1],\"origin\":[0,0,0],\
              \"voxels\":1,\"layers\":1}]}\n"
         );

@@ -1,7 +1,7 @@
 use crate::{
     Dependencies, Error, Format, MeshFormat, PositiveF64, Result, SelectIndex,
     commands::{
-        Atlas, AttributeBinding, ChannelSource, MeshMethod, MeshTextureMap, ResourceStorage,
+        Atlas, ChannelSource, MeshMethod, MeshTextureMap, PropertyBinding, ResourceStorage,
         Texture, TextureArg, TextureMap, TextureName, TextureShape,
     },
     require_file_name,
@@ -100,14 +100,14 @@ pub struct Mesh {
     /// the mesh, no path separator.
     ///
     /// Each `<expr>` is one of:
-    /// - <attribute>: a voxel attribute by name, as `metallicFactor` or
+    /// - <property>: a voxel property by name, as `metallicFactor` or
     ///   `baseColorFactor`
-    /// - <attribute>.<r|g|b|a>: one component of a color attribute, as
+    /// - <property>.<r|g|b|a>: one component of a color property, as
     ///   `baseColorFactor.r`
-    /// - 1-<attribute>: the inverse `1 - value`, as `1-roughnessFactor`
+    /// - 1-<property>: the inverse `1 - value`, as `1-roughnessFactor`
     /// - 0, 1: a constant channel
     ///
-    /// Attribute keys are voxj attributes or `--define-attribute` aliases.
+    /// Property keys are voxj properties or `--define-property` aliases.
     #[arg(
         value_names = ["file-name", "channels"],
         long = "texture-map",
@@ -117,16 +117,16 @@ pub struct Mesh {
     )]
     texture_map: Vec<String>,
 
-    /// Name a custom attribute for `--texture-map`, `<attribute> <name>`,
-    /// repeatable, as `--define-attribute sss subsurface`. The attribute's type
+    /// Name a custom property for `--texture-map`, `<property> <name>`,
+    /// repeatable, as `--define-property sss subsurface`. The property's type
     /// is read from its value pool in the meshed layer's palette, not declared.
     #[arg(
-        value_names = ["attribute", "name"],
-        long = "define-attribute",
+        value_names = ["property", "name"],
+        long = "define-property",
         num_args = 2,
         action = clap::ArgAction::Append,
     )]
-    define_attribute: Vec<String>,
+    define_property: Vec<String>,
 
     /// Where the baked images go. Defaults to `embedded` for `.glb` and
     /// `external` for `.gltf`.
@@ -312,10 +312,10 @@ impl Mesh {
     }
 
     /// Resolves the `--texture-map` custom maps, pairing each occurrence into a
-    /// typed value and resolving its channels against the `--define-attribute`
+    /// typed value and resolving its channels against the `--define-property`
     /// bindings.
     fn resolve_custom_maps(&self) -> Result<Vec<MeshTextureMap>> {
-        let bindings = self.attribute_bindings()?;
+        let bindings = self.property_bindings()?;
 
         // clap's `num_args = 2` guarantees an even length, so each chunk is a
         // full pair.
@@ -328,13 +328,13 @@ impl Mesh {
         maps.iter().map(|map| map.resolve(&bindings)).collect()
     }
 
-    /// Pairs each `--define-attribute <attribute> <name>` occurrence into a
+    /// Pairs each `--define-property <property> <name>` occurrence into a
     /// typed binding. clap's `num_args = 2` guarantees an even length, so each
     /// chunk is a full pair.
-    fn attribute_bindings(&self) -> Result<Vec<AttributeBinding>> {
-        self.define_attribute
+    fn property_bindings(&self) -> Result<Vec<PropertyBinding>> {
+        self.define_property
             .chunks(2)
-            .map(|pair| AttributeBinding::new(&pair[0], &pair[1]))
+            .map(|pair| PropertyBinding::new(&pair[0], &pair[1]))
             .collect()
     }
 
@@ -555,11 +555,11 @@ mod tests {
     }
 
     #[test]
-    fn a_define_attribute_alias_reaches_a_spaced_name_in_a_map() {
+    fn a_define_property_alias_reaches_a_spaced_name_in_a_map() {
         // The two-token form quotes a voxel name with spaces; the space-free
         // alias then stands in for it in --texture-map.
         assert!(resolves(&[
-            "--define-attribute",
+            "--define-property",
             "spark",
             "super emissive thing",
             "--texture-map",
@@ -569,7 +569,7 @@ mod tests {
     }
 
     #[test]
-    fn a_spaced_attribute_typed_straight_into_a_map_is_rejected() {
+    fn a_spaced_property_typed_straight_into_a_map_is_rejected() {
         assert!(!resolves(&[
             "--texture-map",
             "spark.png",

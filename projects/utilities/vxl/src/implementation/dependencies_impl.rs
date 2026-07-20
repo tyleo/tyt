@@ -2,10 +2,10 @@ use crate::{
     Dependencies, Format, MeshFormat, ReportLayout, Result, SelectIndex, VoxjColorFormat,
     VoxjEncoding, VoxjFormat, Width,
     commands::{
-        AttributeSelector, CameraView, ColorFormat, EditState, FillMode, GridResolution,
-        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
-        PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView, ResourceStorage,
-        SurfaceMode, TextureShape,
+        CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyViews, MaterialMode,
+        MeshMethod, MeshTextureMap, PaletteListFields, PaletteListLayout, PaletteReduction,
+        PaletteShowLayout, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
+        TextureShape,
     },
     implementation,
 };
@@ -159,7 +159,7 @@ impl Dependencies for DependenciesImpl {
         &self,
         input: &Path,
         from: Option<Format>,
-        selectors: &[AttributeSelector],
+        selectors: &[PropertySelector],
         layout: PaletteShowLayout,
         width: Width,
     ) -> Result<()> {

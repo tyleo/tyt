@@ -1,27 +1,27 @@
 use crate::ColorComponent;
 
-/// The attribute field of an `--attribute` selector: one attribute key,
-/// optionally narrowed to a color component, or every attribute of the palette.
+/// The property field of a `--property` selector: one property key,
+/// optionally narrowed to a color component, or every property of the palette.
 #[derive(Clone, Debug, PartialEq)]
-pub enum AttributeRef {
-    /// Every attribute of the palette.
+pub enum PropertyRef {
+    /// Every property of the palette.
     All,
-    /// One attribute by key, optionally narrowed to one color `component`.
+    /// One property by key, optionally narrowed to one color `component`.
     Key {
-        /// The attribute key, with any trailing `.component` stripped off.
+        /// The property key, with any trailing `.component` stripped off.
         key: String,
         /// The color component to read, or `None` for the whole value.
         component: Option<ColorComponent>,
     },
 }
 
-impl AttributeRef {
-    /// Parses the attribute field: `*` for every attribute, else a key with an
+impl PropertyRef {
+    /// Parses the property field: `*` for every property, else a key with an
     /// optional trailing `.r`/`.g`/`.b`/`.a` color component. A longer dotted
     /// suffix stays part of the key.
     pub fn parse(value: &str) -> Result<Self, String> {
         if value == "*" {
-            return Ok(AttributeRef::All);
+            return Ok(PropertyRef::All);
         }
         let (key, component) = match value.rsplit_once('.') {
             Some((head, tail))
@@ -32,9 +32,9 @@ impl AttributeRef {
             _ => (value, None),
         };
         if key.is_empty() {
-            return Err(format!("`{value}` names no attribute"));
+            return Err(format!("`{value}` names no property"));
         }
-        Ok(AttributeRef::Key {
+        Ok(PropertyRef::Key {
             key: key.to_string(),
             component,
         })
@@ -43,18 +43,18 @@ impl AttributeRef {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ColorComponent, commands::AttributeRef};
+    use crate::{ColorComponent, commands::PropertyRef};
 
     #[test]
     fn parses_a_star() {
-        assert_eq!(AttributeRef::parse("*").unwrap(), AttributeRef::All);
+        assert_eq!(PropertyRef::parse("*").unwrap(), PropertyRef::All);
     }
 
     #[test]
     fn parses_a_bare_key() {
         assert_eq!(
-            AttributeRef::parse("rgba").unwrap(),
-            AttributeRef::Key {
+            PropertyRef::parse("rgba").unwrap(),
+            PropertyRef::Key {
                 key: "rgba".to_string(),
                 component: None,
             }
@@ -64,8 +64,8 @@ mod tests {
     #[test]
     fn parses_a_trailing_color_component() {
         assert_eq!(
-            AttributeRef::parse("rgba.a").unwrap(),
-            AttributeRef::Key {
+            PropertyRef::parse("rgba.a").unwrap(),
+            PropertyRef::Key {
                 key: "rgba".to_string(),
                 component: Some(ColorComponent::A),
             }
@@ -75,8 +75,8 @@ mod tests {
     #[test]
     fn keeps_a_dotted_key_without_a_component() {
         assert_eq!(
-            AttributeRef::parse("my.attr").unwrap(),
-            AttributeRef::Key {
+            PropertyRef::parse("my.attr").unwrap(),
+            PropertyRef::Key {
                 key: "my.attr".to_string(),
                 component: None,
             }
@@ -85,12 +85,12 @@ mod tests {
 
     #[test]
     fn rejects_an_unknown_component() {
-        assert!(AttributeRef::parse("rgba.z").is_err());
+        assert!(PropertyRef::parse("rgba.z").is_err());
     }
 
     #[test]
     fn rejects_an_empty_key() {
-        assert!(AttributeRef::parse("").is_err());
-        assert!(AttributeRef::parse(".a").is_err());
+        assert!(PropertyRef::parse("").is_err());
+        assert!(PropertyRef::parse(".a").is_err());
     }
 }

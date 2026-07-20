@@ -330,6 +330,23 @@ unbound-default rule for now. Surfacing both arities is the third commit's
 job. Internal names follow voxcore (`property_id`, `value_id`); the
 user-facing `attribute` vocabulary is untouched until the rename commit.
 
+## The vxl rename stops at the voxsmith seam
+
+2026-07-20, phase 7 commit 2. Every vxl identifier, flag, and displayed
+word moves to the property vocabulary: `PropertyBinding` / `PropertyRef` /
+`PropertySelector` / `property_names` / `ChannelSource::Property`, the
+flags `--property` (the `palette show` selector), `--define-property`, and
+`--show-properties`, the table headers and hierarchy branches, and the
+JSON keys `property` / `properties`. Two boundaries hold. voxsmith's
+public API keeps its names, so the channel lowering still targets
+`MaterialChannel::Attribute` and unbound defaults still classify through
+`GltfAttributeKind`; the plan's blast radius scoped the rename to vxl.
+And the CLI types keep their `key` fields and key prose: `PropertyBinding`
+already uses `name` for its alias side, and the voxsmith seam says `key`,
+so only the attribute noun moved. `PropertyBinding` also keeps the binding
+noun README decision 12 dropped from the wire: a wire entry is the
+property itself, while this type binds a CLI alias to a property key.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

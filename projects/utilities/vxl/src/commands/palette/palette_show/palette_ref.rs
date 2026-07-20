@@ -1,4 +1,4 @@
-/// The palette field of an `--attribute` selector: one palette by index, or
+/// The palette field of a `--property` selector: one palette by index, or
 /// every palette.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PaletteRef {

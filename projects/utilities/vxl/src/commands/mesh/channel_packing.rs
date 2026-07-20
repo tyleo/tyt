@@ -1,6 +1,6 @@
 use crate::{
     Result,
-    commands::{AttributeBinding, ChannelSource},
+    commands::{ChannelSource, PropertyBinding},
 };
 use std::{result::Result as StdResult, str::FromStr};
 
@@ -50,9 +50,9 @@ impl ChannelPacking {
             .collect()
     }
 
-    /// Resolves every channel against the `--define-attribute` bindings into a
-    /// packing with concrete attribute keys.
-    pub(crate) fn resolve(&self, bindings: &[AttributeBinding]) -> Result<ChannelPacking> {
+    /// Resolves every channel against the `--define-property` bindings into a
+    /// packing with concrete property keys.
+    pub(crate) fn resolve(&self, bindings: &[PropertyBinding]) -> Result<ChannelPacking> {
         let resolved = self
             .sources()
             .iter()
@@ -113,8 +113,8 @@ mod tests {
     use crate::commands::{ChannelPacking, ChannelSource};
     use voxsmith::{EMISSIVE_STRENGTH, METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
-    fn attribute(key: &str, invert: bool) -> ChannelSource {
-        ChannelSource::Attribute {
+    fn property(key: &str, invert: bool) -> ChannelSource {
+        ChannelSource::Property {
             key: key.to_string(),
             component: None,
             invert,
@@ -130,9 +130,9 @@ mod tests {
         assert_eq!(
             packing.sources(),
             vec![
-                attribute(METALLIC_FACTOR, false),
-                attribute(ROUGHNESS_FACTOR, true),
-                attribute(EMISSIVE_STRENGTH, false),
+                property(METALLIC_FACTOR, false),
+                property(ROUGHNESS_FACTOR, true),
+                property(EMISSIVE_STRENGTH, false),
             ]
         );
     }
@@ -146,10 +146,10 @@ mod tests {
         assert_eq!(
             packing.sources(),
             vec![
-                attribute(METALLIC_FACTOR, false),
+                property(METALLIC_FACTOR, false),
                 ChannelSource::Zero,
                 ChannelSource::Zero,
-                attribute(ROUGHNESS_FACTOR, true),
+                property(ROUGHNESS_FACTOR, true),
             ]
         );
     }

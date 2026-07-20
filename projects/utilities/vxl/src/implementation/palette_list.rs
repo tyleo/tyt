@@ -15,7 +15,7 @@ use voxcore::{BVoxPalette, VoxMain, VoxPalette};
 type Entry<'a> = (U32Id<BVoxPalette>, &'a VoxPalette);
 
 /// Loads the voxel file at `input` and prints a per-palette overview: each
-/// palette's index and, when enabled by `fields`, its attribute keys, material
+/// palette's index and, when enabled by `fields`, its property keys, material
 /// count, and referencing objects. `filters` narrows the palettes and `layout`
 /// chooses the Markdown table, the hierarchy tree, or a JSON form.
 pub fn palette_list(
@@ -73,8 +73,8 @@ fn render(
 /// always-shown index.
 fn render_markdown(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> String {
     let mut headers = vec!["index"];
-    if fields.attributes {
-        headers.push("attributes");
+    if fields.properties {
+        headers.push("properties");
     }
     if fields.materials {
         headers.push("materials");
@@ -87,9 +87,9 @@ fn render_markdown(state: &VoxMain, palettes: &[Entry], fields: PaletteListField
         .iter()
         .map(|(id, palette)| {
             let mut columns = vec![id.to_u32().to_string()];
-            if fields.attributes {
+            if fields.properties {
                 columns.push(implementation::md_cell(
-                    &implementation::attribute_names(palette).join(", "),
+                    &implementation::property_names(palette).join(", "),
                 ));
             }
             if fields.materials {
@@ -120,10 +120,10 @@ fn render_json(
         .map(|(id, palette)| {
             let mut entry = Map::new();
             entry.insert("index".to_string(), json!(id.to_u32()));
-            if fields.attributes {
+            if fields.properties {
                 entry.insert(
-                    "attributes".to_string(),
-                    json!(implementation::attribute_names(palette)),
+                    "properties".to_string(),
+                    json!(implementation::property_names(palette)),
                 );
             }
             if fields.materials {
@@ -144,7 +144,7 @@ fn render_json(
 
 /// The listing as an indented tree, like `hierarchy show`: a `palettes` header
 /// over one bare-index branch per palette, each carrying its enabled fields as
-/// child branches in the order material count, attributes, objects.
+/// child branches in the order material count, properties, objects.
 fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> String {
     let mut output = String::from("palettes\n");
     let total = palettes.len();
@@ -158,10 +158,10 @@ fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFiel
         if fields.materials {
             children.push(HierarchyChild::MaterialCount(palette.material_count()));
         }
-        if fields.attributes {
+        if fields.properties {
             children.push(HierarchyChild::Names(
-                "attributes",
-                implementation::attribute_names(palette),
+                "properties",
+                implementation::property_names(palette),
             ));
         }
         if fields.objects {
@@ -199,7 +199,7 @@ fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFiel
 enum HierarchyChild<'a> {
     /// A `materialCount: <n>` leaf.
     MaterialCount(usize),
-    /// A named subtree, `attributes` or `objects`, with one child per name.
+    /// A named subtree, `properties` or `objects`, with one child per name.
     Names(&'static str, Vec<&'a str>),
 }
 
@@ -278,7 +278,7 @@ mod tests {
     /// Every field enabled, the bare-`palette list` default.
     fn all_fields() -> PaletteListFields {
         PaletteListFields {
-            attributes: true,
+            properties: true,
             materials: true,
             objects: true,
         }
@@ -290,7 +290,7 @@ mod tests {
     fn shared_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        // Colors and metallic values back the properties; only the attribute
+        // Colors and metallic values back the properties; only the property
         // names and material counts reach the listing, so the values are
         // arbitrary.
         let colors = state.add_value_pool(VoxValuePool::Srgba {
@@ -340,7 +340,7 @@ mod tests {
     fn markdown_lists_one_row_per_palette() {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::Markdown),
-            "| index | attributes                      | materials | used by |\n\
+            "| index | properties                      | materials | used by |\n\
              | ----- | ------------------------------- | --------- | ------- |\n\
              | 0     | baseColorFactor, metallicFactor | 2         | a, b    |\n\
              | 1     | baseColorFactor                 | 1         | b       |\n"
@@ -352,14 +352,14 @@ mod tests {
         let state = shared_state();
         let palettes = select_palettes(&state, &[]).unwrap();
         let fields = PaletteListFields {
-            attributes: true,
+            properties: true,
             materials: true,
             objects: false,
         };
         let output = render(&state, &palettes, fields, PaletteListLayout::Markdown).unwrap();
         assert_eq!(
             output,
-            "| index | attributes                      | materials |\n\
+            "| index | properties                      | materials |\n\
              | ----- | ------------------------------- | --------- |\n\
              | 0     | baseColorFactor, metallicFactor | 2         |\n\
              | 1     | baseColorFactor                 | 1         |\n"
@@ -373,7 +373,7 @@ mod tests {
             "palettes\n\
              ├ 0\n\
              │ ├ materialCount: 2\n\
-             │ ├ attributes\n\
+             │ ├ properties\n\
              │ │ ├ baseColorFactor\n\
              │ │ └ metallicFactor\n\
              │ └ objects\n\
@@ -381,7 +381,7 @@ mod tests {
              │   └ b\n\
              └ 1\n\
              \u{20}\u{20}├ materialCount: 1\n\
-             \u{20}\u{20}├ attributes\n\
+             \u{20}\u{20}├ properties\n\
              \u{20}\u{20}│ └ baseColorFactor\n\
              \u{20}\u{20}└ objects\n\
              \u{20}\u{20}\u{20}\u{20}└ b\n"
@@ -393,7 +393,7 @@ mod tests {
         let state = shared_state();
         let palettes = select_palettes(&state, &[]).unwrap();
         let fields = PaletteListFields {
-            attributes: false,
+            properties: false,
             materials: true,
             objects: true,
         };
@@ -414,11 +414,11 @@ mod tests {
     }
 
     #[test]
-    fn compact_json_records_indices_attributes_materials_and_users() {
+    fn compact_json_records_indices_properties_materials_and_users() {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::CompactJson),
-            "[{\"index\":0,\"attributes\":[\"baseColorFactor\",\"metallicFactor\"],\"materials\":2,\"used_by\":[0,1]},\
-             {\"index\":1,\"attributes\":[\"baseColorFactor\"],\"materials\":1,\"used_by\":[1]}]\n"
+            "[{\"index\":0,\"properties\":[\"baseColorFactor\",\"metallicFactor\"],\"materials\":2,\"used_by\":[0,1]},\
+             {\"index\":1,\"properties\":[\"baseColorFactor\"],\"materials\":1,\"used_by\":[1]}]\n"
         );
     }
 
@@ -441,7 +441,7 @@ mod tests {
         let output = render(&state, &palettes, all_fields(), PaletteListLayout::Markdown).unwrap();
         assert_eq!(
             output,
-            "| index | attributes      | materials | used by |\n\
+            "| index | properties      | materials | used by |\n\
              | ----- | --------------- | --------- | ------- |\n\
              | 1     | baseColorFactor | 1         | b       |\n"
         );
@@ -475,14 +475,14 @@ mod tests {
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Markdown),
-            "| index | attributes      | materials | used by |\n\
+            "| index | properties      | materials | used by |\n\
              | ----- | --------------- | --------- | ------- |\n\
              | 0     | baseColorFactor | 1         |         |\n"
         );
 
         assert_eq!(
             render_all(&state, PaletteListLayout::CompactJson),
-            "[{\"index\":0,\"attributes\":[\"baseColorFactor\"],\"materials\":1,\"used_by\":[]}]\n"
+            "[{\"index\":0,\"properties\":[\"baseColorFactor\"],\"materials\":1,\"used_by\":[]}]\n"
         );
     }
 
@@ -502,7 +502,7 @@ mod tests {
             "palettes\n\
              └ 0\n\
              \u{20}\u{20}├ materialCount: 1\n\
-             \u{20}\u{20}├ attributes\n\
+             \u{20}\u{20}├ properties\n\
              \u{20}\u{20}│ └ baseColorFactor\n\
              \u{20}\u{20}└ objects: []\n"
         );

@@ -193,7 +193,7 @@ property rename, then the new-model surfaces, then the docs sweep.
       and `hierarchy_show`; scalar properties stay unsurfaced and every
       flag, header, and JSON key keeps its `attribute` wording. The
       workspace compiles and tests green again.
-- [ ] Align the crate with the property rename: `attribute`-named files and
+- [x] Align the crate with the property rename: `attribute`-named files and
       identifiers (`attribute_names`, `attribute_ref`, `attribute_selector`,
       `attribute_binding`, `ChannelSource::Attribute`), the
       `--define-attribute` flag, and the displayed vocabulary (table

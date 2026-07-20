@@ -1,4 +1,3 @@
-mod attribute_names;
 mod dependencies_impl;
 mod hierarchy_show;
 mod info;
@@ -7,6 +6,7 @@ mod markdown_table;
 mod mesh_object;
 mod palette_list;
 mod palette_show;
+mod property_names;
 mod quote_name;
 mod resolve_objects;
 mod text_width;
@@ -22,7 +22,6 @@ mod voxelize;
 mod write_stdout;
 mod write_voxj_document;
 
-pub(crate) use attribute_names::*;
 pub use dependencies_impl::*;
 pub(crate) use hierarchy_show::*;
 pub(crate) use info::*;
@@ -31,6 +30,7 @@ pub(crate) use markdown_table::*;
 pub(crate) use mesh_object::*;
 pub(crate) use palette_list::*;
 pub(crate) use palette_show::*;
+pub(crate) use property_names::*;
 pub(crate) use quote_name::*;
 pub(crate) use resolve_objects::*;
 pub(crate) use text_width::*;

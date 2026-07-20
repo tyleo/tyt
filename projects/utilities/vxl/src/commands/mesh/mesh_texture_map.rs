@@ -14,6 +14,6 @@ pub struct MeshTextureMap {
     pub slot: Option<MaterialSlot>,
 
     /// The resolved bake: what the map writes into its image, with any custom
-    /// attribute binding already applied.
+    /// property binding already applied.
     pub bake: TextureBake,
 }

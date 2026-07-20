@@ -1,11 +1,11 @@
 mod atlas;
-mod attribute_binding;
 mod channel_packing;
 mod channel_source;
 #[allow(clippy::module_inception)]
 mod mesh;
 mod mesh_method;
 mod mesh_texture_map;
+mod property_binding;
 mod resource_storage;
 mod texture;
 mod texture_arg;
@@ -16,12 +16,12 @@ mod texture_name;
 mod texture_shape;
 
 pub use atlas::*;
-pub use attribute_binding::*;
 pub use channel_packing::*;
 pub use channel_source::*;
 pub use mesh::*;
 pub use mesh_method::*;
 pub use mesh_texture_map::*;
+pub use property_binding::*;
 pub use resource_storage::*;
 pub use texture::*;
 pub use texture_arg::*;

@@ -1,14 +1,14 @@
-use crate::{ColorComponent, Error, Result, commands::AttributeBinding};
+use crate::{ColorComponent, Error, Result, commands::PropertyBinding};
 use std::{result::Result as StdResult, str::FromStr};
 
-/// One channel's value in a material map: an attribute by name, optionally one
-/// color component of it, optionally inverted as `1-<attribute>`, the constant
+/// One channel's value in a material map: a property by name, optionally one
+/// color component of it, optionally inverted as `1-<property>`, the constant
 /// `0` or `1`, or `computed-occlusion` derived from the voxel geometry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum ChannelSource {
-    /// An attribute value by name, optionally one color `component` of it,
+    /// A property value by name, optionally one color `component` of it,
     /// inverted to `1 - value` when `invert` is set.
-    Attribute {
+    Property {
         key: String,
         component: Option<ColorComponent>,
         invert: bool,
@@ -23,12 +23,12 @@ pub enum ChannelSource {
 }
 
 impl ChannelSource {
-    /// Resolves this source's attribute key against the `--define-attribute`
+    /// Resolves this source's property key against the `--define-property`
     /// bindings and rejects `computed-occlusion` under the palette atlas. The
     /// color component is validated later, once the document loads, against the
     /// key's pool kind, since the type lives in the file, not the flags.
-    pub(crate) fn resolve(&self, bindings: &[AttributeBinding]) -> Result<ChannelSource> {
-        let ChannelSource::Attribute {
+    pub(crate) fn resolve(&self, bindings: &[PropertyBinding]) -> Result<ChannelSource> {
+        let ChannelSource::Property {
             key,
             component,
             invert,
@@ -40,7 +40,7 @@ impl ChannelSource {
             return Ok(self.clone());
         };
 
-        // A binding renames the key to a concrete voxel attribute key; a bare
+        // A binding renames the key to a concrete voxel property key; a bare
         // key resolves to itself.
         let resolved_key = match bindings
             .iter()
@@ -50,7 +50,7 @@ impl ChannelSource {
             None => key.clone(),
         };
 
-        Ok(ChannelSource::Attribute {
+        Ok(ChannelSource::Property {
             key: resolved_key,
             component: *component,
             invert: *invert,
@@ -74,8 +74,8 @@ impl FromStr for ChannelSource {
 
     /// Parses one channel expression. `0` and `1` are the constants,
     /// `computed-occlusion` the geometry-derived occlusion, a leading `1-`
-    /// inverts an attribute, and a trailing `.r`/`.g`/`.b`/`.a` reads one
-    /// color component. An attribute reference carries no whitespace.
+    /// inverts a property, and a trailing `.r`/`.g`/`.b`/`.a` reads one
+    /// color component. A property reference carries no whitespace.
     fn from_str(value: &str) -> StdResult<Self, Self::Err> {
         match value {
             "0" => return Ok(ChannelSource::Zero),
@@ -98,14 +98,14 @@ impl FromStr for ChannelSource {
             _ => (body, None),
         };
         if name.is_empty() {
-            return Err(format!("`{value}` names no attribute"));
+            return Err(format!("`{value}` names no property"));
         }
         if name.chars().any(char::is_whitespace) {
             return Err(format!(
-                "`{value}` names an attribute with whitespace; alias it with --define-attribute"
+                "`{value}` names a property with whitespace; alias it with --define-property"
             ));
         }
-        Ok(ChannelSource::Attribute {
+        Ok(ChannelSource::Property {
             key: name.to_string(),
             component,
             invert,
@@ -117,20 +117,20 @@ impl FromStr for ChannelSource {
 mod tests {
     use crate::{
         ColorComponent,
-        commands::{AttributeBinding, ChannelSource},
+        commands::{ChannelSource, PropertyBinding},
     };
     use voxsmith::{BASE_COLOR_FACTOR, METALLIC_FACTOR, ROUGHNESS_FACTOR};
 
-    fn attribute(key: &str, invert: bool) -> ChannelSource {
-        ChannelSource::Attribute {
+    fn property(key: &str, invert: bool) -> ChannelSource {
+        ChannelSource::Property {
             key: key.to_string(),
             component: None,
             invert,
         }
     }
 
-    fn attribute_with(key: &str, component: Option<ColorComponent>, invert: bool) -> ChannelSource {
-        ChannelSource::Attribute {
+    fn property_with(key: &str, component: Option<ColorComponent>, invert: bool) -> ChannelSource {
+        ChannelSource::Property {
             key: key.to_string(),
             component,
             invert,
@@ -138,7 +138,7 @@ mod tests {
     }
 
     fn component(key: &str, component: ColorComponent, invert: bool) -> ChannelSource {
-        ChannelSource::Attribute {
+        ChannelSource::Property {
             key: key.to_string(),
             component: Some(component),
             invert,
@@ -146,10 +146,10 @@ mod tests {
     }
 
     /// Two aliases, `gloss` and `tint`, so resolution has a rename to apply.
-    fn bindings() -> Vec<AttributeBinding> {
+    fn bindings() -> Vec<PropertyBinding> {
         vec![
-            AttributeBinding::new("gloss", ROUGHNESS_FACTOR).unwrap(),
-            AttributeBinding::new("tint", "tint").unwrap(),
+            PropertyBinding::new("gloss", ROUGHNESS_FACTOR).unwrap(),
+            PropertyBinding::new("tint", "tint").unwrap(),
         ]
     }
 
@@ -164,14 +164,14 @@ mod tests {
     }
 
     #[test]
-    fn parses_attribute_and_inverse() {
+    fn parses_property_and_inverse() {
         assert_eq!(
             "metallicFactor".parse::<ChannelSource>().unwrap(),
-            attribute(METALLIC_FACTOR, false)
+            property(METALLIC_FACTOR, false)
         );
         assert_eq!(
             "1-metallicFactor".parse::<ChannelSource>().unwrap(),
-            attribute(METALLIC_FACTOR, true)
+            property(METALLIC_FACTOR, true)
         );
     }
 
@@ -179,11 +179,11 @@ mod tests {
     fn parses_inverted_roughness() {
         assert_eq!(
             "roughnessFactor".parse::<ChannelSource>().unwrap(),
-            attribute(ROUGHNESS_FACTOR, false)
+            property(ROUGHNESS_FACTOR, false)
         );
         assert_eq!(
             "1-roughnessFactor".parse::<ChannelSource>().unwrap(),
-            attribute(ROUGHNESS_FACTOR, true)
+            property(ROUGHNESS_FACTOR, true)
         );
     }
 
@@ -203,12 +203,12 @@ mod tests {
     fn keeps_dotted_keys_without_a_component() {
         assert_eq!(
             "my.attr".parse::<ChannelSource>().unwrap(),
-            attribute("my.attr", false)
+            property("my.attr", false)
         );
     }
 
     #[test]
-    fn rejects_empty_attribute() {
+    fn rejects_empty_property() {
         assert!("".parse::<ChannelSource>().is_err());
         assert!("1-".parse::<ChannelSource>().is_err());
     }
@@ -219,9 +219,9 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_whitespace_attribute() {
+    fn rejects_a_whitespace_property() {
         // A voxel name with spaces is unreachable here; alias it with
-        // --define-attribute and reference the space-free alias instead.
+        // --define-property and reference the space-free alias instead.
         assert!("super emissive thing".parse::<ChannelSource>().is_err());
         assert!("1-super emissive thing".parse::<ChannelSource>().is_err());
     }
@@ -229,8 +229,8 @@ mod tests {
     #[test]
     fn a_binding_resolves_to_its_concrete_key() {
         // The alias `gloss` renames to the layer's `roughnessFactor`.
-        let resolved = attribute("gloss", true).resolve(&bindings()).unwrap();
-        assert_eq!(resolved, attribute(ROUGHNESS_FACTOR, true));
+        let resolved = property("gloss", true).resolve(&bindings()).unwrap();
+        assert_eq!(resolved, property(ROUGHNESS_FACTOR, true));
 
         // A component rides through the rename unchanged; its validity against
         // the pool kind is checked later, at the bake.
@@ -244,9 +244,9 @@ mod tests {
     fn a_binding_reaches_a_name_with_spaces() {
         // The alias is space-free and parses, then resolves to its bound voxel
         // name, spaces and all.
-        let bindings = vec![AttributeBinding::new("spark", "super emissive thing").unwrap()];
-        let resolved = attribute("spark", false).resolve(&bindings).unwrap();
-        assert_eq!(resolved, attribute("super emissive thing", false));
+        let bindings = vec![PropertyBinding::new("spark", "super emissive thing").unwrap()];
+        let resolved = property("spark", false).resolve(&bindings).unwrap();
+        assert_eq!(resolved, property("super emissive thing", false));
     }
 
     #[test]
@@ -260,7 +260,7 @@ mod tests {
                 .is_ok()
         );
         assert!(
-            attribute_with(BASE_COLOR_FACTOR, None, false)
+            property_with(BASE_COLOR_FACTOR, None, false)
                 .resolve(&bindings())
                 .is_ok()
         );

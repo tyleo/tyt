@@ -1,6 +1,6 @@
 use crate::{
     Error, Result,
-    commands::{AttributeBinding, ChannelPacking, MeshTextureMap, TextureBake},
+    commands::{ChannelPacking, MeshTextureMap, PropertyBinding, TextureBake},
     require_file_name,
 };
 
@@ -24,9 +24,9 @@ impl TextureMap {
         Ok(TextureMap { name, channels })
     }
 
-    /// Resolves this custom map against the `--define-attribute` bindings into
+    /// Resolves this custom map against the `--define-property` bindings into
     /// the map the writer bakes. A custom packing has no standard glTF slot.
-    pub fn resolve(&self, bindings: &[AttributeBinding]) -> Result<MeshTextureMap> {
+    pub fn resolve(&self, bindings: &[PropertyBinding]) -> Result<MeshTextureMap> {
         let packing = self.channels.resolve(bindings)?;
 
         Ok(MeshTextureMap {

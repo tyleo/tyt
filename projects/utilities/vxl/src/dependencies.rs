@@ -2,10 +2,10 @@ use crate::{
     Format, MeshFormat, ReportLayout, Result, SelectIndex, VoxjColorFormat, VoxjEncoding,
     VoxjFormat, Width,
     commands::{
-        AttributeSelector, CameraView, ColorFormat, EditState, FillMode, GridResolution,
-        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
-        PaletteListLayout, PaletteReduction, PaletteShowLayout, PatternView, ResourceStorage,
-        SurfaceMode, TextureShape,
+        CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyViews, MaterialMode,
+        MeshMethod, MeshTextureMap, PaletteListFields, PaletteListLayout, PaletteReduction,
+        PaletteShowLayout, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
+        TextureShape,
     },
 };
 use std::path::Path;
@@ -199,7 +199,7 @@ pub trait Dependencies {
     fn validate(&self, input: &Path, layout: ReportLayout) -> Result<()>;
 
     /// Prints a one-line-per-palette overview of the voxel file at `input`: each
-    /// palette's index, ordered attribute keys, material count, and the objects
+    /// palette's index, ordered property keys, material count, and the objects
     /// that reference it.
     ///
     /// # Arguments
@@ -224,7 +224,7 @@ pub trait Dependencies {
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.
     /// * `from` - source format, inferred from `input`'s extension when `None`.
-    /// * `selectors` - the `--attribute` selectors, each naming one or more
+    /// * `selectors` - the `--property` selectors, each naming one or more
     ///   value collections, in render order.
     /// * `layout` - how to arrange the collections, and the serialization to
     ///   emit.
@@ -233,7 +233,7 @@ pub trait Dependencies {
         &self,
         input: &Path,
         from: Option<Format>,
-        selectors: &[AttributeSelector],
+        selectors: &[PropertySelector],
         layout: PaletteShowLayout,
         width: Width,
     ) -> Result<()>;
