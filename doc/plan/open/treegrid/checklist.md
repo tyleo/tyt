@@ -16,15 +16,18 @@ items off as they land.
 - The crate lives at `projects/utilities/treegrid` with dependency
   `branded-id`, an optional `json` feature gating `serde_json`
   (`preserve_order`) with the value JSON forms and the JSON layouts,
-  and an optional `ty-math` feature gating the typed-color
-  constructors -- no clap, libc, tyt-common, or tyt-injection. No IO
+  an optional `ty-math` feature gating the typed-color
+  constructors, and one default-on feature per layout (`hierarchy`,
+  `rows`, `columns`, `tables`) gating that layout's module -- no
+  clap, libc, tyt-common, or tyt-injection. No IO
   `Dependencies` trait, no `impl` feature (pure math and pure
   serialization ride feature gates; the `TreeGridCells` cell policy
   is the one injection point).
   Publishable metadata like the sibling crates (license, repository,
   description); add to workspace `members` and `[patch.crates-io]`.
-- House style: one public type per file, private `mod` + `pub use`
-  re-exports, doc comments on public items, leaf-item imports.
+- House style: one public item per file named for it, render methods
+  on extension traits, private `mod` + `pub use` re-exports, doc
+  comments on public items, leaf-item imports.
 - Parity phases (3, 4) end with byte-identical default command output.
   Phase 2 changes flag values but keeps the default (`rows` + `concat`)
   output byte-identical; its JSON change is deliberate and called out.
@@ -91,7 +94,7 @@ items off as they land.
       including headerless root-level data, a nested two-level parent
       path (`#` then `##`), a non-default `header_level`, and the
       past-6 bold fallback.
-- [ ] **S4b. Render extension traits and per-layout features.** Owner
+- [x] **S4b. Render extension traits and per-layout features.** Owner
       restructure (2026-07-20). Each layout becomes its own module
       holding an extension trait on `TreeGrid`
       (`TreeGridRenderHierarchy`, `TreeGridRenderRows`,

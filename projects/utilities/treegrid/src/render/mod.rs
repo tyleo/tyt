@@ -1,22 +1,16 @@
-//! The layout renders and their shared machinery.
+//! Machinery shared by two or more layout renders, grouped by feature
+//! gate so each `cfg` sits once, on the module that rides it.
 
 mod cell;
-mod columns;
-// `group` re-exports nothing: consumers reach its walk through
-// `TreeGrid` methods, so a `Group` re-export would sit unused.
-mod group;
-mod heading;
-mod hierarchy;
-// Unreachable from the public API until the S5 tables render lands.
-#[allow(dead_code)]
-mod markdown_table;
-mod rows;
-mod text_width;
-mod tree_glyphs;
+#[cfg(any(feature = "columns", feature = "hierarchy", feature = "rows"))]
+mod cell_render;
+#[cfg(any(feature = "hierarchy", feature = "rows"))]
+mod cell_separator;
+#[cfg(any(feature = "columns", feature = "rows"))]
+mod label;
+mod visible_width;
 
 pub(crate) use cell::*;
-pub(crate) use heading::*;
-#[allow(unused_imports)]
-pub(crate) use markdown_table::*;
-pub(crate) use text_width::*;
-pub(crate) use tree_glyphs::*;
+#[cfg(any(feature = "columns", feature = "rows"))]
+pub(crate) use label::*;
+pub(crate) use visible_width::*;

@@ -465,3 +465,90 @@ heading over an empty group stands alone exactly as in rows.
 - **The voxsmith clippy failure from chunk 1 persists**, so
   verification again ran `cargo clippy -p treegrid --all-targets
   --all-features`; treegrid is clean.
+
+## S4b: render extension traits and per-layout features (2026-07-20)
+
+Owner restructure. Each layout moved into its own top-level module
+named for its render method (`src/render_hierarchy/`,
+`src/render_rows/`, `src/render_columns/`, `src/render_tables/`;
+owner call during review, so the render family clusters beside
+`render/` in the source listing while the features keep the bare
+layout names) holding its extension trait on `TreeGrid`
+(`TreeGridRenderHierarchy`,
+`TreeGridRenderRows`, `TreeGridRenderColumns`; `TreeGridRenderTables`
+joins at S5 and `TreeGridRenderJson` at S6), its options payload, and
+its `resolve_*` impl, each behind a default-on cargo feature named
+for the layout; `json` and `ty-math` stay non-default. `render/`
+keeps only crate-private machinery shared by two or more layouts.
+
+- **Trait impls carry the render; private helpers stay inherent.**
+  Each trait has one blanket impl for `TreeGrid<C: TreeGridCells>`,
+  and the render's private helpers (`render_subtree`, `row_block`,
+  `column_block`) sit in an inherent `impl` block in the same file,
+  so nothing private rides the trait. Tests and adopters import the
+  trait alongside the payload.
+- **No type changes shape with a feature.** The loose
+  `TreeGridOptions` and the `Kind` enums its fields reference
+  (`TreeGridLabelKind`, `TreeGridTableShapeKind`) stay ungated in the
+  crate root, as do `TreeGridLabelMode` and `TreeGridHeaderOptions`,
+  which the rows and columns payloads share. Whole items gate on
+  features; fields never do.
+- **Shared machinery gates on the union of its consumers, one gate
+  per module (owner review call).** `render/` groups by feature
+  predicate so each `cfg(any(...))` sits once, on a module, and leaf
+  files carry no cfg at all: `render/label/` (the label-mode
+  machinery: `data_paths`, `group`, `groups`, `heading`,
+  `pad_right`) rides `columns` / `rows`, and the two gated `Cell`
+  capabilities are impl-only files (`cell_render.rs` on `columns` /
+  `hierarchy` / `rows`, `cell_separator.rs` on `hierarchy` / `rows`),
+  leaving `cell.rs` (the struct and `Cell::text`) and
+  `visible_width.rs` ungated under `render`'s own gate.
+  Single-consumer machinery lives in its consumer instead (owner
+  call, the tree-glyphs reading): `markdown_table` / `markdown_cell`
+  sit in `render_tables/` under its feature, carrying the S5
+  dead-code allows, and the visual-padding test builds its `Cell`
+  directly so no `render_tables` test reaches the `cell_render`
+  gate.
+  `render/mod.rs` still flattens, so call sites keep the `render::`
+  prefix, and `Cell::bare_visual` widened to `pub(crate)` for the
+  sibling impl files. Every feature combination builds and documents
+  warning-free (checked over the empty set, each single feature, and
+  json pairings). S5 widens the unions when the tables render
+  arrives (`tables` joins `cell_render` and `label`, and the
+  markdown allows drop). `cell_separator`'s union is `hierarchy` /
+  `rows` permanently: the columns layout never consults the strip
+  rule, and tables put one cell per table cell (S15 revisits it if
+  records join multi-valued cells). The `TreeGridOptions` helpers
+  (`no_*`, `text_label`, `level`) keep per-method cfg unions: they
+  cross the `json` feature, which no module grouping aligns with.
+- **One pub item per file now covers crate-private machinery.**
+  `text_width.rs` split into `visible_width.rs` / `pad_right.rs`,
+  vxl's `md_cell` moved out of `markdown_table.rs` and renamed
+  `markdown_cell` (owner call: the crate spells `markdown` out
+  consistently, where vxl mixed the two), and the walk methods
+  moved out of `group.rs` into `data_paths.rs` / `groups.rs`;
+  `group.rs` keeps the `Group` struct, whose re-export gains its
+  first named consumer (`groups.rs` imports `render::Group`),
+  retiring the S4 no-re-export note. A method-named impl-only file
+  takes its type as a prefix when the bare method name would stutter
+  or collide (`cell_render.rs`, not `render/render.rs`). The tree
+  glyphs folded into the hierarchy render as private consts and
+  `tree_glyphs.rs` is gone.
+- **Impl-only file naming.** A file adding a single method to another
+  file's type is named for the method (`resolve_rows.rs`;
+  `json/resolve_json.rs`, renamed from `json/tree_grid_options.rs`);
+  a constructor-family file keeps the extended type's name (`color/`
+  unchanged). CLAUDE.md's one-pub-per-file rule was amended to say
+  both halves, plus the extension-trait rule.
+- **Cross-feature doc references are plain code spans.** A core
+  type's rustdoc cannot intra-doc-link a feature-gated type without
+  breaking `deny(rustdoc::broken_intra_doc_links)` in feature-off
+  builds, so the `Kind` enums now name `TreeGridTableLabelMode` /
+  `TreeGridTableShape` in backticks without links; `cargo doc` runs
+  clean across the same feature matrix.
+
+The plan README (crate section and type roster), checklist ground
+rules, the continue prompt, the rendering spec (model bullet and
+per-layout render lines), and the crate README were amended in the
+same change. The voxsmith workspace breakage persists, so
+verification stayed scoped to `-p treegrid`.

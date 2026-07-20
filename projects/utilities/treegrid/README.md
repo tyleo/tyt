@@ -88,8 +88,11 @@ let tree = grid.render_hierarchy(&TreeGridHierarchyOptions::default());
 └ position: [12.5, 0.5, 10.0]
 ```
 
-The `json-pretty` / `json-compact` layouts ride the optional `json`
-feature, which pulls in `serde_json`; `TreeGridJsonValue` pairs a
+Each layout rides its own default-on cargo feature (`hierarchy`,
+`rows`, `columns`, `tables`), its render method arriving on a small
+extension trait, so an adopter that renders only one layout can trim
+the rest. The `json-pretty` / `json-compact` layouts ride the optional
+`json` feature, which pulls in `serde_json`; `TreeGridJsonValue` pairs a
 value with a native JSON form when its text and JSON diverge:
 
 ```rust

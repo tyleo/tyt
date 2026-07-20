@@ -1,8 +1,14 @@
-use crate::{
-    TreeGridColumnsOptions, TreeGridError, TreeGridHeaderOptions, TreeGridHierarchyOptions,
-    TreeGridLabelKind, TreeGridLabelMode, TreeGridNestedTableOptions, TreeGridRowsOptions,
-    TreeGridTableLabelMode, TreeGridTableShape, TreeGridTableShapeKind,
-};
+#[cfg(any(
+    feature = "columns",
+    feature = "hierarchy",
+    feature = "json",
+    feature = "rows",
+    feature = "tables"
+))]
+use crate::TreeGridError;
+#[cfg(any(feature = "columns", feature = "rows"))]
+use crate::{TreeGridHeaderOptions, TreeGridLabelMode};
+use crate::{TreeGridLabelKind, TreeGridTableShapeKind};
 use std::num::NonZeroU8;
 
 /// Loose render options: every option as its own independent field.
@@ -72,71 +78,10 @@ impl TreeGridOptions {
         self
     }
 
-    /// The hierarchy render's options, rejecting every option it does
-    /// not consume.
-    pub fn resolve_hierarchy(&self) -> Result<TreeGridHierarchyOptions, TreeGridError> {
-        self.no_label()?;
-        self.no_width()?;
-        self.no_header_level()?;
-        self.no_table_shape()?;
-        Ok(TreeGridHierarchyOptions {
-            bare_roots: self.bare_roots,
-            value_children: self.value_children,
-        })
-    }
-
-    /// The rows render's options, rejecting every option it does not
-    /// consume.
-    pub fn resolve_rows(&self) -> Result<TreeGridRowsOptions, TreeGridError> {
-        self.no_hierarchy_options()?;
-        self.no_table_shape()?;
-        Ok(TreeGridRowsOptions {
-            label: self.text_label()?,
-            width: self.width,
-        })
-    }
-
-    /// The columns render's options, rejecting every option it does
-    /// not consume.
-    pub fn resolve_columns(&self) -> Result<TreeGridColumnsOptions, TreeGridError> {
-        self.no_hierarchy_options()?;
-        self.no_width()?;
-        self.no_table_shape()?;
-        Ok(TreeGridColumnsOptions {
-            label: self.text_label()?,
-        })
-    }
-
-    /// The tables render's shape, rejecting every option it does not
-    /// consume.
-    pub fn resolve_tables(&self) -> Result<TreeGridTableShape, TreeGridError> {
-        self.no_hierarchy_options()?;
-        self.no_width()?;
-        let label = match self.label.unwrap_or(TreeGridLabelKind::Concat) {
-            TreeGridLabelKind::None => return Err(TreeGridError::LabelNoneWithTables),
-            TreeGridLabelKind::Concat => TreeGridTableLabelMode::Concat,
-            TreeGridLabelKind::Header => TreeGridTableLabelMode::Header,
-        };
-        match self.table_shape.unwrap_or(TreeGridTableShapeKind::Nested) {
-            TreeGridTableShapeKind::Nested => {
-                Ok(TreeGridTableShape::Nested(TreeGridNestedTableOptions {
-                    label,
-                    level: self.level(),
-                }))
-            }
-            TreeGridTableShapeKind::Flat => {
-                if label == TreeGridTableLabelMode::Header {
-                    return Err(TreeGridError::HeaderLabelWithFlatTables);
-                }
-                self.no_header_level()?;
-                Ok(TreeGridTableShape::Flat)
-            }
-        }
-    }
-
     /// The rows / columns label mode, with the header level folded
     /// into `header` labels.
-    fn text_label(&self) -> Result<TreeGridLabelMode, TreeGridError> {
+    #[cfg(any(feature = "columns", feature = "rows"))]
+    pub(crate) fn text_label(&self) -> Result<TreeGridLabelMode, TreeGridError> {
         match self.label.unwrap_or(TreeGridLabelKind::Concat) {
             TreeGridLabelKind::None => {
                 self.no_header_level()?;
@@ -152,10 +97,12 @@ impl TreeGridOptions {
         }
     }
 
-    fn level(&self) -> NonZeroU8 {
+    #[cfg(any(feature = "columns", feature = "rows", feature = "tables"))]
+    pub(crate) fn level(&self) -> NonZeroU8 {
         self.header_level.unwrap_or(NonZeroU8::MIN)
     }
 
+    #[cfg(any(feature = "hierarchy", feature = "json"))]
     pub(crate) fn no_label(&self) -> Result<(), TreeGridError> {
         if self.label.is_some() {
             return Err(TreeGridError::LabelModeWithoutLabels);
@@ -163,6 +110,12 @@ impl TreeGridOptions {
         Ok(())
     }
 
+    #[cfg(any(
+        feature = "columns",
+        feature = "hierarchy",
+        feature = "json",
+        feature = "tables"
+    ))]
     pub(crate) fn no_width(&self) -> Result<(), TreeGridError> {
         if self.width.is_some() {
             return Err(TreeGridError::WidthWithoutRows);
@@ -170,6 +123,13 @@ impl TreeGridOptions {
         Ok(())
     }
 
+    #[cfg(any(
+        feature = "columns",
+        feature = "hierarchy",
+        feature = "json",
+        feature = "rows",
+        feature = "tables"
+    ))]
     pub(crate) fn no_header_level(&self) -> Result<(), TreeGridError> {
         if self.header_level.is_some() {
             return Err(TreeGridError::HeaderLevelWithoutHeaders);
@@ -177,6 +137,12 @@ impl TreeGridOptions {
         Ok(())
     }
 
+    #[cfg(any(
+        feature = "columns",
+        feature = "hierarchy",
+        feature = "json",
+        feature = "rows"
+    ))]
     pub(crate) fn no_table_shape(&self) -> Result<(), TreeGridError> {
         if self.table_shape.is_some() {
             return Err(TreeGridError::TableShapeWithoutTables);
@@ -184,6 +150,12 @@ impl TreeGridOptions {
         Ok(())
     }
 
+    #[cfg(any(
+        feature = "columns",
+        feature = "json",
+        feature = "rows",
+        feature = "tables"
+    ))]
     pub(crate) fn no_hierarchy_options(&self) -> Result<(), TreeGridError> {
         if self.bare_roots {
             return Err(TreeGridError::BareRootsWithoutHierarchy);
@@ -197,11 +169,7 @@ impl TreeGridOptions {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        TreeGridColumnsOptions, TreeGridError, TreeGridHeaderOptions, TreeGridHierarchyOptions,
-        TreeGridLabelKind, TreeGridLabelMode, TreeGridNestedTableOptions, TreeGridOptions,
-        TreeGridRowsOptions, TreeGridTableLabelMode, TreeGridTableShape, TreeGridTableShapeKind,
-    };
+    use crate::{TreeGridLabelKind, TreeGridOptions, TreeGridTableShapeKind};
     use std::num::NonZeroU8;
 
     #[test]
@@ -224,156 +192,6 @@ mod tests {
                 value_children: true,
                 table_shape: Some(TreeGridTableShapeKind::Flat),
             }
-        );
-    }
-
-    #[test]
-    fn default_options_resolve_to_concat_rows() {
-        assert_eq!(
-            TreeGridOptions::default().resolve_rows(),
-            Ok(TreeGridRowsOptions::default())
-        );
-    }
-
-    #[test]
-    fn hierarchy_options_resolve_into_the_hierarchy_payload() {
-        let options = TreeGridOptions::default()
-            .with_bare_roots(true)
-            .with_value_children(true);
-
-        assert_eq!(
-            options.resolve_hierarchy(),
-            Ok(TreeGridHierarchyOptions::default()
-                .with_bare_roots(true)
-                .with_value_children(true))
-        );
-    }
-
-    #[test]
-    fn a_header_label_carries_the_level() {
-        let options = TreeGridOptions::default()
-            .with_label(TreeGridLabelKind::Header)
-            .with_header_level(NonZeroU8::new(3).unwrap())
-            .with_width(72);
-
-        assert_eq!(
-            options.resolve_rows(),
-            Ok(TreeGridRowsOptions::default()
-                .with_label(TreeGridLabelMode::Header(
-                    TreeGridHeaderOptions::default().with_level(NonZeroU8::new(3).unwrap())
-                ))
-                .with_width(72))
-        );
-    }
-
-    #[test]
-    fn an_unset_level_defaults_to_one() {
-        let options = TreeGridOptions::default().with_label(TreeGridLabelKind::Header);
-
-        assert_eq!(
-            options.resolve_columns(),
-            Ok(TreeGridColumnsOptions::default()
-                .with_label(TreeGridLabelMode::Header(TreeGridHeaderOptions::default())))
-        );
-    }
-
-    #[test]
-    fn tables_resolve_nested_with_header_labels_and_level() {
-        let options = TreeGridOptions::default()
-            .with_label(TreeGridLabelKind::Header)
-            .with_header_level(NonZeroU8::new(2).unwrap());
-
-        assert_eq!(
-            options.resolve_tables(),
-            Ok(TreeGridTableShape::Nested(
-                TreeGridNestedTableOptions::default()
-                    .with_label(TreeGridTableLabelMode::Header)
-                    .with_level(NonZeroU8::new(2).unwrap())
-            ))
-        );
-    }
-
-    #[test]
-    fn flat_tables_resolve_with_concat_labels() {
-        let options = TreeGridOptions::default().with_table_shape(TreeGridTableShapeKind::Flat);
-
-        assert_eq!(options.resolve_tables(), Ok(TreeGridTableShape::Flat));
-    }
-
-    #[test]
-    fn a_label_off_the_text_renders_is_rejected() {
-        let options = TreeGridOptions::default().with_label(TreeGridLabelKind::Concat);
-
-        assert_eq!(
-            options.resolve_hierarchy(),
-            Err(TreeGridError::LabelModeWithoutLabels)
-        );
-    }
-
-    #[test]
-    fn none_labels_with_tables_are_rejected() {
-        let options = TreeGridOptions::default().with_label(TreeGridLabelKind::None);
-
-        assert_eq!(
-            options.resolve_tables(),
-            Err(TreeGridError::LabelNoneWithTables)
-        );
-    }
-
-    #[test]
-    fn header_labels_with_flat_tables_are_rejected() {
-        let options = TreeGridOptions::default()
-            .with_label(TreeGridLabelKind::Header)
-            .with_table_shape(TreeGridTableShapeKind::Flat);
-
-        assert_eq!(
-            options.resolve_tables(),
-            Err(TreeGridError::HeaderLabelWithFlatTables)
-        );
-    }
-
-    #[test]
-    fn a_level_without_headings_is_rejected() {
-        let options = TreeGridOptions::default().with_header_level(NonZeroU8::new(2).unwrap());
-
-        assert_eq!(
-            options.resolve_rows(),
-            Err(TreeGridError::HeaderLevelWithoutHeaders)
-        );
-    }
-
-    #[test]
-    fn a_width_off_rows_is_rejected() {
-        let options = TreeGridOptions::default().with_width(80);
-
-        assert_eq!(
-            options.resolve_columns(),
-            Err(TreeGridError::WidthWithoutRows)
-        );
-    }
-
-    #[test]
-    fn a_table_shape_off_tables_is_rejected() {
-        let options = TreeGridOptions::default().with_table_shape(TreeGridTableShapeKind::Nested);
-
-        assert_eq!(
-            options.resolve_rows(),
-            Err(TreeGridError::TableShapeWithoutTables)
-        );
-    }
-
-    #[test]
-    fn hierarchy_options_off_hierarchy_are_rejected() {
-        let bare = TreeGridOptions::default().with_bare_roots(true);
-        let children = TreeGridOptions::default().with_value_children(true);
-
-        assert_eq!(
-            bare.resolve_rows(),
-            Err(TreeGridError::BareRootsWithoutHierarchy)
-        );
-        assert_eq!(
-            children.resolve_columns(),
-            Err(TreeGridError::ValueChildrenWithoutHierarchy)
         );
     }
 }

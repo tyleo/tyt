@@ -83,7 +83,12 @@ Dependencies: `branded-id`, plus two optional features: `json` gates
 `serde_json` (with `preserve_order`), the value JSON forms, and the
 JSON layouts (JSON-rendering adopters enable it), and `ty-math` gates
 the typed-color value constructors (vxl enables it at no cost; it
-already depends on ty-math). No clap, no libc, no tyt-common. No IO
+already depends on ty-math). Each layout also rides its own
+default-on feature (`hierarchy`, `rows`, `columns`, `tables`) whose
+module holds that layout's render extension trait
+(`TreeGridRenderHierarchy` and kin), its options payload, and its
+`resolve_*` impl, so an adopter can trim to the layouts it renders
+(S4b, 2026-07-20). No clap, no libc, no tyt-common. No IO
 `Dependencies` trait and no `impl` feature: the optional capabilities
 are pure math and pure serialization, so they ride feature gates; the
 one injection point is the pure `TreeGridCells` cell policy. Public
@@ -94,7 +99,10 @@ follow house style: one per file, `TreeGrid` prefix (`TreeGrid`,
 `TreeGridJsonValueCells` pairing,
 `TreeGridNode`, `TreeGridLabel`, `TreeGridValue`, `TreeGridSwatch`,
 `TreeGridVisual`,
-`TreeGridCellFormat`, the per-layout option payloads
+`TreeGridCellFormat`, the render extension traits
+(`TreeGridRenderHierarchy`, `TreeGridRenderRows`,
+`TreeGridRenderColumns`, with `TreeGridRenderTables` at S5 and
+`TreeGridRenderJson` at S6), the per-layout option payloads
 (`TreeGridHierarchyOptions`, `TreeGridRowsOptions`, and kin),
 `TreeGridLabelMode`, `TreeGridTableShape`, the loose
 `TreeGridOptions` with its `*Kind` enums, `TreeGridError`,

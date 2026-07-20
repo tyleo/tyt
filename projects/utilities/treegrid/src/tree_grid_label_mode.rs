@@ -3,9 +3,9 @@ use crate::TreeGridHeaderOptions;
 /// How the `rows` and `columns` layouts spend the ancestor path.
 ///
 /// Lives on those layouts' option payloads; tables carry the
-/// two-variant [`TreeGridTableLabelMode`](crate::TreeGridTableLabelMode)
-/// instead, and the `hierarchy` and JSON layouts carry labels
-/// structurally with no mode at all.
+/// two-variant tables-feature `TreeGridTableLabelMode` instead, and
+/// the `hierarchy` and JSON layouts carry labels structurally with no
+/// mode at all.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum TreeGridLabelMode {
     /// No labels anywhere.

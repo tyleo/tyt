@@ -4,7 +4,8 @@ use crate::{
 };
 use branded_id::U32Id;
 
-impl<C: TreeGridCells> TreeGrid<C> {
+/// The `columns` render.
+pub trait TreeGridRenderColumns {
     /// Renders the `columns` layout: one padded column of cells per
     /// data node, in pre-order, values reading straight down.
     ///
@@ -16,7 +17,11 @@ impl<C: TreeGridCells> TreeGrid<C> {
     /// 2. `concat` (default): the full dot-joined path.
     /// 3. `header`: the leaf segment, grouped into one column block
     ///    per branch under nested markdown headings.
-    pub fn render_columns(&self, options: &TreeGridColumnsOptions) -> String {
+    fn render_columns(&self, options: &TreeGridColumnsOptions) -> String;
+}
+
+impl<C: TreeGridCells> TreeGridRenderColumns for TreeGrid<C> {
+    fn render_columns(&self, options: &TreeGridColumnsOptions) -> String {
         let mut blocks: Vec<String> = Vec::new();
         match options.label {
             TreeGridLabelMode::None => {
@@ -53,7 +58,9 @@ impl<C: TreeGridCells> TreeGrid<C> {
             format!("{}\n", blocks.join("\n\n"))
         }
     }
+}
 
+impl<C: TreeGridCells> TreeGrid<C> {
     /// One block of columns: an optional label line, then one line
     /// per value index; `None` when there are no columns.
     fn column_block(
@@ -119,7 +126,7 @@ fn join_padded<'a>(values: impl Iterator<Item = &'a str>, widths: &[usize]) -> S
 mod tests {
     use crate::{
         TreeGrid, TreeGridCellFormat, TreeGridColumnsOptions, TreeGridHeaderOptions, TreeGridLabel,
-        TreeGridLabelMode, TreeGridValue,
+        TreeGridLabelMode, TreeGridRenderColumns, TreeGridValue,
     };
 
     /// The rendering spec's worked example.

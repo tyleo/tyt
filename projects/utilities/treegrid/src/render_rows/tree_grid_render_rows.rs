@@ -4,7 +4,8 @@ use crate::{
 };
 use branded_id::U32Id;
 
-impl<C: TreeGridCells> TreeGrid<C> {
+/// The `rows` render.
+pub trait TreeGridRenderRows {
     /// Renders the `rows` layout: one labeled row of cells per data
     /// node, in pre-order, with a blank line between rows.
     ///
@@ -16,7 +17,11 @@ impl<C: TreeGridCells> TreeGrid<C> {
     /// 2. `concat` (default): the full dot-joined path.
     /// 3. `header`: the leaf segment, grouped under nested markdown
     ///    headings and padded per group.
-    pub fn render_rows(&self, options: &TreeGridRowsOptions) -> String {
+    fn render_rows(&self, options: &TreeGridRowsOptions) -> String;
+}
+
+impl<C: TreeGridCells> TreeGridRenderRows for TreeGrid<C> {
+    fn render_rows(&self, options: &TreeGridRowsOptions) -> String {
         let mut blocks: Vec<String> = Vec::new();
         match options.label {
             TreeGridLabelMode::None => {
@@ -58,7 +63,9 @@ impl<C: TreeGridCells> TreeGrid<C> {
             format!("{}\n", blocks.join("\n\n"))
         }
     }
+}
 
+impl<C: TreeGridCells> TreeGrid<C> {
     /// One node's row block: padded label, cells, indented
     /// continuation lines.
     fn row_block(
@@ -134,7 +141,7 @@ fn wrap_cells(cells: &[Cell], separator: &str, budget: usize) -> Vec<String> {
 mod tests {
     use crate::{
         TreeGrid, TreeGridCellFormat, TreeGridHeaderOptions, TreeGridLabel, TreeGridLabelMode,
-        TreeGridRowsOptions, TreeGridValue,
+        TreeGridRenderRows, TreeGridRowsOptions, TreeGridValue,
     };
     use std::num::NonZeroU8;
 

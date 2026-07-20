@@ -50,6 +50,14 @@ amended; after adoption, this spec is the single source of truth.
 - A **data node** is a node with at least one value. Data nodes enumerate
   in pre-order in every layout, so all layouts agree on order. A node may
   have both values and children.
+- Each layout lives in its own module, named for its render method
+  (`render_hierarchy` and kin), behind a default-on cargo feature
+  named for the layout (`hierarchy`, `rows`, `columns`, `tables`;
+  `json` and `ty-math` stay non-default): the layout's render method
+  rides an extension trait on `TreeGrid` (`TreeGridRenderHierarchy`
+  and kin), beside its options payload and its `resolve_*` impl, so
+  an adopter can trim to the layouts it renders and no type changes
+  shape with a feature.
 
 ## Cells
 
@@ -75,8 +83,8 @@ when set, else the policy's -- and builds the cell from the value's
   color-swatched values decorate, gray component swatches and
   swatchless values print text alone.
 - All alignment measures **visible width**: a visual declares its
-  width; text measures characters outside ANSI CSI sequences
-  (`text_width::visible_width` moves into the crate).
+  width; text measures characters outside ANSI CSI sequences (vxl's
+  `visible_width`, ported into the crate's render machinery).
 
 ## Value constructors
 
@@ -177,9 +185,10 @@ Behind the `ty-math` feature, over the component-generic color family
 
 ### hierarchy
 
-- Rendered by `render_hierarchy(&TreeGridHierarchyOptions)`.
+- Rendered by `render_hierarchy(&TreeGridHierarchyOptions)`, on the
+  `TreeGridRenderHierarchy` trait behind the `hierarchy` feature.
 - Glyphs: connector `├` / `└` before a child, extension `│ ` / `  ` under
-  a non-last / last child (today's `tree_glyphs`).
+  a non-last / last child.
 - `TreeGridHierarchyOptions::bare_roots` (the other `resolve_*`
   methods reject it as `TreeGridError::BareRootsWithoutHierarchy`):
   - `false` (default): roots take connectors like any child, siblings of
@@ -230,7 +239,8 @@ and from vmax `hierarchy` (connectored roots, annotation form):
 
 Today's `palette show --layout row`:
 
-- Rendered by `render_rows(&TreeGridRowsOptions)`.
+- Rendered by `render_rows(&TreeGridRowsOptions)`, on the
+  `TreeGridRenderRows` trait behind the `rows` feature.
 - One row per data node: `{label} {cells}`.
 - Labels pad to the longest label so every row's first cell aligns; cells
   themselves are never padded. `--label none` drops the label column and
@@ -250,7 +260,8 @@ Today's `palette show --layout row`:
 
 Today's `palette show --layout column`:
 
-- Rendered by `render_columns(&TreeGridColumnsOptions)`.
+- Rendered by `render_columns(&TreeGridColumnsOptions)`, on the
+  `TreeGridRenderColumns` trait behind the `columns` feature.
 - One column per data node, cells padded to the column's max visible
   width (the label widens its column too, unless `none`), columns joined
   with one space, lines right-trimmed.
@@ -259,7 +270,8 @@ Today's `palette show --layout column`:
 
 ### tables
 
-Rendered by `render_tables(&TreeGridTableShape)`.
+Rendered by `render_tables(&TreeGridTableShape)`, on the
+`TreeGridRenderTables` trait (S5) behind the `tables` feature.
 `TreeGridTableShape` picks the shape:
 `Nested(TreeGridNestedTableOptions)`, carrying the heading label mode
 and level, or `Flat`. `resolve_tables` maps the loose
@@ -289,16 +301,16 @@ the other `resolve_*` methods reject a set shape as
   the real adopters.
 - `markdown_table` rules: every column pads to its widest cell, minimum
   width 3 so the dash separator stays valid markdown; cell text escapes
-  pipes and flattens newlines (`md_cell`); width is visible width, so
-  swatch cells align.
+  pipes and flattens newlines (`markdown_cell`); width is visible
+  width, so swatch cells align.
 - `none` label mode is an error (see Labels).
 
 ### json-pretty / json-compact
 
 - Behind the non-default `json` feature; without it these renders do
   not exist. Rendered by `render_json_pretty()` /
-  `render_json_compact()` after a `resolve_json()` check that no
-  option is set.
+  `render_json_compact()`, on the `TreeGridRenderJson` trait (S6),
+  after a `resolve_json()` check that no option is set.
 - The envelope: a JSON array of root records, where a record is
 
   ```json

@@ -25,11 +25,6 @@ pub(crate) fn markdown_table(headers: &[Cell], rows: &[Vec<Cell>]) -> String {
     output
 }
 
-/// `text` safe for one table cell: pipes escaped, newlines flattened to spaces.
-pub(crate) fn md_cell(text: &str) -> String {
-    text.replace('|', "\\|").replace(['\n', '\r'], " ")
-}
-
 /// One `| ... | ... |` row, each column padded to its width by the cell's
 /// declared visible width, a missing trailing column left blank.
 fn table_row(cells: &[Cell], widths: &[usize]) -> String {
@@ -49,10 +44,7 @@ fn table_row(cells: &[Cell], widths: &[usize]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        TreeGridCellFormat, TreeGridSwatch, TreeGridValue, TreeGridValueCells,
-        render::{self, Cell},
-    };
+    use crate::{render::Cell, render_tables};
 
     #[test]
     fn aligns_columns_to_the_widest_cell() {
@@ -63,7 +55,7 @@ mod tests {
         ];
 
         assert_eq!(
-            render::markdown_table(&headers, &rows),
+            render_tables::markdown_table(&headers, &rows),
             "| #   | name        |\n\
              | --- | ----------- |\n\
              | 0   | energy-tank |\n\
@@ -77,7 +69,7 @@ mod tests {
         let rows = [vec![Cell::text("0"), Cell::text("x")]];
 
         assert_eq!(
-            render::markdown_table(&headers, &rows),
+            render_tables::markdown_table(&headers, &rows),
             "| #   | a   | b   |\n\
              | --- | --- | --- |\n\
              | 0   | x   |     |\n"
@@ -86,28 +78,17 @@ mod tests {
 
     #[test]
     fn a_visual_cell_pads_by_its_declared_width() {
-        let value = TreeGridValue::new("#FF0000FF").with_swatch(TreeGridSwatch::Color([255, 0, 0]));
-        let cell = Cell::render(
-            &TreeGridValueCells,
-            Some(TreeGridCellFormat::Visual),
-            &value,
-        );
+        let cell = Cell {
+            rendered: "\x1b[48;2;255;0;0m  \x1b[0m".to_owned(),
+            width: 2,
+            bare_visual: true,
+        };
 
         assert_eq!(
-            render::markdown_table(&[Cell::text("color")], &[vec![cell]]),
+            render_tables::markdown_table(&[Cell::text("color")], &[vec![cell]]),
             "| color |\n\
              | ----- |\n\
              | \x1b[48;2;255;0;0m  \x1b[0m    |\n"
         );
-    }
-
-    #[test]
-    fn md_cell_escapes_pipes() {
-        assert_eq!(render::md_cell("a|b"), "a\\|b");
-    }
-
-    #[test]
-    fn md_cell_flattens_newlines() {
-        assert_eq!(render::md_cell("a\nb\rc"), "a b c");
     }
 }

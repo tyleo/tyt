@@ -1,10 +1,22 @@
-use crate::{
-    BTreeGridNode, TreeGrid, TreeGridCells, TreeGridHierarchyOptions,
-    render::{CONNECTOR_LAST, CONNECTOR_MID, Cell, EXTENSION_LAST, EXTENSION_MID},
-};
+use crate::{BTreeGridNode, TreeGrid, TreeGridCells, TreeGridHierarchyOptions, render::Cell};
 use branded_id::U32Id;
 
-impl<C: TreeGridCells> TreeGrid<C> {
+/// Box drawings up and right: the connector before a last child.
+const CONNECTOR_LAST: char = '\u{2514}';
+
+/// Box drawings vertical and right: the connector before a non-last
+/// child.
+const CONNECTOR_MID: char = '\u{251C}';
+
+/// The prefix extension under a last child: two spaces.
+const EXTENSION_LAST: &str = "  ";
+
+/// The prefix extension under a non-last child: box drawings vertical,
+/// a space.
+const EXTENSION_MID: &str = "\u{2502} ";
+
+/// The `hierarchy` render.
+pub trait TreeGridRenderHierarchy {
     /// Renders the `hierarchy` layout: a box-glyph tree with one line
     /// per node.
     ///
@@ -19,7 +31,11 @@ impl<C: TreeGridCells> TreeGrid<C> {
     /// sections separate with one blank line; unset, roots take
     /// connectors as siblings of one another. Every line ends with a
     /// newline; an empty grid renders as the empty string.
-    pub fn render_hierarchy(&self, options: &TreeGridHierarchyOptions) -> String {
+    fn render_hierarchy(&self, options: &TreeGridHierarchyOptions) -> String;
+}
+
+impl<C: TreeGridCells> TreeGridRenderHierarchy for TreeGrid<C> {
+    fn render_hierarchy(&self, options: &TreeGridHierarchyOptions) -> String {
         let mut output = String::new();
         if options.bare_roots {
             for (index, &root) in self.roots().iter().enumerate() {
@@ -38,7 +54,9 @@ impl<C: TreeGridCells> TreeGrid<C> {
         }
         output
     }
+}
 
+impl<C: TreeGridCells> TreeGrid<C> {
     /// Appends `id`'s connector line and everything beneath it, under
     /// `prefix`.
     fn render_subtree(
@@ -118,7 +136,8 @@ impl<C: TreeGridCells> TreeGrid<C> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        TreeGrid, TreeGridCellFormat, TreeGridHierarchyOptions, TreeGridLabel, TreeGridValue,
+        TreeGrid, TreeGridCellFormat, TreeGridHierarchyOptions, TreeGridLabel,
+        TreeGridRenderHierarchy, TreeGridValue,
     };
 
     #[test]

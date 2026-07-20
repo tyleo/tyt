@@ -53,14 +53,17 @@ no checklist item is checked yet, the first session starts at S1.
 ## Do the work
 
 - Follow `CLAUDE.md`: Rust edition 2024, consolidated nested `use`
-  statements, one public type per file named in snake_case for the
-  type, private `mod` declarations with `pub use` re-exports, doc
+  statements, one public item per file named in snake_case for it
+  (render methods ride extension traits), private `mod` declarations
+  with `pub use` re-exports, doc
   comments on public items, comments wrapped to 80 columns, and only
   ASCII in comments and docs (no em dashes or ellipses).
 - The crate's dependency is `branded-id`, plus two optional features:
   `json` gating `serde_json` (`preserve_order`) with the value JSON
   forms and the JSON layouts, and `ty-math` gating the typed-color
-  constructors. No clap, libc, tyt-common, or
+  constructors; each layout rides its own default-on feature
+  (`hierarchy`, `rows`, `columns`, `tables`) gating that layout's
+  module. No clap, libc, tyt-common, or
   tyt-injection; no IO `Dependencies` trait and no `impl` feature
   (the `TreeGridCells` cell policy is the one injection point).
   Publishable metadata like the sibling utilities crates; add it to

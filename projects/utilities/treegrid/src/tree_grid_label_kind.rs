@@ -1,8 +1,8 @@
 /// How the text layouts spend the ancestor path.
 ///
 /// The loose counterpart of
-/// [`TreeGridLabelMode`](crate::TreeGridLabelMode) and
-/// [`TreeGridTableLabelMode`](crate::TreeGridTableLabelMode).
+/// [`TreeGridLabelMode`](crate::TreeGridLabelMode) and the
+/// tables-feature `TreeGridTableLabelMode`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TreeGridLabelKind {
     /// No labels anywhere.

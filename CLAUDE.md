@@ -20,13 +20,14 @@ cargo check
 - Import types/traits/enums as leaf items, with aliases to avoid collisions (e.g., `Error as IOError`, `Result as StdResult`, `Error as StdError`)
 - Import modules for free functions and keep the module prefix in calls (e.g., `use std::{env, fs, io, process};` then `fs::read()`, `env::temp_dir()`, `io::stdout()`, `process::exit(1)`)
 - Prefer `#[derive(Default)]` over manual `impl Default` when all field defaults match the type's inherent default
-- One public struct/trait/enum per file, file named to match the type in snake_case
+- One public item per file (struct, trait, enum, or function), file named to match the item in snake_case; capability methods on a type from another file ride an extension trait, one trait per file
+- Impl-only files: a file adding a single method to another file's type is named for the method (e.g., `resolve_json.rs`); a constructor-family file keeps the extended type's name
 - Doc comments (`///`) on all public items
 - `#[arg]` attributes always start with `value_name` (e.g., `#[arg(value_name = "input-fbx")]`, `#[arg(value_name = "max-iterations", long)]`)
 
 ## Module structure
 
-- One public struct/trait/enum per file — the file is a private `mod` in its parent `mod.rs` or `lib.rs`
+- One public item per file — the file is a private `mod` in its parent `mod.rs` or `lib.rs`
 - `mod.rs` / `lib.rs` files have two sections: private `mod` declarations, then `pub use module_name::*;` re-exports to flatten the public API
 - Crate-internal items use `pub(crate) use module_name::*;`
 - Subdirectories that consumers navigate are declared `pub mod` (e.g., `pub mod commands;`)
