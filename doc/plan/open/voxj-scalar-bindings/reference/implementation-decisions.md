@@ -99,6 +99,51 @@ moved to one shared internal constant. Both stay crate-internal; the public
 API still speaks plain material counts, and phase 6 can promote the type if
 the voxsmith seam wants it.
 
+## voxcore lands in three commits
+
+2026-07-19, phase 5 refinement. Commit 1 renames the palette surface to the
+spec's property vocabulary with no behavior change. Commit 2 adds
+scalar-property storage, the state maintenance that keeps it consistent
+(gc, prune, reorder, relabel), and the new validate rules. Commit 3 derives
+layer sampledness from palette material counts and scopes the live-voxel
+sample checks to sampled layers. Each compiles and tests green in voxcore
+alone; voxsmith and vxl stay red until phase 6, as the plan expects.
+
+## voxcore property naming follows the wire
+
+2026-07-19, phase 5 commit 1. The naming question the owner's 2026-07-15
+surface left open settles on the property vocabulary: `VoxArrayProperty`
+(brand `BVoxArrayProperty`) replaces `VoxPaletteBinding`, its key field is
+`name`, and the palette storage and maps are `array_property_ids` /
+`array_properties` / `array_property_by_name`, with the scalar side to
+mirror them (`scalar_property_*`, plus the combined `property_by_name` map)
+in commit 2. The binding noun drops for the reason it dropped in voxj
+(README decision 12): an entry is the property itself. The pool field stays
+`pool`, not the wire's `valuePool`: voxcore references carry the target in
+their type (`U32Id<BVoxValuePool>`), and the crate already says plain
+`pool` throughout. Materials keep voxcore's per-material storage, now
+described as rows to match the row-major wire (README decision 14).
+
+## Pool values are referenced by branded value ids
+
+2026-07-19, phase 5 commit 1, owner review. A bare `u32` cell in the
+materials rows did not say what it indexes. Pools now store their values
+as `IdVec<BVoxPoolValue, T>` and every reference to one is a
+`U32Id<BVoxPoolValue>` called a value id: the materials cells,
+`add_material`, `value_id`, `material_value`, the new `contains_value`
+range check, `retain_values`, `reorder_value_pool`, and the prune and
+reorder remap tables (`IdVec<BVoxPoolValue, U32Id<BVoxPoolValue>>`, old
+value id to new). With the branded type the index noun went too (owner):
+voxcore says value id (`value_id`, `remap_pool_value_ids`) while the
+wire keeps `valueIndex` and its value-index prose; the voxj seam
+translates in phase 6. The brand documents the reference without a
+liveness claim: `IdVec` is dense positional storage, unlike the
+`IdStruct`-minted entity ids, so pruning and reordering still rewrite
+value ids in place. The brand is `BVoxPoolValue` because `BVoxValue`
+would read as pairing with the `VoxValue` ext type. Errors keep raw
+`u32` listing indices. Commit 2's scalar property carries the same
+`value_id` type and name.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

@@ -16,23 +16,24 @@ pub enum Error {
     PoolBound { pool: u32 },
 
     /// A value pool holds a value that is malformed for its kind or outside its
-    /// bounds, at the given value-index.
+    /// bounds, at the given value id.
     PoolValue { pool: u32, index: u32 },
 
-    /// A palette binding references a value pool that does not exist.
-    BindingPool {
+    /// A palette array property references a value pool that does not exist.
+    ArrayPropertyPool {
         palette: u32,
-        binding: u32,
+        array_property: u32,
         pool: u32,
     },
 
-    /// A palette declares the same attribute key on more than one binding.
-    DuplicateBindingAttribute { palette: u32, binding: u32 },
+    /// A palette declares the same name on more than one array property.
+    DuplicateArrayPropertyName { palette: u32, array_property: u32 },
 
-    /// A material's value-index for a binding is beyond the bound pool's values.
+    /// A material's value id for an array property is beyond the pool's
+    /// values.
     MaterialValue {
         palette: u32,
-        binding: u32,
+        array_property: u32,
         material: u32,
     },
 
@@ -88,25 +89,28 @@ impl Display for Error {
                 f,
                 "value pool {pool} value {index} is malformed for its kind or out of bounds"
             ),
-            Error::BindingPool {
+            Error::ArrayPropertyPool {
                 palette,
-                binding,
+                array_property,
                 pool,
             } => write!(
                 f,
-                "palette {palette} binding {binding} references value pool {pool}, which does not exist"
+                "palette {palette} array property {array_property} references value pool {pool}, which does not exist"
             ),
-            Error::DuplicateBindingAttribute { palette, binding } => write!(
+            Error::DuplicateArrayPropertyName {
+                palette,
+                array_property,
+            } => write!(
                 f,
-                "palette {palette} binding {binding} declares an attribute key already bound"
+                "palette {palette} array property {array_property} duplicates another property's name"
             ),
             Error::MaterialValue {
                 palette,
-                binding,
+                array_property,
                 material,
             } => write!(
                 f,
-                "palette {palette} material {material} has a value-index for binding {binding} out of the bound pool's range"
+                "palette {palette} material {material} has a value id for array property {array_property} out of the pool's range"
             ),
             Error::PaletteRef { object, palette } => write!(
                 f,

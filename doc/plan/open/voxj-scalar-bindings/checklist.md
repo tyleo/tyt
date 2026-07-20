@@ -119,12 +119,35 @@ scalar-property content checks on top of it.
       one failure fixture per new check; finalize the `palettes` check
       wording in `check_voxj_file` and `Check`.
 
-## Phase 5: `voxcore` (coarse)
+## Phase 5: `voxcore`
 
-- [ ] Grow `VoxPalette` scalar-binding storage; derive sampled layers for
-      channel arity; extend `vox_main` validate, gc, remap, and liveness (a
-      pool referenced only by a scalar binding stays live); regenerate
-      in-test fixtures.
+Refined 2026-07-19 into three commits: the property-vocabulary rename first,
+then scalar-property storage and checks, then sampled-layer derivation.
+
+- [x] Rename the palette surface to the spec's property vocabulary, no
+      behavior change: `VoxPaletteBinding` becomes `VoxArrayProperty`
+      (`name` / `pool`, brand `BVoxArrayProperty`), the `VoxPalette` storage
+      and API follow (`add_array_property`, `array_property_by_name`, and
+      so on), materials are described as rows (README decision 14), and the
+      `Error` variants become `ArrayPropertyPool` /
+      `DuplicateArrayPropertyName` with `MaterialValue` gaining an
+      `array_property` field. Owner review during the session added
+      branded value ids: pools store `IdVec<BVoxPoolValue, T>` and every
+      pool-value reference is a `U32Id<BVoxPoolValue>` named a value id
+      (`value_id`, `remap_pool_value_ids`; the wire keeps `valueIndex`).
+- [ ] Add scalar properties: `VoxScalarProperty` (`name` / `pool` /
+      `value_id`, brand `BVoxScalarProperty`), palette storage, name
+      maps, and API; gc, clone, and removal integration;
+      `relabel_value_pools` and `remap_pool_value_ids` cover scalar
+      cells; `prune_value_pools` keeps a value alive that only a scalar
+      property references; `reorder_value_pool` follows them; `validate`
+      checks scalar pools, `value_id` range, and name uniqueness across
+      both lists; a scalar resolution helper beside `material_value`.
+- [ ] Derive sampledness from the palette: a layer is sampled iff its
+      palette's material count is above zero; scope the live-voxel sample
+      checks in `validate` to sampled layers; expose the sampled-layer view
+      the voxsmith seam and vxl need; document unsampled layers' ignored
+      sample cells.
 
 ## Phase 6: `voxsmith` (coarse)
 
