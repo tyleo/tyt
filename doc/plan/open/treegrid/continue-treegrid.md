@@ -61,8 +61,9 @@ no checklist item is checked yet, the first session starts at S1.
 - The crate's dependency is `branded-id`, plus two optional features:
   `json` gating `serde_json` (`preserve_order`) with the value JSON
   forms and the JSON layouts, and `ty-math` gating the typed-color
-  constructors; each layout rides its own default-on feature
-  (`hierarchy`, `rows`, `columns`, `tables`) gating that layout's
+  constructors; each layout rides its own default-on feature named
+  for its render module (`render_hierarchy`, `render_rows`,
+  `render_columns`, `render_tables`) gating that
   module. No clap, libc, tyt-common, or
   tyt-injection; no IO `Dependencies` trait and no `impl` feature
   (the `TreeGridCells` cell policy is the one injection point).

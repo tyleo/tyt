@@ -1,12 +1,12 @@
 #[cfg(any(
-    feature = "columns",
-    feature = "hierarchy",
+    feature = "render_columns",
+    feature = "render_hierarchy",
     feature = "json",
-    feature = "rows",
-    feature = "tables"
+    feature = "render_rows",
+    feature = "render_tables"
 ))]
 use crate::TreeGridError;
-#[cfg(any(feature = "columns", feature = "rows"))]
+#[cfg(any(feature = "render_columns", feature = "render_rows"))]
 use crate::{TreeGridHeaderOptions, TreeGridLabelMode};
 use crate::{TreeGridLabelKind, TreeGridTableShapeKind};
 use std::num::NonZeroU8;
@@ -80,7 +80,7 @@ impl TreeGridOptions {
 
     /// The rows / columns label mode, with the header level folded
     /// into `header` labels.
-    #[cfg(any(feature = "columns", feature = "rows"))]
+    #[cfg(any(feature = "render_columns", feature = "render_rows"))]
     pub(crate) fn text_label(&self) -> Result<TreeGridLabelMode, TreeGridError> {
         match self.label.unwrap_or(TreeGridLabelKind::Concat) {
             TreeGridLabelKind::None => {
@@ -97,12 +97,16 @@ impl TreeGridOptions {
         }
     }
 
-    #[cfg(any(feature = "columns", feature = "rows", feature = "tables"))]
+    #[cfg(any(
+        feature = "render_columns",
+        feature = "render_rows",
+        feature = "render_tables"
+    ))]
     pub(crate) fn level(&self) -> NonZeroU8 {
         self.header_level.unwrap_or(NonZeroU8::MIN)
     }
 
-    #[cfg(any(feature = "hierarchy", feature = "json"))]
+    #[cfg(any(feature = "render_hierarchy", feature = "json"))]
     pub(crate) fn no_label(&self) -> Result<(), TreeGridError> {
         if self.label.is_some() {
             return Err(TreeGridError::LabelModeWithoutLabels);
@@ -111,10 +115,10 @@ impl TreeGridOptions {
     }
 
     #[cfg(any(
-        feature = "columns",
-        feature = "hierarchy",
+        feature = "render_columns",
+        feature = "render_hierarchy",
         feature = "json",
-        feature = "tables"
+        feature = "render_tables"
     ))]
     pub(crate) fn no_width(&self) -> Result<(), TreeGridError> {
         if self.width.is_some() {
@@ -124,11 +128,11 @@ impl TreeGridOptions {
     }
 
     #[cfg(any(
-        feature = "columns",
-        feature = "hierarchy",
+        feature = "render_columns",
+        feature = "render_hierarchy",
         feature = "json",
-        feature = "rows",
-        feature = "tables"
+        feature = "render_rows",
+        feature = "render_tables"
     ))]
     pub(crate) fn no_header_level(&self) -> Result<(), TreeGridError> {
         if self.header_level.is_some() {
@@ -138,10 +142,10 @@ impl TreeGridOptions {
     }
 
     #[cfg(any(
-        feature = "columns",
-        feature = "hierarchy",
+        feature = "render_columns",
+        feature = "render_hierarchy",
         feature = "json",
-        feature = "rows"
+        feature = "render_rows"
     ))]
     pub(crate) fn no_table_shape(&self) -> Result<(), TreeGridError> {
         if self.table_shape.is_some() {
@@ -151,10 +155,10 @@ impl TreeGridOptions {
     }
 
     #[cfg(any(
-        feature = "columns",
+        feature = "render_columns",
         feature = "json",
-        feature = "rows",
-        feature = "tables"
+        feature = "render_rows",
+        feature = "render_tables"
     ))]
     pub(crate) fn no_hierarchy_options(&self) -> Result<(), TreeGridError> {
         if self.bare_roots {

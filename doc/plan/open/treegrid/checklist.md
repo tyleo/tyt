@@ -17,8 +17,9 @@ items off as they land.
   `branded-id`, an optional `json` feature gating `serde_json`
   (`preserve_order`) with the value JSON forms and the JSON layouts,
   an optional `ty-math` feature gating the typed-color
-  constructors, and one default-on feature per layout (`hierarchy`,
-  `rows`, `columns`, `tables`) gating that layout's module -- no
+  constructors, and one default-on feature per layout, named for its
+  render module (`render_hierarchy`, `render_rows`, `render_columns`,
+  `render_tables`), gating that module -- no
   clap, libc, tyt-common, or tyt-injection. No IO
   `Dependencies` trait, no `impl` feature (pure math and pure
   serialization ride feature gates; the `TreeGridCells` cell policy

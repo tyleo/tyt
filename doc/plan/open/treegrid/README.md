@@ -84,7 +84,8 @@ Dependencies: `branded-id`, plus two optional features: `json` gates
 JSON layouts (JSON-rendering adopters enable it), and `ty-math` gates
 the typed-color value constructors (vxl enables it at no cost; it
 already depends on ty-math). Each layout also rides its own
-default-on feature (`hierarchy`, `rows`, `columns`, `tables`) whose
+default-on feature named for its render module (`render_hierarchy`,
+`render_rows`, `render_columns`, `render_tables`) whose
 module holds that layout's render extension trait
 (`TreeGridRenderHierarchy` and kin), its options payload, and its
 `resolve_*` impl, so an adopter can trim to the layouts it renders

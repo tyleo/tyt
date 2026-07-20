@@ -601,3 +601,17 @@ both modes), the bold past-level-6 fallback, root-level data with no
 heading, pipe escaping, and a visual cell padding by declared width.
 The voxsmith workspace breakage persists, so verification stayed
 scoped to `-p treegrid`.
+
+## Layout features take the render_ prefix (2026-07-20)
+
+Owner call, right after S5 landed: the four layout features rename to
+match their modules -- `render_hierarchy`, `render_rows`,
+`render_columns`, `render_tables` -- so the feature, the module, and
+the render method all carry one name. This supersedes the S4b
+reading that the features keep the bare layout names; `json` and
+`ty-math` are untouched (they gate value forms and constructors, not
+renders), and the layout names themselves are unchanged -- prose and
+the adopters' `--layout` values still say `hierarchy` / `rows` /
+`columns` / `tables`. The plan README, checklist ground rules, the
+continue prompt, the rendering spec, and the crate README were
+amended in the same change.

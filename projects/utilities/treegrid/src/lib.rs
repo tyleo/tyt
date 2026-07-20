@@ -10,19 +10,19 @@ mod color;
 #[cfg(feature = "json")]
 mod json;
 #[cfg(any(
-    feature = "columns",
-    feature = "hierarchy",
-    feature = "rows",
-    feature = "tables"
+    feature = "render_columns",
+    feature = "render_hierarchy",
+    feature = "render_rows",
+    feature = "render_tables"
 ))]
 mod render;
-#[cfg(feature = "columns")]
+#[cfg(feature = "render_columns")]
 mod render_columns;
-#[cfg(feature = "hierarchy")]
+#[cfg(feature = "render_hierarchy")]
 mod render_hierarchy;
-#[cfg(feature = "rows")]
+#[cfg(feature = "render_rows")]
 mod render_rows;
-#[cfg(feature = "tables")]
+#[cfg(feature = "render_tables")]
 mod render_tables;
 mod tree_grid;
 mod tree_grid_cell_format;
@@ -41,13 +41,13 @@ mod value;
 pub use b_tree_grid_node::*;
 #[cfg(feature = "json")]
 pub use json::*;
-#[cfg(feature = "columns")]
+#[cfg(feature = "render_columns")]
 pub use render_columns::*;
-#[cfg(feature = "hierarchy")]
+#[cfg(feature = "render_hierarchy")]
 pub use render_hierarchy::*;
-#[cfg(feature = "rows")]
+#[cfg(feature = "render_rows")]
 pub use render_rows::*;
-#[cfg(feature = "tables")]
+#[cfg(feature = "render_tables")]
 pub use render_tables::*;
 pub use tree_grid::*;
 pub use tree_grid_cell_format::*;

@@ -52,8 +52,9 @@ amended; after adoption, this spec is the single source of truth.
   have both values and children.
 - Each layout lives in its own module, named for its render method
   (`render_hierarchy` and kin), behind a default-on cargo feature
-  named for the layout (`hierarchy`, `rows`, `columns`, `tables`;
-  `json` and `ty-math` stay non-default): the layout's render method
+  named like the module (`render_hierarchy`, `render_rows`,
+  `render_columns`, `render_tables`; `json` and `ty-math` stay
+  non-default): the layout's render method
   rides an extension trait on `TreeGrid` (`TreeGridRenderHierarchy`
   and kin), beside its options payload and its `resolve_*` impl, so
   an adopter can trim to the layouts it renders and no type changes
@@ -186,7 +187,8 @@ Behind the `ty-math` feature, over the component-generic color family
 ### hierarchy
 
 - Rendered by `render_hierarchy(&TreeGridHierarchyOptions)`, on the
-  `TreeGridRenderHierarchy` trait behind the `hierarchy` feature.
+  `TreeGridRenderHierarchy` trait behind the `render_hierarchy`
+  feature.
 - Glyphs: connector `├` / `└` before a child, extension `│ ` / `  ` under
   a non-last / last child.
 - `TreeGridHierarchyOptions::bare_roots` (the other `resolve_*`
@@ -240,7 +242,7 @@ and from vmax `hierarchy` (connectored roots, annotation form):
 Today's `palette show --layout row`:
 
 - Rendered by `render_rows(&TreeGridRowsOptions)`, on the
-  `TreeGridRenderRows` trait behind the `rows` feature.
+  `TreeGridRenderRows` trait behind the `render_rows` feature.
 - One row per data node: `{label} {cells}`.
 - Labels pad to the longest label so every row's first cell aligns; cells
   themselves are never padded. `--label none` drops the label column and
@@ -261,7 +263,7 @@ Today's `palette show --layout row`:
 Today's `palette show --layout column`:
 
 - Rendered by `render_columns(&TreeGridColumnsOptions)`, on the
-  `TreeGridRenderColumns` trait behind the `columns` feature.
+  `TreeGridRenderColumns` trait behind the `render_columns` feature.
 - One column per data node, cells padded to the column's max visible
   width (the label widens its column too, unless `none`), columns joined
   with one space, lines right-trimmed.
@@ -271,7 +273,7 @@ Today's `palette show --layout column`:
 ### tables
 
 Rendered by `render_tables(&TreeGridTableShape)`, on the
-`TreeGridRenderTables` trait behind the `tables` feature.
+`TreeGridRenderTables` trait behind the `render_tables` feature.
 `TreeGridTableShape` picks the shape:
 `Nested(TreeGridNestedTableOptions)`, carrying the heading label mode
 and level, or `Flat`. `resolve_tables` maps the loose

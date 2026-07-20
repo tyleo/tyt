@@ -12,10 +12,10 @@ serde_json = { version = "1", features = ["preserve_order"], optional = true }
 ty-math = { version = "0.1.8", optional = true }
 
 [features]
-default = ["columns", "hierarchy", "rows", "tables"]
-columns = []
-hierarchy = []
+default = ["render_columns", "render_hierarchy", "render_rows", "render_tables"]
 json = ["dep:serde_json"]
-rows = []
-tables = []
+render_columns = []
+render_hierarchy = []
+render_rows = []
+render_tables = []
 ty-math = ["dep:ty-math"]
