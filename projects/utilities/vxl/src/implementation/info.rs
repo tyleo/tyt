@@ -220,6 +220,7 @@ fn yes_no(flag: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use crate::{Format, ReportLayout, implementation::info::render};
+    use branded_id::{IdVec, U32Id};
     use serde_json::Value;
     use ty_math::TyVector3U32;
     use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
@@ -229,11 +230,11 @@ mod tests {
     fn tight_state() -> VoxMain {
         let mut state = VoxMain::default();
         let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: vec![[1.0, 0.0, 0.0, 1.0]],
+            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding("baseColorFactor".to_owned(), pool);
-        let material = palette.add_material(vec![0]).unwrap();
+        palette.add_array_property("baseColorFactor".to_owned(), pool);
+        let material = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette = state.add_palette(palette);
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();

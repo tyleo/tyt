@@ -1204,7 +1204,7 @@ mod tests {
         commands::{HierarchyViews, OriginView, PatternView, TransformView},
         implementation::hierarchy_show::{RenderOptions, render},
     };
-    use branded_id::U32Id;
+    use branded_id::{IdVec, U32Id};
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
     use voxcore::{
         BVoxHierarchyNode, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject,
@@ -1420,12 +1420,12 @@ mod tests {
     /// the material count matters to the tree, so every color is the same.
     fn add_palette_with_materials(state: &mut VoxMain, count: usize) -> U32Id<BVoxPalette> {
         let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: vec![[0.0, 0.0, 0.0, 1.0]],
+            values: IdVec::from_vec(vec![[0.0, 0.0, 0.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding("baseColorFactor".to_owned(), pool);
+        palette.add_array_property("baseColorFactor".to_owned(), pool);
         for _ in 0..count {
-            palette.add_material(vec![0]).unwrap();
+            palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         }
         state.add_palette(palette)
     }

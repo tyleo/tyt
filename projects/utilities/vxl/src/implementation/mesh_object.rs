@@ -200,7 +200,7 @@ fn channel_kind(
         .palette(palette)
         .expect("the meshed layer references a palette the state holds");
 
-    let Some(binding_id) = palette.binding_by_attribute(key) else {
+    let Some(property_id) = palette.array_property_by_name(key) else {
         // Absent from the palette: the voxj format's unbound-default rule. A
         // glTF built-in takes its spec kind and bakes its default; a custom
         // attribute has no default, so its type cannot be inferred.
@@ -215,12 +215,12 @@ fn channel_kind(
         };
     };
 
-    let binding = palette
-        .binding(binding_id)
-        .expect("a binding id from this palette resolves");
+    let property = palette
+        .array_property(property_id)
+        .expect("an array-property id from this palette resolves");
     let pool = state
-        .value_pool(binding.pool)
-        .expect("a binding references a pool the state holds");
+        .value_pool(property.pool)
+        .expect("an array property references a pool the state holds");
 
     pool_kind(pool, key)
 }
@@ -328,20 +328,27 @@ fn atlas_shape(shape: TextureShape) -> AtlasShape {
 mod tests {
     use super::{resolve_layer, validate_channel};
     use crate::ColorComponent;
-    use branded_id::U32Id;
+    use branded_id::{IdVec, U32Id};
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxPalette, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{
+        BVoxPalette, BVoxPoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool,
+    };
+
+    /// The branded value id `index`.
+    fn value(index: usize) -> U32Id<BVoxPoolValue> {
+        U32Id::from_u32(index as u32)
+    }
 
     /// A standalone object with `layers` layers over one shared palette. The
     /// backing state is dropped; the object owns its layer set.
     fn object_with_layers(layers: usize) -> VoxObject {
         let mut state = VoxMain::default();
         let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: vec![[1.0, 0.0, 0.0, 1.0]],
+            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding("baseColorFactor".to_owned(), pool);
-        let material = palette.add_material(vec![0]).unwrap();
+        palette.add_array_property("baseColorFactor".to_owned(), pool);
+        let material = palette.add_material(vec![value(0)]).unwrap();
         let palette = state.add_palette(palette);
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
@@ -377,22 +384,24 @@ mod tests {
         let mut state = VoxMain::default();
 
         let tint = state.add_value_pool(VoxValuePool::Srgba {
-            values: vec![[1.0, 0.0, 0.0, 1.0]],
+            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
         });
         let glow = state.add_value_pool(VoxValuePool::Srgb {
-            values: vec![[0.0, 1.0, 0.0]],
+            values: IdVec::from_vec(vec![[0.0, 1.0, 0.0]]),
         });
         let gloss = state.add_value_pool(VoxValuePool::Float {
             min: VoxBound::Number(0.0),
             max: VoxBound::Number(1.0),
-            values: vec![0.5],
+            values: IdVec::from_vec(vec![0.5]),
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_binding("tint".to_owned(), tint);
-        palette.add_binding("glow".to_owned(), glow);
-        palette.add_binding("gloss".to_owned(), gloss);
-        palette.add_material(vec![0, 0, 0]).unwrap();
+        palette.add_array_property("tint".to_owned(), tint);
+        palette.add_array_property("glow".to_owned(), glow);
+        palette.add_array_property("gloss".to_owned(), gloss);
+        palette
+            .add_material(vec![value(0), value(0), value(0)])
+            .unwrap();
 
         let palette = state.add_palette(palette);
 
@@ -484,11 +493,11 @@ mod tests {
     fn a_string_pool_has_no_texel_value() {
         let mut state = VoxMain::default();
         let tag = state.add_value_pool(VoxValuePool::String {
-            values: vec!["low".to_owned()],
+            values: IdVec::from_vec(vec!["low".to_owned()]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding("tag".to_owned(), tag);
-        palette.add_material(vec![0]).unwrap();
+        palette.add_array_property("tag".to_owned(), tag);
+        palette.add_material(vec![value(0)]).unwrap();
         let palette = state.add_palette(palette);
 
         assert!(!validates(&state, palette, "tag", None));

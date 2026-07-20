@@ -265,9 +265,15 @@ mod tests {
         commands::{PaletteListFields, PaletteListLayout},
         implementation::palette_list::{render, select_palettes},
     };
+    use branded_id::{IdVec, U32Id};
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{BVoxPoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+
+    /// The branded value id `index`.
+    fn value(index: usize) -> U32Id<BVoxPoolValue> {
+        U32Id::from_u32(index as u32)
+    }
 
     /// Every field enabled, the bare-`palette list` default.
     fn all_fields() -> PaletteListFields {
@@ -284,32 +290,32 @@ mod tests {
     fn shared_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        // Colors and metallic values back the bindings; only the attribute
+        // Colors and metallic values back the properties; only the attribute
         // names and material counts reach the listing, so the values are
         // arbitrary.
         let colors = state.add_value_pool(VoxValuePool::Srgba {
-            values: vec![
+            values: IdVec::from_vec(vec![
                 [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 1.0],
                 [0.0, 0.0, 1.0, 1.0],
-            ],
+            ]),
         });
         let metallic = state.add_value_pool(VoxValuePool::Float {
             min: VoxBound::Number(0.0),
             max: VoxBound::Number(1.0),
-            values: vec![0.0, 1.0],
+            values: IdVec::from_vec(vec![0.0, 1.0]),
         });
 
         let mut zero = VoxPalette::default();
-        zero.add_binding("baseColorFactor".to_owned(), colors);
-        zero.add_binding("metallicFactor".to_owned(), metallic);
-        let zero_material = zero.add_material(vec![0, 0]).unwrap();
-        zero.add_material(vec![1, 1]).unwrap();
+        zero.add_array_property("baseColorFactor".to_owned(), colors);
+        zero.add_array_property("metallicFactor".to_owned(), metallic);
+        let zero_material = zero.add_material(vec![value(0), value(0)]).unwrap();
+        zero.add_material(vec![value(1), value(1)]).unwrap();
         let zero = state.add_palette(zero);
 
         let mut one = VoxPalette::default();
-        one.add_binding("baseColorFactor".to_owned(), colors);
-        let one_material = one.add_material(vec![2]).unwrap();
+        one.add_array_property("baseColorFactor".to_owned(), colors);
+        let one_material = one.add_material(vec![value(2)]).unwrap();
         let one = state.add_palette(one);
 
         let mut a = VoxObject::new("a".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
@@ -460,11 +466,11 @@ mod tests {
     fn an_unreferenced_palette_lists_no_users() {
         let mut state = VoxMain::default();
         let colors = state.add_value_pool(VoxValuePool::Srgba {
-            values: vec![[1.0, 1.0, 1.0, 1.0]],
+            values: IdVec::from_vec(vec![[1.0, 1.0, 1.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding("baseColorFactor".to_owned(), colors);
-        palette.add_material(vec![0]).unwrap();
+        palette.add_array_property("baseColorFactor".to_owned(), colors);
+        palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);
 
         assert_eq!(
@@ -484,11 +490,11 @@ mod tests {
     fn an_unreferenced_palette_shows_an_empty_objects_branch() {
         let mut state = VoxMain::default();
         let colors = state.add_value_pool(VoxValuePool::Srgba {
-            values: vec![[1.0, 1.0, 1.0, 1.0]],
+            values: IdVec::from_vec(vec![[1.0, 1.0, 1.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_binding("baseColorFactor".to_owned(), colors);
-        palette.add_material(vec![0]).unwrap();
+        palette.add_array_property("baseColorFactor".to_owned(), colors);
+        palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);
 
         assert_eq!(

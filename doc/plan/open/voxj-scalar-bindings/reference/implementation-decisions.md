@@ -306,6 +306,30 @@ palettes. Color reads (`emissiveFactor`, `baseColorFactor`) stay
 array-only in this fold; no producer pins them and the color sidecar path
 already resolves through `resolve_cell_color`.
 
+## vxl lands in four commits
+
+2026-07-20, phase 7 refinement. Commit 1 adapts the crate to the renamed
+voxcore API at display parity. Commit 2 aligns the crate with the property
+rename: the `attribute`-named files and identifiers, the
+`--define-attribute` flag, and the displayed vocabulary. Commit 3 surfaces
+the new model: scalar properties in `palette show` / `palette list` /
+`info` and the mesh channel lookup, and sampled vs unsampled layer counts
+in `info` and `hierarchy show`; `validate` gains no new check names, since
+the voxj-codec check surface is unchanged (see the phase 4 entry). Commit 4
+is the docs sweep, the checklist's existing final item.
+
+## The vxl adaptation keeps scalar properties unsurfaced
+
+2026-07-20, phase 7 commit 1. Every palette read moves to the array-property
+API (`iter_array_properties`, `array_property_by_name`, `value_id`) and
+branded pool-value ids, so the commands render exactly what they did
+before: scalar properties do not appear in `palette show`, `palette list`,
+or `info`, and `mesh` channel inference still consults only array
+properties, so a name a palette pins as a scalar falls to the
+unbound-default rule for now. Surfacing both arities is the third commit's
+job. Internal names follow voxcore (`property_id`, `value_id`); the
+user-facing `attribute` vocabulary is untouched until the rename commit.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

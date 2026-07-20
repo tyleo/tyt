@@ -181,13 +181,28 @@ decision.
       vmax material fold gained the scalar fallback so the pin survives
       glTF to vmax. See the decisions log.)
 
-## Phase 7: `vxl` and docs (coarse)
+## Phase 7: `vxl` and docs
 
-- [ ] Surface the layer list, sampled vs unsampled, and scalar bindings in
-      `info`, `hierarchy show`, `palette show` / `list`, and `mesh`; align
-      `attribute`-named identifiers and the `--define-attribute` flag with
-      the property rename; add the new `validate` check names; regenerate
-      goldens.
+Refined 2026-07-20 into four commits: the compile adaptation first, then the
+property rename, then the new-model surfaces, then the docs sweep.
+
+- [x] Adapt the crate to the renamed voxcore API at display parity:
+      `iter_array_properties` / `array_property_by_name` / `value_id` and
+      branded pool-value ids through `palette_show`, `mesh_object`, and
+      `attribute_names`, plus the test fixtures in `info`, `palette_list`,
+      and `hierarchy_show`; scalar properties stay unsurfaced and every
+      flag, header, and JSON key keeps its `attribute` wording. The
+      workspace compiles and tests green again.
+- [ ] Align the crate with the property rename: `attribute`-named files and
+      identifiers (`attribute_names`, `attribute_ref`, `attribute_selector`,
+      `attribute_binding`, `ChannelSource::Attribute`), the
+      `--define-attribute` flag, and the displayed vocabulary (table
+      headers, JSON keys, error messages); regenerate inline expectations.
+- [ ] Surface the new model: scalar properties in `palette show` /
+      `palette list` / `info` and the mesh channel lookup
+      (`property_by_name`), sampled vs unsampled layer counts in `info` and
+      `hierarchy show`; `validate` gains no new check names (the voxj-codec
+      check surface is unchanged); regenerate inline expectations.
 - [ ] Bring `voxj-codec/README.md`, the other crate READMEs, and the
       vxl-commands plan pages (`README.md`, `reference/mesh.md`,
       `reference/palette/remap.md`, `reference/validate.md`) in line with the
