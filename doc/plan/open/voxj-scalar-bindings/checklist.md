@@ -198,7 +198,7 @@ property rename, then the new-model surfaces, then the docs sweep.
       `attribute_binding`, `ChannelSource::Attribute`), the
       `--define-attribute` flag, and the displayed vocabulary (table
       headers, JSON keys, error messages); regenerate inline expectations.
-- [ ] Surface the new model: scalar properties in `palette show` /
+- [x] Surface the new model: scalar properties in `palette show` /
       `palette list` / `info` and the mesh channel lookup
       (`property_by_name`), sampled vs unsampled layer counts in `info` and
       `hierarchy show`; `validate` gains no new check names (the voxj-codec

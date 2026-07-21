@@ -4,16 +4,16 @@ use crate::{
     implementation,
 };
 use branded_id::U32Id;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64};
-use voxcore::{BVoxPoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool};
+use voxcore::{BVoxPoolValue, VoxMain, VoxPalette, VoxPropertyId, VoxValue, VoxValuePool};
 
 /// Loads the voxel file at `input` and prints the value collections named by
-/// `selectors`. Each selector resolves to one or more collections, an
+/// `selectors`. Each selector resolves to one or more collections, a
 /// property's values down a palette; `layout` arranges them and chooses the
 /// serialization, and `width` wraps the `row` layouts.
 pub fn palette_show(
@@ -73,21 +73,27 @@ struct Collection {
     key: String,
     /// The color component read from the property, when one was given.
     component: Option<ColorComponent>,
+    /// Whether the key names a scalar property, whose one sample is the
+    /// palette-wide pinned value rather than material 0's.
+    scalar: bool,
     /// How each value renders.
     format: PaletteShowFormat,
-    /// One sample per palette material, in material order.
+    /// One sample per palette material in material order, or the one pinned
+    /// sample of a scalar property.
     samples: Vec<Sample>,
 }
 
 impl Collection {
     /// The `{palette}."{key}"` header for the text layouts, with the color
-    /// component appended after the closing quote when one was read.
+    /// component appended after the closing quote when one was read and a
+    /// ` (scalar)` marker on a scalar property.
     fn header(&self) -> String {
         format!(
-            "{}.{}{}",
+            "{}.{}{}{}",
             self.palette,
             implementation::quote_name(&self.key),
-            self.component_suffix()
+            self.component_suffix(),
+            if self.scalar { " (scalar)" } else { "" }
         )
     }
 
@@ -204,18 +210,12 @@ fn expand_property(
 ) -> Result<()> {
     match property {
         PropertyRef::All => {
-            let names: Vec<String> = palette
-                .iter_array_properties()
-                .map(|(_, property)| property.name.to_string())
-                .collect();
-            for name in names {
-                collections.push(build_collection(
-                    state, index, palette, &name, None, format,
-                )?);
+            for name in implementation::property_names(palette) {
+                collections.push(build_collection(state, index, palette, name, None, format)?);
             }
         }
         PropertyRef::Key { key, component } => {
-            if palette.array_property_by_name(key).is_none() {
+            if palette.property_by_name(key).is_none() {
                 if palette_is_wild {
                     return Ok(());
                 }
@@ -238,7 +238,7 @@ fn expand_property(
 
 /// Builds one collection from a present property: classifies the bound pool by
 /// kind, rejects a color component on a non-color and `.a` on a three-component
-/// color, then samples each material's value.
+/// color, then samples the property's values.
 fn build_collection(
     state: &VoxMain,
     index: usize,
@@ -248,14 +248,25 @@ fn build_collection(
     format: PaletteShowFormat,
 ) -> Result<Collection> {
     let property_id = palette
-        .array_property_by_name(key)
+        .property_by_name(key)
         .expect("caller verified the property is present");
-    let property = palette
-        .array_property(property_id)
-        .expect("an array-property id from this palette resolves");
+    let pool_id = match property_id {
+        VoxPropertyId::Array(id) => {
+            palette
+                .array_property(id)
+                .expect("an array-property id from this palette resolves")
+                .pool
+        }
+        VoxPropertyId::Scalar(id) => {
+            palette
+                .scalar_property(id)
+                .expect("a scalar-property id from this palette resolves")
+                .pool
+        }
+    };
     let pool = state
-        .value_pool(property.pool)
-        .expect("an array property references a pool the state holds");
+        .value_pool(pool_id)
+        .expect("a property references a pool the state holds");
     let kind = classify(pool);
 
     // A color component names one channel: it applies only to a color, and `.a`
@@ -288,20 +299,29 @@ fn build_collection(
 
     // A material holds one value id per array property, so the lookup with
     // this palette's own property id always resolves.
-    let samples = palette
-        .iter_materials()
-        .map(|material| {
-            let value_id = palette
-                .value_id(material, property_id)
-                .expect("a material holds a value for every array property");
-            sample(pool, value_id, kind, component)
-        })
-        .collect();
+    let samples = match property_id {
+        VoxPropertyId::Array(id) => palette
+            .iter_materials()
+            .map(|material| {
+                let value_id = palette
+                    .value_id(material, id)
+                    .expect("a material holds a value for every array property");
+                sample(pool, value_id, kind, component)
+            })
+            .collect(),
+        VoxPropertyId::Scalar(id) => {
+            let property = palette
+                .scalar_property(id)
+                .expect("a scalar-property id from this palette resolves");
+            vec![sample(pool, property.value_id, kind, component)]
+        }
+    };
 
     Ok(Collection {
         palette: index,
         key: key.to_string(),
         component,
+        scalar: matches!(property_id, VoxPropertyId::Scalar(_)),
         format,
         samples,
     })
@@ -584,11 +604,7 @@ fn json_text(value: &Value) -> String {
 
 /// The palette's property keys joined for a not-found message.
 fn available_keys(palette: &VoxPalette) -> String {
-    palette
-        .iter_array_properties()
-        .map(|(_, property)| property.name.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
+    implementation::property_names(palette).join(", ")
 }
 
 /// Renders the collections under `layout`, wrapping the `row` layouts to the
@@ -843,11 +859,9 @@ fn rendered_cells(collection: &Collection) -> Vec<String> {
         .collect()
 }
 
-/// The collections as JSON, one record per collection in render order: its
-/// resolved palette index, its property label, and its values in native JSON
-/// types. The format and layout are ignored; a color is a hex string or a float
-/// array, a component its byte or float, and a scalar a number. `pretty` selects
-/// indented output, matching the shared report JSON.
+/// The collections as JSON, pretty or compact: one record per collection in
+/// render order. Values emit in their native JSON types; the per-collection
+/// format is ignored.
 fn render_json(collections: &[Collection], pretty: bool) -> String {
     let records: Vec<Value> = collections
         .iter()
@@ -857,11 +871,15 @@ fn render_json(collections: &[Collection], pretty: bool) -> String {
                 .iter()
                 .map(|sample| sample.json.clone())
                 .collect();
-            json!({
-                "palette": collection.palette,
-                "property": collection.property(),
-                "values": values,
-            })
+            // Field by field so `scalar` appears only on a scalar property.
+            let mut record = Map::new();
+            record.insert("palette".to_string(), json!(collection.palette));
+            record.insert("property".to_string(), json!(collection.property()));
+            if collection.scalar {
+                record.insert("scalar".to_string(), json!(true));
+            }
+            record.insert("values".to_string(), Value::Array(values));
+            Value::Object(record)
         })
         .collect();
     let payload = Value::Array(records);
@@ -1334,5 +1352,105 @@ mod tests {
             json,
             "[{\"palette\":0,\"property\":\"\",\"values\":[true]}]\n"
         );
+    }
+
+    /// One palette pinning a scalar `emissiveStrength` and a scalar color
+    /// `tint` beside a one-material `baseColorFactor` column.
+    fn scalar_state() -> VoxMain {
+        let mut state = VoxMain::default();
+        let colors = srgba_pool(&mut state, &[[255, 0, 0, 255]]);
+        let strengths = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::None,
+            values: IdVec::from_vec(vec![2.0]),
+        });
+        let tints = srgba_pool(&mut state, &[[0, 255, 0, 128]]);
+
+        let mut palette = VoxPalette::default();
+        palette.add_array_property("baseColorFactor".to_owned(), colors);
+        palette.add_scalar_property("emissiveStrength".to_owned(), strengths, value(0));
+        palette.add_scalar_property("tint".to_owned(), tints, value(0));
+        palette.add_material(vec![value(0)]).unwrap();
+        state.add_palette(palette);
+        state
+    }
+
+    #[test]
+    fn a_scalar_property_shows_its_one_pinned_value() {
+        let state = scalar_state();
+        let output = show(
+            &state,
+            &[("0", "emissiveStrength", "value")],
+            PaletteShowLayout::Row,
+        );
+        assert_eq!(output, "0.\"emissiveStrength\" (scalar) 2\n");
+    }
+
+    #[test]
+    fn star_property_expands_scalar_properties_after_array_ones() {
+        let state = scalar_state();
+        let collections = resolve_collections(&state, &selectors(&[("0", "*", "value")])).unwrap();
+        let headers: Vec<String> = collections.iter().map(|c| c.header()).collect();
+        assert_eq!(
+            headers,
+            [
+                "0.\"baseColorFactor\"",
+                "0.\"emissiveStrength\" (scalar)",
+                "0.\"tint\" (scalar)"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_scalar_color_reads_like_a_material_value() {
+        let state = scalar_state();
+        let whole = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Row);
+        assert_eq!(whole, "0.\"tint\" (scalar) #00FF0080\n");
+        let component = show(&state, &[("0", "tint.a", "value")], PaletteShowLayout::Row);
+        assert_eq!(component, "0.\"tint\".a (scalar) 128\n");
+    }
+
+    #[test]
+    fn a_component_on_a_scalar_number_property_is_an_error() {
+        let state = scalar_state();
+        let result =
+            resolve_collections(&state, &selectors(&[("0", "emissiveStrength.r", "value")]));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn scalar_json_records_mark_the_arity() {
+        let state = scalar_state();
+        let output = show(
+            &state,
+            &[
+                ("0", "baseColorFactor", "value"),
+                ("0", "emissiveStrength", "value"),
+            ],
+            PaletteShowLayout::CompactJson,
+        );
+        assert_eq!(
+            output,
+            "[{\"palette\":0,\"property\":\"baseColorFactor\",\"values\":[\"#FF0000FF\"]},\
+             {\"palette\":0,\"property\":\"emissiveStrength\",\"scalar\":true,\"values\":[2]}]\n"
+        );
+    }
+
+    #[test]
+    fn a_scalar_only_palette_shows_with_no_materials() {
+        // No materials at all: the palette is never sampled, but its pinned
+        // value still shows.
+        let mut state = VoxMain::default();
+        let strengths = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::None,
+            values: IdVec::from_vec(vec![0.5]),
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_scalar_property("emissiveStrength".to_owned(), strengths, value(0));
+        state.add_palette(palette);
+
+        let output = show(&state, &[("0", "*", "value")], PaletteShowLayout::Row);
+        assert_eq!(output, "0.\"emissiveStrength\" (scalar) 0.5\n");
     }
 }

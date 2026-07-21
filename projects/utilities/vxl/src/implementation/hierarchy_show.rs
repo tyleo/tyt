@@ -1049,9 +1049,10 @@ impl Walk<'_> {
     }
 
     /// Appends the `layers` subtree: one child per layer the object carries, in
-    /// layer order, each `<palette index>: {materials: <count>}`. An object with
-    /// no layer prints `layers: []`, and a layer whose palette the state does
-    /// not hold prints a `missing palette` marker.
+    /// layer order. Each line reads `<palette index>: {materials: <count>, ...}`:
+    /// a layer whose palette has no materials adds `sampled: false`. An object
+    /// with no layer prints `layers: []`, and a layer whose palette the state
+    /// does not hold prints a `missing palette` marker.
     fn render_layers(&mut self, prefix: &str, is_last: bool, object: &VoxObject) {
         let connector = if is_last {
             CONNECTOR_LAST
@@ -1086,11 +1087,20 @@ impl Walk<'_> {
             };
 
             let line = match self.scene.state.palette(palette_id) {
-                Some(palette) => format!(
-                    "{inner}{child_connector} {}: {{materials: {}}}\n",
-                    palette_id.to_u32(),
-                    palette.material_count()
-                ),
+                Some(palette) => {
+                    let materials = palette.material_count();
+                    // Only the notable state is tagged, like `instance` and
+                    // `cycle`.
+                    let sampled = if materials == 0 {
+                        ", sampled: false"
+                    } else {
+                        ""
+                    };
+                    format!(
+                        "{inner}{child_connector} {}: {{materials: {materials}{sampled}}}\n",
+                        palette_id.to_u32(),
+                    )
+                }
 
                 None => format!(
                     "{inner}{child_connector} missing palette {}\n",
@@ -1956,6 +1966,47 @@ mod tests {
              \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 2}\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 3}\n"
+        );
+    }
+
+    #[test]
+    fn an_unsampled_layer_is_marked_in_the_layers_subtree() {
+        // Palette 0 has no materials, so the layer referencing it is never
+        // sampled.
+        let mut state = VoxMain::default();
+        let pinned = add_palette_with_materials(&mut state, 0);
+        let sampled = add_palette_with_materials(&mut state, 2);
+        let material = state
+            .palette(sampled)
+            .unwrap()
+            .iter_materials()
+            .next()
+            .unwrap();
+
+        let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        // An unsampled layer's cells are ignored filler, so any id fills.
+        body.add_layer(pinned, U32Id::from_u32(0));
+        body.add_layer(sampled, material);
+        let body = state.add_object(body);
+
+        let root = state.add_hierarchy_node(node("root", vec![], vec![body]));
+        state.set_root_hierarchy_nodes(vec![root]);
+
+        let output = render_views(
+            &state,
+            HierarchyViews {
+                layers: true,
+                ..HierarchyViews::default()
+            },
+        );
+        assert_eq!(
+            output,
+            "root\n\
+             \u{2514} \"root\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 0, sampled: false}\n\
+             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 2}\n"
         );
     }
 

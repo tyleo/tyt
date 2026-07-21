@@ -1,7 +1,8 @@
 use crate::{Format, ReportLayout, Result, implementation};
+use branded_id::U32Id;
 use serde_json::{Map, Value, json};
 use std::{fs, path::Path};
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{BVoxObject, VoxMain, VoxObject};
 use voxj_codec::from_voxj_or_voxjz_file_bytes;
 
 /// Loads the voxel file at `input` and reports what it contains in `layout`.
@@ -69,7 +70,7 @@ fn render_markdown(
         .map(|(id, palette)| {
             implementation::row([
                 &id.to_u32().to_string(),
-                &implementation::md_cell(&implementation::property_names(palette).join(", ")),
+                &implementation::md_cell(&implementation::property_labels(palette).join(", ")),
                 &palette.material_count().to_string(),
             ])
         })
@@ -91,6 +92,7 @@ fn render_markdown(
                 &format!("{}, {}, {}", origin.x, origin.y, origin.z),
                 &object.live_count().to_string(),
                 &object.layer_count().to_string(),
+                &sampled_layer_count(state, id).to_string(),
             ])
         })
         .collect();
@@ -116,6 +118,7 @@ fn render_markdown(
             "Origin",
             "Voxels",
             "Layers",
+            "Sampled",
         ],
         &object_rows,
     ));
@@ -132,11 +135,19 @@ fn render_json(
     let palettes: Vec<Value> = state
         .iter_palettes()
         .map(|(id, palette)| {
-            json!({
-                "id": id.to_u32(),
-                "properties": implementation::property_names(palette),
-                "materials": palette.material_count(),
-            })
+            // Field by field so `scalar_properties` appears only when present.
+            let mut entry = Map::new();
+            entry.insert("id".to_string(), json!(id.to_u32()));
+            entry.insert(
+                "properties".to_string(),
+                json!(implementation::property_names(palette)),
+            );
+            let scalars = implementation::scalar_property_names(palette);
+            if !scalars.is_empty() {
+                entry.insert("scalar_properties".to_string(), json!(scalars));
+            }
+            entry.insert("materials".to_string(), json!(palette.material_count()));
+            Value::Object(entry)
         })
         .collect();
 
@@ -156,6 +167,10 @@ fn render_json(
             entry.insert("origin".to_string(), json!([origin.x, origin.y, origin.z]));
             entry.insert("voxels".to_string(), json!(object.live_count()));
             entry.insert("layers".to_string(), json!(object.layer_count()));
+            entry.insert(
+                "sampled_layers".to_string(),
+                json!(sampled_layer_count(state, id)),
+            );
             Value::Object(entry)
         })
         .collect();
@@ -170,6 +185,15 @@ fn render_json(
     document.insert("palettes".to_string(), Value::Array(palettes));
     document.insert("objects".to_string(), Value::Array(objects));
     implementation::to_json_string(&Value::Object(document), pretty)
+}
+
+/// How many of an object's layers are sampled: those whose palette has
+/// materials.
+fn sampled_layer_count(state: &VoxMain, id: U32Id<BVoxObject>) -> usize {
+    state
+        .iter_sampled_layers(id)
+        .map(|layers| layers.count())
+        .unwrap_or(0)
 }
 
 /// Whether any object has an [`edit_bounds`] build volume.
@@ -223,7 +247,7 @@ mod tests {
     use branded_id::{IdVec, U32Id};
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// One `baseColorFactor` palette and one tight 1x1x1 object sampling its one
     /// material.
@@ -270,9 +294,9 @@ mod tests {
              | --- | --------------- | --------- |\n\
              | 0   | baseColorFactor | 1         |\n\
              \n## Objects\n\n\
-             | Id  | Name | Bounds | Edit bounds | Origin  | Voxels | Layers |\n\
-             | --- | ---- | ------ | ----------- | ------- | ------ | ------ |\n\
-             | 0   | body | 1x1x1  | -           | 0, 0, 0 | 1      | 1      |\n"
+             | Id  | Name | Bounds | Edit bounds | Origin  | Voxels | Layers | Sampled |\n\
+             | --- | ---- | ------ | ----------- | ------- | ------ | ------ | ------- |\n\
+             | 0   | body | 1x1x1  | -           | 0, 0, 0 | 1      | 1      | 1       |\n"
         );
     }
 
@@ -291,7 +315,7 @@ mod tests {
             "{\"format\":\"voxj\",\"voxj_version\":2,\"has_ext\":false,\"has_edit\":false,\
              \"palettes\":[{\"id\":0,\"properties\":[\"baseColorFactor\"],\"materials\":1}],\
              \"objects\":[{\"id\":0,\"name\":\"body\",\"bounds\":[1,1,1],\"origin\":[0,0,0],\
-             \"voxels\":1,\"layers\":1}]}\n"
+             \"voxels\":1,\"layers\":1,\"sampled_layers\":1}]}\n"
         );
     }
 
@@ -365,10 +389,9 @@ mod tests {
         .unwrap();
         assert!(markdown.contains("| Has edit     | yes   |\n"));
         // Content 1x1x1, edit build volume 3x1x1, origin spaced.
-        assert!(
-            markdown
-                .contains("| 0   | margin | 1x1x1  | 3x1x1       | 0, 0, 0 | 1      | 0      |\n")
-        );
+        assert!(markdown.contains(
+            "| 0   | margin | 1x1x1  | 3x1x1       | 0, 0, 0 | 1      | 0      | 0       |\n"
+        ));
 
         let json = render(
             &state,
@@ -380,5 +403,61 @@ mod tests {
         .unwrap();
         assert!(json.contains("\"has_edit\":true"));
         assert!(json.contains("\"bounds\":[1,1,1],\"edit_bounds\":[3,1,1]"));
+    }
+
+    #[test]
+    fn reports_scalar_properties_and_unsampled_layers() {
+        // Palette 0 pins `emissiveStrength` with no materials, so the layer
+        // referencing it is unsampled.
+        let mut state = VoxMain::default();
+        let strengths = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::None,
+            values: IdVec::from_vec(vec![2.0]),
+        });
+        let mut pinned = VoxPalette::default();
+        pinned.add_scalar_property("emissiveStrength".to_owned(), strengths, U32Id::from_u32(0));
+        let pinned = state.add_palette(pinned);
+
+        let colors = state.add_value_pool(VoxValuePool::Srgba {
+            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
+        });
+        let mut sampled = VoxPalette::default();
+        sampled.add_array_property("baseColorFactor".to_owned(), colors);
+        let material = sampled.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let sampled = state.add_palette(sampled);
+
+        let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.add_layer(sampled, material);
+        // An unsampled layer's cells are ignored filler, so any id fills.
+        object.add_layer(pinned, U32Id::from_u32(0));
+        state.add_object(object);
+
+        let markdown = render(
+            &state,
+            Format::Voxj,
+            Some(1),
+            "pinned.voxj",
+            ReportLayout::Markdown,
+        )
+        .unwrap();
+        assert!(markdown.contains("| 0   | emissiveStrength (scalar) | 0         |\n"));
+        assert!(markdown.contains("| 1   | baseColorFactor           | 1         |\n"));
+        // Two layers, one sampled.
+        assert!(markdown.contains("| 2      | 1       |\n"));
+
+        let json = render(
+            &state,
+            Format::Voxj,
+            Some(1),
+            "pinned.voxj",
+            ReportLayout::CompactJson,
+        )
+        .unwrap();
+        assert!(json.contains(
+            "{\"id\":0,\"properties\":[\"emissiveStrength\"],\
+             \"scalar_properties\":[\"emissiveStrength\"],\"materials\":0}"
+        ));
+        assert!(json.contains("\"layers\":2,\"sampled_layers\":1"));
     }
 }

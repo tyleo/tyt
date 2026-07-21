@@ -89,7 +89,7 @@ fn render_markdown(state: &VoxMain, palettes: &[Entry], fields: PaletteListField
             let mut columns = vec![id.to_u32().to_string()];
             if fields.properties {
                 columns.push(implementation::md_cell(
-                    &implementation::property_names(palette).join(", "),
+                    &implementation::property_labels(palette).join(", "),
                 ));
             }
             if fields.materials {
@@ -106,9 +106,8 @@ fn render_markdown(state: &VoxMain, palettes: &[Entry], fields: PaletteListField
     implementation::markdown_table(&headers, &rows)
 }
 
-/// The listing as a JSON array, pretty or compact, one record per palette in
-/// index order: its index and each enabled field. Object references emit as
-/// indices under `used_by`.
+/// The listing as a JSON array, pretty or compact: one record per palette in
+/// index order, its index and each enabled field.
 fn render_json(
     state: &VoxMain,
     palettes: &[Entry],
@@ -125,6 +124,10 @@ fn render_json(
                     "properties".to_string(),
                     json!(implementation::property_names(palette)),
                 );
+                let scalars = implementation::scalar_property_names(palette);
+                if !scalars.is_empty() {
+                    entry.insert("scalar_properties".to_string(), json!(scalars));
+                }
             }
             if fields.materials {
                 entry.insert("materials".to_string(), json!(palette.material_count()));
@@ -161,13 +164,16 @@ fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFiel
         if fields.properties {
             children.push(HierarchyChild::Names(
                 "properties",
-                implementation::property_names(palette),
+                implementation::property_labels(palette),
             ));
         }
         if fields.objects {
             children.push(HierarchyChild::Names(
                 "objects",
-                referencing_names(state, *id),
+                referencing_names(state, *id)
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
             ));
         }
 
@@ -196,11 +202,11 @@ fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFiel
 
 /// One enabled child under a palette in the `hierarchy` layout. Collected before
 /// rendering so the last enabled child takes the closing connector.
-enum HierarchyChild<'a> {
+enum HierarchyChild {
     /// A `materialCount: <n>` leaf.
     MaterialCount(usize),
     /// A named subtree, `properties` or `objects`, with one child per name.
-    Names(&'static str, Vec<&'a str>),
+    Names(&'static str, Vec<String>),
 }
 
 /// Appends a `header` subtree under `prefix` with one bare child per name, or a
@@ -210,7 +216,7 @@ fn render_names_subtree(
     prefix: &str,
     is_last: bool,
     header: &str,
-    names: &[&str],
+    names: &[String],
 ) {
     let connector = if is_last {
         CONNECTOR_LAST
@@ -286,7 +292,8 @@ mod tests {
 
     /// Two palettes and two objects: `a` samples palette 0, `b` samples both.
     /// Palette 0 carries `baseColorFactor` and `metallicFactor` with two
-    /// materials, palette 1 carries `baseColorFactor` with one material.
+    /// materials, palette 1 carries `baseColorFactor` with one material plus a
+    /// scalar `emissiveStrength`.
     fn shared_state() -> VoxMain {
         let mut state = VoxMain::default();
 
@@ -315,6 +322,7 @@ mod tests {
 
         let mut one = VoxPalette::default();
         one.add_array_property("baseColorFactor".to_owned(), colors);
+        one.add_scalar_property("emissiveStrength".to_owned(), metallic, value(1));
         let one_material = one.add_material(vec![value(2)]).unwrap();
         let one = state.add_palette(one);
 
@@ -340,10 +348,10 @@ mod tests {
     fn markdown_lists_one_row_per_palette() {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::Markdown),
-            "| index | properties                      | materials | used by |\n\
-             | ----- | ------------------------------- | --------- | ------- |\n\
-             | 0     | baseColorFactor, metallicFactor | 2         | a, b    |\n\
-             | 1     | baseColorFactor                 | 1         | b       |\n"
+            "| index | properties                                 | materials | used by |\n\
+             | ----- | ------------------------------------------ | --------- | ------- |\n\
+             | 0     | baseColorFactor, metallicFactor            | 2         | a, b    |\n\
+             | 1     | baseColorFactor, emissiveStrength (scalar) | 1         | b       |\n"
         );
     }
 
@@ -359,10 +367,10 @@ mod tests {
         let output = render(&state, &palettes, fields, PaletteListLayout::Markdown).unwrap();
         assert_eq!(
             output,
-            "| index | properties                      | materials |\n\
-             | ----- | ------------------------------- | --------- |\n\
-             | 0     | baseColorFactor, metallicFactor | 2         |\n\
-             | 1     | baseColorFactor                 | 1         |\n"
+            "| index | properties                                 | materials |\n\
+             | ----- | ------------------------------------------ | --------- |\n\
+             | 0     | baseColorFactor, metallicFactor            | 2         |\n\
+             | 1     | baseColorFactor, emissiveStrength (scalar) | 1         |\n"
         );
     }
 
@@ -382,7 +390,8 @@ mod tests {
              └ 1\n\
              \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}├ properties\n\
-             \u{20}\u{20}│ └ baseColorFactor\n\
+             \u{20}\u{20}│ ├ baseColorFactor\n\
+             \u{20}\u{20}│ └ emissiveStrength (scalar)\n\
              \u{20}\u{20}└ objects\n\
              \u{20}\u{20}\u{20}\u{20}└ b\n"
         );
@@ -418,7 +427,8 @@ mod tests {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::CompactJson),
             "[{\"index\":0,\"properties\":[\"baseColorFactor\",\"metallicFactor\"],\"materials\":2,\"used_by\":[0,1]},\
-             {\"index\":1,\"properties\":[\"baseColorFactor\"],\"materials\":1,\"used_by\":[1]}]\n"
+             {\"index\":1,\"properties\":[\"baseColorFactor\",\"emissiveStrength\"],\
+             \"scalar_properties\":[\"emissiveStrength\"],\"materials\":1,\"used_by\":[1]}]\n"
         );
     }
 
@@ -441,9 +451,9 @@ mod tests {
         let output = render(&state, &palettes, all_fields(), PaletteListLayout::Markdown).unwrap();
         assert_eq!(
             output,
-            "| index | properties      | materials | used by |\n\
-             | ----- | --------------- | --------- | ------- |\n\
-             | 1     | baseColorFactor | 1         | b       |\n"
+            "| index | properties                                 | materials | used by |\n\
+             | ----- | ------------------------------------------ | --------- | ------- |\n\
+             | 1     | baseColorFactor, emissiveStrength (scalar) | 1         | b       |\n"
         );
     }
 
@@ -505,6 +515,34 @@ mod tests {
              \u{20}\u{20}├ properties\n\
              \u{20}\u{20}│ └ baseColorFactor\n\
              \u{20}\u{20}└ objects: []\n"
+        );
+    }
+
+    #[test]
+    fn a_scalar_only_palette_lists_its_pinned_property() {
+        // No materials at all: the palette is never sampled, but its pinned
+        // property still lists.
+        let mut state = VoxMain::default();
+        let strengths = state.add_value_pool(VoxValuePool::Float {
+            min: VoxBound::Number(0.0),
+            max: VoxBound::None,
+            values: IdVec::from_vec(vec![2.0]),
+        });
+        let mut palette = VoxPalette::default();
+        palette.add_scalar_property("emissiveStrength".to_owned(), strengths, value(0));
+        state.add_palette(palette);
+
+        assert_eq!(
+            render_all(&state, PaletteListLayout::Markdown),
+            "| index | properties                | materials | used by |\n\
+             | ----- | ------------------------- | --------- | ------- |\n\
+             | 0     | emissiveStrength (scalar) | 0         |         |\n"
+        );
+
+        assert_eq!(
+            render_all(&state, PaletteListLayout::CompactJson),
+            "[{\"index\":0,\"properties\":[\"emissiveStrength\"],\
+             \"scalar_properties\":[\"emissiveStrength\"],\"materials\":0,\"used_by\":[]}]\n"
         );
     }
 }

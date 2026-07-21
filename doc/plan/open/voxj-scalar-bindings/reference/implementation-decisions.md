@@ -347,6 +347,36 @@ so only the attribute noun moved. `PropertyBinding` also keeps the binding
 noun README decision 12 dropped from the wire: a wire entry is the
 property itself, while this type binds a CLI alias to a property key.
 
+## vxl reports one combined properties list, arity marked
+
+2026-07-21, phase 7 commit 3. The summaries (`palette list`, `info`) keep one
+`properties` listing rather than mirroring the wire's two lists: rule 10.2
+makes the names one namespace, and `properties` is the umbrella noun the
+rename commit established. Arity still shows. Text layouts suffix a scalar
+name with ` (scalar)`; JSON keeps plain names and adds the subset under a
+`scalar_properties` key only when the palette has scalar properties, the
+`edit_bounds` conditional-key precedent. Three helpers carry the shapes, one
+per file: `property_names` (all names, array then scalar, each in id order),
+`property_labels` (the marked text form), `scalar_property_names` (the JSON
+subset).
+
+## A scalar collection is one pinned sample; sampledness is a tag
+
+2026-07-21, phase 7 commit 3. In `palette show` a scalar property resolves
+through `property_by_name` into a one-sample collection: the pinned value
+reads through the same pool-kind classification, component rules, and
+swatch rendering as a material cell, the header appends ` (scalar)` after
+the component suffix, and the JSON record carries `"scalar": true` only on
+scalar collections. `*` selectors expand array then scalar. For layer
+counts, `info`'s objects gain a `Sampled` column (JSON `sampled_layers`)
+beside the total from `VoxMain::iter_sampled_layers`, and `hierarchy show
+--show-layers` appends `sampled: false` to an unsampled layer's line, the
+notable-state tag idiom `instance` and `cycle` already use; a sampled
+layer's line is unchanged. The mesh channel lookup (`channel_kind`) also
+resolves `property_by_name`, matching voxsmith's `material_attribute`, so a
+custom-named scalar pin now types its channel instead of failing the
+unbound-default rule.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new
