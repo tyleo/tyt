@@ -206,7 +206,7 @@ items off as they land.
 
 ## Phase 5: `tyt fbx hierarchy` adopts (severable)
 
-- [ ] **S13. Data over the Blender boundary.** Extend
+- [x] **S13. Data over the Blender boundary.** Extend
       `FBX_HIERARCHY_JSON_PY` to emit the object hierarchy with
       per-object payloads: type, and the transform / bounds / extents
       values computed in Blender for the requested

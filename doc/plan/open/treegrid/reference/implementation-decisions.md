@@ -890,3 +890,42 @@ binaries produce byte-identical stdout, stderr, and exit codes over
 every tyt-assets vmax bundle across plain, transform and bounds view,
 selection (object, group, multi-pattern, bang-pattern, anchored),
 collapse-ancestors / -descendants / both, and no-match invocations.
+
+## S13: the hierarchy payload crosses the Blender boundary (2026-07-22)
+
+`fbx_hierarchy_json.py` gains a payload form: after `<input_fbx>`,
+the twelve transform / bounds / extents tokens in exactly the order
+`fbx_hierarchy.py` takes them (show, precision, and space per group,
+plus the rotation-unit and scale flags), so the Rust packers reuse
+verbatim at S14. With one arg the script keeps today's listing form
+(the twelve tokens default off) and its output stays byte-identical,
+leaving the six listing callers (hierarchy, render, rename, extract,
+transform, modify) untouched; selection and collapse tokens do not
+cross, since S14 applies them in Rust.
+
+- **Components cross as precision-formatted strings**
+  (`"position": ["1.00", "2.00", "3.00"]`, likewise `rotation` /
+  `scale`, `bounds.min` / `bounds.max`, and `extents`). Fixed-point
+  text cannot survive as JSON numbers (`json.dumps(1.0)` drops the
+  padding the precision knob exists to align), and the plan's
+  boundary rule wants knobbed values as finished text: Blender owns
+  space, unit, precision, and scale, and Rust assembles labels
+  without re-rounding.
+- **The AABB math is copied verbatim, not hoisted into `common.py`.**
+  `collect_world_corners` / `compute_aabb` duplicate from
+  `fbx_hierarchy.py` for the one step both scripts exist; S14
+  deletes the tree script whole, making the json script the math's
+  only home, while `common.py` keeps to cross-command scene
+  utilities.
+- **Payload keys are omitted, not nulled.** `transform` appears only
+  when requested; `bounds` / `extents` only when requested and the
+  object's subtree has mesh geometry (`compute_aabb` returning
+  `None`, the condition the tree renderer gates its subtrees on), so
+  S14 rebuilds the subtree set from key presence alone.
+
+Verified: on a generated fixture (nested empty / cube / sphere plus
+a geometry-less empty), the one-arg listing output is byte-identical
+to the previous script's, and three payload combos (all defaults;
+world space with degrees and mixed precisions; local bounds with
+scale baked) reproduce the tree renderer's content lines exactly,
+value for value in both directions.
