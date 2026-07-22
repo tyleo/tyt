@@ -32,11 +32,29 @@ pub fn is_file_match(patterns: &[GitIgnoreRegex], path: &str) -> Option<bool> {
     result
 }
 
-/// Matches `path` down its ancestor directories, then the leaf as a directory
-/// when `is_dir` or a file otherwise. An excluded ancestor prunes the subtree.
-/// The `is_dir` flag keeps a directory-only pattern from matching a file leaf by
-/// name. `Some(true)` includes, `Some(false)` excludes, `None` is no match.
-pub fn is_path_match(patterns: &[GitIgnoreRegex], path: &str, is_dir: bool) -> Option<bool> {
+/// Matches a directory `path` down its ancestor directories, then the leaf as a
+/// directory. An excluded ancestor prunes the subtree. `Some(true)` includes,
+/// `Some(false)` excludes, `None` is no match.
+pub fn is_directory_path_match(patterns: &[GitIgnoreRegex], path: &str) -> Option<bool> {
+    path_match(patterns, path, is_directory_match)
+}
+
+/// Matches a file `path` down its ancestor directories, then the leaf as a
+/// file, so a directory-only pattern never matches the leaf by name. An
+/// excluded ancestor prunes the subtree. `Some(true)` includes, `Some(false)`
+/// excludes, `None` is no match.
+pub fn is_file_path_match(patterns: &[GitIgnoreRegex], path: &str) -> Option<bool> {
+    path_match(patterns, path, is_file_match)
+}
+
+/// The shared ancestor walk of the signed path matchers: ancestors match as
+/// directories with an excluded one pruning, then `leaf_match` decides the
+/// leaf.
+fn path_match(
+    patterns: &[GitIgnoreRegex],
+    path: &str,
+    leaf_match: fn(&[GitIgnoreRegex], &str) -> Option<bool>,
+) -> Option<bool> {
     let mut directory = None;
 
     for prefix in ancestor_prefixes(path) {
@@ -49,11 +67,7 @@ pub fn is_path_match(patterns: &[GitIgnoreRegex], path: &str, is_dir: bool) -> O
         }
     }
 
-    let leaf = if is_dir {
-        is_directory_match(patterns, path)
-    } else {
-        is_file_match(patterns, path)
-    };
+    let leaf = leaf_match(patterns, path);
 
     if leaf == Some(false) {
         return Some(false);
@@ -77,16 +91,32 @@ pub fn is_file_match_unsigned(patterns: &[UnsignedGitIgnoreRegex], path: &str) -
         .any(|pattern| pattern.kind() != GitIgnoreRegexKind::Directory && pattern.is_match(path))
 }
 
-/// Whether any pattern matches `path` at an ancestor, as a directory, or as a
-/// file.
-pub fn is_path_match_unsigned(patterns: &[UnsignedGitIgnoreRegex], path: &str) -> bool {
+/// Whether any pattern matches an ancestor of the directory `path` or the leaf
+/// as a directory.
+pub fn is_directory_path_match_unsigned(patterns: &[UnsignedGitIgnoreRegex], path: &str) -> bool {
+    path_match_unsigned(patterns, path, is_directory_match_unsigned)
+}
+
+/// Whether any pattern matches an ancestor of the file `path`, or any file
+/// pattern matches the leaf.
+pub fn is_file_path_match_unsigned(patterns: &[UnsignedGitIgnoreRegex], path: &str) -> bool {
+    path_match_unsigned(patterns, path, is_file_match_unsigned)
+}
+
+/// The shared ancestor walk of the unsigned path matchers: any ancestor match
+/// includes, else `leaf_match` decides the leaf.
+fn path_match_unsigned(
+    patterns: &[UnsignedGitIgnoreRegex],
+    path: &str,
+    leaf_match: fn(&[UnsignedGitIgnoreRegex], &str) -> bool,
+) -> bool {
     for prefix in ancestor_prefixes(path) {
         if is_directory_match_unsigned(patterns, prefix) {
             return true;
         }
     }
 
-    is_directory_match_unsigned(patterns, path) || is_file_match_unsigned(patterns, path)
+    leaf_match(patterns, path)
 }
 
 /// The proper ancestor prefixes of `path`, shallowest first. `a/b/c` gives `a`
@@ -99,8 +129,9 @@ fn ancestor_prefixes(path: &str) -> impl Iterator<Item = &str> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        GitIgnoreRegex, UnsignedGitIgnoreRegex, is_directory_match, is_file_match, is_path_match,
-        is_path_match_unsigned,
+        GitIgnoreRegex, UnsignedGitIgnoreRegex, is_directory_match, is_directory_path_match,
+        is_directory_path_match_unsigned, is_file_match, is_file_path_match,
+        is_file_path_match_unsigned,
     };
 
     fn signed(patterns: &[&str]) -> Vec<GitIgnoreRegex> {
@@ -136,10 +167,10 @@ mod tests {
     fn selecting_a_node_selects_its_whole_subtree() {
         let patterns = signed(&["wall"]);
 
-        assert_eq!(is_path_match(&patterns, "wall", true), Some(true));
-        assert_eq!(is_path_match(&patterns, "wall/brick", false), Some(true));
-        assert_eq!(is_path_match(&patterns, "floor", true), None);
-        assert_eq!(is_path_match(&patterns, "floor/tile", false), None);
+        assert_eq!(is_directory_path_match(&patterns, "wall"), Some(true));
+        assert_eq!(is_file_path_match(&patterns, "wall/brick"), Some(true));
+        assert_eq!(is_directory_path_match(&patterns, "floor"), None);
+        assert_eq!(is_file_path_match(&patterns, "floor/tile"), None);
     }
 
     #[test]
@@ -148,19 +179,19 @@ mod tests {
         // same name.
         let patterns = signed(&["brick/"]);
 
-        assert_eq!(is_path_match(&patterns, "brick", true), Some(true));
-        assert_eq!(is_path_match(&patterns, "brick", false), None);
+        assert_eq!(is_directory_path_match(&patterns, "brick"), Some(true));
+        assert_eq!(is_file_path_match(&patterns, "brick"), None);
     }
 
     #[test]
     fn a_selected_directory_pulls_in_its_object_subtree() {
         let patterns = signed(&["*/"]);
 
-        assert_eq!(is_path_match(&patterns, "wall", true), Some(true));
+        assert_eq!(is_directory_path_match(&patterns, "wall"), Some(true));
         // An object rides in as part of a selected node's subtree.
-        assert_eq!(is_path_match(&patterns, "wall/brick", false), Some(true));
+        assert_eq!(is_file_path_match(&patterns, "wall/brick"), Some(true));
         // A top-level object has no selected ancestor, so it stays out.
-        assert_eq!(is_path_match(&patterns, "loose", false), None);
+        assert_eq!(is_file_path_match(&patterns, "loose"), None);
     }
 
     #[test]
@@ -169,20 +200,23 @@ mod tests {
         // pattern naming a descendant.
         let patterns = signed(&["**", "!wall/", "wall/brick"]);
 
-        assert_eq!(is_path_match(&patterns, "floor", true), Some(true));
-        assert_eq!(is_path_match(&patterns, "wall", true), Some(false));
-        assert_eq!(is_path_match(&patterns, "wall/brick", false), Some(false));
+        assert_eq!(is_directory_path_match(&patterns, "floor"), Some(true));
+        assert_eq!(is_directory_path_match(&patterns, "wall"), Some(false));
+        assert_eq!(is_file_path_match(&patterns, "wall/brick"), Some(false));
     }
 
     #[test]
     fn a_deeper_exclude_prunes_only_that_branch() {
         let patterns = signed(&["house/", "!house/attic/"]);
 
-        assert_eq!(is_path_match(&patterns, "house", true), Some(true));
-        assert_eq!(is_path_match(&patterns, "house/room", true), Some(true));
-        assert_eq!(is_path_match(&patterns, "house/attic", true), Some(false));
+        assert_eq!(is_directory_path_match(&patterns, "house"), Some(true));
+        assert_eq!(is_directory_path_match(&patterns, "house/room"), Some(true));
         assert_eq!(
-            is_path_match(&patterns, "house/attic/box", false),
+            is_directory_path_match(&patterns, "house/attic"),
+            Some(false)
+        );
+        assert_eq!(
+            is_file_path_match(&patterns, "house/attic/box"),
             Some(false)
         );
     }
@@ -191,16 +225,26 @@ mod tests {
     fn a_file_leaf_can_be_selected_by_name() {
         let patterns = signed(&["**/brick"]);
 
-        assert_eq!(is_path_match(&patterns, "wall/brick", false), Some(true));
-        assert_eq!(is_path_match(&patterns, "wall/stone", false), None);
+        assert_eq!(is_file_path_match(&patterns, "wall/brick"), Some(true));
+        assert_eq!(is_file_path_match(&patterns, "wall/stone"), None);
     }
 
     #[test]
     fn unsigned_path_match_is_any_match_along_the_path() {
         let patterns = unsigned(&["wall"]);
 
-        assert!(is_path_match_unsigned(&patterns, "wall"));
-        assert!(is_path_match_unsigned(&patterns, "wall/brick"));
-        assert!(!is_path_match_unsigned(&patterns, "floor/tile"));
+        assert!(is_directory_path_match_unsigned(&patterns, "wall"));
+        assert!(is_file_path_match_unsigned(&patterns, "wall/brick"));
+        assert!(!is_file_path_match_unsigned(&patterns, "floor/tile"));
+    }
+
+    #[test]
+    fn an_unsigned_directory_only_pattern_does_not_match_a_file_leaf() {
+        let patterns = unsigned(&["logs/"]);
+
+        assert!(is_directory_path_match_unsigned(&patterns, "logs"));
+        assert!(!is_file_path_match_unsigned(&patterns, "logs"));
+        // A file under the directory still rides in through the ancestor.
+        assert!(is_file_path_match_unsigned(&patterns, "logs/app"));
     }
 }

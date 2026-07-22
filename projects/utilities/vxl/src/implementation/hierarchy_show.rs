@@ -288,8 +288,12 @@ impl<'a> Scene<'a> {
         let selected: HashSet<String> = placements
             .iter()
             .filter(|placement| {
-                let is_dir = matches!(placement.entity, Entity::Node(_));
-                pathspec::is_path_match(&patterns, &placement.path, is_dir) == Some(true)
+                let matched = if matches!(placement.entity, Entity::Node(_)) {
+                    pathspec::is_directory_path_match(&patterns, &placement.path)
+                } else {
+                    pathspec::is_file_path_match(&patterns, &placement.path)
+                };
+                matched == Some(true)
             })
             .map(|placement| placement.path.clone())
             .collect();

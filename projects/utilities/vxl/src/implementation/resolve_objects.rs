@@ -1,6 +1,6 @@
 use crate::{Format, Result, SelectIndex, implementation};
 use branded_id::U32Id;
-use pathspec::{GitIgnoreRegex, is_path_match};
+use pathspec::{GitIgnoreRegex, is_file_path_match};
 use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
@@ -61,10 +61,10 @@ fn select_objects(
 }
 
 /// Marks every object a path glob reaches. Each object's placement paths are
-/// tested against the gitignore patterns with [`is_path_match`], which pulls an
-/// object in when its own path matches or when a selected ancestor node does,
-/// so a matched node selects its whole subtree. Matching any of a DAG object's
-/// placement paths selects it.
+/// tested against the gitignore patterns with [`is_file_path_match`], which
+/// pulls an object in when its own path matches or when a selected ancestor
+/// node does, so a matched node selects its whole subtree. Matching any of a
+/// DAG object's placement paths selects it.
 fn select_by_path(
     state: &VoxMain,
     objects: &[ObjectId],
@@ -79,9 +79,9 @@ fn select_by_path(
     let object_paths = object_paths(state, objects, &node_paths);
 
     for (object_index, path) in &object_paths {
-        // Objects are leaves, so each is tested as a file; the ancestor walk in
-        // `is_path_match` is what carries a selected node down to its objects.
-        if is_path_match(&patterns, path, false) == Some(true) {
+        // Objects are file leaves; the ancestor walk in `is_file_path_match` is
+        // what carries a selected node down to its objects.
+        if is_file_path_match(&patterns, path) == Some(true) {
             chosen[*object_index] = true;
         }
     }

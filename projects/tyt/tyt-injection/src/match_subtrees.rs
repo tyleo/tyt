@@ -1,4 +1,4 @@
-use pathspec::{GitIgnoreRegex, is_path_match};
+use pathspec::{GitIgnoreRegex, is_directory_path_match, is_file_path_match};
 use std::io::{Error, ErrorKind, Result};
 
 /// Selects the candidates matched by the gitignore-style `patterns` with real
@@ -12,6 +12,13 @@ pub fn match_subtrees(patterns: &[&str], candidates: &[(&str, bool)]) -> Result<
 
     Ok(candidates
         .iter()
-        .map(|(path, is_dir)| is_path_match(&compiled, path, *is_dir) == Some(true))
+        .map(|(path, is_dir)| {
+            let matched = if *is_dir {
+                is_directory_path_match(&compiled, path)
+            } else {
+                is_file_path_match(&compiled, path)
+            };
+            matched == Some(true)
+        })
         .collect())
 }
