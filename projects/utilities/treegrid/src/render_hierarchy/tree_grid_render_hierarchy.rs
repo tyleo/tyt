@@ -19,18 +19,6 @@ const EXTENSION_MID: &str = "\u{2502} ";
 pub trait TreeGridRenderHierarchy {
     /// Renders the `hierarchy` layout: a box-glyph tree with one line
     /// per node.
-    ///
-    /// A node line is the rendered label, then the annotation joined
-    /// with one space when present, then `: ` and the node's cells
-    /// when it has values. With
-    /// [`value_children`](TreeGridHierarchyOptions::value_children)
-    /// set, a data node prints its label alone and each value takes
-    /// its own connector line beneath, before the node's children.
-    /// With [`bare_roots`](TreeGridHierarchyOptions::bare_roots) set,
-    /// each root prints on an unprefixed line and successive root
-    /// sections separate with one blank line; unset, roots take
-    /// connectors as siblings of one another. Every line ends with a
-    /// newline; an empty grid renders as the empty string.
     fn render_hierarchy(&self, options: &TreeGridHierarchyOptions) -> String;
 }
 
@@ -114,11 +102,7 @@ impl<C: TreeGridCells> TreeGrid<C> {
     /// instead.
     fn node_line(&self, id: U32Id<BTreeGridNode>, options: &TreeGridHierarchyOptions) -> String {
         let node = self.node(id);
-        let mut line = node.label.render();
-        if let Some(annotation) = &node.annotation {
-            line.push(' ');
-            line.push_str(annotation);
-        }
+        let mut line = node.annotated_label();
         if !options.value_children && !node.values.is_empty() {
             let cells: Vec<Cell> = node
                 .values

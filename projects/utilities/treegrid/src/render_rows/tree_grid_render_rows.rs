@@ -8,15 +8,6 @@ use branded_id::U32Id;
 pub trait TreeGridRenderRows {
     /// Renders the `rows` layout: one labeled row of cells per data
     /// node, in pre-order, with a blank line between rows.
-    ///
-    /// Labels pad to a shared column; cells stay ragged. A width
-    /// wraps cells onto continuation lines under the first cell.
-    /// The label mode picks the label:
-    ///
-    /// 1. `none`: no label column.
-    /// 2. `concat` (default): the full dot-joined path.
-    /// 3. `header`: the leaf segment, grouped under nested markdown
-    ///    headings and padded per group.
     fn render_rows(&self, options: &TreeGridRowsOptions) -> String;
 }
 
@@ -42,13 +33,13 @@ impl<C: TreeGridCells> TreeGridRenderRows for TreeGrid<C> {
                         blocks.push(render::heading(
                             header.level,
                             group.depth,
-                            &self.node(branch).label.render(),
+                            &self.node(branch).annotated_label(),
                         ));
                     }
                     let labels: Vec<String> = group
                         .members
                         .iter()
-                        .map(|&id| self.node(id).label.render())
+                        .map(|&id| self.node(id).annotated_label())
                         .collect();
                     let width = label_width(labels.iter().map(String::as_str));
                     for (label, &id) in labels.iter().zip(&group.members) {
@@ -279,6 +270,71 @@ mod tests {
              **\"baseColorFactor\"**\n\
              \n\
              a 255\n"
+        );
+    }
+
+    #[test]
+    fn an_annotation_suffixes_and_widens_the_concat_label() {
+        let mut grid = TreeGrid::new();
+        let palette = grid.add_root(TreeGridLabel::bare("0"));
+        let base = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
+        grid.node_mut(base).format = Some(TreeGridCellFormat::Text);
+        grid.push_value(base, TreeGridValue::srgba8([255, 0, 0, 255]));
+        let strength = grid.add_child(palette, TreeGridLabel::quoted("emissiveStrength"));
+        grid.node_mut(strength).annotation = Some("(scalar)".to_string());
+        grid.push_value(strength, TreeGridValue::float(2.0));
+
+        assert_eq!(
+            grid.render_rows(&TreeGridRowsOptions::default()),
+            "0.\"baseColorFactor\"           #FF0000FF\n\
+             \n\
+             0.\"emissiveStrength\" (scalar) 2\n"
+        );
+    }
+
+    #[test]
+    fn an_annotated_branch_keeps_descendant_paths_bare() {
+        let mut grid = TreeGrid::new();
+        let palette = grid.add_root(TreeGridLabel::bare("0"));
+        let tint = grid.add_child(palette, TreeGridLabel::quoted("tint"));
+        grid.node_mut(tint).annotation = Some("(scalar)".to_string());
+        grid.node_mut(tint).format = Some(TreeGridCellFormat::Text);
+        grid.push_value(tint, TreeGridValue::srgba8([0, 255, 0, 128]));
+        let alpha = grid.add_child(tint, TreeGridLabel::bare("a"));
+        grid.node_mut(alpha).format = Some(TreeGridCellFormat::Text);
+        grid.push_value(alpha, TreeGridValue::unorm8(128));
+
+        assert_eq!(
+            grid.render_rows(&TreeGridRowsOptions::default()),
+            "0.\"tint\" (scalar) #00FF0080\n\
+             \n\
+             0.\"tint\".a        128\n"
+        );
+    }
+
+    #[test]
+    fn an_annotation_suffixes_the_header_label_and_heading() {
+        let mut grid = TreeGrid::new();
+        let palette = grid.add_root(TreeGridLabel::bare("0"));
+        let tint = grid.add_child(palette, TreeGridLabel::quoted("tint"));
+        grid.node_mut(tint).annotation = Some("(scalar)".to_string());
+        grid.node_mut(tint).format = Some(TreeGridCellFormat::Text);
+        grid.push_value(tint, TreeGridValue::srgba8([0, 255, 0, 128]));
+        let alpha = grid.add_child(tint, TreeGridLabel::bare("a"));
+        grid.node_mut(alpha).format = Some(TreeGridCellFormat::Text);
+        grid.push_value(alpha, TreeGridValue::unorm8(128));
+
+        let options = TreeGridRowsOptions::default()
+            .with_label(TreeGridLabelMode::Header(TreeGridHeaderOptions::default()));
+        assert_eq!(
+            grid.render_rows(&options),
+            "# 0\n\
+             \n\
+             \"tint\" (scalar) #00FF0080\n\
+             \n\
+             ## \"tint\" (scalar)\n\
+             \n\
+             a 128\n"
         );
     }
 

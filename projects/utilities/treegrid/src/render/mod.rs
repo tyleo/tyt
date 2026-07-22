@@ -1,6 +1,7 @@
 //! Machinery shared by two or more layout renders, grouped by feature
 //! gate so each `cfg` sits once, on the module that rides it.
 
+mod annotated_label;
 mod cell;
 #[cfg(any(
     feature = "render_columns",

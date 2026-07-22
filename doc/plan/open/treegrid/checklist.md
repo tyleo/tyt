@@ -139,8 +139,11 @@ items off as they land.
 
 - [ ] **S7. Adoption.** Sampling keeps producing `Sample`-shaped data,
       now as `TreeGridValue`s; build the forest (palette `Bare` ->
-      attribute `Quoted` -> optional component `Bare`; per-collection
-      format on the data node). Map pools to the typed constructors
+      property `Quoted` -> optional component `Bare`; per-collection
+      format on the data node). A scalar property's data node sets
+      `annotation: "(scalar)"`: the text layouts suffix it (chunk 1,
+      2026-07-21) and the envelope's `annotation` field replaces the
+      bespoke `scalar: true` flag. Map pools to the typed constructors
       (`srgba8` for sRGB colors, `unorm8` for components, `float` for
       numbers); linear colors keep their space-joined text through the
       escape hatch until the S17 notation flip. Decide the

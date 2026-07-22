@@ -13,8 +13,8 @@ pub struct TreeGridNode<V> {
     /// One path segment.
     pub label: TreeGridLabel,
 
-    /// A verbatim suffix shown only by the `hierarchy` layout, joined
-    /// to the label with one space; the caller supplies its own
+    /// A verbatim suffix joined with one space to the label wherever
+    /// a layout labels this node; the caller supplies its own
     /// brackets (for example `(Group)`).
     pub annotation: Option<String>,
 

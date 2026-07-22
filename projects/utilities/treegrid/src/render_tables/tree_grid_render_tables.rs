@@ -9,18 +9,7 @@ use branded_id::U32Id;
 /// The `tables` render.
 pub trait TreeGridRenderTables {
     /// Renders the `tables` layout: aligned markdown tables led by a
-    /// `#` column of 0-based value indices, one column per data node,
-    /// shorter series blank past their end.
-    ///
-    /// The shape picks the grouping:
-    ///
-    /// 1. `Nested` (default): one table per branch's direct data
-    ///    children, under nested markdown headings carrying the
-    ///    branch's full dot-joined path (`concat`) or its leaf
-    ///    segment (`header`); a data-bearing root joins a first,
-    ///    heading-less table.
-    /// 2. `Flat`: one table over every data node, headed by full
-    ///    dot-joined paths: the comparison view.
+    /// `#` column of 0-based value indices, one column per data node.
     fn render_tables(&self, shape: &TreeGridTableShape) -> String;
 }
 
@@ -46,27 +35,34 @@ impl<C: TreeGridCells> TreeGrid<C> {
         // Groups arrive depth-first with parents before children, so a
         // depth-indexed stack of cumulative paths recovers each
         // branch's dot-joined path without parent links in the arena.
+        // The stacked segments stay bare; the annotation joins only
+        // the branch's own heading.
         let mut paths: Vec<String> = Vec::new();
         for group in self.groups() {
             if let Some(branch) = group.branch {
-                let leaf = self.node(branch).label.render();
+                let node = self.node(branch);
+                let leaf = node.label.render();
                 paths.truncate(group.depth);
                 let path = match paths.last() {
                     Some(parent) => format!("{parent}.{leaf}"),
                     None => leaf.clone(),
                 };
                 let text = match options.label {
-                    TreeGridTableLabelMode::Concat => &path,
-                    TreeGridTableLabelMode::Header => &leaf,
+                    TreeGridTableLabelMode::Concat => path.clone(),
+                    TreeGridTableLabelMode::Header => leaf,
                 };
-                blocks.push(render::heading(options.level, group.depth, text));
+                let text = match &node.annotation {
+                    Some(annotation) => format!("{text} {annotation}"),
+                    None => text,
+                };
+                blocks.push(render::heading(options.level, group.depth, &text));
                 paths.push(path);
             }
             if !group.members.is_empty() {
                 let labels: Vec<String> = group
                     .members
                     .iter()
-                    .map(|&id| self.node(id).label.render())
+                    .map(|&id| self.node(id).annotated_label())
                     .collect();
                 blocks.push(self.table_block(&labels, &group.members));
             }
@@ -309,6 +305,62 @@ mod tests {
              | #   | \"metallicFactor\" |\n\
              | --- | ---------------- |\n\
              | 0   | 0.2              |\n"
+        );
+    }
+
+    #[test]
+    fn annotations_suffix_column_headers_and_headings() {
+        let mut grid = TreeGrid::new();
+        let palette = grid.add_root(TreeGridLabel::bare("0"));
+        let strength = grid.add_child(palette, TreeGridLabel::quoted("emissiveStrength"));
+        grid.node_mut(strength).annotation = Some("(scalar)".to_string());
+        grid.push_value(strength, TreeGridValue::float(2.0));
+        let tint = grid.add_child(palette, TreeGridLabel::quoted("tint"));
+        grid.node_mut(tint).annotation = Some("(scalar)".to_string());
+        let alpha = grid.add_child(tint, TreeGridLabel::bare("a"));
+        grid.node_mut(alpha).format = Some(TreeGridCellFormat::Text);
+        grid.push_value(alpha, TreeGridValue::unorm8(128));
+        let sub = grid.add_child(tint, TreeGridLabel::bare("sub"));
+        let leaf = grid.add_child(sub, TreeGridLabel::bare("b"));
+        grid.push_value(leaf, TreeGridValue::int(7));
+
+        // The heading path stack stays bare, so `sub`'s concat
+        // heading skips its parent's annotation.
+        assert_eq!(
+            grid.render_tables(&TreeGridTableShape::default()),
+            "# 0\n\
+             \n\
+             | #   | \"emissiveStrength\" (scalar) |\n\
+             | --- | --------------------------- |\n\
+             | 0   | 2                           |\n\
+             \n\
+             ## 0.\"tint\" (scalar)\n\
+             \n\
+             | #   | a   |\n\
+             | --- | --- |\n\
+             | 0   | 128 |\n\
+             \n\
+             ### 0.\"tint\".sub\n\
+             \n\
+             | #   | b   |\n\
+             | --- | --- |\n\
+             | 0   | 7   |\n"
+        );
+    }
+
+    #[test]
+    fn flat_headers_carry_annotations() {
+        let mut grid = TreeGrid::new();
+        let palette = grid.add_root(TreeGridLabel::bare("0"));
+        let strength = grid.add_child(palette, TreeGridLabel::quoted("emissiveStrength"));
+        grid.node_mut(strength).annotation = Some("(scalar)".to_string());
+        grid.push_value(strength, TreeGridValue::float(2.0));
+
+        assert_eq!(
+            grid.render_tables(&TreeGridTableShape::Flat),
+            "| #   | 0.\"emissiveStrength\" (scalar) |\n\
+             | --- | ----------------------------- |\n\
+             | 0   | 2                             |\n"
         );
     }
 

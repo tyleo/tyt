@@ -16,13 +16,16 @@ amended; after adoption, this spec is the single source of truth.
     (`"baseColorFactor"`, `""`, `"has \"quotes\""`). JSON always emits
     the raw string, which is why quoting is a flag rather than baked
     into the label text by the caller.
-  - `annotation: Option<String>` -- a verbatim suffix shown only by the
-    `hierarchy` layout, joined to the label with one space; the caller
-    supplies its own brackets (`vmax`'s `energy-tank (Group)` sets
-    `annotation: "(Group)"`). Note that `vxl hierarchy show`'s tags are
-    *not* annotations: its lines read `"energy-tank-1": {node: 0}` --
-    label, colon, tag -- which is exactly the data-node form, so the tag
-    is modeled as the node's single value (text `{node: 0}`).
+  - `annotation: Option<String>`: a verbatim suffix joined with one
+    space to the label wherever a layout labels the node, meaning
+    `hierarchy` node lines, row labels, column heads, table column
+    headers, and the headings that name a branch. The caller supplies
+    its own brackets (`vmax`'s `energy-tank (Group)` sets
+    `annotation: "(Group)"`; `palette show`'s scalar marker sets
+    `annotation: "(scalar)"`). Note that `vxl hierarchy show`'s tags
+    are *not* annotations: its lines read `"energy-tank-1": {node: 0}`
+    (label, colon, tag), which is exactly the data-node form, so the
+    tag is modeled as the node's single value (text `{node: 0}`).
   - `format: Option<TreeGridCellFormat>` -- how this node's values
     render to cells (`Visual`, `VisualText`, `Text`); unset defers to
     the policy per value.
@@ -180,7 +183,11 @@ Behind the `ty-math` feature, over the component-generic color family
   label mode `none`, `concat` with `rows` / `columns`, flat tables,
   or a render that takes no label mode -- it is
   `TreeGridError::HeaderLevelWithoutHeaders`, not a silent no-op.
-- Annotations never appear in `concat` or `header` labels.
+- A node's annotation suffixes its own label wherever one names it:
+  the concat path of an annotated data node ends with the suffix, and
+  an annotated branch's heading carries it. Segments an ancestor
+  contributes to a longer path stay bare; `none` mode drops
+  annotations with the labels they ride.
 
 ## Layouts
 

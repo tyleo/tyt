@@ -9,17 +9,11 @@ use serde_json::{Error as JsonError, Map, Value};
 /// text-only policy.
 pub trait TreeGridRenderJson {
     /// Renders the `json-pretty` layout: one record per root node,
-    /// pretty-printed, ending with a newline.
-    ///
-    /// Records nest through their `children`; absent and empty
-    /// fields are omitted. Labels emit their raw text, `Bare` and
-    /// `Quoted` alike, and values their policy JSON form. An empty
-    /// grid renders as the empty array.
+    /// pretty-printed.
     fn render_json_pretty(&self) -> String;
 
     /// Renders the `json-compact` layout: the envelope of
-    /// [`render_json_pretty`](Self::render_json_pretty) on one line,
-    /// ending with a newline.
+    /// [`render_json_pretty`](Self::render_json_pretty) on one line.
     fn render_json_compact(&self) -> String;
 }
 

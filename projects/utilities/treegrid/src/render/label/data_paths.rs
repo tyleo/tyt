@@ -3,7 +3,7 @@ use branded_id::U32Id;
 
 impl<C: TreeGridCells> TreeGrid<C> {
     /// Data nodes in pre-order, each paired with its full dot-joined
-    /// path.
+    /// path and annotation suffix; ancestor segments stay bare.
     pub(crate) fn data_paths(&self) -> Vec<(String, U32Id<BTreeGridNode>)> {
         let mut paths = Vec::new();
         for &root in self.roots() {
@@ -25,7 +25,11 @@ impl<C: TreeGridCells> TreeGrid<C> {
             format!("{prefix}.{}", node.label.render())
         };
         if !node.values.is_empty() {
-            paths.push((path.clone(), id));
+            let label = match &node.annotation {
+                Some(annotation) => format!("{path} {annotation}"),
+                None => path.clone(),
+            };
+            paths.push((label, id));
         }
         for &child in node.children() {
             self.collect_data_paths(child, &path, paths);

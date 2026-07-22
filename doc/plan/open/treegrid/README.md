@@ -45,7 +45,8 @@ A tree grid is a forest of nodes in a branded-id arena, voxcore-style
 either `Bare`, printed as-is for trusted identifiers like `transform` or
 `0`, or `Quoted`, printed `{:?}`-quoted for user-entered strings like
 `"baseColorFactor"`), an optional
-annotation (a hierarchy-layout-only verbatim suffix, vmax's `(Group)`;
+annotation (a verbatim suffix on the node's own label wherever a
+layout labels it, vmax's `(Group)` and `palette show`'s `(scalar)`;
 `hierarchy show`'s `: {node: 0}` tags are instead ordinary node values),
 an ordered list of values, and children -- and any node may have both
 values and children. Values render through the grid's cell policy

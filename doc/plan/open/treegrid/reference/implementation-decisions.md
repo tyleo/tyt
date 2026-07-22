@@ -645,3 +645,37 @@ The voxsmith half of the voxcore properties breakage is fixed, but
 vxl still fails the workspace clippy gate. Verification therefore
 stayed scoped to `-p treegrid`, across the empty set, single
 features, json pairings, and `--all-features`.
+
+## S7 chunk 1: annotations join the text-layout labels (2026-07-21)
+
+S7 starts on the crate side. The scalar-bindings work (vxl cb80f6f,
+2026-07-21, after phase 1 closed) put a ` (scalar)` suffix in
+`palette show`'s default rows output, as in
+`0."emissiveStrength" (scalar) 2`, so the phase 2 parity bar now
+needs a label suffix in layouts that had none. That suffix is
+exactly the annotation concept, so the hierarchy-only restriction is
+lifted rather than a second mechanism invented: a node's annotation
+now suffixes its own rendered label wherever a layout labels the
+node, meaning hierarchy node lines as before, plus row labels,
+column heads, table column headers, and the headings that name an
+annotated branch. Segments an ancestor contributes to a descendant's
+path stay bare, and `none` label mode drops annotations with the
+labels they ride. The JSON envelope already carried the field; the
+bespoke `"scalar": true` record flag maps onto it at the adoption,
+part of the envelope change phase 2 declares.
+
+- **`TreeGridNode::annotated_label` is the one join point.** A
+  method-named impl-only file in `render/`, under the module's own
+  four-render gate. The hierarchy render's inline join folded into
+  it; `data_paths` and the tables path stack append the annotation
+  only to the label they emit, keeping recursion prefixes bare.
+- **The spec was amended, not the implementation**: the model
+  bullet, the Labels rule, and the plan README's model paragraph.
+  The checklist's S7 body gained the scalar mapping note, and its
+  stale attribute noun became property.
+- **The render method docs cut to one summary line each** (owner
+  call, mid-session): the mechanics paragraphs restated what the
+  option payloads and the spec already hold, so all five render
+  traits keep only the layout summary.
+
+Chunk 2 is the vxl adoption proper.
