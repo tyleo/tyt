@@ -72,10 +72,10 @@ is a separate mode left for a later pass.
 ## Material and texture maps
 
 A material map is one image whose channels are filled from a material's
-attributes, so maps that read attributes share one atlas and differ only in
-which attributes they read. Attributes a material omits fall back to their spec defaults from
-[Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
-so a map never fails for a missing attribute. `--atlas` sets how
+properties, so maps that read properties share one atlas and differ only in
+which properties they read. Properties a material omits fall back to their spec defaults from
+[Properties](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties),
+so a map never fails for a missing property. `--atlas` sets how
 the atlas is laid out and how the mesh's UVs index it:
 
 1. `palette` (default): one texel per palette material, placed at its material
@@ -139,7 +139,7 @@ bundle that expands to several; the single presets are:
    `--texture-map` and the packings that read it, such as `mse`.
 7. `occlusion`: grayscale `occlusionStrength`. One channel.
 8. `computed-occlusion`: grayscale occlusion computed from the voxel geometry
-   rather than read from the `occlusionStrength` attribute. One channel. Always
+   rather than read from the `occlusionStrength` property. One channel. Always
    bakes into an unwrap layout; see the atlas notes above.
 9. `roughness`: grayscale `roughnessFactor`. One channel.
 10. `smoothness`: grayscale `smoothness`. One channel.
@@ -171,9 +171,9 @@ error.
 
 `--texture-map <file-name> <channels>` writes a custom packing, also repeatable.
 The `channels` argument is a comma-separated list of `R=<expr>`, `G=<expr>`,
-`B=<expr>`, and optional `A=<expr>`, where `<expr>` is an attribute name,
-`1-<attribute>` for an inverted attribute, one color component as
-`<attribute>.r`, `.g`, `.b`, or `.a`, the constant `0` or `1`, or
+`B=<expr>`, and optional `A=<expr>`, where `<expr>` is a property name,
+`1-<property>` for an inverted property, one color component as
+`<property>.r`, `.g`, `.b`, or `.a`, the constant `0` or `1`, or
 `computed-occlusion` for the geometry-derived occlusion. The channel
 count is the number of channels named; an omitted channel is `0`. For example
 `--texture-map model-mse.png R=metallicFactor,G=1-roughnessFactor,B=emissiveStrength`
@@ -181,59 +181,61 @@ reproduces `--texture mse`, and swapping `G=roughnessFactor` writes roughness
 instead of its inverse. A packing that names `computed-occlusion` always bakes
 into an unwrap layout, as `--texture-map ao.png R=computed-occlusion` does.
 
-A color attribute is read one component at a time. `baseColorFactor` is a color,
+A color property is read one component at a time. `baseColorFactor` is a color,
 so `R=baseColorFactor.a` writes its straight alpha and
 `R=baseColorFactor.r,G=baseColorFactor.g,B=baseColorFactor.b,A=baseColorFactor.a`
 splits the color across four channels; a component reads a byte from the stored
 color. Naming a color with no component, as in `R=baseColorFactor`, is an error,
-and `--texture albedo` is the way to write the whole color. A scalar attribute
+and `--texture albedo` is the way to write the whole color. A scalar property
 names no component, so `metallicFactor.r` is an error, and a color with no alpha
 rejects `.a`: `emissiveFactor` is a three-component color, so `emissiveFactor.a`
 is an error.
 
-`--define-attribute <attribute> <name>` names a custom
-attribute so `--texture-map` and `--vertex-map` can read it, repeatable, as in
-`--define-attribute sss subsurface`. The voxel-json format stores attributes
+`--define-property <property> <name>` names a custom
+property so `--texture-map` and `--vertex-map` can read it, repeatable, as in
+`--define-property sss subsurface`. The voxel-json format stores properties
 generically, so a palette may
 carry keys beyond the recommended set in
-[Attributes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes),
+[Properties](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties),
 and a binding gives one such key a name a packing can use. A binding reads the
 key from the meshed layer's material. Its two tokens are:
 
-1. `attribute`: the reference used in `--texture-map` and `--vertex-map`. It
-   shadows a built-in attribute name on collision, so `--define-attribute
+1. `property`: the reference used in `--texture-map` and `--vertex-map`. It
+   shadows a built-in property name on collision, so `--define-property
    roughnessFactor micro-rough` makes `R=roughnessFactor` read `micro-rough`
    instead. The shadowing is scoped to the custom packings; the `--texture` and
-   `--vertex` presets always read the spec attributes. The reference carries no
+   `--vertex` presets always read the spec properties. The reference carries no
    whitespace, since `--texture-map` reads it as a bare token.
-2. `name`: the voxel-json attribute key read from the meshed layer's material.
+2. `name`: the voxel-json property key read from the meshed layer's material.
    As its own token it may be quoted, so a name with spaces, as
-   `--define-attribute emissive "super emissive thing"`, is reachable only
+   `--define-property emissive "super emissive thing"`, is reachable only
    through such an alias.
 
-The attribute's type is not declared: it is read from the bound key's value pool
-in the meshed layer's palette when the document loads. A color pool exposes the
-`r`, `g`, `b`, and (with alpha) `a` components a packing reads as `<attribute>.r`
-and so on; a `float`, `int`, or `bool` pool is a scalar, read whole. An attribute
+The property's type is not declared: it is read from the value pool the key
+binds in the meshed layer's palette when the document loads, whether the
+palette carries the key as an array property or a scalar pin. A color pool
+exposes the
+`r`, `g`, `b`, and (with alpha) `a` components a packing reads as `<property>.r`
+and so on; a `float`, `int`, or `bool` pool is a scalar, read whole. A property
 absent from that palette follows the format's unbound-default rule: a glTF
 built-in bakes its spec default, so `baseColorFactor.a` and `occlusionStrength`
 need no binding, while a custom key, which has no default, is an error.
 
-For example, with a palette binding `tint` to an `srgba` pool, `--define-attribute
+For example, with a palette binding `tint` to an `srgba` pool, `--define-property
 tint tint` then `--texture-map
 paint.png R=tint.r,G=tint.g,B=tint.b,A=baseColorFactor.a` packs the custom `tint`
 color into RGB and the base color's alpha into `A`.
 
 ## Vertex attribute maps
 
-A material map reads a material's attributes the same way whether it lands in a
+A material map reads a material's properties the same way whether it lands in a
 texture or on the mesh's vertices; only the carrier differs. The
 [texture maps](#material-and-texture-maps) above write through `--texture` and
 `--texture-map`, sampled by the mesh's UVs; `--vertex` and `--vertex-map` write
 the same resolved values to glTF vertex attributes, one value per vertex, with no
 texture and no UV set. The source grammar is shared: `--vertex-map` reads the
-same `<channels>` expressions as `--texture-map`, and `--define-attribute` names
-custom attributes for both. Vertex attributes need geometry, so unlike texture
+same `<channels>` expressions as `--texture-map`, and `--define-property` names
+custom properties for both. Vertex attributes need geometry, so unlike texture
 maps they have no `material`-command equivalent.
 
 The attribute name a value lands in decides whether a generic glTF viewer reads
@@ -278,11 +280,12 @@ seam.
    and the exact-value alternative to the palette atlas. The table is the distinct
    materials used, so it is per-mesh, not shared across meshes. Custom; not read
    by a generic viewer.
-6. `palette-layers`: one index per referenced palette layer per vertex, written
+6. `palette-layers`: one index per sampled layer per vertex, written
    as scalars `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on, with each layer's
-   palette shipped verbatim as [palette data](#palette-data). A custom shader
-   combines the indexed materials however the consuming application defines, since
-   the voxel-json format no longer merges layers. Its data sums the layer sizes
+   palette shipped verbatim as [palette data](#palette-data); an unsampled
+   layer has no per-voxel samples, so it ships no index. A custom shader
+   combines the indexed materials, canonically by the format's layer-override
+   order: the last layer supplying a property wins. Its data sums the layer sizes
    rather than multiplying them and depends only on the palette set, so it stays
    shareable across meshes and is the compact carrier for a many-layer object; it
    is also the only carrier that preserves every layer's material rather than
@@ -333,9 +336,9 @@ are JSONC for readability; a real file is plain JSON.
 
 The top-level `kind` says which carrier wrote it. A material is an object of
 voxel-json
-[attribute](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#attributes)
+[property](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties)
 keys to values: a color is a `#RRGGBBAA` hex string, a scalar is a number, and an
-omitted attribute takes its spec default, so a material lists only what it sets.
+omitted property takes its spec default, so a material lists only what it sets.
 An unrecognized `version` is rejected.
 
 ### `kind: "palette-index"`
@@ -358,9 +361,10 @@ material the mesh uses:
 ### `kind: "palette-layers"`
 
 `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on index `layers[0]`, `layers[1]`, and
-so on in the object's `layerPaletteRefs` order. A custom shader combines the
-indexed materials however the consuming application defines, since the voxel-json
-format no longer merges layers:
+so on, one entry per sampled layer in the object's `layers` order. A custom
+shader combines the indexed materials, canonically by the format's
+layer-override order, each property taking its value from the last layer that
+supplies it:
 
 ```jsonc
 {
@@ -402,16 +406,17 @@ interface PaletteIndexData {
 interface PaletteLayersData {
   version: 1;
   kind: "palette-layers";
-  // _PALETTEINDEX0, _PALETTEINDEX1, ... index layers[0], layers[1], ... in the
-  // object's layerPaletteRefs order; the voxel-json format no longer merges
-  // layers, so a consumer combines them however it defines.
+  // _PALETTEINDEX0, _PALETTEINDEX1, ... index layers[0], layers[1], ..., one
+  // entry per sampled layer in the object's `layers` order; the canonical
+  // combination is the format's layer-override order, the last layer
+  // supplying a property winning.
   layers: Material[][];
 }
 
-// Attribute keys to values, following the voxel-json Attributes vocabulary: a
-// color is a `#RRGGBBAA` hex string, a scalar is a number. An omitted attribute
+// Property keys to values, following the voxel-json Properties vocabulary: a
+// color is a `#RRGGBBAA` hex string, a scalar is a number. An omitted property
 // takes its spec default, so a material lists only what it sets.
-type Material = { [attribute: string]: string | number };
+type Material = { [property: string]: string | number };
 ```
 
 ## Future work

@@ -9,7 +9,7 @@ vxl hierarchy show <input> [pattern...] [options]
 Prints the scene graph as a tree with box-drawing glyphs, modeled on the FBX
 hierarchy view. The graph is a DAG, not a tree: a node may have multiple
 parents, which is instancing, and the roots are exactly the nodes listed in
-`rootHierarchyNodes`. `show` marks shared and instanced nodes and lists
+`rootNodes`. `show` marks shared and instanced nodes and lists
 unplaced library nodes, defined as nodes that are neither a root nor a child,
 so the structure stays visible rather than implying a strict tree. Each node
 shows its name and its referenced child objects. See
@@ -52,10 +52,11 @@ voxels reports a zero-size box at its origin.
 8. `--show-runtime-extents [precision]`: append the runtime grid's extents
    (`max - min`).
 9. `--show-layers` (flag): append each object's referenced layers as a
-   nested subtree, one child per layer in the object's layer-reference
-   order, reading `<palette index>: {materials: <count>}`. Two layers may share
-   a palette, and layers do not merge. An object that references no layer prints
-   an empty `layers: []` array.
+   nested subtree, one child per layer in the object's `layers` order, back
+   to front, reading `<palette index>: {materials: <count>}`; a layer whose
+   palette has no materials appends `, sampled: false`, since it carries no
+   sample channel. Two layers may share a palette. An object that references
+   no layer prints an empty `layers: []` array.
 10. `--collapse-ancestors` (flag): hide the ancestor chain above each match root
     and replace it with an `ancestors` marker, omitted when the match root is a
     top-level node. Requires a `pattern`.

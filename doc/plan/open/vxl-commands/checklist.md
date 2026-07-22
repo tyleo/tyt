@@ -59,7 +59,7 @@ off as they land.
       (`albedo`/`computed-occlusion` → `COLOR_0`, the scalar/packed presets →
       `_NAME`, `palette-index` → `_PALETTEINDEX` over a per-mesh used-combos
       table, `palette-layers` → `_PALETTEINDEX0..n` over per-layer palettes),
-      reusing the `--texture-map` channel parser and `--define-attribute`; emit
+      reusing the `--texture-map` channel parser and `--define-property`; emit
       glTF vertex attributes (`COLOR_0` standard, `_NAME` custom) and write the
       `PaletteData` JSON per `--palette-storage`. See [mesh](reference/mesh.md).
 - [x] `ResourceStorage` `ValueEnum` (`embedded` | `external` | `both`) backing
@@ -120,7 +120,7 @@ off as they land.
       written per `--palette-storage` (extras / `-palette.json` / both),
       `--vertex-target <preset> <target>` overriding a preset's attribute, and
       `--vertex-map <target> <channels>` reusing the `--texture-map` channel
-      grammar and `--define-attribute`.
+      grammar and `--define-property`.
 - [x] `Dependencies::resolve_objects` and `mesh_object` and their impls, the
       flag-agnostic split that replaces the planned single `Dependencies::mesh`:
       the impl resolves the selectors to object indices and meshes by index,
@@ -192,9 +192,9 @@ Material sampling (see [voxelize](reference/voxelize.md) and
       cluster representative's whole material). Accept a full document or a bare
       palette JSON; dither only with a document.
 - [ ] `palette remap`: `--target` (JSON `palettes` array) or `--target-index`,
-      `--target-attribute`, space, dither with `--select` / `--select-index`,
+      `--target-property`, space, dither with `--select` / `--select-index`,
       and the same material-follows-color rule (a remapped voxel adopts the
-      target material's whole set of attribute values). Accept a full document or
+      target material's whole set of property values). Accept a full document or
       a bare palette JSON input, the `--target` shape; dither only with a
       document.
 
@@ -219,10 +219,11 @@ Material sampling (see [voxelize](reference/voxelize.md) and
 ### info ([reference/info.md](reference/info.md))
 
 - [ ] Report version, per-object bounds / voxel count / encodings, palette
-      attribute sets and material counts, `editState` and `ext` presence, and root /
+      property sets and material counts, `editState` and `ext` presence, and root /
       instanced / unplaced nodes; `--layout`. Landed: the command, dispatch,
       `Dependencies::info`, and a markdown / pretty-json / compact-json `--layout`
-      report covering version, per-object bounds, voxel count, palette attribute
+      report covering version, per-object bounds, voxel count, layer and
+      sampled-layer counts, palette property
       sets and material counts, and `editState` / `ext` presence, with tests. Pending:
       per-object encodings and the root / instanced / unplaced node breakdown.
 

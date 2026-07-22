@@ -203,10 +203,11 @@ property rename, then the new-model surfaces, then the docs sweep.
       (`property_by_name`), sampled vs unsampled layer counts in `info` and
       `hierarchy show`; `validate` gains no new check names (the voxj-codec
       check surface is unchanged); regenerate inline expectations.
-- [ ] Bring `voxj-codec/README.md`, the other crate READMEs, and the
+- [x] Bring `voxj-codec/README.md`, the other crate READMEs, and the
       vxl-commands plan pages (`README.md`, `reference/mesh.md`,
       `reference/palette/remap.md`, `reference/validate.md`) in line with the
-      new spec.
+      new spec. (Extended at owner request to the whole vxl-commands
+      reference; see the decisions log for the sweep's scope.)
 
 Gate: build, clippy, and tests green across the workspace; docs consistent.
 Close the plan.

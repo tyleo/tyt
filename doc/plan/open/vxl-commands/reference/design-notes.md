@@ -16,7 +16,7 @@ Rationale for the non-obvious choices, for reviewers.
 3. Material maps come from `--texture <preset>` for the named presets and bundles
    and `--texture-map <file-name> <channels>` for a custom packing. The presets
    name the common packings, ORM and MSE included, so the common cases are one
-   flag, while `--texture-map` expresses any channel-to-attribute packing without
+   flag, while `--texture-map` expresses any channel-to-property packing without
    a code change. No flag packs several tokens into one quoted string: `--texture`
    is a plain, repeatable value enum clap validates and completes, with a map's
    file name split out to `--texture-name <preset> <file-name>` and
@@ -50,12 +50,12 @@ Rationale for the non-obvious choices, for reviewers.
    how to output several, and whether to bake a node's subtree, transforms, and
    instancing into one placed mesh, is a deferred, separate mode.
 6. Quantize, remap, and `voxelize`'s `--max-palette-materials` share one reduction
-   rule: material follows color. Reducing the compared attribute
+   rule: material follows color. Reducing the compared property
    (`baseColorFactor` by default) clusters materials by it and collapses each
-   cluster to one representative material, so a material's other attributes ride
+   cluster to one representative material, so a material's other properties ride
    along with its color and a count bounds the material count, not just the
-   attribute's distinct values. The earlier rule kept materials that share a color
-   but differ in their other attributes distinct; it was dropped so a count
+   property's distinct values. The earlier rule kept materials that share a color
+   but differ in their other properties distinct; it was dropped so a count
    actually bounds the palette, the representative stays a real material rather
    than an average, and the three commands share one engine and its `--method` /
    `--space` / `--dither` controls. The accepted cost is that fusing two colors
@@ -66,9 +66,9 @@ Rationale for the non-obvious choices, for reviewers.
    in 3D order and narrow that dithering with the object selectors, while a bare
    palette has nothing to walk and skips both. Reusing the selectors keeps one
    addressing model across mesh, material, quantize, and remap.
-8. Custom attributes reach `--texture-map` and `--vertex-map` through a declared
-   binding, `--define-attribute <name>=<key>`, rather than inline qualifiers. The
-   voxel-json format stores attributes generically, so a packing must read a key
+8. Custom properties reach `--texture-map` and `--vertex-map` through a declared
+   binding, `--define-property <property> <name>`, rather than inline qualifiers. The
+   voxel-json format stores properties generically, so a packing must read a key
    the presets do not name; the binding gives that key a name a packing can use,
    so the grammar stays a flat `name`, `1-name`, or `name.component`, reusable
    across channels, images, and vertex attributes. The value's type is not
@@ -79,26 +79,27 @@ Rationale for the non-obvious choices, for reviewers.
    `--texture` or `--vertex` preset. The binding reads the key from the meshed
    layer's material, the layer `mesh` selects with `--layer` and the first by
    default, the same layer the rest of `mesh` bakes, rather than naming a
-   separate source. Layers no longer merge, so each layer is one palette and
-   every voxel samples one material per layer; reaching another layer's value is
+   separate source. `mesh` bakes one selected layer rather than applying the
+   format's layer-override resolution, so each layer is one palette and every
+   voxel samples one material in it; reaching another layer's value is
    just another `--layer`. The built-in `baseColorFactor` is itself a color, so
    `baseColorFactor.a` and an RGBA split need no binding,
    complementing the whole-color `albedo` preset. Inline `N:` and `.component`
    qualifiers with no declaration were dropped: they give no reusable name.
-9. `palette show` and `mesh` both read an attribute's type from its bound value
+9. `palette show` and `mesh` both read a property's type from its bound value
    pool's kind, a color kind for a color and a scalar kind for a number; the file
    is the single source of type truth, for a built-in and a custom key alike.
    `show` reads it inline as it prints concrete materials; `mesh` defers the same
    read to the bake, since a `--texture-map` packing is compiled before the
    document loads, and validates each channel's component against the pool kind
-   once the layer's palette is in hand. An attribute absent from that palette
+   once the layer's palette is in hand. A property absent from that palette
    follows the format's unbound-default rule: a glTF built-in takes its spec kind
    and default, a custom key is an error. `--type` stays as an optional override
    on `show` so a preview can assert a type and read a custom key exactly as the
    mesh packing will. The
    `.component` grammar is reused from `--texture-map`, so `baseColorFactor.a`
    means one thing across show, mesh, and the packings; it is read-only inspection sugar,
-   scoped to show, so the mutating palette commands keep whole-attribute
+   scoped to show, so the mutating palette commands keep whole-property
    semantics. `auto` keeps numeric output for scalars and swatches only true
    colors, beside their hex. `swatch` and `swatch-value` extend swatches to
    scalars and extracted channels as a grayscale ramp, since a single `0..1`
@@ -133,13 +134,13 @@ Rationale for the non-obvious choices, for reviewers.
     the inline cap and the standalone command cannot diverge; `none` disables it
     for bit-exact materials. Sampling drops no PBR: voxelize writes the same
     `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
-    `emissiveStrength`, and `occlusionStrength` attributes `mesh` bakes, so the
+    `emissiveStrength`, and `occlusionStrength` properties `mesh` bakes, so the
     two are inverses.
 12. Vertex attribute maps share the texture maps' source grammar and add only a
     carrier. A map resolves a material value the same way whether it lands in a
     texel or on a vertex, so `--vertex` and `--vertex-map` reuse the
     `--texture`/`--texture-map` presets, the `--texture-map` channel grammar, and
-    `--define-attribute`, differing only in destination. This folds the former
+    `--define-property`, differing only in destination. This folds the former
     `--vertex-computed-occlusion` boolean into `--vertex computed-occlusion`, one
     cell of the general family, and leaves the texture presets untouched. A
     separate `--atlas vertex` was rejected: atlas is a texture layout, while the

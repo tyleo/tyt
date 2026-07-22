@@ -6,8 +6,10 @@ former [open questions](#open-questions) included. The owner approved
 spec text, on 2026-07-16, closing phase 1, and the phase 2 spec commit landed
 2026-07-17, so the
 [spec](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md)
-is now authoritative; the next step is phase 3, the `voxj` crate. The
-executable steps live in [checklist.md](checklist.md).
+is now authoritative. The code phases 3 to 7 landed crate by crate, ending
+with the docs sweep on 2026-07-21, so every checklist item is complete and
+the plan closes once the owner accepts the final chunk. The executable steps
+live in [checklist.md](checklist.md).
 
 ## Motivation
 

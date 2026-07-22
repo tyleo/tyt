@@ -44,7 +44,7 @@ real-world voxel size with `--voxel-size`. When neither is given it defaults to
    4. `auto`, the default, picks `per-texel` when the mesh carries textures and
       `per-primitive` when it does not.
 
-   Every mode writes the same attributes [`mesh`](mesh.md) bakes back,
+   Every mode writes the same properties [`mesh`](mesh.md) bakes back,
    `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
    `emissiveStrength`, and `occlusionStrength`, so a voxelized model round-trips
    through `mesh`.

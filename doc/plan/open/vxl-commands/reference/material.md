@@ -11,7 +11,7 @@ so you can produce or re-bake textures for a mesh you already have. It takes the
 same map flags as `mesh`, `--texture <preset>` for the presets and bundles,
 `--texture-name` / `--texture-name-prefix` for naming the preset images,
 `--texture-map <file-name> <channels>` for a custom packing, and
-`--define-attribute` for naming custom attributes, plus the
+`--define-property` for naming custom properties, plus the
 `--computed-occlusion-*` options that tune a baked `computed-occlusion` map; see
 [Material and texture maps](mesh.md#material-and-texture-maps). The default
 `output-stem` is the input stem, and each preset image defaults to that stem plus
@@ -40,8 +40,8 @@ unwrapped per mesh. Either way you can iterate on materials without re-meshing.
    either kind, the default covers every object.
 5. `--layer <index>` (default `0`): the object layer whose materials this bake
    reads, a 0-based index into the object's layers in reference order, the same
-   selector as `mesh`. Layers no longer merge, so the bake reads one layer,
-   defaulting to the first.
+   selector as `mesh`. The bake reads one selected layer rather than applying
+   the format's layer-override resolution, defaulting to the first.
 
 At least one map must be requested; with no `--texture` or `--texture-map` the
 command reports the available presets and exits non-zero, since there is nothing

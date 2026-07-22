@@ -377,6 +377,30 @@ resolves `property_by_name`, matching voxsmith's `material_attribute`, so a
 custom-named scalar pin now types its channel instead of failing the
 unbound-default rule.
 
+## The docs sweep updates model statements, not historical records
+
+2026-07-21, phase 7 commit 4. The sweep covers the blast radius's four
+vxl-commands pages plus, at owner request, the rest of the vxl-commands
+reference: `hierarchy/show.md` (stale wire names and the no-merge layer
+claim), the palette pages (`README.md`, `show.md`, `list.md`,
+`quantize.md`), `conventions.md`, `info.md`, `material.md`, `voxelize.md`,
+`design-notes.md`, and the plan checklist's unchecked items. Of the crate
+READMEs only `voxj-codec/README.md` needed changes. Historical records keep
+their period names: the vxl-commands `implementation-decisions.md` log and
+every checked checklist item, page-local checklists included, are untouched.
+`design-notes.md` counts as living rationale, not a log, so its vocabulary
+moved and its layer story now states that `mesh` bakes one selected layer
+rather than applying the override resolution. The unimplemented remap and
+quantize pages follow the CLI rename (`--target-property` / `--property`),
+remap's target-file examples move to the new wire shape and stop claiming to
+mirror the spec's File Example, which the spec rewrite replaced, and the
+implemented pages pick up the shipped surfaces: show's quoted
+`{palette}."{property}"` headers, one-value scalar collections and the
+`"scalar": true` record key, list's `properties` branch with ` (scalar)`
+labels and the conditional `scalar_properties` key, and info's layer and
+sampled-layer counts. The `attribute` wording that remains is glTF
+vertex-attribute vocabulary, which README decision 11 keeps.
+
 ## voxj round-trip tests gate on the serde feature
 
 2026-07-19, phase 3. The crate's serde support is optional, so the new

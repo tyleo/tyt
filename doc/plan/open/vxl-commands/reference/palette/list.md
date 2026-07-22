@@ -8,8 +8,8 @@ vxl palette list <input> [filter]... [options]
 
 Gives a per-palette overview of the whole document so you can see what is there
 before printing any colors. Each palette shows its index and, unless turned off,
-its ordered attribute keys, its material count, and which objects reference it, which
-is exactly the index and attribute that [`show`](show.md),
+its ordered property keys, its material count, and which objects reference it, which
+is exactly the index and property that [`show`](show.md),
 [`quantize`](quantize.md), and [`remap`](remap.md) ask for. By default it prints
 a tree:
 
@@ -17,7 +17,7 @@ a tree:
 palettes
 ├ 0
 │ ├ materialCount: 12
-│ ├ attributes
+│ ├ properties
 │ │ ├ baseColorFactor
 │ │ └ metallicFactor
 │ └ objects
@@ -25,13 +25,14 @@ palettes
 │   └ Object B
 └ 1
   ├ materialCount: 2
-  ├ attributes
-  │ └ baseColorFactor
+  ├ properties
+  │ ├ baseColorFactor
+  │ └ emissiveStrength (scalar)
   └ objects
     └ Object B
 ```
 
-From there, `vxl palette show <input> --attribute 1 '*' auto` prints palette 1's
+From there, `vxl palette show <input> --property 1 '*' auto` prints palette 1's
 colors.
 
 ## Filters
@@ -48,7 +49,8 @@ so a stray index is caught rather than silently listing nothing.
 Three settable booleans choose which fields render beside the always-shown index,
 each defaulting to shown so a bare `palette list` prints them all:
 
-1. `--show-attributes` (default `true`): the ordered attribute keys.
+1. `--show-properties` (default `true`): the ordered property keys, array
+   properties then scalar, a scalar property suffixed ` (scalar)`.
 2. `--show-materials` (default `true`): the material count.
 3. `--show-objects` (default `true`): the objects that reference the palette.
 
@@ -64,15 +66,17 @@ branch in the tree, and the other two behave the same way.
    [`hierarchy show`](../hierarchy/show.md) idiom, a `palettes` header over one
    branch per palette index, with the material count as a `materialCount: <n>`
    leaf and
-   `attributes` and `objects` as subtrees.
+   `properties` and `objects` as subtrees.
 2. `markdown`: an aligned table, one column per enabled field:
 
-   | index | attributes                      | materials | used by            |
-   | ----- | ------------------------------- | --------- | ------------------ |
-   | 0     | baseColorFactor, metallicFactor | 12        | Object A, Object B |
-   | 1     | baseColorFactor                 | 2         | Object B           |
-   | 2     | metallicFactor, roughnessFactor | 1         | Object B           |
+   | index | properties                                 | materials | used by            |
+   | ----- | ------------------------------------------ | --------- | ------------------ |
+   | 0     | baseColorFactor, metallicFactor            | 12        | Object A, Object B |
+   | 1     | baseColorFactor, emissiveStrength (scalar) | 2         | Object B           |
+   | 2     | metallicFactor, roughnessFactor            | 1         | Object B           |
 
 3. `pretty-json` and `compact-json`: the listing as pretty or compact JSON, one
    record per palette carrying its index and each enabled field, the referencing
-   objects as their indices under `used_by`.
+   objects as their indices under `used_by`. Property names are plain, with the
+   scalar subset repeated under a `scalar_properties` key when the palette pins
+   any.

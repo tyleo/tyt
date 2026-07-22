@@ -3,10 +3,10 @@
 *Part of [`vxl palette`](README.md) in the [Vxl Command-Line Reference](../../README.md).*
 
 ```
-vxl palette quantize <input> [output] --max-palette-materials <n> [--index 0] [--attribute baseColorFactor] [options]
+vxl palette quantize <input> [output] --max-palette-materials <n> [--index 0] [--property baseColorFactor] [options]
 ```
 
-Reduces the selected attribute of a palette to at most `--max-palette-materials`
+Reduces the selected property of a palette to at most `--max-palette-materials`
 distinct values and rewrites the affected sample channel to match.
 
 The input is either a full voxj/voxjz document or a bare palette JSON file, a
@@ -18,10 +18,10 @@ has no voxels, so only its entries are reduced and dithering does not apply. The
 output mirrors the input, a document in its own format or a bare palette JSON.
 
 1. `--max-palette-materials <n>` (required): the maximum number of materials to
-   keep. The selected attribute is clustered to this many values and each cluster
+   keep. The selected property is clustered to this many values and each cluster
    collapses to one material.
 2. `--index <n>` (default `0`): which palette to quantize.
-3. `--attribute <key>` (default `baseColorFactor`): which attribute to cluster on.
+3. `--property <key>` (default `baseColorFactor`): which property to cluster on.
 4. `--method` `median-cut` | `octree` | `kmeans` (default `median-cut`):
    clustering algorithm.
 5. `--space` `oklab` | `lab` | `srgb` (default `oklab`): distance metric used
@@ -38,14 +38,17 @@ output mirrors the input, a document in its own format or a bare palette JSON.
    unions with `--select`. Given no selector of either kind, every object is
    dithered. See [Object selectors](../conventions.md#object-selectors).
 
-A material spans all of a palette's attributes, one value per binding. Material
-follows color: `quantize` clusters the selected attribute to at most
+A material spans all of a palette's array properties, one value per property;
+a scalar property is palette-wide, so it rides the merge untouched, and a
+palette pinning the selected property as a scalar has one value and nothing to
+cluster. Material
+follows color: `quantize` clusters the selected property to at most
 `--max-palette-materials` values, then collapses each cluster to one material
-whose whole set of values is its representative's, so the other attributes follow
+whose whole set of values is its representative's, so the other properties follow
 the clustered one: materials in the same color cluster merge into one and any
 appearance difference between them is lost to the representative.
 `--max-palette-materials` therefore bounds the palette's material count, not just
-the selected attribute's distinct values. The representative is an actual
+the selected property's distinct values. The representative is an actual
 material, never an averaged one, so every kept material is a real one. This is the
 reduction [`voxelize`](../voxelize.md)'s `--max-palette-materials` applies inline,
 sharing this command's `--method`, `--space`, and `--dither`. See

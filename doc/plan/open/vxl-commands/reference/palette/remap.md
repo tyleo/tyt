@@ -28,10 +28,10 @@ its own format or a bare palette JSON.
    `--target` file's array when `--target` is given, otherwise a palette in the
    input document itself. Without `--target` it must name a palette other than
    the `--index` one being remapped.
-3. `--target-attribute <key>` (default `baseColorFactor`): the attribute compared
+3. `--target-property <key>` (default `baseColorFactor`): the property compared
    when finding the nearest entry, in the target.
 4. `--index <n>` (default `0`): which palette in the input to remap from.
-5. `--attribute <key>` (default `baseColorFactor`): which attribute in the input
+5. `--property <key>` (default `baseColorFactor`): which property in the input
    to compare.
 6. `--space` `oklab` | `lab` | `srgb` (default `oklab`): distance metric for the
    nearest-value search.
@@ -48,8 +48,8 @@ its own format or a bare palette JSON.
    dithered. See [Object selectors](../conventions.md#object-selectors).
 
 When several input materials land on the same target entry they merge into it,
-each remapped voxel adopting the target material's every attribute value, so
-material follows color (the compared attribute), the same rule
+each remapped voxel adopting the target material's every property value, so
+material follows color (the compared property), the same rule
 [`quantize`](quantize.md) and [`voxelize`](../voxelize.md) follow.
 
 ## Example
@@ -64,7 +64,11 @@ shared pools rather than inline in each palette. A single-palette target file:
     { "kind": "srgba-hex", "values": ["#1D2B53FF", "#7E2553FF", "#008751FF"] }
   ],
   "palettes": [
-    { "bindings": [{ "attribute": "baseColorFactor", "poolRef": 0 }], "materials": [[0, 1, 2]] }
+    {
+      "arrayProperties": [{ "name": "baseColorFactor", "valuePool": 0 }],
+      "scalarProperties": [],
+      "materials": [[0], [1], [2]]
+    }
   ]
 }
 ```
@@ -75,8 +79,7 @@ Remap a model onto it:
 vxl palette remap model.voxj out.voxj --target target.json
 ```
 
-A target file may hold several palettes; `--target-index` picks one. Reusing
-the palette set from the format spec:
+A target file may hold several palettes; `--target-index` picks one:
 
 ```json
 {
@@ -86,9 +89,27 @@ the palette set from the format spec:
     { "kind": "float", "min": 0, "max": 1, "values": [0.2] }
   ],
   "palettes": [
-    { "bindings": [{ "attribute": "baseColorFactor", "poolRef": 0 }, { "attribute": "metallicFactor", "poolRef": 1 }], "materials": [[0], [0]] },
-    { "bindings": [{ "attribute": "baseColorFactor", "poolRef": 0 }], "materials": [[1, 2]] },
-    { "bindings": [{ "attribute": "metallicFactor", "poolRef": 1 }, { "attribute": "roughnessFactor", "poolRef": 2 }], "materials": [[0], [0]] }
+    {
+      "arrayProperties": [
+        { "name": "baseColorFactor", "valuePool": 0 },
+        { "name": "metallicFactor", "valuePool": 1 }
+      ],
+      "scalarProperties": [],
+      "materials": [[0, 0]]
+    },
+    {
+      "arrayProperties": [{ "name": "baseColorFactor", "valuePool": 0 }],
+      "scalarProperties": [],
+      "materials": [[1], [2]]
+    },
+    {
+      "arrayProperties": [
+        { "name": "metallicFactor", "valuePool": 1 },
+        { "name": "roughnessFactor", "valuePool": 2 }
+      ],
+      "scalarProperties": [],
+      "materials": [[0, 0]]
+    }
   ]
 }
 ```

@@ -19,17 +19,19 @@ The reference writes `.voxj` for brevity.
 
 A document holds an ordered `palettes` array and a shared
 `runtimeState.valuePools` array the palettes reference by index. Each palette
-pairs an ordered set of `bindings`, each naming an attribute (`baseColorFactor`,
-`metallicFactor`, `roughnessFactor`, and so on) with a value pool it draws from,
-and a column-major `materials` table holding one column of value-indices per
-binding. A voxel samples one material index per layer its object references
-through `layerPaletteRefs`, indexing that layer's palette `materials` columns.
-Layers do not merge, so the meaning of overlapping layers is left to the
-consuming application, and a consumer that needs one effective material reads a
-single selected layer, the object's first (index `0`) by default. This model is
-defined in [Palettes](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).
+pairs an ordered set of `arrayProperties`, each naming a property
+(`baseColorFactor`, `metallicFactor`, `roughnessFactor`, and so on) with a
+value pool it draws from, a set of `scalarProperties`, each pinning a property
+to one pool cell for the whole palette, and a row-major `materials` table
+holding one row of value-indices per material, one per array property. A voxel
+samples one material index per sampled layer its object references through
+`layers`; a layer is sampled iff its palette has materials, so a scalar-only
+palette carries no channel. Layers combine by overriding: contributions apply
+in `layers` order, back to front, and each property takes its value from the
+last layer that supplies it. This model is defined in
+[Palettes](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).
 The palette commands address a target their own way, described under
-[`vxl palette`](reference/palette/README.md); attribute keys are the glTF names
+[`vxl palette`](reference/palette/README.md); property keys are the glTF names
 such as `baseColorFactor`, not the old `rgba`.
 
 > Notation: `<required>`, `[optional]`, `[optional=default]`, and `flag` for a

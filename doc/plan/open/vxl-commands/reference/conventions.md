@@ -15,12 +15,12 @@ These hold across the commands and match the existing `to` commands.
 4. Palette addressing differs by command. [`palette list`](palette/list.md)
    takes repeatable positional index filters such as `1` or `1-5`.
    [`palette show`](palette/show.md) takes a repeatable
-   `--attribute <palette> <attribute> <format>` selector, defaulting to the
-   whole-document wildcard `'*' '*' auto`, and extends `--attribute` with the
+   `--property <palette> <property> <format>` selector, defaulting to the
+   whole-document wildcard `'*' '*' auto`, and extends `--property` with the
    `<key>.component` grammar to read one channel of a color. The mutating
    `quantize` and `remap` address a palette with `--index` (default `0`) and
-   `--attribute` (default `baseColorFactor`), operate on a whole attribute, and
-   reject a component. Attribute keys are the glTF names such as `baseColorFactor`,
+   `--property` (default `baseColorFactor`), operate on a whole property, and
+   reject a component. Property keys are the glTF names such as `baseColorFactor`,
    not the old `rgba`.
 5. The read-only reports render with `--layout`, `markdown` (default),
    `pretty-json`, or `compact-json`: `validate` and `info`.
