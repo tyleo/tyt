@@ -2039,6 +2039,7 @@ dependencies = [
  "libc",
  "pathspec",
  "serde_json",
+ "treegrid",
  "ty-math",
  "vmax-codec",
  "voxcore",

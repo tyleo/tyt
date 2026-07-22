@@ -4,11 +4,11 @@ use crate::{
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyViews, MaterialMode,
         MeshMethod, MeshTextureMap, PaletteListFields, PaletteListLayout, PaletteReduction,
-        PaletteShowLayout, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
-        TextureShape,
+        PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PatternView, PropertySelector,
+        ResourceStorage, SurfaceMode, TextureShape,
     },
 };
-use std::path::Path;
+use std::{num::NonZeroU8, path::Path};
 
 /// Dependencies for this crate's operations.
 pub trait Dependencies {
@@ -228,13 +228,23 @@ pub trait Dependencies {
     ///   value collections, in render order.
     /// * `layout` - how to arrange the collections, and the serialization to
     ///   emit.
-    /// * `width` - the width the `row` layouts wrap to.
+    /// * `label` - how the text layouts label each collection; `None` means
+    ///   full concat paths.
+    /// * `header_level` - the markdown level of the shallowest heading a
+    ///   heading-emitting render prints; `None` starts at `#`.
+    /// * `table_shape` - how the `tables` layout shapes its tables; `None`
+    ///   means one table per palette group under headings.
+    /// * `width` - the width the `rows` layout wraps to.
+    #[allow(clippy::too_many_arguments)]
     fn palette_show(
         &self,
         input: &Path,
         from: Option<Format>,
         selectors: &[PropertySelector],
         layout: PaletteShowLayout,
+        label: Option<PaletteShowLabel>,
+        header_level: Option<NonZeroU8>,
+        table_shape: Option<PaletteShowTableShape>,
         width: Width,
     ) -> Result<()>;
 

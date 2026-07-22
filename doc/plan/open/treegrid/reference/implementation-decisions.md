@@ -679,3 +679,71 @@ part of the envelope change phase 2 declares.
   traits keep only the layout summary.
 
 Chunk 2 is the vxl adoption proper.
+
+## S7 chunk 2: `vxl palette show` adopts the crate (2026-07-21)
+
+The adoption proper, completing S7. Sampling still resolves selectors
+into per-collection samples, now built as `TreeGridJsonValue`s by the
+typed constructors; a builder populates the forest (palette `Bare`
+root, property `Quoted` child, component `Bare` leaf, samples and
+format on the deepest node, `(scalar)` as its annotation); and one
+`render` function maps the flag values into `TreeGridOptions`, calls
+the layout's `resolve_*` / render pair, and maps `TreeGridError` to
+`ErrorKind::InvalidInput`. Deleted: `render_row` / `render_column` /
+`render_markdown` / `render_json`, `render_cell`, `wrap_cells`,
+`assemble_row`, `join_padded`, `color_swatch` / `gray_swatch` /
+`scalar_level`, `abuts`, `srgb_hex`, `json_text`, and the `Sample` /
+`Swatch` types. Verified byte-identical against the pre-adoption
+binary on four tyt-assets vmax files across `rows` (default),
+`columns`, and the old `markdown` as `tables --table-shape flat`.
+
+- **The forest tail-merges: a collection reuses the immediately
+  preceding collection's palette and property nodes when they match,
+  and a data node is always fresh.** Contiguous runs, which include
+  every output of the default `* * auto` selector, merge each palette
+  under one root, which is what makes `--label header` and nested
+  tables group per palette. Because merging never reaches back past the previous
+  collection, pre-order equals selector order for *every* input
+  (a palette revisited later starts a fresh root; a repeated property
+  renders one data node per selector), so all text layouts keep byte
+  parity, not just the default-selector ones.
+- **The number-pool gray swatch keeps today's `0..1` mapping** (the
+  checklist's embedded decision): number samples build with `unorm`,
+  clamping into the unit interval exactly as `scalar_level` did.
+  Keying off the pool's declared bounds was rejected: `auto` never
+  shows the swatch either way, bounds may be open (`VoxBound::None`)
+  and give no scale, and parity stays exact.
+- **Pool-to-constructor mapping**: sRGB colors `srgba8` / `srgb8`
+  (alpha by pool kind), sRGB components `unorm8`, linear components
+  and numbers `unorm`, bools `bool`, strings `new` (the
+  `String(text)` JSON fallback is the native form), json pools
+  `json(vox_value_to_json(..))`. Linear whole colors keep their
+  space-joined text through the `new` + `with_json` + `with_swatch`
+  escape hatch until the S17 notation flip.
+- **The new flags are `Option`s with no clap default** (`--label`,
+  `--header-level`, `--table-shape`; documented defaults `concat`,
+  `#`, `nested`), so the crate's no-silent-no-op rejections fire only
+  on explicitly set flags and the defaults never trip them on
+  layouts that consume none. `--width` keeps its `terminal` clap
+  default and is resolved and passed only under `--layout rows`, the
+  S7 note from the two-layer options entry; on other layouts it is
+  documented as rows-only and ignored, as today. The format
+  vocabulary maps `auto` to the unset node format and `swatch` /
+  `swatch-value` / `value` to `Visual` / `VisualText` / `Text`, the
+  `FillMode` pattern.
+- **`--layout hierarchy` renders with default hierarchy options**:
+  connectored roots and inline values, the spec's worked-example
+  shape for a palette forest.
+- **vxl's layout goldens moved to selector-shaped end-to-end tests.**
+  The wrapping, padding, strip, and format-matrix goldens live in
+  treegrid since S3-S5; the vxl tests keep selector and sampling
+  coverage plus one end-to-end render per layout and label mode,
+  including the selector-order and repeated-property parity pins and
+  the new-envelope JSON forms.
+
+The commit message carries the old-to-new flag mapping and calls out
+the two deliberate changes: `tables` defaults to the grouped redesign
+of `markdown` (the old interleaved table is `--table-shape flat`),
+and the JSON payload switches from the bespoke
+`[{palette, property, scalar?, values}]` records to the generic
+envelope, `scalar: true` becoming `annotation: "(scalar)"`.

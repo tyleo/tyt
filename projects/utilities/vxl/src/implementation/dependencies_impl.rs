@@ -4,12 +4,12 @@ use crate::{
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyViews, MaterialMode,
         MeshMethod, MeshTextureMap, PaletteListFields, PaletteListLayout, PaletteReduction,
-        PaletteShowLayout, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
-        TextureShape,
+        PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PatternView, PropertySelector,
+        ResourceStorage, SurfaceMode, TextureShape,
     },
     implementation,
 };
-use std::path::Path;
+use std::{num::NonZeroU8, path::Path};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -161,9 +161,21 @@ impl Dependencies for DependenciesImpl {
         from: Option<Format>,
         selectors: &[PropertySelector],
         layout: PaletteShowLayout,
+        label: Option<PaletteShowLabel>,
+        header_level: Option<NonZeroU8>,
+        table_shape: Option<PaletteShowTableShape>,
         width: Width,
     ) -> Result<()> {
-        implementation::palette_show(input, from, selectors, layout, width)
+        implementation::palette_show(
+            input,
+            from,
+            selectors,
+            layout,
+            label,
+            header_level,
+            table_shape,
+            width,
+        )
     }
 
     fn hierarchy_show(

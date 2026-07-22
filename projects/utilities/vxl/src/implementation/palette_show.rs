@@ -1,31 +1,47 @@
 use crate::{
     ColorComponent, Format, Result, Width,
-    commands::{PaletteRef, PaletteShowFormat, PaletteShowLayout, PropertyRef, PropertySelector},
+    commands::{
+        PaletteRef, PaletteShowFormat, PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape,
+        PropertyRef, PropertySelector,
+    },
     implementation,
 };
 use branded_id::U32Id;
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 use std::{
     io::{Error as IOError, ErrorKind},
+    num::NonZeroU8,
     path::Path,
+    result::Result as StdResult,
 };
-use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64};
+use treegrid::{
+    BTreeGridNode, TreeGrid, TreeGridCellFormat, TreeGridError, TreeGridJsonValue,
+    TreeGridJsonValueCells, TreeGridLabel, TreeGridLabelKind, TreeGridOptions,
+    TreeGridRenderColumns, TreeGridRenderHierarchy, TreeGridRenderJson, TreeGridRenderRows,
+    TreeGridRenderTables, TreeGridSwatch, TreeGridTableShapeKind,
+};
+use ty_math::{TyLinSrgbaF64, TySrgbaF64};
 use voxcore::{BVoxPoolValue, VoxMain, VoxPalette, VoxPropertyId, VoxValue, VoxValuePool};
 
 /// Loads the voxel file at `input` and prints the value collections named by
-/// `selectors`. Each selector resolves to one or more collections, a
-/// property's values down a palette; `layout` arranges them and chooses the
-/// serialization, and `width` wraps the `row` layouts.
+/// `selectors`, each a property's values down a palette, populated into a
+/// tree grid of palette, property, and component nodes and rendered under
+/// `layout`.
+#[allow(clippy::too_many_arguments)]
 pub fn palette_show(
     input: &Path,
     from: Option<Format>,
     selectors: &[PropertySelector],
     layout: PaletteShowLayout,
+    label: Option<PaletteShowLabel>,
+    header_level: Option<NonZeroU8>,
+    table_shape: Option<PaletteShowTableShape>,
     width: Width,
 ) -> Result<()> {
     let state = implementation::load_state(input, from)?;
     let collections = resolve_collections(&state, selectors)?;
-    let output = render(&collections, layout, resolve_width(width));
+    let grid = build_grid(collections);
+    let output = render(&grid, layout, label, header_level, table_shape, width)?;
     implementation::write_stdout(output.as_bytes())
 }
 
@@ -58,14 +74,15 @@ fn terminal_columns() -> Option<usize> {
     }
 }
 
-/// No terminal-width detection off unix; the `row` layouts do not wrap.
+/// No terminal-width detection off unix; the `rows` layout does not wrap.
 #[cfg(not(unix))]
 fn terminal_columns() -> Option<usize> {
     None
 }
 
 /// One resolved value collection: a property's values down one palette,
-/// labeled by its palette index and property, with the format that renders it.
+/// addressed by its palette index and property, with the format that renders
+/// it.
 struct Collection {
     /// The resolved palette index, even when the selector used `*`.
     palette: usize,
@@ -80,58 +97,7 @@ struct Collection {
     format: PaletteShowFormat,
     /// One sample per palette material in material order, or the one pinned
     /// sample of a scalar property.
-    samples: Vec<Sample>,
-}
-
-impl Collection {
-    /// The `{palette}."{key}"` header for the text layouts, with the color
-    /// component appended after the closing quote when one was read and a
-    /// ` (scalar)` marker on a scalar property.
-    fn header(&self) -> String {
-        format!(
-            "{}.{}{}{}",
-            self.palette,
-            implementation::quote_name(&self.key),
-            self.component_suffix(),
-            if self.scalar { " (scalar)" } else { "" }
-        )
-    }
-
-    /// The raw `{key}` or `{key}.{component}` property label for the JSON
-    /// records, where the serialization already quotes it.
-    fn property(&self) -> String {
-        format!("{}{}", self.key, self.component_suffix())
-    }
-
-    /// The `.{component}` suffix, or empty when no component was read.
-    fn component_suffix(&self) -> String {
-        match self.component {
-            Some(component) => format!(".{}", component_letter(component)),
-            None => String::new(),
-        }
-    }
-}
-
-/// One rendered material value: its display text, JSON form, and the swatch it
-/// carries. Sampling reads a value through its bound pool's kind and
-/// precomputes all three so every layout renders uniformly.
-struct Sample {
-    /// The value as text: a hex color, a color component, a number, a bool, a
-    /// string, or a JSON value.
-    text: String,
-    /// The value in its native JSON type.
-    json: Value,
-    /// The swatch this value renders, or none for a value with no swatch.
-    swatch: Swatch,
-}
-
-/// The swatch a [`Sample`] renders: a true-color block for a whole color, a
-/// grayscale block for a scalar or color component, or none for a value with no
-/// meaningful swatch, such as a bool or string.
-enum Swatch {
-    Color([u8; 3]),
-    Gray(u8),
-    None,
+    samples: Vec<TreeGridJsonValue>,
 }
 
 /// How a bound pool's kind renders in `palette show`: a color, in sRGB or
@@ -361,7 +327,7 @@ fn sample(
     value_id: U32Id<BVoxPoolValue>,
     kind: Kind,
     component: Option<ColorComponent>,
-) -> Sample {
+) -> TreeGridJsonValue {
     match kind {
         Kind::Color { srgb, .. } => sample_color(pool, value_id, srgb, component),
         Kind::Number => sample_number(pool, value_id),
@@ -369,61 +335,52 @@ fn sample(
     }
 }
 
-/// The sample for a color value: a whole color as a swatch plus a hex string
-/// (sRGB) or float components (linear), or, with a `component`, one channel as a
-/// byte (sRGB) or float (linear) with a grayscale swatch.
+/// The sample for a color value: a whole color as hex (sRGB) or space-joined
+/// float components (linear) with a color swatch, or, with a `component`, one
+/// channel as a byte (sRGB) or float (linear) with a grayscale swatch.
 fn sample_color(
     pool: &VoxValuePool,
     value_id: U32Id<BVoxPoolValue>,
     srgb: bool,
     component: Option<ColorComponent>,
-) -> Sample {
+) -> TreeGridJsonValue {
     let bytes = color_bytes(pool, value_id);
     match component {
         Some(component) => {
             let channel = component_index(component);
             if srgb {
-                let byte = bytes[channel];
-                Sample {
-                    text: byte.to_string(),
-                    json: json!(byte),
-                    swatch: Swatch::Gray(byte),
-                }
+                TreeGridJsonValue::unorm8(bytes[channel])
             } else {
-                let value = color_floats(pool, value_id)[channel];
-                Sample {
-                    text: format_number(value),
-                    json: number_json(value),
-                    swatch: Swatch::Gray(scalar_level(value)),
-                }
+                TreeGridJsonValue::unorm(color_floats(pool, value_id)[channel])
+            }
+        }
+        None if srgb => {
+            if alpha_component(pool) {
+                TreeGridJsonValue::srgba8(bytes)
+            } else {
+                TreeGridJsonValue::srgb8([bytes[0], bytes[1], bytes[2]])
             }
         }
         None => {
-            let swatch = Swatch::Color([bytes[0], bytes[1], bytes[2]]);
-            if srgb {
-                let text = srgb_hex(&bytes, alpha_component(pool));
-                Sample {
-                    json: Value::String(text.clone()),
-                    text,
-                    swatch,
-                }
-            } else {
-                let floats = color_floats(pool, value_id);
-                let text = floats
-                    .iter()
-                    .map(|value| format_number(*value))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let json = Value::Array(floats.iter().map(|value| number_json(*value)).collect());
-                Sample { text, json, swatch }
-            }
+            // Linear colors keep their space-joined component text rather
+            // than the crate's functional notation.
+            let floats = color_floats(pool, value_id);
+            let text = floats
+                .iter()
+                .map(|value| format_number(*value))
+                .collect::<Vec<_>>()
+                .join(" ");
+            let json = Value::Array(floats.iter().map(|value| number_json(*value)).collect());
+            TreeGridJsonValue::new(text)
+                .with_json(json)
+                .with_swatch(TreeGridSwatch::Color([bytes[0], bytes[1], bytes[2]]))
         }
     }
 }
 
 /// The sample for a `float` or `int` value: its number, with a grayscale swatch
 /// mapping its `0..1` range onto `0..255`.
-fn sample_number(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> Sample {
+fn sample_number(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> TreeGridJsonValue {
     let index = value_id.to_usize_id();
     let value = match pool {
         VoxValuePool::Float { values, .. } => values[index],
@@ -431,48 +388,19 @@ fn sample_number(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> Sample 
         // classify() routes only Float and Int here.
         _ => 0.0,
     };
-    Sample {
-        text: format_number(value),
-        json: number_json(value),
-        swatch: Swatch::Gray(scalar_level(value)),
-    }
+    TreeGridJsonValue::unorm(value)
 }
 
 /// The sample for a `bool`, `string`, or `json` value: its text and native JSON
 /// with no swatch.
-fn sample_other(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> Sample {
+fn sample_other(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> TreeGridJsonValue {
     let index = value_id.to_usize_id();
     match pool {
-        VoxValuePool::Bool { values } => {
-            let value = values[index];
-            Sample {
-                text: value.to_string(),
-                json: Value::Bool(value),
-                swatch: Swatch::None,
-            }
-        }
-        VoxValuePool::String { values } => {
-            let value = values[index].clone();
-            Sample {
-                json: Value::String(value.clone()),
-                text: value,
-                swatch: Swatch::None,
-            }
-        }
-        VoxValuePool::Json { values } => {
-            let json = vox_value_to_json(&values[index]);
-            Sample {
-                text: json_text(&json),
-                json,
-                swatch: Swatch::None,
-            }
-        }
+        VoxValuePool::Bool { values } => TreeGridJsonValue::bool(values[index]),
+        VoxValuePool::String { values } => TreeGridJsonValue::new(values[index].clone()),
+        VoxValuePool::Json { values } => TreeGridJsonValue::json(vox_value_to_json(&values[index])),
         // classify() routes only Bool, String, and Json here.
-        _ => Sample {
-            text: "null".to_string(),
-            json: Value::Null,
-            swatch: Swatch::None,
-        },
+        _ => TreeGridJsonValue::json(Value::Null),
     }
 }
 
@@ -531,19 +459,6 @@ fn alpha_component(pool: &VoxValuePool) -> bool {
     )
 }
 
-/// The canonical uppercase hex for a color, `#RRGGBBAA` with alpha or `#RRGGBB`
-/// without.
-fn srgb_hex(bytes: &[u8; 4], alpha: bool) -> String {
-    if alpha {
-        format!(
-            "#{:02X}{:02X}{:02X}{:02X}",
-            bytes[0], bytes[1], bytes[2], bytes[3]
-        )
-    } else {
-        format!("#{:02X}{:02X}{:02X}", bytes[0], bytes[1], bytes[2])
-    }
-}
-
 /// The `0..3` index of a color component into an `[r, g, b, a]` array.
 fn component_index(component: ColorComponent) -> usize {
     match component {
@@ -597,309 +512,141 @@ fn vox_value_to_json(value: &VoxValue) -> Value {
     }
 }
 
-/// A JSON value as its compact text, the string a `json`-pool value renders to.
-fn json_text(value: &Value) -> String {
-    serde_json::to_string(value).unwrap_or_else(|_| "null".to_string())
-}
-
 /// The palette's property keys joined for a not-found message.
 fn available_keys(palette: &VoxPalette) -> String {
     implementation::property_names(palette).join(", ")
 }
 
-/// Renders the collections under `layout`, wrapping the `row` layouts to the
-/// `width` columns when given.
-fn render(collections: &[Collection], layout: PaletteShowLayout, width: Option<usize>) -> String {
-    match layout {
-        PaletteShowLayout::Row => render_row(collections, true, width),
-        PaletteShowLayout::RowNoHeader => render_row(collections, false, width),
-        PaletteShowLayout::Column => render_column(collections, true),
-        PaletteShowLayout::ColumnNoHeader => render_column(collections, false),
-        PaletteShowLayout::Markdown => render_markdown(collections),
-        PaletteShowLayout::PrettyJson => render_json(collections, true),
-        PaletteShowLayout::CompactJson => render_json(collections, false),
+/// Populates a tree grid from the collections in order: palette root,
+/// property child, component leaf, with each collection's samples on its
+/// deepest node. A collection reuses the immediately preceding collection's
+/// palette and property nodes when they match, so a contiguous run shares
+/// its ancestors and pre-order keeps the selector order in every layout.
+fn build_grid(collections: Vec<Collection>) -> TreeGrid<TreeGridJsonValueCells> {
+    let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
+    let mut palette_node: Option<(usize, U32Id<BTreeGridNode>)> = None;
+    let mut property_node: Option<(String, U32Id<BTreeGridNode>)> = None;
+    for collection in collections {
+        let palette = match palette_node {
+            Some((index, id)) if index == collection.palette => id,
+            _ => {
+                let id = grid.add_root(TreeGridLabel::bare(collection.palette.to_string()));
+                palette_node = Some((collection.palette, id));
+                property_node = None;
+                id
+            }
+        };
+        let data = match collection.component {
+            Some(component) => {
+                let property = match &property_node {
+                    Some((key, id)) if *key == collection.key => *id,
+                    _ => grid.add_child(palette, TreeGridLabel::quoted(collection.key.as_str())),
+                };
+                property_node = Some((collection.key, property));
+                let letter = component_letter(component).to_string();
+                grid.add_child(property, TreeGridLabel::bare(letter))
+            }
+            None => {
+                // A data node is always fresh, so a property selected twice
+                // keeps one collection per selector.
+                let id = grid.add_child(palette, TreeGridLabel::quoted(collection.key.as_str()));
+                property_node = Some((collection.key, id));
+                id
+            }
+        };
+        let node = grid.node_mut(data);
+        if collection.scalar {
+            node.annotation = Some("(scalar)".to_owned());
+        }
+        node.format = cell_format(collection.format);
+        node.values = collection.samples;
     }
+    grid
 }
 
-/// One material's text under its collection's `format`. A value with no swatch
-/// prints its text under every format.
-fn render_cell(sample: &Sample, format: PaletteShowFormat) -> String {
+/// The node cell format a `--property` format maps to; `auto` leaves the
+/// format unset so the grid's cell policy decides per value.
+fn cell_format(format: PaletteShowFormat) -> Option<TreeGridCellFormat> {
     match format {
-        PaletteShowFormat::Auto => match &sample.swatch {
-            Swatch::Color(rgb) => format!("{} {}", color_swatch(rgb), sample.text),
-            Swatch::Gray(_) | Swatch::None => sample.text.clone(),
-        },
-        PaletteShowFormat::Swatch => match &sample.swatch {
-            Swatch::Color(rgb) => color_swatch(rgb),
-            Swatch::Gray(level) => gray_swatch(*level),
-            Swatch::None => sample.text.clone(),
-        },
-        PaletteShowFormat::SwatchValue => match &sample.swatch {
-            Swatch::Color(rgb) => format!("{} {}", color_swatch(rgb), sample.text),
-            Swatch::Gray(level) => format!("{} {}", gray_swatch(*level), sample.text),
-            Swatch::None => sample.text.clone(),
-        },
-        PaletteShowFormat::Value => sample.text.clone(),
+        PaletteShowFormat::Auto => None,
+        PaletteShowFormat::Swatch => Some(TreeGridCellFormat::Visual),
+        PaletteShowFormat::SwatchValue => Some(TreeGridCellFormat::VisualText),
+        PaletteShowFormat::Value => Some(TreeGridCellFormat::Text),
     }
 }
 
-/// A two-cell truecolor swatch of an rgb color.
-fn color_swatch(rgb: &[u8; 3]) -> String {
-    format!("\x1b[48;2;{};{};{}m  \x1b[0m", rgb[0], rgb[1], rgb[2])
-}
-
-/// A two-cell truecolor grayscale swatch of a `0..255` gray level.
-fn gray_swatch(level: u8) -> String {
-    format!("\x1b[48;2;{level};{level};{level}m  \x1b[0m")
-}
-
-/// The gray level for a scalar, its `0..1` value mapped onto `0..255`.
-fn scalar_level(value: f64) -> u8 {
-    value.to_unorm8()
-}
-
-/// Whether a collection's cells abut into a strip: a `swatch` collection whose
-/// every value carries a swatch. A value with no swatch, such as a bool, keeps
-/// the one-space separator so it does not run together.
-fn abuts(collection: &Collection) -> bool {
-    matches!(collection.format, PaletteShowFormat::Swatch)
-        && collection
-            .samples
-            .iter()
-            .all(|sample| !matches!(sample.swatch, Swatch::None))
-}
-
-/// Each collection on one row, the rows separated by a blank line. A swatch
-/// collection's cells abut into a strip; other formats put one space between
-/// cells. With `with_header`, only the header is padded, to the longest, so the
-/// first value of every row aligns; the values themselves are not padded. A
-/// `width` wraps a row that overflows it onto continuation lines indented under
-/// its first value.
-fn render_row(collections: &[Collection], with_header: bool, width: Option<usize>) -> String {
-    let headers: Vec<String> = collections.iter().map(Collection::header).collect();
-    let cells: Vec<Vec<String>> = collections.iter().map(rendered_cells).collect();
-    let header_width = headers
-        .iter()
-        .map(|h| implementation::visible_width(h))
-        .max()
-        .unwrap_or(0);
-    let indent = if with_header { header_width + 1 } else { 0 };
-
-    let mut blocks: Vec<String> = Vec::new();
-    for ((collection, header), row) in collections.iter().zip(&headers).zip(&cells) {
-        // Swatches abut into a strip; other formats, and swatch cells that fell
-        // back to raw text, keep one space so values stay legible.
-        let separator = if abuts(collection) { "" } else { " " };
-        let segments = match width {
-            // Leave room for at least one cell beside the header indent.
-            Some(width) => wrap_cells(row, separator, width.saturating_sub(indent).max(1)),
-            None => vec![row.join(separator)],
-        };
-        blocks.push(assemble_row(
-            header,
-            header_width,
-            indent,
-            with_header,
-            &segments,
-        ));
+/// Renders the grid under `layout`, mapping the flag values into the crate's
+/// loose options; an option the chosen render does not consume is invalid
+/// input. Only the `rows` render consumes a width, so only it resolves the
+/// `width` flag.
+fn render(
+    grid: &TreeGrid<TreeGridJsonValueCells>,
+    layout: PaletteShowLayout,
+    label: Option<PaletteShowLabel>,
+    header_level: Option<NonZeroU8>,
+    table_shape: Option<PaletteShowTableShape>,
+    width: Width,
+) -> Result<String> {
+    let mut options = TreeGridOptions::default();
+    if let Some(label) = label {
+        options = options.with_label(match label {
+            PaletteShowLabel::None => TreeGridLabelKind::None,
+            PaletteShowLabel::Concat => TreeGridLabelKind::Concat,
+            PaletteShowLabel::Header => TreeGridLabelKind::Header,
+        });
     }
-    if blocks.is_empty() {
-        String::new()
-    } else {
-        format!("{}\n", blocks.join("\n\n"))
+    if let Some(level) = header_level {
+        options = options.with_header_level(level);
     }
-}
-
-/// Splits `cells` into segments whose visible width stays within `budget`,
-/// joining each segment's cells with `separator`. A cell wider than `budget`
-/// takes a segment of its own.
-fn wrap_cells(cells: &[String], separator: &str, budget: usize) -> Vec<String> {
-    let separator_width = separator.chars().count();
-    let mut segments: Vec<String> = Vec::new();
-    let mut current: Vec<&str> = Vec::new();
-    let mut width = 0;
-    for cell in cells {
-        let cell_width = implementation::visible_width(cell);
-        if !current.is_empty() && width + separator_width + cell_width > budget {
-            segments.push(current.join(separator));
-            current.clear();
-            width = 0;
+    if let Some(shape) = table_shape {
+        options = options.with_table_shape(match shape {
+            PaletteShowTableShape::Nested => TreeGridTableShapeKind::Nested,
+            PaletteShowTableShape::Flat => TreeGridTableShapeKind::Flat,
+        });
+    }
+    Ok(match layout {
+        PaletteShowLayout::Hierarchy => {
+            grid.render_hierarchy(&resolve_options(options.resolve_hierarchy())?)
         }
-        if !current.is_empty() {
-            width += separator_width;
+        PaletteShowLayout::Rows => {
+            if let Some(columns) = resolve_width(width) {
+                options = options.with_width(columns);
+            }
+            grid.render_rows(&resolve_options(options.resolve_rows())?)
         }
-        width += cell_width;
-        current.push(cell);
-    }
-    if !current.is_empty() {
-        segments.push(current.join(separator));
-    }
-    segments
+        PaletteShowLayout::Columns => {
+            grid.render_columns(&resolve_options(options.resolve_columns())?)
+        }
+        PaletteShowLayout::Tables => {
+            grid.render_tables(&resolve_options(options.resolve_tables())?)
+        }
+        PaletteShowLayout::JsonPretty => {
+            resolve_options(options.resolve_json())?;
+            grid.render_json_pretty()
+        }
+        PaletteShowLayout::JsonCompact => {
+            resolve_options(options.resolve_json())?;
+            grid.render_json_compact()
+        }
+    })
 }
 
-/// Assembles one collection's row from its wrapped `segments`: the first line
-/// carries the padded header, the continuation lines indent under the first
-/// value, and every line is right-trimmed. An empty row keeps just its header.
-fn assemble_row(
-    header: &str,
-    header_width: usize,
-    indent: usize,
-    with_header: bool,
-    segments: &[String],
-) -> String {
-    if segments.is_empty() {
-        return if with_header {
-            implementation::pad_right(header, header_width)
-                .trim_end()
-                .to_string()
-        } else {
-            String::new()
-        };
-    }
-    segments
-        .iter()
-        .enumerate()
-        .map(|(line, segment)| {
-            let prefix = match (line, with_header) {
-                (0, true) => format!("{} ", implementation::pad_right(header, header_width)),
-                (0, false) => String::new(),
-                _ => " ".repeat(indent),
-            };
-            format!("{prefix}{segment}").trim_end().to_string()
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// Each collection as its own column, padded to a common visible width so the
-/// values read straight down. With `with_header`, each column is topped by its
-/// header, which also widens the column to fit it.
-fn render_column(collections: &[Collection], with_header: bool) -> String {
-    let headers: Vec<String> = collections.iter().map(Collection::header).collect();
-    let cells: Vec<Vec<String>> = collections.iter().map(rendered_cells).collect();
-    let widths: Vec<usize> = headers
-        .iter()
-        .zip(&cells)
-        .map(|(header, column)| {
-            let cell = column
-                .iter()
-                .map(|c| implementation::visible_width(c))
-                .max()
-                .unwrap_or(0);
-            if with_header {
-                implementation::visible_width(header).max(cell)
-            } else {
-                cell
-            }
-        })
-        .collect();
-    let row_count = cells.iter().map(Vec::len).max().unwrap_or(0);
-
-    let mut output = String::new();
-    if with_header {
-        output.push_str(join_padded(&headers, &widths).trim_end());
-        output.push('\n');
-    }
-    for row in 0..row_count {
-        let line: Vec<String> = cells
-            .iter()
-            .map(|column| column.get(row).cloned().unwrap_or_default())
-            .collect();
-        output.push_str(join_padded(&line, &widths).trim_end());
-        output.push('\n');
-    }
-    output
-}
-
-/// The collections as an aligned markdown table led by a `#` column of 0-based
-/// material indices, then one column per collection and one row per material
-/// index. A shorter palette leaves its column blank past its last material.
-fn render_markdown(collections: &[Collection]) -> String {
-    if collections.is_empty() {
-        return String::new();
-    }
-    let headers: Vec<String> = collections.iter().map(Collection::header).collect();
-    let cells: Vec<Vec<String>> = collections.iter().map(rendered_cells).collect();
-    let row_count = cells.iter().map(Vec::len).max().unwrap_or(0);
-    // One row per material index, led by the index and then each collection's
-    // cell or a blank.
-    let rows: Vec<Vec<String>> = (0..row_count)
-        .map(|row| {
-            let mut cells_row = vec![row.to_string()];
-            cells_row.extend(
-                cells
-                    .iter()
-                    .map(|column| column.get(row).cloned().unwrap_or_default()),
-            );
-            cells_row
-        })
-        .collect();
-    let mut header_refs: Vec<&str> = vec!["#"];
-    header_refs.extend(headers.iter().map(String::as_str));
-    implementation::markdown_table(&header_refs, &rows)
-}
-
-/// Joins one value per column, each padded to its column width, with single
-/// spaces between columns.
-fn join_padded(values: &[String], widths: &[usize]) -> String {
-    values
-        .iter()
-        .zip(widths)
-        .map(|(value, width)| implementation::pad_right(value, *width))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// One collection's cells rendered to text under its format.
-fn rendered_cells(collection: &Collection) -> Vec<String> {
-    collection
-        .samples
-        .iter()
-        .map(|sample| render_cell(sample, collection.format))
-        .collect()
-}
-
-/// The collections as JSON, pretty or compact: one record per collection in
-/// render order. Values emit in their native JSON types; the per-collection
-/// format is ignored.
-fn render_json(collections: &[Collection], pretty: bool) -> String {
-    let records: Vec<Value> = collections
-        .iter()
-        .map(|collection| {
-            let values: Vec<Value> = collection
-                .samples
-                .iter()
-                .map(|sample| sample.json.clone())
-                .collect();
-            // Field by field so `scalar` appears only on a scalar property.
-            let mut record = Map::new();
-            record.insert("palette".to_string(), json!(collection.palette));
-            record.insert("property".to_string(), json!(collection.property()));
-            if collection.scalar {
-                record.insert("scalar".to_string(), json!(true));
-            }
-            record.insert("values".to_string(), Value::Array(values));
-            Value::Object(record)
-        })
-        .collect();
-    let payload = Value::Array(records);
-    let text = if pretty {
-        serde_json::to_string_pretty(&payload)
-    } else {
-        serde_json::to_string(&payload)
-    }
-    .expect("palette values serialize to JSON");
-    format!("{text}\n")
+/// Maps an invalid option combination into an invalid-input error.
+fn resolve_options<T>(resolved: StdResult<T, TreeGridError>) -> Result<T> {
+    resolved.map_err(|error| IOError::new(ErrorKind::InvalidInput, error.to_string()).into())
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        commands::{PaletteShowLayout, PropertySelector},
-        implementation::palette_show::{render, resolve_collections},
+        Width,
+        commands::{PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PropertySelector},
+        implementation::palette_show::{build_grid, render, resolve_collections},
     };
     use branded_id::{IdVec, U32Id};
     use serde_json::Value;
+    use std::num::NonZeroU8;
+    use treegrid::{TreeGrid, TreeGridJsonValueCells};
     use voxcore::{
         BVoxPoolValue, BVoxValuePool, VoxBound, VoxMain, VoxPalette, VoxValue, VoxValuePool,
     };
@@ -964,18 +711,35 @@ mod tests {
             .collect()
     }
 
+    /// The populated grid for the selectors, resolved against `state`.
+    fn grid_for(
+        state: &VoxMain,
+        fields: &[(&str, &str, &str)],
+    ) -> TreeGrid<TreeGridJsonValueCells> {
+        build_grid(resolve_collections(state, &selectors(fields)).unwrap())
+    }
+
+    /// Renders the selectors under `layout` with default label options and no
+    /// wrapping.
     fn show(state: &VoxMain, fields: &[(&str, &str, &str)], layout: PaletteShowLayout) -> String {
-        let collections = resolve_collections(state, &selectors(fields)).unwrap();
-        render(&collections, layout, None)
+        render(
+            &grid_for(state, fields),
+            layout,
+            None,
+            None,
+            None,
+            Width::Unlimited,
+        )
+        .unwrap()
     }
 
     #[test]
-    fn value_layout_prints_canonical_hex_with_a_header() {
+    fn value_format_prints_canonical_hex_with_a_label() {
         let state = sample_state();
         let output = show(
             &state,
             &[("0", "baseColorFactor", "value")],
-            PaletteShowLayout::Row,
+            PaletteShowLayout::Rows,
         );
         assert_eq!(output, "0.\"baseColorFactor\" #FF0000FF #00FF0080\n");
     }
@@ -986,19 +750,19 @@ mod tests {
         let output = show(
             &state,
             &[("0", "baseColorFactor.a", "value")],
-            PaletteShowLayout::Row,
+            PaletteShowLayout::Rows,
         );
         // Alpha bytes FF and 80 as 0..255 integers.
         assert_eq!(output, "0.\"baseColorFactor\".a 255 128\n");
     }
 
     #[test]
-    fn swatch_layout_abuts_swatches_into_a_strip() {
+    fn swatch_format_abuts_swatches_into_a_strip() {
         let state = sample_state();
         let output = show(
             &state,
             &[("0", "baseColorFactor", "swatch")],
-            PaletteShowLayout::Row,
+            PaletteShowLayout::Rows,
         );
         assert_eq!(
             output,
@@ -1023,15 +787,15 @@ mod tests {
         let output = show(
             &state,
             &[("0", "shadows", "swatch")],
-            PaletteShowLayout::Row,
+            PaletteShowLayout::Rows,
         );
         assert_eq!(output, "0.\"shadows\" true false\n");
     }
 
     #[test]
-    fn row_pads_only_the_header_not_the_values() {
+    fn rows_pad_only_the_label_not_the_values() {
         let state = sample_state();
-        // The headers pad to the longest so each row's first value aligns, but
+        // The labels pad to the longest so each row's first value aligns, but
         // the values are not column-aligned: `metallicFactor` stays compact
         // rather than padding out to the wider `baseColorFactor` columns.
         let output = show(
@@ -1040,7 +804,7 @@ mod tests {
                 ("0", "baseColorFactor", "value"),
                 ("0", "metallicFactor", "value"),
             ],
-            PaletteShowLayout::Row,
+            PaletteShowLayout::Rows,
         );
         assert_eq!(
             output,
@@ -1051,13 +815,20 @@ mod tests {
     }
 
     #[test]
-    fn row_wraps_cells_to_the_width() {
+    fn rows_wrap_cells_to_the_width() {
         let state = sample_state();
-        let collections =
-            resolve_collections(&state, &selectors(&[("0", "baseColorFactor", "value")])).unwrap();
-        // Width 30 leaves 10 columns after the `0."baseColorFactor" ` prefix: one
-        // 9-wide hex fits per line, so the second wraps under the first.
-        let output = render(&collections, PaletteShowLayout::Row, Some(30));
+        let grid = grid_for(&state, &[("0", "baseColorFactor", "value")]);
+        // Width 30 leaves 10 columns after the `0."baseColorFactor" ` prefix:
+        // one 9-wide hex fits per line, so the second wraps under the first.
+        let output = render(
+            &grid,
+            PaletteShowLayout::Rows,
+            None,
+            None,
+            None,
+            Width::Columns(30),
+        )
+        .unwrap();
         assert_eq!(
             output,
             "0.\"baseColorFactor\" #FF0000FF\n                    #00FF0080\n"
@@ -1065,13 +836,18 @@ mod tests {
     }
 
     #[test]
-    fn row_no_header_drops_the_header_column() {
+    fn rows_with_label_none_drop_the_label_column() {
         let state = sample_state();
-        let output = show(
-            &state,
-            &[("0", "baseColorFactor", "value")],
-            PaletteShowLayout::RowNoHeader,
-        );
+        let grid = grid_for(&state, &[("0", "baseColorFactor", "value")]);
+        let output = render(
+            &grid,
+            PaletteShowLayout::Rows,
+            Some(PaletteShowLabel::None),
+            None,
+            None,
+            Width::Unlimited,
+        )
+        .unwrap();
         assert_eq!(output, "#FF0000FF #00FF0080\n");
     }
 
@@ -1080,7 +856,15 @@ mod tests {
         let state = sample_state();
         let collections =
             resolve_collections(&state, &[PropertySelector::default_all_auto()]).unwrap();
-        let output = render(&collections, PaletteShowLayout::Row, None);
+        let output = render(
+            &build_grid(collections),
+            PaletteShowLayout::Rows,
+            None,
+            None,
+            None,
+            Width::Unlimited,
+        )
+        .unwrap();
         assert_eq!(
             output,
             "0.\"baseColorFactor\" \x1b[48;2;255;0;0m  \x1b[0m #FF0000FF \x1b[48;2;0;255;0m  \x1b[0m #00FF0080\n\
@@ -1092,7 +876,47 @@ mod tests {
     }
 
     #[test]
-    fn column_layout_stacks_collections_under_headers() {
+    fn collections_render_in_selector_order() {
+        let state = sample_state();
+        // A palette revisited later starts a fresh root rather than merging
+        // backward, so pre-order keeps the selector order.
+        let output = show(
+            &state,
+            &[
+                ("1", "baseColorFactor", "value"),
+                ("0", "baseColorFactor", "value"),
+            ],
+            PaletteShowLayout::Rows,
+        );
+        assert_eq!(
+            output,
+            "1.\"baseColorFactor\" #0000FFFF\n\
+             \n\
+             0.\"baseColorFactor\" #FF0000FF #00FF0080\n"
+        );
+    }
+
+    #[test]
+    fn a_repeated_property_keeps_one_row_per_selector() {
+        let state = sample_state();
+        let output = show(
+            &state,
+            &[
+                ("0", "baseColorFactor", "value"),
+                ("0", "baseColorFactor", "swatch"),
+            ],
+            PaletteShowLayout::Rows,
+        );
+        assert_eq!(
+            output,
+            "0.\"baseColorFactor\" #FF0000FF #00FF0080\n\
+             \n\
+             0.\"baseColorFactor\" \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
+        );
+    }
+
+    #[test]
+    fn columns_stack_collections_under_labels() {
         let state = sample_state();
         let output = show(
             &state,
@@ -1100,7 +924,7 @@ mod tests {
                 ("0", "baseColorFactor.a", "value"),
                 ("1", "baseColorFactor.a", "value"),
             ],
-            PaletteShowLayout::Column,
+            PaletteShowLayout::Columns,
         );
         assert_eq!(
             output,
@@ -1109,27 +933,110 @@ mod tests {
     }
 
     #[test]
-    fn column_no_header_drops_the_header_row() {
+    fn columns_with_label_none_drop_the_label_row() {
         let state = sample_state();
-        let output = show(
+        let grid = grid_for(
             &state,
             &[
                 ("0", "baseColorFactor.a", "value"),
                 ("1", "baseColorFactor.a", "value"),
             ],
-            PaletteShowLayout::ColumnNoHeader,
         );
+        let output = render(
+            &grid,
+            PaletteShowLayout::Columns,
+            Some(PaletteShowLabel::None),
+            None,
+            None,
+            Width::Unlimited,
+        )
+        .unwrap();
         assert_eq!(output, "255 255\n128\n");
     }
 
     #[test]
-    fn markdown_layout_fills_an_aligned_table() {
+    fn hierarchy_layout_renders_the_palette_tree() {
+        let state = sample_state();
+        let output = show(&state, &[("0", "*", "value")], PaletteShowLayout::Hierarchy);
+        assert_eq!(
+            output,
+            "└ 0\n  ├ \"baseColorFactor\": #FF0000FF #00FF0080\n  └ \"metallicFactor\": 1 0.2\n"
+        );
+    }
+
+    #[test]
+    fn header_labels_group_rows_under_palette_headings() {
+        let state = sample_state();
+        let grid = grid_for(&state, &[("*", "baseColorFactor", "value")]);
+        let output = render(
+            &grid,
+            PaletteShowLayout::Rows,
+            Some(PaletteShowLabel::Header),
+            None,
+            None,
+            Width::Unlimited,
+        )
+        .unwrap();
+        assert_eq!(
+            output,
+            "# 0\n\n\"baseColorFactor\" #FF0000FF #00FF0080\n\n# 1\n\n\"baseColorFactor\" #0000FFFF\n"
+        );
+    }
+
+    #[test]
+    fn a_header_level_shifts_the_headings() {
+        let state = sample_state();
+        let grid = grid_for(&state, &[("*", "baseColorFactor", "value")]);
+        let output = render(
+            &grid,
+            PaletteShowLayout::Rows,
+            Some(PaletteShowLabel::Header),
+            NonZeroU8::new(2),
+            None,
+            Width::Unlimited,
+        )
+        .unwrap();
+        assert!(output.starts_with("## 0\n"));
+    }
+
+    #[test]
+    fn nested_tables_group_one_table_per_palette() {
         let state = sample_state();
         let output = show(
             &state,
             &[("*", "baseColorFactor", "value")],
-            PaletteShowLayout::Markdown,
+            PaletteShowLayout::Tables,
         );
+        assert_eq!(
+            output,
+            "# 0\n\
+             \n\
+             | #   | \"baseColorFactor\" |\n\
+             | --- | ----------------- |\n\
+             | 0   | #FF0000FF         |\n\
+             | 1   | #00FF0080         |\n\
+             \n\
+             # 1\n\
+             \n\
+             | #   | \"baseColorFactor\" |\n\
+             | --- | ----------------- |\n\
+             | 0   | #0000FFFF         |\n"
+        );
+    }
+
+    #[test]
+    fn flat_tables_fill_one_aligned_comparison_table() {
+        let state = sample_state();
+        let grid = grid_for(&state, &[("*", "baseColorFactor", "value")]);
+        let output = render(
+            &grid,
+            PaletteShowLayout::Tables,
+            None,
+            None,
+            Some(PaletteShowTableShape::Flat),
+            Width::Unlimited,
+        )
+        .unwrap();
         assert_eq!(
             output,
             "| #   | 0.\"baseColorFactor\" | 1.\"baseColorFactor\" |\n\
@@ -1140,7 +1047,22 @@ mod tests {
     }
 
     #[test]
-    fn compact_json_emits_records_in_render_order() {
+    fn a_label_mode_on_the_hierarchy_layout_is_invalid_input() {
+        let state = sample_state();
+        let grid = grid_for(&state, &[("0", "baseColorFactor", "value")]);
+        let result = render(
+            &grid,
+            PaletteShowLayout::Hierarchy,
+            Some(PaletteShowLabel::Concat),
+            None,
+            None,
+            Width::Unlimited,
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn compact_json_nests_component_records_under_the_property() {
         let state = sample_state();
         let output = show(
             &state,
@@ -1148,12 +1070,13 @@ mod tests {
                 ("0", "baseColorFactor", "value"),
                 ("0", "baseColorFactor.a", "value"),
             ],
-            PaletteShowLayout::CompactJson,
+            PaletteShowLayout::JsonCompact,
         );
         assert_eq!(
             output,
-            "[{\"palette\":0,\"property\":\"baseColorFactor\",\"values\":[\"#FF0000FF\",\"#00FF0080\"]},\
-             {\"palette\":0,\"property\":\"baseColorFactor.a\",\"values\":[255,128]}]\n"
+            "[{\"label\":\"0\",\"children\":[{\"label\":\"baseColorFactor\",\
+             \"values\":[\"#FF0000FF\",\"#00FF0080\"],\"children\":[\
+             {\"label\":\"a\",\"values\":[255,128]}]}]}]\n"
         );
     }
 
@@ -1164,8 +1087,8 @@ mod tests {
             ("0", "baseColorFactor", "value"),
             ("0", "baseColorFactor.a", "value"),
         ];
-        let pretty = show(&state, fields, PaletteShowLayout::PrettyJson);
-        let compact = show(&state, fields, PaletteShowLayout::CompactJson);
+        let pretty = show(&state, fields, PaletteShowLayout::JsonPretty);
+        let compact = show(&state, fields, PaletteShowLayout::JsonCompact);
         // Indented, and carrying the same data as the compact form.
         assert!(pretty.contains("\n  "));
         let pretty_value: Value = serde_json::from_str(&pretty).unwrap();
@@ -1177,8 +1100,8 @@ mod tests {
     fn star_property_expands_to_every_property() {
         let state = sample_state();
         let collections = resolve_collections(&state, &selectors(&[("0", "*", "value")])).unwrap();
-        let headers: Vec<String> = collections.iter().map(|c| c.header()).collect();
-        assert_eq!(headers, ["0.\"baseColorFactor\"", "0.\"metallicFactor\""]);
+        let keys: Vec<&str> = collections.iter().map(|c| c.key.as_str()).collect();
+        assert_eq!(keys, ["baseColorFactor", "metallicFactor"]);
     }
 
     #[test]
@@ -1187,8 +1110,11 @@ mod tests {
         // Only palette 0 has `metallicFactor`; palette 1 is skipped, not an error.
         let collections =
             resolve_collections(&state, &selectors(&[("*", "metallicFactor", "value")])).unwrap();
-        let headers: Vec<String> = collections.iter().map(|c| c.header()).collect();
-        assert_eq!(headers, ["0.\"metallicFactor\""]);
+        let labels: Vec<(usize, &str)> = collections
+            .iter()
+            .map(|c| (c.palette, c.key.as_str()))
+            .collect();
+        assert_eq!(labels, [(0, "metallicFactor")]);
     }
 
     #[test]
@@ -1219,13 +1145,13 @@ mod tests {
         let scalar = show(
             &state,
             &[("0", "metallicFactor", "auto")],
-            PaletteShowLayout::Row,
+            PaletteShowLayout::Rows,
         );
         assert_eq!(scalar, "0.\"metallicFactor\" 1 0.2\n");
         let component = show(
             &state,
             &[("0", "baseColorFactor.r", "auto")],
-            PaletteShowLayout::Row,
+            PaletteShowLayout::Rows,
         );
         assert_eq!(component, "0.\"baseColorFactor\".r 255 0\n");
     }
@@ -1246,7 +1172,7 @@ mod tests {
     #[test]
     fn a_three_component_color_renders_hex_without_alpha() {
         let state = three_component_state();
-        let output = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Row);
+        let output = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Rows);
         // Six hex digits, no alpha pair.
         assert_eq!(output, "0.\"tint\" #FF0000\n");
     }
@@ -1256,7 +1182,7 @@ mod tests {
         let state = three_component_state();
         // `.a` is out of range on a three-component color, but `.r` reads.
         assert!(resolve_collections(&state, &selectors(&[("0", "tint.a", "value")])).is_err());
-        let red = show(&state, &[("0", "tint.r", "value")], PaletteShowLayout::Row);
+        let red = show(&state, &[("0", "tint.r", "value")], PaletteShowLayout::Rows);
         assert_eq!(red, "0.\"tint\".r 255\n");
     }
 
@@ -1275,7 +1201,7 @@ mod tests {
         let output = show(
             &state,
             &[("0", "emissiveFactor", "value")],
-            PaletteShowLayout::Row,
+            PaletteShowLayout::Rows,
         );
         assert_eq!(output, "0.\"emissiveFactor\" 2 1 0.5 1\n");
     }
@@ -1294,7 +1220,7 @@ mod tests {
         palette.add_material(vec![value(1)]).unwrap();
         state.add_palette(palette);
 
-        let output = show(&state, &[("0", "count", "value")], PaletteShowLayout::Row);
+        let output = show(&state, &[("0", "count", "value")], PaletteShowLayout::Rows);
         assert_eq!(output, "0.\"count\" 3 7\n");
     }
 
@@ -1313,21 +1239,21 @@ mod tests {
         state.add_palette(palette);
 
         // The array survives into both the text and JSON layouts.
-        let text = show(&state, &[("0", "extra", "value")], PaletteShowLayout::Row);
+        let text = show(&state, &[("0", "extra", "value")], PaletteShowLayout::Rows);
         assert_eq!(text, "0.\"extra\" [1,2]\n");
         let json = show(
             &state,
             &[("0", "extra", "value")],
-            PaletteShowLayout::CompactJson,
+            PaletteShowLayout::JsonCompact,
         );
         assert_eq!(
             json,
-            "[{\"palette\":0,\"property\":\"extra\",\"values\":[[1,2]]}]\n"
+            "[{\"label\":\"0\",\"children\":[{\"label\":\"extra\",\"values\":[[1,2]]}]}]\n"
         );
     }
 
     #[test]
-    fn an_empty_property_name_is_quoted_in_the_header_but_raw_in_json() {
+    fn an_empty_property_name_is_quoted_in_the_label_but_raw_in_json() {
         let mut state = VoxMain::default();
         let pool = state.add_value_pool(VoxValuePool::Bool {
             values: IdVec::from_vec(vec![true]),
@@ -1340,17 +1266,17 @@ mod tests {
 
         // An empty name prints quoted as `""` rather than vanishing after the
         // `0.` prefix.
-        let row = show(&state, &[("0", "*", "value")], PaletteShowLayout::Row);
+        let row = show(&state, &[("0", "*", "value")], PaletteShowLayout::Rows);
         assert_eq!(row, "0.\"\" true\n");
         // JSON keeps the raw name; its own string quoting is enough there.
         let json = show(
             &state,
             &[("0", "*", "value")],
-            PaletteShowLayout::CompactJson,
+            PaletteShowLayout::JsonCompact,
         );
         assert_eq!(
             json,
-            "[{\"palette\":0,\"property\":\"\",\"values\":[true]}]\n"
+            "[{\"label\":\"0\",\"children\":[{\"label\":\"\",\"values\":[true]}]}]\n"
         );
     }
 
@@ -1381,7 +1307,7 @@ mod tests {
         let output = show(
             &state,
             &[("0", "emissiveStrength", "value")],
-            PaletteShowLayout::Row,
+            PaletteShowLayout::Rows,
         );
         assert_eq!(output, "0.\"emissiveStrength\" (scalar) 2\n");
     }
@@ -1390,13 +1316,16 @@ mod tests {
     fn star_property_expands_scalar_properties_after_array_ones() {
         let state = scalar_state();
         let collections = resolve_collections(&state, &selectors(&[("0", "*", "value")])).unwrap();
-        let headers: Vec<String> = collections.iter().map(|c| c.header()).collect();
+        let keys: Vec<(&str, bool)> = collections
+            .iter()
+            .map(|c| (c.key.as_str(), c.scalar))
+            .collect();
         assert_eq!(
-            headers,
+            keys,
             [
-                "0.\"baseColorFactor\"",
-                "0.\"emissiveStrength\" (scalar)",
-                "0.\"tint\" (scalar)"
+                ("baseColorFactor", false),
+                ("emissiveStrength", true),
+                ("tint", true)
             ]
         );
     }
@@ -1404,9 +1333,9 @@ mod tests {
     #[test]
     fn a_scalar_color_reads_like_a_material_value() {
         let state = scalar_state();
-        let whole = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Row);
+        let whole = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Rows);
         assert_eq!(whole, "0.\"tint\" (scalar) #00FF0080\n");
-        let component = show(&state, &[("0", "tint.a", "value")], PaletteShowLayout::Row);
+        let component = show(&state, &[("0", "tint.a", "value")], PaletteShowLayout::Rows);
         assert_eq!(component, "0.\"tint\".a (scalar) 128\n");
     }
 
@@ -1419,7 +1348,7 @@ mod tests {
     }
 
     #[test]
-    fn scalar_json_records_mark_the_arity() {
+    fn scalar_json_records_carry_the_annotation() {
         let state = scalar_state();
         let output = show(
             &state,
@@ -1427,12 +1356,13 @@ mod tests {
                 ("0", "baseColorFactor", "value"),
                 ("0", "emissiveStrength", "value"),
             ],
-            PaletteShowLayout::CompactJson,
+            PaletteShowLayout::JsonCompact,
         );
         assert_eq!(
             output,
-            "[{\"palette\":0,\"property\":\"baseColorFactor\",\"values\":[\"#FF0000FF\"]},\
-             {\"palette\":0,\"property\":\"emissiveStrength\",\"scalar\":true,\"values\":[2]}]\n"
+            "[{\"label\":\"0\",\"children\":[\
+             {\"label\":\"baseColorFactor\",\"values\":[\"#FF0000FF\"]},\
+             {\"label\":\"emissiveStrength\",\"annotation\":\"(scalar)\",\"values\":[2]}]}]\n"
         );
     }
 
@@ -1450,7 +1380,7 @@ mod tests {
         palette.add_scalar_property("emissiveStrength".to_owned(), strengths, value(0));
         state.add_palette(palette);
 
-        let output = show(&state, &[("0", "*", "value")], PaletteShowLayout::Row);
+        let output = show(&state, &[("0", "*", "value")], PaletteShowLayout::Rows);
         assert_eq!(output, "0.\"emissiveStrength\" (scalar) 0.5\n");
     }
 }

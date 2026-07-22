@@ -137,7 +137,7 @@ items off as they land.
 
 ## Phase 2: `vxl palette show` adopts (breaking flags + JSON)
 
-- [ ] **S7. Adoption.** Sampling keeps producing `Sample`-shaped data,
+- [x] **S7. Adoption.** Sampling keeps producing `Sample`-shaped data,
       now as `TreeGridValue`s; build the forest (palette `Bare` ->
       property `Quoted` -> optional component `Bare`; per-collection
       format on the data node). A scalar property's data node sets

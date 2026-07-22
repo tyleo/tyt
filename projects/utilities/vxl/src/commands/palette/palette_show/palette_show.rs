@@ -1,10 +1,11 @@
 use crate::{
     Dependencies, Error, Format, Result, Width,
-    commands::{PaletteShowLayout, PropertySelector},
+    commands::{PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PropertySelector},
 };
 use clap::Parser;
 use std::{
     io::{Error as IOError, ErrorKind},
+    num::NonZeroU8,
     path::PathBuf,
 };
 
@@ -34,11 +35,26 @@ pub struct PaletteShow {
     property: Vec<String>,
 
     /// How to arrange the collections, and the serialization to emit.
-    #[arg(value_name = "layout", long, default_value = "row")]
+    #[arg(value_name = "layout", long, default_value = "rows")]
     layout: PaletteShowLayout,
 
-    /// Width the `row` layouts wrap to: `terminal` (default), `unlimited`, or a
-    /// column count.
+    /// How the text layouts label each collection. Defaults to `concat`,
+    /// full dot-joined paths.
+    #[arg(value_name = "label", long)]
+    label: Option<PaletteShowLabel>,
+
+    /// The markdown level of the shallowest heading a heading-emitting
+    /// render prints. Headings start at `#` when omitted.
+    #[arg(value_name = "header-level", long)]
+    header_level: Option<NonZeroU8>,
+
+    /// How the `tables` layout shapes its tables. Defaults to `nested`,
+    /// one table per palette group under headings.
+    #[arg(value_name = "table-shape", long)]
+    table_shape: Option<PaletteShowTableShape>,
+
+    /// Width the `rows` layout wraps to: `terminal` (default), `unlimited`,
+    /// or a column count.
     #[arg(value_name = "width", long, default_value = "terminal")]
     width: Width,
 }
@@ -56,6 +72,15 @@ impl PaletteShow {
                 .collect::<std::result::Result<Vec<_>, String>>()
                 .map_err(|message| Error::IO(IOError::new(ErrorKind::InvalidInput, message)))?
         };
-        dependencies.palette_show(&self.input, self.from, &selectors, self.layout, self.width)
+        dependencies.palette_show(
+            &self.input,
+            self.from,
+            &selectors,
+            self.layout,
+            self.label,
+            self.header_level,
+            self.table_shape,
+            self.width,
+        )
     }
 }
