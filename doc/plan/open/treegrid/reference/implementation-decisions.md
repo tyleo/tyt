@@ -816,3 +816,36 @@ The default output is untouched (the existing render tests pass
 unchanged); the vxl-commands hierarchy show reference gained the
 `--layout` item and conventions item 5 now points `hierarchy show`
 at the shared names, retiring "prints only its tree".
+
+## S11: `palette list --layout hierarchy` adopts the crate (2026-07-22)
+
+`render_hierarchy` becomes a `TreeGrid` builder: a bare `palettes`
+root (`bare_roots: true`), one `Bare` index branch per palette,
+`materialCount` as a data node with one pre-formatted value,
+`properties` / `objects` as `Bare` subtrees, and an empty subtree as
+a `header: []` data node, the `hierarchy show` idiom. The
+`HierarchyChild` enum and `render_names_subtree` are deleted with the
+connector bookkeeping (insertion order is render order), and vxl's
+`tree_glyphs` module is deleted with its last consumer. The grid is
+the plain battery; markdown and JSON stay bespoke until S15.
+
+- **The 4b call: `Quoted`, the design-notes recommendation.**
+  Property keys and object names are user-entered, so they normalize
+  to `Quoted` labels, finishing what 82e803a started (it quoted
+  `hierarchy show` and `palette show` but skipped this command).
+  `palette show` already prints `0."baseColorFactor"`, so within vxl
+  the quoting convention now holds everywhere. `hierarchy` is this
+  command's *default* layout, so the normalization is a deliberate
+  default-output byte change, the one the checklist's embedded
+  decision sanctions; it is called out in the commit message, the
+  three hierarchy goldens updated with it, and the palette list
+  reference example requoted in the same change. The S12 call is
+  separate: vmax never quotes anywhere, so its parity reading stands
+  on its own.
+- **The `(scalar)` suffix is an annotation on the hierarchy path.**
+  Baking `property_labels`'s ` (scalar)` string into a `Quoted` label
+  would quote the suffix too, so the hierarchy builder iterates the
+  property families directly (`property_entries`, label plus optional
+  annotation) and renders `"emissiveStrength" (scalar)`, the S7
+  shape. `property_labels` stays for the markdown table, which keeps
+  its bespoke renderer until S15.

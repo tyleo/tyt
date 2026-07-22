@@ -185,7 +185,7 @@ items off as they land.
       `json-pretty` | `json-compact` now that the tree is data. Update
       the vxl-commands hierarchy reference pages and conventions item 5
       ("prints only its tree" is no longer true).
-- [ ] **S11. `palette list --layout hierarchy`.** Build the `palettes`
+- [x] **S11. `palette list --layout hierarchy`.** Build the `palettes`
       tree (bare root, index `Bare` children, field leaves) and render
       through the crate; markdown and JSON stay bespoke until phase 6
       (S15). Attribute and object names print bare today

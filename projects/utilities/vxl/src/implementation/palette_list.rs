@@ -1,13 +1,17 @@
 use crate::{
     Format, Result, SelectIndex,
     commands::{PaletteListFields, PaletteListLayout},
-    implementation::{self, CONNECTOR_LAST, CONNECTOR_MID, EXTENSION_LAST, EXTENSION_MID},
+    implementation,
 };
 use branded_id::U32Id;
 use serde_json::{Map, Value, json};
 use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
+};
+use treegrid::{
+    BTreeGridNode, TreeGrid, TreeGridHierarchyOptions, TreeGridLabel, TreeGridRenderHierarchy,
+    TreeGridValue,
 };
 use voxcore::{BVoxPalette, VoxMain, VoxPalette};
 
@@ -145,104 +149,65 @@ fn render_json(
     implementation::to_json_string(&Value::Array(records), pretty)
 }
 
-/// The listing as an indented tree, like `hierarchy show`: a `palettes` header
-/// over one bare-index branch per palette, each carrying its enabled fields as
-/// child branches in the order material count, properties, objects.
+/// The listing as an indented tree: a bare `palettes` root over one bare-index
+/// branch per palette, its enabled fields as child branches.
 fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> String {
-    let mut output = String::from("palettes\n");
-    let total = palettes.len();
-    for (index, (id, palette)) in palettes.iter().enumerate() {
-        let last = index + 1 == total;
-        let connector = if last { CONNECTOR_LAST } else { CONNECTOR_MID };
-        output.push_str(&format!("{connector} {}\n", id.to_u32()));
-
-        let child_prefix = if last { EXTENSION_LAST } else { EXTENSION_MID };
-        let mut children = Vec::new();
+    let mut grid = TreeGrid::new();
+    let root = grid.add_root(TreeGridLabel::bare("palettes"));
+    for (id, palette) in palettes {
+        let branch = grid.add_child(root, TreeGridLabel::bare(id.to_u32().to_string()));
         if fields.materials {
-            children.push(HierarchyChild::MaterialCount(palette.material_count()));
+            let count = grid.add_child(branch, TreeGridLabel::bare("materialCount"));
+            grid.push_value(
+                count,
+                TreeGridValue::new(palette.material_count().to_string()),
+            );
         }
         if fields.properties {
-            children.push(HierarchyChild::Names(
-                "properties",
-                implementation::property_labels(palette),
-            ));
+            add_names_subtree(&mut grid, branch, "properties", property_entries(palette));
         }
         if fields.objects {
-            children.push(HierarchyChild::Names(
-                "objects",
-                referencing_names(state, *id)
-                    .into_iter()
-                    .map(str::to_string)
-                    .collect(),
-            ));
-        }
-
-        let child_total = children.len();
-        for (child_index, child) in children.iter().enumerate() {
-            let child_last = child_index + 1 == child_total;
-            match child {
-                HierarchyChild::MaterialCount(count) => {
-                    let connector = if child_last {
-                        CONNECTOR_LAST
-                    } else {
-                        CONNECTOR_MID
-                    };
-                    output.push_str(&format!(
-                        "{child_prefix}{connector} materialCount: {count}\n"
-                    ));
-                }
-                HierarchyChild::Names(header, names) => {
-                    render_names_subtree(&mut output, child_prefix, child_last, header, names);
-                }
-            }
+            let names = referencing_names(state, *id)
+                .into_iter()
+                .map(|name| (TreeGridLabel::quoted(name), None))
+                .collect();
+            add_names_subtree(&mut grid, branch, "objects", names);
         }
     }
-    output
+    grid.render_hierarchy(&TreeGridHierarchyOptions::default().with_bare_roots(true))
 }
 
-/// One enabled child under a palette in the `hierarchy` layout. Collected before
-/// rendering so the last enabled child takes the closing connector.
-enum HierarchyChild {
-    /// A `materialCount: <n>` leaf.
-    MaterialCount(usize),
-    /// A named subtree, `properties` or `objects`, with one child per name.
-    Names(&'static str, Vec<String>),
+/// A palette's property keys as hierarchy entries, array then scalar in id
+/// order, a scalar key carrying the `(scalar)` annotation.
+fn property_entries(palette: &VoxPalette) -> Vec<(TreeGridLabel, Option<String>)> {
+    palette
+        .iter_array_properties()
+        .map(|(_, property)| (TreeGridLabel::quoted(property.name.clone()), None))
+        .chain(palette.iter_scalar_properties().map(|(_, property)| {
+            (
+                TreeGridLabel::quoted(property.name.clone()),
+                Some("(scalar)".to_owned()),
+            )
+        }))
+        .collect()
 }
 
-/// Appends a `header` subtree under `prefix` with one bare child per name, or a
-/// `header: []` leaf when `names` is empty, matching the `hierarchy show` idiom.
-fn render_names_subtree(
-    output: &mut String,
-    prefix: &str,
-    is_last: bool,
+/// Adds a `header` subtree under `parent` with one optionally annotated child
+/// per entry, or a `header: []` leaf when `entries` is empty.
+fn add_names_subtree(
+    grid: &mut TreeGrid,
+    parent: U32Id<BTreeGridNode>,
     header: &str,
-    names: &[String],
+    entries: Vec<(TreeGridLabel, Option<String>)>,
 ) {
-    let connector = if is_last {
-        CONNECTOR_LAST
-    } else {
-        CONNECTOR_MID
-    };
-    if names.is_empty() {
-        output.push_str(&format!("{prefix}{connector} {header}: []\n"));
+    let subtree = grid.add_child(parent, TreeGridLabel::bare(header));
+    if entries.is_empty() {
+        grid.push_value(subtree, TreeGridValue::new("[]"));
         return;
     }
-    output.push_str(&format!("{prefix}{connector} {header}\n"));
-
-    let extension = if is_last {
-        EXTENSION_LAST
-    } else {
-        EXTENSION_MID
-    };
-    let inner = format!("{prefix}{extension}");
-    let total = names.len();
-    for (index, name) in names.iter().enumerate() {
-        let connector = if index + 1 == total {
-            CONNECTOR_LAST
-        } else {
-            CONNECTOR_MID
-        };
-        output.push_str(&format!("{inner}{connector} {name}\n"));
+    for (label, annotation) in entries {
+        let node = grid.add_child(subtree, label);
+        grid.node_mut(node).annotation = annotation;
     }
 }
 
@@ -382,18 +347,18 @@ mod tests {
              ├ 0\n\
              │ ├ materialCount: 2\n\
              │ ├ properties\n\
-             │ │ ├ baseColorFactor\n\
-             │ │ └ metallicFactor\n\
+             │ │ ├ \"baseColorFactor\"\n\
+             │ │ └ \"metallicFactor\"\n\
              │ └ objects\n\
-             │   ├ a\n\
-             │   └ b\n\
+             │   ├ \"a\"\n\
+             │   └ \"b\"\n\
              └ 1\n\
              \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}├ properties\n\
-             \u{20}\u{20}│ ├ baseColorFactor\n\
-             \u{20}\u{20}│ └ emissiveStrength (scalar)\n\
+             \u{20}\u{20}│ ├ \"baseColorFactor\"\n\
+             \u{20}\u{20}│ └ \"emissiveStrength\" (scalar)\n\
              \u{20}\u{20}└ objects\n\
-             \u{20}\u{20}\u{20}\u{20}└ b\n"
+             \u{20}\u{20}\u{20}\u{20}└ \"b\"\n"
         );
     }
 
@@ -413,12 +378,12 @@ mod tests {
              ├ 0\n\
              │ ├ materialCount: 2\n\
              │ └ objects\n\
-             │   ├ a\n\
-             │   └ b\n\
+             │   ├ \"a\"\n\
+             │   └ \"b\"\n\
              └ 1\n\
              \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}└ objects\n\
-             \u{20}\u{20}\u{20}\u{20}└ b\n"
+             \u{20}\u{20}\u{20}\u{20}└ \"b\"\n"
         );
     }
 
@@ -513,7 +478,7 @@ mod tests {
              └ 0\n\
              \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}├ properties\n\
-             \u{20}\u{20}│ └ baseColorFactor\n\
+             \u{20}\u{20}│ └ \"baseColorFactor\"\n\
              \u{20}\u{20}└ objects: []\n"
         );
     }
