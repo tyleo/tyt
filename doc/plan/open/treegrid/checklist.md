@@ -165,7 +165,7 @@ items off as they land.
       selector/sampling tests in vxl plus a few end-to-end renders; the
       layout goldens now live in treegrid. Commit as `feat(vxl)!` with
       the old->new flag mapping in the message.
-- [ ] **S8. Docs.** Update
+- [x] **S8. Docs.** Update
       [vxl-commands palette/show.md](../vxl-commands/reference/palette/show.md)
       (layouts, `--label`, the JSON envelope; check off its deferred
       envelope item) and

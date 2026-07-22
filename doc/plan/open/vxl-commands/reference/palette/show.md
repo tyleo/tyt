@@ -3,7 +3,8 @@
 *Part of [`vxl palette`](README.md) in the [Vxl Command-Line Reference](../../README.md).*
 
 ```
-vxl palette show <input> [--property <palette> <property> <format>]... [--layout row] [--width terminal]
+vxl palette show <input> [--property <palette> <property> <format>]... [--layout rows]
+    [--label concat] [--header-level <level>] [--table-shape nested] [--width terminal]
 ```
 
 Prints one or more palette value collections. A collection is a property's
@@ -49,7 +50,7 @@ There is no type field. `show` reads concrete values and classifies each by
 its bound value pool's kind, a color from a color-kind pool and a scalar from a
 number pool, and a number prints as it reads.
 
-## Value collections and headers
+## Value collections and labels
 
 Each selector resolves to one or more value collections. A `*` palette or `*`
 property expands to one collection per match, so `'*' baseColorFactor` yields a
@@ -57,10 +58,11 @@ collection for every palette that carries `baseColorFactor`. An array property
 yields one value per material in material order; a scalar property yields a
 one-value collection, its pinned palette-wide value, read through the same
 pool-kind classification. Each collection is
-labeled by a header reading `{palette}."{property}"`, the property quoted, with
-the component appended when one is read and a ` (scalar)` marker on a scalar
-property, as in `0."baseColorFactor"`, `1."baseColorFactor"`,
-`0."baseColorFactor".a`, and `0."emissiveStrength" (scalar)`.
+labeled by its path, `{palette}."{property}"`, the property quoted, with the
+component appended when one is read and a ` (scalar)` annotation suffixed on a
+scalar property, as in `0."baseColorFactor"`, `1."baseColorFactor"`,
+`0."baseColorFactor".a`, and `0."emissiveStrength" (scalar)`. The
+[`--label` flag](#labels) chooses how the text layouts spend that path.
 
 Collections come out in selector order, then palette order, then property order
 within a palette, array properties before scalar. A `*` that matches nothing
@@ -92,49 +94,90 @@ The third selector field renders each value:
 ## Layouts
 
 `--layout` arranges the collections and chooses the serialization. It defaults to
-`row` and is orthogonal to the per-collection format. The text layouts share that
-format and only place the collections; the two JSON layouts emit the records
-directly and ignore the format.
+`rows` and is orthogonal to the per-collection format. The text layouts share
+that format and only place the collections; the two JSON layouts emit the
+records directly and ignore the format.
 
-1. `row` (default): each collection is one row prefixed by its
-   `{palette}."{property}"` header, the headers padded to the longest so the first
-   value of each row lines up, and the rows separated by a blank line. Only the
-   header is padded; the values are not column-aligned. Swatch cells abut into a
-   continuous strip; the other formats, and a swatch value with no swatch such as
-   a bool, separate their values with a single space.
-2. `row-no-header`: `row` with the header column dropped.
-3. `column`: each collection is its own column beneath its header, padded to a
+1. `hierarchy`: a box-glyph tree of palettes, properties, and components, each
+   collection's values inline on its node.
+2. `rows` (default): each collection is one row prefixed by its label, the
+   labels padded to the longest so the first value of each row lines up, and
+   the rows separated by a blank line. Only the label is padded; the values are
+   not column-aligned. Swatch cells abut into a continuous strip; the other
+   formats, and a swatch value with no swatch such as a bool, separate their
+   values with a single space.
+3. `columns`: each collection is its own column beneath its label, padded to a
    common width so a `value` rendering reads straight down.
-4. `column-no-header`: `column` with the header row dropped.
-5. `markdown`: the collections fill an aligned markdown table, one column per
-   collection, the `{palette}."{property}"` labels as the header row, and one row
-   per material index. A shorter palette leaves its column blank past its last
-   material.
-6. `pretty-json`: the collection records as indented JSON.
-7. `compact-json`: the collection records as single-line JSON.
+4. `tables`: the collections fill aligned markdown tables led by a `#` column
+   of 0-based material indices, one column per collection headed by its label,
+   and one row per material index. A shorter palette leaves its column blank
+   past its last material. `--table-shape` picks the shape: `nested` (default)
+   groups one table per palette under nested headings, and `flat` is one table
+   over every collection with full-path column headers, the cross-palette
+   comparison view.
+5. `json-pretty`: the collection tree as indented JSON.
+6. `json-compact`: the collection tree as single-line JSON.
 
 Alignment for the `value` and `swatch-value` forms is measured by the visible
 width of a cell, since the swatch escape codes carry no width of their own.
+
+## Labels
+
+`--label` chooses how the text layouts `rows`, `columns`, and `tables` label
+each collection. The `hierarchy` and JSON layouts carry the labels
+structurally, so setting `--label` with them is an error rather than a silent
+no-op.
+
+1. `none`: no labels; the ` (scalar)` annotation drops with the label it
+   rides. An error under `tables`, whose columns cannot be headed by nothing.
+2. `concat` (default): the full dot-joined path, as in `0."baseColorFactor".a`.
+   Inline on `rows` and `columns`; under `tables` the headings nest exactly
+   like `header` but each carries its full path.
+3. `header`: the ancestor path becomes nested markdown headings, `# 0` and
+   `## "baseColorFactor"`, and each collection beneath is labeled by its leaf
+   segment alone, so palettes read as per-palette sections.
+
+`--header-level` sets the markdown level of the shallowest heading, so
+embedded output sits at the right depth under a host document's headings; the
+headings start at `#` when it is omitted. It applies to the renders that emit
+headings, `--label header` and the nested `tables` shape, and is an error on a
+render that emits none. A heading that would nest past markdown's level 6
+renders as a bold `**label**` line instead.
+
+## The JSON envelope
 
 The two JSON layouts emit the stored values in their native JSON types, a number
 as a number and a `#RRGGBBAA` as a string, so they ignore the selector's format
 field. The selectors still choose which palettes and properties appear, and a
 color component emits its byte. There is no `type` field; each value already
-carries its type. The payload is one record per collection, in render order, the
-resolved palette index even when the selector used `*`; a scalar collection
-additionally carries `"scalar": true`:
+carries its type. The payload is the shared read-command envelope: one record
+per node of the collection tree, each `{"label", "annotation"?, "values"?,
+"children"?}`, with the raw unquoted segment as the label. A palette is a root
+record labeled by its resolved index even when the selector used `*`, a
+property nests under its palette, a component under its property, and a scalar
+collection carries `"annotation": "(scalar)"`. Consecutive collections sharing
+a palette nest under one record; a palette revisited later starts a fresh
+record, so the records keep selector order:
 
 ```json
 [
-  { "palette": 0, "property": "baseColorFactor", "values": ["#FF0000FF", "#00FF0080"] },
-  { "palette": 0, "property": "baseColorFactor.a", "values": [255, 128] },
-  { "palette": 0, "property": "emissiveStrength", "scalar": true, "values": [5] }
+  {
+    "label": "0",
+    "children": [
+      {
+        "label": "baseColorFactor",
+        "values": ["#FF0000FF", "#00FF0080"],
+        "children": [{ "label": "a", "values": [255, 128] }]
+      },
+      { "label": "emissiveStrength", "annotation": "(scalar)", "values": [5] }
+    ]
+  }
 ]
 ```
 
 ## Width
 
-`--width` wraps the `row` layouts so a wide palette folds onto continuation
+`--width` wraps the `rows` layout so a wide palette folds onto continuation
 lines, each indented under the row's first value, rather than running off as one
 line the terminal mangles. It takes one of:
 
@@ -144,7 +187,7 @@ line the terminal mangles. It takes one of:
 2. `unlimited`: never wrap; one line per collection.
 3. a column count, such as `--width 80`: wrap to that many columns.
 
-It applies to `row` and `row-no-header`; the other layouts ignore it.
+It applies to `rows`; the other layouts ignore it.
 
 ## Deferred
 
@@ -159,8 +202,9 @@ read commands so they are settled once and shared:
    its content the way the document forms are, shared with `quantize` and
    `remap`.
 3. One shared JSON envelope across `list`, `show`, `hierarchy show`, `validate`,
-   and `info`. The per-record shape above is the template; the envelope wrapping
-   it is settled when the other read commands land.
+   and `info`. Settled by the [treegrid plan](../../../treegrid/README.md) as
+   the record envelope above, which `show` now emits; the remaining read
+   commands adopt it as they migrate to the shared renderer.
 
 ## Checklist
 
@@ -183,7 +227,8 @@ read commands so they are settled once and shared:
 - [ ] Specify a locked input format on `--from` in conventions, distinguishing
       voxj and voxjz and naming a bare palette json, adopted by every read
       command.
-- [ ] Share one JSON envelope across the read commands, wrapping the per-record
-      shape `show` emits.
+- [x] Share one JSON envelope across the read commands, settled as the treegrid
+      record envelope `show` emits; the remaining read commands adopt it as
+      they migrate.
 - [ ] Accept a bare palette `.json` input on the palette commands, sharing the
       shape with `quantize` and `remap`.
