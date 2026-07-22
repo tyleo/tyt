@@ -747,3 +747,44 @@ of `markdown` (the old interleaved table is `--table-shape flat`),
 and the JSON payload switches from the bespoke
 `[{palette, property, scalar?, values}]` records to the generic
 envelope, `scalar: true` becoming `annotation: "(scalar)"`.
+
+## S9: `vxl hierarchy show` adopts the crate (2026-07-22)
+
+The parity adoption: `Scene`, placement enumeration, `Filter`, and the
+view math all stay; `Walk` keeps its traversal order and per-id
+instance counters but populates a `TreeGrid` instead of pushing
+strings (`output: String` becomes `grid: TreeGrid`, the `render_*`
+methods rename to `build_*`), and `render` draws the populated grid
+once through `render_hierarchy`.
+
+- **The mode picks `bare_roots`**: `!collapse_ancestors()`. The
+  section form adds `root` / `unplaced` as bare roots (added only
+  when non-empty, so the crate's blank-line rule reproduces the old
+  `gap` flag exactly, which is deleted); the collapsed-ancestors form
+  adds each match root to a connectored-roots forest, behind a
+  value-less `Bare("ancestors")` root when its path is nested.
+- **`NodeChild` is deleted.** Insertion order is render order, so the
+  pre-assembled ordered-children list and every `prefix` /
+  `connector` / `is_last` parameter disappear; children are added in
+  the old visual order (transform subtree, then the descendants
+  marker or the filtered children).
+- **Markers are value-less `Bare` nodes, tags are values.**
+  `ancestors` / `descendants` / `missing node N` / `missing object N`
+  / `missing palette N` are bare labels with no values, so they
+  render label-alone; the `{node: 0}`-style tags, geometry rows,
+  layer entries, and `layers: []` are `TreeGridValue::new`
+  pre-formatted text values, per the spec's model note.
+- **The grid is the plain battery** (`TreeGrid::new`, no json
+  policy): every value is pre-formatted text. S10's JSON layouts
+  render on the same grid, since `TreeGridValueCells` implements
+  `TreeGridJsonCells` as `String(text)`, the shape this command's
+  envelope wants.
+- **vxl's `quote_name` is deleted with its module.** This command was
+  its last consumer (`palette show` dropped it at S7);
+  `TreeGridLabel::quoted` carries the same `{:?}` semantics.
+
+Verified: the 26 existing render tests pass unchanged, and the old
+and new binaries render byte-identically over every tyt-assets vmax
+bundle across plain, all-views, collapse-instances,
+collapse-ancestors / -descendants / both, multi-pattern, bang-pattern,
+and no-match invocations.

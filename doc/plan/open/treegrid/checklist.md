@@ -173,7 +173,7 @@ items off as they land.
 
 ## Phase 3: vxl tree renderers adopt (parity)
 
-- [ ] **S9. `hierarchy show`.** Keep `Scene` / placements / `Filter` /
+- [x] **S9. `hierarchy show`.** Keep `Scene` / placements / `Filter` /
       view math; replace `Walk`'s string assembly with a `TreeGrid` builder
       (sections as bare roots; the `{node: 0}` / `{object: 0, instance:
       1}` / `{materials: 10}` tags as node *values*, not annotations;

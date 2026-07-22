@@ -1,7 +1,7 @@
 use crate::{
     Format, Result,
     commands::{HierarchyViews, PatternView},
-    implementation::{self, CONNECTOR_LAST, CONNECTOR_MID, EXTENSION_LAST, EXTENSION_MID},
+    implementation,
 };
 use branded_id::{IdVec, U32Id};
 use pathspec::GitIgnoreRegex;
@@ -10,6 +10,10 @@ use std::{
     f64::consts::PI,
     io::{Error as IOError, ErrorKind},
     path::Path,
+};
+use treegrid::{
+    BTreeGridNode, TreeGrid, TreeGridHierarchyOptions, TreeGridLabel, TreeGridRenderHierarchy,
+    TreeGridValue,
 };
 use ty_math::{TyTransformF64, TyVector3F64};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
@@ -21,6 +25,10 @@ type NodeId = U32Id<BVoxHierarchyNode>;
 /// An object id in the loaded [`VoxMain`], aliased alongside [`NodeId`] to keep
 /// the node-versus-object distinction in the type system.
 type ObjectId = U32Id<BVoxObject>;
+
+/// A node id in the [`TreeGrid`] being populated, aliased beside [`NodeId`] and
+/// [`ObjectId`] so the three id spaces stay distinct in signatures.
+type GridNodeId = U32Id<BTreeGridNode>;
 
 /// Loads the voxel file at `input` and prints its scene graph as a tree.
 pub fn hierarchy_show(
@@ -74,12 +82,18 @@ fn render(state: &VoxMain, options: &RenderOptions) -> Result<String> {
         filter,
         seen_nodes: IdVec::from_vec(vec![0; state.hierarchy_node_count()]),
         seen_objects: IdVec::from_vec(vec![0; state.object_count()]),
-        output: String::new(),
+        grid: TreeGrid::new(),
     };
+
+    // Collapsed ancestors print a flat list whose roots take connectors; the
+    // section form prints `root` / `unplaced` as bare headers.
+    let bare_roots = !walk.collapse_ancestors();
 
     walk.run();
 
-    Ok(walk.output)
+    let layout = TreeGridHierarchyOptions::default().with_bare_roots(bare_roots);
+
+    Ok(walk.grid.render_hierarchy(&layout))
 }
 
 /// A thin view over the loaded [`VoxMain`], which stays the single source of
@@ -427,9 +441,7 @@ impl Filter {
     }
 }
 
-/// One render pass over a [`Scene`]: the immutable options and filter, plus the
-/// growing output and the per-id counters that number instances and drive the
-/// instance collapse.
+/// One populate pass over a [`Scene`].
 struct Walk<'a> {
     /// The scene being rendered.
     scene: &'a Scene<'a>,
@@ -450,24 +462,8 @@ struct Walk<'a> {
     /// Placements of each object already shown, indexed by object id.
     seen_objects: IdVec<BVoxObject, usize>,
 
-    /// The accumulated tree text.
-    output: String,
-}
-
-/// One ordered child of a node in the render: a prepended transform subtree, a
-/// collapsed-descendants marker, a child node with its path, or a child object.
-enum NodeChild {
-    /// The node's own transform subtree.
-    Transform,
-
-    /// A `descendants` marker standing in for the hidden subtree.
-    Descendants,
-
-    /// A child node and its path.
-    Node(NodeId, String),
-
-    /// A child object.
-    Object(ObjectId),
+    /// The grid being populated, rendered once the walk completes.
+    grid: TreeGrid,
 }
 
 impl Walk<'_> {
@@ -499,7 +495,21 @@ impl Walk<'_> {
         index
     }
 
-    /// Renders the whole scene into `output`.
+    /// Adds a node under `parent`, or as a grid root when there is none.
+    fn add_node(&mut self, parent: Option<GridNodeId>, label: TreeGridLabel) -> GridNodeId {
+        match parent {
+            Some(parent) => self.grid.add_child(parent, label),
+            None => self.grid.add_root(label),
+        }
+    }
+
+    /// Adds a leaf under `parent` carrying one pre-formatted value.
+    fn add_value_leaf(&mut self, parent: GridNodeId, label: impl Into<String>, text: String) {
+        let leaf = self.grid.add_child(parent, TreeGridLabel::bare(label));
+        self.grid.push_value(leaf, TreeGridValue::new(text));
+    }
+
+    /// Populates the whole scene into the grid.
     fn run(&mut self) {
         if self.collapse_ancestors() {
             self.run_collapsed_ancestors();
@@ -508,76 +518,51 @@ impl Walk<'_> {
         }
     }
 
-    /// The `root` section of each root's subtree, then the `unplaced` section of
-    /// nodes that are neither a root nor a child and objects no node places. With
-    /// a filter, each section keeps only entries on the way to a match, and a
-    /// section header prints only when its section has visible entries.
+    /// The `root` section, then the `unplaced` section of unplaced nodes and
+    /// orphan objects.
     fn run_sections(&mut self) {
         let roots = self.scene.roots().to_vec();
-        self.render_group("root", &roots, &[], false);
+        self.build_group("root", &roots, &[]);
 
         let unplaced = self.scene.unplaced_nodes();
         let orphans = self.scene.orphan_objects();
-        self.render_group("unplaced", &unplaced, &orphans, true);
+        self.build_group("unplaced", &unplaced, &orphans);
     }
 
-    /// Prints the match roots as a flat list, each behind an `ancestors` marker,
-    /// dropped when the root is a top-level node. Runs only with a filter. World
-    /// space still uses each root's stored parent world transform, so the hidden
-    /// ancestors' placement is kept.
+    /// Adds the match roots as a flat list, each behind an `ancestors` marker
+    /// unless it is top-level. Each keeps its stored parent world transform, so
+    /// the hidden ancestors' placement holds.
     fn run_collapsed_ancestors(&mut self) {
         let roots = match &self.filter {
             Some(filter) => filter.roots.clone(),
             None => return,
         };
 
-        let total = roots.len();
+        for placement in &roots {
+            let parent = placement
+                .path
+                .contains('/')
+                .then(|| self.grid.add_root(TreeGridLabel::bare("ancestors")));
 
-        for (index, placement) in roots.iter().enumerate() {
-            let is_last = index + 1 == total;
-            let mut branch = HashSet::new();
-
-            if placement.path.contains('/') {
-                let connector = if is_last {
-                    CONNECTOR_LAST
-                } else {
-                    CONNECTOR_MID
-                };
-
-                self.output.push_str(&format!("{connector} ancestors\n"));
-
-                let extension = if is_last {
-                    EXTENSION_LAST
-                } else {
-                    EXTENSION_MID
-                };
-
-                self.render_placement(placement, extension, true, &mut branch);
-            } else {
-                self.render_placement(placement, "", is_last, &mut branch);
-            }
+            self.build_placement(placement, parent);
         }
     }
 
-    /// Renders one match root: a node with its subtree, or a leaf object.
-    fn render_placement(
-        &mut self,
-        placement: &Placement,
-        prefix: &str,
-        is_last: bool,
-        branch: &mut HashSet<NodeId>,
-    ) {
+    /// Builds one match root: a node with its subtree, or a leaf object.
+    fn build_placement(&mut self, placement: &Placement, parent: Option<GridNodeId>) {
         match placement.entity {
-            Entity::Node(id) => self.render_node(
-                id,
-                prefix,
-                is_last,
-                &placement.path,
-                placement.parent_world,
-                branch,
-            ),
+            Entity::Node(id) => {
+                let mut branch = HashSet::new();
+                self.build_node(
+                    id,
+                    parent,
+                    &placement.path,
+                    placement.parent_world,
+                    &mut branch,
+                );
+            }
 
-            Entity::Object(id) => self.render_object(id, prefix, is_last, placement.parent_world),
+            Entity::Object(id) => self.build_object(id, parent, placement.parent_world),
         }
     }
 
@@ -586,18 +571,9 @@ impl Walk<'_> {
         self.filter.as_ref().is_some_and(|f| f.is_root(path))
     }
 
-    /// Renders one section under `header`: its top-level node ids then object
-    /// ids, at prefix depth zero. With a filter, a top-level node shows only when
-    /// it is on the way to a selection, and a section-level object shows only when
-    /// its name is selected. Nothing prints, header included, when the section is
-    /// empty.
-    fn render_group(
-        &mut self,
-        header: &str,
-        node_ids: &[NodeId],
-        object_ids: &[ObjectId],
-        gap: bool,
-    ) {
+    /// Builds one section: a bare `header` root over the visible top-level
+    /// nodes then objects, skipped entirely when empty.
+    fn build_group(&mut self, header: &str, node_ids: &[NodeId], object_ids: &[ObjectId]) {
         let nodes: Vec<NodeId> = node_ids
             .iter()
             .copied()
@@ -610,31 +586,23 @@ impl Walk<'_> {
             .filter(|&id| self.top_object_visible(id))
             .collect();
 
-        let total = nodes.len() + objects.len();
-
-        if total == 0 {
+        if nodes.is_empty() && objects.is_empty() {
             return;
         }
 
-        if gap && !self.output.is_empty() {
-            self.output.push('\n');
-        }
-
-        self.output.push_str(header);
-        self.output.push('\n');
+        let section = self.grid.add_root(TreeGridLabel::bare(header));
 
         // A section root has no parent, so it starts from the identity.
         let identity = TyTransformF64::default();
         let mut branch = HashSet::new();
 
-        for (index, &id) in nodes.iter().enumerate() {
+        for &id in &nodes {
             let path = self.scene.node_name(id).to_string();
-            self.render_node(id, "", index + 1 == total, &path, identity, &mut branch);
+            self.build_node(id, Some(section), &path, identity, &mut branch);
         }
 
-        for (index, &id) in objects.iter().enumerate() {
-            let last = nodes.len() + index + 1 == total;
-            self.render_object(id, "", last, identity);
+        for &id in &objects {
+            self.build_object(id, Some(section), identity);
         }
     }
 
@@ -656,40 +624,24 @@ impl Walk<'_> {
         }
     }
 
-    /// Appends node `id`'s subtree at `path`. Every line reads
-    /// `"name": {node: <id>, ...}`: a shared node adds `instance: <k>`, the count
-    /// of its placements already shown, so `instance > 0` marks a repeat, and
-    /// with `collapse_instances` a repeat outside a cycle stops without
-    /// expanding. A node on its own ancestor chain adds `cycle: true` and stops,
-    /// so a document that skipped validation cannot recurse forever.
-    /// `parent_world` is this node's parent's world transform,
-    /// composed with the node's local transform for `--show-transforms world` and
-    /// carried down to the children. With a filter, a child node shows when it
-    /// leads to a selection and a child object shows when it is selected;
-    /// `collapse_descendants` replaces a match root's subtree with a
-    /// `descendants` marker.
-    fn render_node(
+    /// Builds node `id`'s subtree at `path`. A node on its own ancestor chain
+    /// stops with a `cycle: true` tag, so a document that skipped validation
+    /// cannot recurse forever.
+    fn build_node(
         &mut self,
         id: NodeId,
-        prefix: &str,
-        is_last: bool,
+        parent: Option<GridNodeId>,
         path: &str,
         parent_world: TyTransformF64,
         branch: &mut HashSet<NodeId>,
     ) {
         let scene = self.scene;
 
-        let connector = if is_last {
-            CONNECTOR_LAST
-        } else {
-            CONNECTOR_MID
-        };
-
         let Some(node) = scene.state.hierarchy_node(id) else {
-            self.output.push_str(&format!(
-                "{prefix}{connector} missing node {}\n",
-                id.to_u32()
-            ));
+            self.add_node(
+                parent,
+                TreeGridLabel::bare(format!("missing node {}", id.to_u32())),
+            );
             return;
         };
 
@@ -714,10 +666,10 @@ impl Walk<'_> {
             tag.push_str(", cycle: true");
         }
 
-        self.output.push_str(&format!(
-            "{prefix}{connector} {}: {{{tag}}}\n",
-            implementation::quote_name(&node.name)
-        ));
+        let grid_node = self.add_node(parent, TreeGridLabel::quoted(node.name.as_str()));
+
+        self.grid
+            .push_value(grid_node, TreeGridValue::new(format!("{{{tag}}}")));
 
         if is_cycle || collapsed_stub {
             return;
@@ -727,20 +679,8 @@ impl Walk<'_> {
 
         let world = parent_world.compose(&local);
 
-        let extension = if is_last {
-            EXTENSION_LAST
-        } else {
-            EXTENSION_MID
-        };
-
-        let child_prefix = format!("{prefix}{extension}");
-
-        // Assemble the ordered children: the transform subtree first, then either
-        // the collapsed-descendants marker or the filtered real children.
-        let mut children: Vec<NodeChild> = Vec::new();
-
         if self.views.transforms.is_some() {
-            children.push(NodeChild::Transform);
+            self.build_transform(grid_node, local, world);
         }
 
         // The child nodes that lead to a selection and the child objects that are
@@ -771,51 +711,29 @@ impl Walk<'_> {
 
         let has_children = !child_nodes.is_empty() || !child_objects.is_empty();
 
+        branch.insert(id);
+
         if self.collapse_descendants() && self.is_root(path) && has_children {
-            children.push(NodeChild::Descendants);
+            self.grid
+                .add_child(grid_node, TreeGridLabel::bare("descendants"));
         } else {
             for (child, child_path) in child_nodes {
-                children.push(NodeChild::Node(child, child_path));
+                self.build_node(child, Some(grid_node), &child_path, world, branch);
             }
 
             for object in child_objects {
-                children.push(NodeChild::Object(object));
-            }
-        }
-
-        let total = children.len();
-
-        branch.insert(id);
-
-        for (index, child) in children.into_iter().enumerate() {
-            let last = index + 1 == total;
-
-            match child {
-                NodeChild::Transform => self.render_transform(&child_prefix, last, local, world),
-
-                NodeChild::Descendants => {
-                    let connector = if last { CONNECTOR_LAST } else { CONNECTOR_MID };
-                    self.output
-                        .push_str(&format!("{child_prefix}{connector} descendants\n"));
-                }
-
-                NodeChild::Node(child_id, child_path) => {
-                    self.render_node(child_id, &child_prefix, last, &child_path, world, branch)
-                }
-
-                NodeChild::Object(object) => self.render_object(object, &child_prefix, last, world),
+                self.build_object(object, Some(grid_node), world);
             }
         }
 
         branch.remove(&id);
     }
 
-    /// Appends the `transform` subtree for a node: its position, rotation, and
-    /// scale, in local space or, when the view asks, the composed world space.
-    fn render_transform(
+    /// Builds the `transform` subtree, in local or, when the view asks, the
+    /// composed world space.
+    fn build_transform(
         &mut self,
-        prefix: &str,
-        is_last: bool,
+        parent: GridNodeId,
         local: TyTransformF64,
         world: TyTransformF64,
     ) {
@@ -825,22 +743,9 @@ impl Walk<'_> {
 
         let transform = if view.world { world } else { local };
 
-        let connector = if is_last {
-            CONNECTOR_LAST
-        } else {
-            CONNECTOR_MID
-        };
-
-        self.output
-            .push_str(&format!("{prefix}{connector} transform\n"));
-
-        let extension = if is_last {
-            EXTENSION_LAST
-        } else {
-            EXTENSION_MID
-        };
-
-        let inner = format!("{prefix}{extension}");
+        let subtree = self
+            .grid
+            .add_child(parent, TreeGridLabel::bare("transform"));
 
         let mut rotation = transform.rotation.to_euler_radians();
 
@@ -850,45 +755,40 @@ impl Walk<'_> {
 
         let precision = view.precision;
 
-        self.output.push_str(&format!(
-            "{inner}{CONNECTOR_MID} position: [{}]\n",
-            format_vec3(transform.position, precision)
-        ));
+        self.add_value_leaf(
+            subtree,
+            "position",
+            format!("[{}]", format_vec3(transform.position, precision)),
+        );
 
-        self.output.push_str(&format!(
-            "{inner}{CONNECTOR_MID} rotation: [{}]\n",
-            format_vec3(rotation, precision)
-        ));
+        self.add_value_leaf(
+            subtree,
+            "rotation",
+            format!("[{}]", format_vec3(rotation, precision)),
+        );
 
-        self.output.push_str(&format!(
-            "{inner}{CONNECTOR_LAST} scale: [{}]\n",
-            format_vec3(transform.scale, precision)
-        ));
+        self.add_value_leaf(
+            subtree,
+            "scale",
+            format!("[{}]", format_vec3(transform.scale, precision)),
+        );
     }
 
-    /// Appends object `id` as a leaf line reading `"name": {object: <id>, ...}`,
-    /// then its enabled rows and its `layers` subtree.
-    /// `placing_world` is the world transform of the node placing the object.
-    fn render_object(
+    /// Builds object `id`, its enabled rows, then its `layers` subtree.
+    /// `placing_world` is the world transform of the placing node.
+    fn build_object(
         &mut self,
         id: ObjectId,
-        prefix: &str,
-        is_last: bool,
+        parent: Option<GridNodeId>,
         placing_world: TyTransformF64,
     ) {
         let scene = self.scene;
 
-        let connector = if is_last {
-            CONNECTOR_LAST
-        } else {
-            CONNECTOR_MID
-        };
-
         let Some(object) = scene.state.object(id) else {
-            self.output.push_str(&format!(
-                "{prefix}{connector} missing object {}\n",
-                id.to_u32()
-            ));
+            self.add_node(
+                parent,
+                TreeGridLabel::bare(format!("missing object {}", id.to_u32())),
+            );
             return;
         };
 
@@ -900,28 +800,17 @@ impl Walk<'_> {
             tag.push_str(&format!(", instance: {index}"));
         }
 
-        self.output.push_str(&format!(
-            "{prefix}{connector} {}: {{{tag}}}\n",
-            implementation::quote_name(object.name())
-        ));
+        let grid_node = self.add_node(parent, TreeGridLabel::quoted(object.name()));
 
-        let extension = if is_last {
-            EXTENSION_LAST
-        } else {
-            EXTENSION_MID
-        };
+        self.grid
+            .push_value(grid_node, TreeGridValue::new(format!("{{{tag}}}")));
 
-        let child_prefix = format!("{prefix}{extension}");
-
-        let rows = self.object_rows(object, placing_world);
-        let total = rows.len() + usize::from(self.views.layers);
-
-        for (index, row) in rows.iter().enumerate() {
-            self.render_object_row(row, &child_prefix, index + 1 == total);
+        for row in self.object_rows(object, placing_world) {
+            self.build_object_row(&row, grid_node);
         }
 
         if self.views.layers {
-            self.render_layers(&child_prefix, true, object);
+            self.build_layers(grid_node, object);
         }
     }
 
@@ -987,15 +876,8 @@ impl Walk<'_> {
         rows
     }
 
-    /// Appends one geometry row: a `label: [x, y, z]` line, a `label` min/max
-    /// subtree, or, when the value is unavailable, a `label: null` leaf.
-    fn render_object_row(&mut self, row: &ObjectRow, prefix: &str, is_last: bool) {
-        let connector = if is_last {
-            CONNECTOR_LAST
-        } else {
-            CONNECTOR_MID
-        };
-
+    /// Builds one geometry row; an absent grid reads `null`.
+    fn build_object_row(&mut self, row: &ObjectRow, parent: GridNodeId) {
         match row {
             ObjectRow::Value {
                 label,
@@ -1007,90 +889,53 @@ impl Walk<'_> {
                     None => "null".to_string(),
                 };
 
-                self.output
-                    .push_str(&format!("{prefix}{connector} {label}: {text}\n"));
+                self.add_value_leaf(parent, *label, text);
             }
 
-            ObjectRow::Count { label, value } => self
-                .output
-                .push_str(&format!("{prefix}{connector} {label}: {value}\n")),
+            ObjectRow::Count { label, value } => {
+                self.add_value_leaf(parent, *label, value.to_string())
+            }
 
             ObjectRow::Bounds {
                 label,
                 corners: None,
                 ..
-            } => self
-                .output
-                .push_str(&format!("{prefix}{connector} {label}: null\n")),
+            } => self.add_value_leaf(parent, *label, "null".to_string()),
 
             ObjectRow::Bounds {
                 label,
                 corners: Some((min, max)),
                 precision,
             } => {
-                self.output
-                    .push_str(&format!("{prefix}{connector} {label}\n"));
+                let subtree = self.grid.add_child(parent, TreeGridLabel::bare(*label));
 
-                let extension = if is_last {
-                    EXTENSION_LAST
-                } else {
-                    EXTENSION_MID
-                };
+                self.add_value_leaf(
+                    subtree,
+                    "min",
+                    format!("[{}]", format_vec3(*min, *precision)),
+                );
 
-                let inner = format!("{prefix}{extension}");
-
-                self.output.push_str(&format!(
-                    "{inner}{CONNECTOR_MID} min: [{}]\n",
-                    format_vec3(*min, *precision)
-                ));
-
-                self.output.push_str(&format!(
-                    "{inner}{CONNECTOR_LAST} max: [{}]\n",
-                    format_vec3(*max, *precision)
-                ));
+                self.add_value_leaf(
+                    subtree,
+                    "max",
+                    format!("[{}]", format_vec3(*max, *precision)),
+                );
             }
         }
     }
 
-    /// Appends the `layers` subtree: one child per layer the object carries, in
-    /// layer order. Each line reads `<palette index>: {materials: <count>, ...}`:
-    /// a layer whose palette has no materials adds `sampled: false`. An object
-    /// with no layer prints `layers: []`, and a layer whose palette the state
-    /// does not hold prints a `missing palette` marker.
-    fn render_layers(&mut self, prefix: &str, is_last: bool, object: &VoxObject) {
-        let connector = if is_last {
-            CONNECTOR_LAST
-        } else {
-            CONNECTOR_MID
-        };
-
-        let total = object.layer_count();
-
-        if total == 0 {
-            self.output
-                .push_str(&format!("{prefix}{connector} layers: []\n"));
+    /// Builds the `layers` subtree, one child per layer, `layers: []` when the
+    /// object has none.
+    fn build_layers(&mut self, parent: GridNodeId, object: &VoxObject) {
+        if object.layer_count() == 0 {
+            self.add_value_leaf(parent, "layers", "[]".to_string());
             return;
         }
 
-        self.output
-            .push_str(&format!("{prefix}{connector} layers\n"));
+        let subtree = self.grid.add_child(parent, TreeGridLabel::bare("layers"));
 
-        let extension = if is_last {
-            EXTENSION_LAST
-        } else {
-            EXTENSION_MID
-        };
-
-        let inner = format!("{prefix}{extension}");
-
-        for (index, (_, palette_id)) in object.iter_layers().enumerate() {
-            let child_connector = if index + 1 == total {
-                CONNECTOR_LAST
-            } else {
-                CONNECTOR_MID
-            };
-
-            let line = match self.scene.state.palette(palette_id) {
+        for (_, palette_id) in object.iter_layers() {
+            match self.scene.state.palette(palette_id) {
                 Some(palette) => {
                     let materials = palette.material_count();
                     // Only the notable state is tagged, like `instance` and
@@ -1100,19 +945,21 @@ impl Walk<'_> {
                     } else {
                         ""
                     };
-                    format!(
-                        "{inner}{child_connector} {}: {{materials: {materials}{sampled}}}\n",
-                        palette_id.to_u32(),
-                    )
+
+                    self.add_value_leaf(
+                        subtree,
+                        palette_id.to_u32().to_string(),
+                        format!("{{materials: {materials}{sampled}}}"),
+                    );
                 }
 
-                None => format!(
-                    "{inner}{child_connector} missing palette {}\n",
-                    palette_id.to_u32()
-                ),
-            };
-
-            self.output.push_str(&line);
+                None => {
+                    self.grid.add_child(
+                        subtree,
+                        TreeGridLabel::bare(format!("missing palette {}", palette_id.to_u32())),
+                    );
+                }
+            }
         }
     }
 }
