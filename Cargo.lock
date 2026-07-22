@@ -1858,8 +1858,10 @@ dependencies = [
 name = "tyt-vmax"
 version = "0.1.6"
 dependencies = [
+ "branded-id",
  "clap",
  "clap_complete",
+ "treegrid",
  "ty-math",
  "tyt-common",
  "tyt-injection",

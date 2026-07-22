@@ -195,7 +195,7 @@ items off as they land.
 
 ## Phase 4: `tyt vmax hierarchy` adopts (parity)
 
-- [ ] **S12. Adoption.** Keep scene load, `select_nodes`, transform
+- [x] **S12. Adoption.** Keep scene load, `select_nodes`, transform
       resolution, and all flag parsing; replace `Renderer` with a
       `TreeGrid` builder (connectored roots, `(Group)` / `(Object)`
       annotations, `transform` / `bounds` `Bare` subtrees, `ancestors`

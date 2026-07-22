@@ -1,4 +1,5 @@
 use crate::{Dependencies, Error, ResolvedNodeTransform, Result, VoxelMaxSceneNode};
+use branded_id::U32Id;
 use clap::Parser;
 use std::{
     collections::{HashMap, HashSet},
@@ -6,6 +7,14 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
 };
+use treegrid::{
+    BTreeGridNode, TreeGrid, TreeGridHierarchyOptions, TreeGridLabel, TreeGridRenderHierarchy,
+    TreeGridValue,
+};
+
+/// A node id in the [`TreeGrid`] being populated, distinct from the scene's
+/// `usize` node indices.
+type GridNodeId = U32Id<BTreeGridNode>;
 
 /// The largest `--show-*` precision accepted, keeping float formatting below the
 /// width the standard formatter can represent.
@@ -128,7 +137,7 @@ impl Hierarchy {
             .map(|view| dependencies.resolve_node_transforms(&nodes, &parent_of, view.world))
             .unwrap_or_default();
 
-        let mut renderer = Renderer {
+        let mut builder = Builder {
             nodes: &nodes,
             children,
             parent_of,
@@ -140,16 +149,19 @@ impl Hierarchy {
             show_transforms,
             transforms,
             show_bounds,
-            output: String::new(),
+            grid: TreeGrid::new(),
         };
 
         if collapse_ancestors && filtering {
-            renderer.render_collapsed_ancestors();
+            builder.build_collapsed_ancestors();
         } else {
-            renderer.render_tree();
+            builder.build_tree();
         }
 
-        dependencies.write_stdout(renderer.output.as_bytes())?;
+        let output = builder
+            .grid
+            .render_hierarchy(&TreeGridHierarchyOptions::default());
+        dependencies.write_stdout(output.as_bytes())?;
         Ok(())
     }
 }
@@ -341,21 +353,9 @@ fn invalid_input(message: String) -> Error {
     Error::IO(IOError::new(ErrorKind::InvalidInput, message))
 }
 
-/// A row appended under a node, in render order.
-enum Item {
-    /// The `transform` subtree.
-    Transform,
-    /// The `bounds` subtree.
-    Bounds,
-    /// The `descendants` collapse marker.
-    Descendants,
-    /// A real child node by index.
-    Child(usize),
-}
-
-/// Renders the filtered hierarchy tree into an output string. The selection sets
-/// hold node indices, so same-name siblings never conflate.
-struct Renderer<'a> {
+/// Populates the filtered hierarchy tree into a [`TreeGrid`]. The selection
+/// sets hold node indices, so same-name siblings never conflate.
+struct Builder<'a> {
     nodes: &'a [VoxelMaxSceneNode],
     children: HashMap<Option<&'a str>, Vec<usize>>,
     parent_of: Vec<Option<usize>>,
@@ -367,40 +367,28 @@ struct Renderer<'a> {
     show_transforms: Option<TransformView>,
     transforms: Vec<ResolvedNodeTransform>,
     show_bounds: Option<usize>,
-    output: String,
+    grid: TreeGrid,
 }
 
-impl Renderer<'_> {
-    /// Renders every visible root subtree in order.
-    fn render_tree(&mut self) {
+impl Builder<'_> {
+    /// Adds every visible root subtree in order.
+    fn build_tree(&mut self) {
         let roots = self.children.get(&None).cloned().unwrap_or_default();
-        let shown: Vec<usize> = roots
-            .into_iter()
-            .filter(|&root| self.will_show(root))
-            .collect();
-
-        let count = shown.len();
-        for (index, root) in shown.into_iter().enumerate() {
-            self.render_node(root, "", index + 1 == count);
+        for root in roots {
+            if self.will_show(root) {
+                self.build_node(root, None);
+            }
         }
     }
 
-    /// Renders each match root as a flat list, prefixed with an `ancestors`
-    /// marker when its ancestor chain is hidden.
-    fn render_collapsed_ancestors(&mut self) {
-        let roots = self.collect_match_roots();
-        let count = roots.len();
-
-        for (index, node) in roots.into_iter().enumerate() {
-            let is_last = index + 1 == count;
-            if self.parent_of[node].is_some() {
-                let connector = if is_last { '└' } else { '├' };
-                let extension = if is_last { "  " } else { "│ " };
-                self.output.push_str(&format!("{connector} ancestors\n"));
-                self.render_node(node, extension, true);
-            } else {
-                self.render_node(node, "", is_last);
-            }
+    /// Adds each match root as a flat root list, behind an `ancestors` marker
+    /// root when its ancestor chain is hidden.
+    fn build_collapsed_ancestors(&mut self) {
+        for node in self.collect_match_roots() {
+            let parent = self.parent_of[node]
+                .is_some()
+                .then(|| self.grid.add_root(TreeGridLabel::bare("ancestors")));
+            self.build_node(node, parent);
         }
     }
 
@@ -425,48 +413,23 @@ impl Renderer<'_> {
         }
     }
 
-    /// Prints `index`'s row, then its transform, bounds, and child rows.
-    fn render_node(&mut self, index: usize, prefix: &str, is_last: bool) {
+    /// Adds `index`'s node, then its transform and bounds subtrees, then the
+    /// visible children or a `descendants` marker.
+    fn build_node(&mut self, index: usize, parent: Option<GridNodeId>) {
         let (name, is_group) = {
             let node = &self.nodes[index];
             (node.name.clone(), node.is_group)
         };
 
-        let connector = if is_last { '└' } else { '├' };
-        let kind = if is_group { "Group" } else { "Object" };
-        self.output
-            .push_str(&format!("{prefix}{connector} {name} ({kind})\n"));
-
-        let child_prefix = format!("{prefix}{}", if is_last { "  " } else { "│ " });
-        let is_match_root = self.filtering && self.match_roots.contains(&index);
-
-        let items = self.child_items(index, is_group, is_match_root);
-        let count = items.len();
-        for (position, item) in items.into_iter().enumerate() {
-            let item_last = position + 1 == count;
-            match item {
-                Item::Transform => self.render_transform(index, &child_prefix, item_last),
-                Item::Bounds => self.render_bounds(index, &child_prefix, item_last),
-                Item::Descendants => {
-                    let connector = if item_last { '└' } else { '├' };
-                    self.output
-                        .push_str(&format!("{child_prefix}{connector} descendants\n"));
-                }
-                Item::Child(child) => self.render_node(child, &child_prefix, item_last),
-            }
-        }
-    }
-
-    /// The rows to render under `index`: an optional transform and bounds
-    /// subtree, then the visible children or a `descendants` marker.
-    fn child_items(&self, index: usize, is_group: bool, is_match_root: bool) -> Vec<Item> {
-        let mut items = Vec::new();
+        let grid_node = self.add_node(parent, TreeGridLabel::bare(name));
+        let kind = if is_group { "(Group)" } else { "(Object)" };
+        self.grid.node_mut(grid_node).annotation = Some(kind.to_owned());
 
         if self.show_transforms.is_some() {
-            items.push(Item::Transform);
+            self.build_transform(index, grid_node);
         }
         if self.show_bounds.is_some() && self.nodes[index].bounds.is_some() {
-            items.push(Item::Bounds);
+            self.build_bounds(index, grid_node);
         }
 
         if is_group {
@@ -481,14 +444,30 @@ impl Renderer<'_> {
                 })
                 .unwrap_or_default();
 
+            let is_match_root = self.filtering && self.match_roots.contains(&index);
             if self.collapse_descendants && is_match_root && !kids.is_empty() {
-                items.push(Item::Descendants);
+                self.grid
+                    .add_child(grid_node, TreeGridLabel::bare("descendants"));
             } else {
-                items.extend(kids.into_iter().map(Item::Child));
+                for kid in kids {
+                    self.build_node(kid, Some(grid_node));
+                }
             }
         }
+    }
 
-        items
+    /// Adds a node under `parent`, or as a grid root when there is none.
+    fn add_node(&mut self, parent: Option<GridNodeId>, label: TreeGridLabel) -> GridNodeId {
+        match parent {
+            Some(parent) => self.grid.add_child(parent, label),
+            None => self.grid.add_root(label),
+        }
+    }
+
+    /// Adds a leaf under `parent` carrying one pre-formatted value.
+    fn add_value_leaf(&mut self, parent: GridNodeId, label: &str, text: String) {
+        let leaf = self.grid.add_child(parent, TreeGridLabel::bare(label));
+        self.grid.push_value(leaf, TreeGridValue::new(text));
     }
 
     /// Whether `index` renders: everything when not filtering, else a group when
@@ -507,7 +486,7 @@ impl Renderer<'_> {
         }
     }
 
-    fn render_transform(&mut self, index: usize, prefix: &str, is_last: bool) {
+    fn build_transform(&mut self, index: usize, parent: GridNodeId) {
         let Some(view) = self.show_transforms else {
             return;
         };
@@ -526,38 +505,23 @@ impl Renderer<'_> {
         }
 
         let precision = view.precision;
-        let connector = if is_last { '└' } else { '├' };
-        let inner = format!("{prefix}{}", if is_last { "  " } else { "│ " });
-        self.output
-            .push_str(&format!("{prefix}{connector} transform\n"));
-        self.output.push_str(&format!(
-            "{inner}├ position: {}\n",
-            fmt3(resolved.position, precision)
-        ));
-        self.output.push_str(&format!(
-            "{inner}├ rotation: {}\n",
-            fmt3(rotation, precision)
-        ));
-        self.output.push_str(&format!(
-            "{inner}└ scale: {}\n",
-            fmt3(resolved.scale, precision)
-        ));
+        let subtree = self
+            .grid
+            .add_child(parent, TreeGridLabel::bare("transform"));
+        self.add_value_leaf(subtree, "position", fmt3(resolved.position, precision));
+        self.add_value_leaf(subtree, "rotation", fmt3(rotation, precision));
+        self.add_value_leaf(subtree, "scale", fmt3(resolved.scale, precision));
     }
 
-    fn render_bounds(&mut self, index: usize, prefix: &str, is_last: bool) {
+    fn build_bounds(&mut self, index: usize, parent: GridNodeId) {
         let precision = self.show_bounds.unwrap_or(2);
         let Some((min, max)) = self.nodes[index].bounds else {
             return;
         };
 
-        let connector = if is_last { '└' } else { '├' };
-        let inner = format!("{prefix}{}", if is_last { "  " } else { "│ " });
-        self.output
-            .push_str(&format!("{prefix}{connector} bounds\n"));
-        self.output
-            .push_str(&format!("{inner}├ min: {}\n", fmt3(min, precision)));
-        self.output
-            .push_str(&format!("{inner}└ max: {}\n", fmt3(max, precision)));
+        let subtree = self.grid.add_child(parent, TreeGridLabel::bare("bounds"));
+        self.add_value_leaf(subtree, "min", fmt3(min, precision));
+        self.add_value_leaf(subtree, "max", fmt3(max, precision));
     }
 }
 

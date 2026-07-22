@@ -849,3 +849,44 @@ the plain battery; markdown and JSON stay bespoke until S15.
   annotation) and renders `"emissiveStrength" (scalar)`, the S7
   shape. `property_labels` stays for the markdown table, which keeps
   its bespoke renderer until S15.
+
+## S12: `tyt vmax hierarchy` adopts the crate (2026-07-22)
+
+The parity adoption: scene load, `select_nodes`, transform resolution,
+and all flag parsing stay; `Renderer` becomes `Builder`
+(`output: String` becomes `grid: TreeGrid`, the `render_*` methods
+rename to `build_*`), and `execute` draws the populated grid once
+through `render_hierarchy` with default options -- connectored roots
+and inline values, exactly the vmax shape, so no option is set.
+
+- **The 4b call: `Bare`, the parity reading.** The S11 normalization
+  finished a quoting convention two of vxl's three tree commands
+  already had; vmax quotes nowhere, so `Quoted` names would start a
+  new convention for the tool rather than complete one, and phase 4's
+  bar is byte-identical output. Names stay `Bare`; revisit only if
+  quoting ever becomes a cross-tool rule.
+- **Annotations carry their parentheses.** `(Group)` / `(Object)` are
+  the annotation strings, matching `(scalar)` at S7; the markers
+  (`ancestors`, `descendants`) are value-less `Bare` nodes, and
+  `transform` / `bounds` are `Bare` subtrees whose `position` /
+  `rotation` / `scale` / `min` / `max` leaves each carry one
+  pre-formatted `fmt3` value. Each nested match root adds its own
+  `Bare("ancestors")` grid root with the match root as its only
+  child, reproducing the old one-marker-per-root listing.
+- **The `Item` enum is deleted.** Insertion order is render order, so
+  the pre-assembled row list and every `prefix` / `connector` /
+  `is_last` parameter disappear; `child_items` folds into
+  `build_node`.
+- **The dependency trims to `render_hierarchy`.** tyt-vmax takes
+  treegrid non-optionally (`commands` compiles without the `impl`
+  feature) with `default-features = false`, the first adopter to trim
+  to its one layout; `branded-id` joins for the grid node id alias.
+  The grid is the plain battery: every value is pre-formatted text,
+  and the optional follow-up `--layout` exposure would add the `json`
+  feature with the S10 shape.
+
+Verified: the flag-parsing tests pass unchanged, and the old and new
+binaries produce byte-identical stdout, stderr, and exit codes over
+every tyt-assets vmax bundle across plain, transform and bounds view,
+selection (object, group, multi-pattern, bang-pattern, anchored),
+collapse-ancestors / -descendants / both, and no-match invocations.
