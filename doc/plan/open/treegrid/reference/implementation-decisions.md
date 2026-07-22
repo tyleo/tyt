@@ -788,3 +788,31 @@ and new binaries render byte-identically over every tyt-assets vmax
 bundle across plain, all-views, collapse-instances,
 collapse-ancestors / -descendants / both, multi-pattern, bang-pattern,
 and no-match invocations.
+
+## S10: `hierarchy show --layout` (2026-07-22)
+
+The flag follows the S7 shape: a command-side clap enum
+(`HierarchyShowLayout`: `hierarchy` default, `json-pretty`,
+`json-compact`), threaded through `Dependencies::hierarchy_show` into
+the implementation's `RenderOptions`, with `render` picking the crate
+render method by the flag. The flag sits after `--from`, where
+`palette show` puts its `--layout`.
+
+- **No loose `TreeGridOptions` are involved.** The command exposes no
+  label, heading, table, or width flags, so there is nothing for a
+  `resolve_*` to reject; the match dispatches straight to
+  `render_hierarchy` / `render_json_pretty` / `render_json_compact`,
+  and `bare_roots` stays the internally computed hierarchy option it
+  became at S9, consumed only by the `hierarchy` arm.
+- **The JSON envelope emits every value as a string.** The grid is
+  the plain battery, whose `TreeGridJsonCells` impl is the
+  `String(text)` fallback (as the S9 entry anticipated), so the
+  `{node: 0}`-style tags, view rows, and layer entries arrive as
+  their pre-formatted text; labels are the raw names, unquoted. The
+  pattern, collapse, and view flags shape the tree identically under
+  every layout.
+
+The default output is untouched (the existing render tests pass
+unchanged); the vxl-commands hierarchy show reference gained the
+`--layout` item and conventions item 5 now points `hierarchy show`
+at the shared names, retiring "prints only its tree".

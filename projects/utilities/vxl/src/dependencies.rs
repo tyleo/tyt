@@ -2,10 +2,11 @@ use crate::{
     Format, MeshFormat, ReportLayout, Result, SelectIndex, VoxjColorFormat, VoxjEncoding,
     VoxjFormat, Width,
     commands::{
-        CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyViews, MaterialMode,
-        MeshMethod, MeshTextureMap, PaletteListFields, PaletteListLayout, PaletteReduction,
-        PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PatternView, PropertySelector,
-        ResourceStorage, SurfaceMode, TextureShape,
+        CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
+        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
+        PaletteListLayout, PaletteReduction, PaletteShowLabel, PaletteShowLayout,
+        PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
+        TextureShape,
     },
 };
 use std::{num::NonZeroU8, path::Path};
@@ -248,15 +249,17 @@ pub trait Dependencies {
         width: Width,
     ) -> Result<()>;
 
-    /// Prints the scene graph of the voxel file at `input` as a tree, marking
-    /// instanced nodes and listing nodes that are neither a root nor a child
-    /// and objects no node places.
+    /// Prints the scene graph of the voxel file at `input`, marking instanced
+    /// nodes and listing nodes that are neither a root nor a child and objects
+    /// no node places.
     ///
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.
     /// * `from` - source format, inferred from `input`'s extension when `None`.
     /// * `pattern` - node-path globs and their collapse flags; when set, only
     ///   matched nodes and objects and their ancestors print.
+    /// * `layout` - how to render the scene graph, and the serialization to
+    ///   emit.
     /// * `collapse_instances` - when true, expand a shared node's first
     ///   placement and print each later placement as a non-expanded stub.
     /// * `views` - the per-node and per-object subtrees to append: the node
@@ -267,6 +270,7 @@ pub trait Dependencies {
         input: &Path,
         from: Option<Format>,
         pattern: Option<PatternView>,
+        layout: HierarchyShowLayout,
         collapse_instances: bool,
         views: HierarchyViews,
     ) -> Result<()>;

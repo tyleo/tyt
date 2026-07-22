@@ -181,7 +181,7 @@ items off as they land.
       nodes with pre-formatted values like `position: [12.5, 0.5,
       10.0]`). Byte-identical output; existing render tests keep passing
       unchanged.
-- [ ] **S10. `hierarchy show --layout`.** Expose `hierarchy` (default) |
+- [x] **S10. `hierarchy show --layout`.** Expose `hierarchy` (default) |
       `json-pretty` | `json-compact` now that the tree is data. Update
       the vxl-commands hierarchy reference pages and conventions item 5
       ("prints only its tree" is no longer true).

@@ -65,5 +65,11 @@ voxels reports a zero-size box at its origin.
     descendants. Requires a `pattern`.
 12. `--collapse-instances` (flag): expand each shared node's first placement and
     print each later placement as a non-expanded stub, rather than expanding
-    every placement in full. This command prints only the tree; it has no
-    `--layout`.
+    every placement in full.
+13. `--layout <layout>`: how to render the scene graph, and the serialization
+    to emit. `hierarchy` (default) is the box-glyph tree; `json-pretty` and
+    `json-compact` emit the same tree as the shared read-command envelope, one
+    record per node, each `{"label", "values"?, "children"?}`, with the raw
+    unquoted name as the label and the `{node: 0}`-style tags, view rows, and
+    layer entries as pre-formatted string values. The pattern, collapse, and
+    `--show-*` flags shape the tree the same way under every layout.

@@ -1,6 +1,6 @@
 use crate::{
     Format, Result,
-    commands::{HierarchyViews, PatternView},
+    commands::{HierarchyShowLayout, HierarchyViews, PatternView},
     implementation,
 };
 use branded_id::{IdVec, U32Id};
@@ -13,7 +13,7 @@ use std::{
 };
 use treegrid::{
     BTreeGridNode, TreeGrid, TreeGridHierarchyOptions, TreeGridLabel, TreeGridRenderHierarchy,
-    TreeGridValue,
+    TreeGridRenderJson, TreeGridValue,
 };
 use ty_math::{TyTransformF64, TyVector3F64};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
@@ -30,11 +30,12 @@ type ObjectId = U32Id<BVoxObject>;
 /// [`ObjectId`] so the three id spaces stay distinct in signatures.
 type GridNodeId = U32Id<BTreeGridNode>;
 
-/// Loads the voxel file at `input` and prints its scene graph as a tree.
+/// Loads the voxel file at `input` and prints its scene graph under `layout`.
 pub fn hierarchy_show(
     input: &Path,
     from: Option<Format>,
     pattern: Option<PatternView>,
+    layout: HierarchyShowLayout,
     collapse_instances: bool,
     views: HierarchyViews,
 ) -> Result<()> {
@@ -42,6 +43,7 @@ pub fn hierarchy_show(
 
     let options = RenderOptions {
         pattern,
+        layout,
         collapse_instances,
         views,
     };
@@ -52,11 +54,14 @@ pub fn hierarchy_show(
 }
 
 /// The knobs `render` reads: an optional node-path glob with its collapse flags,
-/// and the subtree views.
+/// the layout, and the subtree views.
 struct RenderOptions {
     /// Node-path glob and collapse flags; when set, only matched nodes and their
     /// ancestors print.
     pattern: Option<PatternView>,
+
+    /// The rendering to draw the populated grid through.
+    layout: HierarchyShowLayout,
 
     /// Collapse repeat instances to a stub after the first placement.
     collapse_instances: bool,
@@ -91,9 +96,16 @@ fn render(state: &VoxMain, options: &RenderOptions) -> Result<String> {
 
     walk.run();
 
-    let layout = TreeGridHierarchyOptions::default().with_bare_roots(bare_roots);
+    Ok(match options.layout {
+        HierarchyShowLayout::Hierarchy => {
+            let hierarchy = TreeGridHierarchyOptions::default().with_bare_roots(bare_roots);
+            walk.grid.render_hierarchy(&hierarchy)
+        }
 
-    Ok(walk.grid.render_hierarchy(&layout))
+        HierarchyShowLayout::JsonPretty => walk.grid.render_json_pretty(),
+
+        HierarchyShowLayout::JsonCompact => walk.grid.render_json_compact(),
+    })
 }
 
 /// A thin view over the loaded [`VoxMain`], which stays the single source of
@@ -1062,7 +1074,7 @@ fn format_vec3(vector: TyVector3F64, precision: usize) -> String {
 mod tests {
     use crate::{
         Result,
-        commands::{HierarchyViews, OriginView, PatternView, TransformView},
+        commands::{HierarchyShowLayout, HierarchyViews, OriginView, PatternView, TransformView},
         implementation::hierarchy_show::{RenderOptions, render},
     };
     use branded_id::{IdVec, U32Id};
@@ -1146,6 +1158,7 @@ mod tests {
             state,
             &RenderOptions {
                 pattern,
+                layout: HierarchyShowLayout::Hierarchy,
                 collapse_instances,
                 views: HierarchyViews::default(),
             },
@@ -1158,8 +1171,23 @@ mod tests {
             state,
             &RenderOptions {
                 pattern: None,
+                layout: HierarchyShowLayout::Hierarchy,
                 collapse_instances: false,
                 views,
+            },
+        )
+        .unwrap()
+    }
+
+    /// Renders `state` under `layout`, no pattern, collapse flags, or views.
+    fn render_layout(state: &VoxMain, layout: HierarchyShowLayout) -> String {
+        render(
+            state,
+            &RenderOptions {
+                pattern: None,
+                layout,
+                collapse_instances: false,
+                views: HierarchyViews::default(),
             },
         )
         .unwrap()
@@ -1346,6 +1374,52 @@ mod tests {
             "root\n\
              \u{2514} \"root\": {node: 0}\n\
              \u{20}\u{20}\u{2514} \"body\": {object: 0}\n"
+        );
+    }
+
+    #[test]
+    fn json_pretty_renders_the_record_envelope() {
+        // The section root, the node tags, and the object tags all survive as
+        // records; labels are the raw names, unquoted, and every value is the
+        // pre-formatted tag text.
+        let output = render_layout(&simple_state(), HierarchyShowLayout::JsonPretty);
+        assert_eq!(
+            output,
+            r#"[
+  {
+    "label": "root",
+    "children": [
+      {
+        "label": "root",
+        "values": [
+          "{node: 0}"
+        ],
+        "children": [
+          {
+            "label": "body",
+            "values": [
+              "{object: 0}"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
+"#
+        );
+    }
+
+    #[test]
+    fn json_compact_renders_the_envelope_on_one_line() {
+        let output = render_layout(&simple_state(), HierarchyShowLayout::JsonCompact);
+        assert_eq!(
+            output,
+            concat!(
+                r#"[{"label":"root","children":[{"label":"root","values":["{node: 0}"],"#,
+                r#""children":[{"label":"body","values":["{object: 0}"]}]}]}]"#,
+                "\n"
+            )
         );
     }
 

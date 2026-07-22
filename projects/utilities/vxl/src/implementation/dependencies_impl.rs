@@ -2,10 +2,11 @@ use crate::{
     Dependencies, Format, MeshFormat, ReportLayout, Result, SelectIndex, VoxjColorFormat,
     VoxjEncoding, VoxjFormat, Width,
     commands::{
-        CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyViews, MaterialMode,
-        MeshMethod, MeshTextureMap, PaletteListFields, PaletteListLayout, PaletteReduction,
-        PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PatternView, PropertySelector,
-        ResourceStorage, SurfaceMode, TextureShape,
+        CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
+        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
+        PaletteListLayout, PaletteReduction, PaletteShowLabel, PaletteShowLayout,
+        PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
+        TextureShape,
     },
     implementation,
 };
@@ -183,10 +184,11 @@ impl Dependencies for DependenciesImpl {
         input: &Path,
         from: Option<Format>,
         pattern: Option<PatternView>,
+        layout: HierarchyShowLayout,
         collapse_instances: bool,
         views: HierarchyViews,
     ) -> Result<()> {
-        implementation::hierarchy_show(input, from, pattern, collapse_instances, views)
+        implementation::hierarchy_show(input, from, pattern, layout, collapse_instances, views)
     }
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
