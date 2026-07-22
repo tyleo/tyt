@@ -1,15 +1,16 @@
 # voxj scalar bindings: palette-scoped values and scalar layers
 
-Status: **open.** This document records a design settled with the owner, the
-former [open questions](#open-questions) included. The owner approved
+Status: **closed.** All seven phases landed and the workspace builds, lints,
+and tests green on the scalar-bindings format. The owner approved
 [reference/format-design.md](reference/format-design.md), the complete target
-spec text, on 2026-07-16, closing phase 1, and the phase 2 spec commit landed
-2026-07-17, so the
+spec text, on 2026-07-16, closing phase 1; the phase 2 spec commit landed
+2026-07-17, making the
 [spec](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md)
-is now authoritative. The code phases 3 to 7 landed crate by crate, ending
-with the docs sweep on 2026-07-21, so every checklist item is complete and
-the plan closes once the owner accepts the final chunk. The executable steps
-live in [checklist.md](checklist.md).
+authoritative; and the code phases 3 to 7 landed crate by crate, ending with
+the docs sweep on 2026-07-21 (`9d6b5ba`). All fourteen decisions are settled,
+the former [open questions](#open-questions) included; see
+[Decisions](#decisions). The executable steps lived in
+[checklist.md](checklist.md).
 
 ## Motivation
 
