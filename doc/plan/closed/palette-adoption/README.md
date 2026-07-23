@@ -1,7 +1,13 @@
 # Back ty-math's color types with the `palette` crate
 
-Status: **open, unimplemented.** Design settled; no code landed yet. A direct
-follow-up to the closed [ty-color-model plan](../../closed/ty-color-model/README.md),
+Status: **closed.** Landed as one commit (`e54da22`, 2026-07-23), rebased on
+origin's latest. All nine steps (S1-S9) shipped: ty-math's color types are now
+`type Ty... = palette::...` aliases, every consumer moved onto palette's own
+methods, and the workspace is green (1006 tests default / 1016 `--all-features`,
+clippy clean) with no external wire moved. The per-step keyboard record is in
+[reference/implementation-decisions.md](reference/implementation-decisions.md).
+A direct follow-up to the closed
+[ty-color-model plan](../ty-color-model/README.md),
 which built palette-STYLE color types by hand (`TySrgba<T>` / `TyLinSrgba<T>` /
 `TySrgb<T>` / `TyOklabColor` / `TyCielabColor`, the color space as the type
 identity and the component as a generic). This plan replaces those hand-rolled
