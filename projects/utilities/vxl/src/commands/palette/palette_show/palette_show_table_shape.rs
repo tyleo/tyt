@@ -10,4 +10,9 @@ pub enum PaletteShowTableShape {
     /// One table over every collection, the cross-palette comparison view.
     #[value(name = "flat")]
     Flat,
+
+    /// One row per property under each palette's heading, component
+    /// values in relative-path columns.
+    #[value(name = "records")]
+    Records,
 }

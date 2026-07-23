@@ -603,6 +603,7 @@ fn render(
         options = options.with_table_shape(match shape {
             PaletteShowTableShape::Nested => TreeGridTableShapeKind::Nested,
             PaletteShowTableShape::Flat => TreeGridTableShapeKind::Flat,
+            PaletteShowTableShape::Records => TreeGridTableShapeKind::Records,
         });
     }
     Ok(match layout {
@@ -1044,6 +1045,64 @@ mod tests {
              | --- | ------------------- | ------------------- |\n\
              | 0   | #FF0000FF           | #0000FFFF           |\n\
              | 1   | #00FF0080           |                     |\n"
+        );
+    }
+
+    #[test]
+    fn records_tables_list_one_property_per_row() {
+        let state = sample_state();
+        let grid = grid_for(&state, &[("*", "baseColorFactor", "value")]);
+        let output = render(
+            &grid,
+            PaletteShowLayout::Tables,
+            None,
+            None,
+            Some(PaletteShowTableShape::Records),
+            Width::Unlimited,
+        )
+        .unwrap();
+        assert_eq!(
+            output,
+            "# 0\n\
+             \n\
+             | label             | value               |\n\
+             | ----------------- | ------------------- |\n\
+             | \"baseColorFactor\" | #FF0000FF #00FF0080 |\n\
+             \n\
+             # 1\n\
+             \n\
+             | label             | value     |\n\
+             | ----------------- | --------- |\n\
+             | \"baseColorFactor\" | #0000FFFF |\n"
+        );
+    }
+
+    #[test]
+    fn records_tables_add_a_column_per_component_path() {
+        let state = sample_state();
+        let grid = grid_for(
+            &state,
+            &[
+                ("0", "baseColorFactor", "value"),
+                ("0", "baseColorFactor.a", "value"),
+            ],
+        );
+        let output = render(
+            &grid,
+            PaletteShowLayout::Tables,
+            None,
+            None,
+            Some(PaletteShowTableShape::Records),
+            Width::Unlimited,
+        )
+        .unwrap();
+        assert_eq!(
+            output,
+            "# 0\n\
+             \n\
+             | label             | value               | a       |\n\
+             | ----------------- | ------------------- | ------- |\n\
+             | \"baseColorFactor\" | #FF0000FF #00FF0080 | 255 128 |\n"
         );
     }
 

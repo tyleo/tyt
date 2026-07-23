@@ -1068,3 +1068,17 @@ The spec's tables section, labels section, and worked example were
 amended in the same change (the settled contract replacing the
 "settled at S15" deferral, and the illustrative `node` column header
 becoming `label`).
+
+## S15 chunk 2: `records` joins `palette show --table-shape` (2026-07-23)
+
+The flag exposure the S7 entry deferred: `PaletteShowTableShape`
+gains `Records`, mapped to `TreeGridTableShapeKind::Records` in the
+one flag-mapping match, so `vxl palette show --layout tables
+--table-shape records` renders each palette as a heading over one
+row-per-property table. No new flag interactions: `--header-level`
+already reaches the records payload through `resolve_tables`, and
+the label modes coincide at root-level headings, both accepted since
+chunk 1. The palette show reference's tables item and header-level
+paragraph were amended, and two end-to-end tests pin the shape (one
+property per row; a component's relative-path column). The remaining
+S15 chunks are the `palette list` / `info` / `validate` adoptions.

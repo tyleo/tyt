@@ -112,9 +112,11 @@ records directly and ignore the format.
    of 0-based material indices, one column per collection headed by its label,
    and one row per material index. A shorter palette leaves its column blank
    past its last material. `--table-shape` picks the shape: `nested` (default)
-   groups one table per palette under nested headings, and `flat` is one table
+   groups one table per palette under nested headings; `flat` is one table
    over every collection with full-path column headers, the cross-palette
-   comparison view.
+   comparison view; and `records` transposes to one row per property under
+   each palette's heading, with a `label` column, a `value` column of the
+   row's own values, and one column per component path.
 5. `json-pretty`: the collection tree as indented JSON.
 6. `json-compact`: the collection tree as single-line JSON.
 
@@ -140,8 +142,8 @@ no-op.
 `--header-level` sets the markdown level of the shallowest heading, so
 embedded output sits at the right depth under a host document's headings; the
 headings start at `#` when it is omitted. It applies to the renders that emit
-headings, `--label header` and the nested `tables` shape, and is an error on a
-render that emits none. A heading that would nest past markdown's level 6
+headings, `--label header` and the nested and records `tables` shapes, and is
+an error on a render that emits none. A heading that would nest past markdown's level 6
 renders as a bold `**label**` line instead.
 
 ## The JSON envelope
