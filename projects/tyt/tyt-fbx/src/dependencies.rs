@@ -1,4 +1,4 @@
-use crate::{MeshWithUvs, Result, Script, utilities::COMMON_PY};
+use crate::{HierarchyEntry, MeshWithUvs, Result, Script, utilities::COMMON_PY};
 use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
@@ -41,6 +41,8 @@ pub trait Dependencies {
     fn match_paths(&self, patterns: &[&str], candidates: &[(&str, bool)]) -> Result<Vec<bool>>;
 
     fn parse_hierarchy_json(&self, json: &[u8]) -> Result<Vec<(String, String, String)>>;
+
+    fn parse_hierarchy_payloads_json(&self, json: &[u8]) -> Result<Vec<HierarchyEntry>>;
 
     // --- Provided methods ---
 

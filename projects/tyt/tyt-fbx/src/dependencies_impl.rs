@@ -1,4 +1,6 @@
-use crate::{Dependencies, Error, MeshWithUvs, Result};
+use crate::{
+    Dependencies, Error, HierarchyBounds, HierarchyEntry, HierarchyTransform, MeshWithUvs, Result,
+};
 use std::{
     ffi::OsStr,
     io::{Error as IOError, ErrorKind},
@@ -6,6 +8,7 @@ use std::{
     result::Result as StdResult,
 };
 use ty_math::{TySrgba, TyVector3};
+use tyt_injection::serde_json::Value;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -68,7 +71,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn parse_hierarchy_json(&self, json: &[u8]) -> Result<Vec<(String, String, String)>> {
-        let entries: Vec<tyt_injection::serde_json::Value> = tyt_injection::parse_json(json)?;
+        let entries: Vec<Value> = tyt_injection::parse_json(json)?;
         entries
             .into_iter()
             .map(|v| {
@@ -90,6 +93,27 @@ impl Dependencies for DependenciesImpl {
             .map_err(Error::from)
     }
 
+    fn parse_hierarchy_payloads_json(&self, json: &[u8]) -> Result<Vec<HierarchyEntry>> {
+        let entries: Vec<Value> = tyt_injection::parse_json(json)?;
+        entries
+            .into_iter()
+            .map(|entry| {
+                Ok(HierarchyEntry {
+                    name: payload_string(&entry, "name")?,
+                    path: payload_string(&entry, "path")?,
+                    object_type: payload_string(&entry, "type")?,
+                    transform: entry.get("transform").map(payload_transform).transpose()?,
+                    bounds: entry.get("bounds").map(payload_bounds).transpose()?,
+                    extents: entry
+                        .get("extents")
+                        .map(|extents| component_strings(extents, "extents"))
+                        .transpose()?,
+                })
+            })
+            .collect::<StdResult<Vec<_>, IOError>>()
+            .map_err(Error::from)
+    }
+
     fn remove_dir_all<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         Ok(tyt_injection::remove_dir_all(path.as_ref())?)
     }
@@ -100,5 +124,87 @@ impl Dependencies for DependenciesImpl {
 
     fn write_file<P: AsRef<Path>>(&self, path: P, contents: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_file_atomic(path.as_ref(), contents)?)
+    }
+}
+
+fn payload_string(entry: &Value, key: &str) -> StdResult<String, IOError> {
+    entry[key]
+        .as_str()
+        .map(str::to_owned)
+        .ok_or_else(|| IOError::new(ErrorKind::InvalidData, format!("missing '{key}'")))
+}
+
+fn payload_transform(transform: &Value) -> StdResult<HierarchyTransform, IOError> {
+    Ok(HierarchyTransform {
+        position: component_strings(&transform["position"], "position")?,
+        rotation: component_strings(&transform["rotation"], "rotation")?,
+        scale: component_strings(&transform["scale"], "scale")?,
+    })
+}
+
+fn payload_bounds(bounds: &Value) -> StdResult<HierarchyBounds, IOError> {
+    Ok(HierarchyBounds {
+        min: component_strings(&bounds["min"], "min")?,
+        max: component_strings(&bounds["max"], "max")?,
+    })
+}
+
+fn component_strings(value: &Value, key: &str) -> StdResult<[String; 3], IOError> {
+    value
+        .as_array()
+        .and_then(|components| match components.as_slice() {
+            [Value::String(x), Value::String(y), Value::String(z)] => {
+                Some([x.clone(), y.clone(), z.clone()])
+            }
+            _ => None,
+        })
+        .ok_or_else(|| {
+            IOError::new(
+                ErrorKind::InvalidData,
+                format!("expected 3 string components in '{key}'"),
+            )
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Dependencies, DependenciesImpl};
+
+    #[test]
+    fn hierarchy_payloads_parse_with_their_optional_sections() {
+        let json = r#"[
+            {"name": "Rig", "path": "Rig", "type": "EMPTY",
+             "transform": {"position": ["1.00", "2.00", "3.00"],
+                           "rotation": ["0.00", "0.00", "0.00"],
+                           "scale": ["1.00", "1.00", "1.00"]},
+             "bounds": {"min": ["-1.00", "-1.00", "-1.00"],
+                        "max": ["1.00", "1.00", "1.00"]},
+             "extents": ["2.00", "2.00", "2.00"]},
+            {"name": "Probe", "path": "Rig/Probe", "type": "EMPTY"}
+        ]"#;
+
+        let entries = DependenciesImpl
+            .parse_hierarchy_payloads_json(json.as_bytes())
+            .unwrap();
+
+        let rig = &entries[0];
+        assert_eq!(rig.object_type, "EMPTY");
+        let transform = rig.transform.as_ref().unwrap();
+        assert_eq!(transform.position, ["1.00", "2.00", "3.00"]);
+        assert_eq!(rig.bounds.as_ref().unwrap().max, ["1.00", "1.00", "1.00"]);
+        assert_eq!(rig.extents.as_ref().unwrap(), &["2.00", "2.00", "2.00"]);
+
+        let probe = &entries[1];
+        assert!(probe.transform.is_none() && probe.bounds.is_none() && probe.extents.is_none());
+    }
+
+    #[test]
+    fn a_short_component_array_is_a_parse_error() {
+        let json = r#"[{"name": "Rig", "path": "Rig", "type": "EMPTY", "extents": ["1.00"]}]"#;
+        assert!(
+            DependenciesImpl
+                .parse_hierarchy_payloads_json(json.as_bytes())
+                .is_err()
+        );
     }
 }

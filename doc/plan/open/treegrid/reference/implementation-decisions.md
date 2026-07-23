@@ -969,3 +969,47 @@ deferred publish item. Decision 11 carries the dated amendment.
   enumeration order -- pre-order for callers that enumerate
   pre-order. A caller whose node indexing is not pre-order keeps
   its own ordering traversal and uses the roots for membership.
+
+## S14: `tyt fbx hierarchy` renders in Rust (2026-07-23)
+
+Phase 5 closes: the command runs the payload form of
+`fbx_hierarchy_json.py` once (the twelve view tokens ride the one
+invocation), parses the entries through the new
+`Dependencies::parse_hierarchy_payloads_json`, applies selection and
+collapse in Rust, populates a `TreeGrid`, and prints the render.
+`fbx_hierarchy.py` is deleted whole, as the S13 entry anticipated,
+along with `resolve_matched_paths` and its extra Blender run --
+selecting used to import the FBX twice.
+
+- **The payload types are `HierarchyEntry` / `HierarchyTransform` /
+  `HierarchyBounds`**, components as `[String; 3]`
+  precision-formatted in Blender; the triple-returning
+  `parse_hierarchy_json` listing parse stays for the other five
+  commands.
+- **Data lines put the text in the label and the tag in the
+  annotation.** The tree's `{ "X": 1.00, .. } (POSITION)` lines print
+  the value before its name, so the vector text is the `Bare` label
+  and `(POSITION)` / `(EXTENTS)` / `(X-BOUNDS)` the annotation;
+  object lines hang their `(MESH)`-style type there too, and
+  `(TRANSFORM)` / `(BOUNDS)` / `(ANCESTORS)` / `(DESCENDANTS)` are
+  value-less `Bare` nodes. No node carries a value, so the grid is
+  the plain battery and the treegrid dependency trims to
+  `render_hierarchy` with default features off.
+- **`TreeSelection` supplies `selected` / `visible`; `match_roots`
+  goes unused.** Parent indices derive from the `/`-joined pre-order
+  paths. A matched object's whole subtree prints, so the builder
+  threads an in-match flag down and consults `visible` only outside
+  match subtrees, and collapse-ancestors lists every match in entry
+  order -- a match nested inside another match gets its own listing.
+  Both rules preserve what the deleted script did; the leaf-only
+  `match_paths` matching is unchanged, so the same objects match.
+- **Stdout is now only the tree.** The old command relayed the tree
+  script's whole captured output, Blender import chatter and the
+  trailing `Blender quit` line included; the render prints clean.
+  Phase 5 sets no byte-parity bar, and the tree lines themselves are
+  unchanged.
+- **Tests gate on the `impl` feature.** The fixture-JSON tests parse
+  through `DependenciesImpl` and match through the real glob stack,
+  covering the command layer end to end without Blender; the goldens
+  were verified against the deleted script's own print functions run
+  over a stub scene.

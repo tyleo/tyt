@@ -1805,8 +1805,11 @@ dependencies = [
 name = "tyt-fbx"
 version = "0.1.7"
 dependencies = [
+ "branded-id",
  "clap",
  "clap_complete",
+ "treegrid",
+ "treeselect",
  "ty-math",
  "tyt-common",
  "tyt-injection",

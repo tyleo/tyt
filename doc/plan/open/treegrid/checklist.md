@@ -212,7 +212,7 @@ items off as they land.
       values computed in Blender for the requested
       space/unit/precision/scale (the math stays where the evaluated
       scene is).
-- [ ] **S14. Render in Rust.** Parse the payload, apply select/collapse
+- [x] **S14. Render in Rust.** Parse the payload, apply select/collapse
       in Rust (matching logic already lives there; the closure comes
       from `TreeSelection`, S18, pulled forward if this phase lands
       first), build the `TreeGrid`, render, and delete the
