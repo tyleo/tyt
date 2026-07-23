@@ -68,16 +68,23 @@ branch in the tree, and the other two behave the same way.
    leaf and
    `properties` and `objects` as subtrees. Property keys and object names are
    user-entered, so they print quoted.
-2. `markdown`: an aligned table, one column per enabled field:
+2. `markdown`: a `# palettes` heading over one aligned record table, one row
+   per palette labeled by its index and one column per enabled field:
 
-   | index | properties                                 | materials | used by            |
+   ```
+   # palettes
+
+   | label | properties                                 | materials | used by            |
    | ----- | ------------------------------------------ | --------- | ------------------ |
    | 0     | baseColorFactor, metallicFactor            | 12        | Object A, Object B |
    | 1     | baseColorFactor, emissiveStrength (scalar) | 2         | Object B           |
    | 2     | metallicFactor, roughnessFactor            | 1         | Object B           |
+   ```
 
-3. `pretty-json` and `compact-json`: the listing as pretty or compact JSON, one
-   record per palette carrying its index and each enabled field, the referencing
-   objects as their indices under `used_by`. Property names are plain, with the
-   scalar subset repeated under a `scalar_properties` key when the palette pins
-   any.
+3. `pretty-json` and `compact-json`: the listing tree as pretty or compact
+   JSON in the shared read-command envelope, one `{"label", "annotation"?,
+   "values"?, "children"?}` record per tree node: the `palettes` root over one
+   record per palette index, the material count as a native number under
+   `materialCount`, and the property and object names as child records, a
+   scalar property carrying `"annotation": "(scalar)"` and an empty subtree
+   the `"[]"` string value its tree leaf shows.

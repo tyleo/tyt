@@ -4,14 +4,14 @@ use crate::{
     implementation,
 };
 use branded_id::U32Id;
-use serde_json::{Map, Value, json};
 use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
 use treegrid::{
-    BTreeGridNode, TreeGrid, TreeGridHierarchyOptions, TreeGridLabel, TreeGridRenderHierarchy,
-    TreeGridValue,
+    BTreeGridNode, TreeGrid, TreeGridHierarchyOptions, TreeGridJsonValue, TreeGridJsonValueCells,
+    TreeGridLabel, TreeGridRecordsTableOptions, TreeGridRenderHierarchy, TreeGridRenderJson,
+    TreeGridRenderTables, TreeGridTableShape, TreeGridValue,
 };
 use voxcore::{BVoxPalette, VoxMain, VoxPalette};
 
@@ -31,7 +31,7 @@ pub fn palette_list(
 ) -> Result<()> {
     let state = implementation::load_state(input, from)?;
     let palettes = select_palettes(&state, filters)?;
-    let output = render(&state, &palettes, fields, layout)?;
+    let output = render(&state, &palettes, fields, layout);
     implementation::write_stdout(output.as_bytes())
 }
 
@@ -64,95 +64,27 @@ fn render(
     palettes: &[Entry],
     fields: PaletteListFields,
     layout: PaletteListLayout,
-) -> Result<String> {
+) -> String {
     match layout {
-        PaletteListLayout::Markdown => Ok(render_markdown(state, palettes, fields)),
-        PaletteListLayout::Hierarchy => Ok(render_hierarchy(state, palettes, fields)),
-        PaletteListLayout::PrettyJson => render_json(state, palettes, fields, true),
-        PaletteListLayout::CompactJson => render_json(state, palettes, fields, false),
+        PaletteListLayout::Markdown => build_records_grid(state, palettes, fields).render_tables(
+            &TreeGridTableShape::Records(TreeGridRecordsTableOptions::default()),
+        ),
+        PaletteListLayout::Hierarchy => build_grid(state, palettes, fields)
+            .render_hierarchy(&TreeGridHierarchyOptions::default().with_bare_roots(true)),
+        PaletteListLayout::PrettyJson => build_grid(state, palettes, fields).render_json_pretty(),
+        PaletteListLayout::CompactJson => build_grid(state, palettes, fields).render_json_compact(),
     }
 }
 
-/// The listing as one aligned table, a column per enabled field beside the
-/// always-shown index.
-fn render_markdown(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> String {
-    let mut headers = vec!["index"];
-    if fields.properties {
-        headers.push("properties");
-    }
-    if fields.materials {
-        headers.push("materials");
-    }
-    if fields.objects {
-        headers.push("used by");
-    }
-
-    let rows: Vec<Vec<String>> = palettes
-        .iter()
-        .map(|(id, palette)| {
-            let mut columns = vec![id.to_u32().to_string()];
-            if fields.properties {
-                columns.push(implementation::md_cell(
-                    &implementation::property_labels(palette).join(", "),
-                ));
-            }
-            if fields.materials {
-                columns.push(palette.material_count().to_string());
-            }
-            if fields.objects {
-                columns.push(implementation::md_cell(
-                    &referencing_names(state, *id).join(", "),
-                ));
-            }
-            columns
-        })
-        .collect();
-    implementation::markdown_table(&headers, &rows)
-}
-
-/// The listing as a JSON array, pretty or compact: one record per palette in
-/// index order, its index and each enabled field.
-fn render_json(
+/// The listing tree the hierarchy and JSON layouts share: a bare `palettes`
+/// root over one bare-index branch per palette, its enabled fields as child
+/// branches.
+fn build_grid(
     state: &VoxMain,
     palettes: &[Entry],
     fields: PaletteListFields,
-    pretty: bool,
-) -> Result<String> {
-    let records: Vec<Value> = palettes
-        .iter()
-        .map(|(id, palette)| {
-            let mut entry = Map::new();
-            entry.insert("index".to_string(), json!(id.to_u32()));
-            if fields.properties {
-                entry.insert(
-                    "properties".to_string(),
-                    json!(implementation::property_names(palette)),
-                );
-                let scalars = implementation::scalar_property_names(palette);
-                if !scalars.is_empty() {
-                    entry.insert("scalar_properties".to_string(), json!(scalars));
-                }
-            }
-            if fields.materials {
-                entry.insert("materials".to_string(), json!(palette.material_count()));
-            }
-            if fields.objects {
-                let used_by: Vec<u32> = referencing_objects(state, *id)
-                    .into_iter()
-                    .map(|(index, _)| index)
-                    .collect();
-                entry.insert("used_by".to_string(), json!(used_by));
-            }
-            Value::Object(entry)
-        })
-        .collect();
-    implementation::to_json_string(&Value::Array(records), pretty)
-}
-
-/// The listing as an indented tree: a bare `palettes` root over one bare-index
-/// branch per palette, its enabled fields as child branches.
-fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> String {
-    let mut grid = TreeGrid::new();
+) -> TreeGrid<TreeGridJsonValueCells> {
+    let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
     let root = grid.add_root(TreeGridLabel::bare("palettes"));
     for (id, palette) in palettes {
         let branch = grid.add_child(root, TreeGridLabel::bare(id.to_u32().to_string()));
@@ -160,7 +92,7 @@ fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFiel
             let count = grid.add_child(branch, TreeGridLabel::bare("materialCount"));
             grid.push_value(
                 count,
-                TreeGridValue::new(palette.material_count().to_string()),
+                TreeGridJsonValue::int(palette.material_count() as i64),
             );
         }
         if fields.properties {
@@ -174,7 +106,39 @@ fn render_hierarchy(state: &VoxMain, palettes: &[Entry], fields: PaletteListFiel
             add_names_subtree(&mut grid, branch, "objects", names);
         }
     }
-    grid.render_hierarchy(&TreeGridHierarchyOptions::default().with_bare_roots(true))
+    grid
+}
+
+/// The flat forest the markdown table renders: the `palettes` root over one
+/// row per palette, each enabled field one data child whose comma-joined cell
+/// text is baked as a single value, so the record columns keep the old table's
+/// vocabulary and stay present even when every cell is empty.
+fn build_records_grid(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> TreeGrid {
+    let mut grid = TreeGrid::new();
+    let root = grid.add_root(TreeGridLabel::bare("palettes"));
+    for (id, palette) in palettes {
+        let row = grid.add_child(root, TreeGridLabel::bare(id.to_u32().to_string()));
+        if fields.properties {
+            let cell = implementation::property_labels(palette).join(", ");
+            let node = grid.add_child(row, TreeGridLabel::bare("properties"));
+            grid.push_value(node, TreeGridValue::new(cell));
+        }
+        if fields.materials {
+            let node = grid.add_child(row, TreeGridLabel::bare("materials"));
+            grid.push_value(
+                node,
+                TreeGridValue::new(palette.material_count().to_string()),
+            );
+        }
+        if fields.objects {
+            let node = grid.add_child(row, TreeGridLabel::bare("used by"));
+            grid.push_value(
+                node,
+                TreeGridValue::new(referencing_names(state, *id).join(", ")),
+            );
+        }
+    }
+    grid
 }
 
 /// A palette's property keys as hierarchy entries, array then scalar in id
@@ -195,14 +159,14 @@ fn property_entries(palette: &VoxPalette) -> Vec<(TreeGridLabel, Option<String>)
 /// Adds a `header` subtree under `parent` with one optionally annotated child
 /// per entry, or a `header: []` leaf when `entries` is empty.
 fn add_names_subtree(
-    grid: &mut TreeGrid,
+    grid: &mut TreeGrid<TreeGridJsonValueCells>,
     parent: U32Id<BTreeGridNode>,
     header: &str,
     entries: Vec<(TreeGridLabel, Option<String>)>,
 ) {
     let subtree = grid.add_child(parent, TreeGridLabel::bare(header));
     if entries.is_empty() {
-        grid.push_value(subtree, TreeGridValue::new("[]"));
+        grid.push_value(subtree, TreeGridJsonValue::new("[]"));
         return;
     }
     for (label, annotation) in entries {
@@ -306,14 +270,16 @@ mod tests {
     /// Renders every palette of `state` with all fields in `layout`.
     fn render_all(state: &VoxMain, layout: PaletteListLayout) -> String {
         let palettes = select_palettes(state, &[]).unwrap();
-        render(state, &palettes, all_fields(), layout).unwrap()
+        render(state, &palettes, all_fields(), layout)
     }
 
     #[test]
     fn markdown_lists_one_row_per_palette() {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::Markdown),
-            "| index | properties                                 | materials | used by |\n\
+            "# palettes\n\
+             \n\
+             | label | properties                                 | materials | used by |\n\
              | ----- | ------------------------------------------ | --------- | ------- |\n\
              | 0     | baseColorFactor, metallicFactor            | 2         | a, b    |\n\
              | 1     | baseColorFactor, emissiveStrength (scalar) | 1         | b       |\n"
@@ -329,10 +295,12 @@ mod tests {
             materials: true,
             objects: false,
         };
-        let output = render(&state, &palettes, fields, PaletteListLayout::Markdown).unwrap();
+        let output = render(&state, &palettes, fields, PaletteListLayout::Markdown);
         assert_eq!(
             output,
-            "| index | properties                                 | materials |\n\
+            "# palettes\n\
+             \n\
+             | label | properties                                 | materials |\n\
              | ----- | ------------------------------------------ | --------- |\n\
              | 0     | baseColorFactor, metallicFactor            | 2         |\n\
              | 1     | baseColorFactor, emissiveStrength (scalar) | 1         |\n"
@@ -371,7 +339,7 @@ mod tests {
             materials: true,
             objects: true,
         };
-        let output = render(&state, &palettes, fields, PaletteListLayout::Hierarchy).unwrap();
+        let output = render(&state, &palettes, fields, PaletteListLayout::Hierarchy);
         assert_eq!(
             output,
             "palettes\n\
@@ -388,12 +356,21 @@ mod tests {
     }
 
     #[test]
-    fn compact_json_records_indices_properties_materials_and_users() {
+    fn compact_json_nests_the_envelope_fields_under_each_palette() {
         assert_eq!(
             render_all(&shared_state(), PaletteListLayout::CompactJson),
-            "[{\"index\":0,\"properties\":[\"baseColorFactor\",\"metallicFactor\"],\"materials\":2,\"used_by\":[0,1]},\
-             {\"index\":1,\"properties\":[\"baseColorFactor\",\"emissiveStrength\"],\
-             \"scalar_properties\":[\"emissiveStrength\"],\"materials\":1,\"used_by\":[1]}]\n"
+            "[{\"label\":\"palettes\",\"children\":[\
+             {\"label\":\"0\",\"children\":[\
+             {\"label\":\"materialCount\",\"values\":[2]},\
+             {\"label\":\"properties\",\"children\":[\
+             {\"label\":\"baseColorFactor\"},{\"label\":\"metallicFactor\"}]},\
+             {\"label\":\"objects\",\"children\":[{\"label\":\"a\"},{\"label\":\"b\"}]}]},\
+             {\"label\":\"1\",\"children\":[\
+             {\"label\":\"materialCount\",\"values\":[1]},\
+             {\"label\":\"properties\",\"children\":[\
+             {\"label\":\"baseColorFactor\"},\
+             {\"label\":\"emissiveStrength\",\"annotation\":\"(scalar)\"}]},\
+             {\"label\":\"objects\",\"children\":[{\"label\":\"b\"}]}]}]}]\n"
         );
     }
 
@@ -413,10 +390,12 @@ mod tests {
         let state = shared_state();
         let filters = ["1".parse::<SelectIndex>().unwrap()];
         let palettes = select_palettes(&state, &filters).unwrap();
-        let output = render(&state, &palettes, all_fields(), PaletteListLayout::Markdown).unwrap();
+        let output = render(&state, &palettes, all_fields(), PaletteListLayout::Markdown);
         assert_eq!(
             output,
-            "| index | properties                                 | materials | used by |\n\
+            "# palettes\n\
+             \n\
+             | label | properties                                 | materials | used by |\n\
              | ----- | ------------------------------------------ | --------- | ------- |\n\
              | 1     | baseColorFactor, emissiveStrength (scalar) | 1         | b       |\n"
         );
@@ -450,14 +429,19 @@ mod tests {
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Markdown),
-            "| index | properties      | materials | used by |\n\
+            "# palettes\n\
+             \n\
+             | label | properties      | materials | used by |\n\
              | ----- | --------------- | --------- | ------- |\n\
              | 0     | baseColorFactor | 1         |         |\n"
         );
 
         assert_eq!(
             render_all(&state, PaletteListLayout::CompactJson),
-            "[{\"index\":0,\"properties\":[\"baseColorFactor\"],\"materials\":1,\"used_by\":[]}]\n"
+            "[{\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
+             {\"label\":\"materialCount\",\"values\":[1]},\
+             {\"label\":\"properties\",\"children\":[{\"label\":\"baseColorFactor\"}]},\
+             {\"label\":\"objects\",\"values\":[\"[]\"]}]}]}]\n"
         );
     }
 
@@ -499,15 +483,20 @@ mod tests {
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Markdown),
-            "| index | properties                | materials | used by |\n\
+            "# palettes\n\
+             \n\
+             | label | properties                | materials | used by |\n\
              | ----- | ------------------------- | --------- | ------- |\n\
              | 0     | emissiveStrength (scalar) | 0         |         |\n"
         );
 
         assert_eq!(
             render_all(&state, PaletteListLayout::CompactJson),
-            "[{\"index\":0,\"properties\":[\"emissiveStrength\"],\
-             \"scalar_properties\":[\"emissiveStrength\"],\"materials\":0,\"used_by\":[]}]\n"
+            "[{\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
+             {\"label\":\"materialCount\",\"values\":[0]},\
+             {\"label\":\"properties\",\"children\":[\
+             {\"label\":\"emissiveStrength\",\"annotation\":\"(scalar)\"}]},\
+             {\"label\":\"objects\",\"values\":[\"[]\"]}]}]}]\n"
         );
     }
 }

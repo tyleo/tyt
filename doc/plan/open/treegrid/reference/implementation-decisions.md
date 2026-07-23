@@ -1082,3 +1082,47 @@ chunk 1. The palette show reference's tables item and header-level
 paragraph were amended, and two end-to-end tests pin the shape (one
 property per row; a component's relative-path column). The remaining
 S15 chunks are the `palette list` / `info` / `validate` adoptions.
+
+## S15 chunk 3: `palette list` markdown and JSON adopt the crate (2026-07-23)
+
+The first records adopter. `render_markdown` and `render_json` are
+deleted; the S11 hierarchy builder becomes `build_grid`, shared by
+the hierarchy and JSON layouts, and a second flat forest feeds the
+markdown table. Phase 6 sets no parity bar, and the two deliberate
+output changes ride the commit message: markdown gains the
+`# palettes` heading with `index` renamed to the fixed `label`
+column, and the JSON switches from the bespoke
+`[{index, properties, scalar_properties?, materials, used_by}]`
+records to the shared envelope.
+
+- **Hierarchy and JSON share one tree, the S10 shape.** `build_grid`
+  moves to `TreeGrid<TreeGridJsonValueCells>` so `materialCount`
+  carries a native integer (`TreeGridJsonValue::int`; its text is
+  `Display`, so the tree output is unchanged), and the empty-subtree
+  `[]` leaf reaches the envelope as the `"[]"` string, the
+  `hierarchy show` string-fallback idiom. Property and object names
+  stay value-less children, so the envelope lists names where the
+  old JSON listed `used_by` indices; the names are what the tree
+  shows, and the index form died with the bespoke payload.
+- **Markdown builds its own flat records forest.** Records flatten
+  only values, so the display tree cannot feed the table (its name
+  nodes are value-less, and multi-valued cells join with a space,
+  not a comma). The builder bakes each enabled field into one
+  pre-formatted value under a `Bare` field node (`properties`,
+  `materials`, `used by`, today's column vocabulary), always pushing
+  the possibly empty joined text so every enabled column is present
+  in every row, reproducing the old table's blank cells. The plain
+  battery suffices; pipe escaping moved into the crate's
+  `markdown_cell` with the old `md_cell` calls.
+- **The structural payload is built directly.** No flag maps to a
+  loose option (`markdown` is the one table layout), so `render`
+  passes `TreeGridTableShape::Records` with default options, the
+  S10 no-resolve pattern, and `render` returns plain `String`, every
+  arm infallible.
+- `markdown_table`, `md_cell`, `to_json_string`, `property_names`,
+  and `scalar_property_names` survive in `implementation/` for
+  `info` / `validate`; they retire with those adoptions.
+
+The palette list reference's markdown and JSON layout items were
+amended. The remaining S15 chunks are the `info` and `validate`
+adoptions.
