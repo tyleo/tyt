@@ -203,9 +203,9 @@ a set mode:
   logic: commands filter first and populate only what shows. `ancestors` /
   `descendants` / instance stubs are ordinary `Bare` nodes the command
   inserts. The one shared piece of that upstream logic, the
-  selected / visible / match-roots closure, gets a home beside the
-  matchers in `pathspec` at phase 7 (`TreeSelection`, decision 11);
-  treegrid itself never selects.
+  selected / visible / match-roots closure, gets a home in the
+  dep-free `treeselect` crate at phase 7 (`TreeSelection`, decision
+  11); treegrid itself never selects.
 - **Sampling and policy formatting.** Pool classification, precision
   (`fmt3`), space/unit conversion: anything with a knob stays upstream
   and arrives as finished text. The typed constructors own only
@@ -266,10 +266,11 @@ change in phase 2). Phase 5 is the big one -- `tyt fbx hierarchy` renders
 inside Blender today, so adoption moves data (not text) across the
 process boundary; it is severable and can slip without blocking anything
 else. Phase 6 (record tables and the consistency pass) is committed
-scope. Phase 7 is a small coda outside the crate: `pathspec` gains the
-`TreeSelection` closure (decision 11), `tyt vmax hierarchy` and
-`vxl hierarchy show` drop their hand-rolled copies so lines go down,
-and S14 builds on it rather than writing a third; it closes the plan.
+scope. Phase 7 is a small coda outside the crate: the dep-free
+`treeselect` crate gains the `TreeSelection` closure (decision 11),
+`tyt vmax hierarchy` and `vxl hierarchy show` drop their hand-rolled
+copies so lines go down, and S14 builds on it rather than writing a
+third; it closes the plan.
 
 ## Decisions
 
@@ -356,7 +357,12 @@ and S14 builds on it rather than writing a third; it closes the plan.
    duplicated by `tyt vmax hierarchy` and `vxl hierarchy show` and
    needed a third time at S14. It is selection, so it lives beside
    the matchers in `pathspec` as `TreeSelection` (phase 7), and
-   treegrid keeps its no-selection boundary.
+   treegrid keeps its no-selection boundary. Amended 2026-07-22: the
+   home is the new dep-free `treeselect` crate rather than
+   `pathspec` -- `TreeSelection` uses no pathspec type, and the
+   adopters consume it in their pure command layers, where a
+   pathspec dependency would arrive non-optionally and drag
+   `globset` in; the no-selection boundary stands.
 
 ## Documents
 

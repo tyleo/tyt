@@ -1693,6 +1693,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "treeselect"
+version = "0.1.0"
+
+[[package]]
 name = "ty-math"
 version = "0.1.8"
 

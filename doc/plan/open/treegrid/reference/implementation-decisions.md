@@ -929,3 +929,43 @@ to the previous script's, and three payload combos (all defaults;
 world space with degrees and mixed precisions; local bounds with
 scale baked) reproduce the tree renderer's content lines exactly,
 value for value in both directions.
+
+## S18: `TreeSelection` lands in the new `treeselect` crate (2026-07-22)
+
+Pulled forward ahead of S14 per the phase 7 note, since phase 5 ran
+first. The closure was staged in `pathspec` first; on review the
+owner reopened decision 11's homing and chose a dependency-free
+micro crate, `projects/utilities/treeselect` (unclaimed on crates.io
+as of 2026-07-22), with the sibling utilities' publishable metadata,
+added to workspace `members` and `[patch.crates-io]` and joining the
+deferred publish item. Decision 11 carries the dated amendment.
+
+- **Why not pathspec.** `TreeSelection` imports no pathspec type
+  (its input is a plain `Vec<bool>` from any predicate), and the
+  S19 / S14 adopters consume it in their pure command layers, where
+  a pathspec dependency would arrive non-optionally and drag
+  `globset`'s regex stack into the builds the `impl` gates exist to
+  keep lean: vxl gates pathspec behind `impl` today, and tyt-vmax /
+  tyt-fbx do not depend on it at all. The intended composition --
+  pathspec produces the flags, treeselect resolves them, treegrid
+  renders the filtered tree -- is documented with examples in the
+  crate README rather than expressed as a dependency.
+- **Private fields with slice accessors**, so the derived invariants
+  (`visible` a superset of `selected`, `match_roots` computed from
+  both inputs) survive the constructor. `selected()` / `visible()` /
+  `match_roots()` return slices; adopters needing sets or scattered
+  flags build their own at the call site.
+- **`from_matches` takes `matched: Vec<bool>` by value** -- the
+  shape the upstream matchers hand back, and the vector becomes the
+  `selected` field verbatim -- with `parents: &[Option<usize>]`
+  borrowed. Mismatched lengths panic (`assert_eq!`): the inputs line
+  up by node, and a mismatch is a caller bug, not a runtime
+  condition.
+- **The ancestor walk stops at the first already-visible node.**
+  A visible node's chain is either complete or pending that node's
+  own walk (every matched index is iterated), so marking stays
+  linear without a second pass.
+- **`match_roots` is in ascending index order**, the caller's
+  enumeration order -- pre-order for callers that enumerate
+  pre-order. A caller whose node indexing is not pre-order keeps
+  its own ordering traversal and uses the roots for membership.

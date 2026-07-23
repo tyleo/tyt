@@ -5,7 +5,7 @@ hierarchical-data renderer -- the `treegrid` crate at
 `projects/utilities/treegrid` -- and migrates the read commands onto it:
 `vxl palette show`, `vxl hierarchy show`, `vxl palette list`,
 `tyt vmax hierarchy`, `tyt fbx hierarchy`, and the `vxl info` /
-`validate` / `list` tables, plus a small `pathspec` coda. This is
+`validate` / `list` tables, plus a small `treeselect` coda. This is
 execution, not planning: the design is owner-reviewed and its eleven
 decisions are closed. Your job each session is to advance the plan by
 one reviewable, staged chunk and then stop for the user to review. If
@@ -42,7 +42,7 @@ no checklist item is checked yet, the first session starts at S1.
 - The next work is the first unchecked `[ ]` step, taken in order.
   Phases 1 through 4 and 6 are in dependency order; do not skip ahead
   within them. Two exceptions: phase 5 (`tyt fbx hierarchy`) is
-  severable and may slip past phase 6, and phase 7 (the `pathspec`
+  severable and may slip past phase 6, and phase 7 (the `treeselect`
   `TreeSelection` closure) is independent and may land at any point --
   pull S18 forward if phase 5 runs first, since S14 builds on it.
 - If a step is large (S1, S7), split it into the smallest coherent
@@ -85,7 +85,7 @@ no checklist item is checked yet, the first session starts at S1.
   `cargo clippy --workspace --all-targets -- -D warnings`, then
   `cargo test -p` the crate or crates you touched (`treegrid` in phase
   1; `vxl` in phases 2, 3, and 6; `tyt-vmax` in phase 4; `tyt-fbx` in
-  phase 5; `pathspec` plus both adopters in phase 7).
+  phase 5; `treeselect` plus both adopters in phase 7).
 
 ## Stage, do not commit
 
@@ -112,7 +112,7 @@ no checklist item is checked yet, the first session starts at S1.
 - Do not let selection, glob filtering, sampling or precision policy,
   terminal-width detection, or clap types into the crate; it renders
   what it is handed. The one shared selection piece, `TreeSelection`,
-  lands in `pathspec` (phase 7), not in treegrid.
+  lands in `treeselect` (phase 7), not in treegrid.
 - Do not change default byte output in the parity phases; if a golden
   changes outside the deliberate phase 2 JSON change, stop and say so.
 - Do not skip ahead in phases 1-4 and 6, and do not run multiple steps

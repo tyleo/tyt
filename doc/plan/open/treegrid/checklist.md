@@ -250,17 +250,19 @@ is in scope, not optional. The plan does not close without it.
       [palette show reference](../vxl-commands/reference/palette/show.md)
       wording.
 
-## Phase 7: tree-selection closure in pathspec (committed, closes the plan)
+## Phase 7: tree-selection closure in treeselect (committed, closes the plan)
 
 The one shared win from the query-layer investigation (2026-07-14, see
 README decision 11): the selected / visible / match-roots closure that
 `tyt vmax hierarchy` and `vxl hierarchy show` each hand-roll and S14
-would otherwise write a third time. It lives in `pathspec`, not
-treegrid, so the crate keeps its no-selection boundary. Independent of
-every other phase; land it any time, and pull it forward if phase 5
-runs first.
+would otherwise write a third time. It lives in the dep-free
+`treeselect` crate (decision 11 as amended 2026-07-22), not treegrid,
+so the crate keeps its no-selection boundary. Independent of every
+other phase; land it any time, and pull it forward if phase 5 runs
+first.
 
-- [ ] **S18. `TreeSelection`.** A new pathspec public struct:
+- [x] **S18. `TreeSelection`.** A public struct in the new dep-free
+      `treeselect` crate:
       `selected` / `visible` per-node flag vectors plus `match_roots`
       indices, built by `from_matches(matched, parents)`, with
       `matched` as `match_paths` / `match_subtrees` return it and
@@ -282,7 +284,8 @@ runs first.
 
 ## Deferred
 
-- [ ] Publish `treegrid` 0.1.0 to crates.io before any dependent crate
-      cuts a release (local builds ride `[patch.crates-io]` meanwhile).
+- [ ] Publish `treegrid` and `treeselect` 0.1.0 to crates.io before
+      any dependent crate cuts a release (local builds ride
+      `[patch.crates-io]` meanwhile).
 - [ ] Decide whether `hierarchy show` / vmax / fbx expose `rows` /
       `columns` / `tables`, once someone wants them.
