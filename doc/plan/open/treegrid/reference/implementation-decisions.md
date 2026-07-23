@@ -1194,3 +1194,30 @@ consumer, which closes the S15 retirement list and the step.
 
 The validate reference's layout item was amended and S15 is checked
 off; phase 6 continues at S16, the layout-name consistency pass.
+
+## S16: the shared layout names reach list, info, and validate (2026-07-23)
+
+The consistency pass: every read command's `--layout` now draws from
+the shared vocabulary. `palette list` renames `markdown` /
+`pretty-json` / `compact-json` to `tables` / `json-pretty` /
+`json-compact`, keeping its `hierarchy` default, and `info` and
+`validate` take `tables` (their default), `json-pretty`, and
+`json-compact`. Flag values only; every layout's output bytes are
+unchanged.
+
+- **`ReportLayout` retires into per-command enums.** `InfoLayout` and
+  `ValidateLayout` are command-side clap enums beside their commands
+  (`commands/info/` and `commands/validate/` become directories, the
+  `palette_list/` shape), completing the one-`ValueEnum`-per-command
+  pattern the other read commands follow; `utilities/` keeps no
+  shared layout type.
+- **`validate`'s human-readable slot is named `tables`.** Its report
+  is a bulleted check list, not a table (the S15 chunk 5 settlement),
+  but the shared vocabulary has no `markdown` value and the
+  checklist's rename spans all three commands, so the value names the
+  human-readable slot and the reference doc says what it renders. The
+  private renderer keeps the name `render_markdown` for the format it
+  emits; info's, which does render record tables, is `render_tables`.
+- Conventions item 5 drops its later-consistency-pass caveat and now
+  states the shared vocabulary once; the info, validate, and palette
+  list references carry the new names.

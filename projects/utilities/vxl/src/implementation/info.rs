@@ -1,4 +1,4 @@
-use crate::{Format, ReportLayout, Result, implementation};
+use crate::{Format, Result, commands::InfoLayout, implementation};
 use branded_id::U32Id;
 use std::{fs, num::NonZeroU8, path::Path};
 use treegrid::{
@@ -16,7 +16,7 @@ const SECTION_LEVEL: NonZeroU8 = NonZeroU8::new(2).unwrap();
 /// Loads the voxel file at `input` and reports what it contains in `layout`.
 /// The document is read into voxcore first; only the format and, for Voxel Json,
 /// the document version come from outside that model.
-pub fn info(input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()> {
+pub fn info(input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()> {
     let state = implementation::load_state(input, from)?;
     // load_state resolved the format, so this inference cannot fail.
     let format = from
@@ -46,14 +46,12 @@ fn render(
     format: Format,
     voxj_version: Option<u32>,
     name: &str,
-    layout: ReportLayout,
+    layout: InfoLayout,
 ) -> String {
     match layout {
-        ReportLayout::Markdown => render_markdown(state, format, voxj_version, name),
-        ReportLayout::PrettyJson => {
-            build_json_grid(state, format, voxj_version).render_json_pretty()
-        }
-        ReportLayout::CompactJson => {
+        InfoLayout::Tables => render_tables(state, format, voxj_version, name),
+        InfoLayout::JsonPretty => build_json_grid(state, format, voxj_version).render_json_pretty(),
+        InfoLayout::JsonCompact => {
             build_json_grid(state, format, voxj_version).render_json_compact()
         }
     }
@@ -61,12 +59,7 @@ fn render(
 
 /// The report as a file-name heading over three record-table sections:
 /// document, palettes, objects.
-fn render_markdown(
-    state: &VoxMain,
-    format: Format,
-    voxj_version: Option<u32>,
-    name: &str,
-) -> String {
+fn render_tables(state: &VoxMain, format: Format, voxj_version: Option<u32>, name: &str) -> String {
     let tables = build_records_grid(state, format, voxj_version).render_tables(
         &TreeGridTableShape::Records(
             TreeGridRecordsTableOptions::default().with_level(SECTION_LEVEL),
@@ -347,7 +340,7 @@ fn yes_no(flag: bool) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use crate::{Format, ReportLayout, implementation::info::render};
+    use crate::{Format, commands::InfoLayout, implementation::info::render};
     use branded_id::{IdVec, U32Id};
     use serde_json::Value;
     use ty_math::TyVector3U32;
@@ -374,13 +367,13 @@ mod tests {
     }
 
     #[test]
-    fn markdown_lists_document_palette_and_object_tables() {
+    fn tables_lists_document_palette_and_object_sections() {
         let output = render(
             &tight_state(),
             Format::Voxj,
             Some(2),
             "test.voxj",
-            ReportLayout::Markdown,
+            InfoLayout::Tables,
         );
         assert_eq!(
             output,
@@ -404,13 +397,13 @@ mod tests {
     }
 
     #[test]
-    fn compact_json_nests_the_envelope_fields_under_each_section() {
+    fn json_compact_nests_the_envelope_fields_under_each_section() {
         let output = render(
             &tight_state(),
             Format::Voxj,
             Some(2),
             "test.voxj",
-            ReportLayout::CompactJson,
+            InfoLayout::JsonCompact,
         );
         assert_eq!(
             output,
@@ -433,21 +426,21 @@ mod tests {
     }
 
     #[test]
-    fn pretty_json_is_multiline_and_matches_compact() {
+    fn json_pretty_is_multiline_and_matches_compact() {
         let state = tight_state();
         let pretty = render(
             &state,
             Format::Voxj,
             Some(2),
             "test.voxj",
-            ReportLayout::PrettyJson,
+            InfoLayout::JsonPretty,
         );
         let compact = render(
             &state,
             Format::Voxj,
             Some(2),
             "test.voxj",
-            ReportLayout::CompactJson,
+            InfoLayout::JsonCompact,
         );
         assert!(pretty.starts_with("[\n"));
         assert!(pretty.contains("\"label\": \"document\""));
@@ -458,22 +451,22 @@ mod tests {
 
     #[test]
     fn omits_voxj_version_for_other_formats() {
-        let markdown = render(
+        let tables = render(
             &tight_state(),
             Format::MVox,
             None,
             "model.mvox",
-            ReportLayout::Markdown,
+            InfoLayout::Tables,
         );
-        assert!(markdown.contains("| Format   | mvox  |\n"));
-        assert!(!markdown.contains("Voxj version"));
+        assert!(tables.contains("| Format   | mvox  |\n"));
+        assert!(!tables.contains("Voxj version"));
 
         let json = render(
             &tight_state(),
             Format::MVox,
             None,
             "model.mvox",
-            ReportLayout::CompactJson,
+            InfoLayout::JsonCompact,
         );
         assert!(!json.contains("voxj_version"));
     }
@@ -488,16 +481,16 @@ mod tests {
         object.retain_voxel(voxel, &[]).unwrap();
         state.add_object(object);
 
-        let markdown = render(
+        let tables = render(
             &state,
             Format::Voxj,
             Some(1),
             "sample.voxj",
-            ReportLayout::Markdown,
+            InfoLayout::Tables,
         );
-        assert!(markdown.contains("| Has edit     | yes   |\n"));
+        assert!(tables.contains("| Has edit     | yes   |\n"));
         // Content 1x1x1, edit build volume 3x1x1, origin spaced.
-        assert!(markdown.contains(
+        assert!(tables.contains(
             "| 0     | margin | 1x1x1  | 3x1x1       | 0, 0, 0 | 1      | 0      | 0       |\n"
         ));
 
@@ -506,7 +499,7 @@ mod tests {
             Format::Voxj,
             Some(1),
             "sample.voxj",
-            ReportLayout::CompactJson,
+            InfoLayout::JsonCompact,
         );
         assert!(json.contains("{\"label\":\"has_edit\",\"values\":[true]}"));
         assert!(json.contains(
@@ -543,24 +536,24 @@ mod tests {
         object.add_layer(pinned, U32Id::from_u32(0));
         state.add_object(object);
 
-        let markdown = render(
+        let tables = render(
             &state,
             Format::Voxj,
             Some(1),
             "pinned.voxj",
-            ReportLayout::Markdown,
+            InfoLayout::Tables,
         );
-        assert!(markdown.contains("| 0     | emissiveStrength (scalar) | 0         |\n"));
-        assert!(markdown.contains("| 1     | baseColorFactor           | 1         |\n"));
+        assert!(tables.contains("| 0     | emissiveStrength (scalar) | 0         |\n"));
+        assert!(tables.contains("| 1     | baseColorFactor           | 1         |\n"));
         // Two layers, one sampled.
-        assert!(markdown.contains("| 2      | 1       |\n"));
+        assert!(tables.contains("| 2      | 1       |\n"));
 
         let json = render(
             &state,
             Format::Voxj,
             Some(1),
             "pinned.voxj",
-            ReportLayout::CompactJson,
+            InfoLayout::JsonCompact,
         );
         assert!(json.contains(
             "{\"label\":\"0\",\"children\":[{\"label\":\"properties\",\"children\":[\

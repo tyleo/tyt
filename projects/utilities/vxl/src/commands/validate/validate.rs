@@ -1,4 +1,4 @@
-use crate::{Dependencies, ReportLayout, Result};
+use crate::{Dependencies, Result, commands::ValidateLayout};
 use clap::Parser;
 use std::path::PathBuf;
 
@@ -11,8 +11,8 @@ pub struct Validate {
     input: PathBuf,
 
     /// How to lay out the report.
-    #[arg(value_name = "layout", long, default_value = "markdown")]
-    layout: ReportLayout,
+    #[arg(value_name = "layout", long, default_value = "tables")]
+    layout: ValidateLayout,
 }
 
 impl Validate {

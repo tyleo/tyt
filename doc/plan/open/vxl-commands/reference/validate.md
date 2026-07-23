@@ -20,8 +20,8 @@ component; unit `rotation` quaternions within tolerance; and, when present, an
 validator cannot confirm, that sample order matches the position block's voxel
 order, is reported as unverifiable.
 
-1. `--layout` `markdown` | `pretty-json` | `compact-json` (default `markdown`):
-   how to render the report. `markdown` is a human-readable per-check list; the
+1. `--layout` `tables` | `json-pretty` | `json-compact` (default `tables`):
+   how to render the report. `tables` is a human-readable per-check list; the
    JSON forms emit the report in the shared read-command envelope, one
    `{"label", "annotation"?, "values"?, "children"?}` record per node: `name`
    and `valid` roots, then a `checks` root with one child per check bearing

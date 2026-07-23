@@ -1,14 +1,10 @@
 use clap::ValueEnum;
 
-/// How `palette list` renders the listing.
+/// How `info` renders the report.
 #[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum PaletteListLayout {
-    /// Indented tree, one palette per branch, like `hierarchy show`.
-    #[value(name = "hierarchy")]
-    Hierarchy,
-
-    /// A `# palettes` heading over one aligned record table, one row per
-    /// palette.
+pub enum InfoLayout {
+    /// A file-name title over `Document`, `Palettes`, and `Objects` record
+    /// tables.
     #[value(name = "tables")]
     Tables,
 

@@ -1,12 +1,12 @@
 use crate::{
-    Dependencies, Format, MeshFormat, ReportLayout, Result, SelectIndex, VoxjColorFormat,
-    VoxjEncoding, VoxjFormat, Width,
+    Dependencies, Format, MeshFormat, Result, SelectIndex, VoxjColorFormat, VoxjEncoding,
+    VoxjFormat, Width,
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
-        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
+        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
         PaletteListLayout, PaletteReduction, PaletteShowLabel, PaletteShowLayout,
         PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
-        TextureShape,
+        TextureShape, ValidateLayout,
     },
     implementation,
 };
@@ -137,11 +137,11 @@ impl Dependencies for DependenciesImpl {
         )
     }
 
-    fn info(&self, input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()> {
+    fn info(&self, input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()> {
         implementation::info(input, from, layout)
     }
 
-    fn validate(&self, input: &Path, layout: ReportLayout) -> Result<()> {
+    fn validate(&self, input: &Path, layout: ValidateLayout) -> Result<()> {
         implementation::validate(input, layout)
     }
 

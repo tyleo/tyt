@@ -1,12 +1,11 @@
 use crate::{
-    Format, MeshFormat, ReportLayout, Result, SelectIndex, VoxjColorFormat, VoxjEncoding,
-    VoxjFormat, Width,
+    Format, MeshFormat, Result, SelectIndex, VoxjColorFormat, VoxjEncoding, VoxjFormat, Width,
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
-        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
+        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
         PaletteListLayout, PaletteReduction, PaletteShowLabel, PaletteShowLayout,
         PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
-        TextureShape,
+        TextureShape, ValidateLayout,
     },
 };
 use std::{num::NonZeroU8, path::Path};
@@ -186,7 +185,7 @@ pub trait Dependencies {
     /// * `input` - the voxel file to read, in any supported format.
     /// * `from` - source format, inferred from `input`'s extension when `None`.
     /// * `layout` - how to lay out the report.
-    fn info(&self, input: &Path, from: Option<Format>, layout: ReportLayout) -> Result<()>;
+    fn info(&self, input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()>;
 
     /// Validates the Voxel Json document at `input` against the format spec and
     /// writes a per-check report to standard output, then fails when any check
@@ -197,7 +196,7 @@ pub trait Dependencies {
     /// * `input` - the `.voxj` or `.voxjz` document to validate, recognized by
     ///   its leading bytes.
     /// * `layout` - how to lay out the report.
-    fn validate(&self, input: &Path, layout: ReportLayout) -> Result<()>;
+    fn validate(&self, input: &Path, layout: ValidateLayout) -> Result<()>;
 
     /// Prints a one-line-per-palette overview of the voxel file at `input`: each
     /// palette's index, ordered property keys, material count, and the objects

@@ -1,4 +1,4 @@
-use crate::{ReportLayout, Result, implementation};
+use crate::{Result, commands::ValidateLayout, implementation};
 use std::{
     fs,
     io::{Error as IOError, ErrorKind},
@@ -13,7 +13,7 @@ use voxj_codec::{VoxjCheck, VoxjCheckStatus, check_voxj_file, from_voxj_or_voxjz
 /// report in `layout` to standard output, and fails when any check failed so
 /// the process exits non-zero. The document is read as raw Voxel Json rather
 /// than through voxcore, since the checks inspect the on-disk encoding.
-pub fn validate(input: &Path, layout: ReportLayout) -> Result<()> {
+pub fn validate(input: &Path, layout: ValidateLayout) -> Result<()> {
     let file = from_voxj_or_voxjz_file_bytes(&fs::read(input)?)?;
     let checks = check_voxj_file(&file);
     let output = render(&checks, &file_name(input), layout);
@@ -42,11 +42,11 @@ fn file_name(input: &Path) -> String {
 }
 
 /// Renders the report in `layout`, the testable core of [`validate`].
-fn render(checks: &[VoxjCheck], name: &str, layout: ReportLayout) -> String {
+fn render(checks: &[VoxjCheck], name: &str, layout: ValidateLayout) -> String {
     match layout {
-        ReportLayout::Markdown => render_markdown(checks, name),
-        ReportLayout::PrettyJson => build_json_grid(checks, name).render_json_pretty(),
-        ReportLayout::CompactJson => build_json_grid(checks, name).render_json_compact(),
+        ValidateLayout::Tables => render_markdown(checks, name),
+        ValidateLayout::JsonPretty => build_json_grid(checks, name).render_json_pretty(),
+        ValidateLayout::JsonCompact => build_json_grid(checks, name).render_json_compact(),
     }
 }
 
@@ -127,7 +127,7 @@ fn plural(count: usize) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ReportLayout, implementation::validate::render};
+    use crate::{commands::ValidateLayout, implementation::validate::render};
     use serde_json::Value;
     use voxj_codec::{VoxjCheck, VoxjCheckStatus};
 
@@ -152,8 +152,8 @@ mod tests {
     }
 
     #[test]
-    fn markdown_lists_each_check_and_a_failure_summary() {
-        let output = render(&checks(), "model.voxj", ReportLayout::Markdown);
+    fn tables_lists_each_check_and_a_failure_summary() {
+        let output = render(&checks(), "model.voxj", ValidateLayout::Tables);
         assert_eq!(
             output,
             "# model.voxj\n\n\
@@ -166,7 +166,7 @@ mod tests {
     }
 
     #[test]
-    fn markdown_reports_all_passed() {
+    fn tables_reports_all_passed() {
         let checks = vec![
             VoxjCheck {
                 name: "version",
@@ -177,13 +177,13 @@ mod tests {
                 status: VoxjCheckStatus::Unverifiable,
             },
         ];
-        let output = render(&checks, "ok.voxj", ReportLayout::Markdown);
+        let output = render(&checks, "ok.voxj", ValidateLayout::Tables);
         assert!(output.ends_with("\nAll checks passed.\n"));
     }
 
     #[test]
-    fn compact_json_reports_validity_and_each_status() {
-        let output = render(&checks(), "model.voxj", ReportLayout::CompactJson);
+    fn json_compact_reports_validity_and_each_status() {
+        let output = render(&checks(), "model.voxj", ValidateLayout::JsonCompact);
         assert_eq!(
             output,
             "[{\"label\":\"name\",\"values\":[\"model.voxj\"]},\
@@ -198,9 +198,9 @@ mod tests {
     }
 
     #[test]
-    fn pretty_json_is_multiline_and_matches_compact() {
-        let pretty = render(&checks(), "model.voxj", ReportLayout::PrettyJson);
-        let compact = render(&checks(), "model.voxj", ReportLayout::CompactJson);
+    fn json_pretty_is_multiline_and_matches_compact() {
+        let pretty = render(&checks(), "model.voxj", ValidateLayout::JsonPretty);
+        let compact = render(&checks(), "model.voxj", ValidateLayout::JsonCompact);
         assert!(pretty.starts_with("[\n"));
         let pretty_value: Value = serde_json::from_str(&pretty).unwrap();
         let compact_value: Value = serde_json::from_str(&compact).unwrap();

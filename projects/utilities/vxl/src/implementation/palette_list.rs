@@ -66,13 +66,13 @@ fn render(
     layout: PaletteListLayout,
 ) -> String {
     match layout {
-        PaletteListLayout::Markdown => build_records_grid(state, palettes, fields).render_tables(
+        PaletteListLayout::Tables => build_records_grid(state, palettes, fields).render_tables(
             &TreeGridTableShape::Records(TreeGridRecordsTableOptions::default()),
         ),
         PaletteListLayout::Hierarchy => build_grid(state, palettes, fields)
             .render_hierarchy(&TreeGridHierarchyOptions::default().with_bare_roots(true)),
-        PaletteListLayout::PrettyJson => build_grid(state, palettes, fields).render_json_pretty(),
-        PaletteListLayout::CompactJson => build_grid(state, palettes, fields).render_json_compact(),
+        PaletteListLayout::JsonPretty => build_grid(state, palettes, fields).render_json_pretty(),
+        PaletteListLayout::JsonCompact => build_grid(state, palettes, fields).render_json_compact(),
     }
 }
 
@@ -264,9 +264,9 @@ mod tests {
     }
 
     #[test]
-    fn markdown_lists_one_row_per_palette() {
+    fn tables_lists_one_row_per_palette() {
         assert_eq!(
-            render_all(&shared_state(), PaletteListLayout::Markdown),
+            render_all(&shared_state(), PaletteListLayout::Tables),
             "# palettes\n\
              \n\
              | label | properties                                 | materials | used by |\n\
@@ -277,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn markdown_drops_a_disabled_field_column() {
+    fn tables_drops_a_disabled_field_column() {
         let state = shared_state();
         let palettes = select_palettes(&state, &[]).unwrap();
         let fields = PaletteListFields {
@@ -285,7 +285,7 @@ mod tests {
             materials: true,
             objects: false,
         };
-        let output = render(&state, &palettes, fields, PaletteListLayout::Markdown);
+        let output = render(&state, &palettes, fields, PaletteListLayout::Tables);
         assert_eq!(
             output,
             "# palettes\n\
@@ -346,9 +346,9 @@ mod tests {
     }
 
     #[test]
-    fn compact_json_nests_the_envelope_fields_under_each_palette() {
+    fn json_compact_nests_the_envelope_fields_under_each_palette() {
         assert_eq!(
-            render_all(&shared_state(), PaletteListLayout::CompactJson),
+            render_all(&shared_state(), PaletteListLayout::JsonCompact),
             "[{\"label\":\"palettes\",\"children\":[\
              {\"label\":\"0\",\"children\":[\
              {\"label\":\"materialCount\",\"values\":[2]},\
@@ -365,10 +365,10 @@ mod tests {
     }
 
     #[test]
-    fn pretty_json_is_multiline_and_matches_compact() {
+    fn json_pretty_is_multiline_and_matches_compact() {
         let state = shared_state();
-        let pretty = render_all(&state, PaletteListLayout::PrettyJson);
-        let compact = render_all(&state, PaletteListLayout::CompactJson);
+        let pretty = render_all(&state, PaletteListLayout::JsonPretty);
+        let compact = render_all(&state, PaletteListLayout::JsonCompact);
         assert!(pretty.starts_with("[\n"));
         let pretty_value: Value = serde_json::from_str(&pretty).unwrap();
         let compact_value: Value = serde_json::from_str(&compact).unwrap();
@@ -380,7 +380,7 @@ mod tests {
         let state = shared_state();
         let filters = ["1".parse::<SelectIndex>().unwrap()];
         let palettes = select_palettes(&state, &filters).unwrap();
-        let output = render(&state, &palettes, all_fields(), PaletteListLayout::Markdown);
+        let output = render(&state, &palettes, all_fields(), PaletteListLayout::Tables);
         assert_eq!(
             output,
             "# palettes\n\
@@ -418,7 +418,7 @@ mod tests {
         state.add_palette(palette);
 
         assert_eq!(
-            render_all(&state, PaletteListLayout::Markdown),
+            render_all(&state, PaletteListLayout::Tables),
             "# palettes\n\
              \n\
              | label | properties      | materials | used by |\n\
@@ -427,7 +427,7 @@ mod tests {
         );
 
         assert_eq!(
-            render_all(&state, PaletteListLayout::CompactJson),
+            render_all(&state, PaletteListLayout::JsonCompact),
             "[{\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
              {\"label\":\"materialCount\",\"values\":[1]},\
              {\"label\":\"properties\",\"children\":[{\"label\":\"baseColorFactor\"}]},\
@@ -472,7 +472,7 @@ mod tests {
         state.add_palette(palette);
 
         assert_eq!(
-            render_all(&state, PaletteListLayout::Markdown),
+            render_all(&state, PaletteListLayout::Tables),
             "# palettes\n\
              \n\
              | label | properties                | materials | used by |\n\
@@ -481,7 +481,7 @@ mod tests {
         );
 
         assert_eq!(
-            render_all(&state, PaletteListLayout::CompactJson),
+            render_all(&state, PaletteListLayout::JsonCompact),
             "[{\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
              {\"label\":\"materialCount\",\"values\":[0]},\
              {\"label\":\"properties\",\"children\":[\

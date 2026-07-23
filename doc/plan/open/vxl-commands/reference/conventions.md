@@ -22,17 +22,16 @@ These hold across the commands and match the existing `to` commands.
    `--property` (default `baseColorFactor`), operate on a whole property, and
    reject a component. Property keys are the glTF names such as `baseColorFactor`,
    not the old `rgba`.
-5. The read-only reports render with `--layout`.
-   [`palette show`](palette/show.md) uses the shared layout vocabulary,
-   `hierarchy`, `rows` (its default), `columns`, `tables`, `json-pretty`, and
-   `json-compact`, refined by `--label`, `--header-level`, and `--table-shape`.
-   [`hierarchy show`](hierarchy/show.md) uses the shared names too, offering
-   `hierarchy` (its default), `json-pretty`, and `json-compact`.
-   `validate` and `info` still take `markdown` (default), `pretty-json`, or
-   `compact-json`, and [`palette list`](palette/list.md) shares those values
-   but adds a `hierarchy` tree like [`hierarchy show`](hierarchy/show.md) and
-   defaults to it rather than `markdown`; they adopt the shared names in a
-   later consistency pass.
+5. The read-only reports render with `--layout`, every command drawing its
+   values from one shared vocabulary: `hierarchy`, `rows`, `columns`,
+   `tables`, `json-pretty`, and `json-compact`.
+   [`palette show`](palette/show.md) offers all six, defaults to `rows`, and
+   refines them with `--label`, `--header-level`, and `--table-shape`.
+   [`hierarchy show`](hierarchy/show.md) offers `hierarchy` (its default),
+   `json-pretty`, and `json-compact`. `validate` and `info` offer `tables`
+   (their default), `json-pretty`, and `json-compact`, and
+   [`palette list`](palette/list.md) adds a `hierarchy` tree to those three
+   and defaults to it.
 6. Multiple values are passed by repeating the flag, as in
    `--select-index 0 --select-index 3`, not as one comma-separated argument. The
    exception is the `--texture-map` channel list, where the comma-separated RGBA

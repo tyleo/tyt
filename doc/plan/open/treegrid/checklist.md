@@ -234,7 +234,7 @@ is in scope, not optional. The plan does not close without it.
       vxl's `markdown_table` and `to_json_string`; `info`'s
       `##`-sectioned markdown becomes `tables` + `header` with
       `header_level` 2 beneath its command-printed `# {input}` title.
-- [ ] **S16. Layout-name consistency.** `markdown -> tables`,
+- [x] **S16. Layout-name consistency.** `markdown -> tables`,
       `pretty-json -> json-pretty`, `compact-json -> json-compact`
       across `list` / `info` / `validate`, one breaking commit, retiring
       vxl's `ReportLayout` clap enum; update conventions.md.

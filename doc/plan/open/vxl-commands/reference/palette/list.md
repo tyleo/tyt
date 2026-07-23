@@ -59,7 +59,7 @@ branch in the tree, and the other two behave the same way.
 
 ## Layout
 
-`--layout` `hierarchy` | `markdown` | `pretty-json` | `compact-json` (default
+`--layout` `hierarchy` | `tables` | `json-pretty` | `json-compact` (default
 `hierarchy`): how to render the listing.
 
 1. `hierarchy` (default): the indented tree above, in the
@@ -68,7 +68,7 @@ branch in the tree, and the other two behave the same way.
    leaf and
    `properties` and `objects` as subtrees. Property keys and object names are
    user-entered, so they print quoted.
-2. `markdown`: a `# palettes` heading over one aligned record table, one row
+2. `tables`: a `# palettes` heading over one aligned record table, one row
    per palette labeled by its index and one column per enabled field:
 
    ```
@@ -81,7 +81,7 @@ branch in the tree, and the other two behave the same way.
    | 2     | metallicFactor, roughnessFactor            | 1         | Object B           |
    ```
 
-3. `pretty-json` and `compact-json`: the listing tree as pretty or compact
+3. `json-pretty` and `json-compact`: the listing tree as pretty or compact
    JSON in the shared read-command envelope, one `{"label", "annotation"?,
    "values"?, "children"?}` record per tree node: the `palettes` root over one
    record per palette index, the material count as a native number under
