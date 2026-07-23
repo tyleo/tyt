@@ -12,7 +12,7 @@ impl<C: TreeGridCells> TreeGrid<C> {
         paths
     }
 
-    fn collect_data_paths(
+    pub(crate) fn collect_data_paths(
         &self,
         id: U32Id<BTreeGridNode>,
         prefix: &str,

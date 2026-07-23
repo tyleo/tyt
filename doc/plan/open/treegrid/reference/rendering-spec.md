@@ -140,9 +140,10 @@ Behind the `ty-math` feature, over the component-generic color family
 - A **path** is the segments from a root to a node, joined with `.`:
   `0."baseColorFactor".a`.
 - `TreeGridLabelMode` lives on the `rows` and `columns` payloads
-  (`tables` carries its own two-variant `TreeGridTableLabelMode`);
-  the `resolve_*` methods map the loose `TreeGridOptions::label` kind
-  into them, unset meaning `concat`. A label mode with the
+  (nested tables carry their own two-variant `TreeGridTableLabelMode`;
+  record tables carry no mode, `concat` and `header` rendering alike
+  there); the `resolve_*` methods map the loose
+  `TreeGridOptions::label` kind into them, unset meaning `concat`. A label mode with the
   `hierarchy` or JSON renders, which carry labels structurally, is
   `TreeGridError::LabelModeWithoutLabels`:
   - `none`: no labels anywhere. Under `tables` this is
@@ -170,8 +171,9 @@ Behind the `ty-math` feature, over the component-generic color family
   heading. A node with both values and children is a column in its
   parent's group *and* a heading over its own.
 - The heading level: `header` labels carry it
-  (`TreeGridLabelMode::Header(TreeGridHeaderOptions)`), and nested
-  tables carry theirs beside the table label. The shallowest heading
+  (`TreeGridLabelMode::Header(TreeGridHeaderOptions)`), nested tables
+  carry theirs beside the table label, and record tables carry theirs
+  alone. The shallowest heading
   prints at that level, default `1`, so output embedded in a host
   markdown document sits at the right depth under its headings. A
   heading that lands deeper than `6` -- markdown's deepest level --
@@ -283,7 +285,8 @@ Rendered by `render_tables(&TreeGridTableShape)`, on the
 `TreeGridRenderTables` trait behind the `render_tables` feature.
 `TreeGridTableShape` picks the shape:
 `Nested(TreeGridNestedTableOptions)`, carrying the heading label mode
-and level, or `Flat`. `resolve_tables` maps the loose
+and level, `Flat`, or `Records(TreeGridRecordsTableOptions)`,
+carrying the heading level alone. `resolve_tables` maps the loose
 `TreeGridOptions::table_shape` kind into it, unset meaning `Nested`;
 the other `resolve_*` methods reject a set shape as
 `TreeGridError::TableShapeWithoutTables`, not a silent no-op.
@@ -299,15 +302,25 @@ the other `resolve_*` methods reject a set shape as
   explicit shape because it is the comparison view: two palettes'
   colors line up side by side in one table. Requires `concat`;
   `header` is `TreeGridError::HeaderLabelWithFlatTables`.
-- `Records` (lands in phase 6, committed scope): the transpose for
-  entity-per-row reports, what `info` and `palette list --layout
-  markdown` render today. Rows are one branch's children; columns are
-  the union of their descendant data-node paths flattened *relative to
-  the row*, so a node's `transform.position` is a prefix-free column
-  and the prefix lives in the row label, plus a column for a row's own
-  value. Chosen explicitly, never inferred. Column naming, multi-valued
-  cells, and heterogeneous-children sparsity are settled at S15 against
-  the real adopters.
+- `Records`: the transpose for entity-per-row reports. Each root is a
+  section: a heading at `header_level` (concat and header modes
+  coincide, a root's path being its leaf segment) over one table whose
+  rows are the root's children bearing values anywhere in their
+  subtree. A row's whole subtree flattens into its cells and the walk
+  never descends further; a command wanting deeper sectioning builds a
+  flatter forest. A root bearing its own values is instead a row of a
+  heading-less leading table, even when it also has data-bearing
+  children; a value-less root with no data beneath it is skipped.
+  Columns: `label` (the row's annotated leaf label), then `value` (the
+  row's own series, present only when some row has one), then the
+  union of the rows' relative descendant data paths in first-encounter
+  order, scanning rows in order and each row's paths in pre-order.
+  Path segments join with `.` and stay bare; the data node's own
+  segment carries its annotation. Same-path descendants merge into one
+  column, and a descendant literally labeled `value` keeps a column of
+  its own beside the own-value column. A node's values join into one
+  cell with its separator rule, and a row without data at a column
+  leaves the cell blank. Chosen explicitly, never inferred.
 - `markdown_table` rules: every column pads to its widest cell, minimum
   width 3 so the dash separator stays valid markdown; cell text escapes
   pipes and flattens newlines (`markdown_cell`); width is visible
@@ -536,14 +549,14 @@ root."energy-tank-1" root."energy-tank-1".transform.position root."energy-tank-1
 {node: 0}            [12.50, 0.50, 10.00]                    [0.00, 0.00, 0.00]                      ...
 ```
 
-`tables` + `Records` (phase 6) is the shape this data actually wants:
-one row per node, descendant paths flattened relative to the row, the
-prefix living in the row label (column names illustrative until S15):
+`tables` + `Records` is the shape this data actually wants: one row
+per node, descendant paths flattened relative to the row, the prefix
+living in the row label:
 
 ```text
 # root
 
-| node             | value     | transform.position    | transform.rotation | transform.scale    |
+| label            | value     | transform.position    | transform.rotation | transform.scale    |
 | ---------------- | --------- | --------------------- | ------------------ | ------------------ |
 | "energy-tank-1"  | {node: 0} | [12.50, 0.50, 10.00]  | [0.00, 0.00, 0.00] | [1.00, 1.00, 1.00] |
 | "energy-tank-2"  | {node: 1} | [-11.50, 0.50, 10.00] | [0.00, 0.00, 0.00] | [1.00, 1.00, 1.00] |
@@ -551,8 +564,9 @@ prefix living in the row label (column names illustrative until S15):
 | "energy-tank"    | {node: 3} | [0.50, 0.50, 10.00]   | [0.00, 0.00, 0.00] | [1.00, 1.00, 1.00] |
 ```
 
-The differently-named object children would add one sparse column per
-name; a command building for records skips or normalizes them. `Flat`
+The differently-named object children add one sparse column per name
+each, omitted above; a command building for records skips or
+normalizes them. `Flat`
 on this tree is the degenerate 21-column, one-row table that motivated
 grouping in the first place -- available, not advisable.
 

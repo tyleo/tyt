@@ -1,6 +1,7 @@
 use crate::{
     TreeGridError, TreeGridLabelKind, TreeGridNestedTableOptions, TreeGridOptions,
-    TreeGridTableLabelMode, TreeGridTableShape, TreeGridTableShapeKind,
+    TreeGridRecordsTableOptions, TreeGridTableLabelMode, TreeGridTableShape,
+    TreeGridTableShapeKind,
 };
 
 impl TreeGridOptions {
@@ -28,6 +29,13 @@ impl TreeGridOptions {
                 self.no_header_level()?;
                 Ok(TreeGridTableShape::Flat)
             }
+            // Record sections are roots, whose concat path is their
+            // leaf segment, so both heading label modes render alike.
+            TreeGridTableShapeKind::Records => {
+                Ok(TreeGridTableShape::Records(TreeGridRecordsTableOptions {
+                    level: self.level(),
+                }))
+            }
         }
     }
 }
@@ -36,7 +44,8 @@ impl TreeGridOptions {
 mod tests {
     use crate::{
         TreeGridError, TreeGridLabelKind, TreeGridNestedTableOptions, TreeGridOptions,
-        TreeGridTableLabelMode, TreeGridTableShape, TreeGridTableShapeKind,
+        TreeGridRecordsTableOptions, TreeGridTableLabelMode, TreeGridTableShape,
+        TreeGridTableShapeKind,
     };
     use std::num::NonZeroU8;
 
@@ -70,6 +79,34 @@ mod tests {
         assert_eq!(
             options.resolve_tables(),
             Err(TreeGridError::LabelNoneWithTables)
+        );
+    }
+
+    #[test]
+    fn records_resolve_with_the_header_level() {
+        let options = TreeGridOptions::default()
+            .with_table_shape(TreeGridTableShapeKind::Records)
+            .with_header_level(NonZeroU8::new(2).unwrap());
+
+        assert_eq!(
+            options.resolve_tables(),
+            Ok(TreeGridTableShape::Records(
+                TreeGridRecordsTableOptions::default().with_level(NonZeroU8::new(2).unwrap())
+            ))
+        );
+    }
+
+    #[test]
+    fn records_accept_both_heading_label_modes_alike() {
+        let records = TreeGridOptions::default().with_table_shape(TreeGridTableShapeKind::Records);
+
+        assert_eq!(
+            records
+                .with_label(TreeGridLabelKind::Concat)
+                .resolve_tables(),
+            records
+                .with_label(TreeGridLabelKind::Header)
+                .resolve_tables()
         );
     }
 

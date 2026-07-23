@@ -8,4 +8,8 @@ pub enum TreeGridTableShapeKind {
 
     /// One table over every data node.
     Flat,
+
+    /// One table per root: one row per child, one column per
+    /// descendant data path named relative to the row.
+    Records,
 }

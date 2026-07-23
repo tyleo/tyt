@@ -10,7 +10,11 @@ mod cell;
     feature = "render_tables"
 ))]
 mod cell_render;
-#[cfg(any(feature = "render_hierarchy", feature = "render_rows"))]
+#[cfg(any(
+    feature = "render_hierarchy",
+    feature = "render_rows",
+    feature = "render_tables"
+))]
 mod cell_separator;
 #[cfg(any(
     feature = "render_columns",

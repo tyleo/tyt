@@ -1013,3 +1013,58 @@ selecting used to import the FBX twice.
   covering the command layer end to end without Blender; the goldens
   were verified against the deleted script's own print functions run
   over a stub scene.
+
+## S15 chunk 1: the records table shape (2026-07-23)
+
+S15 lands in chunks. This chunk is the crate side:
+`TreeGridTableShape::Records(TreeGridRecordsTableOptions)`, its
+`resolve_tables` arm, and the render; the `info` / `validate` /
+`palette list` adoptions and their `records` flag values follow. The
+questions the checklist left open are settled against those adopters'
+current output and the spec's hierarchy-data worked example:
+
+- **The walk is one level: roots are sections, their children are
+  rows.** No structural test can tell a section child from an entity
+  child (`palette list` rows are value-less index branches, while the
+  worked example's rows are tag-valued scene nodes), so the crate
+  never guesses deeper: each value-less root that leads to data
+  renders a heading at `header_level` and one table of its
+  data-bearing children, and a row's whole subtree flattens into its
+  cells. Deeper sectioning means building a flatter forest, the
+  spec's "the command owns the tree it populates". The known
+  consumers fit: `info` renders three section roots at level 2 and
+  `palette list` one `palettes` root, the same node its hierarchy
+  layout prints as the bare `palettes` line. Section headings sit at
+  depth zero, where a concat path equals the leaf segment, so the
+  payload carries only the level and `resolve_tables` accepts both
+  heading label modes as one behavior; `none` stays
+  `LabelNoneWithTables`.
+- **Data-bearing roots row a heading-less leading table**, the
+  records analog of the nested walk's root-level group. A data root
+  is consumed as a row even when it also has data-bearing children
+  (its subtree already flattened into its row), where nested makes
+  such a node both a column and a heading; rows consuming subtrees is
+  what makes the difference.
+- **Columns are `label`, `value`, then relative paths in
+  first-encounter order.** The two fixed headers take the JSON
+  envelope's vocabulary, `value` singular because the cell holds one
+  row's own series; the own-value column appears only when some row
+  bears values. Descendant columns scan rows in order and each row's
+  paths in pre-order through `collect_data_paths` (widened
+  `pub(crate)` beside `leads_to_data`), keeping ancestor segments
+  bare and annotations on the emitted segment. Same-path siblings
+  merge into one column in encounter order; a descendant literally
+  labeled `value` keeps a column of its own rather than colliding
+  with the own-value column.
+- **Multi-valued cells join with `Cell::separator`**, the join the
+  hierarchy layout's inline values use: one space, or bare visuals
+  abutting into a strip. `cell_separator`'s gate union gains
+  `render_tables`, the revisit the S4b entry reserved for exactly
+  this case. A command wanting a `", "`-joined listing cell bakes the
+  text into one pre-formatted value. A row without data at a column
+  leaves the cell blank, the shorter-series rule.
+
+The spec's tables section, labels section, and worked example were
+amended in the same change (the settled contract replacing the
+"settled at S15" deferral, and the illustrative `node` column header
+becoming `label`).

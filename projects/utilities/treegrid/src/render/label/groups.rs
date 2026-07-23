@@ -48,7 +48,7 @@ impl<C: TreeGridCells> TreeGrid<C> {
     }
 
     /// Whether `id` is a proper ancestor of a data node.
-    fn leads_to_data(&self, id: U32Id<BTreeGridNode>) -> bool {
+    pub(crate) fn leads_to_data(&self, id: U32Id<BTreeGridNode>) -> bool {
         self.node(id)
             .children()
             .iter()
