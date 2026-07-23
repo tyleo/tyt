@@ -22,7 +22,9 @@ mod tests {
     };
     use branded_id::{IdVec, U32Id};
     use std::collections::{BTreeMap, BTreeSet};
-    use ty_math::{TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{
+        TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
+    };
     use vmax::{
         VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
         VMaxObject, VMaxPalettePngFile, VMaxSceneCamera, VMaxSceneJsonFile,
@@ -585,8 +587,8 @@ mod tests {
     fn color_floats(hex: &str) -> [f64; 4] {
         TySrgbaU8::from_hex(hex)
             .expect("a valid hex color")
-            .to_f64()
-            .to_array()
+            .into_format::<f64, f64>()
+            .into()
     }
 
     /// Adds a folded palette binding `baseColorFactor` to a pool of the given

@@ -272,7 +272,7 @@ fn folded_palette(
     let color_pool = state.add_value_pool(VoxValuePool::Srgba {
         values: colors
             .iter()
-            .map(|color| TySrgbaU8::from_array(*color).to_f64().to_array())
+            .map(|color| <[f64; 4]>::from(TySrgbaU8::from(*color).into_format::<f64, f64>()))
             .collect(),
     });
     palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), color_pool);
@@ -313,7 +313,8 @@ fn folded_palette(
                 values: colors
                     .iter()
                     .map(|color| {
-                        let [r, g, b, _] = TySrgbaU8::from_array(*color).to_f64().to_array();
+                        let [r, g, b, _] =
+                            <[f64; 4]>::from(TySrgbaU8::from(*color).into_format::<f64, f64>());
                         [r, g, b]
                     })
                     .collect(),

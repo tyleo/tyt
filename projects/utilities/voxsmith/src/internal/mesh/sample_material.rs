@@ -2,7 +2,7 @@ use crate::{
     GridSpace, MeshBaseColorMap, MeshEmissiveMap, MeshMaterial, MeshMaterialMaps,
     MeshMetallicRoughnessMap, MeshOcclusionMap, MeshSampler, MeshTexture, MeshTriangle, VoxelGrid,
 };
-use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector2F64, TyVector3F64, TyVector3U32};
+use ty_math::{TyLinSrgbaF64, TySrgbaF64, TySrgbaU8, TyVector2F64, TyVector3F64, TyVector3U32};
 
 /// Barycentric samples per grid unit of a triangle's longest edge, so a triangle
 /// spanning `k` voxels is sampled about `2k` times along it.
@@ -240,14 +240,13 @@ fn apply(
     let n = accum.count as f64;
 
     if maps.base_color.is_some() && triangle.uvs.base_color.is_some() {
-        material.base_color = TyLinSrgbaF64::new(
+        material.base_color = TySrgbaF64::from_linear(TyLinSrgbaF64::new(
             accum.base_color[0] / n,
             accum.base_color[1] / n,
             accum.base_color[2] / n,
             accum.base_color[3] / n,
-        )
-        .to_srgba()
-        .to_u8();
+        ))
+        .into_format::<u8, u8>();
     }
 
     if maps.metallic_roughness.is_some() && triangle.uvs.metallic_roughness.is_some() {
@@ -259,14 +258,13 @@ fn apply(
     // material's flat factor, since it is a per-material scalar the texture does
     // not carry.
     if maps.emissive.is_some() && triangle.uvs.emissive.is_some() {
-        material.emissive_factor = TyLinSrgbaF64::new(
+        material.emissive_factor = TySrgbaF64::from_linear(TyLinSrgbaF64::new(
             accum.emissive[0] / n,
             accum.emissive[1] / n,
             accum.emissive[2] / n,
             1.0,
-        )
-        .to_srgba()
-        .to_u8();
+        ))
+        .into_format::<u8, u8>();
     }
 
     if maps.occlusion.is_some() && triangle.uvs.occlusion.is_some() {
@@ -278,11 +276,11 @@ fn apply(
 /// factor.
 fn base_color_linear(texture: &MeshTexture, uv: TyVector2F64, map: &MeshBaseColorMap) -> [f64; 4] {
     let texel = texture.sample(uv.x, uv.y, map.sampler.wrap_s, map.sampler.wrap_t);
-    let color = TySrgbaU8::from_array(texel)
-        .to_f64()
-        .to_lin_srgba()
-        .componentwise_multiply(&map.factor);
-    [color.r, color.g, color.b, color.a]
+    let color = TySrgbaU8::from(texel)
+        .into_format::<f64, f64>()
+        .into_linear()
+        * map.factor;
+    [color.red, color.green, color.blue, color.alpha]
 }
 
 /// The metallic and roughness of a texel: straight-decoded linear data, blue
@@ -301,11 +299,13 @@ fn metallic_roughness(
 /// component-wise by the linear emissive factor.
 fn emissive(texture: &MeshTexture, uv: TyVector2F64, map: &MeshEmissiveMap) -> [f64; 3] {
     let texel = texture.sample(uv.x, uv.y, map.sampler.wrap_s, map.sampler.wrap_t);
-    let color = TySrgbaU8::from_array(texel).to_f64().to_lin_srgba();
+    let color: TyLinSrgbaF64 = TySrgbaU8::from(texel)
+        .into_format::<f64, f64>()
+        .into_linear();
     [
-        color.r * map.factor[0],
-        color.g * map.factor[1],
-        color.b * map.factor[2],
+        color.red * map.factor[0],
+        color.green * map.factor[1],
+        color.blue * map.factor[2],
     ]
 }
 

@@ -12,13 +12,9 @@ use voxcore::{
 };
 
 /// The color a body with no sampled surface falls back to when `fill_color` is
-/// `None`: opaque white.
-const DEFAULT_FILL: TySrgbaU8 = TySrgbaU8 {
-    r: 255,
-    g: 255,
-    b: 255,
-    a: 255,
-};
+/// `None`: opaque white. Held as bytes since palette's `Srgba` has no const
+/// constructor; wrap it with `TySrgbaU8::from` at each use site.
+const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
 /// Voxelizes a [`Mesh`] into a [`VoxMain`] of one object placed by one root
 /// node. Errors when the mesh has no triangle geometry, the grid exceeds
@@ -230,7 +226,7 @@ fn fill_interior(
                 if grid.filled[cell] && grid.triangle[cell].is_none() {
                     let resolved = nearest[cell]
                         .and_then(|source| cell_materials[source])
-                        .unwrap_or_else(|| MeshMaterial::flat(DEFAULT_FILL));
+                        .unwrap_or_else(|| MeshMaterial::flat(TySrgbaU8::from(DEFAULT_FILL)));
                     cell_materials[cell] = Some(resolved);
                 }
             }
@@ -273,7 +269,7 @@ fn build_palette(
     // An all-empty grid still needs a non-empty palette so its pools and default
     // material are valid; give it a lone white material.
     if distinct.is_empty() {
-        distinct.push(MeshMaterial::flat(DEFAULT_FILL));
+        distinct.push(MeshMaterial::flat(TySrgbaU8::from(DEFAULT_FILL)));
     }
 
     // One deduplicated pool per property, plus each distinct material's
@@ -384,9 +380,9 @@ fn srgba_pool(
         .iter()
         .map(|material| {
             let color = get(material);
-            *lookup.entry(color.to_array()).or_insert_with(|| {
+            *lookup.entry(<[u8; 4]>::from(color)).or_insert_with(|| {
                 let index = U32Id::from_u32(values.len() as u32);
-                values.push(color.to_f64().to_array());
+                values.push(<[f64; 4]>::from(color.into_format::<f64, f64>()));
                 index
             })
         })
@@ -408,10 +404,10 @@ fn srgb_pool(
         .map(|material| {
             let color = get(material);
             *lookup
-                .entry([color.r, color.g, color.b])
+                .entry([color.red, color.green, color.blue])
                 .or_insert_with(|| {
                     let index = U32Id::from_u32(values.len() as u32);
-                    values.push(color.to_f64().to_srgb().to_array());
+                    values.push(<[f64; 3]>::from(color.into_format::<f64, f64>().color));
                     index
                 })
         })
@@ -464,10 +460,10 @@ type MaterialKey = ([u8; 4], u64, u64, [u8; 3], u64, u64, u64, u64);
 fn material_key(material: &MeshMaterial) -> MaterialKey {
     let emissive = material.emissive_factor;
     (
-        material.base_color.to_array(),
+        <[u8; 4]>::from(material.base_color),
         material.metallic.to_bits(),
         material.roughness.to_bits(),
-        [emissive.r, emissive.g, emissive.b],
+        [emissive.red, emissive.green, emissive.blue],
         material.emissive_strength.to_bits(),
         material.occlusion.to_bits(),
         material.ior.to_bits(),
@@ -543,7 +539,7 @@ fn for_each_neighbor(cell: usize, nx: usize, ny: usize, nz: usize, mut visit: im
 fn fill_srgba(fill_color: Option<[u8; 4]>) -> TySrgbaU8 {
     match fill_color {
         Some([r, g, b, a]) => TySrgbaU8::new(r, g, b, a),
-        None => DEFAULT_FILL,
+        None => TySrgbaU8::from(DEFAULT_FILL),
     }
 }
 

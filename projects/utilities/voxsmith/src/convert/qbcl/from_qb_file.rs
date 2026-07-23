@@ -179,7 +179,7 @@ fn translation(position: [i32; 3]) -> TyTransformF64 {
 
 /// The float sRGB components in `[0, 1]` of an `[r, g, b]` byte color.
 fn color_floats(color: [u8; 3]) -> [f64; 3] {
-    TySrgbU8::from_array(color).to_f64().to_array()
+    TySrgbU8::from(color).into_format::<f64>().into()
 }
 
 #[cfg(test)]

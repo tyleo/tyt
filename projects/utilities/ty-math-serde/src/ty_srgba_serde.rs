@@ -13,10 +13,10 @@ pub struct TySrgbaSerde {
 impl From<TySrgba> for TySrgbaSerde {
     fn from(c: TySrgba) -> Self {
         Self {
-            r: c.r,
-            g: c.g,
-            b: c.b,
-            a: c.a,
+            r: c.red,
+            g: c.green,
+            b: c.blue,
+            a: c.alpha,
         }
     }
 }

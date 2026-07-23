@@ -301,7 +301,7 @@ fn translation(position: [i32; 3]) -> TyTransformF64 {
 
 /// The float sRGB components in `[0, 1]` of an `[r, g, b]` byte color.
 fn color_floats(color: [u8; 3]) -> [f64; 3] {
-    TySrgbU8::from_array(color).to_f64().to_array()
+    TySrgbU8::from(color).into_format::<f64>().into()
 }
 
 #[cfg(test)]
@@ -313,7 +313,7 @@ mod tests {
         QbclNodeBody, QbclThumbnail, QbclVoxel,
     };
     use std::collections::BTreeSet;
-    use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyHexColor, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
         VoxPalette, VoxValue, VoxValuePool,
@@ -397,9 +397,9 @@ mod tests {
     fn srgb(hex: &str) -> [f64; 3] {
         TySrgbaU8::from_hex(hex)
             .expect("a valid hex color")
-            .to_f64()
-            .to_srgb()
-            .to_array()
+            .into_format::<f64, f64>()
+            .color
+            .into()
     }
 
     /// A state carrying no format ext, built straight from voxcore: a red-green

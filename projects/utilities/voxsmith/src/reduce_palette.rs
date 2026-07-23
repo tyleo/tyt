@@ -1,10 +1,12 @@
-use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, Result};
+use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, Result, pool_color};
 use branded_id::U32Id;
 use std::{cmp::Ordering, collections::HashMap, mem};
-use ty_math::{TyLinSrgbaF64, TySrgbaF64, TySrgbaU8, TyVector3F64, TyVector3U32};
+use ty_math::{
+    FromColor, TyCielabColorF64, TyColorToVector3, TyLinSrgbaF64, TyOklabColorF64, TySrgbaU8,
+    TyVector3F64, TyVector3U32,
+};
 use voxcore::{
     BVoxArrayProperty, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, VoxMain, VoxObject,
-    VoxValuePool,
 };
 
 /// Reduces `palette` in `state` to at most `max_materials` materials, then,
@@ -159,9 +161,8 @@ struct Point {
 }
 
 /// The sRGB bytes of a material's `baseColorFactor`, or `None` if the value is
-/// absent or its bound pool is not a color kind. Mirrors the atlas bake's color
-/// decode: an sRGB pool's components map straight to bytes, a linear pool's
-/// re-encode to sRGB.
+/// absent or its bound pool is not a color kind. Resolves the bound pool value
+/// and decodes it with [`pool_color`].
 fn material_color(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
@@ -169,26 +170,8 @@ fn material_color(
     array_property: U32Id<BVoxArrayProperty>,
 ) -> Option<[u8; 4]> {
     let (pool, value_id) = state.material_value(palette, material, array_property)?;
-    let value_id = value_id.to_usize_id();
 
-    match pool {
-        VoxValuePool::Srgb { values } => values
-            .get(value_id)
-            .map(|&[r, g, b]| TySrgbaF64::new(r, g, b, 1.0).to_u8().to_array()),
-        VoxValuePool::Srgba { values } => values
-            .get(value_id)
-            .map(|&[r, g, b, a]| TySrgbaF64::new(r, g, b, a).to_u8().to_array()),
-        VoxValuePool::LinearRgb { values } => values.get(value_id).map(|&[r, g, b]| {
-            TyLinSrgbaF64::new(r, g, b, 1.0)
-                .to_srgba()
-                .to_u8()
-                .to_array()
-        }),
-        VoxValuePool::LinearRgba { values } => values
-            .get(value_id)
-            .map(|&[r, g, b, a]| TyLinSrgbaF64::new(r, g, b, a).to_srgba().to_u8().to_array()),
-        _ => None,
-    }
+    pool_color(pool, value_id)
 }
 
 /// How many live voxels sample each material of `palette`, across every object
@@ -541,12 +524,18 @@ fn nearest_centroid(coords: TyVector3F64, centroids: &[TyVector3F64]) -> usize {
 /// An sRGB byte color as a point in `space`; alpha is dropped. `srgb` uses the
 /// stored sRGB bytes; `oklab` and `lab` decode to linear light first.
 fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
-    let color = TySrgbaU8::from_array(rgba);
+    let srgb = TySrgbaU8::from(rgba).into_format::<f64, f64>();
 
     match space {
-        ColorSpace::Srgb => color.to_f64().to_srgb().to_vector3(),
-        ColorSpace::Oklab => color.to_f64().to_lin_srgba().to_oklab().to_vector3(),
-        ColorSpace::Lab => color.to_f64().to_lin_srgba().to_cielab().to_vector3(),
+        ColorSpace::Srgb => srgb.color.to_vector3(),
+        ColorSpace::Oklab => {
+            let linear: TyLinSrgbaF64 = srgb.into_linear();
+            TyOklabColorF64::from_color(linear).to_vector3()
+        }
+        ColorSpace::Lab => {
+            let linear: TyLinSrgbaF64 = srgb.into_linear();
+            TyCielabColorF64::from_color(linear).to_vector3()
+        }
     }
 }
 

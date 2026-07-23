@@ -413,22 +413,23 @@ fn color_bytes(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> [u8; 4] {
     match pool {
         VoxValuePool::Srgb { values } => {
             let [r, g, b] = values[index];
-            TySrgbaF64::new(r, g, b, 1.0).to_u8().to_array()
+            <[u8; 4]>::from(TySrgbaF64::new(r, g, b, 1.0).into_format::<u8, u8>())
         }
         VoxValuePool::Srgba { values } => {
             let [r, g, b, a] = values[index];
-            TySrgbaF64::new(r, g, b, a).to_u8().to_array()
+            <[u8; 4]>::from(TySrgbaF64::new(r, g, b, a).into_format::<u8, u8>())
         }
         VoxValuePool::LinearRgb { values } => {
             let [r, g, b] = values[index];
-            TyLinSrgbaF64::new(r, g, b, 1.0)
-                .to_srgba()
-                .to_u8()
-                .to_array()
+            <[u8; 4]>::from(
+                TySrgbaF64::from_linear(TyLinSrgbaF64::new(r, g, b, 1.0)).into_format::<u8, u8>(),
+            )
         }
         VoxValuePool::LinearRgba { values } => {
             let [r, g, b, a] = values[index];
-            TyLinSrgbaF64::new(r, g, b, a).to_srgba().to_u8().to_array()
+            <[u8; 4]>::from(
+                TySrgbaF64::from_linear(TyLinSrgbaF64::new(r, g, b, a)).into_format::<u8, u8>(),
+            )
         }
         // classify() routes only color kinds here.
         _ => [0, 0, 0, 0],

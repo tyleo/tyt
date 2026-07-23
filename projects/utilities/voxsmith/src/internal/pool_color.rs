@@ -10,21 +10,22 @@ pub fn pool_color(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> Option
     let value_id = value_id.to_usize_id();
 
     match pool {
-        VoxValuePool::Srgb { values } => values
-            .get(value_id)
-            .map(|&[r, g, b]| TySrgbaF64::new(r, g, b, 1.0).to_u8().to_array()),
-        VoxValuePool::Srgba { values } => values
-            .get(value_id)
-            .map(|&[r, g, b, a]| TySrgbaF64::new(r, g, b, a).to_u8().to_array()),
-        VoxValuePool::LinearRgb { values } => values.get(value_id).map(|&[r, g, b]| {
-            TyLinSrgbaF64::new(r, g, b, 1.0)
-                .to_srgba()
-                .to_u8()
-                .to_array()
+        VoxValuePool::Srgb { values } => values.get(value_id).map(|&[r, g, b]| {
+            <[u8; 4]>::from(TySrgbaF64::new(r, g, b, 1.0).into_format::<u8, u8>())
         }),
-        VoxValuePool::LinearRgba { values } => values
-            .get(value_id)
-            .map(|&[r, g, b, a]| TyLinSrgbaF64::new(r, g, b, a).to_srgba().to_u8().to_array()),
+        VoxValuePool::Srgba { values } => values.get(value_id).map(|&[r, g, b, a]| {
+            <[u8; 4]>::from(TySrgbaF64::new(r, g, b, a).into_format::<u8, u8>())
+        }),
+        VoxValuePool::LinearRgb { values } => values.get(value_id).map(|&[r, g, b]| {
+            <[u8; 4]>::from(
+                TySrgbaF64::from_linear(TyLinSrgbaF64::new(r, g, b, 1.0)).into_format::<u8, u8>(),
+            )
+        }),
+        VoxValuePool::LinearRgba { values } => values.get(value_id).map(|&[r, g, b, a]| {
+            <[u8; 4]>::from(
+                TySrgbaF64::from_linear(TyLinSrgbaF64::new(r, g, b, a)).into_format::<u8, u8>(),
+            )
+        }),
         _ => None,
     }
 }

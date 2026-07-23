@@ -7,8 +7,8 @@ use crate::{
 use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use ty_math::{
-    TyBoundsF64, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32,
-    TyVector3U32,
+    TyBoundsF64, TyLinSrgbaF64, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64,
+    TyVector3I32, TyVector3U32,
 };
 use vmax::{
     VMaxBrush, VMaxBrushColor, VMaxBrushEntry, VMaxBrushState, VMaxCamera, VMaxContentsVmaxbFile,
@@ -741,10 +741,10 @@ fn derive_materials(
         let value_id = palette.value_id(material, color)?;
         let pool = array_property_pool(state, folded.palette, color)?;
         let [r, g, b, _] = pool_color(pool, value_id)?;
-        let linear = TySrgbaU8::from_array([r, g, b, 255])
-            .to_f64()
-            .to_lin_srgba();
-        Some(0.2126 * linear.r + 0.7152 * linear.g + 0.0722 * linear.b)
+        let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
+            .into_format::<f64, f64>()
+            .into_linear();
+        Some(0.2126 * linear.red + 0.7152 * linear.green + 0.0722 * linear.blue)
     };
 
     let mut signatures: Vec<Vec<U32Id<BVoxPoolValue>>> = Vec::new();
@@ -840,10 +840,10 @@ fn derived_material(
             .position(|(name, _)| name == EMISSIVE_FACTOR)?;
         let pool = array_property_pool(state, palette, properties[position].1)?;
         let [r, g, b, _] = pool_color(pool, signature[position])?;
-        let linear = TySrgbaU8::from_array([r, g, b, 255])
-            .to_f64()
-            .to_lin_srgba();
-        Some(0.2126 * linear.r + 0.7152 * linear.g + 0.0722 * linear.b)
+        let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
+            .into_format::<f64, f64>()
+            .into_linear();
+        Some(0.2126 * linear.red + 0.7152 * linear.green + 0.0722 * linear.blue)
     };
     let carries = |property: &str| -> bool {
         properties.iter().any(|(name, _)| name == property)

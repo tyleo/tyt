@@ -1,6 +1,6 @@
 use crate::{ColorFormat, voxj_value_from_vox_value};
 use std::fmt::Write;
-use ty_math::{TyFloatExt, TySrgbaF64};
+use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64};
 use voxcore::{VoxBound, VoxValuePool};
 use voxj::{VoxjBound, VoxjValuePool};
 
@@ -102,23 +102,21 @@ fn encode_hex<const N: usize>(components: &[f64; N]) -> String {
     hex
 }
 
-/// Decodes a three-component sRGB color to linear light through
-/// [`TySrgba::to_lin_srgba`](ty_math::TySrgba::to_lin_srgba). The alpha is a
+/// Decodes a three-component sRGB color to linear light. The alpha is a
 /// discarded placeholder, since the linear decode is shared with the 4-channel
 /// form.
 fn decode_rgb(components: &[f64; 3]) -> [f64; 3] {
     let [r, g, b] = *components;
-    let linear = TySrgbaF64::new(r, g, b, 0.0).to_lin_srgba();
-    [linear.r, linear.g, linear.b]
+    let linear: TyLinSrgbaF64 = TySrgbaF64::new(r, g, b, 0.0).into_linear();
+    [linear.red, linear.green, linear.blue]
 }
 
-/// Decodes an sRGBA color to linear light through
-/// [`TySrgba::to_lin_srgba`](ty_math::TySrgba::to_lin_srgba); alpha carries no
-/// gamma, so it passes through.
+/// Decodes an sRGBA color to linear light; alpha carries no gamma, so it passes
+/// through.
 fn decode_rgba(components: &[f64; 4]) -> [f64; 4] {
-    TySrgbaF64::from_array(*components)
-        .to_lin_srgba()
-        .to_array()
+    let linear: TyLinSrgbaF64 = TySrgbaF64::from(*components).into_linear();
+
+    linear.into()
 }
 
 #[cfg(test)]
@@ -211,7 +209,7 @@ mod tests {
     }
 
     /// The sRGB transfer inverse, kept in the test as an independent reference
-    /// for the production decode (`TySrgba::to_lin_srgba`).
+    /// for the production decode (`TySrgba::into_linear`).
     fn srgb_to_linear(component: f64) -> f64 {
         if component <= 0.040_45 {
             component / 12.92

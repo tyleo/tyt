@@ -12,22 +12,21 @@ impl TreeGridValue {
     /// functional text, with a color swatch quantizing each
     /// component to a byte.
     pub fn srgb<T: Copy + Display + TyFloatExt + Into<f64>>(color: TySrgb<T>) -> Self {
-        let [r, g, b] = color.to_array();
-        let bytes = TySrgb::new(r.into(), g.into(), b.into()).to_u8();
-        Self::new(format!("rgb({r}, {g}, {b})"))
-            .with_swatch(TreeGridSwatch::Color(bytes.to_array()))
+        let [r, g, b] = <[T; 3]>::from(color);
+        let bytes = TySrgb::<f64>::new(r.into(), g.into(), b.into()).into_format::<u8>();
+        Self::new(format!("rgb({r}, {g}, {b})")).with_swatch(TreeGridSwatch::Color(bytes.into()))
     }
 
     /// Creates a float-component sRGB color value with alpha:
     /// `rgba(r, g, b, a)` functional text, with a color swatch of the
     /// quantized rgb part.
     pub fn srgba<T: Copy + Display + TyFloatExt + Into<f64>>(color: TySrgba<T>) -> Self {
-        let [r, g, b, a] = color.to_array();
-        let bytes = TySrgba::new(r.into(), g.into(), b.into(), a.into())
-            .to_u8()
-            .to_srgb();
+        let [r, g, b, a] = <[T; 4]>::from(color);
+        let bytes = TySrgba::<f64>::new(r.into(), g.into(), b.into(), a.into())
+            .into_format::<u8, u8>()
+            .color;
         Self::new(format!("rgba({r}, {g}, {b}, {a})"))
-            .with_swatch(TreeGridSwatch::Color(bytes.to_array()))
+            .with_swatch(TreeGridSwatch::Color(bytes.into()))
     }
 
     /// Creates a float-component linear RGB color value:
@@ -35,12 +34,10 @@ impl TreeGridValue {
     /// transfer-encoding each component to sRGB and quantizing it to
     /// a byte; out-of-gamut components clamp in the quantize.
     pub fn lin_rgb<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgb<T>) -> Self {
-        let [r, g, b] = color.to_array();
-        let bytes = TyLinSrgb::new(r.into(), g.into(), b.into())
-            .to_srgb()
-            .to_u8();
-        Self::new(format!("lrgb({r}, {g}, {b})"))
-            .with_swatch(TreeGridSwatch::Color(bytes.to_array()))
+        let [r, g, b] = <[T; 3]>::from(color);
+        let linear = TyLinSrgb::<f64>::new(r.into(), g.into(), b.into());
+        let bytes = TySrgb::<f64>::from_linear(linear).into_format::<u8>();
+        Self::new(format!("lrgb({r}, {g}, {b})")).with_swatch(TreeGridSwatch::Color(bytes.into()))
     }
 
     /// Creates a float-component linear RGB color value with alpha:
@@ -48,13 +45,13 @@ impl TreeGridValue {
     /// the transfer-encoded, quantized rgb part; out-of-gamut
     /// components clamp in the quantize.
     pub fn lin_rgba<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgba<T>) -> Self {
-        let [r, g, b, a] = color.to_array();
-        let bytes = TyLinSrgba::new(r.into(), g.into(), b.into(), a.into())
-            .to_srgba()
-            .to_u8()
-            .to_srgb();
+        let [r, g, b, a] = <[T; 4]>::from(color);
+        let linear = TyLinSrgba::<f64>::new(r.into(), g.into(), b.into(), a.into());
+        let bytes = TySrgba::<f64>::from_linear(linear)
+            .into_format::<u8, u8>()
+            .color;
         Self::new(format!("lrgba({r}, {g}, {b}, {a})"))
-            .with_swatch(TreeGridSwatch::Color(bytes.to_array()))
+            .with_swatch(TreeGridSwatch::Color(bytes.into()))
     }
 }
 

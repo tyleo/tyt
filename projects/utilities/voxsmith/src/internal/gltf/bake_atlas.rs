@@ -1,6 +1,6 @@
 use crate::{
     BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, MaterialBake,
-    MaterialChannel, Result, UsedMaterials, default_scalar,
+    MaterialChannel, Result, UsedMaterials, default_scalar, pool_color,
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
@@ -142,38 +142,9 @@ fn color_bytes_or(
     value: Option<(&VoxValuePool, U32Id<BVoxPoolValue>)>,
     default: [u8; 4],
 ) -> [u8; 4] {
-    let Some((pool, value_id)) = value else {
-        return default;
-    };
-    let index = value_id.to_usize_id();
-
-    match pool {
-        VoxValuePool::Srgb { values } => values
-            .get(index)
-            .map(|&[r, g, b]| TySrgbaF64::new(r, g, b, 1.0).to_u8().to_array())
-            .unwrap_or(default),
-
-        VoxValuePool::Srgba { values } => values
-            .get(index)
-            .map(|&[r, g, b, a]| TySrgbaF64::new(r, g, b, a).to_u8().to_array())
-            .unwrap_or(default),
-
-        VoxValuePool::LinearRgb { values } => values
-            .get(index)
-            .map(|&[r, g, b]| {
-                TyLinSrgbaF64::new(r, g, b, 1.0)
-                    .to_srgba()
-                    .to_u8()
-                    .to_array()
-            })
-            .unwrap_or(default),
-
-        VoxValuePool::LinearRgba { values } => values
-            .get(index)
-            .map(|&[r, g, b, a]| TyLinSrgbaF64::new(r, g, b, a).to_srgba().to_u8().to_array())
-            .unwrap_or(default),
-        _ => default,
-    }
+    value
+        .and_then(|(pool, value_id)| pool_color(pool, value_id))
+        .unwrap_or(default)
 }
 
 /// One color component as a byte.
@@ -230,17 +201,20 @@ fn emissive_color_bytes(
         0.0
     };
 
-    let linear = TySrgbaU8::from_array(color).to_f64().to_lin_srgba();
+    let linear: TyLinSrgbaF64 = TySrgbaU8::from(color)
+        .into_format::<f64, f64>()
+        .into_linear();
 
-    TyLinSrgbaF64::new(
-        linear.r * fraction,
-        linear.g * fraction,
-        linear.b * fraction,
+    let scaled = TyLinSrgbaF64::new(
+        linear.red * fraction,
+        linear.green * fraction,
+        linear.blue * fraction,
         1.0,
-    )
-    .to_srgba()
-    .to_u8()
-    .to_array()
+    );
+
+    TySrgbaF64::from_linear(scaled)
+        .into_format::<u8, u8>()
+        .into()
 }
 
 /// The greatest `emissiveStrength` among the used materials.

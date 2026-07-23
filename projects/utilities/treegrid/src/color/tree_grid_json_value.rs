@@ -9,7 +9,7 @@ impl TreeGridJsonValue {
     pub fn srgb<T: Copy + Display + TyFloatExt + Into<f64>>(color: TySrgb<T>) -> Self {
         Self {
             value: TreeGridValue::srgb(color),
-            json: Some(components_json(color.to_array().map(Into::into))),
+            json: Some(components_json(<[T; 3]>::from(color).map(Into::into))),
         }
     }
 
@@ -18,7 +18,7 @@ impl TreeGridJsonValue {
     pub fn srgba<T: Copy + Display + TyFloatExt + Into<f64>>(color: TySrgba<T>) -> Self {
         Self {
             value: TreeGridValue::srgba(color),
-            json: Some(components_json(color.to_array().map(Into::into))),
+            json: Some(components_json(<[T; 4]>::from(color).map(Into::into))),
         }
     }
 
@@ -27,7 +27,7 @@ impl TreeGridJsonValue {
     pub fn lin_rgb<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgb<T>) -> Self {
         Self {
             value: TreeGridValue::lin_rgb(color),
-            json: Some(components_json(color.to_array().map(Into::into))),
+            json: Some(components_json(<[T; 3]>::from(color).map(Into::into))),
         }
     }
 
@@ -36,7 +36,7 @@ impl TreeGridJsonValue {
     pub fn lin_rgba<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgba<T>) -> Self {
         Self {
             value: TreeGridValue::lin_rgba(color),
-            json: Some(components_json(color.to_array().map(Into::into))),
+            json: Some(components_json(<[T; 4]>::from(color).map(Into::into))),
         }
     }
 }

@@ -104,7 +104,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     let color_pool = state.add_value_pool(VoxValuePool::Srgba {
         values: distinct_colors
             .iter()
-            .map(|&color| TySrgbaU8::from_array(color).to_f64().to_array())
+            .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
             .collect(),
     });
     palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), color_pool);
@@ -511,7 +511,9 @@ mod tests {
         MVoxShapeNode, MVoxTransformNode, MVoxUnknownChunk, MVoxVoxel,
     };
     use std::{array, collections::BTreeSet};
-    use ty_math::{TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{
+        TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
+    };
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
         VoxPalette, VoxValue, VoxValuePool,
@@ -525,8 +527,8 @@ mod tests {
     fn srgba(hex: &str) -> [f64; 4] {
         TySrgbaU8::from_hex(hex)
             .expect("a valid hex color")
-            .to_f64()
-            .to_array()
+            .into_format::<f64, f64>()
+            .into()
     }
 
     /// A file exercising every modeled chunk: two models, a custom palette, a

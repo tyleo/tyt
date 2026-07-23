@@ -1,12 +1,13 @@
 mod array_conversions;
-mod srgb_transfer;
 mod ty_bounds;
 mod ty_bounds_f32;
 mod ty_bounds_f64;
 mod ty_cielab_color;
 mod ty_cielab_color_f32;
 mod ty_cielab_color_f64;
+mod ty_color_to_vector3;
 mod ty_float_ext;
+mod ty_hex_color;
 mod ty_lin_srgb;
 mod ty_lin_srgb_f32;
 mod ty_lin_srgb_f64;
@@ -52,14 +53,15 @@ mod ty_vector4_f32;
 mod ty_vector4_f64;
 
 pub(crate) use array_conversions::*;
-pub(crate) use srgb_transfer::*;
 pub use ty_bounds::*;
 pub use ty_bounds_f32::*;
 pub use ty_bounds_f64::*;
 pub use ty_cielab_color::*;
 pub use ty_cielab_color_f32::*;
 pub use ty_cielab_color_f64::*;
+pub use ty_color_to_vector3::*;
 pub use ty_float_ext::*;
+pub use ty_hex_color::*;
 pub use ty_lin_srgb::*;
 pub use ty_lin_srgb_f32::*;
 pub use ty_lin_srgb_f64::*;
@@ -103,3 +105,7 @@ pub use ty_vector3_u32::*;
 pub use ty_vector4::*;
 pub use ty_vector4_f32::*;
 pub use ty_vector4_f64::*;
+
+// palette is an implementation detail of the color aliases; re-export the
+// conversion traits and the Lab white point so consumers never name `palette`.
+pub use palette::{FromColor, IntoColor, white_point::D65};

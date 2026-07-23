@@ -1,7 +1,12 @@
 [package]
 name = "ty-math"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Math types and utilities shared across all tyt crates."
+
+[dependencies]
+# Backs ty-math's color aliases. Slim on purpose: no `serializing` (keeps the
+# hand-rolled serde DTO and its r/g/b/a wire), no `named`/`random`.
+palette = { version = "0.7", default-features = false, features = ["std"] }

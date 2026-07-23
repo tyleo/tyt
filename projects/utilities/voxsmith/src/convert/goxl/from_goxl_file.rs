@@ -83,7 +83,7 @@ fn build_palette(
     let pool = state.add_value_pool(VoxValuePool::Srgba {
         values: order
             .iter()
-            .map(|&color| TySrgbaU8::from_array(color).to_f64().to_array())
+            .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
             .collect(),
     });
 
@@ -278,7 +278,9 @@ mod tests {
         GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
     };
     use std::collections::BTreeSet;
-    use ty_math::{TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
+    use ty_math::{
+        TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
+    };
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
         VoxPalette, VoxValue, VoxValuePool,
@@ -288,8 +290,8 @@ mod tests {
     fn srgba(hex: &str) -> [f64; 4] {
         TySrgbaU8::from_hex(hex)
             .expect("a valid hex color")
-            .to_f64()
-            .to_array()
+            .into_format::<f64, f64>()
+            .into()
     }
 
     /// A `4 x 4` matrix with distinct float cells, for transform and box
