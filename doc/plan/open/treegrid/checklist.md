@@ -224,7 +224,7 @@ items off as they land.
 Owner condition on the series-first tables call (2026-07-12): this phase
 is in scope, not optional. The plan does not close without it.
 
-- [ ] **S15. Record-shaped tables and the last adopters.** Add
+- [x] **S15. Record-shaped tables and the last adopters.** Add
       `Records` to `TreeGridTableShape`: rows are one branch's
       children, columns the union of relative flattened descendant
       paths plus the row's own value; settle column naming,

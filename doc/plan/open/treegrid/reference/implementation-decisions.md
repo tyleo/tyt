@@ -1167,3 +1167,30 @@ bespoke report object to the envelope array.
 The info reference's layout item was amended. The remaining S15
 chunk is the `validate` adoption, which settles whether its
 list-shaped report joins the crate or only drops `to_json_string`.
+
+## S15 chunk 5: `validate` JSON adopts the envelope, completing S15 (2026-07-23)
+
+The settlement of the question chunk 4 left open: the JSON layouts
+render a `TreeGrid` envelope, and the markdown report stays bespoke.
+The bulleted per-check list is neither a table nor hierarchical data
+(nested failure messages under a pass / fail list with a computed
+summary line), no treegrid layout fits it, and the plan's adoption
+table assigns only validate's JSON to the crate; a `checks` records
+table was considered and dropped, since long failure messages read
+as list items, not cells. `to_json_string` is deleted with its last
+consumer, which closes the S15 retirement list and the step.
+
+- **The envelope tree is `name` and `valid` roots, then `checks`.**
+  Root-level scalars keep the payload's key order without inventing
+  a grouping root (info's `document` groups four document
+  properties; a file name and a verdict share no such noun). Each
+  check child bears its result as a string value (`passed` /
+  `failed` / `unverifiable`), and a failed check's messages ride a
+  `failures` child, one value per message.
+- The commit message calls out the payload switch from the bespoke
+  `{name, valid, checks: [{name, status, failures?}]}` object to the
+  envelope array; exit-code behavior and the markdown report are
+  unchanged.
+
+The validate reference's layout item was amended and S15 is checked
+off; phase 6 continues at S16, the layout-name consistency pass.

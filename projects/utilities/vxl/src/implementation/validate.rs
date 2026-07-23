@@ -1,9 +1,11 @@
 use crate::{ReportLayout, Result, implementation};
-use serde_json::{Map, Value, json};
 use std::{
     fs,
     io::{Error as IOError, ErrorKind},
     path::Path,
+};
+use treegrid::{
+    TreeGrid, TreeGridJsonValue, TreeGridJsonValueCells, TreeGridLabel, TreeGridRenderJson,
 };
 use voxj_codec::{VoxjCheck, VoxjCheckStatus, check_voxj_file, from_voxj_or_voxjz_file_bytes};
 
@@ -14,7 +16,7 @@ use voxj_codec::{VoxjCheck, VoxjCheckStatus, check_voxj_file, from_voxj_or_voxjz
 pub fn validate(input: &Path, layout: ReportLayout) -> Result<()> {
     let file = from_voxj_or_voxjz_file_bytes(&fs::read(input)?)?;
     let checks = check_voxj_file(&file);
-    let output = render(&checks, &file_name(input), layout)?;
+    let output = render(&checks, &file_name(input), layout);
     implementation::write_stdout(output.as_bytes())?;
 
     let failed = failed_count(&checks);
@@ -40,11 +42,11 @@ fn file_name(input: &Path) -> String {
 }
 
 /// Renders the report in `layout`, the testable core of [`validate`].
-fn render(checks: &[VoxjCheck], name: &str, layout: ReportLayout) -> Result<String> {
+fn render(checks: &[VoxjCheck], name: &str, layout: ReportLayout) -> String {
     match layout {
-        ReportLayout::Markdown => Ok(render_markdown(checks, name)),
-        ReportLayout::PrettyJson => render_json(checks, name, true),
-        ReportLayout::CompactJson => render_json(checks, name, false),
+        ReportLayout::Markdown => render_markdown(checks, name),
+        ReportLayout::PrettyJson => build_json_grid(checks, name).render_json_pretty(),
+        ReportLayout::CompactJson => build_json_grid(checks, name).render_json_compact(),
     }
 }
 
@@ -77,36 +79,37 @@ fn render_markdown(checks: &[VoxjCheck], name: &str) -> String {
     output
 }
 
-/// The report as one JSON object: the document `name`, whether it is `valid`
-/// (no check failed), and one entry per check with its `status` and, when
-/// failed, its `failures`. Keys keep insertion order.
-fn render_json(checks: &[VoxjCheck], name: &str, pretty: bool) -> Result<String> {
-    let entries: Vec<Value> = checks
-        .iter()
-        .map(|check| {
-            let mut entry = Map::new();
-            entry.insert("name".to_owned(), json!(check.name));
-            match &check.status {
-                VoxjCheckStatus::Passed => {
-                    entry.insert("status".to_owned(), json!("passed"));
-                }
-                VoxjCheckStatus::Unverifiable => {
-                    entry.insert("status".to_owned(), json!("unverifiable"));
-                }
-                VoxjCheckStatus::Failed(messages) => {
-                    entry.insert("status".to_owned(), json!("failed"));
-                    entry.insert("failures".to_owned(), json!(messages));
+/// The report tree the JSON layouts render as the shared envelope: `name`
+/// and `valid` roots, then a `checks` root with one child per check bearing
+/// its status as a string value, a failed check's messages under a
+/// `failures` child.
+fn build_json_grid(checks: &[VoxjCheck], name: &str) -> TreeGrid<TreeGridJsonValueCells> {
+    let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
+    let name_root = grid.add_root(TreeGridLabel::bare("name"));
+    grid.push_value(name_root, TreeGridJsonValue::new(name));
+    let valid = grid.add_root(TreeGridLabel::bare("valid"));
+    grid.push_value(valid, TreeGridJsonValue::bool(failed_count(checks) == 0));
+
+    let root = grid.add_root(TreeGridLabel::bare("checks"));
+    for check in checks {
+        let node = grid.add_child(root, TreeGridLabel::bare(check.name));
+        match &check.status {
+            VoxjCheckStatus::Passed => {
+                grid.push_value(node, TreeGridJsonValue::new("passed"));
+            }
+            VoxjCheckStatus::Unverifiable => {
+                grid.push_value(node, TreeGridJsonValue::new("unverifiable"));
+            }
+            VoxjCheckStatus::Failed(messages) => {
+                grid.push_value(node, TreeGridJsonValue::new("failed"));
+                let failures = grid.add_child(node, TreeGridLabel::bare("failures"));
+                for message in messages {
+                    grid.push_value(failures, TreeGridJsonValue::new(message.clone()));
                 }
             }
-            Value::Object(entry)
-        })
-        .collect();
-
-    let mut document = Map::new();
-    document.insert("name".to_owned(), json!(name));
-    document.insert("valid".to_owned(), json!(failed_count(checks) == 0));
-    document.insert("checks".to_owned(), Value::Array(entries));
-    implementation::to_json_string(&Value::Object(document), pretty)
+        }
+    }
+    grid
 }
 
 /// How many checks failed.
@@ -150,7 +153,7 @@ mod tests {
 
     #[test]
     fn markdown_lists_each_check_and_a_failure_summary() {
-        let output = render(&checks(), "model.voxj", ReportLayout::Markdown).unwrap();
+        let output = render(&checks(), "model.voxj", ReportLayout::Markdown);
         assert_eq!(
             output,
             "# model.voxj\n\n\
@@ -174,28 +177,31 @@ mod tests {
                 status: VoxjCheckStatus::Unverifiable,
             },
         ];
-        let output = render(&checks, "ok.voxj", ReportLayout::Markdown).unwrap();
+        let output = render(&checks, "ok.voxj", ReportLayout::Markdown);
         assert!(output.ends_with("\nAll checks passed.\n"));
     }
 
     #[test]
     fn compact_json_reports_validity_and_each_status() {
-        let output = render(&checks(), "model.voxj", ReportLayout::CompactJson).unwrap();
+        let output = render(&checks(), "model.voxj", ReportLayout::CompactJson);
         assert_eq!(
             output,
-            "{\"name\":\"model.voxj\",\"valid\":false,\"checks\":[\
-             {\"name\":\"version\",\"status\":\"passed\"},\
-             {\"name\":\"indices\",\"status\":\"failed\",\"failures\":\
-             [\"object 0 references palette 5, but the document has 1 palettes\"]},\
-             {\"name\":\"sample-order\",\"status\":\"unverifiable\"}]}\n"
+            "[{\"label\":\"name\",\"values\":[\"model.voxj\"]},\
+             {\"label\":\"valid\",\"values\":[false]},\
+             {\"label\":\"checks\",\"children\":[\
+             {\"label\":\"version\",\"values\":[\"passed\"]},\
+             {\"label\":\"indices\",\"values\":[\"failed\"],\"children\":[\
+             {\"label\":\"failures\",\"values\":\
+             [\"object 0 references palette 5, but the document has 1 palettes\"]}]},\
+             {\"label\":\"sample-order\",\"values\":[\"unverifiable\"]}]}]\n"
         );
     }
 
     #[test]
     fn pretty_json_is_multiline_and_matches_compact() {
-        let pretty = render(&checks(), "model.voxj", ReportLayout::PrettyJson).unwrap();
-        let compact = render(&checks(), "model.voxj", ReportLayout::CompactJson).unwrap();
-        assert!(pretty.starts_with("{\n"));
+        let pretty = render(&checks(), "model.voxj", ReportLayout::PrettyJson);
+        let compact = render(&checks(), "model.voxj", ReportLayout::CompactJson);
+        assert!(pretty.starts_with("[\n"));
         let pretty_value: Value = serde_json::from_str(&pretty).unwrap();
         let compact_value: Value = serde_json::from_str(&compact).unwrap();
         assert_eq!(pretty_value, compact_value);

@@ -22,4 +22,8 @@ order, is reported as unverifiable.
 
 1. `--layout` `markdown` | `pretty-json` | `compact-json` (default `markdown`):
    how to render the report. `markdown` is a human-readable per-check list; the
-   JSON forms emit a structured report of every check and its result.
+   JSON forms emit the report in the shared read-command envelope, one
+   `{"label", "annotation"?, "values"?, "children"?}` record per node: `name`
+   and `valid` roots, then a `checks` root with one child per check bearing
+   its result (`passed`, `failed`, `unverifiable`) as a string value, a
+   failed check's messages under a `failures` child.
