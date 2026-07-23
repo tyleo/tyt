@@ -96,7 +96,12 @@ fn build_grid(
             );
         }
         if fields.properties {
-            add_names_subtree(&mut grid, branch, "properties", property_entries(palette));
+            add_names_subtree(
+                &mut grid,
+                branch,
+                "properties",
+                implementation::property_entries(palette),
+            );
         }
         if fields.objects {
             let names = referencing_names(state, *id)
@@ -111,8 +116,8 @@ fn build_grid(
 
 /// The flat forest the markdown table renders: the `palettes` root over one
 /// row per palette, each enabled field one data child whose comma-joined cell
-/// text is baked as a single value, so the record columns keep the old table's
-/// vocabulary and stay present even when every cell is empty.
+/// text is baked as a single value, pushed even when empty so every enabled
+/// column appears in every row.
 fn build_records_grid(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> TreeGrid {
     let mut grid = TreeGrid::new();
     let root = grid.add_root(TreeGridLabel::bare("palettes"));
@@ -139,21 +144,6 @@ fn build_records_grid(state: &VoxMain, palettes: &[Entry], fields: PaletteListFi
         }
     }
     grid
-}
-
-/// A palette's property keys as hierarchy entries, array then scalar in id
-/// order, a scalar key carrying the `(scalar)` annotation.
-fn property_entries(palette: &VoxPalette) -> Vec<(TreeGridLabel, Option<String>)> {
-    palette
-        .iter_array_properties()
-        .map(|(_, property)| (TreeGridLabel::quoted(property.name.clone()), None))
-        .chain(palette.iter_scalar_properties().map(|(_, property)| {
-            (
-                TreeGridLabel::quoted(property.name.clone()),
-                Some("(scalar)".to_owned()),
-            )
-        }))
-        .collect()
 }
 
 /// Adds a `header` subtree under `parent` with one optionally annotated child

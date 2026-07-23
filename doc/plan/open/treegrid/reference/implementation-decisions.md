@@ -1126,3 +1126,44 @@ records to the shared envelope.
 The palette list reference's markdown and JSON layout items were
 amended. The remaining S15 chunks are the `info` and `validate`
 adoptions.
+
+## S15 chunk 4: `info` markdown and JSON adopt the crate (2026-07-23)
+
+The checklist's committed shape: the `##`-sectioned markdown becomes
+records tables at `header_level` 2 beneath the command-printed
+`# {input}` title, and the JSON becomes the shared envelope. The two
+deliberate output changes ride the commit message: each table's
+entity column (`Property`, `Id`) becomes the records shape's fixed
+`label` / `value` headers, and the JSON payload switches from the one
+bespoke report object to the envelope array.
+
+- **Two forests, the palette list split.** The markdown forest bakes
+  every cell as pre-formatted text under the old column vocabulary
+  (`Document` rows bear their own values, so that table renders
+  `label` / `value`; `Palettes` and `Objects` rows carry one data
+  child per column). The JSON forest keeps the old payload's
+  snake_case keys as labels with native values (`has_ext` a bool,
+  counts integers), the top-level scalars grouped under a `document`
+  root mirroring the markdown sections, `properties` as annotated
+  name children (the palette list shape, killing the
+  `scalar_properties` duplicate key), and a bounds / origin triple
+  as a three-integer series rather than one array value. Absent
+  fields stay omitted nodes.
+- **`property_entries` hoisted to `implementation/`.** The info JSON
+  forest needs the same annotated property iteration `palette list`
+  built at S11, so the private helper moved up rather than
+  duplicating; `palette list` now imports it.
+- **Three helpers retire.** `info` was the last consumer of
+  `markdown_table` (with `row` / `md_cell`), `text_width`, and
+  `scalar_property_names`; all three files are deleted.
+  `to_json_string` survives with `validate`, its last consumer, and
+  `property_labels` / `property_names` keep their other adopters.
+- **Empty sections vanish rather than render header-only tables**: a
+  document with no palettes skips `## Palettes` entirely, where the
+  old renderer emitted a headed table of zero rows. The records walk
+  skips a root with no data beneath it, and a section of nothing
+  reads better absent; the tested states all have content.
+
+The info reference's layout item was amended. The remaining S15
+chunk is the `validate` adoption, which settles whether its
+list-shaped report joins the crate or only drops `to_json_string`.
