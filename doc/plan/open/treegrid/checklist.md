@@ -284,8 +284,10 @@ first.
 
 ## Deferred
 
-- [ ] Publish `treegrid` and `treeselect` 0.1.0 to crates.io before
+- [x] Publish `treegrid` and `treeselect` 0.1.0 to crates.io before
       any dependent crate cuts a release (local builds ride
-      `[patch.crates-io]` meanwhile).
+      `[patch.crates-io]` meanwhile). Both published 2026-07-24;
+      `[patch.crates-io]` kept so local builds stay on the workspace
+      sources.
 - [ ] Decide whether `hierarchy show` / vmax / fbx expose `rows` /
       `columns` / `tables`, once someone wants them.
