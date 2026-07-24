@@ -1221,3 +1221,30 @@ unchanged.
 - Conventions item 5 drops its later-consistency-pass caveat and now
   states the shared vocabulary once; the info, validate, and palette
   list references carry the new names.
+
+## S17: the linear-color notation flip (2026-07-24)
+
+`palette show`'s whole linear colors now build with
+`TreeGridJsonValue::lin_rgb` / `lin_rgba`, so their text renders the
+functional notation the color feature defined at S2: the escape-hatch
+arm from S7 is deleted, `2 1 0.5 1` becomes `lrgba(2, 1, 0.5, 1)`,
+and vxl's treegrid dependency gains the `ty-math` feature, the
+no-cost enable the plan README anticipated since vxl already depends
+on ty-math directly.
+
+- **Text is the whole change.** The constructors pair the same
+  per-component `number_json` array the deleted arm built and the
+  same transfer-encoded quantized swatch bytes `color_bytes`
+  produced (both crates route the transfer through ty-math's shared
+  definition), so the JSON layouts and swatch output are untouched.
+  `format_number` is deleted with its last consumer; `number_json`
+  stays for `vox_value_to_json`, and `color_bytes` still serves the
+  sRGB arms.
+- **The linear end-to-end test renames with its behavior**,
+  `a_linear_color_renders_float_components` becoming
+  `a_linear_color_renders_functional_notation`, and the palette show
+  reference's Formats section now states the sRGB-hex versus
+  linear-functional split.
+- **`rgb(...)` / `rgba(...)` remain unadopted**, as the checklist
+  scoped: no float-form sRGB rendering exists in the command, and
+  8-bit sRGB keeps its hex.

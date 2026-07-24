@@ -91,6 +91,10 @@ The third selector field renders each value:
 4. `swatch-value`: each swatch followed by its value text, the colored swatch
    with its hex and the grayscale swatch with its number.
 
+Wherever a format shows a color's text, an sRGB pool renders `#RRGGBBAA` hex
+(`#RRGGBB` without alpha) and a linear pool renders `lrgb(...)` / `lrgba(...)`
+functional notation, whose float components carry HDR values no hex can hold.
+
 ## Layouts
 
 `--layout` arranges the collections and chooses the serialization. It defaults to

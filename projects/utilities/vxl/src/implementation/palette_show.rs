@@ -18,9 +18,9 @@ use treegrid::{
     BTreeGridNode, TreeGrid, TreeGridCellFormat, TreeGridError, TreeGridJsonValue,
     TreeGridJsonValueCells, TreeGridLabel, TreeGridLabelKind, TreeGridOptions,
     TreeGridRenderColumns, TreeGridRenderHierarchy, TreeGridRenderJson, TreeGridRenderRows,
-    TreeGridRenderTables, TreeGridSwatch, TreeGridTableShapeKind,
+    TreeGridRenderTables, TreeGridTableShapeKind,
 };
-use ty_math::{TyLinSrgbaF64, TySrgbaF64};
+use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbaF64};
 use voxcore::{BVoxPoolValue, VoxMain, VoxPalette, VoxPropertyId, VoxValue, VoxValuePool};
 
 /// Loads the voxel file at `input` and prints the value collections named by
@@ -335,9 +335,13 @@ fn sample(
     }
 }
 
-/// The sample for a color value: a whole color as hex (sRGB) or space-joined
-/// float components (linear) with a color swatch, or, with a `component`, one
-/// channel as a byte (sRGB) or float (linear) with a grayscale swatch.
+/// The sample for a color value:
+///
+/// 1. A whole sRGB color: hex with a color swatch.
+/// 2. A whole linear color: `lrgb(...)` / `lrgba(...)` functional notation
+///    with a color swatch.
+/// 3. One `component` channel: a byte (sRGB) or float (linear) with a
+///    grayscale swatch.
 fn sample_color(
     pool: &VoxValuePool,
     value_id: U32Id<BVoxPoolValue>,
@@ -362,18 +366,14 @@ fn sample_color(
             }
         }
         None => {
-            // Linear colors keep their space-joined component text rather
-            // than the crate's functional notation.
             let floats = color_floats(pool, value_id);
-            let text = floats
-                .iter()
-                .map(|value| format_number(*value))
-                .collect::<Vec<_>>()
-                .join(" ");
-            let json = Value::Array(floats.iter().map(|value| number_json(*value)).collect());
-            TreeGridJsonValue::new(text)
-                .with_json(json)
-                .with_swatch(TreeGridSwatch::Color([bytes[0], bytes[1], bytes[2]]))
+            if alpha_component(pool) {
+                TreeGridJsonValue::lin_rgba(TyLinSrgbaF64::new(
+                    floats[0], floats[1], floats[2], floats[3],
+                ))
+            } else {
+                TreeGridJsonValue::lin_rgb(TyLinSrgbF64::new(floats[0], floats[1], floats[2]))
+            }
         }
     }
 }
@@ -478,12 +478,6 @@ fn component_letter(component: ColorComponent) -> char {
         ColorComponent::B => 'b',
         ColorComponent::A => 'a',
     }
-}
-
-/// A number as text, an integral value with no fractional part, matching the
-/// number layouts.
-fn format_number(value: f64) -> String {
-    format!("{value}")
 }
 
 /// A number as JSON: an integer when it is integral and fits `i64`, else a
@@ -1247,7 +1241,7 @@ mod tests {
     }
 
     #[test]
-    fn a_linear_color_renders_float_components() {
+    fn a_linear_color_renders_functional_notation() {
         let mut state = VoxMain::default();
         // A linear pool carries HDR components above 1 that no hex can hold.
         let pool = state.add_value_pool(VoxValuePool::LinearRgba {
@@ -1263,7 +1257,7 @@ mod tests {
             &[("0", "emissiveFactor", "value")],
             PaletteShowLayout::Rows,
         );
-        assert_eq!(output, "0.\"emissiveFactor\" 2 1 0.5 1\n");
+        assert_eq!(output, "0.\"emissiveFactor\" lrgba(2, 1, 0.5, 1)\n");
     }
 
     #[test]

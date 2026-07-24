@@ -238,7 +238,7 @@ is in scope, not optional. The plan does not close without it.
       `pretty-json -> json-pretty`, `compact-json -> json-compact`
       across `list` / `info` / `validate`, one breaking commit, retiring
       vxl's `ReportLayout` clap enum; update conventions.md.
-- [ ] **S17. Linear-color notation flip.** Flip `vxl palette show`'s
+- [x] **S17. Linear-color notation flip.** Flip `vxl palette show`'s
       linear colors from space-joined text (today `2 1 0.5 1`,
       preserved through the escape hatch in S7) to the `lin_rgb` /
       `lin_rgba` constructors, adopting the `lrgb(...)` / `lrgba(...)`
