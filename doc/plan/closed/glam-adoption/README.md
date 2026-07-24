@@ -1,14 +1,22 @@
 # Back ty-math's math types with `glam`
 
-Status: **open, unimplemented.** A direct follow-up to the closed
-[palette-adoption plan](../../closed/palette-adoption/README.md), which replaced
-ty-math's hand-rolled color types with `type Ty... = palette::...` aliases and
-moved consumers onto palette's own methods. This plan does the same for the
-GEOMETRIC types: `TyVector2/3/4`, `TyQuaternion`, `TyMatrix4x4`, and the
-composites `TyPose`/`TyTransform`/`TyUniformTrs`/`TyBounds`, replacing hand-rolled
-vector/quaternion/matrix math with [`glam`](https://docs.rs/glam) (a maintained,
-SIMD-capable linear-algebra crate). ty-math keeps the `Ty...` names as the public
-vocabulary; `glam` stays an implementation detail confined to ty-math.
+Status: **closed.** Landed as one commit (`22650a6`, 2026-07-24), rebased on
+origin's latest. All nine steps (S1-S9) shipped: ty-math's math types are now
+concrete `glam` aliases (`TyVector2/3/4`, `TyQuaternion`, `TyMatrix4x4`, plus the
+F32/F64 and V3 I32/U32 families) with a small set of extension traits and four
+glam-backed composites (`TyBounds`/`TyTransform`/`TyUniformTrs`/`TyPose`); every
+consumer moved onto glam's own methods; the workspace is green (clippy clean, all
+tests passing) with no external wire moved and `glam` named only inside ty-math.
+The per-step keyboard record is in
+[reference/implementation-decisions.md](reference/implementation-decisions.md).
+A direct follow-up to the closed
+[palette-adoption plan](../palette-adoption/README.md), which replaced ty-math's
+hand-rolled color types with `type Ty... = palette::...` aliases and moved
+consumers onto palette's own methods. This plan does the same for the GEOMETRIC
+types, replacing hand-rolled vector/quaternion/matrix math with
+[`glam`](https://docs.rs/glam) (a maintained, SIMD-capable linear-algebra crate).
+ty-math keeps the `Ty...` names as the public vocabulary; `glam` stays an
+implementation detail confined to ty-math.
 
 ## Goal in one paragraph
 
