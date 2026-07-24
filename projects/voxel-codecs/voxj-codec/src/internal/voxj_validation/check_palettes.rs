@@ -36,7 +36,7 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
         }
 
         // Every palette is sampled, so it needs a material to sample (rule
-        // 10.6).
+        // 10.3).
         if palette.materials.is_empty() {
             failures.report(Check::Palettes, format!("palette {index} has no materials"));
             if !failures.go() {
