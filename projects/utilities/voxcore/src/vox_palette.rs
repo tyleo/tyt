@@ -133,8 +133,7 @@ impl VoxPalette {
         if !self.material_ids.is_retained(material) || !self.property_ids.is_retained(property) {
             return None;
         }
-        // Safety: a retained material has a value id for every array
-        // property.
+        // Safety: a retained material has a value id for every property.
         let row = unsafe { self.materials.get(material) };
         Some(*unsafe { row.get(property) })
     }

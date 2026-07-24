@@ -99,7 +99,7 @@ fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>
             &mut grid,
             row,
             "Properties",
-            implementation::property_labels(palette).join(", "),
+            implementation::property_names(palette).join(", "),
         );
         add_cell(
             &mut grid,
@@ -181,9 +181,8 @@ fn build_json_grid(
     for (id, palette) in state.iter_palettes() {
         let branch = grid.add_child(palettes, TreeGridLabel::bare(id.to_u32().to_string()));
         let properties = grid.add_child(branch, TreeGridLabel::bare("properties"));
-        for (label, annotation) in implementation::property_entries(palette) {
-            let node = grid.add_child(properties, label);
-            grid.node_mut(node).annotation = annotation;
+        for name in implementation::property_names(palette) {
+            grid.add_child(properties, TreeGridLabel::quoted(name.to_owned()));
         }
         add_field(
             &mut grid,

@@ -804,8 +804,8 @@ fn derive_materials(
     })
 }
 
-/// One derived Voxel Max material. A coefficient reads from its array
-/// property's pool at the signature's value id. Metalness and roughness map
+/// One derived Voxel Max material. A coefficient reads from its property's
+/// pool at the signature's value id. Metalness and roughness map
 /// from the 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient;
 /// see [`pbr_factor_to_vm_coefficient`].
 fn derived_material(

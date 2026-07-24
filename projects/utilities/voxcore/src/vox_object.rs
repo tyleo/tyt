@@ -45,7 +45,7 @@ pub struct VoxObject {
     layer_palettes: IdField<BVoxLayer, U32Id<BVoxPalette>>,
 
     /// Per layer, the material each voxel samples. Cells of non-live voxels
-    /// and of unsampled layers are ignored filler.
+    /// are ignored filler.
     samples: IdField<BVoxLayer, IdField<BVoxVoxel, U32Id<BVoxMaterial>>>,
 }
 
@@ -155,8 +155,7 @@ impl VoxObject {
     }
 
     /// Material the live voxel `id` samples in `layer`, or `None` if the voxel
-    /// is not live or `layer` is not one of this object's layers. For an
-    /// unsampled layer this reads an ignored filler cell.
+    /// is not live or `layer` is not one of this object's layers.
     pub fn voxel_material(
         &self,
         id: U32Id<BVoxVoxel>,
@@ -181,8 +180,7 @@ impl VoxObject {
     /// Live voxels' samples in `layer`, as `(voxel id, material)`, in ascending
     /// raster order, or `None` if `layer` is not one of this object's layers.
     /// Reads the layer's sample column once, so a full scan skips
-    /// [`voxel_material`](Self::voxel_material)'s per-call lookups. For an
-    /// unsampled layer this walks ignored filler cells.
+    /// [`voxel_material`](Self::voxel_material)'s per-call lookups.
     pub fn iter_live_samples(
         &self,
         layer: U32Id<BVoxLayer>,
@@ -249,9 +247,9 @@ impl VoxObject {
     /// its id, back-filling every voxel with `default_material`. Live voxels
     /// keep `default_material` until [`retain_voxel`](Self::retain_voxel)
     /// overwrites it, so widening the layer set never requires re-adding voxels.
-    /// The same palette may back several layers. If `palette` has no
-    /// materials the layer is unsampled and every cell is ignored filler, so
-    /// `default_material` may be any id.
+    /// The same palette may back several layers. `default_material` should be
+    /// one of `palette`'s materials, which
+    /// [`VoxMain::validate`](crate::VoxMain::validate) checks.
     pub fn add_layer(
         &mut self,
         palette: U32Id<BVoxPalette>,
@@ -271,8 +269,7 @@ impl VoxObject {
     }
 
     /// Makes the voxel at `id` live with one `samples` material per layer, in
-    /// [`add_layer`](Self::add_layer) order, unsampled layers included; their
-    /// entries are stored as ignored filler. `None`, changing nothing, if
+    /// [`iter_layers`](Self::iter_layers) order. `None`, changing nothing, if
     /// `id` is outside the grid or `samples` has the wrong length.
     pub fn retain_voxel(
         &mut self,
@@ -327,8 +324,9 @@ impl VoxObject {
     }
 
     /// Removes layer `id`, dropping its per-voxel sample column so every voxel
-    /// keeps one fewer sample. `None`, changing nothing, if `id` is not one of
-    /// this object's layers. Leaves a hole until
+    /// keeps one fewer sample. Removal may reorder the remaining layers: the
+    /// last layer moves into the removed slot. `None`, changing nothing, if
+    /// `id` is not one of this object's layers. Leaves a hole until
     /// [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
     pub fn remove_layer(&mut self, id: U32Id<BVoxLayer>) -> Option<()> {
         if !self.layer_ids.is_retained(id) {
@@ -393,10 +391,9 @@ impl VoxObject {
     /// Rewrites this object's cross-references to match pools a
     /// [`VoxMain`](crate::VoxMain) is compacting, then compacts its own layer
     /// pool. Each layer's palette is translated through `palette_remap`, and
-    /// each sampled layer's live-voxel sample materials through the
-    /// `material_remaps` entry for the referenced palette's pre-gc id; an
-    /// unsampled layer's cells are filler and left untouched. Requires a
-    /// referentially valid object, so every translation resolves.
+    /// each layer's live-voxel sample materials through the `material_remaps`
+    /// entry for the referenced palette's pre-gc id. Requires a referentially
+    /// valid object, so every translation resolves.
     pub(crate) fn gc(
         &mut self,
         palette_remap: &IdRemap<BVoxPalette, u32>,
@@ -415,13 +412,8 @@ impl VoxObject {
             *unsafe { self.layer_palettes.get_mut(layer_id) } = new_palette;
 
             // Translate each live voxel's sample material through that palette's
-            // relabeling. Filler cells are exempt: non-live voxels', and every
-            // cell of an unsampled layer, whose palette has no materials and so
-            // an empty relabeling.
+            // relabeling; non-live voxels' filler cells are exempt.
             let material_remap = &material_remaps[old_palette.to_usize_id()];
-            if material_remap.is_empty() {
-                continue;
-            }
             // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };
             for &voxel_id in &live {

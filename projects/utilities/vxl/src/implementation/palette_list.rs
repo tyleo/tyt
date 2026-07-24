@@ -96,17 +96,16 @@ fn build_grid(
             );
         }
         if fields.properties {
-            add_names_subtree(
-                &mut grid,
-                branch,
-                "properties",
-                implementation::property_entries(palette),
-            );
+            let names = implementation::property_names(palette)
+                .into_iter()
+                .map(|name| TreeGridLabel::quoted(name.to_owned()))
+                .collect();
+            add_names_subtree(&mut grid, branch, "properties", names);
         }
         if fields.objects {
             let names = referencing_names(state, *id)
                 .into_iter()
-                .map(|name| (TreeGridLabel::quoted(name), None))
+                .map(TreeGridLabel::quoted)
                 .collect();
             add_names_subtree(&mut grid, branch, "objects", names);
         }
@@ -124,7 +123,7 @@ fn build_records_grid(state: &VoxMain, palettes: &[Entry], fields: PaletteListFi
     for (id, palette) in palettes {
         let row = grid.add_child(root, TreeGridLabel::bare(id.to_u32().to_string()));
         if fields.properties {
-            let cell = implementation::property_labels(palette).join(", ");
+            let cell = implementation::property_names(palette).join(", ");
             let node = grid.add_child(row, TreeGridLabel::bare("properties"));
             grid.push_value(node, TreeGridValue::new(cell));
         }
@@ -146,22 +145,21 @@ fn build_records_grid(state: &VoxMain, palettes: &[Entry], fields: PaletteListFi
     grid
 }
 
-/// Adds a `header` subtree under `parent` with one optionally annotated child
-/// per entry, or a `header: []` leaf when `entries` is empty.
+/// Adds a `header` subtree under `parent` with one child per label, or a
+/// `header: []` leaf when `labels` is empty.
 fn add_names_subtree(
     grid: &mut TreeGrid<TreeGridJsonValueCells>,
     parent: U32Id<BTreeGridNode>,
     header: &str,
-    entries: Vec<(TreeGridLabel, Option<String>)>,
+    labels: Vec<TreeGridLabel>,
 ) {
     let subtree = grid.add_child(parent, TreeGridLabel::bare(header));
-    if entries.is_empty() {
+    if labels.is_empty() {
         grid.push_value(subtree, TreeGridJsonValue::new("[]"));
         return;
     }
-    for (label, annotation) in entries {
-        let node = grid.add_child(subtree, label);
-        grid.node_mut(node).annotation = annotation;
+    for label in labels {
+        grid.add_child(subtree, label);
     }
 }
 

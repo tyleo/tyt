@@ -53,10 +53,9 @@ voxels reports a zero-size box at its origin.
    (`max - min`).
 9. `--show-layers` (flag): append each object's referenced layers as a
    nested subtree, one child per layer in the object's `layers` order, back
-   to front, reading `<palette index>: {materials: <count>}`; a layer whose
-   palette has no materials appends `, sampled: false`, since it carries no
-   sample channel. Two layers may share a palette. An object that references
-   no layer prints an empty `layers: []` array.
+   to front, reading `<palette index>: {materials: <count>}`. Two layers may
+   share a palette. An object that references no layer prints an empty
+   `layers: []` array.
 10. `--collapse-ancestors` (flag): hide the ancestor chain above each match root
     and replace it with an `ancestors` marker, omitted when the match root is a
     top-level node. Requires a `pattern`.

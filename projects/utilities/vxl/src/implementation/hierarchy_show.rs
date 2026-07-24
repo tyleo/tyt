@@ -956,18 +956,10 @@ impl Walk<'_> {
             match self.scene.state.palette(palette_id) {
                 Some(palette) => {
                     let materials = palette.material_count();
-                    // Only the notable state is tagged, like `instance` and
-                    // `cycle`.
-                    let sampled = if materials == 0 {
-                        ", sampled: false"
-                    } else {
-                        ""
-                    };
-
                     self.add_value_leaf(
                         subtree,
                         palette_id.to_u32().to_string(),
-                        format!("{{materials: {materials}{sampled}}}"),
+                        format!("{{materials: {materials}}}"),
                     );
                 }
 
@@ -1917,47 +1909,6 @@ mod tests {
              \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 2}\n\
              \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 3}\n"
-        );
-    }
-
-    #[test]
-    fn an_unsampled_layer_is_marked_in_the_layers_subtree() {
-        // Palette 0 has no materials, so the layer referencing it is never
-        // sampled.
-        let mut state = VoxMain::default();
-        let pinned = add_palette_with_materials(&mut state, 0);
-        let sampled = add_palette_with_materials(&mut state, 2);
-        let material = state
-            .palette(sampled)
-            .unwrap()
-            .iter_materials()
-            .next()
-            .unwrap();
-
-        let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        // An unsampled layer's cells are ignored filler, so any id fills.
-        body.add_layer(pinned, U32Id::from_u32(0));
-        body.add_layer(sampled, material);
-        let body = state.add_object(body);
-
-        let root = state.add_hierarchy_node(node("root", vec![], vec![body]));
-        state.set_root_hierarchy_nodes(vec![root]);
-
-        let output = render_views(
-            &state,
-            HierarchyViews {
-                layers: true,
-                ..HierarchyViews::default()
-            },
-        );
-        assert_eq!(
-            output,
-            "root\n\
-             \u{2514} \"root\": {node: 0}\n\
-             \u{20}\u{20}\u{2514} \"body\": {object: 0}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{2514} layers\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{251C} 0: {materials: 0, sampled: false}\n\
-             \u{20}\u{20}\u{20}\u{20}\u{20}\u{20}\u{2514} 1: {materials: 2}\n"
         );
     }
 

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// A material palette: named properties bound to value pools, and the
 /// materials that index them.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(
     feature = "serde",

@@ -35,7 +35,7 @@ mod tests {
 
     /// A one-material palette whose `baseColorFactor` property draws
     /// from a fresh one-color pool.
-    fn array_palette(state: &mut VoxMain) -> U32Id<BVoxPalette> {
+    fn color_palette(state: &mut VoxMain) -> U32Id<BVoxPalette> {
         let pool = state.add_value_pool(VoxValuePool::Srgba {
             values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
         });
@@ -59,8 +59,8 @@ mod tests {
     #[test]
     fn the_last_supplying_layer_wins() {
         let mut state = VoxMain::default();
-        let first = array_palette(&mut state);
-        let second = array_palette(&mut state);
+        let first = color_palette(&mut state);
+        let second = color_palette(&mut state);
         let object = object_over(&[first, second]);
 
         let winner = resolve_object_property_ref(&state, &object, BASE_COLOR_FACTOR).unwrap();
@@ -82,7 +82,7 @@ mod tests {
     #[test]
     fn a_layer_without_the_property_is_passed_over() {
         let mut state = VoxMain::default();
-        let supplying = array_palette(&mut state);
+        let supplying = color_palette(&mut state);
 
         // The trailing palette does not carry the name, so the scan passes
         // its layer.
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn none_when_no_layer_supplies_the_name() {
         let mut state = VoxMain::default();
-        let palette = array_palette(&mut state);
+        let palette = color_palette(&mut state);
         let object = object_over(&[palette]);
 
         assert_eq!(
