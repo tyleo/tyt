@@ -1,6 +1,21 @@
 # treegrid: one hierarchical-data renderer for the read commands
 
-Status: **open.** Nothing has landed; this document is the design.
+Status: **closed.** Every step (S1 through S19) shipped across the
+seven phases. The `treegrid` crate renders every read command's
+hierarchical output, and `vxl palette show`, `vxl hierarchy show`,
+`vxl palette list`, `tyt vmax hierarchy`, `tyt fbx hierarchy`, and the
+`vxl info` / `validate` / `list` tables all adopted it; the
+`treeselect` `TreeSelection` closure landed and both call sites adopted
+it. `treegrid` 0.1.0 and `treeselect` 0.1.0 are published to crates.io
+(2026-07-24), with the workspace `[patch.crates-io]` entries kept so
+local builds stay on the in-tree sources. The workspace is green:
+`cargo check`, `cargo clippy --workspace --all-targets -- -D warnings`,
+and `cargo test --workspace` all pass. The per-step keyboard record is
+in
+[reference/implementation-decisions.md](reference/implementation-decisions.md).
+One future option stays deferred, not blocking: whether `hierarchy
+show` / vmax / fbx expose the `rows` / `columns` / `tables` layouts,
+once someone wants them.
 
 Four commands orbit the same idea -- a hierarchical collection whose nodes
 carry data, rendered as text -- and each one re-implements the rendering:
