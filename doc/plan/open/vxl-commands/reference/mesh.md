@@ -186,8 +186,8 @@ so `R=baseColorFactor.a` writes its straight alpha and
 `R=baseColorFactor.r,G=baseColorFactor.g,B=baseColorFactor.b,A=baseColorFactor.a`
 splits the color across four channels; a component reads a byte from the stored
 color. Naming a color with no component, as in `R=baseColorFactor`, is an error,
-and `--texture albedo` is the way to write the whole color. A scalar property
-names no component, so `metallicFactor.r` is an error, and a color with no alpha
+and `--texture albedo` is the way to write the whole color. A scalar names no
+component, so `metallicFactor.r` is an error, and a color with no alpha
 rejects `.a`: `emissiveFactor` is a three-component color, so `emissiveFactor.a`
 is an error.
 
@@ -212,8 +212,7 @@ key from the meshed layer's material. Its two tokens are:
    through such an alias.
 
 The property's type is not declared: it is read from the value pool the key
-binds in the meshed layer's palette when the document loads, whether the
-palette carries the key as an array property or a scalar pin. A color pool
+binds in the meshed layer's palette when the document loads. A color pool
 exposes the
 `r`, `g`, `b`, and (with alpha) `a` components a packing reads as `<property>.r`
 and so on; a `float`, `int`, or `bool` pool is a scalar, read whole. A property
@@ -280,10 +279,9 @@ seam.
    and the exact-value alternative to the palette atlas. The table is the distinct
    materials used, so it is per-mesh, not shared across meshes. Custom; not read
    by a generic viewer.
-6. `palette-layers`: one index per sampled layer per vertex, written
-   as scalars `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on, with each layer's
-   palette shipped verbatim as [palette data](#palette-data); an unsampled
-   layer has no per-voxel samples, so it ships no index. A custom shader
+6. `palette-layers`: one index per layer per vertex, written as scalars
+   `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on, with each layer's palette
+   shipped verbatim as [palette data](#palette-data). A custom shader
    combines the indexed materials, canonically by the format's layer-override
    order: the last layer supplying a property wins. Its data sums the layer sizes
    rather than multiplying them and depends only on the palette set, so it stays
@@ -361,10 +359,9 @@ material the mesh uses:
 ### `kind: "palette-layers"`
 
 `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on index `layers[0]`, `layers[1]`, and
-so on, one entry per sampled layer in the object's `layers` order. A custom
-shader combines the indexed materials, canonically by the format's
-layer-override order, each property taking its value from the last layer that
-supplies it:
+so on, one entry per layer in the object's `layers` order. A custom shader
+combines the indexed materials, canonically by the format's layer-override
+order, each property taking its value from the last layer that supplies it:
 
 ```jsonc
 {
@@ -407,7 +404,7 @@ interface PaletteLayersData {
   version: 1;
   kind: "palette-layers";
   // _PALETTEINDEX0, _PALETTEINDEX1, ... index layers[0], layers[1], ..., one
-  // entry per sampled layer in the object's `layers` order; the canonical
+  // entry per layer in the object's `layers` order; the canonical
   // combination is the format's layer-override order, the last layer
   // supplying a property winning.
   layers: Material[][];

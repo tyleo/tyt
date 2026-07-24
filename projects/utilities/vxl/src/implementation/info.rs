@@ -6,7 +6,7 @@ use treegrid::{
     TreeGridRecordsTableOptions, TreeGridRenderJson, TreeGridRenderTables, TreeGridTableShape,
     TreeGridValue,
 };
-use voxcore::{BVoxObject, VoxMain, VoxObject};
+use voxcore::{VoxMain, VoxObject};
 use voxj_codec::from_voxj_or_voxjz_file_bytes;
 
 /// The record sections' heading level, beneath the `# {input}` title the
@@ -128,12 +128,6 @@ fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>
         );
         add_cell(&mut grid, row, "Voxels", object.live_count().to_string());
         add_cell(&mut grid, row, "Layers", object.layer_count().to_string());
-        add_cell(
-            &mut grid,
-            row,
-            "Sampled",
-            sampled_layer_count(state, id).to_string(),
-        );
     }
     grid
 }
@@ -250,12 +244,6 @@ fn build_json_grid(
             "layers",
             TreeGridJsonValue::int(object.layer_count() as i64),
         );
-        add_field(
-            &mut grid,
-            branch,
-            "sampled_layers",
-            TreeGridJsonValue::int(sampled_layer_count(state, id) as i64),
-        );
     }
     grid
 }
@@ -282,15 +270,6 @@ fn add_triple(
     for component in triple {
         grid.push_value(node, TreeGridJsonValue::int(component));
     }
-}
-
-/// How many of an object's layers are sampled: those whose palette has
-/// materials.
-fn sampled_layer_count(state: &VoxMain, id: U32Id<BVoxObject>) -> usize {
-    state
-        .iter_sampled_layers(id)
-        .map(|layers| layers.count())
-        .unwrap_or(0)
 }
 
 /// Whether any object has an [`edit_bounds`] build volume.
@@ -390,9 +369,9 @@ mod tests {
              | ----- | --------------- | --------- |\n\
              | 0     | baseColorFactor | 1         |\n\
              \n## Objects\n\n\
-             | label | Name | Bounds | Edit bounds | Origin  | Voxels | Layers | Sampled |\n\
-             | ----- | ---- | ------ | ----------- | ------- | ------ | ------ | ------- |\n\
-             | 0     | body | 1x1x1  | -           | 0, 0, 0 | 1      | 1      | 1       |\n"
+             | label | Name | Bounds | Edit bounds | Origin  | Voxels | Layers |\n\
+             | ----- | ---- | ------ | ----------- | ------- | ------ | ------ |\n\
+             | 0     | body | 1x1x1  | -           | 0, 0, 0 | 1      | 1      |\n"
         );
     }
 
@@ -420,8 +399,7 @@ mod tests {
              {\"label\":\"bounds\",\"values\":[1,1,1]},\
              {\"label\":\"origin\",\"values\":[0,0,0]},\
              {\"label\":\"voxels\",\"values\":[1]},\
-             {\"label\":\"layers\",\"values\":[1]},\
-             {\"label\":\"sampled_layers\",\"values\":[1]}]}]}]\n"
+             {\"label\":\"layers\",\"values\":[1]}]}]}]\n"
         );
     }
 
@@ -490,9 +468,11 @@ mod tests {
         );
         assert!(tables.contains("| Has edit     | yes   |\n"));
         // Content 1x1x1, edit build volume 3x1x1, origin spaced.
-        assert!(tables.contains(
-            "| 0     | margin | 1x1x1  | 3x1x1       | 0, 0, 0 | 1      | 0      | 0       |\n"
-        ));
+        assert!(
+            tables.contains(
+                "| 0     | margin | 1x1x1  | 3x1x1       | 0, 0, 0 | 1      | 0      |\n"
+            )
+        );
 
         let json = render(
             &state,
@@ -509,60 +489,53 @@ mod tests {
     }
 
     #[test]
-    fn reports_scalar_properties_and_unsampled_layers() {
-        // Palette 0 pins `emissiveStrength` with no materials, so the layer
-        // referencing it is unsampled.
+    fn reports_two_layers_over_two_palettes() {
         let mut state = VoxMain::default();
         let strengths = state.add_value_pool(VoxValuePool::Float {
             min: VoxBound::Number(0.0),
             max: VoxBound::None,
             values: IdVec::from_vec(vec![2.0]),
         });
-        let mut pinned = VoxPalette::default();
-        pinned.add_scalar_property("emissiveStrength".to_owned(), strengths, U32Id::from_u32(0));
-        let pinned = state.add_palette(pinned);
+        let mut glow = VoxPalette::default();
+        glow.add_array_property("emissiveStrength".to_owned(), strengths);
+        let glow_material = glow.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let glow = state.add_palette(glow);
 
         let colors = state.add_value_pool(VoxValuePool::Srgba {
             values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
         });
-        let mut sampled = VoxPalette::default();
-        sampled.add_array_property("baseColorFactor".to_owned(), colors);
-        let material = sampled.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let sampled = state.add_palette(sampled);
+        let mut base = VoxPalette::default();
+        base.add_array_property("baseColorFactor".to_owned(), colors);
+        let material = base.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let base = state.add_palette(base);
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(sampled, material);
-        // An unsampled layer's cells are ignored filler, so any id fills.
-        object.add_layer(pinned, U32Id::from_u32(0));
+        object.add_layer(base, material);
+        object.add_layer(glow, glow_material);
         state.add_object(object);
 
         let tables = render(
             &state,
             Format::Voxj,
             Some(1),
-            "pinned.voxj",
+            "layered.voxj",
             InfoLayout::Tables,
         );
-        assert!(tables.contains("| 0     | emissiveStrength (scalar) | 0         |\n"));
-        assert!(tables.contains("| 1     | baseColorFactor           | 1         |\n"));
-        // Two layers, one sampled.
-        assert!(tables.contains("| 2      | 1       |\n"));
+        assert!(tables.contains("| 0     | emissiveStrength | 1         |\n"));
+        assert!(tables.contains("| 1     | baseColorFactor  | 1         |\n"));
 
         let json = render(
             &state,
             Format::Voxj,
             Some(1),
-            "pinned.voxj",
+            "layered.voxj",
             InfoLayout::JsonCompact,
         );
         assert!(json.contains(
             "{\"label\":\"0\",\"children\":[{\"label\":\"properties\",\"children\":[\
-             {\"label\":\"emissiveStrength\",\"annotation\":\"(scalar)\"}]},\
-             {\"label\":\"materials\",\"values\":[0]}]}"
+             {\"label\":\"emissiveStrength\"}]},\
+             {\"label\":\"materials\",\"values\":[1]}]}"
         ));
-        assert!(json.contains(
-            "{\"label\":\"layers\",\"values\":[2]},\
-             {\"label\":\"sampled_layers\",\"values\":[1]}"
-        ));
+        assert!(json.contains("{\"label\":\"layers\",\"values\":[2]}"));
     }
 }

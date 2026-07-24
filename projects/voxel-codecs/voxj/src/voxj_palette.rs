@@ -1,4 +1,4 @@
-use crate::{VoxjArrayProperty, VoxjScalarProperty};
+use crate::VoxjArrayProperty;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -15,13 +15,9 @@ pub struct VoxjPalette {
     /// within each [`materials`](Self::materials) row.
     pub array_properties: Vec<VoxjArrayProperty>,
 
-    /// Palette-scoped properties, each pinned to a single pool cell, with no
-    /// [`materials`](Self::materials) column.
-    pub scalar_properties: Vec<VoxjScalarProperty>,
-
-    /// Row-major materials: one row per material, each of exactly
-    /// `array_properties.len()` value-indices in property order, so the
-    /// material count `M` is `materials.len()`. `materials[m][b]` is a
+    /// Row-major materials: at least one row, one per material, each of
+    /// exactly `array_properties.len()` value-indices in property order, so
+    /// the material count `M` is `materials.len()`. `materials[m][b]` is a
     /// value-index into the pool bound by array property `b`.
     pub materials: Vec<Vec<usize>>,
 }

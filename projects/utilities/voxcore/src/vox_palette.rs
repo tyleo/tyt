@@ -1,7 +1,4 @@
-use crate::{
-    BVoxArrayProperty, BVoxMaterial, BVoxPoolValue, BVoxScalarProperty, BVoxValuePool,
-    VoxArrayProperty, VoxPropertyId, VoxScalarProperty,
-};
+use crate::{BVoxArrayProperty, BVoxMaterial, BVoxPoolValue, BVoxValuePool, VoxArrayProperty};
 use branded_id::{
     IdSlice, U32Id,
     soa::{IdField, IdRemap, IdStruct},
@@ -12,7 +9,7 @@ use std::collections::HashMap;
 /// [`VoxValuePool`](crate::VoxValuePool)s a [`VoxMain`](crate::VoxMain)
 /// holds, and the materials that index them.
 /// [`VoxMain::validate`](crate::VoxMain::validate) rejects duplicate
-/// property names and array properties without a material.
+/// property names and palettes without a material.
 #[derive(Debug, Default)]
 pub struct VoxPalette {
     /// Array property id pool.
@@ -20,12 +17,6 @@ pub struct VoxPalette {
 
     /// The array properties, in material-row value-id order.
     array_properties: IdField<BVoxArrayProperty, VoxArrayProperty>,
-
-    /// Scalar property id pool.
-    scalar_property_ids: IdStruct<BVoxScalarProperty>,
-
-    /// The scalar properties, each carrying its own pinned value id.
-    scalar_properties: IdField<BVoxScalarProperty, VoxScalarProperty>,
 
     /// Material id pool.
     material_ids: IdStruct<BVoxMaterial>,
@@ -38,18 +29,6 @@ pub struct VoxPalette {
     /// Rebuilt by [`gc`](Self::gc); exact for a validated palette, whose
     /// property names are unique.
     array_property_by_name: HashMap<String, U32Id<BVoxArrayProperty>>,
-
-    /// Name index into `scalar_properties`, for O(1)
-    /// [`scalar_property_by_name`](Self::scalar_property_by_name) lookup.
-    /// Rebuilt by [`gc`](Self::gc); exact for a validated palette, whose
-    /// property names are unique.
-    scalar_property_by_name: HashMap<String, U32Id<BVoxScalarProperty>>,
-
-    /// Name index across both property lists, tagged by arity, for O(1)
-    /// [`property_by_name`](Self::property_by_name) lookup. Rebuilt by
-    /// [`gc`](Self::gc); exact for a validated palette, whose property names
-    /// are unique.
-    property_by_name: HashMap<String, VoxPropertyId>,
 }
 
 impl VoxPalette {
@@ -67,8 +46,6 @@ impl VoxPalette {
 
         self.array_property_by_name
             .insert(name.clone(), array_property_id);
-        self.property_by_name
-            .insert(name.clone(), VoxPropertyId::Array(array_property_id));
 
         self.array_properties
             .retain(array_property_id, VoxArrayProperty { name, pool });
@@ -112,76 +89,6 @@ impl VoxPalette {
         self.array_property_ids
             .iter()
             .map(move |id| (id, unsafe { self.array_properties.get(id) }))
-    }
-
-    /// Adds a scalar property and returns its id. It pins `name` to the
-    /// single value `value_id` in `pool` for the whole palette; scalar
-    /// properties have no per-material column, so existing materials are
-    /// untouched. [`VoxMain::validate`](crate::VoxMain::validate)
-    /// range-checks the value id against the pool.
-    pub fn add_scalar_property(
-        &mut self,
-        name: String,
-        pool: U32Id<BVoxValuePool>,
-        value_id: U32Id<BVoxPoolValue>,
-    ) -> U32Id<BVoxScalarProperty> {
-        let scalar_property_id = self.scalar_property_ids.retain();
-
-        self.scalar_property_by_name
-            .insert(name.clone(), scalar_property_id);
-        self.property_by_name
-            .insert(name.clone(), VoxPropertyId::Scalar(scalar_property_id));
-
-        self.scalar_properties.retain(
-            scalar_property_id,
-            VoxScalarProperty {
-                name,
-                pool,
-                value_id,
-            },
-        );
-
-        scalar_property_id
-    }
-
-    /// Number of scalar properties.
-    pub fn scalar_property_count(&self) -> usize {
-        self.scalar_property_ids.len()
-    }
-
-    /// The scalar property `id`, or `None` if not one of this palette's.
-    pub fn scalar_property(&self, id: U32Id<BVoxScalarProperty>) -> Option<&VoxScalarProperty> {
-        // Safety: retained ids have a value.
-        self.scalar_property_ids
-            .is_retained(id)
-            .then(|| unsafe { self.scalar_properties.get(id) })
-    }
-
-    /// The scalar property named `name`, or `None` if none has that name.
-    /// O(1) through the name index. If a palette transiently declares the
-    /// same name twice, which [`VoxMain::validate`](crate::VoxMain::validate)
-    /// rejects, this returns the last such property added.
-    pub fn scalar_property_by_name(&self, name: &str) -> Option<U32Id<BVoxScalarProperty>> {
-        self.scalar_property_by_name.get(name).copied()
-    }
-
-    /// The property named `name` across both lists, tagged by arity, or
-    /// `None` if none has that name. O(1) through the name index. If a
-    /// palette transiently declares the same name twice, which
-    /// [`VoxMain::validate`](crate::VoxMain::validate) rejects, this returns
-    /// the last such property added.
-    pub fn property_by_name(&self, name: &str) -> Option<VoxPropertyId> {
-        self.property_by_name.get(name).copied()
-    }
-
-    /// Scalar properties in id order, as `(id, property)`.
-    pub fn iter_scalar_properties(
-        &self,
-    ) -> impl Iterator<Item = (U32Id<BVoxScalarProperty>, &VoxScalarProperty)> + '_ {
-        // Safety: retained ids have a value.
-        self.scalar_property_ids
-            .iter()
-            .map(move |id| (id, unsafe { self.scalar_properties.get(id) }))
     }
 
     /// Adds a material with one value id per array property, in
@@ -251,13 +158,6 @@ impl VoxPalette {
             array_properties.retain(array_property_id, property);
         }
 
-        let mut scalar_properties = IdField::new();
-        for scalar_property_id in self.scalar_property_ids.iter() {
-            // Safety: retained ids have a value.
-            let property = unsafe { self.scalar_properties.get(scalar_property_id) }.clone();
-            scalar_properties.retain(scalar_property_id, property);
-        }
-
         let mut materials = IdField::new();
         for material_id in self.material_ids.iter() {
             // Safety: a retained material has a value row. Its value ids are
@@ -270,13 +170,9 @@ impl VoxPalette {
         Self {
             array_property_ids: self.array_property_ids.clone(),
             array_properties,
-            scalar_property_ids: self.scalar_property_ids.clone(),
-            scalar_properties,
             material_ids: self.material_ids.clone(),
             materials,
             array_property_by_name: self.array_property_by_name.clone(),
-            scalar_property_by_name: self.scalar_property_by_name.clone(),
-            property_by_name: self.property_by_name.clone(),
         }
     }
 
@@ -291,15 +187,12 @@ impl VoxPalette {
             return None;
         }
 
-        // Drop index entries still pointing here; a duplicate name may have
-        // overwritten one.
+        // Drop the index entry still pointing here; a duplicate name may have
+        // overwritten it.
         // Safety: a retained array property has a value.
         let name = unsafe { self.array_properties.get(id) }.name.clone();
         if self.array_property_by_name.get(&name) == Some(&id) {
             self.array_property_by_name.remove(&name);
-        }
-        if self.property_by_name.get(&name) == Some(&VoxPropertyId::Array(id)) {
-            self.property_by_name.remove(&name);
         }
 
         // A value id is Copy, so releasing each material's slot at `id`
@@ -308,32 +201,6 @@ impl VoxPalette {
         // Safety: a retained array property has a value.
         unsafe { self.array_properties.release(id) };
         self.array_property_ids.release(id);
-        Some(())
-    }
-
-    /// Removes scalar property `id`, freeing it. Materials have no column for
-    /// a scalar property, so they are untouched. `None`, changing nothing, if
-    /// `id` is not one of this palette's scalar properties. Leaves a hole
-    /// until [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
-    pub fn remove_scalar_property(&mut self, id: U32Id<BVoxScalarProperty>) -> Option<()> {
-        if !self.scalar_property_ids.is_retained(id) {
-            return None;
-        }
-
-        // Drop index entries still pointing here; a duplicate name may have
-        // overwritten one.
-        // Safety: a retained scalar property has a value.
-        let name = unsafe { self.scalar_properties.get(id) }.name.clone();
-        if self.scalar_property_by_name.get(&name) == Some(&id) {
-            self.scalar_property_by_name.remove(&name);
-        }
-        if self.property_by_name.get(&name) == Some(&VoxPropertyId::Scalar(id)) {
-            self.property_by_name.remove(&name);
-        }
-
-        // Safety: a retained scalar property has a value.
-        unsafe { self.scalar_properties.release(id) };
-        self.scalar_property_ids.release(id);
         Some(())
     }
 
@@ -381,15 +248,8 @@ impl VoxPalette {
         // pool, and nothing has retained or released since.
         unsafe { self.materials.gc(&material_remap) };
 
-        let scalar_property_remap = self.scalar_property_ids.gc();
-        // Safety: the scalar property column was in sync with the pre-gc
-        // scalar property pool, and nothing has retained or released since.
-        unsafe { self.scalar_properties.gc(&scalar_property_remap) };
-
-        // Rebuild the name indexes against the relabeled property ids.
+        // Rebuild the name index against the relabeled property ids.
         self.array_property_by_name.clear();
-        self.scalar_property_by_name.clear();
-        self.property_by_name.clear();
 
         let array_property_ids: Vec<_> = self.array_property_ids.iter().collect();
         for array_property_id in array_property_ids {
@@ -398,31 +258,15 @@ impl VoxPalette {
                 .name
                 .clone();
 
-            self.array_property_by_name
-                .insert(name.clone(), array_property_id);
-            self.property_by_name
-                .insert(name, VoxPropertyId::Array(array_property_id));
-        }
-
-        let scalar_property_ids: Vec<_> = self.scalar_property_ids.iter().collect();
-        for scalar_property_id in scalar_property_ids {
-            // Safety: retained scalar property ids have a value.
-            let name = unsafe { self.scalar_properties.get(scalar_property_id) }
-                .name
-                .clone();
-
-            self.scalar_property_by_name
-                .insert(name.clone(), scalar_property_id);
-            self.property_by_name
-                .insert(name, VoxPropertyId::Scalar(scalar_property_id));
+            self.array_property_by_name.insert(name, array_property_id);
         }
 
         material_remap
     }
 
     /// Maps every value id into `pool` through `remap`: each material's cell
-    /// for an array property on `pool`, and each scalar property's pinned
-    /// value id on `pool`. `remap` covers every pre-prune value id of `pool`.
+    /// for an array property on `pool`. `remap` covers every pre-prune value
+    /// id of `pool`.
     pub(crate) fn remap_pool_value_ids(
         &mut self,
         pool: U32Id<BVoxValuePool>,
@@ -449,14 +293,6 @@ impl VoxPalette {
                 }
             }
         }
-
-        for scalar_property_id in self.scalar_property_ids.iter() {
-            // Safety: retained scalar property ids have a value.
-            let property = unsafe { self.scalar_properties.get_mut(scalar_property_id) };
-            if property.pool == pool {
-                property.value_id = remap[property.value_id.to_usize_id()];
-            }
-        }
     }
 
     /// Translates every property's pool id through `remap`, matching a
@@ -471,15 +307,6 @@ impl VoxPalette {
                 .new_id(property.pool)
                 .expect("an array property names a live value pool in a valid state");
         }
-
-        let scalar_property_ids: Vec<_> = self.scalar_property_ids.iter().collect();
-        for scalar_property_id in scalar_property_ids {
-            // Safety: retained scalar property ids have a value.
-            let property = unsafe { self.scalar_properties.get_mut(scalar_property_id) };
-            property.pool = remap
-                .new_id(property.pool)
-                .expect("a scalar property names a live value pool in a valid state");
-        }
     }
 }
 
@@ -493,18 +320,13 @@ impl Drop for VoxPalette {
         unsafe {
             self.materials.release_all(&self.material_ids);
             self.array_properties.release_all(&self.array_property_ids);
-            self.scalar_properties
-                .release_all(&self.scalar_property_ids);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        BVoxArrayProperty, BVoxMaterial, BVoxPoolValue, BVoxScalarProperty, BVoxValuePool,
-        VoxPalette, VoxPropertyId,
-    };
+    use crate::{BVoxArrayProperty, BVoxMaterial, BVoxPoolValue, BVoxValuePool, VoxPalette};
     use branded_id::U32Id;
 
     fn pool(index: u32) -> U32Id<BVoxValuePool> {
@@ -540,100 +362,6 @@ mod tests {
                 .collect::<Vec<_>>(),
             [(metallic, "metallic"), (ior, "ior")]
         );
-    }
-
-    #[test]
-    fn builds_and_reads_scalar_properties() {
-        let mut palette = VoxPalette::default();
-        let strength =
-            palette.add_scalar_property("emissiveStrength".to_owned(), pool(0), value(3));
-        let color = palette.add_array_property("baseColorFactor".to_owned(), pool(1));
-
-        assert_eq!(palette.scalar_property_count(), 1);
-        let property = palette.scalar_property(strength).unwrap();
-        assert_eq!(property.name, "emissiveStrength");
-        assert_eq!(property.pool, pool(0));
-        assert_eq!(property.value_id, value(3));
-        assert_eq!(
-            palette.scalar_property_by_name("emissiveStrength"),
-            Some(strength)
-        );
-        assert_eq!(palette.scalar_property_by_name("missing"), None);
-        // The combined index tags each property with its arity.
-        assert_eq!(
-            palette.property_by_name("emissiveStrength"),
-            Some(VoxPropertyId::Scalar(strength))
-        );
-        assert_eq!(
-            palette.property_by_name("baseColorFactor"),
-            Some(VoxPropertyId::Array(color))
-        );
-        assert_eq!(palette.property_by_name("missing"), None);
-        assert_eq!(
-            palette
-                .iter_scalar_properties()
-                .map(|(id, p)| (id, p.name.as_str()))
-                .collect::<Vec<_>>(),
-            [(strength, "emissiveStrength")]
-        );
-    }
-
-    #[test]
-    fn scalar_properties_leave_materials_untouched() {
-        let mut palette = VoxPalette::default();
-        let color = palette.add_array_property("baseColorFactor".to_owned(), pool(0));
-        let material = palette.add_material(vec![value(1)]).unwrap();
-
-        // A scalar property adds no per-material column; material rows keep
-        // one value id per array property.
-        palette.add_scalar_property("emissiveStrength".to_owned(), pool(1), value(0));
-        assert_eq!(palette.value_id(material, color), Some(value(1)));
-        assert!(palette.add_material(vec![value(0)]).is_some());
-        assert_eq!(palette.add_material(vec![value(0), value(0)]), None);
-    }
-
-    #[test]
-    fn remove_scalar_property_drops_indexes_then_gc_renumbers() {
-        let mut palette = VoxPalette::default();
-        let a = palette.add_scalar_property("a".to_owned(), pool(0), value(0));
-        let b = palette.add_scalar_property("b".to_owned(), pool(0), value(1));
-
-        assert_eq!(palette.remove_scalar_property(a), Some(()));
-        assert_eq!(palette.scalar_property_count(), 1);
-        assert_eq!(palette.scalar_property(a), None); // a hole until gc
-        assert_eq!(palette.scalar_property_by_name("a"), None);
-        assert_eq!(palette.property_by_name("a"), None);
-        assert_eq!(palette.remove_scalar_property(a), None); // already gone
-        assert_eq!(palette.scalar_property(b).unwrap().name, "b");
-
-        palette.gc();
-        // The survivor renumbers to 0 and the indexes follow.
-        let relabeled = U32Id::<BVoxScalarProperty>::from_u32(0);
-        assert_eq!(palette.scalar_property(relabeled).unwrap().name, "b");
-        assert_eq!(palette.scalar_property_by_name("b"), Some(relabeled));
-        assert_eq!(
-            palette.property_by_name("b"),
-            Some(VoxPropertyId::Scalar(relabeled))
-        );
-    }
-
-    #[test]
-    fn clone_palette_deep_copies_scalar_properties() {
-        let mut palette = VoxPalette::default();
-        let strength =
-            palette.add_scalar_property("emissiveStrength".to_owned(), pool(0), value(2));
-
-        let copy = palette.clone_palette();
-        assert_eq!(copy.scalar_property(strength).unwrap().value_id, value(2));
-        assert_eq!(
-            copy.property_by_name("emissiveStrength"),
-            Some(VoxPropertyId::Scalar(strength))
-        );
-
-        // Mutating the original must not touch the copy.
-        palette.add_scalar_property("alphaCutoff".to_owned(), pool(1), value(0));
-        assert_eq!(palette.scalar_property_count(), 2);
-        assert_eq!(copy.scalar_property_count(), 1);
     }
 
     #[test]

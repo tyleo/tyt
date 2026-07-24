@@ -54,18 +54,15 @@ number pool, and a number prints as it reads.
 
 Each selector resolves to one or more value collections. A `*` palette or `*`
 property expands to one collection per match, so `'*' baseColorFactor` yields a
-collection for every palette that carries `baseColorFactor`. An array property
-yields one value per material in material order; a scalar property yields a
-one-value collection, its pinned palette-wide value, read through the same
-pool-kind classification. Each collection is
+collection for every palette that carries `baseColorFactor`. A property yields
+one value per material in material order. Each collection is
 labeled by its path, `{palette}."{property}"`, the property quoted, with the
-component appended when one is read and a ` (scalar)` annotation suffixed on a
-scalar property, as in `0."baseColorFactor"`, `1."baseColorFactor"`,
-`0."baseColorFactor".a`, and `0."emissiveStrength" (scalar)`. The
+component appended when one is read, as in `0."baseColorFactor"`,
+`1."baseColorFactor"`, and `0."baseColorFactor".a`. The
 [`--label` flag](#labels) chooses how the text layouts spend that path.
 
 Collections come out in selector order, then palette order, then property order
-within a palette, array properties before scalar. A `*` that matches nothing
+within a palette. A `*` that matches nothing
 yields no collection, while a named
 palette or property that is absent is an error, so a typo is caught but a broad
 `'*'` quietly skips a palette that lacks the property. A value that does not
@@ -134,8 +131,8 @@ each collection. The `hierarchy` and JSON layouts carry the labels
 structurally, so setting `--label` with them is an error rather than a silent
 no-op.
 
-1. `none`: no labels; the ` (scalar)` annotation drops with the label it
-   rides. An error under `tables`, whose columns cannot be headed by nothing.
+1. `none`: no labels. An error under `tables`, whose columns cannot be headed
+   by nothing.
 2. `concat` (default): the full dot-joined path, as in `0."baseColorFactor".a`.
    Inline on `rows` and `columns`; under `tables` the headings nest exactly
    like `header` but each carries its full path.
@@ -160,8 +157,8 @@ carries its type. The payload is the shared read-command envelope: one record
 per node of the collection tree, each `{"label", "annotation"?, "values"?,
 "children"?}`, with the raw unquoted segment as the label. A palette is a root
 record labeled by its resolved index even when the selector used `*`, a
-property nests under its palette, a component under its property, and a scalar
-collection carries `"annotation": "(scalar)"`. Consecutive collections sharing
+property nests under its palette, and a component under its property.
+Consecutive collections sharing
 a palette nest under one record; a palette revisited later starts a fresh
 record, so the records keep selector order:
 
@@ -175,7 +172,7 @@ record, so the records keep selector order:
         "values": ["#FF0000FF", "#00FF0080"],
         "children": [{ "label": "a", "values": [255, 128] }]
       },
-      { "label": "emissiveStrength", "annotation": "(scalar)", "values": [5] }
+      { "label": "emissiveStrength", "values": [5] }
     ]
   }
 ]

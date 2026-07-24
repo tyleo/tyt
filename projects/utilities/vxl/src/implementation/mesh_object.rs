@@ -11,7 +11,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use voxcore::{BVoxLayer, BVoxPalette, VoxMain, VoxObject, VoxPropertyId, VoxValuePool};
+use voxcore::{BVoxLayer, BVoxPalette, VoxMain, VoxObject, VoxValuePool};
 use voxsmith::{
     AtlasShape, ColorChannel, GltfAttributeKind, MaterialBake, MaterialChannel, MaterialMap,
     MaterialMeshRequest, MaterialSlot, MeshMethod as VoxsmithMeshMethod,
@@ -188,8 +188,8 @@ fn validate_channel(
 }
 
 /// The kind of the property `key` in the meshed layer: its bound pool's kind
-/// when a property of either arity carries it, else the voxj unbound-default
-/// rule, a glTF built-in by its spec kind and a custom property an error.
+/// when a property carries it, else the voxj unbound-default rule, a glTF
+/// built-in by its spec kind and a custom property an error.
 fn channel_kind(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
@@ -200,7 +200,7 @@ fn channel_kind(
         .palette(palette)
         .expect("the meshed layer references a palette the state holds");
 
-    let Some(property_id) = palette.property_by_name(key) else {
+    let Some(property_id) = palette.array_property_by_name(key) else {
         // Absent from the palette: the voxj format's unbound-default rule. A
         // glTF built-in takes its spec kind and bakes its default; a custom
         // property has no default, so its type cannot be inferred.
@@ -215,20 +215,10 @@ fn channel_kind(
         };
     };
 
-    let pool_id = match property_id {
-        VoxPropertyId::Array(id) => {
-            palette
-                .array_property(id)
-                .expect("an array-property id from this palette resolves")
-                .pool
-        }
-        VoxPropertyId::Scalar(id) => {
-            palette
-                .scalar_property(id)
-                .expect("a scalar-property id from this palette resolves")
-                .pool
-        }
-    };
+    let pool_id = palette
+        .array_property(property_id)
+        .expect("an array-property id from this palette resolves")
+        .pool;
     let pool = state
         .value_pool(pool_id)
         .expect("a property references a pool the state holds");
@@ -498,40 +488,6 @@ mod tests {
             "subsurface",
             Some(ColorComponent::R)
         ));
-    }
-
-    #[test]
-    fn a_scalar_pinned_property_validates_by_its_pool_kind() {
-        // Neither key is a glTF built-in, so without the pins both would fail
-        // the unbound-default rule.
-        let mut state = VoxMain::default();
-        let glossiness = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::Number(0.0),
-            max: VoxBound::Number(1.0),
-            values: IdVec::from_vec(vec![0.7]),
-        });
-        let sheens = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[0.0, 1.0, 0.0, 1.0]]),
-        });
-        let mut palette = VoxPalette::default();
-        palette.add_scalar_property("glossiness".to_owned(), glossiness, value(0));
-        palette.add_scalar_property("sheenColor".to_owned(), sheens, value(0));
-        let palette = state.add_palette(palette);
-
-        assert!(validates(&state, palette, "glossiness", None));
-        assert!(!validates(
-            &state,
-            palette,
-            "glossiness",
-            Some(ColorComponent::R)
-        ));
-        assert!(validates(
-            &state,
-            palette,
-            "sheenColor",
-            Some(ColorComponent::A)
-        ));
-        assert!(!validates(&state, palette, "sheenColor", None));
     }
 
     #[test]

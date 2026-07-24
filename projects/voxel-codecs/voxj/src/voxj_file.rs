@@ -18,14 +18,13 @@ pub struct VoxjFile {
 mod tests {
     use crate::{
         VoxjArrayProperty, VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
-        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjScalarProperty,
-        VoxjTransform, VoxjValuePool,
+        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjValuePool,
     };
     use serde_json::{Value, json};
 
-    /// Covers the full palette surface: a mixed sampled palette, a
-    /// scalar-only unsampled palette, and one channel for the one sampled
-    /// layer.
+    /// Covers the full palette surface: two palettes sharing a pool, and one
+    /// channel per layer.
     fn document() -> VoxjFile {
         VoxjFile {
             version: 1,
@@ -47,21 +46,14 @@ mod tests {
                                 name: "baseColorFactor".to_owned(),
                                 value_pool: 1,
                             }],
-                            scalar_properties: vec![VoxjScalarProperty {
-                                name: "emissiveStrength".to_owned(),
-                                value_pool: 0,
-                                value_index: 0,
-                            }],
                             materials: vec![vec![0], vec![1]],
                         },
                         VoxjPalette {
-                            array_properties: Vec::new(),
-                            scalar_properties: vec![VoxjScalarProperty {
+                            array_properties: vec![VoxjArrayProperty {
                                 name: "emissiveStrength".to_owned(),
                                 value_pool: 0,
-                                value_index: 1,
                             }],
-                            materials: Vec::new(),
+                            materials: vec![vec![1]],
                         },
                     ],
                     objects: vec![VoxjObject {
@@ -70,7 +62,7 @@ mod tests {
                         origin: [0, 0, 0],
                         voxel_positions: VoxjPositionBlock::RawJson(vec![[0, 0, 0], [1, 0, 0]]),
                         layers: vec![0, 1],
-                        voxel_samples: VoxjSampleBlock::RawJson(vec![vec![0, 1]]),
+                        voxel_samples: VoxjSampleBlock::RawJson(vec![vec![0, 1], vec![0, 0]]),
                     }],
                     nodes: vec![VoxjHierarchyNode {
                         name: "o".to_owned(),
@@ -110,25 +102,13 @@ mod tests {
                             "arrayProperties": [
                                 { "name": "baseColorFactor", "valuePool": 1 },
                             ],
-                            "scalarProperties": [
-                                {
-                                    "name": "emissiveStrength",
-                                    "valuePool": 0,
-                                    "valueIndex": 0,
-                                },
-                            ],
                             "materials": [[0], [1]],
                         },
                         {
-                            "arrayProperties": [],
-                            "scalarProperties": [
-                                {
-                                    "name": "emissiveStrength",
-                                    "valuePool": 0,
-                                    "valueIndex": 1,
-                                },
+                            "arrayProperties": [
+                                { "name": "emissiveStrength", "valuePool": 0 },
                             ],
-                            "materials": [],
+                            "materials": [[1]],
                         },
                     ],
                     "objects": [
@@ -143,7 +123,7 @@ mod tests {
                             "layers": [0, 1],
                             "voxelSamples": {
                                 "encoding": "raw-json",
-                                "data": [[0, 1]],
+                                "data": [[0, 1], [0, 0]],
                             },
                         },
                     ],
@@ -195,5 +175,16 @@ mod tests {
             rename_key(&mut wire, pointer, from, to);
             assert!(serde_json::from_value::<VoxjFile>(wire).is_err());
         }
+    }
+
+    #[test]
+    fn scalar_properties_reject() {
+        let mut wire = wire_document();
+        wire.pointer_mut("/main/runtimeState/palettes/0")
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert("scalarProperties".to_owned(), json!([]));
+        assert!(serde_json::from_value::<VoxjFile>(wire).is_err());
     }
 }

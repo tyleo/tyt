@@ -16,13 +16,12 @@ checklist and exits non-zero on any failure. The checks include:
    bits.
 4. unique voxel positions.
 5. tight `bounds`.
-6. one sample channel per sampled layer with correct per-channel lengths.
+6. one sample channel per layer with correct per-channel lengths.
 7. well-formed `valuePools` whose values match their declared `kind`.
 8. palettes:
    1. property names are unique;
-   2. row-major `materials` rows and scalar `valueIndex` pins hold in-range
-      value-indices;
-   3. array properties come with at least one material.
+   2. row-major `materials` rows hold in-range value-indices;
+   3. every palette has at least one material.
 9. an acyclic hierarchy.
 10. no zero `scale` component.
 11. unit `rotation` quaternions within tolerance.

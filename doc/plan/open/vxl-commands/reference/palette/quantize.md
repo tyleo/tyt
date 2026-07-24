@@ -38,10 +38,8 @@ output mirrors the input, a document in its own format or a bare palette JSON.
    unions with `--select`. Given no selector of either kind, every object is
    dithered. See [Object selectors](../conventions.md#object-selectors).
 
-A material spans all of a palette's array properties, one value per property;
-a scalar property is palette-wide, so it rides the merge untouched, and a
-palette pinning the selected property as a scalar has one value and nothing to
-cluster. Material
+A material spans all of a palette's array properties, one value per property.
+Material
 follows color: `quantize` clusters the selected property to at most
 `--max-palette-materials` values, then collapses each cluster to one material
 whose whole set of values is its representative's, so the other properties follow

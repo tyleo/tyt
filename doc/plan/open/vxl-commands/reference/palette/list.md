@@ -27,7 +27,7 @@ palettes
   ├ materialCount: 2
   ├ properties
   │ ├ "baseColorFactor"
-  │ └ "emissiveStrength" (scalar)
+  │ └ "emissiveStrength"
   └ objects
     └ "Object B"
 ```
@@ -49,8 +49,7 @@ so a stray index is caught rather than silently listing nothing.
 Three settable booleans choose which fields render beside the always-shown index,
 each defaulting to shown so a bare `palette list` prints them all:
 
-1. `--show-properties` (default `true`): the ordered property keys, array
-   properties then scalar, a scalar property suffixed ` (scalar)`.
+1. `--show-properties` (default `true`): the ordered property keys.
 2. `--show-materials` (default `true`): the material count.
 3. `--show-objects` (default `true`): the objects that reference the palette.
 
@@ -74,17 +73,16 @@ branch in the tree, and the other two behave the same way.
    ```
    # palettes
 
-   | label | properties                                 | materials | used by            |
-   | ----- | ------------------------------------------ | --------- | ------------------ |
-   | 0     | baseColorFactor, metallicFactor            | 12        | Object A, Object B |
-   | 1     | baseColorFactor, emissiveStrength (scalar) | 2         | Object B           |
-   | 2     | metallicFactor, roughnessFactor            | 1         | Object B           |
+   | label | properties                        | materials | used by            |
+   | ----- | --------------------------------- | --------- | ------------------ |
+   | 0     | baseColorFactor, metallicFactor   | 12        | Object A, Object B |
+   | 1     | baseColorFactor, emissiveStrength | 2         | Object B           |
+   | 2     | metallicFactor, roughnessFactor   | 1         | Object B           |
    ```
 
 3. `json-pretty` and `json-compact`: the listing tree as pretty or compact
    JSON in the shared read-command envelope, one `{"label", "annotation"?,
    "values"?, "children"?}` record per tree node: the `palettes` root over one
    record per palette index, the material count as a native number under
-   `materialCount`, and the property and object names as child records, a
-   scalar property carrying `"annotation": "(scalar)"` and an empty subtree
-   the `"[]"` string value its tree leaf shows.
+   `materialCount`, and the property and object names as child records, an
+   empty subtree the `"[]"` string value its tree leaf shows.

@@ -4,7 +4,7 @@ use crate::{
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
-use voxcore::{BVoxPoolValue, VoxMain, VoxPropertyId, VoxValuePool};
+use voxcore::{BVoxPoolValue, VoxMain, VoxValuePool};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
 /// `width` x `height` texels, one texel per material placed row-major from the
@@ -110,9 +110,8 @@ fn channel_byte(
 }
 
 /// What the material at `index` draws for attribute `key`: the value pool the
-/// property draws from and the value id into it. An array property reads the
-/// material's cell; a scalar property pins one value for every material.
-/// `None` when `index` is out of range or no property carries `key`.
+/// property draws from and the value id into it, read from the material's
+/// cell. `None` when `index` is out of range or no property carries `key`.
 fn material_attribute<'a>(
     state: &'a VoxMain,
     used: &UsedMaterials,
@@ -121,10 +120,8 @@ fn material_attribute<'a>(
 ) -> Option<(&'a VoxValuePool, U32Id<BVoxPoolValue>)> {
     let material = used.material(index)?;
     let palette = used.palette();
-    match state.palette(palette)?.property_by_name(key)? {
-        VoxPropertyId::Array(property) => state.material_value(palette, material, property),
-        VoxPropertyId::Scalar(property) => state.scalar_property_value(palette, property),
-    }
+    let property = state.palette(palette)?.array_property_by_name(key)?;
+    state.material_value(palette, material, property)
 }
 
 /// A color attribute's RGBA bytes, defaulting to opaque white (the base-color
@@ -380,9 +377,9 @@ mod tests {
     }
 
     #[test]
-    fn a_scalar_property_pins_one_value_for_every_material() {
-        // `emissiveStrength` is a palette-scoped scalar property, so both
-        // materials bake the same pinned half strength.
+    fn a_shared_pool_cell_bakes_one_value_for_every_material() {
+        // Both material rows repeat the strength pool's one cell, so both
+        // bake the same half strength.
         let mut state = VoxMain::default();
         let base = state.add_value_pool(VoxValuePool::Srgba {
             values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]),
@@ -395,9 +392,9 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
-        palette.add_scalar_property(EMISSIVE_STRENGTH.to_owned(), strength, value(0));
-        let red = palette.add_material(vec![value(0)]).unwrap();
-        let blue = palette.add_material(vec![value(1)]).unwrap();
+        palette.add_array_property(EMISSIVE_STRENGTH.to_owned(), strength);
+        let red = palette.add_material(vec![value(0), value(0)]).unwrap();
+        let blue = palette.add_material(vec![value(1), value(0)]).unwrap();
         let palette_id = state.add_palette(palette);
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();

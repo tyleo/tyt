@@ -222,9 +222,9 @@ Material sampling (see [voxelize](reference/voxelize.md) and
       property sets and material counts, `editState` and `ext` presence, and root /
       instanced / unplaced nodes; `--layout`. Landed: the command, dispatch,
       `Dependencies::info`, and a markdown / pretty-json / compact-json `--layout`
-      report covering version, per-object bounds, voxel count, layer and
-      sampled-layer counts, palette property
-      sets and material counts, and `editState` / `ext` presence, with tests. Pending:
+      report covering version, per-object bounds, voxel count, layer count,
+      palette property sets and material counts, and `editState` / `ext`
+      presence, with tests. Pending:
       per-object encodings and the root / instanced / unplaced node breakdown.
 
 ## Finishing

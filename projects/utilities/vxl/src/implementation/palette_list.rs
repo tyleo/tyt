@@ -211,8 +211,8 @@ mod tests {
 
     /// Two palettes and two objects: `a` samples palette 0, `b` samples both.
     /// Palette 0 carries `baseColorFactor` and `metallicFactor` with two
-    /// materials, palette 1 carries `baseColorFactor` with one material plus a
-    /// scalar `emissiveStrength`.
+    /// materials, palette 1 carries `baseColorFactor` and `emissiveStrength`
+    /// with one material.
     fn shared_state() -> VoxMain {
         let mut state = VoxMain::default();
 
@@ -241,8 +241,8 @@ mod tests {
 
         let mut one = VoxPalette::default();
         one.add_array_property("baseColorFactor".to_owned(), colors);
-        one.add_scalar_property("emissiveStrength".to_owned(), metallic, value(1));
-        let one_material = one.add_material(vec![value(2)]).unwrap();
+        one.add_array_property("emissiveStrength".to_owned(), metallic);
+        let one_material = one.add_material(vec![value(2), value(1)]).unwrap();
         let one = state.add_palette(one);
 
         let mut a = VoxObject::new("a".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
@@ -269,10 +269,10 @@ mod tests {
             render_all(&shared_state(), PaletteListLayout::Tables),
             "# palettes\n\
              \n\
-             | label | properties                                 | materials | used by |\n\
-             | ----- | ------------------------------------------ | --------- | ------- |\n\
-             | 0     | baseColorFactor, metallicFactor            | 2         | a, b    |\n\
-             | 1     | baseColorFactor, emissiveStrength (scalar) | 1         | b       |\n"
+             | label | properties                        | materials | used by |\n\
+             | ----- | --------------------------------- | --------- | ------- |\n\
+             | 0     | baseColorFactor, metallicFactor   | 2         | a, b    |\n\
+             | 1     | baseColorFactor, emissiveStrength | 1         | b       |\n"
         );
     }
 
@@ -290,10 +290,10 @@ mod tests {
             output,
             "# palettes\n\
              \n\
-             | label | properties                                 | materials |\n\
-             | ----- | ------------------------------------------ | --------- |\n\
-             | 0     | baseColorFactor, metallicFactor            | 2         |\n\
-             | 1     | baseColorFactor, emissiveStrength (scalar) | 1         |\n"
+             | label | properties                        | materials |\n\
+             | ----- | --------------------------------- | --------- |\n\
+             | 0     | baseColorFactor, metallicFactor   | 2         |\n\
+             | 1     | baseColorFactor, emissiveStrength | 1         |\n"
         );
     }
 
@@ -314,7 +314,7 @@ mod tests {
              \u{20}\u{20}├ materialCount: 1\n\
              \u{20}\u{20}├ properties\n\
              \u{20}\u{20}│ ├ \"baseColorFactor\"\n\
-             \u{20}\u{20}│ └ \"emissiveStrength\" (scalar)\n\
+             \u{20}\u{20}│ └ \"emissiveStrength\"\n\
              \u{20}\u{20}└ objects\n\
              \u{20}\u{20}\u{20}\u{20}└ \"b\"\n"
         );
@@ -359,7 +359,7 @@ mod tests {
              {\"label\":\"materialCount\",\"values\":[1]},\
              {\"label\":\"properties\",\"children\":[\
              {\"label\":\"baseColorFactor\"},\
-             {\"label\":\"emissiveStrength\",\"annotation\":\"(scalar)\"}]},\
+             {\"label\":\"emissiveStrength\"}]},\
              {\"label\":\"objects\",\"children\":[{\"label\":\"b\"}]}]}]}]\n"
         );
     }
@@ -385,9 +385,9 @@ mod tests {
             output,
             "# palettes\n\
              \n\
-             | label | properties                                 | materials | used by |\n\
-             | ----- | ------------------------------------------ | --------- | ------- |\n\
-             | 1     | baseColorFactor, emissiveStrength (scalar) | 1         | b       |\n"
+             | label | properties                        | materials | used by |\n\
+             | ----- | --------------------------------- | --------- | ------- |\n\
+             | 1     | baseColorFactor, emissiveStrength | 1         | b       |\n"
         );
     }
 
@@ -454,39 +454,6 @@ mod tests {
              \u{20}\u{20}├ properties\n\
              \u{20}\u{20}│ └ \"baseColorFactor\"\n\
              \u{20}\u{20}└ objects: []\n"
-        );
-    }
-
-    #[test]
-    fn a_scalar_only_palette_lists_its_pinned_property() {
-        // No materials at all: the palette is never sampled, but its pinned
-        // property still lists.
-        let mut state = VoxMain::default();
-        let strengths = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::Number(0.0),
-            max: VoxBound::None,
-            values: IdVec::from_vec(vec![2.0]),
-        });
-        let mut palette = VoxPalette::default();
-        palette.add_scalar_property("emissiveStrength".to_owned(), strengths, value(0));
-        state.add_palette(palette);
-
-        assert_eq!(
-            render_all(&state, PaletteListLayout::Tables),
-            "# palettes\n\
-             \n\
-             | label | properties                | materials | used by |\n\
-             | ----- | ------------------------- | --------- | ------- |\n\
-             | 0     | emissiveStrength (scalar) | 0         |         |\n"
-        );
-
-        assert_eq!(
-            render_all(&state, PaletteListLayout::JsonCompact),
-            "[{\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
-             {\"label\":\"materialCount\",\"values\":[0]},\
-             {\"label\":\"properties\",\"children\":[\
-             {\"label\":\"emissiveStrength\",\"annotation\":\"(scalar)\"}]},\
-             {\"label\":\"objects\",\"values\":[\"[]\"]}]}]}]\n"
         );
     }
 }

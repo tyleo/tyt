@@ -15,10 +15,9 @@ use voxcore::{
 ///
 /// Materials cluster by the `baseColorFactor` array property and each cluster
 /// collapses onto one real representative, so a merged voxel takes the
-/// representative's whole material. Colorless materials are left untouched; a
-/// scalar `baseColorFactor` is palette-wide, so it leaves every material
-/// colorless. Returns `Some((before, after))` when the reduction fired,
-/// `None` when the palette already fit.
+/// representative's whole material. Colorless materials are left untouched.
+/// Returns `Some((before, after))` when the reduction fired, `None` when the
+/// palette already fit.
 ///
 /// The prune runs state-wide through [`VoxMain::prune_value_pools`], compacting
 /// the pools to fit a small budget such as Voxel Max's 255 colors;
@@ -75,9 +74,7 @@ fn reduce_materials(
         return Ok(None);
     }
 
-    // The `baseColorFactor` array property; only colored materials cluster,
-    // and a scalar `baseColorFactor` is palette-wide, leaving every material
-    // colorless.
+    // The `baseColorFactor` array property; only colored materials cluster.
     let color_property = palette_ref.array_property_by_name(BASE_COLOR_FACTOR);
 
     let colored: Vec<(u32, [u8; 4])> = match color_property {
@@ -1207,12 +1204,10 @@ mod tests {
     }
 
     #[test]
-    fn a_scalar_color_palette_is_left_untouched() {
-        // The palette pins `baseColorFactor` for every material, so every material counts as colorless and the reduction no-ops even over the cap.
+    fn a_colorless_palette_is_left_untouched() {
+        // The palette carries no `baseColorFactor`, so every material counts
+        // as colorless and the reduction no-ops even over the cap.
         let mut state = VoxMain::default();
-        let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: [srgba("#FF0000FF")].into_iter().collect(),
-        });
         let tag = state.add_value_pool(VoxValuePool::Float {
             min: VoxBound::None,
             max: VoxBound::None,
@@ -1220,7 +1215,6 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_scalar_property(BASE_COLOR_FACTOR.to_owned(), base, value(0));
         palette.add_array_property("tag".to_owned(), tag);
         let materials: Vec<_> = (0..3)
             .map(|index| palette.add_material(vec![value(index)]).unwrap())
@@ -1252,69 +1246,10 @@ mod tests {
     }
 
     #[test]
-    fn a_scalar_property_survives_reduction_and_pruning() {
-        // The strength pool is referenced only by the scalar property; the
-        // reduction's prune keeps its pinned value and the property still
-        // resolves afterward.
-        let mut state = VoxMain::default();
-        let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: ["#FE0000FF", "#FF0000FF", "#0000FFFF"]
-                .iter()
-                .map(|color| srgba(color))
-                .collect(),
-        });
-        let strength = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::None,
-            max: VoxBound::None,
-            values: [2.5].into_iter().collect(),
-        });
-
-        let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
-        palette.add_scalar_property("emissiveStrength".to_owned(), strength, value(0));
-        let materials: Vec<_> = (0..3)
-            .map(|index| palette.add_material(vec![value(index)]).unwrap())
-            .collect();
-
-        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
-        let palette_id = state.add_palette(palette);
-        object.add_layer(palette_id, materials[0]);
-        for (x, &material) in materials.iter().enumerate() {
-            let voxel = object.voxel_id(TyVector3U32::new(x as u32, 0, 0)).unwrap();
-            object.retain_voxel(voxel, &[material]).unwrap();
-        }
-        state.add_object(object);
-
-        let outcome = reduce_palette(
-            &mut state,
-            palette_id,
-            2,
-            ReductionMethod::MedianCut,
-            ColorSpace::Oklab,
-            Dither::None,
-            false,
-        )
-        .unwrap();
-        assert_eq!(outcome, Some((3, 2)));
-
-        let palette_ref = state.palette(palette_id).unwrap();
-        let property = palette_ref
-            .scalar_property_by_name("emissiveStrength")
-            .unwrap();
-        match state.scalar_property_value(palette_id, property) {
-            Some((VoxValuePool::Float { values, .. }, value_id)) => {
-                assert_eq!(values[value_id.to_usize_id()], 2.5)
-            }
-            other => panic!("the scalar property did not resolve: {other:?}"),
-        }
-        assert_eq!(state.validate(), Ok(()));
-    }
-
-    #[test]
-    fn dithering_reduces_around_an_unsampled_scalar_layer() {
-        // A trailing scalar-only layer is unsampled; the dither rebuilds
-        // full-arity sample rows around its filler slot and the reduction
-        // still lands.
+    fn dithering_reduces_around_a_second_layer() {
+        // A trailing layer over another palette; the dither rebuilds
+        // full-arity sample rows around its slot and the reduction still
+        // lands.
         let (mut state, palette, object_id) =
             state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
         let strength = state.add_value_pool(VoxValuePool::Float {
@@ -1323,13 +1258,14 @@ mod tests {
             values: [1.5].into_iter().collect(),
         });
 
-        let mut scalar_palette = VoxPalette::default();
-        scalar_palette.add_scalar_property("emissiveStrength".to_owned(), strength, value(0));
-        let scalar_palette_id = state.add_palette(scalar_palette);
+        let mut glow_palette = VoxPalette::default();
+        glow_palette.add_array_property("emissiveStrength".to_owned(), strength);
+        glow_palette.add_material(vec![value(0)]).unwrap();
+        let glow_palette_id = state.add_palette(glow_palette);
         state
             .object_mut(object_id)
             .unwrap()
-            .add_layer(scalar_palette_id, U32Id::from_u32(0));
+            .add_layer(glow_palette_id, U32Id::from_u32(0));
 
         let outcome = reduce_palette(
             &mut state,
@@ -1346,11 +1282,10 @@ mod tests {
         assert_eq!(material_count(&state, palette), 2);
         assert_eq!(state.validate(), Ok(()));
 
-        // The scalar layer and its palette are untouched.
+        // The trailing layer and its palette are untouched.
         let object = state.object(object_id).unwrap();
         assert_eq!(object.layer_count(), 2);
-        let scalar_ref = state.palette(scalar_palette_id).unwrap();
-        assert_eq!(scalar_ref.scalar_property_count(), 1);
+        assert_eq!(material_count(&state, glow_palette_id), 1);
     }
 
     #[test]

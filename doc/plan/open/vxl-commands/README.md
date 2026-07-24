@@ -21,14 +21,12 @@ A document holds an ordered `palettes` array and a shared
 `runtimeState.valuePools` array the palettes reference by index. Each palette
 pairs an ordered set of `arrayProperties`, each naming a property
 (`baseColorFactor`, `metallicFactor`, `roughnessFactor`, and so on) with a
-value pool it draws from, a set of `scalarProperties`, each pinning a property
-to one pool cell for the whole palette, and a row-major `materials` table
-holding one row of value-indices per material, one per array property. A voxel
-samples one material index per sampled layer its object references through
-`layers`; a layer is sampled iff its palette has materials, so a scalar-only
-palette carries no channel. Layers combine by overriding: contributions apply
-in `layers` order, back to front, and each property takes its value from the
-last layer that supplies it. This model is defined in
+value pool it draws from, and a row-major `materials` table holding one row of
+value-indices per material, one per array property. A voxel samples one
+material index per layer its object references through `layers`. Layers
+combine by overriding: contributions apply in `layers` order, back to front,
+and each property takes its value from the last layer that supplies it. This
+model is defined in
 [Palettes](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).
 The palette commands address a target their own way, described under
 [`vxl palette`](reference/palette/README.md); property keys are the glTF names

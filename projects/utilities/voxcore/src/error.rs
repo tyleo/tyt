@@ -29,20 +29,6 @@ pub enum Error {
     /// A palette declares the same name on more than one array property.
     DuplicateArrayPropertyName { palette: u32, array_property: u32 },
 
-    /// A palette scalar property references a value pool that does not exist.
-    ScalarPropertyPool {
-        palette: u32,
-        scalar_property: u32,
-        pool: u32,
-    },
-
-    /// A palette declares the same name on a scalar property and another
-    /// property, array or scalar.
-    DuplicateScalarPropertyName { palette: u32, scalar_property: u32 },
-
-    /// A scalar property's pinned value id is beyond the pool's values.
-    ScalarPropertyValue { palette: u32, scalar_property: u32 },
-
     /// A material's value id for an array property is beyond the pool's
     /// values.
     MaterialValue {
@@ -51,15 +37,13 @@ pub enum Error {
         material: u32,
     },
 
-    /// A palette declares array properties but has no materials to carry
-    /// their values.
-    ArrayPropertiesWithoutMaterials { palette: u32 },
+    /// A palette has no materials.
+    PaletteWithoutMaterials { palette: u32 },
 
     /// An object references a palette that does not exist.
     PaletteRef { object: u32, palette: u32 },
 
-    /// A live voxel in a sampled layer samples a material beyond the
-    /// palette's materials.
+    /// A live voxel samples a material beyond its layer's palette.
     SampleMaterial {
         object: u32,
         voxel: u32,
@@ -123,28 +107,6 @@ impl Display for Error {
                 f,
                 "palette {palette} array property {array_property} duplicates another property's name"
             ),
-            Error::ScalarPropertyPool {
-                palette,
-                scalar_property,
-                pool,
-            } => write!(
-                f,
-                "palette {palette} scalar property {scalar_property} references value pool {pool}, which does not exist"
-            ),
-            Error::DuplicateScalarPropertyName {
-                palette,
-                scalar_property,
-            } => write!(
-                f,
-                "palette {palette} scalar property {scalar_property} duplicates another property's name"
-            ),
-            Error::ScalarPropertyValue {
-                palette,
-                scalar_property,
-            } => write!(
-                f,
-                "palette {palette} scalar property {scalar_property} pins a value id out of the pool's range"
-            ),
             Error::MaterialValue {
                 palette,
                 array_property,
@@ -153,10 +115,9 @@ impl Display for Error {
                 f,
                 "palette {palette} material {material} has a value id for array property {array_property} out of the pool's range"
             ),
-            Error::ArrayPropertiesWithoutMaterials { palette } => write!(
-                f,
-                "palette {palette} declares array properties but has no materials"
-            ),
+            Error::PaletteWithoutMaterials { palette } => {
+                write!(f, "palette {palette} has no materials")
+            }
             Error::PaletteRef { object, palette } => write!(
                 f,
                 "object {object} references palette {palette}, which does not exist"

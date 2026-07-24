@@ -1,7 +1,7 @@
 use crate::{
-    BVoxArrayProperty, BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette,
-    BVoxPoolValue, BVoxScalarProperty, BVoxValuePool, Error, Result, VoxBound, VoxGcRemap,
-    VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState, VoxValue, VoxValuePool,
+    BVoxArrayProperty, BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
+    BVoxValuePool, Error, Result, VoxBound, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette,
+    VoxRuntimeState, VoxValue, VoxValuePool,
 };
 use branded_id::{IdSlice, IdVec, U32Id, soa::IdRemap};
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -145,51 +145,6 @@ impl VoxMain {
         let value_id = palette.value_id(material, array_property)?;
         let pool = self.value_pool(palette.array_property(array_property)?.pool)?;
         Some((pool, value_id))
-    }
-
-    /// Resolves what `scalar_property` in `palette` pins: the value pool it
-    /// draws from and the value id of the pinned value, one value for the
-    /// whole palette. `None` if either id is not this state's, or the
-    /// property names a pool this state does not hold. Read the value at
-    /// that id out of the returned pool by the pool's kind.
-    pub fn scalar_property_value(
-        &self,
-        palette: U32Id<BVoxPalette>,
-        scalar_property: U32Id<BVoxScalarProperty>,
-    ) -> Option<(&VoxValuePool, U32Id<BVoxPoolValue>)> {
-        let palette = self.palette(palette)?;
-        let property = palette.scalar_property(scalar_property)?;
-        let pool = self.value_pool(property.pool)?;
-        Some((pool, property.value_id))
-    }
-
-    /// Whether `layer` of `object` is sampled: its palette has at least one
-    /// material. `None` if `object` is not one of this state's, `layer` is
-    /// not one of that object's, or the layer references a palette this
-    /// state does not hold.
-    pub fn layer_is_sampled(
-        &self,
-        object: U32Id<BVoxObject>,
-        layer: U32Id<BVoxLayer>,
-    ) -> Option<bool> {
-        let palette = self.object(object)?.layer_palette(layer)?;
-        Some(self.palette(palette)?.material_count() > 0)
-    }
-
-    /// The sampled layers of `object` in layer order, as `(layer id,
-    /// palette)`: the Voxel Json channel order, one sample channel per
-    /// sampled layer. A layer referencing a palette this state does not hold
-    /// is skipped like an unsampled one; [`validate`](Self::validate) rejects
-    /// such a state. `None` if `object` is not one of this state's.
-    pub fn iter_sampled_layers(
-        &self,
-        object: U32Id<BVoxObject>,
-    ) -> Option<impl Iterator<Item = (U32Id<BVoxLayer>, U32Id<BVoxPalette>)> + '_> {
-        let object = self.object(object)?;
-        Some(object.iter_layers().filter(move |&(_, palette)| {
-            self.palette(palette)
-                .is_some_and(|palette| palette.material_count() > 0)
-        }))
     }
 
     /// Adds a hierarchy node, returning its id (its listing index). Its
@@ -446,19 +401,19 @@ impl VoxMain {
         }
     }
 
-    /// Drops value-pool entries no material or scalar property references,
-    /// renumbers the survivors densely from `0`, and rewrites the value ids
-    /// at them. The pool-value counterpart to [`gc`](Self::gc), which
-    /// compacts the id pools but not the values inside a pool.
+    /// Drops value-pool entries no material references, renumbers the
+    /// survivors densely from `0`, and rewrites the value ids at them. The
+    /// pool-value counterpart to [`gc`](Self::gc), which compacts the id
+    /// pools but not the values inside a pool.
     ///
     /// 1. references union across palettes, so a shared entry survives while
-    ///    any one material or scalar property uses it;
+    ///    any one material uses it;
     /// 2. a pool nothing references is left whole, since
     ///    [`validate`](Self::validate) requires every pool non-empty;
     /// 3. the state stays referentially valid.
     pub fn prune_value_pools(&mut self) {
-        // The value ids each pool still has a material or scalar property
-        // referencing, ascending so the kept order stays stable.
+        // The value ids each pool still has a material referencing,
+        // ascending so the kept order stays stable.
         let pool_ids: Vec<_> = self.runtime_state.value_pool_ids.iter().collect();
         let mut referenced: HashMap<U32Id<BVoxValuePool>, BTreeSet<U32Id<BVoxPoolValue>>> =
             pool_ids.iter().map(|&id| (id, BTreeSet::new())).collect();
@@ -477,13 +432,6 @@ impl VoxMain {
                         .expect("a retained material has a value id for every array property");
                     uses.insert(value_id);
                 }
-            }
-
-            for (_, property) in palette.iter_scalar_properties() {
-                let uses = referenced
-                    .get_mut(&property.pool)
-                    .expect("a scalar property names a live value pool in a valid state");
-                uses.insert(property.value_id);
             }
         }
 
@@ -522,9 +470,9 @@ impl VoxMain {
     }
 
     /// Reorders `pool`'s values to `new_order` and rewrites every material
-    /// and scalar-property value id that draws on it, so values move without
-    /// changing what anything resolves to. `new_order[new_index]` is the old
-    /// value id landing at `new_index`. `None`, changing nothing, if `pool` is not one
+    /// value id that draws on it, so values move without changing what
+    /// anything resolves to. `new_order[new_index]` is the old value id
+    /// landing at `new_index`. `None`, changing nothing, if `pool` is not one
     /// of this state's or `new_order` is not a permutation of the pool's
     /// `0..values_len`.
     pub fn reorder_value_pool(
@@ -564,15 +512,13 @@ impl VoxMain {
     ///    and its `min`/`max` finite, integer-valued for an `int` pool, and
     ///    ordered;
     /// 2. per palette:
-    ///    1. every property, array or scalar, names a live value pool;
-    ///    2. no property name repeats across the two property lists;
+    ///    1. every property names a live value pool;
+    ///    2. no property name repeats;
     ///    3. every material value id is within its array property's pool;
-    ///    4. every scalar property pins a value id within its pool;
-    ///    5. a palette with array properties has at least one material;
+    ///    4. there is at least one material;
     /// 3. every object layer references a live palette (two layers may share
-    ///    one), and in every sampled layer (its palette has materials) every
-    ///    live-voxel sample material is within that palette; an unsampled
-    ///    layer's sample cells are ignored;
+    ///    one), and every live-voxel sample material is within its layer's
+    ///    palette;
     /// 4. every node child node and child object resolves, and no node lists
     ///    the same one twice;
     /// 5. every root resolves, and no root repeats;
@@ -595,14 +541,10 @@ impl VoxMain {
             check_value_pool(pool_id.to_u32(), pool)?;
         }
 
-        // Palette property rules: pools resolve, names are unique across the
-        // array and scalar lists, and every value id is within its pool.
-        // Array properties are checked first, so a cross-list duplicate
-        // reports as the scalar property's fault.
+        // Palette property rules: pools resolve, names are unique, and every
+        // value id is within its pool.
         for (palette_id, palette) in self.iter_palettes() {
-            let mut seen_names = HashSet::with_capacity(
-                palette.array_property_count() + palette.scalar_property_count(),
-            );
+            let mut seen_names = HashSet::with_capacity(palette.array_property_count());
 
             for (property_id, property) in palette.iter_array_properties() {
                 if !seen_names.insert(property.name.as_str()) {
@@ -632,32 +574,9 @@ impl VoxMain {
                 }
             }
 
-            for (property_id, property) in palette.iter_scalar_properties() {
-                if !seen_names.insert(property.name.as_str()) {
-                    return Err(Error::DuplicateScalarPropertyName {
-                        palette: palette_id.to_u32(),
-                        scalar_property: property_id.to_u32(),
-                    });
-                }
-                let pool = self
-                    .value_pool(property.pool)
-                    .ok_or(Error::ScalarPropertyPool {
-                        palette: palette_id.to_u32(),
-                        scalar_property: property_id.to_u32(),
-                        pool: property.pool.to_u32(),
-                    })?;
-                if !pool.contains_value(property.value_id) {
-                    return Err(Error::ScalarPropertyValue {
-                        palette: palette_id.to_u32(),
-                        scalar_property: property_id.to_u32(),
-                    });
-                }
-            }
-
-            // An array property's values live in the material rows, so array
-            // properties bind nothing without a material.
-            if palette.array_property_count() > 0 && palette.material_count() == 0 {
-                return Err(Error::ArrayPropertiesWithoutMaterials {
+            // Every palette is sampled, so it needs a material to sample.
+            if palette.material_count() == 0 {
+                return Err(Error::PaletteWithoutMaterials {
                     palette: palette_id.to_u32(),
                 });
             }
@@ -676,13 +595,10 @@ impl VoxMain {
                 })?;
                 layer_palettes.push((layer_id, palette));
             }
-            // Every live voxel samples a material within each sampled layer's
-            // palette; an unsampled layer's cells are ignored filler.
-            // Layer-major so each layer's sample column is read once.
+            // Every live voxel samples a material within each layer's
+            // palette. Layer-major so each layer's sample column is read
+            // once.
             for &(layer_id, palette) in &layer_palettes {
-                if palette.material_count() == 0 {
-                    continue;
-                }
                 let samples = object
                     .iter_live_samples(layer_id)
                     .expect("an iterated layer is one of the object's layers");
@@ -1026,8 +942,8 @@ fn is_permutation(order: &[U32Id<BVoxPoolValue>], len: usize) -> bool {
 mod tests {
     use crate::{
         BVoxArrayProperty, BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette,
-        BVoxPoolValue, BVoxScalarProperty, BVoxValuePool, Error, VoxBound, VoxHierarchyNode,
-        VoxMain, VoxObject, VoxPalette, VoxValuePool,
+        BVoxPoolValue, BVoxValuePool, Error, VoxBound, VoxHierarchyNode, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool,
     };
     use branded_id::{IdVec, U32Id};
     use ty_math::{TyQuaternion, TyVector3, TyVector3U32};
@@ -1083,14 +999,6 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette.add_array_property("v".to_owned(), pool);
         palette.add_material(vec![value(index)]).unwrap();
-        palette
-    }
-
-    /// A palette with one scalar property "s" pinning `pool`'s value id 0 and
-    /// no materials, so a layer on it is unsampled.
-    fn scalar_only_palette(pool: U32Id<BVoxValuePool>) -> VoxPalette {
-        let mut palette = VoxPalette::default();
-        palette.add_scalar_property("s".to_owned(), pool, value(0));
         palette
     }
 
@@ -1425,26 +1333,14 @@ mod tests {
     }
 
     #[test]
-    fn validate_accepts_an_empty_palette() {
+    fn validate_rejects_a_palette_without_materials() {
         let mut state = VoxMain::default();
-        // Only array properties require materials, so an empty palette passes.
-        state.add_palette(VoxPalette::default());
-        assert_eq!(state.validate(), Ok(()));
-    }
-
-    #[test]
-    fn validate_rejects_a_palette_with_array_properties_and_no_materials() {
-        let mut state = VoxMain::default();
-        let pool = int_pool(&mut state, vec![7]);
-        // One array property and no material rows, so the property binds
-        // nothing anywhere.
-        let mut palette = VoxPalette::default();
-        palette.add_array_property("v".to_owned(), pool);
-        let id = state.add_palette(palette);
-
+        // Every palette is sampled, so even a property-less palette needs a
+        // material.
+        let id = state.add_palette(VoxPalette::default());
         assert_eq!(
             state.validate(),
-            Err(Error::ArrayPropertiesWithoutMaterials {
+            Err(Error::PaletteWithoutMaterials {
                 palette: id.to_u32(),
             })
         );
@@ -1482,28 +1378,13 @@ mod tests {
     }
 
     #[test]
-    fn validate_ignores_an_unsampled_layers_sample_cells() {
-        let mut state = VoxMain::default();
-        let pool = int_pool(&mut state, vec![7]);
-        let palette = state.add_palette(scalar_only_palette(pool));
-
-        // The layer back-fills the live voxel with material 9; the palette
-        // has no materials, so the cell is ignored filler.
-        let mut object = unit_object("o");
-        object.add_layer(palette, material(9));
-        state.add_object(object);
-
-        assert_eq!(state.validate(), Ok(()));
-    }
-
-    #[test]
-    fn validate_rejects_a_sampled_layers_bad_sample_material() {
+    fn validate_rejects_a_bad_sample_material() {
         let mut state = VoxMain::default();
         let pool = int_pool(&mut state, vec![7]);
         let palette = state.add_palette(one_material_palette(pool, 0));
 
-        // The palette has materials, so the layer is sampled and the
-        // back-filled material 9 is a fault.
+        // The layer back-fills the live voxel with material 9, beyond the
+        // palette's one material.
         let mut object = unit_object("o");
         object.add_layer(palette, material(9));
         let id = state.add_object(object);
@@ -1516,64 +1397,6 @@ mod tests {
                 material: 9,
             })
         );
-    }
-
-    #[test]
-    fn sampled_layers_derive_from_palette_material_counts() {
-        let mut state = VoxMain::default();
-        let pool = int_pool(&mut state, vec![7]);
-        let sampled = state.add_palette(one_material_palette(pool, 0));
-        let scalar_only = state.add_palette(scalar_only_palette(pool));
-
-        let mut object = unit_object("o");
-        let base = object.add_layer(sampled, material(0));
-        let glow = object.add_layer(scalar_only, material(0));
-        let overlay = object.add_layer(sampled, material(0));
-        let object = state.add_object(object);
-        state.validate().unwrap();
-
-        assert_eq!(state.layer_is_sampled(object, base), Some(true));
-        assert_eq!(state.layer_is_sampled(object, glow), Some(false));
-        assert_eq!(state.layer_is_sampled(object, overlay), Some(true));
-        // Unknown ids resolve to None.
-        assert_eq!(state.layer_is_sampled(object, U32Id::from_u32(9)), None);
-        assert_eq!(
-            state.layer_is_sampled(U32Id::<BVoxObject>::from_u32(9), base),
-            None
-        );
-
-        // The view skips the unsampled layer, in layer order: one sample
-        // channel per sampled layer on the wire.
-        let layers: Vec<_> = state.iter_sampled_layers(object).unwrap().collect();
-        assert_eq!(layers, [(base, sampled), (overlay, sampled)]);
-        assert!(
-            state
-                .iter_sampled_layers(U32Id::<BVoxObject>::from_u32(9))
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn gc_leaves_an_unsampled_layers_filler_cells() {
-        let mut state = VoxMain::default();
-        let pool = int_pool(&mut state, vec![7]);
-        let sampled = state.add_palette(one_material_palette(pool, 0));
-        let scalar_only = state.add_palette(scalar_only_palette(pool));
-
-        let mut object = unit_object("o");
-        let base = object.add_layer(sampled, material(0));
-        let glow = object.add_layer(scalar_only, material(9));
-        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        let object = state.add_object(object);
-        state.validate().unwrap();
-
-        // gc translates the sampled layer's cells and leaves the unsampled
-        // layer's filler in place.
-        state.gc();
-        assert_eq!(state.validate(), Ok(()));
-        let object = state.object(object).unwrap();
-        assert_eq!(object.voxel_material(voxel, base), Some(material(0)));
-        assert_eq!(object.voxel_material(voxel, glow), Some(material(9)));
     }
 
     #[test]
@@ -1601,181 +1424,6 @@ mod tests {
         state.add_hierarchy_node(node_with_children(vec![node_id(1)]));
         state.add_hierarchy_node(node_with_children(vec![node_id(0)]));
         assert!(matches!(state.validate(), Err(Error::Cycle { .. })));
-    }
-
-    #[test]
-    fn scalar_property_value_resolves_through_the_pool() {
-        let mut state = VoxMain::default();
-        let strengths = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::Number(0.0),
-            max: VoxBound::None,
-            values: IdVec::from_vec(vec![1.0, 4.0]),
-        });
-
-        // A scalar-only palette.
-        let mut palette = VoxPalette::default();
-        let strength =
-            palette.add_scalar_property("emissiveStrength".to_owned(), strengths, value(1));
-        let palette = state.add_palette(palette);
-        assert_eq!(state.validate(), Ok(()));
-
-        match state.scalar_property_value(palette, strength) {
-            Some((VoxValuePool::Float { values, .. }, id)) => {
-                assert_eq!(values[id.to_usize_id()], 4.0)
-            }
-            other => panic!("unexpected scalar value {other:?}"),
-        }
-        // An id that is not the palette's resolves to None.
-        assert_eq!(
-            state.scalar_property_value(palette, U32Id::<BVoxScalarProperty>::from_u32(9)),
-            None
-        );
-    }
-
-    #[test]
-    fn validate_rejects_a_dangling_scalar_property_pool() {
-        let mut state = VoxMain::default();
-        let mut palette = VoxPalette::default();
-        // The property references pool id 0, but the state holds no pools.
-        palette.add_scalar_property(
-            "emissiveStrength".to_owned(),
-            U32Id::<BVoxValuePool>::from_u32(0),
-            value(0),
-        );
-        state.add_palette(palette);
-        assert_eq!(
-            state.validate(),
-            Err(Error::ScalarPropertyPool {
-                palette: 0,
-                scalar_property: 0,
-                pool: 0,
-            })
-        );
-    }
-
-    #[test]
-    fn validate_rejects_a_scalar_property_value_id_out_of_range() {
-        let mut state = VoxMain::default();
-        let pool = int_pool(&mut state, vec![0, 1]);
-        let mut palette = VoxPalette::default();
-        // Two pool values, but the property pins value id 2.
-        palette.add_scalar_property("v".to_owned(), pool, value(2));
-        state.add_palette(palette);
-        assert_eq!(
-            state.validate(),
-            Err(Error::ScalarPropertyValue {
-                palette: 0,
-                scalar_property: 0,
-            })
-        );
-    }
-
-    #[test]
-    fn validate_rejects_a_duplicate_scalar_property_name() {
-        let mut state = VoxMain::default();
-        let pool = int_pool(&mut state, vec![0]);
-        let mut palette = VoxPalette::default();
-        palette.add_scalar_property("v".to_owned(), pool, value(0));
-        palette.add_scalar_property("v".to_owned(), pool, value(0));
-        state.add_palette(palette);
-        assert_eq!(
-            state.validate(),
-            Err(Error::DuplicateScalarPropertyName {
-                palette: 0,
-                scalar_property: 1,
-            })
-        );
-    }
-
-    #[test]
-    fn validate_rejects_a_name_shared_across_the_property_lists() {
-        let mut state = VoxMain::default();
-        let pool = int_pool(&mut state, vec![0]);
-        let mut palette = VoxPalette::default();
-        // One name in both lists; the scalar side reports the fault.
-        palette.add_array_property("v".to_owned(), pool);
-        palette.add_scalar_property("v".to_owned(), pool, value(0));
-        state.add_palette(palette);
-        assert_eq!(
-            state.validate(),
-            Err(Error::DuplicateScalarPropertyName {
-                palette: 0,
-                scalar_property: 0,
-            })
-        );
-    }
-
-    #[test]
-    fn prune_value_pools_keeps_values_scalar_properties_reference() {
-        let mut state = VoxMain::default();
-        // In `ints`, the material references value 0 and a scalar property
-        // value 2; value 1 is unreferenced and prunes away. `glow` is
-        // referenced only by a scalar property.
-        let ints = int_pool(&mut state, vec![10, 20, 30]);
-        let glow = int_pool(&mut state, vec![1, 4]);
-
-        let mut palette = VoxPalette::default();
-        let array = palette.add_array_property("a".to_owned(), ints);
-        let material = palette.add_material(vec![value(0)]).unwrap();
-        let scalar = palette.add_scalar_property("s".to_owned(), ints, value(2));
-        let strength = palette.add_scalar_property("emissiveStrength".to_owned(), glow, value(1));
-
-        let palette_id = state.add_palette(palette);
-        state.validate().unwrap();
-
-        state.prune_value_pools();
-
-        assert_eq!(
-            state.value_pool(ints),
-            Some(&VoxValuePool::Int {
-                min: VoxBound::None,
-                max: VoxBound::None,
-                values: IdVec::from_vec(vec![10, 30]),
-            })
-        );
-        assert_eq!(
-            state.value_pool(glow),
-            Some(&VoxValuePool::Int {
-                min: VoxBound::None,
-                max: VoxBound::None,
-                values: IdVec::from_vec(vec![4]),
-            })
-        );
-        // Every reference follows the dense numbering.
-        let palette = state.palette(palette_id).unwrap();
-        assert_eq!(palette.value_id(material, array), Some(value(0)));
-        assert_eq!(palette.scalar_property(scalar).unwrap().value_id, value(1));
-        assert_eq!(
-            palette.scalar_property(strength).unwrap().value_id,
-            value(0)
-        );
-        state.validate().unwrap();
-    }
-
-    #[test]
-    fn reorder_value_pool_follows_scalar_property_value_ids() {
-        let mut state = VoxMain::default();
-        let ints = int_pool(&mut state, vec![10, 20, 30]);
-        let mut palette = VoxPalette::default();
-        let scalar = palette.add_scalar_property("s".to_owned(), ints, value(0));
-        let palette_id = state.add_palette(palette);
-        state.validate().unwrap();
-
-        // Move 30 to 0, 10 to 1, 20 to 2.
-        assert_eq!(
-            state.reorder_value_pool(ints, &[value(2), value(0), value(1)]),
-            Some(())
-        );
-
-        // The property still resolves to 10, now at value id 1.
-        match state.scalar_property_value(palette_id, scalar) {
-            Some((VoxValuePool::Int { values, .. }, id)) => {
-                assert_eq!(id, value(1));
-                assert_eq!(values[id.to_usize_id()], 10);
-            }
-            other => panic!("unexpected scalar value {other:?}"),
-        }
-        state.validate().unwrap();
     }
 
     #[test]

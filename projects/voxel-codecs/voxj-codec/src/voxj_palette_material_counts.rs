@@ -4,12 +4,11 @@ use voxj::VoxjPalette;
 /// The material count M of each referenced palette, in `layers` order. This is
 /// the `material_counts` argument that
 /// [`encode_voxj_object`](crate::encode_voxj_object()) and
-/// [`decode_voxj_object`](crate::decode_voxj_object()) need to tell sampled
-/// layers (M > 0) from unsampled ones and to derive the bit width of
-/// `packed-base64` channels. A layer entry outside `palettes` is an error.
+/// [`decode_voxj_object`](crate::decode_voxj_object()) need to derive the bit
+/// width of `packed-base64` channels, one channel per layer. A layer entry
+/// outside `palettes` is an error.
 ///
-/// `materials` is row-major, one row per material, so M is `materials.len()`;
-/// a palette with no materials yields M = 0 and is never sampled.
+/// `materials` is row-major, one row per material, so M is `materials.len()`.
 pub fn voxj_palette_material_counts(
     layers: &[usize],
     palettes: &[VoxjPalette],
@@ -43,7 +42,6 @@ mod tests {
                 name: "baseColorFactor".to_owned(),
                 value_pool: 0,
             }],
-            scalar_properties: vec![],
             materials: (0..m).map(|i| vec![i]).collect(),
         }
     }
@@ -69,22 +67,11 @@ mod tests {
         // one material, so M is the row count.
         let palettes = [VoxjPalette {
             array_properties: vec![],
-            scalar_properties: vec![],
             materials: vec![vec![], vec![], vec![]],
         }];
         assert_eq!(
             voxj_palette_material_counts(&[0], &palettes).unwrap(),
             vec![3]
-        );
-    }
-
-    #[test]
-    fn counts_a_material_less_palette_as_zero() {
-        // No materials means M = 0: the palette is never sampled.
-        let palettes = [VoxjPalette::default()];
-        assert_eq!(
-            voxj_palette_material_counts(&[0], &palettes).unwrap(),
-            vec![0]
         );
     }
 }

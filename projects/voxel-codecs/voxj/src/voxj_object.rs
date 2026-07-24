@@ -2,7 +2,7 @@ use crate::{VoxjPositionBlock, VoxjSampleBlock};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// One object's voxel geometry and sampled-layer material samples, in encoded
+/// One object's voxel geometry and per-layer material samples, in encoded
 /// blocks.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
@@ -35,9 +35,8 @@ pub struct VoxjObject {
     /// layer that supplies it.
     pub layers: Vec<usize>,
 
-    /// Encoded voxel samples: one channel per sampled layer in
+    /// Encoded voxel samples: one channel per layer in
     /// [`layers`](Self::layers) order, each giving a material index into that
-    /// layer's palette for every voxel, in voxel order. A layer is sampled
-    /// iff its palette has materials.
+    /// layer's palette for every voxel, in voxel order.
     pub voxel_samples: VoxjSampleBlock,
 }

@@ -11,12 +11,10 @@ pub enum Check {
     ValuePools,
 
     /// Per palette:
-    /// 1. every property has a non-empty name, distinct across the array and
-    ///    scalar lists together, and an in-range value pool;
-    /// 2. every scalar property pins an in-range value-index;
-    /// 3. row-major materials hold one row per material, each of exactly one
-    ///    in-range value-index per array property;
-    /// 4. a palette with array properties has at least one material.
+    /// 1. every property has a non-empty name, distinct within the palette,
+    ///    and an in-range value pool;
+    /// 2. row-major materials hold at least one row, one per material, each
+    ///    of exactly one in-range value-index per property.
     Palettes,
 
     /// Object layers, node children, child objects, and roots resolve; node
@@ -26,7 +24,7 @@ pub enum Check {
     /// Each object's position and sample blocks decode: recognized structure,
     /// canonical base64, exact bitmap and packed byte counts with zero pad
     /// bits, well-formed run streams and varints, the Hilbert bits cap, and one
-    /// channel per sampled layer with one value per voxel.
+    /// channel per layer with one value per voxel.
     Blocks,
 
     /// Voxel positions within an object are unique.

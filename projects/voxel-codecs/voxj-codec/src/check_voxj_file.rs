@@ -12,12 +12,10 @@ use voxj::VoxjFile;
 /// 2. `value-pools`: every value pool has non-empty values within its kind,
 ///    with in-range numeric bounds and in-range color components.
 /// 3. `palettes`:
-///    1. every property has a non-empty name, distinct across the array and
-///       scalar lists together, and an in-range value pool;
-///    2. every scalar property pins an in-range value-index;
-///    3. row-major materials hold one row per material, each of exactly one
-///       in-range value-index per array property;
-///    4. a palette with array properties has at least one material.
+///    1. every property has a non-empty name, distinct within the palette,
+///       and an in-range value pool;
+///    2. row-major materials hold at least one row, one per material, each of
+///       exactly one in-range value-index per property.
 /// 4. `indices`:
 ///    1. object layers, node children, child objects, and roots resolve;
 ///    2. node children, child objects, and roots each appear at most once; a
@@ -27,7 +25,7 @@ use voxj::VoxjFile;
 ///    2. exact bitmap and packed byte counts with zero pad bits;
 ///    3. well-formed run streams and varints;
 ///    4. the Hilbert bits cap;
-///    5. one channel per sampled layer with one value per voxel.
+///    5. one channel per layer with one value per voxel.
 /// 6. `unique-positions`: voxel positions within an object are unique.
 /// 7. `bounds`: positions lie within bounds and bounds are exactly tight.
 /// 8. `sample-materials`: each sample indexes a real material of its layer's
@@ -53,13 +51,12 @@ mod tests {
     use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
         VoxjArrayProperty, VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
-        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjScalarProperty,
-        VoxjTransform, VoxjValuePool,
+        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjValuePool,
     };
 
     /// An `srgba-hex` pool of four colors backing the array property's
-    /// value-indices, and a one-value `float` pool backing the scalar
-    /// property.
+    /// value-indices, and an unreferenced one-value `float` pool.
     fn value_pools() -> Vec<VoxjValuePool> {
         vec![
             VoxjValuePool::SrgbaHex {
@@ -75,18 +72,12 @@ mod tests {
 
     /// A palette of `materials` materials: one array property binding
     /// `baseColorFactor` to value pool 0, its rows the value-indices
-    /// `0..materials`, and one scalar property pinning `emissiveStrength` to
-    /// value 0 of the float pool.
+    /// `0..materials`.
     fn palette(materials: usize) -> VoxjPalette {
         VoxjPalette {
             array_properties: vec![VoxjArrayProperty {
                 name: "baseColorFactor".to_owned(),
                 value_pool: 0,
-            }],
-            scalar_properties: vec![VoxjScalarProperty {
-                name: "emissiveStrength".to_owned(),
-                value_pool: 1,
-                value_index: 0,
             }],
             materials: (0..materials).map(|i| vec![i]).collect(),
         }
@@ -240,35 +231,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_array_properties_without_materials() {
+    fn rejects_a_palette_without_materials() {
         let mut file = valid_file();
-        // An extra, unreferenced palette with an array property and no
-        // materials fails only the palettes check.
+        // An extra, unreferenced palette with no materials fails only the
+        // palettes check.
         file.main.runtime_state.palettes.push(VoxjPalette {
             array_properties: vec![VoxjArrayProperty {
                 name: "baseColorFactor".to_owned(),
                 value_pool: 0,
             }],
-            scalar_properties: vec![],
             materials: vec![],
         });
-        let checks = check_voxj_file(&file);
-        assert!(matches!(
-            status(&checks, "palettes"),
-            VoxjCheckStatus::Failed(_)
-        ));
-    }
-
-    #[test]
-    fn rejects_scalar_value_index_out_of_range() {
-        let mut file = valid_file();
-        // Pool 1 has a single value, so the scalar property's value-index 1 is
-        // out of range.
-        file.main.runtime_state.palettes[0].scalar_properties = vec![VoxjScalarProperty {
-            name: "emissiveStrength".to_owned(),
-            value_pool: 1,
-            value_index: 1,
-        }];
         let checks = check_voxj_file(&file);
         assert!(matches!(
             status(&checks, "palettes"),

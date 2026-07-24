@@ -41,7 +41,7 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
             .as_ref()
             .and_then(|e| e.objects.get(index))
             .map(|edit| (edit.bounds, edit.origin));
-        let vox_object = vox_object_from_voxj_decoded_object(&decoded, &material_counts, edit)?;
+        let vox_object = vox_object_from_voxj_decoded_object(&decoded, edit)?;
         state.add_object(vox_object);
     }
 
@@ -82,7 +82,7 @@ mod tests {
     use voxj::{
         VoxjArrayProperty, VoxjBound, VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode,
         VoxjMain, VoxjMap, VoxjObject, VoxjPalette, VoxjPositionBlock, VoxjRuntimeState,
-        VoxjSampleBlock, VoxjScalarProperty, VoxjTransform, VoxjValue, VoxjValuePool,
+        VoxjSampleBlock, VoxjTransform, VoxjValue, VoxjValuePool,
     };
     use voxj_codec::{decode_voxj_object, voxj_palette_material_counts};
 
@@ -101,7 +101,6 @@ mod tests {
     fn numbered_palette(name: &str, value_pool: usize, n: usize) -> VoxjPalette {
         VoxjPalette {
             array_properties: vec![array_property(name, value_pool)],
-            scalar_properties: vec![],
             materials: (0..n).map(|m| vec![m]).collect(),
         }
     }
@@ -113,19 +112,10 @@ mod tests {
         }
     }
 
-    fn scalar_property(name: &str, value_pool: usize, value_index: usize) -> VoxjScalarProperty {
-        VoxjScalarProperty {
-            name: name.to_owned(),
-            value_pool,
-            value_index,
-        }
-    }
-
     /// One object holding raw-json position and sample blocks, the readable
     /// form the fixtures author geometry in. `samples` is one row of material
-    /// indices per voxel, one entry per sampled layer; transposed into the
-    /// per-sampled-layer channels the sample block stores, their count read
-    /// off the row arity.
+    /// indices per voxel, one entry per layer; transposed into the per-layer
+    /// channels the sample block stores, their count read off the row arity.
     fn object(
         name: &str,
         layers: Vec<usize>,
@@ -183,7 +173,6 @@ mod tests {
                                 array_property("metallicFactor", 1),
                                 array_property("ior", 2),
                             ],
-                            scalar_properties: vec![],
                             materials: vec![vec![0, 0], vec![1, 1]],
                         },
                     ],
@@ -539,28 +528,24 @@ mod tests {
         assert!(from_voxj_file(&file).is_err());
     }
 
-    /// A voxelless object (tight bounds `[0, 0, 0]`) may reference a palette
-    /// with no materials: the layer is unsampled, carries no channel, and
-    /// round-trips rather than being rejected.
+    /// A voxelless object (tight bounds `[0, 0, 0]`) still carries one empty
+    /// channel per layer and round-trips rather than being rejected.
     #[test]
-    fn round_trips_empty_palette_referenced_by_voxelless_object() {
+    fn round_trips_a_voxelless_object_with_a_layer() {
         let file = VoxjFile {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
                     value_pools: vec![numbered_pool(1)],
-                    objects: vec![object(
-                        "empty-ref",
-                        vec![0],
-                        [0, 0, 0],
-                        Vec::new(),
-                        Vec::new(),
-                    )],
-                    palettes: vec![VoxjPalette {
-                        array_properties: vec![],
-                        scalar_properties: vec![],
-                        materials: vec![],
+                    objects: vec![VoxjObject {
+                        name: "empty-ref".to_owned(),
+                        layers: vec![0],
+                        bounds: [0, 0, 0],
+                        origin: [0, 0, 0],
+                        voxel_positions: VoxjPositionBlock::RawJson(Vec::new()),
+                        voxel_samples: VoxjSampleBlock::RawJson(vec![Vec::new()]),
                     }],
+                    palettes: vec![numbered_palette("baseColorFactor", 0, 1)],
                     nodes: Vec::new(),
                     root_nodes: Vec::new(),
                 },
@@ -572,11 +557,18 @@ mod tests {
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
-    /// Scalar properties and an unsampled scalar-only layer round-trip: the
-    /// scalar-only palette has no materials, so its layer carries no channel
-    /// and each voxel's row holds one entry for the sampled layer alone.
+    /// Sibling variant palettes round-trip: both share the same pools and
+    /// differ in one column, and the object layered over them carries one
+    /// channel per layer.
     #[test]
-    fn round_trips_scalar_properties_and_unsampled_layer() {
+    fn round_trips_sibling_variant_palettes() {
+        let variant = |strength: usize| VoxjPalette {
+            array_properties: vec![
+                array_property("baseColorFactor", 0),
+                array_property("emissiveStrength", 1),
+            ],
+            materials: vec![vec![0, strength], vec![1, strength]],
+        };
         let file = VoxjFile {
             version: 1,
             main: VoxjMain {
@@ -587,24 +579,9 @@ mod tests {
                         vec![0, 1],
                         [2, 1, 1],
                         vec![[0, 0, 0], [1, 0, 0]],
-                        vec![vec![0], vec![1]],
+                        vec![vec![0, 0], vec![1, 1]],
                     )],
-                    palettes: vec![
-                        // Palette 0 mixes arities: sampled, and every material
-                        // shares one emissiveStrength.
-                        VoxjPalette {
-                            array_properties: vec![array_property("baseColorFactor", 0)],
-                            scalar_properties: vec![scalar_property("emissiveStrength", 1, 0)],
-                            materials: vec![vec![0], vec![1]],
-                        },
-                        // Palette 1 is scalar-only: M = 0, an object-wide
-                        // override listed after the sampled layer.
-                        VoxjPalette {
-                            array_properties: vec![],
-                            scalar_properties: vec![scalar_property("emissiveStrength", 1, 2)],
-                            materials: vec![],
-                        },
-                    ],
+                    palettes: vec![variant(0), variant(2)],
                     nodes: Vec::new(),
                     root_nodes: Vec::new(),
                 },

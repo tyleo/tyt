@@ -10,9 +10,7 @@ use ty_math::{TyVector3I32, TyVector3U32};
 ///
 /// Each layer references a shared [`VoxPalette`](crate::VoxPalette), and
 /// layers override back to front: each property takes its value from the
-/// last layer that supplies it. An unsampled layer's sample cells are
-/// ignored filler (see
-/// [`VoxMain::layer_is_sampled`](crate::VoxMain::layer_is_sampled)).
+/// last layer that supplies it.
 ///
 /// Every grid cell has a voxel id equal to
 /// its raster index `x*Y*Z + y*Z + z`, so [`voxel_id`](Self::voxel_id) and

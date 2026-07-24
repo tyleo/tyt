@@ -805,10 +805,9 @@ fn derive_materials(
 }
 
 /// One derived Voxel Max material. A coefficient reads from its array
-/// property's pool at the signature's value id, or from the palette's scalar
-/// property of the same name when no column carries it. Metalness and
-/// roughness map from the 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider
-/// coefficient; see [`pbr_factor_to_vm_coefficient`].
+/// property's pool at the signature's value id. Metalness and roughness map
+/// from the 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient;
+/// see [`pbr_factor_to_vm_coefficient`].
 fn derived_material(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
@@ -818,20 +817,12 @@ fn derived_material(
     base_luminance: Option<f64>,
 ) -> VMaxMaterial {
     let scalar = |property: &str| -> Option<f64> {
-        match properties.iter().position(|(name, _)| name == property) {
-            Some(position) => {
-                pool_scalar(state, palette, properties[position].1, signature[position])
-            }
-            None => scalar_property_scalar(state, palette, property),
-        }
+        let position = properties.iter().position(|(name, _)| name == property)?;
+        pool_scalar(state, palette, properties[position].1, signature[position])
     };
     let flag = |property: &str| -> Option<bool> {
-        match properties.iter().position(|(name, _)| name == property) {
-            Some(position) => {
-                pool_flag(state, palette, properties[position].1, signature[position])
-            }
-            None => scalar_property_flag(state, palette, property),
-        }
+        let position = properties.iter().position(|(name, _)| name == property)?;
+        pool_flag(state, palette, properties[position].1, signature[position])
     };
     // The emissive color's linear luminance at this slot, or `None` when the
     // property is absent. Folded into Voxel Max's single self-illumination
@@ -847,12 +838,7 @@ fn derived_material(
             .into_linear();
         Some(0.2126 * linear.red + 0.7152 * linear.green + 0.0722 * linear.blue)
     };
-    let carries = |property: &str| -> bool {
-        properties.iter().any(|(name, _)| name == property)
-            || state
-                .palette(palette)
-                .is_some_and(|palette| palette.scalar_property_by_name(property).is_some())
-    };
+    let carries = |property: &str| -> bool { properties.iter().any(|(name, _)| name == property) };
     let dispersed = carries(IOR) || carries(TRANSMISSION_FACTOR) || carries(ABSORPTION);
     VMaxMaterial {
         mi: (slot + 1).to_string(),
@@ -934,28 +920,6 @@ fn pool_flag(
 ) -> Option<bool> {
     match array_property_pool(state, palette, array_property)? {
         VoxValuePool::Bool { values } => values.get(value_id.to_usize_id()).copied(),
-        _ => None,
-    }
-}
-
-/// The `f64` value the palette's scalar property `name` pins in a `float`
-/// pool, or `None`.
-fn scalar_property_scalar(state: &VoxMain, palette: U32Id<BVoxPalette>, name: &str) -> Option<f64> {
-    let property = state.palette(palette)?.scalar_property_by_name(name)?;
-    match state.scalar_property_value(palette, property)? {
-        (VoxValuePool::Float { values, .. }, value_id) => {
-            values.get(value_id.to_usize_id()).copied()
-        }
-        _ => None,
-    }
-}
-
-/// The `bool` value the palette's scalar property `name` pins in a `bool`
-/// pool, or `None`.
-fn scalar_property_flag(state: &VoxMain, palette: U32Id<BVoxPalette>, name: &str) -> Option<bool> {
-    let property = state.palette(palette)?.scalar_property_by_name(name)?;
-    match state.scalar_property_value(palette, property)? {
-        (VoxValuePool::Bool { values }, value_id) => values.get(value_id.to_usize_id()).copied(),
         _ => None,
     }
 }

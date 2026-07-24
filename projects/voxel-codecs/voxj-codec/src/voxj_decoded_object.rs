@@ -24,10 +24,9 @@ pub struct VoxjDecodedObject {
     /// Voxel positions `[x, y, z]`, in listing order.
     pub positions: Vec<[u32; 3]>,
 
-    /// One material index per sampled layer, per voxel, aligned to
-    /// [`positions`](Self::positions). A layer is sampled iff its palette has
-    /// materials; entries follow [`layers`](Self::layers) order with unsampled
-    /// layers skipped. Each index addresses a material in that layer's
-    /// palette.
+    /// One material index per layer, per voxel, aligned to
+    /// [`positions`](Self::positions). Entries follow
+    /// [`layers`](Self::layers) order; each index addresses a material in
+    /// that layer's palette.
     pub samples: Vec<Vec<u32>>,
 }

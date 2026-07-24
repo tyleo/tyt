@@ -8,10 +8,9 @@ vxl info <input> [options]
 
 Reports what a document contains, surfacing the format internals that voxel
 counts and bounds alone miss: the `version`; per-object `bounds`, voxel count,
-layer and sampled-layer counts, and the position and sample encodings in use;
-each palette's property set, scalar pins marked, and
-material count; whether `editState` and `ext` namespaces are present; and the root,
-instanced, and unplaced nodes in the hierarchy.
+layer count, and the position and sample encodings in use; each palette's
+property set and material count; whether `editState` and `ext` namespaces are
+present; and the root, instanced, and unplaced nodes in the hierarchy.
 
 1. `--layout` `tables` | `json-pretty` | `json-compact` (default `tables`):
    how to render the report. `tables` is the human-readable form, a
@@ -21,6 +20,5 @@ instanced, and unplaced nodes in the hierarchy.
    `{"label", "annotation"?, "values"?, "children"?}` record per node:
    `document`, `palettes`, and `objects` roots whose fields carry snake_case
    labels and values in their native JSON types, a bounds or
-   origin triple as a three-number series, a scalar property carrying
-   `"annotation": "(scalar)"`, and absent fields (`voxj_version`,
+   origin triple as a three-number series, and absent fields (`voxj_version`,
    `edit_bounds`) omitted.

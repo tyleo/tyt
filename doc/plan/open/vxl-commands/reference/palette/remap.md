@@ -66,7 +66,6 @@ shared pools rather than inline in each palette. A single-palette target file:
   "palettes": [
     {
       "arrayProperties": [{ "name": "baseColorFactor", "valuePool": 0 }],
-      "scalarProperties": [],
       "materials": [[0], [1], [2]]
     }
   ]
@@ -94,12 +93,10 @@ A target file may hold several palettes; `--target-index` picks one:
         { "name": "baseColorFactor", "valuePool": 0 },
         { "name": "metallicFactor", "valuePool": 1 }
       ],
-      "scalarProperties": [],
       "materials": [[0, 0]]
     },
     {
       "arrayProperties": [{ "name": "baseColorFactor", "valuePool": 0 }],
-      "scalarProperties": [],
       "materials": [[1], [2]]
     },
     {
@@ -107,7 +104,6 @@ A target file may hold several palettes; `--target-index` picks one:
         { "name": "metallicFactor", "valuePool": 1 },
         { "name": "roughnessFactor", "valuePool": 2 }
       ],
-      "scalarProperties": [],
       "materials": [[0, 0]]
     }
   ]

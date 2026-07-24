@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 )]
 pub struct VoxjArrayProperty {
     /// The property name. Advisory: a consumer ignores names it does not
-    /// recognize. No property name repeats within a palette, across its array
-    /// and scalar properties together.
+    /// recognize. No property name repeats within a palette.
     pub name: String,
 
     /// Index into

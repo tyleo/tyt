@@ -3,12 +3,11 @@ use std::collections::HashSet;
 use voxj::{VoxjMain, VoxjPalette, VoxjRuntimeState};
 
 /// Per palette:
-/// 1. every property has a non-empty name, distinct across the array and
-///    scalar lists together, and an in-range value pool;
-/// 2. every scalar property pins an in-range value-index;
-/// 3. row-major materials hold one row per material, each of exactly one
-///    value-index per array property, within the pool that property binds;
-/// 4. a palette with array properties has at least one material.
+/// 1. every property has a non-empty name, distinct within the palette, and
+///    an in-range value pool;
+/// 2. row-major materials hold at least one row, one per material, each of
+///    exactly one value-index per property, within the pool that property
+///    binds.
 pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
     for (index, palette) in state.palettes.iter().enumerate() {
@@ -16,20 +15,11 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
             return;
         }
 
-        // One namespace across both property lists (rule 10.2).
-        let mut seen = HashSet::with_capacity(
-            palette.array_properties.len() + palette.scalar_properties.len(),
-        );
+        // One namespace per palette (rule 10.2).
+        let mut seen = HashSet::with_capacity(palette.array_properties.len());
 
         for (position, property) in palette.array_properties.iter().enumerate() {
-            check_name(
-                index,
-                "array",
-                position,
-                &property.name,
-                &mut seen,
-                failures,
-            );
+            check_name(index, position, &property.name, &mut seen, failures);
             if property.value_pool >= state.value_pools.len() {
                 failures.report(
                     Check::Palettes,
@@ -45,54 +35,10 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
             }
         }
 
-        for (position, property) in palette.scalar_properties.iter().enumerate() {
-            check_name(
-                index,
-                "scalar",
-                position,
-                &property.name,
-                &mut seen,
-                failures,
-            );
-            // The pinned cell gets the same range checks as a materials cell:
-            // the pool resolves and the value-index lands inside it.
-            match state.value_pools.get(property.value_pool) {
-                None => {
-                    failures.report(
-                        Check::Palettes,
-                        format!(
-                            "palette {index} scalar property {position} references value pool {}, but the document has {} pools",
-                            property.value_pool,
-                            state.value_pools.len()
-                        ),
-                    );
-                }
-                Some(pool) => {
-                    let pool_len = pool.values_len();
-                    if property.value_index >= pool_len {
-                        failures.report(
-                            Check::Palettes,
-                            format!(
-                                "palette {index} scalar property {position} value-index {} \
-                                 is out of range for a pool with {pool_len} values",
-                                property.value_index
-                            ),
-                        );
-                    }
-                }
-            }
-            if !failures.go() {
-                return;
-            }
-        }
-
-        // An array property's values live in the material rows, so array
-        // properties bind nothing without a material (rule 10.6).
-        if !palette.array_properties.is_empty() && palette.materials.is_empty() {
-            failures.report(
-                Check::Palettes,
-                format!("palette {index} declares array properties but has no materials"),
-            );
+        // Every palette is sampled, so it needs a material to sample (rule
+        // 10.6).
+        if palette.materials.is_empty() {
+            failures.report(Check::Palettes, format!("palette {index} has no materials"));
             if !failures.go() {
                 return;
             }
@@ -102,11 +48,9 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
     }
 }
 
-/// A property's name is non-empty and not yet taken within the palette; `kind`
-/// names the list for the message.
+/// A property's name is non-empty and not yet taken within the palette.
 fn check_name<'a>(
     index: usize,
-    kind: &str,
     position: usize,
     name: &'a str,
     seen: &mut HashSet<&'a str>,
@@ -115,7 +59,7 @@ fn check_name<'a>(
     if name.is_empty() {
         failures.report(
             Check::Palettes,
-            format!("palette {index} {kind} property {position} has an empty name"),
+            format!("palette {index} array property {position} has an empty name"),
         );
     } else if !seen.insert(name) {
         failures.report(

@@ -1,56 +1,43 @@
-use crate::{CellColor, Error, ObjectPropertyRef, Result, base_color_factor_ref, pool_color};
+use crate::{CellColor, Error, Result, base_color_factor_ref, pool_color};
 use std::collections::HashMap;
 use voxcore::{VoxMain, VoxObject};
 
 /// The [`CellColor`] read for `object`, picked from its winning
-/// `baseColorFactor` supplier: a table of per-material colors for an array
-/// supplier, one pinned color for a scalar one. All decoding happens here;
-/// a supplier drawing from a non-color pool errors. `Ok(None)` when no
-/// layer supplies `baseColorFactor`.
+/// `baseColorFactor` supplier: a table of per-material colors, read through
+/// the material each voxel samples in the winning layer. All decoding
+/// happens here; a supplier drawing from a non-color pool errors. `Ok(None)`
+/// when no layer supplies `baseColorFactor`.
 pub fn resolve_cell_color<'a>(
     state: &VoxMain,
     object: &'a VoxObject,
 ) -> Result<Option<CellColor<'a>>> {
-    match base_color_factor_ref(state, object) {
-        None => Ok(None),
-        Some(ObjectPropertyRef::Array {
-            layer,
-            palette,
-            property,
-        }) => {
-            let palette_ref = state
-                .palette(palette)
-                .expect("the winning layer references one of the state's palettes");
+    let Some(winner) = base_color_factor_ref(state, object) else {
+        return Ok(None);
+    };
 
-            let colors: HashMap<_, _> = palette_ref
-                .iter_materials()
-                .map(|material| {
-                    let (pool, value_id) = state
-                        .material_value(palette, material, property)
-                        .expect("a palette material carries a value for each array property");
-                    let color = pool_color(pool, value_id).ok_or_else(|| non_color_pool(object))?;
-                    Ok((material, color))
-                })
-                .collect::<Result<_>>()?;
+    let palette_ref = state
+        .palette(winner.palette)
+        .expect("the winning layer references one of the state's palettes");
 
-            Ok(Some(Box::new(move |voxel| {
-                let material = object
-                    .voxel_material(voxel, layer)
-                    .expect("a live voxel samples the winning layer");
-                *colors
-                    .get(&material)
-                    .expect("a sampled material is one of the palette's")
-            })))
-        }
-        Some(ObjectPropertyRef::Scalar { palette, property }) => {
+    let colors: HashMap<_, _> = palette_ref
+        .iter_materials()
+        .map(|material| {
             let (pool, value_id) = state
-                .scalar_property_value(palette, property)
-                .expect("the winning palette pins the scalar property");
+                .material_value(winner.palette, material, winner.property)
+                .expect("a palette material carries a value for each array property");
             let color = pool_color(pool, value_id).ok_or_else(|| non_color_pool(object))?;
+            Ok((material, color))
+        })
+        .collect::<Result<_>>()?;
 
-            Ok(Some(Box::new(move |_| color)))
-        }
-    }
+    Ok(Some(Box::new(move |voxel| {
+        let material = object
+            .voxel_material(voxel, winner.layer)
+            .expect("a live voxel samples the winning layer");
+        *colors
+            .get(&material)
+            .expect("a sampled material is one of the palette's")
+    })))
 }
 
 /// The error for a `baseColorFactor` drawing from a non-color pool.
@@ -69,7 +56,7 @@ mod tests {
     use voxcore::{VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     #[test]
-    fn an_array_supplier_reads_each_voxel_through_its_material() {
+    fn a_supplier_reads_each_voxel_through_its_material() {
         let mut state = VoxMain::default();
         let pool = state.add_value_pool(VoxValuePool::Srgba {
             values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]),
@@ -98,47 +85,11 @@ mod tests {
     }
 
     #[test]
-    fn a_scalar_supplier_reads_one_color_for_every_voxel() {
-        let mut state = VoxMain::default();
-        let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
-        });
-        let pinned = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[0.0, 1.0, 0.0, 1.0]]),
-        });
-
-        // The sampled array layer is overridden by a trailing scalar-only
-        // palette, so every voxel takes the pinned color.
-        let mut array = VoxPalette::default();
-        array.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
-        let red = array.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let array_id = state.add_palette(array);
-
-        let mut scalar = VoxPalette::default();
-        scalar.add_scalar_property(BASE_COLOR_FACTOR.to_owned(), pinned, U32Id::from_u32(0));
-        let scalar_id = state.add_palette(scalar);
-
-        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_layer(array_id, red);
-        object.add_layer(scalar_id, U32Id::from_u32(0));
-        for x in 0..2 {
-            let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
-            object
-                .retain_voxel(voxel, &[red, U32Id::from_u32(0)])
-                .unwrap();
-        }
-
-        let cell_color = resolve_cell_color(&state, &object).unwrap().unwrap();
-        for x in 0..2 {
-            let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
-            assert_eq!(cell_color(voxel), [0, 255, 0, 255]);
-        }
-    }
-
-    #[test]
     fn none_when_no_layer_supplies_the_color() {
         let mut state = VoxMain::default();
-        let palette_id = state.add_palette(VoxPalette::default());
+        let mut palette = VoxPalette::default();
+        palette.add_material(vec![]).unwrap();
+        let palette_id = state.add_palette(palette);
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(palette_id, U32Id::from_u32(0));
@@ -147,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    fn an_array_supplier_over_a_non_color_pool_errors() {
+    fn a_supplier_over_a_non_color_pool_errors() {
         let mut state = VoxMain::default();
         let pool = state.add_value_pool(VoxValuePool::Float {
             min: VoxBound::None,
@@ -162,25 +113,6 @@ mod tests {
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(palette_id, material);
-
-        assert!(resolve_cell_color(&state, &object).is_err());
-    }
-
-    #[test]
-    fn a_scalar_supplier_over_a_non_color_pool_errors() {
-        let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::None,
-            max: VoxBound::None,
-            values: IdVec::from_vec(vec![1.0]),
-        });
-
-        let mut palette = VoxPalette::default();
-        palette.add_scalar_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0));
-        let palette_id = state.add_palette(palette);
-
-        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, U32Id::from_u32(0));
 
         assert!(resolve_cell_color(&state, &object).is_err());
     }
