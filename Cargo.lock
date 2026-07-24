@@ -2097,6 +2097,7 @@ dependencies = [
  "pathspec",
  "serde_json",
  "treegrid",
+ "treeselect",
  "ty-math",
  "vmax-codec",
  "voxcore",

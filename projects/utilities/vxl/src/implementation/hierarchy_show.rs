@@ -15,6 +15,7 @@ use treegrid::{
     BTreeGridNode, TreeGrid, TreeGridHierarchyOptions, TreeGridLabel, TreeGridRenderHierarchy,
     TreeGridRenderJson, TreeGridValue,
 };
+use treeselect::TreeSelection;
 use ty_math::{TyTransformF64, TyVector3F64};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 
@@ -238,12 +239,12 @@ impl<'a> Scene<'a> {
 
         for &root in self.roots() {
             let path = self.node_name(root).to_string();
-            self.enumerate_from(root, path, identity, &mut branch, &mut out);
+            self.enumerate_from(root, path, identity, None, &mut branch, &mut out);
         }
 
         for id in self.unplaced_nodes() {
             let path = self.node_name(id).to_string();
-            self.enumerate_from(id, path, identity, &mut branch, &mut out);
+            self.enumerate_from(id, path, identity, None, &mut branch, &mut out);
         }
 
         // An orphan object has just its name as a path and no placing node.
@@ -252,6 +253,7 @@ impl<'a> Scene<'a> {
                 path: self.object_name(id).to_string(),
                 entity: Entity::Object(id),
                 parent_world: identity,
+                parent: None,
             });
         }
 
@@ -260,13 +262,12 @@ impl<'a> Scene<'a> {
 
     /// Records this node placement and its child objects, then descends into its
     /// child nodes unless `id` is already on the current branch, a cycle.
-    /// `parent_world` is the world transform of `id`'s parent; `branch` is the
-    /// set of node ids on the path from the section root to here.
     fn enumerate_from(
         &self,
         id: NodeId,
         path: String,
         parent_world: TyTransformF64,
+        parent: Option<usize>,
         branch: &mut HashSet<NodeId>,
         out: &mut Vec<Placement>,
     ) {
@@ -274,10 +275,12 @@ impl<'a> Scene<'a> {
             return;
         };
 
+        let this = out.len();
         out.push(Placement {
             path: path.clone(),
             entity: Entity::Node(id),
             parent_world,
+            parent,
         });
 
         if !branch.insert(id) {
@@ -291,29 +294,29 @@ impl<'a> Scene<'a> {
                 path: child_path(&path, self.object_name(object)),
                 entity: Entity::Object(object),
                 parent_world: world,
+                parent: Some(this),
             });
         }
 
         for &child in &node.child_nodes {
             let child_path = child_path(&path, self.node_name(child));
-            self.enumerate_from(child, child_path, world, branch, out);
+            self.enumerate_from(child, child_path, world, Some(this), branch, out);
         }
 
         branch.remove(&id);
     }
 
-    /// Builds the selection filter for `pattern`: every placement its patterns
-    /// select, the node paths that lead to a selection, and the match roots, plus
-    /// the collapse flags. Errors on a malformed pattern or when nothing matches.
+    /// Builds the selection filter for `pattern`, erroring on a malformed
+    /// pattern or when nothing matches.
     fn build_filter(&self, pattern: &PatternView) -> Result<Filter> {
         let patterns = GitIgnoreRegex::from_spans_ignore_inert(&pattern.globs)
             .map_err(|error| IOError::new(ErrorKind::InvalidInput, error.to_string()))?;
 
         let placements = self.enumerate_placements();
 
-        let selected: HashSet<String> = placements
+        let matched: Vec<bool> = placements
             .iter()
-            .filter(|placement| {
+            .map(|placement| {
                 let matched = if matches!(placement.entity, Entity::Node(_)) {
                     pathspec::is_directory_path_match(&patterns, &placement.path)
                 } else {
@@ -321,10 +324,9 @@ impl<'a> Scene<'a> {
                 };
                 matched == Some(true)
             })
-            .map(|placement| placement.path.clone())
             .collect();
 
-        if selected.is_empty() {
+        if !matched.contains(&true) {
             return Err(IOError::new(
                 ErrorKind::NotFound,
                 format!(
@@ -335,24 +337,19 @@ impl<'a> Scene<'a> {
             .into());
         }
 
-        // Every selected path and each of its proper prefixes, so the chain from
-        // a section root down to a selection stays on screen.
-        let mut visible = selected.clone();
-        for path in &selected {
-            for (index, _) in path.match_indices('/') {
-                visible.insert(path[..index].to_string());
-            }
-        }
+        let parents: Vec<Option<usize>> = placements
+            .iter()
+            .map(|placement| placement.parent)
+            .collect();
+        let selection = TreeSelection::from_matches(matched, &parents);
 
-        // The selected placements whose parent is not itself selected: the entry
-        // point of each selected subtree.
-        let roots: Vec<Placement> = placements
-            .into_iter()
-            .filter(|placement| selected.contains(&placement.path))
-            .filter(|placement| match parent_path(&placement.path) {
-                Some(parent) => !selected.contains(parent),
-                None => true,
-            })
+        let selected = flagged_paths(&placements, selection.selected());
+        let visible = flagged_paths(&placements, selection.visible());
+
+        let roots: Vec<Placement> = selection
+            .match_roots()
+            .iter()
+            .map(|&index| placements[index].clone())
             .collect();
 
         let root_paths: HashSet<String> = roots
@@ -383,6 +380,10 @@ struct Placement {
 
     /// The world transform of the placing parent.
     parent_world: TyTransformF64,
+
+    /// The placing parent's index in the enumeration, `None` at a section
+    /// root or an orphan object.
+    parent: Option<usize>,
 }
 
 /// A placement's entity: a hierarchy node or a leaf object.
@@ -405,9 +406,14 @@ fn child_path(parent: &str, name: &str) -> String {
     }
 }
 
-/// The parent path of `path`, or `None` when `path` is at the top level.
-fn parent_path(path: &str) -> Option<&str> {
-    path.rfind('/').map(|index| &path[..index])
+/// Projects `flags` onto placement paths for the walk's path-keyed queries.
+fn flagged_paths(placements: &[Placement], flags: &[bool]) -> HashSet<String> {
+    placements
+        .iter()
+        .zip(flags)
+        .filter(|&(_, &flag)| flag)
+        .map(|(placement, _)| placement.path.clone())
+        .collect()
 }
 
 /// A `pattern`'s resolved selection and its collapse flags. `selected` is every
@@ -1619,6 +1625,23 @@ mod tests {
             "\u{2514} ancestors\n\
              \u{20}\u{20}\u{2514} \"hand\": {node: 0}\n\
              \u{20}\u{20}\u{20}\u{20}\u{2514} descendants\n"
+        );
+    }
+
+    #[test]
+    fn collapse_ancestors_prints_an_empty_named_child_once() {
+        // Empty names collapse the object's path onto its parent node's, so
+        // match-rootness must come from the parent link, not the path.
+        let mut state = VoxMain::default();
+        let body = state.add_object(object(""));
+        let root = state.add_hierarchy_node(node("", vec![], vec![body]));
+        state.set_root_hierarchy_nodes(vec![root]);
+
+        let output = show(&state, Some("*"), false, true, false);
+        assert_eq!(
+            output,
+            "\u{2514} \"\": {node: 0}\n\
+             \u{20}\u{20}\u{2514} \"\": {object: 0}\n"
         );
     }
 

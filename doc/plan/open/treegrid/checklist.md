@@ -273,7 +273,7 @@ first.
       ancestor" when a `!` pattern deselects a middle node). Unit
       tests: a root match, a nested match, several match roots, and
       the deselected-middle-node divergence case.
-- [ ] **S19. Adopt at both call sites.** One commit per site,
+- [x] **S19. Adopt at both call sites.** One commit per site,
       byte-identical output:
       1. `tyt vmax hierarchy`: scatter the `match_subtrees` flags over
          the full node index range, then replace the hand-built

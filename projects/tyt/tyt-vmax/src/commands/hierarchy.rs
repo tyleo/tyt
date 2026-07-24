@@ -443,10 +443,11 @@ impl Builder<'_> {
         self.grid.push_value(leaf, TreeGridValue::new(text));
     }
 
-    /// Whether `index` renders: everything when not filtering, else a group when
-    /// it leads to a selection and an object when it is itself selected. A
-    /// matched group's descendants ride in because the subtree matcher marks
-    /// them selected.
+    /// Whether `index` renders:
+    ///
+    /// 1. No selection: everything renders.
+    /// 2. A group: renders when it or any node under it matched the patterns.
+    /// 3. An object: renders only when it matched the patterns.
     fn will_show(&self, index: usize) -> bool {
         let Some(selection) = &self.selection else {
             return true;

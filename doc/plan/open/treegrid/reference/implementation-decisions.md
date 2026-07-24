@@ -1279,3 +1279,36 @@ binaries produce byte-identical stdout, stderr, and exit codes over
 bounds views, object / group / multi-pattern / bang-pattern /
 anchored selection, every collapse combination, and no-match). Site
 2, `vxl hierarchy show`, completes the step.
+
+## S19 site 2: `vxl hierarchy show` adopts TreeSelection (2026-07-24)
+
+The last adoption, completing S19 and phase 7. `enumerate_placements`
+records each placement's parent index (`Placement::parent`, `None` at
+a section root or an orphan object), and `build_filter` resolves the
+pattern matches through `TreeSelection`, projecting the resolved
+flags onto the path sets the walk queries (the new `flagged_paths`
+helper); the prefix-slicing `visible` assembly and the path-keyed
+match-root rule are deleted, and `parent_path` with them. The
+`Filter` struct and the `Walk` are untouched: the walk rebuilds paths
+as it descends, so its query surface stays path-keyed.
+
+- **One deliberate output change, owner-approved (2026-07-24).** An
+  empty-named object's path collapses onto its parent node's path
+  (`child_path` drops an empty parent), and the old path-keyed rule
+  then treated the object as top-level, listing it twice under
+  `--collapse-ancestors`: once inside its parent's subtree and once
+  as its own match root. The structural parent rule prints it once,
+  matching the plain tree's shape and the vmax and fbx index-keyed
+  sites; `collapse_ancestors_prints_an_empty_named_child_once` pins
+  the fixed form.
+- **treeselect joins vxl behind `impl`**, beside pathspec and
+  treegrid, since its consumer is the implementation layer.
+
+Verified: treeselect and vxl tests pass (the 26 pre-adoption render
+tests unchanged), and the old and new binaries were compared over
+198 invocations (11 tyt-assets bundles across plain, the full view
+set, collapse-instances, object / node-only / multi-pattern /
+bang-pattern / nested-path selection, every collapse combination,
+the JSON layouts, and no-match): byte-identical everywhere except
+the divergence above, which appeared in exactly the six
+empty-named-bundle collapse-ancestors runs.
