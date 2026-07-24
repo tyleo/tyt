@@ -11,18 +11,23 @@ use voxj::VoxjFile;
 /// 1. `version`: the version is recognized.
 /// 2. `value-pools`: every value pool has non-empty values within its kind,
 ///    with in-range numeric bounds and in-range color components.
-/// 3. `palettes`: every palette's properties have non-empty names, distinct
-///    across array and scalar properties together, and in-range value pools;
-///    every scalar property pins an in-range value-index; and row-major
-///    materials hold one row per material, each of exactly one in-range
-///    value-index per array property.
-/// 4. `indices`: object layers, node children, child objects, and roots
-///    resolve; node children, child objects, and roots each appear at most once
-///    (a palette may back two layers, so a repeated layer entry is allowed).
-/// 5. `blocks`: each object's position and sample blocks decode: canonical
-///    base64, exact bitmap and packed byte counts with zero pad bits,
-///    well-formed run streams and varints, the Hilbert bits cap, and one
-///    channel per sampled layer with one value per voxel.
+/// 3. `palettes`:
+///    1. every property has a non-empty name, distinct across the array and
+///       scalar lists together, and an in-range value pool;
+///    2. every scalar property pins an in-range value-index;
+///    3. row-major materials hold one row per material, each of exactly one
+///       in-range value-index per array property;
+///    4. a palette with array properties has at least one material.
+/// 4. `indices`:
+///    1. object layers, node children, child objects, and roots resolve;
+///    2. node children, child objects, and roots each appear at most once; a
+///       palette may back two layers, so a repeated layer entry is allowed.
+/// 5. `blocks`: each object's position and sample blocks decode:
+///    1. canonical base64;
+///    2. exact bitmap and packed byte counts with zero pad bits;
+///    3. well-formed run streams and varints;
+///    4. the Hilbert bits cap;
+///    5. one channel per sampled layer with one value per voxel.
 /// 6. `unique-positions`: voxel positions within an object are unique.
 /// 7. `bounds`: positions lie within bounds and bounds are exactly tight.
 /// 8. `sample-materials`: each sample indexes a real material of its layer's
@@ -227,6 +232,26 @@ mod tests {
         // Pool 0 has four values, so value-index 9 in material 3's row is out
         // of range.
         file.main.runtime_state.palettes[0].materials = vec![vec![0], vec![1], vec![2], vec![9]];
+        let checks = check_voxj_file(&file);
+        assert!(matches!(
+            status(&checks, "palettes"),
+            VoxjCheckStatus::Failed(_)
+        ));
+    }
+
+    #[test]
+    fn rejects_array_properties_without_materials() {
+        let mut file = valid_file();
+        // An extra, unreferenced palette with an array property and no
+        // materials fails only the palettes check.
+        file.main.runtime_state.palettes.push(VoxjPalette {
+            array_properties: vec![VoxjArrayProperty {
+                name: "baseColorFactor".to_owned(),
+                value_pool: 0,
+            }],
+            scalar_properties: vec![],
+            materials: vec![],
+        });
         let checks = check_voxj_file(&file);
         assert!(matches!(
             status(&checks, "palettes"),

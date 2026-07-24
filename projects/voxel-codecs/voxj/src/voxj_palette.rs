@@ -3,10 +3,7 @@ use crate::{VoxjArrayProperty, VoxjScalarProperty};
 use serde::{Deserialize, Serialize};
 
 /// A material palette: named properties bound to value pools, and the
-/// materials that index them, stored row-major. An array property takes one
-/// value per material; a scalar property pins one pool cell for the whole
-/// palette. A palette with no materials is never sampled and supplies only
-/// its scalar properties.
+/// materials that index them.
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(

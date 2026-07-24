@@ -51,6 +51,10 @@ pub enum Error {
         material: u32,
     },
 
+    /// A palette declares array properties but has no materials to carry
+    /// their values.
+    ArrayPropertiesWithoutMaterials { palette: u32 },
+
     /// An object references a palette that does not exist.
     PaletteRef { object: u32, palette: u32 },
 
@@ -148,6 +152,10 @@ impl Display for Error {
             } => write!(
                 f,
                 "palette {palette} material {material} has a value id for array property {array_property} out of the pool's range"
+            ),
+            Error::ArrayPropertiesWithoutMaterials { palette } => write!(
+                f,
+                "palette {palette} declares array properties but has no materials"
             ),
             Error::PaletteRef { object, palette } => write!(
                 f,

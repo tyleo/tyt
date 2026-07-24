@@ -8,22 +8,11 @@ use branded_id::{
 };
 use std::collections::HashMap;
 
-/// A palette: an ordered set of array properties, a set of scalar properties,
-/// and a set of materials, one row per material. Each array property names a
-/// property and the [`VoxValuePool`](crate::VoxValuePool) it draws from, and
-/// each material row carries one value id per array property:
-/// `value_id(material, array_property)` identifies a value in the pool
-/// `array_property` draws from. Each scalar property pins its name to a
-/// single pool value for the whole palette, with no per-material column.
-/// Resolve a value by reading the id out of the pool a
-/// [`VoxMain`](crate::VoxMain) holds. An object's voxels sample materials by
-/// id (see [`VoxObject`](crate::VoxObject)).
-///
-/// Build it with [`add_array_property`](Self::add_array_property) and
-/// [`add_scalar_property`](Self::add_scalar_property), then
-/// [`add_material`](Self::add_material). No two properties share a name
-/// across the two lists, a rule
-/// [`VoxMain::validate`](crate::VoxMain::validate) checks.
+/// A material palette: named properties bound to the
+/// [`VoxValuePool`](crate::VoxValuePool)s a [`VoxMain`](crate::VoxMain)
+/// holds, and the materials that index them.
+/// [`VoxMain::validate`](crate::VoxMain::validate) rejects duplicate
+/// property names and array properties without a material.
 #[derive(Debug, Default)]
 pub struct VoxPalette {
     /// Array property id pool.

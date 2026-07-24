@@ -556,9 +556,8 @@ mod tests {
                         Vec::new(),
                         Vec::new(),
                     )],
-                    // One array property, no materials: M = 0, never sampled.
                     palettes: vec![VoxjPalette {
-                        array_properties: vec![array_property("baseColorFactor", 0)],
+                        array_properties: vec![],
                         scalar_properties: vec![],
                         materials: vec![],
                     }],

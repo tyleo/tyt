@@ -319,6 +319,19 @@ mod tests {
     }
 
     #[test]
+    fn rejects_array_properties_without_materials() {
+        let mut file = valid_file();
+        // An extra, unreferenced palette with an array property and no
+        // materials; the missing materials are the document's only fault.
+        file.main.runtime_state.palettes.push(VoxjPalette {
+            array_properties: vec![array_property("baseColorFactor", 0)],
+            scalar_properties: vec![],
+            materials: vec![],
+        });
+        assert!(validate_voxj_file(&file).is_err());
+    }
+
+    #[test]
     fn rejects_ragged_material_rows() {
         let mut file = valid_file();
         // Two array properties but a short second row; every row must hold

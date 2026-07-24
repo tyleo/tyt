@@ -8,13 +8,13 @@ use ty_math::{TyVector3I32, TyVector3U32};
 /// One object's voxel volume: a dense grid, the ordered layers it references,
 /// and the material each voxel samples in each layer.
 ///
-/// Each layer references a shared [`VoxPalette`](crate::VoxPalette); two layers
-/// may reference the same palette, and layers override back to front, each
-/// property taking its value from the last layer that supplies it. A layer is
-/// sampled iff its palette has materials (see
-/// [`VoxMain::layer_is_sampled`](crate::VoxMain::layer_is_sampled)); an
-/// unsampled layer supplies only its palette's scalar properties, and its
-/// sample cells are ignored filler. Every grid cell has a voxel id equal to
+/// Each layer references a shared [`VoxPalette`](crate::VoxPalette), and
+/// layers override back to front: each property takes its value from the
+/// last layer that supplies it. An unsampled layer's sample cells are
+/// ignored filler (see
+/// [`VoxMain::layer_is_sampled`](crate::VoxMain::layer_is_sampled)).
+///
+/// Every grid cell has a voxel id equal to
 /// its raster index `x*Y*Z + y*Z + z`, so [`voxel_id`](Self::voxel_id) and
 /// [`voxel_position`](Self::voxel_position) interconvert.
 /// [`is_live`](Self::is_live) says which cells are filled.

@@ -8,17 +8,28 @@ vxl validate <input> [options]
 
 Checks a voxel-json document against the spec's
 [Validation](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#validation)
-checklist and exits non-zero on any failure. The checks include a recognized
-`version`; all indices in range; well-formed position data with correct decoded
-byte lengths and zero pad bits; unique voxel positions; tight `bounds`; one
-sample channel per sampled layer with correct per-channel lengths; well-formed
-`valuePools` whose values match their declared `kind`; palettes whose property
-names are unique and whose row-major `materials` rows and scalar `valueIndex`
-pins hold in-range value-indices; an acyclic hierarchy; no zero `scale`
-component; unit `rotation` quaternions within tolerance; and, when present, an
-`editState` whose edit grid contains each runtime grid. The one item a
-validator cannot confirm, that sample order matches the position block's voxel
-order, is reported as unverifiable.
+checklist and exits non-zero on any failure. The checks include:
+
+1. a recognized `version`.
+2. all indices in range.
+3. well-formed position data with correct decoded byte lengths and zero pad
+   bits.
+4. unique voxel positions.
+5. tight `bounds`.
+6. one sample channel per sampled layer with correct per-channel lengths.
+7. well-formed `valuePools` whose values match their declared `kind`.
+8. palettes:
+   1. property names are unique;
+   2. row-major `materials` rows and scalar `valueIndex` pins hold in-range
+      value-indices;
+   3. array properties come with at least one material.
+9. an acyclic hierarchy.
+10. no zero `scale` component.
+11. unit `rotation` quaternions within tolerance.
+12. when present, an `editState` whose edit grid contains each runtime grid.
+
+The one item a validator cannot confirm, that sample order matches the position
+block's voxel order, is reported as unverifiable.
 
 1. `--layout` `tables` | `json-pretty` | `json-compact` (default `tables`):
    how to render the report. `tables` is a human-readable per-check list; the

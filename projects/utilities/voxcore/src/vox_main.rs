@@ -163,12 +163,10 @@ impl VoxMain {
         Some((pool, property.value_id))
     }
 
-    /// Whether `layer` of `object` is sampled: a layer is sampled iff its
-    /// palette's material count is above zero. A sampled layer's per-voxel
-    /// samples are meaningful; an unsampled layer supplies only its palette's
-    /// scalar properties. `None` if `object` is not one of this state's,
-    /// `layer` is not one of that object's, or the layer references a palette
-    /// this state does not hold.
+    /// Whether `layer` of `object` is sampled: its palette has at least one
+    /// material. `None` if `object` is not one of this state's, `layer` is
+    /// not one of that object's, or the layer references a palette this
+    /// state does not hold.
     pub fn layer_is_sampled(
         &self,
         object: U32Id<BVoxObject>,
@@ -565,11 +563,12 @@ impl VoxMain {
     /// 1. every value pool is non-empty, its values well-formed for its kind,
     ///    and its `min`/`max` finite, integer-valued for an `int` pool, and
     ///    ordered;
-    /// 2. every palette property, array or scalar, names a live value pool,
-    ///    no palette declares the same property name twice across its two
-    ///    property lists, every material value id is within its array
-    ///    property's pool, and every scalar property pins a value id within
-    ///    its pool;
+    /// 2. per palette:
+    ///    1. every property, array or scalar, names a live value pool;
+    ///    2. no property name repeats across the two property lists;
+    ///    3. every material value id is within its array property's pool;
+    ///    4. every scalar property pins a value id within its pool;
+    ///    5. a palette with array properties has at least one material;
     /// 3. every object layer references a live palette (two layers may share
     ///    one), and in every sampled layer (its palette has materials) every
     ///    live-voxel sample material is within that palette; an unsampled
@@ -653,6 +652,14 @@ impl VoxMain {
                         scalar_property: property_id.to_u32(),
                     });
                 }
+            }
+
+            // An array property's values live in the material rows, so array
+            // properties bind nothing without a material.
+            if palette.array_property_count() > 0 && palette.material_count() == 0 {
+                return Err(Error::ArrayPropertiesWithoutMaterials {
+                    palette: palette_id.to_u32(),
+                });
             }
         }
 
@@ -1415,6 +1422,32 @@ mod tests {
         object.add_layer(palette, second);
         state.add_object(object);
         assert_eq!(state.validate(), Ok(()));
+    }
+
+    #[test]
+    fn validate_accepts_an_empty_palette() {
+        let mut state = VoxMain::default();
+        // Only array properties require materials, so an empty palette passes.
+        state.add_palette(VoxPalette::default());
+        assert_eq!(state.validate(), Ok(()));
+    }
+
+    #[test]
+    fn validate_rejects_a_palette_with_array_properties_and_no_materials() {
+        let mut state = VoxMain::default();
+        let pool = int_pool(&mut state, vec![7]);
+        // One array property and no material rows, so the property binds
+        // nothing anywhere.
+        let mut palette = VoxPalette::default();
+        palette.add_array_property("v".to_owned(), pool);
+        let id = state.add_palette(palette);
+
+        assert_eq!(
+            state.validate(),
+            Err(Error::ArrayPropertiesWithoutMaterials {
+                palette: id.to_u32(),
+            })
+        );
     }
 
     #[test]

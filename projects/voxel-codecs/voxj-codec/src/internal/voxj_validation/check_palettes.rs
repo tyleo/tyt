@@ -2,11 +2,13 @@ use crate::{Check, Failures};
 use std::collections::HashSet;
 use voxj::{VoxjMain, VoxjPalette, VoxjRuntimeState};
 
-/// Every palette's properties have non-empty names, distinct across its array
-/// and scalar properties together, and in-range value pools; its scalar
-/// properties pin in-range value-indices; and its row-major materials hold one
-/// row per material, each of exactly one value-index per array property,
-/// within the pool that property binds.
+/// Per palette:
+/// 1. every property has a non-empty name, distinct across the array and
+///    scalar lists together, and an in-range value pool;
+/// 2. every scalar property pins an in-range value-index;
+/// 3. row-major materials hold one row per material, each of exactly one
+///    value-index per array property, within the pool that property binds;
+/// 4. a palette with array properties has at least one material.
 pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
     for (index, palette) in state.palettes.iter().enumerate() {
@@ -79,6 +81,18 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
                     }
                 }
             }
+            if !failures.go() {
+                return;
+            }
+        }
+
+        // An array property's values live in the material rows, so array
+        // properties bind nothing without a material (rule 10.6).
+        if !palette.array_properties.is_empty() && palette.materials.is_empty() {
+            failures.report(
+                Check::Palettes,
+                format!("palette {index} declares array properties but has no materials"),
+            );
             if !failures.go() {
                 return;
             }

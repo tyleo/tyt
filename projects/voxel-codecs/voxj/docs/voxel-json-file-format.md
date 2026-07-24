@@ -255,7 +255,7 @@ Notes:
 
 ## Palettes
 
-A palette binds property names to shared [value pools](#value-pools), then lists the distinct materials it uses as rows over those pools. Properties come in two arities, and a palette may carry either, both, or neither. An **array property** binds to a whole pool and takes one value-index per material, so its value varies per material. A **scalar property** is pinned to a single pool cell of any kind, `valuePools[valuePool].values[valueIndex]`, one value for the whole palette. A voxel samples a material in each sampled layer by its index in that layer's palette. A palette may be referenced by any number of layers and objects (see [Objects](#objects)).
+A palette binds property names to shared [value pools](#value-pools), then lists the distinct materials it uses as rows over those pools. Properties come in two arities, and a palette may carry either, both, or neither. An **array property** binds to a whole pool and takes one value-index per material, so its value varies per material. A **scalar property** is pinned to a single pool cell of any kind, `valuePools[valuePool].values[valueIndex]`, one value for the whole palette. Scalar properties may stand alone, but an array property's values live in the material rows, so a palette with array properties has at least one material. A voxel samples a material in each sampled layer by its index in that layer's palette. A palette may be referenced by any number of layers and objects (see [Objects](#objects)).
 
 A scalar property wires a name to a value; any arithmetic, such as `emissiveStrength` multiplying `emissiveFactor`, comes from the property vocabulary. Within one palette a name appears in `arrayProperties` or `scalarProperties`, so a single layer never conflicts with itself.
 
@@ -294,7 +294,7 @@ A material is one row of value-indices, one per array property, so the material 
 
 A voxel's property values resolve from its object's `layers` as follows:
 
-1. Each layer supplies its palette's properties. A scalar property supplies its `name` as `valuePools[valuePool].values[valueIndex]`, one value for the whole object. An array property supplies its `name` per voxel: read the voxel's sample `m` from the layer's channel, a material index; array property `b` supplies `arrayProperties[b].name` as `valuePools[arrayProperties[b].valuePool].values[materials[m][b]]`. An unsampled layer has no channel and supplies only its scalar properties.
+1. Each layer supplies its palette's properties. A scalar property supplies its `name` as `valuePools[valuePool].values[valueIndex]`, one value for the whole object. An array property supplies its `name` per voxel: read the voxel's sample `m` from the layer's channel, a material index; array property `b` supplies `arrayProperties[b].name` as `valuePools[arrayProperties[b].valuePool].values[materials[m][b]]`.
 2. Layers override: contributions apply in `layers` order, back to front, and each property takes its value from the last layer that supplies it. Three layers supplying `{a, b, c}`, then `{a}`, then `{c}` resolve to `b` from the first, `a` from the second, and `c` from the third.
 3. Unbound properties are left to the vocabulary; the recommended glTF conventions supply a default for each (see [Properties](#properties)).
 
@@ -506,6 +506,7 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
     3. `materials` is an array of `M >= 0` rows, the material count; every row is an array of exactly `arrayProperties.length` integers, one value-index per array property in property order.
     4. every `materials[m][b]` is an integer in `[0, valuePools[arrayProperties[b].valuePool].values.length)`.
     5. every scalar property's `valueIndex` is an integer in `[0, valuePools[valuePool].values.length)`.
+    6. a palette with a non-empty `arrayProperties` has a non-empty `materials`.
 11. **Samples**: let `V` be the voxel count from the position block. A layer is sampled iff the material count `M` of its palette is greater than zero. `voxelSamples.data` has exactly one channel per sampled layer, in `layers` order, so channel `c` belongs to the `c`-th sampled layer. For channel `c`, let `M` be the material count of its layer's palette, and by encoding:
     1. `raw-json`: each channel is a `number[]` of length exactly `V`, every entry an integer in `[0, M)`.
     2. `rle-json`: each channel is a flat even-length `[value, count, ...]` stream whose values are integers in `[0, M)`, whose counts are positive integers, and whose counts sum to exactly `V`.
