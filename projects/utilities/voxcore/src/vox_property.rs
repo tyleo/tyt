@@ -1,10 +1,10 @@
 use crate::BVoxValuePool;
 use branded_id::U32Id;
 
-/// One array property in a palette: it names a property and the
+/// One property in a palette: it names a property and the
 /// [`VoxValuePool`](crate::VoxValuePool) that property's materials draw from.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct VoxArrayProperty {
+pub struct VoxProperty {
     /// The property name: a neutral free string. A consumer ignores names it
     /// does not recognize.
     pub name: String,
@@ -15,12 +15,12 @@ pub struct VoxArrayProperty {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BVoxValuePool, VoxArrayProperty};
+    use crate::{BVoxValuePool, VoxProperty};
     use branded_id::U32Id;
 
     #[test]
     fn holds_a_name_and_a_pool() {
-        let property = VoxArrayProperty {
+        let property = VoxProperty {
             name: "baseColorFactor".to_owned(),
             pool: U32Id::<BVoxValuePool>::from_u32(2),
         };

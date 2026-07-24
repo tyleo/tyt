@@ -17,12 +17,12 @@ mod tests {
     use crate::validate_voxj_file;
     use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
-        VoxjArrayProperty, VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
-        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
+        VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
         VoxjValuePool,
     };
 
-    /// An `srgba-hex` pool of four colors backing the array property's
+    /// An `srgba-hex` pool of four colors backing the property's
     /// value-indices, and an unreferenced one-value `float` pool.
     fn value_pools() -> Vec<VoxjValuePool> {
         vec![
@@ -37,20 +37,20 @@ mod tests {
         ]
     }
 
-    /// An array property of `name` bound to value pool `value_pool`.
-    fn array_property(name: &str, value_pool: usize) -> VoxjArrayProperty {
-        VoxjArrayProperty {
+    /// A property of `name` bound to value pool `value_pool`.
+    fn property(name: &str, value_pool: usize) -> VoxjProperty {
+        VoxjProperty {
             name: name.to_owned(),
             value_pool,
         }
     }
 
-    /// A palette of `materials` materials: one array property binding
+    /// A palette of `materials` materials: one property binding
     /// `baseColorFactor` to value pool 0, its rows the value-indices
     /// `0..materials`.
     fn palette(materials: usize) -> VoxjPalette {
         VoxjPalette {
-            array_properties: vec![array_property("baseColorFactor", 0)],
+            properties: vec![property("baseColorFactor", 0)],
             materials: (0..materials).map(|i| vec![i]).collect(),
         }
     }
@@ -235,9 +235,9 @@ mod tests {
         // Two properties of the same name; keep the row arity valid so the
         // duplicate is the only fault.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            array_properties: vec![
-                array_property("baseColorFactor", 0),
-                array_property("baseColorFactor", 0),
+            properties: vec![
+                property("baseColorFactor", 0),
+                property("baseColorFactor", 0),
             ],
             materials: (0..4).map(|i| vec![i, i]).collect(),
         };
@@ -247,14 +247,14 @@ mod tests {
     #[test]
     fn rejects_empty_property_name() {
         let mut file = valid_file();
-        file.main.runtime_state.palettes[0].array_properties = vec![array_property("", 0)];
+        file.main.runtime_state.palettes[0].properties = vec![property("", 0)];
         assert!(validate_voxj_file(&file).is_err());
     }
 
     #[test]
     fn rejects_material_row_arity_mismatch() {
         let mut file = valid_file();
-        // One array property but rows of two value-indices.
+        // One property but rows of two value-indices.
         file.main.runtime_state.palettes[0].materials = (0..4).map(|i| vec![i, i]).collect();
         assert!(validate_voxj_file(&file).is_err());
     }
@@ -271,8 +271,7 @@ mod tests {
     fn rejects_property_value_pool_out_of_range() {
         let mut file = valid_file();
         // The document has two value pools; value pool 9 is out of range.
-        file.main.runtime_state.palettes[0].array_properties =
-            vec![array_property("baseColorFactor", 9)];
+        file.main.runtime_state.palettes[0].properties = vec![property("baseColorFactor", 9)];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -282,7 +281,7 @@ mod tests {
         // An extra, unreferenced palette with no materials; the missing
         // materials are the document's only fault.
         file.main.runtime_state.palettes.push(VoxjPalette {
-            array_properties: vec![array_property("baseColorFactor", 0)],
+            properties: vec![property("baseColorFactor", 0)],
             materials: vec![],
         });
         assert!(validate_voxj_file(&file).is_err());
@@ -291,12 +290,12 @@ mod tests {
     #[test]
     fn rejects_ragged_material_rows() {
         let mut file = valid_file();
-        // Two array properties but a short second row; every row must hold
-        // exactly one value-index per array property.
+        // Two properties but a short second row; every row must hold
+        // exactly one value-index per property.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            array_properties: vec![
-                array_property("baseColorFactor", 0),
-                array_property("metallicFactor", 0),
+            properties: vec![
+                property("baseColorFactor", 0),
+                property("metallicFactor", 0),
             ],
             materials: vec![vec![0, 1], vec![0]],
         };
@@ -306,11 +305,11 @@ mod tests {
     #[test]
     fn accepts_a_property_less_palette_sampled_by_voxels() {
         let mut file = valid_file();
-        // With no array properties every row is empty, but each row is still
+        // With no properties every row is empty, but each row is still
         // one material, so M stays 4 and the object's samples of materials 1
         // and 3 stay in range.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            array_properties: vec![],
+            properties: vec![],
             materials: vec![vec![], vec![], vec![], vec![]],
         };
         assert!(validate_voxj_file(&file).is_ok());
@@ -319,10 +318,10 @@ mod tests {
     #[test]
     fn rejects_a_property_less_palette_with_value_indices() {
         let mut file = valid_file();
-        // Without array properties every row must be empty; a stray
+        // Without properties every row must be empty; a stray
         // value-index violates the row rule.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            array_properties: vec![],
+            properties: vec![],
             materials: vec![vec![0]; 4],
         };
         assert!(validate_voxj_file(&file).is_err());

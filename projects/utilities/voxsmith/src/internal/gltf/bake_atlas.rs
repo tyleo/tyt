@@ -120,7 +120,7 @@ fn material_attribute<'a>(
 ) -> Option<(&'a VoxValuePool, U32Id<BVoxPoolValue>)> {
     let material = used.material(index)?;
     let palette = used.palette();
-    let property = state.palette(palette)?.array_property_by_name(key)?;
+    let property = state.palette(palette)?.property_by_name(key)?;
     state.material_value(palette, material, property)
 }
 
@@ -283,9 +283,9 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
-        palette.add_array_property(METALLIC_FACTOR.to_owned(), metallic);
-        palette.add_array_property(ROUGHNESS_FACTOR.to_owned(), roughness);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette.add_property(METALLIC_FACTOR.to_owned(), metallic);
+        palette.add_property(ROUGHNESS_FACTOR.to_owned(), roughness);
         // Value ids: base 0 = red, 1 = blue; metallic 0 = 1.0, 1 = 0.0;
         // roughness 0 = 0.0, 1 = 1.0.
         let red_shiny = palette
@@ -353,7 +353,7 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property("flag".to_owned(), flag);
+        palette.add_property("flag".to_owned(), flag);
         let on = palette.add_material(vec![value(0)]).unwrap();
         let off = palette.add_material(vec![value(1)]).unwrap();
         let palette_id = state.add_palette(palette);
@@ -391,8 +391,8 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
-        palette.add_array_property(EMISSIVE_STRENGTH.to_owned(), strength);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette.add_property(EMISSIVE_STRENGTH.to_owned(), strength);
         let red = palette.add_material(vec![value(0), value(0)]).unwrap();
         let blue = palette.add_material(vec![value(1), value(0)]).unwrap();
         let palette_id = state.add_palette(palette);
@@ -485,8 +485,8 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property(EMISSIVE_FACTOR.to_owned(), factor);
-        palette.add_array_property(EMISSIVE_STRENGTH.to_owned(), strength);
+        palette.add_property(EMISSIVE_FACTOR.to_owned(), factor);
+        palette.add_property(EMISSIVE_STRENGTH.to_owned(), strength);
         let full_blue = palette.add_material(vec![value(0), value(0)]).unwrap();
         let dim_white = palette.add_material(vec![value(1), value(1)]).unwrap();
         let palette_id = state.add_palette(palette);

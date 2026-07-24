@@ -717,11 +717,11 @@ mod tests {
         let (_, object) = state.iter_objects().next().unwrap();
         let (layer, palette_id) = object.iter_layers().next().unwrap();
         let palette = state.palette(palette_id).unwrap();
-        let array_property = palette.array_property_by_name(attribute).unwrap();
+        let property = palette.property_by_name(attribute).unwrap();
         let voxel = object.voxel_id(position).unwrap();
         let material = object.voxel_material(voxel, layer).unwrap();
         state
-            .material_value(palette_id, material, array_property)
+            .material_value(palette_id, material, property)
             .unwrap()
     }
 
@@ -1092,7 +1092,7 @@ mod tests {
         assert_eq!(palette.material_count(), 1);
         assert_eq!(
             palette
-                .iter_array_properties()
+                .iter_properties()
                 .map(|(_, property)| property.name.as_str())
                 .collect::<Vec<_>>(),
             [

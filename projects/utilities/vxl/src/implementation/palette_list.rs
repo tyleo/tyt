@@ -233,15 +233,15 @@ mod tests {
         });
 
         let mut zero = VoxPalette::default();
-        zero.add_array_property("baseColorFactor".to_owned(), colors);
-        zero.add_array_property("metallicFactor".to_owned(), metallic);
+        zero.add_property("baseColorFactor".to_owned(), colors);
+        zero.add_property("metallicFactor".to_owned(), metallic);
         let zero_material = zero.add_material(vec![value(0), value(0)]).unwrap();
         zero.add_material(vec![value(1), value(1)]).unwrap();
         let zero = state.add_palette(zero);
 
         let mut one = VoxPalette::default();
-        one.add_array_property("baseColorFactor".to_owned(), colors);
-        one.add_array_property("emissiveStrength".to_owned(), metallic);
+        one.add_property("baseColorFactor".to_owned(), colors);
+        one.add_property("emissiveStrength".to_owned(), metallic);
         let one_material = one.add_material(vec![value(2), value(1)]).unwrap();
         let one = state.add_palette(one);
 
@@ -413,7 +413,7 @@ mod tests {
             values: IdVec::from_vec(vec![[1.0, 1.0, 1.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("baseColorFactor".to_owned(), colors);
+        palette.add_property("baseColorFactor".to_owned(), colors);
         palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);
 
@@ -442,7 +442,7 @@ mod tests {
             values: IdVec::from_vec(vec![[1.0, 1.0, 1.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("baseColorFactor".to_owned(), colors);
+        palette.add_property("baseColorFactor".to_owned(), colors);
         palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);
 

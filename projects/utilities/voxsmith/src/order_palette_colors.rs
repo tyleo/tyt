@@ -6,18 +6,15 @@ use voxcore::{BVoxPalette, BVoxPoolValue, VoxMain};
 /// first material's color moves to value id 0, the next new color to 1, and so
 /// on, then any unused color. A voxelized palette has one color per material,
 /// so its material color value ids become 0, 1, 2, and up. A no-op without a
-/// color array property; rendering is unchanged.
+/// color property; rendering is unchanged.
 pub fn order_palette_colors(state: &mut VoxMain, palette: U32Id<BVoxPalette>) {
     let Some(palette_ref) = state.palette(palette) else {
         return;
     };
-    let Some(color) = palette_ref.array_property_by_name(BASE_COLOR_FACTOR) else {
+    let Some(color) = palette_ref.property_by_name(BASE_COLOR_FACTOR) else {
         return;
     };
-    let Some(pool) = palette_ref
-        .array_property(color)
-        .map(|property| property.pool)
-    else {
+    let Some(pool) = palette_ref.property(color).map(|property| property.pool) else {
         return;
     };
     let len = state.value_pool(pool).map_or(0, |pool| pool.values_len());
@@ -68,7 +65,7 @@ mod tests {
             ]),
         });
         let mut palette = VoxPalette::default();
-        let color = palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        let color = palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
         let blue = palette.add_material(vec![U32Id::from_u32(2)]).unwrap();
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let green = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();

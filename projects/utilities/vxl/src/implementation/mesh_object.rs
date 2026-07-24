@@ -200,7 +200,7 @@ fn channel_kind(
         .palette(palette)
         .expect("the meshed layer references a palette the state holds");
 
-    let Some(property_id) = palette.array_property_by_name(key) else {
+    let Some(property_id) = palette.property_by_name(key) else {
         // Absent from the palette: the voxj format's unbound-default rule. A
         // glTF built-in takes its spec kind and bakes its default; a custom
         // property has no default, so its type cannot be inferred.
@@ -216,8 +216,8 @@ fn channel_kind(
     };
 
     let pool_id = palette
-        .array_property(property_id)
-        .expect("an array-property id from this palette resolves")
+        .property(property_id)
+        .expect("a property id from this palette resolves")
         .pool;
     let pool = state
         .value_pool(pool_id)
@@ -348,7 +348,7 @@ mod tests {
             values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("baseColorFactor".to_owned(), pool);
+        palette.add_property("baseColorFactor".to_owned(), pool);
         let material = palette.add_material(vec![value(0)]).unwrap();
         let palette = state.add_palette(palette);
 
@@ -397,9 +397,9 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property("tint".to_owned(), tint);
-        palette.add_array_property("glow".to_owned(), glow);
-        palette.add_array_property("gloss".to_owned(), gloss);
+        palette.add_property("tint".to_owned(), tint);
+        palette.add_property("glow".to_owned(), glow);
+        palette.add_property("gloss".to_owned(), gloss);
         palette
             .add_material(vec![value(0), value(0), value(0)])
             .unwrap();
@@ -497,7 +497,7 @@ mod tests {
             values: IdVec::from_vec(vec!["low".to_owned()]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("tag".to_owned(), tag);
+        palette.add_property("tag".to_owned(), tag);
         palette.add_material(vec![value(0)]).unwrap();
         let palette = state.add_palette(palette);
 

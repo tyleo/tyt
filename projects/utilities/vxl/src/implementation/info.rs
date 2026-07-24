@@ -333,7 +333,7 @@ mod tests {
             values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("baseColorFactor".to_owned(), pool);
+        palette.add_property("baseColorFactor".to_owned(), pool);
         let material = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette = state.add_palette(palette);
 
@@ -497,7 +497,7 @@ mod tests {
             values: IdVec::from_vec(vec![2.0]),
         });
         let mut glow = VoxPalette::default();
-        glow.add_array_property("emissiveStrength".to_owned(), strengths);
+        glow.add_property("emissiveStrength".to_owned(), strengths);
         let glow_material = glow.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let glow = state.add_palette(glow);
 
@@ -505,7 +505,7 @@ mod tests {
             values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
         });
         let mut base = VoxPalette::default();
-        base.add_array_property("baseColorFactor".to_owned(), colors);
+        base.add_property("baseColorFactor".to_owned(), colors);
         let material = base.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let base = state.add_palette(base);
 

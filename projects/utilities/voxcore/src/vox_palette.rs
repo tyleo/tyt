@@ -1,4 +1,4 @@
-use crate::{BVoxArrayProperty, BVoxMaterial, BVoxPoolValue, BVoxValuePool, VoxArrayProperty};
+use crate::{BVoxMaterial, BVoxPoolValue, BVoxProperty, BVoxValuePool, VoxProperty};
 use branded_id::{
     IdSlice, U32Id,
     soa::{IdField, IdRemap, IdStruct},
@@ -12,87 +12,86 @@ use std::collections::HashMap;
 /// property names and palettes without a material.
 #[derive(Debug, Default)]
 pub struct VoxPalette {
-    /// Array property id pool.
-    array_property_ids: IdStruct<BVoxArrayProperty>,
+    /// Property id pool.
+    property_ids: IdStruct<BVoxProperty>,
 
-    /// The array properties, in material-row value-id order.
-    array_properties: IdField<BVoxArrayProperty, VoxArrayProperty>,
+    /// The properties, in material-row value-id order.
+    properties: IdField<BVoxProperty, VoxProperty>,
 
     /// Material id pool.
     material_ids: IdStruct<BVoxMaterial>,
 
-    /// Per material, one value id per array property.
-    materials: IdField<BVoxMaterial, IdField<BVoxArrayProperty, U32Id<BVoxPoolValue>>>,
+    /// Per material, one value id per property.
+    materials: IdField<BVoxMaterial, IdField<BVoxProperty, U32Id<BVoxPoolValue>>>,
 
-    /// Name index into `array_properties`, for O(1)
-    /// [`array_property_by_name`](Self::array_property_by_name) lookup.
+    /// Name index into `properties`, for O(1)
+    /// [`property_by_name`](Self::property_by_name) lookup.
     /// Rebuilt by [`gc`](Self::gc); exact for a validated palette, whose
     /// property names are unique.
-    array_property_by_name: HashMap<String, U32Id<BVoxArrayProperty>>,
+    property_by_name: HashMap<String, U32Id<BVoxProperty>>,
 }
 
 impl VoxPalette {
-    /// Adds an array property after any existing ones and returns its id,
+    /// Adds a property after any existing ones and returns its id,
     /// back-filling existing materials with value id 0 so every material
-    /// keeps one value id per array property. Add all array properties
+    /// keeps one value id per property. Add all properties
     /// before any materials to avoid the back-fill placeholder, which is a
     /// valid id only if the property's pool is non-empty.
-    pub fn add_array_property(
+    pub fn add_property(
         &mut self,
         name: String,
         pool: U32Id<BVoxValuePool>,
-    ) -> U32Id<BVoxArrayProperty> {
-        let array_property_id = self.array_property_ids.retain();
+    ) -> U32Id<BVoxProperty> {
+        let property_id = self.property_ids.retain();
 
-        self.array_property_by_name
-            .insert(name.clone(), array_property_id);
+        self.property_by_name.insert(name.clone(), property_id);
 
-        self.array_properties
-            .retain(array_property_id, VoxArrayProperty { name, pool });
+        self.properties
+            .retain(property_id, VoxProperty { name, pool });
 
         for material_id in self.material_ids.iter() {
             // Safety: retained material ids have a value row.
             let material = unsafe { self.materials.get_mut(material_id) };
-            material.retain(array_property_id, U32Id::from_u32(0));
+            material.retain(property_id, U32Id::from_u32(0));
         }
 
-        array_property_id
+        property_id
     }
 
-    /// Number of array properties.
-    pub fn array_property_count(&self) -> usize {
-        self.array_property_ids.len()
+    /// Number of properties.
+    pub fn property_count(&self) -> usize {
+        self.property_ids.len()
     }
 
-    /// The array property `id`, or `None` if not one of this palette's.
-    pub fn array_property(&self, id: U32Id<BVoxArrayProperty>) -> Option<&VoxArrayProperty> {
+    /// The property `id`, or `None` if not one of this palette's.
+    pub fn property(&self, id: U32Id<BVoxProperty>) -> Option<&VoxProperty> {
         // Safety: retained ids have a value.
-        self.array_property_ids
+        self.property_ids
             .is_retained(id)
-            .then(|| unsafe { self.array_properties.get(id) })
+            .then(|| unsafe { self.properties.get(id) })
     }
 
-    /// The array property named `name`, or `None` if none has that name. O(1)
+    /// The property named `name`, or `None` if none has that name. O(1)
     /// through the name index. If a palette transiently declares the same
     /// name twice, which [`VoxMain::validate`](crate::VoxMain::validate)
     /// rejects, this returns the last such property added.
-    pub fn array_property_by_name(&self, name: &str) -> Option<U32Id<BVoxArrayProperty>> {
-        self.array_property_by_name.get(name).copied()
+    pub fn property_by_name(&self, name: &str) -> Option<U32Id<BVoxProperty>> {
+        self.property_by_name.get(name).copied()
     }
 
-    /// Array properties in id order, as `(id, property)`. Array property
+    /// Properties in id order, as `(id, property)`. Property
     /// order is the value-id order of each material row.
-    pub fn iter_array_properties(
+    pub fn iter_properties(
         &self,
-    ) -> impl Iterator<Item = (U32Id<BVoxArrayProperty>, &VoxArrayProperty)> + '_ {
+    ) -> impl Iterator<Item = (U32Id<BVoxProperty>, &VoxProperty)> + '_ {
         // Safety: retained ids have a value.
-        self.array_property_ids
+        self.property_ids
             .iter()
-            .map(move |id| (id, unsafe { self.array_properties.get(id) }))
+            .map(move |id| (id, unsafe { self.properties.get(id) }))
     }
 
-    /// Adds a material with one value id per array property, in
-    /// [`iter_array_properties`](Self::iter_array_properties) order, and
+    /// Adds a material with one value id per property, in
+    /// [`iter_properties`](Self::iter_properties) order, and
     /// returns its id. `None`, changing nothing, if `value_ids` has the
     /// wrong length. Each value id is range-checked against its property's
     /// pool by [`VoxMain::validate`](crate::VoxMain::validate), not here.
@@ -100,13 +99,13 @@ impl VoxPalette {
         &mut self,
         value_ids: Vec<U32Id<BVoxPoolValue>>,
     ) -> Option<U32Id<BVoxMaterial>> {
-        if value_ids.len() != self.array_property_ids.len() {
+        if value_ids.len() != self.property_ids.len() {
             return None;
         }
         let material_id = self.material_ids.retain();
         let mut row = IdField::new();
-        for (array_property_id, value_id) in self.array_property_ids.iter().zip(value_ids) {
-            row.retain(array_property_id, value_id);
+        for (property_id, value_id) in self.property_ids.iter().zip(value_ids) {
+            row.retain(property_id, value_id);
         }
         self.materials.retain(material_id, row);
         Some(material_id)
@@ -122,24 +121,22 @@ impl VoxPalette {
         self.material_ids.is_retained(id)
     }
 
-    /// The value id `material` draws for `array_property`, identifying a
+    /// The value id `material` draws for `property`, identifying a
     /// value in the pool that property draws from, or `None` if either id is
     /// not this palette's. Read the pool a [`VoxMain`](crate::VoxMain) holds
     /// by that id for the value.
     pub fn value_id(
         &self,
         material: U32Id<BVoxMaterial>,
-        array_property: U32Id<BVoxArrayProperty>,
+        property: U32Id<BVoxProperty>,
     ) -> Option<U32Id<BVoxPoolValue>> {
-        if !self.material_ids.is_retained(material)
-            || !self.array_property_ids.is_retained(array_property)
-        {
+        if !self.material_ids.is_retained(material) || !self.property_ids.is_retained(property) {
             return None;
         }
         // Safety: a retained material has a value id for every array
         // property.
         let row = unsafe { self.materials.get(material) };
-        Some(*unsafe { row.get(array_property) })
+        Some(*unsafe { row.get(property) })
     }
 
     /// Material ids in id order; read value ids with
@@ -151,11 +148,11 @@ impl VoxPalette {
     /// Deep copy. Liveness lives in the id pools, so the columns can't derive
     /// `Clone`; rebuild them against the cloned pools.
     pub fn clone_palette(&self) -> Self {
-        let mut array_properties = IdField::new();
-        for array_property_id in self.array_property_ids.iter() {
+        let mut properties = IdField::new();
+        for property_id in self.property_ids.iter() {
             // Safety: retained ids have a value.
-            let property = unsafe { self.array_properties.get(array_property_id) }.clone();
-            array_properties.retain(array_property_id, property);
+            let property = unsafe { self.properties.get(property_id) }.clone();
+            properties.retain(property_id, property);
         }
 
         let mut materials = IdField::new();
@@ -168,39 +165,39 @@ impl VoxPalette {
         }
 
         Self {
-            array_property_ids: self.array_property_ids.clone(),
-            array_properties,
+            property_ids: self.property_ids.clone(),
+            properties,
             material_ids: self.material_ids.clone(),
             materials,
-            array_property_by_name: self.array_property_by_name.clone(),
+            property_by_name: self.property_by_name.clone(),
         }
     }
 
-    /// Removes array property `id`, freeing its name string. Each material
+    /// Removes property `id`, freeing its name string. Each material
     /// keeps a Copy value id at the removed property's slot, unreferenced
     /// (reads are guarded by property retention) until [`gc`](Self::gc)
     /// compacts the rows. `None`, changing nothing, if `id` is not one of
-    /// this palette's array properties. Leaves a hole until
+    /// this palette's properties. Leaves a hole until
     /// [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
-    pub fn remove_array_property(&mut self, id: U32Id<BVoxArrayProperty>) -> Option<()> {
-        if !self.array_property_ids.is_retained(id) {
+    pub fn remove_property(&mut self, id: U32Id<BVoxProperty>) -> Option<()> {
+        if !self.property_ids.is_retained(id) {
             return None;
         }
 
         // Drop the index entry still pointing here; a duplicate name may have
         // overwritten it.
-        // Safety: a retained array property has a value.
-        let name = unsafe { self.array_properties.get(id) }.name.clone();
-        if self.array_property_by_name.get(&name) == Some(&id) {
-            self.array_property_by_name.remove(&name);
+        // Safety: a retained property has a value.
+        let name = unsafe { self.properties.get(id) }.name.clone();
+        if self.property_by_name.get(&name) == Some(&id) {
+            self.property_by_name.remove(&name);
         }
 
         // A value id is Copy, so releasing each material's slot at `id`
         // would be a no-op; leave it for gc to compact and only free the
         // property.
-        // Safety: a retained array property has a value.
-        unsafe { self.array_properties.release(id) };
-        self.array_property_ids.release(id);
+        // Safety: a retained property has a value.
+        unsafe { self.properties.release(id) };
+        self.property_ids.release(id);
         Some(())
     }
 
@@ -214,7 +211,7 @@ impl VoxPalette {
             return None;
         }
         // The row holds Copy value ids, so dropping the inner IdField frees
-        // its buffer with nothing to release per array property.
+        // its buffer with nothing to release per property.
         // Safety: a retained material has a row.
         unsafe { self.materials.release(id) };
         self.material_ids.release(id);
@@ -229,18 +226,18 @@ impl VoxPalette {
     /// point into the referenced pools, whose contents gc does not touch, so
     /// they stay valid.
     pub(crate) fn gc(&mut self) -> IdRemap<BVoxMaterial, u32> {
-        let array_property_remap = self.array_property_ids.gc();
+        let property_remap = self.property_ids.gc();
         // Safety: the property column was in sync with the pre-gc property
         // pool, and nothing has retained or released since.
-        unsafe { self.array_properties.gc(&array_property_remap) };
+        unsafe { self.properties.gc(&property_remap) };
 
         let material_ids: Vec<_> = self.material_ids.iter().collect();
         for material_id in material_ids {
             // Safety: a retained material holds a value id for every pre-gc
-            // array property id, and the remap came from this palette's
-            // array property pool.
+            // property id, and the remap came from this palette's
+            // property pool.
             let row = unsafe { self.materials.get_mut(material_id) };
-            unsafe { row.gc(&array_property_remap) };
+            unsafe { row.gc(&property_remap) };
         }
 
         let material_remap = self.material_ids.gc();
@@ -249,46 +246,44 @@ impl VoxPalette {
         unsafe { self.materials.gc(&material_remap) };
 
         // Rebuild the name index against the relabeled property ids.
-        self.array_property_by_name.clear();
+        self.property_by_name.clear();
 
-        let array_property_ids: Vec<_> = self.array_property_ids.iter().collect();
-        for array_property_id in array_property_ids {
-            // Safety: retained array property ids have a value.
-            let name = unsafe { self.array_properties.get(array_property_id) }
-                .name
-                .clone();
+        let property_ids: Vec<_> = self.property_ids.iter().collect();
+        for property_id in property_ids {
+            // Safety: retained property ids have a value.
+            let name = unsafe { self.properties.get(property_id) }.name.clone();
 
-            self.array_property_by_name.insert(name, array_property_id);
+            self.property_by_name.insert(name, property_id);
         }
 
         material_remap
     }
 
     /// Maps every value id into `pool` through `remap`: each material's cell
-    /// for an array property on `pool`. `remap` covers every pre-prune value
+    /// for a property on `pool`. `remap` covers every pre-prune value
     /// id of `pool`.
     pub(crate) fn remap_pool_value_ids(
         &mut self,
         pool: U32Id<BVoxValuePool>,
         remap: &IdSlice<BVoxPoolValue, U32Id<BVoxPoolValue>>,
     ) {
-        // The array properties on `pool`, found once so each material's row
+        // The properties on `pool`, found once so each material's row
         // is visited once for all of them.
         let pool_properties: Vec<_> = self
-            .array_property_ids
+            .property_ids
             .iter()
-            .filter(|&array_property_id| {
-                // Safety: retained array property ids have a value.
-                unsafe { self.array_properties.get(array_property_id) }.pool == pool
+            .filter(|&property_id| {
+                // Safety: retained property ids have a value.
+                unsafe { self.properties.get(property_id) }.pool == pool
             })
             .collect();
         if !pool_properties.is_empty() {
             for material_id in self.material_ids.iter() {
                 // Safety: a retained material holds a value id for every
-                // array property, and the row is keyed by array property id.
+                // property, and the row is keyed by property id.
                 let row = unsafe { self.materials.get_mut(material_id) };
-                for &array_property_id in &pool_properties {
-                    let slot = unsafe { row.get_mut(array_property_id) };
+                for &property_id in &pool_properties {
+                    let slot = unsafe { row.get_mut(property_id) };
                     *slot = remap[slot.to_usize_id()];
                 }
             }
@@ -299,13 +294,13 @@ impl VoxPalette {
     /// value-pool store a [`VoxMain`](crate::VoxMain) is compacting. Requires
     /// a referentially valid palette, so every property names a live pool.
     pub(crate) fn relabel_value_pools(&mut self, remap: &IdRemap<BVoxValuePool, u32>) {
-        let array_property_ids: Vec<_> = self.array_property_ids.iter().collect();
-        for array_property_id in array_property_ids {
-            // Safety: retained array property ids have a value.
-            let property = unsafe { self.array_properties.get_mut(array_property_id) };
+        let property_ids: Vec<_> = self.property_ids.iter().collect();
+        for property_id in property_ids {
+            // Safety: retained property ids have a value.
+            let property = unsafe { self.properties.get_mut(property_id) };
             property.pool = remap
                 .new_id(property.pool)
-                .expect("an array property names a live value pool in a valid state");
+                .expect("a property names a live value pool in a valid state");
         }
     }
 }
@@ -314,19 +309,19 @@ impl Drop for VoxPalette {
     fn drop(&mut self) {
         // Each material's row is an IdField owning a heap buffer whose value
         // ids are Copy, so releasing the inner IdField frees the buffer with
-        // nothing to release per array property. The properties own name
+        // nothing to release per property. The properties own name
         // strings, freed by releasing them.
         // Safety: each column holds a value for every id in its pool.
         unsafe {
             self.materials.release_all(&self.material_ids);
-            self.array_properties.release_all(&self.array_property_ids);
+            self.properties.release_all(&self.property_ids);
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{BVoxArrayProperty, BVoxMaterial, BVoxPoolValue, BVoxValuePool, VoxPalette};
+    use crate::{BVoxMaterial, BVoxPoolValue, BVoxProperty, BVoxValuePool, VoxPalette};
     use branded_id::U32Id;
 
     fn pool(index: u32) -> U32Id<BVoxValuePool> {
@@ -340,24 +335,24 @@ mod tests {
     #[test]
     fn builds_and_reads_a_material_palette() {
         let mut palette = VoxPalette::default();
-        let metallic = palette.add_array_property("metallic".to_owned(), pool(0));
-        let ior = palette.add_array_property("ior".to_owned(), pool(1));
+        let metallic = palette.add_property("metallic".to_owned(), pool(0));
+        let ior = palette.add_property("ior".to_owned(), pool(1));
 
-        // Two materials, each a value id per array property, in property
+        // Two materials, each a value id per property, in property
         // order.
         let matte = palette.add_material(vec![value(0), value(3)]).unwrap();
         let shiny = palette.add_material(vec![value(1), value(3)]).unwrap();
 
-        assert_eq!(palette.array_property_count(), 2);
+        assert_eq!(palette.property_count(), 2);
         assert_eq!(palette.material_count(), 2);
-        assert_eq!(palette.array_property(metallic).unwrap().name, "metallic");
-        assert_eq!(palette.array_property(ior).unwrap().pool, pool(1));
+        assert_eq!(palette.property(metallic).unwrap().name, "metallic");
+        assert_eq!(palette.property(ior).unwrap().pool, pool(1));
         assert_eq!(palette.value_id(matte, metallic), Some(value(0)));
         assert_eq!(palette.value_id(matte, ior), Some(value(3)));
         assert_eq!(palette.value_id(shiny, metallic), Some(value(1)));
         assert_eq!(
             palette
-                .iter_array_properties()
+                .iter_properties()
                 .map(|(id, p)| (id, p.name.as_str()))
                 .collect::<Vec<_>>(),
             [(metallic, "metallic"), (ior, "ior")]
@@ -367,48 +362,39 @@ mod tests {
     #[test]
     fn add_material_rejects_wrong_arity_without_changing_state() {
         let mut palette = VoxPalette::default();
-        palette.add_array_property("baseColorFactor".to_owned(), pool(0));
-        // One array property, but two value ids supplied.
+        palette.add_property("baseColorFactor".to_owned(), pool(0));
+        // One property, but two value ids supplied.
         assert_eq!(palette.add_material(vec![value(0), value(1)]), None);
         assert_eq!(palette.material_count(), 0);
     }
 
     #[test]
-    fn array_property_by_name_indexes_and_survives_gc() {
+    fn property_by_name_indexes_and_survives_gc() {
         let mut palette = VoxPalette::default();
-        let color = palette.add_array_property("baseColorFactor".to_owned(), pool(0));
-        let metal = palette.add_array_property("metallicFactor".to_owned(), pool(1));
+        let color = palette.add_property("baseColorFactor".to_owned(), pool(0));
+        let metal = palette.add_property("metallicFactor".to_owned(), pool(1));
 
-        assert_eq!(
-            palette.array_property_by_name("baseColorFactor"),
-            Some(color)
-        );
-        assert_eq!(
-            palette.array_property_by_name("metallicFactor"),
-            Some(metal)
-        );
-        assert_eq!(palette.array_property_by_name("missing"), None);
+        assert_eq!(palette.property_by_name("baseColorFactor"), Some(color));
+        assert_eq!(palette.property_by_name("metallicFactor"), Some(metal));
+        assert_eq!(palette.property_by_name("missing"), None);
 
         // Removing a property drops it from the index; gc renumbers the rest
         // and the index follows.
-        palette.remove_array_property(color);
-        assert_eq!(palette.array_property_by_name("baseColorFactor"), None);
+        palette.remove_property(color);
+        assert_eq!(palette.property_by_name("baseColorFactor"), None);
         palette.gc();
-        let metal = U32Id::<BVoxArrayProperty>::from_u32(0);
-        assert_eq!(
-            palette.array_property_by_name("metallicFactor"),
-            Some(metal)
-        );
-        assert_eq!(palette.array_property_by_name("baseColorFactor"), None);
+        let metal = U32Id::<BVoxProperty>::from_u32(0);
+        assert_eq!(palette.property_by_name("metallicFactor"), Some(metal));
+        assert_eq!(palette.property_by_name("baseColorFactor"), None);
     }
 
     #[test]
-    fn add_array_property_back_fills_existing_materials_with_zero() {
+    fn add_property_back_fills_existing_materials_with_zero() {
         let mut palette = VoxPalette::default();
-        let color = palette.add_array_property("baseColorFactor".to_owned(), pool(0));
+        let color = palette.add_property("baseColorFactor".to_owned(), pool(0));
         let material = palette.add_material(vec![value(7)]).unwrap();
 
-        let added = palette.add_array_property("metallicFactor".to_owned(), pool(1));
+        let added = palette.add_property("metallicFactor".to_owned(), pool(1));
         assert_eq!(palette.value_id(material, color), Some(value(7)));
         assert_eq!(palette.value_id(material, added), Some(value(0)));
     }
@@ -416,15 +402,12 @@ mod tests {
     #[test]
     fn clone_palette_is_an_independent_deep_copy() {
         let mut palette = VoxPalette::default();
-        let property = palette.add_array_property("baseColorFactor".to_owned(), pool(0));
+        let property = palette.add_property("baseColorFactor".to_owned(), pool(0));
         let material = palette.add_material(vec![value(2)]).unwrap();
 
         let copy = palette.clone_palette();
         assert_eq!(copy.value_id(material, property), Some(value(2)));
-        assert_eq!(
-            copy.array_property(property).unwrap().name,
-            "baseColorFactor"
-        );
+        assert_eq!(copy.property(property).unwrap().name, "baseColorFactor");
 
         // Mutating the original must not touch the copy.
         palette.add_material(vec![value(5)]).unwrap();
@@ -433,31 +416,31 @@ mod tests {
     }
 
     #[test]
-    fn remove_array_property_keeps_materials_then_gc_renumbers() {
+    fn remove_property_keeps_materials_then_gc_renumbers() {
         let mut palette = VoxPalette::default();
-        let a = palette.add_array_property("a".to_owned(), pool(0));
-        let b = palette.add_array_property("b".to_owned(), pool(1));
+        let a = palette.add_property("a".to_owned(), pool(0));
+        let b = palette.add_property("b".to_owned(), pool(1));
         let material = palette.add_material(vec![value(1), value(2)]).unwrap();
 
-        assert_eq!(palette.remove_array_property(a), Some(()));
-        assert_eq!(palette.array_property_count(), 1);
-        assert_eq!(palette.array_property(a), None); // a hole until gc
+        assert_eq!(palette.remove_property(a), Some(()));
+        assert_eq!(palette.property_count(), 1);
+        assert_eq!(palette.property(a), None); // a hole until gc
         assert_eq!(palette.value_id(material, a), None);
         assert_eq!(palette.value_id(material, b), Some(value(2)));
-        assert_eq!(palette.remove_array_property(a), None); // already gone
+        assert_eq!(palette.remove_property(a), None); // already gone
 
         palette.gc();
         // The surviving property and material renumber to 0.
-        let property = U32Id::<BVoxArrayProperty>::from_u32(0);
+        let property = U32Id::<BVoxProperty>::from_u32(0);
         let material = U32Id::<BVoxMaterial>::from_u32(0);
-        assert_eq!(palette.array_property(property).unwrap().name, "b");
+        assert_eq!(palette.property(property).unwrap().name, "b");
         assert_eq!(palette.value_id(material, property), Some(value(2)));
     }
 
     #[test]
     fn remove_material_then_gc_compacts_remaining_materials() {
         let mut palette = VoxPalette::default();
-        let property = palette.add_array_property("v".to_owned(), pool(0));
+        let property = palette.add_property("v".to_owned(), pool(0));
         let keep = palette.add_material(vec![value(0)]).unwrap();
         let drop = palette.add_material(vec![value(1)]).unwrap();
         let last = palette.add_material(vec![value(2)]).unwrap();

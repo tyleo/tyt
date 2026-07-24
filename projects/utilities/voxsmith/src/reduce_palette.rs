@@ -5,15 +5,13 @@ use ty_math::{
     FromColor, TyCielabColorF64, TyColorToVector3, TyLinSrgbaF64, TyOklabColorF64, TySrgbaU8,
     TyVector3Ext, TyVector3F64, TyVector3U32,
 };
-use voxcore::{
-    BVoxArrayProperty, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, VoxMain, VoxObject,
-};
+use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxMain, VoxObject};
 
 /// Reduces `palette` in `state` to at most `max_materials` materials, then,
 /// unless `keep_unused_values`, prunes the pool values the reduction leaves
 /// unreferenced.
 ///
-/// Materials cluster by the `baseColorFactor` array property and each cluster
+/// Materials cluster by the `baseColorFactor` property and each cluster
 /// collapses onto one real representative, so a merged voxel takes the
 /// representative's whole material. Colorless materials are left untouched.
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
@@ -74,14 +72,14 @@ fn reduce_materials(
         return Ok(None);
     }
 
-    // The `baseColorFactor` array property; only colored materials cluster.
-    let color_property = palette_ref.array_property_by_name(BASE_COLOR_FACTOR);
+    // The `baseColorFactor` property; only colored materials cluster.
+    let color_property = palette_ref.property_by_name(BASE_COLOR_FACTOR);
 
     let colored: Vec<(u32, [u8; 4])> = match color_property {
-        Some(array_property) => palette_ref
+        Some(property) => palette_ref
             .iter_materials()
             .filter_map(|material| {
-                let color = material_color(state, palette, material, array_property)?;
+                let color = material_color(state, palette, material, property)?;
                 Some((material.to_u32(), color))
             })
             .collect(),
@@ -164,9 +162,9 @@ fn material_color(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
     material: U32Id<BVoxMaterial>,
-    array_property: U32Id<BVoxArrayProperty>,
+    property: U32Id<BVoxProperty>,
 ) -> Option<[u8; 4]> {
-    let (pool, value_id) = state.material_value(palette, material, array_property)?;
+    let (pool, value_id) = state.material_value(palette, material, property)?;
 
     pool_color(pool, value_id)
 }
@@ -786,12 +784,12 @@ mod tests {
         palette: U32Id<BVoxPalette>,
         material: U32Id<BVoxMaterial>,
     ) -> String {
-        let array_property = state
+        let property = state
             .palette(palette)
             .unwrap()
-            .array_property_by_name(BASE_COLOR_FACTOR)
+            .property_by_name(BASE_COLOR_FACTOR)
             .unwrap();
-        match state.material_value(palette, material, array_property) {
+        match state.material_value(palette, material, property) {
             Some((VoxValuePool::Srgba { values }, value_id)) => {
                 hex_of(values[value_id.to_usize_id()])
             }
@@ -830,8 +828,8 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
-        palette.add_array_property("tag".to_owned(), tag);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette.add_property("tag".to_owned(), tag);
         let materials: Vec<_> = (0..colors.len())
             .map(|index| {
                 palette
@@ -894,7 +892,7 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
         let materials: Vec<_> = (0..colors.len())
             .map(|index| palette.add_material(vec![value(index)]).unwrap())
             .collect();
@@ -972,7 +970,7 @@ mod tests {
         let object = state.object(object).unwrap();
         let (layer, _) = object.iter_layers().next().unwrap();
         let palette_ref = state.palette(palette).unwrap();
-        let tag = palette_ref.array_property_by_name("tag").unwrap();
+        let tag = palette_ref.property_by_name("tag").unwrap();
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         let material = object.voxel_material(voxel, layer).unwrap();
         match state.material_value(palette, material, tag) {
@@ -1161,12 +1159,12 @@ mod tests {
         }
     }
 
-    /// The number of values in the pool the array property `name` draws from
+    /// The number of values in the pool the property `name` draws from
     /// in the first palette that carries it.
     fn pool_len(state: &VoxMain, name: &str) -> usize {
         for (_, palette) in state.iter_palettes() {
-            if let Some(array_property) = palette.array_property_by_name(name) {
-                let pool = palette.array_property(array_property).unwrap().pool;
+            if let Some(property) = palette.property_by_name(name) {
+                let pool = palette.property(property).unwrap().pool;
                 return state.value_pool(pool).unwrap().values_len();
             }
         }
@@ -1215,7 +1213,7 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property("tag".to_owned(), tag);
+        palette.add_property("tag".to_owned(), tag);
         let materials: Vec<_> = (0..3)
             .map(|index| palette.add_material(vec![value(index)]).unwrap())
             .collect();
@@ -1259,7 +1257,7 @@ mod tests {
         });
 
         let mut glow_palette = VoxPalette::default();
-        glow_palette.add_array_property("emissiveStrength".to_owned(), strength);
+        glow_palette.add_property("emissiveStrength".to_owned(), strength);
         glow_palette.add_material(vec![value(0)]).unwrap();
         let glow_palette_id = state.add_palette(glow_palette);
         state

@@ -237,7 +237,7 @@ fn fill_interior(
 /// Assembles a palette from a per-cell material list. Near-identical
 /// materials merge to one palette material, and each filled cell samples its
 /// cell's material. Every glTF property draws from a deduplicated value pool
-/// added to `state`: an array property carrying one value id per material.
+/// added to `state`: a property carrying one value id per material.
 /// The default material is the first built, or a lone white material for an
 /// all-empty grid, so the palette is never empty.
 fn build_palette(
@@ -299,14 +299,14 @@ fn build_palette(
     let transmission_pool = state.add_value_pool(bounded_float(transmission.values, 0.0, 1.0));
 
     let mut palette = VoxPalette::default();
-    palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base_color_pool);
-    palette.add_array_property(METALLIC_FACTOR.to_owned(), metallic_pool);
-    palette.add_array_property(ROUGHNESS_FACTOR.to_owned(), roughness_pool);
-    palette.add_array_property(EMISSIVE_FACTOR.to_owned(), emissive_factor_pool);
-    palette.add_array_property(EMISSIVE_STRENGTH.to_owned(), emissive_strength_pool);
-    palette.add_array_property(OCCLUSION_STRENGTH.to_owned(), occlusion_pool);
-    palette.add_array_property(IOR.to_owned(), ior_pool);
-    palette.add_array_property(TRANSMISSION_FACTOR.to_owned(), transmission_pool);
+    palette.add_property(BASE_COLOR_FACTOR.to_owned(), base_color_pool);
+    palette.add_property(METALLIC_FACTOR.to_owned(), metallic_pool);
+    palette.add_property(ROUGHNESS_FACTOR.to_owned(), roughness_pool);
+    palette.add_property(EMISSIVE_FACTOR.to_owned(), emissive_factor_pool);
+    palette.add_property(EMISSIVE_STRENGTH.to_owned(), emissive_strength_pool);
+    palette.add_property(OCCLUSION_STRENGTH.to_owned(), occlusion_pool);
+    palette.add_property(IOR.to_owned(), ior_pool);
+    palette.add_property(TRANSMISSION_FACTOR.to_owned(), transmission_pool);
 
     // One material per distinct mesh material, its value ids in property
     // order.
@@ -323,7 +323,7 @@ fn build_palette(
                     ior.indices[index],
                     transmission.indices[index],
                 ])
-                .expect("one value id for each array property")
+                .expect("one value id for each property")
         })
         .collect();
 
@@ -580,12 +580,12 @@ mod tests {
     }
 
     /// The strength the given voxel's material samples from the
-    /// `emissiveStrength` array property.
+    /// `emissiveStrength` property.
     fn sampled_strength(state: &VoxMain, position: TyVector3U32) -> f64 {
         let (_, object) = state.iter_objects().next().unwrap();
         let (layer, palette_id) = object.iter_layers().next().unwrap();
         let palette = state.palette(palette_id).unwrap();
-        let property = palette.array_property_by_name(EMISSIVE_STRENGTH).unwrap();
+        let property = palette.property_by_name(EMISSIVE_STRENGTH).unwrap();
         let voxel = object.voxel_id(position).unwrap();
         let material = object.voxel_material(voxel, layer).unwrap();
         match state

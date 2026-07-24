@@ -24,7 +24,7 @@ pub fn resolve_cell_color<'a>(
         .map(|material| {
             let (pool, value_id) = state
                 .material_value(winner.palette, material, winner.property)
-                .expect("a palette material carries a value for each array property");
+                .expect("a palette material carries a value for each property");
             let color = pool_color(pool, value_id).ok_or_else(|| non_color_pool(object))?;
             Ok((material, color))
         })
@@ -63,7 +63,7 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let blue = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
         let palette_id = state.add_palette(palette);
@@ -107,7 +107,7 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
         let material = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette_id = state.add_palette(palette);
 

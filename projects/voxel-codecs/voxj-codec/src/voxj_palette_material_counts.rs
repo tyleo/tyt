@@ -32,13 +32,13 @@ pub fn voxj_palette_material_counts(
 #[cfg(test)]
 mod tests {
     use crate::voxj_palette_material_counts;
-    use voxj::{VoxjArrayProperty, VoxjPalette};
+    use voxj::{VoxjPalette, VoxjProperty};
 
-    /// A palette of `m` materials: one array property over pool 0, its rows
+    /// A palette of `m` materials: one property over pool 0, its rows
     /// the value-indices `0..m`.
     fn palette(m: usize) -> VoxjPalette {
         VoxjPalette {
-            array_properties: vec![VoxjArrayProperty {
+            properties: vec![VoxjProperty {
                 name: "baseColorFactor".to_owned(),
                 value_pool: 0,
             }],
@@ -63,10 +63,10 @@ mod tests {
 
     #[test]
     fn counts_a_property_less_palette_by_its_rows() {
-        // With no array properties every row is empty, but each row is still
+        // With no properties every row is empty, but each row is still
         // one material, so M is the row count.
         let palettes = [VoxjPalette {
-            array_properties: vec![],
+            properties: vec![],
             materials: vec![vec![], vec![], vec![]],
         }];
         assert_eq!(

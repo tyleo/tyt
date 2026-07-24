@@ -17,8 +17,8 @@ pub struct VoxjFile {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
     use crate::{
-        VoxjArrayProperty, VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
-        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
+        VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
         VoxjValuePool,
     };
     use serde_json::{Value, json};
@@ -42,14 +42,14 @@ mod tests {
                     ],
                     palettes: vec![
                         VoxjPalette {
-                            array_properties: vec![VoxjArrayProperty {
+                            properties: vec![VoxjProperty {
                                 name: "baseColorFactor".to_owned(),
                                 value_pool: 1,
                             }],
                             materials: vec![vec![0], vec![1]],
                         },
                         VoxjPalette {
-                            array_properties: vec![VoxjArrayProperty {
+                            properties: vec![VoxjProperty {
                                 name: "emissiveStrength".to_owned(),
                                 value_pool: 0,
                             }],
@@ -99,13 +99,13 @@ mod tests {
                     ],
                     "palettes": [
                         {
-                            "arrayProperties": [
+                            "properties": [
                                 { "name": "baseColorFactor", "valuePool": 1 },
                             ],
                             "materials": [[0], [1]],
                         },
                         {
-                            "arrayProperties": [
+                            "properties": [
                                 { "name": "emissiveStrength", "valuePool": 0 },
                             ],
                             "materials": [[1]],
@@ -164,9 +164,10 @@ mod tests {
         for (pointer, from, to) in [
             (
                 "/main/runtimeState/palettes/0",
+                "properties",
                 "arrayProperties",
-                "bindings",
             ),
+            ("/main/runtimeState/palettes/0", "properties", "bindings"),
             ("/main/runtimeState/objects/0", "layers", "layerPaletteRefs"),
             ("/main/runtimeState", "nodes", "hierarchyNodes"),
             ("/main/runtimeState", "rootNodes", "rootHierarchyNodes"),

@@ -50,12 +50,12 @@ mod tests {
     use crate::{VoxjCheck, VoxjCheckStatus, check_voxj_file};
     use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
-        VoxjArrayProperty, VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
-        VoxjPalette, VoxjPositionBlock, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
+        VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
         VoxjValuePool,
     };
 
-    /// An `srgba-hex` pool of four colors backing the array property's
+    /// An `srgba-hex` pool of four colors backing the property's
     /// value-indices, and an unreferenced one-value `float` pool.
     fn value_pools() -> Vec<VoxjValuePool> {
         vec![
@@ -70,12 +70,12 @@ mod tests {
         ]
     }
 
-    /// A palette of `materials` materials: one array property binding
+    /// A palette of `materials` materials: one property binding
     /// `baseColorFactor` to value pool 0, its rows the value-indices
     /// `0..materials`.
     fn palette(materials: usize) -> VoxjPalette {
         VoxjPalette {
-            array_properties: vec![VoxjArrayProperty {
+            properties: vec![VoxjProperty {
                 name: "baseColorFactor".to_owned(),
                 value_pool: 0,
             }],
@@ -236,7 +236,7 @@ mod tests {
         // An extra, unreferenced palette with no materials fails only the
         // palettes check.
         file.main.runtime_state.palettes.push(VoxjPalette {
-            array_properties: vec![VoxjArrayProperty {
+            properties: vec![VoxjProperty {
                 name: "baseColorFactor".to_owned(),
                 value_pool: 0,
             }],

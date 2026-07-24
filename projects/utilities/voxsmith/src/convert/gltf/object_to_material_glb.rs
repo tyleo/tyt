@@ -58,7 +58,7 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let blue = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
         let palette_id = state.add_palette(palette);

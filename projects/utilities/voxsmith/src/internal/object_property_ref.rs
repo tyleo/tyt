@@ -1,5 +1,5 @@
 use branded_id::U32Id;
-use voxcore::{BVoxArrayProperty, BVoxLayer, BVoxPalette};
+use voxcore::{BVoxLayer, BVoxPalette, BVoxProperty};
 
 /// One property's winning supplier for a whole object. Under the canonical
 /// override order the last layer whose palette carries the property wins;
@@ -12,6 +12,6 @@ pub struct ObjectPropertyRef {
     /// The palette the winning layer references.
     pub palette: U32Id<BVoxPalette>,
 
-    /// The array property supplying the value.
-    pub property: U32Id<BVoxArrayProperty>,
+    /// The property supplying the value.
+    pub property: U32Id<BVoxProperty>,
 }

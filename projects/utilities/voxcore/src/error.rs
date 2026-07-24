@@ -19,21 +19,21 @@ pub enum Error {
     /// bounds, at the given value id.
     PoolValue { pool: u32, index: u32 },
 
-    /// A palette array property references a value pool that does not exist.
-    ArrayPropertyPool {
+    /// A palette property references a value pool that does not exist.
+    PropertyPool {
         palette: u32,
-        array_property: u32,
+        property: u32,
         pool: u32,
     },
 
-    /// A palette declares the same name on more than one array property.
-    DuplicateArrayPropertyName { palette: u32, array_property: u32 },
+    /// A palette declares the same name on more than one property.
+    DuplicatePropertyName { palette: u32, property: u32 },
 
-    /// A material's value id for an array property is beyond the pool's
+    /// A material's value id for a property is beyond the pool's
     /// values.
     MaterialValue {
         palette: u32,
-        array_property: u32,
+        property: u32,
         material: u32,
     },
 
@@ -92,28 +92,25 @@ impl Display for Error {
                 f,
                 "value pool {pool} value {index} is malformed for its kind or out of bounds"
             ),
-            Error::ArrayPropertyPool {
+            Error::PropertyPool {
                 palette,
-                array_property,
+                property,
                 pool,
             } => write!(
                 f,
-                "palette {palette} array property {array_property} references value pool {pool}, which does not exist"
+                "palette {palette} property {property} references value pool {pool}, which does not exist"
             ),
-            Error::DuplicateArrayPropertyName {
-                palette,
-                array_property,
-            } => write!(
+            Error::DuplicatePropertyName { palette, property } => write!(
                 f,
-                "palette {palette} array property {array_property} duplicates another property's name"
+                "palette {palette} property {property} duplicates another property's name"
             ),
             Error::MaterialValue {
                 palette,
-                array_property,
+                property,
                 material,
             } => write!(
                 f,
-                "palette {palette} material {material} has a value id for array property {array_property} out of the pool's range"
+                "palette {palette} material {material} has a value id for property {property} out of the pool's range"
             ),
             Error::PaletteWithoutMaterials { palette } => {
                 write!(f, "palette {palette} has no materials")

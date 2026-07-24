@@ -177,7 +177,7 @@ fn expand_property(
             }
         }
         PropertyRef::Key { key, component } => {
-            if palette.array_property_by_name(key).is_none() {
+            if palette.property_by_name(key).is_none() {
                 if palette_is_wild {
                     return Ok(());
                 }
@@ -210,11 +210,11 @@ fn build_collection(
     format: PaletteShowFormat,
 ) -> Result<Collection> {
     let property_id = palette
-        .array_property_by_name(key)
+        .property_by_name(key)
         .expect("caller verified the property is present");
     let pool_id = palette
-        .array_property(property_id)
-        .expect("an array-property id from this palette resolves")
+        .property(property_id)
+        .expect("a property id from this palette resolves")
         .pool;
     let pool = state
         .value_pool(pool_id)
@@ -249,14 +249,14 @@ fn build_collection(
         }
     }
 
-    // A material holds one value id per array property, so the lookup with
+    // A material holds one value id per property, so the lookup with
     // this palette's own property id always resolves.
     let samples = palette
         .iter_materials()
         .map(|material| {
             let value_id = palette
                 .value_id(material, property_id)
-                .expect("a material holds a value for every array property");
+                .expect("a material holds a value for every property");
             sample(pool, value_id, kind, component)
         })
         .collect();
@@ -658,14 +658,14 @@ mod tests {
         let colors_one = srgba_pool(&mut state, &[[0, 0, 255, 255]]);
 
         let mut first = VoxPalette::default();
-        first.add_array_property("baseColorFactor".to_owned(), colors_zero);
-        first.add_array_property("metallicFactor".to_owned(), metallic);
+        first.add_property("baseColorFactor".to_owned(), colors_zero);
+        first.add_property("metallicFactor".to_owned(), metallic);
         first.add_material(vec![value(0), value(0)]).unwrap();
         first.add_material(vec![value(1), value(1)]).unwrap();
         state.add_palette(first);
 
         let mut second = VoxPalette::default();
-        second.add_array_property("baseColorFactor".to_owned(), colors_one);
+        second.add_property("baseColorFactor".to_owned(), colors_one);
         second.add_material(vec![value(0)]).unwrap();
         state.add_palette(second);
 
@@ -747,7 +747,7 @@ mod tests {
             values: IdVec::from_vec(vec![true, false]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("shadows".to_owned(), shadows);
+        palette.add_property("shadows".to_owned(), shadows);
         palette.add_material(vec![value(0)]).unwrap();
         palette.add_material(vec![value(1)]).unwrap();
         state.add_palette(palette);
@@ -1191,7 +1191,7 @@ mod tests {
             values: IdVec::from_vec(vec![[1.0, 0.0, 0.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("tint".to_owned(), pool);
+        palette.add_property("tint".to_owned(), pool);
         palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);
         state
@@ -1222,7 +1222,7 @@ mod tests {
             values: IdVec::from_vec(vec![[2.0, 1.0, 0.5, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("emissiveFactor".to_owned(), pool);
+        palette.add_property("emissiveFactor".to_owned(), pool);
         palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);
 
@@ -1243,7 +1243,7 @@ mod tests {
             values: IdVec::from_vec(vec![3, 7]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("count".to_owned(), pool);
+        palette.add_property("count".to_owned(), pool);
         palette.add_material(vec![value(0)]).unwrap();
         palette.add_material(vec![value(1)]).unwrap();
         state.add_palette(palette);
@@ -1262,7 +1262,7 @@ mod tests {
             ])]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("extra".to_owned(), pool);
+        palette.add_property("extra".to_owned(), pool);
         palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);
 
@@ -1288,7 +1288,7 @@ mod tests {
         });
         let mut palette = VoxPalette::default();
         // A binding with no property name, reached through the `*` property.
-        palette.add_array_property(String::new(), pool);
+        palette.add_property(String::new(), pool);
         palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);
 
@@ -1319,7 +1319,7 @@ mod tests {
             values: IdVec::from_vec(vec![2.0]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("emissiveStrength".to_owned(), strengths);
+        palette.add_property("emissiveStrength".to_owned(), strengths);
         palette.add_material(vec![value(0)]).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
         state.add_palette(palette);

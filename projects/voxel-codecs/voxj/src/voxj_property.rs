@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
     feature = "serde",
     serde(rename_all = "camelCase", deny_unknown_fields)
 )]
-pub struct VoxjArrayProperty {
+pub struct VoxjProperty {
     /// The property name. Advisory: a consumer ignores names it does not
     /// recognize. No property name repeats within a palette.
     pub name: String,

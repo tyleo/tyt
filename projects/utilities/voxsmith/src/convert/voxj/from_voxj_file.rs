@@ -80,8 +80,8 @@ mod tests {
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
     use voxcore::{BVoxObject, BVoxPalette};
     use voxj::{
-        VoxjArrayProperty, VoxjBound, VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode,
-        VoxjMain, VoxjMap, VoxjObject, VoxjPalette, VoxjPositionBlock, VoxjRuntimeState,
+        VoxjBound, VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap,
+        VoxjObject, VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState,
         VoxjSampleBlock, VoxjTransform, VoxjValue, VoxjValuePool,
     };
     use voxj_codec::{decode_voxj_object, voxj_palette_material_counts};
@@ -96,17 +96,17 @@ mod tests {
         }
     }
 
-    /// A one-array-property palette over `value_pool` with `n` materials,
+    /// A one-property palette over `value_pool` with `n` materials,
     /// material `m` reading value-index `m`, one row `[m]` per material.
     fn numbered_palette(name: &str, value_pool: usize, n: usize) -> VoxjPalette {
         VoxjPalette {
-            array_properties: vec![array_property(name, value_pool)],
+            properties: vec![property(name, value_pool)],
             materials: (0..n).map(|m| vec![m]).collect(),
         }
     }
 
-    fn array_property(name: &str, value_pool: usize) -> VoxjArrayProperty {
-        VoxjArrayProperty {
+    fn property(name: &str, value_pool: usize) -> VoxjProperty {
+        VoxjProperty {
             name: name.to_owned(),
             value_pool,
         }
@@ -164,15 +164,12 @@ mod tests {
                     ],
                     palettes: vec![
                         numbered_palette("baseColorFactor", 0, 6),
-                        // Two array properties over the bounded pools, one row
+                        // Two properties over the bounded pools, one row
                         // per material: material 0 = { metallicFactor: 0.0,
                         // ior: 1.5 }, material 1 = { metallicFactor: 0.5,
                         // ior: 2.0 }.
                         VoxjPalette {
-                            array_properties: vec![
-                                array_property("metallicFactor", 1),
-                                array_property("ior", 2),
-                            ],
+                            properties: vec![property("metallicFactor", 1), property("ior", 2)],
                             materials: vec![vec![0, 0], vec![1, 1]],
                         },
                     ],
@@ -563,9 +560,9 @@ mod tests {
     #[test]
     fn round_trips_sibling_variant_palettes() {
         let variant = |strength: usize| VoxjPalette {
-            array_properties: vec![
-                array_property("baseColorFactor", 0),
-                array_property("emissiveStrength", 1),
+            properties: vec![
+                property("baseColorFactor", 0),
+                property("emissiveStrength", 1),
             ],
             materials: vec![vec![0, strength], vec![1, strength]],
         };

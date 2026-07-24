@@ -107,7 +107,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
             .collect(),
     });
-    palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), color_pool);
+    palette.add_property(BASE_COLOR_FACTOR.to_owned(), color_pool);
 
     // The scalars are custom MagicaVoxel attributes with no glTF bounds, so
     // their float pools are unbounded.
@@ -136,7 +136,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
         let type_pool = state.add_value_pool(VoxValuePool::String {
             values: IdVec::from_vec(distinct_types),
         });
-        palette.add_array_property("type".to_owned(), type_pool);
+        palette.add_property("type".to_owned(), type_pool);
         attribute_indices.push(type_indices);
 
         for (name, read) in SCALARS {
@@ -159,7 +159,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
                 max: VoxBound::None,
                 values: IdVec::from_vec(distinct),
             });
-            palette.add_array_property(name.to_owned(), pool);
+            palette.add_property(name.to_owned(), pool);
             attribute_indices.push(indices);
         }
     }
@@ -171,7 +171,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
         }
         palette
             .add_material(value_ids)
-            .expect("one value id per array property");
+            .expect("one value id per property");
     }
 
     Ok(palette)
@@ -701,7 +701,7 @@ mod tests {
                 .collect(),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
         for index in 0..4 {
             palette
                 .add_material(vec![U32Id::from_u32(index)])

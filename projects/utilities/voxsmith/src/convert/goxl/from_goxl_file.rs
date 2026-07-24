@@ -88,12 +88,12 @@ fn build_palette(
     });
 
     let mut palette = VoxPalette::default();
-    palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
+    palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
     let mut materials = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
         let material = palette
             .add_material(vec![U32Id::from_u32(index as u32)])
-            .expect("one value id for the one array property");
+            .expect("one value id for the one property");
         materials.insert(*color, material);
     }
 
@@ -463,11 +463,11 @@ mod tests {
                 .collect(),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
         for index in 0..4 {
             palette
                 .add_material(vec![U32Id::from_u32(index)])
-                .expect("one value id for the one array property");
+                .expect("one value id for the one property");
         }
         let palette_id = state.add_palette(palette);
         let material = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);

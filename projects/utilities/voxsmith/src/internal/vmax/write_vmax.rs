@@ -18,7 +18,7 @@ use vmax::{
 };
 use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
-    BVoxArrayProperty, BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, BVoxProperty,
     VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
 };
 
@@ -622,12 +622,12 @@ fn object_view_box(origin: [i32; 3], size: TyVector3U32) -> VMaxViewBox {
 }
 
 /// The folded palette an object references: the palette id, the optional
-/// `baseColorFactor` array property, and the material array properties in
+/// `baseColorFactor` property, and the material properties in
 /// order.
 struct FoldedRef {
     palette: U32Id<BVoxPalette>,
-    color: Option<U32Id<BVoxArrayProperty>>,
-    materials: Vec<(String, U32Id<BVoxArrayProperty>)>,
+    color: Option<U32Id<BVoxProperty>>,
+    materials: Vec<(String, U32Id<BVoxProperty>)>,
 }
 
 /// The one folded palette an object references on its single layer, or `None`
@@ -635,9 +635,9 @@ struct FoldedRef {
 fn folded_ref(state: &VoxMain, object: &VoxObject) -> Option<FoldedRef> {
     let (_, palette_id) = object.iter_layers().next()?;
     let palette = state.palette(palette_id)?;
-    let color = palette.array_property_by_name(BASE_COLOR_FACTOR);
+    let color = palette.property_by_name(BASE_COLOR_FACTOR);
     let materials = palette
-        .iter_array_properties()
+        .iter_properties()
         .filter(|(id, _)| Some(*id) != color)
         .map(|(id, property)| (property.name.clone(), id))
         .collect();
@@ -741,7 +741,7 @@ fn derive_materials(
     let base_luminance = |material| -> Option<f64> {
         let color = folded.color?;
         let value_id = palette.value_id(material, color)?;
-        let pool = array_property_pool(state, folded.palette, color)?;
+        let pool = property_pool(state, folded.palette, color)?;
         let [r, g, b, _] = pool_color(pool, value_id)?;
         let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
             .into_format::<f64, f64>()
@@ -759,9 +759,9 @@ fn derive_materials(
         let signature: Vec<U32Id<BVoxPoolValue>> = folded
             .materials
             .iter()
-            .map(|(_, array_property)| {
+            .map(|(_, property)| {
                 palette
-                    .value_id(material, *array_property)
+                    .value_id(material, *property)
                     .unwrap_or(U32Id::from_u32(0))
             })
             .collect();
@@ -811,7 +811,7 @@ fn derive_materials(
 fn derived_material(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    properties: &[(String, U32Id<BVoxArrayProperty>)],
+    properties: &[(String, U32Id<BVoxProperty>)],
     slot: usize,
     signature: &[U32Id<BVoxPoolValue>],
     base_luminance: Option<f64>,
@@ -831,7 +831,7 @@ fn derived_material(
         let position = properties
             .iter()
             .position(|(name, _)| name == EMISSIVE_FACTOR)?;
-        let pool = array_property_pool(state, palette, properties[position].1)?;
+        let pool = property_pool(state, palette, properties[position].1)?;
         let [r, g, b, _] = pool_color(pool, signature[position])?;
         let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
             .into_format::<f64, f64>()
@@ -896,41 +896,41 @@ fn vmax_material(slot: usize, material: &VoxelMaxMaterial) -> VMaxMaterial {
     }
 }
 
-/// The `f64` value at `value_id` in an array property's `float` pool, or
+/// The `f64` value at `value_id` in a property's `float` pool, or
 /// `None`.
 fn pool_scalar(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    array_property: U32Id<BVoxArrayProperty>,
+    property: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxPoolValue>,
 ) -> Option<f64> {
-    match array_property_pool(state, palette, array_property)? {
+    match property_pool(state, palette, property)? {
         VoxValuePool::Float { values, .. } => values.get(value_id.to_usize_id()).copied(),
         _ => None,
     }
 }
 
-/// The `bool` value at `value_id` in an array property's `bool` pool, or
+/// The `bool` value at `value_id` in a property's `bool` pool, or
 /// `None`.
 fn pool_flag(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    array_property: U32Id<BVoxArrayProperty>,
+    property: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxPoolValue>,
 ) -> Option<bool> {
-    match array_property_pool(state, palette, array_property)? {
+    match property_pool(state, palette, property)? {
         VoxValuePool::Bool { values } => values.get(value_id.to_usize_id()).copied(),
         _ => None,
     }
 }
 
-/// The value pool an array property draws from.
-fn array_property_pool(
+/// The value pool a property draws from.
+fn property_pool(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    array_property: U32Id<BVoxArrayProperty>,
+    property: U32Id<BVoxProperty>,
 ) -> Option<&VoxValuePool> {
-    let pool = state.palette(palette)?.array_property(array_property)?.pool;
+    let pool = state.palette(palette)?.property(property)?.pool;
     state.value_pool(pool)
 }
 
@@ -1067,17 +1067,17 @@ fn build_palette(
     pal
 }
 
-/// The color array property's pool decoded to exactly [`PALETTE_COLORS`]
+/// The color property's pool decoded to exactly [`PALETTE_COLORS`]
 /// 0-based RGBA entries, padded with transparent entries or truncated to that
 /// count. Colors past the budget are dropped; a voxel that would reference one
 /// is rejected by [`reconstruct_voxels`].
 fn color_palette_colors(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    color: U32Id<BVoxArrayProperty>,
+    color: U32Id<BVoxProperty>,
 ) -> Vec<[u8; 4]> {
     let mut cells: Vec<[u8; 4]> = Vec::new();
-    if let Some(pool) = array_property_pool(state, palette, color) {
+    if let Some(pool) = property_pool(state, palette, color) {
         for index in 0..pool.values_len().min(PALETTE_COLORS) {
             cells.push(pool_color(pool, U32Id::from_u32(index as u32)).unwrap_or([0, 0, 0, 0]));
         }
@@ -1191,7 +1191,7 @@ fn default_material(slot: usize) -> VMaxMaterial {
 fn color_material_map(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
-    color: U32Id<BVoxArrayProperty>,
+    color: U32Id<BVoxProperty>,
     plan: &MaterialPlan,
 ) -> (Vec<u8>, Vec<i64>, i64) {
     let mut lc = vec![0u8; 256];

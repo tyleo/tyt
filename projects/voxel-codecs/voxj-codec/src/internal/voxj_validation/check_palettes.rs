@@ -16,15 +16,15 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
         }
 
         // One namespace per palette (rule 10.2).
-        let mut seen = HashSet::with_capacity(palette.array_properties.len());
+        let mut seen = HashSet::with_capacity(palette.properties.len());
 
-        for (position, property) in palette.array_properties.iter().enumerate() {
+        for (position, property) in palette.properties.iter().enumerate() {
             check_name(index, position, &property.name, &mut seen, failures);
             if property.value_pool >= state.value_pools.len() {
                 failures.report(
                     Check::Palettes,
                     format!(
-                        "palette {index} array property {position} references value pool {}, but the document has {} pools",
+                        "palette {index} property {position} references value pool {}, but the document has {} pools",
                         property.value_pool,
                         state.value_pools.len()
                     ),
@@ -59,7 +59,7 @@ fn check_name<'a>(
     if name.is_empty() {
         failures.report(
             Check::Palettes,
-            format!("palette {index} array property {position} has an empty name"),
+            format!("palette {index} property {position} has an empty name"),
         );
     } else if !seen.insert(name) {
         failures.report(
@@ -69,7 +69,7 @@ fn check_name<'a>(
     }
 }
 
-/// Every materials row holds exactly one value-index per array property, and
+/// Every materials row holds exactly one value-index per property, and
 /// every value-index falls within the values of the pool its property names.
 fn check_materials(
     index: usize,
@@ -77,14 +77,14 @@ fn check_materials(
     state: &VoxjRuntimeState,
     failures: &mut Failures,
 ) {
-    let width = palette.array_properties.len();
+    let width = palette.properties.len();
     for (material, row) in palette.materials.iter().enumerate() {
         if row.len() != width {
             failures.report(
                 Check::Palettes,
                 format!(
                     "palette {index} material {material} has {} value-indices but the palette \
-                     has {width} array properties",
+                     has {width} properties",
                     row.len()
                 ),
             );
@@ -99,10 +99,7 @@ fn check_materials(
             // The row arity matches here, so the property always resolves; its
             // pool resolves only when the value pool is in range, already
             // reported above when it is not.
-            let Some(pool) = state
-                .value_pools
-                .get(palette.array_properties[cell].value_pool)
-            else {
+            let Some(pool) = state.value_pools.get(palette.properties[cell].value_pool) else {
                 continue;
             };
             let pool_len = pool.values_len();

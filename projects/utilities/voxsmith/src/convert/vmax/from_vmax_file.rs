@@ -266,8 +266,8 @@ fn folded_palette(
 
     // `baseColorFactor` and `emissiveFactor` read the voxel's color cell; every
     // material scalar reads its material byte. `color_axis` records each
-    // array property's axis in property order, so a folded material gathers
-    // one value id per array property.
+    // property's axis in property order, so a folded material gathers
+    // one value id per property.
     let mut palette = VoxPalette::default();
     let mut color_axis: Vec<bool> = Vec::new();
     let color_pool = state.add_value_pool(VoxValuePool::Srgba {
@@ -276,7 +276,7 @@ fn folded_palette(
             .map(|color| <[f64; 4]>::from(TySrgbaU8::from(*color).into_format::<f64, f64>()))
             .collect(),
     });
-    palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), color_pool);
+    palette.add_property(BASE_COLOR_FACTOR.to_owned(), color_pool);
     color_axis.push(true);
 
     // Metalness and roughness convert from Voxel Max's 0.1 to 0.9 slider
@@ -293,7 +293,7 @@ fn folded_palette(
                 .map(|m| vm_coefficient_to_pbr_factor(m.mc))
                 .collect(),
         );
-        palette.add_array_property(METALLIC_FACTOR.to_owned(), metallic);
+        palette.add_property(METALLIC_FACTOR.to_owned(), metallic);
         color_axis.push(false);
         let roughness = float_pool(
             state,
@@ -302,7 +302,7 @@ fn folded_palette(
                 .map(|m| vm_coefficient_to_pbr_factor(m.rc))
                 .collect(),
         );
-        palette.add_array_property(ROUGHNESS_FACTOR.to_owned(), roughness);
+        palette.add_property(ROUGHNESS_FACTOR.to_owned(), roughness);
         color_axis.push(false);
         // Voxel Max glows in the voxel's own base color, so an emissive
         // material's color is its base color. The property appears only when
@@ -320,11 +320,11 @@ fn folded_palette(
                     })
                     .collect(),
             });
-            palette.add_array_property(EMISSIVE_FACTOR.to_owned(), emissive_color);
+            palette.add_property(EMISSIVE_FACTOR.to_owned(), emissive_color);
             color_axis.push(true);
         }
         let emissive = float_pool(state, materials.iter().map(|m| m.sic).collect());
-        palette.add_array_property(EMISSIVE_STRENGTH.to_owned(), emissive);
+        palette.add_property(EMISSIVE_STRENGTH.to_owned(), emissive);
         color_axis.push(false);
 
         // Dispersion properties appear only when some material carries an `md`
@@ -339,20 +339,20 @@ fn folded_palette(
                     .map(|m| m.md.as_ref().map_or(default_ior, |d| d.ior))
                     .collect(),
             );
-            palette.add_array_property(IOR.to_owned(), ior);
+            palette.add_property(IOR.to_owned(), ior);
             color_axis.push(false);
             let transmission = float_pool(state, dispersion(&materials, |d| d.transmission));
-            palette.add_array_property(TRANSMISSION_FACTOR.to_owned(), transmission);
+            palette.add_property(TRANSMISSION_FACTOR.to_owned(), transmission);
             color_axis.push(false);
             let absorption = float_pool(state, dispersion(&materials, |d| d.absorption));
-            palette.add_array_property(ABSORPTION.to_owned(), absorption);
+            palette.add_property(ABSORPTION.to_owned(), absorption);
             color_axis.push(false);
         }
 
         let shadows = state.add_value_pool(VoxValuePool::Bool {
             values: materials.iter().map(|m| m.sh).collect(),
         });
-        palette.add_array_property(SHADOWS.to_owned(), shadows);
+        palette.add_property(SHADOWS.to_owned(), shadows);
         color_axis.push(false);
     }
 
@@ -377,7 +377,7 @@ fn folded_palette(
             .collect();
         let id = palette
             .add_material(value_ids)
-            .expect("one value id per array property");
+            .expect("one value id per property");
         combos.insert(key, id);
     }
 

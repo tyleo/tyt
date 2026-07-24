@@ -115,16 +115,16 @@ fn colors_from_palette(state: &VoxMain, palette: Option<U32Id<BVoxPalette>>) -> 
     let Some(palette) = palette else {
         return colors;
     };
-    let Some(array_property) = state
+    let Some(property) = state
         .palette(palette)
-        .and_then(|palette| palette.array_property_by_name(BASE_COLOR_FACTOR))
+        .and_then(|palette| palette.property_by_name(BASE_COLOR_FACTOR))
     else {
         return colors;
     };
     for (index, color) in colors.iter_mut().enumerate() {
         let material = U32Id::<BVoxMaterial>::from_u32(index as u32);
         if let Some([r, g, b, a]) = state
-            .material_value(palette, material, array_property)
+            .material_value(palette, material, property)
             .and_then(|(pool, value)| pool_color(pool, value))
         {
             *color = MVoxColor::new(r, g, b, a);

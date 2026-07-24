@@ -12,7 +12,7 @@ pub fn resolve_object_property_ref(
 
     layers.into_iter().rev().find_map(|(layer, palette_id)| {
         let palette = state.palette(palette_id)?;
-        let property = palette.array_property_by_name(name)?;
+        let property = palette.property_by_name(name)?;
         Some(ObjectPropertyRef {
             layer,
             palette: palette_id,
@@ -33,7 +33,7 @@ mod tests {
         U32Id::from_u32(index)
     }
 
-    /// A one-material palette whose `baseColorFactor` array property draws
+    /// A one-material palette whose `baseColorFactor` property draws
     /// from a fresh one-color pool.
     fn array_palette(state: &mut VoxMain) -> U32Id<BVoxPalette> {
         let pool = state.add_value_pool(VoxValuePool::Srgba {
@@ -41,7 +41,7 @@ mod tests {
         });
 
         let mut palette = VoxPalette::default();
-        palette.add_array_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
         palette.add_material(vec![value(0)]).unwrap();
 
         state.add_palette(palette)
@@ -73,7 +73,7 @@ mod tests {
                 property: state
                     .palette(second)
                     .unwrap()
-                    .array_property_by_name(BASE_COLOR_FACTOR)
+                    .property_by_name(BASE_COLOR_FACTOR)
                     .unwrap(),
             }
         );
@@ -90,7 +90,7 @@ mod tests {
             values: IdVec::from_vec(vec![[0.0, 1.0, 0.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("emissiveFactor".to_owned(), pool);
+        palette.add_property("emissiveFactor".to_owned(), pool);
         palette.add_material(vec![value(0)]).unwrap();
         let plain = state.add_palette(palette);
 

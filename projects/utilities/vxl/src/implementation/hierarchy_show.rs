@@ -1321,7 +1321,7 @@ mod tests {
             values: IdVec::from_vec(vec![[0.0, 0.0, 0.0, 1.0]]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("baseColorFactor".to_owned(), pool);
+        palette.add_property("baseColorFactor".to_owned(), pool);
         for _ in 0..count {
             palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         }

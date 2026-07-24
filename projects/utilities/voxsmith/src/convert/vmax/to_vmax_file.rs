@@ -310,8 +310,8 @@ mod tests {
             values: (0..256u32).map(f64::from).collect(),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("baseColorFactor".to_owned(), color);
-        palette.add_array_property("metallicFactor".to_owned(), metallic);
+        palette.add_property("baseColorFactor".to_owned(), color);
+        palette.add_property("metallicFactor".to_owned(), metallic);
         for index in 0..256u32 {
             palette
                 .add_material(vec![U32Id::from_u32(0), U32Id::from_u32(index)])
@@ -599,11 +599,11 @@ mod tests {
             values: hexes.iter().map(|hex| color_floats(hex)).collect(),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("baseColorFactor".to_owned(), pool);
+        palette.add_property("baseColorFactor".to_owned(), pool);
         for index in 0..hexes.len() {
             palette
                 .add_material(vec![U32Id::from_u32(index as u32)])
-                .expect("one value id per array property");
+                .expect("one value id per property");
         }
         state.add_palette(palette)
     }
@@ -1137,11 +1137,11 @@ mod tests {
                 values: IdVec::from_vec(vec![true]),
             });
             let mut palette = VoxPalette::default();
-            palette.add_array_property("baseColorFactor".to_owned(), color);
-            palette.add_array_property("metallicFactor".to_owned(), metallic);
-            palette.add_array_property("roughnessFactor".to_owned(), roughness);
-            palette.add_array_property("emissiveStrength".to_owned(), emissive);
-            palette.add_array_property("shadows".to_owned(), shadows);
+            palette.add_property("baseColorFactor".to_owned(), color);
+            palette.add_property("metallicFactor".to_owned(), metallic);
+            palette.add_property("roughnessFactor".to_owned(), roughness);
+            palette.add_property("emissiveStrength".to_owned(), emissive);
+            palette.add_property("shadows".to_owned(), shadows);
             palette.add_material(vec![U32Id::from_u32(0); 5]).unwrap();
             let palette_id = state.add_palette(palette);
             let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
@@ -1167,16 +1167,16 @@ mod tests {
             let reloaded = from_vmax_file(&file).unwrap();
             let (palette_id, material_palette) = reloaded
                 .iter_palettes()
-                .find(|(_, palette)| palette.array_property_by_name("metallicFactor").is_some())
+                .find(|(_, palette)| palette.property_by_name("metallicFactor").is_some())
                 .expect("a material palette survives");
             let material = material_palette
                 .iter_materials()
                 .next()
                 .expect("one material");
             let scalar = |attribute: &str| -> f64 {
-                let array_property = material_palette.array_property_by_name(attribute).unwrap();
+                let property = material_palette.property_by_name(attribute).unwrap();
                 match reloaded
-                    .material_value(palette_id, material, array_property)
+                    .material_value(palette_id, material, property)
                     .unwrap()
                 {
                     (VoxValuePool::Float { values, .. }, index) => values[index.to_usize_id()],
@@ -1184,9 +1184,9 @@ mod tests {
                 }
             };
             let flag = |attribute: &str| -> bool {
-                let array_property = material_palette.array_property_by_name(attribute).unwrap();
+                let property = material_palette.property_by_name(attribute).unwrap();
                 match reloaded
-                    .material_value(palette_id, material, array_property)
+                    .material_value(palette_id, material, property)
                     .unwrap()
                 {
                     (VoxValuePool::Bool { values }, index) => values[index.to_usize_id()],
@@ -1223,9 +1223,9 @@ mod tests {
             values: IdVec::from_vec(vec![2.0]),
         });
         let mut palette = VoxPalette::default();
-        palette.add_array_property("baseColorFactor".to_owned(), color);
-        palette.add_array_property("emissiveFactor".to_owned(), emissive_color);
-        palette.add_array_property("emissiveStrength".to_owned(), strength);
+        palette.add_property("baseColorFactor".to_owned(), color);
+        palette.add_property("emissiveFactor".to_owned(), emissive_color);
+        palette.add_property("emissiveStrength".to_owned(), strength);
         palette.add_material(vec![U32Id::from_u32(0); 3]).unwrap();
         let palette_id = state.add_palette(palette);
         let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
@@ -1244,14 +1244,14 @@ mod tests {
         let reloaded = from_vmax_file(&file).unwrap();
         let (palette_id, material_palette) = reloaded
             .iter_palettes()
-            .find(|(_, palette)| palette.array_property_by_name("emissiveStrength").is_some())
+            .find(|(_, palette)| palette.property_by_name("emissiveStrength").is_some())
             .expect("an emissive palette survives");
         let material = material_palette.iter_materials().next().unwrap();
-        let array_property = material_palette
-            .array_property_by_name("emissiveStrength")
+        let property = material_palette
+            .property_by_name("emissiveStrength")
             .unwrap();
         let sic = match reloaded
-            .material_value(palette_id, material, array_property)
+            .material_value(palette_id, material, property)
             .unwrap()
         {
             (VoxValuePool::Float { values, .. }, index) => values[index.to_usize_id()],
