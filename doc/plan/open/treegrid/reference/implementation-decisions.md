@@ -1248,3 +1248,34 @@ on ty-math directly.
 - **`rgb(...)` / `rgba(...)` remain unadopted**, as the checklist
   scoped: no float-form sRGB rendering exists in the command, and
   8-bit sRGB keeps its hex.
+
+## S19 site 1: `tyt vmax hierarchy` adopts TreeSelection (2026-07-24)
+
+S19 lands one commit per site; this is the vmax site. `select_nodes`
+now returns a `TreeSelection`: the `match_subtrees` flags scatter
+from their reachable-list alignment onto the full node index range,
+and `from_matches` resolves them against `parent_of`, replacing the
+hand-built `selected` / `visible` / `match_roots` HashSets. The
+no-match error moves ahead of the resolve and keys off the raw
+flags, keeping its message and `NotFound` kind. tyt-vmax takes
+`treeselect` non-optionally beside treegrid, the tyt-fbx shape.
+
+- **The Builder holds `Option<TreeSelection>`**, replacing the three
+  set fields and the `filtering` flag: `None` renders everything,
+  `will_show` indexes the flag slices, and the new `is_match_root`
+  helper binary-searches `match_roots`, sound because the roots are
+  documented ascending. The pre-order `collect_match_roots`
+  traversal stays: vmax node indices are scene storage order while
+  display order sorts children by name, so the command keeps its own
+  ordering walk and uses the roots for membership, as the S18 entry
+  anticipated.
+- **Unreachable nodes stay invisible.** A node outside the reachable
+  list scatters to unmatched, and no matched node's ancestor chain
+  reaches it, so the resolved flags reproduce the old sets exactly.
+
+Verified: treeselect and tyt-vmax tests pass, and the old and new
+binaries produce byte-identical stdout, stderr, and exit codes over
+165 invocations (11 tyt-assets bundles across plain, transform and
+bounds views, object / group / multi-pattern / bang-pattern /
+anchored selection, every collapse combination, and no-match). Site
+2, `vxl hierarchy show`, completes the step.

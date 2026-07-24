@@ -2,7 +2,7 @@ use crate::{Dependencies, Error, ResolvedNodeTransform, Result, VoxelMaxSceneNod
 use branded_id::U32Id;
 use clap::Parser;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     f64::consts::PI,
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
@@ -11,6 +11,7 @@ use treegrid::{
     BTreeGridNode, TreeGrid, TreeGridHierarchyOptions, TreeGridLabel, TreeGridRenderHierarchy,
     TreeGridValue,
 };
+use treeselect::TreeSelection;
 
 /// A node id in the [`TreeGrid`] being populated, distinct from the scene's
 /// `usize` node indices.
@@ -118,18 +119,18 @@ impl Hierarchy {
         }
 
         let filtering = !select.is_empty();
-        let (selected, visible, match_roots) = if filtering {
-            select_nodes(
-                &dependencies,
-                &select,
-                &nodes,
-                &path_of,
-                &parent_of,
-                &reachable,
-            )?
-        } else {
-            (HashSet::new(), HashSet::new(), HashSet::new())
-        };
+        let selection = filtering
+            .then(|| {
+                select_nodes(
+                    &dependencies,
+                    &select,
+                    &nodes,
+                    &path_of,
+                    &parent_of,
+                    &reachable,
+                )
+            })
+            .transpose()?;
 
         // Resolve the local or world transform per node up front, while
         // `parent_of` is still in hand, so the renderer just formats them.
@@ -141,10 +142,7 @@ impl Hierarchy {
             nodes: &nodes,
             children,
             parent_of,
-            selected,
-            visible,
-            match_roots,
-            filtering,
+            selection,
             collapse_descendants,
             show_transforms,
             transforms,
@@ -206,10 +204,8 @@ fn assign_paths(
     path_of[index] = path;
 }
 
-/// Resolves the selection patterns into the `(selected, visible, match_roots)`
-/// node-index sets. `selected` is every node the gitignore patterns reach,
-/// `visible` adds their ancestors, and `match_roots` are the topmost selected
-/// nodes. Keying on index, not path, keeps same-name siblings distinct.
+/// Resolves the selection patterns into a [`TreeSelection`] over the node
+/// indices. Keying on index, not path, keeps same-name siblings distinct.
 fn select_nodes(
     dependencies: &impl Dependencies,
     select: &[String],
@@ -217,7 +213,7 @@ fn select_nodes(
     path_of: &[String],
     parent_of: &[Option<usize>],
     reachable: &[usize],
-) -> Result<(HashSet<usize>, HashSet<usize>, HashSet<usize>)> {
+) -> Result<TreeSelection> {
     let candidates: Vec<(&str, bool)> = reachable
         .iter()
         .map(|&index| (path_of[index].as_str(), nodes[index].is_group))
@@ -225,39 +221,20 @@ fn select_nodes(
     let patterns: Vec<&str> = select.iter().map(String::as_str).collect();
     let matched = dependencies.match_subtrees(&patterns, &candidates)?;
 
-    let selected: HashSet<usize> = reachable
-        .iter()
-        .zip(matched.iter())
-        .filter(|&(_, &m)| m)
-        .map(|(&index, _)| index)
-        .collect();
-
-    if selected.is_empty() {
+    if !matched.contains(&true) {
         return Err(Error::IO(IOError::new(
             ErrorKind::NotFound,
             format!("no node or object matched any of: {}", select.join(", ")),
         )));
     }
 
-    let mut visible = selected.clone();
-    for &index in &selected {
-        let mut ancestor = parent_of[index];
-        while let Some(node) = ancestor {
-            visible.insert(node);
-            ancestor = parent_of[node];
-        }
+    // Scatter the reachable-aligned flags over the full node index range.
+    let mut scattered = vec![false; nodes.len()];
+    for (&index, &is_matched) in reachable.iter().zip(matched.iter()) {
+        scattered[index] = is_matched;
     }
 
-    let match_roots: HashSet<usize> = selected
-        .iter()
-        .copied()
-        .filter(|&index| match parent_of[index] {
-            Some(parent) => !selected.contains(&parent),
-            None => true,
-        })
-        .collect();
-
-    Ok((selected, visible, match_roots))
+    Ok(TreeSelection::from_matches(scattered, parent_of))
 }
 
 /// Resolved `--show-transforms` view: the space, rotation unit, and precision
@@ -354,15 +331,12 @@ fn invalid_input(message: String) -> Error {
 }
 
 /// Populates the filtered hierarchy tree into a [`TreeGrid`]. The selection
-/// sets hold node indices, so same-name siblings never conflate.
+/// holds node indices, so same-name siblings never conflate.
 struct Builder<'a> {
     nodes: &'a [VoxelMaxSceneNode],
     children: HashMap<Option<&'a str>, Vec<usize>>,
     parent_of: Vec<Option<usize>>,
-    selected: HashSet<usize>,
-    visible: HashSet<usize>,
-    match_roots: HashSet<usize>,
-    filtering: bool,
+    selection: Option<TreeSelection>,
     collapse_descendants: bool,
     show_transforms: Option<TransformView>,
     transforms: Vec<ResolvedNodeTransform>,
@@ -403,7 +377,7 @@ impl Builder<'_> {
     }
 
     fn collect_match_roots_from(&self, index: usize, roots: &mut Vec<usize>) {
-        if self.match_roots.contains(&index) {
+        if self.is_match_root(index) {
             roots.push(index);
         }
         if let Some(kids) = self.children.get(&Some(self.nodes[index].id.as_str())) {
@@ -444,8 +418,7 @@ impl Builder<'_> {
                 })
                 .unwrap_or_default();
 
-            let is_match_root = self.filtering && self.match_roots.contains(&index);
-            if self.collapse_descendants && is_match_root && !kids.is_empty() {
+            if self.collapse_descendants && self.is_match_root(index) && !kids.is_empty() {
                 self.grid
                     .add_child(grid_node, TreeGridLabel::bare("descendants"));
             } else {
@@ -472,18 +445,25 @@ impl Builder<'_> {
 
     /// Whether `index` renders: everything when not filtering, else a group when
     /// it leads to a selection and an object when it is itself selected. A
-    /// matched group's descendants ride in because the subtree matcher put them
-    /// in `selected`.
+    /// matched group's descendants ride in because the subtree matcher marks
+    /// them selected.
     fn will_show(&self, index: usize) -> bool {
-        if !self.filtering {
+        let Some(selection) = &self.selection else {
             return true;
-        }
+        };
 
         if self.nodes[index].is_group {
-            self.visible.contains(&index)
+            selection.visible()[index]
         } else {
-            self.selected.contains(&index)
+            selection.selected()[index]
         }
+    }
+
+    /// Whether `index` is a match root under an active selection.
+    fn is_match_root(&self, index: usize) -> bool {
+        self.selection
+            .as_ref()
+            .is_some_and(|selection| selection.match_roots().binary_search(&index).is_ok())
     }
 
     fn build_transform(&mut self, index: usize, parent: GridNodeId) {

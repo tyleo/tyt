@@ -1916,6 +1916,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "treegrid",
+ "treeselect",
  "ty-math",
  "tyt-common",
  "tyt-injection",
