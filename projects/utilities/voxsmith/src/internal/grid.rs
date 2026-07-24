@@ -24,9 +24,9 @@ pub fn tighten(object: &VoxObject) -> (VoxObject, (TyVector3U32, TyVector3I32)) 
     };
     let mut tight = VoxObject::new(object.name().to_owned(), size)
         .expect("a sub-grid of an existing grid is within the dense limit");
-    tight.set_origin(origin + min.to_i32());
+    tight.set_origin(origin + min.as_ivec3());
     copy_layers(object, &mut tight);
-    copy_voxels(object, &mut tight, -min.to_i32());
+    copy_voxels(object, &mut tight, -min.as_ivec3());
     (tight, build_volume)
 }
 
@@ -48,7 +48,7 @@ fn copy_voxels(from: &VoxObject, to: &mut VoxObject, offset: TyVector3I32) {
         let p = from
             .voxel_position(voxel)
             .expect("a live voxel is within the grid");
-        let position = (p.to_i32() + offset).to_u32();
+        let position = (p.as_ivec3() + offset).as_uvec3();
         let id = to
             .voxel_id(position)
             .expect("the shifted voxel is within the target grid");

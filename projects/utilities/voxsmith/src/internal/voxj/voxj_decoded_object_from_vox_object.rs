@@ -70,7 +70,7 @@ pub fn voxj_decoded_object_from_vox_object(
         name: object.name().to_owned(),
         layers,
         bounds: size.to_array(),
-        origin: (origin + min.to_i32()).to_array(),
+        origin: (origin + min.as_ivec3()).to_array(),
         positions,
         samples,
     }

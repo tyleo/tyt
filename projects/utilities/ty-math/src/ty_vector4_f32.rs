@@ -1,4 +1,4 @@
-use crate::TyVector4;
+use glam::Vec4;
 
-/// A [`TyVector4`] with `f32` components.
-pub type TyVector4F32 = TyVector4<f32>;
+/// A 4D vector with `f32` components.
+pub type TyVector4F32 = Vec4;

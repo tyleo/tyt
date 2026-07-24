@@ -1,6 +1,6 @@
 [package]
 name = "ty-math"
-version = "0.1.9"
+version = "0.1.10"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -10,3 +10,12 @@ description = "Math types and utilities shared across all tyt crates."
 # Backs ty-math's color aliases. Slim on purpose: no `serializing` (keeps the
 # hand-rolled serde DTO and its r/g/b/a wire), no `named`/`random`.
 palette = { version = "0.7", default-features = false, features = ["std"] }
+# Backs ty-math's vector/quaternion/matrix aliases. Slim on purpose: no `serde`
+# (keeps the hand-rolled DVector3 `{x,y,z}` DTO). `debug-glam-assert` opts into
+# glam's fail-fast contract in debug/test at zero release cost.
+glam = { version = "0.33", default-features = false, features = [
+    "std",
+    "float-types",
+    "integer-types",
+    "debug-glam-assert",
+] }

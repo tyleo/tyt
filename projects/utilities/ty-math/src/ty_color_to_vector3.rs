@@ -1,29 +1,30 @@
-use crate::{TyCielabColor, TyOklabColor, TySrgb, TyVector3};
+use crate::{TyCielabColorF64, TyOklabColorF64, TySrgbF64, TyVector3F64};
 
-/// Bridges a color's three spatial channels to a [`TyVector3`] for distance
-/// math, dropping alpha where present. palette cannot know `TyVector3`, so this
-/// glue lives in ty-math; it reads the channels through palette's fields (the
-/// alpha types reach `l` / `a` / `b` by `Deref`).
-pub trait TyColorToVector3<T> {
-    /// The color's three channels as a [`TyVector3`].
-    fn to_vector3(&self) -> TyVector3<T>;
+/// Bridges a color's three spatial channels to a [`TyVector3F64`] for distance
+/// math, dropping alpha where present. palette cannot know the vector type, so
+/// this glue lives in ty-math; it reads the channels through palette's fields
+/// (the alpha types reach `l` / `a` / `b` by `Deref`). Only `f64` colors are used
+/// for clustering, so the bridge is `f64`-only.
+pub trait TyColorToVector3 {
+    /// The color's three channels as a [`TyVector3F64`].
+    fn to_vector3(&self) -> TyVector3F64;
 }
 
-impl<T: Copy> TyColorToVector3<T> for TySrgb<T> {
-    fn to_vector3(&self) -> TyVector3<T> {
-        TyVector3::new(self.red, self.green, self.blue)
+impl TyColorToVector3 for TySrgbF64 {
+    fn to_vector3(&self) -> TyVector3F64 {
+        TyVector3F64::new(self.red, self.green, self.blue)
     }
 }
 
-impl<T: Copy> TyColorToVector3<T> for TyOklabColor<T> {
-    fn to_vector3(&self) -> TyVector3<T> {
-        TyVector3::new(self.l, self.a, self.b)
+impl TyColorToVector3 for TyOklabColorF64 {
+    fn to_vector3(&self) -> TyVector3F64 {
+        TyVector3F64::new(self.l, self.a, self.b)
     }
 }
 
-impl<T: Copy> TyColorToVector3<T> for TyCielabColor<T> {
-    fn to_vector3(&self) -> TyVector3<T> {
-        TyVector3::new(self.l, self.a, self.b)
+impl TyColorToVector3 for TyCielabColorF64 {
+    fn to_vector3(&self) -> TyVector3F64 {
+        TyVector3F64::new(self.l, self.a, self.b)
     }
 }
 

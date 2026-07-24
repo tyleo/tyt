@@ -374,7 +374,7 @@ mod tests {
         let placed_at = |x: f64, y: f64, z: f64| {
             TyTransformF64::new(
                 TyVector3F64::new(x, y, z),
-                TyQuaternionF64::identity(),
+                TyQuaternionF64::IDENTITY,
                 TyVector3F64::new(1.0, 1.0, 1.0),
             )
         };
@@ -564,7 +564,7 @@ mod tests {
             child_objects: vec![object(0), object(1)],
             transform: TyTransformF64::new(
                 TyVector3F64::new(10.0, 0.0, 0.0),
-                TyQuaternionF64::identity(),
+                TyQuaternionF64::IDENTITY,
                 TyVector3F64::new(1.0, 1.0, 1.0),
             ),
         });
@@ -632,7 +632,7 @@ mod tests {
     fn at(x: f64, y: f64, z: f64) -> TyTransformF64 {
         TyTransformF64::new(
             TyVector3F64::new(x, y, z),
-            TyQuaternionF64::identity(),
+            TyQuaternionF64::IDENTITY,
             TyVector3F64::new(1.0, 1.0, 1.0),
         )
     }
@@ -1104,7 +1104,7 @@ mod tests {
             s.y * origin.y as f64,
             s.z * origin.z as f64,
         );
-        let world = node.transform.position + r.rotate(local);
+        let world = node.transform.position + r * local;
         assert!(close(world.x, 7.0) && close(world.y, 0.0) && close(world.z, 0.0));
     }
 

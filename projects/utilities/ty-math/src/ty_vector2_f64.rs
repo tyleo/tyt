@@ -1,4 +1,4 @@
-use crate::TyVector2;
+use glam::DVec2;
 
-/// A [`TyVector2`] with `f64` components.
-pub type TyVector2F64 = TyVector2<f64>;
+/// A 2D vector with `f64` components.
+pub type TyVector2F64 = DVec2;

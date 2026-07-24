@@ -1,4 +1,4 @@
-use crate::TyVector2;
+use glam::Vec2;
 
-/// A [`TyVector2`] with `f32` components.
-pub type TyVector2F32 = TyVector2<f32>;
+/// A 2D vector with `f32` components.
+pub type TyVector2F32 = Vec2;

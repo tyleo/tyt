@@ -1,88 +1,77 @@
-use crate::{TyBounds, TyPose, TyQuaternion, TyVector3};
+use crate::{TyBounds, TyPose, TyQuaternionExt};
+use glam::{DQuat, DVec3};
 
-/// A transform with component type `T` and a single uniform scale factor. The
-/// scalar-scale companion to [`TyTransform`](crate::TyTransform).
+/// A transform with a single uniform scale factor, the scalar-scale companion to
+/// [`TyTransform`](crate::TyTransform). Backed by glam; the bare name is the
+/// `f64` form.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TyUniformTrs<T = f64> {
+pub struct TyUniformTrs {
     /// The translation.
-    pub translation: TyVector3<T>,
+    pub translation: DVec3,
 
     /// The rotation, a unit quaternion.
-    pub rotation: TyQuaternion<T>,
+    pub rotation: DQuat,
 
     /// The uniform scale factor.
-    pub scale: T,
+    pub scale: f64,
 }
 
-impl<T> TyUniformTrs<T> {
+impl TyUniformTrs {
+    /// The identity transform: zero translation, identity rotation, unit scale.
+    pub const IDENTITY: Self = Self {
+        translation: DVec3::ZERO,
+        rotation: DQuat::IDENTITY,
+        scale: 1.0,
+    };
+
     /// Creates a transform from a `translation`, `rotation`, and uniform `scale`.
-    pub fn new(translation: TyVector3<T>, rotation: TyQuaternion<T>, scale: T) -> Self {
+    pub fn new(translation: DVec3, rotation: DQuat, scale: f64) -> Self {
         Self {
             translation,
             rotation,
             scale,
         }
     }
+
+    /// The transform of `target` expressed in the local space of `self`. Assumes a
+    /// positive scale.
+    pub fn calculate_relative_trs(&self, target: &Self) -> Self {
+        let inverse_rotation = self.rotation.inverse();
+        let inverse_scale = 1.0 / self.scale;
+
+        let delta = target.translation - self.translation;
+
+        Self::new(
+            inverse_rotation * (delta * inverse_scale),
+            inverse_rotation * target.rotation,
+            target.scale * inverse_scale,
+        )
+    }
+
+    /// This transform as a [`TyPose`], dropping the scale.
+    pub fn to_pose(&self) -> TyPose {
+        TyPose::new(self.translation, self.rotation)
+    }
+
+    /// Transforms `aabb` by this transform, growing it to the axis-aligned bound of
+    /// the scaled and rotated box. Assumes a positive scale.
+    pub fn transform_aabb_conservative(&self, aabb: &TyBounds) -> TyBounds {
+        let center = self.translation + self.rotation * (aabb.center * self.scale);
+        let extents = self.rotation.rotate_extents_abs(aabb.extents * self.scale);
+
+        TyBounds::new(center, extents)
+    }
 }
 
-/// Implements the float-only transform operations for a concrete floating-point
-/// component type.
-macro_rules! impl_ty_uniform_trs_float {
-    ($t:ty) => {
-        impl TyUniformTrs<$t> {
-            /// The identity transform: zero translation, identity rotation, unit
-            /// scale.
-            pub fn identity() -> Self {
-                Self {
-                    translation: TyVector3::<$t>::ZERO,
-                    rotation: TyQuaternion::<$t>::identity(),
-                    scale: 1.0,
-                }
-            }
-
-            /// The transform of `target` expressed in the local space of `self`.
-            /// Assumes a positive scale.
-            pub fn calculate_relative_trs(&self, target: &Self) -> Self {
-                let inverse_rotation = self.rotation.inverse();
-                let inverse_scale = 1.0 / self.scale;
-
-                let delta = target.translation - self.translation;
-                let relative_translation = inverse_rotation.rotate(delta * inverse_scale);
-                let relative_rotation = inverse_rotation * target.rotation;
-                let relative_scale = target.scale * inverse_scale;
-
-                Self::new(relative_translation, relative_rotation, relative_scale)
-            }
-
-            /// This transform as a [`TyPose`], dropping the scale.
-            pub fn to_pose(&self) -> TyPose<$t> {
-                TyPose::new(self.translation, self.rotation)
-            }
-
-            /// Transforms `aabb` by this transform, growing it to the axis-aligned
-            /// bound of the scaled and rotated box. Assumes a positive scale.
-            pub fn transform_aabb_conservative(&self, aabb: &TyBounds<$t>) -> TyBounds<$t> {
-                let center = self.translation + self.rotation.rotate(aabb.center * self.scale);
-                let extents = self.rotation.rotate_extents_abs(aabb.extents * self.scale);
-
-                TyBounds::new(center, extents)
-            }
-        }
-
-        impl Default for TyUniformTrs<$t> {
-            fn default() -> Self {
-                Self::identity()
-            }
-        }
-    };
+impl Default for TyUniformTrs {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
 }
-
-impl_ty_uniform_trs_float!(f32);
-impl_ty_uniform_trs_float!(f64);
 
 #[cfg(test)]
 mod tests {
-    use crate::{TyQuaternionF64, TyUniformTrsF64, TyVector3F64};
+    use crate::{TyQuaternionExt, TyQuaternionF64, TyUniformTrsF64, TyVector3F64};
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-9
@@ -105,14 +94,14 @@ mod tests {
         assert!(
             relative
                 .rotation
-                .is_approximately_equal(TyQuaternionF64::identity(), 1e-9)
+                .is_approximately_equal(TyQuaternionF64::IDENTITY, 1e-9)
         );
     }
 
     #[test]
     fn relative_scale_is_the_ratio() {
-        let parent = TyUniformTrsF64::new(TyVector3F64::ZERO, TyQuaternionF64::identity(), 2.0);
-        let child = TyUniformTrsF64::new(TyVector3F64::ZERO, TyQuaternionF64::identity(), 6.0);
+        let parent = TyUniformTrsF64::new(TyVector3F64::ZERO, TyQuaternionF64::IDENTITY, 2.0);
+        let child = TyUniformTrsF64::new(TyVector3F64::ZERO, TyQuaternionF64::IDENTITY, 6.0);
         assert!(close(parent.calculate_relative_trs(&child).scale, 3.0));
     }
 }

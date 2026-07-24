@@ -34,9 +34,7 @@ impl GridSpace {
     /// `point` in grid coordinates, where one unit is one voxel from the min
     /// corner.
     pub fn to_grid(&self, point: TyVector3F64) -> [f64; 3] {
-        (point - self.min)
-            .componentwise_divide(&self.size)
-            .to_array()
+        ((point - self.min) / self.size).to_array()
     }
 
     /// The raster cell index (`x*Y*Z + y*Z + z`) `point` falls in, floored and
@@ -57,7 +55,7 @@ impl GridSpace {
         let (x, remainder) = (cell / plane, cell % plane);
         let (y, z) = (remainder / nz, remainder % nz);
         let offset = TyVector3F64::new(x as f64 + 0.5, y as f64 + 0.5, z as f64 + 0.5);
-        self.min + offset.componentwise_multiply(&self.size)
+        self.min + offset * self.size
     }
 }
 

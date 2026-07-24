@@ -1,6 +1,6 @@
 use crate::{MeshMethod, object_to_mesh_geometry};
 use serde_json::{Value, json};
-use ty_math::TyVector3F32;
+use ty_math::{TyVector3Ext, TyVector3F32};
 use voxcore::VoxObject;
 
 /// Meshes `object` with `method` and lays its geometry out as a glTF JSON
@@ -44,8 +44,8 @@ pub(crate) fn object_to_gltf_document(
     let mut max = TyVector3F32::NEG_INFINITY;
     for &point in &geometry.positions {
         let point = position(point);
-        min = min.component_min_with(&point);
-        max = max.component_max_with(&point);
+        min = min.min(point);
+        max = max.max(point);
 
         for value in point.to_array() {
             blob.extend_from_slice(&value.to_le_bytes());

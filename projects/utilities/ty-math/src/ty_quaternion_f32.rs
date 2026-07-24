@@ -1,4 +1,4 @@
-use crate::TyQuaternion;
+use glam::Quat;
 
-/// A [`TyQuaternion`] with `f32` components.
-pub type TyQuaternionF32 = TyQuaternion<f32>;
+/// A quaternion `(x, y, z, w)` with `f32` components.
+pub type TyQuaternionF32 = Quat;

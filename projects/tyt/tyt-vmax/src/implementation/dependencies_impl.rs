@@ -6,7 +6,9 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
-use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64};
+use ty_math::{
+    TyQuaternionExt, TyQuaternionF64, TyTransformF64, TyVector3F64, ZERO_LENGTH_TOLERANCE,
+};
 use tyt_injection::serde_json::Value;
 use vmax_codec::from_scene_json_file_bytes;
 
@@ -60,9 +62,16 @@ fn authored_bounds(
 /// `[x, y, z, angle]` axis-angle rotation decoded to a quaternion.
 fn local_transform(node: &VoxelMaxSceneNode) -> TyTransformF64 {
     let [x, y, z, angle] = node.rotation;
+    let axis = TyVector3F64::new(x, y, z);
+    let rotation = if axis.length() < ZERO_LENGTH_TOLERANCE {
+        // A degenerate (zero) axis decodes to identity.
+        TyQuaternionF64::IDENTITY
+    } else {
+        TyQuaternionF64::from_axis_angle(axis.normalize(), angle)
+    };
     TyTransformF64::new(
         TyVector3F64::from_array(node.position),
-        TyQuaternionF64::from_axis_angle(TyVector3F64::new(x, y, z), angle),
+        rotation,
         TyVector3F64::from_array(node.scale),
     )
 }

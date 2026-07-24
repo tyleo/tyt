@@ -455,7 +455,7 @@ impl SceneBuilder {
         let shape = self.allocate();
 
         let bounds = object.bounds();
-        let pivot = (bounds / 2).to_i32().to_array();
+        let pivot = (bounds / 2).as_ivec3().to_array();
         self.nodes
             .insert(transform, transform_node(transform, pivot, shape));
         self.nodes
@@ -506,5 +506,5 @@ fn shape_node(id: i32, model: u32) -> MVoxSceneNode {
 
 /// One scene-frame translation rounded from a node's local position.
 fn translation_of(position: &TyVector3F64) -> [i32; 3] {
-    position.round().to_i32().to_array()
+    position.round().as_ivec3().to_array()
 }

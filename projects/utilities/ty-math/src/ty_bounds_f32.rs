@@ -1,4 +1,4 @@
-use crate::TyBounds;
+use crate::impl_ty_bounds;
+use glam::Vec3;
 
-/// A [`TyBounds`] with `f32` components.
-pub type TyBoundsF32 = TyBounds<f32>;
+impl_ty_bounds!(TyBoundsF32, Vec3, f32);

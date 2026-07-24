@@ -1,73 +1,63 @@
-use crate::{TyBounds, TyQuaternion, TyUniformTrs, TyVector3};
+use crate::{TyBounds, TyQuaternionExt, TyUniformTrs};
+use glam::{DQuat, DVec3};
 
-/// A rigid pose with component type `T`: a rotation and position, no scale.
+/// A rigid pose: a rotation and position, no scale. Backed by glam; the bare name
+/// is the `f64` form.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TyPose<T = f64> {
+pub struct TyPose {
     /// The position.
-    pub position: TyVector3<T>,
+    pub position: DVec3,
 
     /// The rotation, a unit quaternion.
-    pub rotation: TyQuaternion<T>,
+    pub rotation: DQuat,
 }
 
-impl<T> TyPose<T> {
+impl TyPose {
+    /// The identity pose: zero position, identity rotation.
+    pub const IDENTITY: Self = Self {
+        position: DVec3::ZERO,
+        rotation: DQuat::IDENTITY,
+    };
+
     /// Creates a pose from a `position` and a `rotation`.
-    pub fn new(position: TyVector3<T>, rotation: TyQuaternion<T>) -> Self {
+    pub fn new(position: DVec3, rotation: DQuat) -> Self {
         Self { position, rotation }
+    }
+
+    /// The pose of `target` expressed in the local space of `self`.
+    pub fn calculate_relative_pose(&self, target: &Self) -> Self {
+        let inverse_rotation = self.rotation.inverse();
+
+        Self::new(
+            inverse_rotation * (target.position - self.position),
+            inverse_rotation * target.rotation,
+        )
+    }
+
+    /// Transforms `aabb` by this pose, growing it to the axis-aligned bound of the
+    /// rotated box.
+    pub fn transform_aabb_conservative(&self, aabb: &TyBounds) -> TyBounds {
+        let center = self.position + self.rotation * aabb.center;
+        let extents = self.rotation.rotate_extents_abs(aabb.extents);
+
+        TyBounds::new(center, extents)
+    }
+
+    /// This pose with a uniform `scale`, as a [`TyUniformTrs`].
+    pub fn with_uniform_scale(&self, scale: f64) -> TyUniformTrs {
+        TyUniformTrs::new(self.position, self.rotation, scale)
     }
 }
 
-/// Implements the float-only pose operations for a concrete floating-point
-/// component type.
-macro_rules! impl_ty_pose_float {
-    ($t:ty) => {
-        impl TyPose<$t> {
-            /// The identity pose: zero position, identity rotation.
-            pub fn identity() -> Self {
-                Self {
-                    position: TyVector3::<$t>::ZERO,
-                    rotation: TyQuaternion::<$t>::identity(),
-                }
-            }
-
-            /// The pose of `target` expressed in the local space of `self`.
-            pub fn calculate_relative_pose(&self, target: &Self) -> Self {
-                let inverse_rotation = self.rotation.inverse();
-                let relative_position = inverse_rotation.rotate(target.position - self.position);
-                let relative_rotation = inverse_rotation * target.rotation;
-
-                Self::new(relative_position, relative_rotation)
-            }
-
-            /// Transforms `aabb` by this pose, growing it to the axis-aligned
-            /// bound of the rotated box.
-            pub fn transform_aabb_conservative(&self, aabb: &TyBounds<$t>) -> TyBounds<$t> {
-                let center = self.position + self.rotation.rotate(aabb.center);
-                let extents = self.rotation.rotate_extents_abs(aabb.extents);
-
-                TyBounds::new(center, extents)
-            }
-
-            /// This pose with a uniform `scale`, as a [`TyUniformTrs`].
-            pub fn with_uniform_scale(&self, scale: $t) -> TyUniformTrs<$t> {
-                TyUniformTrs::new(self.position, self.rotation, scale)
-            }
-        }
-
-        impl Default for TyPose<$t> {
-            fn default() -> Self {
-                Self::identity()
-            }
-        }
-    };
+impl Default for TyPose {
+    fn default() -> Self {
+        Self::IDENTITY
+    }
 }
-
-impl_ty_pose_float!(f32);
-impl_ty_pose_float!(f64);
 
 #[cfg(test)]
 mod tests {
-    use crate::{TyPoseF64, TyQuaternionF64, TyVector3F64};
+    use crate::{TyPoseF64, TyQuaternionExt, TyQuaternionF64, TyVector3F64};
     use std::f64::consts::PI;
 
     fn close(a: f64, b: f64) -> bool {
@@ -89,7 +79,7 @@ mod tests {
         assert!(
             relative
                 .rotation
-                .is_approximately_equal(TyQuaternionF64::identity(), 1e-9)
+                .is_approximately_equal(TyQuaternionF64::IDENTITY, 1e-9)
         );
     }
 
@@ -102,10 +92,7 @@ mod tests {
             TyVector3F64::new(1.0, 0.0, 0.0),
             TyQuaternionF64::from_axis_angle(TyVector3F64::new(0.0, 0.0, 1.0), PI / 2.0),
         );
-        let target = TyPoseF64::new(
-            TyVector3F64::new(2.0, 0.0, 0.0),
-            TyQuaternionF64::identity(),
-        );
+        let target = TyPoseF64::new(TyVector3F64::new(2.0, 0.0, 0.0), TyQuaternionF64::IDENTITY);
         let relative = parent.calculate_relative_pose(&target);
         assert!(
             close(relative.position.x, 0.0)

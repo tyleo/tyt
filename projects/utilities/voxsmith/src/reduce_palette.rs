@@ -3,7 +3,7 @@ use branded_id::U32Id;
 use std::{cmp::Ordering, collections::HashMap, mem};
 use ty_math::{
     FromColor, TyCielabColorF64, TyColorToVector3, TyLinSrgbaF64, TyOklabColorF64, TySrgbaU8,
-    TyVector3F64, TyVector3U32,
+    TyVector3Ext, TyVector3F64, TyVector3U32,
 };
 use voxcore::{
     BVoxArrayProperty, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, VoxMain, VoxObject,
@@ -248,9 +248,8 @@ fn median_cut(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
         let mut color_box = boxes.swap_remove(index);
 
         color_box.sort_by(|a, b| {
-            a.coords
-                .component(axis)
-                .partial_cmp(&b.coords.component(axis))
+            a.coords[axis]
+                .partial_cmp(&b.coords[axis])
                 .unwrap_or(Ordering::Equal)
         });
 
@@ -424,7 +423,7 @@ fn kmeans(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
         for (index, point) in points.iter().enumerate() {
             let nearest = centroids
                 .iter()
-                .map(|centroid| (point.coords - *centroid).magnitude_squared())
+                .map(|centroid| (point.coords - *centroid).length_squared())
                 .fold(f64::INFINITY, f64::min);
 
             if best.is_none_or(|(_, far)| nearest > far) {
@@ -469,7 +468,7 @@ fn kmeans(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
 
             let w = point.population.max(1) as f64;
 
-            sum[cluster] = sum[cluster] + point.coords * w;
+            sum[cluster] += point.coords * w;
 
             weight[cluster] += w;
         }
@@ -498,8 +497,8 @@ fn point_bounds(points: &[Point]) -> (TyVector3F64, TyVector3F64) {
     let mut high = TyVector3F64::NEG_INFINITY;
 
     for point in points {
-        low = low.component_min_with(&point.coords);
-        high = high.component_max_with(&point.coords);
+        low = low.min(point.coords);
+        high = high.max(point.coords);
     }
 
     (low, high)
@@ -511,7 +510,7 @@ fn nearest_centroid(coords: TyVector3F64, centroids: &[TyVector3F64]) -> usize {
     let mut best_distance = f64::INFINITY;
 
     for (index, centroid) in centroids.iter().enumerate() {
-        let distance = (coords - *centroid).magnitude_squared();
+        let distance = (coords - *centroid).length_squared();
         if distance < best_distance {
             best_distance = distance;
             best = index;
@@ -671,8 +670,8 @@ fn nearest_representative(coords: TyVector3F64, representatives: &[Point]) -> Po
         .copied()
         .min_by(|a, b| {
             (coords - a.coords)
-                .magnitude_squared()
-                .partial_cmp(&(coords - b.coords).magnitude_squared())
+                .length_squared()
+                .partial_cmp(&(coords - b.coords).length_squared())
                 .unwrap_or(Ordering::Equal)
                 .then_with(|| a.material.cmp(&b.material))
         })
@@ -696,7 +695,7 @@ fn diffuse_error(
     let mut push = |carry: bool, neighbor: u32, weight: f64| {
         if carry {
             let slot = errors.entry(neighbor).or_insert(TyVector3F64::ZERO);
-            *slot = *slot + error * weight;
+            *slot += error * weight;
         }
     };
 
@@ -718,7 +717,7 @@ fn palette_spacing(representatives: &[Point]) -> f64 {
         let mut nearest = f64::INFINITY;
         for (other_index, other) in representatives.iter().enumerate() {
             if index != other_index {
-                nearest = nearest.min((representative.coords - other.coords).magnitude());
+                nearest = nearest.min((representative.coords - other.coords).length());
             }
         }
         total += nearest;

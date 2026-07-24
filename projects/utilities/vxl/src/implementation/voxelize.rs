@@ -7,7 +7,7 @@ use crate::{
     implementation,
 };
 use std::{fs, path::Path};
-use ty_math::{TyVector3, TyVector3U32};
+use ty_math::{TyVector3F64, TyVector3U32};
 use voxcore::VoxMain;
 use voxsmith::{
     ColorSpace as VoxsmithColorSpace, Dither as VoxsmithDither, EditStateMode,
@@ -88,7 +88,7 @@ pub fn voxelize(
 /// real-world voxel size and records that size as the node scale; `AxisVoxelCount`
 /// pins the chosen axis at the given count, sizing the others to preserve aspect,
 /// and leaves the node scale at `1`. Every axis is at least one voxel.
-fn resolve_grid(extent: TyVector3<f64>, resolution: GridResolution) -> (TyVector3U32, f64) {
+fn resolve_grid(extent: TyVector3F64, resolution: GridResolution) -> (TyVector3U32, f64) {
     match resolution {
         GridResolution::MetersPerVoxel(meters) => {
             let count = |edge: f64| (edge / meters).ceil().max(1.0) as u32;

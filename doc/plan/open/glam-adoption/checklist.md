@@ -36,7 +36,7 @@ commit once.
 
 ## Phase 1: ty-math foundation
 
-- [ ] **S1. Add the `glam` dependency.** Workspace has no `[workspace.
+- [x] **S1. Add the `glam` dependency.** Workspace has no `[workspace.
       dependencies]` table (palette lives only in ty-math/Cargo.toml), so add to
       `ty-math/Cargo.toml`: `glam = { version = "0.33", default-features = false,
       features = ["std", "float-types", "integer-types", "debug-glam-assert"] }`.
@@ -45,9 +45,20 @@ commit once.
       DMat3, DMat4, Mat4, EulerRot};` all import (temporary scratch check).
       `cargo check -p ty-math` still green (dep unused yet). Record the resolved
       glam version in the decision log.
+      DONE: resolved `glam v0.33.2`; the scratch probe additionally confirmed
+      every api-map symbol for S2+ compiles against 0.33.2. See
+      [decision log](reference/implementation-decisions.md#s1-glam-dependency).
 
-- [ ] **S2. Flip the math types to aliases + add ext traits + rewrite composites.**
+- [x] **S2. Flip the math types to aliases + add ext traits + rewrite composites.**
       The atomic step; ty-math compiles on its own, consumers break until Phase 2.
+      DONE: `cargo test -p ty-math` green (46 tests), clippy clean, `ty-math-serde`
+      compiles. Owner override this session - KEEP every method (ported to glam),
+      not just the api-map's EXT set: the "DROP trivia" below became ext methods,
+      and `TyVector2Ext` (`to_vector3`) + `TyMatrix4x4Ext` (`get`) were added.
+      `rotate_towards` -> `rotation_towards` (glam has a colliding inherent method).
+      `is_normalized(tol)` deferred to S5. `to_euler_radians` matches the old
+      Tait-Bryan formula to 1e-9 (test). A 4-agent adversarial audit found no
+      semantic drift. See [decision log](reference/implementation-decisions.md#s2-ty-math-flip-aliases--ext-traits--composites).
       - Replace the vector/quat/matrix base + alias files with concrete aliases
         ([api-map](reference/glam-api-map.md) "Type aliases"): `TyVector2/3/4`
         (bare = `DVec*`) and `*F32/*F64` (+ V3 `*I32/*U32`); `TyQuaternion` (bare
@@ -91,7 +102,7 @@ commit once.
 
 ## Phase 2: migrate consumers (workspace red until S8)
 
-- [ ] **S3. voxsmith/convert (Cluster A, ~14 files).** `magnitude`->`length`;
+- [x] **S3. voxsmith/convert (Cluster A, ~14 files).** `magnitude`->`length`;
       `componentwise_multiply(&o)`->`* o`; `to_f64/to_i32/to_u32`->`as_dvec3/
       as_ivec3/as_uvec3`; `from_column_arrays(a)`->`from_cols_array_2d(&a)`;
       `identity()`->`IDENTITY`; `.transform_point`->`.transform_point3`. At each
@@ -100,15 +111,24 @@ commit once.
       `zup_to_yup`/`yup_to_zup`/`triangle_normal` -> `TyVector3Ext`. Leave every
       foreign `[f64;3]`/`voxel.*`. Gate: `cargo test -p voxsmith` (runs after S4
       if the lib stays red).
+      DONE: goxl + mvox + vmax + qbcl + gltf migrated; voxelize is alias-only (zero
+      edits). No error in any `convert/` file via `cargo check -p voxsmith`
+      (+ `--features gltf`); the rest of voxsmith stays red until S4.
 
-- [ ] **S4. voxsmith/internal + reduce_palette (Cluster B, ~15 files).** Struct
+- [x] **S4. voxsmith/internal + reduce_palette (Cluster B, ~15 files).** Struct
       field types are pure alias swaps; `.cross(&o)`->`.cross(o)`, `.dot(&o)`->
       `.dot(o)`, `component(i)`->`[i]`, `magnitude`->`length`, `.quantize(..)`
       (VECTOR) -> `TyVector3Ext::quantize`, `zup_to_yup` -> `TyVector3Ext`;
       `box_local.center/.extents` stay `TyBounds` fields. Gate: `cargo test -p
       voxsmith` green (default + `--features gltf`).
+      DONE: `internal/mesh/` + `internal/gltf/*` + `internal/grid.rs` +
+      `internal/voxj/*` + `internal/vmax/write_vmax.rs` + `reduce_palette.rs`, plus
+      `convert/mesh/object_to_mesh_geometry.rs` (NOT in the census - found by
+      compile). `assign_op_pattern` clippy now fires (glam has `AddAssign`): two
+      `*x = *x + y` -> `+=` in reduce_palette. voxsmith green + clippy clean, both
+      builds.
 
-- [ ] **S5. vxl + voxcore (Cluster C, 5 files).** Rewrite the ONE generic
+- [x] **S5. vxl + voxcore (Cluster C, 5 files).** Rewrite the ONE generic
       `vxl/voxelize.rs:91 TyVector3<f64>` -> `TyVector3F64`. `.compose`/
       `.transform_point`/`.to_euler_radians` (ext) on the `TyTransformF64`/
       `TyQuaternionF64` in `hierarchy_show.rs`. voxcore `vox_object.rs` public
@@ -117,8 +137,14 @@ commit once.
       threshold is acceptable, else a distinctly-named tol ext - confirm the
       caller's need), transform field reads; `vox_hierarchy_node.rs` `pub
       transform: TyTransformF64` field. Gate: `cargo test -p vxl -p voxcore` green.
+      DONE: voxcore (S5 earlier) + vxl. `.compose(&x)` and `.transform_point(pt)`
+      needed NO change (composite keeps `compose(&self, &Self)` and
+      `transform_point(&self, DVec3)`). `voxelize.rs` main import `TyVector3` ->
+      `TyVector3F64` (tests keep bare `TyVector3::new`). Euler `-0.0` signed-zero
+      re-baseline: fold via `+ ZERO` in `format_vec3` so no `-0.00` renders (golden
+      unchanged). vxl green + clippy clean (fixed an `assign_op_pattern`).
 
-- [ ] **S6. tyt-fbx + tyt-injection + tyt-vmax (Cluster D, ~10 files).** tyt-fbx
+- [x] **S6. tyt-fbx + tyt-injection + tyt-vmax (Cluster D, ~10 files).** tyt-fbx
       `create_point_cloud.rs`: `.magnitude()`->`.length()`, `.cross(&v)`/`.dot(&v)`
       -> by value, `.x/.y/.z` reads AND the `min.x = v.x` write (glam fields
       writable). The public `serialize_points_and_colors_json` / `MeshWithUvs`
@@ -128,16 +154,22 @@ commit once.
       (normalize the axis), `to_euler_radians().to_array()` (ext), leave the
       `[f64;N]` codec arrays. Gate: `cargo test -p tyt-fbx -p tyt-injection -p
       tyt-vmax` green.
+      DONE: tyt-fbx `create_point_cloud.rs` by-value `dot`/`cross` + `magnitude`->
+      `length`. tyt-vmax `local_transform` axis-angle guarded like the vmax
+      converters (`ZERO_LENGTH_TOLERANCE` + normalize), `to_euler_radians` via ext.
+      tyt-injection `{x,y,z}` JSON test still byte-identical (unchanged).
 
-- [ ] **S7. treegrid + ty-math-serde confirm.** treegrid only uses `TyFloatExt`
+- [x] **S7. treegrid + ty-math-serde confirm.** treegrid only uses `TyFloatExt`
       as a generic bound - confirm it still compiles unchanged. Finish the
       ty-math-serde DTO check from S2 if deferred: `From<TyVector3>` reads
       `.x/.y/.z` on `DVec3`, `From<TyVector3Serde>` is `DVec3::new(..)`, both
       unchanged. Gate: `cargo test -p treegrid -p ty-math-serde` green.
+      DONE: both compile + test unchanged under the whole-workspace build; no edits
+      needed (confirmed by `cargo test --workspace`).
 
 ## Phase 3: sweep, verify, commit
 
-- [ ] **S8. Workspace green + re-baseline.** `cargo check --workspace`, `cargo fmt
+- [x] **S8. Workspace green + re-baseline.** `cargo check --workspace`, `cargo fmt
       --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test
       --workspace`. Confirm the only test changes are intended (deleted
       macro/dropped-method tests, Debug-format re-baselines, any near-gimbal euler
@@ -148,12 +180,26 @@ commit once.
       consumer names `glam` and no dangling reference to a removed method/type/
       `array_conversions` remains. Confirm the quaternion q->matrix->q round-trip
       and the `to_euler_radians` XYZEx convention with a focused test.
+      DONE: `cargo check --workspace` + `cargo fmt --all --check` + `cargo clippy
+      --workspace --all-targets -- -D warnings` + `cargo test --workspace` all
+      green, plus `-p voxsmith --features gltf` check/clippy/test (212 tests). Only
+      test change: no golden/fixture file changed (git shows only `.rs` + these
+      docs); the euler `-0.0` was absorbed in `format_vec3`, not a golden edit.
+      `debug-glam-assert` on in tests -> zero normalization panics. No consumer
+      names `glam` (only ty-math); no dangling old-API grep hit. q->M->q and XYZEx
+      euler pinned by the S2 ty-math tests (green).
 
-- [ ] **S9. One clean commit.** Stage everything (code + these checklist ticks +
+- [x] **S9. One clean commit.** Stage everything (code + these checklist ticks +
       the decision log). Present the staged diff for owner review; commit once,
       directly on main, with a Conventional Commits subject and the
       `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
       trailer, only on explicit approval.
+      DONE: rebased onto `origin/main` (10 upstream commits, fast-forward) via
+      stash/pull/pop so the migration sits on top; one conflict in vxl
+      `hierarchy_show.rs` (kept the `treeselect` import + added `TyQuaternionExt`).
+      Workspace green again (check + fmt + clippy + test, plus voxsmith gltf);
+      committed on main as `refactor(ty-math)!: back the math types with the glam
+      crate`.
 
 Gate (whole plan): workspace green, clippy clean, every external wire identical,
 `glam` named only inside ty-math, ty-math no longer maintains its own

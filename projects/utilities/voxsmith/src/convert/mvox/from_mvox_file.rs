@@ -13,8 +13,8 @@ use std::{
     hash::Hash,
 };
 use ty_math::{
-    TyMatrix4x4F64, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32,
-    TyVector3U32,
+    TyMatrix4x4F64, TyQuaternionExt, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64,
+    TyVector3I32, TyVector3U32,
 };
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode, VoxMain,
@@ -346,7 +346,7 @@ fn transform_from_frames(frames: &[MVoxFrame]) -> TyTransformF64 {
 /// rotation and a negative x scale so voxcore's unit-quaternion invariant
 /// holds.
 fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
-    let position = TyVector3I32::from_array(frame.translation).to_f64();
+    let position = TyVector3I32::from_array(frame.translation).as_dvec3();
 
     let signed = frame.rotation.to_matrix();
     let mut matrix = [[0.0f64; 3]; 3];
@@ -369,7 +369,7 @@ fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
     // Read the proper rotation into a column-major matrix and decode it. The
     // frame is a signed permutation, so after the mirror split it is always a
     // proper rotation.
-    let rotation = TyMatrix4x4F64::from_column_arrays([
+    let rotation = TyMatrix4x4F64::from_cols_array_2d(&[
         [matrix[0][0], matrix[1][0], matrix[2][0], 0.0],
         [matrix[0][1], matrix[1][1], matrix[2][1], 0.0],
         [matrix[0][2], matrix[1][2], matrix[2][2], 0.0],
@@ -384,7 +384,7 @@ fn transform_from_frame(frame: &MVoxFrame) -> TyTransformF64 {
 /// The determinant of a 3x3 matrix, the scalar triple product of its columns.
 fn determinant(matrix: &[[f64; 3]; 3]) -> f64 {
     let column = |c: usize| TyVector3F64::new(matrix[0][c], matrix[1][c], matrix[2][c]);
-    column(0).dot(&column(1).cross(&column(2)))
+    column(0).dot(column(1).cross(column(2)))
 }
 
 /// Builds the `magica-voxel` ext payload from the state with no native home.
@@ -739,7 +739,7 @@ mod tests {
         let placed_at = |x: f64, y: f64, z: f64| {
             TyTransformF64::new(
                 TyVector3F64::new(x, y, z),
-                TyQuaternionF64::identity(),
+                TyQuaternionF64::IDENTITY,
                 TyVector3F64::ONE,
             )
         };

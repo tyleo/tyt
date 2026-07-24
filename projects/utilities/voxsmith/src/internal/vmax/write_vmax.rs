@@ -8,7 +8,7 @@ use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use ty_math::{
     TyBoundsF64, TyLinSrgbaF64, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64,
-    TyVector3I32, TyVector3U32,
+    TyVector3I32, TyVector3U32, ZERO_LENGTH_TOLERANCE,
 };
 use vmax::{
     VMaxBrush, VMaxBrushColor, VMaxBrushEntry, VMaxBrushState, VMaxCamera, VMaxContentsVmaxbFile,
@@ -597,8 +597,10 @@ fn object_placement(
 /// half-extents. Voxel Max renders and frames against this and pivots about the
 /// center.
 fn content_box(box_min: [i32; 3], bounds: TyVector3U32) -> ([f64; 3], [f64; 3], [f64; 3]) {
-    let box_local =
-        TyBoundsF64::from_min_size(TyVector3I32::from_array(box_min).to_f64(), bounds.to_f64());
+    let box_local = TyBoundsF64::from_min_size(
+        TyVector3I32::from_array(box_min).as_dvec3(),
+        bounds.as_dvec3(),
+    );
     (
         box_local.center.to_array(),
         (-box_local.extents).to_array(),
@@ -1346,9 +1348,9 @@ fn object_box_local(state: &VoxMain, object_id: U32Id<BVoxObject>) -> ([f64; 3],
     let (tight, (edit_bounds, edit_origin)) = tighten(object);
     let bounds = tight.bounds();
     let box_local = if bounds.x == 0 && bounds.y == 0 && bounds.z == 0 {
-        TyBoundsF64::from_min_size(edit_origin.to_f64(), edit_bounds.to_f64())
+        TyBoundsF64::from_min_size(edit_origin.as_dvec3(), edit_bounds.as_dvec3())
     } else {
-        TyBoundsF64::from_min_size(tight.origin().to_f64(), bounds.to_f64())
+        TyBoundsF64::from_min_size(tight.origin().as_dvec3(), bounds.as_dvec3())
     };
     (box_local.center.to_array(), box_local.extents.to_array())
 }
@@ -1362,12 +1364,8 @@ fn extend_bounds(bounds: &mut Option<([f64; 3], [f64; 3])>, center: [f64; 3], ha
     let hi = center + half;
     match bounds {
         Some((min, max)) => {
-            *min = TyVector3F64::from_array(*min)
-                .component_min_with(&lo)
-                .to_array();
-            *max = TyVector3F64::from_array(*max)
-                .component_max_with(&hi)
-                .to_array();
+            *min = TyVector3F64::from_array(*min).min(lo).to_array();
+            *max = TyVector3F64::from_array(*max).max(hi).to_array();
         }
         None => *bounds = Some((lo.to_array(), hi.to_array())),
     }
@@ -1378,15 +1376,9 @@ fn extend_bounds(bounds: &mut Option<([f64; 3], [f64; 3])>, center: [f64; 3], ha
 /// half-extent picks up the rotation: `sum_j abs(col_j) * half[j]` over the
 /// rotated, scaled basis columns.
 fn transform_half(transform: &TyTransformF64, half: [f64; 3]) -> [f64; 3] {
-    let col_x = transform
-        .rotation
-        .rotate(TyVector3F64::new(transform.scale.x, 0.0, 0.0));
-    let col_y = transform
-        .rotation
-        .rotate(TyVector3F64::new(0.0, transform.scale.y, 0.0));
-    let col_z = transform
-        .rotation
-        .rotate(TyVector3F64::new(0.0, 0.0, transform.scale.z));
+    let col_x = transform.rotation * TyVector3F64::new(transform.scale.x, 0.0, 0.0);
+    let col_y = transform.rotation * TyVector3F64::new(0.0, transform.scale.y, 0.0);
+    let col_z = transform.rotation * TyVector3F64::new(0.0, 0.0, transform.scale.z);
     [
         col_x.x.abs() * half[0] + col_y.x.abs() * half[1] + col_z.x.abs() * half[2],
         col_x.y.abs() * half[0] + col_y.y.abs() * half[1] + col_z.y.abs() * half[2],
@@ -1442,7 +1434,12 @@ fn node_ind(ext_node: &VoxelMaxNode, is_group: bool, counter: &mut i64) -> [i64;
 /// identity.
 fn ext_rotation(ext_node: &VoxelMaxNode) -> TyQuaternionF64 {
     let [x, y, z, angle] = ext_node.rotation.unwrap_or(IDENTITY_AXIS_ANGLE);
-    TyQuaternionF64::from_axis_angle(TyVector3F64::new(x, y, z), angle)
+    let axis = TyVector3F64::new(x, y, z);
+    if axis.length() < ZERO_LENGTH_TOLERANCE {
+        // A degenerate (zero) axis decodes to identity, matching the read path.
+        return TyQuaternionF64::IDENTITY;
+    }
+    TyQuaternionF64::from_axis_angle(axis.normalize(), angle)
 }
 
 /// The `[x, y, z, angle]` axis-angle that reproduces a quaternion rotation, the
@@ -1480,7 +1477,7 @@ fn unbake_position(
         (box_min[1] as f64 - center[1] - origin[1] as f64) * scale.y,
         (box_min[2] as f64 - center[2] - origin[2] as f64) * scale.z,
     );
-    let rotated = rotation.rotate(offset);
+    let rotated = rotation * offset;
     [
         transform.position.x - center[0] - rotated.x,
         transform.position.y - center[1] - rotated.y,

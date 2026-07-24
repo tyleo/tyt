@@ -156,7 +156,7 @@ impl GoxlBuilder {
                 .hierarchy_node(node_id)
                 .expect("a hierarchy id from the state resolves");
             let position = node.transform.position;
-            let world = parent + position.round().to_i32();
+            let world = parent + position.round().as_ivec3();
             (
                 node.name.clone(),
                 node.child_objects.clone(),
@@ -200,7 +200,7 @@ impl GoxlBuilder {
             let position = object
                 .voxel_position(voxel)
                 .expect("a live voxel is within the grid");
-            let world_position = (world + position.to_i32()).to_array();
+            let world_position = (world + position.as_ivec3()).to_array();
             let origin = [
                 world_position[0].div_euclid(edge) * edge,
                 world_position[1].div_euclid(edge) * edge,

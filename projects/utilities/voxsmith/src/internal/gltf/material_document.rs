@@ -6,7 +6,7 @@ use crate::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
-use ty_math::TyVector3F32;
+use ty_math::{TyVector3Ext, TyVector3F32};
 use voxcore::{VoxMain, VoxObject};
 
 /// Which glTF container the document is assembled for, so images embed the way
@@ -85,8 +85,8 @@ pub(crate) fn build_material_document(
 
     for &point in &geometry.positions {
         let point = position(point);
-        min = min.component_min_with(&point);
-        max = max.component_max_with(&point);
+        min = min.min(point);
+        max = max.max(point);
 
         for value in point.to_array() {
             blob.extend_from_slice(&value.to_le_bytes());

@@ -1,4 +1,4 @@
-use crate::TyMatrix4x4;
+use glam::DMat4;
 
-/// A [`TyMatrix4x4`] with `f64` components.
-pub type TyMatrix4x4F64 = TyMatrix4x4<f64>;
+/// A 4x4 column-major matrix with `f64` components.
+pub type TyMatrix4x4F64 = DMat4;

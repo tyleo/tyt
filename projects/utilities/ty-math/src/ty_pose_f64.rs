@@ -1,4 +1,4 @@
 use crate::TyPose;
 
 /// A [`TyPose`] with `f64` components.
-pub type TyPoseF64 = TyPose<f64>;
+pub type TyPoseF64 = TyPose;

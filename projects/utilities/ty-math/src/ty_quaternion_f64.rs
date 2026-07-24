@@ -1,4 +1,4 @@
-use crate::TyQuaternion;
+use glam::DQuat;
 
-/// A [`TyQuaternion`] with `f64` components.
-pub type TyQuaternionF64 = TyQuaternion<f64>;
+/// A quaternion `(x, y, z, w)` with `f64` components.
+pub type TyQuaternionF64 = DQuat;

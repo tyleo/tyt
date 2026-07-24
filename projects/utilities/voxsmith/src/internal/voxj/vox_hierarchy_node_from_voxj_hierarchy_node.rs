@@ -72,7 +72,7 @@ fn vox_transform_from_voxj_transform(transform: &VoxjTransform) -> Result<TyTran
 
     Ok(TyTransformF64::new(
         TyVector3::from_array(transform.position),
-        TyQuaternion::new(
+        TyQuaternion::from_xyzw(
             rotation_x / magnitude,
             rotation_y / magnitude,
             rotation_z / magnitude,

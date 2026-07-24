@@ -346,11 +346,11 @@ fn barycentric(points: &[TyVector3F64; 3], point: TyVector3F64) -> (f64, f64, f6
     let v1 = points[2] - points[0];
     let v2 = point - points[0];
 
-    let d00 = v0.dot(&v0);
-    let d01 = v0.dot(&v1);
-    let d11 = v1.dot(&v1);
-    let d20 = v2.dot(&v0);
-    let d21 = v2.dot(&v1);
+    let d00 = v0.dot(v0);
+    let d01 = v0.dot(v1);
+    let d11 = v1.dot(v1);
+    let d20 = v2.dot(v0);
+    let d21 = v2.dot(v1);
 
     let denom = d00 * d11 - d01 * d01;
     if denom.abs() < f64::EPSILON {

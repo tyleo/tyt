@@ -13,7 +13,8 @@ use gltf::{
 };
 use std::collections::HashMap;
 use ty_math::{
-    TyFloatExt, TyLinSrgbaF64, TyMatrix4x4F64, TySrgbaF64, TySrgbaU8, TyVector2F64, TyVector3F64,
+    TyFloatExt, TyLinSrgbaF64, TyMatrix4x4F64, TySrgbaF64, TySrgbaU8, TyVector2F64, TyVector3Ext,
+    TyVector3F64,
 };
 
 /// Reads a glTF or GLB byte slice into a [`Mesh`]: every triangle in world
@@ -51,7 +52,7 @@ pub fn from_gltf_bytes(bytes: &[u8]) -> Result<Mesh> {
 
     let mut image_slots: HashMap<usize, usize> = HashMap::new();
 
-    let identity = TyMatrix4x4F64::identity();
+    let identity = TyMatrix4x4F64::IDENTITY;
 
     for node in scene.nodes() {
         collect_node(
@@ -80,8 +81,9 @@ fn collect_node(
     slots: &mut HashMap<Option<usize>, u32>,
     image_slots: &mut HashMap<usize, usize>,
 ) {
-    let local = TyMatrix4x4F64::from_column_arrays(
-        node.transform()
+    let local = TyMatrix4x4F64::from_cols_array_2d(
+        &node
+            .transform()
             .matrix()
             .map(|column| column.map(f64::from)),
     );
@@ -456,7 +458,7 @@ impl Depth {
 /// +Z, preserving the right-handedness both formats use.
 fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
     let [x, y, z] = point;
-    let world = world.transform_point(TyVector3F64::new(x, y, z));
+    let world = world.transform_point3(TyVector3F64::new(x, y, z));
     world.yup_to_zup()
 }
 

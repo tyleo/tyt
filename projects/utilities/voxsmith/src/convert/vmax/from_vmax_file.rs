@@ -8,6 +8,7 @@ use branded_id::U32Id;
 use std::collections::HashMap;
 use ty_math::{
     TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32,
+    ZERO_LENGTH_TOLERANCE,
 };
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
@@ -541,7 +542,7 @@ fn min_corner(voxels: &[VMaxVoxel]) -> Option<[i32; 3]> {
         .fold(None, |acc, v| {
             let position = TyVector3I32::from_array(v.position);
             let acc = acc.unwrap_or(position);
-            Some(acc.component_min_with(&position))
+            Some(acc.min(position))
         })
         .map(|corner| corner.to_array())
 }
@@ -591,9 +592,9 @@ fn view_box<'a>(serde: &'a VMaxFile, object: &VMaxObject) -> Option<&'a VMaxView
 /// transform's position lands on the content center (the pivot); any odd-extent
 /// half-voxel remainder is absorbed by that position, keeping rendering exact.
 fn pivot_origin(box_min: [i32; 3], center: [f64; 3]) -> [i32; 3] {
-    (TyVector3I32::from_array(box_min).to_f64() - TyVector3F64::from_array(center))
+    (TyVector3I32::from_array(box_min).as_dvec3() - TyVector3F64::from_array(center))
         .round()
-        .to_i32()
+        .as_ivec3()
         .to_array()
 }
 
@@ -631,7 +632,7 @@ fn authored_box(object: &VMaxObject) -> Option<([i32; 3], [u32; 3])> {
     let (min, max) = (object.bounds_min?, object.bounds_max?);
     let box_min = (TyVector3F64::from_array(object.center) + TyVector3F64::from_array(min))
         .round()
-        .to_i32()
+        .as_ivec3()
         .to_array();
     let size = [
         (max[0] - min[0]).round().max(0.0) as u32,
@@ -644,7 +645,13 @@ fn authored_box(object: &VMaxObject) -> Option<([i32; 3], [u32; 3])> {
 /// Decodes a stored `[x, y, z, angle]` axis-angle rotation into a quaternion.
 fn axis_angle(rotation: [f64; 4]) -> TyQuaternionF64 {
     let [x, y, z, angle] = rotation;
-    TyQuaternionF64::from_axis_angle(TyVector3F64::new(x, y, z), angle)
+    let axis = TyVector3F64::new(x, y, z);
+    // An unrotated object stores [0, 0, 0, 0]; a zero axis has no direction to
+    // normalize and from_axis_angle needs a unit axis.
+    if axis.length() < ZERO_LENGTH_TOLERANCE {
+        return TyQuaternionF64::IDENTITY;
+    }
+    TyQuaternionF64::from_axis_angle(axis.normalize(), angle)
 }
 
 /// The node transform that places an object so rotating the node pivots its
@@ -658,13 +665,13 @@ fn object_transform(object: &VMaxObject, box_min: [i32; 3], origin: [i32; 3]) ->
     let rotation = axis_angle(object.rotation);
     let scale = TyVector3F64::from_array(object.scale);
     let center = TyVector3F64::from_array(object.center);
-    let box_min = TyVector3I32::from_array(box_min).to_f64();
-    let origin = TyVector3I32::from_array(origin).to_f64();
+    let box_min = TyVector3I32::from_array(box_min).as_dvec3();
+    let origin = TyVector3I32::from_array(origin).as_dvec3();
 
     // t_p + center + R*S*(box_min - center - origin); the bracket is the
     // sub-voxel remainder.
-    let offset = (box_min - center - origin).componentwise_multiply(&scale);
-    let position = TyVector3F64::from_array(object.position) + center + rotation.rotate(offset);
+    let offset = (box_min - center - origin) * scale;
+    let position = TyVector3F64::from_array(object.position) + center + rotation * offset;
 
     TyTransformF64::new(position, rotation, scale)
 }

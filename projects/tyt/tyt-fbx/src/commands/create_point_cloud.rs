@@ -105,7 +105,7 @@ fn parse_error(msg: impl Into<String>) -> Error {
 }
 
 fn triangle_area(a: TyVector3, b: TyVector3, c: TyVector3) -> f64 {
-    0.5 * (b - a).cross(&(c - a)).magnitude()
+    0.5 * (b - a).cross(c - a).length()
 }
 
 fn xorshift64(state: &mut u64) -> u64 {
@@ -221,23 +221,23 @@ fn ray_triangle_intersects(
     let epsilon = 1e-10;
     let edge1 = *v1 - *v0;
     let edge2 = *v2 - *v0;
-    let h = dir.cross(&edge2);
-    let a = edge1.dot(&h);
+    let h = dir.cross(edge2);
+    let a = edge1.dot(h);
     if a > -epsilon && a < epsilon {
         return false;
     }
     let f = 1.0 / a;
     let s = *origin - *v0;
-    let u = f * s.dot(&h);
+    let u = f * s.dot(h);
     if !(0.0..=1.0).contains(&u) {
         return false;
     }
-    let q = s.cross(&edge1);
-    let v = f * dir.dot(&q);
+    let q = s.cross(edge1);
+    let v = f * dir.dot(q);
     if v < 0.0 || u + v > 1.0 {
         return false;
     }
-    let t = f * edge2.dot(&q);
+    let t = f * edge2.dot(q);
     t > epsilon
 }
 
@@ -329,7 +329,7 @@ fn closest_point_on_mesh(
             &vertices[tri[2]],
         );
         let diff = closest - *point;
-        let dist_sq = diff.dot(&diff);
+        let dist_sq = diff.dot(diff);
         if dist_sq < best_dist_sq {
             best_dist_sq = dist_sq;
             best_pos = closest;
@@ -353,15 +353,15 @@ fn closest_point_on_triangle(
     let ac = *c - *a;
     let ap = *p - *a;
 
-    let d1 = ab.dot(&ap);
-    let d2 = ac.dot(&ap);
+    let d1 = ab.dot(ap);
+    let d2 = ac.dot(ap);
     if d1 <= 0.0 && d2 <= 0.0 {
         return (*a, 1.0, 0.0, 0.0);
     }
 
     let bp = *p - *b;
-    let d3 = ab.dot(&bp);
-    let d4 = ac.dot(&bp);
+    let d3 = ab.dot(bp);
+    let d4 = ac.dot(bp);
     if d3 >= 0.0 && d4 <= d3 {
         return (*b, 0.0, 1.0, 0.0);
     }
@@ -373,8 +373,8 @@ fn closest_point_on_triangle(
     }
 
     let cp = *p - *c;
-    let d5 = ab.dot(&cp);
-    let d6 = ac.dot(&cp);
+    let d5 = ab.dot(cp);
+    let d6 = ac.dot(cp);
     if d6 >= 0.0 && d5 <= d6 {
         return (*c, 0.0, 0.0, 1.0);
     }

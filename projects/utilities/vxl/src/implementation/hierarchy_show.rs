@@ -16,7 +16,7 @@ use treegrid::{
     TreeGridRenderJson, TreeGridValue,
 };
 use treeselect::TreeSelection;
-use ty_math::{TyTransformF64, TyVector3F64};
+use ty_math::{TyQuaternionExt, TyTransformF64, TyVector3F64};
 use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 
 /// A hierarchy-node id in the loaded [`VoxMain`], aliased so signatures stay
@@ -768,7 +768,7 @@ impl Walk<'_> {
         let mut rotation = transform.rotation.to_euler_radians();
 
         if view.degrees {
-            rotation = rotation * (180.0 / PI);
+            rotation *= 180.0 / PI;
         }
 
         let precision = view.precision;
@@ -837,14 +837,14 @@ impl Walk<'_> {
     /// shown, a zero-size box at the object's origin when it has no live voxels.
     /// `placing_world` folds an origin into world space when its view asks.
     fn object_rows(&self, object: &VoxObject, placing_world: TyTransformF64) -> Vec<ObjectRow> {
-        let origin = object.origin().to_f64();
-        let build = object.bounds().to_f64();
+        let origin = object.origin().as_dvec3();
+        let build = object.bounds().as_dvec3();
         let edit = edit_present(object);
 
         // The runtime grid as (node-relative min corner, size). An object with no
         // live voxels has a zero-size grid at its origin.
         let (runtime_min, runtime_size) = match object.live_extent() {
-            Some((min, size)) => (origin + min.to_f64(), size.to_f64()),
+            Some((min, size)) => (origin + min.as_dvec3(), size.as_dvec3()),
             None => (origin, TyVector3F64::ZERO),
         };
 
@@ -1067,6 +1067,9 @@ fn origin_value(corner: TyVector3F64, world: bool, placing_world: TyTransformF64
 
 /// Formats a vector as `x, y, z`, each to `precision` decimal places.
 fn format_vec3(vector: TyVector3F64, precision: usize) -> String {
+    // Add zero to fold any -0.0 component to 0.0 so a zero never renders as
+    // "-0.00" (a euler decomposition can yield a signed zero).
+    let vector = vector + TyVector3F64::ZERO;
     format!(
         "{:.p$}, {:.p$}, {:.p$}",
         vector.x,

@@ -12,8 +12,8 @@ pub(crate) fn triangle_bounds(
     let (mut min, mut max) = (first, first);
 
     for p in points {
-        min = min.component_min_with(&p);
-        max = max.component_max_with(&p);
+        min = min.min(p);
+        max = max.max(p);
     }
 
     Some((min, max))

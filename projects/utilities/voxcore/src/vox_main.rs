@@ -5,7 +5,7 @@ use crate::{
 };
 use branded_id::{IdSlice, IdVec, U32Id, soa::IdRemap};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use ty_math::TyVector3F64;
+use ty_math::{TyQuaternionExt, TyVector3F64};
 
 /// The in-memory state of a voxel model: its objects, shared palettes, scene
 /// hierarchy, and roots.
@@ -740,7 +740,7 @@ impl VoxMain {
                 });
             }
             let rotation = node.transform.rotation;
-            if !rotation.is_normalized(ROTATION_TOLERANCE) {
+            if !rotation.is_normalized_within(ROTATION_TOLERANCE) {
                 return Err(Error::NonUnitRotation {
                     node: node_id.to_u32(),
                 });
@@ -1805,7 +1805,7 @@ mod tests {
         let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         // Length squared 4, well outside the unit tolerance.
-        node.transform.rotation = TyQuaternion::new(0.0, 0.0, 0.0, 2.0);
+        node.transform.rotation = TyQuaternion::from_xyzw(0.0, 0.0, 0.0, 2.0);
         let id = state.add_hierarchy_node(node);
         assert_eq!(
             state.validate(),

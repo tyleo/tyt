@@ -294,7 +294,7 @@ impl QbclBuilder {
                 .hierarchy_node(node_id)
                 .expect("a hierarchy id from the state resolves");
             let position = node.transform.position;
-            let world = parent + position.round().to_i32();
+            let world = parent + position.round().as_ivec3();
             (
                 node.name.clone(),
                 node.child_objects.clone(),

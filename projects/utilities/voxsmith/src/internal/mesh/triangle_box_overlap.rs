@@ -29,7 +29,7 @@ pub(crate) fn triangle_box_overlap(center: [f64; 3], half: f64, triangle: &[[f64
     // The 9 cross products of a cube axis with a triangle edge.
     for edge in &edges {
         for axis in &axes {
-            if separates(axis.cross(edge), &v, half) {
+            if separates(axis.cross(*edge), &v, half) {
                 return false;
             }
         }
@@ -42,16 +42,16 @@ pub(crate) fn triangle_box_overlap(center: [f64; 3], half: f64, triangle: &[[f64
         }
     }
     // The triangle normal.
-    !separates(edges[0].cross(&edges[1]), &v, half)
+    !separates(edges[0].cross(edges[1]), &v, half)
 }
 
 /// Whether `axis` separates the origin-centered cube of half-edge `half` from
 /// triangle `v` (already relative to the cube center). A near-zero axis, as a
 /// degenerate edge cross produces, never separates.
 fn separates(axis: TyVector3F64, v: &[TyVector3F64; 3], half: f64) -> bool {
-    let p0 = axis.dot(&v[0]);
-    let p1 = axis.dot(&v[1]);
-    let p2 = axis.dot(&v[2]);
+    let p0 = axis.dot(v[0]);
+    let p1 = axis.dot(v[1]);
+    let p2 = axis.dot(v[2]);
     let min = p0.min(p1).min(p2);
     let max = p0.max(p1).max(p2);
     let radius = half * (axis.x.abs() + axis.y.abs() + axis.z.abs());

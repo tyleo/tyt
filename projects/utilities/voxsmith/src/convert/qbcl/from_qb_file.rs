@@ -174,7 +174,7 @@ fn visibility_of(object: &VoxObject, matrix: &QbMatrix) -> Vec<u8> {
 
 /// A translation-only transform from a scene position.
 fn translation(position: [i32; 3]) -> TyTransformF64 {
-    TyTransformF64::from_translation(TyVector3I32::from_array(position).to_f64())
+    TyTransformF64::from_translation(TyVector3I32::from_array(position).as_dvec3())
 }
 
 /// The float sRGB components in `[0, 1]` of an `[r, g, b]` byte color.

@@ -501,7 +501,7 @@ mod tests {
         let placed_at = |x: f64, y: f64, z: f64| {
             TyTransformF64::new(
                 TyVector3F64::new(x, y, z),
-                TyQuaternionF64::identity(),
+                TyQuaternionF64::IDENTITY,
                 TyVector3F64::new(1.0, 1.0, 1.0),
             )
         };

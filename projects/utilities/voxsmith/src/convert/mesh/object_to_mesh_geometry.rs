@@ -1,6 +1,6 @@
 use crate::{MeshGeometry, MeshMethod};
 use branded_id::U32Id;
-use ty_math::{TyVector3F32, TyVector3U32};
+use ty_math::{TyVector3Ext, TyVector3F32, TyVector3U32};
 use voxcore::{BVoxVoxel, VoxObject};
 
 /// Triangulates `object`'s live voxels into a [`MeshGeometry`] using `method`.
@@ -275,7 +275,7 @@ fn push_face(
 
     // The (u, v) axes may be oriented either way about `d`, so wind the corners
     // by whether the u-then-v corner cross points along the outward normal.
-    let outward = TyVector3F32::triangle_normal(p00, p10, p01).dot(&normal) >= 0.0;
+    let outward = TyVector3F32::triangle_normal(p00, p10, p01).dot(normal) >= 0.0;
 
     let corners = if outward {
         [p00, p10, p11, p01]
@@ -302,7 +302,7 @@ fn push_face(
 #[cfg(test)]
 mod tests {
     use crate::{MeshMethod, mesh_slices, object_to_mesh_geometry};
-    use ty_math::{TyVector3F32, TyVector3U32};
+    use ty_math::{TyVector3Ext, TyVector3F32, TyVector3U32};
     use voxcore::VoxObject;
 
     /// A build-volume object of `bounds` with `live` cells filled, no palettes.
@@ -435,7 +435,7 @@ mod tests {
             );
             let stored = mesh.normals[triangle[0] as usize];
             assert!(
-                TyVector3F32::triangle_normal(p0, p1, p2).dot(&stored) > 0.0,
+                TyVector3F32::triangle_normal(p0, p1, p2).dot(stored) > 0.0,
                 "triangle winds inward"
             );
         }
