@@ -8,7 +8,7 @@ use voxj::VoxjPalette;
 /// width of `packed-base64` channels, one channel per layer. A layer entry
 /// outside `palettes` is an error.
 ///
-/// `materials` is row-major, one row per material, so M is `materials.len()`.
+/// `materials` holds one row per material, so M is `materials.len()`.
 pub fn voxj_palette_material_counts(
     layers: &[usize],
     palettes: &[VoxjPalette],

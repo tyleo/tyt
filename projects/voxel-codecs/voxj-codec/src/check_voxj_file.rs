@@ -14,7 +14,7 @@ use voxj::VoxjFile;
 /// 3. `palettes`:
 ///    1. every property has a non-empty name, distinct within the palette,
 ///       and an in-range value pool;
-///    2. row-major materials hold at least one row, one per material, each of
+///    2. materials hold at least one row, one per material, each of
 ///       exactly one in-range value-index per property.
 /// 4. `indices`:
 ///    1. object layers, node children, child objects, and roots resolve;

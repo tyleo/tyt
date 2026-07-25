@@ -13,8 +13,8 @@ pub enum Check {
     /// Per palette:
     /// 1. every property has a non-empty name, distinct within the palette,
     ///    and an in-range value pool;
-    /// 2. row-major materials hold at least one row, one per material, each
-    ///    of exactly one in-range value-index per property.
+    /// 2. materials hold at least one row, one per material, each of
+    ///    exactly one in-range value-index per property.
     Palettes,
 
     /// Object layers, node children, child objects, and roots resolve; node

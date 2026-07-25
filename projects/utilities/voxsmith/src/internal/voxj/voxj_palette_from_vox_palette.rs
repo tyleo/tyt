@@ -5,8 +5,8 @@ use voxj::{VoxjPalette, VoxjProperty};
 /// materials in id order so each lands at its original index.
 ///
 /// A voxcore property's value-pool id becomes the wire `valuePool`.
-/// `materials` is row-major on both sides, one row per material with a
-/// value-index per property, so rows map one to one.
+/// `materials` carries over one row per material, a value-index per
+/// property.
 pub fn voxj_palette_from_vox_palette(palette: &VoxPalette) -> VoxjPalette {
     let properties: Vec<VoxjProperty> = palette
         .iter_properties()

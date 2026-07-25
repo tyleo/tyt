@@ -407,10 +407,10 @@ impl VoxMain {
     /// pools but not the values inside a pool.
     ///
     /// 1. references union across palettes, so a shared entry survives while
-    ///    any one material uses it;
+    ///    any one material uses it
     /// 2. a pool nothing references is left whole, since
-    ///    [`validate`](Self::validate) requires every pool non-empty;
-    /// 3. the state stays referentially valid.
+    ///    [`validate`](Self::validate) requires every pool non-empty
+    /// 3. the state stays referentially valid
     pub fn prune_value_pools(&mut self) {
         // The value ids each pool still has a material referencing,
         // ascending so the kept order stays stable.
@@ -510,22 +510,22 @@ impl VoxMain {
     ///
     /// 1. every value pool is non-empty, its values well-formed for its kind,
     ///    and its `min`/`max` finite, integer-valued for an `int` pool, and
-    ///    ordered;
+    ///    ordered
     /// 2. per palette:
-    ///    1. every property names a live value pool;
-    ///    2. no property name repeats;
-    ///    3. every material value id is within its property's pool;
-    ///    4. there is at least one material;
+    ///    1. every property names a live value pool
+    ///    2. no property name repeats
+    ///    3. every material value id is within its property's pool
+    ///    4. there is at least one material
     /// 3. every object layer references a live palette (two layers may share
     ///    one), and every live-voxel sample material is within its layer's
-    ///    palette;
+    ///    palette
     /// 4. every node child node and child object resolves, and no node lists
-    ///    the same one twice;
-    /// 5. every root resolves, and no root repeats;
+    ///    the same one twice
+    /// 5. every root resolves, and no root repeats
     /// 6. every node transform has finite position and scale components, a
     ///    non-zero scale on each axis, and a unit-length rotation quaternion
-    ///    within `1e-6`;
-    /// 7. the `child_nodes` graph is acyclic.
+    ///    within `1e-6`
+    /// 7. the `child_nodes` graph is acyclic
     ///
     /// A node may have several parents, since the hierarchy is a DAG; that
     /// sharing is not a cycle.

@@ -8,9 +8,8 @@ use voxj::VoxjPalette;
 /// property and material id equals its wire index.
 ///
 /// Properties carry over as name plus pool reference, the wire `valuePool`
-/// becoming a value-pool id. `materials` is row-major on both sides, one row
-/// per material with a value-index per property, so rows map one to
-/// one.
+/// becoming a value-pool id. `materials` carries over one row per material,
+/// a value-index per property.
 ///
 /// Errors on a duplicate property name or a row whose length disagrees with
 /// the properties. Pool-reference and value-id ranges are checked

@@ -26,7 +26,7 @@ pub struct VoxjDecodedObject {
 
     /// One material index per layer, per voxel, aligned to
     /// [`positions`](Self::positions). Entries follow
-    /// [`layers`](Self::layers) order; each index addresses a material in
+    /// [`layers`](Self::layers) order. Each index addresses a material in
     /// that layer's palette.
     pub samples: Vec<Vec<u32>>,
 }

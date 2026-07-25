@@ -20,7 +20,7 @@ checklist and exits non-zero on any failure. The checks include:
 7. well-formed `valuePools` whose values match their declared `kind`.
 8. palettes:
    1. property names are unique;
-   2. row-major `materials` rows hold in-range value-indices;
+   2. `materials` rows hold in-range value-indices;
    3. every palette has at least one material.
 9. an acyclic hierarchy.
 10. no zero `scale` component.
