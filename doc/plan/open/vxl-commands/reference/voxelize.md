@@ -89,7 +89,7 @@ real-world size only to choose the grid counts; the written document is still
 unitless. glTF is meter-native, and any scene- or node-level scale on the mesh
 is applied before voxelizing, so two glTF exports of the same object at different
 authored scales voxelize alike, mirroring [`vxl mesh`](mesh.md)'s
-`--meters-per-voxel`. When `--voxel-size` is used, `voxelize` records
+`--voxel-size`. When `--voxel-size` is used, `voxelize` records
 `<meters>` as the placing node's scale so the assembled model keeps its source
 dimensions; `--resolution` has no real-world size to record. See
 [Coordinate System](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#coordinate-system).

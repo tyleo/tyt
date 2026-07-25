@@ -12,7 +12,7 @@ for implementation choices a reviewer of the Rust would want explained.
 > "material", moved the recommended PBR attribute names to the glTF
 > metallic-roughness vocabulary (`rgba` became `baseColorFactor`, and so on, with
 > `emissive` split into `emissiveFactor` and `emissiveStrength`), replaced the
-> cross-layer merge with non-merging `layerPaletteRefs` selected by `mesh`'s
+> cross-layer merge with a non-merging `layers` list selected by `mesh`'s
 > `--layer`, renamed `--max-palette-cells` to `--max-palette-materials` and
 > `--show-palettes` to `--show-layers`, and added a `--color-format`
 > (`hex` | `float`, default `float`) encoding option. Where an entry below names

@@ -6,7 +6,7 @@ use voxsmith::{
 
 /// A single-map material preset. The left side of `--texture-name` and each map
 /// a `--texture` bakes; the bundle-inclusive `--texture` value is
-/// [`crate::TextureArg`].
+/// [`TextureArg`](crate::commands::TextureArg).
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, ValueEnum)]
 pub enum Texture {
     /// RGBA base color from `baseColorFactor`. Four channels.

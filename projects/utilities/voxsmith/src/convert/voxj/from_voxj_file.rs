@@ -137,10 +137,10 @@ mod tests {
         }
     }
 
-    /// A document exercising every field: a sparse object with margin bounds, a
-    /// tight object sampling one palette over two layers, a multi-property
-    /// palette over a shared bounded pool, a hierarchy with a non-identity
-    /// transform, roots, and a nested `ext`.
+    /// A document exercising every field: a sparse object, a tight object
+    /// sampling one palette over two layers, a multi-property palette over a
+    /// shared bounded pool, a hierarchy with a non-identity transform, roots,
+    /// and a nested `ext`.
     fn sample_file() -> VoxjFile {
         VoxjFile {
             version: 1,

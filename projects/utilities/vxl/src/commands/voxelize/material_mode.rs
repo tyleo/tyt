@@ -1,7 +1,8 @@
 use clap::ValueEnum;
 
 /// Where each voxel's color and material come from when `voxelize` rasterizes a
-/// mesh. Independent of [`FillMode`](crate::FillMode), which sets the geometry.
+/// mesh. Independent of [`FillMode`](crate::commands::FillMode), which sets
+/// the geometry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum MaterialMode {
     /// Sample per-texel when the mesh carries textures, else per-primitive.
