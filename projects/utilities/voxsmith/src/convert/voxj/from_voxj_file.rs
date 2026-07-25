@@ -4,7 +4,7 @@ use crate::{
 };
 use branded_id::U32Id;
 use voxcore::VoxMain;
-use voxj::VoxjFile;
+use voxj::{VoxjFile, VoxjValue};
 use voxj_codec::{decode_voxj_object, voxj_palette_material_counts};
 
 /// Loads a [`VoxjFile`] into a [`VoxMain`]. Each object's position and sample
@@ -59,8 +59,8 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
 
     state.set_ext(
         main.ext
-            .as_ref()
-            .map(vox_value_from_voxj_value)
+            .clone()
+            .map(|map| vox_value_from_voxj_value(&VoxjValue::Object(map)))
             .transpose()?,
     );
 
@@ -223,7 +223,7 @@ mod tests {
                     root_nodes: vec![0],
                 },
                 edit_state: None,
-                ext: Some(VoxjValue::Object(VoxjMap(vec![(
+                ext: Some(VoxjMap(vec![(
                     "vendor".to_owned(),
                     VoxjValue::Array(vec![
                         VoxjValue::Number(1.0),
@@ -231,7 +231,7 @@ mod tests {
                         VoxjValue::Null,
                         VoxjValue::Text("x".to_owned()),
                     ]),
-                )]))),
+                )])),
             },
         }
     }

@@ -1,6 +1,6 @@
-use crate::{VoxjEditState, VoxjRuntimeState, VoxjValue};
+use crate::{VoxjEditState, VoxjMap, VoxjRuntimeState};
 #[cfg(feature = "serde")]
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// The body of a Voxel Json document.
 #[derive(Clone, Debug, PartialEq)]
@@ -17,7 +17,11 @@ pub struct VoxjMain {
     /// Absent in fully-runtime documents.
     #[cfg_attr(
         feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
+        serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )
     )]
     pub edit_state: Option<VoxjEditState>,
 
@@ -25,7 +29,21 @@ pub struct VoxjMain {
     /// vendor-keyed. The core format assigns it no meaning.
     #[cfg_attr(
         feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
+        serde(
+            default,
+            deserialize_with = "present",
+            skip_serializing_if = "Option::is_none"
+        )
     )]
-    pub ext: Option<VoxjValue>,
+    pub ext: Option<VoxjMap>,
+}
+
+/// Deserializes a present optional field, so an explicit `null` rejects.
+#[cfg(feature = "serde")]
+fn present<'de, T, D>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    T::deserialize(deserializer).map(Some)
 }

@@ -14,8 +14,8 @@ mod tests {
     };
     use serde_json::{Value, json};
     use voxj::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPositionBlock, VoxjRuntimeState,
-        VoxjSampleBlock, VoxjTransform, VoxjValue,
+        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject, VoxjPositionBlock,
+        VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
     };
 
     fn document() -> VoxjFile {
@@ -53,7 +53,7 @@ mod tests {
 
     fn document_with_ext(ext: Value) -> VoxjFile {
         let mut file = document();
-        file.main.ext = Some(serde_json::from_value::<VoxjValue>(ext).unwrap());
+        file.main.ext = Some(serde_json::from_value::<VoxjMap>(ext).unwrap());
         file
     }
 

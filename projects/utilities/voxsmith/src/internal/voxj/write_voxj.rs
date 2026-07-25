@@ -1,11 +1,11 @@
 use crate::{
-    ColorFormat, EditStateMode, Result, voxj_decoded_object_from_vox_object,
+    ColorFormat, EditStateMode, Error, Result, voxj_decoded_object_from_vox_object,
     voxj_hierarchy_node_from_vox_hierarchy_node, voxj_palette_from_vox_palette,
     voxj_value_from_vox_value, voxj_value_pool_from_vox_value_pool,
 };
 use ty_math::TyVector3U32;
 use voxcore::{VoxMain, VoxObject};
-use voxj::{VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState};
+use voxj::{VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState, VoxjValue};
 use voxj_codec::{
     PositionEncoding, SampleEncoding, encode_voxj_object_optimized, voxj_palette_material_counts,
 };
@@ -85,7 +85,15 @@ pub fn write_voxj(
     });
 
     let ext = if ext {
-        state.ext().map(voxj_value_from_vox_value)
+        match state.ext().map(voxj_value_from_vox_value) {
+            Some(VoxjValue::Object(map)) => Some(map),
+            Some(_) => {
+                return Err(Error::invalid(
+                    "a non-object ext cannot be written to voxel json",
+                ));
+            }
+            None => None,
+        }
     } else {
         None
     };

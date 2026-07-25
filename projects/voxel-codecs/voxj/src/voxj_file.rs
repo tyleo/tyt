@@ -179,6 +179,44 @@ mod tests {
     }
 
     #[test]
+    fn null_optional_fields_reject() {
+        for key in ["editState", "ext"] {
+            let mut wire = wire_document();
+            wire.pointer_mut("/main")
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert(key.to_owned(), Value::Null);
+            assert!(serde_json::from_value::<VoxjFile>(wire).is_err());
+        }
+    }
+
+    #[test]
+    fn non_object_ext_rejects() {
+        for value in [json!(42), json!("x"), json!(true), json!([1])] {
+            let mut wire = wire_document();
+            wire.pointer_mut("/main")
+                .unwrap()
+                .as_object_mut()
+                .unwrap()
+                .insert("ext".to_owned(), value);
+            assert!(serde_json::from_value::<VoxjFile>(wire).is_err());
+        }
+    }
+
+    #[test]
+    fn ext_nests_null() {
+        let mut wire = wire_document();
+        wire.pointer_mut("/main")
+            .unwrap()
+            .as_object_mut()
+            .unwrap()
+            .insert("ext".to_owned(), json!({ "vendor": null }));
+        let file = serde_json::from_value::<VoxjFile>(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&file).unwrap(), wire);
+    }
+
+    #[test]
     fn scalar_properties_reject() {
         let mut wire = wire_document();
         wire.pointer_mut("/main/runtimeState/palettes/0")
