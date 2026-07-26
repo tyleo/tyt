@@ -68,13 +68,7 @@ impl VoxMain {
     /// changes nothing if `id` is not one of this state's objects or `index` is
     /// at or past [`object_count`](Self::object_count).
     pub fn move_object(&mut self, id: U32Id<BVoxObject>, index: usize) -> Option<()> {
-        if !self.runtime_state.object_ids.is_retained(id)
-            || index >= self.runtime_state.object_ids.len()
-        {
-            return None;
-        }
-        self.runtime_state.object_ids.move_to(id, index);
-        Some(())
+        self.runtime_state.object_ids.try_move_to(id, index)
     }
 
     /// The listing position of object `id`, or `None` if `id` is not one of
@@ -118,13 +112,7 @@ impl VoxMain {
     /// changes nothing if `id` is not one of this state's palettes or `index`
     /// is at or past [`palette_count`](Self::palette_count).
     pub fn move_palette(&mut self, id: U32Id<BVoxPalette>, index: usize) -> Option<()> {
-        if !self.runtime_state.palette_ids.is_retained(id)
-            || index >= self.runtime_state.palette_ids.len()
-        {
-            return None;
-        }
-        self.runtime_state.palette_ids.move_to(id, index);
-        Some(())
+        self.runtime_state.palette_ids.try_move_to(id, index)
     }
 
     /// The listing position of palette `id`, or `None` if `id` is not one of
@@ -170,13 +158,7 @@ impl VoxMain {
     /// changes nothing if `id` is not one of this state's pools or `index` is
     /// at or past [`value_pool_count`](Self::value_pool_count).
     pub fn move_value_pool(&mut self, id: U32Id<BVoxValuePool>, index: usize) -> Option<()> {
-        if !self.runtime_state.value_pool_ids.is_retained(id)
-            || index >= self.runtime_state.value_pool_ids.len()
-        {
-            return None;
-        }
-        self.runtime_state.value_pool_ids.move_to(id, index);
-        Some(())
+        self.runtime_state.value_pool_ids.try_move_to(id, index)
     }
 
     /// The listing position of value pool `id`, or `None` if `id` is not one
@@ -569,12 +551,7 @@ impl VoxMain {
             return None;
         }
         // Safety: the id is retained, so it has a value.
-        let values = unsafe { self.runtime_state.value_pools.get_mut(pool) };
-        if !is_permutation(values, new_order) {
-            return None;
-        }
-        values.set_value_order(new_order);
-        Some(())
+        unsafe { self.runtime_state.value_pools.get_mut(pool) }.set_value_order(new_order)
     }
 
     /// Checks the value pools, palettes, cross-references, and per-entity rules:
@@ -1003,21 +980,6 @@ fn check_color_components(
 /// Whether every component of `vector` is finite.
 fn vector_is_finite(vector: TyVector3F64) -> bool {
     vector.x.is_finite() && vector.y.is_finite() && vector.z.is_finite()
-}
-
-/// Whether `order` lists each of `pool`'s value ids exactly once.
-fn is_permutation(pool: &VoxValuePool, order: &[U32Id<BVoxPoolValue>]) -> bool {
-    if order.len() != pool.values_len() {
-        return false;
-    }
-    let mut seen = vec![false; order.len()];
-    for &id in order {
-        match pool.value_index(id) {
-            Some(position) if !seen[position] => seen[position] = true,
-            _ => return false,
-        }
-    }
-    true
 }
 
 #[cfg(test)]

@@ -151,11 +151,7 @@ impl VoxPalette {
     /// properties or `index` is at or past
     /// [`property_count`](Self::property_count).
     pub fn move_property(&mut self, id: U32Id<BVoxProperty>, index: usize) -> Option<()> {
-        if !self.property_ids.is_retained(id) || index >= self.property_ids.len() {
-            return None;
-        }
-        self.property_ids.move_to(id, index);
-        Some(())
+        self.property_ids.try_move_to(id, index)
     }
 
     /// The position of property `id` in the property order, or `None` if `id`
@@ -169,11 +165,7 @@ impl VoxPalette {
     /// and changes nothing if `id` is not one of this palette's materials or
     /// `index` is at or past [`material_count`](Self::material_count).
     pub fn move_material(&mut self, id: U32Id<BVoxMaterial>, index: usize) -> Option<()> {
-        if !self.material_ids.is_retained(id) || index >= self.material_ids.len() {
-            return None;
-        }
-        self.material_ids.move_to(id, index);
-        Some(())
+        self.material_ids.try_move_to(id, index)
     }
 
     /// The position of material `id` in the material order, or `None` if `id`

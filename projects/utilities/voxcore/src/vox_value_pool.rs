@@ -150,11 +150,7 @@ impl VoxValuePool {
     /// nothing if `id` is not one of this pool's values or `index` is at or
     /// past [`values_len`](Self::values_len).
     pub fn move_value(&mut self, id: U32Id<BVoxPoolValue>, index: usize) -> Option<()> {
-        if !self.value_ids.is_retained(id) || index >= self.value_ids.len() {
-            return None;
-        }
-        self.value_ids.move_to(id, index);
-        Some(())
+        self.value_ids.try_move_to(id, index)
     }
 
     /// Deep copy. Liveness lives in the id pool, so the column can't derive
@@ -221,10 +217,10 @@ impl VoxValuePool {
         self.value_ids.release_stable(id);
     }
 
-    /// Rewrites the listing order to `new_order`, which must list every value
-    /// id exactly once.
-    pub(crate) fn set_value_order(&mut self, new_order: &[U32Id<BVoxPoolValue>]) {
-        self.value_ids.set_order(new_order);
+    /// Rewrites the listing order to `new_order`. `None`, changing nothing, if
+    /// `new_order` does not list every value id exactly once.
+    pub(crate) fn set_value_order(&mut self, new_order: &[U32Id<BVoxPoolValue>]) -> Option<()> {
+        self.value_ids.try_set_order(new_order)
     }
 
     /// Compacts the value id pool back to a contiguous `0..len` in listing

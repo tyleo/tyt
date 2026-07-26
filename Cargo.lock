@@ -225,9 +225,9 @@ dependencies = [
 
 [[package]]
 name = "branded-id"
-version = "0.1.7"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5d40668b27364106b7dff36ff94665052ae4d3fec5481ec381ca0c8c83644ca"
+checksum = "986e3759c08707537f0cfa739020d4beb88d7a29c3f41e82f91570d4e473136b"
 
 [[package]]
 name = "bstr"

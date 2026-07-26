@@ -346,11 +346,7 @@ impl VoxObject {
     /// changes nothing if `id` is not one of this object's layers or `index` is
     /// at or past [`layer_count`](Self::layer_count).
     pub fn move_layer(&mut self, id: U32Id<BVoxLayer>, index: usize) -> Option<()> {
-        if !self.layer_ids.is_retained(id) || index >= self.layer_ids.len() {
-            return None;
-        }
-        self.layer_ids.move_to(id, index);
-        Some(())
+        self.layer_ids.try_move_to(id, index)
     }
 
     /// The position of layer `id` in the layer order, or `None` if `id` is not
