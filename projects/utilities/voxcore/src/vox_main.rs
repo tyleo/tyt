@@ -1763,7 +1763,7 @@ mod tests {
         let a =
             state.add_object(VoxObject::new("a".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap());
         // `b` carries margin: a 5x5x5 build volume with one live voxel off the
-        // origin, which the old exact-tight-bounds rule forbade.
+        // origin, which the bounds rule allows.
         let mut object_b = VoxObject::new("b".to_owned(), TyVector3U32::new(5, 5, 5)).unwrap();
         let voxel = object_b.voxel_id(TyVector3U32::new(2, 3, 1)).unwrap();
         object_b.retain_voxel(voxel, &[]).unwrap();
