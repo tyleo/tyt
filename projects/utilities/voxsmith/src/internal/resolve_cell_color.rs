@@ -68,7 +68,7 @@ mod tests {
             .unwrap();
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let blue = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         object.add_layer(palette_id, red);
@@ -91,7 +91,7 @@ mod tests {
         let mut state = VoxMain::default();
         let mut palette = VoxPalette::default();
         palette.add_material(vec![]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(palette_id, U32Id::from_u32(0));
@@ -111,7 +111,7 @@ mod tests {
             .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
             .unwrap();
         let material = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(palette_id, material);

@@ -194,7 +194,7 @@ mod tests {
     fn object(state: &mut VoxMain, name: &str) -> ObjectId {
         let object = VoxObject::new(name.to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
 
-        state.add_object(object)
+        state.add_object(object).unwrap()
     }
 
     /// Adds a hierarchy node placing the given child nodes and objects.
@@ -211,7 +211,7 @@ mod tests {
             ..Default::default()
         };
 
-        state.add_hierarchy_node(node)
+        state.add_hierarchy_node(node).unwrap()
     }
 
     /// The path globs as the owned `String`s the resolver takes.
@@ -251,7 +251,7 @@ mod tests {
         let b = object(&mut state, "b");
 
         let root = node(&mut state, "root", vec![], vec![a, b]);
-        state.push_root_hierarchy_node(root);
+        state.push_root_hierarchy_node(root).unwrap();
 
         assert_eq!(
             select_objects(&state, &globs(&["root/b"]), &[]).unwrap(),
@@ -267,7 +267,7 @@ mod tests {
         let b = object(&mut state, "b");
 
         let group = node(&mut state, "group", vec![], vec![a, b]);
-        state.push_root_hierarchy_node(group);
+        state.push_root_hierarchy_node(group).unwrap();
 
         assert_eq!(
             select_objects(&state, &globs(&["group"]), &[]).unwrap(),
@@ -285,7 +285,7 @@ mod tests {
         let keep = node(&mut state, "keep", vec![], vec![a]);
         let drop = node(&mut state, "drop", vec![], vec![b]);
         let root = node(&mut state, "root", vec![keep, drop], vec![]);
-        state.push_root_hierarchy_node(root);
+        state.push_root_hierarchy_node(root).unwrap();
 
         // Select everything under root, then subtract the `drop` branch;
         // last-match-wins leaves only `a`.
@@ -316,7 +316,7 @@ mod tests {
         let c = object(&mut state, "c");
 
         let root = node(&mut state, "root", vec![], vec![a, b, c]);
-        state.push_root_hierarchy_node(root);
+        state.push_root_hierarchy_node(root).unwrap();
 
         // A `root/**` path glob selects every object under root; an index-0
         // selector re-selects `a`, which still appears once, in document order.

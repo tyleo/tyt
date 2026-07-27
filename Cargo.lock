@@ -225,9 +225,9 @@ dependencies = [
 
 [[package]]
 name = "branded-id"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "986e3759c08707537f0cfa739020d4beb88d7a29c3f41e82f91570d4e473136b"
+checksum = "bc72e1956cc3d2d79cd41c42dac9a05aff7d95956e73d3265a14ceb5b5492b05"
 
 [[package]]
 name = "bstr"
@@ -1748,7 +1748,7 @@ version = "0.1.0"
 
 [[package]]
 name = "ty-math"
-version = "0.1.10"
+version = "0.1.11"
 dependencies = [
  "glam",
  "palette",

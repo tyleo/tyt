@@ -350,7 +350,7 @@ mod tests {
             .add_property("baseColorFactor".to_owned(), pool)
             .unwrap();
         let material = palette.add_material(vec![value(0)]).unwrap();
-        let palette = state.add_palette(palette);
+        let palette = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         for _ in 0..layers {
@@ -398,7 +398,7 @@ mod tests {
             .add_material(vec![value(0), value(0), value(0)])
             .unwrap();
 
-        let palette = state.add_palette(palette);
+        let palette = state.add_palette(palette).unwrap();
 
         (state, palette)
     }
@@ -491,7 +491,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette.add_property("tag".to_owned(), tag).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
-        let palette = state.add_palette(palette);
+        let palette = state.add_palette(palette).unwrap();
 
         assert!(!validates(&state, palette, "tag", None));
     }

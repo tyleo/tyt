@@ -1,6 +1,7 @@
 use crate::{
-    Result, vox_hierarchy_node_from_voxj_hierarchy_node, vox_object_from_voxj_decoded_object,
-    vox_palette_from_voxj_palette, vox_value_from_voxj_value, vox_value_pool_from_voxj_value_pool,
+    Error, Result, vox_hierarchy_node_from_voxj_hierarchy_node,
+    vox_object_from_voxj_decoded_object, vox_palette_from_voxj_palette, vox_value_from_voxj_value,
+    vox_value_pool_from_voxj_value_pool,
 };
 use branded_id::U32Id;
 use voxcore::VoxMain;
@@ -9,11 +10,15 @@ use voxj_codec::{decode_voxj_object, voxj_palette_material_counts};
 
 /// Loads a [`VoxjFile`] into a [`VoxMain`]. Each object's position and sample
 /// blocks are decoded, then entities take ids in listing order, so each id
-/// equals its voxj array index and cross-references carry over.
+/// equals its voxj array index and cross-references carry over. The nodes
+/// land as one batch, since the wire permits a node to list a child that
+/// appears later.
 ///
-/// Errors on a malformed block, malformed object geometry, or if
-/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the assembled
-/// state.
+/// Errors if:
+///
+/// 1. a block is malformed
+/// 2. object geometry is malformed
+/// 3. a checked insertion rejects a cross-reference
 pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
     let main = &file.main;
     let mut state = VoxMain::default();
@@ -25,8 +30,13 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
         state.add_value_pool(vox_value_pool_from_voxj_value_pool(pool)?);
     }
 
-    for palette in &main.runtime_state.palettes {
-        state.add_palette(vox_palette_from_voxj_palette(palette)?);
+    // An insertion names the entity it rejected by the ids it holds, which are
+    // internal to the palette or object; the listing index is what points back
+    // into the document.
+    for (index, palette) in main.runtime_state.palettes.iter().enumerate() {
+        state
+            .add_palette(vox_palette_from_voxj_palette(palette)?)
+            .map_err(|error| Error::invalid(format!("palette {index}: {error}")))?;
     }
 
     for (index, object) in main.runtime_state.objects.iter().enumerate() {
@@ -42,12 +52,18 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
             .and_then(|e| e.objects.get(index))
             .map(|edit| (edit.bounds, edit.origin));
         let vox_object = vox_object_from_voxj_decoded_object(&decoded, edit)?;
-        state.add_object(vox_object);
+        state
+            .add_object(vox_object)
+            .map_err(|error| Error::invalid(format!("object {index}: {error}")))?;
     }
 
-    for node in &main.runtime_state.nodes {
-        state.add_hierarchy_node(vox_hierarchy_node_from_voxj_hierarchy_node(node)?);
-    }
+    let nodes = main
+        .runtime_state
+        .nodes
+        .iter()
+        .map(vox_hierarchy_node_from_voxj_hierarchy_node)
+        .collect::<Result<Vec<_>>>()?;
+    state.add_hierarchy_nodes(nodes)?;
 
     state.set_root_hierarchy_nodes(
         main.runtime_state
@@ -55,7 +71,7 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
             .iter()
             .map(|&index| U32Id::from_u32(index as u32))
             .collect(),
-    );
+    )?;
 
     state.set_ext(
         main.ext
@@ -63,9 +79,6 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
             .map(|map| vox_value_from_voxj_value(&VoxjValue::Object(map)))
             .transpose()?,
     );
-
-    // Check cross-references and acyclicity on the assembled state.
-    state.validate()?;
 
     Ok(state)
 }
@@ -564,8 +577,8 @@ mod tests {
         assert!(from_voxj_file(&file).is_err());
     }
 
-    /// A `float` pool value outside its declared `min`/`max` is rejected by
-    /// voxcore validation on the assembled state.
+    /// A `float` pool value outside its declared `min`/`max` is rejected when
+    /// the pool is built.
     #[test]
     fn rejects_value_outside_pool_bounds() {
         let mut file = sample_file();

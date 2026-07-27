@@ -659,14 +659,14 @@ mod tests {
             .unwrap();
         first.add_material(vec![value(0), value(0)]).unwrap();
         first.add_material(vec![value(1), value(1)]).unwrap();
-        state.add_palette(first);
+        state.add_palette(first).unwrap();
 
         let mut second = VoxPalette::default();
         second
             .add_property("baseColorFactor".to_owned(), colors_one)
             .unwrap();
         second.add_material(vec![value(0)]).unwrap();
-        state.add_palette(second);
+        state.add_palette(second).unwrap();
 
         state
     }
@@ -747,7 +747,7 @@ mod tests {
         palette.add_property("shadows".to_owned(), shadows).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
         palette.add_material(vec![value(1)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
 
         // Bools have no swatch, so swatch format spaces them rather than
         // abutting them into `truefalse`.
@@ -1188,7 +1188,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette.add_property("tint".to_owned(), pool).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
         state
     }
 
@@ -1220,7 +1220,7 @@ mod tests {
             .add_property("emissiveFactor".to_owned(), pool)
             .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
 
         let output = show(
             &state,
@@ -1240,7 +1240,7 @@ mod tests {
         palette.add_property("count".to_owned(), pool).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
         palette.add_material(vec![value(1)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
 
         let output = show(&state, &[("0", "count", "value")], PaletteShowLayout::Rows);
         assert_eq!(output, "0.\"count\" 3 7\n");
@@ -1259,7 +1259,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette.add_property("extra".to_owned(), pool).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
 
         // The array survives into both the text and JSON layouts.
         let text = show(&state, &[("0", "extra", "value")], PaletteShowLayout::Rows);
@@ -1283,7 +1283,7 @@ mod tests {
         // A binding with no property name, reached through the `*` property.
         palette.add_property(String::new(), pool).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
 
         // An empty name prints quoted as `""` rather than vanishing after the
         // `0.` prefix.
@@ -1315,7 +1315,7 @@ mod tests {
             .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
 
         let output = show(
             &state,

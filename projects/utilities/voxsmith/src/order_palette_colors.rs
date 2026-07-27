@@ -72,7 +72,7 @@ mod tests {
         let blue = palette.add_material(vec![U32Id::from_u32(2)]).unwrap();
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let green = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
         state.validate().unwrap();
 
         order_palette_colors(&mut state, palette_id);
@@ -121,7 +121,7 @@ mod tests {
         palette.add_material(vec![U32Id::from_u32(2)]).unwrap();
         palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
 
         // Hole the pool, so the live value ids the reorder walks are sparse.
         state

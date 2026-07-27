@@ -248,8 +248,8 @@ impl VoxObject {
     /// keep `default_material` until [`retain_voxel`](Self::retain_voxel)
     /// overwrites it, so widening the layer set never requires re-adding voxels.
     /// The same palette may back several layers. `default_material` should be
-    /// one of `palette`'s materials, which
-    /// [`VoxMain::validate`](crate::VoxMain::validate) checks.
+    /// one of `palette`'s materials; a live voxel keeping it is checked by
+    /// [`VoxMain::add_object`](crate::VoxMain::add_object) on insert.
     pub fn add_layer(
         &mut self,
         palette: U32Id<BVoxPalette>,

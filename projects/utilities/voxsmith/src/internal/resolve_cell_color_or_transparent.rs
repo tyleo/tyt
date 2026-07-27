@@ -20,7 +20,11 @@ mod tests {
     #[test]
     fn an_unsupplied_object_reads_transparent_black() {
         let mut state = VoxMain::default();
-        let palette_id = state.add_palette(VoxPalette::default());
+        // A property-less palette: its one material supplies no
+        // baseColorFactor.
+        let mut palette = VoxPalette::default();
+        palette.add_material(vec![]).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(palette_id, U32Id::from_u32(0));

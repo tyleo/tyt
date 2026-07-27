@@ -51,6 +51,7 @@ mod ty_vector3_u32;
 mod ty_vector4;
 mod ty_vector4_f32;
 mod ty_vector4_f64;
+mod unit_rotation_tolerance;
 mod zero_length_tolerance;
 
 pub use ty_bounds::*;
@@ -106,6 +107,7 @@ pub use ty_vector3_u32::*;
 pub use ty_vector4::*;
 pub use ty_vector4_f32::*;
 pub use ty_vector4_f64::*;
+pub use unit_rotation_tolerance::*;
 pub use zero_length_tolerance::*;
 
 // palette is an implementation detail of the color aliases; re-export the

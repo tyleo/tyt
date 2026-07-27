@@ -846,7 +846,7 @@ mod tests {
         let count: usize = colors.len() + repeats.iter().sum::<usize>();
         let mut object =
             VoxObject::new("o".to_owned(), TyVector3U32::new(count as u32, 1, 1)).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
         object.add_layer(palette_id, materials[0]);
 
         // One voxel per color, plus `repeats[i]` extra voxels sampling material
@@ -864,7 +864,7 @@ mod tests {
                 retain(&mut object, material);
             }
         }
-        let object_id = state.add_object(object);
+        let object_id = state.add_object(object).unwrap();
         (state, palette_id, object_id)
     }
 
@@ -905,7 +905,7 @@ mod tests {
             .collect();
 
         let mut object = VoxObject::new("o".to_owned(), bounds).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
         object.add_layer(palette_id, materials[0]);
 
         for &(position, color) in voxels {
@@ -913,7 +913,7 @@ mod tests {
             object.retain_voxel(voxel, &[materials[color]]).unwrap();
         }
 
-        let object_id = state.add_object(object);
+        let object_id = state.add_object(object).unwrap();
         (state, palette_id, object_id)
     }
 
@@ -1230,13 +1230,13 @@ mod tests {
             .collect();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
         object.add_layer(palette_id, materials[0]);
         for (x, &material) in materials.iter().enumerate() {
             let voxel = object.voxel_id(TyVector3U32::new(x as u32, 0, 0)).unwrap();
             object.retain_voxel(voxel, &[material]).unwrap();
         }
-        state.add_object(object);
+        state.add_object(object).unwrap();
 
         let outcome = reduce_palette(
             &mut state,
@@ -1270,7 +1270,7 @@ mod tests {
             .add_property("emissiveStrength".to_owned(), strength)
             .unwrap();
         glow_palette.add_material(vec![value(0)]).unwrap();
-        let glow_palette_id = state.add_palette(glow_palette);
+        let glow_palette_id = state.add_palette(glow_palette).unwrap();
         state
             .object_mut(object_id)
             .unwrap()

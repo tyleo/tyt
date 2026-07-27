@@ -95,7 +95,7 @@ impl VoxPalette {
     /// [`iter_properties`](Self::iter_properties) order, and returns its id.
     /// Errors, changing nothing, if `value_ids` has the wrong length. Each
     /// value id must be one of its property's pool's values, which
-    /// [`VoxMain::validate`](crate::VoxMain::validate) checks, not here.
+    /// [`VoxMain::add_palette`](crate::VoxMain::add_palette) checks on insert.
     pub fn add_material(
         &mut self,
         value_ids: Vec<U32Id<BVoxPoolValue>>,

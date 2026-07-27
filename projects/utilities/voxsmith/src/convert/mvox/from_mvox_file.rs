@@ -39,33 +39,35 @@ type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 /// and each material's exact optional fields, rides in a `magica-voxel` ext so
 /// the file can be written back exactly.
 ///
-/// Errors on malformed geometry, a material id outside the palette range, a
-/// dangling scene-node reference, or if
-/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
+/// Errors if:
+///
+/// 1. the geometry is malformed
+/// 2. a material id is outside the palette range
+/// 3. a scene-node reference dangles
+/// 4. a checked insertion rejects a cross-reference
 pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
     let palette = build_palette(&mut state, file)?;
-    let palette_id = state.add_palette(palette);
+    let palette_id = state.add_palette(palette)?;
 
     for model in &file.models {
         // The model grid becomes the object's build volume directly; it may
         // carry empty margin around the live voxels.
-        state.add_object(build_object(model, palette_id)?);
+        state.add_object(build_object(model, palette_id)?)?;
     }
 
+    // The scene graph lands as one batch: a transform node lists its child by
+    // listing position, which may lie ahead of it.
     let (nodes, roots) = build_hierarchy(file)?;
-    for node in nodes {
-        state.add_hierarchy_node(node);
-    }
-    state.set_root_hierarchy_nodes(roots);
+    state.add_hierarchy_nodes(nodes)?;
+    state.set_root_hierarchy_nodes(roots)?;
 
     let ext = MagicaVoxelExtWrapper {
         magica_voxel: magica_voxel_ext(file),
     };
     state.set_ext(Some(to_vox_value(&ext)?));
 
-    state.validate()?;
     Ok(state)
 }
 
@@ -720,7 +722,7 @@ mod tests {
                 .add_material(vec![U32Id::from_u32(index)])
                 .expect("one value-index for the one binding");
         }
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
         let material = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Object 0: a red then a green voxel along x.
@@ -734,7 +736,7 @@ mod tests {
             wide.retain_voxel(voxel, &[material(color)])
                 .expect("one sample for the one layer");
         }
-        state.add_object(wide);
+        state.add_object(wide).unwrap();
 
         // Object 1: a single blue voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
@@ -745,7 +747,7 @@ mod tests {
             .expect("a position within the grid");
         unit.retain_voxel(voxel, &[material(3)])
             .expect("one sample for the one layer");
-        state.add_object(unit);
+        state.add_object(unit).unwrap();
 
         let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
@@ -759,25 +761,31 @@ mod tests {
 
         // node 0 groups node 1, which places object 0 at +5x; node 2 places
         // object 1 at +3y. Nodes 0 and 2 are the roots.
-        state.add_hierarchy_node(VoxHierarchyNode {
-            name: "group".to_owned(),
-            child_nodes: vec![node(1)],
-            child_objects: Vec::new(),
-            transform: TyTransformF64::default(),
-        });
-        state.add_hierarchy_node(VoxHierarchyNode {
-            name: "wide".to_owned(),
-            child_nodes: Vec::new(),
-            child_objects: vec![object(0)],
-            transform: placed_at(5.0, 0.0, 0.0),
-        });
-        state.add_hierarchy_node(VoxHierarchyNode {
-            name: "unit".to_owned(),
-            child_nodes: Vec::new(),
-            child_objects: vec![object(1)],
-            transform: placed_at(0.0, 3.0, 0.0),
-        });
-        state.set_root_hierarchy_nodes(vec![node(0), node(2)]);
+        state
+            .add_hierarchy_nodes(vec![
+                VoxHierarchyNode {
+                    name: "group".to_owned(),
+                    child_nodes: vec![node(1)],
+                    child_objects: Vec::new(),
+                    transform: TyTransformF64::default(),
+                },
+                VoxHierarchyNode {
+                    name: "wide".to_owned(),
+                    child_nodes: Vec::new(),
+                    child_objects: vec![object(0)],
+                    transform: placed_at(5.0, 0.0, 0.0),
+                },
+                VoxHierarchyNode {
+                    name: "unit".to_owned(),
+                    child_nodes: Vec::new(),
+                    child_objects: vec![object(1)],
+                    transform: placed_at(0.0, 3.0, 0.0),
+                },
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![node(0), node(2)])
+            .unwrap();
 
         state.validate().expect("a well-formed source state");
         state

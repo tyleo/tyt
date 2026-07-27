@@ -334,13 +334,13 @@ mod tests {
             .add_property("baseColorFactor".to_owned(), pool)
             .unwrap();
         let material = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette = state.add_palette(palette);
+        let palette = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(palette, material);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[material]).unwrap();
-        state.add_object(object);
+        state.add_object(object).unwrap();
         state
     }
 
@@ -456,7 +456,7 @@ mod tests {
         let mut object = VoxObject::new("margin".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
         let voxel = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[]).unwrap();
-        state.add_object(object);
+        state.add_object(object).unwrap();
 
         let tables = render(
             &state,
@@ -497,19 +497,19 @@ mod tests {
         glow.add_property("emissiveStrength".to_owned(), strengths)
             .unwrap();
         let glow_material = glow.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let glow = state.add_palette(glow);
+        let glow = state.add_palette(glow).unwrap();
 
         let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut base = VoxPalette::default();
         base.add_property("baseColorFactor".to_owned(), colors)
             .unwrap();
         let material = base.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let base = state.add_palette(base);
+        let base = state.add_palette(base).unwrap();
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(base, material);
         object.add_layer(glow, glow_material);
-        state.add_object(object);
+        state.add_object(object).unwrap();
 
         let tables = render(
             &state,

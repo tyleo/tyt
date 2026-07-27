@@ -44,7 +44,7 @@ mod tests {
             .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
 
-        state.add_palette(palette)
+        state.add_palette(palette).unwrap()
     }
 
     /// A one-voxel object layering the given palettes in order.
@@ -92,7 +92,7 @@ mod tests {
             .add_property("emissiveFactor".to_owned(), pool)
             .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
-        let plain = state.add_palette(palette);
+        let plain = state.add_palette(palette).unwrap();
 
         let object = object_over(&[supplying, plain]);
 

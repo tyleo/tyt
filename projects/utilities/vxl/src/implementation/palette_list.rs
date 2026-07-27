@@ -237,7 +237,7 @@ mod tests {
             .unwrap();
         let zero_material = zero.add_material(vec![value(0), value(0)]).unwrap();
         zero.add_material(vec![value(1), value(1)]).unwrap();
-        let zero = state.add_palette(zero);
+        let zero = state.add_palette(zero).unwrap();
 
         let mut one = VoxPalette::default();
         one.add_property("baseColorFactor".to_owned(), colors)
@@ -245,16 +245,16 @@ mod tests {
         one.add_property("emissiveStrength".to_owned(), metallic)
             .unwrap();
         let one_material = one.add_material(vec![value(2), value(1)]).unwrap();
-        let one = state.add_palette(one);
+        let one = state.add_palette(one).unwrap();
 
         let mut a = VoxObject::new("a".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         a.add_layer(zero, zero_material);
-        state.add_object(a);
+        state.add_object(a).unwrap();
 
         let mut b = VoxObject::new("b".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         b.add_layer(zero, zero_material);
         b.add_layer(one, one_material);
-        state.add_object(b);
+        state.add_object(b).unwrap();
 
         state
     }
@@ -417,7 +417,7 @@ mod tests {
             .add_property("baseColorFactor".to_owned(), colors)
             .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Tables),
@@ -446,7 +446,7 @@ mod tests {
             .add_property("baseColorFactor".to_owned(), colors)
             .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Hierarchy),

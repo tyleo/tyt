@@ -17,14 +17,13 @@ use voxcore::Error as VoxError;
 #[cfg(feature = "voxj")]
 use voxj_codec::Error as VoxjError;
 
-/// An error from voxsmith: malformed voxel data, a state that fails voxcore
-/// validation, or a codec failure reading or writing a supported format.
+/// An error from voxsmith.
 #[derive(Debug)]
 pub enum Error {
     /// Voxel data was readable but semantically malformed.
     Invalid(String),
 
-    /// The assembled state failed voxcore validation.
+    /// A voxcore construction, mutation, or insertion was rejected.
     Vox(VoxError),
 
     /// Encoding or decoding a Voxel Json document failed.

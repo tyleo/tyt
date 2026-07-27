@@ -17,8 +17,8 @@ use voxcore::{
 const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
 /// Voxelizes a [`Mesh`] into a [`VoxMain`] of one object placed by one root
-/// node. Errors when the mesh has no triangle geometry, the grid exceeds
-/// voxcore's dense-grid limit, or the assembled state fails validation.
+/// node. Errors when the mesh has no triangle geometry or the grid exceeds
+/// voxcore's dense-grid limit.
 ///
 /// # Arguments
 /// * `mesh` - the mesh to rasterize, in Z-up world space.
@@ -71,7 +71,7 @@ pub fn voxelize_mesh(
 
     let (palette, samples, default_material) = build_palette(&mut state, &cell_materials)?;
 
-    let palette_id = state.add_palette(palette);
+    let palette_id = state.add_palette(palette)?;
 
     // The object name: an explicit override, else the mesh's own name, else the
     // caller's fallback.
@@ -93,7 +93,7 @@ pub fn voxelize_mesh(
         }
     }
 
-    let object_id = state.add_object(object);
+    let object_id = state.add_object(object)?;
 
     // One root node placing the object and carrying the real-world scale.
     let transform = TyTransformF64 {
@@ -107,11 +107,9 @@ pub fn voxelize_mesh(
         ..Default::default()
     };
 
-    let node_id = state.add_hierarchy_node(node);
+    let node_id = state.add_hierarchy_node(node)?;
 
-    state.push_root_hierarchy_node(node_id);
-
-    state.validate()?;
+    state.push_root_hierarchy_node(node_id)?;
 
     Ok(state)
 }

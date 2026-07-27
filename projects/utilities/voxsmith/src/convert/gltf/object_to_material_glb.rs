@@ -63,7 +63,7 @@ mod tests {
             .unwrap();
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let blue = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         let layer = object.add_layer(palette_id, red);
@@ -71,7 +71,7 @@ mod tests {
             let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel, &[material]).unwrap();
         }
-        let object_id = state.add_object(object);
+        let object_id = state.add_object(object).unwrap();
 
         (state, object_id, layer)
     }

@@ -57,13 +57,13 @@ mod tests {
             .add_property(BASE_COLOR_FACTOR.to_owned(), base)
             .unwrap();
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("cube".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         let layer = object.add_layer(palette_id, red);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[red]).unwrap();
-        let object_id = state.add_object(object);
+        let object_id = state.add_object(object).unwrap();
 
         let request = MaterialMeshRequest {
             method: MeshMethod::Greedy,

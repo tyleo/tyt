@@ -6,7 +6,9 @@ use voxj::{VoxjHierarchyNode, VoxjTransform};
 
 /// Builds a [`VoxHierarchyNode`] from a [`VoxjHierarchyNode`], mapping child
 /// indices to ids and the transform to its [`ty_math`] form. Child ids are
-/// checked by [`VoxMain::validate`](voxcore::VoxMain::validate), not here.
+/// checked on insert by
+/// [`VoxMain::add_hierarchy_nodes`](voxcore::VoxMain::add_hierarchy_nodes),
+/// not here.
 ///
 /// Errors on a degenerate transform: non-finite position, non-finite or zero
 /// scale, or a non-finite / zero rotation.

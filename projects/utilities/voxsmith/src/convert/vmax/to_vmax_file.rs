@@ -323,16 +323,20 @@ mod tests {
                 .add_material(vec![U32Id::from_u32(0), U32Id::from_u32(index)])
                 .unwrap();
         }
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
         let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object
             .retain_voxel(voxel, &[U32Id::<BVoxMaterial>::from_u32(0)])
             .unwrap();
-        state.add_object(object);
-        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state.add_object(object).unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         assert!(to_vmax_file(&state, VoxelMaxColorFormat::Png).is_err());
@@ -362,7 +366,7 @@ mod tests {
             wide.retain_voxel(voxel, &[material(color)])
                 .expect("one sample for the one layer");
         }
-        state.add_object(wide);
+        state.add_object(wide).unwrap();
 
         // Object 1: a single blue (material 2) voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
@@ -373,7 +377,7 @@ mod tests {
             .expect("a position within the grid");
         unit.retain_voxel(voxel, &[material(2)])
             .expect("one sample for the one layer");
-        state.add_object(unit);
+        state.add_object(unit).unwrap();
 
         let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
@@ -387,25 +391,31 @@ mod tests {
 
         // node 0 groups node 1, which places object 0 at +5x; node 2 places
         // object 1 at +3y. Nodes 0 and 2 are the roots.
-        state.add_hierarchy_node(VoxHierarchyNode {
-            name: "group".to_owned(),
-            child_nodes: vec![node(1)],
-            child_objects: Vec::new(),
-            transform: TyTransformF64::default(),
-        });
-        state.add_hierarchy_node(VoxHierarchyNode {
-            name: "wide".to_owned(),
-            child_nodes: Vec::new(),
-            child_objects: vec![object(0)],
-            transform: placed_at(5.0, 0.0, 0.0),
-        });
-        state.add_hierarchy_node(VoxHierarchyNode {
-            name: "unit".to_owned(),
-            child_nodes: Vec::new(),
-            child_objects: vec![object(1)],
-            transform: placed_at(0.0, 3.0, 0.0),
-        });
-        state.set_root_hierarchy_nodes(vec![node(0), node(2)]);
+        state
+            .add_hierarchy_nodes(vec![
+                VoxHierarchyNode {
+                    name: "group".to_owned(),
+                    child_nodes: vec![node(1)],
+                    child_objects: Vec::new(),
+                    transform: TyTransformF64::default(),
+                },
+                VoxHierarchyNode {
+                    name: "wide".to_owned(),
+                    child_nodes: Vec::new(),
+                    child_objects: vec![object(0)],
+                    transform: placed_at(5.0, 0.0, 0.0),
+                },
+                VoxHierarchyNode {
+                    name: "unit".to_owned(),
+                    child_nodes: Vec::new(),
+                    child_objects: vec![object(1)],
+                    transform: placed_at(0.0, 3.0, 0.0),
+                },
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![node(0), node(2)])
+            .unwrap();
 
         state.validate().expect("a well-formed source state");
         state
@@ -504,21 +514,31 @@ mod tests {
     fn synthesizes_distinct_node_ind() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
         // A root group parenting two object nodes.
-        state.add_hierarchy_node(group_node("g", &[1, 2], at(0.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("a", 0, at(0.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("b", 1, at(5.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_hierarchy_nodes(vec![
+                group_node("g", &[1, 2], at(0.0, 0.0, 0.0)),
+                object_node("a", 0, at(0.0, 0.0, 0.0)),
+                object_node("b", 1, at(5.0, 0.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -557,24 +577,26 @@ mod tests {
             object
                 .retain_voxel(voxel, &[material(color)])
                 .expect("one sample for the one layer");
-            state.add_object(object);
+            state.add_object(object).unwrap();
         }
 
         // One node placing both objects at the same offset, so they coincide in
         // the world at distinct colors.
         let object = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
-        state.add_hierarchy_node(VoxHierarchyNode {
-            name: "layer".to_owned(),
-            child_nodes: Vec::new(),
-            child_objects: vec![object(0), object(1)],
-            transform: TyTransformF64::new(
-                TyVector3F64::new(10.0, 0.0, 0.0),
-                TyQuaternionF64::IDENTITY,
-                TyVector3F64::new(1.0, 1.0, 1.0),
-            ),
-        });
-        state.set_root_hierarchy_nodes(vec![node(0)]);
+        state
+            .add_hierarchy_node(VoxHierarchyNode {
+                name: "layer".to_owned(),
+                child_nodes: Vec::new(),
+                child_objects: vec![object(0), object(1)],
+                transform: TyTransformF64::new(
+                    TyVector3F64::new(10.0, 0.0, 0.0),
+                    TyQuaternionF64::IDENTITY,
+                    TyVector3F64::new(1.0, 1.0, 1.0),
+                ),
+            })
+            .unwrap();
+        state.set_root_hierarchy_nodes(vec![node(0)]).unwrap();
         state.validate().expect("a well-formed source state");
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -613,7 +635,7 @@ mod tests {
                 .add_material(vec![U32Id::from_u32(index as u32)])
                 .expect("one value id per property");
         }
-        state.add_palette(palette)
+        state.add_palette(palette).unwrap()
     }
 
     /// An object of `bounds` whose live voxels each sample one material, given as
@@ -680,13 +702,19 @@ mod tests {
     fn synthesizes_colors_zero_based_with_a_terminator() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(2, 1, 1),
-            &[([0, 0, 0], 0), ([1, 0, 0], 1)],
-        ));
-        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(2, 1, 1),
+                &[([0, 0, 0], 0), ([1, 0, 0], 1)],
+            ))
+            .unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -717,13 +745,19 @@ mod tests {
         let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
         let palette = add_rgba_palette(&mut state, &refs);
         // A voxel on the first color (cell 0) and one on the last (cell 254).
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(2, 1, 1),
-            &[([0, 0, 0], 0), ([1, 0, 0], 254)],
-        ));
-        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(2, 1, 1),
+                &[([0, 0, 0], 0), ([1, 0, 0], 254)],
+            ))
+            .unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Plist).unwrap();
@@ -767,13 +801,19 @@ mod tests {
             let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
             let palette = add_rgba_palette(&mut state, &refs);
             let voxels: Vec<([u32; 3], u32)> = (0..count).map(|i| ([i, 0, 0], i)).collect();
-            state.add_object(color_object(
-                palette,
-                TyVector3U32::new(count, 1, 1),
-                &voxels,
-            ));
-            state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-            state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+            state
+                .add_object(color_object(
+                    palette,
+                    TyVector3U32::new(count, 1, 1),
+                    &voxels,
+                ))
+                .unwrap();
+            state
+                .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+                .unwrap();
+            state
+                .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+                .unwrap();
             state.validate().unwrap();
             to_vmax_file(&state, VoxelMaxColorFormat::Png)
         };
@@ -796,18 +836,28 @@ mod tests {
         let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         // Object 0: a single red voxel. Object 1: an empty, colorless object,
         // whose tight grid is [0, 0, 0].
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
-        state.add_object(VoxObject::new(String::new(), TyVector3U32::new(0, 0, 0)).unwrap());
-        state.add_hierarchy_node(object_node("colored", 0, at(0.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("colorless", 1, at(10.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![
-            U32Id::<BVoxHierarchyNode>::from_u32(0),
-            U32Id::<BVoxHierarchyNode>::from_u32(1),
-        ]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
+        state
+            .add_object(VoxObject::new(String::new(), TyVector3U32::new(0, 0, 0)).unwrap())
+            .unwrap();
+        state
+            .add_hierarchy_nodes(vec![
+                object_node("colored", 0, at(0.0, 0.0, 0.0)),
+                object_node("colorless", 1, at(10.0, 0.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![
+                U32Id::<BVoxHierarchyNode>::from_u32(0),
+                U32Id::<BVoxHierarchyNode>::from_u32(1),
+            ])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -837,21 +887,29 @@ mod tests {
         let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
         // Object 0: a colored voxel, so a `palette.png` exists to borrow.
         // Object 1: a colorless object that nonetheless has a live voxel.
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
         let mut colorless = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
         let voxel = colorless.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         colorless.retain_voxel(voxel, &[]).unwrap();
-        state.add_object(colorless);
-        state.add_hierarchy_node(object_node("colored", 0, at(0.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("colorless", 1, at(10.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![
-            U32Id::<BVoxHierarchyNode>::from_u32(0),
-            U32Id::<BVoxHierarchyNode>::from_u32(1),
-        ]);
+        state.add_object(colorless).unwrap();
+        state
+            .add_hierarchy_nodes(vec![
+                object_node("colored", 0, at(0.0, 0.0, 0.0)),
+                object_node("colorless", 1, at(10.0, 0.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![
+                U32Id::<BVoxHierarchyNode>::from_u32(0),
+                U32Id::<BVoxHierarchyNode>::from_u32(1),
+            ])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -874,33 +932,43 @@ mod tests {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF", "#0000FFFF"]);
         for cell in 0..3 {
-            state.add_object(color_object(
-                palette,
-                TyVector3U32::new(1, 1, 1),
-                &[([0, 0, 0], cell)],
-            ));
+            state
+                .add_object(color_object(
+                    palette,
+                    TyVector3U32::new(1, 1, 1),
+                    &[([0, 0, 0], cell)],
+                ))
+                .unwrap();
         }
         // A fourth object placed by a child node, to confirm it hangs off the
         // first object of the multi-object parent.
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
         // node 0 places objects 0, 1, 2 at +10x and parents node 1; node 1
         // places object 3 at +1y of the first object.
-        state.add_hierarchy_node(VoxHierarchyNode {
-            name: "layer".to_owned(),
-            child_nodes: vec![U32Id::<BVoxHierarchyNode>::from_u32(1)],
-            child_objects: vec![
-                U32Id::<BVoxObject>::from_u32(0),
-                U32Id::<BVoxObject>::from_u32(1),
-                U32Id::<BVoxObject>::from_u32(2),
-            ],
-            transform: at(10.0, 0.0, 0.0),
-        });
-        state.add_hierarchy_node(object_node("child", 3, at(0.0, 1.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_hierarchy_nodes(vec![
+                VoxHierarchyNode {
+                    name: "layer".to_owned(),
+                    child_nodes: vec![U32Id::<BVoxHierarchyNode>::from_u32(1)],
+                    child_objects: vec![
+                        U32Id::<BVoxObject>::from_u32(0),
+                        U32Id::<BVoxObject>::from_u32(1),
+                        U32Id::<BVoxObject>::from_u32(2),
+                    ],
+                    transform: at(10.0, 0.0, 0.0),
+                },
+                object_node("child", 3, at(0.0, 1.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -947,17 +1015,25 @@ mod tests {
     fn synthesizes_instances_sharing_one_contents_file() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
-        state.add_hierarchy_node(object_node("a", 0, at(0.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("b", 0, at(20.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![
-            U32Id::<BVoxHierarchyNode>::from_u32(0),
-            U32Id::<BVoxHierarchyNode>::from_u32(1),
-        ]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
+        state
+            .add_hierarchy_nodes(vec![
+                object_node("a", 0, at(0.0, 0.0, 0.0)),
+                object_node("b", 0, at(20.0, 0.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![
+                U32Id::<BVoxHierarchyNode>::from_u32(0),
+                U32Id::<BVoxHierarchyNode>::from_u32(1),
+            ])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -979,20 +1055,28 @@ mod tests {
     fn synthesizes_a_shared_subtree_at_every_parent() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
         // node 2 places object 0 at +1x and is a child of both group node 0 (at
         // the origin) and group node 1 (at +100x).
-        state.add_hierarchy_node(group_node("a", &[2], at(0.0, 0.0, 0.0)));
-        state.add_hierarchy_node(group_node("b", &[2], at(100.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("c", 0, at(1.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![
-            U32Id::<BVoxHierarchyNode>::from_u32(0),
-            U32Id::<BVoxHierarchyNode>::from_u32(1),
-        ]);
+        state
+            .add_hierarchy_nodes(vec![
+                group_node("a", &[2], at(0.0, 0.0, 0.0)),
+                group_node("b", &[2], at(100.0, 0.0, 0.0)),
+                object_node("c", 0, at(1.0, 0.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![
+                U32Id::<BVoxHierarchyNode>::from_u32(0),
+                U32Id::<BVoxHierarchyNode>::from_u32(1),
+            ])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1011,19 +1095,27 @@ mod tests {
     fn synthesizes_a_node_that_is_root_and_child() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
         // node 1 places object 0 at +1x; it is both a root and a child of group
         // node 0 at +100x.
-        state.add_hierarchy_node(group_node("a", &[1], at(100.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("c", 0, at(1.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![
-            U32Id::<BVoxHierarchyNode>::from_u32(0),
-            U32Id::<BVoxHierarchyNode>::from_u32(1),
-        ]);
+        state
+            .add_hierarchy_nodes(vec![
+                group_node("a", &[1], at(100.0, 0.0, 0.0)),
+                object_node("c", 0, at(1.0, 0.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![
+                U32Id::<BVoxHierarchyNode>::from_u32(0),
+                U32Id::<BVoxHierarchyNode>::from_u32(1),
+            ])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1041,21 +1133,31 @@ mod tests {
     fn drops_a_node_unreachable_from_the_roots() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
         // node 0 is a root placing object 0; node 1 places object 1 but is
         // neither a root nor anyone's child.
-        state.add_hierarchy_node(object_node("rooted", 0, at(0.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("orphan", 1, at(50.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_hierarchy_nodes(vec![
+                object_node("rooted", 0, at(0.0, 0.0, 0.0)),
+                object_node("orphan", 1, at(50.0, 0.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1072,11 +1174,13 @@ mod tests {
     fn keeps_rotation_scale_and_translation() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
         let rotation =
             TyQuaternionF64::from_axis_angle(TyVector3F64::new(0.0, 0.0, 1.0), 90f64.to_radians());
         let transform = TyTransformF64::new(
@@ -1084,8 +1188,12 @@ mod tests {
             rotation,
             TyVector3F64::new(2.0, 1.0, 1.0),
         );
-        state.add_hierarchy_node(object_node("o", 0, transform));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_hierarchy_node(object_node("o", 0, transform))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1154,16 +1262,20 @@ mod tests {
                 .unwrap();
             palette.add_property("shadows".to_owned(), shadows).unwrap();
             palette.add_material(vec![U32Id::from_u32(0); 5]).unwrap();
-            let palette_id = state.add_palette(palette);
+            let palette_id = state.add_palette(palette).unwrap();
             let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
             object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
             let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
             object
                 .retain_voxel(voxel, &[U32Id::<BVoxMaterial>::from_u32(0)])
                 .unwrap();
-            state.add_object(object);
-            state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-            state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+            state.add_object(object).unwrap();
+            state
+                .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+                .unwrap();
+            state
+                .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+                .unwrap();
             state.validate().unwrap();
 
             let file = to_vmax_file(&state, format).unwrap();
@@ -1240,16 +1352,20 @@ mod tests {
             .add_property("emissiveStrength".to_owned(), strength)
             .unwrap();
         palette.add_material(vec![U32Id::from_u32(0); 3]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
         let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object
             .retain_voxel(voxel, &[U32Id::<BVoxMaterial>::from_u32(0)])
             .unwrap();
-        state.add_object(object);
-        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state.add_object(object).unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::All).unwrap();
@@ -1295,13 +1411,19 @@ mod tests {
     fn widens_rgb_source_to_opaque() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#3366CC"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
-        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1323,13 +1445,19 @@ mod tests {
     fn is_idempotent_for_a_colored_object() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(2, 1, 1),
-            &[([0, 0, 0], 0), ([1, 0, 0], 1)],
-        ));
-        state.add_hierarchy_node(object_node("o", 0, at(3.0, 4.0, 5.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(2, 1, 1),
+                &[([0, 0, 0], 0), ([1, 0, 0], 1)],
+            ))
+            .unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(3.0, 4.0, 5.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file1 = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1344,24 +1472,34 @@ mod tests {
     fn synthesizes_a_deep_hierarchy() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 1)],
-        ));
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 1)],
+            ))
+            .unwrap();
         // root group 0 -> group 1 -> group 2 -> object node 3, plus object node
         // 4 hanging off group 1, so leaves sit at different depths.
-        state.add_hierarchy_node(group_node("r", &[1], at(1.0, 0.0, 0.0)));
-        state.add_hierarchy_node(group_node("g1", &[2, 4], at(0.0, 2.0, 0.0)));
-        state.add_hierarchy_node(group_node("g2", &[3], at(0.0, 0.0, 3.0)));
-        state.add_hierarchy_node(object_node("leaf", 0, at(10.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("mid", 1, at(0.0, 20.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_hierarchy_nodes(vec![
+                group_node("r", &[1], at(1.0, 0.0, 0.0)),
+                group_node("g1", &[2, 4], at(0.0, 2.0, 0.0)),
+                group_node("g2", &[3], at(0.0, 0.0, 3.0)),
+                object_node("leaf", 0, at(10.0, 0.0, 0.0)),
+                object_node("mid", 1, at(0.0, 20.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1385,17 +1523,25 @@ mod tests {
         // Two [2, 2, 2] objects, each tight (voxels reach both ends of every
         // axis).
         for _ in 0..2 {
-            state.add_object(color_object(
-                palette,
-                TyVector3U32::new(2, 2, 2),
-                &[([0, 0, 0], 0), ([1, 1, 1], 0)],
-            ));
+            state
+                .add_object(color_object(
+                    palette,
+                    TyVector3U32::new(2, 2, 2),
+                    &[([0, 0, 0], 0), ([1, 1, 1], 0)],
+                ))
+                .unwrap();
         }
         // A root group parenting two object nodes, the second offset +10x.
-        state.add_hierarchy_node(group_node("g", &[1, 2], at(0.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("a", 0, at(0.0, 0.0, 0.0)));
-        state.add_hierarchy_node(object_node("b", 1, at(10.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_hierarchy_nodes(vec![
+                group_node("g", &[1, 2], at(0.0, 0.0, 0.0)),
+                object_node("a", 0, at(0.0, 0.0, 0.0)),
+                object_node("b", 1, at(10.0, 0.0, 0.0)),
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1424,9 +1570,13 @@ mod tests {
         // An empty object holds no voxels; its grid is the [3, 4, 5] build
         // volume.
         let object = VoxObject::new(String::new(), TyVector3U32::new(3, 4, 5)).unwrap();
-        state.add_object(object);
-        state.add_hierarchy_node(object_node("empty", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state.add_object(object).unwrap();
+        state
+            .add_hierarchy_node(object_node("empty", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1456,13 +1606,19 @@ mod tests {
     fn round_trips_a_transparent_color() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#11223300"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
-        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1495,13 +1651,19 @@ mod tests {
         let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
         let palette = add_rgba_palette(&mut state, &refs);
         // One voxel references a low cell; the other 255 cells are padding.
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 5)],
-        ));
-        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 5)],
+            ))
+            .unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -1519,13 +1681,19 @@ mod tests {
     fn synthesizes_a_color_only_object_in_plist() {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(2, 1, 1),
-            &[([0, 0, 0], 0), ([1, 0, 0], 1)],
-        ));
-        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(2, 1, 1),
+                &[([0, 0, 0], 0), ([1, 0, 0], 1)],
+            ))
+            .unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Plist).unwrap();
@@ -1547,13 +1715,19 @@ mod tests {
     fn one_object_state() -> VoxMain {
         let mut state = VoxMain::default();
         let palette = add_rgba_palette(&mut state, &["#FF0000FF"]);
-        state.add_object(color_object(
-            palette,
-            TyVector3U32::new(1, 1, 1),
-            &[([0, 0, 0], 0)],
-        ));
-        state.add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)));
-        state.set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)]);
+        state
+            .add_object(color_object(
+                palette,
+                TyVector3U32::new(1, 1, 1),
+                &[([0, 0, 0], 0)],
+            ))
+            .unwrap();
+        state
+            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .unwrap();
+        state
+            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .unwrap();
         state.validate().unwrap();
         state
     }

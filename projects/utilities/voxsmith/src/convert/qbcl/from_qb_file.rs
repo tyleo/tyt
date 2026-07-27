@@ -18,13 +18,13 @@ use voxcore::{
 /// per-voxel visibility bytes, rides in a `qubicle-qb` ext so the file can be
 /// written back exactly.
 ///
-/// Errors on a matrix grid that exceeds the dense limit, or if
-/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
+/// Errors on a matrix grid that exceeds the dense limit, or on a
+/// cross-reference the checked insertions reject.
 pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, materials) = build_palette(&mut state, file);
-    let palette_id = state.add_palette(palette);
+    let palette_id = state.add_palette(palette)?;
 
     let mut matrices = Vec::with_capacity(file.matrices.len());
     let mut roots = Vec::with_capacity(file.matrices.len());
@@ -34,21 +34,21 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
         // read from that same grid.
         let object = build_object(matrix, palette_id, &materials)?;
         let visibility = visibility_of(&object, matrix);
-        let object_id = state.add_object(object);
+        let object_id = state.add_object(object)?;
         let node = VoxHierarchyNode {
             name: matrix.name.clone(),
             child_nodes: Vec::new(),
             child_objects: vec![object_id],
             transform: translation(matrix.position),
         };
-        roots.push(state.add_hierarchy_node(node));
+        roots.push(state.add_hierarchy_node(node)?);
         matrices.push(QubicleQbMatrix {
             name: matrix.name.clone(),
             position: matrix.position,
             visibility,
         });
     }
-    state.set_root_hierarchy_nodes(roots);
+    state.set_root_hierarchy_nodes(roots)?;
 
     let ext = QubicleQbExtWrapper {
         qubicle_qb: QubicleQbExt {
@@ -62,7 +62,6 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
     };
     state.set_ext(Some(to_vox_value(&ext)?));
 
-    state.validate()?;
     Ok(state)
 }
 

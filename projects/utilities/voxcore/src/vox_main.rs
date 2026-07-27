@@ -5,7 +5,7 @@ use crate::{
 };
 use branded_id::{IdVec, U32Id, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TyQuaternionExt, TyVector3F64};
+use ty_math::{TyQuaternionExt, TyVector3F64, UNIT_ROTATION_TOLERANCE};
 
 /// The in-memory state of a voxel model: its objects, shared palettes, scene
 /// hierarchy, and roots.
@@ -23,11 +23,34 @@ pub struct VoxMain {
 }
 
 impl VoxMain {
-    /// Adds an object at the end of the listing, returning its id.
-    pub fn add_object(&mut self, object: VoxObject) -> U32Id<BVoxObject> {
+    /// Adds an object at the end of the listing, returning its id. Errors,
+    /// changing nothing, if a layer references a palette that is not one of
+    /// this state's or a live voxel samples a material that is not one of its
+    /// layer's palette's.
+    pub fn add_object(&mut self, object: VoxObject) -> Result<U32Id<BVoxObject>> {
+        for (layer_id, palette_id) in object.iter_layers() {
+            let Some(palette) = self.palette(palette_id) else {
+                return Err(Error::LayerPaletteRef {
+                    layer: layer_id,
+                    palette: palette_id,
+                });
+            };
+            let samples = object
+                .iter_live_samples(layer_id)
+                .expect("an iterated layer is one of the object's layers");
+            for (voxel_id, material) in samples {
+                if !palette.contains_material(material) {
+                    return Err(Error::LayerSampleMaterial {
+                        layer: layer_id,
+                        voxel: voxel_id,
+                        material,
+                    });
+                }
+            }
+        }
         let id = self.runtime_state.object_ids.retain();
         self.runtime_state.objects.retain(id, object);
-        id
+        Ok(id)
     }
 
     /// Number of objects.
@@ -86,10 +109,37 @@ impl VoxMain {
     }
 
     /// Adds a shared palette at the end of the listing, returning its id.
-    pub fn add_palette(&mut self, palette: VoxPalette) -> U32Id<BVoxPalette> {
+    /// Errors, changing nothing, if:
+    ///
+    /// 1. the palette holds no materials
+    /// 2. a property names a value pool that is not one of this state's
+    /// 3. a material draws a value that is not one of its property's pool's
+    pub fn add_palette(&mut self, palette: VoxPalette) -> Result<U32Id<BVoxPalette>> {
+        if palette.material_count() == 0 {
+            return Err(Error::NoPaletteMaterials);
+        }
+        for (property_id, property) in palette.iter_properties() {
+            let Some(pool) = self.value_pool(property.pool) else {
+                return Err(Error::PropertyPoolRef {
+                    property: property_id,
+                    pool: property.pool,
+                });
+            };
+            for material_id in palette.iter_materials() {
+                let value_id = palette
+                    .value_id(material_id, property_id)
+                    .expect("a material has a value id for every property");
+                if !pool.contains_value(value_id) {
+                    return Err(Error::MaterialValueRef {
+                        property: property_id,
+                        material: material_id,
+                    });
+                }
+            }
+        }
         let id = self.runtime_state.palette_ids.retain();
         self.runtime_state.palettes.retain(id, palette);
-        id
+        Ok(id)
     }
 
     /// Number of shared palettes.
@@ -209,12 +259,126 @@ impl VoxMain {
         Some((pool, value_id))
     }
 
-    /// Adds a hierarchy node at the end of the listing, returning its id. Its
-    /// references are checked by [`validate`](Self::validate), not here.
-    pub fn add_hierarchy_node(&mut self, node: VoxHierarchyNode) -> U32Id<BVoxHierarchyNode> {
+    /// Adds a hierarchy node at the end of the listing, returning its id. The
+    /// node's id is fresh to every existing child list, so a node whose
+    /// children are already live can never close a cycle. For a batch whose
+    /// nodes reference each other, use
+    /// [`add_hierarchy_nodes`](Self::add_hierarchy_nodes). Errors, changing
+    /// nothing, if:
+    ///
+    /// 1. a child node or child object is not one of this state's
+    /// 2. a child repeats
+    /// 3. the transform is malformed
+    pub fn add_hierarchy_node(
+        &mut self,
+        node: VoxHierarchyNode,
+    ) -> Result<U32Id<BVoxHierarchyNode>> {
+        self.check_inserted_node(&node, 0, &HashSet::new())?;
         let id = self.runtime_state.hierarchy_node_ids.retain();
         self.runtime_state.hierarchy_nodes.retain(id, node);
-        id
+        Ok(id)
+    }
+
+    /// Adds a batch of hierarchy nodes at the end of the listing, assigning
+    /// ids in listing order and returning them. A node's children may
+    /// reference any already-live node or any node in the batch by the id it
+    /// will take, so a listing with forward references loads in one call.
+    /// Errors, changing nothing, if:
+    ///
+    /// 1. a child resolves to neither
+    /// 2. a child repeats within a node
+    /// 3. a transform is malformed
+    /// 4. the batch's `child_nodes` edges form a cycle
+    pub fn add_hierarchy_nodes(
+        &mut self,
+        nodes: Vec<VoxHierarchyNode>,
+    ) -> Result<Vec<U32Id<BVoxHierarchyNode>>> {
+        // The ids the batch will take, named before any of it is inserted so
+        // every check runs before any mutation.
+        let prospective: Vec<U32Id<BVoxHierarchyNode>> = (0..nodes.len())
+            .map(|index| self.runtime_state.hierarchy_node_ids.peek_nth(index))
+            .collect();
+
+        let batch: HashSet<U32Id<BVoxHierarchyNode>> = prospective.iter().copied().collect();
+        for (index, node) in nodes.iter().enumerate() {
+            self.check_inserted_node(node, index, &batch)?;
+        }
+
+        // An edge leaving the batch lands on an already-live node, whose
+        // children are frozen and reference only other live nodes, so it can
+        // never lead back in. Only the batch-internal edges can cycle.
+        let index_of: HashMap<U32Id<BVoxHierarchyNode>, usize> = prospective
+            .iter()
+            .enumerate()
+            .map(|(index, &id)| (id, index))
+            .collect();
+        let children: Vec<&[U32Id<BVoxHierarchyNode>]> = nodes
+            .iter()
+            .map(|node| node.child_nodes.as_slice())
+            .collect();
+        if let Some(index) = first_cycle_position(&children, &index_of) {
+            return Err(Error::InsertedCycle { index });
+        }
+
+        let ids: Vec<U32Id<BVoxHierarchyNode>> = nodes
+            .into_iter()
+            .map(|node| {
+                let id = self.runtime_state.hierarchy_node_ids.retain();
+                self.runtime_state.hierarchy_nodes.retain(id, node);
+                id
+            })
+            .collect();
+        debug_assert_eq!(ids, prospective, "the pool assigned the predicted ids");
+        Ok(ids)
+    }
+
+    /// Checks a node about to be inserted at listing position `index` of its
+    /// batch: every child node resolves against this state or the batch's
+    /// prospective ids, every child object is live, no child repeats, and the
+    /// transform is finite with a non-zero scale and a unit rotation.
+    fn check_inserted_node(
+        &self,
+        node: &VoxHierarchyNode,
+        index: usize,
+        batch: &HashSet<U32Id<BVoxHierarchyNode>>,
+    ) -> Result<()> {
+        let mut seen_child_nodes = HashSet::with_capacity(node.child_nodes.len());
+        for &child in &node.child_nodes {
+            if self.hierarchy_node(child).is_none() && !batch.contains(&child) {
+                return Err(Error::UnknownHierarchyNode { node: child });
+            }
+            if !seen_child_nodes.insert(child) {
+                return Err(Error::InsertedDuplicateChildNode { index, child });
+            }
+        }
+        let mut seen_child_objects = HashSet::with_capacity(node.child_objects.len());
+        for &object in &node.child_objects {
+            if self.object(object).is_none() {
+                return Err(Error::UnknownObject { object });
+            }
+            if !seen_child_objects.insert(object) {
+                return Err(Error::InsertedDuplicateChildObject { index, object });
+            }
+        }
+
+        // The rotation needs no finiteness guard of its own: a non-finite
+        // component fails the unit-length check.
+        let position = node.transform.position;
+        let scale = node.transform.scale;
+        if !vector_is_finite(position) || !vector_is_finite(scale) {
+            return Err(Error::InsertedNonFiniteTransform { index });
+        }
+        if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
+            return Err(Error::InsertedZeroScale { index });
+        }
+        if !node
+            .transform
+            .rotation
+            .is_normalized_within(UNIT_ROTATION_TOLERANCE)
+        {
+            return Err(Error::InsertedNonUnitRotation { index });
+        }
+        Ok(())
     }
 
     /// Number of hierarchy nodes.
@@ -247,16 +411,33 @@ impl VoxMain {
         &self.runtime_state.root_hierarchy_nodes
     }
 
-    /// Replaces the scene's roots. Checked by [`validate`](Self::validate), not
-    /// here.
-    pub fn set_root_hierarchy_nodes(&mut self, roots: Vec<U32Id<BVoxHierarchyNode>>) {
+    /// Replaces the scene's roots. Errors, changing nothing, if a root is not
+    /// one of this state's nodes or repeats.
+    pub fn set_root_hierarchy_nodes(&mut self, roots: Vec<U32Id<BVoxHierarchyNode>>) -> Result<()> {
+        let mut seen = HashSet::with_capacity(roots.len());
+        for &root in &roots {
+            if self.hierarchy_node(root).is_none() {
+                return Err(Error::Root { root });
+            }
+            if !seen.insert(root) {
+                return Err(Error::DuplicateRoot { root });
+            }
+        }
         self.runtime_state.root_hierarchy_nodes = roots;
+        Ok(())
     }
 
-    /// Appends a root. Root uniqueness is checked by
-    /// [`validate`](Self::validate), not here.
-    pub fn push_root_hierarchy_node(&mut self, root: U32Id<BVoxHierarchyNode>) {
+    /// Appends a root. Errors, changing nothing, if `root` is not one of this
+    /// state's nodes or is already a root.
+    pub fn push_root_hierarchy_node(&mut self, root: U32Id<BVoxHierarchyNode>) -> Result<()> {
+        if self.hierarchy_node(root).is_none() {
+            return Err(Error::Root { root });
+        }
+        if self.runtime_state.root_hierarchy_nodes.contains(&root) {
+            return Err(Error::DuplicateRoot { root });
+        }
         self.runtime_state.root_hierarchy_nodes.push(root);
+        Ok(())
     }
 
     /// The user-extension value, or `None` if unset.
@@ -621,10 +802,6 @@ impl VoxMain {
     /// A node may have several parents, since the hierarchy is a DAG; that
     /// sharing is not a cycle.
     pub fn validate(&self) -> Result<()> {
-        // How far a rotation quaternion's length-squared may stray from 1 and
-        // still count as a unit quaternion.
-        const ROTATION_TOLERANCE: f64 = 1e-6;
-
         // Value pools are non-empty and their values and bounds well-formed for
         // their kind. This runs first, so a palette that reads a malformed pool
         // is reported after the pool it reads.
@@ -751,7 +928,7 @@ impl VoxMain {
                 return Err(Error::ZeroScale { node: node_id });
             }
             let rotation = node.transform.rotation;
-            if !rotation.is_normalized_within(ROTATION_TOLERANCE) {
+            if !rotation.is_normalized_within(UNIT_ROTATION_TOLERANCE) {
                 return Err(Error::NonUnitRotation { node: node_id });
             }
         }
@@ -767,75 +944,31 @@ impl VoxMain {
             }
         }
 
-        // Acyclicity; every child is now known live.
-        if let Some(node) = self.first_cycle_node() {
-            return Err(Error::Cycle { node });
-        }
-
-        Ok(())
-    }
-
-    /// A node on a `child_nodes` cycle, or `None` if acyclic. Iterative
-    /// three-colour DFS (so a deep chain can't overflow the stack): a back edge
-    /// into an in-progress node is a cycle, revisiting a finished node is not.
-    /// Call only after every child id is known live. Works over the retained
-    /// node ids by position, so it holds whether or not the pool has holes.
-    fn first_cycle_node(&self) -> Option<U32Id<BVoxHierarchyNode>> {
-        const WHITE: u8 = 0;
-        const GREY: u8 = 1;
-        const BLACK: u8 = 2;
-
-        // Retained node ids and a lookup from id to its position here, so a
-        // holed pool (ids not contiguous from zero) is handled the same as a
-        // packed one.
+        // Acyclicity; every child is now known live. Works over the retained
+        // node ids by position, so it holds whether or not the pool has
+        // holes.
         let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
         let index_of: HashMap<U32Id<BVoxHierarchyNode>, usize> = node_ids
             .iter()
             .enumerate()
             .map(|(index, &id)| (id, index))
             .collect();
-        let count = node_ids.len();
-        let mut colour = vec![WHITE; count];
-
-        for start in 0..count {
-            if colour[start] != WHITE {
-                continue;
-            }
-            colour[start] = GREY;
-            // Each frame is a node position plus how many children we have
-            // walked.
-            let mut stack: Vec<(usize, usize)> = vec![(start, 0)];
-            while let Some(&(node, cursor)) = stack.last() {
-                let node_id = node_ids[node];
-                let next_child = {
-                    // Safety: `node_id` is a retained node id.
-                    let children =
-                        &unsafe { self.runtime_state.hierarchy_nodes.get(node_id) }.child_nodes;
-                    (cursor < children.len()).then(|| children[cursor])
-                };
-                match next_child {
-                    Some(child) => {
-                        stack.last_mut().unwrap().1 += 1;
-                        // Children are retention-checked before this pass runs.
-                        let child = index_of[&child];
-                        match colour[child] {
-                            WHITE => {
-                                colour[child] = GREY;
-                                stack.push((child, 0));
-                            }
-                            GREY => return Some(node_ids[child]),
-                            _ => {}
-                        }
-                    }
-                    None => {
-                        colour[node] = BLACK;
-                        stack.pop();
-                    }
-                }
-            }
+        let children: Vec<&[U32Id<BVoxHierarchyNode>]> = node_ids
+            .iter()
+            .map(|&node_id| {
+                // Safety: `node_id` is a retained node id.
+                unsafe { self.runtime_state.hierarchy_nodes.get(node_id) }
+                    .child_nodes
+                    .as_slice()
+            })
+            .collect();
+        if let Some(position) = first_cycle_position(&children, &index_of) {
+            return Err(Error::Cycle {
+                node: node_ids[position],
+            });
         }
 
-        None
+        Ok(())
     }
 
     /// Deep copy. The runtime scene rebuilds its columns against fresh id
@@ -846,6 +979,64 @@ impl VoxMain {
             ext: self.ext.clone(),
         }
     }
+}
+
+/// The `children` position of a node lying on a `child_nodes` cycle, or `None`
+/// if the graph is acyclic.
+///
+/// `children` holds each node's child ids at that node's position, and
+/// `index_of` maps a child id back to its position. A child missing from
+/// `index_of` leads outside the checked set, where no edge can return, so it is
+/// skipped.
+///
+/// The walk is an iterative three-colour DFS, so a deep chain cannot overflow
+/// the stack. A back edge into an in-progress node is a cycle; revisiting a
+/// finished one is not.
+fn first_cycle_position(
+    children: &[&[U32Id<BVoxHierarchyNode>]],
+    index_of: &HashMap<U32Id<BVoxHierarchyNode>, usize>,
+) -> Option<usize> {
+    const WHITE: u8 = 0;
+    const GREY: u8 = 1;
+    const BLACK: u8 = 2;
+
+    let count = children.len();
+    let mut colour = vec![WHITE; count];
+
+    for start in 0..count {
+        if colour[start] != WHITE {
+            continue;
+        }
+        colour[start] = GREY;
+        // Each frame is a node position plus how many children we have
+        // walked.
+        let mut stack: Vec<(usize, usize)> = vec![(start, 0)];
+        while let Some(&(node, cursor)) = stack.last() {
+            let node_children = children[node];
+            match (cursor < node_children.len()).then(|| node_children[cursor]) {
+                Some(child) => {
+                    stack.last_mut().unwrap().1 += 1;
+                    let Some(&child) = index_of.get(&child) else {
+                        continue;
+                    };
+                    match colour[child] {
+                        WHITE => {
+                            colour[child] = GREY;
+                            stack.push((child, 0));
+                        }
+                        GREY => return Some(child),
+                        _ => {}
+                    }
+                }
+                None => {
+                    colour[node] = BLACK;
+                    stack.pop();
+                }
+            }
+        }
+    }
+
+    None
 }
 
 /// Whether every component of `vector` is finite.
@@ -916,6 +1107,14 @@ mod tests {
         state.add_value_pool(VoxValuePool::int(VoxBound::None, VoxBound::None, values).unwrap())
     }
 
+    /// A palette holding one empty material and no properties, the smallest
+    /// shape [`VoxMain::add_palette`] accepts.
+    fn bare_palette() -> VoxPalette {
+        let mut palette = VoxPalette::default();
+        palette.add_material(vec![]).unwrap();
+        palette
+    }
+
     /// A palette with one property "v" on `pool` and two materials, drawing
     /// value ids 0 and 1.
     fn two_material_palette(pool: U32Id<BVoxValuePool>) -> VoxPalette {
@@ -938,8 +1137,8 @@ mod tests {
     #[test]
     fn add_and_read_back_in_listing_order() {
         let mut state = VoxMain::default();
-        let a = state.add_object(unit_object("a"));
-        let b = state.add_object(unit_object("b"));
+        let a = state.add_object(unit_object("a")).unwrap();
+        let b = state.add_object(unit_object("b")).unwrap();
 
         assert_eq!(state.object_count(), 2);
         assert_eq!(state.object(a).unwrap().name(), "a");
@@ -1020,7 +1219,7 @@ mod tests {
             .unwrap();
         let green = palette.add_material(vec![value(1)]).unwrap();
         let white = palette.add_material(vec![value(3)]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
         state.validate().unwrap();
 
         state.prune_value_pools();
@@ -1052,11 +1251,11 @@ mod tests {
         let mut a = VoxPalette::default();
         let a_property = a.add_property("v".to_owned(), ints).unwrap();
         let a_material = a.add_material(vec![value(0)]).unwrap();
-        let a_id = state.add_palette(a);
+        let a_id = state.add_palette(a).unwrap();
         let mut b = VoxPalette::default();
         let b_property = b.add_property("v".to_owned(), ints).unwrap();
         let b_material = b.add_material(vec![value(2)]).unwrap();
-        let b_id = state.add_palette(b);
+        let b_id = state.add_palette(b).unwrap();
         state.validate().unwrap();
 
         state.prune_value_pools();
@@ -1103,13 +1302,13 @@ mod tests {
             .unwrap();
         let a_blue = a.add_material(vec![value(2)]).unwrap();
         let a_red = a.add_material(vec![value(0)]).unwrap();
-        let a_id = state.add_palette(a);
+        let a_id = state.add_palette(a).unwrap();
         let mut b = VoxPalette::default();
         let b_property = b
             .add_property("baseColorFactor".to_owned(), colors)
             .unwrap();
         let b_green = b.add_material(vec![value(1)]).unwrap();
-        let b_id = state.add_palette(b);
+        let b_id = state.add_palette(b).unwrap();
         state.validate().unwrap();
 
         // List blue first, then red, then green.
@@ -1187,7 +1386,7 @@ mod tests {
         palette.add_property("v".to_owned(), ints).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
         palette.add_material(vec![value(1)]).unwrap();
-        state.add_palette(palette);
+        state.add_palette(palette).unwrap();
 
         state.prune_value_pools();
 
@@ -1200,47 +1399,67 @@ mod tests {
     #[test]
     fn validate_accepts_a_shared_child_dag() {
         let mut state = VoxMain::default();
-        let leaf = state.add_hierarchy_node(VoxHierarchyNode::default());
+        let leaf = state
+            .add_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
         // Sharing a child across parents is legal in a DAG; each parent lists
         // it once.
-        let a = state.add_hierarchy_node(node_with_children(vec![leaf]));
-        let b = state.add_hierarchy_node(node_with_children(vec![leaf]));
-        state.set_root_hierarchy_nodes(vec![a, b]);
+        let a = state
+            .add_hierarchy_node(node_with_children(vec![leaf]))
+            .unwrap();
+        let b = state
+            .add_hierarchy_node(node_with_children(vec![leaf]))
+            .unwrap();
+        state.set_root_hierarchy_nodes(vec![a, b]).unwrap();
 
         assert_eq!(state.validate(), Ok(()));
     }
 
     #[test]
-    fn validate_rejects_a_duplicate_child_node() {
+    fn add_hierarchy_node_rejects_a_duplicate_child_node() {
         let mut state = VoxMain::default();
-        let leaf = state.add_hierarchy_node(VoxHierarchyNode::default());
-        let parent = state.add_hierarchy_node(node_with_children(vec![leaf, leaf]));
+        let leaf = state
+            .add_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
         assert_eq!(
-            state.validate(),
-            Err(Error::DuplicateChildNode {
-                node: parent,
+            state.add_hierarchy_node(node_with_children(vec![leaf, leaf])),
+            Err(Error::InsertedDuplicateChildNode {
+                index: 0,
                 child: leaf,
             })
         );
+        assert_eq!(state.hierarchy_node_count(), 1);
     }
 
     #[test]
-    fn validate_rejects_a_duplicate_child_object() {
+    fn add_hierarchy_node_rejects_a_duplicate_child_object() {
         let mut state = VoxMain::default();
-        let object = state.add_object(unit_object("o"));
-        let node = state.add_hierarchy_node(node_with_objects(vec![object, object]));
+        let object = state.add_object(unit_object("o")).unwrap();
         assert_eq!(
-            state.validate(),
-            Err(Error::DuplicateChildObject { node, object })
+            state.add_hierarchy_node(node_with_objects(vec![object, object])),
+            Err(Error::InsertedDuplicateChildObject { index: 0, object })
         );
+        assert_eq!(state.hierarchy_node_count(), 0);
     }
 
     #[test]
-    fn validate_rejects_a_duplicate_root() {
+    fn root_setters_reject_a_duplicate_root() {
         let mut state = VoxMain::default();
-        let node = state.add_hierarchy_node(VoxHierarchyNode::default());
-        state.set_root_hierarchy_nodes(vec![node, node]);
-        assert_eq!(state.validate(), Err(Error::DuplicateRoot { root: node }));
+        let node = state
+            .add_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
+        assert_eq!(
+            state.set_root_hierarchy_nodes(vec![node, node]),
+            Err(Error::DuplicateRoot { root: node })
+        );
+        assert_eq!(state.root_hierarchy_nodes(), []);
+
+        state.push_root_hierarchy_node(node).unwrap();
+        assert_eq!(
+            state.push_root_hierarchy_node(node),
+            Err(Error::DuplicateRoot { root: node })
+        );
+        assert_eq!(state.root_hierarchy_nodes(), [node]);
     }
 
     #[test]
@@ -1252,148 +1471,179 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette.add_material(vec![]).unwrap();
         let second = palette.add_material(vec![]).unwrap();
-        let palette = state.add_palette(palette);
+        let palette = state.add_palette(palette).unwrap();
 
         let mut object = unit_object("o");
         object.add_layer(palette, second);
-        state.add_object(object);
+        state.add_object(object).unwrap();
         assert_eq!(state.validate(), Ok(()));
     }
 
     #[test]
-    fn validate_rejects_a_palette_without_materials() {
+    fn add_palette_rejects_an_empty_palette() {
         let mut state = VoxMain::default();
         // Every palette is sampled, so even a property-less palette needs a
         // material.
-        let id = state.add_palette(VoxPalette::default());
         assert_eq!(
-            state.validate(),
-            Err(Error::PaletteWithoutMaterials { palette: id })
+            state.add_palette(VoxPalette::default()),
+            Err(Error::NoPaletteMaterials)
         );
+        assert_eq!(state.palette_count(), 0);
     }
 
     #[test]
-    fn validate_rejects_a_dangling_layer_palette() {
+    fn add_object_rejects_a_dangling_layer_palette() {
         let mut state = VoxMain::default();
         let mut object = unit_object("o");
         // Reference palette id 0, but the state has no palettes.
-        object.add_layer(palette(0), material(0));
-        let id = state.add_object(object);
+        let layer = object.add_layer(palette(0), material(0));
 
         assert_eq!(
-            state.validate(),
-            Err(Error::PaletteRef {
-                object: id,
+            state.add_object(object),
+            Err(Error::LayerPaletteRef {
+                layer,
                 palette: palette(0),
             })
         );
+        assert_eq!(state.object_count(), 0);
     }
 
     #[test]
-    fn validate_rejects_a_bad_sample_material() {
+    fn add_object_rejects_a_bad_sample_material() {
         let mut state = VoxMain::default();
         let pool = int_pool(&mut state, vec![7]);
-        let palette = state.add_palette(one_material_palette(pool, 0));
+        let palette = state.add_palette(one_material_palette(pool, 0)).unwrap();
 
         // The layer back-fills the live voxel with material 9, beyond the
         // palette's one material.
         let mut object = unit_object("o");
-        object.add_layer(palette, material(9));
-        let id = state.add_object(object);
+        let layer = object.add_layer(palette, material(9));
 
         assert_eq!(
-            state.validate(),
-            Err(Error::SampleMaterial {
-                object: id,
+            state.add_object(object),
+            Err(Error::LayerSampleMaterial {
+                layer,
                 voxel: voxel(0),
                 material: material(9),
             })
         );
+        assert_eq!(state.object_count(), 0);
     }
 
     #[test]
-    fn validate_rejects_dangling_child() {
+    fn add_hierarchy_node_rejects_a_dangling_child() {
         let mut state = VoxMain::default();
-        state.add_hierarchy_node(node_with_children(vec![node_id(9)]));
-        assert!(matches!(
-            state.validate(),
-            Err(Error::ChildNode { child, .. }) if child == node_id(9)
-        ));
+        assert_eq!(
+            state.add_hierarchy_node(node_with_children(vec![node_id(9)])),
+            Err(Error::UnknownHierarchyNode { node: node_id(9) })
+        );
+        assert_eq!(state.hierarchy_node_count(), 0);
     }
 
     #[test]
-    fn validate_rejects_dangling_root() {
+    fn root_setters_reject_a_dangling_root() {
         let mut state = VoxMain::default();
-        state.add_hierarchy_node(VoxHierarchyNode::default());
-        state.set_root_hierarchy_nodes(vec![node_id(7)]);
-        assert_eq!(state.validate(), Err(Error::Root { root: node_id(7) }));
+        state
+            .add_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
+        assert_eq!(
+            state.set_root_hierarchy_nodes(vec![node_id(7)]),
+            Err(Error::Root { root: node_id(7) })
+        );
+        assert_eq!(
+            state.push_root_hierarchy_node(node_id(7)),
+            Err(Error::Root { root: node_id(7) })
+        );
+        assert_eq!(state.root_hierarchy_nodes(), []);
     }
 
     #[test]
-    fn validate_rejects_a_cycle() {
+    fn add_hierarchy_nodes_rejects_a_cycle() {
         let mut state = VoxMain::default();
         // node 0 -> child 1, node 1 -> child 0.
-        state.add_hierarchy_node(node_with_children(vec![node_id(1)]));
-        state.add_hierarchy_node(node_with_children(vec![node_id(0)]));
-        assert!(matches!(state.validate(), Err(Error::Cycle { .. })));
+        assert!(matches!(
+            state.add_hierarchy_nodes(vec![
+                node_with_children(vec![node_id(1)]),
+                node_with_children(vec![node_id(0)]),
+            ]),
+            Err(Error::InsertedCycle { .. })
+        ));
+        assert_eq!(state.hierarchy_node_count(), 0);
     }
 
     #[test]
-    fn validate_rejects_a_zero_scale() {
+    fn add_hierarchy_nodes_accepts_forward_references() {
+        let mut state = VoxMain::default();
+        // node 0 lists node 1 before node 1 exists; the batch resolves it.
+        let ids = state
+            .add_hierarchy_nodes(vec![
+                node_with_children(vec![node_id(1)]),
+                VoxHierarchyNode::default(),
+            ])
+            .unwrap();
+        assert_eq!(ids, [node_id(0), node_id(1)]);
+        state.set_root_hierarchy_nodes(vec![ids[0]]).unwrap();
+        assert_eq!(state.validate(), Ok(()));
+    }
+
+    #[test]
+    fn add_hierarchy_node_rejects_a_zero_scale() {
         let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         node.transform.scale = TyVector3::new(1.0, 0.0, 1.0);
-        let id = state.add_hierarchy_node(node);
-        assert_eq!(state.validate(), Err(Error::ZeroScale { node: id }));
+        assert_eq!(
+            state.add_hierarchy_node(node),
+            Err(Error::InsertedZeroScale { index: 0 })
+        );
     }
 
     #[test]
-    fn validate_rejects_a_non_finite_scale() {
+    fn add_hierarchy_node_rejects_a_non_finite_scale() {
         let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         // NaN slips past the zero-scale check (NaN == 0.0 is false), so the
         // finiteness check must catch it first.
         node.transform.scale = TyVector3::new(1.0, f64::NAN, 1.0);
-        let id = state.add_hierarchy_node(node);
         assert_eq!(
-            state.validate(),
-            Err(Error::NonFiniteTransform { node: id })
+            state.add_hierarchy_node(node),
+            Err(Error::InsertedNonFiniteTransform { index: 0 })
         );
     }
 
     #[test]
-    fn validate_rejects_a_non_finite_position() {
+    fn add_hierarchy_node_rejects_a_non_finite_position() {
         let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         node.transform.position = TyVector3::new(0.0, 0.0, f64::INFINITY);
-        let id = state.add_hierarchy_node(node);
         assert_eq!(
-            state.validate(),
-            Err(Error::NonFiniteTransform { node: id })
+            state.add_hierarchy_node(node),
+            Err(Error::InsertedNonFiniteTransform { index: 0 })
         );
     }
 
     #[test]
-    fn validate_rejects_a_non_unit_rotation() {
+    fn add_hierarchy_node_rejects_a_non_unit_rotation() {
         let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         // Length squared 4, well outside the unit tolerance.
         node.transform.rotation = TyQuaternion::from_xyzw(0.0, 0.0, 0.0, 2.0);
-        let id = state.add_hierarchy_node(node);
-        assert_eq!(state.validate(), Err(Error::NonUnitRotation { node: id }));
+        assert_eq!(
+            state.add_hierarchy_node(node),
+            Err(Error::InsertedNonUnitRotation { index: 0 })
+        );
     }
 
     #[test]
     fn clone_state_is_an_independent_deep_copy() {
         let mut state = VoxMain::default();
-        state.add_palette(VoxPalette::default());
-        state.add_object(unit_object("o"));
+        state.add_palette(bare_palette()).unwrap();
+        state.add_object(unit_object("o")).unwrap();
 
         let copy = state.clone_state();
         assert_eq!(copy.palette_count(), 1);
         assert_eq!(copy.object_count(), 1);
 
-        state.add_object(unit_object("p"));
+        state.add_object(unit_object("p")).unwrap();
         assert_eq!(state.object_count(), 2);
         assert_eq!(copy.object_count(), 1);
     }
@@ -1403,22 +1653,26 @@ mod tests {
         let mut state = VoxMain::default();
         let pool_a = int_pool(&mut state, vec![10]);
         let pool_b = int_pool(&mut state, vec![20]);
-        let palette_a = state.add_palette(one_material_palette(pool_a, 0));
-        let palette_b = state.add_palette(one_material_palette(pool_b, 0));
+        let palette_a = state.add_palette(one_material_palette(pool_a, 0)).unwrap();
+        let palette_b = state.add_palette(one_material_palette(pool_b, 0)).unwrap();
 
         let mut a = unit_object("a");
         a.add_layer(palette_a, material(0));
-        let object_a = state.add_object(a);
+        let object_a = state.add_object(a).unwrap();
 
         let mut b = unit_object("b");
         b.add_layer(palette_b, material(0));
         let voxel = b.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         b.retain_voxel(voxel, &[material(0)]).unwrap();
-        let object_b = state.add_object(b);
+        let object_b = state.add_object(b).unwrap();
 
-        let inner = state.add_hierarchy_node(node_with_objects(vec![object_a, object_b]));
-        let outer = state.add_hierarchy_node(node_with_children(vec![inner]));
-        state.set_root_hierarchy_nodes(vec![outer]);
+        let inner = state
+            .add_hierarchy_node(node_with_objects(vec![object_a, object_b]))
+            .unwrap();
+        let outer = state
+            .add_hierarchy_node(node_with_children(vec![inner]))
+            .unwrap();
+        state.set_root_hierarchy_nodes(vec![outer]).unwrap();
         assert_eq!(state.validate(), Ok(()));
 
         // Remove object `a` and palette A; the state stays clean (no dangling
@@ -1489,10 +1743,16 @@ mod tests {
     #[test]
     fn remove_hierarchy_node_detaches_children_and_roots() {
         let mut state = VoxMain::default();
-        let leaf = state.add_hierarchy_node(VoxHierarchyNode::default());
-        let mid = state.add_hierarchy_node(node_with_children(vec![leaf]));
-        let top = state.add_hierarchy_node(node_with_children(vec![mid, leaf]));
-        state.set_root_hierarchy_nodes(vec![top, mid]);
+        let leaf = state
+            .add_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
+        let mid = state
+            .add_hierarchy_node(node_with_children(vec![leaf]))
+            .unwrap();
+        let top = state
+            .add_hierarchy_node(node_with_children(vec![mid, leaf]))
+            .unwrap();
+        state.set_root_hierarchy_nodes(vec![top, mid]).unwrap();
 
         assert_eq!(state.remove_hierarchy_node(mid), Ok(()));
         assert_eq!(
@@ -1517,13 +1777,13 @@ mod tests {
         palette.add_property("v".to_owned(), pool).unwrap();
         let keep = palette.add_material(vec![value(0)]).unwrap();
         let drop = palette.add_material(vec![value(1)]).unwrap();
-        let palette = state.add_palette(palette);
+        let palette = state.add_palette(palette).unwrap();
 
         let mut object = unit_object("o");
         let layer = object.add_layer(palette, keep);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[drop]).unwrap();
-        let object = state.add_object(object);
+        let object = state.add_object(object).unwrap();
 
         // Removing `drop` repaints the voxel that used it onto `keep`.
         assert_eq!(state.remove_material(palette, drop, keep), Ok(()));
@@ -1557,13 +1817,13 @@ mod tests {
         let first = palette.add_material(vec![value(0)]).unwrap();
         let second = palette.add_material(vec![value(1)]).unwrap();
         let third = palette.add_material(vec![value(2)]).unwrap();
-        let palette = state.add_palette(palette);
+        let palette = state.add_palette(palette).unwrap();
 
         let mut object = unit_object("o");
         let layer = object.add_layer(palette, first);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[third]).unwrap(); // samples the highest id
-        let object = state.add_object(object);
+        let object = state.add_object(object).unwrap();
 
         // Remove `first`; no live voxel used it, so the repaint is a no-op. The
         // palette is now holed: the voxel still samples `third`, whose id
@@ -1590,7 +1850,7 @@ mod tests {
     #[test]
     fn remove_object_rejects_an_unknown_id() {
         let mut state = VoxMain::default();
-        let object = state.add_object(unit_object("o"));
+        let object = state.add_object(unit_object("o")).unwrap();
         assert_eq!(state.remove_object(object), Ok(()));
         assert_eq!(
             state.remove_object(object),
@@ -1607,14 +1867,15 @@ mod tests {
     #[test]
     fn objects_with_build_volume_margin_validate_and_survive_gc() {
         let mut state = VoxMain::default();
-        let a =
-            state.add_object(VoxObject::new("a".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap());
+        let a = state
+            .add_object(VoxObject::new("a".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap())
+            .unwrap();
         // `b` carries margin: a 5x5x5 build volume with one live voxel off the
         // origin, which the bounds rule allows.
         let mut object_b = VoxObject::new("b".to_owned(), TyVector3U32::new(5, 5, 5)).unwrap();
         let voxel = object_b.voxel_id(TyVector3U32::new(2, 3, 1)).unwrap();
         object_b.retain_voxel(voxel, &[]).unwrap();
-        let b = state.add_object(object_b);
+        let b = state.add_object(object_b).unwrap();
         assert_eq!(b.to_u32(), 1);
         assert_eq!(state.validate(), Ok(()));
 
@@ -1656,7 +1917,7 @@ mod tests {
             .unwrap();
         let matte_red = palette.add_material(vec![value(0), value(0)]).unwrap();
         let shiny_green = palette.add_material(vec![value(1), value(1)]).unwrap();
-        let palette = state.add_palette(palette);
+        let palette = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         // Two layers on the same palette; each voxel samples one material per
@@ -1667,7 +1928,7 @@ mod tests {
         let v1 = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
         object.retain_voxel(v0, &[matte_red, shiny_green]).unwrap();
         object.retain_voxel(v1, &[shiny_green, matte_red]).unwrap();
-        state.add_object(object);
+        state.add_object(object).unwrap();
 
         assert_eq!(state.validate(), Ok(()));
         state.gc();
@@ -1698,41 +1959,37 @@ mod tests {
     }
 
     #[test]
-    fn validate_rejects_a_dangling_property_pool() {
+    fn add_palette_rejects_a_dangling_property_pool() {
         let mut state = VoxMain::default();
         let mut palette = VoxPalette::default();
         // The property references pool id 0, but the state holds no pools.
         let property = palette
             .add_property("baseColorFactor".to_owned(), pool(0))
             .unwrap();
-        let palette = state.add_palette(palette);
+        palette.add_material(vec![value(0)]).unwrap();
         assert_eq!(
-            state.validate(),
-            Err(Error::PropertyPool {
-                palette,
+            state.add_palette(palette),
+            Err(Error::PropertyPoolRef {
                 property,
                 pool: pool(0),
             })
         );
+        assert_eq!(state.palette_count(), 0);
     }
 
     #[test]
-    fn validate_rejects_a_material_value_id_not_in_the_pool() {
+    fn add_palette_rejects_a_material_value_id_not_in_the_pool() {
         let mut state = VoxMain::default();
         let pool = int_pool(&mut state, vec![0, 1]);
         let mut palette = VoxPalette::default();
         let property = palette.add_property("v".to_owned(), pool).unwrap();
         // Two pool values, but this material draws value id 2.
         let material = palette.add_material(vec![value(2)]).unwrap();
-        let palette = state.add_palette(palette);
         assert_eq!(
-            state.validate(),
-            Err(Error::MaterialValue {
-                palette,
-                property,
-                material,
-            })
+            state.add_palette(palette),
+            Err(Error::MaterialValueRef { property, material })
         );
+        assert_eq!(state.palette_count(), 0);
     }
 
     #[test]
@@ -1742,7 +1999,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         let property = palette.add_property("v".to_owned(), pool).unwrap();
         let material = palette.add_material(vec![value(1)]).unwrap();
-        let palette = state.add_palette(palette);
+        let palette = state.add_palette(palette).unwrap();
         state.validate().unwrap();
 
         // Release the drawn value directly, skipping the cell rewrite
@@ -1764,9 +2021,9 @@ mod tests {
     #[test]
     fn remove_object_preserves_the_survivors_order() {
         let mut state = VoxMain::default();
-        let a = state.add_object(unit_object("a"));
-        let b = state.add_object(unit_object("b"));
-        let c = state.add_object(unit_object("c"));
+        let a = state.add_object(unit_object("a")).unwrap();
+        let b = state.add_object(unit_object("b")).unwrap();
+        let c = state.add_object(unit_object("c")).unwrap();
 
         // Removing the first of three is the smallest case a swap-remove would
         // get wrong, listing "c" before "b".
@@ -1776,7 +2033,7 @@ mod tests {
 
         // An object added after the removal recycles the freed id but appends
         // at the end of the order.
-        let d = state.add_object(unit_object("d"));
+        let d = state.add_object(unit_object("d")).unwrap();
         assert_eq!(d, a);
         let names: Vec<&str> = state.iter_objects().map(|(_, o)| o.name()).collect();
         assert_eq!(names, ["b", "c", "d"]);
@@ -1788,9 +2045,9 @@ mod tests {
     #[test]
     fn remove_palette_preserves_the_survivors_order() {
         let mut state = VoxMain::default();
-        let a = state.add_palette(VoxPalette::default());
-        let b = state.add_palette(VoxPalette::default());
-        let c = state.add_palette(VoxPalette::default());
+        let a = state.add_palette(bare_palette()).unwrap();
+        let b = state.add_palette(bare_palette()).unwrap();
+        let c = state.add_palette(bare_palette()).unwrap();
 
         // Removing the first of three is the smallest case a swap-remove would
         // get wrong, listing `c` before `b`.
@@ -1805,9 +2062,9 @@ mod tests {
     fn remove_palette_detaches_every_layer_drawing_it() {
         let mut state = VoxMain::default();
         let pool = int_pool(&mut state, vec![10, 20]);
-        let a = state.add_palette(two_material_palette(pool));
-        let b = state.add_palette(two_material_palette(pool));
-        let c = state.add_palette(two_material_palette(pool));
+        let a = state.add_palette(two_material_palette(pool)).unwrap();
+        let b = state.add_palette(two_material_palette(pool)).unwrap();
+        let c = state.add_palette(two_material_palette(pool)).unwrap();
 
         // Two of the four layers draw `a`, so the detach has to remove both.
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
@@ -1829,7 +2086,7 @@ mod tests {
                 &[material(1), material(0), material(1), material(1)],
             )
             .unwrap();
-        let object_id = state.add_object(object);
+        let object_id = state.add_object(object).unwrap();
         state.validate().unwrap();
 
         assert_eq!(state.remove_palette(a), Ok(()));
@@ -1859,9 +2116,15 @@ mod tests {
     #[test]
     fn remove_hierarchy_node_preserves_the_survivors_order() {
         let mut state = VoxMain::default();
-        let a = state.add_hierarchy_node(VoxHierarchyNode::default());
-        let b = state.add_hierarchy_node(VoxHierarchyNode::default());
-        let c = state.add_hierarchy_node(VoxHierarchyNode::default());
+        let a = state
+            .add_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
+        let b = state
+            .add_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
+        let c = state
+            .add_hierarchy_node(VoxHierarchyNode::default())
+            .unwrap();
 
         // Removing the first of three is the smallest case a swap-remove would
         // get wrong, listing `c` before `b`.
@@ -1878,9 +2141,9 @@ mod tests {
     #[test]
     fn move_object_reorders_the_listing_and_validates() {
         let mut state = VoxMain::default();
-        let a = state.add_object(unit_object("a"));
-        let b = state.add_object(unit_object("b"));
-        let c = state.add_object(unit_object("c"));
+        let a = state.add_object(unit_object("a")).unwrap();
+        let b = state.add_object(unit_object("b")).unwrap();
+        let c = state.add_object(unit_object("c")).unwrap();
 
         assert_eq!(state.move_object(a, 2), Ok(()));
         let names: Vec<&str> = state.iter_objects().map(|(_, o)| o.name()).collect();
@@ -1906,8 +2169,8 @@ mod tests {
     #[test]
     fn move_palette_reorders_the_listing_and_validates() {
         let mut state = VoxMain::default();
-        let a = state.add_palette(VoxPalette::default());
-        let b = state.add_palette(VoxPalette::default());
+        let a = state.add_palette(bare_palette()).unwrap();
+        let b = state.add_palette(bare_palette()).unwrap();
 
         assert_eq!(state.move_palette(b, 0), Ok(()));
         assert_eq!(
@@ -1964,12 +2227,12 @@ mod tests {
         let ints = int_pool(&mut state, vec![10, 20, 30]);
         // Two palettes draw the doomed value, so both must be repointed.
         let a = one_material_palette(ints, 0);
-        let a_id = state.add_palette(a);
+        let a_id = state.add_palette(a).unwrap();
         let mut b = VoxPalette::default();
         let b_property = b.add_property("v".to_owned(), ints).unwrap();
         let b_doomed = b.add_material(vec![value(0)]).unwrap();
         let b_last = b.add_material(vec![value(2)]).unwrap();
-        let b_id = state.add_palette(b);
+        let b_id = state.add_palette(b).unwrap();
         state.validate().unwrap();
 
         // Removing the first of three is the smallest case a swap-remove would
@@ -2025,9 +2288,9 @@ mod tests {
         let property = palette.add_property("v".to_owned(), ints).unwrap();
         let one = palette.add_material(vec![value(0)]).unwrap();
         let two = palette.add_material(vec![value(1)]).unwrap();
-        let palette_id = state.add_palette(palette);
-        let object_a = state.add_object(unit_object("a"));
-        let object_b = state.add_object(unit_object("b"));
+        let palette_id = state.add_palette(palette).unwrap();
+        let object_a = state.add_object(unit_object("a")).unwrap();
+        let object_b = state.add_object(unit_object("b")).unwrap();
         state.validate().unwrap();
 
         // List the value holding 2 first and object b first.
@@ -2095,7 +2358,7 @@ mod tests {
             .add_property("second".to_owned(), second_pool)
             .unwrap();
         let material = palette.add_material(vec![value(1), value(0)]).unwrap();
-        let palette_id = state.add_palette(palette);
+        let palette_id = state.add_palette(palette).unwrap();
         state.validate().unwrap();
 
         // Move the second pool ahead of the first, so the pool relabel is not

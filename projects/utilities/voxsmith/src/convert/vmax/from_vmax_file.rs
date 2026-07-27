@@ -39,8 +39,8 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// are 1-based in Voxel Max, so a voxel's color cell is `color_idx - 1`; the
 /// material byte is 0-based and used directly.
 ///
-/// Errors on malformed geometry or if
-/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
+/// Errors on malformed geometry or on a cross-reference the checked
+/// insertions reject.
 pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
     let scene = &serde.scene_json_file;
     let mut state = VoxMain::default();
@@ -69,7 +69,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
         }
         let (vox_object, data, transform) =
             build_object(serde, object, &mut state, &mut palette_provenance)?;
-        let object_id = state.add_object(vox_object);
+        let object_id = state.add_object(vox_object)?;
         object_data.push(data);
         object_transforms.push(transform);
         object_refs.push(object_id.to_u32() as usize);
@@ -78,11 +78,11 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
         }
     }
 
+    // The scene nodes land as one batch: a group's children may sit after
+    // it in the listing.
     let (nodes, roots) = build_hierarchy(scene, &object_transforms, &object_refs);
-    for node in nodes {
-        state.add_hierarchy_node(node);
-    }
-    state.set_root_hierarchy_nodes(roots);
+    state.add_hierarchy_nodes(nodes)?;
+    state.set_root_hierarchy_nodes(roots)?;
 
     // Each object's preserved editor state, aligned by object id with the
     // objects, read off the contents files.
@@ -99,7 +99,6 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
     let ext = to_vox_value(&VoxelMaxExtWrapper { voxel_max })?;
     state.set_ext(Some(ext));
 
-    state.validate()?;
     Ok(state)
 }
 
@@ -399,7 +398,7 @@ fn folded_palette(
         combos.insert(key, id);
     }
 
-    let palette = state.add_palette(palette);
+    let palette = state.add_palette(palette)?;
     let provenance = VoxelMaxPalette {
         name,
         materials: materials.iter().map(voxel_max_material).collect(),

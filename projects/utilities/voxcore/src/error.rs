@@ -76,6 +76,68 @@ pub enum Error {
     /// A property was given a name the palette already uses.
     DuplicatePropertyName { name: String },
 
+    /// An inserted palette holds no materials.
+    NoPaletteMaterials,
+
+    /// An inserted palette's property names a value pool that is not one of
+    /// the state's.
+    PropertyPoolRef {
+        property: U32Id<BVoxProperty>,
+        pool: U32Id<BVoxValuePool>,
+    },
+
+    /// An inserted palette's material draws a value for this property that is
+    /// not one of the property's pool's.
+    MaterialValueRef {
+        property: U32Id<BVoxProperty>,
+        material: U32Id<BVoxMaterial>,
+    },
+
+    /// An inserted object's layer references a palette that is not one of the
+    /// state's.
+    LayerPaletteRef {
+        layer: U32Id<BVoxLayer>,
+        palette: U32Id<BVoxPalette>,
+    },
+
+    /// A live voxel's sample for this layer is not one of the layer's
+    /// palette's materials.
+    LayerSampleMaterial {
+        layer: U32Id<BVoxLayer>,
+        voxel: U32Id<BVoxVoxel>,
+        material: U32Id<BVoxMaterial>,
+    },
+
+    /// An inserted hierarchy node, at this listing index in its batch, lists
+    /// the same child node more than once.
+    InsertedDuplicateChildNode {
+        index: usize,
+        child: U32Id<BVoxHierarchyNode>,
+    },
+
+    /// An inserted hierarchy node, at this listing index in its batch, places
+    /// the same object more than once.
+    InsertedDuplicateChildObject {
+        index: usize,
+        object: U32Id<BVoxObject>,
+    },
+
+    /// An inserted hierarchy node, at this listing index in its batch, has a
+    /// non-finite transform position or scale component.
+    InsertedNonFiniteTransform { index: usize },
+
+    /// An inserted hierarchy node, at this listing index in its batch, has a
+    /// zero transform scale component.
+    InsertedZeroScale { index: usize },
+
+    /// An inserted hierarchy node, at this listing index in its batch, has a
+    /// transform rotation that is not a unit quaternion.
+    InsertedNonUnitRotation { index: usize },
+
+    /// An inserted batch of hierarchy nodes contains a `child_nodes` cycle
+    /// reaching the node at this listing index.
+    InsertedCycle { index: usize },
+
     /// A value pool's `min`/`max` bounds are malformed: non-finite, not
     /// integer-valued for an `int` pool, or `min` greater than `max`.
     PoolBound { pool: U32Id<BVoxValuePool> },
@@ -237,6 +299,74 @@ impl Display for Error {
             Error::DuplicatePropertyName { name } => {
                 write!(f, "a property named \"{name}\" already exists")
             }
+            Error::NoPaletteMaterials => {
+                write!(f, "an inserted palette needs at least one material")
+            }
+            Error::PropertyPoolRef { property, pool } => write!(
+                f,
+                "the inserted palette's property {} names value pool {}, which is not one of this \
+                 state's",
+                property.to_u32(),
+                pool.to_u32()
+            ),
+            Error::MaterialValueRef { property, material } => write!(
+                f,
+                "the inserted palette's material {} draws a value for property {} that is not one \
+                 of its pool's",
+                material.to_u32(),
+                property.to_u32()
+            ),
+            Error::LayerPaletteRef { layer, palette } => write!(
+                f,
+                "the inserted object's layer {} references palette {}, which is not one of this \
+                 state's",
+                layer.to_u32(),
+                palette.to_u32()
+            ),
+            Error::LayerSampleMaterial {
+                layer,
+                voxel,
+                material,
+            } => write!(
+                f,
+                "voxel {} samples material {} for layer {}, which is not one of the layer's \
+                 palette's",
+                voxel.to_u32(),
+                material.to_u32(),
+                layer.to_u32()
+            ),
+            Error::InsertedDuplicateChildNode { index, child } => write!(
+                f,
+                "the inserted hierarchy node at listing index {index} lists child node {} more \
+                 than once",
+                child.to_u32()
+            ),
+            Error::InsertedDuplicateChildObject { index, object } => write!(
+                f,
+                "the inserted hierarchy node at listing index {index} places object {} more than \
+                 once",
+                object.to_u32()
+            ),
+            Error::InsertedNonFiniteTransform { index } => write!(
+                f,
+                "the inserted hierarchy node at listing index {index} has a non-finite transform \
+                 position or scale component"
+            ),
+            Error::InsertedZeroScale { index } => write!(
+                f,
+                "the inserted hierarchy node at listing index {index} has a zero transform scale \
+                 component"
+            ),
+            Error::InsertedNonUnitRotation { index } => write!(
+                f,
+                "the inserted hierarchy node at listing index {index} has a transform rotation \
+                 that is not a unit quaternion"
+            ),
+            Error::InsertedCycle { index } => write!(
+                f,
+                "the inserted hierarchy nodes contain a cycle reaching the node at listing index \
+                 {index}"
+            ),
             Error::PoolBound { pool } => {
                 write!(
                     f,

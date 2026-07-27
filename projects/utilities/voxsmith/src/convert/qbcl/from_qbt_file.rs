@@ -20,17 +20,17 @@ use voxcore::{
 /// version, and any unknown nodes, rides in a `qubicle-qbt` ext so the file can
 /// be written back exactly.
 ///
-/// Errors on a matrix grid that exceeds the dense limit, or if
-/// [`VoxMain::validate`](voxcore::VoxMain::validate) rejects the result.
+/// Errors on a matrix grid that exceeds the dense limit, or on a
+/// cross-reference the checked insertions reject.
 pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, materials) = build_palette(&mut state, &file.root);
-    let palette_id = state.add_palette(palette);
+    let palette_id = state.add_palette(palette)?;
 
     let mut nodes = Vec::new();
     let root_id = build_node(&file.root, &mut state, palette_id, &materials, &mut nodes)?;
-    state.set_root_hierarchy_nodes(vec![root_id]);
+    state.set_root_hierarchy_nodes(vec![root_id])?;
 
     let ext = QubicleQbtExtWrapper {
         qubicle_qbt: QubicleQbtExt {
@@ -46,7 +46,6 @@ pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
     };
     state.set_ext(Some(to_vox_value(&ext)?));
 
-    state.validate()?;
     Ok(state)
 }
 
@@ -67,14 +66,14 @@ fn build_node(
             // may carry empty margin. The masks are read from that same grid.
             let object = build_object(matrix, palette, materials)?;
             let masks = masks_of(&object, matrix);
-            let object_id = state.add_object(object);
+            let object_id = state.add_object(object)?;
             let hierarchy = VoxHierarchyNode {
                 name: matrix.name.clone(),
                 child_nodes: Vec::new(),
                 child_objects: vec![object_id],
                 transform: translation(matrix.position),
             };
-            let id = state.add_hierarchy_node(hierarchy);
+            let id = state.add_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Matrix {
                 name: matrix.name.clone(),
                 position: matrix.position,
@@ -95,7 +94,7 @@ fn build_node(
                 child_objects: Vec::new(),
                 transform: TyTransformF64::default(),
             };
-            let id = state.add_hierarchy_node(hierarchy);
+            let id = state.add_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Model);
             id
         }
@@ -108,14 +107,14 @@ fn build_node(
             // may carry empty margin. The masks are read from that same grid.
             let object = build_object(&compound.matrix, palette, materials)?;
             let masks = masks_of(&object, &compound.matrix);
-            let object_id = state.add_object(object);
+            let object_id = state.add_object(object)?;
             let hierarchy = VoxHierarchyNode {
                 name: compound.matrix.name.clone(),
                 child_nodes,
                 child_objects: vec![object_id],
                 transform: translation(compound.matrix.position),
             };
-            let id = state.add_hierarchy_node(hierarchy);
+            let id = state.add_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Compound {
                 name: compound.matrix.name.clone(),
                 position: compound.matrix.position,
@@ -132,7 +131,7 @@ fn build_node(
                 child_objects: Vec::new(),
                 transform: TyTransformF64::default(),
             };
-            let id = state.add_hierarchy_node(hierarchy);
+            let id = state.add_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Unknown {
                 type_id: unknown.type_id,
                 data: unknown.data.clone(),
