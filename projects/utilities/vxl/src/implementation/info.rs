@@ -331,7 +331,7 @@ mod tests {
         let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), pool)
+            .add_property("baseColorFactor".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         let material = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette = state.add_palette(palette).unwrap();
@@ -494,14 +494,14 @@ mod tests {
             VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![2.0]).unwrap(),
         );
         let mut glow = VoxPalette::default();
-        glow.add_property("emissiveStrength".to_owned(), strengths)
+        glow.add_property("emissiveStrength".to_owned(), strengths, U32Id::from_u32(0))
             .unwrap();
         let glow_material = glow.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let glow = state.add_palette(glow).unwrap();
 
         let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut base = VoxPalette::default();
-        base.add_property("baseColorFactor".to_owned(), colors)
+        base.add_property("baseColorFactor".to_owned(), colors, U32Id::from_u32(0))
             .unwrap();
         let material = base.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let base = state.add_palette(base).unwrap();

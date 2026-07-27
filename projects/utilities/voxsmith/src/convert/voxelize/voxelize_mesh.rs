@@ -298,28 +298,56 @@ fn build_palette(
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(BASE_COLOR_FACTOR.to_owned(), base_color_pool)
+        .add_property(
+            BASE_COLOR_FACTOR.to_owned(),
+            base_color_pool,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
     palette
-        .add_property(METALLIC_FACTOR.to_owned(), metallic_pool)
+        .add_property(
+            METALLIC_FACTOR.to_owned(),
+            metallic_pool,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
     palette
-        .add_property(ROUGHNESS_FACTOR.to_owned(), roughness_pool)
+        .add_property(
+            ROUGHNESS_FACTOR.to_owned(),
+            roughness_pool,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
     palette
-        .add_property(EMISSIVE_FACTOR.to_owned(), emissive_factor_pool)
+        .add_property(
+            EMISSIVE_FACTOR.to_owned(),
+            emissive_factor_pool,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
     palette
-        .add_property(EMISSIVE_STRENGTH.to_owned(), emissive_strength_pool)
+        .add_property(
+            EMISSIVE_STRENGTH.to_owned(),
+            emissive_strength_pool,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
     palette
-        .add_property(OCCLUSION_STRENGTH.to_owned(), occlusion_pool)
+        .add_property(
+            OCCLUSION_STRENGTH.to_owned(),
+            occlusion_pool,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
     palette
-        .add_property(IOR.to_owned(), ior_pool)
+        .add_property(IOR.to_owned(), ior_pool, U32Id::from_u32(0))
         .expect("the property names are distinct");
     palette
-        .add_property(TRANSMISSION_FACTOR.to_owned(), transmission_pool)
+        .add_property(
+            TRANSMISSION_FACTOR.to_owned(),
+            transmission_pool,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
 
     // One material per distinct mesh material, its value ids in property

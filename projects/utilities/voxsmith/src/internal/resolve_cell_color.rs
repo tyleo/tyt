@@ -64,7 +64,7 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+            .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let blue = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
@@ -108,7 +108,7 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+            .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         let material = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette_id = state.add_palette(palette).unwrap();

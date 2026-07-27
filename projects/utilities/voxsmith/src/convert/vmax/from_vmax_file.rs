@@ -276,7 +276,7 @@ fn folded_palette(
             .collect(),
     )?);
     palette
-        .add_property(BASE_COLOR_FACTOR.to_owned(), color_pool)
+        .add_property(BASE_COLOR_FACTOR.to_owned(), color_pool, U32Id::from_u32(0))
         .expect("the property names are distinct");
     color_axis.push(true);
 
@@ -295,7 +295,7 @@ fn folded_palette(
                 .collect(),
         )?;
         palette
-            .add_property(METALLIC_FACTOR.to_owned(), metallic)
+            .add_property(METALLIC_FACTOR.to_owned(), metallic, U32Id::from_u32(0))
             .expect("the property names are distinct");
         color_axis.push(false);
         let roughness = float_pool(
@@ -306,7 +306,7 @@ fn folded_palette(
                 .collect(),
         )?;
         palette
-            .add_property(ROUGHNESS_FACTOR.to_owned(), roughness)
+            .add_property(ROUGHNESS_FACTOR.to_owned(), roughness, U32Id::from_u32(0))
             .expect("the property names are distinct");
         color_axis.push(false);
         // Voxel Max glows in the voxel's own base color, so an emissive
@@ -326,13 +326,17 @@ fn folded_palette(
                     .collect(),
             )?);
             palette
-                .add_property(EMISSIVE_FACTOR.to_owned(), emissive_color)
+                .add_property(
+                    EMISSIVE_FACTOR.to_owned(),
+                    emissive_color,
+                    U32Id::from_u32(0),
+                )
                 .expect("the property names are distinct");
             color_axis.push(true);
         }
         let emissive = float_pool(state, materials.iter().map(|m| m.sic).collect())?;
         palette
-            .add_property(EMISSIVE_STRENGTH.to_owned(), emissive)
+            .add_property(EMISSIVE_STRENGTH.to_owned(), emissive, U32Id::from_u32(0))
             .expect("the property names are distinct");
         color_axis.push(false);
 
@@ -349,17 +353,21 @@ fn folded_palette(
                     .collect(),
             )?;
             palette
-                .add_property(IOR.to_owned(), ior)
+                .add_property(IOR.to_owned(), ior, U32Id::from_u32(0))
                 .expect("the property names are distinct");
             color_axis.push(false);
             let transmission = float_pool(state, dispersion(&materials, |d| d.transmission))?;
             palette
-                .add_property(TRANSMISSION_FACTOR.to_owned(), transmission)
+                .add_property(
+                    TRANSMISSION_FACTOR.to_owned(),
+                    transmission,
+                    U32Id::from_u32(0),
+                )
                 .expect("the property names are distinct");
             color_axis.push(false);
             let absorption = float_pool(state, dispersion(&materials, |d| d.absorption))?;
             palette
-                .add_property(ABSORPTION.to_owned(), absorption)
+                .add_property(ABSORPTION.to_owned(), absorption, U32Id::from_u32(0))
                 .expect("the property names are distinct");
             color_axis.push(false);
         }
@@ -368,7 +376,7 @@ fn folded_palette(
             materials.iter().map(|m| m.sh).collect(),
         )?);
         palette
-            .add_property(SHADOWS.to_owned(), shadows)
+            .add_property(SHADOWS.to_owned(), shadows, U32Id::from_u32(0))
             .expect("the property names are distinct");
         color_axis.push(false);
     }

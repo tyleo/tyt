@@ -113,7 +113,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
         .expect("byte-derived components are in range and the palette is non-empty"),
     );
     palette
-        .add_property(BASE_COLOR_FACTOR.to_owned(), color_pool)
+        .add_property(BASE_COLOR_FACTOR.to_owned(), color_pool, U32Id::from_u32(0))
         .expect("the property names are distinct");
 
     // The scalars are custom MagicaVoxel attributes with no glTF bounds, so
@@ -144,7 +144,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             VoxValuePool::string(distinct_types).expect("every palette cell yields a type token"),
         );
         palette
-            .add_property("type".to_owned(), type_pool)
+            .add_property("type".to_owned(), type_pool, U32Id::from_u32(0))
             .expect("the property names are distinct");
         attribute_indices.push(type_indices);
 
@@ -168,7 +168,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
                     .expect("the scalars are finite and every palette cell yields one"),
             );
             palette
-                .add_property(name.to_owned(), pool)
+                .add_property(name.to_owned(), pool, U32Id::from_u32(0))
                 .expect("the property names are distinct");
             attribute_indices.push(indices);
         }
@@ -715,7 +715,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+            .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         for index in 0..4 {
             palette

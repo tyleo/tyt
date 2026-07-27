@@ -347,7 +347,7 @@ mod tests {
         let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), pool)
+            .add_property("baseColorFactor".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         let material = palette.add_material(vec![value(0)]).unwrap();
         let palette = state.add_palette(palette).unwrap();
@@ -391,9 +391,15 @@ mod tests {
         );
 
         let mut palette = VoxPalette::default();
-        palette.add_property("tint".to_owned(), tint).unwrap();
-        palette.add_property("glow".to_owned(), glow).unwrap();
-        palette.add_property("gloss".to_owned(), gloss).unwrap();
+        palette
+            .add_property("tint".to_owned(), tint, U32Id::from_u32(0))
+            .unwrap();
+        palette
+            .add_property("glow".to_owned(), glow, U32Id::from_u32(0))
+            .unwrap();
+        palette
+            .add_property("gloss".to_owned(), gloss, U32Id::from_u32(0))
+            .unwrap();
         palette
             .add_material(vec![value(0), value(0), value(0)])
             .unwrap();
@@ -489,7 +495,9 @@ mod tests {
         let mut state = VoxMain::default();
         let tag = state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]).unwrap());
         let mut palette = VoxPalette::default();
-        palette.add_property("tag".to_owned(), tag).unwrap();
+        palette
+            .add_property("tag".to_owned(), tag, U32Id::from_u32(0))
+            .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
         let palette = state.add_palette(palette).unwrap();
 

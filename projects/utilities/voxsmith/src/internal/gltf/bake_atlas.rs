@@ -279,13 +279,13 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property(METALLIC_FACTOR.to_owned(), metallic)
+            .add_property(METALLIC_FACTOR.to_owned(), metallic, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property(ROUGHNESS_FACTOR.to_owned(), roughness)
+            .add_property(ROUGHNESS_FACTOR.to_owned(), roughness, U32Id::from_u32(0))
             .unwrap();
         // Value ids: base 0 = red, 1 = blue; metallic 0 = 1.0, 1 = 0.0;
         // roughness 0 = 0.0, 1 = 1.0.
@@ -352,7 +352,9 @@ mod tests {
         let flag = state.add_value_pool(VoxValuePool::boolean(vec![true, false]).unwrap());
 
         let mut palette = VoxPalette::default();
-        palette.add_property("flag".to_owned(), flag).unwrap();
+        palette
+            .add_property("flag".to_owned(), flag, U32Id::from_u32(0))
+            .unwrap();
         let on = palette.add_material(vec![value(0)]).unwrap();
         let off = palette.add_material(vec![value(1)]).unwrap();
         let palette_id = state.add_palette(palette).unwrap();
@@ -389,10 +391,10 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property(EMISSIVE_STRENGTH.to_owned(), strength)
+            .add_property(EMISSIVE_STRENGTH.to_owned(), strength, U32Id::from_u32(0))
             .unwrap();
         let red = palette.add_material(vec![value(0), value(0)]).unwrap();
         let blue = palette.add_material(vec![value(1), value(0)]).unwrap();
@@ -484,10 +486,10 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(EMISSIVE_FACTOR.to_owned(), factor)
+            .add_property(EMISSIVE_FACTOR.to_owned(), factor, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property(EMISSIVE_STRENGTH.to_owned(), strength)
+            .add_property(EMISSIVE_STRENGTH.to_owned(), strength, U32Id::from_u32(0))
             .unwrap();
         let full_blue = palette.add_material(vec![value(0), value(0)]).unwrap();
         let dim_white = palette.add_material(vec![value(1), value(1)]).unwrap();

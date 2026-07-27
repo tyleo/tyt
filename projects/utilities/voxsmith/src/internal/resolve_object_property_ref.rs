@@ -40,7 +40,7 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+            .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
 
@@ -89,7 +89,7 @@ mod tests {
         let pool = state.add_value_pool(VoxValuePool::srgba(vec![[0.0, 1.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("emissiveFactor".to_owned(), pool)
+            .add_property("emissiveFactor".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
         let plain = state.add_palette(palette).unwrap();

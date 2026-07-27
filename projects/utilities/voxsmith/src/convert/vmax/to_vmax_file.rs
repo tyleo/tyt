@@ -313,10 +313,10 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), color)
+            .add_property("baseColorFactor".to_owned(), color, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property("metallicFactor".to_owned(), metallic)
+            .add_property("metallicFactor".to_owned(), metallic, U32Id::from_u32(0))
             .unwrap();
         for index in 0..256u32 {
             palette
@@ -628,7 +628,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), pool)
+            .add_property("baseColorFactor".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         for index in 0..hexes.len() {
             palette
@@ -1249,18 +1249,20 @@ mod tests {
             let shadows = state.add_value_pool(VoxValuePool::boolean(vec![true]).unwrap());
             let mut palette = VoxPalette::default();
             palette
-                .add_property("baseColorFactor".to_owned(), color)
+                .add_property("baseColorFactor".to_owned(), color, U32Id::from_u32(0))
                 .unwrap();
             palette
-                .add_property("metallicFactor".to_owned(), metallic)
+                .add_property("metallicFactor".to_owned(), metallic, U32Id::from_u32(0))
                 .unwrap();
             palette
-                .add_property("roughnessFactor".to_owned(), roughness)
+                .add_property("roughnessFactor".to_owned(), roughness, U32Id::from_u32(0))
                 .unwrap();
             palette
-                .add_property("emissiveStrength".to_owned(), emissive)
+                .add_property("emissiveStrength".to_owned(), emissive, U32Id::from_u32(0))
                 .unwrap();
-            palette.add_property("shadows".to_owned(), shadows).unwrap();
+            palette
+                .add_property("shadows".to_owned(), shadows, U32Id::from_u32(0))
+                .unwrap();
             palette.add_material(vec![U32Id::from_u32(0); 5]).unwrap();
             let palette_id = state.add_palette(palette).unwrap();
             let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
@@ -1343,13 +1345,17 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), color)
+            .add_property("baseColorFactor".to_owned(), color, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property("emissiveFactor".to_owned(), emissive_color)
+            .add_property(
+                "emissiveFactor".to_owned(),
+                emissive_color,
+                U32Id::from_u32(0),
+            )
             .unwrap();
         palette
-            .add_property("emissiveStrength".to_owned(), strength)
+            .add_property("emissiveStrength".to_owned(), strength, U32Id::from_u32(0))
             .unwrap();
         palette.add_material(vec![U32Id::from_u32(0); 3]).unwrap();
         let palette_id = state.add_palette(palette).unwrap();

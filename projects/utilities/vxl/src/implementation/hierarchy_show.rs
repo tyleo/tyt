@@ -1332,7 +1332,7 @@ mod tests {
         let pool = state.add_value_pool(VoxValuePool::srgba(vec![[0.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), pool)
+            .add_property("baseColorFactor".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         for _ in 0..count {
             palette.add_material(vec![U32Id::from_u32(0)]).unwrap();

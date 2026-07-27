@@ -844,9 +844,11 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base, U32Id::from_u32(0))
             .unwrap();
-        palette.add_property("tag".to_owned(), tag).unwrap();
+        palette
+            .add_property("tag".to_owned(), tag, U32Id::from_u32(0))
+            .unwrap();
         let materials: Vec<_> = (0..colors.len())
             .map(|index| {
                 palette
@@ -910,7 +912,7 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base, U32Id::from_u32(0))
             .unwrap();
         let materials: Vec<_> = (0..colors.len())
             .map(|index| palette.add_material(vec![value(index)]).unwrap())
@@ -1236,7 +1238,9 @@ mod tests {
         );
 
         let mut palette = VoxPalette::default();
-        palette.add_property("tag".to_owned(), tag).unwrap();
+        palette
+            .add_property("tag".to_owned(), tag, U32Id::from_u32(0))
+            .unwrap();
         let materials: Vec<_> = (0..3)
             .map(|index| palette.add_material(vec![value(index)]).unwrap())
             .collect();
@@ -1279,7 +1283,7 @@ mod tests {
 
         let mut glow_palette = VoxPalette::default();
         glow_palette
-            .add_property("emissiveStrength".to_owned(), strength)
+            .add_property("emissiveStrength".to_owned(), strength, U32Id::from_u32(0))
             .unwrap();
         glow_palette.add_material(vec![value(0)]).unwrap();
         let glow_palette_id = state.add_palette(glow_palette).unwrap();

@@ -168,7 +168,7 @@ fn build_palette(
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+        .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
         .expect("the property names are distinct");
     let mut materials = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
@@ -423,7 +423,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+            .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
         for index in 0..3 {
             palette
