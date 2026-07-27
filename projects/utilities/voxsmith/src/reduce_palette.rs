@@ -127,11 +127,13 @@ fn reduce_materials(
 
         for point in cluster {
             if point.material != representative {
-                state.remove_material(
-                    palette,
-                    U32Id::from_u32(point.material),
-                    U32Id::from_u32(representative),
-                );
+                state
+                    .remove_material(
+                        palette,
+                        U32Id::from_u32(point.material),
+                        U32Id::from_u32(representative),
+                    )
+                    .expect("the cluster's materials are live and distinct");
             }
         }
     }

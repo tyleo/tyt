@@ -80,7 +80,7 @@ pub fn voxelize_mesh(
         .or(mesh.name.clone())
         .unwrap_or_else(|| fallback_name.to_owned());
 
-    let mut object = VoxObject::new(object_name, counts).ok_or_else(|| grid_too_large(counts))?;
+    let mut object = VoxObject::new(object_name, counts).map_err(|_| grid_too_large(counts))?;
 
     object.add_layer(palette_id, default_material);
 

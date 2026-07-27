@@ -21,7 +21,7 @@ pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette
             property.name.clone(),
             U32Id::from_u32(property.value_pool as u32),
         )
-        .ok_or_else(|| {
+        .map_err(|_| {
             Error::Invalid(format!(
                 "palette declares property \"{}\" more than once",
                 property.name
@@ -34,7 +34,7 @@ pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette
             .iter()
             .map(|&value_index| (value_index as u32).to_u32_id())
             .collect();
-        out.add_material(value_ids).ok_or_else(|| {
+        out.add_material(value_ids).map_err(|_| {
             Error::Invalid(format!(
                 "palette material {index} has {} value-indices but {} properties",
                 row.len(),

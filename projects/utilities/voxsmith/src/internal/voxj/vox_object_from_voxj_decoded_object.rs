@@ -36,8 +36,8 @@ pub fn vox_object_from_voxj_decoded_object(
     };
     let [size_x, size_y, size_z] = bounds;
 
-    let mut out = VoxObject::new(object.name.clone(), TyVector3U32::from_array(bounds))
-        .ok_or_else(|| {
+    let mut out =
+        VoxObject::new(object.name.clone(), TyVector3U32::from_array(bounds)).map_err(|_| {
             invalid(format!(
                 "object \"{}\" grid {size_x}x{size_y}x{size_z} exceeds the dense limit of {} cells",
                 object.name,

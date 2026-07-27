@@ -175,7 +175,7 @@ fn build_object(
         object.name.clone(),
         TyVector3U32::new(size_x, size_y, size_z),
     )
-    .ok_or_else(|| {
+    .map_err(|_| {
         invalid(format!(
             "object \"{}\" grid {size_x}x{size_y}x{size_z} exceeds the dense limit of {} cells",
             object.name,
@@ -219,7 +219,7 @@ fn build_object(
         let material = folded.combos[&combo_key(voxel, folded.has_materials)];
         vox_object
             .retain_voxel(voxel_id, &[material])
-            .ok_or_else(|| {
+            .map_err(|_| {
                 invalid(format!(
                     "object \"{}\" has a malformed voxel sample",
                     object.name

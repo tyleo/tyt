@@ -262,11 +262,19 @@ impl VoxValuePool {
     }
 
     /// Moves value `id` to listing position `index`, shifting the values
-    /// between its old and new positions one slot. Returns `None` and changes
-    /// nothing if `id` is not one of this pool's values or `index` is at or
-    /// past [`values_len`](Self::values_len).
-    pub fn move_value(&mut self, id: U32Id<BVoxPoolValue>, index: usize) -> Option<()> {
-        self.value_ids.try_move_to(id, index)
+    /// between its old and new positions one slot. Errors, changing nothing,
+    /// if `id` is not one of this pool's values or `index` is at or past
+    /// [`values_len`](Self::values_len).
+    pub fn move_value(&mut self, id: U32Id<BVoxPoolValue>, index: usize) -> Result<()> {
+        if !self.value_ids.is_retained(id) {
+            return Err(Error::UnknownPoolValue { value: id });
+        }
+        let count = self.value_ids.len();
+        if index >= count {
+            return Err(Error::IndexPastCount { index, count });
+        }
+        self.value_ids.move_to(id, index);
+        Ok(())
     }
 
     /// Deep copy. Liveness lives in the id pool, so the column can't derive
@@ -585,7 +593,7 @@ mod tests {
             VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]).unwrap();
         let b = U32Id::from_u32(1);
 
-        assert_eq!(pool.move_value(b, 2), Some(()));
+        assert_eq!(pool.move_value(b, 2), Ok(()));
         let order: Vec<_> = pool
             .iter_values()
             .map(|(_, value)| match value {
@@ -597,8 +605,16 @@ mod tests {
         assert_eq!(pool.value_index(b), Some(2));
 
         // An out-of-range index and an unknown id are rejected.
-        assert_eq!(pool.move_value(b, 3), None);
-        assert_eq!(pool.move_value(U32Id::from_u32(9), 0), None);
+        assert_eq!(
+            pool.move_value(b, 3),
+            Err(Error::IndexPastCount { index: 3, count: 3 })
+        );
+        assert_eq!(
+            pool.move_value(U32Id::from_u32(9), 0),
+            Err(Error::UnknownPoolValue {
+                value: U32Id::from_u32(9)
+            })
+        );
     }
 
     #[test]

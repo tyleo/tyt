@@ -1,6 +1,6 @@
 use crate::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, BVoxProperty,
-    BVoxValuePool, BVoxVoxel,
+    BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
+    BVoxProperty, BVoxValuePool, BVoxVoxel, VoxObject,
 };
 use branded_id::U32Id;
 use std::{
@@ -25,6 +25,56 @@ pub enum Error {
     /// A value pool was given a value that is malformed for its kind or
     /// outside its bounds.
     MalformedPoolValue { value: U32Id<BVoxPoolValue> },
+
+    /// An object grid of this many cells would exceed
+    /// [`MAX_GRID_CELLS`](crate::VoxObject::MAX_GRID_CELLS).
+    GridCellCap { cells: u64 },
+
+    /// A mutation named an object that is not one of the state's.
+    UnknownObject { object: U32Id<BVoxObject> },
+
+    /// A mutation named a palette that is not one of the state's.
+    UnknownPalette { palette: U32Id<BVoxPalette> },
+
+    /// A mutation named a value pool that is not one of the state's.
+    UnknownValuePool { pool: U32Id<BVoxValuePool> },
+
+    /// A mutation named a hierarchy node that is not one of the state's.
+    UnknownHierarchyNode { node: U32Id<BVoxHierarchyNode> },
+
+    /// A mutation named a property that is not one of the palette's.
+    UnknownProperty { property: U32Id<BVoxProperty> },
+
+    /// A mutation named a material that is not one of the palette's.
+    UnknownMaterial { material: U32Id<BVoxMaterial> },
+
+    /// A mutation named a value that is not one of the pool's.
+    UnknownPoolValue { value: U32Id<BVoxPoolValue> },
+
+    /// A mutation named a layer that is not one of the object's.
+    UnknownLayer { layer: U32Id<BVoxLayer> },
+
+    /// A mutation named a voxel outside the object's grid.
+    UnknownVoxel { voxel: U32Id<BVoxVoxel> },
+
+    /// A move targeted a listing position at or past the listing's count.
+    IndexPastCount { index: usize, count: usize },
+
+    /// A removal named its own removed id as the replacement.
+    SelfReplacement,
+
+    /// A reorder did not list each of the pool's value ids exactly once.
+    PoolValueOrder,
+
+    /// A voxel was given a sample count different from the layer count.
+    SampleArity { samples: usize, layers: usize },
+
+    /// A material was given a value-id count different from the property
+    /// count.
+    MaterialValueArity { values: usize, properties: usize },
+
+    /// A property was given a name the palette already uses.
+    DuplicatePropertyName { name: String },
 
     /// A value pool's `min`/`max` bounds are malformed: non-finite, not
     /// integer-valued for an `int` pool, or `min` greater than `max`.
@@ -129,6 +179,64 @@ impl Display for Error {
                 "value {} is malformed for its kind or out of bounds",
                 value.to_u32()
             ),
+            Error::GridCellCap { cells } => write!(
+                f,
+                "a {cells}-cell grid exceeds the {}-cell dense cap",
+                VoxObject::MAX_GRID_CELLS
+            ),
+            Error::UnknownObject { object } => {
+                write!(f, "object {} is not one of this state's", object.to_u32())
+            }
+            Error::UnknownPalette { palette } => {
+                write!(f, "palette {} is not one of this state's", palette.to_u32())
+            }
+            Error::UnknownValuePool { pool } => {
+                write!(f, "value pool {} is not one of this state's", pool.to_u32())
+            }
+            Error::UnknownHierarchyNode { node } => write!(
+                f,
+                "hierarchy node {} is not one of this state's",
+                node.to_u32()
+            ),
+            Error::UnknownProperty { property } => write!(
+                f,
+                "property {} is not one of the palette's",
+                property.to_u32()
+            ),
+            Error::UnknownMaterial { material } => write!(
+                f,
+                "material {} is not one of the palette's",
+                material.to_u32()
+            ),
+            Error::UnknownPoolValue { value } => {
+                write!(f, "value {} is not one of the pool's", value.to_u32())
+            }
+            Error::UnknownLayer { layer } => {
+                write!(f, "layer {} is not one of the object's", layer.to_u32())
+            }
+            Error::UnknownVoxel { voxel } => {
+                write!(f, "voxel {} is outside the object's grid", voxel.to_u32())
+            }
+            Error::IndexPastCount { index, count } => {
+                write!(f, "index {index} is at or past the listing count {count}")
+            }
+            Error::SelfReplacement => {
+                write!(f, "the replacement is the id being removed")
+            }
+            Error::PoolValueOrder => write!(
+                f,
+                "the new order does not list each of the pool's value ids exactly once"
+            ),
+            Error::SampleArity { samples, layers } => {
+                write!(f, "{samples} samples were given for {layers} layers")
+            }
+            Error::MaterialValueArity { values, properties } => write!(
+                f,
+                "{values} value ids were given for {properties} properties"
+            ),
+            Error::DuplicatePropertyName { name } => {
+                write!(f, "a property named \"{name}\" already exists")
+            }
             Error::PoolBound { pool } => {
                 write!(
                     f,

@@ -223,7 +223,7 @@ fn build_object(
 ) -> Result<VoxObject> {
     let [size_x, size_y, size_z] = matrix.size;
     let mut object = VoxObject::new(String::new(), TyVector3U32::new(size_x, size_y, size_z))
-        .ok_or_else(|| {
+        .map_err(|_| {
             Error::invalid(format!(
                 "matrix grid {size_x}x{size_y}x{size_z} exceeds the dense limit of {} cells",
                 VoxObject::MAX_GRID_CELLS

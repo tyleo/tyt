@@ -222,7 +222,7 @@ fn material_type_token(material_type: &MVoxMaterialType) -> String {
 fn build_object(model: &MVoxModel, palette: U32Id<BVoxPalette>) -> Result<VoxObject> {
     let [size_x, size_y, size_z] = model.size;
     let mut object = VoxObject::new(String::new(), TyVector3U32::new(size_x, size_y, size_z))
-        .ok_or_else(|| {
+        .map_err(|_| {
             invalid(format!(
                 "model grid {size_x}x{size_y}x{size_z} exceeds the dense limit of {} cells",
                 VoxObject::MAX_GRID_CELLS

@@ -459,11 +459,11 @@ mod tests {
         // compact so the save numbers entities by listing index again.
         assert_eq!(
             state.remove_object(U32Id::<BVoxObject>::from_u32(1)),
-            Some(())
+            Ok(())
         );
         assert_eq!(
             state.remove_palette(U32Id::<BVoxPalette>::from_u32(1)),
-            Some(())
+            Ok(())
         );
         state.gc();
 
@@ -516,7 +516,7 @@ mod tests {
                 .object_mut(object_id)
                 .unwrap()
                 .remove_layer(U32Id::<BVoxLayer>::from_u32(0)),
-            Some(())
+            Ok(())
         );
         state.gc();
         state.validate().unwrap();
