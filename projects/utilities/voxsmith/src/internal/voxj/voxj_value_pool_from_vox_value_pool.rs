@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn linear_float_decodes_an_srgb_pool() {
-        let pool = VoxValuePool::srgb(vec![[1.0, 0.0, 0.5]]);
+        let pool = VoxValuePool::srgb(vec![[1.0, 0.0, 0.5]]).unwrap();
 
         match voxj_value_pool_from_vox_value_pool(&pool, ColorFormat::LinearFloat) {
             VoxjValuePool::LinearRgbFloat { values } => {
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn linear_float_keeps_straight_alpha() {
-        let pool = VoxValuePool::srgba(vec![[0.5, 0.5, 0.5, 0.25]]);
+        let pool = VoxValuePool::srgba(vec![[0.5, 0.5, 0.5, 0.25]]).unwrap();
 
         match voxj_value_pool_from_vox_value_pool(&pool, ColorFormat::LinearFloat) {
             VoxjValuePool::LinearRgbaFloat { values } => {
@@ -234,7 +234,7 @@ mod tests {
     fn linear_float_preserves_an_hdr_component() {
         // A linear pool carries components above 1; linear-float holds them,
         // hex could not.
-        let pool = VoxValuePool::linear_rgb(vec![[2.5, 0.0, 1.0]]);
+        let pool = VoxValuePool::linear_rgb(vec![[2.5, 0.0, 1.0]]).unwrap();
 
         match voxj_value_pool_from_vox_value_pool(&pool, ColorFormat::LinearFloat) {
             VoxjValuePool::LinearRgbFloat { values } => assert_eq!(values[0], [2.5, 0.0, 1.0]),
@@ -244,7 +244,7 @@ mod tests {
 
     #[test]
     fn srgb_float_default_passes_components_through_unchanged() {
-        let pool = VoxValuePool::srgb(vec![[0.1, 0.2, 0.3]]);
+        let pool = VoxValuePool::srgb(vec![[0.1, 0.2, 0.3]]).unwrap();
 
         match voxj_value_pool_from_vox_value_pool(&pool, ColorFormat::Float) {
             VoxjValuePool::SrgbFloat { values } => assert_eq!(values, vec![[0.1, 0.2, 0.3]]),

@@ -58,10 +58,9 @@ mod tests {
     #[test]
     fn a_supplier_reads_each_voxel_through_its_material() {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::srgba(vec![
-            [1.0, 0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0, 1.0],
-        ]));
+        let pool = state.add_value_pool(
+            VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
+        );
 
         let mut palette = VoxPalette::default();
         palette
@@ -103,11 +102,9 @@ mod tests {
     #[test]
     fn a_supplier_over_a_non_color_pool_errors() {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::float(
-            VoxBound::None,
-            VoxBound::None,
-            vec![1.0],
-        ));
+        let pool = state.add_value_pool(
+            VoxValuePool::float(VoxBound::None, VoxBound::None, vec![1.0]).unwrap(),
+        );
 
         let mut palette = VoxPalette::default();
         palette

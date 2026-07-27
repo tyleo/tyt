@@ -217,16 +217,18 @@ mod tests {
         // Colors and metallic values back the properties; only the property
         // names and material counts reach the listing, so the values are
         // arbitrary.
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![
-            [1.0, 0.0, 0.0, 1.0],
-            [0.0, 1.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0, 1.0],
-        ]));
-        let metallic = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::Number(1.0),
-            vec![0.0, 1.0],
-        ));
+        let colors = state.add_value_pool(
+            VoxValuePool::srgba(vec![
+                [1.0, 0.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0, 1.0],
+                [0.0, 0.0, 1.0, 1.0],
+            ])
+            .unwrap(),
+        );
+        let metallic = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 1.0])
+                .unwrap(),
+        );
 
         let mut zero = VoxPalette::default();
         zero.add_property("baseColorFactor".to_owned(), colors)
@@ -409,7 +411,7 @@ mod tests {
     #[test]
     fn an_unreferenced_palette_lists_no_users() {
         let mut state = VoxMain::default();
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]));
+        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property("baseColorFactor".to_owned(), colors)
@@ -438,7 +440,7 @@ mod tests {
     #[test]
     fn an_unreferenced_palette_shows_an_empty_objects_branch() {
         let mut state = VoxMain::default();
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]));
+        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property("baseColorFactor".to_owned(), colors)

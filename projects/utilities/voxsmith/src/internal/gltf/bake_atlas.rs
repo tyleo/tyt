@@ -265,20 +265,17 @@ mod tests {
     fn single_layer_state() -> (VoxMain, U32Id<BVoxObject>, U32Id<BVoxLayer>) {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(VoxValuePool::srgba(vec![
-            [1.0, 0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0, 1.0],
-        ]));
-        let metallic = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::Number(1.0),
-            vec![1.0, 0.0],
-        ));
-        let roughness = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::Number(1.0),
-            vec![0.0, 1.0],
-        ));
+        let base = state.add_value_pool(
+            VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
+        );
+        let metallic = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![1.0, 0.0])
+                .unwrap(),
+        );
+        let roughness = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 1.0])
+                .unwrap(),
+        );
 
         let mut palette = VoxPalette::default();
         palette
@@ -352,7 +349,7 @@ mod tests {
     #[test]
     fn a_bool_packing_reads_one_or_zero() {
         let mut state = VoxMain::default();
-        let flag = state.add_value_pool(VoxValuePool::boolean(vec![true, false]));
+        let flag = state.add_value_pool(VoxValuePool::boolean(vec![true, false]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette.add_property("flag".to_owned(), flag).unwrap();
@@ -383,15 +380,12 @@ mod tests {
         // Both material rows repeat the strength pool's one cell, so both
         // bake the same half strength.
         let mut state = VoxMain::default();
-        let base = state.add_value_pool(VoxValuePool::srgba(vec![
-            [1.0, 0.0, 0.0, 1.0],
-            [0.0, 0.0, 1.0, 1.0],
-        ]));
-        let strength = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::None,
-            vec![0.5],
-        ));
+        let base = state.add_value_pool(
+            VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
+        );
+        let strength = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![0.5]).unwrap(),
+        );
 
         let mut palette = VoxPalette::default();
         palette
@@ -482,13 +476,11 @@ mod tests {
 
         // emissiveFactor is sRGB; strengths 1.0 and 0.5 fold into the texels as
         // fractions of the mesh max, 1.0.
-        let factor =
-            state.add_value_pool(VoxValuePool::srgb(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]));
-        let strength = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::None,
-            vec![1.0, 0.5],
-        ));
+        let factor = state
+            .add_value_pool(VoxValuePool::srgb(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]).unwrap());
+        let strength = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![1.0, 0.5]).unwrap(),
+        );
 
         let mut palette = VoxPalette::default();
         palette

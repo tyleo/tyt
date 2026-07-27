@@ -57,11 +57,14 @@ mod tests {
         let mut state = VoxMain::default();
         // Three colors; materials reference them out of order: blue, red,
         // green.
-        let pool = state.add_value_pool(VoxValuePool::srgba(vec![
-            [1.0, 0.0, 0.0, 1.0], // 0 red
-            [0.0, 1.0, 0.0, 1.0], // 1 green
-            [0.0, 0.0, 1.0, 1.0], // 2 blue
-        ]));
+        let pool = state.add_value_pool(
+            VoxValuePool::srgba(vec![
+                [1.0, 0.0, 0.0, 1.0], // 0 red
+                [0.0, 1.0, 0.0, 1.0], // 1 green
+                [0.0, 0.0, 1.0, 1.0], // 2 blue
+            ])
+            .unwrap(),
+        );
         let mut palette = VoxPalette::default();
         let color = palette
             .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
@@ -78,11 +81,14 @@ mod tests {
         // material resolves to are unchanged.
         assert_eq!(
             state.value_pool(pool),
-            Some(&VoxValuePool::srgba(vec![
-                [0.0, 0.0, 1.0, 1.0],
-                [1.0, 0.0, 0.0, 1.0],
-                [0.0, 1.0, 0.0, 1.0],
-            ]))
+            Some(
+                &VoxValuePool::srgba(vec![
+                    [0.0, 0.0, 1.0, 1.0],
+                    [1.0, 0.0, 0.0, 1.0],
+                    [0.0, 1.0, 0.0, 1.0],
+                ])
+                .unwrap()
+            )
         );
         state.validate().unwrap();
 
@@ -98,13 +104,16 @@ mod tests {
     #[test]
     fn orders_colors_past_an_unused_color_and_a_hole() {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::srgba(vec![
-            [1.0, 0.0, 0.0, 1.0], // 0 red
-            [0.0, 1.0, 0.0, 1.0], // 1 green
-            [0.0, 0.0, 1.0, 1.0], // 2 blue
-            [1.0, 1.0, 1.0, 1.0], // 3 white, drawn by no material
-            [0.0, 0.0, 0.0, 1.0], // 4 black, released below
-        ]));
+        let pool = state.add_value_pool(
+            VoxValuePool::srgba(vec![
+                [1.0, 0.0, 0.0, 1.0], // 0 red
+                [0.0, 1.0, 0.0, 1.0], // 1 green
+                [0.0, 0.0, 1.0, 1.0], // 2 blue
+                [1.0, 1.0, 1.0, 1.0], // 3 white, drawn by no material
+                [0.0, 0.0, 0.0, 1.0], // 4 black, released below
+            ])
+            .unwrap(),
+        );
         let mut palette = VoxPalette::default();
         palette
             .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
@@ -125,12 +134,15 @@ mod tests {
         // The three drawn colors lead in material order, then the unused one.
         assert_eq!(
             state.value_pool(pool),
-            Some(&VoxValuePool::srgba(vec![
-                [0.0, 0.0, 1.0, 1.0],
-                [1.0, 0.0, 0.0, 1.0],
-                [0.0, 1.0, 0.0, 1.0],
-                [1.0, 1.0, 1.0, 1.0],
-            ]))
+            Some(
+                &VoxValuePool::srgba(vec![
+                    [0.0, 0.0, 1.0, 1.0],
+                    [1.0, 0.0, 0.0, 1.0],
+                    [0.0, 1.0, 0.0, 1.0],
+                    [1.0, 1.0, 1.0, 1.0],
+                ])
+                .unwrap()
+            )
         );
         state.validate().unwrap();
 

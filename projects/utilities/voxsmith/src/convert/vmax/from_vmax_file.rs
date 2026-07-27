@@ -195,7 +195,7 @@ fn build_object(
     // Fold the color and material palettes into one: each voxel samples a
     // single material carrying both its color and its material coefficients, one
     // material per distinct color-and-material combination the voxels use.
-    let folded = folded_palette(serde, object, &voxels, state);
+    let folded = folded_palette(serde, object, &voxels, state)?;
     palette_provenance.push(Some(folded.provenance));
 
     // Back-fill the layer with material 0; the live voxels overwrite theirs.
@@ -259,7 +259,7 @@ fn folded_palette(
     object: &VMaxObject,
     voxels: &[VMaxVoxel],
     state: &mut VoxMain,
-) -> FoldedPalette {
+) -> Result<FoldedPalette> {
     let colors = color_cells(serde, object);
     let (name, materials) = material_list(serde, object);
     let has_materials = !materials.is_empty();
@@ -275,7 +275,7 @@ fn folded_palette(
             .iter()
             .map(|color| <[f64; 4]>::from(TySrgbaU8::from(*color).into_format::<f64, f64>()))
             .collect(),
-    ));
+    )?);
     palette
         .add_property(BASE_COLOR_FACTOR.to_owned(), color_pool)
         .expect("the property names are distinct");
@@ -294,7 +294,7 @@ fn folded_palette(
                 .iter()
                 .map(|m| vm_coefficient_to_pbr_factor(m.mc))
                 .collect(),
-        );
+        )?;
         palette
             .add_property(METALLIC_FACTOR.to_owned(), metallic)
             .expect("the property names are distinct");
@@ -305,7 +305,7 @@ fn folded_palette(
                 .iter()
                 .map(|m| vm_coefficient_to_pbr_factor(m.rc))
                 .collect(),
-        );
+        )?;
         palette
             .add_property(ROUGHNESS_FACTOR.to_owned(), roughness)
             .expect("the property names are distinct");
@@ -325,13 +325,13 @@ fn folded_palette(
                         [r, g, b]
                     })
                     .collect(),
-            ));
+            )?);
             palette
                 .add_property(EMISSIVE_FACTOR.to_owned(), emissive_color)
                 .expect("the property names are distinct");
             color_axis.push(true);
         }
-        let emissive = float_pool(state, materials.iter().map(|m| m.sic).collect());
+        let emissive = float_pool(state, materials.iter().map(|m| m.sic).collect())?;
         palette
             .add_property(EMISSIVE_STRENGTH.to_owned(), emissive)
             .expect("the property names are distinct");
@@ -348,17 +348,17 @@ fn folded_palette(
                     .iter()
                     .map(|m| m.md.as_ref().map_or(default_ior, |d| d.ior))
                     .collect(),
-            );
+            )?;
             palette
                 .add_property(IOR.to_owned(), ior)
                 .expect("the property names are distinct");
             color_axis.push(false);
-            let transmission = float_pool(state, dispersion(&materials, |d| d.transmission));
+            let transmission = float_pool(state, dispersion(&materials, |d| d.transmission))?;
             palette
                 .add_property(TRANSMISSION_FACTOR.to_owned(), transmission)
                 .expect("the property names are distinct");
             color_axis.push(false);
-            let absorption = float_pool(state, dispersion(&materials, |d| d.absorption));
+            let absorption = float_pool(state, dispersion(&materials, |d| d.absorption))?;
             palette
                 .add_property(ABSORPTION.to_owned(), absorption)
                 .expect("the property names are distinct");
@@ -367,7 +367,7 @@ fn folded_palette(
 
         let shadows = state.add_value_pool(VoxValuePool::boolean(
             materials.iter().map(|m| m.sh).collect(),
-        ));
+        )?);
         palette
             .add_property(SHADOWS.to_owned(), shadows)
             .expect("the property names are distinct");
@@ -404,12 +404,12 @@ fn folded_palette(
         name,
         materials: materials.iter().map(voxel_max_material).collect(),
     };
-    FoldedPalette {
+    Ok(FoldedPalette {
         palette,
         provenance,
         combos,
         has_materials,
-    }
+    })
 }
 
 /// The color-and-material combination key for a voxel: its color index and, when
@@ -459,13 +459,14 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
 }
 
 /// An unbounded float pool over `values`, defaulting a non-finite coefficient to
-/// zero so the pool validates; the exact value rides in the ext.
-fn float_pool(state: &mut VoxMain, values: Vec<f64>) -> U32Id<BVoxValuePool> {
+/// zero so the pool builds; the exact value rides in the ext. Errors when
+/// `values` is empty.
+fn float_pool(state: &mut VoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
     let values = values
         .into_iter()
         .map(|v| if v.is_finite() { v } else { 0.0 })
         .collect();
-    state.add_value_pool(VoxValuePool::float(VoxBound::None, VoxBound::None, values))
+    Ok(state.add_value_pool(VoxValuePool::float(VoxBound::None, VoxBound::None, values)?))
 }
 
 /// Each material's dispersion field `read`, or zero where dispersion is absent.

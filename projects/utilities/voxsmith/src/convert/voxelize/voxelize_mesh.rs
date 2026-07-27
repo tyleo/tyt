@@ -69,7 +69,7 @@ pub fn voxelize_mesh(
 
     let mut state = VoxMain::default();
 
-    let (palette, samples, default_material) = build_palette(&mut state, &cell_materials);
+    let (palette, samples, default_material) = build_palette(&mut state, &cell_materials)?;
 
     let palette_id = state.add_palette(palette);
 
@@ -234,6 +234,14 @@ fn fill_interior(
     }
 }
 
+/// A built palette, each filled cell's material sample, and the default
+/// material.
+type PaletteBuild = (
+    VoxPalette,
+    Vec<Option<U32Id<BVoxMaterial>>>,
+    U32Id<BVoxMaterial>,
+);
+
 /// Assembles a palette from a per-cell material list. Near-identical
 /// materials merge to one palette material, and each filled cell samples its
 /// cell's material. Every glTF property draws from a deduplicated value pool
@@ -243,11 +251,7 @@ fn fill_interior(
 fn build_palette(
     state: &mut VoxMain,
     cell_materials: &[Option<MeshMaterial>],
-) -> (
-    VoxPalette,
-    Vec<Option<U32Id<BVoxMaterial>>>,
-    U32Id<BVoxMaterial>,
-) {
+) -> Result<PaletteBuild> {
     // Merge near-identical materials into a distinct list, first seen in raster
     // order, remembering each filled cell's position in it.
     let mut distinct: Vec<MeshMaterial> = Vec::new();
@@ -273,7 +277,7 @@ fn build_palette(
 
     // One deduplicated pool per property, plus each distinct material's
     // value id into it. The bounded scalars clamp to their pool range so the
-    // assembled state validates.
+    // pools build.
     let base_color = srgba_pool(&distinct, |material| material.base_color);
     let metallic = float_pool(&distinct, |material| material.metallic.clamp(0.0, 1.0));
     let roughness = float_pool(&distinct, |material| material.roughness.clamp(0.0, 1.0));
@@ -285,14 +289,14 @@ fn build_palette(
 
     // Register the pools and add each property. All properties precede any
     // material, so no material carries a back-fill placeholder value id.
-    let base_color_pool = state.add_value_pool(VoxValuePool::srgba(base_color.values));
-    let metallic_pool = state.add_value_pool(bounded_float(metallic.values, 0.0, 1.0));
-    let roughness_pool = state.add_value_pool(bounded_float(roughness.values, 0.0, 1.0));
-    let emissive_factor_pool = state.add_value_pool(VoxValuePool::srgb(emissive_factor.values));
-    let emissive_strength_pool = state.add_value_pool(float_above(emissive_strength.values, 0.0));
-    let occlusion_pool = state.add_value_pool(bounded_float(occlusion.values, 0.0, 1.0));
-    let ior_pool = state.add_value_pool(float_above(ior.values, 1.0));
-    let transmission_pool = state.add_value_pool(bounded_float(transmission.values, 0.0, 1.0));
+    let base_color_pool = state.add_value_pool(VoxValuePool::srgba(base_color.values)?);
+    let metallic_pool = state.add_value_pool(bounded_float(metallic.values, 0.0, 1.0)?);
+    let roughness_pool = state.add_value_pool(bounded_float(roughness.values, 0.0, 1.0)?);
+    let emissive_factor_pool = state.add_value_pool(VoxValuePool::srgb(emissive_factor.values)?);
+    let emissive_strength_pool = state.add_value_pool(float_above(emissive_strength.values, 0.0)?);
+    let occlusion_pool = state.add_value_pool(bounded_float(occlusion.values, 0.0, 1.0)?);
+    let ior_pool = state.add_value_pool(float_above(ior.values, 1.0)?);
+    let transmission_pool = state.add_value_pool(bounded_float(transmission.values, 0.0, 1.0)?);
 
     let mut palette = VoxPalette::default();
     palette
@@ -346,7 +350,7 @@ fn build_palette(
 
     let default_material = materials[0];
 
-    (palette, samples, default_material)
+    Ok((palette, samples, default_material))
 }
 
 /// A deduplicated pool column and each distinct material's value id into it.
@@ -424,13 +428,21 @@ fn float_pool(materials: &[MeshMaterial], get: impl Fn(&MeshMaterial) -> f64) ->
 }
 
 /// A float pool bounded on both sides.
-fn bounded_float(values: Vec<f64>, min: f64, max: f64) -> VoxValuePool {
-    VoxValuePool::float(VoxBound::Number(min), VoxBound::Number(max), values)
+fn bounded_float(values: Vec<f64>, min: f64, max: f64) -> Result<VoxValuePool> {
+    Ok(VoxValuePool::float(
+        VoxBound::Number(min),
+        VoxBound::Number(max),
+        values,
+    )?)
 }
 
 /// A float pool bounded below and unbounded above.
-fn float_above(values: Vec<f64>, min: f64) -> VoxValuePool {
-    VoxValuePool::float(VoxBound::Number(min), VoxBound::None, values)
+fn float_above(values: Vec<f64>, min: f64) -> Result<VoxValuePool> {
+    Ok(VoxValuePool::float(
+        VoxBound::Number(min),
+        VoxBound::None,
+        values,
+    )?)
 }
 
 /// A hashable identity for a material: its two 8-bit colors and the bit patterns

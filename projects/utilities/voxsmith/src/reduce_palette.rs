@@ -816,14 +816,17 @@ mod tests {
 
         // baseColorFactor draws from an sRGBA color pool; tag draws from an
         // unbounded float pool with one distinct value per material.
-        let base = state.add_value_pool(VoxValuePool::srgba(
-            colors.iter().map(|color| srgba(color)).collect(),
-        ));
-        let tag = state.add_value_pool(VoxValuePool::float(
-            VoxBound::None,
-            VoxBound::None,
-            (0..colors.len()).map(|index| index as f64).collect(),
-        ));
+        let base = state.add_value_pool(
+            VoxValuePool::srgba(colors.iter().map(|color| srgba(color)).collect()).unwrap(),
+        );
+        let tag = state.add_value_pool(
+            VoxValuePool::float(
+                VoxBound::None,
+                VoxBound::None,
+                (0..colors.len()).map(|index| index as f64).collect(),
+            )
+            .unwrap(),
+        );
 
         let mut palette = VoxPalette::default();
         palette
@@ -887,9 +890,9 @@ mod tests {
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(VoxValuePool::srgba(
-            colors.iter().map(|color| srgba(color)).collect(),
-        ));
+        let base = state.add_value_pool(
+            VoxValuePool::srgba(colors.iter().map(|color| srgba(color)).collect()).unwrap(),
+        );
 
         let mut palette = VoxPalette::default();
         palette
@@ -1209,11 +1212,14 @@ mod tests {
         // The palette carries no `baseColorFactor`, so every material counts
         // as colorless and the reduction no-ops even over the cap.
         let mut state = VoxMain::default();
-        let tag = state.add_value_pool(VoxValuePool::float(
-            VoxBound::None,
-            VoxBound::None,
-            (0..3).map(|index| index as f64).collect(),
-        ));
+        let tag = state.add_value_pool(
+            VoxValuePool::float(
+                VoxBound::None,
+                VoxBound::None,
+                (0..3).map(|index| index as f64).collect(),
+            )
+            .unwrap(),
+        );
 
         let mut palette = VoxPalette::default();
         palette.add_property("tag".to_owned(), tag).unwrap();
@@ -1253,11 +1259,9 @@ mod tests {
         // lands.
         let (mut state, palette, object_id) =
             state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
-        let strength = state.add_value_pool(VoxValuePool::float(
-            VoxBound::None,
-            VoxBound::None,
-            vec![1.5],
-        ));
+        let strength = state.add_value_pool(
+            VoxValuePool::float(VoxBound::None, VoxBound::None, vec![1.5]).unwrap(),
+        );
 
         let mut glow_palette = VoxPalette::default();
         glow_palette

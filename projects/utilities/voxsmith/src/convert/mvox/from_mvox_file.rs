@@ -72,8 +72,8 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
 /// Builds the shared palette: one material per color index `0..=255`, so a
 /// material's index is its color index. `baseColorFactor` binds a color pool;
 /// with materials, `type` and the six scalar fields bind their own pools. An
-/// absent or non-finite field takes a default, since a pool holds no null and
-/// validate rejects a non-finite float; the exact optionals ride in the ext.
+/// absent or non-finite field takes a default, since a pool holds no null and a
+/// float pool rejects a non-finite value; the exact optionals ride in the ext.
 /// Errors on a material id outside `0..=255` or a duplicate id.
 fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     let colors = file.resolved_palette().colors;
@@ -101,12 +101,15 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
 
     let color_bytes: Vec<[u8; 4]> = colors.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
     let (distinct_colors, color_indices) = intern(&color_bytes, |&color| color);
-    let color_pool = state.add_value_pool(VoxValuePool::srgba(
-        distinct_colors
-            .iter()
-            .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
-            .collect(),
-    ));
+    let color_pool = state.add_value_pool(
+        VoxValuePool::srgba(
+            distinct_colors
+                .iter()
+                .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
+                .collect(),
+        )
+        .expect("byte-derived components are in range and the palette is non-empty"),
+    );
     palette
         .add_property(BASE_COLOR_FACTOR.to_owned(), color_pool)
         .expect("the property names are distinct");
@@ -135,7 +138,9 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             })
             .collect();
         let (distinct_types, type_indices) = intern(&types, |token| token.clone());
-        let type_pool = state.add_value_pool(VoxValuePool::string(distinct_types));
+        let type_pool = state.add_value_pool(
+            VoxValuePool::string(distinct_types).expect("every palette cell yields a type token"),
+        );
         palette
             .add_property("type".to_owned(), type_pool)
             .expect("the property names are distinct");
@@ -156,11 +161,10 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
                 })
                 .collect();
             let (distinct, indices) = intern(&values, |value| value.to_bits());
-            let pool = state.add_value_pool(VoxValuePool::float(
-                VoxBound::None,
-                VoxBound::None,
-                distinct,
-            ));
+            let pool = state.add_value_pool(
+                VoxValuePool::float(VoxBound::None, VoxBound::None, distinct)
+                    .expect("the scalars are finite and every palette cell yields one"),
+            );
             palette
                 .add_property(name.to_owned(), pool)
                 .expect("the property names are distinct");
@@ -698,12 +702,15 @@ mod tests {
 
         // One baseColorFactor palette: a transparent placeholder, then red,
         // green, blue.
-        let pool = state.add_value_pool(VoxValuePool::srgba(
-            ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
-                .iter()
-                .map(|hex| srgba(hex))
-                .collect(),
-        ));
+        let pool = state.add_value_pool(
+            VoxValuePool::srgba(
+                ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
+                    .iter()
+                    .map(|hex| srgba(hex))
+                    .collect(),
+            )
+            .unwrap(),
+        );
         let mut palette = VoxPalette::default();
         palette
             .add_property(BASE_COLOR_FACTOR.to_owned(), pool)

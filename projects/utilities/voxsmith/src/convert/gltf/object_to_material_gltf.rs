@@ -50,7 +50,7 @@ mod tests {
     fn cube_gltf(maps: Vec<MaterialMap>, storage: ResourceStorage) -> Vec<u8> {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
+        let base = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette

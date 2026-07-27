@@ -23,7 +23,7 @@ treegrid = { version = "0.1.0", features = ["json", "ty-math"], optional = true 
 treeselect = { version = "0.1.0", optional = true }
 ty-math = { version = "0.1.7", optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
-voxcore = { version = "0.1.0", optional = true }
+voxcore = { version = "0.2.0", optional = true }
 voxj-codec = { version = "0.1.0", optional = true }
 voxsmith = { version = "0.1.0", optional = true }
 

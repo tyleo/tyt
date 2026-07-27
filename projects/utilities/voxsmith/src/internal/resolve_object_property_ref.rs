@@ -36,7 +36,7 @@ mod tests {
     /// A one-material palette whose `baseColorFactor` property draws
     /// from a fresh one-color pool.
     fn color_palette(state: &mut VoxMain) -> U32Id<BVoxPalette> {
-        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
+        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -86,7 +86,7 @@ mod tests {
 
         // The trailing palette does not carry the name, so the scan passes
         // its layer.
-        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[0.0, 1.0, 0.0, 1.0]]));
+        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[0.0, 1.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property("emissiveFactor".to_owned(), pool)

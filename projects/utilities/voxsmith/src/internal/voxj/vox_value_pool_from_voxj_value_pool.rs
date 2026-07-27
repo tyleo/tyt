@@ -11,8 +11,12 @@ use voxj::{VoxjBound, VoxjValuePool};
 /// values and, for `int`/`float`, its bounds across unchanged. `json` values
 /// recurse through [`vox_value_from_voxj_value`].
 ///
-/// Errors only on a malformed hex color string; range and bound checks are left
-/// to [`VoxMain::validate`](voxcore::VoxMain::validate).
+/// Errors if:
+///
+/// 1. a hex color string is malformed
+/// 2. the pool is empty
+/// 3. a bound is malformed
+/// 4. a value is out of range
 pub fn vox_value_pool_from_voxj_value_pool(pool: &VoxjValuePool) -> Result<VoxValuePool> {
     Ok(match pool {
         VoxjValuePool::Json { values } => VoxValuePool::json(
@@ -20,31 +24,31 @@ pub fn vox_value_pool_from_voxj_value_pool(pool: &VoxjValuePool) -> Result<VoxVa
                 .iter()
                 .map(vox_value_from_voxj_value)
                 .collect::<Result<_>>()?,
-        ),
+        )?,
 
-        VoxjValuePool::Bool { values } => VoxValuePool::boolean(values.clone()),
+        VoxjValuePool::Bool { values } => VoxValuePool::boolean(values.clone())?,
 
         VoxjValuePool::Float { min, max, values } => {
-            VoxValuePool::float(vox_bound(*min), vox_bound(*max), values.clone())
+            VoxValuePool::float(vox_bound(*min), vox_bound(*max), values.clone())?
         }
 
         VoxjValuePool::Int { min, max, values } => {
-            VoxValuePool::int(vox_bound(*min), vox_bound(*max), values.clone())
+            VoxValuePool::int(vox_bound(*min), vox_bound(*max), values.clone())?
         }
 
-        VoxjValuePool::String { values } => VoxValuePool::string(values.clone()),
+        VoxjValuePool::String { values } => VoxValuePool::string(values.clone())?,
 
-        VoxjValuePool::SrgbFloat { values } => VoxValuePool::srgb(values.clone()),
+        VoxjValuePool::SrgbFloat { values } => VoxValuePool::srgb(values.clone())?,
 
-        VoxjValuePool::SrgbHex { values } => VoxValuePool::srgb(decode_hex_values(values)?),
+        VoxjValuePool::SrgbHex { values } => VoxValuePool::srgb(decode_hex_values(values)?)?,
 
-        VoxjValuePool::SrgbaFloat { values } => VoxValuePool::srgba(values.clone()),
+        VoxjValuePool::SrgbaFloat { values } => VoxValuePool::srgba(values.clone())?,
 
-        VoxjValuePool::SrgbaHex { values } => VoxValuePool::srgba(decode_hex_values(values)?),
+        VoxjValuePool::SrgbaHex { values } => VoxValuePool::srgba(decode_hex_values(values)?)?,
 
-        VoxjValuePool::LinearRgbFloat { values } => VoxValuePool::linear_rgb(values.clone()),
+        VoxjValuePool::LinearRgbFloat { values } => VoxValuePool::linear_rgb(values.clone())?,
 
-        VoxjValuePool::LinearRgbaFloat { values } => VoxValuePool::linear_rgba(values.clone()),
+        VoxjValuePool::LinearRgbaFloat { values } => VoxValuePool::linear_rgba(values.clone())?,
     })
 }
 

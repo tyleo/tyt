@@ -8,12 +8,23 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
-/// An error from voxcore: a [`VoxMain`](crate::VoxMain) that violates a rule
-/// [`validate`](crate::VoxMain::validate) checks.
+/// An error from voxcore.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     /// A value pool has no values.
     EmptyPool { pool: U32Id<BVoxValuePool> },
+
+    /// A value pool was given no values at construction.
+    EmptyPoolValues,
+
+    /// A value pool was given malformed `min`/`max` bounds at construction:
+    /// non-finite, not integer-valued for an `int` pool, or `min` greater
+    /// than `max`.
+    MalformedPoolBound,
+
+    /// A value pool was given a value that is malformed for its kind or
+    /// outside its bounds.
+    MalformedPoolValue { value: U32Id<BVoxPoolValue> },
 
     /// A value pool's `min`/`max` bounds are malformed: non-finite, not
     /// integer-valued for an `int` pool, or `min` greater than `max`.
@@ -107,6 +118,17 @@ impl Display for Error {
             Error::EmptyPool { pool } => {
                 write!(f, "value pool {} has no values", pool.to_u32())
             }
+            Error::EmptyPoolValues => {
+                write!(f, "a value pool needs at least one value")
+            }
+            Error::MalformedPoolBound => {
+                write!(f, "the value pool's min/max bounds are malformed")
+            }
+            Error::MalformedPoolValue { value } => write!(
+                f,
+                "value {} is malformed for its kind or out of bounds",
+                value.to_u32()
+            ),
             Error::PoolBound { pool } => {
                 write!(
                     f,

@@ -328,7 +328,7 @@ mod tests {
     /// material.
     fn tight_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
+        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property("baseColorFactor".to_owned(), pool)
@@ -490,18 +490,16 @@ mod tests {
     #[test]
     fn reports_two_layers_over_two_palettes() {
         let mut state = VoxMain::default();
-        let strengths = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::None,
-            vec![2.0],
-        ));
+        let strengths = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![2.0]).unwrap(),
+        );
         let mut glow = VoxPalette::default();
         glow.add_property("emissiveStrength".to_owned(), strengths)
             .unwrap();
         let glow_material = glow.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let glow = state.add_palette(glow);
 
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
+        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut base = VoxPalette::default();
         base.add_property("baseColorFactor".to_owned(), colors)
             .unwrap();

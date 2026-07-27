@@ -80,12 +80,15 @@ fn build_palette(
 
     // Colors ride in a shared sRGBA pool as float components in `[0, 1]`; each
     // material draws one value id into it.
-    let pool = state.add_value_pool(VoxValuePool::srgba(
-        order
-            .iter()
-            .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
-            .collect(),
-    ));
+    let pool = state.add_value_pool(
+        VoxValuePool::srgba(
+            order
+                .iter()
+                .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
+                .collect(),
+        )
+        .expect("byte-derived components are in range and the list is non-empty"),
+    );
 
     let mut palette = VoxPalette::default();
     palette
@@ -458,12 +461,15 @@ mod tests {
 
         // One baseColorFactor palette: a transparent placeholder, then red,
         // green, blue.
-        let pool = state.add_value_pool(VoxValuePool::srgba(
-            ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
-                .iter()
-                .map(|hex| srgba(hex))
-                .collect(),
-        ));
+        let pool = state.add_value_pool(
+            VoxValuePool::srgba(
+                ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
+                    .iter()
+                    .map(|hex| srgba(hex))
+                    .collect(),
+            )
+            .unwrap(),
+        );
         let mut palette = VoxPalette::default();
         palette
             .add_property(BASE_COLOR_FACTOR.to_owned(), pool)

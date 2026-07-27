@@ -634,7 +634,7 @@ mod tests {
                 ]
             })
             .collect();
-        state.add_value_pool(VoxValuePool::srgba(values))
+        state.add_value_pool(VoxValuePool::srgba(values).unwrap())
     }
 
     /// A document with two palettes: palette 0 has `baseColorFactor` and
@@ -644,11 +644,10 @@ mod tests {
         let mut state = VoxMain::default();
 
         let colors_zero = srgba_pool(&mut state, &[[255, 0, 0, 255], [0, 255, 0, 128]]);
-        let metallic = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::Number(1.0),
-            vec![1.0, 0.2],
-        ));
+        let metallic = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![1.0, 0.2])
+                .unwrap(),
+        );
         let colors_one = srgba_pool(&mut state, &[[0, 0, 255, 255]]);
 
         let mut first = VoxPalette::default();
@@ -743,7 +742,7 @@ mod tests {
     #[test]
     fn swatch_spaces_values_with_no_swatch() {
         let mut state = VoxMain::default();
-        let shadows = state.add_value_pool(VoxValuePool::boolean(vec![true, false]));
+        let shadows = state.add_value_pool(VoxValuePool::boolean(vec![true, false]).unwrap());
         let mut palette = VoxPalette::default();
         palette.add_property("shadows".to_owned(), shadows).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
@@ -1185,7 +1184,7 @@ mod tests {
     /// One palette binding `tint` to a three-component `Srgb` pool holding a red.
     fn three_component_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::srgb(vec![[1.0, 0.0, 0.0]]));
+        let pool = state.add_value_pool(VoxValuePool::srgb(vec![[1.0, 0.0, 0.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette.add_property("tint".to_owned(), pool).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
@@ -1214,7 +1213,8 @@ mod tests {
     fn a_linear_color_renders_functional_notation() {
         let mut state = VoxMain::default();
         // A linear pool carries HDR components above 1 that no hex can hold.
-        let pool = state.add_value_pool(VoxValuePool::linear_rgba(vec![[2.0, 1.0, 0.5, 1.0]]));
+        let pool =
+            state.add_value_pool(VoxValuePool::linear_rgba(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property("emissiveFactor".to_owned(), pool)
@@ -1233,11 +1233,9 @@ mod tests {
     #[test]
     fn an_int_pool_renders_integers() {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::int(
-            VoxBound::Number(0.0),
-            VoxBound::None,
-            vec![3, 7],
-        ));
+        let pool = state.add_value_pool(
+            VoxValuePool::int(VoxBound::Number(0.0), VoxBound::None, vec![3, 7]).unwrap(),
+        );
         let mut palette = VoxPalette::default();
         palette.add_property("count".to_owned(), pool).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
@@ -1251,10 +1249,13 @@ mod tests {
     #[test]
     fn a_json_pool_renders_arrays_rather_than_null() {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::json(vec![VoxValue::Array(vec![
-            VoxValue::Number(1.0),
-            VoxValue::Number(2.0),
-        ])]));
+        let pool = state.add_value_pool(
+            VoxValuePool::json(vec![VoxValue::Array(vec![
+                VoxValue::Number(1.0),
+                VoxValue::Number(2.0),
+            ])])
+            .unwrap(),
+        );
         let mut palette = VoxPalette::default();
         palette.add_property("extra".to_owned(), pool).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
@@ -1277,7 +1278,7 @@ mod tests {
     #[test]
     fn an_empty_property_name_is_quoted_in_the_label_but_raw_in_json() {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::boolean(vec![true]));
+        let pool = state.add_value_pool(VoxValuePool::boolean(vec![true]).unwrap());
         let mut palette = VoxPalette::default();
         // A binding with no property name, reached through the `*` property.
         palette.add_property(String::new(), pool).unwrap();
@@ -1305,11 +1306,9 @@ mod tests {
         // Both material rows draw the strength pool's one value, so the
         // column shows it twice.
         let mut state = VoxMain::default();
-        let strengths = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::None,
-            vec![2.0],
-        ));
+        let strengths = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![2.0]).unwrap(),
+        );
         let mut palette = VoxPalette::default();
         palette
             .add_property("emissiveStrength".to_owned(), strengths)

@@ -344,7 +344,7 @@ mod tests {
     /// backing state is dropped; the object owns its layer set.
     fn object_with_layers(layers: usize) -> VoxObject {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
+        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property("baseColorFactor".to_owned(), pool)
@@ -384,13 +384,11 @@ mod tests {
     fn palette_state() -> (VoxMain, U32Id<BVoxPalette>) {
         let mut state = VoxMain::default();
 
-        let tint = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
-        let glow = state.add_value_pool(VoxValuePool::srgb(vec![[0.0, 1.0, 0.0]]));
-        let gloss = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::Number(1.0),
-            vec![0.5],
-        ));
+        let tint = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let glow = state.add_value_pool(VoxValuePool::srgb(vec![[0.0, 1.0, 0.0]]).unwrap());
+        let gloss = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.5]).unwrap(),
+        );
 
         let mut palette = VoxPalette::default();
         palette.add_property("tint".to_owned(), tint).unwrap();
@@ -489,7 +487,7 @@ mod tests {
     #[test]
     fn a_string_pool_has_no_texel_value() {
         let mut state = VoxMain::default();
-        let tag = state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]));
+        let tag = state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]).unwrap());
         let mut palette = VoxPalette::default();
         palette.add_property("tag".to_owned(), tag).unwrap();
         palette.add_material(vec![value(0)]).unwrap();

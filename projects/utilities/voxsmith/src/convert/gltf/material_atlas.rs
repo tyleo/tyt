@@ -69,7 +69,7 @@ mod tests {
     fn bakes_one_png_per_requested_map() {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
+        let base = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette

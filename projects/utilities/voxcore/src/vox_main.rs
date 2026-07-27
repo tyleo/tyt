@@ -1,7 +1,7 @@
 use crate::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, BVoxProperty,
-    BVoxValuePool, Error, Result, VoxBound, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette,
-    VoxPoolValueRef, VoxRuntimeState, VoxValue, VoxValuePool, VoxValuePoolKind,
+    BVoxValuePool, Error, Result, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxPoolFlaw,
+    VoxRuntimeState, VoxValue, VoxValuePool,
 };
 use branded_id::{IdVec, U32Id, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
@@ -586,7 +586,17 @@ impl VoxMain {
         // their kind. This runs first, so a palette that reads a malformed pool
         // is reported after the pool it reads.
         for (pool_id, pool) in self.iter_value_pools() {
-            check_value_pool(pool_id, pool)?;
+            match pool.first_flaw() {
+                None => {}
+                Some(VoxPoolFlaw::Empty) => return Err(Error::EmptyPool { pool: pool_id }),
+                Some(VoxPoolFlaw::Bound) => return Err(Error::PoolBound { pool: pool_id }),
+                Some(VoxPoolFlaw::Value(value)) => {
+                    return Err(Error::PoolValue {
+                        pool: pool_id,
+                        value,
+                    });
+                }
+            }
         }
 
         // Palette property rules: pools resolve and every value id is within
@@ -795,188 +805,6 @@ impl VoxMain {
     }
 }
 
-/// Checks a value pool is non-empty and every value and bound is well-formed
-/// for its kind:
-///
-/// 1. int/float bounds finite, integer-valued for `int`, and ordered
-/// 2. int/float values finite and within bounds
-/// 3. color components within their space's range
-///
-/// `pool_id` is the pool's id, for the error.
-fn check_value_pool(pool_id: U32Id<BVoxValuePool>, pool: &VoxValuePool) -> Result<()> {
-    if pool.values_len() == 0 {
-        return Err(Error::EmptyPool { pool: pool_id });
-    }
-    match pool.kind() {
-        VoxValuePoolKind::Float { min, max, .. } => {
-            check_numeric_bounds(pool_id, min, max, false)?;
-            for (value_id, value) in pool.iter_values() {
-                let VoxPoolValueRef::Float(number) = value else {
-                    unreachable!("a float pool yields float values");
-                };
-                if !number.is_finite() || !value_in_bounds(min, max, number) {
-                    return Err(Error::PoolValue {
-                        pool: pool_id,
-                        value: value_id,
-                    });
-                }
-            }
-        }
-        VoxValuePoolKind::Int { min, max, .. } => {
-            check_numeric_bounds(pool_id, min, max, true)?;
-            for (value_id, value) in pool.iter_values() {
-                let VoxPoolValueRef::Int(number) = value else {
-                    unreachable!("an int pool yields int values");
-                };
-                if !int_value_in_bounds(min, max, number) {
-                    return Err(Error::PoolValue {
-                        pool: pool_id,
-                        value: value_id,
-                    });
-                }
-            }
-        }
-        VoxValuePoolKind::Srgb { .. } | VoxValuePoolKind::Srgba { .. } => {
-            check_color_components(pool_id, pool, false)?
-        }
-        VoxValuePoolKind::LinearRgb { .. } | VoxValuePoolKind::LinearRgba { .. } => {
-            check_color_components(pool_id, pool, true)?
-        }
-        VoxValuePoolKind::Json { .. }
-        | VoxValuePoolKind::Bool { .. }
-        | VoxValuePoolKind::String { .. } => {}
-    }
-    Ok(())
-}
-
-/// Checks a bounded pool's `min`/`max`: each numeric bound is finite (and
-/// integer-valued when `integer`), and `min <= max` when both are finite.
-fn check_numeric_bounds(
-    pool_id: U32Id<BVoxValuePool>,
-    min: &VoxBound,
-    max: &VoxBound,
-    integer: bool,
-) -> Result<()> {
-    let min = bound_number(pool_id, min, integer)?;
-    let max = bound_number(pool_id, max, integer)?;
-    if let (Some(low), Some(high)) = (min, max)
-        && low > high
-    {
-        return Err(Error::PoolBound { pool: pool_id });
-    }
-    Ok(())
-}
-
-/// A bound's finite numeric value, or `None` if unbounded. Rejects a non-finite
-/// bound, or a non-integer bound on an `int` pool.
-fn bound_number(
-    pool_id: U32Id<BVoxValuePool>,
-    bound: &VoxBound,
-    integer: bool,
-) -> Result<Option<f64>> {
-    match bound {
-        VoxBound::None => Ok(None),
-        VoxBound::Number(number) => {
-            if !number.is_finite() || (integer && number.fract() != 0.0) {
-                Err(Error::PoolBound { pool: pool_id })
-            } else {
-                Ok(Some(*number))
-            }
-        }
-    }
-}
-
-/// Whether `value` lies within `min`/`max`, each side unbounded when `None`.
-fn value_in_bounds(min: &VoxBound, max: &VoxBound, value: f64) -> bool {
-    let low_ok = match min {
-        VoxBound::Number(low) => value >= *low,
-        VoxBound::None => true,
-    };
-    let high_ok = match max {
-        VoxBound::Number(high) => value <= *high,
-        VoxBound::None => true,
-    };
-    low_ok && high_ok
-}
-
-/// Whether integer `value` lies within `min`/`max`, each side unbounded when
-/// `None`. The integer sibling of [`value_in_bounds`]: it compares in the
-/// integer domain, since casting an `i64` past 2^53 to `f64` rounds and could
-/// carry it across a bound. Each numeric bound is finite and integer-valued,
-/// which [`check_numeric_bounds`] establishes first.
-fn int_value_in_bounds(min: &VoxBound, max: &VoxBound, value: i64) -> bool {
-    let low_ok = match min {
-        VoxBound::Number(low) => int_at_least(value, *low),
-        VoxBound::None => true,
-    };
-    let high_ok = match max {
-        VoxBound::Number(high) => int_at_most(value, *high),
-        VoxBound::None => true,
-    };
-    low_ok && high_ok
-}
-
-/// Exact `value >= bound` for a finite integer-valued `bound`. `i64::MAX as
-/// f64` rounds up to 2^63 and `i64::MIN as f64` is exactly -2^63, so the two
-/// range tests filter every bound outside the `i64` range; the remainder
-/// converts to `i64` exactly.
-fn int_at_least(value: i64, bound: f64) -> bool {
-    if bound >= i64::MAX as f64 {
-        false
-    } else if bound < i64::MIN as f64 {
-        true
-    } else {
-        value >= bound as i64
-    }
-}
-
-/// Exact `value <= bound` for a finite integer-valued `bound`. The mirror of
-/// [`int_at_least`].
-fn int_at_most(value: i64, bound: f64) -> bool {
-    if bound >= i64::MAX as f64 {
-        true
-    } else if bound < i64::MIN as f64 {
-        false
-    } else {
-        value <= bound as i64
-    }
-}
-
-/// Checks each color's components lie in its space's range: sRGB in `[0, 1]`,
-/// linear finite and `>= 0`. The sRGB range test rejects any non-finite
-/// component on its own; the linear side is only lower-bounded, so it guards
-/// finiteness explicitly to reject `+Infinity`, which would otherwise pass
-/// `>= 0`.
-fn check_color_components(
-    pool_id: U32Id<BVoxValuePool>,
-    pool: &VoxValuePool,
-    linear: bool,
-) -> Result<()> {
-    for (value_id, value) in pool.iter_values() {
-        let components: &[f64] = match value {
-            VoxPoolValueRef::Srgb(color) => color,
-            VoxPoolValueRef::Srgba(color) => color,
-            VoxPoolValueRef::LinearRgb(color) => color,
-            VoxPoolValueRef::LinearRgba(color) => color,
-            _ => unreachable!("a color pool yields color values"),
-        };
-        for &component in components {
-            let in_range = if linear {
-                component.is_finite() && component >= 0.0
-            } else {
-                (0.0..=1.0).contains(&component)
-            };
-            if !in_range {
-                return Err(Error::PoolValue {
-                    pool: pool_id,
-                    value: value_id,
-                });
-            }
-        }
-    }
-    Ok(())
-}
-
 /// Whether every component of `vector` is finite.
 fn vector_is_finite(vector: TyVector3F64) -> bool {
     vector.x.is_finite() && vector.y.is_finite() && vector.z.is_finite()
@@ -1042,7 +870,7 @@ mod tests {
 
     /// Adds an unbounded `int` value pool holding `values` and returns its id.
     fn int_pool(state: &mut VoxMain, values: Vec<i64>) -> U32Id<BVoxValuePool> {
-        state.add_value_pool(VoxValuePool::int(VoxBound::None, VoxBound::None, values))
+        state.add_value_pool(VoxValuePool::int(VoxBound::None, VoxBound::None, values).unwrap())
     }
 
     /// A palette with one property "v" on `pool` and two materials, drawing
@@ -1080,12 +908,11 @@ mod tests {
     #[test]
     fn add_and_read_back_value_pools_in_listing_order() {
         let mut state = VoxMain::default();
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
-        let metallic = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::Number(1.0),
-            vec![0.0, 1.0],
-        ));
+        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let metallic = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 1.0])
+                .unwrap(),
+        );
 
         assert_eq!(state.value_pool_count(), 2);
         assert_eq!(colors, U32Id::<BVoxValuePool>::from_u32(0));
@@ -1116,17 +943,17 @@ mod tests {
     #[test]
     fn clone_state_deep_copies_value_pools() {
         let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::int(VoxBound::None, VoxBound::None, vec![7]));
+        state.add_value_pool(VoxValuePool::int(VoxBound::None, VoxBound::None, vec![7]).unwrap());
 
         let copy = state.clone_state();
         assert_eq!(copy.value_pool_count(), 1);
         assert_eq!(
             copy.value_pool(U32Id::<BVoxValuePool>::from_u32(0)),
-            Some(&VoxValuePool::int(VoxBound::None, VoxBound::None, vec![7]))
+            Some(&VoxValuePool::int(VoxBound::None, VoxBound::None, vec![7]).unwrap())
         );
 
         // Mutating the original must not touch the copy.
-        state.add_value_pool(VoxValuePool::boolean(vec![true]));
+        state.add_value_pool(VoxValuePool::boolean(vec![true]).unwrap());
         assert_eq!(state.value_pool_count(), 2);
         assert_eq!(copy.value_pool_count(), 1);
     }
@@ -1135,12 +962,15 @@ mod tests {
     fn prune_value_pools_releases_unreferenced_entries_keeping_ids() {
         let mut state = VoxMain::default();
         // Four colors; the palette references only the middle two.
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![
-            [1.0, 0.0, 0.0, 1.0], // 0 red, unused
-            [0.0, 1.0, 0.0, 1.0], // 1 green, used
-            [0.0, 0.0, 1.0, 1.0], // 2 blue, unused
-            [1.0, 1.0, 1.0, 1.0], // 3 white, used
-        ]));
+        let colors = state.add_value_pool(
+            VoxValuePool::srgba(vec![
+                [1.0, 0.0, 0.0, 1.0], // 0 red, unused
+                [0.0, 1.0, 0.0, 1.0], // 1 green, used
+                [0.0, 0.0, 1.0, 1.0], // 2 blue, unused
+                [1.0, 1.0, 1.0, 1.0], // 3 white, used
+            ])
+            .unwrap(),
+        );
         let mut palette = VoxPalette::default();
         let property = palette
             .add_property("baseColorFactor".to_owned(), colors)
@@ -1156,10 +986,7 @@ mod tests {
         // cells keep their ids. gc owns the renumbering.
         assert_eq!(
             state.value_pool(colors),
-            Some(&VoxValuePool::srgba(vec![
-                [0.0, 1.0, 0.0, 1.0],
-                [1.0, 1.0, 1.0, 1.0]
-            ]))
+            Some(&VoxValuePool::srgba(vec![[0.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]]).unwrap())
         );
         let palette = state.palette(palette_id).unwrap();
         assert_eq!(palette.value_id(green, property), Some(value(1)));
@@ -1195,11 +1022,7 @@ mod tests {
         // survivors keep their ids until gc.
         assert_eq!(
             state.value_pool(ints),
-            Some(&VoxValuePool::int(
-                VoxBound::None,
-                VoxBound::None,
-                vec![10, 30]
-            ))
+            Some(&VoxValuePool::int(VoxBound::None, VoxBound::None, vec![10, 30]).unwrap())
         );
         assert_eq!(
             state
@@ -1223,11 +1046,14 @@ mod tests {
         let mut state = VoxMain::default();
         // Three colors. Two palettes bind the pool, each with materials
         // drawing scattered ids.
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![
-            [1.0, 0.0, 0.0, 1.0], // 0 red
-            [0.0, 1.0, 0.0, 1.0], // 1 green
-            [0.0, 0.0, 1.0, 1.0], // 2 blue
-        ]));
+        let colors = state.add_value_pool(
+            VoxValuePool::srgba(vec![
+                [1.0, 0.0, 0.0, 1.0], // 0 red
+                [0.0, 1.0, 0.0, 1.0], // 1 green
+                [0.0, 0.0, 1.0, 1.0], // 2 blue
+            ])
+            .unwrap(),
+        );
         let mut a = VoxPalette::default();
         let a_property = a
             .add_property("baseColorFactor".to_owned(), colors)
@@ -1252,11 +1078,14 @@ mod tests {
         // The pool follows the new order.
         assert_eq!(
             state.value_pool(colors),
-            Some(&VoxValuePool::srgba(vec![
-                [0.0, 0.0, 1.0, 1.0],
-                [1.0, 0.0, 0.0, 1.0],
-                [0.0, 1.0, 0.0, 1.0]
-            ]))
+            Some(
+                &VoxValuePool::srgba(vec![
+                    [0.0, 0.0, 1.0, 1.0],
+                    [1.0, 0.0, 0.0, 1.0],
+                    [0.0, 1.0, 0.0, 1.0]
+                ])
+                .unwrap()
+            )
         );
         // No cell is rewritten: value ids are stable, so every material keeps
         // its id and resolves to its original color.
@@ -1300,11 +1129,7 @@ mod tests {
         );
         assert_eq!(
             state.value_pool(ints),
-            Some(&VoxValuePool::int(
-                VoxBound::None,
-                VoxBound::None,
-                vec![10, 20, 30]
-            ))
+            Some(&VoxValuePool::int(VoxBound::None, VoxBound::None, vec![10, 20, 30]).unwrap())
         );
     }
 
@@ -1755,15 +1580,13 @@ mod tests {
         // The Phase 3 gate: build a two-layer object that shares one palette,
         // validate it, gc it, and read a material's resolved values back.
         let mut state = VoxMain::default();
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![
-            [1.0, 0.0, 0.0, 1.0],
-            [0.0, 1.0, 0.0, 1.0],
-        ]));
-        let metallic = state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::Number(1.0),
-            vec![0.0, 1.0],
-        ));
+        let colors = state.add_value_pool(
+            VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]]).unwrap(),
+        );
+        let metallic = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 1.0])
+                .unwrap(),
+        );
         let mut palette = VoxPalette::default();
         let color = palette
             .add_property("baseColorFactor".to_owned(), colors)
@@ -1811,123 +1634,6 @@ mod tests {
         assert_eq!(
             pool.value(index),
             Some(VoxPoolValueRef::Srgba(&[0.0, 1.0, 0.0, 1.0]))
-        );
-    }
-
-    #[test]
-    fn validate_rejects_an_empty_pool() {
-        let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::boolean(vec![]));
-        assert_eq!(state.validate(), Err(Error::EmptyPool { pool: pool(0) }));
-    }
-
-    #[test]
-    fn validate_rejects_unordered_pool_bounds() {
-        let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(1.0),
-            VoxBound::Number(0.0),
-            vec![0.5],
-        ));
-        assert_eq!(state.validate(), Err(Error::PoolBound { pool: pool(0) }));
-    }
-
-    #[test]
-    fn validate_rejects_a_non_integer_int_bound() {
-        let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::int(
-            VoxBound::Number(0.5),
-            VoxBound::None,
-            vec![1],
-        ));
-        assert_eq!(state.validate(), Err(Error::PoolBound { pool: pool(0) }));
-    }
-
-    #[test]
-    fn validate_rejects_a_value_out_of_bounds() {
-        let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::float(
-            VoxBound::Number(0.0),
-            VoxBound::Number(1.0),
-            vec![0.0, 2.0],
-        ));
-        assert_eq!(
-            state.validate(),
-            Err(Error::PoolValue {
-                pool: pool(0),
-                value: value(1),
-            })
-        );
-    }
-
-    #[test]
-    fn validate_compares_int_values_against_bounds_exactly() {
-        // 2^53 + 1 rounds down to 2^53 as f64, so a float comparison would
-        // wrongly accept it against a max of 2^53; the integer-domain
-        // comparison rejects it.
-        const MAX: i64 = 1 << 53;
-        let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::int(
-            VoxBound::None,
-            VoxBound::Number(MAX as f64),
-            vec![MAX, MAX + 1],
-        ));
-        assert_eq!(
-            state.validate(),
-            Err(Error::PoolValue {
-                pool: pool(0),
-                value: value(1),
-            })
-        );
-    }
-
-    #[test]
-    fn validate_rejects_an_srgb_component_out_of_range() {
-        let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::srgb(vec![[0.0, 0.0, 0.0], [0.0, 1.5, 0.0]]));
-        assert_eq!(
-            state.validate(),
-            Err(Error::PoolValue {
-                pool: pool(0),
-                value: value(1),
-            })
-        );
-    }
-
-    #[test]
-    fn validate_accepts_hdr_linear_components() {
-        let mut state = VoxMain::default();
-        // Linear colors allow components above 1 for HDR.
-        state.add_value_pool(VoxValuePool::linear_rgb(vec![[0.0, 4.0, 12.0]]));
-        assert_eq!(state.validate(), Ok(()));
-    }
-
-    #[test]
-    fn validate_rejects_a_negative_linear_component() {
-        let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::linear_rgba(vec![[0.0, -0.1, 0.0, 1.0]]));
-        assert_eq!(
-            state.validate(),
-            Err(Error::PoolValue {
-                pool: pool(0),
-                value: value(0),
-            })
-        );
-    }
-
-    #[test]
-    fn validate_rejects_a_non_finite_linear_component() {
-        let mut state = VoxMain::default();
-        // A linear pool is only lower-bounded, so `+Infinity` would pass a bare
-        // `>= 0` test; the finiteness guard must reject it. The wire has no
-        // Infinity, so such a value could never round-trip.
-        state.add_value_pool(VoxValuePool::linear_rgb(vec![[0.0, f64::INFINITY, 0.0]]));
-        assert_eq!(
-            state.validate(),
-            Err(Error::PoolValue {
-                pool: pool(0),
-                value: value(0),
-            })
         );
     }
 
@@ -2206,11 +1912,7 @@ mod tests {
         assert_eq!(b_ref.value_id(b_last, b_property), Some(value(2)));
         assert_eq!(
             state.value_pool(ints),
-            Some(&VoxValuePool::int(
-                VoxBound::None,
-                VoxBound::None,
-                vec![20, 30]
-            ))
+            Some(&VoxValuePool::int(VoxBound::None, VoxBound::None, vec![20, 30]).unwrap())
         );
         state.validate().unwrap();
 
