@@ -18,9 +18,10 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// [`to_voxj_file`](crate::to_voxj_file) and
 /// [`VoxjFileBuilder`](crate::VoxjFileBuilder).
 ///
-/// Value pools, palettes, objects, and hierarchy nodes are emitted in id order,
-/// so each lands at its original array index and the cross references carry
-/// over unchanged.
+/// Value pools, palettes, objects, and hierarchy nodes are emitted in listing
+/// order, and ids are written as array indices. Call
+/// [`VoxMain::gc`](voxcore::VoxMain::gc) first after any removal or move so
+/// each id equals its listing index and the cross references land intact.
 ///
 /// # Arguments
 /// * `state` - the voxel model to encode.

@@ -78,7 +78,7 @@ mod tests {
     };
     use branded_id::U32Id;
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
-    use voxcore::{BVoxObject, BVoxPalette};
+    use voxcore::{BVoxLayer, BVoxObject, BVoxPalette};
     use voxj::{
         VoxjBound, VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap,
         VoxjObject, VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState,
@@ -309,11 +309,10 @@ mod tests {
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
-    /// A document whose edit grid differs from the runtime grid (has margin)
-    /// round-trips the edit state through the VoxMain and back.
-    #[test]
-    fn round_trips_edit_state() {
-        let file = VoxjFile {
+    /// A one-object document whose edit grid is larger than its runtime grid, so
+    /// the object carries margin.
+    fn margin_file() -> VoxjFile {
+        VoxjFile {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
@@ -337,7 +336,14 @@ mod tests {
                 }),
                 ext: None,
             },
-        };
+        }
+    }
+
+    /// A document whose edit grid differs from the runtime grid (has margin)
+    /// round-trips the edit state through the VoxMain and back.
+    #[test]
+    fn round_trips_edit_state() {
+        let file = margin_file();
         let state = from_voxj_file(&file).unwrap();
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
@@ -389,31 +395,7 @@ mod tests {
     /// margin, so its build volume is not recorded.
     #[test]
     fn never_discards_edit_state_with_margin() {
-        let file = VoxjFile {
-            version: 1,
-            main: VoxjMain {
-                runtime_state: VoxjRuntimeState {
-                    value_pools: vec![numbered_pool(2)],
-                    objects: vec![object(
-                        "o",
-                        vec![0],
-                        [2, 1, 1],
-                        vec![[0, 0, 0], [1, 0, 0]],
-                        vec![vec![0], vec![1]],
-                    )],
-                    palettes: vec![numbered_palette("baseColorFactor", 0, 2)],
-                    nodes: Vec::new(),
-                    root_nodes: Vec::new(),
-                },
-                edit_state: Some(VoxjEditState {
-                    objects: vec![VoxjEditObject {
-                        bounds: [4, 2, 2],
-                        origin: [-1, 0, 0],
-                    }],
-                }),
-                ext: None,
-            },
-        };
+        let file = margin_file();
         let state = from_voxj_file(&file).unwrap();
         // Auto would emit it, since the object carries margin.
         assert!(to_voxj_file(&state).unwrap().main.edit_state.is_some());
@@ -491,6 +473,77 @@ mod tests {
             &to_voxj_file(&reloaded).unwrap(),
             &sample_file_without_tight(),
         );
+    }
+
+    /// Removing the first layer keeps the surviving layers' relative order
+    /// through a gc and a save: the document still lists the second and third
+    /// layers' palettes and samples in their original order. Removing the first
+    /// of three is the smallest case a swap-remove would get wrong, listing the
+    /// third layer before the second.
+    #[test]
+    fn remove_first_layer_then_gc_keeps_layer_order() {
+        let palettes = vec![
+            numbered_palette("baseColorFactor", 0, 2),
+            numbered_palette("baseColorFactor", 0, 2),
+            numbered_palette("baseColorFactor", 0, 2),
+        ];
+        let file = VoxjFile {
+            version: 1,
+            main: VoxjMain {
+                runtime_state: VoxjRuntimeState {
+                    value_pools: vec![numbered_pool(2)],
+                    objects: vec![object(
+                        "o",
+                        vec![0, 1, 2],
+                        [2, 1, 1],
+                        vec![[0, 0, 0], [1, 0, 0]],
+                        vec![vec![0, 1, 0], vec![1, 0, 1]],
+                    )],
+                    palettes: palettes.clone(),
+                    nodes: Vec::new(),
+                    root_nodes: Vec::new(),
+                },
+                edit_state: None,
+                ext: None,
+            },
+        };
+        let mut state = from_voxj_file(&file).unwrap();
+
+        // Layer ids follow the listing on load, so the first layer is id 0.
+        let object_id = U32Id::<BVoxObject>::from_u32(0);
+        assert_eq!(
+            state
+                .object_mut(object_id)
+                .unwrap()
+                .remove_layer(U32Id::<BVoxLayer>::from_u32(0)),
+            Some(())
+        );
+        state.gc();
+        state.validate().unwrap();
+
+        let bytes = to_voxj_bytes(&state).unwrap();
+        let reloaded = from_voxj_bytes(&bytes).unwrap();
+        let expected = VoxjFile {
+            version: 1,
+            main: VoxjMain {
+                runtime_state: VoxjRuntimeState {
+                    value_pools: vec![numbered_pool(2)],
+                    objects: vec![object(
+                        "o",
+                        vec![1, 2],
+                        [2, 1, 1],
+                        vec![[0, 0, 0], [1, 0, 0]],
+                        vec![vec![1, 0], vec![0, 1]],
+                    )],
+                    palettes,
+                    nodes: Vec::new(),
+                    root_nodes: Vec::new(),
+                },
+                edit_state: None,
+                ext: None,
+            },
+        };
+        assert_file_eq(&to_voxj_file(&reloaded).unwrap(), &expected);
     }
 
     #[test]

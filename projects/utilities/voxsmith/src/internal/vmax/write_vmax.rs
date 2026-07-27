@@ -19,7 +19,7 @@ use vmax::{
 use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, BVoxProperty,
-    VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
+    VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxPoolValueRef, VoxValuePool,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`
@@ -904,8 +904,8 @@ fn pool_scalar(
     property: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxPoolValue>,
 ) -> Option<f64> {
-    match property_pool(state, palette, property)? {
-        VoxValuePool::Float { values, .. } => values.get(value_id.to_usize_id()).copied(),
+    match property_pool(state, palette, property)?.value(value_id) {
+        Some(VoxPoolValueRef::Float(number)) => Some(number),
         _ => None,
     }
 }
@@ -918,8 +918,8 @@ fn pool_flag(
     property: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxPoolValue>,
 ) -> Option<bool> {
-    match property_pool(state, palette, property)? {
-        VoxValuePool::Bool { values } => values.get(value_id.to_usize_id()).copied(),
+    match property_pool(state, palette, property)?.value(value_id) {
+        Some(VoxPoolValueRef::Bool(flag)) => Some(flag),
         _ => None,
     }
 }
@@ -1078,8 +1078,8 @@ fn color_palette_colors(
 ) -> Vec<[u8; 4]> {
     let mut cells: Vec<[u8; 4]> = Vec::new();
     if let Some(pool) = property_pool(state, palette, color) {
-        for index in 0..pool.values_len().min(PALETTE_COLORS) {
-            cells.push(pool_color(pool, U32Id::from_u32(index as u32)).unwrap_or([0, 0, 0, 0]));
+        for (value_id, _) in pool.iter_values().take(PALETTE_COLORS) {
+            cells.push(pool_color(pool, value_id).unwrap_or([0, 0, 0, 0]));
         }
     }
     cells.resize(PALETTE_COLORS, [0, 0, 0, 0]);

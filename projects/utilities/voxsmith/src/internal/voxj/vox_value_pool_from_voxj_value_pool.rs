@@ -1,5 +1,4 @@
 use crate::{Error, Result, vox_value_from_voxj_value};
-use branded_id::IdVec;
 use voxcore::{VoxBound, VoxValuePool};
 use voxj::{VoxjBound, VoxjValuePool};
 
@@ -16,56 +15,36 @@ use voxj::{VoxjBound, VoxjValuePool};
 /// to [`VoxMain::validate`](voxcore::VoxMain::validate).
 pub fn vox_value_pool_from_voxj_value_pool(pool: &VoxjValuePool) -> Result<VoxValuePool> {
     Ok(match pool {
-        VoxjValuePool::Json { values } => VoxValuePool::Json {
-            values: values
+        VoxjValuePool::Json { values } => VoxValuePool::json(
+            values
                 .iter()
                 .map(vox_value_from_voxj_value)
                 .collect::<Result<_>>()?,
-        },
+        ),
 
-        VoxjValuePool::Bool { values } => VoxValuePool::Bool {
-            values: IdVec::from_vec(values.clone()),
-        },
+        VoxjValuePool::Bool { values } => VoxValuePool::boolean(values.clone()),
 
-        VoxjValuePool::Float { min, max, values } => VoxValuePool::Float {
-            min: vox_bound(*min),
-            max: vox_bound(*max),
-            values: IdVec::from_vec(values.clone()),
-        },
+        VoxjValuePool::Float { min, max, values } => {
+            VoxValuePool::float(vox_bound(*min), vox_bound(*max), values.clone())
+        }
 
-        VoxjValuePool::Int { min, max, values } => VoxValuePool::Int {
-            min: vox_bound(*min),
-            max: vox_bound(*max),
-            values: IdVec::from_vec(values.clone()),
-        },
+        VoxjValuePool::Int { min, max, values } => {
+            VoxValuePool::int(vox_bound(*min), vox_bound(*max), values.clone())
+        }
 
-        VoxjValuePool::String { values } => VoxValuePool::String {
-            values: IdVec::from_vec(values.clone()),
-        },
+        VoxjValuePool::String { values } => VoxValuePool::string(values.clone()),
 
-        VoxjValuePool::SrgbFloat { values } => VoxValuePool::Srgb {
-            values: IdVec::from_vec(values.clone()),
-        },
+        VoxjValuePool::SrgbFloat { values } => VoxValuePool::srgb(values.clone()),
 
-        VoxjValuePool::SrgbHex { values } => VoxValuePool::Srgb {
-            values: IdVec::from_vec(decode_hex_values(values)?),
-        },
+        VoxjValuePool::SrgbHex { values } => VoxValuePool::srgb(decode_hex_values(values)?),
 
-        VoxjValuePool::SrgbaFloat { values } => VoxValuePool::Srgba {
-            values: IdVec::from_vec(values.clone()),
-        },
+        VoxjValuePool::SrgbaFloat { values } => VoxValuePool::srgba(values.clone()),
 
-        VoxjValuePool::SrgbaHex { values } => VoxValuePool::Srgba {
-            values: IdVec::from_vec(decode_hex_values(values)?),
-        },
+        VoxjValuePool::SrgbaHex { values } => VoxValuePool::srgba(decode_hex_values(values)?),
 
-        VoxjValuePool::LinearRgbFloat { values } => VoxValuePool::LinearRgb {
-            values: IdVec::from_vec(values.clone()),
-        },
+        VoxjValuePool::LinearRgbFloat { values } => VoxValuePool::linear_rgb(values.clone()),
 
-        VoxjValuePool::LinearRgbaFloat { values } => VoxValuePool::LinearRgba {
-            values: IdVec::from_vec(values.clone()),
-        },
+        VoxjValuePool::LinearRgbaFloat { values } => VoxValuePool::linear_rgba(values.clone()),
     })
 }
 

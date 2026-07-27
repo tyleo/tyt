@@ -1,15 +1,13 @@
 use crate::{BVoxMaterial, BVoxPoolValue, BVoxProperty, BVoxValuePool, VoxProperty};
 use branded_id::{
-    IdSlice, U32Id,
+    IdVec, U32Id,
     soa::{IdField, IdRemap, IdStruct},
 };
 use std::collections::HashMap;
 
 /// A material palette: named properties bound to the
 /// [`VoxValuePool`](crate::VoxValuePool)s a [`VoxMain`](crate::VoxMain)
-/// holds, and the materials that index them.
-/// [`VoxMain::validate`](crate::VoxMain::validate) rejects duplicate
-/// property names and palettes without a material.
+/// holds, and the materials that draw from them.
 #[derive(Debug, Default)]
 pub struct VoxPalette {
     /// Property id pool.
@@ -25,23 +23,28 @@ pub struct VoxPalette {
     materials: IdField<BVoxMaterial, IdField<BVoxProperty, U32Id<BVoxPoolValue>>>,
 
     /// Name index into `properties`, for O(1)
-    /// [`property_by_name`](Self::property_by_name) lookup.
-    /// Rebuilt by [`gc`](Self::gc); exact for a validated palette, whose
-    /// property names are unique.
+    /// [`property_by_name`](Self::property_by_name) lookup. Rebuilt by
+    /// [`gc`](Self::gc). Doubles as the uniqueness check
+    /// [`add_property`](Self::add_property) makes.
     property_by_name: HashMap<String, U32Id<BVoxProperty>>,
 }
 
 impl VoxPalette {
     /// Adds a property after any existing ones and returns its id,
-    /// back-filling existing materials with value id 0 so every material
-    /// keeps one value id per property. Add all properties
-    /// before any materials to avoid the back-fill placeholder, which is a
-    /// valid id only if the property's pool is non-empty.
+    /// back-filling existing materials with value id 0 so every material keeps
+    /// one value id per property. Returns `None` and changes nothing if a
+    /// property already has this name. Add all properties before any materials
+    /// to avoid the back-fill placeholder, valid only while the pool still
+    /// retains value id 0.
     pub fn add_property(
         &mut self,
         name: String,
         pool: U32Id<BVoxValuePool>,
-    ) -> U32Id<BVoxProperty> {
+    ) -> Option<U32Id<BVoxProperty>> {
+        if self.property_by_name.contains_key(&name) {
+            return None;
+        }
+
         let property_id = self.property_ids.retain();
 
         self.property_by_name.insert(name.clone(), property_id);
@@ -55,7 +58,7 @@ impl VoxPalette {
             material.retain(property_id, U32Id::from_u32(0));
         }
 
-        property_id
+        Some(property_id)
     }
 
     /// Number of properties.
@@ -72,15 +75,13 @@ impl VoxPalette {
     }
 
     /// The property named `name`, or `None` if none has that name. O(1)
-    /// through the name index. If a palette transiently declares the same
-    /// name twice, which [`VoxMain::validate`](crate::VoxMain::validate)
-    /// rejects, this returns the last such property added.
+    /// through the name index.
     pub fn property_by_name(&self, name: &str) -> Option<U32Id<BVoxProperty>> {
         self.property_by_name.get(name).copied()
     }
 
-    /// Properties in id order, as `(id, property)`. Property
-    /// order is the value-id order of each material row.
+    /// Properties in listing order, as `(id, property)`. Property order is the
+    /// value-id order of each material row.
     pub fn iter_properties(
         &self,
     ) -> impl Iterator<Item = (U32Id<BVoxProperty>, &VoxProperty)> + '_ {
@@ -91,10 +92,10 @@ impl VoxPalette {
     }
 
     /// Adds a material with one value id per property, in
-    /// [`iter_properties`](Self::iter_properties) order, and
-    /// returns its id. `None`, changing nothing, if `value_ids` has the
-    /// wrong length. Each value id is range-checked against its property's
-    /// pool by [`VoxMain::validate`](crate::VoxMain::validate), not here.
+    /// [`iter_properties`](Self::iter_properties) order, and returns its id.
+    /// Returns `None` and changes nothing if `value_ids` has the wrong length.
+    /// Each value id must be one of its property's pool's values, which
+    /// [`VoxMain::validate`](crate::VoxMain::validate) checks, not here.
     pub fn add_material(
         &mut self,
         value_ids: Vec<U32Id<BVoxPoolValue>>,
@@ -138,10 +139,47 @@ impl VoxPalette {
         Some(*unsafe { row.get(property) })
     }
 
-    /// Material ids in id order; read value ids with
+    /// Material ids in listing order; read value ids with
     /// [`value_id`](Self::value_id).
     pub fn iter_materials(&self) -> impl Iterator<Item = U32Id<BVoxMaterial>> + '_ {
         self.material_ids.iter()
+    }
+
+    /// Moves property `id` to position `index` in the property order, shifting
+    /// the properties between its old and new positions one slot. Returns
+    /// `None` and changes nothing if `id` is not one of this palette's
+    /// properties or `index` is at or past
+    /// [`property_count`](Self::property_count).
+    pub fn move_property(&mut self, id: U32Id<BVoxProperty>, index: usize) -> Option<()> {
+        if !self.property_ids.is_retained(id) || index >= self.property_ids.len() {
+            return None;
+        }
+        self.property_ids.move_to(id, index);
+        Some(())
+    }
+
+    /// The position of property `id` in the property order, or `None` if `id`
+    /// is not one of this palette's properties.
+    pub fn property_index(&self, id: U32Id<BVoxProperty>) -> Option<usize> {
+        self.property_ids.index_of(id)
+    }
+
+    /// Moves material `id` to position `index` in the material order, shifting
+    /// the materials between its old and new positions one slot. Returns `None`
+    /// and changes nothing if `id` is not one of this palette's materials or
+    /// `index` is at or past [`material_count`](Self::material_count).
+    pub fn move_material(&mut self, id: U32Id<BVoxMaterial>, index: usize) -> Option<()> {
+        if !self.material_ids.is_retained(id) || index >= self.material_ids.len() {
+            return None;
+        }
+        self.material_ids.move_to(id, index);
+        Some(())
+    }
+
+    /// The position of material `id` in the material order, or `None` if `id`
+    /// is not one of this palette's materials.
+    pub fn material_index(&self, id: U32Id<BVoxMaterial>) -> Option<usize> {
+        self.material_ids.index_of(id)
     }
 
     /// Deep copy. Liveness lives in the id pools, so the columns can't derive
@@ -172,12 +210,10 @@ impl VoxPalette {
         }
     }
 
-    /// Removes property `id`, freeing its name string. Each material
-    /// keeps a Copy value id at the removed property's slot, unreferenced
-    /// (reads are guarded by property retention) until [`gc`](Self::gc)
-    /// compacts the rows. `None`, changing nothing, if `id` is not one of
-    /// this palette's properties. Leaves a hole until
-    /// [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
+    /// Removes property `id`. Returns `None` and changes nothing if `id` is not
+    /// one of this palette's properties. Each material row keeps filler at the
+    /// removed slot until [`VoxMain::gc`](crate::VoxMain::gc) compacts the rows
+    /// and renumbers.
     pub fn remove_property(&mut self, id: U32Id<BVoxProperty>) -> Option<()> {
         if !self.property_ids.is_retained(id) {
             return None;
@@ -196,15 +232,13 @@ impl VoxPalette {
         // property.
         // Safety: a retained property has a value.
         unsafe { self.properties.release(id) };
-        self.property_ids.release(id);
+        self.property_ids.release_stable(id);
         Some(())
     }
 
-    /// Drops material `id` and its value-id row. The caller must first
-    /// ensure no live voxel still samples it, which is why this is internal
-    /// and reached only through
-    /// [`VoxMain::remove_material`](crate::VoxMain::remove_material). Leaves
-    /// a hole until [`gc`](Self::gc) renumbers.
+    /// Drops material `id` and its value-id row. The caller must first ensure
+    /// no live voxel still samples it. Leaves a hole until [`gc`](Self::gc)
+    /// renumbers.
     pub(crate) fn remove_material(&mut self, id: U32Id<BVoxMaterial>) -> Option<()> {
         if !self.material_ids.is_retained(id) {
             return None;
@@ -213,7 +247,7 @@ impl VoxPalette {
         // its buffer with nothing to release per property.
         // Safety: a retained material has a row.
         unsafe { self.materials.release(id) };
-        self.material_ids.release(id);
+        self.material_ids.release_stable(id);
         Some(())
     }
 
@@ -258,13 +292,15 @@ impl VoxPalette {
         material_remap
     }
 
-    /// Maps every value id into `pool` through `remap`: each material's cell
-    /// for a property on `pool`. `remap` covers every pre-prune value
-    /// id of `pool`.
-    pub(crate) fn remap_pool_value_ids(
+    /// Repoints each material's cell for a property on `pool` that draws
+    /// `old` to `new`. Used by
+    /// [`VoxMain::remove_pool_value`](crate::VoxMain::remove_pool_value)
+    /// before `old` is released.
+    pub(crate) fn repoint_pool_value(
         &mut self,
         pool: U32Id<BVoxValuePool>,
-        remap: &IdSlice<BVoxPoolValue, U32Id<BVoxPoolValue>>,
+        old: U32Id<BVoxPoolValue>,
+        new: U32Id<BVoxPoolValue>,
     ) {
         // The properties on `pool`, found once so each material's row
         // is visited once for all of them.
@@ -283,8 +319,45 @@ impl VoxPalette {
                 let row = unsafe { self.materials.get_mut(material_id) };
                 for &property_id in &pool_properties {
                     let slot = unsafe { row.get_mut(property_id) };
-                    *slot = remap[slot.to_usize_id()];
+                    if *slot == old {
+                        *slot = new;
+                    }
                 }
+            }
+        }
+    }
+
+    /// Translates each material's cells through the value relabeling of the
+    /// pool its property draws from, matching value pools a
+    /// [`VoxMain`](crate::VoxMain) is compacting. `remaps` is indexed by the
+    /// pool's pre-gc id. Requires a referentially valid palette, so every cell
+    /// draws a live value.
+    pub(crate) fn relabel_pool_values(
+        &mut self,
+        remaps: &IdVec<BVoxValuePool, IdRemap<BVoxPoolValue, u32>>,
+    ) {
+        // Each property's pool, found once so each material's row is visited
+        // once for all of them.
+        let property_pools: Vec<_> = self
+            .property_ids
+            .iter()
+            .map(|property_id| {
+                // Safety: retained property ids have a value.
+                (
+                    property_id,
+                    unsafe { self.properties.get(property_id) }.pool,
+                )
+            })
+            .collect();
+        for material_id in self.material_ids.iter() {
+            // Safety: a retained material holds a value id for every property,
+            // and the row is keyed by property id.
+            let row = unsafe { self.materials.get_mut(material_id) };
+            for &(property_id, pool) in &property_pools {
+                let slot = unsafe { row.get_mut(property_id) };
+                *slot = remaps[pool.to_usize_id()]
+                    .new_id(*slot)
+                    .expect("a material cell draws a live value in a valid state");
             }
         }
     }
@@ -334,8 +407,10 @@ mod tests {
     #[test]
     fn builds_and_reads_a_material_palette() {
         let mut palette = VoxPalette::default();
-        let metallic = palette.add_property("metallic".to_owned(), pool(0));
-        let ior = palette.add_property("ior".to_owned(), pool(1));
+        let metallic = palette
+            .add_property("metallic".to_owned(), pool(0))
+            .unwrap();
+        let ior = palette.add_property("ior".to_owned(), pool(1)).unwrap();
 
         // Two materials, each a value id per property, in property
         // order.
@@ -361,7 +436,9 @@ mod tests {
     #[test]
     fn add_material_rejects_wrong_arity_without_changing_state() {
         let mut palette = VoxPalette::default();
-        palette.add_property("baseColorFactor".to_owned(), pool(0));
+        palette
+            .add_property("baseColorFactor".to_owned(), pool(0))
+            .unwrap();
         // One property, but two value ids supplied.
         assert_eq!(palette.add_material(vec![value(0), value(1)]), None);
         assert_eq!(palette.material_count(), 0);
@@ -370,8 +447,12 @@ mod tests {
     #[test]
     fn property_by_name_indexes_and_survives_gc() {
         let mut palette = VoxPalette::default();
-        let color = palette.add_property("baseColorFactor".to_owned(), pool(0));
-        let metal = palette.add_property("metallicFactor".to_owned(), pool(1));
+        let color = palette
+            .add_property("baseColorFactor".to_owned(), pool(0))
+            .unwrap();
+        let metal = palette
+            .add_property("metallicFactor".to_owned(), pool(1))
+            .unwrap();
 
         assert_eq!(palette.property_by_name("baseColorFactor"), Some(color));
         assert_eq!(palette.property_by_name("metallicFactor"), Some(metal));
@@ -388,12 +469,33 @@ mod tests {
     }
 
     #[test]
+    fn add_property_rejects_a_name_already_in_use() {
+        let mut palette = VoxPalette::default();
+        let first = palette
+            .add_property("baseColorFactor".to_owned(), pool(0))
+            .unwrap();
+
+        // A second property under the same name, even on a different pool.
+        assert_eq!(
+            palette.add_property("baseColorFactor".to_owned(), pool(1)),
+            None
+        );
+        assert_eq!(palette.property_count(), 1);
+        assert_eq!(palette.property_by_name("baseColorFactor"), Some(first));
+        assert_eq!(palette.property(first).unwrap().pool, pool(0));
+    }
+
+    #[test]
     fn add_property_back_fills_existing_materials_with_zero() {
         let mut palette = VoxPalette::default();
-        let color = palette.add_property("baseColorFactor".to_owned(), pool(0));
+        let color = palette
+            .add_property("baseColorFactor".to_owned(), pool(0))
+            .unwrap();
         let material = palette.add_material(vec![value(7)]).unwrap();
 
-        let added = palette.add_property("metallicFactor".to_owned(), pool(1));
+        let added = palette
+            .add_property("metallicFactor".to_owned(), pool(1))
+            .unwrap();
         assert_eq!(palette.value_id(material, color), Some(value(7)));
         assert_eq!(palette.value_id(material, added), Some(value(0)));
     }
@@ -401,7 +503,9 @@ mod tests {
     #[test]
     fn clone_palette_is_an_independent_deep_copy() {
         let mut palette = VoxPalette::default();
-        let property = palette.add_property("baseColorFactor".to_owned(), pool(0));
+        let property = palette
+            .add_property("baseColorFactor".to_owned(), pool(0))
+            .unwrap();
         let material = palette.add_material(vec![value(2)]).unwrap();
 
         let copy = palette.clone_palette();
@@ -417,8 +521,8 @@ mod tests {
     #[test]
     fn remove_property_keeps_materials_then_gc_renumbers() {
         let mut palette = VoxPalette::default();
-        let a = palette.add_property("a".to_owned(), pool(0));
-        let b = palette.add_property("b".to_owned(), pool(1));
+        let a = palette.add_property("a".to_owned(), pool(0)).unwrap();
+        let b = palette.add_property("b".to_owned(), pool(1)).unwrap();
         let material = palette.add_material(vec![value(1), value(2)]).unwrap();
 
         assert_eq!(palette.remove_property(a), Some(()));
@@ -437,9 +541,114 @@ mod tests {
     }
 
     #[test]
+    fn remove_property_preserves_the_survivors_order() {
+        let mut palette = VoxPalette::default();
+        let a = palette.add_property("a".to_owned(), pool(0)).unwrap();
+        let b = palette.add_property("b".to_owned(), pool(0)).unwrap();
+        let c = palette.add_property("c".to_owned(), pool(0)).unwrap();
+
+        // Removing the first of three is the smallest case a swap-remove would
+        // get wrong, listing `c` before `b`.
+        assert_eq!(palette.remove_property(a), Some(()));
+        assert_eq!(
+            palette
+                .iter_properties()
+                .map(|(id, property)| (id, property.name.as_str()))
+                .collect::<Vec<_>>(),
+            [(b, "b"), (c, "c")]
+        );
+
+        // A property added after the removal appends at the end of the order.
+        let d = palette.add_property("d".to_owned(), pool(0)).unwrap();
+        assert_eq!(
+            palette
+                .iter_properties()
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>(),
+            [b, c, d]
+        );
+    }
+
+    #[test]
+    fn remove_material_preserves_the_survivors_order() {
+        let mut palette = VoxPalette::default();
+        let first = palette.add_material(vec![]).unwrap();
+        let middle = palette.add_material(vec![]).unwrap();
+        let last = palette.add_material(vec![]).unwrap();
+
+        // Removing the first of three is the smallest case a swap-remove would
+        // get wrong, listing `last` before `middle`.
+        assert_eq!(palette.remove_material(first), Some(()));
+        assert_eq!(palette.iter_materials().collect::<Vec<_>>(), [middle, last]);
+
+        // A material added after the removal appends at the end of the order.
+        let added = palette.add_material(vec![]).unwrap();
+        assert_eq!(
+            palette.iter_materials().collect::<Vec<_>>(),
+            [middle, last, added]
+        );
+    }
+
+    #[test]
+    fn move_property_reorders_the_listing_and_validates() {
+        let mut palette = VoxPalette::default();
+        let a = palette.add_property("a".to_owned(), pool(0)).unwrap();
+        let b = palette.add_property("b".to_owned(), pool(0)).unwrap();
+        let c = palette.add_property("c".to_owned(), pool(1)).unwrap();
+        assert_eq!(palette.property_index(b), Some(1));
+
+        assert_eq!(palette.move_property(c, 0), Some(()));
+        assert_eq!(
+            palette
+                .iter_properties()
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>(),
+            [c, a, b]
+        );
+        assert_eq!(palette.property_index(c), Some(0));
+
+        // An out-of-range index and an unknown id are rejected.
+        assert_eq!(palette.move_property(c, 3), None);
+        assert_eq!(palette.move_property(U32Id::from_u32(9), 0), None);
+        assert_eq!(palette.property_index(U32Id::from_u32(9)), None);
+        assert_eq!(
+            palette
+                .iter_properties()
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>(),
+            [c, a, b]
+        );
+    }
+
+    #[test]
+    fn move_material_reorders_the_listing_and_validates() {
+        let mut palette = VoxPalette::default();
+        let first = palette.add_material(vec![]).unwrap();
+        let second = palette.add_material(vec![]).unwrap();
+        let third = palette.add_material(vec![]).unwrap();
+        assert_eq!(palette.material_index(second), Some(1));
+
+        assert_eq!(palette.move_material(first, 2), Some(()));
+        assert_eq!(
+            palette.iter_materials().collect::<Vec<_>>(),
+            [second, third, first]
+        );
+        assert_eq!(palette.material_index(first), Some(2));
+
+        // An out-of-range index and an unknown id are rejected.
+        assert_eq!(palette.move_material(first, 3), None);
+        assert_eq!(palette.move_material(U32Id::from_u32(9), 0), None);
+        assert_eq!(palette.material_index(U32Id::from_u32(9)), None);
+        assert_eq!(
+            palette.iter_materials().collect::<Vec<_>>(),
+            [second, third, first]
+        );
+    }
+
+    #[test]
     fn remove_material_then_gc_compacts_remaining_materials() {
         let mut palette = VoxPalette::default();
-        let property = palette.add_property("v".to_owned(), pool(0));
+        let property = palette.add_property("v".to_owned(), pool(0)).unwrap();
         let keep = palette.add_material(vec![value(0)]).unwrap();
         let drop = palette.add_material(vec![value(1)]).unwrap();
         let last = palette.add_material(vec![value(2)]).unwrap();

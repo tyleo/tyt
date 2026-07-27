@@ -1,6 +1,5 @@
 use crate::{Error, Result};
 use branded_id::{U32Id, ext::U32Ext};
-use std::collections::HashSet;
 use voxcore::VoxPalette;
 use voxj::VoxjPalette;
 
@@ -17,18 +16,17 @@ use voxj::VoxjPalette;
 pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette> {
     let mut out = VoxPalette::default();
 
-    let mut names = HashSet::new();
     for property in &palette.properties {
-        if !names.insert(property.name.as_str()) {
-            return Err(Error::Invalid(format!(
-                "palette declares property \"{}\" more than once",
-                property.name
-            )));
-        }
         out.add_property(
             property.name.clone(),
             U32Id::from_u32(property.value_pool as u32),
-        );
+        )
+        .ok_or_else(|| {
+            Error::Invalid(format!(
+                "palette declares property \"{}\" more than once",
+                property.name
+            ))
+        })?;
     }
 
     for (index, row) in palette.materials.iter().enumerate() {

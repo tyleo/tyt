@@ -65,12 +65,17 @@ pub fn voxelize(
 
     reduce_generated_palette(&mut state, reduction)?;
 
-    // Canonicalize the generated palette so its materials reference colors in id
-    // order, `0, 1, 2, ...`, rather than the order voxelize and reduction left.
+    // Canonicalize the generated palette so its materials reference colors in
+    // listing order rather than the order voxelize and reduction left.
     let palette = state.iter_palettes().next().map(|(palette, _)| palette);
     if let Some(palette) = palette {
         order_palette_colors(&mut state, palette);
     }
+
+    // The reduction and the reorder both keep value ids stable, so compact them
+    // to listing order before writing: the writer serializes each material cell
+    // as an index into the pool it emits in listing order.
+    state.gc();
 
     implementation::write_voxj_document(
         &state,

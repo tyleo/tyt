@@ -58,7 +58,7 @@ mod tests {
         AtlasShape, BASE_COLOR_FACTOR, MaterialBake, MaterialChannel, ROUGHNESS_FACTOR,
         object_to_material_atlas,
     };
-    use branded_id::{IdVec, U32Id};
+    use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
@@ -69,12 +69,12 @@ mod tests {
     fn bakes_one_png_per_requested_map() {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
-        });
+        let base = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
 
         let mut palette = VoxPalette::default();
-        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .unwrap();
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette_id = state.add_palette(palette);
 

@@ -269,8 +269,8 @@ impl VoxObject {
     }
 
     /// Makes the voxel at `id` live with one `samples` material per layer, in
-    /// [`iter_layers`](Self::iter_layers) order. `None`, changing nothing, if
-    /// `id` is outside the grid or `samples` has the wrong length.
+    /// [`iter_layers`](Self::iter_layers) order. Returns `None` and changes
+    /// nothing if `id` is outside the grid or `samples` has the wrong length.
     pub fn retain_voxel(
         &mut self,
         id: U32Id<BVoxVoxel>,
@@ -290,7 +290,7 @@ impl VoxObject {
     }
 
     /// Makes the voxel at `id` empty, leaving its samples in place but ignored.
-    /// `None`, changing nothing, if `id` is outside the grid.
+    /// Returns `None` and changes nothing if `id` is outside the grid.
     pub fn release_voxel(&mut self, id: U32Id<BVoxVoxel>) -> Option<()> {
         if (id.to_u32() as usize) >= self.liveness.len() {
             return None;
@@ -324,10 +324,9 @@ impl VoxObject {
     }
 
     /// Removes layer `id`, dropping its per-voxel sample column so every voxel
-    /// keeps one fewer sample. Removal may reorder the remaining layers: the
-    /// last layer moves into the removed slot. `None`, changing nothing, if
-    /// `id` is not one of this object's layers. Leaves a hole until
-    /// [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
+    /// keeps one fewer sample. The remaining layers keep their order. Returns
+    /// `None` and changes nothing if `id` is not one of this object's layers.
+    /// Leaves a hole until [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
     pub fn remove_layer(&mut self, id: U32Id<BVoxLayer>) -> Option<()> {
         if !self.layer_ids.is_retained(id) {
             return None;
@@ -338,8 +337,26 @@ impl VoxObject {
         // with nothing to release per voxel.
         unsafe { self.layer_palettes.release(id) };
         unsafe { self.samples.release(id) };
-        self.layer_ids.release(id);
+        self.layer_ids.release_stable(id);
         Some(())
+    }
+
+    /// Moves layer `id` to position `index` in the layer order, shifting the
+    /// layers between its old and new positions one slot. Returns `None` and
+    /// changes nothing if `id` is not one of this object's layers or `index` is
+    /// at or past [`layer_count`](Self::layer_count).
+    pub fn move_layer(&mut self, id: U32Id<BVoxLayer>, index: usize) -> Option<()> {
+        if !self.layer_ids.is_retained(id) || index >= self.layer_ids.len() {
+            return None;
+        }
+        self.layer_ids.move_to(id, index);
+        Some(())
+    }
+
+    /// The position of layer `id` in the layer order, or `None` if `id` is not
+    /// one of this object's layers.
+    pub fn layer_index(&self, id: U32Id<BVoxLayer>) -> Option<usize> {
+        self.layer_ids.index_of(id)
     }
 
     /// Removes every layer referencing `palette`. Two layers may reference the
@@ -603,6 +620,57 @@ mod tests {
         );
         assert_eq!(object.layer_palette(first), Some(palette));
         assert_eq!(object.layer_palette(U32Id::from_u32(9)), None);
+    }
+
+    #[test]
+    fn remove_layer_preserves_the_survivors_order() {
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        let first = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
+        let middle = object.add_layer(U32Id::<BVoxPalette>::from_u32(1), material(0));
+        let last = object.add_layer(U32Id::<BVoxPalette>::from_u32(2), material(0));
+
+        // Removing the first of three is the smallest case a swap-remove would
+        // get wrong, listing `last` before `middle`.
+        assert_eq!(object.remove_layer(first), Some(()));
+        assert_eq!(
+            object.iter_layers().collect::<Vec<_>>(),
+            [
+                (middle, U32Id::<BVoxPalette>::from_u32(1)),
+                (last, U32Id::<BVoxPalette>::from_u32(2)),
+            ]
+        );
+
+        // A layer added after the removal appends at the end of the order.
+        let added = object.add_layer(U32Id::<BVoxPalette>::from_u32(3), material(0));
+        assert_eq!(
+            object.iter_layers().map(|(id, _)| id).collect::<Vec<_>>(),
+            [middle, last, added]
+        );
+    }
+
+    #[test]
+    fn move_layer_reorders_the_listing_and_validates() {
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        let first = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
+        let second = object.add_layer(U32Id::<BVoxPalette>::from_u32(1), material(0));
+        let third = object.add_layer(U32Id::<BVoxPalette>::from_u32(2), material(0));
+        assert_eq!(object.layer_index(second), Some(1));
+
+        assert_eq!(object.move_layer(third, 0), Some(()));
+        assert_eq!(
+            object.iter_layers().map(|(id, _)| id).collect::<Vec<_>>(),
+            [third, first, second]
+        );
+        assert_eq!(object.layer_index(third), Some(0));
+
+        // An out-of-range index and an unknown id are rejected.
+        assert_eq!(object.move_layer(third, 3), None);
+        assert_eq!(object.move_layer(U32Id::from_u32(9), 0), None);
+        assert_eq!(object.layer_index(U32Id::from_u32(9)), None);
+        assert_eq!(
+            object.iter_layers().map(|(id, _)| id).collect::<Vec<_>>(),
+            [third, first, second]
+        );
     }
 
     #[test]

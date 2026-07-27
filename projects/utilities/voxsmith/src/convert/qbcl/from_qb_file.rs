@@ -94,12 +94,14 @@ fn build_palette(
 
     // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB pool as
     // float components in `[0, 1]`; each material draws one value id into it.
-    let pool = state.add_value_pool(VoxValuePool::Srgb {
-        values: order.iter().map(|&color| color_floats(color)).collect(),
-    });
+    let pool = state.add_value_pool(VoxValuePool::srgb(
+        order.iter().map(|&color| color_floats(color)).collect(),
+    ));
 
     let mut palette = VoxPalette::default();
-    palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
+    palette
+        .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+        .expect("the property names are distinct");
     let mut materials = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
         let material = palette

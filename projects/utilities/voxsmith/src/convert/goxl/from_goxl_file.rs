@@ -80,15 +80,17 @@ fn build_palette(
 
     // Colors ride in a shared sRGBA pool as float components in `[0, 1]`; each
     // material draws one value id into it.
-    let pool = state.add_value_pool(VoxValuePool::Srgba {
-        values: order
+    let pool = state.add_value_pool(VoxValuePool::srgba(
+        order
             .iter()
             .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
             .collect(),
-    });
+    ));
 
     let mut palette = VoxPalette::default();
-    palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
+    palette
+        .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+        .expect("the property names are distinct");
     let mut materials = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
         let material = palette
@@ -456,14 +458,16 @@ mod tests {
 
         // One baseColorFactor palette: a transparent placeholder, then red,
         // green, blue.
-        let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
+        let pool = state.add_value_pool(VoxValuePool::srgba(
+            ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
                 .iter()
                 .map(|hex| srgba(hex))
                 .collect(),
-        });
+        ));
         let mut palette = VoxPalette::default();
-        palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette
+            .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+            .unwrap();
         for index in 0..4 {
             palette
                 .add_material(vec![U32Id::from_u32(index)])

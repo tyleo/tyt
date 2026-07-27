@@ -319,7 +319,7 @@ fn yes_no(flag: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use crate::{Format, commands::InfoLayout, implementation::info::render};
-    use branded_id::{IdVec, U32Id};
+    use branded_id::U32Id;
     use serde_json::Value;
     use ty_math::TyVector3U32;
     use voxcore::{VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
@@ -328,11 +328,11 @@ mod tests {
     /// material.
     fn tight_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
-        });
+        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
         let mut palette = VoxPalette::default();
-        palette.add_property("baseColorFactor".to_owned(), pool);
+        palette
+            .add_property("baseColorFactor".to_owned(), pool)
+            .unwrap();
         let material = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette = state.add_palette(palette);
 
@@ -490,21 +490,21 @@ mod tests {
     #[test]
     fn reports_two_layers_over_two_palettes() {
         let mut state = VoxMain::default();
-        let strengths = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::Number(0.0),
-            max: VoxBound::None,
-            values: IdVec::from_vec(vec![2.0]),
-        });
+        let strengths = state.add_value_pool(VoxValuePool::float(
+            VoxBound::Number(0.0),
+            VoxBound::None,
+            vec![2.0],
+        ));
         let mut glow = VoxPalette::default();
-        glow.add_property("emissiveStrength".to_owned(), strengths);
+        glow.add_property("emissiveStrength".to_owned(), strengths)
+            .unwrap();
         let glow_material = glow.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let glow = state.add_palette(glow);
 
-        let colors = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
-        });
+        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
         let mut base = VoxPalette::default();
-        base.add_property("baseColorFactor".to_owned(), colors);
+        base.add_property("baseColorFactor".to_owned(), colors)
+            .unwrap();
         let material = base.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let base = state.add_palette(base);
 

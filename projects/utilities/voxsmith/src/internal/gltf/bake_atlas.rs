@@ -4,7 +4,7 @@ use crate::{
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
-use voxcore::{BVoxPoolValue, VoxMain, VoxValuePool};
+use voxcore::{BVoxPoolValue, VoxMain, VoxPoolValueRef, VoxValuePool};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
 /// `width` x `height` texels, one texel per material placed row-major from the
@@ -159,19 +159,16 @@ fn component_byte(rgba: [u8; 4], component: ColorChannel) -> u8 {
 /// not one of those pools. A `bool` reads as `1` or `0`.
 fn scalar_value(value: Option<(&VoxValuePool, U32Id<BVoxPoolValue>)>, key: &str) -> f64 {
     let fallback = || default_scalar(key).unwrap_or(0.0);
-    match value {
-        Some((VoxValuePool::Float { values, .. }, value_id)) => values
-            .get(value_id.to_usize_id())
-            .copied()
-            .unwrap_or_else(fallback),
-        Some((VoxValuePool::Int { values, .. }, value_id)) => values
-            .get(value_id.to_usize_id())
-            .map(|&value| value as f64)
-            .unwrap_or_else(fallback),
-        Some((VoxValuePool::Bool { values }, value_id)) => values
-            .get(value_id.to_usize_id())
-            .map(|&value| if value { 1.0 } else { 0.0 })
-            .unwrap_or_else(fallback),
+    match value.and_then(|(pool, value_id)| pool.value(value_id)) {
+        Some(VoxPoolValueRef::Float(number)) => number,
+        Some(VoxPoolValueRef::Int(number)) => number as f64,
+        Some(VoxPoolValueRef::Bool(flag)) => {
+            if flag {
+                1.0
+            } else {
+                0.0
+            }
+        }
         _ => fallback(),
     }
 }
@@ -240,7 +237,7 @@ mod tests {
         METALLIC_FACTOR, MaterialBake, MaterialChannel, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR,
         atlas_dimensions, bake_atlas_pixels, resolve_used_materials,
     };
-    use branded_id::{IdVec, U32Id};
+    use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{
         BVoxLayer, BVoxObject, BVoxPoolValue, VoxBound, VoxMain, VoxObject, VoxPalette,
@@ -268,24 +265,31 @@ mod tests {
     fn single_layer_state() -> (VoxMain, U32Id<BVoxObject>, U32Id<BVoxLayer>) {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]),
-        });
-        let metallic = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::Number(0.0),
-            max: VoxBound::Number(1.0),
-            values: IdVec::from_vec(vec![1.0, 0.0]),
-        });
-        let roughness = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::Number(0.0),
-            max: VoxBound::Number(1.0),
-            values: IdVec::from_vec(vec![0.0, 1.0]),
-        });
+        let base = state.add_value_pool(VoxValuePool::srgba(vec![
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 1.0],
+        ]));
+        let metallic = state.add_value_pool(VoxValuePool::float(
+            VoxBound::Number(0.0),
+            VoxBound::Number(1.0),
+            vec![1.0, 0.0],
+        ));
+        let roughness = state.add_value_pool(VoxValuePool::float(
+            VoxBound::Number(0.0),
+            VoxBound::Number(1.0),
+            vec![0.0, 1.0],
+        ));
 
         let mut palette = VoxPalette::default();
-        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
-        palette.add_property(METALLIC_FACTOR.to_owned(), metallic);
-        palette.add_property(ROUGHNESS_FACTOR.to_owned(), roughness);
+        palette
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .unwrap();
+        palette
+            .add_property(METALLIC_FACTOR.to_owned(), metallic)
+            .unwrap();
+        palette
+            .add_property(ROUGHNESS_FACTOR.to_owned(), roughness)
+            .unwrap();
         // Value ids: base 0 = red, 1 = blue; metallic 0 = 1.0, 1 = 0.0;
         // roughness 0 = 0.0, 1 = 1.0.
         let red_shiny = palette
@@ -348,12 +352,10 @@ mod tests {
     #[test]
     fn a_bool_packing_reads_one_or_zero() {
         let mut state = VoxMain::default();
-        let flag = state.add_value_pool(VoxValuePool::Bool {
-            values: IdVec::from_vec(vec![true, false]),
-        });
+        let flag = state.add_value_pool(VoxValuePool::boolean(vec![true, false]));
 
         let mut palette = VoxPalette::default();
-        palette.add_property("flag".to_owned(), flag);
+        palette.add_property("flag".to_owned(), flag).unwrap();
         let on = palette.add_material(vec![value(0)]).unwrap();
         let off = palette.add_material(vec![value(1)]).unwrap();
         let palette_id = state.add_palette(palette);
@@ -381,18 +383,23 @@ mod tests {
         // Both material rows repeat the strength pool's one cell, so both
         // bake the same half strength.
         let mut state = VoxMain::default();
-        let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]),
-        });
-        let strength = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::Number(0.0),
-            max: VoxBound::None,
-            values: IdVec::from_vec(vec![0.5]),
-        });
+        let base = state.add_value_pool(VoxValuePool::srgba(vec![
+            [1.0, 0.0, 0.0, 1.0],
+            [0.0, 0.0, 1.0, 1.0],
+        ]));
+        let strength = state.add_value_pool(VoxValuePool::float(
+            VoxBound::Number(0.0),
+            VoxBound::None,
+            vec![0.5],
+        ));
 
         let mut palette = VoxPalette::default();
-        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
-        palette.add_property(EMISSIVE_STRENGTH.to_owned(), strength);
+        palette
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .unwrap();
+        palette
+            .add_property(EMISSIVE_STRENGTH.to_owned(), strength)
+            .unwrap();
         let red = palette.add_material(vec![value(0), value(0)]).unwrap();
         let blue = palette.add_material(vec![value(1), value(0)]).unwrap();
         let palette_id = state.add_palette(palette);
@@ -475,18 +482,21 @@ mod tests {
 
         // emissiveFactor is sRGB; strengths 1.0 and 0.5 fold into the texels as
         // fractions of the mesh max, 1.0.
-        let factor = state.add_value_pool(VoxValuePool::Srgb {
-            values: IdVec::from_vec(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]),
-        });
-        let strength = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::Number(0.0),
-            max: VoxBound::None,
-            values: IdVec::from_vec(vec![1.0, 0.5]),
-        });
+        let factor =
+            state.add_value_pool(VoxValuePool::srgb(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]));
+        let strength = state.add_value_pool(VoxValuePool::float(
+            VoxBound::Number(0.0),
+            VoxBound::None,
+            vec![1.0, 0.5],
+        ));
 
         let mut palette = VoxPalette::default();
-        palette.add_property(EMISSIVE_FACTOR.to_owned(), factor);
-        palette.add_property(EMISSIVE_STRENGTH.to_owned(), strength);
+        palette
+            .add_property(EMISSIVE_FACTOR.to_owned(), factor)
+            .unwrap();
+        palette
+            .add_property(EMISSIVE_STRENGTH.to_owned(), strength)
+            .unwrap();
         let full_blue = palette.add_material(vec![value(0), value(0)]).unwrap();
         let dim_white = palette.add_material(vec![value(1), value(1)]).unwrap();
         let palette_id = state.add_palette(palette);

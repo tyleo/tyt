@@ -50,10 +50,8 @@ impl VoxRuntimeState {
     pub(crate) fn clone_runtime_state(&self) -> Self {
         let mut value_pools = IdField::new();
         for id in self.value_pool_ids.iter() {
-            // Safety: retained ids have a value. A value pool is plain data, so
-            // it derives `Clone` and copies wholesale (unlike the SoA-backed
-            // objects and palettes).
-            value_pools.retain(id, unsafe { self.value_pools.get(id) }.clone());
+            // Safety: retained ids have a value.
+            value_pools.retain(id, unsafe { self.value_pools.get(id) }.clone_pool());
         }
 
         let mut palettes = IdField::new();

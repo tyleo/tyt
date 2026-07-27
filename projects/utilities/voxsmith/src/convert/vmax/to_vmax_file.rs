@@ -20,7 +20,7 @@ mod tests {
         SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
         from_vmax_file, resolve_cell_color_or_transparent, to_vmax_file, to_vox_value,
     };
-    use branded_id::{IdVec, U32Id};
+    use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
     use ty_math::{
         TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
@@ -32,7 +32,7 @@ mod tests {
     use vmax_codec::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode,
-        VoxMain, VoxMap, VoxObject, VoxPalette, VoxValue, VoxValuePool,
+        VoxMain, VoxMap, VoxObject, VoxPalette, VoxPoolValueRef, VoxValue, VoxValuePool,
     };
 
     fn material(
@@ -299,19 +299,21 @@ mod tests {
     #[test]
     fn errors_when_derived_materials_exceed_the_byte_budget() {
         let mut state = VoxMain::default();
-        let color = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![color_floats("#FF0000FF")]),
-        });
+        let color = state.add_value_pool(VoxValuePool::srgba(vec![color_floats("#FF0000FF")]));
         // 256 distinct metallic values give 256 distinct material signatures,
         // one past the byte budget; the color pool stays a single in-range color.
-        let metallic = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::None,
-            max: VoxBound::None,
-            values: (0..256u32).map(f64::from).collect(),
-        });
+        let metallic = state.add_value_pool(VoxValuePool::float(
+            VoxBound::None,
+            VoxBound::None,
+            (0..256u32).map(f64::from).collect(),
+        ));
         let mut palette = VoxPalette::default();
-        palette.add_property("baseColorFactor".to_owned(), color);
-        palette.add_property("metallicFactor".to_owned(), metallic);
+        palette
+            .add_property("baseColorFactor".to_owned(), color)
+            .unwrap();
+        palette
+            .add_property("metallicFactor".to_owned(), metallic)
+            .unwrap();
         for index in 0..256u32 {
             palette
                 .add_material(vec![U32Id::from_u32(0), U32Id::from_u32(index)])
@@ -595,11 +597,13 @@ mod tests {
     /// colors, with one material per color so a material's index is its color
     /// index, and returns the palette id.
     fn add_rgba_palette(state: &mut VoxMain, hexes: &[&str]) -> U32Id<BVoxPalette> {
-        let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: hexes.iter().map(|hex| color_floats(hex)).collect(),
-        });
+        let pool = state.add_value_pool(VoxValuePool::srgba(
+            hexes.iter().map(|hex| color_floats(hex)).collect(),
+        ));
         let mut palette = VoxPalette::default();
-        palette.add_property("baseColorFactor".to_owned(), pool);
+        palette
+            .add_property("baseColorFactor".to_owned(), pool)
+            .unwrap();
         for index in 0..hexes.len() {
             palette
                 .add_material(vec![U32Id::from_u32(index as u32)])
@@ -1122,26 +1126,27 @@ mod tests {
             // One folded palette binding a color plus the four material
             // attributes, with a single material. No ext, so the writer derives
             // the Voxel Max material from the pools.
-            let color = state.add_value_pool(VoxValuePool::Srgba {
-                values: IdVec::from_vec(vec![color_floats("#FF0000FF")]),
-            });
-            let float = |value: f64| VoxValuePool::Float {
-                min: VoxBound::None,
-                max: VoxBound::None,
-                values: IdVec::from_vec(vec![value]),
-            };
+            let color = state.add_value_pool(VoxValuePool::srgba(vec![color_floats("#FF0000FF")]));
+            let float =
+                |value: f64| VoxValuePool::float(VoxBound::None, VoxBound::None, vec![value]);
             let metallic = state.add_value_pool(float(0.5));
             let roughness = state.add_value_pool(float(0.25));
             let emissive = state.add_value_pool(float(2.0));
-            let shadows = state.add_value_pool(VoxValuePool::Bool {
-                values: IdVec::from_vec(vec![true]),
-            });
+            let shadows = state.add_value_pool(VoxValuePool::boolean(vec![true]));
             let mut palette = VoxPalette::default();
-            palette.add_property("baseColorFactor".to_owned(), color);
-            palette.add_property("metallicFactor".to_owned(), metallic);
-            palette.add_property("roughnessFactor".to_owned(), roughness);
-            palette.add_property("emissiveStrength".to_owned(), emissive);
-            palette.add_property("shadows".to_owned(), shadows);
+            palette
+                .add_property("baseColorFactor".to_owned(), color)
+                .unwrap();
+            palette
+                .add_property("metallicFactor".to_owned(), metallic)
+                .unwrap();
+            palette
+                .add_property("roughnessFactor".to_owned(), roughness)
+                .unwrap();
+            palette
+                .add_property("emissiveStrength".to_owned(), emissive)
+                .unwrap();
+            palette.add_property("shadows".to_owned(), shadows).unwrap();
             palette.add_material(vec![U32Id::from_u32(0); 5]).unwrap();
             let palette_id = state.add_palette(palette);
             let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
@@ -1175,21 +1180,21 @@ mod tests {
                 .expect("one material");
             let scalar = |attribute: &str| -> f64 {
                 let property = material_palette.property_by_name(attribute).unwrap();
-                match reloaded
+                let (pool, index) = reloaded
                     .material_value(palette_id, material, property)
-                    .unwrap()
-                {
-                    (VoxValuePool::Float { values, .. }, index) => values[index.to_usize_id()],
+                    .unwrap();
+                match pool.value(index) {
+                    Some(VoxPoolValueRef::Float(number)) => number,
                     _ => panic!("a scalar attribute is a float pool"),
                 }
             };
             let flag = |attribute: &str| -> bool {
                 let property = material_palette.property_by_name(attribute).unwrap();
-                match reloaded
+                let (pool, index) = reloaded
                     .material_value(palette_id, material, property)
-                    .unwrap()
-                {
-                    (VoxValuePool::Bool { values }, index) => values[index.to_usize_id()],
+                    .unwrap();
+                match pool.value(index) {
+                    Some(VoxPoolValueRef::Bool(flag)) => flag,
                     _ => panic!("shadows is a bool pool"),
                 }
             };
@@ -1211,21 +1216,23 @@ mod tests {
     #[test]
     fn derives_emissive_relative_to_the_base_color() {
         let mut state = VoxMain::default();
-        let color = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![color_floats("#808080FF")]),
-        });
-        let emissive_color = state.add_value_pool(VoxValuePool::Srgb {
-            values: IdVec::from_vec(vec![[1.0, 1.0, 1.0]]),
-        });
-        let strength = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::None,
-            max: VoxBound::None,
-            values: IdVec::from_vec(vec![2.0]),
-        });
+        let color = state.add_value_pool(VoxValuePool::srgba(vec![color_floats("#808080FF")]));
+        let emissive_color = state.add_value_pool(VoxValuePool::srgb(vec![[1.0, 1.0, 1.0]]));
+        let strength = state.add_value_pool(VoxValuePool::float(
+            VoxBound::None,
+            VoxBound::None,
+            vec![2.0],
+        ));
         let mut palette = VoxPalette::default();
-        palette.add_property("baseColorFactor".to_owned(), color);
-        palette.add_property("emissiveFactor".to_owned(), emissive_color);
-        palette.add_property("emissiveStrength".to_owned(), strength);
+        palette
+            .add_property("baseColorFactor".to_owned(), color)
+            .unwrap();
+        palette
+            .add_property("emissiveFactor".to_owned(), emissive_color)
+            .unwrap();
+        palette
+            .add_property("emissiveStrength".to_owned(), strength)
+            .unwrap();
         palette.add_material(vec![U32Id::from_u32(0); 3]).unwrap();
         let palette_id = state.add_palette(palette);
         let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
@@ -1250,11 +1257,11 @@ mod tests {
         let property = material_palette
             .property_by_name("emissiveStrength")
             .unwrap();
-        let sic = match reloaded
+        let (pool, index) = reloaded
             .material_value(palette_id, material, property)
-            .unwrap()
-        {
-            (VoxValuePool::Float { values, .. }, index) => values[index.to_usize_id()],
+            .unwrap();
+        let sic = match pool.value(index) {
+            Some(VoxPoolValueRef::Float(number)) => number,
             _ => panic!("emissiveStrength is a float pool"),
         };
 

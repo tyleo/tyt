@@ -11,7 +11,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use voxcore::{BVoxLayer, BVoxPalette, VoxMain, VoxObject, VoxValuePool};
+use voxcore::{BVoxLayer, BVoxPalette, VoxMain, VoxObject, VoxValuePool, VoxValuePoolKind};
 use voxsmith::{
     AtlasShape, ColorChannel, GltfAttributeKind, MaterialBake, MaterialChannel, MaterialMap,
     MaterialMeshRequest, MaterialSlot, MeshMethod as VoxsmithMeshMethod,
@@ -229,19 +229,19 @@ fn channel_kind(
 /// Classifies a bound value pool into a channel kind, rejecting a pool that has
 /// no texel value: a string or json pool.
 fn pool_kind(pool: &VoxValuePool, key: &str) -> Result<ChannelKind> {
-    match pool {
-        VoxValuePool::Srgb { .. } | VoxValuePool::LinearRgb { .. } => {
+    match pool.kind() {
+        VoxValuePoolKind::Srgb { .. } | VoxValuePoolKind::LinearRgb { .. } => {
             Ok(ChannelKind::Color { alpha: false })
         }
-        VoxValuePool::Srgba { .. } | VoxValuePool::LinearRgba { .. } => {
+        VoxValuePoolKind::Srgba { .. } | VoxValuePoolKind::LinearRgba { .. } => {
             Ok(ChannelKind::Color { alpha: true })
         }
-        VoxValuePool::Float { .. } | VoxValuePool::Int { .. } | VoxValuePool::Bool { .. } => {
-            Ok(ChannelKind::Scalar)
-        }
-        VoxValuePool::String { .. } | VoxValuePool::Json { .. } => Err(Error::usage(format!(
-            "`{key}` is bound to a string or json pool, which has no texel value"
-        ))),
+        VoxValuePoolKind::Float { .. }
+        | VoxValuePoolKind::Int { .. }
+        | VoxValuePoolKind::Bool { .. } => Ok(ChannelKind::Scalar),
+        VoxValuePoolKind::String { .. } | VoxValuePoolKind::Json { .. } => Err(Error::usage(
+            format!("`{key}` is bound to a string or json pool, which has no texel value"),
+        )),
     }
 }
 
@@ -329,7 +329,7 @@ fn atlas_shape(shape: TextureShape) -> AtlasShape {
 mod tests {
     use super::{resolve_layer, validate_channel};
     use crate::ColorComponent;
-    use branded_id::{IdVec, U32Id};
+    use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{
         BVoxPalette, BVoxPoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool,
@@ -344,11 +344,11 @@ mod tests {
     /// backing state is dropped; the object owns its layer set.
     fn object_with_layers(layers: usize) -> VoxObject {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
-        });
+        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
         let mut palette = VoxPalette::default();
-        palette.add_property("baseColorFactor".to_owned(), pool);
+        palette
+            .add_property("baseColorFactor".to_owned(), pool)
+            .unwrap();
         let material = palette.add_material(vec![value(0)]).unwrap();
         let palette = state.add_palette(palette);
 
@@ -384,22 +384,18 @@ mod tests {
     fn palette_state() -> (VoxMain, U32Id<BVoxPalette>) {
         let mut state = VoxMain::default();
 
-        let tint = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
-        });
-        let glow = state.add_value_pool(VoxValuePool::Srgb {
-            values: IdVec::from_vec(vec![[0.0, 1.0, 0.0]]),
-        });
-        let gloss = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::Number(0.0),
-            max: VoxBound::Number(1.0),
-            values: IdVec::from_vec(vec![0.5]),
-        });
+        let tint = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
+        let glow = state.add_value_pool(VoxValuePool::srgb(vec![[0.0, 1.0, 0.0]]));
+        let gloss = state.add_value_pool(VoxValuePool::float(
+            VoxBound::Number(0.0),
+            VoxBound::Number(1.0),
+            vec![0.5],
+        ));
 
         let mut palette = VoxPalette::default();
-        palette.add_property("tint".to_owned(), tint);
-        palette.add_property("glow".to_owned(), glow);
-        palette.add_property("gloss".to_owned(), gloss);
+        palette.add_property("tint".to_owned(), tint).unwrap();
+        palette.add_property("glow".to_owned(), glow).unwrap();
+        palette.add_property("gloss".to_owned(), gloss).unwrap();
         palette
             .add_material(vec![value(0), value(0), value(0)])
             .unwrap();
@@ -493,11 +489,9 @@ mod tests {
     #[test]
     fn a_string_pool_has_no_texel_value() {
         let mut state = VoxMain::default();
-        let tag = state.add_value_pool(VoxValuePool::String {
-            values: IdVec::from_vec(vec!["low".to_owned()]),
-        });
+        let tag = state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]));
         let mut palette = VoxPalette::default();
-        palette.add_property("tag".to_owned(), tag);
+        palette.add_property("tag".to_owned(), tag).unwrap();
         palette.add_material(vec![value(0)]).unwrap();
         let palette = state.add_palette(palette);
 

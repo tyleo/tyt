@@ -9,18 +9,15 @@ use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, Vo
 
 /// Reduces `palette` in `state` to at most `max_materials` materials, then,
 /// unless `keep_unused_values`, prunes the pool values the reduction leaves
-/// unreferenced.
+/// unreferenced. The prune runs state-wide through
+/// [`VoxMain::prune_value_pools`]. Either way the state stays valid, with the
+/// surviving value ids left for [`VoxMain::gc`] to compact.
 ///
 /// Materials cluster by the `baseColorFactor` property and each cluster
 /// collapses onto one real representative, so a merged voxel takes the
 /// representative's whole material. Colorless materials are left untouched.
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
 /// palette already fit.
-///
-/// The prune runs state-wide through [`VoxMain::prune_value_pools`], compacting
-/// the pools to fit a small budget such as Voxel Max's 255 colors;
-/// `keep_unused_values` leaves every value. The state is compacted and valid
-/// either way.
 ///
 /// # Arguments
 /// * `state` - the document, reduced in place.
@@ -761,7 +758,7 @@ mod tests {
     use ty_math::{TyFloatExt, TyVector3U32};
     use voxcore::{
         BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, VoxBound, VoxMain, VoxObject,
-        VoxPalette, VoxValuePool,
+        VoxPalette, VoxPoolValueRef, VoxValuePool,
     };
 
     /// The branded value id `index`.
@@ -789,10 +786,11 @@ mod tests {
             .unwrap()
             .property_by_name(BASE_COLOR_FACTOR)
             .unwrap();
-        match state.material_value(palette, material, property) {
-            Some((VoxValuePool::Srgba { values }, value_id)) => {
-                hex_of(values[value_id.to_usize_id()])
-            }
+        match state
+            .material_value(palette, material, property)
+            .and_then(|(pool, value_id)| pool.value(value_id))
+        {
+            Some(VoxPoolValueRef::Srgba(&color)) => hex_of(color),
             other => panic!("material has no srgba baseColorFactor: {other:?}"),
         }
     }
@@ -818,18 +816,20 @@ mod tests {
 
         // baseColorFactor draws from an sRGBA color pool; tag draws from an
         // unbounded float pool with one distinct value per material.
-        let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: colors.iter().map(|color| srgba(color)).collect(),
-        });
-        let tag = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::None,
-            max: VoxBound::None,
-            values: (0..colors.len()).map(|index| index as f64).collect(),
-        });
+        let base = state.add_value_pool(VoxValuePool::srgba(
+            colors.iter().map(|color| srgba(color)).collect(),
+        ));
+        let tag = state.add_value_pool(VoxValuePool::float(
+            VoxBound::None,
+            VoxBound::None,
+            (0..colors.len()).map(|index| index as f64).collect(),
+        ));
 
         let mut palette = VoxPalette::default();
-        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
-        palette.add_property("tag".to_owned(), tag);
+        palette
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .unwrap();
+        palette.add_property("tag".to_owned(), tag).unwrap();
         let materials: Vec<_> = (0..colors.len())
             .map(|index| {
                 palette
@@ -887,12 +887,14 @@ mod tests {
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: colors.iter().map(|color| srgba(color)).collect(),
-        });
+        let base = state.add_value_pool(VoxValuePool::srgba(
+            colors.iter().map(|color| srgba(color)).collect(),
+        ));
 
         let mut palette = VoxPalette::default();
-        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .unwrap();
         let materials: Vec<_> = (0..colors.len())
             .map(|index| palette.add_material(vec![value(index)]).unwrap())
             .collect();
@@ -973,10 +975,11 @@ mod tests {
         let tag = palette_ref.property_by_name("tag").unwrap();
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         let material = object.voxel_material(voxel, layer).unwrap();
-        match state.material_value(palette, material, tag) {
-            Some((VoxValuePool::Float { values, .. }, value_id)) => {
-                assert_eq!(values[value_id.to_usize_id()], 1.0)
-            }
+        match state
+            .material_value(palette, material, tag)
+            .and_then(|(pool, value_id)| pool.value(value_id))
+        {
+            Some(VoxPoolValueRef::Float(number)) => assert_eq!(number, 1.0),
             other => panic!("unexpected tag value {other:?}"),
         }
     }
@@ -1206,14 +1209,14 @@ mod tests {
         // The palette carries no `baseColorFactor`, so every material counts
         // as colorless and the reduction no-ops even over the cap.
         let mut state = VoxMain::default();
-        let tag = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::None,
-            max: VoxBound::None,
-            values: (0..3).map(|index| index as f64).collect(),
-        });
+        let tag = state.add_value_pool(VoxValuePool::float(
+            VoxBound::None,
+            VoxBound::None,
+            (0..3).map(|index| index as f64).collect(),
+        ));
 
         let mut palette = VoxPalette::default();
-        palette.add_property("tag".to_owned(), tag);
+        palette.add_property("tag".to_owned(), tag).unwrap();
         let materials: Vec<_> = (0..3)
             .map(|index| palette.add_material(vec![value(index)]).unwrap())
             .collect();
@@ -1250,14 +1253,16 @@ mod tests {
         // lands.
         let (mut state, palette, object_id) =
             state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
-        let strength = state.add_value_pool(VoxValuePool::Float {
-            min: VoxBound::None,
-            max: VoxBound::None,
-            values: [1.5].into_iter().collect(),
-        });
+        let strength = state.add_value_pool(VoxValuePool::float(
+            VoxBound::None,
+            VoxBound::None,
+            vec![1.5],
+        ));
 
         let mut glow_palette = VoxPalette::default();
-        glow_palette.add_property("emissiveStrength".to_owned(), strength);
+        glow_palette
+            .add_property("emissiveStrength".to_owned(), strength)
+            .unwrap();
         glow_palette.add_material(vec![value(0)]).unwrap();
         let glow_palette_id = state.add_palette(glow_palette);
         state

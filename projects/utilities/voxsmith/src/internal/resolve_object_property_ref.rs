@@ -24,7 +24,7 @@ pub fn resolve_object_property_ref(
 #[cfg(test)]
 mod tests {
     use crate::{BASE_COLOR_FACTOR, ObjectPropertyRef, resolve_object_property_ref};
-    use branded_id::{IdVec, U32Id};
+    use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{BVoxPalette, BVoxPoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
@@ -36,12 +36,12 @@ mod tests {
     /// A one-material palette whose `baseColorFactor` property draws
     /// from a fresh one-color pool.
     fn color_palette(state: &mut VoxMain) -> U32Id<BVoxPalette> {
-        let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
-        });
+        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
 
         let mut palette = VoxPalette::default();
-        palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette
+            .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+            .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
 
         state.add_palette(palette)
@@ -86,11 +86,11 @@ mod tests {
 
         // The trailing palette does not carry the name, so the scan passes
         // its layer.
-        let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[0.0, 1.0, 0.0, 1.0]]),
-        });
+        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[0.0, 1.0, 0.0, 1.0]]));
         let mut palette = VoxPalette::default();
-        palette.add_property("emissiveFactor".to_owned(), pool);
+        palette
+            .add_property("emissiveFactor".to_owned(), pool)
+            .unwrap();
         palette.add_material(vec![value(0)]).unwrap();
         let plain = state.add_palette(palette);
 

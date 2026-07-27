@@ -3,7 +3,7 @@ use crate::{
     MagicaVoxelFrame, MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
     MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, to_vox_value,
 };
-use branded_id::{IdVec, U32Id};
+use branded_id::U32Id;
 use mvox::{
     MVoxCamera, MVoxFile, MVoxFrame, MVoxLayer, MVoxMaterial, MVoxMaterialType, MVoxModel,
     MVoxSceneNode, MVoxSceneNodeBody,
@@ -101,13 +101,15 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
 
     let color_bytes: Vec<[u8; 4]> = colors.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
     let (distinct_colors, color_indices) = intern(&color_bytes, |&color| color);
-    let color_pool = state.add_value_pool(VoxValuePool::Srgba {
-        values: distinct_colors
+    let color_pool = state.add_value_pool(VoxValuePool::srgba(
+        distinct_colors
             .iter()
             .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
             .collect(),
-    });
-    palette.add_property(BASE_COLOR_FACTOR.to_owned(), color_pool);
+    ));
+    palette
+        .add_property(BASE_COLOR_FACTOR.to_owned(), color_pool)
+        .expect("the property names are distinct");
 
     // The scalars are custom MagicaVoxel attributes with no glTF bounds, so
     // their float pools are unbounded.
@@ -133,10 +135,10 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             })
             .collect();
         let (distinct_types, type_indices) = intern(&types, |token| token.clone());
-        let type_pool = state.add_value_pool(VoxValuePool::String {
-            values: IdVec::from_vec(distinct_types),
-        });
-        palette.add_property("type".to_owned(), type_pool);
+        let type_pool = state.add_value_pool(VoxValuePool::string(distinct_types));
+        palette
+            .add_property("type".to_owned(), type_pool)
+            .expect("the property names are distinct");
         attribute_indices.push(type_indices);
 
         for (name, read) in SCALARS {
@@ -154,12 +156,14 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
                 })
                 .collect();
             let (distinct, indices) = intern(&values, |value| value.to_bits());
-            let pool = state.add_value_pool(VoxValuePool::Float {
-                min: VoxBound::None,
-                max: VoxBound::None,
-                values: IdVec::from_vec(distinct),
-            });
-            palette.add_property(name.to_owned(), pool);
+            let pool = state.add_value_pool(VoxValuePool::float(
+                VoxBound::None,
+                VoxBound::None,
+                distinct,
+            ));
+            palette
+                .add_property(name.to_owned(), pool)
+                .expect("the property names are distinct");
             attribute_indices.push(indices);
         }
     }
@@ -694,14 +698,16 @@ mod tests {
 
         // One baseColorFactor palette: a transparent placeholder, then red,
         // green, blue.
-        let pool = state.add_value_pool(VoxValuePool::Srgba {
-            values: ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
+        let pool = state.add_value_pool(VoxValuePool::srgba(
+            ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
                 .iter()
                 .map(|hex| srgba(hex))
                 .collect(),
-        });
+        ));
         let mut palette = VoxPalette::default();
-        palette.add_property(BASE_COLOR_FACTOR.to_owned(), pool);
+        palette
+            .add_property(BASE_COLOR_FACTOR.to_owned(), pool)
+            .unwrap();
         for index in 0..4 {
             palette
                 .add_material(vec![U32Id::from_u32(index)])

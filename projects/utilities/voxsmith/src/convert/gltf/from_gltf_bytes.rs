@@ -472,7 +472,7 @@ mod tests {
     use branded_id::U32Id;
     use png::{BitDepth, ColorType, Encoder};
     use ty_math::{TyFloatExt, TyHexColor, TySrgbaU8, TyVector3U32};
-    use voxcore::{BVoxPoolValue, VoxMain, VoxValuePool};
+    use voxcore::{BVoxPoolValue, VoxMain, VoxPoolValueRef, VoxValuePool};
 
     /// A minimal binary glTF (GLB) of an axis-aligned box spanning `[0, sx]`,
     /// `[0, sy]`, `[0, sz]` in glTF Y-up space, indexed triangles. When
@@ -728,9 +728,8 @@ mod tests {
     /// The `#RRGGBBAA` hex of the `baseColorFactor` a given voxel samples.
     fn voxel_hex(state: &VoxMain, position: TyVector3U32) -> String {
         let (pool, index) = voxel_attribute(state, position, BASE_COLOR_FACTOR);
-        match pool {
-            VoxValuePool::Srgba { values } => {
-                let [r, g, b, a] = values[index.to_usize_id()];
+        match pool.value(index) {
+            Some(VoxPoolValueRef::Srgba(&[r, g, b, a])) => {
                 TySrgbaU8::from([byte(r), byte(g), byte(b), byte(a)]).to_hex()
             }
             other => panic!("unexpected baseColorFactor pool {other:?}"),
@@ -740,8 +739,8 @@ mod tests {
     /// The numeric value of one float attribute a given voxel samples.
     fn voxel_number(state: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
         let (pool, index) = voxel_attribute(state, position, attribute);
-        match pool {
-            VoxValuePool::Float { values, .. } => values[index.to_usize_id()],
+        match pool.value(index) {
+            Some(VoxPoolValueRef::Float(number)) => number,
             other => panic!("expected a float pool for {attribute}, got {other:?}"),
         }
     }
@@ -1571,8 +1570,8 @@ mod tests {
 
         let origin = TyVector3U32::new(0, 0, 0);
         let (pool, index) = voxel_attribute(&state, origin, EMISSIVE_FACTOR);
-        let [r, g, b] = match pool {
-            VoxValuePool::Srgb { values } => values[index.to_usize_id()],
+        let [r, g, b] = match pool.value(index) {
+            Some(VoxPoolValueRef::Srgb(&color)) => color,
             other => panic!("expected an sRGB emissiveFactor pool, got {other:?}"),
         };
         assert!(r < 0.01 && b < 0.01, "emissiveFactor red {r} blue {b}");

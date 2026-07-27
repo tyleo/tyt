@@ -270,13 +270,15 @@ fn folded_palette(
     // one value id per property.
     let mut palette = VoxPalette::default();
     let mut color_axis: Vec<bool> = Vec::new();
-    let color_pool = state.add_value_pool(VoxValuePool::Srgba {
-        values: colors
+    let color_pool = state.add_value_pool(VoxValuePool::srgba(
+        colors
             .iter()
             .map(|color| <[f64; 4]>::from(TySrgbaU8::from(*color).into_format::<f64, f64>()))
             .collect(),
-    });
-    palette.add_property(BASE_COLOR_FACTOR.to_owned(), color_pool);
+    ));
+    palette
+        .add_property(BASE_COLOR_FACTOR.to_owned(), color_pool)
+        .expect("the property names are distinct");
     color_axis.push(true);
 
     // Metalness and roughness convert from Voxel Max's 0.1 to 0.9 slider
@@ -293,7 +295,9 @@ fn folded_palette(
                 .map(|m| vm_coefficient_to_pbr_factor(m.mc))
                 .collect(),
         );
-        palette.add_property(METALLIC_FACTOR.to_owned(), metallic);
+        palette
+            .add_property(METALLIC_FACTOR.to_owned(), metallic)
+            .expect("the property names are distinct");
         color_axis.push(false);
         let roughness = float_pool(
             state,
@@ -302,7 +306,9 @@ fn folded_palette(
                 .map(|m| vm_coefficient_to_pbr_factor(m.rc))
                 .collect(),
         );
-        palette.add_property(ROUGHNESS_FACTOR.to_owned(), roughness);
+        palette
+            .add_property(ROUGHNESS_FACTOR.to_owned(), roughness)
+            .expect("the property names are distinct");
         color_axis.push(false);
         // Voxel Max glows in the voxel's own base color, so an emissive
         // material's color is its base color. The property appears only when
@@ -310,8 +316,8 @@ fn folded_palette(
         // emissive is then `emissiveFactor` times `emissiveStrength` per glTF, so
         // the color leads the strength that scales it.
         if materials.iter().any(|m| m.sic > 0.0) {
-            let emissive_color = state.add_value_pool(VoxValuePool::Srgb {
-                values: colors
+            let emissive_color = state.add_value_pool(VoxValuePool::srgb(
+                colors
                     .iter()
                     .map(|color| {
                         let [r, g, b, _] =
@@ -319,12 +325,16 @@ fn folded_palette(
                         [r, g, b]
                     })
                     .collect(),
-            });
-            palette.add_property(EMISSIVE_FACTOR.to_owned(), emissive_color);
+            ));
+            palette
+                .add_property(EMISSIVE_FACTOR.to_owned(), emissive_color)
+                .expect("the property names are distinct");
             color_axis.push(true);
         }
         let emissive = float_pool(state, materials.iter().map(|m| m.sic).collect());
-        palette.add_property(EMISSIVE_STRENGTH.to_owned(), emissive);
+        palette
+            .add_property(EMISSIVE_STRENGTH.to_owned(), emissive)
+            .expect("the property names are distinct");
         color_axis.push(false);
 
         // Dispersion properties appear only when some material carries an `md`
@@ -339,20 +349,28 @@ fn folded_palette(
                     .map(|m| m.md.as_ref().map_or(default_ior, |d| d.ior))
                     .collect(),
             );
-            palette.add_property(IOR.to_owned(), ior);
+            palette
+                .add_property(IOR.to_owned(), ior)
+                .expect("the property names are distinct");
             color_axis.push(false);
             let transmission = float_pool(state, dispersion(&materials, |d| d.transmission));
-            palette.add_property(TRANSMISSION_FACTOR.to_owned(), transmission);
+            palette
+                .add_property(TRANSMISSION_FACTOR.to_owned(), transmission)
+                .expect("the property names are distinct");
             color_axis.push(false);
             let absorption = float_pool(state, dispersion(&materials, |d| d.absorption));
-            palette.add_property(ABSORPTION.to_owned(), absorption);
+            palette
+                .add_property(ABSORPTION.to_owned(), absorption)
+                .expect("the property names are distinct");
             color_axis.push(false);
         }
 
-        let shadows = state.add_value_pool(VoxValuePool::Bool {
-            values: materials.iter().map(|m| m.sh).collect(),
-        });
-        palette.add_property(SHADOWS.to_owned(), shadows);
+        let shadows = state.add_value_pool(VoxValuePool::boolean(
+            materials.iter().map(|m| m.sh).collect(),
+        ));
+        palette
+            .add_property(SHADOWS.to_owned(), shadows)
+            .expect("the property names are distinct");
         color_axis.push(false);
     }
 
@@ -447,11 +465,7 @@ fn float_pool(state: &mut VoxMain, values: Vec<f64>) -> U32Id<BVoxValuePool> {
         .into_iter()
         .map(|v| if v.is_finite() { v } else { 0.0 })
         .collect();
-    state.add_value_pool(VoxValuePool::Float {
-        min: VoxBound::None,
-        max: VoxBound::None,
-        values,
-    })
+    state.add_value_pool(VoxValuePool::float(VoxBound::None, VoxBound::None, values))
 }
 
 /// Each material's dispersion field `read`, or zero where dispersion is absent.

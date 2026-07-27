@@ -39,7 +39,7 @@ mod tests {
         AtlasShape, BASE_COLOR_FACTOR, METALLIC_FACTOR, MaterialBake, MaterialChannel, MaterialMap,
         MaterialMeshRequest, MaterialSlot, MeshMethod, ResourceStorage, object_to_material_gltf,
     };
-    use branded_id::{IdVec, U32Id};
+    use branded_id::U32Id;
     use gltf::Gltf;
     use serde_json::Value;
     use ty_math::TyVector3U32;
@@ -50,12 +50,12 @@ mod tests {
     fn cube_gltf(maps: Vec<MaterialMap>, storage: ResourceStorage) -> Vec<u8> {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(VoxValuePool::Srgba {
-            values: IdVec::from_vec(vec![[1.0, 0.0, 0.0, 1.0]]),
-        });
+        let base = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]));
 
         let mut palette = VoxPalette::default();
-        palette.add_property(BASE_COLOR_FACTOR.to_owned(), base);
+        palette
+            .add_property(BASE_COLOR_FACTOR.to_owned(), base)
+            .unwrap();
         let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette_id = state.add_palette(palette);
 

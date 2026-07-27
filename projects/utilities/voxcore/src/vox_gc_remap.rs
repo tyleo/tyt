@@ -1,4 +1,6 @@
-use crate::{BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePool};
+use crate::{
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, BVoxValuePool,
+};
 use branded_id::{IdVec, soa::IdRemap};
 
 /// The id relabelings from a [`VoxMain::gc`](crate::VoxMain::gc), one per pool,
@@ -6,6 +8,9 @@ use branded_id::{IdVec, soa::IdRemap};
 pub struct VoxGcRemap {
     /// The value-pool relabeling.
     pub value_pools: IdRemap<BVoxValuePool, u32>,
+
+    /// Each value pool's value relabeling, indexed by the pool's old id.
+    pub pool_values: IdVec<BVoxValuePool, IdRemap<BVoxPoolValue, u32>>,
 
     /// The palette pool relabeling.
     pub palettes: IdRemap<BVoxPalette, u32>,

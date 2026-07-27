@@ -1,96 +1,124 @@
+use crate::{
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, BVoxProperty,
+    BVoxValuePool, BVoxVoxel,
+};
+use branded_id::U32Id;
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
 /// An error from voxcore: a [`VoxMain`](crate::VoxMain) that violates a rule
-/// [`validate`](crate::VoxMain::validate) checks. Ids are reported as their
-/// `u32` listing index.
+/// [`validate`](crate::VoxMain::validate) checks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     /// A value pool has no values.
-    EmptyPool { pool: u32 },
+    EmptyPool { pool: U32Id<BVoxValuePool> },
 
     /// A value pool's `min`/`max` bounds are malformed: non-finite, not
     /// integer-valued for an `int` pool, or `min` greater than `max`.
-    PoolBound { pool: u32 },
+    PoolBound { pool: U32Id<BVoxValuePool> },
 
     /// A value pool holds a value that is malformed for its kind or outside its
-    /// bounds, at the given value id.
-    PoolValue { pool: u32, index: u32 },
+    /// bounds.
+    PoolValue {
+        pool: U32Id<BVoxValuePool>,
+        value: U32Id<BVoxPoolValue>,
+    },
 
     /// A palette property references a value pool that does not exist.
     PropertyPool {
-        palette: u32,
-        property: u32,
-        pool: u32,
+        palette: U32Id<BVoxPalette>,
+        property: U32Id<BVoxProperty>,
+        pool: U32Id<BVoxValuePool>,
     },
 
-    /// A palette declares the same name on more than one property.
-    DuplicatePropertyName { palette: u32, property: u32 },
-
-    /// A material's value id for a property is beyond the pool's
-    /// values.
+    /// A material's value id for a property is not one of the pool's values.
     MaterialValue {
-        palette: u32,
-        property: u32,
-        material: u32,
+        palette: U32Id<BVoxPalette>,
+        property: U32Id<BVoxProperty>,
+        material: U32Id<BVoxMaterial>,
     },
 
     /// A palette has no materials.
-    PaletteWithoutMaterials { palette: u32 },
+    PaletteWithoutMaterials { palette: U32Id<BVoxPalette> },
 
     /// An object references a palette that does not exist.
-    PaletteRef { object: u32, palette: u32 },
+    PaletteRef {
+        object: U32Id<BVoxObject>,
+        palette: U32Id<BVoxPalette>,
+    },
 
     /// A live voxel samples a material beyond its layer's palette.
     SampleMaterial {
-        object: u32,
-        voxel: u32,
-        material: u32,
+        object: U32Id<BVoxObject>,
+        voxel: U32Id<BVoxVoxel>,
+        material: U32Id<BVoxMaterial>,
     },
 
     /// A node lists a child node that does not exist.
-    ChildNode { node: u32, child: u32 },
+    ChildNode {
+        node: U32Id<BVoxHierarchyNode>,
+        child: U32Id<BVoxHierarchyNode>,
+    },
 
     /// A node places an object that does not exist.
-    ChildObject { node: u32, object: u32 },
+    ChildObject {
+        node: U32Id<BVoxHierarchyNode>,
+        object: U32Id<BVoxObject>,
+    },
 
     /// A root references a node that does not exist.
-    Root { root: u32 },
+    Root { root: U32Id<BVoxHierarchyNode> },
 
     /// The hierarchy contains a cycle reaching this node.
-    Cycle { node: u32 },
+    Cycle { node: U32Id<BVoxHierarchyNode> },
 
     /// A node lists the same child node more than once.
-    DuplicateChildNode { node: u32, child: u32 },
+    DuplicateChildNode {
+        node: U32Id<BVoxHierarchyNode>,
+        child: U32Id<BVoxHierarchyNode>,
+    },
 
     /// A node places the same object more than once.
-    DuplicateChildObject { node: u32, object: u32 },
+    DuplicateChildObject {
+        node: U32Id<BVoxHierarchyNode>,
+        object: U32Id<BVoxObject>,
+    },
 
     /// A root lists the same node more than once.
-    DuplicateRoot { root: u32 },
+    DuplicateRoot { root: U32Id<BVoxHierarchyNode> },
 
     /// A node's transform has a non-finite position or scale component.
-    NonFiniteTransform { node: u32 },
+    NonFiniteTransform { node: U32Id<BVoxHierarchyNode> },
 
     /// A node's transform has a zero scale component.
-    ZeroScale { node: u32 },
+    ZeroScale { node: U32Id<BVoxHierarchyNode> },
 
     /// A node's transform rotation is not a unit quaternion.
-    NonUnitRotation { node: u32 },
+    NonUnitRotation { node: U32Id<BVoxHierarchyNode> },
 }
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        // Ids print as their bare `u32`: a branded id's own `Display` carries
+        // the brand name, which the surrounding wording already gives.
         match self {
-            Error::EmptyPool { pool } => write!(f, "value pool {pool} has no values"),
-            Error::PoolBound { pool } => {
-                write!(f, "value pool {pool} has malformed min/max bounds")
+            Error::EmptyPool { pool } => {
+                write!(f, "value pool {} has no values", pool.to_u32())
             }
-            Error::PoolValue { pool, index } => write!(
+            Error::PoolBound { pool } => {
+                write!(
+                    f,
+                    "value pool {} has malformed min/max bounds",
+                    pool.to_u32()
+                )
+            }
+            Error::PoolValue { pool, value } => write!(
                 f,
-                "value pool {pool} value {index} is malformed for its kind or out of bounds"
+                "value pool {} value {} is malformed for its kind or out of bounds",
+                pool.to_u32(),
+                value.to_u32()
             ),
             Error::PropertyPool {
                 palette,
@@ -98,11 +126,10 @@ impl Display for Error {
                 pool,
             } => write!(
                 f,
-                "palette {palette} property {property} references value pool {pool}, which does not exist"
-            ),
-            Error::DuplicatePropertyName { palette, property } => write!(
-                f,
-                "palette {palette} property {property} duplicates another property's name"
+                "palette {} property {} references value pool {}, which does not exist",
+                palette.to_u32(),
+                property.to_u32(),
+                pool.to_u32()
             ),
             Error::MaterialValue {
                 palette,
@@ -110,14 +137,19 @@ impl Display for Error {
                 material,
             } => write!(
                 f,
-                "palette {palette} material {material} has a value id for property {property} out of the pool's range"
+                "palette {} material {} has a value id for property {} that is not one of the pool's values",
+                palette.to_u32(),
+                material.to_u32(),
+                property.to_u32()
             ),
             Error::PaletteWithoutMaterials { palette } => {
-                write!(f, "palette {palette} has no materials")
+                write!(f, "palette {} has no materials", palette.to_u32())
             }
             Error::PaletteRef { object, palette } => write!(
                 f,
-                "object {object} references palette {palette}, which does not exist"
+                "object {} references palette {}, which does not exist",
+                object.to_u32(),
+                palette.to_u32()
             ),
             Error::SampleMaterial {
                 object,
@@ -125,47 +157,64 @@ impl Display for Error {
                 material,
             } => write!(
                 f,
-                "object {object} voxel {voxel} samples material {material}, out of range of its palette"
+                "object {} voxel {} samples material {}, out of range of its palette",
+                object.to_u32(),
+                voxel.to_u32(),
+                material.to_u32()
             ),
             Error::ChildNode { node, child } => write!(
                 f,
-                "hierarchy node {node} lists child node {child}, which does not exist"
+                "hierarchy node {} lists child node {}, which does not exist",
+                node.to_u32(),
+                child.to_u32()
             ),
             Error::ChildObject { node, object } => write!(
                 f,
-                "hierarchy node {node} places object {object}, which does not exist"
+                "hierarchy node {} places object {}, which does not exist",
+                node.to_u32(),
+                object.to_u32()
             ),
-            Error::Root { root } => {
-                write!(
-                    f,
-                    "root references hierarchy node {root}, which does not exist"
-                )
-            }
-            Error::Cycle { node } => {
-                write!(f, "hierarchy is not acyclic: a cycle reaches node {node}")
-            }
+            Error::Root { root } => write!(
+                f,
+                "root references hierarchy node {}, which does not exist",
+                root.to_u32()
+            ),
+            Error::Cycle { node } => write!(
+                f,
+                "hierarchy is not acyclic: a cycle reaches node {}",
+                node.to_u32()
+            ),
             Error::DuplicateChildNode { node, child } => write!(
                 f,
-                "hierarchy node {node} lists child node {child} more than once"
+                "hierarchy node {} lists child node {} more than once",
+                node.to_u32(),
+                child.to_u32()
             ),
             Error::DuplicateChildObject { node, object } => write!(
                 f,
-                "hierarchy node {node} places object {object} more than once"
+                "hierarchy node {} places object {} more than once",
+                node.to_u32(),
+                object.to_u32()
             ),
-            Error::DuplicateRoot { root } => {
-                write!(f, "root lists hierarchy node {root} more than once")
-            }
+            Error::DuplicateRoot { root } => write!(
+                f,
+                "root lists hierarchy node {} more than once",
+                root.to_u32()
+            ),
             Error::NonFiniteTransform { node } => write!(
                 f,
-                "hierarchy node {node} has a non-finite transform position or scale component"
+                "hierarchy node {} has a non-finite transform position or scale component",
+                node.to_u32()
             ),
             Error::ZeroScale { node } => write!(
                 f,
-                "hierarchy node {node} has a zero transform scale component"
+                "hierarchy node {} has a zero transform scale component",
+                node.to_u32()
             ),
             Error::NonUnitRotation { node } => write!(
                 f,
-                "hierarchy node {node} transform rotation is not a unit quaternion"
+                "hierarchy node {} transform rotation is not a unit quaternion",
+                node.to_u32()
             ),
         }
     }

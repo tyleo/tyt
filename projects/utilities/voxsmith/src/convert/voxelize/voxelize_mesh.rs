@@ -3,7 +3,7 @@ use crate::{
     MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, SurfaceMode,
     TRANSMISSION_FACTOR, VoxelGrid, sample_material, voxelize_triangles,
 };
-use branded_id::{IdVec, U32Id};
+use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3, TyVector3U32};
 use voxcore::{
@@ -285,28 +285,40 @@ fn build_palette(
 
     // Register the pools and add each property. All properties precede any
     // material, so no material carries a back-fill placeholder value id.
-    let base_color_pool = state.add_value_pool(VoxValuePool::Srgba {
-        values: IdVec::from_vec(base_color.values),
-    });
+    let base_color_pool = state.add_value_pool(VoxValuePool::srgba(base_color.values));
     let metallic_pool = state.add_value_pool(bounded_float(metallic.values, 0.0, 1.0));
     let roughness_pool = state.add_value_pool(bounded_float(roughness.values, 0.0, 1.0));
-    let emissive_factor_pool = state.add_value_pool(VoxValuePool::Srgb {
-        values: IdVec::from_vec(emissive_factor.values),
-    });
+    let emissive_factor_pool = state.add_value_pool(VoxValuePool::srgb(emissive_factor.values));
     let emissive_strength_pool = state.add_value_pool(float_above(emissive_strength.values, 0.0));
     let occlusion_pool = state.add_value_pool(bounded_float(occlusion.values, 0.0, 1.0));
     let ior_pool = state.add_value_pool(float_above(ior.values, 1.0));
     let transmission_pool = state.add_value_pool(bounded_float(transmission.values, 0.0, 1.0));
 
     let mut palette = VoxPalette::default();
-    palette.add_property(BASE_COLOR_FACTOR.to_owned(), base_color_pool);
-    palette.add_property(METALLIC_FACTOR.to_owned(), metallic_pool);
-    palette.add_property(ROUGHNESS_FACTOR.to_owned(), roughness_pool);
-    palette.add_property(EMISSIVE_FACTOR.to_owned(), emissive_factor_pool);
-    palette.add_property(EMISSIVE_STRENGTH.to_owned(), emissive_strength_pool);
-    palette.add_property(OCCLUSION_STRENGTH.to_owned(), occlusion_pool);
-    palette.add_property(IOR.to_owned(), ior_pool);
-    palette.add_property(TRANSMISSION_FACTOR.to_owned(), transmission_pool);
+    palette
+        .add_property(BASE_COLOR_FACTOR.to_owned(), base_color_pool)
+        .expect("the property names are distinct");
+    palette
+        .add_property(METALLIC_FACTOR.to_owned(), metallic_pool)
+        .expect("the property names are distinct");
+    palette
+        .add_property(ROUGHNESS_FACTOR.to_owned(), roughness_pool)
+        .expect("the property names are distinct");
+    palette
+        .add_property(EMISSIVE_FACTOR.to_owned(), emissive_factor_pool)
+        .expect("the property names are distinct");
+    palette
+        .add_property(EMISSIVE_STRENGTH.to_owned(), emissive_strength_pool)
+        .expect("the property names are distinct");
+    palette
+        .add_property(OCCLUSION_STRENGTH.to_owned(), occlusion_pool)
+        .expect("the property names are distinct");
+    palette
+        .add_property(IOR.to_owned(), ior_pool)
+        .expect("the property names are distinct");
+    palette
+        .add_property(TRANSMISSION_FACTOR.to_owned(), transmission_pool)
+        .expect("the property names are distinct");
 
     // One material per distinct mesh material, its value ids in property
     // order.
@@ -413,20 +425,12 @@ fn float_pool(materials: &[MeshMaterial], get: impl Fn(&MeshMaterial) -> f64) ->
 
 /// A float pool bounded on both sides.
 fn bounded_float(values: Vec<f64>, min: f64, max: f64) -> VoxValuePool {
-    VoxValuePool::Float {
-        min: VoxBound::Number(min),
-        max: VoxBound::Number(max),
-        values: IdVec::from_vec(values),
-    }
+    VoxValuePool::float(VoxBound::Number(min), VoxBound::Number(max), values)
 }
 
 /// A float pool bounded below and unbounded above.
 fn float_above(values: Vec<f64>, min: f64) -> VoxValuePool {
-    VoxValuePool::Float {
-        min: VoxBound::Number(min),
-        max: VoxBound::None,
-        values: IdVec::from_vec(values),
-    }
+    VoxValuePool::float(VoxBound::Number(min), VoxBound::None, values)
 }
 
 /// A hashable identity for a material: its two 8-bit colors and the bit patterns
@@ -539,7 +543,7 @@ mod tests {
         MeshTriangleUvs, SurfaceMode, voxelize_mesh,
     };
     use ty_math::{TySrgbaU8, TyVector3F64, TyVector3U32};
-    use voxcore::{VoxMain, VoxValuePool};
+    use voxcore::{VoxMain, VoxPoolValueRef};
 
     /// A two-cell mesh over a `2x1x1` grid: one triangle inside each unit
     /// cell, the left tagged material `0` and the right material `1`.
@@ -590,9 +594,9 @@ mod tests {
         let material = object.voxel_material(voxel, layer).unwrap();
         match state
             .material_value(palette_id, material, property)
-            .unwrap()
+            .and_then(|(pool, value_id)| pool.value(value_id))
         {
-            (VoxValuePool::Float { values, .. }, value_id) => values[value_id.to_usize_id()],
+            Some(VoxPoolValueRef::Float(number)) => number,
             other => panic!("expected a float pool, got {other:?}"),
         }
     }
