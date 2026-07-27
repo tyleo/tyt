@@ -10,8 +10,10 @@ use ty_math::{TyQuaternionExt, TyVector3F64, TyVector3I32, UNIT_ROTATION_TOLERAN
 /// The in-memory state of a voxel model: its objects, shared palettes, scene
 /// hierarchy, and roots.
 ///
-/// Ids are meaningful only within this state. [`validate`](Self::validate)
-/// checks the cross-references.
+/// Ids are meaningful only within this state. Every mutation checks the
+/// cross-references it could break, so a state reached through the public API
+/// never violates a referential rule; [`validate`](Self::validate) audits
+/// them.
 #[derive(Debug, Default)]
 pub struct VoxMain {
     /// The runtime scene: objects.
@@ -981,7 +983,11 @@ impl VoxMain {
             .ok_or(Error::PoolValueOrder)
     }
 
-    /// Checks the value pools, palettes, cross-references, and per-entity rules:
+    /// Audits the full rule set. Every rule here is also enforced at a
+    /// mutation point (a constructor, an insertion, or the mutation itself),
+    /// so a state reached through the public API always passes; a failure
+    /// reports a voxcore bug, never a caller error. The checks stay as the
+    /// specification of what the mutations preserve:
     ///
     /// 1. every value pool is non-empty, its values well-formed for its kind,
     ///    and its `min`/`max` finite, integer-valued for an `int` pool, and
@@ -1022,16 +1028,21 @@ impl VoxMain {
             }
         }
 
-        // Palette property rules: pools resolve and every value id is within
-        // its pool. Names are unique by construction, which add_property
-        // enforces.
+        // Palette property rules: pools resolve, names are unique, and every
+        // value id is within its pool.
         for (palette_id, palette) in self.iter_palettes() {
+            let mut seen_property_names = HashSet::with_capacity(palette.property_count());
             for (property_id, property) in palette.iter_properties() {
                 let pool = self.value_pool(property.pool).ok_or(Error::PropertyPool {
                     palette: palette_id,
                     property: property_id,
                     pool: property.pool,
                 })?;
+                if !seen_property_names.insert(property.name.as_str()) {
+                    return Err(Error::DuplicatePropertyName {
+                        name: property.name.clone(),
+                    });
+                }
                 for material_id in palette.iter_materials() {
                     let value_id = palette
                         .value_id(material_id, property_id)
@@ -1251,7 +1262,7 @@ fn vector_is_finite(vector: TyVector3F64) -> bool {
 mod tests {
     use crate::{
         BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
-        BVoxProperty, BVoxValuePool, BVoxVoxel, Error, VoxBound, VoxHierarchyNode, VoxMain,
+        BVoxProperty, BVoxValuePool, BVoxVoxel, Error, Result, VoxBound, VoxHierarchyNode, VoxMain,
         VoxObject, VoxPalette, VoxPoolValueRef, VoxValuePool, VoxValuePoolKind,
     };
     use branded_id::U32Id;
@@ -2815,5 +2826,368 @@ mod tests {
         );
         assert_eq!(state.palette(palette_id).unwrap().material_count(), 1);
         state.validate().unwrap();
+    }
+
+    #[test]
+    fn add_hierarchy_node_rejects_a_dangling_child_object() {
+        let mut state = VoxMain::default();
+        assert_eq!(
+            state.add_hierarchy_node(node_with_objects(vec![U32Id::from_u32(9)])),
+            Err(Error::UnknownObject {
+                object: U32Id::from_u32(9)
+            })
+        );
+        assert_eq!(state.hierarchy_node_count(), 0);
+    }
+
+    #[test]
+    fn remove_material_cannot_empty_a_palette() {
+        let mut state = VoxMain::default();
+        let ints = int_pool(&mut state, vec![10]);
+        let palette_id = state.add_palette(one_material_palette(ints, 0)).unwrap();
+        let only = state
+            .palette(palette_id)
+            .unwrap()
+            .iter_materials()
+            .next()
+            .unwrap();
+
+        // The removal needs a distinct live replacement, which a one-material
+        // palette cannot supply.
+        assert_eq!(
+            state.remove_material(palette_id, only, only),
+            Err(Error::SelfReplacement)
+        );
+        assert_eq!(
+            state.remove_material(palette_id, only, material(1)),
+            Err(Error::UnknownMaterial {
+                material: material(1)
+            })
+        );
+        assert_eq!(state.palette(palette_id).unwrap().material_count(), 1);
+    }
+
+    /// Everything the readers expose, rendered so a half-applied mutation
+    /// inside an entity shows up. The state's own debug rendering carries the
+    /// id pools, the roots, and the ext, and stops at each entity's edge.
+    fn snapshot(state: &VoxMain) -> String {
+        let mut out = format!("{state:?}");
+        for (pool_id, pool) in state.iter_value_pools() {
+            let values: Vec<_> = pool.iter_values().collect();
+            out += &format!("|pool {pool_id:?} {:?} {values:?}", pool.kind());
+        }
+        for (palette_id, palette) in state.iter_palettes() {
+            let properties: Vec<_> = palette.iter_properties().collect();
+            out += &format!("|palette {palette_id:?} {properties:?}");
+            for material_id in palette.iter_materials() {
+                let row: Vec<_> = palette
+                    .iter_properties()
+                    .map(|(property_id, _)| palette.value_id(material_id, property_id))
+                    .collect();
+                out += &format!("|material {material_id:?} {row:?}");
+            }
+        }
+        for (object_id, object) in state.iter_objects() {
+            let live: Vec<_> = object.iter_live().collect();
+            out += &format!(
+                "|object {object_id:?} {} {:?} {:?} {live:?}",
+                object.name(),
+                object.bounds(),
+                object.origin()
+            );
+            for (layer_id, palette_id) in object.iter_layers() {
+                let samples: Vec<_> = object
+                    .iter_live_samples(layer_id)
+                    .expect("an iterated layer is one of the object's")
+                    .collect();
+                out += &format!("|layer {layer_id:?} {palette_id:?} {samples:?}");
+            }
+        }
+        for (node_id, node) in state.iter_hierarchy_nodes() {
+            out += &format!("|node {node_id:?} {node:?}");
+        }
+        out
+    }
+
+    /// Applies a mutation expected to fail and asserts every reader-visible
+    /// value is byte-for-byte unchanged.
+    fn assert_rejects_unchanged<T>(
+        state: &mut VoxMain,
+        mutate: impl FnOnce(&mut VoxMain) -> Result<T>,
+    ) {
+        let before = snapshot(state);
+        assert!(mutate(state).is_err());
+        assert_eq!(snapshot(state), before);
+    }
+
+    #[test]
+    fn rejected_mutations_change_nothing() {
+        let mut state = VoxMain::default();
+        let ints = int_pool(&mut state, vec![10, 20]);
+        let palette_id = state.add_palette(two_material_palette(ints)).unwrap();
+        let object = state.add_object(unit_object("o")).unwrap();
+        let layer = state.add_layer(object, palette_id, material(0)).unwrap();
+        let node = state
+            .add_hierarchy_node(node_with_objects(vec![object]))
+            .unwrap();
+        state.push_root_hierarchy_node(node).unwrap();
+        state
+            .retain_voxel(object, voxel(0), &[material(1)])
+            .unwrap();
+        state.validate().unwrap();
+
+        // Insertions.
+        assert_rejects_unchanged(&mut state, |s| s.add_palette(VoxPalette::default()));
+        assert_rejects_unchanged(&mut state, |s| {
+            s.add_palette(one_material_palette(pool(9), 0))
+        });
+        assert_rejects_unchanged(&mut state, |s| {
+            let mut bad = unit_object("bad");
+            bad.add_layer(palette(9), material(0));
+            s.add_object(bad)
+        });
+        assert_rejects_unchanged(&mut state, |s| {
+            s.add_hierarchy_node(node_with_children(vec![node_id(9)]))
+        });
+        assert_rejects_unchanged(&mut state, |s| {
+            // The two batch nodes reference each other by prospective id.
+            s.add_hierarchy_nodes(vec![
+                node_with_children(vec![node_id(2)]),
+                node_with_children(vec![node_id(1)]),
+            ])
+        });
+
+        // Root setters.
+        assert_rejects_unchanged(&mut state, |s| s.push_root_hierarchy_node(node_id(9)));
+        assert_rejects_unchanged(&mut state, |s| s.push_root_hierarchy_node(node));
+        assert_rejects_unchanged(&mut state, |s| s.set_root_hierarchy_nodes(vec![node, node]));
+        assert_rejects_unchanged(&mut state, |s| s.set_root_hierarchy_nodes(vec![node_id(9)]));
+
+        // Moves and reorders.
+        assert_rejects_unchanged(&mut state, |s| s.move_object(object, 1));
+        assert_rejects_unchanged(&mut state, |s| s.move_palette(palette(9), 0));
+        assert_rejects_unchanged(&mut state, |s| s.move_value_pool(ints, 1));
+        assert_rejects_unchanged(&mut state, |s| s.reorder_value_pool(ints, &[value(0)]));
+
+        // Object edits.
+        assert_rejects_unchanged(&mut state, |s| s.add_layer(object, palette(9), material(0)));
+        assert_rejects_unchanged(&mut state, |s| s.add_layer(object, palette_id, material(9)));
+        assert_rejects_unchanged(&mut state, |s| {
+            s.retain_voxel(object, voxel(0), &[material(9)])
+        });
+        assert_rejects_unchanged(&mut state, |s| {
+            s.retain_voxel(object, voxel(9), &[material(0)])
+        });
+        assert_rejects_unchanged(&mut state, |s| s.retain_voxel(object, voxel(0), &[]));
+        assert_rejects_unchanged(&mut state, |s| s.release_voxel(object, voxel(9)));
+        assert_rejects_unchanged(&mut state, |s| s.remove_layer(object, U32Id::from_u32(9)));
+        assert_rejects_unchanged(&mut state, |s| s.move_layer(object, layer, 1));
+        assert_rejects_unchanged(&mut state, |s| {
+            s.set_object_origin(U32Id::from_u32(9), TyVector3I32::new(0, 0, 0))
+        });
+
+        // Palette edits.
+        assert_rejects_unchanged(&mut state, |s| {
+            s.add_property(palette_id, "v".to_owned(), ints, value(0))
+        });
+        assert_rejects_unchanged(&mut state, |s| {
+            s.add_property(palette_id, "w".to_owned(), ints, value(9))
+        });
+        assert_rejects_unchanged(&mut state, |s| s.add_material(palette_id, vec![value(9)]));
+        assert_rejects_unchanged(&mut state, |s| {
+            s.remove_property(palette_id, U32Id::from_u32(9))
+        });
+
+        // Removals.
+        assert_rejects_unchanged(&mut state, |s| s.remove_object(U32Id::from_u32(9)));
+        assert_rejects_unchanged(&mut state, |s| s.remove_palette(palette(9)));
+        assert_rejects_unchanged(&mut state, |s| s.remove_hierarchy_node(node_id(9)));
+        assert_rejects_unchanged(&mut state, |s| {
+            s.remove_material(palette_id, material(0), material(0))
+        });
+        assert_rejects_unchanged(&mut state, |s| {
+            s.remove_pool_value(ints, value(0), value(0))
+        });
+
+        state.validate().unwrap();
+    }
+
+    /// A deterministic linear-congruential generator, so the operation
+    /// sequence needs no randomness dependency and replays exactly.
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn next(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            self.0 >> 33
+        }
+
+        /// A value in `[0, bound)`.
+        fn below(&mut self, bound: usize) -> usize {
+            (self.next() % bound as u64) as usize
+        }
+    }
+
+    /// Applies one operation drawn from `rng`. Ids come from a small range so
+    /// calls hit live and dead entities alike, and every `Result` is dropped:
+    /// the property under test is that no success breaks the state.
+    fn apply_random_operation(state: &mut VoxMain, rng: &mut Lcg) {
+        let wild_pool = pool(rng.below(6) as u32);
+        let wild_palette = palette(rng.below(6) as u32);
+        let wild_object = U32Id::<BVoxObject>::from_u32(rng.below(6) as u32);
+        let wild_node = node_id(rng.below(8) as u32);
+        let wild_material = material(rng.below(4) as u32);
+        let wild_value = value(rng.below(4) as u32);
+        match rng.below(21) {
+            0 => {
+                let values = (0..1 + rng.below(3)).map(|v| v as i64).collect();
+                state.add_value_pool(
+                    VoxValuePool::int(VoxBound::None, VoxBound::None, values).unwrap(),
+                );
+            }
+            1 => {
+                let mut palette = VoxPalette::default();
+                for index in 0..rng.below(3) {
+                    let _ = palette.add_property(format!("p{index}"), wild_pool, wild_value);
+                }
+                for _ in 0..1 + rng.below(2) {
+                    let row = (0..palette.property_count())
+                        .map(|_| value(rng.below(4) as u32))
+                        .collect();
+                    let _ = palette.add_material(row);
+                }
+                let _ = state.add_palette(palette);
+            }
+            2 => {
+                let bounds = TyVector3U32::new(1 + rng.below(2) as u32, 1 + rng.below(2) as u32, 1);
+                let mut object = VoxObject::new(String::new(), bounds).unwrap();
+                if rng.below(2) == 0 {
+                    object.add_layer(wild_palette, wild_material);
+                }
+                let samples: Vec<_> = (0..object.layer_count())
+                    .map(|_| material(rng.below(4) as u32))
+                    .collect();
+                let _ = object.retain_voxel(voxel(rng.below(4) as u32), &samples);
+                let _ = state.add_object(object);
+            }
+            3 => {
+                let _ = state.add_hierarchy_node(VoxHierarchyNode {
+                    child_nodes: (0..rng.below(3))
+                        .map(|_| node_id(rng.below(8) as u32))
+                        .collect(),
+                    child_objects: (0..rng.below(2))
+                        .map(|_| U32Id::from_u32(rng.below(6) as u32))
+                        .collect(),
+                    ..VoxHierarchyNode::default()
+                });
+            }
+            4 => {
+                let nodes = (0..1 + rng.below(3))
+                    .map(|_| {
+                        node_with_children(
+                            (0..rng.below(3))
+                                .map(|_| node_id(rng.below(10) as u32))
+                                .collect(),
+                        )
+                    })
+                    .collect();
+                let _ = state.add_hierarchy_nodes(nodes);
+            }
+            5 => {
+                let _ = state.push_root_hierarchy_node(wild_node);
+            }
+            6 => {
+                let roots = (0..rng.below(3))
+                    .map(|_| node_id(rng.below(8) as u32))
+                    .collect();
+                let _ = state.set_root_hierarchy_nodes(roots);
+            }
+            7 => {
+                let _ = state.add_layer(wild_object, wild_palette, wild_material);
+            }
+            8 => {
+                let layers = state.object(wild_object).map_or(0, VoxObject::layer_count);
+                let samples: Vec<_> = (0..layers).map(|_| material(rng.below(4) as u32)).collect();
+                let _ = state.retain_voxel(wild_object, voxel(rng.below(6) as u32), &samples);
+            }
+            9 => {
+                let _ = state.release_voxel(wild_object, voxel(rng.below(6) as u32));
+            }
+            10 => {
+                let _ = state.remove_layer(wild_object, U32Id::from_u32(rng.below(3) as u32));
+            }
+            11 => {
+                let _ = state.move_layer(
+                    wild_object,
+                    U32Id::from_u32(rng.below(3) as u32),
+                    rng.below(3),
+                );
+            }
+            12 => {
+                let _ = state.add_property(
+                    wild_palette,
+                    format!("p{}", rng.below(4)),
+                    wild_pool,
+                    wild_value,
+                );
+            }
+            13 => {
+                let arity = state
+                    .palette(wild_palette)
+                    .map_or(0, VoxPalette::property_count);
+                let row = (0..arity).map(|_| value(rng.below(4) as u32)).collect();
+                let _ = state.add_material(wild_palette, row);
+            }
+            14 => {
+                let _ = state.remove_property(wild_palette, U32Id::from_u32(rng.below(3) as u32));
+            }
+            15 => {
+                let _ = state.remove_object(wild_object);
+            }
+            16 => {
+                let _ = state.remove_palette(wild_palette);
+            }
+            17 => {
+                let _ = state.remove_hierarchy_node(wild_node);
+            }
+            18 => {
+                let _ = state.remove_material(
+                    wild_palette,
+                    wild_material,
+                    material(rng.below(4) as u32),
+                );
+            }
+            19 => {
+                let _ = state.remove_pool_value(wild_pool, wild_value, value(rng.below(4) as u32));
+            }
+            _ => {
+                let _ = state.move_object(wild_object, rng.below(4));
+            }
+        }
+    }
+
+    // Miri interprets the long operation sequence far too slowly; the unsafe
+    // paths it exercises are covered by the focused tests above.
+    /// The payoff property: whatever mix of successes and rejections a
+    /// sequence of safe-API calls produces, the state always audits clean.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn a_seeded_operation_sequence_keeps_the_state_valid() {
+        for seed in 0..3 {
+            let mut rng = Lcg(seed);
+            let mut state = VoxMain::default();
+            for step in 0..600 {
+                apply_random_operation(&mut state, &mut rng);
+                if step % 60 == 0 {
+                    assert_eq!(state.validate(), Ok(()), "seed {seed} step {step}");
+                }
+            }
+            assert_eq!(state.validate(), Ok(()), "seed {seed} before gc");
+            state.gc();
+            assert_eq!(state.validate(), Ok(()), "seed {seed} after gc");
+        }
     }
 }
