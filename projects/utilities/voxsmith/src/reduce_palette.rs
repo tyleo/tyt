@@ -5,7 +5,7 @@ use ty_math::{
     FromColor, TyCielabColorF64, TyColorToVector3, TyLinSrgbaF64, TyOklabColorF64, TySrgbaU8,
     TyVector3Ext, TyVector3F64, TyVector3U32,
 };
-use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxMain, VoxObject};
+use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxMain};
 
 /// Reduces `palette` in `state` to at most `max_materials` materials, then,
 /// unless `keep_unused_values`, prunes the pool values the reduction leaves
@@ -569,27 +569,36 @@ fn dither_voxels(
         .collect();
 
     for (object_id, layers) in targets {
-        let object = state
-            .object_mut(object_id)
-            .expect("a referencing object is one of the state's");
-
         for layer in layers {
-            dither_layer(object, layer, &coords_of, &representatives, spacing, dither);
+            dither_layer(
+                state,
+                object_id,
+                layer,
+                &coords_of,
+                &representatives,
+                spacing,
+                dither,
+            );
         }
     }
 }
 
 /// Dithers one layer on one object: walk live voxels in raster order, snap each
-/// to the nearest representative, and reassign via `retain_voxel`, swapping
-/// only this layer's material.
+/// to the nearest representative, and reassign via
+/// [`VoxMain::retain_voxel`], swapping only this layer's material.
+#[allow(clippy::too_many_arguments)]
 fn dither_layer(
-    object: &mut VoxObject,
+    state: &mut VoxMain,
+    object_id: U32Id<BVoxObject>,
     layer: U32Id<BVoxLayer>,
     coords_of: &HashMap<u32, TyVector3F64>,
     representatives: &[Point],
     spacing: f64,
     dither: Dither,
 ) {
+    let object = state
+        .object(object_id)
+        .expect("a referencing object is one of the state's");
     let bounds = object.bounds();
 
     // Live voxels ascend by raster id, so every diffusion target is a
@@ -608,6 +617,9 @@ fn dither_layer(
     let mut errors: HashMap<u32, TyVector3F64> = HashMap::new();
 
     for voxel in voxels {
+        let object = state
+            .object(object_id)
+            .expect("a referencing object is one of the state's");
         let material = object
             .voxel_material(voxel, layer)
             .expect("a live voxel samples every layer");
@@ -649,9 +661,9 @@ fn dither_layer(
                 })
                 .collect();
             row[slot] = U32Id::from_u32(chosen.material);
-            object
-                .retain_voxel(voxel, &row)
-                .expect("a live voxel takes a full-arity row");
+            state
+                .retain_voxel(object_id, voxel, &row)
+                .expect("a live voxel takes a full-arity row of palette materials");
         }
     }
 }
@@ -1272,9 +1284,8 @@ mod tests {
         glow_palette.add_material(vec![value(0)]).unwrap();
         let glow_palette_id = state.add_palette(glow_palette).unwrap();
         state
-            .object_mut(object_id)
-            .unwrap()
-            .add_layer(glow_palette_id, U32Id::from_u32(0));
+            .add_layer(object_id, glow_palette_id, U32Id::from_u32(0))
+            .unwrap();
 
         let outcome = reduce_palette(
             &mut state,

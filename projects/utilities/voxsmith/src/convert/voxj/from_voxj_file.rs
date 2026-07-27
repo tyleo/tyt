@@ -525,10 +525,7 @@ mod tests {
         // Layer ids follow the listing on load, so the first layer is id 0.
         let object_id = U32Id::<BVoxObject>::from_u32(0);
         assert_eq!(
-            state
-                .object_mut(object_id)
-                .unwrap()
-                .remove_layer(U32Id::<BVoxLayer>::from_u32(0)),
+            state.remove_layer(object_id, U32Id::<BVoxLayer>::from_u32(0)),
             Ok(())
         );
         state.gc();

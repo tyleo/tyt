@@ -1,11 +1,11 @@
 use crate::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, BVoxProperty,
-    BVoxValuePool, Error, Result, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxPoolFlaw,
-    VoxRuntimeState, VoxValue, VoxValuePool,
+    BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
+    BVoxProperty, BVoxValuePool, BVoxVoxel, Error, Result, VoxGcRemap, VoxHierarchyNode, VoxObject,
+    VoxPalette, VoxPoolFlaw, VoxRuntimeState, VoxValue, VoxValuePool,
 };
 use branded_id::{IdVec, U32Id, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TyQuaternionExt, TyVector3F64, UNIT_ROTATION_TOLERANCE};
+use ty_math::{TyQuaternionExt, TyVector3F64, TyVector3I32, UNIT_ROTATION_TOLERANCE};
 
 /// The in-memory state of a voxel model: its objects, shared palettes, scene
 /// hierarchy, and roots.
@@ -76,14 +76,140 @@ impl VoxMain {
             .map(move |id| (id, unsafe { self.runtime_state.objects.get(id) }))
     }
 
-    /// The object `id` for mutation, or `None` if not one of this state's.
-    /// Pairs with [`object`](Self::object) for read-only access.
-    pub fn object_mut(&mut self, id: U32Id<BVoxObject>) -> Option<&mut VoxObject> {
-        if !self.runtime_state.object_ids.is_retained(id) {
-            return None;
+    /// Adds a layer referencing `palette` to object `object`, after its
+    /// existing layers, back-filling every voxel with `default_material` and
+    /// returning the layer's id. Errors, changing nothing, if:
+    ///
+    /// 1. `object` is not one of this state's
+    /// 2. `palette` is not one of this state's
+    /// 3. `default_material` is not one of `palette`'s materials
+    pub fn add_layer(
+        &mut self,
+        object: U32Id<BVoxObject>,
+        palette: U32Id<BVoxPalette>,
+        default_material: U32Id<BVoxMaterial>,
+    ) -> Result<U32Id<BVoxLayer>> {
+        if !self.runtime_state.object_ids.is_retained(object) {
+            return Err(Error::UnknownObject { object });
         }
-        // Safety: the id is retained, so it has a value.
-        Some(unsafe { self.runtime_state.objects.get_mut(id) })
+        let Some(palette_ref) = self.palette(palette) else {
+            return Err(Error::UnknownPalette { palette });
+        };
+        if !palette_ref.contains_material(default_material) {
+            return Err(Error::UnknownMaterial {
+                material: default_material,
+            });
+        }
+        // Safety: the object id is retained.
+        Ok(unsafe { self.runtime_state.objects.get_mut(object) }
+            .add_layer(palette, default_material))
+    }
+
+    /// Removes layer `layer` from object `object`, dropping its per-voxel
+    /// sample column. Errors, changing nothing, if `object` is not one of
+    /// this state's or `layer` is not one of the object's.
+    pub fn remove_layer(
+        &mut self,
+        object: U32Id<BVoxObject>,
+        layer: U32Id<BVoxLayer>,
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object) {
+            return Err(Error::UnknownObject { object });
+        }
+        // Safety: the object id is retained.
+        unsafe { self.runtime_state.objects.get_mut(object) }.remove_layer(layer)
+    }
+
+    /// Moves layer `layer` of object `object` to position `index` in its
+    /// layer order. Errors, changing nothing, if:
+    ///
+    /// 1. `object` is not one of this state's
+    /// 2. `layer` is not one of the object's
+    /// 3. `index` is at or past its layer count
+    pub fn move_layer(
+        &mut self,
+        object: U32Id<BVoxObject>,
+        layer: U32Id<BVoxLayer>,
+        index: usize,
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object) {
+            return Err(Error::UnknownObject { object });
+        }
+        // Safety: the object id is retained.
+        unsafe { self.runtime_state.objects.get_mut(object) }.move_layer(layer, index)
+    }
+
+    /// Makes the voxel at `voxel` in object `object` live with one `samples`
+    /// material per layer, in layer order. Errors, changing nothing, if:
+    ///
+    /// 1. `object` is not one of this state's
+    /// 2. `voxel` is outside its grid
+    /// 3. `samples` has the wrong length
+    /// 4. a sample is not one of its layer's palette's materials
+    pub fn retain_voxel(
+        &mut self,
+        object: U32Id<BVoxObject>,
+        voxel: U32Id<BVoxVoxel>,
+        samples: &[U32Id<BVoxMaterial>],
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object) {
+            return Err(Error::UnknownObject { object });
+        }
+        // Safety: the object id is retained.
+        let object_ref = unsafe { self.runtime_state.objects.get(object) };
+        if object_ref.voxel_position(voxel).is_none() {
+            return Err(Error::UnknownVoxel { voxel });
+        }
+        if samples.len() != object_ref.layer_count() {
+            return Err(Error::SampleArity {
+                samples: samples.len(),
+                layers: object_ref.layer_count(),
+            });
+        }
+        for ((layer, palette_id), &material) in object_ref.iter_layers().zip(samples) {
+            let palette = self
+                .palette(palette_id)
+                .expect("a layer references a live palette");
+            if !palette.contains_material(material) {
+                return Err(Error::LayerSampleMaterial {
+                    layer,
+                    voxel,
+                    material,
+                });
+            }
+        }
+        // Safety: the object id is retained; the grid and arity were checked.
+        unsafe { self.runtime_state.objects.get_mut(object) }.retain_voxel(voxel, samples)
+    }
+
+    /// Makes the voxel at `voxel` in object `object` empty, leaving its
+    /// samples in place but ignored. Errors, changing nothing, if `object` is
+    /// not one of this state's or `voxel` is outside its grid.
+    pub fn release_voxel(
+        &mut self,
+        object: U32Id<BVoxObject>,
+        voxel: U32Id<BVoxVoxel>,
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object) {
+            return Err(Error::UnknownObject { object });
+        }
+        // Safety: the object id is retained.
+        unsafe { self.runtime_state.objects.get_mut(object) }.release_voxel(voxel)
+    }
+
+    /// Sets the grid origin of object `object`. Errors, changing nothing, if
+    /// `object` is not one of this state's.
+    pub fn set_object_origin(
+        &mut self,
+        object: U32Id<BVoxObject>,
+        origin: TyVector3I32,
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object) {
+            return Err(Error::UnknownObject { object });
+        }
+        // Safety: the object id is retained.
+        unsafe { self.runtime_state.objects.get_mut(object) }.set_origin(origin);
+        Ok(())
     }
 
     /// Moves object `id` to position `index` in the listing, shifting the
@@ -1052,7 +1178,7 @@ mod tests {
         VoxObject, VoxPalette, VoxPoolValueRef, VoxValuePool, VoxValuePoolKind,
     };
     use branded_id::U32Id;
-    use ty_math::{TyQuaternion, TyVector3, TyVector3U32};
+    use ty_math::{TyQuaternion, TyVector3, TyVector3I32, TyVector3U32};
 
     fn node_id(index: u32) -> U32Id<BVoxHierarchyNode> {
         U32Id::from_u32(index)
@@ -2410,5 +2536,107 @@ mod tests {
         assert_eq!(pool_ref.value(value_id), Some(VoxPoolValueRef::Int(20)));
         let (pool_ref, value_id) = state.material_value(palette_id, material, second).unwrap();
         assert_eq!(pool_ref.value(value_id), Some(VoxPoolValueRef::Int(30)));
+    }
+
+    #[test]
+    fn object_methods_edit_an_inserted_object() {
+        let mut state = VoxMain::default();
+        let ints = int_pool(&mut state, vec![1, 2]);
+        let palette_id = state.add_palette(two_material_palette(ints)).unwrap();
+        let object = state.add_object(unit_object("o")).unwrap();
+
+        // add_layer back-fills the live voxel with the default material.
+        let base = state.add_layer(object, palette_id, material(0)).unwrap();
+        assert_eq!(
+            state.object(object).unwrap().voxel_material(voxel(0), base),
+            Some(material(0))
+        );
+
+        // retain_voxel swaps the sample; a material beyond the layer's
+        // palette is rejected.
+        state
+            .retain_voxel(object, voxel(0), &[material(1)])
+            .unwrap();
+        assert_eq!(
+            state.object(object).unwrap().voxel_material(voxel(0), base),
+            Some(material(1))
+        );
+        assert_eq!(
+            state.retain_voxel(object, voxel(0), &[material(9)]),
+            Err(Error::LayerSampleMaterial {
+                layer: base,
+                voxel: voxel(0),
+                material: material(9),
+            })
+        );
+
+        // The remaining methods address the object by id.
+        let overlay = state.add_layer(object, palette_id, material(1)).unwrap();
+        state.move_layer(object, overlay, 0).unwrap();
+        assert_eq!(
+            state
+                .object(object)
+                .unwrap()
+                .iter_layers()
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>(),
+            [overlay, base]
+        );
+        state.remove_layer(object, overlay).unwrap();
+        state
+            .set_object_origin(object, TyVector3I32::new(1, 2, 3))
+            .unwrap();
+        assert_eq!(
+            state.object(object).unwrap().origin(),
+            TyVector3I32::new(1, 2, 3)
+        );
+        state.release_voxel(object, voxel(0)).unwrap();
+        assert_eq!(state.object(object).unwrap().live_count(), 0);
+        state.validate().unwrap();
+    }
+
+    #[test]
+    fn object_methods_reject_bad_ids() {
+        let mut state = VoxMain::default();
+        let ints = int_pool(&mut state, vec![1, 2]);
+        let palette_id = state.add_palette(two_material_palette(ints)).unwrap();
+        let object = state.add_object(unit_object("o")).unwrap();
+
+        let ghost = U32Id::<BVoxObject>::from_u32(9);
+        assert_eq!(
+            state.add_layer(ghost, palette_id, material(0)),
+            Err(Error::UnknownObject { object: ghost })
+        );
+        assert_eq!(
+            state.add_layer(object, palette(9), material(0)),
+            Err(Error::UnknownPalette {
+                palette: palette(9)
+            })
+        );
+        assert_eq!(
+            state.add_layer(object, palette_id, material(9)),
+            Err(Error::UnknownMaterial {
+                material: material(9)
+            })
+        );
+        assert_eq!(
+            state.retain_voxel(object, voxel(9), &[]),
+            Err(Error::UnknownVoxel { voxel: voxel(9) })
+        );
+        assert_eq!(
+            state.retain_voxel(object, voxel(0), &[material(0)]),
+            Err(Error::SampleArity {
+                samples: 1,
+                layers: 0
+            })
+        );
+        assert_eq!(
+            state.remove_layer(object, U32Id::<BVoxLayer>::from_u32(9)),
+            Err(Error::UnknownLayer {
+                layer: U32Id::from_u32(9)
+            })
+        );
+        assert_eq!(state.object(object).unwrap().layer_count(), 0);
+        state.validate().unwrap();
     }
 }
