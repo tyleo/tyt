@@ -199,8 +199,7 @@ impl VoxObject {
 
     /// The tight live-voxel extent as `(min_corner, [X, Y, Z] size)` in this
     /// object's grid, or `None` when it has no live voxels. The object stores
-    /// the wider build volume in [`bounds`](Self::bounds); the runtime/tight
-    /// grid a Voxel Json document records is derived from this.
+    /// the wider build volume in [`bounds`](Self::bounds).
     pub fn live_extent(&self) -> Option<(TyVector3U32, TyVector3U32)> {
         let mut live = self.iter_live().map(|id| {
             self.voxel_position(id)
