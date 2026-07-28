@@ -16,9 +16,12 @@ use voxcore::{BVoxHierarchyNode, VoxHierarchyNode, VoxMain, VoxObject};
 /// matrix or compound object emitting its grid with the visibility masks and
 /// color from the ext and the palette.
 ///
-/// Errors if the ext is missing, its node entries do not line up with the
-/// hierarchy, the state does not have exactly one root, or a mask list does not
-/// match its object.
+/// Errors if:
+///
+/// 1. the ext is missing
+/// 2. its node entries do not line up with the hierarchy
+/// 3. the state does not have exactly one root
+/// 4. a mask list does not match its object
 pub fn to_qbt_file(state: &VoxMain) -> Result<QbtFile> {
     let ext = match state.ext() {
         Some(ext) => from_vox_value::<QubicleQbtExtWrapper>(ext)?.qubicle_qbt,

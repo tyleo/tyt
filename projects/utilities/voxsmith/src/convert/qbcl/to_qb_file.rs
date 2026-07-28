@@ -12,8 +12,11 @@ use voxcore::{VoxMain, VoxObject};
 /// cannot be rebuilt. Each object emits one matrix, taking its name, position,
 /// and per-voxel visibility from the ext and its colors from the palette.
 ///
-/// Errors if the ext is missing, its matrix entries do not line up with the
-/// objects, or a visibility list does not match its object.
+/// Errors if:
+///
+/// 1. the ext is missing
+/// 2. its matrix entries do not line up with the objects
+/// 3. a visibility list does not match its object
 pub fn to_qb_file(state: &VoxMain) -> Result<QbFile> {
     let ext = match state.ext() {
         Some(ext) => from_vox_value::<QubicleQbExtWrapper>(ext)?.qubicle_qb,
