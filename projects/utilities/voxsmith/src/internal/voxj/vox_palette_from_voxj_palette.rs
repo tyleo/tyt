@@ -21,6 +21,8 @@ pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette
         out.add_property(
             property.name.clone(),
             U32Id::from_u32(property.value_pool as u32),
+            // The back-fill for materials the palette already holds. The loop
+            // below adds every material, each carrying its own value ids.
             U32Id::from_u32(0),
         )
         .map_err(|_| {
