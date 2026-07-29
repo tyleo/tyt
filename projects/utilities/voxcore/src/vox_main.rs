@@ -250,7 +250,7 @@ impl VoxMain {
         }
         for (property_id, property) in palette.iter_properties() {
             let Some(pool) = self.value_pool(property.pool_id) else {
-                return Err(Error::PropertyPoolRef {
+                return Err(Error::PropertyValuePoolRef {
                     property_id,
                     pool_id: property.pool_id,
                 });
@@ -339,7 +339,7 @@ impl VoxMain {
             return Err(Error::UnknownValuePool { pool_id });
         };
         if !pool_ref.contains_value(default_value_id) {
-            return Err(Error::UnknownPoolValue {
+            return Err(Error::UnknownValuePoolValue {
                 value_id: default_value_id,
             });
         }
@@ -378,7 +378,7 @@ impl VoxMain {
                 .value_pool(property.pool_id)
                 .expect("a property names a live value pool");
             if !pool.contains_value(value_id) {
-                return Err(Error::UnknownPoolValue { value_id });
+                return Err(Error::UnknownValuePoolValue { value_id });
             }
         }
         // Safety: the palette id is retained; the arity was checked.
@@ -851,10 +851,10 @@ impl VoxMain {
         // Safety: the pool id is retained.
         let pool_ref = unsafe { self.runtime_state.value_pools.get(pool_id) };
         if !pool_ref.contains_value(value_id) {
-            return Err(Error::UnknownPoolValue { value_id });
+            return Err(Error::UnknownValuePoolValue { value_id });
         }
         if !pool_ref.contains_value(replacement_id) {
-            return Err(Error::UnknownPoolValue {
+            return Err(Error::UnknownValuePoolValue {
                 value_id: replacement_id,
             });
         }
@@ -1052,7 +1052,7 @@ impl VoxMain {
         // Safety: the id is retained, so it has a value.
         unsafe { self.runtime_state.value_pools.get_mut(pool_id) }
             .set_value_order(new_order_ids)
-            .ok_or(Error::PoolValueOrder)
+            .ok_or(Error::ValuePoolValueOrder)
     }
 
     /// Audits the full rule set. Every rule here is also enforced at a
@@ -1089,10 +1089,10 @@ impl VoxMain {
         for (pool_id, pool) in self.iter_value_pools() {
             match pool.first_flaw() {
                 None => {}
-                Some(VoxValuePoolFlaw::Empty) => return Err(Error::EmptyPool { pool_id }),
-                Some(VoxValuePoolFlaw::Bound) => return Err(Error::PoolBound { pool_id }),
+                Some(VoxValuePoolFlaw::Empty) => return Err(Error::EmptyValuePool { pool_id }),
+                Some(VoxValuePoolFlaw::Bound) => return Err(Error::ValuePoolBound { pool_id }),
                 Some(VoxValuePoolFlaw::Value(value_id)) => {
-                    return Err(Error::PoolValue { pool_id, value_id });
+                    return Err(Error::ValuePoolValue { pool_id, value_id });
                 }
             }
         }
@@ -1104,7 +1104,7 @@ impl VoxMain {
             for (property_id, property) in palette.iter_properties() {
                 let pool = self
                     .value_pool(property.pool_id)
-                    .ok_or(Error::PropertyPool {
+                    .ok_or(Error::PropertyValuePool {
                         palette_id,
                         property_id,
                         pool_id: property.pool_id,
@@ -1639,15 +1639,15 @@ mod tests {
         // pool all reject.
         assert_eq!(
             state.reorder_value_pool(ints_id, &[value_id(0), value_id(0), value_id(1)]),
-            Err(Error::PoolValueOrder)
+            Err(Error::ValuePoolValueOrder)
         );
         assert_eq!(
             state.reorder_value_pool(ints_id, &[value_id(0), value_id(1)]),
-            Err(Error::PoolValueOrder)
+            Err(Error::ValuePoolValueOrder)
         );
         assert_eq!(
             state.reorder_value_pool(ints_id, &[value_id(0), value_id(1), value_id(3)]),
-            Err(Error::PoolValueOrder)
+            Err(Error::ValuePoolValueOrder)
         );
         assert_eq!(
             state.reorder_value_pool(
@@ -2319,7 +2319,7 @@ mod tests {
         palette.add_material(vec![value_id(0)]).unwrap();
         assert_eq!(
             state.add_palette(palette),
-            Err(Error::PropertyPoolRef {
+            Err(Error::PropertyValuePoolRef {
                 property_id,
                 pool_id: pool_id(0),
             })
@@ -2660,13 +2660,13 @@ mod tests {
         );
         assert_eq!(
             state.remove_pool_value(ints_id, value_id(9), value_id(1)),
-            Err(Error::UnknownPoolValue {
+            Err(Error::UnknownValuePoolValue {
                 value_id: value_id(9)
             })
         );
         assert_eq!(
             state.remove_pool_value(ints_id, value_id(1), value_id(0)),
-            Err(Error::UnknownPoolValue {
+            Err(Error::UnknownValuePoolValue {
                 value_id: value_id(0)
             })
         );
@@ -3003,7 +3003,7 @@ mod tests {
         );
         assert_eq!(
             state.add_property(palette_id, "tag".to_owned(), ints_id, value_id(9)),
-            Err(Error::UnknownPoolValue {
+            Err(Error::UnknownValuePoolValue {
                 value_id: value_id(9)
             })
         );
@@ -3024,7 +3024,7 @@ mod tests {
         );
         assert_eq!(
             state.add_material(palette_id, vec![value_id(9)]),
-            Err(Error::UnknownPoolValue {
+            Err(Error::UnknownValuePoolValue {
                 value_id: value_id(9)
             })
         );

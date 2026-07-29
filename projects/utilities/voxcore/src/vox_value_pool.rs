@@ -143,9 +143,11 @@ impl VoxValuePool {
     fn checked(self) -> Result<Self> {
         match self.first_flaw() {
             None => Ok(self),
-            Some(VoxValuePoolFlaw::Empty) => Err(Error::EmptyPoolValues),
-            Some(VoxValuePoolFlaw::Bound) => Err(Error::MalformedPoolBound),
-            Some(VoxValuePoolFlaw::Value(value_id)) => Err(Error::MalformedPoolValue { value_id }),
+            Some(VoxValuePoolFlaw::Empty) => Err(Error::EmptyValuePoolValues),
+            Some(VoxValuePoolFlaw::Bound) => Err(Error::MalformedValuePoolBound),
+            Some(VoxValuePoolFlaw::Value(value_id)) => {
+                Err(Error::MalformedValuePoolValue { value_id })
+            }
         }
     }
 
@@ -267,7 +269,7 @@ impl VoxValuePool {
     /// [`values_len`](Self::values_len).
     pub fn move_value(&mut self, id: U32Id<BVoxValuePoolValue>, index: usize) -> Result<()> {
         if !self.value_ids.is_retained(id) {
-            return Err(Error::UnknownPoolValue { value_id: id });
+            return Err(Error::UnknownValuePoolValue { value_id: id });
         }
         let count = self.value_ids.len();
         if index >= count {
@@ -619,7 +621,7 @@ mod tests {
         );
         assert_eq!(
             pool.move_value(U32Id::from_u32(9), 0),
-            Err(Error::UnknownPoolValue {
+            Err(Error::UnknownValuePoolValue {
                 value_id: U32Id::from_u32(9)
             })
         );
@@ -649,11 +651,11 @@ mod tests {
     fn constructors_reject_an_empty_value_list() {
         assert_eq!(
             VoxValuePool::boolean(vec![]).unwrap_err(),
-            Error::EmptyPoolValues
+            Error::EmptyValuePoolValues
         );
         assert_eq!(
             VoxValuePool::srgba(vec![]).unwrap_err(),
-            Error::EmptyPoolValues
+            Error::EmptyValuePoolValues
         );
     }
 
@@ -662,7 +664,7 @@ mod tests {
         assert_eq!(
             VoxValuePool::float(VoxBound::Number(1.0), VoxBound::Number(0.0), vec![0.5])
                 .unwrap_err(),
-            Error::MalformedPoolBound
+            Error::MalformedValuePoolBound
         );
     }
 
@@ -670,7 +672,7 @@ mod tests {
     fn float_rejects_a_non_finite_bound() {
         assert_eq!(
             VoxValuePool::float(VoxBound::Number(f64::NAN), VoxBound::None, vec![0.5]).unwrap_err(),
-            Error::MalformedPoolBound
+            Error::MalformedValuePoolBound
         );
     }
 
@@ -678,7 +680,7 @@ mod tests {
     fn int_rejects_a_non_integer_bound() {
         assert_eq!(
             VoxValuePool::int(VoxBound::Number(0.5), VoxBound::None, vec![1]).unwrap_err(),
-            Error::MalformedPoolBound
+            Error::MalformedValuePoolBound
         );
     }
 
@@ -687,7 +689,7 @@ mod tests {
         assert_eq!(
             VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 2.0])
                 .unwrap_err(),
-            Error::MalformedPoolValue {
+            Error::MalformedValuePoolValue {
                 value_id: value_id(1)
             }
         );
@@ -697,7 +699,7 @@ mod tests {
     fn float_rejects_a_non_finite_value() {
         assert_eq!(
             VoxValuePool::float(VoxBound::None, VoxBound::None, vec![f64::NAN]).unwrap_err(),
-            Error::MalformedPoolValue {
+            Error::MalformedValuePoolValue {
                 value_id: value_id(0)
             }
         );
@@ -716,7 +718,7 @@ mod tests {
                 vec![MAX, MAX + 1],
             )
             .unwrap_err(),
-            Error::MalformedPoolValue {
+            Error::MalformedValuePoolValue {
                 value_id: value_id(1)
             }
         );
@@ -726,7 +728,7 @@ mod tests {
     fn srgb_rejects_a_component_out_of_range() {
         assert_eq!(
             VoxValuePool::srgb(vec![[0.0, 0.0, 0.0], [0.0, 1.5, 0.0]]).unwrap_err(),
-            Error::MalformedPoolValue {
+            Error::MalformedValuePoolValue {
                 value_id: value_id(1)
             }
         );
@@ -742,7 +744,7 @@ mod tests {
     fn linear_rgba_rejects_a_negative_component() {
         assert_eq!(
             VoxValuePool::linear_rgba(vec![[0.0, -0.1, 0.0, 1.0]]).unwrap_err(),
-            Error::MalformedPoolValue {
+            Error::MalformedValuePoolValue {
                 value_id: value_id(0)
             }
         );
@@ -754,7 +756,7 @@ mod tests {
         // `>= 0` test; the finiteness guard must reject it.
         assert_eq!(
             VoxValuePool::linear_rgb(vec![[0.0, f64::INFINITY, 0.0]]).unwrap_err(),
-            Error::MalformedPoolValue {
+            Error::MalformedValuePoolValue {
                 value_id: value_id(0)
             }
         );

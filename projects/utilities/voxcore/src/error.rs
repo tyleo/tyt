@@ -12,19 +12,19 @@ use std::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     /// A value pool has no values.
-    EmptyPool { pool_id: U32Id<BVoxValuePool> },
+    EmptyValuePool { pool_id: U32Id<BVoxValuePool> },
 
     /// A value pool was given no values at construction.
-    EmptyPoolValues,
+    EmptyValuePoolValues,
 
     /// A value pool was given malformed `min`/`max` bounds at construction:
     /// non-finite, not integer-valued for an `int` pool, or `min` greater
     /// than `max`.
-    MalformedPoolBound,
+    MalformedValuePoolBound,
 
     /// A value pool was given a value that is malformed for its kind or
     /// outside its bounds.
-    MalformedPoolValue { value_id: U32Id<BVoxValuePoolValue> },
+    MalformedValuePoolValue { value_id: U32Id<BVoxValuePoolValue> },
 
     /// An object grid of this many cells would exceed
     /// [`MAX_GRID_CELLS`](crate::VoxObject::MAX_GRID_CELLS).
@@ -49,7 +49,7 @@ pub enum Error {
     UnknownMaterial { material_id: U32Id<BVoxMaterial> },
 
     /// A mutation named a value that is not one of the pool's.
-    UnknownPoolValue { value_id: U32Id<BVoxValuePoolValue> },
+    UnknownValuePoolValue { value_id: U32Id<BVoxValuePoolValue> },
 
     /// A mutation named a layer that is not one of the object's.
     UnknownLayer { layer_id: U32Id<BVoxLayer> },
@@ -64,7 +64,7 @@ pub enum Error {
     SelfReplacement,
 
     /// A reorder did not list each of the pool's value ids exactly once.
-    PoolValueOrder,
+    ValuePoolValueOrder,
 
     /// A voxel was given a sample count different from the layer count.
     SampleArity { samples: usize, layers: usize },
@@ -81,7 +81,7 @@ pub enum Error {
 
     /// An inserted palette's property names a value pool that is not one of
     /// the state's.
-    PropertyPoolRef {
+    PropertyValuePoolRef {
         property_id: U32Id<BVoxProperty>,
         pool_id: U32Id<BVoxValuePool>,
     },
@@ -140,17 +140,17 @@ pub enum Error {
 
     /// A value pool's `min`/`max` bounds are malformed: non-finite, not
     /// integer-valued for an `int` pool, or `min` greater than `max`.
-    PoolBound { pool_id: U32Id<BVoxValuePool> },
+    ValuePoolBound { pool_id: U32Id<BVoxValuePool> },
 
     /// A value pool holds a value that is malformed for its kind or outside its
     /// bounds.
-    PoolValue {
+    ValuePoolValue {
         pool_id: U32Id<BVoxValuePool>,
         value_id: U32Id<BVoxValuePoolValue>,
     },
 
     /// A palette property references a value pool that does not exist.
-    PropertyPool {
+    PropertyValuePool {
         palette_id: U32Id<BVoxPalette>,
         property_id: U32Id<BVoxProperty>,
         pool_id: U32Id<BVoxValuePool>,
@@ -227,16 +227,16 @@ impl Display for Error {
         // Ids print as their bare `u32`: a branded id's own `Display` carries
         // the brand name, which the surrounding wording already gives.
         match self {
-            Error::EmptyPool { pool_id } => {
+            Error::EmptyValuePool { pool_id } => {
                 write!(f, "value pool {} has no values", pool_id.to_u32())
             }
-            Error::EmptyPoolValues => {
+            Error::EmptyValuePoolValues => {
                 write!(f, "a value pool needs at least one value")
             }
-            Error::MalformedPoolBound => {
+            Error::MalformedValuePoolBound => {
                 write!(f, "the value pool's min/max bounds are malformed")
             }
-            Error::MalformedPoolValue { value_id } => write!(
+            Error::MalformedValuePoolValue { value_id } => write!(
                 f,
                 "value {} is malformed for its kind or out of bounds",
                 value_id.to_u32()
@@ -282,7 +282,7 @@ impl Display for Error {
                 "material {} is not one of the palette's",
                 material_id.to_u32()
             ),
-            Error::UnknownPoolValue { value_id } => {
+            Error::UnknownValuePoolValue { value_id } => {
                 write!(f, "value {} is not one of the pool's", value_id.to_u32())
             }
             Error::UnknownLayer { layer_id } => {
@@ -301,7 +301,7 @@ impl Display for Error {
             Error::SelfReplacement => {
                 write!(f, "the replacement is the id being removed")
             }
-            Error::PoolValueOrder => write!(
+            Error::ValuePoolValueOrder => write!(
                 f,
                 "the new order does not list each of the pool's value ids exactly once"
             ),
@@ -318,7 +318,7 @@ impl Display for Error {
             Error::NoPaletteMaterials => {
                 write!(f, "an inserted palette needs at least one material")
             }
-            Error::PropertyPoolRef {
+            Error::PropertyValuePoolRef {
                 property_id,
                 pool_id,
             } => write!(
@@ -392,20 +392,20 @@ impl Display for Error {
                 "the inserted hierarchy nodes contain a cycle reaching the node at listing index \
                  {index}"
             ),
-            Error::PoolBound { pool_id } => {
+            Error::ValuePoolBound { pool_id } => {
                 write!(
                     f,
                     "value pool {} has malformed min/max bounds",
                     pool_id.to_u32()
                 )
             }
-            Error::PoolValue { pool_id, value_id } => write!(
+            Error::ValuePoolValue { pool_id, value_id } => write!(
                 f,
                 "value pool {} value {} is malformed for its kind or out of bounds",
                 pool_id.to_u32(),
                 value_id.to_u32()
             ),
-            Error::PropertyPool {
+            Error::PropertyValuePool {
                 palette_id,
                 property_id,
                 pool_id,
