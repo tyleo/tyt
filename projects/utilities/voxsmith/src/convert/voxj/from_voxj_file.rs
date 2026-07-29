@@ -574,7 +574,7 @@ mod tests {
         assert!(from_voxj_file(&file).is_err());
     }
 
-    /// A `float` pool value outside its declared `min`/`max` is rejected when
+    /// A `float` value-pool value outside its declared `min`/`max` is rejected when
     /// the pool is built.
     #[test]
     fn rejects_value_outside_pool_bounds() {

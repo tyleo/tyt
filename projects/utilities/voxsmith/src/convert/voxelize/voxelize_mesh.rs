@@ -640,7 +640,7 @@ mod tests {
     }
 
     #[test]
-    fn a_shared_strength_repeats_one_pool_value() {
+    fn a_shared_strength_repeats_one_value_pool_value() {
         let mut emissive = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
         emissive.emissive_strength = 2.0;
 

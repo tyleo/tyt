@@ -8,7 +8,7 @@ use ty_math::{
 use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxMain};
 
 /// Reduces `palette` in `state` to at most `max_materials` materials, then,
-/// unless `keep_unused_values`, prunes the pool values the reduction leaves
+/// unless `keep_unused_values`, prunes the value-pool values the reduction leaves
 /// unreferenced. The prune runs state-wide through
 /// [`VoxMain::prune_value_pools`]. Either way the state stays valid, with the
 /// surviving value ids left for [`VoxMain::gc`] to compact.
@@ -26,7 +26,7 @@ use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, Vo
 /// * `method` - the clustering algorithm.
 /// * `space` - the color space compared in.
 /// * `dither` - error diffusion when snapping samples.
-/// * `keep_unused_values` - keep pool values left unreferenced.
+/// * `keep_unused_values` - keep value-pool values left unreferenced.
 pub fn reduce_palette(
     state: &mut VoxMain,
     palette: U32Id<BVoxPalette>,
@@ -155,7 +155,7 @@ struct Point {
 }
 
 /// The sRGB bytes of a material's `baseColorFactor`, or `None` if the value is
-/// absent or its bound pool is not a color kind. Resolves the bound pool value
+/// absent or its bound pool is not a color kind. Resolves the bound value-pool value
 /// and decodes it with [`pool_color`].
 fn material_color(
     state: &VoxMain,

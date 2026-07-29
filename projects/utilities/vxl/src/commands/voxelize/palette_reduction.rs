@@ -16,6 +16,6 @@ pub struct PaletteReduction {
     /// Error diffusion applied when snapping samples to the reduced palette.
     pub dither: Dither,
 
-    /// Keep pool values the reduction leaves unreferenced.
+    /// Keep value-pool values the reduction leaves unreferenced.
     pub keep_unused_values: bool,
 }
