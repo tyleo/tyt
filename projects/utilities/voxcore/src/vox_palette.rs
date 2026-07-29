@@ -310,9 +310,9 @@ impl VoxPalette {
 
     /// Repoints each material's cell for a property on `pool_id` that draws
     /// `old_id` to `new_id`. Used by
-    /// [`VoxMain::remove_pool_value`](crate::VoxMain::remove_pool_value)
+    /// [`VoxMain::remove_value_pool_value`](crate::VoxMain::remove_value_pool_value)
     /// before `old_id` is released.
-    pub(crate) fn repoint_pool_value(
+    pub(crate) fn repoint_value_pool_value(
         &mut self,
         pool_id: U32Id<BVoxValuePool>,
         old_id: U32Id<BVoxValuePoolValue>,
@@ -348,7 +348,7 @@ impl VoxPalette {
     /// [`VoxMain`](crate::VoxMain) is compacting. `remaps` is indexed by the
     /// pool's pre-gc id. Requires a referentially valid palette, so every cell
     /// draws a live value.
-    pub(crate) fn relabel_pool_values(
+    pub(crate) fn relabel_value_pool_values(
         &mut self,
         remaps: &IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>>,
     ) {

@@ -10,7 +10,7 @@ pub struct VoxGcRemap {
     pub value_pools: IdRemap<BVoxValuePool, u32>,
 
     /// Each value pool's value relabeling, indexed by the pool's old id.
-    pub pool_values: IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>>,
+    pub value_pool_values: IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>>,
 
     /// The palette pool relabeling.
     pub palettes: IdRemap<BVoxPalette, u32>,

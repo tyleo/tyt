@@ -839,7 +839,7 @@ impl VoxMain {
     /// 1. `pool_id` is not one of this state's pools
     /// 2. `value_id` or `replacement_id` is not one of that pool's values
     /// 3. `replacement_id` is `value_id` itself
-    pub fn remove_pool_value(
+    pub fn remove_value_pool_value(
         &mut self,
         pool_id: U32Id<BVoxValuePool>,
         value_id: U32Id<BVoxValuePoolValue>,
@@ -865,7 +865,7 @@ impl VoxMain {
         for palette_id in self.runtime_state.palette_ids.iter() {
             // Safety: retained palette ids have a value.
             let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
-            palette.repoint_pool_value(pool_id, value_id, replacement_id);
+            palette.repoint_value_pool_value(pool_id, value_id, replacement_id);
         }
 
         // Safety: the pool id is retained and the value is one of its values.
@@ -891,12 +891,12 @@ impl VoxMain {
         // by the pool's pre-gc id so the palette pass below can translate its
         // cells before pool ids move.
         let pool_id_space = self.runtime_state.value_pool_ids.peek_next_fresh().to_u32() as usize;
-        let mut pool_value_remaps: IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>> =
+        let mut value_pool_value_remaps: IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>> =
             IdVec::from_vec((0..pool_id_space).map(|_| IdRemap::default()).collect());
         for pool_id in self.runtime_state.value_pool_ids.iter() {
             // Safety: retained pool ids have a value.
             let pool = unsafe { self.runtime_state.value_pools.get_mut(pool_id) };
-            pool_value_remaps[pool_id.to_usize_id()] = pool.gc_values();
+            value_pool_value_remaps[pool_id.to_usize_id()] = pool.gc_values();
         }
 
         // Compact the shared value-pool store, then relabel every palette
@@ -919,7 +919,7 @@ impl VoxMain {
         for palette_id in self.runtime_state.palette_ids.iter().collect::<Vec<_>>() {
             // Safety: retained palette ids have a value.
             let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
-            palette.relabel_pool_values(&pool_value_remaps);
+            palette.relabel_value_pool_values(&value_pool_value_remaps);
             palette.relabel_value_pools(&pool_remap);
             material_remaps[palette_id.to_usize_id()] = palette.gc();
         }
@@ -976,7 +976,7 @@ impl VoxMain {
 
         VoxGcRemap {
             value_pools: pool_remap,
-            pool_values: pool_value_remaps,
+            value_pool_values: value_pool_value_remaps,
             objects: object_remap,
             palettes: palette_remap,
             hierarchy_nodes: node_remap,
@@ -985,8 +985,8 @@ impl VoxMain {
     }
 
     /// Releases value-pool entries no material references, keeping the
-    /// survivors' listing order and their ids. The pool-value counterpart to
-    /// the entity `remove_*` methods. [`gc`](Self::gc) renumbers. Requires a
+    /// survivors' listing order and their ids. The value-pool-value counterpart
+    /// to the entity `remove_*` methods. [`gc`](Self::gc) renumbers. Requires a
     /// referentially valid state, which [`validate`](Self::validate) checks.
     ///
     /// 1. references union across palettes, so a shared entry survives while
@@ -2335,7 +2335,7 @@ mod tests {
         let property_id = palette
             .add_property("v".to_owned(), ints_id, value_id(0))
             .unwrap();
-        // Two pool values, but this material draws value id 2.
+        // The pool holds two values, but this material draws value id 2.
         let material_id = palette.add_material(vec![value_id(2)]).unwrap();
         assert_eq!(
             state.add_palette(palette),
@@ -2360,7 +2360,7 @@ mod tests {
         state.validate().unwrap();
 
         // Release the drawn value directly, skipping the cell rewrite
-        // remove_pool_value performs, so the material's cell holds a stale id.
+        // remove_value_pool_value performs, so the material's cell holds a stale id.
         // Safety: the pool id is retained.
         let pool_ref = unsafe { state.runtime_state.value_pools.get_mut(ints_id) };
         pool_ref.release_value_stable(value_id(1));
@@ -2607,7 +2607,7 @@ mod tests {
     }
 
     #[test]
-    fn remove_pool_value_repoints_cells_preserves_order_and_validates() {
+    fn remove_value_pool_value_repoints_cells_preserves_order_and_validates() {
         let mut state = VoxMain::default();
         let ints_id = int_pool(&mut state, vec![10, 20, 30]);
         // Two palettes draw the doomed value, so both must be repointed.
@@ -2625,7 +2625,7 @@ mod tests {
         // Removing the first of three is the smallest case a swap-remove would
         // get wrong, listing 30 before 20.
         assert_eq!(
-            state.remove_pool_value(ints_id, value_id(0), value_id(2)),
+            state.remove_value_pool_value(ints_id, value_id(0), value_id(2)),
             Ok(())
         );
 
@@ -2655,23 +2655,23 @@ mod tests {
         // A repeated id, an id not the pool's, a released id, and an unknown
         // pool all reject.
         assert_eq!(
-            state.remove_pool_value(ints_id, value_id(1), value_id(1)),
+            state.remove_value_pool_value(ints_id, value_id(1), value_id(1)),
             Err(Error::SelfReplacement)
         );
         assert_eq!(
-            state.remove_pool_value(ints_id, value_id(9), value_id(1)),
+            state.remove_value_pool_value(ints_id, value_id(9), value_id(1)),
             Err(Error::UnknownValuePoolValue {
                 value_id: value_id(9)
             })
         );
         assert_eq!(
-            state.remove_pool_value(ints_id, value_id(1), value_id(0)),
+            state.remove_value_pool_value(ints_id, value_id(1), value_id(0)),
             Err(Error::UnknownValuePoolValue {
                 value_id: value_id(0)
             })
         );
         assert_eq!(
-            state.remove_pool_value(U32Id::from_u32(9), value_id(1), value_id(2)),
+            state.remove_value_pool_value(U32Id::from_u32(9), value_id(1), value_id(2)),
             Err(Error::UnknownValuePool {
                 pool_id: pool_id(9)
             })
@@ -2721,11 +2721,11 @@ mod tests {
         // The value remap is indexed by the pool's old id. The value holding 2
         // moved from id 1 to id 0.
         assert_eq!(
-            remap.pool_values[ints_id.to_usize_id()].new_id(value_id(1)),
+            remap.value_pool_values[ints_id.to_usize_id()].new_id(value_id(1)),
             Some(value_id(0))
         );
         assert_eq!(
-            remap.pool_values[ints_id.to_usize_id()].new_id(value_id(0)),
+            remap.value_pool_values[ints_id.to_usize_id()].new_id(value_id(0)),
             Some(value_id(1))
         );
         let pool = state.value_pool(ints_id).unwrap();
@@ -2794,11 +2794,11 @@ mod tests {
         // Each pool's value remap is keyed by that pool's pre-gc id, which is
         // the id the moved pool held before the relabel above.
         assert_eq!(
-            remap.pool_values[first_pool_id.to_usize_id()].new_id(value_id(1)),
+            remap.value_pool_values[first_pool_id.to_usize_id()].new_id(value_id(1)),
             Some(value_id(0))
         );
         assert_eq!(
-            remap.pool_values[second_pool_id.to_usize_id()].new_id(value_id(2)),
+            remap.value_pool_values[second_pool_id.to_usize_id()].new_id(value_id(2)),
             Some(value_id(0))
         );
 
@@ -3233,7 +3233,7 @@ mod tests {
             s.remove_material(live_palette_id, material_id(0), material_id(0))
         });
         assert_rejects_unchanged(&mut state, |s| {
-            s.remove_pool_value(ints_id, value_id(0), value_id(0))
+            s.remove_value_pool_value(ints_id, value_id(0), value_id(0))
         });
 
         state.validate().unwrap();
@@ -3394,7 +3394,7 @@ mod tests {
                 );
             }
             19 => {
-                let _ = state.remove_pool_value(
+                let _ = state.remove_value_pool_value(
                     wild_pool_id,
                     wild_value_id,
                     value_id(rng.below(4) as u32),
