@@ -1,6 +1,6 @@
 use crate::{
-    BVoxLayer, BVoxMaterial, BVoxPalette, BVoxPoolValue, BVoxProperty, VoxPalette, VoxPoolValueRef,
-    VoxValuePool,
+    BVoxLayer, BVoxMaterial, BVoxPalette, BVoxProperty, BVoxValuePoolValue, VoxPalette,
+    VoxValuePool, VoxValuePoolValueRef,
 };
 use branded_id::U32Id;
 
@@ -51,7 +51,7 @@ impl<'a> VoxEffectiveProperty<'a> {
 
     /// The value id `material` draws, or `None` if `material` is not one of
     /// the winning palette's.
-    pub fn value_id(&self, material_id: U32Id<BVoxMaterial>) -> Option<U32Id<BVoxPoolValue>> {
+    pub fn value_id(&self, material_id: U32Id<BVoxMaterial>) -> Option<U32Id<BVoxValuePoolValue>> {
         self.palette.value_id(material_id, self.property_id)
     }
 
@@ -59,7 +59,7 @@ impl<'a> VoxEffectiveProperty<'a> {
     /// material order.
     pub fn iter_values(
         &self,
-    ) -> impl Iterator<Item = (U32Id<BVoxMaterial>, U32Id<BVoxPoolValue>)> + '_ {
+    ) -> impl Iterator<Item = (U32Id<BVoxMaterial>, U32Id<BVoxValuePoolValue>)> + '_ {
         self.palette.iter_materials().map(move |material_id| {
             let value_id = self
                 .palette
@@ -71,7 +71,7 @@ impl<'a> VoxEffectiveProperty<'a> {
 
     /// The value `material` draws, or `None` if `material` is not one of the
     /// winning palette's.
-    pub fn value(&self, material_id: U32Id<BVoxMaterial>) -> Option<VoxPoolValueRef<'_>> {
+    pub fn value(&self, material_id: U32Id<BVoxMaterial>) -> Option<VoxValuePoolValueRef<'_>> {
         let value_id = self.value_id(material_id)?;
         self.pool.value(value_id)
     }

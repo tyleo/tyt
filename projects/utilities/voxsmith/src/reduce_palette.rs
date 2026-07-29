@@ -771,12 +771,12 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::{TyFloatExt, TyVector3U32};
     use voxcore::{
-        BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, VoxBound, VoxMain, VoxObject,
-        VoxPalette, VoxPoolValueRef, VoxValuePool,
+        BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue, VoxBound, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool, VoxValuePoolValueRef,
     };
 
     /// The branded value id `index`.
-    fn value(index: usize) -> U32Id<BVoxPoolValue> {
+    fn value(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
     }
 
@@ -804,7 +804,7 @@ mod tests {
             .material_value(palette, material, property)
             .and_then(|(pool, value_id)| pool.value(value_id))
         {
-            Some(VoxPoolValueRef::Srgba(&color)) => hex_of(color),
+            Some(VoxValuePoolValueRef::Srgba(&color)) => hex_of(color),
             other => panic!("material has no srgba baseColorFactor: {other:?}"),
         }
     }
@@ -998,7 +998,7 @@ mod tests {
             .material_value(palette, material, tag)
             .and_then(|(pool, value_id)| pool.value(value_id))
         {
-            Some(VoxPoolValueRef::Float(number)) => assert_eq!(number, 1.0),
+            Some(VoxValuePoolValueRef::Float(number)) => assert_eq!(number, 1.0),
             other => panic!("unexpected tag value {other:?}"),
         }
     }

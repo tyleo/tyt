@@ -22,7 +22,8 @@ use treegrid::{
 };
 use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbaF64};
 use voxcore::{
-    BVoxPoolValue, VoxMain, VoxPalette, VoxPoolValueRef, VoxValue, VoxValuePool, VoxValuePoolKind,
+    BVoxValuePoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolKind,
+    VoxValuePoolValueRef,
 };
 
 /// Loads the voxel file at `input` and prints the value collections named by
@@ -303,7 +304,7 @@ fn classify(pool: &VoxValuePool) -> Kind {
 /// optional color `component`.
 fn sample(
     pool: &VoxValuePool,
-    value_id: U32Id<BVoxPoolValue>,
+    value_id: U32Id<BVoxValuePoolValue>,
     kind: Kind,
     component: Option<ColorComponent>,
 ) -> TreeGridJsonValue {
@@ -323,7 +324,7 @@ fn sample(
 ///    grayscale swatch.
 fn sample_color(
     pool: &VoxValuePool,
-    value_id: U32Id<BVoxPoolValue>,
+    value_id: U32Id<BVoxValuePoolValue>,
     srgb: bool,
     component: Option<ColorComponent>,
 ) -> TreeGridJsonValue {
@@ -359,10 +360,10 @@ fn sample_color(
 
 /// The sample for a `float` or `int` value: its number, with a grayscale swatch
 /// mapping its `0..1` range onto `0..255`.
-fn sample_number(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> TreeGridJsonValue {
+fn sample_number(pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> TreeGridJsonValue {
     let value = match pool.value(value_id) {
-        Some(VoxPoolValueRef::Float(number)) => number,
-        Some(VoxPoolValueRef::Int(number)) => number as f64,
+        Some(VoxValuePoolValueRef::Float(number)) => number,
+        Some(VoxValuePoolValueRef::Int(number)) => number as f64,
         // classify() routes only Float and Int here, and a validated document
         // draws only retained values.
         _ => 0.0,
@@ -372,11 +373,13 @@ fn sample_number(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> TreeGri
 
 /// The sample for a `bool`, `string`, or `json` value: its text and native JSON
 /// with no swatch.
-fn sample_other(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> TreeGridJsonValue {
+fn sample_other(pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> TreeGridJsonValue {
     match pool.value(value_id) {
-        Some(VoxPoolValueRef::Bool(flag)) => TreeGridJsonValue::bool(flag),
-        Some(VoxPoolValueRef::String(text)) => TreeGridJsonValue::new(text.to_owned()),
-        Some(VoxPoolValueRef::Json(value)) => TreeGridJsonValue::json(vox_value_to_json(value)),
+        Some(VoxValuePoolValueRef::Bool(flag)) => TreeGridJsonValue::bool(flag),
+        Some(VoxValuePoolValueRef::String(text)) => TreeGridJsonValue::new(text.to_owned()),
+        Some(VoxValuePoolValueRef::Json(value)) => {
+            TreeGridJsonValue::json(vox_value_to_json(value))
+        }
         // classify() routes only Bool, String, and Json here, and a validated
         // document draws only retained values.
         _ => TreeGridJsonValue::json(Value::Null),
@@ -387,18 +390,18 @@ fn sample_other(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> TreeGrid
 /// shared pool color decode: sRGB components map straight to bytes, linear
 /// components re-encode to sRGB, and a three-component color takes opaque
 /// alpha.
-fn color_bytes(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> [u8; 4] {
+fn color_bytes(pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> [u8; 4] {
     match pool.value(value_id) {
-        Some(VoxPoolValueRef::Srgb(&[r, g, b])) => {
+        Some(VoxValuePoolValueRef::Srgb(&[r, g, b])) => {
             <[u8; 4]>::from(TySrgbaF64::new(r, g, b, 1.0).into_format::<u8, u8>())
         }
-        Some(VoxPoolValueRef::Srgba(&[r, g, b, a])) => {
+        Some(VoxValuePoolValueRef::Srgba(&[r, g, b, a])) => {
             <[u8; 4]>::from(TySrgbaF64::new(r, g, b, a).into_format::<u8, u8>())
         }
-        Some(VoxPoolValueRef::LinearRgb(&[r, g, b])) => <[u8; 4]>::from(
+        Some(VoxValuePoolValueRef::LinearRgb(&[r, g, b])) => <[u8; 4]>::from(
             TySrgbaF64::from_linear(TyLinSrgbaF64::new(r, g, b, 1.0)).into_format::<u8, u8>(),
         ),
-        Some(VoxPoolValueRef::LinearRgba(&[r, g, b, a])) => <[u8; 4]>::from(
+        Some(VoxValuePoolValueRef::LinearRgba(&[r, g, b, a])) => <[u8; 4]>::from(
             TySrgbaF64::from_linear(TyLinSrgbaF64::new(r, g, b, a)).into_format::<u8, u8>(),
         ),
         // classify() routes only color kinds here, and a validated document
@@ -409,14 +412,13 @@ fn color_bytes(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> [u8; 4] {
 
 /// The natural-range float components of the color at `value_id`, three or
 /// four long by kind.
-fn color_floats(pool: &VoxValuePool, value_id: U32Id<BVoxPoolValue>) -> Vec<f64> {
+fn color_floats(pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> Vec<f64> {
     match pool.value(value_id) {
-        Some(VoxPoolValueRef::Srgb(color)) | Some(VoxPoolValueRef::LinearRgb(color)) => {
+        Some(VoxValuePoolValueRef::Srgb(color)) | Some(VoxValuePoolValueRef::LinearRgb(color)) => {
             color.to_vec()
         }
-        Some(VoxPoolValueRef::Srgba(color)) | Some(VoxPoolValueRef::LinearRgba(color)) => {
-            color.to_vec()
-        }
+        Some(VoxValuePoolValueRef::Srgba(color))
+        | Some(VoxValuePoolValueRef::LinearRgba(color)) => color.to_vec(),
         // classify() routes only color kinds here, and a validated document
         // draws only retained values.
         _ => Vec::new(),
@@ -612,11 +614,11 @@ mod tests {
     use std::num::NonZeroU8;
     use treegrid::{TreeGrid, TreeGridJsonValueCells};
     use voxcore::{
-        BVoxPoolValue, BVoxValuePool, VoxBound, VoxMain, VoxPalette, VoxValue, VoxValuePool,
+        BVoxValuePool, BVoxValuePoolValue, VoxBound, VoxMain, VoxPalette, VoxValue, VoxValuePool,
     };
 
     /// The branded value id `index`.
-    fn value(index: usize) -> U32Id<BVoxPoolValue> {
+    fn value(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
     }
 

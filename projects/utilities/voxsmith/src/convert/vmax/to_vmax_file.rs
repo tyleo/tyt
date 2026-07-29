@@ -32,7 +32,7 @@ mod tests {
     use vmax_codec::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode,
-        VoxMain, VoxMap, VoxObject, VoxPalette, VoxPoolValueRef, VoxValue, VoxValuePool,
+        VoxMain, VoxMap, VoxObject, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolValueRef,
     };
 
     fn material(
@@ -1304,7 +1304,7 @@ mod tests {
                     .material_value(palette_id, material, property)
                     .unwrap();
                 match pool.value(index) {
-                    Some(VoxPoolValueRef::Float(number)) => number,
+                    Some(VoxValuePoolValueRef::Float(number)) => number,
                     _ => panic!("a scalar attribute is a float pool"),
                 }
             };
@@ -1314,7 +1314,7 @@ mod tests {
                     .material_value(palette_id, material, property)
                     .unwrap();
                 match pool.value(index) {
-                    Some(VoxPoolValueRef::Bool(flag)) => flag,
+                    Some(VoxValuePoolValueRef::Bool(flag)) => flag,
                     _ => panic!("shadows is a bool pool"),
                 }
             };
@@ -1389,7 +1389,7 @@ mod tests {
             .material_value(palette_id, material, property)
             .unwrap();
         let sic = match pool.value(index) {
-            Some(VoxPoolValueRef::Float(number)) => number,
+            Some(VoxValuePoolValueRef::Float(number)) => number,
             _ => panic!("emissiveStrength is a float pool"),
         };
 

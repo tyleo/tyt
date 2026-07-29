@@ -1,7 +1,7 @@
 use crate::{ColorFormat, voxj_value_from_vox_value};
 use std::fmt::Write;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64};
-use voxcore::{VoxBound, VoxPoolValueRef, VoxValuePool, VoxValuePoolKind};
+use voxcore::{VoxBound, VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef};
 use voxj::{VoxjBound, VoxjValuePool};
 
 /// Converts a [`VoxValuePool`] into a [`VoxjValuePool`], kind by kind, its
@@ -27,7 +27,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
             values: pool
                 .iter_values()
                 .map(|(_, value)| match value {
-                    VoxPoolValueRef::Json(value) => voxj_value_from_vox_value(value),
+                    VoxValuePoolValueRef::Json(value) => voxj_value_from_vox_value(value),
                     other => unreachable!("a json pool yields json values, not {other:?}"),
                 })
                 .collect(),
@@ -37,7 +37,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
             values: pool
                 .iter_values()
                 .map(|(_, value)| match value {
-                    VoxPoolValueRef::Bool(flag) => flag,
+                    VoxValuePoolValueRef::Bool(flag) => flag,
                     other => unreachable!("a bool pool yields bool values, not {other:?}"),
                 })
                 .collect(),
@@ -49,7 +49,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
             values: pool
                 .iter_values()
                 .map(|(_, value)| match value {
-                    VoxPoolValueRef::Float(number) => number,
+                    VoxValuePoolValueRef::Float(number) => number,
                     other => unreachable!("a float pool yields float values, not {other:?}"),
                 })
                 .collect(),
@@ -61,7 +61,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
             values: pool
                 .iter_values()
                 .map(|(_, value)| match value {
-                    VoxPoolValueRef::Int(number) => number,
+                    VoxValuePoolValueRef::Int(number) => number,
                     other => unreachable!("an int pool yields int values, not {other:?}"),
                 })
                 .collect(),
@@ -71,7 +71,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
             values: pool
                 .iter_values()
                 .map(|(_, value)| match value {
-                    VoxPoolValueRef::String(text) => text.to_owned(),
+                    VoxValuePoolValueRef::String(text) => text.to_owned(),
                     other => unreachable!("a string pool yields string values, not {other:?}"),
                 })
                 .collect(),
@@ -116,7 +116,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
 fn rgb_colors(pool: &VoxValuePool) -> Vec<[f64; 3]> {
     pool.iter_values()
         .map(|(_, value)| match value {
-            VoxPoolValueRef::Srgb(color) | VoxPoolValueRef::LinearRgb(color) => *color,
+            VoxValuePoolValueRef::Srgb(color) | VoxValuePoolValueRef::LinearRgb(color) => *color,
             other => unreachable!("an rgb pool yields rgb colors, not {other:?}"),
         })
         .collect()
@@ -127,7 +127,7 @@ fn rgb_colors(pool: &VoxValuePool) -> Vec<[f64; 3]> {
 fn rgba_colors(pool: &VoxValuePool) -> Vec<[f64; 4]> {
     pool.iter_values()
         .map(|(_, value)| match value {
-            VoxPoolValueRef::Srgba(color) | VoxPoolValueRef::LinearRgba(color) => *color,
+            VoxValuePoolValueRef::Srgba(color) | VoxValuePoolValueRef::LinearRgba(color) => *color,
             other => unreachable!("an rgba pool yields rgba colors, not {other:?}"),
         })
         .collect()

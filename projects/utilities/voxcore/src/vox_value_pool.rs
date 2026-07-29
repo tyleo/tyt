@@ -1,6 +1,6 @@
 use crate::{
-    BVoxPoolValue, Error, Result, VoxBound, VoxPoolFlaw, VoxPoolValueRef, VoxValue,
-    VoxValuePoolKind,
+    BVoxValuePoolValue, Error, Result, VoxBound, VoxValue, VoxValuePoolFlaw, VoxValuePoolKind,
+    VoxValuePoolValueRef,
 };
 use branded_id::{
     U32Id,
@@ -20,7 +20,7 @@ use std::mem;
 #[derive(Debug)]
 pub struct VoxValuePool {
     /// Value id pool. Its listing order is the pool's value order.
-    value_ids: IdStruct<BVoxPoolValue>,
+    value_ids: IdStruct<BVoxValuePoolValue>,
 
     /// The kind and its typed value column, keyed by `value_ids`.
     kind: VoxValuePoolKind,
@@ -143,43 +143,43 @@ impl VoxValuePool {
     fn checked(self) -> Result<Self> {
         match self.first_flaw() {
             None => Ok(self),
-            Some(VoxPoolFlaw::Empty) => Err(Error::EmptyPoolValues),
-            Some(VoxPoolFlaw::Bound) => Err(Error::MalformedPoolBound),
-            Some(VoxPoolFlaw::Value(value)) => Err(Error::MalformedPoolValue { value }),
+            Some(VoxValuePoolFlaw::Empty) => Err(Error::EmptyPoolValues),
+            Some(VoxValuePoolFlaw::Bound) => Err(Error::MalformedPoolBound),
+            Some(VoxValuePoolFlaw::Value(value)) => Err(Error::MalformedPoolValue { value }),
         }
     }
 
     /// The pool's first well-formedness flaw, or `None` if it is well formed.
     /// The constructors gate on this, so a flaw found later is a voxcore bug;
     /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
-    pub(crate) fn first_flaw(&self) -> Option<VoxPoolFlaw> {
+    pub(crate) fn first_flaw(&self) -> Option<VoxValuePoolFlaw> {
         if self.value_ids.is_empty() {
-            return Some(VoxPoolFlaw::Empty);
+            return Some(VoxValuePoolFlaw::Empty);
         }
         match &self.kind {
             VoxValuePoolKind::Float { min, max, .. } => {
                 if !bounds_well_formed(min, max, false) {
-                    return Some(VoxPoolFlaw::Bound);
+                    return Some(VoxValuePoolFlaw::Bound);
                 }
                 for (value_id, value) in self.iter_values() {
-                    let VoxPoolValueRef::Float(number) = value else {
+                    let VoxValuePoolValueRef::Float(number) = value else {
                         unreachable!("a float pool yields float values");
                     };
                     if !number.is_finite() || !value_in_bounds(min, max, number) {
-                        return Some(VoxPoolFlaw::Value(value_id));
+                        return Some(VoxValuePoolFlaw::Value(value_id));
                     }
                 }
             }
             VoxValuePoolKind::Int { min, max, .. } => {
                 if !bounds_well_formed(min, max, true) {
-                    return Some(VoxPoolFlaw::Bound);
+                    return Some(VoxValuePoolFlaw::Bound);
                 }
                 for (value_id, value) in self.iter_values() {
-                    let VoxPoolValueRef::Int(number) = value else {
+                    let VoxValuePoolValueRef::Int(number) = value else {
                         unreachable!("an int pool yields int values");
                     };
                     if !int_value_in_bounds(min, max, number) {
-                        return Some(VoxPoolFlaw::Value(value_id));
+                        return Some(VoxValuePoolFlaw::Value(value_id));
                     }
                 }
             }
@@ -201,13 +201,13 @@ impl VoxValuePool {
     /// rejects any non-finite component on its own; the linear side is only
     /// lower-bounded, so it guards finiteness explicitly to reject
     /// `+Infinity`, which would otherwise pass `>= 0`.
-    fn first_color_flaw(&self, linear: bool) -> Option<VoxPoolFlaw> {
+    fn first_color_flaw(&self, linear: bool) -> Option<VoxValuePoolFlaw> {
         for (value_id, value) in self.iter_values() {
             let components: &[f64] = match value {
-                VoxPoolValueRef::Srgb(color) => color,
-                VoxPoolValueRef::Srgba(color) => color,
-                VoxPoolValueRef::LinearRgb(color) => color,
-                VoxPoolValueRef::LinearRgba(color) => color,
+                VoxValuePoolValueRef::Srgb(color) => color,
+                VoxValuePoolValueRef::Srgba(color) => color,
+                VoxValuePoolValueRef::LinearRgb(color) => color,
+                VoxValuePoolValueRef::LinearRgba(color) => color,
                 _ => unreachable!("a color pool yields color values"),
             };
             for &component in components {
@@ -217,7 +217,7 @@ impl VoxValuePool {
                     (0.0..=1.0).contains(&component)
                 };
                 if !in_range {
-                    return Some(VoxPoolFlaw::Value(value_id));
+                    return Some(VoxValuePoolFlaw::Value(value_id));
                 }
             }
         }
@@ -236,20 +236,20 @@ impl VoxValuePool {
     }
 
     /// Whether `id` is one of this pool's values.
-    pub fn contains_value(&self, id: U32Id<BVoxPoolValue>) -> bool {
+    pub fn contains_value(&self, id: U32Id<BVoxValuePoolValue>) -> bool {
         self.value_ids.is_retained(id)
     }
 
     /// The value at `id`, typed by the pool's kind, or `None` if `id` is not
     /// one of this pool's values.
-    pub fn value(&self, id: U32Id<BVoxPoolValue>) -> Option<VoxPoolValueRef<'_>> {
+    pub fn value(&self, id: U32Id<BVoxValuePoolValue>) -> Option<VoxValuePoolValueRef<'_>> {
         self.value_ids.is_retained(id).then(|| self.value_ref(id))
     }
 
     /// Values in listing order, as `(id, value)`.
     pub fn iter_values(
         &self,
-    ) -> impl Iterator<Item = (U32Id<BVoxPoolValue>, VoxPoolValueRef<'_>)> + '_ {
+    ) -> impl Iterator<Item = (U32Id<BVoxValuePoolValue>, VoxValuePoolValueRef<'_>)> + '_ {
         self.value_ids
             .iter()
             .map(move |id| (id, self.value_ref(id)))
@@ -257,7 +257,7 @@ impl VoxValuePool {
 
     /// The listing position of value `id`, or `None` if `id` is not one of
     /// this pool's values.
-    pub fn value_index(&self, id: U32Id<BVoxPoolValue>) -> Option<usize> {
+    pub fn value_index(&self, id: U32Id<BVoxValuePoolValue>) -> Option<usize> {
         self.value_ids.index_of(id)
     }
 
@@ -265,7 +265,7 @@ impl VoxValuePool {
     /// between its old and new positions one slot. Errors, changing nothing,
     /// if `id` is not one of this pool's values or `index` is at or past
     /// [`values_len`](Self::values_len).
-    pub fn move_value(&mut self, id: U32Id<BVoxPoolValue>, index: usize) -> Result<()> {
+    pub fn move_value(&mut self, id: U32Id<BVoxValuePoolValue>, index: usize) -> Result<()> {
         if !self.value_ids.is_retained(id) {
             return Err(Error::UnknownPoolValue { value: id });
         }
@@ -323,7 +323,7 @@ impl VoxValuePool {
     /// Releases value `id`, keeping the surviving values' listing order. The
     /// id must be one of this pool's values. The caller repoints any palette
     /// cell drawing it first.
-    pub(crate) fn release_value_stable(&mut self, id: U32Id<BVoxPoolValue>) {
+    pub(crate) fn release_value_stable(&mut self, id: U32Id<BVoxValuePoolValue>) {
         // Safety: the id is retained, so it has a value in the column.
         unsafe {
             match &mut self.kind {
@@ -343,14 +343,17 @@ impl VoxValuePool {
 
     /// Rewrites the listing order to `new_order`. `None`, changing nothing, if
     /// `new_order` does not list every value id exactly once.
-    pub(crate) fn set_value_order(&mut self, new_order: &[U32Id<BVoxPoolValue>]) -> Option<()> {
+    pub(crate) fn set_value_order(
+        &mut self,
+        new_order: &[U32Id<BVoxValuePoolValue>],
+    ) -> Option<()> {
         self.value_ids.try_set_order(new_order)
     }
 
     /// Compacts the value id pool back to a contiguous `0..len` in listing
     /// order and returns the relabeling, so the caller can translate the
     /// palette cells that point at these values.
-    pub(crate) fn gc_values(&mut self) -> IdRemap<BVoxPoolValue, u32> {
+    pub(crate) fn gc_values(&mut self) -> IdRemap<BVoxValuePoolValue, u32> {
         let remap = self.value_ids.gc();
         // Safety: the column was in sync with the pre-gc pool, and nothing has
         // retained or released since.
@@ -371,22 +374,24 @@ impl VoxValuePool {
     }
 
     /// The typed ref for a retained `id`.
-    fn value_ref(&self, id: U32Id<BVoxPoolValue>) -> VoxPoolValueRef<'_> {
+    fn value_ref(&self, id: U32Id<BVoxValuePoolValue>) -> VoxValuePoolValueRef<'_> {
         // Safety: the id is retained, so it has a value in the column.
         unsafe {
             match &self.kind {
-                VoxValuePoolKind::Json { values } => VoxPoolValueRef::Json(values.get(id)),
-                VoxValuePoolKind::Bool { values } => VoxPoolValueRef::Bool(*values.get(id)),
-                VoxValuePoolKind::Float { values, .. } => VoxPoolValueRef::Float(*values.get(id)),
-                VoxValuePoolKind::Int { values, .. } => VoxPoolValueRef::Int(*values.get(id)),
-                VoxValuePoolKind::String { values } => VoxPoolValueRef::String(values.get(id)),
-                VoxValuePoolKind::Srgb { values } => VoxPoolValueRef::Srgb(values.get(id)),
-                VoxValuePoolKind::Srgba { values } => VoxPoolValueRef::Srgba(values.get(id)),
+                VoxValuePoolKind::Json { values } => VoxValuePoolValueRef::Json(values.get(id)),
+                VoxValuePoolKind::Bool { values } => VoxValuePoolValueRef::Bool(*values.get(id)),
+                VoxValuePoolKind::Float { values, .. } => {
+                    VoxValuePoolValueRef::Float(*values.get(id))
+                }
+                VoxValuePoolKind::Int { values, .. } => VoxValuePoolValueRef::Int(*values.get(id)),
+                VoxValuePoolKind::String { values } => VoxValuePoolValueRef::String(values.get(id)),
+                VoxValuePoolKind::Srgb { values } => VoxValuePoolValueRef::Srgb(values.get(id)),
+                VoxValuePoolKind::Srgba { values } => VoxValuePoolValueRef::Srgba(values.get(id)),
                 VoxValuePoolKind::LinearRgb { values } => {
-                    VoxPoolValueRef::LinearRgb(values.get(id))
+                    VoxValuePoolValueRef::LinearRgb(values.get(id))
                 }
                 VoxValuePoolKind::LinearRgba { values } => {
-                    VoxPoolValueRef::LinearRgba(values.get(id))
+                    VoxValuePoolValueRef::LinearRgba(values.get(id))
                 }
             }
         }
@@ -507,7 +512,7 @@ fn int_at_most(value: i64, bound: f64) -> bool {
 
 /// Builds the paired id pool and value column for `values`, retaining ids in
 /// order.
-fn columns<T>(values: Vec<T>) -> (IdStruct<BVoxPoolValue>, IdField<BVoxPoolValue, T>) {
+fn columns<T>(values: Vec<T>) -> (IdStruct<BVoxValuePoolValue>, IdField<BVoxValuePoolValue, T>) {
     let mut ids = IdStruct::new();
     let mut column = IdField::with_capacity(values.len());
     for value in values {
@@ -519,9 +524,9 @@ fn columns<T>(values: Vec<T>) -> (IdStruct<BVoxPoolValue>, IdField<BVoxPoolValue
 
 /// Clones the values retained in `column` against the same ids.
 fn cloned<T: Clone>(
-    ids: &IdStruct<BVoxPoolValue>,
-    column: &IdField<BVoxPoolValue, T>,
-) -> IdField<BVoxPoolValue, T> {
+    ids: &IdStruct<BVoxValuePoolValue>,
+    column: &IdField<BVoxValuePoolValue, T>,
+) -> IdField<BVoxValuePoolValue, T> {
     let mut copy = IdField::with_capacity(ids.len());
     for id in ids.iter() {
         // Safety: retained ids have a value.
@@ -532,10 +537,10 @@ fn cloned<T: Clone>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{BVoxPoolValue, Error, VoxBound, VoxPoolValueRef, VoxValuePool};
+    use crate::{BVoxValuePoolValue, Error, VoxBound, VoxValuePool, VoxValuePoolValueRef};
     use branded_id::U32Id;
 
-    fn value(index: u32) -> U32Id<BVoxPoolValue> {
+    fn value(index: u32) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index)
     }
 
@@ -547,10 +552,13 @@ mod tests {
         assert_eq!(pool.values_len(), 3);
         let values: Vec<_> = pool.iter_values().collect();
         assert_eq!(values.len(), 3);
-        assert_eq!(values[1], (U32Id::from_u32(1), VoxPoolValueRef::Float(0.5)));
+        assert_eq!(
+            values[1],
+            (U32Id::from_u32(1), VoxValuePoolValueRef::Float(0.5))
+        );
         assert_eq!(
             pool.value(U32Id::from_u32(2)),
-            Some(VoxPoolValueRef::Float(1.0))
+            Some(VoxValuePoolValueRef::Float(1.0))
         );
         assert_eq!(pool.value(U32Id::from_u32(3)), None);
     }
@@ -562,7 +570,7 @@ mod tests {
         assert_eq!(pool.values_len(), 1);
         assert_eq!(
             pool.value(U32Id::from_u32(0)),
-            Some(VoxPoolValueRef::Srgba(&[1.0, 0.0, 0.0, 1.0]))
+            Some(VoxValuePoolValueRef::Srgba(&[1.0, 0.0, 0.0, 1.0]))
         );
     }
 
@@ -597,7 +605,7 @@ mod tests {
         let order: Vec<_> = pool
             .iter_values()
             .map(|(_, value)| match value {
-                VoxPoolValueRef::String(text) => text.to_owned(),
+                VoxValuePoolValueRef::String(text) => text.to_owned(),
                 other => panic!("unexpected value {other:?}"),
             })
             .collect();
@@ -630,7 +638,7 @@ mod tests {
         assert_eq!(copy.value(U32Id::from_u32(1)), None);
         assert_eq!(
             copy.value(U32Id::from_u32(2)),
-            Some(VoxPoolValueRef::String("c"))
+            Some(VoxValuePoolValueRef::String("c"))
         );
 
         copy.move_value(U32Id::from_u32(0), 1).unwrap();

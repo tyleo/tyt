@@ -1,8 +1,8 @@
 use crate::{
     BVoxEffectiveProperty, BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette,
-    BVoxPoolValue, BVoxProperty, BVoxValuePool, BVoxVoxel, Error, Result, VoxEffectivePalette,
-    VoxEffectiveProperty, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxPoolFlaw,
-    VoxRuntimeState, VoxValue, VoxValuePool,
+    BVoxProperty, BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxEffectivePalette,
+    VoxEffectiveProperty, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState,
+    VoxValue, VoxValuePool, VoxValuePoolFlaw,
 };
 use branded_id::{IdVec, U32Id, UsizeId, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
@@ -329,7 +329,7 @@ impl VoxMain {
         palette: U32Id<BVoxPalette>,
         name: String,
         pool: U32Id<BVoxValuePool>,
-        default: U32Id<BVoxPoolValue>,
+        default: U32Id<BVoxValuePoolValue>,
     ) -> Result<U32Id<BVoxProperty>> {
         if !self.runtime_state.palette_ids.is_retained(palette) {
             return Err(Error::UnknownPalette { palette });
@@ -353,7 +353,7 @@ impl VoxMain {
     pub fn add_material(
         &mut self,
         palette: U32Id<BVoxPalette>,
-        value_ids: Vec<U32Id<BVoxPoolValue>>,
+        value_ids: Vec<U32Id<BVoxValuePoolValue>>,
     ) -> Result<U32Id<BVoxMaterial>> {
         if !self.runtime_state.palette_ids.is_retained(palette) {
             return Err(Error::UnknownPalette { palette });
@@ -458,7 +458,7 @@ impl VoxMain {
         palette: U32Id<BVoxPalette>,
         material: U32Id<BVoxMaterial>,
         property: U32Id<BVoxProperty>,
-    ) -> Option<(&VoxValuePool, U32Id<BVoxPoolValue>)> {
+    ) -> Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)> {
         let palette = self.palette(palette)?;
         let value_id = palette.value_id(material, property)?;
         let pool = self.value_pool(palette.property(property)?.pool)?;
@@ -825,8 +825,8 @@ impl VoxMain {
     pub fn remove_pool_value(
         &mut self,
         pool: U32Id<BVoxValuePool>,
-        value: U32Id<BVoxPoolValue>,
-        replacement: U32Id<BVoxPoolValue>,
+        value: U32Id<BVoxValuePoolValue>,
+        replacement: U32Id<BVoxValuePoolValue>,
     ) -> Result<()> {
         if !self.runtime_state.value_pool_ids.is_retained(pool) {
             return Err(Error::UnknownValuePool { pool });
@@ -872,7 +872,7 @@ impl VoxMain {
         // by the pool's pre-gc id so the palette pass below can translate its
         // cells before pool ids move.
         let pool_id_space = self.runtime_state.value_pool_ids.peek_next_fresh().to_u32() as usize;
-        let mut pool_value_remaps: IdVec<BVoxValuePool, IdRemap<BVoxPoolValue, u32>> =
+        let mut pool_value_remaps: IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>> =
             IdVec::from_vec((0..pool_id_space).map(|_| IdRemap::default()).collect());
         for pool_id in self.runtime_state.value_pool_ids.iter() {
             // Safety: retained pool ids have a value.
@@ -978,7 +978,7 @@ impl VoxMain {
     pub fn prune_value_pools(&mut self) {
         // The value ids each pool still has a material referencing.
         let pool_ids: Vec<_> = self.runtime_state.value_pool_ids.iter().collect();
-        let mut referenced: HashMap<U32Id<BVoxValuePool>, HashSet<U32Id<BVoxPoolValue>>> =
+        let mut referenced: HashMap<U32Id<BVoxValuePool>, HashSet<U32Id<BVoxValuePoolValue>>> =
             pool_ids.iter().map(|&id| (id, HashSet::new())).collect();
 
         for palette_id in self.runtime_state.palette_ids.iter() {
@@ -1025,7 +1025,7 @@ impl VoxMain {
     pub fn reorder_value_pool(
         &mut self,
         pool: U32Id<BVoxValuePool>,
-        new_order: &[U32Id<BVoxPoolValue>],
+        new_order: &[U32Id<BVoxValuePoolValue>],
     ) -> Result<()> {
         if !self.runtime_state.value_pool_ids.is_retained(pool) {
             return Err(Error::UnknownValuePool { pool });
@@ -1070,9 +1070,9 @@ impl VoxMain {
         for (pool_id, pool) in self.iter_value_pools() {
             match pool.first_flaw() {
                 None => {}
-                Some(VoxPoolFlaw::Empty) => return Err(Error::EmptyPool { pool: pool_id }),
-                Some(VoxPoolFlaw::Bound) => return Err(Error::PoolBound { pool: pool_id }),
-                Some(VoxPoolFlaw::Value(value)) => {
+                Some(VoxValuePoolFlaw::Empty) => return Err(Error::EmptyPool { pool: pool_id }),
+                Some(VoxValuePoolFlaw::Bound) => return Err(Error::PoolBound { pool: pool_id }),
+                Some(VoxValuePoolFlaw::Value(value)) => {
                     return Err(Error::PoolValue {
                         pool: pool_id,
                         value,
@@ -1314,9 +1314,9 @@ fn vector_is_finite(vector: TyVector3F64) -> bool {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
-        BVoxProperty, BVoxValuePool, BVoxVoxel, Error, Result, VoxBound, VoxHierarchyNode, VoxMain,
-        VoxObject, VoxPalette, VoxPoolValueRef, VoxValuePool, VoxValuePoolKind,
+        BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty,
+        BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxBound, VoxHierarchyNode,
+        VoxMain, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef,
     };
     use branded_id::U32Id;
     use ty_math::{TyQuaternion, TyVector3, TyVector3I32, TyVector3U32};
@@ -1329,7 +1329,7 @@ mod tests {
         U32Id::from_u32(index)
     }
 
-    fn value(index: u32) -> U32Id<BVoxPoolValue> {
+    fn value(index: u32) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index)
     }
 
@@ -1608,7 +1608,7 @@ mod tests {
         let pool = state.value_pool(colors).unwrap();
         assert_eq!(
             pool.value(value(2)),
-            Some(VoxPoolValueRef::Srgba(&[0.0, 0.0, 1.0, 1.0]))
+            Some(VoxValuePoolValueRef::Srgba(&[0.0, 0.0, 1.0, 1.0]))
         );
         assert_eq!(
             state.palette(b_id).unwrap().value_id(b_green, b_property),
@@ -1968,7 +1968,7 @@ mod tests {
         let (pool, index) = state
             .material_value(palette, material(0), property)
             .unwrap();
-        assert_eq!(pool.value(index), Some(VoxPoolValueRef::Int(20)));
+        assert_eq!(pool.value(index), Some(VoxValuePoolValueRef::Int(20)));
         assert_eq!(
             state
                 .object(object)
@@ -2120,7 +2120,7 @@ mod tests {
             .unwrap();
         let property = U32Id::<BVoxProperty>::from_u32(0);
         let (pool, index) = state.material_value(palette, sampled, property).unwrap();
-        assert_eq!(pool.value(index), Some(VoxPoolValueRef::Int(2)));
+        assert_eq!(pool.value(index), Some(VoxValuePoolValueRef::Int(2)));
         assert_eq!(state.palette(palette).unwrap().material_count(), 2);
     }
 
@@ -2218,10 +2218,10 @@ mod tests {
         let (pool, index) = state.material_value(palette, sampled, color).unwrap();
         assert_eq!(
             pool.value(index),
-            Some(VoxPoolValueRef::Srgba(&[1.0, 0.0, 0.0, 1.0]))
+            Some(VoxValuePoolValueRef::Srgba(&[1.0, 0.0, 0.0, 1.0]))
         );
         let (pool, index) = state.material_value(palette, sampled, metal).unwrap();
-        assert_eq!(pool.value(index), Some(VoxPoolValueRef::Float(0.0)));
+        assert_eq!(pool.value(index), Some(VoxValuePoolValueRef::Float(0.0)));
 
         // The overlay layer at v0 samples shiny_green, drawing color id 1
         // (green), proving the two layers resolve independently.
@@ -2231,7 +2231,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             pool.value(index),
-            Some(VoxPoolValueRef::Srgba(&[0.0, 1.0, 0.0, 1.0]))
+            Some(VoxValuePoolValueRef::Srgba(&[0.0, 1.0, 0.0, 1.0]))
         );
     }
 
@@ -2611,8 +2611,8 @@ mod tests {
             Some(value(1))
         );
         let pool = state.value_pool(ints).unwrap();
-        assert_eq!(pool.value(value(0)), Some(VoxPoolValueRef::Int(2)));
-        assert_eq!(pool.value(value(1)), Some(VoxPoolValueRef::Int(1)));
+        assert_eq!(pool.value(value(0)), Some(VoxValuePoolValueRef::Int(2)));
+        assert_eq!(pool.value(value(1)), Some(VoxValuePoolValueRef::Int(1)));
         assert_eq!(
             pool.iter_values()
                 .map(|(id, _)| id.to_u32())
@@ -2690,9 +2690,15 @@ mod tests {
         // The material still reads the same two numbers, through the relabeled
         // pool ids and the relabeled cells.
         let (pool_ref, value_id) = state.material_value(palette_id, material, first).unwrap();
-        assert_eq!(pool_ref.value(value_id), Some(VoxPoolValueRef::Int(20)));
+        assert_eq!(
+            pool_ref.value(value_id),
+            Some(VoxValuePoolValueRef::Int(20))
+        );
         let (pool_ref, value_id) = state.material_value(palette_id, material, second).unwrap();
-        assert_eq!(pool_ref.value(value_id), Some(VoxPoolValueRef::Int(30)));
+        assert_eq!(
+            pool_ref.value(value_id),
+            Some(VoxValuePoolValueRef::Int(30))
+        );
     }
 
     #[test]

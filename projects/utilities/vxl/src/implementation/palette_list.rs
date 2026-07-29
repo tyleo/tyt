@@ -191,10 +191,10 @@ mod tests {
     use branded_id::U32Id;
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxPoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The branded value id `index`.
-    fn value(index: usize) -> U32Id<BVoxPoolValue> {
+    fn value(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
     }
 

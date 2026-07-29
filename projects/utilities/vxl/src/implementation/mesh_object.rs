@@ -332,11 +332,11 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{
-        BVoxPalette, BVoxPoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool,
+        BVoxPalette, BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool,
     };
 
     /// The branded value id `index`.
-    fn value(index: usize) -> U32Id<BVoxPoolValue> {
+    fn value(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
     }
 

@@ -1,7 +1,7 @@
 use crate::BASE_COLOR_FACTOR;
 use branded_id::U32Id;
 use std::collections::HashSet;
-use voxcore::{BVoxPalette, BVoxPoolValue, VoxMain};
+use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain};
 
 /// Reorders `palette`'s `baseColorFactor` colors to material order: each
 /// material's color in turn, then the colors no material uses. Rendering is
@@ -25,8 +25,9 @@ pub fn order_palette_colors(state: &mut VoxMain, palette: U32Id<BVoxPalette>) {
 
     // The used color value ids in material order, then the unused ones in
     // their current order, forming a permutation of the pool.
-    let mut new_order: Vec<U32Id<BVoxPoolValue>> = Vec::with_capacity(pool_ref.values_len());
-    let mut seen: HashSet<U32Id<BVoxPoolValue>> = HashSet::with_capacity(pool_ref.values_len());
+    let mut new_order: Vec<U32Id<BVoxValuePoolValue>> = Vec::with_capacity(pool_ref.values_len());
+    let mut seen: HashSet<U32Id<BVoxValuePoolValue>> =
+        HashSet::with_capacity(pool_ref.values_len());
     for material in palette_ref.iter_materials() {
         let Some(value_id) = palette_ref.value_id(material, color) else {
             continue;

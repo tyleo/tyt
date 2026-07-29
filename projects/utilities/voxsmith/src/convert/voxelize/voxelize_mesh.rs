@@ -7,7 +7,7 @@ use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3, TyVector3U32};
 use voxcore::{
-    BVoxMaterial, BVoxPoolValue, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
+    BVoxMaterial, BVoxValuePoolValue, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
 };
 
@@ -385,7 +385,7 @@ struct PoolColumn<T> {
     values: Vec<T>,
 
     /// Per distinct material, its value id into [`values`](Self::values).
-    indices: Vec<U32Id<BVoxPoolValue>>,
+    indices: Vec<U32Id<BVoxValuePoolValue>>,
 }
 
 /// A four-component sRGB color pool over the extracted color, deduplicated by its
@@ -395,7 +395,7 @@ fn srgba_pool(
     get: impl Fn(&MeshMaterial) -> TySrgbaU8,
 ) -> PoolColumn<[f64; 4]> {
     let mut values = Vec::new();
-    let mut lookup: HashMap<[u8; 4], U32Id<BVoxPoolValue>> = HashMap::new();
+    let mut lookup: HashMap<[u8; 4], U32Id<BVoxValuePoolValue>> = HashMap::new();
     let indices = materials
         .iter()
         .map(|material| {
@@ -418,7 +418,7 @@ fn srgb_pool(
     get: impl Fn(&MeshMaterial) -> TySrgbaU8,
 ) -> PoolColumn<[f64; 3]> {
     let mut values = Vec::new();
-    let mut lookup: HashMap<[u8; 3], U32Id<BVoxPoolValue>> = HashMap::new();
+    let mut lookup: HashMap<[u8; 3], U32Id<BVoxValuePoolValue>> = HashMap::new();
     let indices = materials
         .iter()
         .map(|material| {
@@ -438,7 +438,7 @@ fn srgb_pool(
 /// A float pool over the extracted scalar, deduplicated by its bit pattern.
 fn float_pool(materials: &[MeshMaterial], get: impl Fn(&MeshMaterial) -> f64) -> PoolColumn<f64> {
     let mut values = Vec::new();
-    let mut lookup: HashMap<u64, U32Id<BVoxPoolValue>> = HashMap::new();
+    let mut lookup: HashMap<u64, U32Id<BVoxValuePoolValue>> = HashMap::new();
     let indices = materials
         .iter()
         .map(|material| {
@@ -581,7 +581,7 @@ mod tests {
         MeshTriangleUvs, SurfaceMode, voxelize_mesh,
     };
     use ty_math::{TySrgbaU8, TyVector3F64, TyVector3U32};
-    use voxcore::{VoxMain, VoxPoolValueRef};
+    use voxcore::{VoxMain, VoxValuePoolValueRef};
 
     /// A two-cell mesh over a `2x1x1` grid: one triangle inside each unit
     /// cell, the left tagged material `0` and the right material `1`.
@@ -634,7 +634,7 @@ mod tests {
             .material_value(palette_id, material, property)
             .and_then(|(pool, value_id)| pool.value(value_id))
         {
-            Some(VoxPoolValueRef::Float(number)) => number,
+            Some(VoxValuePoolValueRef::Float(number)) => number,
             other => panic!("expected a float pool, got {other:?}"),
         }
     }

@@ -1,9 +1,9 @@
-use crate::BVoxPoolValue;
+use crate::BVoxValuePoolValue;
 use branded_id::U32Id;
 
 /// A well-formedness flaw in a value pool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum VoxPoolFlaw {
+pub(crate) enum VoxValuePoolFlaw {
     /// The pool holds no values.
     Empty,
 
@@ -12,5 +12,5 @@ pub(crate) enum VoxPoolFlaw {
     Bound,
 
     /// The value at this id is malformed for its kind or outside the bounds.
-    Value(U32Id<BVoxPoolValue>),
+    Value(U32Id<BVoxValuePoolValue>),
 }

@@ -1,6 +1,6 @@
 use crate::{
-    BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
-    BVoxProperty, BVoxValuePool, BVoxVoxel, VoxObject,
+    BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty,
+    BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, VoxObject,
 };
 use branded_id::U32Id;
 use std::{
@@ -24,7 +24,7 @@ pub enum Error {
 
     /// A value pool was given a value that is malformed for its kind or
     /// outside its bounds.
-    MalformedPoolValue { value: U32Id<BVoxPoolValue> },
+    MalformedPoolValue { value: U32Id<BVoxValuePoolValue> },
 
     /// An object grid of this many cells would exceed
     /// [`MAX_GRID_CELLS`](crate::VoxObject::MAX_GRID_CELLS).
@@ -49,7 +49,7 @@ pub enum Error {
     UnknownMaterial { material: U32Id<BVoxMaterial> },
 
     /// A mutation named a value that is not one of the pool's.
-    UnknownPoolValue { value: U32Id<BVoxPoolValue> },
+    UnknownPoolValue { value: U32Id<BVoxValuePoolValue> },
 
     /// A mutation named a layer that is not one of the object's.
     UnknownLayer { layer: U32Id<BVoxLayer> },
@@ -146,7 +146,7 @@ pub enum Error {
     /// bounds.
     PoolValue {
         pool: U32Id<BVoxValuePool>,
-        value: U32Id<BVoxPoolValue>,
+        value: U32Id<BVoxValuePoolValue>,
     },
 
     /// A palette property references a value pool that does not exist.

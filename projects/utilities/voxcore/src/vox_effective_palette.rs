@@ -1,6 +1,6 @@
 use crate::{
     BVoxEffectiveProperty, BVoxMaterial, BVoxVoxel, VoxEffectiveProperty, VoxObject,
-    VoxPoolValueRef,
+    VoxValuePoolValueRef,
 };
 use branded_id::{IdVec, U32Id, UsizeId};
 use std::collections::HashMap;
@@ -52,7 +52,7 @@ impl<'a> VoxEffectivePalette<'a> {
         &self,
         property_id: UsizeId<BVoxEffectiveProperty>,
         material_id: U32Id<BVoxMaterial>,
-    ) -> Option<VoxPoolValueRef<'_>> {
+    ) -> Option<VoxValuePoolValueRef<'_>> {
         self.properties.get(property_id)?.value(material_id)
     }
 
@@ -63,7 +63,7 @@ impl<'a> VoxEffectivePalette<'a> {
         &self,
         voxel_id: U32Id<BVoxVoxel>,
         property_id: UsizeId<BVoxEffectiveProperty>,
-    ) -> Option<VoxPoolValueRef<'_>> {
+    ) -> Option<VoxValuePoolValueRef<'_>> {
         let property = self.properties.get(property_id)?;
         let material_id = self.object.voxel_material(voxel_id, property.layer_id)?;
         property.value(material_id)
@@ -73,13 +73,13 @@ impl<'a> VoxEffectivePalette<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BVoxPalette, BVoxPoolValue, BVoxValuePool, Error, VoxBound, VoxMain, VoxObject, VoxPalette,
-        VoxPoolValueRef, VoxValuePool,
+        BVoxPalette, BVoxValuePool, BVoxValuePoolValue, Error, VoxBound, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool, VoxValuePoolValueRef,
     };
     use branded_id::{U32Id, UsizeId};
     use ty_math::TyVector3U32;
 
-    fn value_id(index: u32) -> U32Id<BVoxPoolValue> {
+    fn value_id(index: u32) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index)
     }
 
@@ -141,7 +141,7 @@ mod tests {
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         assert_eq!(
             effective.voxel_value(voxel_id, property_id),
-            Some(VoxPoolValueRef::Int(20))
+            Some(VoxValuePoolValueRef::Int(20))
         );
     }
 
@@ -221,16 +221,16 @@ mod tests {
         let v_id = effective.property_by_name("v").unwrap();
         assert_eq!(
             effective.value(v_id, sparse_id),
-            Some(VoxPoolValueRef::Int(30))
+            Some(VoxValuePoolValueRef::Int(30))
         );
         assert_eq!(
             effective.value(v_id, keep_id),
-            Some(VoxPoolValueRef::Int(10))
+            Some(VoxValuePoolValueRef::Int(10))
         );
         assert_eq!(effective.value(v_id, doomed_id), None);
         assert_eq!(
             effective.voxel_value(voxel_id, v_id),
-            Some(VoxPoolValueRef::Int(30))
+            Some(VoxValuePoolValueRef::Int(30))
         );
     }
 

@@ -2,7 +2,7 @@ use crate::VoxValue;
 
 /// One value read out of a [`VoxValuePool`](crate::VoxValuePool).
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum VoxPoolValueRef<'a> {
+pub enum VoxValuePoolValueRef<'a> {
     /// A value from a `json` pool.
     Json(&'a VoxValue),
 

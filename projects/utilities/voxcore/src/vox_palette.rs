@@ -1,4 +1,6 @@
-use crate::{BVoxMaterial, BVoxPoolValue, BVoxProperty, BVoxValuePool, Error, Result, VoxProperty};
+use crate::{
+    BVoxMaterial, BVoxProperty, BVoxValuePool, BVoxValuePoolValue, Error, Result, VoxProperty,
+};
 use branded_id::{
     IdVec, U32Id,
     soa::{IdField, IdRemap, IdStruct},
@@ -20,7 +22,7 @@ pub struct VoxPalette {
     material_ids: IdStruct<BVoxMaterial>,
 
     /// Per material, one value id per property.
-    materials: IdField<BVoxMaterial, IdField<BVoxProperty, U32Id<BVoxPoolValue>>>,
+    materials: IdField<BVoxMaterial, IdField<BVoxProperty, U32Id<BVoxValuePoolValue>>>,
 
     /// Name index into `properties`, for O(1)
     /// [`property_by_name`](Self::property_by_name) lookup. Rebuilt by
@@ -41,7 +43,7 @@ impl VoxPalette {
         &mut self,
         name: String,
         pool: U32Id<BVoxValuePool>,
-        default_value: U32Id<BVoxPoolValue>,
+        default_value: U32Id<BVoxValuePoolValue>,
     ) -> Result<U32Id<BVoxProperty>> {
         if self.property_by_name.contains_key(&name) {
             return Err(Error::DuplicatePropertyName { name });
@@ -100,7 +102,7 @@ impl VoxPalette {
     /// [`VoxMain::add_palette`](crate::VoxMain::add_palette) checks on insert.
     pub fn add_material(
         &mut self,
-        value_ids: Vec<U32Id<BVoxPoolValue>>,
+        value_ids: Vec<U32Id<BVoxValuePoolValue>>,
     ) -> Result<U32Id<BVoxMaterial>> {
         if value_ids.len() != self.property_ids.len() {
             return Err(Error::MaterialValueArity {
@@ -135,7 +137,7 @@ impl VoxPalette {
         &self,
         material: U32Id<BVoxMaterial>,
         property: U32Id<BVoxProperty>,
-    ) -> Option<U32Id<BVoxPoolValue>> {
+    ) -> Option<U32Id<BVoxValuePoolValue>> {
         if !self.material_ids.is_retained(material) || !self.property_ids.is_retained(property) {
             return None;
         }
@@ -311,8 +313,8 @@ impl VoxPalette {
     pub(crate) fn repoint_pool_value(
         &mut self,
         pool: U32Id<BVoxValuePool>,
-        old: U32Id<BVoxPoolValue>,
-        new: U32Id<BVoxPoolValue>,
+        old: U32Id<BVoxValuePoolValue>,
+        new: U32Id<BVoxValuePoolValue>,
     ) {
         // The properties on `pool`, found once so each material's row
         // is visited once for all of them.
@@ -346,7 +348,7 @@ impl VoxPalette {
     /// draws a live value.
     pub(crate) fn relabel_pool_values(
         &mut self,
-        remaps: &IdVec<BVoxValuePool, IdRemap<BVoxPoolValue, u32>>,
+        remaps: &IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>>,
     ) {
         // Each property's pool, found once so each material's row is visited
         // once for all of them.
@@ -405,14 +407,14 @@ impl Drop for VoxPalette {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BVoxMaterial, BVoxPoolValue, BVoxProperty, BVoxValuePool, Error, VoxPalette};
+    use crate::{BVoxMaterial, BVoxProperty, BVoxValuePool, BVoxValuePoolValue, Error, VoxPalette};
     use branded_id::U32Id;
 
     fn pool(index: u32) -> U32Id<BVoxValuePool> {
         U32Id::from_u32(index)
     }
 
-    fn value(index: u32) -> U32Id<BVoxPoolValue> {
+    fn value(index: u32) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index)
     }
 

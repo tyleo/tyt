@@ -1,5 +1,5 @@
 use crate::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, BVoxValuePool,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePool, BVoxValuePoolValue,
 };
 use branded_id::{IdVec, soa::IdRemap};
 
@@ -10,7 +10,7 @@ pub struct VoxGcRemap {
     pub value_pools: IdRemap<BVoxValuePool, u32>,
 
     /// Each value pool's value relabeling, indexed by the pool's old id.
-    pub pool_values: IdVec<BVoxValuePool, IdRemap<BVoxPoolValue, u32>>,
+    pub pool_values: IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>>,
 
     /// The palette pool relabeling.
     pub palettes: IdRemap<BVoxPalette, u32>,

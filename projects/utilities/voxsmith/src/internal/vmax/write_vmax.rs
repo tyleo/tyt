@@ -18,8 +18,8 @@ use vmax::{
 };
 use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue, BVoxProperty,
-    VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxPoolValueRef, VoxValuePool,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, BVoxValuePoolValue,
+    VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`
@@ -749,14 +749,14 @@ fn derive_materials(
         Some(0.2126 * linear.red + 0.7152 * linear.green + 0.0722 * linear.blue)
     };
 
-    let mut signatures: Vec<Vec<U32Id<BVoxPoolValue>>> = Vec::new();
+    let mut signatures: Vec<Vec<U32Id<BVoxValuePoolValue>>> = Vec::new();
     // Parallel to `signatures`: the base luminance of the first material to claim
     // each slot, the reference its emissive is read against.
     let mut base_luminances: Vec<Option<f64>> = Vec::new();
-    let mut index_of: HashMap<Vec<U32Id<BVoxPoolValue>>, u8> = HashMap::new();
+    let mut index_of: HashMap<Vec<U32Id<BVoxValuePoolValue>>, u8> = HashMap::new();
     let mut material_idx = HashMap::new();
     for material in palette.iter_materials() {
-        let signature: Vec<U32Id<BVoxPoolValue>> = folded
+        let signature: Vec<U32Id<BVoxValuePoolValue>> = folded
             .materials
             .iter()
             .map(|(_, property)| {
@@ -813,7 +813,7 @@ fn derived_material(
     palette: U32Id<BVoxPalette>,
     properties: &[(String, U32Id<BVoxProperty>)],
     slot: usize,
-    signature: &[U32Id<BVoxPoolValue>],
+    signature: &[U32Id<BVoxValuePoolValue>],
     base_luminance: Option<f64>,
 ) -> VMaxMaterial {
     let scalar = |property: &str| -> Option<f64> {
@@ -902,10 +902,10 @@ fn pool_scalar(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
     property: U32Id<BVoxProperty>,
-    value_id: U32Id<BVoxPoolValue>,
+    value_id: U32Id<BVoxValuePoolValue>,
 ) -> Option<f64> {
     match property_pool(state, palette, property)?.value(value_id) {
-        Some(VoxPoolValueRef::Float(number)) => Some(number),
+        Some(VoxValuePoolValueRef::Float(number)) => Some(number),
         _ => None,
     }
 }
@@ -916,10 +916,10 @@ fn pool_flag(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
     property: U32Id<BVoxProperty>,
-    value_id: U32Id<BVoxPoolValue>,
+    value_id: U32Id<BVoxValuePoolValue>,
 ) -> Option<bool> {
     match property_pool(state, palette, property)?.value(value_id) {
-        Some(VoxPoolValueRef::Bool(flag)) => Some(flag),
+        Some(VoxValuePoolValueRef::Bool(flag)) => Some(flag),
         _ => None,
     }
 }

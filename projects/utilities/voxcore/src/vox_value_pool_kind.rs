@@ -1,4 +1,4 @@
-use crate::{BVoxPoolValue, VoxBound, VoxValue};
+use crate::{BVoxValuePoolValue, VoxBound, VoxValue};
 use branded_id::soa::IdField;
 
 /// The kind of a [`VoxValuePool`](crate::VoxValuePool) and its typed value
@@ -14,13 +14,13 @@ pub enum VoxValuePoolKind {
     /// Arbitrary [`VoxValue`]s, including null.
     Json {
         /// The pooled values.
-        values: IdField<BVoxPoolValue, VoxValue>,
+        values: IdField<BVoxValuePoolValue, VoxValue>,
     },
 
     /// Boolean values.
     Bool {
         /// The pooled values.
-        values: IdField<BVoxPoolValue, bool>,
+        values: IdField<BVoxValuePoolValue, bool>,
     },
 
     /// Finite floating-point values within `min`/`max`.
@@ -32,7 +32,7 @@ pub enum VoxValuePoolKind {
         max: VoxBound,
 
         /// The pooled values.
-        values: IdField<BVoxPoolValue, f64>,
+        values: IdField<BVoxValuePoolValue, f64>,
     },
 
     /// Integer values within `min`/`max`.
@@ -44,36 +44,36 @@ pub enum VoxValuePoolKind {
         max: VoxBound,
 
         /// The pooled values.
-        values: IdField<BVoxPoolValue, i64>,
+        values: IdField<BVoxValuePoolValue, i64>,
     },
 
     /// String values.
     String {
         /// The pooled values.
-        values: IdField<BVoxPoolValue, String>,
+        values: IdField<BVoxValuePoolValue, String>,
     },
 
     /// Three-component sRGB colors, each float component in `[0, 1]`.
     Srgb {
         /// The pooled colors.
-        values: IdField<BVoxPoolValue, [f64; 3]>,
+        values: IdField<BVoxValuePoolValue, [f64; 3]>,
     },
 
     /// Four-component sRGB colors, each float component in `[0, 1]`.
     Srgba {
         /// The pooled colors.
-        values: IdField<BVoxPoolValue, [f64; 4]>,
+        values: IdField<BVoxValuePoolValue, [f64; 4]>,
     },
 
     /// Three-component linear colors, each float component `>= 0`.
     LinearRgb {
         /// The pooled colors.
-        values: IdField<BVoxPoolValue, [f64; 3]>,
+        values: IdField<BVoxValuePoolValue, [f64; 3]>,
     },
 
     /// Four-component linear colors, each float component `>= 0`.
     LinearRgba {
         /// The pooled colors.
-        values: IdField<BVoxPoolValue, [f64; 4]>,
+        values: IdField<BVoxValuePoolValue, [f64; 4]>,
     },
 }

@@ -4,7 +4,7 @@ use crate::{
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
-use voxcore::{BVoxPoolValue, VoxMain, VoxPoolValueRef, VoxValuePool};
+use voxcore::{BVoxValuePoolValue, VoxMain, VoxValuePool, VoxValuePoolValueRef};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
 /// `width` x `height` texels, one texel per material placed row-major from the
@@ -117,7 +117,7 @@ fn material_attribute<'a>(
     used: &UsedMaterials,
     index: usize,
     key: &str,
-) -> Option<(&'a VoxValuePool, U32Id<BVoxPoolValue>)> {
+) -> Option<(&'a VoxValuePool, U32Id<BVoxValuePoolValue>)> {
     let material = used.material(index)?;
     let palette = used.palette();
     let property = state.palette(palette)?.property_by_name(key)?;
@@ -126,7 +126,7 @@ fn material_attribute<'a>(
 
 /// A color attribute's RGBA bytes, defaulting to opaque white (the base-color
 /// spec default) when the value is absent or its pool is not a color kind.
-fn color_bytes(value: Option<(&VoxValuePool, U32Id<BVoxPoolValue>)>) -> [u8; 4] {
+fn color_bytes(value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>) -> [u8; 4] {
     color_bytes_or(value, [255, 255, 255, 255])
 }
 
@@ -136,7 +136,7 @@ fn color_bytes(value: Option<(&VoxValuePool, U32Id<BVoxPoolValue>)>) -> [u8; 4] 
 /// scene-linear components re-encoded to sRGB here. A three-component color takes
 /// opaque alpha.
 fn color_bytes_or(
-    value: Option<(&VoxValuePool, U32Id<BVoxPoolValue>)>,
+    value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
     default: [u8; 4],
 ) -> [u8; 4] {
     value
@@ -157,12 +157,12 @@ fn component_byte(rgba: [u8; 4], component: ColorChannel) -> u8 {
 /// A scalar attribute's value from a `float`, `int`, or `bool` pool, defaulting
 /// to its spec default (or `0` for a key with no standard default) when absent or
 /// not one of those pools. A `bool` reads as `1` or `0`.
-fn scalar_value(value: Option<(&VoxValuePool, U32Id<BVoxPoolValue>)>, key: &str) -> f64 {
+fn scalar_value(value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>, key: &str) -> f64 {
     let fallback = || default_scalar(key).unwrap_or(0.0);
     match value.and_then(|(pool, value_id)| pool.value(value_id)) {
-        Some(VoxPoolValueRef::Float(number)) => number,
-        Some(VoxPoolValueRef::Int(number)) => number as f64,
-        Some(VoxPoolValueRef::Bool(flag)) => {
+        Some(VoxValuePoolValueRef::Float(number)) => number,
+        Some(VoxValuePoolValueRef::Int(number)) => number as f64,
+        Some(VoxValuePoolValueRef::Bool(flag)) => {
             if flag {
                 1.0
             } else {
@@ -240,12 +240,12 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{
-        BVoxLayer, BVoxObject, BVoxPoolValue, VoxBound, VoxMain, VoxObject, VoxPalette,
+        BVoxLayer, BVoxObject, BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette,
         VoxValuePool,
     };
 
     /// The branded value id `index`.
-    fn value(index: u32) -> U32Id<BVoxPoolValue> {
+    fn value(index: u32) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index)
     }
 

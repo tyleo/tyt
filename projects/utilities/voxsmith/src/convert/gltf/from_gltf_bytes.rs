@@ -472,7 +472,7 @@ mod tests {
     use branded_id::U32Id;
     use png::{BitDepth, ColorType, Encoder};
     use ty_math::{TyFloatExt, TyHexColor, TySrgbaU8, TyVector3U32};
-    use voxcore::{BVoxPoolValue, VoxMain, VoxPoolValueRef, VoxValuePool};
+    use voxcore::{BVoxValuePoolValue, VoxMain, VoxValuePool, VoxValuePoolValueRef};
 
     /// A minimal binary glTF (GLB) of an axis-aligned box spanning `[0, sx]`,
     /// `[0, sy]`, `[0, sz]` in glTF Y-up space, indexed triangles. When
@@ -713,7 +713,7 @@ mod tests {
         state: &'a VoxMain,
         position: TyVector3U32,
         attribute: &str,
-    ) -> (&'a VoxValuePool, U32Id<BVoxPoolValue>) {
+    ) -> (&'a VoxValuePool, U32Id<BVoxValuePoolValue>) {
         let (_, object) = state.iter_objects().next().unwrap();
         let (layer, palette_id) = object.iter_layers().next().unwrap();
         let palette = state.palette(palette_id).unwrap();
@@ -729,7 +729,7 @@ mod tests {
     fn voxel_hex(state: &VoxMain, position: TyVector3U32) -> String {
         let (pool, index) = voxel_attribute(state, position, BASE_COLOR_FACTOR);
         match pool.value(index) {
-            Some(VoxPoolValueRef::Srgba(&[r, g, b, a])) => {
+            Some(VoxValuePoolValueRef::Srgba(&[r, g, b, a])) => {
                 TySrgbaU8::from([byte(r), byte(g), byte(b), byte(a)]).to_hex()
             }
             other => panic!("unexpected baseColorFactor pool {other:?}"),
@@ -740,7 +740,7 @@ mod tests {
     fn voxel_number(state: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
         let (pool, index) = voxel_attribute(state, position, attribute);
         match pool.value(index) {
-            Some(VoxPoolValueRef::Float(number)) => number,
+            Some(VoxValuePoolValueRef::Float(number)) => number,
             other => panic!("expected a float pool for {attribute}, got {other:?}"),
         }
     }
@@ -1571,7 +1571,7 @@ mod tests {
         let origin = TyVector3U32::new(0, 0, 0);
         let (pool, index) = voxel_attribute(&state, origin, EMISSIVE_FACTOR);
         let [r, g, b] = match pool.value(index) {
-            Some(VoxPoolValueRef::Srgb(&color)) => color,
+            Some(VoxValuePoolValueRef::Srgb(&color)) => color,
             other => panic!("expected an sRGB emissiveFactor pool, got {other:?}"),
         };
         assert!(r < 0.01 && b < 0.01, "emissiveFactor red {r} blue {b}");
