@@ -65,7 +65,7 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
         .collect::<Result<Vec<_>>>()?;
     state.add_hierarchy_nodes(nodes)?;
 
-    state.set_root_hierarchy_nodes(
+    state.set_root_hierarchy_node_ids(
         main.runtime_state
             .root_nodes
             .iter()

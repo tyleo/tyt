@@ -18,8 +18,8 @@ pub struct VoxHierarchyNode {
     pub transform: TyTransformF64,
 
     /// Child nodes.
-    pub child_nodes: Vec<U32Id<BVoxHierarchyNode>>,
+    pub child_node_ids: Vec<U32Id<BVoxHierarchyNode>>,
 
     /// Objects placed by this node.
-    pub child_objects: Vec<U32Id<BVoxObject>>,
+    pub child_object_ids: Vec<U32Id<BVoxObject>>,
 }

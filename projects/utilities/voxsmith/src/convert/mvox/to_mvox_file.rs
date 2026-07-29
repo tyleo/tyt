@@ -117,7 +117,7 @@ fn colors_from_palette(state: &VoxMain, palette: Option<U32Id<BVoxPalette>>) -> 
     };
     let Some(property) = state
         .palette(palette)
-        .and_then(|palette| palette.property_by_name(BASE_COLOR_FACTOR))
+        .and_then(|palette| palette.property_id_by_name(BASE_COLOR_FACTOR))
     else {
         return colors;
     };
@@ -379,7 +379,7 @@ fn synthesize_scene(state: &VoxMain) -> Vec<MVoxSceneNode> {
     let root_group = builder.allocate();
 
     let mut roots: Vec<i32> = state
-        .root_hierarchy_nodes()
+        .root_hierarchy_node_ids()
         .iter()
         .map(|&node| builder.emit_node(state, node))
         .collect();
@@ -427,8 +427,8 @@ impl SceneBuilder {
                 .hierarchy_node(node_id)
                 .expect("a hierarchy id from the state resolves");
             (
-                node.child_nodes.clone(),
-                node.child_objects.clone(),
+                node.child_node_ids.clone(),
+                node.child_object_ids.clone(),
                 translation_of(&node.transform.position),
             )
         };

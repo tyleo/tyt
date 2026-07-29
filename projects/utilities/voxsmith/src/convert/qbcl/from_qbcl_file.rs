@@ -31,7 +31,7 @@ pub fn from_qbcl_file(file: &QbclFile) -> Result<VoxMain> {
 
     let mut nodes = Vec::new();
     let root_id = build_node(&file.root, &mut state, palette_id, &materials, &mut nodes)?;
-    state.set_root_hierarchy_nodes(vec![root_id])?;
+    state.set_root_hierarchy_node_ids(vec![root_id])?;
 
     let ext = QubicleQbclExtWrapper {
         qubicle_qbcl: QubicleQbclExt {
@@ -77,8 +77,8 @@ fn build_node(
             let object_id = state.add_object(object)?;
             let hierarchy = VoxHierarchyNode {
                 name: node.name.clone(),
-                child_nodes: Vec::new(),
-                child_objects: vec![object_id],
+                child_node_ids: Vec::new(),
+                child_object_ids: vec![object_id],
                 transform: translation(matrix.position),
             };
             let id = state.add_hierarchy_node(hierarchy)?;
@@ -93,14 +93,14 @@ fn build_node(
             id
         }
         QbclNodeBody::Model(model) => {
-            let mut child_nodes = Vec::with_capacity(model.children.len());
+            let mut child_node_ids = Vec::with_capacity(model.children.len());
             for child in &model.children {
-                child_nodes.push(build_node(child, state, palette, materials, nodes)?);
+                child_node_ids.push(build_node(child, state, palette, materials, nodes)?);
             }
             let hierarchy = VoxHierarchyNode {
                 name: node.name.clone(),
-                child_nodes,
-                child_objects: Vec::new(),
+                child_node_ids,
+                child_object_ids: Vec::new(),
                 transform: TyTransformF64::default(),
             };
             let id = state.add_hierarchy_node(hierarchy)?;
@@ -113,9 +113,9 @@ fn build_node(
             id
         }
         QbclNodeBody::Compound(compound) => {
-            let mut child_nodes = Vec::with_capacity(compound.children.len());
+            let mut child_node_ids = Vec::with_capacity(compound.children.len());
             for child in &compound.children {
-                child_nodes.push(build_node(child, state, palette, materials, nodes)?);
+                child_node_ids.push(build_node(child, state, palette, materials, nodes)?);
             }
             // The compound grid becomes the object's build volume directly; it
             // may carry empty margin. The masks are read from that same grid.
@@ -124,8 +124,8 @@ fn build_node(
             let object_id = state.add_object(object)?;
             let hierarchy = VoxHierarchyNode {
                 name: node.name.clone(),
-                child_nodes,
-                child_objects: vec![object_id],
+                child_node_ids,
+                child_object_ids: vec![object_id],
                 transform: translation(compound.matrix.position),
             };
             let id = state.add_hierarchy_node(hierarchy)?;
@@ -468,26 +468,26 @@ mod tests {
             .add_hierarchy_nodes(vec![
                 VoxHierarchyNode {
                     name: "group".to_owned(),
-                    child_nodes: vec![node(1)],
-                    child_objects: Vec::new(),
+                    child_node_ids: vec![node(1)],
+                    child_object_ids: Vec::new(),
                     transform: TyTransformF64::default(),
                 },
                 VoxHierarchyNode {
                     name: "wide".to_owned(),
-                    child_nodes: Vec::new(),
-                    child_objects: vec![object(0)],
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object(0)],
                     transform: placed_at(5.0, 0.0, 0.0),
                 },
                 VoxHierarchyNode {
                     name: "unit".to_owned(),
-                    child_nodes: Vec::new(),
-                    child_objects: vec![object(1)],
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object(1)],
                     transform: placed_at(0.0, 3.0, 0.0),
                 },
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![node(0), node(2)])
+            .set_root_hierarchy_node_ids(vec![node(0), node(2)])
             .unwrap();
 
         state.validate().expect("a well-formed source state");

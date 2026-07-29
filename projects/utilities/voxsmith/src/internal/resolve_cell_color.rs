@@ -13,7 +13,7 @@ pub fn resolve_cell_color<'a>(
     object: &'a VoxObject,
 ) -> Result<Option<CellColor<'a>>> {
     let effective = state.effective_palette(object)?;
-    let Some(property_id) = effective.property_by_name(BASE_COLOR_FACTOR) else {
+    let Some(property_id) = effective.property_id_by_name(BASE_COLOR_FACTOR) else {
         return Ok(None);
     };
     let property = effective

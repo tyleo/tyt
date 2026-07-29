@@ -200,7 +200,7 @@ fn channel_kind(
         .palette(palette)
         .expect("the meshed layer references a palette the state holds");
 
-    let Some(property_id) = palette.property_by_name(key) else {
+    let Some(property_id) = palette.property_id_by_name(key) else {
         // Absent from the palette: the voxj format's unbound-default rule. A
         // glTF built-in takes its spec kind and bakes its default; a custom
         // property has no default, so its type cannot be inferred.
@@ -218,7 +218,7 @@ fn channel_kind(
     let pool_id = palette
         .property(property_id)
         .expect("a property id from this palette resolves")
-        .pool;
+        .pool_id;
     let pool = state
         .value_pool(pool_id)
         .expect("a property references a pool the state holds");

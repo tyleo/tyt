@@ -717,7 +717,7 @@ mod tests {
         let (_, object) = state.iter_objects().next().unwrap();
         let (layer, palette_id) = object.iter_layers().next().unwrap();
         let palette = state.palette(palette_id).unwrap();
-        let property = palette.property_by_name(attribute).unwrap();
+        let property = palette.property_id_by_name(attribute).unwrap();
         let voxel = object.voxel_id(position).unwrap();
         let material = object.voxel_material(voxel, layer).unwrap();
         state
@@ -1112,7 +1112,7 @@ mod tests {
         assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
 
         // The root node records the meters-per-voxel scale.
-        let root = state.root_hierarchy_nodes()[0];
+        let root = state.root_hierarchy_node_ids()[0];
         assert_eq!(state.hierarchy_node(root).unwrap().transform.scale.z, 2.0);
     }
 

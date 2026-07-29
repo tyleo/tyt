@@ -64,7 +64,7 @@ pub fn write_voxj(
         .collect();
 
     let root_nodes = state
-        .root_hierarchy_nodes()
+        .root_hierarchy_node_ids()
         .iter()
         .map(|id| id.to_u32() as usize)
         .collect();

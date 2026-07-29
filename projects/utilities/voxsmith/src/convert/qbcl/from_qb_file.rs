@@ -37,8 +37,8 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
         let object_id = state.add_object(object)?;
         let node = VoxHierarchyNode {
             name: matrix.name.clone(),
-            child_nodes: Vec::new(),
-            child_objects: vec![object_id],
+            child_node_ids: Vec::new(),
+            child_object_ids: vec![object_id],
             transform: translation(matrix.position),
         };
         roots.push(state.add_hierarchy_node(node)?);
@@ -48,7 +48,7 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
             visibility,
         });
     }
-    state.set_root_hierarchy_nodes(roots)?;
+    state.set_root_hierarchy_node_ids(roots)?;
 
     let ext = QubicleQbExtWrapper {
         qubicle_qb: QubicleQbExt {

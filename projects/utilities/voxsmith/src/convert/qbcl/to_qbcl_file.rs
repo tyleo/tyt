@@ -39,7 +39,7 @@ pub fn to_qbcl_file(state: &VoxMain) -> Result<QbclFile> {
         )));
     }
 
-    let roots = state.root_hierarchy_nodes();
+    let roots = state.root_hierarchy_node_ids();
     let [root] = roots else {
         return Err(Error::invalid(format!(
             "a Qubicle .qbcl file needs exactly one root, but the state has {}",
@@ -143,7 +143,7 @@ fn rebuild_children(
     nodes: &[QubicleQbclNode],
 ) -> Result<Vec<QbclNode>> {
     hierarchy
-        .child_nodes
+        .child_node_ids
         .iter()
         .map(|&child| rebuild_node(child, state, nodes))
         .collect()
@@ -154,7 +154,7 @@ fn rebuild_children(
 /// keeps the original dimensions and voxel positions directly.
 fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result<&'a VoxObject> {
     let object_id = *hierarchy
-        .child_objects
+        .child_object_ids
         .first()
         .ok_or_else(|| Error::invalid("a matrix or compound node has no object"))?;
     state
@@ -246,7 +246,7 @@ const SOLID_MASK: u8 = 0x7e;
 fn synthesize_qbcl(state: &VoxMain) -> Result<QbclFile> {
     let mut builder = QbclBuilder::default();
     let mut children: Vec<QbclNode> = state
-        .root_hierarchy_nodes()
+        .root_hierarchy_node_ids()
         .iter()
         .map(|&root| builder.emit_node(state, root, TyVector3I32::new(0, 0, 0)))
         .collect::<Result<_>>()?;
@@ -296,8 +296,8 @@ impl QbclBuilder {
             let world = parent + position.round().as_ivec3();
             (
                 node.name.clone(),
-                node.child_objects.clone(),
-                node.child_nodes.clone(),
+                node.child_object_ids.clone(),
+                node.child_node_ids.clone(),
                 world,
             )
         };

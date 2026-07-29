@@ -38,11 +38,11 @@ pub struct VoxObject {
     /// Which cells are filled, one bit per voxel id.
     liveness: VoxLiveness,
 
-    /// Pool shared by `layer_palettes` and `samples`.
+    /// Pool shared by `layer_palette_ids` and `samples`.
     layer_ids: IdStruct<BVoxLayer>,
 
     /// The palette each layer references, in layer order.
-    layer_palettes: IdField<BVoxLayer, U32Id<BVoxPalette>>,
+    layer_palette_ids: IdField<BVoxLayer, U32Id<BVoxPalette>>,
 
     /// Per layer, the material each voxel samples. Cells of non-live voxels
     /// are ignored filler.
@@ -78,7 +78,7 @@ impl VoxObject {
             voxel_ids,
             liveness: VoxLiveness::new(volume as usize),
             layer_ids: IdStruct::new(),
-            layer_palettes: IdField::new(),
+            layer_palette_ids: IdField::new(),
             samples: IdField::new(),
         })
     }
@@ -154,19 +154,19 @@ impl VoxObject {
         (id.to_u32() as usize) < self.liveness.len() && self.liveness.is_live(id)
     }
 
-    /// Material the live voxel `id` samples in `layer`, or `None` if the voxel
-    /// is not live or `layer` is not one of this object's layers.
+    /// Material the live voxel `id` samples in `layer_id`, or `None` if the
+    /// voxel is not live or `layer_id` is not one of this object's layers.
     pub fn voxel_material(
         &self,
         id: U32Id<BVoxVoxel>,
-        layer: U32Id<BVoxLayer>,
+        layer_id: U32Id<BVoxLayer>,
     ) -> Option<U32Id<BVoxMaterial>> {
-        if !self.is_live(id) || !self.layer_ids.is_retained(layer) {
+        if !self.is_live(id) || !self.layer_ids.is_retained(layer_id) {
             return None;
         }
 
         // Safety: the dense grid gives every layer a slot for every voxel id.
-        let column = unsafe { self.samples.get(layer) };
+        let column = unsafe { self.samples.get(layer_id) };
         Some(*unsafe { column.get(id) })
     }
 
@@ -177,19 +177,19 @@ impl VoxObject {
         self.liveness.iter_live()
     }
 
-    /// Live voxels' samples in `layer`, as `(voxel id, material)`, in ascending
-    /// raster order, or `None` if `layer` is not one of this object's layers.
-    /// Reads the layer's sample column once, so a full scan skips
-    /// [`voxel_material`](Self::voxel_material)'s per-call lookups.
+    /// Live voxels' samples in `layer_id`, as `(voxel id, material id)`, in
+    /// ascending raster order, or `None` if `layer_id` is not one of this
+    /// object's layers. Reads the layer's sample column once, so a full scan
+    /// skips [`voxel_material`](Self::voxel_material)'s per-call lookups.
     pub fn iter_live_samples(
         &self,
-        layer: U32Id<BVoxLayer>,
+        layer_id: U32Id<BVoxLayer>,
     ) -> Option<impl Iterator<Item = (U32Id<BVoxVoxel>, U32Id<BVoxMaterial>)> + '_> {
-        if !self.layer_ids.is_retained(layer) {
+        if !self.layer_ids.is_retained(layer_id) {
             return None;
         }
         // Safety: retained layer ids have a sample column.
-        let column = unsafe { self.samples.get(layer) };
+        let column = unsafe { self.samples.get(layer_id) };
         Some(self.liveness.iter_live().map(move |id| {
             // Safety: the dense grid gives every layer a slot for every voxel
             // id.
@@ -224,42 +224,43 @@ impl VoxObject {
         self.layer_ids.len()
     }
 
-    /// The palette `layer` references, or `None` if `layer` is not one of this
-    /// object's layers.
-    pub fn layer_palette(&self, id: U32Id<BVoxLayer>) -> Option<U32Id<BVoxPalette>> {
-        // Safety: retained layer ids have a `layer_palettes` value.
+    /// The palette id layer `id` references, or `None` if `id` is not one of
+    /// this object's layers.
+    pub fn layer_palette_id(&self, id: U32Id<BVoxLayer>) -> Option<U32Id<BVoxPalette>> {
+        // Safety: retained layer ids have a `layer_palette_ids` value.
         self.layer_ids
             .is_retained(id)
-            .then(|| *unsafe { self.layer_palettes.get(id) })
+            .then(|| *unsafe { self.layer_palette_ids.get(id) })
     }
 
     /// Layers in layer order, as `(layer id, palette)`. Pair a layer id with
     /// [`voxel_material`](Self::voxel_material) to read its samples.
     pub fn iter_layers(&self) -> impl Iterator<Item = (U32Id<BVoxLayer>, U32Id<BVoxPalette>)> + '_ {
-        // Safety: retained layer ids have a `layer_palettes` value.
+        // Safety: retained layer ids have a `layer_palette_ids` value.
         self.layer_ids
             .iter()
-            .map(move |id| (id, *unsafe { self.layer_palettes.get(id) }))
+            .map(move |id| (id, *unsafe { self.layer_palette_ids.get(id) }))
     }
 
-    /// Adds a layer referencing `palette` after any existing ones and returns
-    /// its id, back-filling every voxel with `default_material`. Live voxels
-    /// keep `default_material` until [`retain_voxel`](Self::retain_voxel)
-    /// overwrites it, so widening the layer set never requires re-adding voxels.
-    /// The same palette may back several layers. `default_material` should be
-    /// one of `palette`'s materials; a live voxel keeping it is checked by
+    /// Adds a layer referencing `palette_id` after any existing ones and
+    /// returns its id, back-filling every voxel with `default_material_id`.
+    /// Live voxels keep `default_material_id` until
+    /// [`retain_voxel`](Self::retain_voxel) overwrites it, so widening the
+    /// layer set never requires re-adding voxels. The same palette may back
+    /// several layers. `default_material_id` should be one of `palette_id`'s
+    /// materials; a live voxel keeping it is checked by
     /// [`VoxMain::add_object`](crate::VoxMain::add_object) on insert.
     pub fn add_layer(
         &mut self,
-        palette: U32Id<BVoxPalette>,
-        default_material: U32Id<BVoxMaterial>,
+        palette_id: U32Id<BVoxPalette>,
+        default_material_id: U32Id<BVoxMaterial>,
     ) -> U32Id<BVoxLayer> {
         let layer_id = self.layer_ids.retain();
-        self.layer_palettes.retain(layer_id, palette);
+        self.layer_palette_ids.retain(layer_id, palette_id);
 
         let mut column = IdField::new();
         for voxel_id in &self.voxel_ids {
-            column.retain(voxel_id, default_material);
+            column.retain(voxel_id, default_material_id);
         }
 
         self.samples.retain(layer_id, column);
@@ -267,29 +268,29 @@ impl VoxObject {
         layer_id
     }
 
-    /// Makes the voxel at `id` live with one `samples` material per layer, in
-    /// [`iter_layers`](Self::iter_layers) order. Errors, changing nothing, if
-    /// `id` is outside the grid or `samples` has the wrong length.
+    /// Makes the voxel at `id` live with one `sample_ids` material per layer,
+    /// in [`iter_layers`](Self::iter_layers) order. Errors, changing nothing,
+    /// if `id` is outside the grid or `sample_ids` has the wrong length.
     pub fn retain_voxel(
         &mut self,
         id: U32Id<BVoxVoxel>,
-        samples: &[U32Id<BVoxMaterial>],
+        sample_ids: &[U32Id<BVoxMaterial>],
     ) -> Result<()> {
         if (id.to_u32() as usize) >= self.liveness.len() {
-            return Err(Error::UnknownVoxel { voxel: id });
+            return Err(Error::UnknownVoxel { voxel_id: id });
         }
-        if samples.len() != self.layer_ids.len() {
+        if sample_ids.len() != self.layer_ids.len() {
             return Err(Error::SampleArity {
-                samples: samples.len(),
+                samples: sample_ids.len(),
                 layers: self.layer_ids.len(),
             });
         }
 
         self.liveness.set_live(id, true);
-        for (layer_id, &material) in self.layer_ids.iter().zip(samples) {
+        for (layer_id, &material_id) in self.layer_ids.iter().zip(sample_ids) {
             // Safety: the dense grid gives every layer a slot for `id`.
             let column = unsafe { self.samples.get_mut(layer_id) };
-            unsafe { column.set(id, material) };
+            unsafe { column.set(id, material_id) };
         }
         Ok(())
     }
@@ -298,7 +299,7 @@ impl VoxObject {
     /// Errors, changing nothing, if `id` is outside the grid.
     pub fn release_voxel(&mut self, id: U32Id<BVoxVoxel>) -> Result<()> {
         if (id.to_u32() as usize) >= self.liveness.len() {
-            return Err(Error::UnknownVoxel { voxel: id });
+            return Err(Error::UnknownVoxel { voxel_id: id });
         }
         self.liveness.set_live(id, false);
         Ok(())
@@ -308,7 +309,7 @@ impl VoxObject {
     /// `Clone`; rebuild them against the cloned pools.
     pub fn clone_object(&self) -> Self {
         // The inner sample columns own storage, so clone them one by one;
-        // `layer_palettes` is Copy-valued and clones wholesale below.
+        // `layer_palette_ids` is Copy-valued and clones wholesale below.
         let mut samples = IdField::new();
         for layer_id in self.layer_ids.iter() {
             // Safety: retained layer ids have a sample column.
@@ -323,7 +324,7 @@ impl VoxObject {
             voxel_ids: self.voxel_ids.clone(),
             liveness: self.liveness.clone(),
             layer_ids: self.layer_ids.clone(),
-            layer_palettes: self.layer_palettes.clone(),
+            layer_palette_ids: self.layer_palette_ids.clone(),
             samples,
         }
     }
@@ -334,13 +335,13 @@ impl VoxObject {
     /// hole until [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
     pub fn remove_layer(&mut self, id: U32Id<BVoxLayer>) -> Result<()> {
         if !self.layer_ids.is_retained(id) {
-            return Err(Error::UnknownLayer { layer: id });
+            return Err(Error::UnknownLayer { layer_id: id });
         }
 
         // Safety: a retained layer id has a value in both columns. Sample
         // materials are Copy, so dropping the inner column frees its storage
         // with nothing to release per voxel.
-        unsafe { self.layer_palettes.release(id) };
+        unsafe { self.layer_palette_ids.release(id) };
         unsafe { self.samples.release(id) };
         self.layer_ids.release_stable(id);
         Ok(())
@@ -352,7 +353,7 @@ impl VoxObject {
     /// past [`layer_count`](Self::layer_count).
     pub fn move_layer(&mut self, id: U32Id<BVoxLayer>, index: usize) -> Result<()> {
         if !self.layer_ids.is_retained(id) {
-            return Err(Error::UnknownLayer { layer: id });
+            return Err(Error::UnknownLayer { layer_id: id });
         }
         let count = self.layer_ids.len();
         if index >= count {
@@ -368,48 +369,48 @@ impl VoxObject {
         self.layer_ids.index_of(id)
     }
 
-    /// Removes every layer referencing `palette`. Two layers may reference the
-    /// same palette, so this removes every match. Used by
+    /// Removes every layer referencing `palette_id`. Two layers may reference
+    /// the same palette, so this removes every match. Used by
     /// [`VoxMain::remove_palette`](crate::VoxMain::remove_palette) to detach an
     /// object from a palette being removed.
-    pub(crate) fn remove_layers_to(&mut self, palette: U32Id<BVoxPalette>) {
-        let doomed: Vec<_> = self
+    pub(crate) fn remove_layers_to(&mut self, palette_id: U32Id<BVoxPalette>) {
+        let doomed_ids: Vec<_> = self
             .iter_layers()
-            .filter(|&(_, p)| p == palette)
+            .filter(|&(_, layer_palette_id)| layer_palette_id == palette_id)
             .map(|(id, _)| id)
             .collect();
 
-        for id in doomed {
+        for id in doomed_ids {
             self.remove_layer(id)
                 .expect("an iterated layer is one of the object's");
         }
     }
 
-    /// Repoints every live voxel that samples `old` through a layer referencing
-    /// `palette` to `new`. Used by
+    /// Repoints every live voxel that samples `old_id` through a layer
+    /// referencing `palette_id` to `new_id`. Used by
     /// [`VoxMain::remove_material`](crate::VoxMain::remove_material) before the
     /// old material is dropped.
     pub(crate) fn repaint_material(
         &mut self,
-        palette: U32Id<BVoxPalette>,
-        old: U32Id<BVoxMaterial>,
-        new: U32Id<BVoxMaterial>,
+        palette_id: U32Id<BVoxPalette>,
+        old_id: U32Id<BVoxMaterial>,
+        new_id: U32Id<BVoxMaterial>,
     ) {
         let layer_ids: Vec<_> = self.layer_ids.iter().collect();
-        let live: Vec<_> = self.liveness.iter_live().collect();
+        let live_ids: Vec<_> = self.liveness.iter_live().collect();
         for layer_id in layer_ids {
-            // Safety: retained layer ids have a `layer_palettes` value.
-            if *unsafe { self.layer_palettes.get(layer_id) } != palette {
+            // Safety: retained layer ids have a `layer_palette_ids` value.
+            if *unsafe { self.layer_palette_ids.get(layer_id) } != palette_id {
                 continue;
             }
 
             // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };
-            for &voxel_id in &live {
+            for &voxel_id in &live_ids {
                 // Safety: the dense grid gives every layer a slot for every
                 // voxel id.
-                if *unsafe { column.get(voxel_id) } == old {
-                    *unsafe { column.get_mut(voxel_id) } = new;
+                if *unsafe { column.get(voxel_id) } == old_id {
+                    *unsafe { column.get_mut(voxel_id) } = new_id;
                 }
             }
         }
@@ -427,31 +428,31 @@ impl VoxObject {
         material_remaps: &IdVec<BVoxPalette, IdRemap<BVoxMaterial, u32>>,
     ) {
         let layer_ids: Vec<_> = self.layer_ids.iter().collect();
-        let live: Vec<_> = self.liveness.iter_live().collect();
+        let live_ids: Vec<_> = self.liveness.iter_live().collect();
         for layer_id in layer_ids {
             // Translate the referenced palette id to its relabeled value.
-            // Safety: retained layer ids have a `layer_palettes` value.
-            let old_palette = *unsafe { self.layer_palettes.get(layer_id) };
-            let new_palette = palette_remap
-                .new_id(old_palette)
+            // Safety: retained layer ids have a `layer_palette_ids` value.
+            let old_palette_id = *unsafe { self.layer_palette_ids.get(layer_id) };
+            let new_palette_id = palette_remap
+                .new_id(old_palette_id)
                 .expect("a layer references a live palette in a valid state");
             // Safety: same retained layer id.
-            *unsafe { self.layer_palettes.get_mut(layer_id) } = new_palette;
+            *unsafe { self.layer_palette_ids.get_mut(layer_id) } = new_palette_id;
 
             // Translate each live voxel's sample material through that palette's
             // relabeling; non-live voxels' filler cells are exempt.
-            let material_remap = &material_remaps[old_palette.to_usize_id()];
+            let material_remap = &material_remaps[old_palette_id.to_usize_id()];
             // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };
-            for &voxel_id in &live {
+            for &voxel_id in &live_ids {
                 // Safety: the dense grid gives every layer a slot for every
                 // voxel id.
-                let material = *unsafe { column.get(voxel_id) };
-                let new_material = material_remap
-                    .new_id(material)
+                let material_id = *unsafe { column.get(voxel_id) };
+                let new_material_id = material_remap
+                    .new_id(material_id)
                     .expect("a live voxel samples a live material in a valid state");
                 // Safety: same dense slot.
-                *unsafe { column.get_mut(voxel_id) } = new_material;
+                *unsafe { column.get_mut(voxel_id) } = new_material_id;
             }
         }
 
@@ -461,7 +462,7 @@ impl VoxObject {
         // Safety: both columns were in sync with the pre-gc layer pool, and
         // nothing has retained or released since.
         unsafe { self.samples.gc(&layer_remap) };
-        unsafe { self.layer_palettes.gc(&layer_remap) };
+        unsafe { self.layer_palette_ids.gc(&layer_remap) };
     }
 }
 
@@ -471,7 +472,7 @@ impl Drop for VoxObject {
         // materials are Copy, so dropping the inner columns frees their storage
         // and the voxel pool needs no part here.
         unsafe {
-            self.layer_palettes.release_all(&self.layer_ids);
+            self.layer_palette_ids.release_all(&self.layer_ids);
             self.samples.release_all(&self.layer_ids);
         }
     }
@@ -483,7 +484,7 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
 
-    fn material(index: u32) -> U32Id<BVoxMaterial> {
+    fn material_id(index: u32) -> U32Id<BVoxMaterial> {
         U32Id::from_u32(index)
     }
 
@@ -519,28 +520,28 @@ mod tests {
     #[test]
     fn retain_and_release_track_liveness_and_samples() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        let layer = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
+        let layer_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
         let id = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
 
         assert!(!object.is_live(id));
-        assert_eq!(object.voxel_material(id, layer), None);
+        assert_eq!(object.voxel_material(id, layer_id), None);
 
-        assert_eq!(object.retain_voxel(id, &[material(7)]), Ok(()));
+        assert_eq!(object.retain_voxel(id, &[material_id(7)]), Ok(()));
         assert!(object.is_live(id));
         assert_eq!(object.live_count(), 1);
-        assert_eq!(object.voxel_material(id, layer), Some(material(7)));
+        assert_eq!(object.voxel_material(id, layer_id), Some(material_id(7)));
         assert_eq!(object.iter_live().collect::<Vec<_>>(), [id]);
 
         assert_eq!(object.release_voxel(id), Ok(()));
         assert!(!object.is_live(id));
         assert_eq!(object.live_count(), 0);
-        assert_eq!(object.voxel_material(id, layer), None);
+        assert_eq!(object.voxel_material(id, layer_id), None);
     }
 
     #[test]
     fn retain_voxel_rejects_bad_input_without_changing_state() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
+        object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
         let id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
 
         // Wrong sample arity and an out-of-grid id are both rejected,
@@ -553,16 +554,16 @@ mod tests {
             })
         );
         assert_eq!(
-            object.retain_voxel(U32Id::from_u32(99), &[material(0)]),
+            object.retain_voxel(U32Id::from_u32(99), &[material_id(0)]),
             Err(Error::UnknownVoxel {
-                voxel: U32Id::from_u32(99)
+                voxel_id: U32Id::from_u32(99)
             })
         );
         assert_eq!(object.live_count(), 0);
         assert_eq!(
             object.release_voxel(U32Id::from_u32(99)),
             Err(Error::UnknownVoxel {
-                voxel: U32Id::from_u32(99)
+                voxel_id: U32Id::from_u32(99)
             })
         );
     }
@@ -593,14 +594,17 @@ mod tests {
     #[test]
     fn iter_live_samples_walks_a_layer_in_raster_order() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        let layer = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
-        let first = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        let second = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
-        object.retain_voxel(second, &[material(7)]).unwrap();
-        object.retain_voxel(first, &[material(2)]).unwrap();
+        let layer_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
+        let first_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        let second_id = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
+        object.retain_voxel(second_id, &[material_id(7)]).unwrap();
+        object.retain_voxel(first_id, &[material_id(2)]).unwrap();
 
-        let samples: Vec<_> = object.iter_live_samples(layer).unwrap().collect();
-        assert_eq!(samples, [(first, material(2)), (second, material(7))]);
+        let samples: Vec<_> = object.iter_live_samples(layer_id).unwrap().collect();
+        assert_eq!(
+            samples,
+            [(first_id, material_id(2)), (second_id, material_id(7))]
+        );
         // A layer id the object never minted is rejected.
         assert!(object.iter_live_samples(U32Id::from_u32(9)).is_none());
     }
@@ -608,18 +612,18 @@ mod tests {
     #[test]
     fn clone_object_is_an_independent_deep_copy() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        let layer = object.add_layer(U32Id::<BVoxPalette>::from_u32(3), material(0));
+        let layer_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(3), material_id(0));
         let id = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
-        object.retain_voxel(id, &[material(7)]).unwrap();
+        object.retain_voxel(id, &[material_id(7)]).unwrap();
 
         let copy = object.clone_object();
         assert_eq!(copy.name(), "o");
         assert_eq!(copy.bounds(), TyVector3U32::new(2, 1, 1));
         assert_eq!(copy.live_count(), 1);
-        assert_eq!(copy.voxel_material(id, layer), Some(material(7)));
+        assert_eq!(copy.voxel_material(id, layer_id), Some(material_id(7)));
         assert_eq!(
             copy.iter_layers().collect::<Vec<_>>(),
-            [(layer, U32Id::<BVoxPalette>::from_u32(3))]
+            [(layer_id, U32Id::<BVoxPalette>::from_u32(3))]
         );
 
         // Editing the original must not touch the copy.
@@ -631,110 +635,110 @@ mod tests {
     #[test]
     fn two_layers_may_share_a_palette() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        let palette = U32Id::<BVoxPalette>::from_u32(0);
+        let palette_id = U32Id::<BVoxPalette>::from_u32(0);
         // Two layers referencing the same palette is allowed; layers do not
         // merge.
-        let first = object.add_layer(palette, material(0));
-        let second = object.add_layer(palette, material(0));
+        let first_id = object.add_layer(palette_id, material_id(0));
+        let second_id = object.add_layer(palette_id, material_id(0));
         let id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object
-            .retain_voxel(id, &[material(2), material(5)])
+            .retain_voxel(id, &[material_id(2), material_id(5)])
             .unwrap();
 
         assert_eq!(object.layer_count(), 2);
-        assert_eq!(object.voxel_material(id, first), Some(material(2)));
-        assert_eq!(object.voxel_material(id, second), Some(material(5)));
+        assert_eq!(object.voxel_material(id, first_id), Some(material_id(2)));
+        assert_eq!(object.voxel_material(id, second_id), Some(material_id(5)));
         assert_eq!(
             object.iter_layers().collect::<Vec<_>>(),
-            [(first, palette), (second, palette)]
+            [(first_id, palette_id), (second_id, palette_id)]
         );
-        assert_eq!(object.layer_palette(first), Some(palette));
-        assert_eq!(object.layer_palette(U32Id::from_u32(9)), None);
+        assert_eq!(object.layer_palette_id(first_id), Some(palette_id));
+        assert_eq!(object.layer_palette_id(U32Id::from_u32(9)), None);
     }
 
     #[test]
     fn remove_layer_preserves_the_survivors_order() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        let first = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
-        let middle = object.add_layer(U32Id::<BVoxPalette>::from_u32(1), material(0));
-        let last = object.add_layer(U32Id::<BVoxPalette>::from_u32(2), material(0));
+        let first_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
+        let middle_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(1), material_id(0));
+        let last_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(2), material_id(0));
 
         // Removing the first of three is the smallest case a swap-remove would
-        // get wrong, listing `last` before `middle`.
-        assert_eq!(object.remove_layer(first), Ok(()));
+        // get wrong, listing `last_id` before `middle_id`.
+        assert_eq!(object.remove_layer(first_id), Ok(()));
         assert_eq!(
             object.iter_layers().collect::<Vec<_>>(),
             [
-                (middle, U32Id::<BVoxPalette>::from_u32(1)),
-                (last, U32Id::<BVoxPalette>::from_u32(2)),
+                (middle_id, U32Id::<BVoxPalette>::from_u32(1)),
+                (last_id, U32Id::<BVoxPalette>::from_u32(2)),
             ]
         );
 
         // A layer added after the removal appends at the end of the order.
-        let added = object.add_layer(U32Id::<BVoxPalette>::from_u32(3), material(0));
+        let added_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(3), material_id(0));
         assert_eq!(
             object.iter_layers().map(|(id, _)| id).collect::<Vec<_>>(),
-            [middle, last, added]
+            [middle_id, last_id, added_id]
         );
     }
 
     #[test]
     fn move_layer_reorders_the_listing_and_validates() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        let first = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
-        let second = object.add_layer(U32Id::<BVoxPalette>::from_u32(1), material(0));
-        let third = object.add_layer(U32Id::<BVoxPalette>::from_u32(2), material(0));
-        assert_eq!(object.layer_index(second), Some(1));
+        let first_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
+        let second_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(1), material_id(0));
+        let third_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(2), material_id(0));
+        assert_eq!(object.layer_index(second_id), Some(1));
 
-        assert_eq!(object.move_layer(third, 0), Ok(()));
+        assert_eq!(object.move_layer(third_id, 0), Ok(()));
         assert_eq!(
             object.iter_layers().map(|(id, _)| id).collect::<Vec<_>>(),
-            [third, first, second]
+            [third_id, first_id, second_id]
         );
-        assert_eq!(object.layer_index(third), Some(0));
+        assert_eq!(object.layer_index(third_id), Some(0));
 
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(
-            object.move_layer(third, 3),
+            object.move_layer(third_id, 3),
             Err(Error::IndexPastCount { index: 3, count: 3 })
         );
         assert_eq!(
             object.move_layer(U32Id::from_u32(9), 0),
             Err(Error::UnknownLayer {
-                layer: U32Id::from_u32(9)
+                layer_id: U32Id::from_u32(9)
             })
         );
         assert_eq!(object.layer_index(U32Id::from_u32(9)), None);
         assert_eq!(
             object.iter_layers().map(|(id, _)| id).collect::<Vec<_>>(),
-            [third, first, second]
+            [third_id, first_id, second_id]
         );
     }
 
     #[test]
     fn remove_layer_drops_its_samples_leaving_others() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        let first = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material(0));
-        let second = object.add_layer(U32Id::<BVoxPalette>::from_u32(1), material(0));
+        let first_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
+        let second_id = object.add_layer(U32Id::<BVoxPalette>::from_u32(1), material_id(0));
         let id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object
-            .retain_voxel(id, &[material(5), material(6)])
+            .retain_voxel(id, &[material_id(5), material_id(6)])
             .unwrap();
 
-        assert_eq!(object.remove_layer(first), Ok(()));
+        assert_eq!(object.remove_layer(first_id), Ok(()));
         assert_eq!(object.layer_count(), 1);
         assert_eq!(
-            object.remove_layer(first),
-            Err(Error::UnknownLayer { layer: first })
+            object.remove_layer(first_id),
+            Err(Error::UnknownLayer { layer_id: first_id })
         ); // already gone
 
         // The surviving layer still resolves to palette 1, material 6, and a
         // voxel now expects exactly one sample.
-        assert_eq!(object.voxel_material(id, second), Some(material(6)));
+        assert_eq!(object.voxel_material(id, second_id), Some(material_id(6)));
         assert_eq!(
             object.iter_layers().collect::<Vec<_>>(),
-            [(second, U32Id::<BVoxPalette>::from_u32(1))]
+            [(second_id, U32Id::<BVoxPalette>::from_u32(1))]
         );
-        assert_eq!(object.retain_voxel(id, &[material(6)]), Ok(()));
+        assert_eq!(object.retain_voxel(id, &[material_id(6)]), Ok(()));
     }
 }

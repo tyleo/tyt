@@ -120,7 +120,7 @@ fn material_attribute<'a>(
 ) -> Option<(&'a VoxValuePool, U32Id<BVoxValuePoolValue>)> {
     let material = used.material(index)?;
     let palette = used.palette();
-    let property = state.palette(palette)?.property_by_name(key)?;
+    let property = state.palette(palette)?.property_id_by_name(key)?;
     state.material_value(palette, material, property)
 }
 

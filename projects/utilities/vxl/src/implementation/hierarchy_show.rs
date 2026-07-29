@@ -147,16 +147,16 @@ impl<'a> Scene<'a> {
         let mut object_placements: IdVec<BVoxObject, usize> =
             IdVec::from_vec(vec![0; state.object_count()]);
 
-        for &root in state.root_hierarchy_nodes() {
+        for &root in state.root_hierarchy_node_ids() {
             bump(&mut node_placements, root);
         }
 
         for (_, node) in state.iter_hierarchy_nodes() {
-            for &child in &node.child_nodes {
+            for &child in &node.child_node_ids {
                 bump(&mut node_placements, child);
             }
 
-            for &object in &node.child_objects {
+            for &object in &node.child_object_ids {
                 bump(&mut object_placements, object);
             }
         }
@@ -170,7 +170,7 @@ impl<'a> Scene<'a> {
 
     /// The scene's roots, hierarchy node ids in listing order.
     fn roots(&self) -> &[NodeId] {
-        self.state.root_hierarchy_nodes()
+        self.state.root_hierarchy_node_ids()
     }
 
     /// Placement count of node `id`, or `0` when `id` is outside the sized
@@ -289,7 +289,7 @@ impl<'a> Scene<'a> {
 
         let world = parent_world.compose(&node.transform);
 
-        for &object in &node.child_objects {
+        for &object in &node.child_object_ids {
             out.push(Placement {
                 path: child_path(&path, self.object_name(object)),
                 entity: Entity::Object(object),
@@ -298,7 +298,7 @@ impl<'a> Scene<'a> {
             });
         }
 
-        for &child in &node.child_nodes {
+        for &child in &node.child_node_ids {
             let child_path = child_path(&path, self.node_name(child));
             self.enumerate_from(child, child_path, world, Some(this), branch, out);
         }
@@ -704,7 +704,7 @@ impl Walk<'_> {
         // The child nodes that lead to a selection and the child objects that are
         // selected; without a filter every child shows.
         let mut child_nodes: Vec<(NodeId, String)> = Vec::new();
-        for &child in &node.child_nodes {
+        for &child in &node.child_node_ids {
             let child_path = child_path(path, scene.node_name(child));
             if self
                 .filter
@@ -716,7 +716,7 @@ impl Walk<'_> {
         }
 
         let mut child_objects: Vec<ObjectId> = Vec::new();
-        for &object in &node.child_objects {
+        for &object in &node.child_object_ids {
             let object_path = child_path(path, scene.object_name(object));
             if self
                 .filter
@@ -1230,13 +1230,13 @@ mod tests {
     fn node_xf(
         name: &str,
         transform: TyTransformF64,
-        child_nodes: Vec<U32Id<BVoxHierarchyNode>>,
-        child_objects: Vec<U32Id<BVoxObject>>,
+        child_node_ids: Vec<U32Id<BVoxHierarchyNode>>,
+        child_object_ids: Vec<U32Id<BVoxObject>>,
     ) -> VoxHierarchyNode {
         VoxHierarchyNode {
             name: name.to_owned(),
-            child_nodes,
-            child_objects,
+            child_node_ids,
+            child_object_ids,
             transform,
         }
     }
@@ -1257,13 +1257,13 @@ mod tests {
     /// A node with the given name, child nodes, and child objects.
     fn node(
         name: &str,
-        child_nodes: Vec<U32Id<BVoxHierarchyNode>>,
-        child_objects: Vec<U32Id<BVoxObject>>,
+        child_node_ids: Vec<U32Id<BVoxHierarchyNode>>,
+        child_object_ids: Vec<U32Id<BVoxObject>>,
     ) -> VoxHierarchyNode {
         VoxHierarchyNode {
             name: name.to_owned(),
-            child_nodes,
-            child_objects,
+            child_node_ids,
+            child_object_ids,
             ..VoxHierarchyNode::default()
         }
     }
@@ -1275,7 +1275,7 @@ mod tests {
         let root = state
             .add_hierarchy_node(node("root", vec![], vec![body]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
         state
     }
 
@@ -1296,7 +1296,7 @@ mod tests {
         let root = state
             .add_hierarchy_node(node("root", vec![arm_a, arm_b], vec![]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
         state
     }
 
@@ -1322,7 +1322,7 @@ mod tests {
         let root = state
             .add_hierarchy_node(node("root", vec![arm_a, arm_b], vec![]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
         state
     }
 
@@ -1368,7 +1368,7 @@ mod tests {
         let root = state
             .add_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
         state
     }
 
@@ -1389,7 +1389,7 @@ mod tests {
         let root = state
             .add_hierarchy_node(node("root", vec![], vec![body]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
         state
     }
 
@@ -1495,7 +1495,7 @@ mod tests {
         state
             .add_hierarchy_node(node("spareNode", vec![], vec![spare_child]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
 
         let output = show(&state, None, false, false, false);
         assert_eq!(
@@ -1592,7 +1592,7 @@ mod tests {
         state
             .add_hierarchy_node(node("spareNode", vec![], vec![spare_child]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
 
         // The orphan object matches; nothing else does, so only it shows.
         let output = show_many(&state, &["looseMesh"], false, false, false);
@@ -1649,7 +1649,7 @@ mod tests {
         let root = state
             .add_hierarchy_node(node("", vec![], vec![body]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
 
         let output = show(&state, Some("*"), false, true, false);
         assert_eq!(
@@ -1678,7 +1678,7 @@ mod tests {
                 vec![body],
             ))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
 
         let view = TransformView {
             world: false,
@@ -1760,7 +1760,7 @@ mod tests {
         let root = state
             .add_hierarchy_node(node("root", vec![], vec![body]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
 
         let views = HierarchyViews {
             edit_origins: Some(OriginView {
@@ -1803,7 +1803,7 @@ mod tests {
         let root = state
             .add_hierarchy_node(node("root", vec![], vec![body]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
 
         let views = HierarchyViews {
             edit_extents: Some(2),
@@ -1852,7 +1852,7 @@ mod tests {
                 vec![body],
             ))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
 
         let local = render_views(
             &state,
@@ -1907,7 +1907,7 @@ mod tests {
                 vec![],
             ))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
 
         let view = TransformView {
             world: true,
@@ -2045,7 +2045,7 @@ mod tests {
         let root = state
             .add_hierarchy_node(node("", vec![], vec![mesh]))
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
 
         let output = show(&state, None, false, false, false);
         assert_eq!(

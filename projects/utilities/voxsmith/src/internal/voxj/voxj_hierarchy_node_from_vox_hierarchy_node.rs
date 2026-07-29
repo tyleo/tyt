@@ -8,12 +8,12 @@ pub fn voxj_hierarchy_node_from_vox_hierarchy_node(node: &VoxHierarchyNode) -> V
     VoxjHierarchyNode {
         name: node.name.clone(),
         child_nodes: node
-            .child_nodes
+            .child_node_ids
             .iter()
             .map(|id| id.to_u32() as usize)
             .collect(),
         child_objects: node
-            .child_objects
+            .child_object_ids
             .iter()
             .map(|id| id.to_u32() as usize)
             .collect(),

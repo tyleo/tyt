@@ -40,7 +40,7 @@ pub fn to_qbt_file(state: &VoxMain) -> Result<QbtFile> {
         )));
     }
 
-    let roots = state.root_hierarchy_nodes();
+    let roots = state.root_hierarchy_node_ids();
     let [root] = roots else {
         return Err(Error::invalid(format!(
             "a Qubicle .qbt file needs exactly one root, but the state has {}",
@@ -135,7 +135,7 @@ fn rebuild_children(
     nodes: &[QubicleQbtNode],
 ) -> Result<Vec<QbtNode>> {
     hierarchy
-        .child_nodes
+        .child_node_ids
         .iter()
         .map(|&child| rebuild_node(child, state, nodes))
         .collect()
@@ -146,7 +146,7 @@ fn rebuild_children(
 /// keeps the original dimensions and voxel positions directly.
 fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result<&'a VoxObject> {
     let object_id = *hierarchy
-        .child_objects
+        .child_object_ids
         .first()
         .ok_or_else(|| Error::invalid("a matrix or compound node has no object"))?;
     state

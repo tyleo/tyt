@@ -13,10 +13,10 @@ pub fn order_palette_colors(state: &mut VoxMain, palette: U32Id<BVoxPalette>) {
     let Some(palette_ref) = state.palette(palette) else {
         return;
     };
-    let Some(color) = palette_ref.property_by_name(BASE_COLOR_FACTOR) else {
+    let Some(color) = palette_ref.property_id_by_name(BASE_COLOR_FACTOR) else {
         return;
     };
-    let Some(pool) = palette_ref.property(color).map(|property| property.pool) else {
+    let Some(pool) = palette_ref.property(color).map(|property| property.pool_id) else {
         return;
     };
     let Some(pool_ref) = state.value_pool(pool) else {

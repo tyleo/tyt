@@ -17,12 +17,12 @@ pub fn vox_hierarchy_node_from_voxj_hierarchy_node(
 ) -> Result<VoxHierarchyNode> {
     Ok(VoxHierarchyNode {
         name: node.name.clone(),
-        child_nodes: node
+        child_node_ids: node
             .child_nodes
             .iter()
             .map(|&index| U32Id::from_u32(index as u32))
             .collect(),
-        child_objects: node
+        child_object_ids: node
             .child_objects
             .iter()
             .map(|&index| U32Id::from_u32(index as u32))

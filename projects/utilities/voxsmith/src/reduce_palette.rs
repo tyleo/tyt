@@ -70,7 +70,7 @@ fn reduce_materials(
     }
 
     // The `baseColorFactor` property; only colored materials cluster.
-    let color_property = palette_ref.property_by_name(BASE_COLOR_FACTOR);
+    let color_property = palette_ref.property_id_by_name(BASE_COLOR_FACTOR);
 
     let colored: Vec<(u32, [u8; 4])> = match color_property {
         Some(property) => palette_ref
@@ -798,7 +798,7 @@ mod tests {
         let property = state
             .palette(palette)
             .unwrap()
-            .property_by_name(BASE_COLOR_FACTOR)
+            .property_id_by_name(BASE_COLOR_FACTOR)
             .unwrap();
         match state
             .material_value(palette, material, property)
@@ -991,7 +991,7 @@ mod tests {
         let object = state.object(object).unwrap();
         let (layer, _) = object.iter_layers().next().unwrap();
         let palette_ref = state.palette(palette).unwrap();
-        let tag = palette_ref.property_by_name("tag").unwrap();
+        let tag = palette_ref.property_id_by_name("tag").unwrap();
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         let material = object.voxel_material(voxel, layer).unwrap();
         match state
@@ -1185,8 +1185,8 @@ mod tests {
     /// in the first palette that carries it.
     fn pool_len(state: &VoxMain, name: &str) -> usize {
         for (_, palette) in state.iter_palettes() {
-            if let Some(property) = palette.property_by_name(name) {
-                let pool = palette.property(property).unwrap().pool;
+            if let Some(property) = palette.property_id_by_name(name) {
+                let pool = palette.property(property).unwrap().pool_id;
                 return state.value_pool(pool).unwrap().values_len();
             }
         }

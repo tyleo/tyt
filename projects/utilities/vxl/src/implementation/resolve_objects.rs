@@ -97,7 +97,7 @@ fn node_paths(state: &VoxMain) -> Vec<(NodeId, String)> {
 
     let mut stack = Vec::new();
 
-    for &root in state.root_hierarchy_nodes() {
+    for &root in state.root_hierarchy_node_ids() {
         walk_node_paths(state, root, "", &mut stack, &mut paths);
     }
 
@@ -131,7 +131,7 @@ fn walk_node_paths(
 
     stack.push(node_id);
 
-    for &child in &node.child_nodes {
+    for &child in &node.child_node_ids {
         walk_node_paths(state, child, &path, stack, paths);
     }
 
@@ -155,7 +155,7 @@ fn object_paths(
             continue;
         };
 
-        for &child_object in &node.child_objects {
+        for &child_object in &node.child_object_ids {
             let Some(object_index) = objects.iter().position(|&id| id == child_object) else {
                 continue;
             };
@@ -201,13 +201,13 @@ mod tests {
     fn node(
         state: &mut VoxMain,
         name: &str,
-        child_nodes: Vec<NodeId>,
-        child_objects: Vec<ObjectId>,
+        child_node_ids: Vec<NodeId>,
+        child_object_ids: Vec<ObjectId>,
     ) -> NodeId {
         let node = VoxHierarchyNode {
             name: name.to_owned(),
-            child_nodes,
-            child_objects,
+            child_node_ids,
+            child_object_ids,
             ..Default::default()
         };
 
@@ -251,7 +251,7 @@ mod tests {
         let b = object(&mut state, "b");
 
         let root = node(&mut state, "root", vec![], vec![a, b]);
-        state.push_root_hierarchy_node(root).unwrap();
+        state.push_root_hierarchy_node_id(root).unwrap();
 
         assert_eq!(
             select_objects(&state, &globs(&["root/b"]), &[]).unwrap(),
@@ -267,7 +267,7 @@ mod tests {
         let b = object(&mut state, "b");
 
         let group = node(&mut state, "group", vec![], vec![a, b]);
-        state.push_root_hierarchy_node(group).unwrap();
+        state.push_root_hierarchy_node_id(group).unwrap();
 
         assert_eq!(
             select_objects(&state, &globs(&["group"]), &[]).unwrap(),
@@ -285,7 +285,7 @@ mod tests {
         let keep = node(&mut state, "keep", vec![], vec![a]);
         let drop = node(&mut state, "drop", vec![], vec![b]);
         let root = node(&mut state, "root", vec![keep, drop], vec![]);
-        state.push_root_hierarchy_node(root).unwrap();
+        state.push_root_hierarchy_node_id(root).unwrap();
 
         // Select everything under root, then subtract the `drop` branch;
         // last-match-wins leaves only `a`.
@@ -316,7 +316,7 @@ mod tests {
         let c = object(&mut state, "c");
 
         let root = node(&mut state, "root", vec![], vec![a, b, c]);
-        state.push_root_hierarchy_node(root).unwrap();
+        state.push_root_hierarchy_node_id(root).unwrap();
 
         // A `root/**` path glob selects every object under root; an index-0
         // selector re-selects `a`, which still appears once, in document order.

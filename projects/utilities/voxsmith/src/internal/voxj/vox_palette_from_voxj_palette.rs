@@ -76,8 +76,8 @@ mod tests {
         assert_eq!(out.property_count(), 2);
         assert_eq!(out.material_count(), 3);
 
-        let base = out.property_by_name("baseColorFactor").unwrap();
-        let metallic = out.property_by_name("metallicFactor").unwrap();
+        let base = out.property_id_by_name("baseColorFactor").unwrap();
+        let metallic = out.property_id_by_name("metallicFactor").unwrap();
         let material_2 = out.iter_materials().nth(2).unwrap();
         // Material 2 reads value id 2 for base color and 1 for metallic.
         assert_eq!(out.value_id(material_2, base), Some(U32Id::from_u32(2)));

@@ -61,7 +61,7 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
     // listing position, which may lie ahead of it.
     let (nodes, roots) = build_hierarchy(file)?;
     state.add_hierarchy_nodes(nodes)?;
-    state.set_root_hierarchy_nodes(roots)?;
+    state.set_root_hierarchy_node_ids(roots)?;
 
     let ext = MagicaVoxelExtWrapper {
         magica_voxel: magica_voxel_ext(file),
@@ -283,40 +283,40 @@ fn build_hierarchy(
                 referenced[child] = true;
                 VoxHierarchyNode {
                     name,
-                    child_nodes: vec![U32Id::from_u32(child as u32)],
-                    child_objects: Vec::new(),
+                    child_node_ids: vec![U32Id::from_u32(child as u32)],
+                    child_object_ids: Vec::new(),
                     transform: transform_from_frames(&transform.frames),
                 }
             }
             MVoxSceneNodeBody::Group(group) => {
-                let mut child_nodes = Vec::with_capacity(group.children.len());
+                let mut child_node_ids = Vec::with_capacity(group.children.len());
                 let mut seen = HashSet::new();
                 for &child in &group.children {
                     let child = resolve(&position_of_id, child)?;
                     referenced[child] = true;
                     if seen.insert(child) {
-                        child_nodes.push(U32Id::from_u32(child as u32));
+                        child_node_ids.push(U32Id::from_u32(child as u32));
                     }
                 }
                 VoxHierarchyNode {
                     name,
-                    child_nodes,
-                    child_objects: Vec::new(),
+                    child_node_ids,
+                    child_object_ids: Vec::new(),
                     transform: TyTransformF64::default(),
                 }
             }
             MVoxSceneNodeBody::Shape(shape) => {
-                let mut child_objects = Vec::with_capacity(shape.models.len());
+                let mut child_object_ids = Vec::with_capacity(shape.models.len());
                 let mut seen = HashSet::new();
                 for model in &shape.models {
                     if seen.insert(model.model) {
-                        child_objects.push(U32Id::<BVoxObject>::from_u32(model.model));
+                        child_object_ids.push(U32Id::<BVoxObject>::from_u32(model.model));
                     }
                 }
                 VoxHierarchyNode {
                     name,
-                    child_nodes: Vec::new(),
-                    child_objects,
+                    child_node_ids: Vec::new(),
+                    child_object_ids,
                     transform: TyTransformF64::default(),
                 }
             }
@@ -765,26 +765,26 @@ mod tests {
             .add_hierarchy_nodes(vec![
                 VoxHierarchyNode {
                     name: "group".to_owned(),
-                    child_nodes: vec![node(1)],
-                    child_objects: Vec::new(),
+                    child_node_ids: vec![node(1)],
+                    child_object_ids: Vec::new(),
                     transform: TyTransformF64::default(),
                 },
                 VoxHierarchyNode {
                     name: "wide".to_owned(),
-                    child_nodes: Vec::new(),
-                    child_objects: vec![object(0)],
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object(0)],
                     transform: placed_at(5.0, 0.0, 0.0),
                 },
                 VoxHierarchyNode {
                     name: "unit".to_owned(),
-                    child_nodes: Vec::new(),
-                    child_objects: vec![object(1)],
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object(1)],
                     transform: placed_at(0.0, 3.0, 0.0),
                 },
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![node(0), node(2)])
+            .set_root_hierarchy_node_ids(vec![node(0), node(2)])
             .unwrap();
 
         state.validate().expect("a well-formed source state");

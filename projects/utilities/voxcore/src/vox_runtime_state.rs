@@ -41,7 +41,7 @@ pub struct VoxRuntimeState {
     pub(crate) hierarchy_nodes: IdField<BVoxHierarchyNode, VoxHierarchyNode>,
 
     /// The scene's roots: hierarchy node ids.
-    pub(crate) root_hierarchy_nodes: Vec<U32Id<BVoxHierarchyNode>>,
+    pub(crate) root_hierarchy_node_ids: Vec<U32Id<BVoxHierarchyNode>>,
 }
 
 impl VoxRuntimeState {
@@ -81,7 +81,7 @@ impl VoxRuntimeState {
             hierarchy_nodes,
             object_ids: self.object_ids.clone(),
             objects,
-            root_hierarchy_nodes: self.root_hierarchy_nodes.clone(),
+            root_hierarchy_node_ids: self.root_hierarchy_node_ids.clone(),
         }
     }
 }

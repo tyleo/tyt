@@ -115,7 +115,7 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
 /// other alpha is kept.
 fn synthesize_goxl(state: &VoxMain) -> Result<GoxlFile> {
     let mut builder = GoxlBuilder::default();
-    for &root in state.root_hierarchy_nodes() {
+    for &root in state.root_hierarchy_node_ids() {
         builder.emit_node(state, root, TyVector3I32::new(0, 0, 0))?;
     }
     for (id, object) in state.iter_objects() {
@@ -159,8 +159,8 @@ impl GoxlBuilder {
             let world = parent + position.round().as_ivec3();
             (
                 node.name.clone(),
-                node.child_objects.clone(),
-                node.child_nodes.clone(),
+                node.child_object_ids.clone(),
+                node.child_node_ids.clone(),
                 world,
             )
         };

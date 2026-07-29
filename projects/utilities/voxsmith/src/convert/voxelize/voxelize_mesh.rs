@@ -102,14 +102,14 @@ pub fn voxelize_mesh(
     };
 
     let node = VoxHierarchyNode {
-        child_objects: vec![object_id],
+        child_object_ids: vec![object_id],
         transform,
         ..Default::default()
     };
 
     let node_id = state.add_hierarchy_node(node)?;
 
-    state.push_root_hierarchy_node(node_id)?;
+    state.push_root_hierarchy_node_id(node_id)?;
 
     Ok(state)
 }
@@ -627,7 +627,7 @@ mod tests {
         let (_, object) = state.iter_objects().next().unwrap();
         let (layer, palette_id) = object.iter_layers().next().unwrap();
         let palette = state.palette(palette_id).unwrap();
-        let property = palette.property_by_name(EMISSIVE_STRENGTH).unwrap();
+        let property = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
         let voxel = object.voxel_id(position).unwrap();
         let material = object.voxel_material(voxel, layer).unwrap();
         match state
@@ -653,8 +653,8 @@ mod tests {
         // deduplicated pool's one value.
         let (_, palette) = state.iter_palettes().next().unwrap();
         assert_eq!(palette.iter_materials().count(), 2);
-        let property = palette.property_by_name(EMISSIVE_STRENGTH).unwrap();
-        let pool = palette.property(property).unwrap().pool;
+        let property = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
+        let pool = palette.property(property).unwrap().pool_id;
         assert_eq!(state.value_pool(pool).unwrap().values_len(), 1);
         assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 2.0);
         assert_eq!(sampled_strength(&state, TyVector3U32::new(1, 0, 0)), 2.0);

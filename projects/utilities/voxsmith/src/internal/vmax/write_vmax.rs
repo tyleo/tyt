@@ -127,7 +127,7 @@ pub fn write_vmax(
         let node = placement.node;
         let ext_node = &placement.ext;
 
-        if node.child_objects.is_empty() {
+        if node.child_object_ids.is_empty() {
             let ind = node_ind(ext_node, true, &mut ind_counter);
             let (center, half) = subtree_box_local(state, placement.id, &mut box_memo);
             groups.push(group_from_node(node, ext_node, ind, center, half));
@@ -139,7 +139,7 @@ pub fn write_vmax(
         // exactly. A synthesized node may carry several, such as a Goxel
         // layer's blocks; the extra objects become sibling object-nodes under
         // the same parent.
-        for (slot, object_id) in node.child_objects.iter().enumerate() {
+        for (slot, object_id) in node.child_object_ids.iter().enumerate() {
             let object_id = *object_id;
             let object = state.object(object_id).expect("a valid node child object");
             let folded = folded_ref(state, object);
@@ -452,7 +452,7 @@ fn ext_placements<'a>(state: &'a VoxMain, voxel_max: &VoxelMaxExt) -> Vec<Placem
 fn synthesize_placements(state: &VoxMain) -> Vec<Placement<'_>> {
     let mut placements = Vec::new();
     let mut counter = 0usize;
-    for &root in state.root_hierarchy_nodes() {
+    for &root in state.root_hierarchy_node_ids() {
         push_placement(state, root, None, &mut counter, &mut placements);
     }
     placements
@@ -488,7 +488,7 @@ fn push_placement<'a>(
         selected: None,
     };
     placements.push(Placement { id, node, ext });
-    for &child in &node.child_nodes {
+    for &child in &node.child_node_ids {
         push_placement(state, child, Some(ext_id.clone()), counter, placements);
     }
 }
@@ -635,7 +635,7 @@ struct FoldedRef {
 fn folded_ref(state: &VoxMain, object: &VoxObject) -> Option<FoldedRef> {
     let (_, palette_id) = object.iter_layers().next()?;
     let palette = state.palette(palette_id)?;
-    let color = palette.property_by_name(BASE_COLOR_FACTOR);
+    let color = palette.property_id_by_name(BASE_COLOR_FACTOR);
     let materials = palette
         .iter_properties()
         .filter(|(id, _)| Some(*id) != color)
@@ -930,7 +930,7 @@ fn property_pool(
     palette: U32Id<BVoxPalette>,
     property: U32Id<BVoxProperty>,
 ) -> Option<&VoxValuePool> {
-    let pool = state.palette(palette)?.property(property)?.pool;
+    let pool = state.palette(palette)?.property(property)?.pool_id;
     state.value_pool(pool)
 }
 
@@ -1270,11 +1270,11 @@ fn subtree_box_local(
         .hierarchy_node(node_id)
         .expect("a valid hierarchy node");
     let mut bounds: Option<([f64; 3], [f64; 3])> = None;
-    for &object in &node.child_objects {
+    for &object in &node.child_object_ids {
         let (center, half) = object_box_local(state, object);
         extend_bounds(&mut bounds, center, half);
     }
-    for &child in &node.child_nodes {
+    for &child in &node.child_node_ids {
         let (child_center, child_half) = subtree_box_local(state, child, memo);
         let transform = state
             .hierarchy_node(child)

@@ -37,7 +37,7 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
     // Every layer node is a root, in stored order.
     let nodes = build_layer_nodes(file, state.object_count())?;
     let roots = state.add_hierarchy_nodes(nodes)?;
-    state.set_root_hierarchy_nodes(roots)?;
+    state.set_root_hierarchy_node_ids(roots)?;
 
     let ext = GoxelExtWrapper {
         goxel: goxel_ext(file),
@@ -148,7 +148,7 @@ fn build_object(
 fn build_layer_nodes(file: &GoxlFile, object_count: usize) -> Result<Vec<VoxHierarchyNode>> {
     let mut nodes = Vec::with_capacity(file.layers.len());
     for layer in &file.layers {
-        let mut child_objects = Vec::new();
+        let mut child_object_ids = Vec::new();
         let mut seen = HashSet::new();
         for placement in &layer.blocks {
             let index = placement.block_index;
@@ -158,13 +158,13 @@ fn build_layer_nodes(file: &GoxlFile, object_count: usize) -> Result<Vec<VoxHier
                 )));
             }
             if seen.insert(index) {
-                child_objects.push(U32Id::<BVoxObject>::from_u32(index as u32));
+                child_object_ids.push(U32Id::<BVoxObject>::from_u32(index as u32));
             }
         }
         nodes.push(VoxHierarchyNode {
             name: layer.name.clone(),
-            child_nodes: Vec::new(),
-            child_objects,
+            child_node_ids: Vec::new(),
+            child_object_ids,
             transform: TyTransformF64::default(),
         });
     }
@@ -517,26 +517,26 @@ mod tests {
             .add_hierarchy_nodes(vec![
                 VoxHierarchyNode {
                     name: "group".to_owned(),
-                    child_nodes: vec![node(1)],
-                    child_objects: Vec::new(),
+                    child_node_ids: vec![node(1)],
+                    child_object_ids: Vec::new(),
                     transform: TyTransformF64::default(),
                 },
                 VoxHierarchyNode {
                     name: "wide".to_owned(),
-                    child_nodes: Vec::new(),
-                    child_objects: vec![object(0)],
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object(0)],
                     transform: placed_at(5.0, 0.0, 0.0),
                 },
                 VoxHierarchyNode {
                     name: "unit".to_owned(),
-                    child_nodes: Vec::new(),
-                    child_objects: vec![object(1)],
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object(1)],
                     transform: placed_at(0.0, 3.0, 0.0),
                 },
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![node(0), node(2)])
+            .set_root_hierarchy_node_ids(vec![node(0), node(2)])
             .unwrap();
 
         state.validate().expect("a well-formed source state");

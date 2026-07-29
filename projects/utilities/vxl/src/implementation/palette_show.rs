@@ -180,7 +180,7 @@ fn expand_property(
             }
         }
         PropertyRef::Key { key, component } => {
-            if palette.property_by_name(key).is_none() {
+            if palette.property_id_by_name(key).is_none() {
                 if palette_is_wild {
                     return Ok(());
                 }
@@ -213,12 +213,12 @@ fn build_collection(
     format: PaletteShowFormat,
 ) -> Result<Collection> {
     let property_id = palette
-        .property_by_name(key)
+        .property_id_by_name(key)
         .expect("caller verified the property is present");
     let pool_id = palette
         .property(property_id)
         .expect("a property id from this palette resolves")
-        .pool;
+        .pool_id;
     let pool = state
         .value_pool(pool_id)
         .expect("a property references a pool the state holds");

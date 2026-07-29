@@ -335,7 +335,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -395,26 +395,26 @@ mod tests {
             .add_hierarchy_nodes(vec![
                 VoxHierarchyNode {
                     name: "group".to_owned(),
-                    child_nodes: vec![node(1)],
-                    child_objects: Vec::new(),
+                    child_node_ids: vec![node(1)],
+                    child_object_ids: Vec::new(),
                     transform: TyTransformF64::default(),
                 },
                 VoxHierarchyNode {
                     name: "wide".to_owned(),
-                    child_nodes: Vec::new(),
-                    child_objects: vec![object(0)],
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object(0)],
                     transform: placed_at(5.0, 0.0, 0.0),
                 },
                 VoxHierarchyNode {
                     name: "unit".to_owned(),
-                    child_nodes: Vec::new(),
-                    child_objects: vec![object(1)],
+                    child_node_ids: Vec::new(),
+                    child_object_ids: vec![object(1)],
                     transform: placed_at(0.0, 3.0, 0.0),
                 },
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![node(0), node(2)])
+            .set_root_hierarchy_node_ids(vec![node(0), node(2)])
             .unwrap();
 
         state.validate().expect("a well-formed source state");
@@ -440,7 +440,7 @@ mod tests {
                 origin[1] + position.y.round() as i32,
                 origin[2] + position.z.round() as i32,
             ];
-            for &object in &node.child_objects {
+            for &object in &node.child_object_ids {
                 let object = state.object(object).expect("a valid object");
                 let cell_color = resolve_cell_color_or_transparent(state, object)
                     .expect("the test state colors resolve");
@@ -459,13 +459,13 @@ mod tests {
                     voxels.insert((world, rgba));
                 }
             }
-            for &child in &node.child_nodes {
+            for &child in &node.child_node_ids {
                 walk(state, child, translation, voxels);
             }
         }
 
         let mut voxels = BTreeSet::new();
-        for &root in state.root_hierarchy_nodes() {
+        for &root in state.root_hierarchy_node_ids() {
             walk(state, root, [0, 0, 0], &mut voxels);
         }
         voxels
@@ -537,7 +537,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -587,8 +587,8 @@ mod tests {
         state
             .add_hierarchy_node(VoxHierarchyNode {
                 name: "layer".to_owned(),
-                child_nodes: Vec::new(),
-                child_objects: vec![object(0), object(1)],
+                child_node_ids: Vec::new(),
+                child_object_ids: vec![object(0), object(1)],
                 transform: TyTransformF64::new(
                     TyVector3F64::new(10.0, 0.0, 0.0),
                     TyQuaternionF64::IDENTITY,
@@ -596,7 +596,7 @@ mod tests {
                 ),
             })
             .unwrap();
-        state.set_root_hierarchy_nodes(vec![node(0)]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![node(0)]).unwrap();
         state.validate().expect("a well-formed source state");
 
         let file = to_vmax_file(&state, VoxelMaxColorFormat::Png).unwrap();
@@ -671,8 +671,8 @@ mod tests {
     fn object_node(name: &str, object: u32, transform: TyTransformF64) -> VoxHierarchyNode {
         VoxHierarchyNode {
             name: name.to_owned(),
-            child_nodes: Vec::new(),
-            child_objects: vec![U32Id::<BVoxObject>::from_u32(object)],
+            child_node_ids: Vec::new(),
+            child_object_ids: vec![U32Id::<BVoxObject>::from_u32(object)],
             transform,
         }
     }
@@ -681,11 +681,11 @@ mod tests {
     fn group_node(name: &str, children: &[u32], transform: TyTransformF64) -> VoxHierarchyNode {
         VoxHierarchyNode {
             name: name.to_owned(),
-            child_nodes: children
+            child_node_ids: children
                 .iter()
                 .map(|&c| U32Id::<BVoxHierarchyNode>::from_u32(c))
                 .collect(),
-            child_objects: Vec::new(),
+            child_object_ids: Vec::new(),
             transform,
         }
     }
@@ -713,7 +713,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -756,7 +756,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -812,7 +812,7 @@ mod tests {
                 .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
                 .unwrap();
             state
-                .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+                .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
                 .unwrap();
             state.validate().unwrap();
             to_vmax_file(&state, VoxelMaxColorFormat::Png)
@@ -853,7 +853,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![
+            .set_root_hierarchy_node_ids(vec![
                 U32Id::<BVoxHierarchyNode>::from_u32(0),
                 U32Id::<BVoxHierarchyNode>::from_u32(1),
             ])
@@ -905,7 +905,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![
+            .set_root_hierarchy_node_ids(vec![
                 U32Id::<BVoxHierarchyNode>::from_u32(0),
                 U32Id::<BVoxHierarchyNode>::from_u32(1),
             ])
@@ -955,8 +955,8 @@ mod tests {
             .add_hierarchy_nodes(vec![
                 VoxHierarchyNode {
                     name: "layer".to_owned(),
-                    child_nodes: vec![U32Id::<BVoxHierarchyNode>::from_u32(1)],
-                    child_objects: vec![
+                    child_node_ids: vec![U32Id::<BVoxHierarchyNode>::from_u32(1)],
+                    child_object_ids: vec![
                         U32Id::<BVoxObject>::from_u32(0),
                         U32Id::<BVoxObject>::from_u32(1),
                         U32Id::<BVoxObject>::from_u32(2),
@@ -967,7 +967,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1029,7 +1029,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![
+            .set_root_hierarchy_node_ids(vec![
                 U32Id::<BVoxHierarchyNode>::from_u32(0),
                 U32Id::<BVoxHierarchyNode>::from_u32(1),
             ])
@@ -1072,7 +1072,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![
+            .set_root_hierarchy_node_ids(vec![
                 U32Id::<BVoxHierarchyNode>::from_u32(0),
                 U32Id::<BVoxHierarchyNode>::from_u32(1),
             ])
@@ -1111,7 +1111,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![
+            .set_root_hierarchy_node_ids(vec![
                 U32Id::<BVoxHierarchyNode>::from_u32(0),
                 U32Id::<BVoxHierarchyNode>::from_u32(1),
             ])
@@ -1156,7 +1156,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1192,7 +1192,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, transform))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1276,7 +1276,7 @@ mod tests {
                 .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
                 .unwrap();
             state
-                .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+                .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
                 .unwrap();
             state.validate().unwrap();
 
@@ -1292,14 +1292,14 @@ mod tests {
             let reloaded = from_vmax_file(&file).unwrap();
             let (palette_id, material_palette) = reloaded
                 .iter_palettes()
-                .find(|(_, palette)| palette.property_by_name("metallicFactor").is_some())
+                .find(|(_, palette)| palette.property_id_by_name("metallicFactor").is_some())
                 .expect("a material palette survives");
             let material = material_palette
                 .iter_materials()
                 .next()
                 .expect("one material");
             let scalar = |attribute: &str| -> f64 {
-                let property = material_palette.property_by_name(attribute).unwrap();
+                let property = material_palette.property_id_by_name(attribute).unwrap();
                 let (pool, index) = reloaded
                     .material_value(palette_id, material, property)
                     .unwrap();
@@ -1309,7 +1309,7 @@ mod tests {
                 }
             };
             let flag = |attribute: &str| -> bool {
-                let property = material_palette.property_by_name(attribute).unwrap();
+                let property = material_palette.property_id_by_name(attribute).unwrap();
                 let (pool, index) = reloaded
                     .material_value(palette_id, material, property)
                     .unwrap();
@@ -1370,7 +1370,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1379,11 +1379,11 @@ mod tests {
         let reloaded = from_vmax_file(&file).unwrap();
         let (palette_id, material_palette) = reloaded
             .iter_palettes()
-            .find(|(_, palette)| palette.property_by_name("emissiveStrength").is_some())
+            .find(|(_, palette)| palette.property_id_by_name("emissiveStrength").is_some())
             .expect("an emissive palette survives");
         let material = material_palette.iter_materials().next().unwrap();
         let property = material_palette
-            .property_by_name("emissiveStrength")
+            .property_id_by_name("emissiveStrength")
             .unwrap();
         let (pool, index) = reloaded
             .material_value(palette_id, material, property)
@@ -1428,7 +1428,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1462,7 +1462,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(3.0, 4.0, 5.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1504,7 +1504,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1546,7 +1546,7 @@ mod tests {
             ])
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1581,7 +1581,7 @@ mod tests {
             .add_hierarchy_node(object_node("empty", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1623,7 +1623,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1668,7 +1668,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1698,7 +1698,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
 
@@ -1732,7 +1732,7 @@ mod tests {
             .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
-            .set_root_hierarchy_nodes(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
+            .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
             .unwrap();
         state.validate().unwrap();
         state

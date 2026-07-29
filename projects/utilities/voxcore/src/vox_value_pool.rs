@@ -145,7 +145,7 @@ impl VoxValuePool {
             None => Ok(self),
             Some(VoxValuePoolFlaw::Empty) => Err(Error::EmptyPoolValues),
             Some(VoxValuePoolFlaw::Bound) => Err(Error::MalformedPoolBound),
-            Some(VoxValuePoolFlaw::Value(value)) => Err(Error::MalformedPoolValue { value }),
+            Some(VoxValuePoolFlaw::Value(value_id)) => Err(Error::MalformedPoolValue { value_id }),
         }
     }
 
@@ -267,7 +267,7 @@ impl VoxValuePool {
     /// [`values_len`](Self::values_len).
     pub fn move_value(&mut self, id: U32Id<BVoxValuePoolValue>, index: usize) -> Result<()> {
         if !self.value_ids.is_retained(id) {
-            return Err(Error::UnknownPoolValue { value: id });
+            return Err(Error::UnknownPoolValue { value_id: id });
         }
         let count = self.value_ids.len();
         if index >= count {
@@ -341,13 +341,13 @@ impl VoxValuePool {
         self.value_ids.release_stable(id);
     }
 
-    /// Rewrites the listing order to `new_order`. `None`, changing nothing, if
-    /// `new_order` does not list every value id exactly once.
+    /// Rewrites the listing order to `new_order_ids`. `None`, changing nothing, if
+    /// `new_order_ids` does not list every value id exactly once.
     pub(crate) fn set_value_order(
         &mut self,
-        new_order: &[U32Id<BVoxValuePoolValue>],
+        new_order_ids: &[U32Id<BVoxValuePoolValue>],
     ) -> Option<()> {
-        self.value_ids.try_set_order(new_order)
+        self.value_ids.try_set_order(new_order_ids)
     }
 
     /// Compacts the value id pool back to a contiguous `0..len` in listing
@@ -540,7 +540,7 @@ mod tests {
     use crate::{BVoxValuePoolValue, Error, VoxBound, VoxValuePool, VoxValuePoolValueRef};
     use branded_id::U32Id;
 
-    fn value(index: u32) -> U32Id<BVoxValuePoolValue> {
+    fn value_id(index: u32) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index)
     }
 
@@ -599,9 +599,9 @@ mod tests {
     fn move_value_reorders_the_listing_and_validates() {
         let mut pool =
             VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]).unwrap();
-        let b = U32Id::from_u32(1);
+        let b_id = U32Id::from_u32(1);
 
-        assert_eq!(pool.move_value(b, 2), Ok(()));
+        assert_eq!(pool.move_value(b_id, 2), Ok(()));
         let order: Vec<_> = pool
             .iter_values()
             .map(|(_, value)| match value {
@@ -610,17 +610,17 @@ mod tests {
             })
             .collect();
         assert_eq!(order, ["a", "c", "b"]);
-        assert_eq!(pool.value_index(b), Some(2));
+        assert_eq!(pool.value_index(b_id), Some(2));
 
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(
-            pool.move_value(b, 3),
+            pool.move_value(b_id, 3),
             Err(Error::IndexPastCount { index: 3, count: 3 })
         );
         assert_eq!(
             pool.move_value(U32Id::from_u32(9), 0),
             Err(Error::UnknownPoolValue {
-                value: U32Id::from_u32(9)
+                value_id: U32Id::from_u32(9)
             })
         );
     }
@@ -687,7 +687,9 @@ mod tests {
         assert_eq!(
             VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 2.0])
                 .unwrap_err(),
-            Error::MalformedPoolValue { value: value(1) }
+            Error::MalformedPoolValue {
+                value_id: value_id(1)
+            }
         );
     }
 
@@ -695,7 +697,9 @@ mod tests {
     fn float_rejects_a_non_finite_value() {
         assert_eq!(
             VoxValuePool::float(VoxBound::None, VoxBound::None, vec![f64::NAN]).unwrap_err(),
-            Error::MalformedPoolValue { value: value(0) }
+            Error::MalformedPoolValue {
+                value_id: value_id(0)
+            }
         );
     }
 
@@ -712,7 +716,9 @@ mod tests {
                 vec![MAX, MAX + 1],
             )
             .unwrap_err(),
-            Error::MalformedPoolValue { value: value(1) }
+            Error::MalformedPoolValue {
+                value_id: value_id(1)
+            }
         );
     }
 
@@ -720,7 +726,9 @@ mod tests {
     fn srgb_rejects_a_component_out_of_range() {
         assert_eq!(
             VoxValuePool::srgb(vec![[0.0, 0.0, 0.0], [0.0, 1.5, 0.0]]).unwrap_err(),
-            Error::MalformedPoolValue { value: value(1) }
+            Error::MalformedPoolValue {
+                value_id: value_id(1)
+            }
         );
     }
 
@@ -734,7 +742,9 @@ mod tests {
     fn linear_rgba_rejects_a_negative_component() {
         assert_eq!(
             VoxValuePool::linear_rgba(vec![[0.0, -0.1, 0.0, 1.0]]).unwrap_err(),
-            Error::MalformedPoolValue { value: value(0) }
+            Error::MalformedPoolValue {
+                value_id: value_id(0)
+            }
         );
     }
 
@@ -744,7 +754,9 @@ mod tests {
         // `>= 0` test; the finiteness guard must reject it.
         assert_eq!(
             VoxValuePool::linear_rgb(vec![[0.0, f64::INFINITY, 0.0]]).unwrap_err(),
-            Error::MalformedPoolValue { value: value(0) }
+            Error::MalformedPoolValue {
+                value_id: value_id(0)
+            }
         );
     }
 }

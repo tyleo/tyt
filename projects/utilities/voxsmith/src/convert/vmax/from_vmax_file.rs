@@ -82,7 +82,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
     // it in the listing.
     let (nodes, roots) = build_hierarchy(scene, &object_transforms, &object_refs);
     state.add_hierarchy_nodes(nodes)?;
-    state.set_root_hierarchy_nodes(roots)?;
+    state.set_root_hierarchy_node_ids(roots)?;
 
     // Each object's preserved editor state, aligned by object id with the
     // objects, read off the contents files.
@@ -725,8 +725,8 @@ fn build_hierarchy(
         parents.push(group.parent_id.as_deref());
         nodes.push(VoxHierarchyNode {
             name: group.name.clone(),
-            child_nodes: Vec::new(),
-            child_objects: Vec::new(),
+            child_node_ids: Vec::new(),
+            child_object_ids: Vec::new(),
             transform: group_transform(group),
         });
     }
@@ -735,8 +735,8 @@ fn build_hierarchy(
         parents.push(object.parent_id.as_deref());
         nodes.push(VoxHierarchyNode {
             name: object.name.clone(),
-            child_nodes: Vec::new(),
-            child_objects: vec![U32Id::<BVoxObject>::from_u32(object_refs[index] as u32)],
+            child_node_ids: Vec::new(),
+            child_object_ids: vec![U32Id::<BVoxObject>::from_u32(object_refs[index] as u32)],
             transform: object_transforms[index],
         });
     }
@@ -745,7 +745,7 @@ fn build_hierarchy(
     for (node, parent) in parents.iter().enumerate() {
         match parent.and_then(|pid| node_of_id.get(pid)) {
             Some(&parent_node) => nodes[parent_node]
-                .child_nodes
+                .child_node_ids
                 .push(U32Id::from_u32(node as u32)),
             None => roots.push(U32Id::from_u32(node as u32)),
         }
