@@ -1,9 +1,10 @@
 use crate::{
-    BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxPoolValue,
-    BVoxProperty, BVoxValuePool, BVoxVoxel, Error, Result, VoxGcRemap, VoxHierarchyNode, VoxObject,
-    VoxPalette, VoxPoolFlaw, VoxRuntimeState, VoxValue, VoxValuePool,
+    BVoxEffectiveProperty, BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette,
+    BVoxPoolValue, BVoxProperty, BVoxValuePool, BVoxVoxel, Error, Result, VoxEffectivePalette,
+    VoxEffectiveProperty, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxPoolFlaw,
+    VoxRuntimeState, VoxValue, VoxValuePool,
 };
-use branded_id::{IdVec, U32Id, soa::IdRemap};
+use branded_id::{IdVec, U32Id, UsizeId, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyQuaternionExt, TyVector3F64, TyVector3I32, UNIT_ROTATION_TOLERANCE};
 
@@ -462,6 +463,58 @@ impl VoxMain {
         let value_id = palette.value_id(material, property)?;
         let pool = self.value_pool(palette.property(property)?.pool)?;
         Some((pool, value_id))
+    }
+
+    /// The effective palette of `object`, resolving its layer override rule
+    /// once. Layers are walked front to back, each palette property landing
+    /// at its name's entry, so the last supplying layer wins while the first
+    /// fixes the entry's position. Errors if a layer references a palette
+    /// that is not one of this state's.
+    pub fn effective_palette<'a>(
+        &'a self,
+        object: &'a VoxObject,
+    ) -> Result<VoxEffectivePalette<'a>> {
+        let mut properties: IdVec<BVoxEffectiveProperty, VoxEffectiveProperty<'a>> =
+            IdVec::default();
+        let mut property_by_name: HashMap<&'a str, UsizeId<BVoxEffectiveProperty>> = HashMap::new();
+
+        for (layer_id, palette_id) in object.iter_layers() {
+            let Some(palette) = self.palette(palette_id) else {
+                return Err(Error::LayerPaletteRef {
+                    layer: layer_id,
+                    palette: palette_id,
+                });
+            };
+
+            for (property_id, property) in palette.iter_properties() {
+                let pool = self
+                    .value_pool(property.pool)
+                    .expect("a property names a live value pool");
+
+                let entry = VoxEffectiveProperty {
+                    name: property.name.as_str(),
+                    layer_id,
+                    palette_id,
+                    palette,
+                    property_id,
+                    pool,
+                };
+
+                match property_by_name.get(property.name.as_str()) {
+                    Some(&effective_id) => properties[effective_id] = entry,
+                    None => {
+                        let effective_id = properties.push(entry);
+                        property_by_name.insert(property.name.as_str(), effective_id);
+                    }
+                }
+            }
+        }
+
+        Ok(VoxEffectivePalette {
+            object,
+            properties,
+            property_by_name,
+        })
     }
 
     /// Adds a hierarchy node at the end of the listing, returning its id. The

@@ -76,22 +76,21 @@ fn matrix_from_object(
     let mut voxels = vec![QbVoxel::default(); volume];
 
     let cell_color = resolve_cell_color_or_transparent(state, object)?;
-    let live: Vec<_> = object.iter_live().collect();
-    if live.len() != provenance.visibility.len() {
+    let live_count = object.live_count();
+    if live_count != provenance.visibility.len() {
         return Err(Error::invalid(format!(
-            "qubicle-qb ext has {} visibility bytes but the object has {} solid voxels",
-            provenance.visibility.len(),
-            live.len()
+            "qubicle-qb ext has {} visibility bytes but the object has {live_count} solid voxels",
+            provenance.visibility.len()
         )));
     }
 
-    for (&voxel, &visibility) in live.iter().zip(&provenance.visibility) {
+    for (voxel_id, &visibility) in object.iter_live().zip(&provenance.visibility) {
         let position = object
-            .voxel_position(voxel)
+            .voxel_position(voxel_id)
             .expect("a live voxel is within the grid");
         // A Qubicle voxel stores no alpha, so the sampled color's alpha is
         // dropped.
-        let [r, g, b, _] = cell_color(voxel);
+        let [r, g, b, _] = cell_color.color(voxel_id);
         // Storage order: index = x + size_x * (y + size_y * z).
         let index = position.x as usize
             + size_x as usize * (position.y as usize + size_y as usize * position.z as usize);

@@ -212,7 +212,7 @@ impl GoxlBuilder {
                 (world_position[2] - origin[2]) as usize,
             ];
             let index = local[0] + stride * (local[1] + stride * local[2]);
-            let rgba = cell_color(voxel);
+            let rgba = cell_color.color(voxel);
             let block = tiles
                 .entry(origin)
                 .or_insert_with(|| vec![GoxlVoxel::default(); GoxlBlock::SIZE.pow(3) as usize]);
@@ -270,7 +270,7 @@ fn block_from_object(state: &VoxMain, object: &VoxObject) -> Result<GoxlBlock> {
                     .voxel_id(TyVector3U32::new(x, y, z))
                     .filter(|&id| object.is_live(id))
                     .map(|id| {
-                        let [r, g, b, a] = cell_color(id);
+                        let [r, g, b, a] = cell_color.color(id);
                         GoxlVoxel { r, g, b, a }
                     })
                     .unwrap_or_default();

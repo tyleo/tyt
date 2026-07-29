@@ -7,7 +7,7 @@ pub fn resolve_cell_color_or_transparent<'a>(
     state: &VoxMain,
     object: &'a VoxObject,
 ) -> Result<CellColor<'a>> {
-    Ok(resolve_cell_color(state, object)?.unwrap_or_else(|| Box::new(|_| [0, 0, 0, 0])))
+    Ok(resolve_cell_color(state, object)?.unwrap_or_else(|| CellColor::transparent(object)))
 }
 
 #[cfg(test)]
@@ -28,10 +28,12 @@ mod tests {
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.add_layer(palette_id, U32Id::from_u32(0));
-        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        object.retain_voxel(voxel, &[U32Id::from_u32(0)]).unwrap();
+        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object
+            .retain_voxel(voxel_id, &[U32Id::from_u32(0)])
+            .unwrap();
 
         let cell_color = resolve_cell_color_or_transparent(&state, &object).unwrap();
-        assert_eq!(cell_color(voxel), [0, 0, 0, 0]);
+        assert_eq!(cell_color.color(voxel_id), [0, 0, 0, 0]);
     }
 }

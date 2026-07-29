@@ -179,22 +179,21 @@ fn matrix_from_object(
     let mut voxels = vec![QbclVoxel::default(); volume];
 
     let cell_color = resolve_cell_color_or_transparent(state, object)?;
-    let live: Vec<_> = object.iter_live().collect();
-    if live.len() != masks.len() {
+    let live_count = object.live_count();
+    if live_count != masks.len() {
         return Err(Error::invalid(format!(
-            "qubicle-qbcl ext has {} masks but the object has {} solid voxels",
-            masks.len(),
-            live.len()
+            "qubicle-qbcl ext has {} masks but the object has {live_count} solid voxels",
+            masks.len()
         )));
     }
 
-    for (&voxel, &mask) in live.iter().zip(masks) {
+    for (voxel_id, &mask) in object.iter_live().zip(masks) {
         let position = object
-            .voxel_position(voxel)
+            .voxel_position(voxel_id)
             .expect("a live voxel is within the grid");
         // A Qubicle voxel stores no alpha, so the sampled color's alpha is
         // dropped.
-        let [r, g, b, _] = cell_color(voxel);
+        let [r, g, b, _] = cell_color.color(voxel_id);
         // Storage order: index = y + size_y * (z + size_z * x).
         let index = position.y as usize
             + size_y as usize * (position.z as usize + size_z as usize * position.x as usize);
@@ -384,7 +383,7 @@ impl QbclBuilder {
                 .expect("a live voxel is within the grid");
             // A Qubicle voxel stores no alpha, so the sampled color's alpha is
             // dropped.
-            let [r, g, b, _] = cell_color(voxel);
+            let [r, g, b, _] = cell_color.color(voxel);
             // Storage order: index = y + size_y * (z + size_z * x).
             let index = cell.y as usize
                 + size_y as usize * (cell.z as usize + size_z as usize * cell.x as usize);

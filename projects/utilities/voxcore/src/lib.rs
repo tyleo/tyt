@@ -2,6 +2,7 @@
 
 //! Core types for working with voxels.
 
+mod b_vox_effective_property;
 mod b_vox_hierarchy_node;
 mod b_vox_layer;
 mod b_vox_material;
@@ -14,6 +15,8 @@ mod b_vox_voxel;
 mod error;
 mod result;
 mod vox_bound;
+mod vox_effective_palette;
+mod vox_effective_property;
 mod vox_gc_remap;
 mod vox_hierarchy_node;
 mod vox_liveness;
@@ -29,6 +32,7 @@ mod vox_value;
 mod vox_value_pool;
 mod vox_value_pool_kind;
 
+pub use b_vox_effective_property::*;
 pub use b_vox_hierarchy_node::*;
 pub use b_vox_layer::*;
 pub use b_vox_material::*;
@@ -41,6 +45,8 @@ pub use b_vox_voxel::*;
 pub use error::*;
 pub use result::*;
 pub use vox_bound::*;
+pub use vox_effective_palette::*;
+pub use vox_effective_property::*;
 pub use vox_gc_remap::*;
 pub use vox_hierarchy_node::*;
 pub use vox_liveness::*;

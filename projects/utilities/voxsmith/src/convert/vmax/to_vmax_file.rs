@@ -455,7 +455,7 @@ mod tests {
                         translation[1] + object_origin.y + grid.y as i32,
                         translation[2] + object_origin.z + grid.z as i32,
                     ];
-                    let rgba = cell_color(voxel);
+                    let rgba = cell_color.color(voxel);
                     voxels.insert((world, rgba));
                 }
             }

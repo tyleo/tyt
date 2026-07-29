@@ -303,7 +303,7 @@ fn synthesize_palette(state: &VoxMain) -> Result<(MVoxPalette, HashMap<[u8; 4], 
             continue;
         };
         for voxel in object.iter_live() {
-            let rgba = cell_color(voxel);
+            let rgba = cell_color.color(voxel);
             if color_index.contains_key(&rgba) {
                 continue;
             }
@@ -347,7 +347,10 @@ fn synthesize_model(
             let position = object
                 .voxel_position(voxel)
                 .expect("a live voxel is within the grid");
-            let index = color_index.get(&cell_color(voxel)).copied().unwrap_or(0);
+            let index = color_index
+                .get(&cell_color.color(voxel))
+                .copied()
+                .unwrap_or(0);
             MVoxVoxel {
                 x: position.x as u8,
                 y: position.y as u8,
