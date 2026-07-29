@@ -121,22 +121,28 @@ fn reduce_materials(
 
     // Drop every non-representative material onto its representative, then
     // compact. After dithering no voxel samples a non-representative, so the
-    // repaint is a no-op and only the drop remains.
-    for cluster in &clusters {
-        let representative = representative(cluster);
-
-        for point in cluster {
-            if point.material != representative {
-                state
-                    .remove_material(
-                        palette,
+    // repaint is a no-op and only the drop remains. One batched removal keeps
+    // the repaint to a single pass over the voxels, rather than one per
+    // dropped material.
+    let replacements: HashMap<_, _> = clusters
+        .iter()
+        .flat_map(|cluster| {
+            let representative = representative(cluster);
+            cluster
+                .iter()
+                .filter(move |point| point.material != representative)
+                .map(move |point| {
+                    (
                         U32Id::from_u32(point.material),
                         U32Id::from_u32(representative),
                     )
-                    .expect("the cluster's materials are live and distinct");
-            }
-        }
-    }
+                })
+        })
+        .collect();
+
+    state
+        .remove_materials(palette, &replacements)
+        .expect("the cluster's materials are live and distinct");
 
     state.gc();
 

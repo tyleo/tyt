@@ -789,45 +789,73 @@ impl VoxMain {
     /// Removes `material_id` from `palette_id`, first repainting every live
     /// voxel that samples it onto `replacement_id` so no voxel is left
     /// without a material. Leaves a hole until [`gc`](Self::gc) renumbers.
-    /// Errors, changing nothing, if:
-    ///
-    /// 1. `palette_id` is not one of this state's palettes
-    /// 2. `material_id` or `replacement_id` is not one of that palette's
-    ///    materials
-    /// 3. `replacement_id` is `material_id` itself
+    /// Errors, changing nothing, under the
+    /// [`remove_materials`](Self::remove_materials) rules.
     pub fn remove_material(
         &mut self,
         palette_id: U32Id<BVoxPalette>,
         material_id: U32Id<BVoxMaterial>,
         replacement_id: U32Id<BVoxMaterial>,
     ) -> Result<()> {
+        self.remove_materials(palette_id, &HashMap::from([(material_id, replacement_id)]))
+    }
+
+    /// Removes every keyed material of `replacement_ids` from `palette_id`,
+    /// first repainting each live voxel that samples one onto the material it
+    /// pairs with so no voxel is left without a material. The whole batch
+    /// repaints in one pass over the voxels, so merging a palette down costs
+    /// what removing a single material does. Leaves holes until
+    /// [`gc`](Self::gc) renumbers. Errors, changing nothing, if:
+    ///
+    /// 1. `palette_id` is not one of this state's palettes
+    /// 2. a material id or a replacement id is not one of that palette's
+    ///    materials
+    /// 3. a replacement is itself removed, which covers a material named as
+    ///    its own replacement
+    pub fn remove_materials(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
+    ) -> Result<()> {
         if !self.runtime_state.palette_ids.is_retained(palette_id) {
             return Err(Error::UnknownPalette { palette_id });
         }
         // Safety: the palette id is retained.
         let palette_ref = unsafe { self.runtime_state.palettes.get(palette_id) };
-        if !palette_ref.contains_material(material_id) {
-            return Err(Error::UnknownMaterial { material_id });
+        for (&material_id, &replacement_id) in replacement_ids {
+            for id in [material_id, replacement_id] {
+                if !palette_ref.contains_material(id) {
+                    return Err(Error::UnknownMaterial { material_id: id });
+                }
+            }
+            if replacement_ids.contains_key(&replacement_id) {
+                return Err(Error::SelfReplacement);
+            }
         }
-        if !palette_ref.contains_material(replacement_id) {
-            return Err(Error::UnknownMaterial {
-                material_id: replacement_id,
-            });
-        }
-        if material_id == replacement_id {
-            return Err(Error::SelfReplacement);
-        }
+
+        // The doomed materials in listing order, so the removal below can walk
+        // them back to front.
+        let doomed_ids: Vec<_> = palette_ref
+            .iter_materials()
+            .filter(|material_id| replacement_ids.contains_key(material_id))
+            .collect();
 
         let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
         for object_id in object_ids {
             // Safety: retained object ids have a value.
             let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
-            object.repaint_material(palette_id, material_id, replacement_id);
+            object.repaint_materials(palette_id, replacement_ids);
         }
 
-        // Safety: the palette id is retained; the material is one of its
+        // Safety: the palette id is retained; each material is one of its
         // materials.
-        unsafe { self.runtime_state.palettes.get_mut(palette_id) }.remove_material(material_id);
+        let palette_ref = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
+        // Back to front: a removal shifts the materials listed after it, so
+        // dropping the last one first leaves nothing to shift and keeps the
+        // batch linear where front-to-back removal is quadratic.
+        for material_id in doomed_ids.into_iter().rev() {
+            palette_ref.remove_material(material_id);
+        }
         Ok(())
     }
 
@@ -1030,7 +1058,10 @@ impl VoxMain {
                 .map(|(value_id, _)| value_id)
                 .filter(|value_id| !keep_ids.contains(value_id))
                 .collect();
-            for value_id in doomed_ids {
+            // Back to front: a release shifts the values listed after it, so
+            // dropping the last one first leaves nothing to shift and keeps
+            // the prune linear where front-to-back release is quadratic.
+            for value_id in doomed_ids.into_iter().rev() {
                 pool.release_value_stable(value_id);
             }
         }
@@ -1324,6 +1355,7 @@ mod tests {
         VoxMain, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef,
     };
     use branded_id::U32Id;
+    use std::collections::HashMap;
     use ty_math::{TyQuaternion, TyVector3, TyVector3I32, TyVector3U32};
 
     fn node_id(index: u32) -> U32Id<BVoxHierarchyNode> {
@@ -2127,6 +2159,66 @@ mod tests {
                 material_id: drop_id
             })
         ); // drop_id gone
+
+        state.gc();
+        assert_eq!(state.validate(), Ok(()));
+    }
+
+    #[test]
+    fn remove_materials_merges_a_batch_in_one_pass() {
+        let mut state = VoxMain::default();
+        let ints_id = int_pool(&mut state, vec![0, 1, 2, 3]);
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property("v".to_owned(), ints_id, value_id(0))
+            .unwrap();
+        let material_ids: Vec<_> = (0..4)
+            .map(|index| palette.add_material(vec![value_id(index)]).unwrap())
+            .collect();
+        let live_palette_id = state.add_palette(palette).unwrap();
+
+        // A four-voxel row, one voxel per material.
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(4, 1, 1)).unwrap();
+        let layer_id = object.add_layer(live_palette_id, material_ids[0]);
+        let voxel_ids: Vec<_> = (0..4)
+            .map(|x| object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap())
+            .collect();
+        for (&live_voxel_id, &material_id) in voxel_ids.iter().zip(&material_ids) {
+            object.retain_voxel(live_voxel_id, &[material_id]).unwrap();
+        }
+        let object_id = state.add_object(object).unwrap();
+
+        // A replacement that is itself removed is rejected whole: the batch
+        // would leave the chained voxels pointing at a dropped material.
+        let chained_ids = HashMap::from([
+            (material_ids[1], material_ids[0]),
+            (material_ids[0], material_ids[3]),
+            (material_ids[2], material_ids[3]),
+        ]);
+        assert_eq!(
+            state.remove_materials(live_palette_id, &chained_ids),
+            Err(Error::SelfReplacement)
+        );
+        assert_eq!(state.palette(live_palette_id).unwrap().material_count(), 4);
+
+        // The batch drops materials 0 through 2 onto 3 in one pass.
+        let merged_ids = HashMap::from([
+            (material_ids[0], material_ids[3]),
+            (material_ids[1], material_ids[3]),
+            (material_ids[2], material_ids[3]),
+        ]);
+        assert_eq!(state.remove_materials(live_palette_id, &merged_ids), Ok(()));
+        assert_eq!(state.validate(), Ok(()));
+        assert_eq!(state.palette(live_palette_id).unwrap().material_count(), 1);
+        for &live_voxel_id in &voxel_ids {
+            assert_eq!(
+                state
+                    .object(object_id)
+                    .unwrap()
+                    .voxel_material(live_voxel_id, layer_id),
+                Some(material_ids[3])
+            );
+        }
 
         state.gc();
         assert_eq!(state.validate(), Ok(()));

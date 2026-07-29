@@ -3,6 +3,7 @@ use branded_id::{
     IdVec, U32Id,
     soa::{IdField, IdRemap, IdStruct},
 };
+use std::collections::HashMap;
 use ty_math::{TyVector3I32, TyVector3U32};
 
 /// One object's voxel volume: a dense grid, the ordered layers it references,
@@ -386,18 +387,17 @@ impl VoxObject {
         }
     }
 
-    /// Repoints every live voxel that samples `old_id` through a layer
-    /// referencing `palette_id` to `new_id`. Used by
-    /// [`VoxMain::remove_material`](crate::VoxMain::remove_material) before the
-    /// old material is dropped.
-    pub(crate) fn repaint_material(
+    /// Repoints every live voxel that samples a keyed material of
+    /// `replacement_ids` through a layer referencing `palette_id` to the
+    /// material it pairs with. Used by
+    /// [`VoxMain::remove_materials`](crate::VoxMain::remove_materials) before
+    /// the old materials are dropped.
+    pub(crate) fn repaint_materials(
         &mut self,
         palette_id: U32Id<BVoxPalette>,
-        old_id: U32Id<BVoxMaterial>,
-        new_id: U32Id<BVoxMaterial>,
+        replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
     ) {
         let layer_ids: Vec<_> = self.layer_ids.iter().collect();
-        let live_ids: Vec<_> = self.liveness.iter_live().collect();
         for layer_id in layer_ids {
             // Safety: retained layer ids have a `layer_palette_ids` value.
             if *unsafe { self.layer_palette_ids.get(layer_id) } != palette_id {
@@ -406,11 +406,12 @@ impl VoxObject {
 
             // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };
-            for &voxel_id in &live_ids {
+            for voxel_id in self.liveness.iter_live() {
                 // Safety: the dense grid gives every layer a slot for every
                 // voxel id.
-                if *unsafe { column.get(voxel_id) } == old_id {
-                    *unsafe { column.get_mut(voxel_id) } = new_id;
+                let sample = unsafe { column.get_mut(voxel_id) };
+                if let Some(&replacement_id) = replacement_ids.get(sample) {
+                    *sample = replacement_id;
                 }
             }
         }
