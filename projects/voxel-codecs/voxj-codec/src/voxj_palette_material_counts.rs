@@ -15,13 +15,13 @@ pub fn voxj_palette_material_counts(
 ) -> Result<Vec<usize>> {
     layers
         .iter()
-        .map(|&idx| {
+        .map(|&palette_index| {
             palettes
-                .get(idx)
+                .get(palette_index)
                 .map(|palette| palette.materials.len())
                 .ok_or_else(|| {
                     Error::Invalid(format!(
-                        "layer references palette {idx}, but the document has {} palettes",
+                        "layer references palette {palette_index}, but the document has {} palettes",
                         palettes.len()
                     ))
                 })

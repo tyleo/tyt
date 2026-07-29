@@ -95,8 +95,9 @@ fn cell_index(pos: [u32; 3], bounds: [u32; 3]) -> u64 {
 
 /// Voxel order ascending by raster cell index, paired with a dense occupancy
 /// bitmap: bit `k` (MSB-first, 8 per byte) is set when raster cell `k` holds a
-/// voxel. Each cell index is computed exactly once, by sorting `(cell, voxel)`
-/// pairs, and shared between the order permutation and the packed bits.
+/// voxel. Each cell index is computed exactly once, by sorting
+/// `(cell index, voxel index)` pairs, and shared between the order permutation
+/// and the packed bits.
 fn bitmap_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, VoxjPositionBlock) {
     let mut indexed: Vec<(u64, usize)> = positions
         .iter()
@@ -124,7 +125,7 @@ fn bitmap_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, Vo
 /// Voxel order ascending by Hilbert index, paired with the delta-varint
 /// position block. Each voxel's Hilbert index is computed exactly once and
 /// shared between the order permutation and the encoded deltas. Sorting
-/// `(index, original_voxel)` pairs yields both in a single pass.
+/// `(Hilbert index, voxel index)` pairs yields both in a single pass.
 fn hilbert_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, VoxjPositionBlock) {
     let bits = hilbert_bits(bounds);
     let mut indexed: Vec<(u64, usize)> = positions

@@ -45,16 +45,16 @@ fn check_sample_materials(
     failures: &mut Failures,
 ) {
     // Decoding guarantees one row entry per layer.
-    for (voxel, row) in decoded.samples.iter().enumerate() {
-        for (channel, &material) in row.iter().enumerate() {
-            let palette = object.layers[channel];
-            let material_count = material_counts[channel];
-            if material as usize >= material_count {
+    for (voxel_index, row) in decoded.samples.iter().enumerate() {
+        for (channel_index, &material_index) in row.iter().enumerate() {
+            let palette_index = object.layers[channel_index];
+            let material_count = material_counts[channel_index];
+            if material_index as usize >= material_count {
                 failures.report(
                     Check::SampleMaterials,
                     format!(
-                        "object {index} voxel {voxel} samples material {material} of palette \
-                         {palette}, which has {material_count} materials"
+                        "object {index} voxel {voxel_index} samples material {material_index} of \
+                         palette {palette_index}, which has {material_count} materials"
                     ),
                 );
                 if !failures.go() {
