@@ -18,11 +18,11 @@ use voxsmith::{
     object_to_material_glb, object_to_material_gltf,
 };
 
-/// Meshes the object at index `object_index` of the voxel file at `input` into a
-/// mesh at `output`. With no `maps` it writes pure geometry. Otherwise it bakes the
-/// object's flattened layer materials, merged per property name by the
-/// format's layer-override rule, into textures the mesh samples, writing any
-/// loose images beside `output`. The object index is a position into the
+/// Meshes the object at index `object_index` of the voxel file at `input` into
+/// a mesh at `output`. With no `maps` it writes pure geometry. Otherwise it
+/// bakes the object's flattened layer materials, merged per property name by
+/// the format's layer-override rule, into textures the mesh samples, writing
+/// any loose images beside `output`. The object index is a position into the
 /// document's objects, as [`resolve_objects`] returns.
 ///
 /// [`resolve_objects`]: crate::implementation::resolve_objects

@@ -1,11 +1,11 @@
 use crate::{Check, Failures};
 use voxj::{VoxjBound, VoxjMain, VoxjValuePool};
 
-/// Every value pool is well-formed per spec rule 9: `values` is non-empty;
-/// each int or float value lies within the value pool's `min`/`max`;
-/// an int value pool's numeric bounds are integer-valued; `min <= max` when
-/// both are finite; hex colors match their kind's pattern; and float color
-/// components lie in their color space's range.
+/// Every value pool is well-formed per spec rule 9: `values` is non-empty; each
+/// int or float value lies within the value pool's `min`/`max`; an int
+/// value pool's numeric bounds are integer-valued; `min <= max` when both are
+/// finite; hex colors match their kind's pattern; and float color components
+/// lie in their color space's range.
 ///
 /// A value's JSON shape is guaranteed at parse by the typed value-pool model: a
 /// bound is present only on `int` and `float`, `null` is rejected outside a

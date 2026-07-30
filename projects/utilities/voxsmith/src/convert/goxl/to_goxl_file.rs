@@ -14,15 +14,15 @@ use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 ///
 /// When the state carries the `goxel` ext the forward path writes, the file is
 /// rebuilt losslessly from it, the inverse of
-/// [`from_goxl_file`](crate::from_goxl_file): each object emits one `16 x 16 x
-/// 16` block, and the layers, materials, cameras, light, preview, and image
-/// come from the ext. When the ext is absent or names another format, the file
-/// is synthesized from the bare scene instead by `synthesize_goxl`, so any
-/// source can be written to Goxel. An empty voxel is written back as the
+/// [`from_goxl_file`](crate::from_goxl_file): each object emits one
+/// `16 x 16 x 16` block, and the layers, materials, cameras, light, preview,
+/// and image come from the ext. When the ext is absent or names another format,
+/// the file is synthesized from the bare scene instead by `synthesize_goxl`, so
+/// any source can be written to Goxel. An empty voxel is written back as the
 /// transparent zero voxel.
 ///
-/// Errors when a `goxel` ext is present but cannot be deserialized, or when
-/// an object's `baseColorFactor` draws from a non-color value pool.
+/// Errors when a `goxel` ext is present but cannot be deserialized, or when an
+/// object's `baseColorFactor` draws from a non-color value pool.
 pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
     let ext = match ext_for(state, "goxel") {
         Some(ext) => from_vox_value::<GoxelExtWrapper>(ext)?.goxel,

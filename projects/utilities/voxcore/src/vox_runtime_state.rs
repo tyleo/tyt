@@ -11,9 +11,9 @@ use branded_id::{
 /// sample, the scene hierarchy, and the roots of that hierarchy. Held by
 /// [`VoxMain`](crate::VoxMain) alongside the ext.
 ///
-/// This is the struct-of-arrays backing store. [`VoxMain`](crate::VoxMain)
-/// owns mutation logic over these fields; they are crate-private so the
-/// id pools and columns stay in sync.
+/// This is the struct-of-arrays backing store. [`VoxMain`](crate::VoxMain) owns
+/// mutation logic over these fields; they are crate-private so the id pools and
+/// columns stay in sync.
 #[derive(Debug, Default)]
 pub struct VoxRuntimeState {
     /// Value-pool id pool.

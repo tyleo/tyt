@@ -170,8 +170,8 @@ fn add_names_subtree(
 }
 
 /// The objects that reference `palette_id`, in object order, as
-/// `(index, name)`. An object appears once however many of its layers
-/// reference the palette.
+/// `(index, name)`. An object appears once however many of its layers reference
+/// the palette.
 fn referencing_objects(state: &VoxMain, palette_id: U32Id<BVoxPalette>) -> Vec<(u32, &str)> {
     state
         .iter_objects()

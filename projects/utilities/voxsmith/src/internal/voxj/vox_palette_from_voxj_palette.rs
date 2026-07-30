@@ -10,9 +10,9 @@ use voxj::VoxjPalette;
 /// `valuePool` becoming a value-pool id. `materials` carries over one row per
 /// material, a value-index per property.
 ///
-/// Errors on a duplicate property name or a row whose length disagrees with
-/// the properties. Value-pool-reference and value-id ranges are checked when
-/// the palette is inserted by
+/// Errors on a duplicate property name or a row whose length disagrees with the
+/// properties. Value-pool-reference and value-id ranges are checked when the
+/// palette is inserted by
 /// [`VoxMain::add_palette`](voxcore::VoxMain::add_palette).
 pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette> {
     let mut out = VoxPalette::default();

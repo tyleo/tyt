@@ -323,10 +323,9 @@ impl VoxMain {
         self.runtime_state.palette_ids.index_of(id)
     }
 
-    /// Adds a property named `name` on `value_pool_id` to palette
-    /// `palette_id`, back-filling its existing materials with
-    /// `default_value_id`, and returns the property's id. Errors, changing
-    /// nothing, if:
+    /// Adds a property named `name` on `value_pool_id` to palette `palette_id`,
+    /// back-filling its existing materials with `default_value_id`, and returns
+    /// the property's id. Errors, changing nothing, if:
     ///
     /// 1. `palette_id` is not one of this state's
     /// 2. `value_pool_id` is not one of this state's
@@ -461,18 +460,18 @@ impl VoxMain {
         Ok(())
     }
 
-    /// The listing position of value pool `id`, or `None` if `id` is not one
-    /// of this state's value pools.
+    /// The listing position of value pool `id`, or `None` if `id` is not one of
+    /// this state's value pools.
     pub fn value_pool_index(&self, id: U32Id<BVoxValuePool>) -> Option<usize> {
         self.runtime_state.value_pool_ids.index_of(id)
     }
 
-    /// Resolves what `material_id` in `palette_id` draws for `property_id`:
-    /// the value pool the property draws from and the value id it holds in
-    /// that value pool. `None` if any id is not this state's, `property_id`
-    /// is not `palette_id`'s, or the property names a value pool this state
-    /// does not hold. Read the value at that id out of the returned
-    /// value pool by the value pool's kind.
+    /// Resolves what `material_id` in `palette_id` draws for `property_id`: the
+    /// value pool the property draws from and the value id it holds in that
+    /// value pool. `None` if any id is not this state's, `property_id` is not
+    /// `palette_id`'s, or the property names a value pool this state does not
+    /// hold. Read the value at that id out of the returned value pool by the
+    /// value pool's kind.
     pub fn material_value(
         &self,
         palette_id: U32Id<BVoxPalette>,
@@ -1126,11 +1125,11 @@ impl VoxMain {
             .ok_or(Error::ValuePoolValueOrder)
     }
 
-    /// Audits the full rule set. Every rule here is also enforced at a
-    /// mutation point (a constructor, an insertion, or the mutation itself),
-    /// so a state reached through the public API always passes; a failure
-    /// reports a voxcore bug, never a caller error. The checks stay as the
-    /// specification of what the mutations preserve:
+    /// Audits the full rule set. Every rule here is also enforced at a mutation
+    /// point (a constructor, an insertion, or the mutation itself), so a state
+    /// reached through the public API always passes; a failure reports a
+    /// voxcore bug, never a caller error. The checks stay as the specification
+    /// of what the mutations preserve:
     ///
     /// 1. every value pool is non-empty, its values well-formed for its kind,
     ///    and its `min`/`max` finite, integer-valued for an `int` value pool,
@@ -1331,13 +1330,12 @@ impl VoxMain {
     }
 }
 
-/// The `children` index of a node lying on a `child_node_ids` cycle, or
-/// `None` if the graph is acyclic.
+/// The `children` index of a node lying on a `child_node_ids` cycle, or `None`
+/// if the graph is acyclic.
 ///
-/// `children` holds each node's child ids at that node's index, and
-/// `index_of` maps a child id back to its index. A child missing from
-/// `index_of` leads outside the checked set, where no edge can return, so it
-/// is skipped.
+/// `children` holds each node's child ids at that node's index, and `index_of`
+/// maps a child id back to its index. A child missing from `index_of` leads
+/// outside the checked set, where no edge can return, so it is skipped.
 ///
 /// The walk is an iterative three-colour DFS, so a deep chain cannot overflow
 /// the stack. A back edge into an in-progress node is a cycle; revisiting a

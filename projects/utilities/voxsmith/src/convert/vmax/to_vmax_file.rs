@@ -258,8 +258,8 @@ mod tests {
     /// non-finite coefficient round-trips exactly, alongside a plain material
     /// and the padded default slots. The value pools carry a finite-defaulted
     /// neutral copy, but the ext keeps the exact values, so the rebuilt
-    /// document matches byte for byte. Coefficients are f32-exact, as Voxel
-    /// Max stores them, and the non-finite `mc` is infinity, not NaN, so it
+    /// document matches byte for byte. Coefficients are f32-exact, as Voxel Max
+    /// stores them, and the non-finite `mc` is infinity, not NaN, so it
     /// compares equal.
     #[test]
     fn round_trips_rich_materials() {

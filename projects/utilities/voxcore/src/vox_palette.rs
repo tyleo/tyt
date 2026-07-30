@@ -32,13 +32,12 @@ pub struct VoxPalette {
 }
 
 impl VoxPalette {
-    /// Adds a property after any existing ones and returns its id,
-    /// back-filling existing materials with `default_value_id` so every
-    /// material keeps one value id per property. Errors, changing nothing, if
-    /// a property already has this name. `default_value_id` must be one of
-    /// `value_pool_id`'s values, which
-    /// [`VoxMain::add_palette`](crate::VoxMain::add_palette) checks on
-    /// insert.
+    /// Adds a property after any existing ones and returns its id, back-filling
+    /// existing materials with `default_value_id` so every material keeps one
+    /// value id per property. Errors, changing nothing, if a property already
+    /// has this name. `default_value_id` must be one of `value_pool_id`'s
+    /// values, which [`VoxMain::add_palette`](crate::VoxMain::add_palette)
+    /// checks on insert.
     pub fn add_property(
         &mut self,
         name: String,
@@ -134,9 +133,9 @@ impl VoxPalette {
         self.material_ids.is_retained(id)
     }
 
-    /// The value id `material_id` draws for `property_id`, identifying a
-    /// value in the value pool that property draws from, or `None` if either id
-    /// is not this palette's. Read the value pool a [`VoxMain`](crate::VoxMain)
+    /// The value id `material_id` draws for `property_id`, identifying a value
+    /// in the value pool that property draws from, or `None` if either id is
+    /// not this palette's. Read the value pool a [`VoxMain`](crate::VoxMain)
     /// holds by that id for the value.
     pub fn value_id(
         &self,
@@ -276,9 +275,9 @@ impl VoxPalette {
     /// `0..len`, moving every value to its relabeled id, and returns the
     /// material relabeling so a [`VoxMain`](crate::VoxMain) can translate the
     /// samples that point at these materials. Properties are referenced only
-    /// within this palette, so their relabelings stay internal. Value ids
-    /// point into the referenced value pools, whose contents gc does not touch,
-    /// so they stay valid.
+    /// within this palette, so their relabelings stay internal. Value ids point
+    /// into the referenced value pools, whose contents gc does not touch, so
+    /// they stay valid.
     pub(crate) fn gc(&mut self) -> IdRemap<BVoxMaterial, u32> {
         let property_remap = self.property_ids.gc();
         // Safety: the property column was in sync with the pre-gc property
@@ -288,8 +287,8 @@ impl VoxPalette {
         let material_ids: Vec<_> = self.material_ids.iter().collect();
         for material_id in material_ids {
             // Safety: a retained material holds a value id for every pre-gc
-            // property id, and the remap came from this palette's
-            // property id pool.
+            // property id, and the remap came from this palette's property
+            // id pool.
             let row = unsafe { self.materials.get_mut(material_id) };
             unsafe { row.gc(&property_remap) };
         }
@@ -314,17 +313,18 @@ impl VoxPalette {
     }
 
     /// Repoints each material's cell for a property on `value_pool_id` that
-    /// draws `old_id` to `new_id`. Used by
-    /// [`VoxMain::remove_value_pool_value`](crate::VoxMain::remove_value_pool_value)
-    /// before `old_id` is released.
+    /// draws `old_id` to `new_id`. Used by [`remove_value_pool_value`] before
+    /// `old_id` is released.
+    ///
+    /// [`remove_value_pool_value`]: crate::VoxMain::remove_value_pool_value
     pub(crate) fn repoint_value_pool_value(
         &mut self,
         value_pool_id: U32Id<BVoxValuePool>,
         old_id: U32Id<BVoxValuePoolValue>,
         new_id: U32Id<BVoxValuePoolValue>,
     ) {
-        // The properties on `value_pool_id`, found once so each material's
-        // row is visited once for all of them.
+        // The properties on `value_pool_id`, found once so each material's row
+        // is visited once for all of them.
         let value_pool_property_ids: Vec<_> = self
             .property_ids
             .iter()
@@ -384,9 +384,8 @@ impl VoxPalette {
     }
 
     /// Translates every property's value-pool id through `remap`, matching a
-    /// value-pool store a [`VoxMain`](crate::VoxMain) is compacting. Requires
-    /// a referentially valid palette, so every property names a live
-    /// value pool.
+    /// value-pool store a [`VoxMain`](crate::VoxMain) is compacting. Requires a
+    /// referentially valid palette, so every property names a live value pool.
     pub(crate) fn relabel_value_pools(&mut self, remap: &IdRemap<BVoxValuePool, u32>) {
         let property_ids: Vec<_> = self.property_ids.iter().collect();
         for property_id in property_ids {
@@ -403,8 +402,8 @@ impl Drop for VoxPalette {
     fn drop(&mut self) {
         // Each material's row is an IdField owning a heap buffer whose value
         // ids are Copy, so releasing the inner IdField frees the buffer with
-        // nothing to release per property. The properties own name
-        // strings, freed by releasing them.
+        // nothing to release per property. The properties own name strings,
+        // freed by releasing them.
         // Safety: each column holds a value for every id in its id pool.
         unsafe {
             self.materials.release_all(&self.material_ids);

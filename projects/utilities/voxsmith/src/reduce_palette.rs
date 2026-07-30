@@ -8,8 +8,8 @@ use ty_math::{
 use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxMain};
 
 /// Reduces `palette` in `state` to at most `max_materials` materials, then,
-/// unless `keep_unused_values`, prunes the value-pool values the reduction leaves
-/// unreferenced. The prune runs state-wide through
+/// unless `keep_unused_values`, prunes the value-pool values the reduction
+/// leaves unreferenced. The prune runs state-wide through
 /// [`VoxMain::prune_value_pools`]. Either way the state stays valid, with the
 /// surviving value ids left for [`VoxMain::gc`] to compact.
 ///
@@ -202,8 +202,8 @@ fn representative_id(cluster: &[Point]) -> u32 {
     representative_point(cluster).material_id
 }
 
-/// The representative (see [`representative_id`]) as a whole [`Point`], for
-/// the dither pass's snap target.
+/// The representative (see [`representative_id`]) as a whole [`Point`], for the
+/// dither pass's snap target.
 fn representative_point(cluster: &[Point]) -> Point {
     cluster
         .iter()
@@ -835,9 +835,8 @@ mod tests {
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        // baseColorFactor draws from an sRGBA color value pool; tag draws
-        // from an unbounded float value pool with one distinct value per
-        // material.
+        // baseColorFactor draws from an sRGBA color value pool; tag draws from
+        // an unbounded float value pool with one distinct value per material.
         let base_value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(colors.iter().map(|color| srgba(color)).collect()).unwrap(),
         );
@@ -1208,8 +1207,8 @@ mod tests {
         }
     }
 
-    /// The number of values in the value pool the property `name` draws from
-    /// in the first palette that carries it.
+    /// The number of values in the value pool the property `name` draws from in
+    /// the first palette that carries it.
     fn value_pool_len(state: &VoxMain, name: &str) -> usize {
         for (_, palette) in state.iter_palettes() {
             if let Some(property_id) = palette.property_id_by_name(name) {

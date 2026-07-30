@@ -810,8 +810,8 @@ fn derive_materials(
 }
 
 /// One derived Voxel Max material. A coefficient reads from its property's
-/// value pool at the signature's value id. Metalness and roughness map from
-/// the 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient; see
+/// value pool at the signature's value id. Metalness and roughness map from the
+/// 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient; see
 /// [`pbr_factor_to_vm_coefficient`].
 fn derived_material(
     state: &VoxMain,
@@ -911,8 +911,7 @@ fn vmax_material(slot: usize, material: &VoxelMaxMaterial) -> VMaxMaterial {
     }
 }
 
-/// The `f64` value at `value_id` in a property's `float` value pool, or
-/// `None`.
+/// The `f64` value at `value_id` in a property's `float` value pool, or `None`.
 fn value_pool_scalar(
     state: &VoxMain,
     palette_id: U32Id<BVoxPalette>,
@@ -925,8 +924,7 @@ fn value_pool_scalar(
     }
 }
 
-/// The `bool` value at `value_id` in a property's `bool` value pool, or
-/// `None`.
+/// The `bool` value at `value_id` in a property's `bool` value pool, or `None`.
 fn value_pool_flag(
     state: &VoxMain,
     palette_id: U32Id<BVoxPalette>,

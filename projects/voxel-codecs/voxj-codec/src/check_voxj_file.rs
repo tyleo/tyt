@@ -38,9 +38,9 @@ use voxj::VoxjFile;
 ///     can witness.
 ///
 /// A check whose work an earlier failure made moot reports no failure rather
-/// than a spurious one: an object's geometry checks are skipped when its
-/// layers do not resolve, so they may read as passed while `indices` carries
-/// the real fault.
+/// than a spurious one: an object's geometry checks are skipped when its layers
+/// do not resolve, so they may read as passed while `indices` carries the real
+/// fault.
 pub fn check_voxj_file(file: &VoxjFile) -> Vec<VoxjCheck> {
     build_voxj_report(collect_voxj_failures(file, false))
 }

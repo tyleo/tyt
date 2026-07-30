@@ -105,8 +105,8 @@ fn color_bytes(value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>) -> [u8
 }
 
 /// A color attribute's RGBA bytes, decoded by the bound value pool's kind, or
-/// `default` when the value is absent or its value pool is not a color kind.
-/// An sRGB value pool holds sRGB-encoded components in `[0, 1]`; a linear
+/// `default` when the value is absent or its value pool is not a color kind. An
+/// sRGB value pool holds sRGB-encoded components in `[0, 1]`; a linear
 /// value pool holds scene-linear components re-encoded to sRGB here. A
 /// three-component color takes opaque alpha.
 fn color_bytes_or(
@@ -351,8 +351,7 @@ mod tests {
 
     #[test]
     fn a_shared_value_pool_cell_bakes_one_value_for_every_material() {
-        // Both material rows repeat the strength value pool's one cell, so
-        // both
+        // Both material rows repeat the strength value pool's one cell, so both
         // bake the same half strength.
         let mut state = VoxMain::default();
         let base_value_pool_id = state.add_value_pool(

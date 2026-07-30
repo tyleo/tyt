@@ -90,11 +90,12 @@ pub trait Dependencies {
     ///   `None`.
     /// * `output` - the `.voxj` or `.voxjz` document to write.
     /// * `resolution` - how the grid is sized: a voxel count along the longest
-    ///   axis, or a real-world voxel size (recorded as the placing node's scale).
+    ///   axis, or a real-world voxel size (recorded as the placing node's
+    ///   scale).
     /// * `fill_mode` - a solid body (flood-filled) or a hollow surface shell.
     /// * `material_mode` - where each voxel's color and material come from.
-    /// * `fill_color` - the color of voxels a mode cannot sample, or `None` when
-    ///   the flag is omitted.
+    /// * `fill_color` - the color of voxels a mode cannot sample, or `None`
+    ///   when the flag is omitted.
     /// * `name` - object-name override; `None` uses the mesh's name, else the
     ///   input stem.
     /// * `reduction` - the palette material cap and its clustering controls.
@@ -141,9 +142,9 @@ pub trait Dependencies {
     ) -> Result<Vec<usize>>;
 
     /// Meshes the object at index `object_index` of the voxel file at `input`
-    /// into a glTF or GLB mesh at `output`, with no hierarchy-node transform. With no
-    /// `maps` it is pure geometry. Otherwise it bakes the object's flattened
-    /// layer materials, merged per property name by the format's
+    /// into a glTF or GLB mesh at `output`, with no hierarchy-node transform.
+    /// With no `maps` it is pure geometry. Otherwise it bakes the object's
+    /// flattened layer materials, merged per property name by the format's
     /// layer-override rule, into textures the mesh's UVs sample, writing any
     /// loose images beside `output`.
     ///
@@ -153,12 +154,13 @@ pub trait Dependencies {
     ///   `None`.
     /// * `output` - the `.gltf` or `.glb` mesh to write.
     /// * `format` - the target mesh container.
-    /// * `scale` - meters per voxel, applied as a uniform scale to every vertex.
+    /// * `scale` - meters per voxel, applied as a uniform scale to every
+    ///   vertex.
     /// * `method` - the meshing strategy.
     /// * `object_index` - the object's index into the document, as
     ///   [`resolve_objects`](Self::resolve_objects) returns.
-    /// * `maps` - the material maps to bake, each its own image, in order; empty
-    ///   for pure geometry.
+    /// * `maps` - the material maps to bake, each its own image, in order;
+    ///   empty for pure geometry.
     /// * `storage` - where the baked images go.
     /// * `texture_shape` - how the baked atlas canvas is shaped around the
     ///   material texels; ignored for pure geometry.

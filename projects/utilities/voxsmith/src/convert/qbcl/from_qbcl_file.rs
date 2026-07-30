@@ -151,10 +151,10 @@ fn build_node(
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
 /// color across every matrix and compound voxel in the tree, bound to
-/// `baseColorFactor`, with one material per color and a map from a color to
-/// its material. The value pool is added to `state`. A tree with no solid
-/// voxels gets a single placeholder color so objects have a default material
-/// to sample.
+/// `baseColorFactor`, with one material per color and a map from a color to its
+/// material. The value pool is added to `state`. A tree with no solid voxels
+/// gets a single placeholder color so objects have a default material to
+/// sample.
 fn build_palette(
     state: &mut VoxMain,
     root: &QbclNode,
@@ -167,8 +167,8 @@ fn build_palette(
     }
 
     // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB
-    // value pool as float components in `[0, 1]`; each material draws one
-    // value id into it.
+    // value pool as float components in `[0, 1]`; each material draws one value
+    // id into it.
     let value_pool_id = state.add_value_pool(
         VoxValuePool::srgb(order.iter().map(|&color| color_floats(color)).collect())
             .expect("byte-derived components are in range and the list is non-empty"),

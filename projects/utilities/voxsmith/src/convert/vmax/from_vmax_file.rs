@@ -742,9 +742,9 @@ fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
 }
 
 /// Builds the voxcore hierarchy: one node per group then one per object, the
-/// latter placing its geometry. `object_ids[i]` is the object that scene
-/// object `i` places, so instances share a `child_objects` id. Returns the
-/// nodes in id order and the root ids.
+/// latter placing its geometry. `object_ids[i]` is the object that scene object
+/// `i` places, so instances share a `child_objects` id. Returns the nodes in id
+/// order and the root ids.
 fn build_hierarchy(
     scene: &VMaxSceneJsonFile,
     object_transforms: &[TyTransformF64],

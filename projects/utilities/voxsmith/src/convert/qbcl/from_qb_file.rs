@@ -92,8 +92,8 @@ fn build_palette(
     }
 
     // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB
-    // value pool as float components in `[0, 1]`; each material draws one
-    // value id into it.
+    // value pool as float components in `[0, 1]`; each material draws one value
+    // id into it.
     let value_pool_id = state.add_value_pool(
         VoxValuePool::srgb(order.iter().map(|&color| color_floats(color)).collect())
             .expect("byte-derived components are in range and the list is non-empty"),

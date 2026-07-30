@@ -3,11 +3,11 @@ use branded_id::IdVec;
 use voxcore::{VoxMain, VoxObject};
 
 /// The [`CellColor`] read for `object`, picked from its winning
-/// `baseColorFactor` supplier in the effective palette: a table of
-/// per-material colors, read through the material each voxel samples in the
-/// winning layer. All decoding happens here. A supplier drawing from a
-/// non-color value pool errors, as does a layer referencing a palette the
-/// state does not hold. `Ok(None)` when no layer supplies `baseColorFactor`.
+/// `baseColorFactor` supplier in the effective palette: a table of per-material
+/// colors, read through the material each voxel samples in the winning layer.
+/// All decoding happens here. A supplier drawing from a non-color value pool
+/// errors, as does a layer referencing a palette the state does not hold.
+/// `Ok(None)` when no layer supplies `baseColorFactor`.
 pub fn resolve_cell_color<'a>(
     state: &VoxMain,
     object: &'a VoxObject,

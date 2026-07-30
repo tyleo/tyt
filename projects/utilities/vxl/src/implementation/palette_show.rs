@@ -99,9 +99,9 @@ struct Collection {
     samples: Vec<TreeGridJsonValue>,
 }
 
-/// How a bound value pool's kind renders in `palette show`: a color, in sRGB
-/// or linear space and with three or four components; a plain number; or any
-/// other value shown as text with no swatch.
+/// How a bound value pool's kind renders in `palette show`: a color, in sRGB or
+/// linear space and with three or four components; a plain number; or any other
+/// value shown as text with no swatch.
 #[derive(Clone, Copy)]
 enum Kind {
     /// A color value pool: `srgb` distinguishes sRGB from linear space,
@@ -214,8 +214,8 @@ fn expand_property(
 }
 
 /// Builds one collection from a present property: classifies the bound
-/// value pool by kind, rejects a color component on a non-color and `.a` on
-/// a three-component color, then samples the property's values.
+/// value pool by kind, rejects a color component on a non-color and `.a` on a
+/// three-component color, then samples the property's values.
 fn build_collection(
     state: &VoxMain,
     palette_index: usize,
@@ -285,8 +285,8 @@ fn build_collection(
     })
 }
 
-/// How a value pool's kind renders: a color with its space and component
-/// count, a number, or any other value.
+/// How a value pool's kind renders: a color with its space and component count,
+/// a number, or any other value.
 fn classify(value_pool: &VoxValuePool) -> Kind {
     match value_pool.kind() {
         VoxValuePoolKind::Srgb { .. } => Kind::Color {

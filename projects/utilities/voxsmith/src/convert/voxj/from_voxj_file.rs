@@ -253,8 +253,8 @@ mod tests {
     /// only it referenced (id 1), then compacting: the two survivors renumber
     /// to objects 0 and 1, the lone palette stays 0, and the "leaf" node loses
     /// its reference to the removed object. The value pools are untouched:
-    /// there is no value-pool removal, so the now-unreferenced value pools
-    /// stay in place.
+    /// there is no value-pool removal, so the now-unreferenced value pools stay
+    /// in place.
     fn sample_file_without_tight() -> VoxjFile {
         let base = sample_file();
         VoxjFile {
@@ -575,8 +575,8 @@ mod tests {
         assert!(from_voxj_file(&file).is_err());
     }
 
-    /// A `float` value-pool value outside its declared `min`/`max` is
-    /// rejected when the value pool is built.
+    /// A `float` value-pool value outside its declared `min`/`max` is rejected
+    /// when the value pool is built.
     #[test]
     fn rejects_value_outside_value_pool_bounds() {
         let mut file = sample_file();

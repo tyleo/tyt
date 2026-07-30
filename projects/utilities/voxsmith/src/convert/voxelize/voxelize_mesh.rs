@@ -268,8 +268,8 @@ fn build_palette(
         })
         .collect();
 
-    // An all-empty grid still needs a non-empty palette so its value pools
-    // and default material are valid; give it a lone white material.
+    // An all-empty grid still needs a non-empty palette so its value pools and
+    // default material are valid; give it a lone white material.
     if distinct.is_empty() {
         distinct.push(MeshMaterial::flat(TySrgbaU8::from(DEFAULT_FILL)));
     }
@@ -385,8 +385,8 @@ fn build_palette(
     Ok((palette, sample_ids, default_material_id))
 }
 
-/// A deduplicated value pool column and each distinct material's value id
-/// into it.
+/// A deduplicated value pool column and each distinct material's value id into
+/// it.
 struct ValuePoolColumn<T> {
     /// The distinct values, in first-seen order.
     values: Vec<T>,

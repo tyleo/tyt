@@ -21,10 +21,10 @@ use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObjec
 /// names another format, the file is synthesized from the bare scene by
 /// `synthesize_qbcl`, so any source can be written to Qubicle.
 ///
-/// Errors when a `qubicle-qbcl` ext is present but its node entries do not
-/// line up with the hierarchy, the state does not have exactly one root, or a
-/// mask list does not match its object, and when an object's
-/// `baseColorFactor` draws from a non-color value pool.
+/// Errors when a `qubicle-qbcl` ext is present but its node entries do not line
+/// up with the hierarchy, the state does not have exactly one root, or a mask
+/// list does not match its object, and when an object's `baseColorFactor` draws
+/// from a non-color value pool.
 pub fn to_qbcl_file(state: &VoxMain) -> Result<QbclFile> {
     let ext = match ext_for(state, "qubicle-qbcl") {
         Some(ext) => from_vox_value::<QubicleQbclExtWrapper>(ext)?.qubicle_qbcl,

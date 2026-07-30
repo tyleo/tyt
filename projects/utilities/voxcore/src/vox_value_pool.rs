@@ -8,8 +8,8 @@ use branded_id::{
 };
 use std::mem;
 
-/// A shared value pool: one [`VoxValuePoolKind`] column keyed by an id pool
-/// of value ids.
+/// A shared value pool: one [`VoxValuePoolKind`] column keyed by an id pool of
+/// value ids.
 ///
 /// Build a value pool with the constructor for its kind (for example
 /// [`float`](Self::float) or [`srgba`](Self::srgba)), which checks its input
@@ -92,8 +92,8 @@ impl VoxValuePool {
     }
 
     /// Creates an `srgb` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty or a component is
-    /// outside `[0, 1]`.
+    /// Errors, building nothing, if `values` is empty or a component is outside
+    /// `[0, 1]`.
     pub fn srgb(values: Vec<[f64; 3]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -104,8 +104,8 @@ impl VoxValuePool {
     }
 
     /// Creates an `srgba` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty or a component is
-    /// outside `[0, 1]`.
+    /// Errors, building nothing, if `values` is empty or a component is outside
+    /// `[0, 1]`.
     pub fn srgba(values: Vec<[f64; 4]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -258,15 +258,15 @@ impl VoxValuePool {
             .map(move |value_id| (value_id, self.value_ref(value_id)))
     }
 
-    /// The listing position of value `id`, or `None` if `id` is not one of
-    /// this value pool's values.
+    /// The listing position of value `id`, or `None` if `id` is not one of this
+    /// value pool's values.
     pub fn value_index(&self, id: U32Id<BVoxValuePoolValue>) -> Option<usize> {
         self.value_ids.index_of(id)
     }
 
     /// Moves value `id` to listing position `index`, shifting the values
-    /// between its old and new positions one slot. Errors, changing nothing,
-    /// if `id` is not one of this value pool's values or `index` is at or past
+    /// between its old and new positions one slot. Errors, changing nothing, if
+    /// `id` is not one of this value pool's values or `index` is at or past
     /// [`values_len`](Self::values_len).
     pub fn move_value(&mut self, id: U32Id<BVoxValuePoolValue>, index: usize) -> Result<()> {
         if !self.value_ids.is_retained(id) {
@@ -323,9 +323,9 @@ impl VoxValuePool {
         }
     }
 
-    /// Releases value `id`, keeping the surviving values' listing order. The
-    /// id must be one of this value pool's values. The caller repoints any
-    /// palette cell drawing it first.
+    /// Releases value `id`, keeping the surviving values' listing order. The id
+    /// must be one of this value pool's values. The caller repoints any palette
+    /// cell drawing it first.
     pub(crate) fn release_value_stable(&mut self, id: U32Id<BVoxValuePoolValue>) {
         // Safety: the id is retained, so it has a value in the column.
         unsafe {

@@ -73,8 +73,8 @@ fn build_palette(
         order.push([0, 0, 0, 0]);
     }
 
-    // Colors ride in a shared sRGBA value pool as float components in
-    // `[0, 1]`; each material draws one value id into it.
+    // Colors ride in a shared sRGBA value pool as float components in `[0, 1]`;
+    // each material draws one value id into it.
     let value_pool_id = state.add_value_pool(
         VoxValuePool::srgba(
             order

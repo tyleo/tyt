@@ -15,9 +15,9 @@ use voxj::{VoxjBound, VoxjValuePool};
 /// 3. [`ColorFormat::LinearFloat`]: decode to linear light, write the
 ///    `linear-rgb` / `linear-rgba` float kinds.
 ///
-/// Linear-kind value pools always serialize as float. Every other kind maps
-/// one to one, keeping its values and any `int`/`float` bounds; `json`
-/// recurses through [`voxj_value_from_vox_value`].
+/// Linear-kind value pools always serialize as float. Every other kind maps one
+/// to one, keeping its values and any `int`/`float` bounds; `json` recurses
+/// through [`voxj_value_from_vox_value`].
 pub fn voxj_value_pool_from_vox_value_pool(
     value_pool: &VoxValuePool,
     color_format: ColorFormat,

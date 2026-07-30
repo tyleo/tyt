@@ -141,8 +141,8 @@ fn colors_from_palette(
 }
 
 /// Rebuilds the materials from the ext, which holds each one's exact optional
-/// fields, so an absent field round-trips as absent. The palette's
-/// value pools carry only a default-substituted neutral copy.
+/// fields, so an absent field round-trips as absent. The palette's value pools
+/// carry only a default-substituted neutral copy.
 fn build_materials(ext: &MagicaVoxelExt) -> Vec<MVoxMaterial> {
     ext.materials
         .iter()

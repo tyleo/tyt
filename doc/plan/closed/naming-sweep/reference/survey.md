@@ -270,22 +270,21 @@ qb, qbt, qbcl, and goxl readers, `to_mvox_file.rs` (36, 137),
 
 ### Id suffixes (about 300 lines, 8 files; 108 of 118 files clean)
 
-- `implementation/hierarchy_show.rs` (about 155): the `Scene`/`Walk`
-  walkers (`for &root` 150, 240; `for &child` 155, 301; `for &object` 159,
-  292; `roots()` 172; `unplaced_nodes()` 211; `orphan_objects()` 220;
-  `enumerate_from(id:)` 267), treegrid `parent` parameters (517, 525, 570,
-  651, 752, 800, 898, 947), grid-id locals `leaf`, `section`, `subtree`,
-  `grid_node`, `roots`, `unplaced`, `orphans`, `parent` (526 to 953, 687,
-  821, 542 to 560), `Entity::Node(id)`/`Entity::Object(id)` (572, 583),
-  `nodes`/`objects` id vecs (595, 601, 617, 622),
-  `child_nodes`/`child_objects` (706, 718, 738, 742), bare-`id`
-  parameters on the placement and name helpers (178 to 203, 500, 509, 629,
-  638, 650, 799; subject parameters, stay `id` under Q2); test fixtures: `let body|head|hand_mesh|...` object
-  ids (1274 to 2044), node-id locals (1275 to 1894), `let pool` (1332),
-  `first`/`second` palette ids (1348, 1355), `let id = voxel_id` (1221);
-  `body_id` at 1366 is the file's own counter-example. Note the `NodeId`
-  and `ObjectId` aliases are duplicated with `resolve_objects.rs`;
-  hoisting is optional and not required by this plan.
+- `implementation/hierarchy_show.rs` (about 155): the `Scene`/`Walk` walkers
+  (`for &root` 150, 240; `for &child` 155, 301; `for &object` 159, 292;
+  `roots()` 172; `unplaced_nodes()` 211; `orphan_objects()` 220;
+  `enumerate_from(id:)` 267), treegrid `parent` parameters (517, 525, 570, 651,
+  752, 800, 898, 947), grid-id locals `leaf`, `section`, `subtree`, `grid_node`,
+  `roots`, `unplaced`, `orphans`, `parent` (526 to 953, 687, 821, 542 to 560),
+  `Entity::Node(id)`/`Entity::Object(id)` (572, 583), `nodes`/`objects` id vecs
+  (595, 601, 617, 622), `child_nodes`/`child_objects` (706, 718, 738, 742),
+  bare-`id` parameters on the placement and name helpers (178 to 203, 500, 509,
+  629, 638, 650, 799; subject parameters, stay `id` under Q2); test fixtures:
+  `let body|head|hand_mesh|...` object ids (1274 to 2044), node-id locals (1275
+  to 1894), `let pool` (1332), `first`/`second` palette ids (1348, 1355),
+  `let id = voxel_id` (1221); `body_id` at 1366 is the file's own
+  counter-example. Note the `NodeId` and `ObjectId` aliases are duplicated with
+  `resolve_objects.rs`; hoisting is optional and not required by this plan.
 - `implementation/resolve_objects.rs` (about 28): `objects` id vec (42)
   and parameters (70, 146), `for &root` (100), `for &child` (134), `for
   &child_object` (158), test helper `fn object` returning an id (194),

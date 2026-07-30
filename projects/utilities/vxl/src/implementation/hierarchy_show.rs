@@ -260,8 +260,9 @@ impl<'a> Scene<'a> {
         out
     }
 
-    /// Records this node placement and its child objects, then descends into its
-    /// child nodes unless `node_id` is already on the current branch, a cycle.
+    /// Records this node placement and its child objects, then descends into
+    /// its child nodes unless `node_id` is already on the current branch, a
+    /// cycle.
     fn enumerate_from(
         &self,
         node_id: NodeId,
