@@ -186,8 +186,13 @@ Gate: workspace green; the voxsmith gate grep returns nothing.
       `voxelize.rs`. The survey's `info.rs` and `hierarchy_show.rs` prose
       lines were fixture identifiers, not comments, so they landed with the
       identifier commit.
-- [ ] The message commit: the `mesh_object.rs` "bound to a string or json
-      pool" text spells value pool out.
+- [x] The message commit: the `mesh_object.rs` "bound to a string or json
+      pool" text spells value pool out, plus the `palette_show.rs` lookup
+      `expect` the survey's message list missed.
+- [x] Gate residue: the docs commit's rewrap split one `palette_show.rs`
+      "value pool" across two lines, which the line-based gate grep reads
+      as a bare mention; rewrapped onto one line and logged in
+      `reference/ambiguous-mentions.md`.
 
 Gate: workspace green; the vxl gate grep returns nothing; the
 report-command output assertions are unchanged outside the message commit.

@@ -213,9 +213,9 @@ fn expand_property(
     Ok(())
 }
 
-/// Builds one collection from a present property: classifies the bound value
-/// pool by kind, rejects a color component on a non-color and `.a` on a
-/// three-component color, then samples the property's values.
+/// Builds one collection from a present property: classifies the bound
+/// value pool by kind, rejects a color component on a non-color and `.a` on
+/// a three-component color, then samples the property's values.
 fn build_collection(
     state: &VoxMain,
     palette_index: usize,

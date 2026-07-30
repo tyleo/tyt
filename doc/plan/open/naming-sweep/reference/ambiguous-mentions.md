@@ -44,3 +44,7 @@ ruling time), ruling, why.
   values ... keyed by a pool of value ids": the first defines the value
   pool itself and reads "A shared value pool"; the second is the id
   pool of value ids.
+- `palette_show.rs:216` — already correct, wrap artifact. The docs commit's
+  rewrap split "value pool" across two lines, which the line-based gate
+  grep reads as a bare mention; rewrapped so it sits on one line, wording
+  unchanged.
