@@ -192,7 +192,7 @@ fn value_pool_kind(value_pool: &VoxValuePool, key: &str) -> Result<ChannelKind> 
         | VoxValuePoolKind::Int { .. }
         | VoxValuePoolKind::Bool { .. } => Ok(ChannelKind::Scalar),
         VoxValuePoolKind::String { .. } | VoxValuePoolKind::Json { .. } => Err(Error::usage(
-            format!("`{key}` is bound to a string or json pool, which has no texel value"),
+            format!("`{key}` is bound to a string or json value pool, which has no texel value"),
         )),
     }
 }

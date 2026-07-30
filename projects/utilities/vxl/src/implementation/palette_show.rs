@@ -233,7 +233,7 @@ fn build_collection(
         .value_pool_id;
     let value_pool = state
         .value_pool(value_pool_id)
-        .expect("a property references a pool the state holds");
+        .expect("a property references a value pool the state holds");
     let kind = classify(value_pool);
 
     // A color component names one channel: it applies only to a color, and `.a`
