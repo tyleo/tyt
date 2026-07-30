@@ -48,3 +48,7 @@ ruling time), ruling, why.
   rewrap split "value pool" across two lines, which the line-based gate
   grep reads as a bare mention; rewrapped so it sits on one line, wording
   unchanged.
+- `vox_main.rs:433`, `471`, and `896` — value pool. Each line already said
+  "value pool" or "Value pools" earlier, so the gate grep's line-based
+  exclusion hid the trailing bare mention through iteration 1; spelled out
+  during iteration 3's gate.

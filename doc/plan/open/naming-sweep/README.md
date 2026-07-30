@@ -1,7 +1,8 @@
 # Naming Sweep Plan
 
-Status: **open.** Iterations 1 (`voxcore`) and 2 (`voxsmith`) are complete
-and awaiting the owner's gate review; iteration 3 (`vxl`) is next.
+Status: **open.** Iterations 1 (`voxcore`), 2 (`voxsmith`), and 3 (`vxl`)
+are complete and awaiting the owner's gate review; iteration 4 (voxj-codec)
+is next.
 
 This plan carries the naming rules the recent `voxcore` and voxj commit
 series established across the crates that still miss them. Three rules, one
@@ -80,9 +81,10 @@ follows the rename. About 81 value-pool lines with exactly one user-visible mess
 assert exact rendered output in their tests, a safety net: none of those
 assertions may change outside a dedicated message commit.
 
-**voxj and voxj-codec** (iteration 4): clean on value pool, zero bare
-mentions, with the wire keys `valuePool` and `valuePools` as the sanctioned
-short forms. The `_index` sweep missed one shape: the outer subject index of
+**voxj and voxj-codec** (iteration 4): the wire keys `valuePool` and
+`valuePools` are the sanctioned short forms. The survey read these crates as
+having zero bare mentions; iteration 3's gate found fourteen prose lines it
+missed, listed in the checklist's iteration 4. The `_index` sweep missed one shape: the outer subject index of
 the seven `check_*` functions, 14 sites, bare `index` while every nested
 index is suffixed. Q3 folds them into this plan.
 
