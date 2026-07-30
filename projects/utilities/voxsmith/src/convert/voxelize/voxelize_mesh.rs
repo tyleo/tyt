@@ -654,8 +654,8 @@ mod tests {
         let (_, palette) = state.iter_palettes().next().unwrap();
         assert_eq!(palette.iter_materials().count(), 2);
         let property = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
-        let pool = palette.property(property).unwrap().pool_id;
-        assert_eq!(state.value_pool(pool).unwrap().values_len(), 1);
+        let value_pool_id = palette.property(property).unwrap().value_pool_id;
+        assert_eq!(state.value_pool(value_pool_id).unwrap().values_len(), 1);
         assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 2.0);
         assert_eq!(sampled_strength(&state, TyVector3U32::new(1, 0, 0)), 2.0);
     }

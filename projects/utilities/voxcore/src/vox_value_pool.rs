@@ -281,7 +281,7 @@ impl VoxValuePool {
 
     /// Deep copy. Liveness lives in the id pool, so the column can't derive
     /// `Clone`. Rebuild it against the cloned pool.
-    pub fn clone_pool(&self) -> Self {
+    pub fn clone_value_pool(&self) -> Self {
         let kind = match &self.kind {
             VoxValuePoolKind::Json { values } => VoxValuePoolKind::Json {
                 values: cloned(&self.value_ids, values),
@@ -628,15 +628,15 @@ mod tests {
     }
 
     #[test]
-    fn clone_pool_is_an_independent_deep_copy() {
-        let mut pool =
+    fn clone_value_pool_is_an_independent_deep_copy() {
+        let mut value_pool =
             VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]).unwrap();
         // Hole the pool first: equality compares values in listing order, so
         // only reading back by id catches a clone that relabels.
-        pool.release_value_stable(U32Id::from_u32(1));
+        value_pool.release_value_stable(U32Id::from_u32(1));
 
-        let mut copy = pool.clone_pool();
-        assert_eq!(pool, copy);
+        let mut copy = value_pool.clone_value_pool();
+        assert_eq!(value_pool, copy);
         assert_eq!(copy.value(U32Id::from_u32(1)), None);
         assert_eq!(
             copy.value(U32Id::from_u32(2)),
@@ -644,7 +644,7 @@ mod tests {
         );
 
         copy.move_value(U32Id::from_u32(0), 1).unwrap();
-        assert_ne!(pool, copy);
+        assert_ne!(value_pool, copy);
     }
 
     #[test]

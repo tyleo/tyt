@@ -170,12 +170,12 @@ fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKin
         };
     };
 
-    let pool = effective
+    let value_pool = effective
         .property(property_id)
         .expect("a resolved name identifies one of the effective palette's properties")
         .value_pool();
 
-    pool_kind(pool, key)
+    pool_kind(value_pool, key)
 }
 
 /// Classifies a bound value pool into a channel kind, rejecting a pool that has

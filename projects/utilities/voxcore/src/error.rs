@@ -12,7 +12,7 @@ use std::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
     /// A value pool has no values.
-    EmptyValuePool { pool_id: U32Id<BVoxValuePool> },
+    EmptyValuePool { value_pool_id: U32Id<BVoxValuePool> },
 
     /// A value pool was given no values at construction.
     EmptyValuePoolValues,
@@ -37,7 +37,7 @@ pub enum Error {
     UnknownPalette { palette_id: U32Id<BVoxPalette> },
 
     /// A mutation named a value pool that is not one of the state's.
-    UnknownValuePool { pool_id: U32Id<BVoxValuePool> },
+    UnknownValuePool { value_pool_id: U32Id<BVoxValuePool> },
 
     /// A mutation named a hierarchy node that is not one of the state's.
     UnknownHierarchyNode { node_id: U32Id<BVoxHierarchyNode> },
@@ -83,7 +83,7 @@ pub enum Error {
     /// the state's.
     PropertyValuePoolRef {
         property_id: U32Id<BVoxProperty>,
-        pool_id: U32Id<BVoxValuePool>,
+        value_pool_id: U32Id<BVoxValuePool>,
     },
 
     /// An inserted palette's material draws a value for this property that is
@@ -140,12 +140,12 @@ pub enum Error {
 
     /// A value pool's `min`/`max` bounds are malformed: non-finite, not
     /// integer-valued for an `int` pool, or `min` greater than `max`.
-    ValuePoolBound { pool_id: U32Id<BVoxValuePool> },
+    ValuePoolBound { value_pool_id: U32Id<BVoxValuePool> },
 
     /// A value pool holds a value that is malformed for its kind or outside its
     /// bounds.
     ValuePoolValue {
-        pool_id: U32Id<BVoxValuePool>,
+        value_pool_id: U32Id<BVoxValuePool>,
         value_id: U32Id<BVoxValuePoolValue>,
     },
 
@@ -153,7 +153,7 @@ pub enum Error {
     PropertyValuePool {
         palette_id: U32Id<BVoxPalette>,
         property_id: U32Id<BVoxProperty>,
-        pool_id: U32Id<BVoxValuePool>,
+        value_pool_id: U32Id<BVoxValuePool>,
     },
 
     /// A material's value id for a property is not one of the pool's values.
@@ -227,8 +227,8 @@ impl Display for Error {
         // Ids print as their bare `u32`: a branded id's own `Display` carries
         // the brand name, which the surrounding wording already gives.
         match self {
-            Error::EmptyValuePool { pool_id } => {
-                write!(f, "value pool {} has no values", pool_id.to_u32())
+            Error::EmptyValuePool { value_pool_id } => {
+                write!(f, "value pool {} has no values", value_pool_id.to_u32())
             }
             Error::EmptyValuePoolValues => {
                 write!(f, "a value pool needs at least one value")
@@ -260,11 +260,11 @@ impl Display for Error {
                     palette_id.to_u32()
                 )
             }
-            Error::UnknownValuePool { pool_id } => {
+            Error::UnknownValuePool { value_pool_id } => {
                 write!(
                     f,
                     "value pool {} is not one of this state's",
-                    pool_id.to_u32()
+                    value_pool_id.to_u32()
                 )
             }
             Error::UnknownHierarchyNode { node_id } => write!(
@@ -320,13 +320,13 @@ impl Display for Error {
             }
             Error::PropertyValuePoolRef {
                 property_id,
-                pool_id,
+                value_pool_id,
             } => write!(
                 f,
                 "the inserted palette's property {} names value pool {}, which is not one of this \
                  state's",
                 property_id.to_u32(),
-                pool_id.to_u32()
+                value_pool_id.to_u32()
             ),
             Error::MaterialValueRef {
                 property_id,
@@ -392,29 +392,32 @@ impl Display for Error {
                 "the inserted hierarchy nodes contain a cycle reaching the node at listing index \
                  {index}"
             ),
-            Error::ValuePoolBound { pool_id } => {
+            Error::ValuePoolBound { value_pool_id } => {
                 write!(
                     f,
                     "value pool {} has malformed min/max bounds",
-                    pool_id.to_u32()
+                    value_pool_id.to_u32()
                 )
             }
-            Error::ValuePoolValue { pool_id, value_id } => write!(
+            Error::ValuePoolValue {
+                value_pool_id,
+                value_id,
+            } => write!(
                 f,
                 "value pool {} value {} is malformed for its kind or out of bounds",
-                pool_id.to_u32(),
+                value_pool_id.to_u32(),
                 value_id.to_u32()
             ),
             Error::PropertyValuePool {
                 palette_id,
                 property_id,
-                pool_id,
+                value_pool_id,
             } => write!(
                 f,
                 "palette {} property {} references value pool {}, which does not exist",
                 palette_id.to_u32(),
                 property_id.to_u32(),
-                pool_id.to_u32()
+                value_pool_id.to_u32()
             ),
             Error::MaterialValue {
                 palette_id,

@@ -1,6 +1,6 @@
 # Naming Sweep Plan
 
-Status: **open.** No iteration has started.
+Status: **open.** Iteration 1 (`voxcore`) is in progress.
 
 This plan carries the naming rules the recent `voxcore` and voxj commit
 series established across the crates that still miss them. Three rules, one

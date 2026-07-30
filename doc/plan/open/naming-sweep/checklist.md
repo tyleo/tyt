@@ -39,7 +39,7 @@ suffixes and the spelled-out value pool, one iteration per crate, in order:
 
 ## Iteration 1: voxcore
 
-- [ ] The breaking surface, one `refactor(voxel)!` commit: rename
+- [x] The breaking surface, one `refactor(voxel)!` commit: rename
       `VoxProperty::pool_id` to `value_pool_id`; rename the `pool_id` field
       on the six `Error` variants (`EmptyValuePool`, `UnknownValuePool`,
       `PropertyValuePoolRef`, `ValuePoolBound`, `ValuePoolValue`,

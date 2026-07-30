@@ -215,14 +215,14 @@ fn build_collection(
     let property_id = palette
         .property_id_by_name(key)
         .expect("caller verified the property is present");
-    let pool_id = palette
+    let value_pool_id = palette
         .property(property_id)
         .expect("a property id from this palette resolves")
-        .pool_id;
-    let pool = state
-        .value_pool(pool_id)
+        .value_pool_id;
+    let value_pool = state
+        .value_pool(value_pool_id)
         .expect("a property references a pool the state holds");
-    let kind = classify(pool);
+    let kind = classify(value_pool);
 
     // A color component names one channel: it applies only to a color, and `.a`
     // only to a four-component color.
@@ -260,7 +260,7 @@ fn build_collection(
             let value_id = palette
                 .value_id(material, property_id)
                 .expect("a material holds a value for every property");
-            sample(pool, value_id, kind, component)
+            sample(value_pool, value_id, kind, component)
         })
         .collect();
 

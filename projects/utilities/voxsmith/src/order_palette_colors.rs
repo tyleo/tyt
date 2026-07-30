@@ -13,37 +13,40 @@ pub fn order_palette_colors(state: &mut VoxMain, palette: U32Id<BVoxPalette>) {
     let Some(palette_ref) = state.palette(palette) else {
         return;
     };
-    let Some(color) = palette_ref.property_id_by_name(BASE_COLOR_FACTOR) else {
+    let Some(color_id) = palette_ref.property_id_by_name(BASE_COLOR_FACTOR) else {
         return;
     };
-    let Some(pool) = palette_ref.property(color).map(|property| property.pool_id) else {
+    let Some(value_pool_id) = palette_ref
+        .property(color_id)
+        .map(|property| property.value_pool_id)
+    else {
         return;
     };
-    let Some(pool_ref) = state.value_pool(pool) else {
+    let Some(value_pool) = state.value_pool(value_pool_id) else {
         return;
     };
 
     // The used color value ids in material order, then the unused ones in
     // their current order, forming a permutation of the pool.
-    let mut new_order: Vec<U32Id<BVoxValuePoolValue>> = Vec::with_capacity(pool_ref.values_len());
+    let mut new_order: Vec<U32Id<BVoxValuePoolValue>> = Vec::with_capacity(value_pool.values_len());
     let mut seen: HashSet<U32Id<BVoxValuePoolValue>> =
-        HashSet::with_capacity(pool_ref.values_len());
+        HashSet::with_capacity(value_pool.values_len());
     for material in palette_ref.iter_materials() {
-        let Some(value_id) = palette_ref.value_id(material, color) else {
+        let Some(value_id) = palette_ref.value_id(material, color_id) else {
             continue;
         };
         if seen.insert(value_id) {
             new_order.push(value_id);
         }
     }
-    for (value_id, _) in pool_ref.iter_values() {
+    for (value_id, _) in value_pool.iter_values() {
         if !seen.contains(&value_id) {
             new_order.push(value_id);
         }
     }
 
     state
-        .reorder_value_pool(pool, &new_order)
+        .reorder_value_pool(value_pool_id, &new_order)
         .expect("the color pool is live and new_order is a permutation by construction");
 }
 

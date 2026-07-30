@@ -12,7 +12,7 @@ pub fn voxj_palette_from_vox_palette(palette: &VoxPalette) -> VoxjPalette {
         .iter_properties()
         .map(|(_, property)| VoxjProperty {
             name: property.name.clone(),
-            value_pool: property.pool_id.to_u32() as usize,
+            value_pool: property.value_pool_id.to_u32() as usize,
         })
         .collect();
 

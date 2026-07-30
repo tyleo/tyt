@@ -930,8 +930,8 @@ fn property_pool(
     palette: U32Id<BVoxPalette>,
     property: U32Id<BVoxProperty>,
 ) -> Option<&VoxValuePool> {
-    let pool = state.palette(palette)?.property(property)?.pool_id;
-    state.value_pool(pool)
+    let value_pool_id = state.palette(palette)?.property(property)?.value_pool_id;
+    state.value_pool(value_pool_id)
 }
 
 /// Re-bases the tight object's voxels to absolute model space, recovering each

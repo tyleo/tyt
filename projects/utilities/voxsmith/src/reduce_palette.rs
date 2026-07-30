@@ -1192,8 +1192,8 @@ mod tests {
     fn pool_len(state: &VoxMain, name: &str) -> usize {
         for (_, palette) in state.iter_palettes() {
             if let Some(property) = palette.property_id_by_name(name) {
-                let pool = palette.property(property).unwrap().pool_id;
-                return state.value_pool(pool).unwrap().values_len();
+                let value_pool_id = palette.property(property).unwrap().value_pool_id;
+                return state.value_pool(value_pool_id).unwrap().values_len();
             }
         }
         panic!("no palette carries {name}");

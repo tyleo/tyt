@@ -51,7 +51,7 @@ impl VoxRuntimeState {
         let mut value_pools = IdField::new();
         for id in self.value_pool_ids.iter() {
             // Safety: retained ids have a value.
-            value_pools.retain(id, unsafe { self.value_pools.get(id) }.clone_pool());
+            value_pools.retain(id, unsafe { self.value_pools.get(id) }.clone_value_pool());
         }
 
         let mut palettes = IdField::new();

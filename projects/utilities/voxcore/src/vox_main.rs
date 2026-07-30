@@ -249,17 +249,17 @@ impl VoxMain {
             return Err(Error::NoPaletteMaterials);
         }
         for (property_id, property) in palette.iter_properties() {
-            let Some(pool) = self.value_pool(property.pool_id) else {
+            let Some(value_pool) = self.value_pool(property.value_pool_id) else {
                 return Err(Error::PropertyValuePoolRef {
                     property_id,
-                    pool_id: property.pool_id,
+                    value_pool_id: property.value_pool_id,
                 });
             };
             for material_id in palette.iter_materials() {
                 let value_id = palette
                     .value_id(material_id, property_id)
                     .expect("a material has a value id for every property");
-                if !pool.contains_value(value_id) {
+                if !value_pool.contains_value(value_id) {
                     return Err(Error::MaterialValueRef {
                         property_id,
                         material_id,
@@ -329,16 +329,16 @@ impl VoxMain {
         &mut self,
         palette_id: U32Id<BVoxPalette>,
         name: String,
-        pool_id: U32Id<BVoxValuePool>,
+        value_pool_id: U32Id<BVoxValuePool>,
         default_value_id: U32Id<BVoxValuePoolValue>,
     ) -> Result<U32Id<BVoxProperty>> {
         if !self.runtime_state.palette_ids.is_retained(palette_id) {
             return Err(Error::UnknownPalette { palette_id });
         }
-        let Some(pool_ref) = self.value_pool(pool_id) else {
-            return Err(Error::UnknownValuePool { pool_id });
+        let Some(value_pool) = self.value_pool(value_pool_id) else {
+            return Err(Error::UnknownValuePool { value_pool_id });
         };
-        if !pool_ref.contains_value(default_value_id) {
+        if !value_pool.contains_value(default_value_id) {
             return Err(Error::UnknownValuePoolValue {
                 value_id: default_value_id,
             });
@@ -346,7 +346,7 @@ impl VoxMain {
         // Safety: the palette id is retained.
         unsafe { self.runtime_state.palettes.get_mut(palette_id) }.add_property(
             name,
-            pool_id,
+            value_pool_id,
             default_value_id,
         )
     }
@@ -374,10 +374,10 @@ impl VoxMain {
             });
         }
         for ((_, property), &value_id) in palette_ref.iter_properties().zip(&value_ids) {
-            let pool = self
-                .value_pool(property.pool_id)
+            let value_pool = self
+                .value_pool(property.value_pool_id)
                 .expect("a property names a live value pool");
-            if !pool.contains_value(value_id) {
+            if !value_pool.contains_value(value_id) {
                 return Err(Error::UnknownValuePoolValue { value_id });
             }
         }
@@ -438,7 +438,7 @@ impl VoxMain {
     /// past [`value_pool_count`](Self::value_pool_count).
     pub fn move_value_pool(&mut self, id: U32Id<BVoxValuePool>, index: usize) -> Result<()> {
         if !self.runtime_state.value_pool_ids.is_retained(id) {
-            return Err(Error::UnknownValuePool { pool_id: id });
+            return Err(Error::UnknownValuePool { value_pool_id: id });
         }
         let count = self.runtime_state.value_pool_ids.len();
         if index >= count {
@@ -468,8 +468,8 @@ impl VoxMain {
     ) -> Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)> {
         let palette = self.palette(palette_id)?;
         let value_id = palette.value_id(material_id, property_id)?;
-        let pool = self.value_pool(palette.property(property_id)?.pool_id)?;
-        Some((pool, value_id))
+        let value_pool = self.value_pool(palette.property(property_id)?.value_pool_id)?;
+        Some((value_pool, value_id))
     }
 
     /// The effective palette of `object`, resolving its layer override rule
@@ -495,8 +495,8 @@ impl VoxMain {
             };
 
             for (property_id, property) in palette.iter_properties() {
-                let pool = self
-                    .value_pool(property.pool_id)
+                let value_pool = self
+                    .value_pool(property.value_pool_id)
                     .expect("a property names a live value pool");
 
                 let entry = VoxEffectiveProperty {
@@ -505,7 +505,7 @@ impl VoxMain {
                     palette_id,
                     palette,
                     property_id,
-                    pool,
+                    pool: value_pool,
                 };
 
                 match property_id_by_name.get(property.name.as_str()) {
@@ -869,19 +869,19 @@ impl VoxMain {
     /// 3. `replacement_id` is `value_id` itself
     pub fn remove_value_pool_value(
         &mut self,
-        pool_id: U32Id<BVoxValuePool>,
+        value_pool_id: U32Id<BVoxValuePool>,
         value_id: U32Id<BVoxValuePoolValue>,
         replacement_id: U32Id<BVoxValuePoolValue>,
     ) -> Result<()> {
-        if !self.runtime_state.value_pool_ids.is_retained(pool_id) {
-            return Err(Error::UnknownValuePool { pool_id });
+        if !self.runtime_state.value_pool_ids.is_retained(value_pool_id) {
+            return Err(Error::UnknownValuePool { value_pool_id });
         }
         // Safety: the pool id is retained.
-        let pool_ref = unsafe { self.runtime_state.value_pools.get(pool_id) };
-        if !pool_ref.contains_value(value_id) {
+        let value_pool = unsafe { self.runtime_state.value_pools.get(value_pool_id) };
+        if !value_pool.contains_value(value_id) {
             return Err(Error::UnknownValuePoolValue { value_id });
         }
-        if !pool_ref.contains_value(replacement_id) {
+        if !value_pool.contains_value(replacement_id) {
             return Err(Error::UnknownValuePoolValue {
                 value_id: replacement_id,
             });
@@ -893,11 +893,12 @@ impl VoxMain {
         for palette_id in self.runtime_state.palette_ids.iter() {
             // Safety: retained palette ids have a value.
             let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
-            palette.repoint_value_pool_value(pool_id, value_id, replacement_id);
+            palette.repoint_value_pool_value(value_pool_id, value_id, replacement_id);
         }
 
         // Safety: the pool id is retained and the value is one of its values.
-        unsafe { self.runtime_state.value_pools.get_mut(pool_id) }.release_value_stable(value_id);
+        unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) }
+            .release_value_stable(value_id);
         Ok(())
     }
 
@@ -1033,7 +1034,7 @@ impl VoxMain {
             let palette = unsafe { self.runtime_state.palettes.get(palette_id) };
             for (property_id, property) in palette.iter_properties() {
                 let used_ids = referenced_ids
-                    .get_mut(&property.pool_id)
+                    .get_mut(&property.value_pool_id)
                     .expect("a property names a live value pool in a valid state");
                 for material_id in palette.iter_materials() {
                     let value_id = palette
@@ -1074,14 +1075,14 @@ impl VoxMain {
     /// each of the pool's value ids exactly once.
     pub fn reorder_value_pool(
         &mut self,
-        pool_id: U32Id<BVoxValuePool>,
+        value_pool_id: U32Id<BVoxValuePool>,
         new_order_ids: &[U32Id<BVoxValuePoolValue>],
     ) -> Result<()> {
-        if !self.runtime_state.value_pool_ids.is_retained(pool_id) {
-            return Err(Error::UnknownValuePool { pool_id });
+        if !self.runtime_state.value_pool_ids.is_retained(value_pool_id) {
+            return Err(Error::UnknownValuePool { value_pool_id });
         }
         // Safety: the id is retained, so it has a value.
-        unsafe { self.runtime_state.value_pools.get_mut(pool_id) }
+        unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) }
             .set_value_order(new_order_ids)
             .ok_or(Error::ValuePoolValueOrder)
     }
@@ -1117,13 +1118,20 @@ impl VoxMain {
         // Value pools are non-empty and their values and bounds well-formed for
         // their kind. This runs first, so a palette that reads a malformed pool
         // is reported after the pool it reads.
-        for (pool_id, pool) in self.iter_value_pools() {
-            match pool.first_flaw() {
+        for (value_pool_id, value_pool) in self.iter_value_pools() {
+            match value_pool.first_flaw() {
                 None => {}
-                Some(VoxValuePoolFlaw::Empty) => return Err(Error::EmptyValuePool { pool_id }),
-                Some(VoxValuePoolFlaw::Bound) => return Err(Error::ValuePoolBound { pool_id }),
+                Some(VoxValuePoolFlaw::Empty) => {
+                    return Err(Error::EmptyValuePool { value_pool_id });
+                }
+                Some(VoxValuePoolFlaw::Bound) => {
+                    return Err(Error::ValuePoolBound { value_pool_id });
+                }
                 Some(VoxValuePoolFlaw::Value(value_id)) => {
-                    return Err(Error::ValuePoolValue { pool_id, value_id });
+                    return Err(Error::ValuePoolValue {
+                        value_pool_id,
+                        value_id,
+                    });
                 }
             }
         }
@@ -1133,13 +1141,13 @@ impl VoxMain {
         for (palette_id, palette) in self.iter_palettes() {
             let mut seen_property_names = HashSet::with_capacity(palette.property_count());
             for (property_id, property) in palette.iter_properties() {
-                let pool = self
-                    .value_pool(property.pool_id)
-                    .ok_or(Error::PropertyValuePool {
-                        palette_id,
-                        property_id,
-                        pool_id: property.pool_id,
-                    })?;
+                let value_pool =
+                    self.value_pool(property.value_pool_id)
+                        .ok_or(Error::PropertyValuePool {
+                            palette_id,
+                            property_id,
+                            value_pool_id: property.value_pool_id,
+                        })?;
                 if !seen_property_names.insert(property.name.as_str()) {
                     return Err(Error::DuplicatePropertyName {
                         name: property.name.clone(),
@@ -1149,7 +1157,7 @@ impl VoxMain {
                     let value_id = palette
                         .value_id(material_id, property_id)
                         .expect("a material has a value id for every property");
-                    if !pool.contains_value(value_id) {
+                    if !value_pool.contains_value(value_id) {
                         return Err(Error::MaterialValue {
                             palette_id,
                             property_id,
@@ -1370,7 +1378,7 @@ mod tests {
         U32Id::from_u32(index)
     }
 
-    fn pool_id(index: u32) -> U32Id<BVoxValuePool> {
+    fn value_pool_id(index: u32) -> U32Id<BVoxValuePool> {
         U32Id::from_u32(index)
     }
 
@@ -1687,7 +1695,7 @@ mod tests {
                 &[value_id(0), value_id(1), value_id(2)]
             ),
             Err(Error::UnknownValuePool {
-                pool_id: pool_id(9)
+                value_pool_id: value_pool_id(9)
             })
         );
         assert_eq!(
@@ -2406,14 +2414,14 @@ mod tests {
         let mut palette = VoxPalette::default();
         // The property references pool id 0, but the state holds no pools.
         let property_id = palette
-            .add_property("baseColorFactor".to_owned(), pool_id(0), value_id(0))
+            .add_property("baseColorFactor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
         palette.add_material(vec![value_id(0)]).unwrap();
         assert_eq!(
             state.add_palette(palette),
             Err(Error::PropertyValuePoolRef {
                 property_id,
-                pool_id: pool_id(0),
+                value_pool_id: value_pool_id(0),
             })
         );
         assert_eq!(state.palette_count(), 0);
@@ -2692,7 +2700,7 @@ mod tests {
         assert_eq!(
             state.move_value_pool(U32Id::from_u32(9), 0),
             Err(Error::UnknownValuePool {
-                pool_id: pool_id(9)
+                value_pool_id: value_pool_id(9)
             })
         );
         assert_eq!(state.value_pool_index(U32Id::from_u32(9)), None);
@@ -2765,7 +2773,7 @@ mod tests {
         assert_eq!(
             state.remove_value_pool_value(U32Id::from_u32(9), value_id(1), value_id(2)),
             Err(Error::UnknownValuePool {
-                pool_id: pool_id(9)
+                value_pool_id: value_pool_id(9)
             })
         );
         state.validate().unwrap();
@@ -2840,15 +2848,15 @@ mod tests {
     #[test]
     fn gc_after_a_pool_move_relabels_pools_and_each_pool_s_values() {
         let mut state = VoxMain::default();
-        let first_pool_id = int_pool(&mut state, vec![10, 20]);
-        let second_pool_id = int_pool(&mut state, vec![30, 40, 50]);
+        let first_value_pool_id = int_pool(&mut state, vec![10, 20]);
+        let second_value_pool_id = int_pool(&mut state, vec![30, 40, 50]);
         let mut palette = VoxPalette::default();
         // Both properties come before the material, so neither is back-filled.
         let first_id = palette
-            .add_property("first".to_owned(), first_pool_id, value_id(0))
+            .add_property("first".to_owned(), first_value_pool_id, value_id(0))
             .unwrap();
         let second_id = palette
-            .add_property("second".to_owned(), second_pool_id, value_id(0))
+            .add_property("second".to_owned(), second_value_pool_id, value_id(0))
             .unwrap();
         let live_material_id = palette
             .add_material(vec![value_id(1), value_id(0)])
@@ -2860,12 +2868,15 @@ mod tests {
         // the identity, and give the two pools different value permutations, so
         // a cell relabeled through the wrong pool's remap lands on the wrong
         // value.
-        state.move_value_pool(second_pool_id, 0).unwrap();
+        state.move_value_pool(second_value_pool_id, 0).unwrap();
         state
-            .reorder_value_pool(first_pool_id, &[value_id(1), value_id(0)])
+            .reorder_value_pool(first_value_pool_id, &[value_id(1), value_id(0)])
             .unwrap();
         state
-            .reorder_value_pool(second_pool_id, &[value_id(2), value_id(0), value_id(1)])
+            .reorder_value_pool(
+                second_value_pool_id,
+                &[value_id(2), value_id(0), value_id(1)],
+            )
             .unwrap();
         state.validate().unwrap();
 
@@ -2873,8 +2884,14 @@ mod tests {
         state.validate().unwrap();
 
         // The pools renumber to listing order, so the moved pool is now id 0.
-        assert_eq!(remap.value_pools.new_id(second_pool_id), Some(pool_id(0)));
-        assert_eq!(remap.value_pools.new_id(first_pool_id), Some(pool_id(1)));
+        assert_eq!(
+            remap.value_pools.new_id(second_value_pool_id),
+            Some(value_pool_id(0))
+        );
+        assert_eq!(
+            remap.value_pools.new_id(first_value_pool_id),
+            Some(value_pool_id(1))
+        );
         assert_eq!(
             state
                 .iter_value_pools()
@@ -2886,18 +2903,24 @@ mod tests {
         // Each pool's value remap is keyed by that pool's pre-gc id, which is
         // the id the moved pool held before the relabel above.
         assert_eq!(
-            remap.value_pool_values[first_pool_id.to_usize_id()].new_id(value_id(1)),
+            remap.value_pool_values[first_value_pool_id.to_usize_id()].new_id(value_id(1)),
             Some(value_id(0))
         );
         assert_eq!(
-            remap.value_pool_values[second_pool_id.to_usize_id()].new_id(value_id(2)),
+            remap.value_pool_values[second_value_pool_id.to_usize_id()].new_id(value_id(2)),
             Some(value_id(0))
         );
 
         // Every property followed the pool renumbering.
         let palette_ref = state.palette(palette_id).unwrap();
-        assert_eq!(palette_ref.property(first_id).unwrap().pool_id, pool_id(1));
-        assert_eq!(palette_ref.property(second_id).unwrap().pool_id, pool_id(0));
+        assert_eq!(
+            palette_ref.property(first_id).unwrap().value_pool_id,
+            value_pool_id(1)
+        );
+        assert_eq!(
+            palette_ref.property(second_id).unwrap().value_pool_id,
+            value_pool_id(0)
+        );
 
         // The material still reads the same two numbers, through the relabeled
         // pool ids and the relabeled cells.
@@ -3088,9 +3111,9 @@ mod tests {
             })
         );
         assert_eq!(
-            state.add_property(palette_id, "tag".to_owned(), pool_id(9), value_id(0)),
+            state.add_property(palette_id, "tag".to_owned(), value_pool_id(9), value_id(0)),
             Err(Error::UnknownValuePool {
-                pool_id: pool_id(9)
+                value_pool_id: value_pool_id(9)
             })
         );
         assert_eq!(
@@ -3244,7 +3267,7 @@ mod tests {
         // Insertions.
         assert_rejects_unchanged(&mut state, |s| s.add_palette(VoxPalette::default()));
         assert_rejects_unchanged(&mut state, |s| {
-            s.add_palette(one_material_palette(pool_id(9), 0))
+            s.add_palette(one_material_palette(value_pool_id(9), 0))
         });
         assert_rejects_unchanged(&mut state, |s| {
             let mut bad = unit_object("bad");
@@ -3354,7 +3377,7 @@ mod tests {
     /// calls hit live and dead entities alike, and every `Result` is dropped:
     /// the property under test is that no success breaks the state.
     fn apply_random_operation(state: &mut VoxMain, rng: &mut Lcg) {
-        let wild_pool_id = pool_id(rng.below(6) as u32);
+        let wild_value_pool_id = value_pool_id(rng.below(6) as u32);
         let wild_palette_id = palette_id(rng.below(6) as u32);
         let wild_object_id = U32Id::<BVoxObject>::from_u32(rng.below(6) as u32);
         let wild_node_id = node_id(rng.below(8) as u32);
@@ -3370,7 +3393,11 @@ mod tests {
             1 => {
                 let mut palette = VoxPalette::default();
                 for index in 0..rng.below(3) {
-                    let _ = palette.add_property(format!("p{index}"), wild_pool_id, wild_value_id);
+                    let _ = palette.add_property(
+                        format!("p{index}"),
+                        wild_value_pool_id,
+                        wild_value_id,
+                    );
                 }
                 for _ in 0..1 + rng.below(2) {
                     let row = (0..palette.property_count())
@@ -3454,7 +3481,7 @@ mod tests {
                 let _ = state.add_property(
                     wild_palette_id,
                     format!("p{}", rng.below(4)),
-                    wild_pool_id,
+                    wild_value_pool_id,
                     wild_value_id,
                 );
             }
@@ -3487,7 +3514,7 @@ mod tests {
             }
             19 => {
                 let _ = state.remove_value_pool_value(
-                    wild_pool_id,
+                    wild_value_pool_id,
                     wild_value_id,
                     value_id(rng.below(4) as u32),
                 );

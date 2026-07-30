@@ -10,7 +10,7 @@ pub struct VoxProperty {
     pub name: String,
 
     /// The value pool this property's materials draw values from.
-    pub pool_id: U32Id<BVoxValuePool>,
+    pub value_pool_id: U32Id<BVoxValuePool>,
 }
 
 #[cfg(test)]
@@ -22,10 +22,10 @@ mod tests {
     fn holds_a_name_and_a_pool() {
         let property = VoxProperty {
             name: "baseColorFactor".to_owned(),
-            pool_id: U32Id::<BVoxValuePool>::from_u32(2),
+            value_pool_id: U32Id::<BVoxValuePool>::from_u32(2),
         };
 
         assert_eq!(property.name, "baseColorFactor");
-        assert_eq!(property.pool_id, U32Id::from_u32(2));
+        assert_eq!(property.value_pool_id, U32Id::from_u32(2));
     }
 }
