@@ -199,7 +199,7 @@ report-command output assertions are unchanged outside the message commit.
 
 ## Iteration 4: voxj-codec
 
-- [ ] One commit renaming the outer subject indices in the seven `check_*`
+- [x] One commit renaming the outer subject indices in the seven `check_*`
       functions to `<entity>_index` (the survey's 14 sites), message texts
       unchanged.
 - [ ] Bare-pool prose the survey missed, one docs commit: the nine

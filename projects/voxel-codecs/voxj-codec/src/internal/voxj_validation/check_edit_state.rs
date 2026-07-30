@@ -19,7 +19,7 @@ pub fn check_edit_state(main: &VoxjMain, failures: &mut Failures) {
         );
         return;
     }
-    for (index, (edit, object)) in edit_state.objects.iter().zip(objects).enumerate() {
+    for (object_index, (edit, object)) in edit_state.objects.iter().zip(objects).enumerate() {
         if !failures.go() {
             return;
         }
@@ -32,7 +32,7 @@ pub fn check_edit_state(main: &VoxjMain, failures: &mut Failures) {
                 failures.report(
                     Check::EditState,
                     format!(
-                        "edit grid {index} on axis {axis} ([{edit_min}, {edit_max})) does not \
+                        "edit grid {object_index} on axis {axis} ([{edit_min}, {edit_max})) does not \
                          contain the runtime grid ([{run_min}, {run_max}))"
                     ),
                 );

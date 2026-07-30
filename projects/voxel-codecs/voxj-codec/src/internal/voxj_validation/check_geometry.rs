@@ -9,7 +9,7 @@ use voxj::{VoxjMain, VoxjObject};
 /// layer.
 pub fn check_geometry(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
-    for (index, object) in state.objects.iter().enumerate() {
+    for (object_index, object) in state.objects.iter().enumerate() {
         if !failures.go() {
             return;
         }
@@ -22,23 +22,25 @@ pub fn check_geometry(main: &VoxjMain, failures: &mut Failures) {
             Err(error) => {
                 failures.report(
                     Check::Blocks,
-                    format!("object {index} has a malformed position or sample block: {error}"),
+                    format!(
+                        "object {object_index} has a malformed position or sample block: {error}"
+                    ),
                 );
                 continue;
             }
         };
 
-        check_sample_materials(index, object, &decoded, &material_counts, failures);
+        check_sample_materials(object_index, object, &decoded, &material_counts, failures);
         if !failures.go() {
             return;
         }
-        check_positions(index, object, &decoded, failures);
+        check_positions(object_index, object, &decoded, failures);
     }
 }
 
 /// Each decoded sample indexes a real material of its layer's palette.
 fn check_sample_materials(
-    index: usize,
+    object_index: usize,
     object: &VoxjObject,
     decoded: &VoxjDecodedObject,
     material_counts: &[usize],
@@ -53,7 +55,7 @@ fn check_sample_materials(
                 failures.report(
                     Check::SampleMaterials,
                     format!(
-                        "object {index} voxel {voxel_index} samples material {material_index} of \
+                        "object {object_index} voxel {voxel_index} samples material {material_index} of \
                          palette {palette_index}, which has {material_count} materials"
                     ),
                 );
@@ -69,7 +71,7 @@ fn check_sample_materials(
 /// tight around them. Tightness is checked only when every position is in
 /// bounds, since an out-of-bounds voxel makes the extent meaningless.
 fn check_positions(
-    index: usize,
+    object_index: usize,
     object: &VoxjObject,
     decoded: &VoxjDecodedObject,
     failures: &mut Failures,
@@ -85,7 +87,7 @@ fn check_positions(
             failures.report(
                 Check::Bounds,
                 format!(
-                    "object {index} voxel position [{x}, {y}, {z}] lies outside \
+                    "object {object_index} voxel position [{x}, {y}, {z}] lies outside \
                      bounds [{bound_x}, {bound_y}, {bound_z}]"
                 ),
             );
@@ -97,7 +99,7 @@ fn check_positions(
         if !seen.insert([x, y, z]) {
             failures.report(
                 Check::UniquePositions,
-                format!("object {index} repeats voxel position [{x}, {y}, {z}]"),
+                format!("object {object_index} repeats voxel position [{x}, {y}, {z}]"),
             );
             if !failures.go() {
                 return;
@@ -118,7 +120,7 @@ fn check_positions(
             failures.report(
                 Check::Bounds,
                 format!(
-                    "object {index} is empty, so its bounds must be [0, 0, 0], \
+                    "object {object_index} is empty, so its bounds must be [0, 0, 0], \
                      not [{bound_x}, {bound_y}, {bound_z}]"
                 ),
             );
@@ -131,7 +133,7 @@ fn check_positions(
             failures.report(
                 Check::Bounds,
                 format!(
-                    "object {index} bounds are not tight on {name}: its voxels span \
+                    "object {object_index} bounds are not tight on {name}: its voxels span \
                      [{}, {}], so the bound must be {}, not {}",
                     min[axis],
                     max[axis],

@@ -9,7 +9,7 @@ use voxj::{VoxjMain, VoxjPalette, VoxjRuntimeState};
 ///    one value-index per property, within the value pool that property binds.
 pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
-    for (index, palette) in state.palettes.iter().enumerate() {
+    for (palette_index, palette) in state.palettes.iter().enumerate() {
         if !failures.go() {
             return;
         }
@@ -18,12 +18,18 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
         let mut seen = HashSet::with_capacity(palette.properties.len());
 
         for (property_index, property) in palette.properties.iter().enumerate() {
-            check_name(index, property_index, &property.name, &mut seen, failures);
+            check_name(
+                palette_index,
+                property_index,
+                &property.name,
+                &mut seen,
+                failures,
+            );
             if property.value_pool >= state.value_pools.len() {
                 failures.report(
                     Check::Palettes,
                     format!(
-                        "palette {index} property {property_index} references value pool {}, but the document has {} value pools",
+                        "palette {palette_index} property {property_index} references value pool {}, but the document has {} value pools",
                         property.value_pool,
                         state.value_pools.len()
                     ),
@@ -37,19 +43,22 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
         // Every palette is sampled, so it needs a material to sample (rule
         // 10.3).
         if palette.materials.is_empty() {
-            failures.report(Check::Palettes, format!("palette {index} has no materials"));
+            failures.report(
+                Check::Palettes,
+                format!("palette {palette_index} has no materials"),
+            );
             if !failures.go() {
                 return;
             }
         }
 
-        check_materials(index, palette, state, failures);
+        check_materials(palette_index, palette, state, failures);
     }
 }
 
 /// A property's name is non-empty and not yet taken within the palette.
 fn check_name<'a>(
-    index: usize,
+    palette_index: usize,
     property_index: usize,
     name: &'a str,
     seen: &mut HashSet<&'a str>,
@@ -58,12 +67,12 @@ fn check_name<'a>(
     if name.is_empty() {
         failures.report(
             Check::Palettes,
-            format!("palette {index} property {property_index} has an empty name"),
+            format!("palette {palette_index} property {property_index} has an empty name"),
         );
     } else if !seen.insert(name) {
         failures.report(
             Check::Palettes,
-            format!("palette {index} lists property {name:?} more than once"),
+            format!("palette {palette_index} lists property {name:?} more than once"),
         );
     }
 }
@@ -71,7 +80,7 @@ fn check_name<'a>(
 /// Every materials row holds exactly one value-index per property, and every
 /// value-index falls within the values of the value pool its property names.
 fn check_materials(
-    index: usize,
+    palette_index: usize,
     palette: &VoxjPalette,
     state: &VoxjRuntimeState,
     failures: &mut Failures,
@@ -82,7 +91,7 @@ fn check_materials(
             failures.report(
                 Check::Palettes,
                 format!(
-                    "palette {index} material {material_index} has {} value-indices but the \
+                    "palette {palette_index} material {material_index} has {} value-indices but the \
                      palette has {width} properties",
                     row.len()
                 ),
@@ -109,7 +118,7 @@ fn check_materials(
                 failures.report(
                     Check::Palettes,
                     format!(
-                        "palette {index} material {material_index} value-index {value_index} \
+                        "palette {palette_index} material {material_index} value-index {value_index} \
                          is out of range for a value pool with {value_pool_len} values"
                     ),
                 );

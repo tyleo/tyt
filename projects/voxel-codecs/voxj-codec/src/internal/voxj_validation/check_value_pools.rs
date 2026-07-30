@@ -14,7 +14,7 @@ use voxj::{VoxjBound, VoxjMain, VoxjValuePool};
 /// bounds, hex text, and color-component ranges. The `json`, `bool`, and
 /// `string` kinds add no content rule past non-emptiness.
 pub fn check_value_pools(main: &VoxjMain, failures: &mut Failures) {
-    for (index, value_pool) in main.runtime_state.value_pools.iter().enumerate() {
+    for (value_pool_index, value_pool) in main.runtime_state.value_pools.iter().enumerate() {
         if !failures.go() {
             return;
         }
@@ -22,7 +22,7 @@ pub fn check_value_pools(main: &VoxjMain, failures: &mut Failures) {
         if value_pool.values_len() == 0 {
             failures.report(
                 Check::ValuePools,
-                format!("value pool {index} has no values"),
+                format!("value pool {value_pool_index} has no values"),
             );
             if !failures.go() {
                 return;
@@ -31,19 +31,32 @@ pub fn check_value_pools(main: &VoxjMain, failures: &mut Failures) {
 
         match value_pool {
             VoxjValuePool::Float { min, max, values } => {
-                check_numeric(index, *min, *max, false, values.iter().copied(), failures);
+                check_numeric(
+                    value_pool_index,
+                    *min,
+                    *max,
+                    false,
+                    values.iter().copied(),
+                    failures,
+                );
             }
             VoxjValuePool::Int { min, max, values } => {
                 let values = values.iter().map(|&value| value as f64);
-                check_numeric(index, *min, *max, true, values, failures);
+                check_numeric(value_pool_index, *min, *max, true, values, failures);
             }
-            VoxjValuePool::SrgbHex { values } => check_hex(index, values, 6, failures),
-            VoxjValuePool::SrgbaHex { values } => check_hex(index, values, 8, failures),
-            VoxjValuePool::SrgbFloat { values } => check_colors(index, values, false, failures),
-            VoxjValuePool::SrgbaFloat { values } => check_colors(index, values, false, failures),
-            VoxjValuePool::LinearRgbFloat { values } => check_colors(index, values, true, failures),
+            VoxjValuePool::SrgbHex { values } => check_hex(value_pool_index, values, 6, failures),
+            VoxjValuePool::SrgbaHex { values } => check_hex(value_pool_index, values, 8, failures),
+            VoxjValuePool::SrgbFloat { values } => {
+                check_colors(value_pool_index, values, false, failures)
+            }
+            VoxjValuePool::SrgbaFloat { values } => {
+                check_colors(value_pool_index, values, false, failures)
+            }
+            VoxjValuePool::LinearRgbFloat { values } => {
+                check_colors(value_pool_index, values, true, failures)
+            }
             VoxjValuePool::LinearRgbaFloat { values } => {
-                check_colors(index, values, true, failures)
+                check_colors(value_pool_index, values, true, failures)
             }
             VoxjValuePool::Json { .. }
             | VoxjValuePool::Bool { .. }
@@ -57,7 +70,7 @@ pub fn check_value_pools(main: &VoxjMain, failures: &mut Failures) {
 /// integer-valued; both kinds present their values as `f64`, so a large int
 /// bound compares within `f64` precision, ample for the format's small ranges.
 fn check_numeric(
-    index: usize,
+    value_pool_index: usize,
     min: VoxjBound,
     max: VoxjBound,
     integer: bool,
@@ -72,7 +85,7 @@ fn check_numeric(
                 failures.report(
                     Check::ValuePools,
                     format!(
-                        "value pool {index} is an int value pool but its {side} bound \
+                        "value pool {value_pool_index} is an int value pool but its {side} bound \
                          {number} is not integer-valued"
                     ),
                 );
@@ -88,7 +101,7 @@ fn check_numeric(
     {
         failures.report(
             Check::ValuePools,
-            format!("value pool {index} has min {low} greater than max {high}"),
+            format!("value pool {value_pool_index} has min {low} greater than max {high}"),
         );
         if !failures.go() {
             return;
@@ -102,7 +115,7 @@ fn check_numeric(
             failures.report(
                 Check::ValuePools,
                 format!(
-                    "value pool {index} value {value} lies outside [{}, {}]",
+                    "value pool {value_pool_index} value {value} lies outside [{}, {}]",
                     describe(min),
                     describe(max)
                 ),
@@ -123,13 +136,13 @@ fn describe(bound: VoxjBound) -> String {
 }
 
 /// Every hex color is `#` followed by exactly `digits` uppercase hex characters.
-fn check_hex(index: usize, values: &[String], digits: usize, failures: &mut Failures) {
+fn check_hex(value_pool_index: usize, values: &[String], digits: usize, failures: &mut Failures) {
     for (value_index, value) in values.iter().enumerate() {
         if !is_hex_color(value, digits) {
             failures.report(
                 Check::ValuePools,
                 format!(
-                    "value pool {index} value {value_index} {value:?} is not \
+                    "value pool {value_pool_index} value {value_index} {value:?} is not \
                      {digits} uppercase hex digits after '#'"
                 ),
             );
@@ -154,7 +167,7 @@ fn is_hex_color(value: &str, digits: usize) -> bool {
 /// linear `>= 0` for HDR. The array length is fixed by the kind, so only the
 /// range is open here.
 fn check_colors<const N: usize>(
-    index: usize,
+    value_pool_index: usize,
     values: &[[f64; N]],
     linear: bool,
     failures: &mut Failures,
@@ -170,7 +183,7 @@ fn check_colors<const N: usize>(
                 failures.report(
                     Check::ValuePools,
                     format!(
-                        "value pool {index} color {value_index} component {component} \
+                        "value pool {value_pool_index} color {value_index} component {component} \
                          is {channel}, outside {}",
                         if linear {
                             ">= 0 (linear)"

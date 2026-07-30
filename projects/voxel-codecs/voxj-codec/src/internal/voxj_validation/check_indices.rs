@@ -8,7 +8,7 @@ use voxj::VoxjMain;
 pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
 
-    for (index, object) in state.objects.iter().enumerate() {
+    for (object_index, object) in state.objects.iter().enumerate() {
         for &palette_index in &object.layers {
             if !failures.go() {
                 return;
@@ -17,7 +17,7 @@ pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
                 failures.report(
                     Check::Indices,
                     format!(
-                        "object {index} references palette {palette_index}, but the document has {} palettes",
+                        "object {object_index} references palette {palette_index}, but the document has {} palettes",
                         state.palettes.len()
                     ),
                 );
@@ -25,7 +25,7 @@ pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
         }
     }
 
-    for (index, node) in state.nodes.iter().enumerate() {
+    for (node_index, node) in state.nodes.iter().enumerate() {
         if !failures.go() {
             return;
         }
@@ -35,7 +35,7 @@ pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
                 failures.report(
                     Check::Indices,
                     format!(
-                        "hierarchy node {index} lists child node {child_node_index}, but the document has {} nodes",
+                        "hierarchy node {node_index} lists child node {child_node_index}, but the document has {} nodes",
                         state.nodes.len()
                     ),
                 );
@@ -43,7 +43,7 @@ pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
                 failures.report(
                     Check::Indices,
                     format!(
-                        "hierarchy node {index} lists child node {child_node_index} more than once"
+                        "hierarchy node {node_index} lists child node {child_node_index} more than once"
                     ),
                 );
             }
@@ -58,7 +58,7 @@ pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
                 failures.report(
                     Check::Indices,
                     format!(
-                        "hierarchy node {index} places object {child_object_index}, but the document has {} objects",
+                        "hierarchy node {node_index} places object {child_object_index}, but the document has {} objects",
                         state.objects.len()
                     ),
                 );
@@ -66,7 +66,7 @@ pub fn check_indices(main: &VoxjMain, failures: &mut Failures) {
                 failures.report(
                     Check::Indices,
                     format!(
-                        "hierarchy node {index} places object {child_object_index} more than once"
+                        "hierarchy node {node_index} places object {child_object_index} more than once"
                     ),
                 );
             }

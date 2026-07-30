@@ -8,7 +8,7 @@ const ROTATION_TOLERANCE: f64 = 1e-6;
 /// No transform scale component is zero and every rotation is a unit
 /// quaternion.
 pub fn check_transforms(main: &VoxjMain, failures: &mut Failures) {
-    for (index, node) in main.runtime_state.nodes.iter().enumerate() {
+    for (node_index, node) in main.runtime_state.nodes.iter().enumerate() {
         if !failures.go() {
             return;
         }
@@ -16,7 +16,7 @@ pub fn check_transforms(main: &VoxjMain, failures: &mut Failures) {
         if scale_x == 0.0 || scale_y == 0.0 || scale_z == 0.0 {
             failures.report(
                 Check::Scale,
-                format!("hierarchy node {index} has a transform scale component of zero"),
+                format!("hierarchy node {node_index} has a transform scale component of zero"),
             );
             if !failures.go() {
                 return;
@@ -32,7 +32,7 @@ pub fn check_transforms(main: &VoxjMain, failures: &mut Failures) {
             failures.report(
                 Check::Rotation,
                 format!(
-                    "hierarchy node {index} rotation is not a unit quaternion \
+                    "hierarchy node {node_index} rotation is not a unit quaternion \
                      (length squared {length_squared})"
                 ),
             );
