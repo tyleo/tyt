@@ -1300,20 +1300,20 @@ mod tests {
                 .expect("one material");
             let scalar = |attribute: &str| -> f64 {
                 let property = material_palette.property_id_by_name(attribute).unwrap();
-                let (pool, index) = reloaded
+                let (value_pool, index) = reloaded
                     .material_value(palette_id, material, property)
                     .unwrap();
-                match pool.value(index) {
+                match value_pool.value(index) {
                     Some(VoxValuePoolValueRef::Float(number)) => number,
                     _ => panic!("a scalar attribute is a float pool"),
                 }
             };
             let flag = |attribute: &str| -> bool {
                 let property = material_palette.property_id_by_name(attribute).unwrap();
-                let (pool, index) = reloaded
+                let (value_pool, index) = reloaded
                     .material_value(palette_id, material, property)
                     .unwrap();
-                match pool.value(index) {
+                match value_pool.value(index) {
                     Some(VoxValuePoolValueRef::Bool(flag)) => flag,
                     _ => panic!("shadows is a bool pool"),
                 }
@@ -1385,10 +1385,10 @@ mod tests {
         let property = material_palette
             .property_id_by_name("emissiveStrength")
             .unwrap();
-        let (pool, index) = reloaded
+        let (value_pool, index) = reloaded
             .material_value(palette_id, material, property)
             .unwrap();
-        let sic = match pool.value(index) {
+        let sic = match value_pool.value(index) {
             Some(VoxValuePoolValueRef::Float(number)) => number,
             _ => panic!("emissiveStrength is a float pool"),
         };

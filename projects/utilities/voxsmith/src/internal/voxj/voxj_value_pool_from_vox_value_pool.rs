@@ -19,12 +19,12 @@ use voxj::{VoxjBound, VoxjValuePool};
 /// one, keeping its values and any `int`/`float` bounds; `json` recurses through
 /// [`voxj_value_from_vox_value`].
 pub fn voxj_value_pool_from_vox_value_pool(
-    pool: &VoxValuePool,
+    value_pool: &VoxValuePool,
     color_format: ColorFormat,
 ) -> VoxjValuePool {
-    match pool.kind() {
+    match value_pool.kind() {
         VoxValuePoolKind::Json { .. } => VoxjValuePool::Json {
-            values: pool
+            values: value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
                     VoxValuePoolValueRef::Json(value) => voxj_value_from_vox_value(value),
@@ -34,7 +34,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
         },
 
         VoxValuePoolKind::Bool { .. } => VoxjValuePool::Bool {
-            values: pool
+            values: value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
                     VoxValuePoolValueRef::Bool(flag) => flag,
@@ -46,7 +46,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
         VoxValuePoolKind::Float { min, max, .. } => VoxjValuePool::Float {
             min: voxj_bound(*min),
             max: voxj_bound(*max),
-            values: pool
+            values: value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
                     VoxValuePoolValueRef::Float(number) => number,
@@ -58,7 +58,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
         VoxValuePoolKind::Int { min, max, .. } => VoxjValuePool::Int {
             min: voxj_bound(*min),
             max: voxj_bound(*max),
-            values: pool
+            values: value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
                     VoxValuePoolValueRef::Int(number) => number,
@@ -68,7 +68,7 @@ pub fn voxj_value_pool_from_vox_value_pool(
         },
 
         VoxValuePoolKind::String { .. } => VoxjValuePool::String {
-            values: pool
+            values: value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
                     VoxValuePoolValueRef::String(text) => text.to_owned(),
@@ -79,42 +79,43 @@ pub fn voxj_value_pool_from_vox_value_pool(
 
         VoxValuePoolKind::Srgb { .. } => match color_format {
             ColorFormat::Hex => VoxjValuePool::SrgbHex {
-                values: rgb_colors(pool).iter().map(encode_hex).collect(),
+                values: rgb_colors(value_pool).iter().map(encode_hex).collect(),
             },
             ColorFormat::Float => VoxjValuePool::SrgbFloat {
-                values: rgb_colors(pool),
+                values: rgb_colors(value_pool),
             },
             ColorFormat::LinearFloat => VoxjValuePool::LinearRgbFloat {
-                values: rgb_colors(pool).iter().map(decode_rgb).collect(),
+                values: rgb_colors(value_pool).iter().map(decode_rgb).collect(),
             },
         },
 
         VoxValuePoolKind::Srgba { .. } => match color_format {
             ColorFormat::Hex => VoxjValuePool::SrgbaHex {
-                values: rgba_colors(pool).iter().map(encode_hex).collect(),
+                values: rgba_colors(value_pool).iter().map(encode_hex).collect(),
             },
             ColorFormat::Float => VoxjValuePool::SrgbaFloat {
-                values: rgba_colors(pool),
+                values: rgba_colors(value_pool),
             },
             ColorFormat::LinearFloat => VoxjValuePool::LinearRgbaFloat {
-                values: rgba_colors(pool).iter().map(decode_rgba).collect(),
+                values: rgba_colors(value_pool).iter().map(decode_rgba).collect(),
             },
         },
 
         VoxValuePoolKind::LinearRgb { .. } => VoxjValuePool::LinearRgbFloat {
-            values: rgb_colors(pool),
+            values: rgb_colors(value_pool),
         },
 
         VoxValuePoolKind::LinearRgba { .. } => VoxjValuePool::LinearRgbaFloat {
-            values: rgba_colors(pool),
+            values: rgba_colors(value_pool),
         },
     }
 }
 
 /// The three-component colors of an `srgb` or `linear-rgb` pool in listing
 /// order.
-fn rgb_colors(pool: &VoxValuePool) -> Vec<[f64; 3]> {
-    pool.iter_values()
+fn rgb_colors(value_pool: &VoxValuePool) -> Vec<[f64; 3]> {
+    value_pool
+        .iter_values()
         .map(|(_, value)| match value {
             VoxValuePoolValueRef::Srgb(color) | VoxValuePoolValueRef::LinearRgb(color) => *color,
             other => unreachable!("an rgb pool yields rgb colors, not {other:?}"),
@@ -124,8 +125,9 @@ fn rgb_colors(pool: &VoxValuePool) -> Vec<[f64; 3]> {
 
 /// The four-component colors of an `srgba` or `linear-rgba` pool in listing
 /// order.
-fn rgba_colors(pool: &VoxValuePool) -> Vec<[f64; 4]> {
-    pool.iter_values()
+fn rgba_colors(value_pool: &VoxValuePool) -> Vec<[f64; 4]> {
+    value_pool
+        .iter_values()
         .map(|(_, value)| match value {
             VoxValuePoolValueRef::Srgba(color) | VoxValuePoolValueRef::LinearRgba(color) => *color,
             other => unreachable!("an rgba pool yields rgba colors, not {other:?}"),
@@ -192,10 +194,10 @@ mod tests {
     }
 
     #[test]
-    fn linear_float_decodes_an_srgb_pool() {
-        let pool = VoxValuePool::srgb(vec![[1.0, 0.0, 0.5]]).unwrap();
+    fn linear_float_decodes_an_srgb_value_pool() {
+        let value_pool = VoxValuePool::srgb(vec![[1.0, 0.0, 0.5]]).unwrap();
 
-        match voxj_value_pool_from_vox_value_pool(&pool, ColorFormat::LinearFloat) {
+        match voxj_value_pool_from_vox_value_pool(&value_pool, ColorFormat::LinearFloat) {
             VoxjValuePool::LinearRgbFloat { values } => {
                 assert_eq!(values.len(), 1);
                 assert!((values[0][0] - 1.0).abs() < EPSILON);
@@ -208,9 +210,9 @@ mod tests {
 
     #[test]
     fn linear_float_keeps_straight_alpha() {
-        let pool = VoxValuePool::srgba(vec![[0.5, 0.5, 0.5, 0.25]]).unwrap();
+        let value_pool = VoxValuePool::srgba(vec![[0.5, 0.5, 0.5, 0.25]]).unwrap();
 
-        match voxj_value_pool_from_vox_value_pool(&pool, ColorFormat::LinearFloat) {
+        match voxj_value_pool_from_vox_value_pool(&value_pool, ColorFormat::LinearFloat) {
             VoxjValuePool::LinearRgbaFloat { values } => {
                 // Alpha carries no gamma, so it passes through.
                 assert_eq!(values[0][3], 0.25);
@@ -234,9 +236,9 @@ mod tests {
     fn linear_float_preserves_an_hdr_component() {
         // A linear pool carries components above 1; linear-float holds them,
         // hex could not.
-        let pool = VoxValuePool::linear_rgb(vec![[2.5, 0.0, 1.0]]).unwrap();
+        let value_pool = VoxValuePool::linear_rgb(vec![[2.5, 0.0, 1.0]]).unwrap();
 
-        match voxj_value_pool_from_vox_value_pool(&pool, ColorFormat::LinearFloat) {
+        match voxj_value_pool_from_vox_value_pool(&value_pool, ColorFormat::LinearFloat) {
             VoxjValuePool::LinearRgbFloat { values } => assert_eq!(values[0], [2.5, 0.0, 1.0]),
             other => panic!("expected linear-rgb-float, got {other:?}"),
         }
@@ -244,9 +246,9 @@ mod tests {
 
     #[test]
     fn srgb_float_default_passes_components_through_unchanged() {
-        let pool = VoxValuePool::srgb(vec![[0.1, 0.2, 0.3]]).unwrap();
+        let value_pool = VoxValuePool::srgb(vec![[0.1, 0.2, 0.3]]).unwrap();
 
-        match voxj_value_pool_from_vox_value_pool(&pool, ColorFormat::Float) {
+        match voxj_value_pool_from_vox_value_pool(&value_pool, ColorFormat::Float) {
             VoxjValuePool::SrgbFloat { values } => assert_eq!(values, vec![[0.1, 0.2, 0.3]]),
             other => panic!("expected srgb-float, got {other:?}"),
         }

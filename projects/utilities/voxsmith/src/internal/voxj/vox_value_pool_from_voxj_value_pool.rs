@@ -17,8 +17,8 @@ use voxj::{VoxjBound, VoxjValuePool};
 /// 2. the pool is empty
 /// 3. a bound is malformed
 /// 4. a value is out of range
-pub fn vox_value_pool_from_voxj_value_pool(pool: &VoxjValuePool) -> Result<VoxValuePool> {
-    Ok(match pool {
+pub fn vox_value_pool_from_voxj_value_pool(value_pool: &VoxjValuePool) -> Result<VoxValuePool> {
+    Ok(match value_pool {
         VoxjValuePool::Json { values } => VoxValuePool::json(
             values
                 .iter()

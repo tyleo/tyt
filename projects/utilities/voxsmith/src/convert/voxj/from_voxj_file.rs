@@ -26,8 +26,8 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
     // Build each value before adding it so a failed conversion leaves the state
     // untouched. Value pools land first, so palette properties resolve against
     // them.
-    for pool in &main.runtime_state.value_pools {
-        state.add_value_pool(vox_value_pool_from_voxj_value_pool(pool)?);
+    for value_pool in &main.runtime_state.value_pools {
+        state.add_value_pool(vox_value_pool_from_voxj_value_pool(value_pool)?);
     }
 
     // An insertion names the entity it rejected by the ids it holds, which are
@@ -101,7 +101,7 @@ mod tests {
 
     /// An unbounded `float` pool of ascending values `0.0 ..= (n - 1)`, so a
     /// material reading value-index `m` resolves to `m` as a float.
-    fn numbered_pool(n: usize) -> VoxjValuePool {
+    fn numbered_value_pool(n: usize) -> VoxjValuePool {
         VoxjValuePool::Float {
             min: VoxjBound::None,
             max: VoxjBound::None,
@@ -161,7 +161,7 @@ mod tests {
                 runtime_state: VoxjRuntimeState {
                     value_pools: vec![
                         // pool 0: six base values, bound by palette 0.
-                        numbered_pool(6),
+                        numbered_value_pool(6),
                         // pool 1: metallic in [0, 1].
                         VoxjValuePool::Float {
                             min: VoxjBound::Number(0.0),
@@ -329,7 +329,7 @@ mod tests {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
-                    value_pools: vec![numbered_pool(2)],
+                    value_pools: vec![numbered_value_pool(2)],
                     objects: vec![object(
                         "o",
                         vec![0],
@@ -504,7 +504,7 @@ mod tests {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
-                    value_pools: vec![numbered_pool(2)],
+                    value_pools: vec![numbered_value_pool(2)],
                     objects: vec![object(
                         "o",
                         vec![0, 1, 2],
@@ -537,7 +537,7 @@ mod tests {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
-                    value_pools: vec![numbered_pool(2)],
+                    value_pools: vec![numbered_value_pool(2)],
                     objects: vec![object(
                         "o",
                         vec![1, 2],
@@ -577,7 +577,7 @@ mod tests {
     /// A `float` value-pool value outside its declared `min`/`max` is rejected when
     /// the pool is built.
     #[test]
-    fn rejects_value_outside_pool_bounds() {
+    fn rejects_value_outside_value_pool_bounds() {
         let mut file = sample_file();
         // pool 1 is metallic in [0, 1]; push a value above the max.
         file.main.runtime_state.value_pools[1] = VoxjValuePool::Float {
@@ -596,7 +596,7 @@ mod tests {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
-                    value_pools: vec![numbered_pool(1)],
+                    value_pools: vec![numbered_value_pool(1)],
                     objects: vec![VoxjObject {
                         name: "empty-ref".to_owned(),
                         layers: vec![0],
@@ -633,7 +633,7 @@ mod tests {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
-                    value_pools: vec![numbered_pool(2), numbered_pool(3)],
+                    value_pools: vec![numbered_value_pool(2), numbered_value_pool(3)],
                     objects: vec![object(
                         "lamp",
                         vec![0, 1],

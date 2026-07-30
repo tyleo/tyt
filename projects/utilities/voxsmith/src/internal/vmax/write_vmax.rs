@@ -2,7 +2,7 @@ use crate::{
     ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
     ROUGHNESS_FACTOR, Result, SHADOWS, SceneCameraSource, TRANSMISSION_FACTOR, VoxelMaxColorFormat,
     VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, ext_for,
-    from_vox_value, pbr_factor_to_vm_coefficient, pool_color, tighten,
+    from_vox_value, pbr_factor_to_vm_coefficient, tighten, value_pool_color,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -741,8 +741,8 @@ fn derive_materials(
     let base_luminance = |material| -> Option<f64> {
         let color = folded.color?;
         let value_id = palette.value_id(material, color)?;
-        let pool = property_pool(state, folded.palette, color)?;
-        let [r, g, b, _] = pool_color(pool, value_id)?;
+        let value_pool = property_value_pool(state, folded.palette, color)?;
+        let [r, g, b, _] = value_pool_color(value_pool, value_id)?;
         let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
             .into_format::<f64, f64>()
             .into_linear();
@@ -818,11 +818,11 @@ fn derived_material(
 ) -> VMaxMaterial {
     let scalar = |property: &str| -> Option<f64> {
         let position = properties.iter().position(|(name, _)| name == property)?;
-        pool_scalar(state, palette, properties[position].1, signature[position])
+        value_pool_scalar(state, palette, properties[position].1, signature[position])
     };
     let flag = |property: &str| -> Option<bool> {
         let position = properties.iter().position(|(name, _)| name == property)?;
-        pool_flag(state, palette, properties[position].1, signature[position])
+        value_pool_flag(state, palette, properties[position].1, signature[position])
     };
     // The emissive color's linear luminance at this slot, or `None` when the
     // property is absent. Folded into Voxel Max's single self-illumination
@@ -831,8 +831,8 @@ fn derived_material(
         let position = properties
             .iter()
             .position(|(name, _)| name == EMISSIVE_FACTOR)?;
-        let pool = property_pool(state, palette, properties[position].1)?;
-        let [r, g, b, _] = pool_color(pool, signature[position])?;
+        let value_pool = property_value_pool(state, palette, properties[position].1)?;
+        let [r, g, b, _] = value_pool_color(value_pool, signature[position])?;
         let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
             .into_format::<f64, f64>()
             .into_linear();
@@ -898,13 +898,13 @@ fn vmax_material(slot: usize, material: &VoxelMaxMaterial) -> VMaxMaterial {
 
 /// The `f64` value at `value_id` in a property's `float` pool, or
 /// `None`.
-fn pool_scalar(
+fn value_pool_scalar(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
     property: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
 ) -> Option<f64> {
-    match property_pool(state, palette, property)?.value(value_id) {
+    match property_value_pool(state, palette, property)?.value(value_id) {
         Some(VoxValuePoolValueRef::Float(number)) => Some(number),
         _ => None,
     }
@@ -912,20 +912,20 @@ fn pool_scalar(
 
 /// The `bool` value at `value_id` in a property's `bool` pool, or
 /// `None`.
-fn pool_flag(
+fn value_pool_flag(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
     property: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
 ) -> Option<bool> {
-    match property_pool(state, palette, property)?.value(value_id) {
+    match property_value_pool(state, palette, property)?.value(value_id) {
         Some(VoxValuePoolValueRef::Bool(flag)) => Some(flag),
         _ => None,
     }
 }
 
 /// The value pool a property draws from.
-fn property_pool(
+fn property_value_pool(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
     property: U32Id<BVoxProperty>,
@@ -1077,9 +1077,9 @@ fn color_palette_colors(
     color: U32Id<BVoxProperty>,
 ) -> Vec<[u8; 4]> {
     let mut cells: Vec<[u8; 4]> = Vec::new();
-    if let Some(pool) = property_pool(state, palette, color) {
-        for (value_id, _) in pool.iter_values().take(PALETTE_COLORS) {
-            cells.push(pool_color(pool, value_id).unwrap_or([0, 0, 0, 0]));
+    if let Some(value_pool) = property_value_pool(state, palette, color) {
+        for (value_id, _) in value_pool.iter_values().take(PALETTE_COLORS) {
+            cells.push(value_pool_color(value_pool, value_id).unwrap_or([0, 0, 0, 0]));
         }
     }
     cells.resize(PALETTE_COLORS, [0, 0, 0, 0]);

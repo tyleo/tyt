@@ -287,7 +287,7 @@ fn folded_palette(
     // `absorption` have no glTF counterpart. The exact coefficients ride in the
     // ext for a byte-exact write-back.
     if has_materials {
-        let metallic = float_pool(
+        let metallic = float_value_pool(
             state,
             materials
                 .iter()
@@ -298,7 +298,7 @@ fn folded_palette(
             .add_property(METALLIC_FACTOR.to_owned(), metallic, U32Id::from_u32(0))
             .expect("the property names are distinct");
         color_axis.push(false);
-        let roughness = float_pool(
+        let roughness = float_value_pool(
             state,
             materials
                 .iter()
@@ -334,7 +334,7 @@ fn folded_palette(
                 .expect("the property names are distinct");
             color_axis.push(true);
         }
-        let emissive = float_pool(state, materials.iter().map(|m| m.sic).collect())?;
+        let emissive = float_value_pool(state, materials.iter().map(|m| m.sic).collect())?;
         palette
             .add_property(EMISSIVE_STRENGTH.to_owned(), emissive, U32Id::from_u32(0))
             .expect("the property names are distinct");
@@ -345,7 +345,7 @@ fn folded_palette(
         // transmission and absorption; its absence rides in the ext.
         if materials.iter().any(|m| m.md.is_some()) {
             let default_ior = default_scalar(IOR).expect("ior has a glTF default");
-            let ior = float_pool(
+            let ior = float_value_pool(
                 state,
                 materials
                     .iter()
@@ -356,7 +356,7 @@ fn folded_palette(
                 .add_property(IOR.to_owned(), ior, U32Id::from_u32(0))
                 .expect("the property names are distinct");
             color_axis.push(false);
-            let transmission = float_pool(state, dispersion(&materials, |d| d.transmission))?;
+            let transmission = float_value_pool(state, dispersion(&materials, |d| d.transmission))?;
             palette
                 .add_property(
                     TRANSMISSION_FACTOR.to_owned(),
@@ -365,7 +365,7 @@ fn folded_palette(
                 )
                 .expect("the property names are distinct");
             color_axis.push(false);
-            let absorption = float_pool(state, dispersion(&materials, |d| d.absorption))?;
+            let absorption = float_value_pool(state, dispersion(&materials, |d| d.absorption))?;
             palette
                 .add_property(ABSORPTION.to_owned(), absorption, U32Id::from_u32(0))
                 .expect("the property names are distinct");
@@ -468,7 +468,7 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
 /// An unbounded float pool over `values`, defaulting a non-finite coefficient to
 /// zero so the pool builds; the exact value rides in the ext. Errors when
 /// `values` is empty.
-fn float_pool(state: &mut VoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
+fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
     let values = values
         .into_iter()
         .map(|v| if v.is_finite() { v } else { 0.0 })

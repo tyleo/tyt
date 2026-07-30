@@ -13,11 +13,11 @@ mod to_vox_value;
 #[cfg(feature = "_color")]
 mod cell_color;
 #[cfg(feature = "_color")]
-mod pool_color;
-#[cfg(feature = "_color")]
 mod resolve_cell_color;
 #[cfg(feature = "_color")]
 mod resolve_cell_color_or_transparent;
+#[cfg(feature = "_color")]
+mod value_pool_color;
 
 // Tightening a build-volume object to its live extent is wanted only by the
 // Voxel Max writer.
@@ -56,11 +56,11 @@ pub(crate) use to_vox_value::*;
 #[cfg(feature = "_color")]
 pub(crate) use cell_color::*;
 #[cfg(feature = "_color")]
-pub(crate) use pool_color::*;
-#[cfg(feature = "_color")]
 pub(crate) use resolve_cell_color::*;
 #[cfg(feature = "_color")]
 pub(crate) use resolve_cell_color_or_transparent::*;
+#[cfg(feature = "_color")]
+pub(crate) use value_pool_color::*;
 
 #[cfg(feature = "vmax")]
 pub(crate) use grid::*;

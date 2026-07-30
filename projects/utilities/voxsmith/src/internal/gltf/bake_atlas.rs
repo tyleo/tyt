@@ -1,6 +1,6 @@
 use crate::{
     BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, MaterialBake,
-    MaterialChannel, Result, UsedMaterials, default_scalar, pool_color,
+    MaterialChannel, Result, UsedMaterials, default_scalar, value_pool_color,
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
@@ -113,7 +113,7 @@ fn color_bytes_or(
     default: [u8; 4],
 ) -> [u8; 4] {
     value
-        .and_then(|(pool, value_id)| pool_color(pool, value_id))
+        .and_then(|(value_pool, value_id)| value_pool_color(value_pool, value_id))
         .unwrap_or(default)
 }
 
@@ -132,7 +132,7 @@ fn component_byte(rgba: [u8; 4], component: ColorChannel) -> u8 {
 /// not one of those pools. A `bool` reads as `1` or `0`.
 fn scalar_value(value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>, key: &str) -> f64 {
     let fallback = || default_scalar(key).unwrap_or(0.0);
-    match value.and_then(|(pool, value_id)| pool.value(value_id)) {
+    match value.and_then(|(value_pool, value_id)| value_pool.value(value_id)) {
         Some(VoxValuePoolValueRef::Float(number)) => number,
         Some(VoxValuePoolValueRef::Int(number)) => number as f64,
         Some(VoxValuePoolValueRef::Bool(flag)) => {
@@ -336,7 +336,7 @@ mod tests {
     }
 
     #[test]
-    fn a_shared_pool_cell_bakes_one_value_for_every_material() {
+    fn a_shared_value_pool_cell_bakes_one_value_for_every_material() {
         // Both material rows repeat the strength pool's one cell, so both
         // bake the same half strength.
         let mut state = VoxMain::default();

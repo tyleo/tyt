@@ -276,14 +276,16 @@ fn build_palette(
     // One deduplicated pool per property, plus each distinct material's
     // value id into it. The bounded scalars clamp to their pool range so the
     // pools build.
-    let base_color = srgba_pool(&distinct, |material| material.base_color);
-    let metallic = float_pool(&distinct, |material| material.metallic.clamp(0.0, 1.0));
-    let roughness = float_pool(&distinct, |material| material.roughness.clamp(0.0, 1.0));
-    let emissive_factor = srgb_pool(&distinct, |material| material.emissive_factor);
-    let emissive_strength = float_pool(&distinct, |material| material.emissive_strength.max(0.0));
-    let occlusion = float_pool(&distinct, |material| material.occlusion.clamp(0.0, 1.0));
-    let ior = float_pool(&distinct, |material| material.ior.max(1.0));
-    let transmission = float_pool(&distinct, |material| material.transmission.clamp(0.0, 1.0));
+    let base_color = srgba_value_pool(&distinct, |material| material.base_color);
+    let metallic = float_value_pool(&distinct, |material| material.metallic.clamp(0.0, 1.0));
+    let roughness = float_value_pool(&distinct, |material| material.roughness.clamp(0.0, 1.0));
+    let emissive_factor = srgb_value_pool(&distinct, |material| material.emissive_factor);
+    let emissive_strength =
+        float_value_pool(&distinct, |material| material.emissive_strength.max(0.0));
+    let occlusion = float_value_pool(&distinct, |material| material.occlusion.clamp(0.0, 1.0));
+    let ior = float_value_pool(&distinct, |material| material.ior.max(1.0));
+    let transmission =
+        float_value_pool(&distinct, |material| material.transmission.clamp(0.0, 1.0));
 
     // Register the pools and add each property. All properties precede any
     // material, so no material carries a back-fill placeholder value id.
@@ -380,7 +382,7 @@ fn build_palette(
 }
 
 /// A deduplicated pool column and each distinct material's value id into it.
-struct PoolColumn<T> {
+struct ValuePoolColumn<T> {
     /// The distinct values, in first-seen order.
     values: Vec<T>,
 
@@ -390,10 +392,10 @@ struct PoolColumn<T> {
 
 /// A four-component sRGB color pool over the extracted color, deduplicated by its
 /// 8-bit bytes and stored as float components in `[0, 1]`.
-fn srgba_pool(
+fn srgba_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TySrgbaU8,
-) -> PoolColumn<[f64; 4]> {
+) -> ValuePoolColumn<[f64; 4]> {
     let mut values = Vec::new();
     let mut lookup: HashMap<[u8; 4], U32Id<BVoxValuePoolValue>> = HashMap::new();
     let indices = materials
@@ -407,16 +409,16 @@ fn srgba_pool(
             })
         })
         .collect();
-    PoolColumn { values, indices }
+    ValuePoolColumn { values, indices }
 }
 
 /// A three-component sRGB color pool over the extracted color, deduplicated by
 /// its 8-bit bytes and stored as float components in `[0, 1]`; the alpha is
 /// dropped.
-fn srgb_pool(
+fn srgb_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TySrgbaU8,
-) -> PoolColumn<[f64; 3]> {
+) -> ValuePoolColumn<[f64; 3]> {
     let mut values = Vec::new();
     let mut lookup: HashMap<[u8; 3], U32Id<BVoxValuePoolValue>> = HashMap::new();
     let indices = materials
@@ -432,11 +434,14 @@ fn srgb_pool(
                 })
         })
         .collect();
-    PoolColumn { values, indices }
+    ValuePoolColumn { values, indices }
 }
 
 /// A float pool over the extracted scalar, deduplicated by its bit pattern.
-fn float_pool(materials: &[MeshMaterial], get: impl Fn(&MeshMaterial) -> f64) -> PoolColumn<f64> {
+fn float_value_pool(
+    materials: &[MeshMaterial],
+    get: impl Fn(&MeshMaterial) -> f64,
+) -> ValuePoolColumn<f64> {
     let mut values = Vec::new();
     let mut lookup: HashMap<u64, U32Id<BVoxValuePoolValue>> = HashMap::new();
     let indices = materials
@@ -450,7 +455,7 @@ fn float_pool(materials: &[MeshMaterial], get: impl Fn(&MeshMaterial) -> f64) ->
             })
         })
         .collect();
-    PoolColumn { values, indices }
+    ValuePoolColumn { values, indices }
 }
 
 /// A float pool bounded on both sides.
@@ -632,7 +637,7 @@ mod tests {
         let material = object.voxel_material(voxel, layer).unwrap();
         match state
             .material_value(palette_id, material, property)
-            .and_then(|(pool, value_id)| pool.value(value_id))
+            .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
             Some(VoxValuePoolValueRef::Float(number)) => number,
             other => panic!("expected a float pool, got {other:?}"),

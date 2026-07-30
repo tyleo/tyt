@@ -148,21 +148,21 @@ mod tests {
 
     /// Adds an unbounded `float` value pool holding `values` and returns its
     /// id.
-    fn float_pool(state: &mut VoxMain, values: Vec<f64>) -> U32Id<BVoxValuePool> {
+    fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> U32Id<BVoxValuePool> {
         state.add_value_pool(VoxValuePool::float(VoxBound::None, VoxBound::None, values).unwrap())
     }
 
-    /// Adds a palette binding each `(name, value id)` entry on `pool_id` and
-    /// one material drawing the listed value ids, and returns its id.
+    /// Adds a palette binding each `(name, value id)` entry on `value_pool_id`
+    /// and one material drawing the listed value ids, and returns its id.
     fn palette_over(
         state: &mut VoxMain,
-        pool_id: U32Id<BVoxValuePool>,
+        value_pool_id: U32Id<BVoxValuePool>,
         entries: &[(&str, u32)],
     ) -> U32Id<BVoxPalette> {
         let mut palette = VoxPalette::default();
         for &(name, _) in entries {
             palette
-                .add_property(name.to_owned(), pool_id, value_id(0))
+                .add_property(name.to_owned(), value_pool_id, value_id(0))
                 .unwrap();
         }
         palette
@@ -189,18 +189,18 @@ mod tests {
         // The worked flatten example: layers binding {a, b}, {c}, {b, c}. The
         // winners are a from the first layer, b and c from the third.
         let mut state = VoxMain::default();
-        let pool_id = float_pool(&mut state, vec![0.1, 0.2, 0.3, 0.4, 0.5]);
-        let first_id = palette_over(&mut state, pool_id, &[("a", 0), ("b", 1)]);
-        let second_id = palette_over(&mut state, pool_id, &[("c", 2)]);
-        let third_id = palette_over(&mut state, pool_id, &[("b", 3), ("c", 4)]);
+        let value_pool_id = float_value_pool(&mut state, vec![0.1, 0.2, 0.3, 0.4, 0.5]);
+        let first_id = palette_over(&mut state, value_pool_id, &[("a", 0), ("b", 1)]);
+        let second_id = palette_over(&mut state, value_pool_id, &[("c", 2)]);
+        let third_id = palette_over(&mut state, value_pool_id, &[("b", 3), ("c", 4)]);
         let object = object_over(&[first_id, second_id, third_id]);
 
         let used = resolve_used_materials(&state, &object).unwrap();
         assert_eq!(used.len(), 1);
 
         let read = |key: &str| {
-            let (pool, value_id) = used.attribute(0, key).unwrap();
-            pool.value(value_id).unwrap()
+            let (value_pool, value_id) = used.attribute(0, key).unwrap();
+            value_pool.value(value_id).unwrap()
         };
         assert_eq!(read("a"), VoxValuePoolValueRef::Float(0.1));
         assert_eq!(read("b"), VoxValuePoolValueRef::Float(0.4));
@@ -209,27 +209,27 @@ mod tests {
     }
 
     #[test]
-    fn properties_pull_from_their_own_palettes_and_pools() {
+    fn properties_pull_from_their_own_palettes_and_value_pools() {
         // Two layers on different palettes over different pools: each name
         // resolves to its own palette's pool and value.
         let mut state = VoxMain::default();
-        let first_pool_id = float_pool(&mut state, vec![0.25]);
-        let second_pool_id = float_pool(&mut state, vec![0.75]);
-        let first_id = palette_over(&mut state, first_pool_id, &[("a", 0)]);
-        let second_id = palette_over(&mut state, second_pool_id, &[("b", 0)]);
+        let first_value_pool_id = float_value_pool(&mut state, vec![0.25]);
+        let second_value_pool_id = float_value_pool(&mut state, vec![0.75]);
+        let first_id = palette_over(&mut state, first_value_pool_id, &[("a", 0)]);
+        let second_id = palette_over(&mut state, second_value_pool_id, &[("b", 0)]);
         let object = object_over(&[first_id, second_id]);
 
         let used = resolve_used_materials(&state, &object).unwrap();
         assert_eq!(used.len(), 1);
 
-        let (a_pool, a_value_id) = used.attribute(0, "a").unwrap();
-        let (b_pool, b_value_id) = used.attribute(0, "b").unwrap();
+        let (a_value_pool, a_value_id) = used.attribute(0, "a").unwrap();
+        let (b_value_pool, b_value_id) = used.attribute(0, "b").unwrap();
         assert_eq!(
-            a_pool.value(a_value_id),
+            a_value_pool.value(a_value_id),
             Some(VoxValuePoolValueRef::Float(0.25))
         );
         assert_eq!(
-            b_pool.value(b_value_id),
+            b_value_pool.value(b_value_id),
             Some(VoxValuePoolValueRef::Float(0.75))
         );
     }
@@ -240,8 +240,8 @@ mod tests {
         // and its samples never split texels: two voxels differing only in it
         // share one texel, and the earlier layer keeps its name.
         let mut state = VoxMain::default();
-        let pool_id = float_pool(&mut state, vec![0.5]);
-        let supplying_id = palette_over(&mut state, pool_id, &[("a", 0)]);
+        let value_pool_id = float_value_pool(&mut state, vec![0.5]);
+        let supplying_id = palette_over(&mut state, value_pool_id, &[("a", 0)]);
 
         let mut plain = VoxPalette::default();
         plain.add_material(vec![]).unwrap();
@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(used.len(), 1);
         assert_eq!(
             used.attribute(0, "a")
-                .map(|(pool, value_id)| pool.value(value_id)),
+                .map(|(value_pool, value_id)| value_pool.value(value_id)),
             Some(Some(VoxValuePoolValueRef::Float(0.5)))
         );
     }
@@ -293,11 +293,11 @@ mod tests {
         // Two layers each binding a name over a two-material palette: voxels
         // share a texel exactly when they sample the same material in both.
         let mut state = VoxMain::default();
-        let pool_id = float_pool(&mut state, vec![0.0, 1.0]);
+        let value_pool_id = float_value_pool(&mut state, vec![0.0, 1.0]);
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property("a".to_owned(), pool_id, value_id(0))
+            .add_property("a".to_owned(), value_pool_id, value_id(0))
             .unwrap();
         palette.add_material(vec![value_id(0)]).unwrap();
         palette.add_material(vec![value_id(1)]).unwrap();
@@ -305,7 +305,7 @@ mod tests {
 
         let mut second = VoxPalette::default();
         second
-            .add_property("b".to_owned(), pool_id, value_id(0))
+            .add_property("b".to_owned(), value_pool_id, value_id(0))
             .unwrap();
         second.add_material(vec![value_id(0)]).unwrap();
         second.add_material(vec![value_id(1)]).unwrap();
@@ -337,8 +337,8 @@ mod tests {
 
         // The split texels differ only in `b`, the second layer's name.
         let read = |index: usize, key: &str| {
-            let (pool, value_id) = used.attribute(index, key).unwrap();
-            pool.value(value_id).unwrap()
+            let (value_pool, value_id) = used.attribute(index, key).unwrap();
+            value_pool.value(value_id).unwrap()
         };
         assert_eq!(read(0, "a"), read(1, "a"));
         assert_eq!(read(0, "b"), VoxValuePoolValueRef::Float(0.0));

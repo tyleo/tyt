@@ -1,7 +1,7 @@
 use crate::{
     BASE_COLOR_FACTOR, Error, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
-    MagicaVoxelNodeBody, Result, ext_for, from_vox_value, pool_color, resolve_cell_color,
-    resolve_cell_color_or_transparent,
+    MagicaVoxelNodeBody, Result, ext_for, from_vox_value, resolve_cell_color,
+    resolve_cell_color_or_transparent, value_pool_color,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -125,7 +125,7 @@ fn colors_from_palette(state: &VoxMain, palette: Option<U32Id<BVoxPalette>>) -> 
         let material = U32Id::<BVoxMaterial>::from_u32(index as u32);
         if let Some([r, g, b, a]) = state
             .material_value(palette, material, property)
-            .and_then(|(pool, value)| pool_color(pool, value))
+            .and_then(|(value_pool, value)| value_pool_color(value_pool, value))
         {
             *color = MVoxColor::new(r, g, b, a);
         }

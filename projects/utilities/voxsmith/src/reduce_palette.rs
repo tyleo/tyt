@@ -1,4 +1,4 @@
-use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, Result, pool_color};
+use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, Result, value_pool_color};
 use branded_id::U32Id;
 use std::{cmp::Ordering, collections::HashMap, mem};
 use ty_math::{
@@ -162,16 +162,16 @@ struct Point {
 
 /// The sRGB bytes of a material's `baseColorFactor`, or `None` if the value is
 /// absent or its bound pool is not a color kind. Resolves the bound value-pool value
-/// and decodes it with [`pool_color`].
+/// and decodes it with [`value_pool_color`].
 fn material_color(
     state: &VoxMain,
     palette: U32Id<BVoxPalette>,
     material: U32Id<BVoxMaterial>,
     property: U32Id<BVoxProperty>,
 ) -> Option<[u8; 4]> {
-    let (pool, value_id) = state.material_value(palette, material, property)?;
+    let (value_pool, value_id) = state.material_value(palette, material, property)?;
 
-    pool_color(pool, value_id)
+    value_pool_color(value_pool, value_id)
 }
 
 /// How many live voxels sample each material of `palette`, across every object
@@ -808,7 +808,7 @@ mod tests {
             .unwrap();
         match state
             .material_value(palette, material, property)
-            .and_then(|(pool, value_id)| pool.value(value_id))
+            .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
             Some(VoxValuePoolValueRef::Srgba(&color)) => hex_of(color),
             other => panic!("material has no srgba baseColorFactor: {other:?}"),
@@ -1002,7 +1002,7 @@ mod tests {
         let material = object.voxel_material(voxel, layer).unwrap();
         match state
             .material_value(palette, material, tag)
-            .and_then(|(pool, value_id)| pool.value(value_id))
+            .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
             Some(VoxValuePoolValueRef::Float(number)) => assert_eq!(number, 1.0),
             other => panic!("unexpected tag value {other:?}"),
@@ -1189,7 +1189,7 @@ mod tests {
 
     /// The number of values in the pool the property `name` draws from
     /// in the first palette that carries it.
-    fn pool_len(state: &VoxMain, name: &str) -> usize {
+    fn value_pool_len(state: &VoxMain, name: &str) -> usize {
         for (_, palette) in state.iter_palettes() {
             if let Some(property) = palette.property_id_by_name(name) {
                 let value_pool_id = palette.property(property).unwrap().value_pool_id;
@@ -1205,7 +1205,7 @@ mod tests {
         // prunes the merged-away color and its tag from the pools.
         let (mut state, palette, _) =
             state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
-        assert_eq!(pool_len(&state, BASE_COLOR_FACTOR), 3);
+        assert_eq!(value_pool_len(&state, BASE_COLOR_FACTOR), 3);
 
         let outcome = reduce_palette(
             &mut state,
@@ -1220,8 +1220,8 @@ mod tests {
         assert_eq!(outcome, Some((3, 2)));
 
         // Both pools now carry only the two survivors' values.
-        assert_eq!(pool_len(&state, BASE_COLOR_FACTOR), 2);
-        assert_eq!(pool_len(&state, "tag"), 2);
+        assert_eq!(value_pool_len(&state, BASE_COLOR_FACTOR), 2);
+        assert_eq!(value_pool_len(&state, "tag"), 2);
         assert_eq!(state.validate(), Ok(()));
         // The survivors still resolve to their original colors.
         let mut survivors = colors(&state, palette);
@@ -1319,7 +1319,7 @@ mod tests {
     }
 
     #[test]
-    fn keep_unused_values_leaves_the_pools_whole() {
+    fn keep_unused_values_leaves_the_value_pools_whole() {
         // The same reduction with keep_unused_values keeps the merged-away color
         // in the pool, unreferenced.
         let (mut state, palette, _) =
@@ -1335,7 +1335,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(material_count(&state, palette), 2);
-        assert_eq!(pool_len(&state, BASE_COLOR_FACTOR), 3);
+        assert_eq!(value_pool_len(&state, BASE_COLOR_FACTOR), 3);
         assert_eq!(state.validate(), Ok(()));
     }
 }

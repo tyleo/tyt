@@ -41,7 +41,7 @@ pub fn write_voxj(
 ) -> Result<VoxjFile> {
     let value_pools = state
         .iter_value_pools()
-        .map(|(_, pool)| voxj_value_pool_from_vox_value_pool(pool, color_format))
+        .map(|(_, value_pool)| voxj_value_pool_from_vox_value_pool(value_pool, color_format))
         .collect::<Vec<_>>();
 
     let palettes = state

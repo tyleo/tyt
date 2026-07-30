@@ -89,9 +89,11 @@ Gate: workspace green; the voxcore gate grep returns only id-pool mentions
 
 ## Iteration 2: voxsmith
 
-- [ ] The breaking field, one commit: `MaterialMeshRequest::layer` to
-      `layer_id`, with the forced vxl call sites.
-- [ ] Value-pool identifiers: rename `internal/pool_color.rs` to
+- [x] The breaking field, one commit: `MaterialMeshRequest::layer` to
+      `layer_id`, with the forced vxl call sites. Moot: the layer-flatten
+      rework landed after the survey and dropped the field, so there is
+      nothing to rename.
+- [x] Value-pool identifiers: rename `internal/pool_color.rs` to
       `value_pool_color.rs` with its function and the `mod` and re-export
       lines; `property_pool`, `pool_scalar`, and `pool_flag` in
       `internal/vmax/write_vmax.rs`; `PoolColumn`, `srgb_pool`,
@@ -100,9 +102,13 @@ Gate: workspace green; the voxcore gate grep returns only id-pool mentions
       `convert/vmax/from_vmax_file.rs`; `pool_ref` in
       `order_palette_colors.rs`; `non_color_pool` in
       `internal/resolve_cell_color.rs`; the test helpers `pool_len` and
-      `numbered_pool`; the three test names saying bare pool; and every
-      `pool` and `pool_id` local, parameter, and closure argument on the
-      survey's value-pool list.
+      `numbered_pool`; the six test names saying bare pool (the survey's
+      three plus three that drifted in); and every `pool` and `pool_id`
+      local, parameter, and closure argument on the survey's value-pool
+      list, plus the `float_pool` and `pool_id` test helpers the layer
+      flatten added to `internal/gltf/used_materials.rs`.
+      `order_palette_colors.rs` drifted clean of its `pool_ref` before this
+      iteration.
 - [ ] Id suffixes, the six hot files: `internal/vmax/write_vmax.rs`,
       `reduce_palette.rs`, `convert/vmax/to_vmax_file.rs`,
       `convert/voxelize/voxelize_mesh.rs`, `internal/gltf/bake_atlas.rs`,
