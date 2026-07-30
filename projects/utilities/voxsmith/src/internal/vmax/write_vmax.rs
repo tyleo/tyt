@@ -660,11 +660,12 @@ struct MaterialPlan {
     materials: Vec<VMaxMaterial>,
 }
 
-/// Reconstructs the Voxel Max materials for a folded palette. A Voxel-Max-origin
-/// state carries the exact list in its ext, whose pools hold one value per
-/// material so a material's index is its value id into the first material
-/// property; a state loaded from another format has no such list, so the
-/// materials are derived from the pools, one per distinct material signature.
+/// Reconstructs the Voxel Max materials for a folded palette. A
+/// Voxel-Max-origin state carries the exact list in its ext, whose value pools
+/// hold one value per material so a material's index is its value id into the
+/// first material property; a state loaded from another format has no such
+/// list, so the materials are derived from the value pools, one per distinct
+/// material signature.
 fn material_plan(
     state: &VoxMain,
     folded: &FoldedRef,
@@ -730,10 +731,10 @@ fn material_plan(
 /// Derives a Voxel Max material per distinct signature of the material
 /// properties, for a state that carries no exact material list. The signature
 /// index is the `material_idx`, and each material reads its coefficients from
-/// the pools. Errors when the distinct materials exceed [`MATERIAL_SLOTS`],
-/// since a Voxel Max palette holds only that many, so a cross-format source
-/// with too many materials cannot be represented rather than silently
-/// wrapping.
+/// the value pools. Errors when the distinct materials exceed
+/// [`MATERIAL_SLOTS`], since a Voxel Max palette holds only that many, so a
+/// cross-format source with too many materials cannot be represented rather
+/// than silently wrapping.
 fn derive_materials(
     state: &VoxMain,
     folded: &FoldedRef,
@@ -809,9 +810,9 @@ fn derive_materials(
 }
 
 /// One derived Voxel Max material. A coefficient reads from its property's
-/// pool at the signature's value id. Metalness and roughness map
-/// from the 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient;
-/// see [`pbr_factor_to_vm_coefficient`].
+/// value pool at the signature's value id. Metalness and roughness map from
+/// the 0 to 1 glTF factor to Voxel Max's 0.1 to 0.9 slider coefficient; see
+/// [`pbr_factor_to_vm_coefficient`].
 fn derived_material(
     state: &VoxMain,
     palette_id: U32Id<BVoxPalette>,
@@ -910,7 +911,7 @@ fn vmax_material(slot: usize, material: &VoxelMaxMaterial) -> VMaxMaterial {
     }
 }
 
-/// The `f64` value at `value_id` in a property's `float` pool, or
+/// The `f64` value at `value_id` in a property's `float` value pool, or
 /// `None`.
 fn value_pool_scalar(
     state: &VoxMain,
@@ -924,7 +925,7 @@ fn value_pool_scalar(
     }
 }
 
-/// The `bool` value at `value_id` in a property's `bool` pool, or
+/// The `bool` value at `value_id` in a property's `bool` value pool, or
 /// `None`.
 fn value_pool_flag(
     state: &VoxMain,
@@ -1090,7 +1091,7 @@ fn build_palette(
     pal
 }
 
-/// The color property's pool decoded to exactly [`PALETTE_COLORS`]
+/// The color property's value pool decoded to exactly [`PALETTE_COLORS`]
 /// 0-based RGBA entries, padded with transparent entries or truncated to that
 /// count. Colors past the budget are dropped; a voxel that would reference one
 /// is rejected by [`reconstruct_voxels`].

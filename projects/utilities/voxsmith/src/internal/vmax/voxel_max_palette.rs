@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// losslessly.
 ///
 /// The palette folds each voxel's color and material into one material per
-/// distinct color-plus-material combination, and its pools carry a
+/// distinct color-plus-material combination, and its value pools carry a
 /// finite-defaulted neutral copy of the materials, so the exact list is kept
 /// here for a byte-exact write-back. It is empty for a color-only palette.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]

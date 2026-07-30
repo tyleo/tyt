@@ -3,10 +3,10 @@ use ty_math::{TyLinSrgbaF64, TySrgbaF64};
 use voxcore::{BVoxValuePoolValue, VoxValuePool, VoxValuePoolValueRef};
 
 /// Decodes the color at `value_id` in a color `value_pool` to sRGB
-/// `[r, g, b, a]` bytes, or `None` when the value id is not the pool's or
-/// `value_pool` is not a color kind. An sRGB pool's components map straight to
-/// bytes, and a linear pool's re-encode to sRGB. A three-component color takes
-/// opaque alpha.
+/// `[r, g, b, a]` bytes, or `None` when the value id is not the value pool's
+/// or `value_pool` is not a color kind. An sRGB value pool's components map
+/// straight to bytes, and a linear value pool's re-encode to sRGB. A
+/// three-component color takes opaque alpha.
 pub fn value_pool_color(
     value_pool: &VoxValuePool,
     value_id: U32Id<BVoxValuePoolValue>,

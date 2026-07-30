@@ -255,11 +255,12 @@ mod tests {
     }
 
     /// A material carrying dispersion, a transmission color (`tc`), and a
-    /// non-finite coefficient round-trips exactly, alongside a plain material and
-    /// the padded default slots. The pools carry a finite-defaulted neutral copy,
-    /// but the ext keeps the exact values, so the rebuilt document matches byte
-    /// for byte. Coefficients are f32-exact, as Voxel Max stores them, and the
-    /// non-finite `mc` is infinity, not NaN, so it compares equal.
+    /// non-finite coefficient round-trips exactly, alongside a plain material
+    /// and the padded default slots. The value pools carry a finite-defaulted
+    /// neutral copy, but the ext keeps the exact values, so the rebuilt
+    /// document matches byte for byte. Coefficients are f32-exact, as Voxel
+    /// Max stores them, and the non-finite `mc` is infinity, not NaN, so it
+    /// compares equal.
     #[test]
     fn round_trips_rich_materials() {
         let mut original = sample();
@@ -302,7 +303,8 @@ mod tests {
         let color_value_pool_id =
             state.add_value_pool(VoxValuePool::srgba(vec![color_floats("#FF0000FF")]).unwrap());
         // 256 distinct metallic values give 256 distinct material signatures,
-        // one past the byte budget; the color pool stays a single in-range color.
+        // one past the byte budget; the color value pool stays a single
+        // in-range color.
         let metallic_value_pool_id = state.add_value_pool(
             VoxValuePool::float(
                 VoxBound::None,
@@ -627,9 +629,9 @@ mod tests {
             .into()
     }
 
-    /// Adds a folded palette binding `baseColorFactor` to a pool of the given
-    /// colors, with one material per color so a material's index is its color
-    /// index, and returns the palette id.
+    /// Adds a folded palette binding `baseColorFactor` to a value pool of the
+    /// given colors, with one material per color so a material's index is its
+    /// color index, and returns the palette id.
     fn add_rgba_palette(state: &mut VoxMain, hexes: &[&str]) -> U32Id<BVoxPalette> {
         let value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(hexes.iter().map(|hex| color_floats(hex)).collect()).unwrap(),
@@ -1249,7 +1251,7 @@ mod tests {
             let mut state = VoxMain::default();
             // One folded palette binding a color plus the four material
             // attributes, with a single material. No ext, so the writer derives
-            // the Voxel Max material from the pools.
+            // the Voxel Max material from the value pools.
             let color =
                 state.add_value_pool(VoxValuePool::srgba(vec![color_floats("#FF0000FF")]).unwrap());
             let float = |value: f64| {

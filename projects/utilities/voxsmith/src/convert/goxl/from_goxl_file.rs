@@ -47,11 +47,11 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
     Ok(state)
 }
 
-/// Builds the one shared palette: a color pool of one entry per distinct color
-/// across every block's solid voxels, bound to `baseColorFactor`, with one
-/// material per color and a map from a color to its material. The pool is added
-/// to `state`. A file with no solid voxels gets a single placeholder color so
-/// objects have a default material to sample.
+/// Builds the one shared palette: a color value pool of one entry per distinct
+/// color across every block's solid voxels, bound to `baseColorFactor`, with
+/// one material per color and a map from a color to its material. The
+/// value pool is added to `state`. A file with no solid voxels gets a single
+/// placeholder color so objects have a default material to sample.
 fn build_palette(
     state: &mut VoxMain,
     file: &GoxlFile,
@@ -73,8 +73,8 @@ fn build_palette(
         order.push([0, 0, 0, 0]);
     }
 
-    // Colors ride in a shared sRGBA pool as float components in `[0, 1]`; each
-    // material draws one value id into it.
+    // Colors ride in a shared sRGBA value pool as float components in
+    // `[0, 1]`; each material draws one value id into it.
     let value_pool_id = state.add_value_pool(
         VoxValuePool::srgba(
             order

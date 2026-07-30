@@ -6,8 +6,8 @@ use voxcore::{VoxMain, VoxObject};
 /// `baseColorFactor` supplier in the effective palette: a table of
 /// per-material colors, read through the material each voxel samples in the
 /// winning layer. All decoding happens here. A supplier drawing from a
-/// non-color pool errors, as does a layer referencing a palette the state
-/// does not hold. `Ok(None)` when no layer supplies `baseColorFactor`.
+/// non-color value pool errors, as does a layer referencing a palette the
+/// state does not hold. `Ok(None)` when no layer supplies `baseColorFactor`.
 pub fn resolve_cell_color<'a>(
     state: &VoxMain,
     object: &'a VoxObject,
@@ -36,7 +36,7 @@ pub fn resolve_cell_color<'a>(
     Ok(Some(CellColor::new(object, property.layer_id(), colors)))
 }
 
-/// The error for a `baseColorFactor` drawing from a non-color pool.
+/// The error for a `baseColorFactor` drawing from a non-color value pool.
 fn non_color_value_pool(object: &VoxObject) -> Error {
     Error::invalid(format!(
         "object {:?}: baseColorFactor draws from a non-color pool",

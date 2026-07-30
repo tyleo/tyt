@@ -98,16 +98,17 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
 }
 
 /// A color attribute's RGBA bytes, defaulting to opaque white (the base-color
-/// spec default) when the value is absent or its pool is not a color kind.
+/// spec default) when the value is absent or its value pool is not a color
+/// kind.
 fn color_bytes(value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>) -> [u8; 4] {
     color_bytes_or(value, [255, 255, 255, 255])
 }
 
-/// A color attribute's RGBA bytes, decoded by the bound pool's kind, or
-/// `default` when the value is absent or its pool is not a color kind. An sRGB
-/// pool holds sRGB-encoded components in `[0, 1]`; a linear pool holds
-/// scene-linear components re-encoded to sRGB here. A three-component color takes
-/// opaque alpha.
+/// A color attribute's RGBA bytes, decoded by the bound value pool's kind, or
+/// `default` when the value is absent or its value pool is not a color kind.
+/// An sRGB value pool holds sRGB-encoded components in `[0, 1]`; a linear
+/// value pool holds scene-linear components re-encoded to sRGB here. A
+/// three-component color takes opaque alpha.
 fn color_bytes_or(
     value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
     default: [u8; 4],
@@ -127,9 +128,9 @@ fn component_byte(rgba: [u8; 4], component: ColorChannel) -> u8 {
     }
 }
 
-/// A scalar attribute's value from a `float`, `int`, or `bool` pool, defaulting
-/// to its spec default (or `0` for a key with no standard default) when absent or
-/// not one of those pools. A `bool` reads as `1` or `0`.
+/// A scalar attribute's value from a `float`, `int`, or `bool` value pool,
+/// defaulting to its spec default (or `0` for a key with no standard default)
+/// when absent or not one of those value pools. A `bool` reads as `1` or `0`.
 fn scalar_value(value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>, key: &str) -> f64 {
     let fallback = || default_scalar(key).unwrap_or(0.0);
     match value.and_then(|(value_pool, value_id)| value_pool.value(value_id)) {
@@ -218,7 +219,7 @@ mod tests {
     }
 
     /// A single-layer document: one palette carrying `baseColorFactor`,
-    /// `metallicFactor`, and `roughnessFactor` over three pools, with a
+    /// `metallicFactor`, and `roughnessFactor` over three value pools, with a
     /// three-voxel object whose voxels sample three materials in raster order:
     /// (red, shiny, smooth), (red, matte, rough), (blue, matte, rough).
     fn single_layer_state() -> (VoxMain, U32Id<BVoxObject>) {
@@ -350,7 +351,8 @@ mod tests {
 
     #[test]
     fn a_shared_value_pool_cell_bakes_one_value_for_every_material() {
-        // Both material rows repeat the strength pool's one cell, so both
+        // Both material rows repeat the strength value pool's one cell, so
+        // both
         // bake the same half strength.
         let mut state = VoxMain::default();
         let base_value_pool_id = state.add_value_pool(

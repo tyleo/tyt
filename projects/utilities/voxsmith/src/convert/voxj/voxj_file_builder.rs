@@ -57,7 +57,7 @@ impl<'a> VoxjFileBuilder<'a> {
         self
     }
 
-    /// Sets the on-wire encoding for sRGB color pools; the default is
+    /// Sets the on-wire encoding for sRGB color value pools; the default is
     /// [`ColorFormat::Float`].
     pub fn color_format(mut self, color_format: ColorFormat) -> Self {
         self.color_format = color_format;

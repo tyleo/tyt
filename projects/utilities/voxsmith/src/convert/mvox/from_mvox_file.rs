@@ -27,7 +27,7 @@ const PALETTE_CELLS: usize = 256;
 /// MagicaVoxel's default shading token, taken by a color slot with no material.
 const DEFAULT_MATERIAL_TYPE: &str = "_diffuse";
 
-/// Reads one scalar material field, for the per-attribute pool build.
+/// Reads one scalar material field, for the per-attribute value-pool build.
 type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 
 /// Loads a decoded MagicaVoxel [`MVoxFile`] into a [`VoxMain`].
@@ -72,11 +72,12 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
 }
 
 /// Builds the shared palette: one material per color index `0..=255`, so a
-/// material's index is its color index. `baseColorFactor` binds a color pool;
-/// with materials, `type` and the six scalar fields bind their own pools. An
-/// absent or non-finite field takes a default, since a pool holds no null and a
-/// float pool rejects a non-finite value; the exact optionals ride in the ext.
-/// Errors on a material id outside `0..=255` or a duplicate id.
+/// material's index is its color index. `baseColorFactor` binds a color
+/// value pool; with materials, `type` and the six scalar fields bind their own
+/// value pools. An absent or non-finite field takes a default, since a
+/// value pool holds no null and a float value pool rejects a non-finite value;
+/// the exact optionals ride in the ext. Errors on a material id outside
+/// `0..=255` or a duplicate id.
 fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     let colors = file.resolved_palette().colors;
     let has_materials = !file.materials.is_empty();
@@ -121,7 +122,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
         .expect("the property names are distinct");
 
     // The scalars are custom MagicaVoxel attributes with no glTF bounds, so
-    // their float pools are unbounded.
+    // their float value pools are unbounded.
     let mut attribute_indices: Vec<Vec<u32>> = Vec::new();
     if has_materials {
         const SCALARS: [(&str, ScalarField); 6] = [
@@ -160,8 +161,8 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
                         .copied()
                         .and_then(read)
                         // The codec accepts a non-finite scalar, but a Float
-                        // pool must be finite; default it. The ext keeps the
-                        // exact value.
+                        // value pool must be finite; default it. The ext keeps
+                        // the exact value.
                         .filter(|value| value.is_finite())
                         .map_or(0.0, |value| value as f64)
                 })
@@ -929,9 +930,9 @@ mod tests {
         assert!(from_mvox_file(&file).is_err());
     }
 
-    /// The codec accepts a non-finite scalar, but a Float pool must be finite.
-    /// from_mvox_file defaults the pooled copy and the ext keeps the exact
-    /// value, so the material still round-trips.
+    /// The codec accepts a non-finite scalar, but a Float value pool must be
+    /// finite. from_mvox_file defaults the value-pool copy and the ext keeps
+    /// the exact value, so the material still round-trips.
     #[test]
     fn round_trips_a_non_finite_material_scalar() {
         let file = MVoxFile {

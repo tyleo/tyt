@@ -1,5 +1,5 @@
 /// How a Voxel Json writer encodes a color value pool: color space and numeric
-/// encoding together. Only the two sRGB kinds vary; a linear-kind pool
+/// encoding together. Only the two sRGB kinds vary; a linear-kind value pool
 /// serializes as float under every choice.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ColorFormat {

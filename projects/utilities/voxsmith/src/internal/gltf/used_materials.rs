@@ -210,8 +210,8 @@ mod tests {
 
     #[test]
     fn properties_pull_from_their_own_palettes_and_value_pools() {
-        // Two layers on different palettes over different pools: each name
-        // resolves to its own palette's pool and value.
+        // Two layers on different palettes over different value pools: each
+        // name resolves to its own palette's value pool and value.
         let mut state = VoxMain::default();
         let first_value_pool_id = float_value_pool(&mut state, vec![0.25]);
         let second_value_pool_id = float_value_pool(&mut state, vec![0.75]);

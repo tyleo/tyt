@@ -22,7 +22,7 @@ use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 /// transparent zero voxel.
 ///
 /// Errors when a `goxel` ext is present but cannot be deserialized, or when
-/// an object's `baseColorFactor` draws from a non-color pool.
+/// an object's `baseColorFactor` draws from a non-color value pool.
 pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
     let ext = match ext_for(state, "goxel") {
         Some(ext) => from_vox_value::<GoxelExtWrapper>(ext)?.goxel,

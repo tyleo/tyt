@@ -28,10 +28,13 @@ suffixes and the spelled-out value pool, one iteration per crate, in order:
   `cargo clippy --workspace --all-targets -- -D warnings`. After each
   iteration: `cargo test -p voxcore -p voxsmith -p vxl`.
 - The value-pool gate grep, per crate:
-  `grep -rni '\bpool' projects/utilities/<crate>/src --include='*.rs' | grep -vi 'value_pool\|value pool\|value-pool\|ValuePool'`
-  After iteration 1 it returns only id-pool mentions for voxcore (nothing,
-  once the Q1 item lands); after iterations 2 and 3 it returns nothing for
-  voxsmith and vxl.
+  `grep -rni '\bpool' projects/utilities/<crate>/src --include='*.rs' | perl -ne 'my $s = $_; $s =~ s/^[^:]*:\d+://; $s =~ s/value[-_ ]pools?//gi; $s =~ s/valuepools?//gi; print if $s =~ /\bpool/i'`
+  The perl filter tests a copy of each line with the file prefix and the
+  spelled-out forms removed, so a `value_pool` filename or a spelled-out
+  mention cannot mask a bare mention sharing its line, and `pooled` counts
+  as bare. After iteration 1 it returns only id-pool mentions for voxcore
+  (nothing, once the Q1 item lands); after iterations 2 and 3 it returns
+  nothing for voxsmith and vxl.
 - A heuristic id-suffix grep, worth running at each iteration's end:
   `grep -rnE '\b(let|for) &?\(?(palette|object|node|layer|voxel|material|property|root|child)\b' projects/utilities/<crate>/src --include='*.rs'`
   It over-matches (entity-value bindings are fine); read the hits against
@@ -127,8 +130,13 @@ Gate: workspace green; the voxcore gate grep returns only id-pool mentions
       `to_vmax_file.rs`, plus `PoolColumn::indices` to `value_ids`, and
       the three value-id `index` locals inside the `ValuePoolColumn`
       builders).
-- [ ] Prose, one docs commit: the roughly 90 comment and doc lines on the
-      survey list.
+- [x] Prose, one docs commit: the roughly 90 comment and doc lines on the
+      survey list, plus the lines the survey's gate grep could not see: the
+      doc blocks in `value_pool_color.rs` and the two voxj value-pool
+      converters (their filenames matched the grep's exclusion), a
+      `pooled copy` in `from_mvox_file.rs`, and the mixed
+      value-pool-and-bare lines in `reduce_palette.rs` and
+      `vox_palette_from_voxj_palette.rs`.
 - [ ] The message commit: the `order_palette_colors.rs` and
       `resolve_cell_color.rs` failure texts spell value pool out.
 

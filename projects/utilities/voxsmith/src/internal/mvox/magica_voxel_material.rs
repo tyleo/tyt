@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 
 /// Per-material provenance in the `magica-voxel` ext: the authoritative type
 /// token and scalar fields written back to the `MATL` chunk. They also fold
-/// into the palette pools, which default an absent field, so the exact
-/// optionals are kept here.
+/// into the palette's value pools, which default an absent field, so the
+/// exact optionals are kept here.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
 pub struct MagicaVoxelMaterial {
     /// The material id, which is the material index it folds into.

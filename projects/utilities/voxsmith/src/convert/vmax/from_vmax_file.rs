@@ -248,11 +248,12 @@ struct FoldedPalette {
 /// Builds one folded palette for an object's live voxels, adding it and its
 /// value pools to `state`.
 ///
-/// The color pool is the object's full color table in order, so a material's
-/// `baseColorFactor` value-index is `color_idx - 1`. Each material scalar pool
-/// holds one value per Voxel Max material, in order; the material byte is
-/// 0-based, so a voxel's value-index is its `material_idx`. The exact material
-/// list rides in the ext provenance for a byte-exact write-back.
+/// The color value pool is the object's full color table in order, so a
+/// material's `baseColorFactor` value-index is `color_idx - 1`. Each material
+/// scalar value pool holds one value per Voxel Max material, in order; the
+/// material byte is 0-based, so a voxel's value-index is its `material_idx`.
+/// The exact material list rides in the ext provenance for a byte-exact
+/// write-back.
 fn folded_palette(
     serde: &VMaxFile,
     object: &VMaxObject,
@@ -285,7 +286,7 @@ fn folded_palette(
     color_axis.push(true);
 
     // Metalness and roughness convert from Voxel Max's 0.1 to 0.9 slider
-    // coefficient to the 0 to 1 glTF factor the pool name implies; see
+    // coefficient to the 0 to 1 glTF factor the value-pool name implies; see
     // [`vm_coefficient_to_pbr_factor`]. The remaining scalars are unbounded and
     // stay raw: `sic` is an unbounded emission strength, and `shadows` and
     // `absorption` have no glTF counterpart. The exact coefficients ride in the
@@ -498,9 +499,9 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
     }
 }
 
-/// An unbounded float pool over `values`, defaulting a non-finite coefficient to
-/// zero so the pool builds; the exact value rides in the ext. Errors when
-/// `values` is empty.
+/// An unbounded float value pool over `values`, defaulting a non-finite
+/// coefficient to zero so the value pool builds; the exact value rides in the
+/// ext. Errors when `values` is empty.
 fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
     let values = values
         .into_iter()

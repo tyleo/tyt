@@ -27,7 +27,7 @@ pub fn order_palette_colors(state: &mut VoxMain, palette_id: U32Id<BVoxPalette>)
     };
 
     // The used color value ids in material order, then the unused ones in
-    // their current order, forming a permutation of the pool.
+    // their current order, forming a permutation of the value pool.
     let mut new_order: Vec<U32Id<BVoxValuePoolValue>> = Vec::with_capacity(value_pool.values_len());
     let mut seen: HashSet<U32Id<BVoxValuePoolValue>> =
         HashSet::with_capacity(value_pool.values_len());
@@ -85,7 +85,7 @@ mod tests {
 
         order_palette_colors(&mut state, palette_id);
 
-        // The pool lists the colors in material order. Ids and what each
+        // The value pool lists the colors in material order. Ids and what each
         // material resolves to are unchanged.
         assert_eq!(
             state.value_pool(value_pool_id),
@@ -144,7 +144,8 @@ mod tests {
         palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
         let palette_id = state.add_palette(palette).unwrap();
 
-        // Hole the pool, so the live value ids the reorder walks are sparse.
+        // Hole the value pool, so the live value ids the reorder walks are
+        // sparse.
         state
             .remove_value_pool_value(value_pool_id, U32Id::from_u32(4), U32Id::from_u32(0))
             .unwrap();

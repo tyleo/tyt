@@ -65,11 +65,11 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
     Ok(state)
 }
 
-/// Builds the one shared palette: a color pool of one entry per distinct color
-/// across every matrix's solid voxels, bound to `baseColorFactor`, with one
-/// material per color and a map from a color to its material. The pool is added
-/// to `state`. A file with no solid voxels gets a single placeholder color so
-/// objects have a default material to sample.
+/// Builds the one shared palette: a color value pool of one entry per distinct
+/// color across every matrix's solid voxels, bound to `baseColorFactor`, with
+/// one material per color and a map from a color to its material. The
+/// value pool is added to `state`. A file with no solid voxels gets a single
+/// placeholder color so objects have a default material to sample.
 fn build_palette(
     state: &mut VoxMain,
     file: &QbFile,
@@ -91,8 +91,9 @@ fn build_palette(
         order.push([0, 0, 0]);
     }
 
-    // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB pool as
-    // float components in `[0, 1]`; each material draws one value id into it.
+    // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB
+    // value pool as float components in `[0, 1]`; each material draws one
+    // value id into it.
     let value_pool_id = state.add_value_pool(
         VoxValuePool::srgb(order.iter().map(|&color| color_floats(color)).collect())
             .expect("byte-derived components are in range and the list is non-empty"),

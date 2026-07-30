@@ -267,15 +267,15 @@ fn build_palette(
         })
         .collect();
 
-    // An all-empty grid still needs a non-empty palette so its pools and default
-    // material are valid; give it a lone white material.
+    // An all-empty grid still needs a non-empty palette so its value pools
+    // and default material are valid; give it a lone white material.
     if distinct.is_empty() {
         distinct.push(MeshMaterial::flat(TySrgbaU8::from(DEFAULT_FILL)));
     }
 
-    // One deduplicated pool per property, plus each distinct material's
-    // value id into it. The bounded scalars clamp to their pool range so the
-    // pools build.
+    // One deduplicated value pool per property, plus each distinct material's
+    // value id into it. The bounded scalars clamp to their value pool range so
+    // the value pools build.
     let base_color = srgba_value_pool(&distinct, |material| material.base_color);
     let metallic = float_value_pool(&distinct, |material| material.metallic.clamp(0.0, 1.0));
     let roughness = float_value_pool(&distinct, |material| material.roughness.clamp(0.0, 1.0));
@@ -287,8 +287,8 @@ fn build_palette(
     let transmission =
         float_value_pool(&distinct, |material| material.transmission.clamp(0.0, 1.0));
 
-    // Register the pools and add each property. All properties precede any
-    // material, so no material carries a back-fill placeholder value id.
+    // Register the value pools and add each property. All properties precede
+    // any material, so no material carries a back-fill placeholder value id.
     let base_color_value_pool_id = state.add_value_pool(VoxValuePool::srgba(base_color.values)?);
     let metallic_value_pool_id = state.add_value_pool(bounded_float(metallic.values, 0.0, 1.0)?);
     let roughness_value_pool_id = state.add_value_pool(bounded_float(roughness.values, 0.0, 1.0)?);
@@ -384,7 +384,8 @@ fn build_palette(
     Ok((palette, sample_ids, default_material_id))
 }
 
-/// A deduplicated pool column and each distinct material's value id into it.
+/// A deduplicated value pool column and each distinct material's value id
+/// into it.
 struct ValuePoolColumn<T> {
     /// The distinct values, in first-seen order.
     values: Vec<T>,
@@ -393,8 +394,8 @@ struct ValuePoolColumn<T> {
     value_ids: Vec<U32Id<BVoxValuePoolValue>>,
 }
 
-/// A four-component sRGB color pool over the extracted color, deduplicated by its
-/// 8-bit bytes and stored as float components in `[0, 1]`.
+/// A four-component sRGB color value pool over the extracted color,
+/// deduplicated by its 8-bit bytes and stored as float components in `[0, 1]`.
 fn srgba_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TySrgbaU8,
@@ -415,9 +416,9 @@ fn srgba_value_pool(
     ValuePoolColumn { values, value_ids }
 }
 
-/// A three-component sRGB color pool over the extracted color, deduplicated by
-/// its 8-bit bytes and stored as float components in `[0, 1]`; the alpha is
-/// dropped.
+/// A three-component sRGB color value pool over the extracted color,
+/// deduplicated by its 8-bit bytes and stored as float components in `[0, 1]`;
+/// the alpha is dropped.
 fn srgb_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TySrgbaU8,
@@ -440,7 +441,8 @@ fn srgb_value_pool(
     ValuePoolColumn { values, value_ids }
 }
 
-/// A float pool over the extracted scalar, deduplicated by its bit pattern.
+/// A float value pool over the extracted scalar, deduplicated by its bit
+/// pattern.
 fn float_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> f64,
@@ -461,7 +463,7 @@ fn float_value_pool(
     ValuePoolColumn { values, value_ids }
 }
 
-/// A float pool bounded on both sides.
+/// A float value pool bounded on both sides.
 fn bounded_float(values: Vec<f64>, min: f64, max: f64) -> Result<VoxValuePool> {
     Ok(VoxValuePool::float(
         VoxBound::Number(min),
@@ -470,7 +472,7 @@ fn bounded_float(values: Vec<f64>, min: f64, max: f64) -> Result<VoxValuePool> {
     )?)
 }
 
-/// A float pool bounded below and unbounded above.
+/// A float value pool bounded below and unbounded above.
 fn float_above(values: Vec<f64>, min: f64) -> Result<VoxValuePool> {
     Ok(VoxValuePool::float(
         VoxBound::Number(min),
@@ -658,7 +660,7 @@ mod tests {
         let state = voxelize(vec![emissive, other]);
 
         // Two distinct materials share the strength, so both rows repeat the
-        // deduplicated pool's one value.
+        // deduplicated value pool's one value.
         let (_, palette) = state.iter_palettes().next().unwrap();
         assert_eq!(palette.iter_materials().count(), 2);
         let property_id = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();

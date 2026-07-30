@@ -14,7 +14,7 @@ use voxj::{VoxjBound, VoxjValuePool};
 /// Errors if:
 ///
 /// 1. a hex color string is malformed
-/// 2. the pool is empty
+/// 2. the value pool is empty
 /// 3. a bound is malformed
 /// 4. a value is out of range
 pub fn vox_value_pool_from_voxj_value_pool(value_pool: &VoxjValuePool) -> Result<VoxValuePool> {

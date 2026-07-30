@@ -15,9 +15,9 @@ use voxj::{VoxjBound, VoxjValuePool};
 /// 3. [`ColorFormat::LinearFloat`]: decode to linear light, write the
 ///    `linear-rgb` / `linear-rgba` float kinds.
 ///
-/// Linear-kind pools always serialize as float. Every other kind maps one to
-/// one, keeping its values and any `int`/`float` bounds; `json` recurses through
-/// [`voxj_value_from_vox_value`].
+/// Linear-kind value pools always serialize as float. Every other kind maps
+/// one to one, keeping its values and any `int`/`float` bounds; `json`
+/// recurses through [`voxj_value_from_vox_value`].
 pub fn voxj_value_pool_from_vox_value_pool(
     value_pool: &VoxValuePool,
     color_format: ColorFormat,
@@ -111,8 +111,8 @@ pub fn voxj_value_pool_from_vox_value_pool(
     }
 }
 
-/// The three-component colors of an `srgb` or `linear-rgb` pool in listing
-/// order.
+/// The three-component colors of an `srgb` or `linear-rgb` value pool in
+/// listing order.
 fn rgb_colors(value_pool: &VoxValuePool) -> Vec<[f64; 3]> {
     value_pool
         .iter_values()
@@ -123,8 +123,8 @@ fn rgb_colors(value_pool: &VoxValuePool) -> Vec<[f64; 3]> {
         .collect()
 }
 
-/// The four-component colors of an `srgba` or `linear-rgba` pool in listing
-/// order.
+/// The four-component colors of an `srgba` or `linear-rgba` value pool in
+/// listing order.
 fn rgba_colors(value_pool: &VoxValuePool) -> Vec<[f64; 4]> {
     value_pool
         .iter_values()
@@ -234,8 +234,8 @@ mod tests {
 
     #[test]
     fn linear_float_preserves_an_hdr_component() {
-        // A linear pool carries components above 1; linear-float holds them,
-        // hex could not.
+        // A linear value pool carries components above 1; linear-float holds
+        // them, hex could not.
         let value_pool = VoxValuePool::linear_rgb(vec![[2.5, 0.0, 1.0]]).unwrap();
 
         match voxj_value_pool_from_vox_value_pool(&value_pool, ColorFormat::LinearFloat) {

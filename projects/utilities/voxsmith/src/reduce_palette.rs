@@ -162,8 +162,8 @@ struct Point {
 }
 
 /// The sRGB bytes of a material's `baseColorFactor`, or `None` if the value is
-/// absent or its bound pool is not a color kind. Resolves the bound value-pool value
-/// and decodes it with [`value_pool_color`].
+/// absent or its bound value pool is not a color kind. Resolves the bound
+/// value-pool value and decodes it with [`value_pool_color`].
 fn material_color(
     state: &VoxMain,
     palette_id: U32Id<BVoxPalette>,
@@ -835,8 +835,9 @@ mod tests {
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        // baseColorFactor draws from an sRGBA color pool; tag draws from an
-        // unbounded float pool with one distinct value per material.
+        // baseColorFactor draws from an sRGBA color value pool; tag draws
+        // from an unbounded float value pool with one distinct value per
+        // material.
         let base_value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(colors.iter().map(|color| srgba(color)).collect()).unwrap(),
         );
@@ -1207,7 +1208,7 @@ mod tests {
         }
     }
 
-    /// The number of values in the pool the property `name` draws from
+    /// The number of values in the value pool the property `name` draws from
     /// in the first palette that carries it.
     fn value_pool_len(state: &VoxMain, name: &str) -> usize {
         for (_, palette) in state.iter_palettes() {
@@ -1222,7 +1223,7 @@ mod tests {
     #[test]
     fn pruning_drops_the_merged_away_values() {
         // Three colors fused to two; with keep_unused_values off, the reduction
-        // prunes the merged-away color and its tag from the pools.
+        // prunes the merged-away color and its tag from the value pools.
         let (mut state, palette_id, _) =
             state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
         assert_eq!(value_pool_len(&state, BASE_COLOR_FACTOR), 3);
@@ -1239,7 +1240,7 @@ mod tests {
         .unwrap();
         assert_eq!(outcome, Some((3, 2)));
 
-        // Both pools now carry only the two survivors' values.
+        // Both value pools now carry only the two survivors' values.
         assert_eq!(value_pool_len(&state, BASE_COLOR_FACTOR), 2);
         assert_eq!(value_pool_len(&state, "tag"), 2);
         assert_eq!(state.validate(), Ok(()));
@@ -1344,8 +1345,8 @@ mod tests {
 
     #[test]
     fn keep_unused_values_leaves_the_value_pools_whole() {
-        // The same reduction with keep_unused_values keeps the merged-away color
-        // in the pool, unreferenced.
+        // The same reduction with keep_unused_values keeps the merged-away
+        // color in the value pool, unreferenced.
         let (mut state, palette_id, _) =
             state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
         reduce_palette(

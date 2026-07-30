@@ -3,9 +3,9 @@
 //! other format carries the plain 0 to 1 glTF factor. The slider percent is
 //! `(coefficient - 0.1) / 0.8`, so a coefficient of 0.1 reads as 0 percent and
 //! 0.9 reads as 100 percent. The Voxel Max reader and writer convert at the
-//! boundary so the shared `metallicFactor` and `roughnessFactor` pools stay on
-//! the 0 to 1 glTF range. Writing a bare 0.0 metalness left the selected
-//! material's slider reading a negative percent.
+//! boundary so the shared `metallicFactor` and `roughnessFactor` value pools
+//! stay on the 0 to 1 glTF range. Writing a bare 0.0 metalness left the
+//! selected material's slider reading a negative percent.
 
 /// The lowest coefficient a slider produces, its 0 percent point.
 const COEFFICIENT_MIN: f64 = 0.1;

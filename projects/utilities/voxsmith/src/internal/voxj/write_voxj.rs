@@ -30,7 +30,7 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// * `sample` - sample-block encoding, or `None` to search for the smallest.
 /// * `ext` - when false, omits the user-defined `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-/// * `color_format` - the on-wire encoding for sRGB color pools.
+/// * `color_format` - the on-wire encoding for sRGB color value pools.
 pub fn write_voxj(
     state: &VoxMain,
     position: Option<PositionEncoding>,
