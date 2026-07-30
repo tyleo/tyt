@@ -53,7 +53,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
     // One voxcore object per distinct geometry; instances of one geometry
     // collapse to a single object placed by several nodes.
     let mut object_transforms: Vec<TyTransformF64> = Vec::new();
-    let mut object_refs: Vec<usize> = Vec::new();
+    let mut object_ids: Vec<usize> = Vec::new();
     let mut object_data: Vec<Option<String>> = Vec::new();
     let mut instances: HashMap<InstanceKey, usize> = HashMap::new();
     for object in &scene.objects {
@@ -64,7 +64,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
             let box_min = authored_box(object).map_or([0, 0, 0], |(box_min, _)| box_min);
             let origin = pivot_origin(box_min, object.center);
             object_transforms.push(object_transform(object, box_min, origin));
-            object_refs.push(existing);
+            object_ids.push(existing);
             continue;
         }
         let (vox_object, data, transform) =
@@ -72,7 +72,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
         let object_id = state.add_object(vox_object)?;
         object_data.push(data);
         object_transforms.push(transform);
-        object_refs.push(object_id.to_u32() as usize);
+        object_ids.push(object_id.to_u32() as usize);
         if let Some(key) = key {
             instances.insert(key, object_id.to_u32() as usize);
         }
@@ -80,7 +80,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
 
     // The scene nodes land as one batch: a group's children may sit after
     // it in the listing.
-    let (nodes, roots) = build_hierarchy(scene, &object_transforms, &object_refs);
+    let (nodes, roots) = build_hierarchy(scene, &object_transforms, &object_ids);
     state.add_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(roots)?;
 
@@ -421,11 +421,17 @@ fn folded_palette(
     keys.dedup();
     let mut combo_material_ids: HashMap<(u8, u8), U32Id<BVoxMaterial>> = HashMap::new();
     for key in keys {
-        let color = u32::from(key.0).saturating_sub(1);
-        let material = u32::from(key.1);
+        let color_index = u32::from(key.0).saturating_sub(1);
+        let material_index = u32::from(key.1);
         let value_ids = color_axis
             .iter()
-            .map(|&is_color| U32Id::from_u32(if is_color { color } else { material }))
+            .map(|&is_color| {
+                U32Id::from_u32(if is_color {
+                    color_index
+                } else {
+                    material_index
+                })
+            })
             .collect();
         let material_id = palette
             .add_material(value_ids)
@@ -735,20 +741,20 @@ fn group_transform(group: &VMaxGroup) -> TyTransformF64 {
 }
 
 /// Builds the voxcore hierarchy: one node per group then one per object, the
-/// latter placing its geometry. `object_refs[i]` is the object that scene
+/// latter placing its geometry. `object_ids[i]` is the object that scene
 /// object `i` places, so instances share a `child_objects` id. Returns the
 /// nodes in id order and the root ids.
 fn build_hierarchy(
     scene: &VMaxSceneJsonFile,
     object_transforms: &[TyTransformF64],
-    object_refs: &[usize],
+    object_ids: &[usize],
 ) -> (Vec<VoxHierarchyNode>, Vec<U32Id<BVoxHierarchyNode>>) {
     let mut nodes: Vec<VoxHierarchyNode> = Vec::new();
-    let mut node_of_id: HashMap<&str, usize> = HashMap::new();
+    let mut node_index_of_id: HashMap<&str, usize> = HashMap::new();
     let mut parents: Vec<Option<&str>> = Vec::new();
 
     for group in &scene.groups {
-        node_of_id.insert(&group.id, nodes.len());
+        node_index_of_id.insert(&group.id, nodes.len());
         parents.push(group.parent_id.as_deref());
         nodes.push(VoxHierarchyNode {
             name: group.name.clone(),
@@ -758,23 +764,23 @@ fn build_hierarchy(
         });
     }
     for (index, object) in scene.objects.iter().enumerate() {
-        node_of_id.insert(&object.id, nodes.len());
+        node_index_of_id.insert(&object.id, nodes.len());
         parents.push(object.parent_id.as_deref());
         nodes.push(VoxHierarchyNode {
             name: object.name.clone(),
             child_node_ids: Vec::new(),
-            child_object_ids: vec![U32Id::<BVoxObject>::from_u32(object_refs[index] as u32)],
+            child_object_ids: vec![U32Id::<BVoxObject>::from_u32(object_ids[index] as u32)],
             transform: object_transforms[index],
         });
     }
 
     let mut roots = Vec::new();
-    for (node, parent) in parents.iter().enumerate() {
-        match parent.and_then(|pid| node_of_id.get(pid)) {
-            Some(&parent_node) => nodes[parent_node]
+    for (node_index, parent) in parents.iter().enumerate() {
+        match parent.and_then(|pid| node_index_of_id.get(pid)) {
+            Some(&parent_node_index) => nodes[parent_node_index]
                 .child_node_ids
-                .push(U32Id::from_u32(node as u32)),
-            None => roots.push(U32Id::from_u32(node as u32)),
+                .push(U32Id::from_u32(node_index as u32)),
+            None => roots.push(U32Id::from_u32(node_index as u32)),
         }
     }
 

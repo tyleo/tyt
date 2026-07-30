@@ -656,7 +656,7 @@ fn folded_ref(state: &VoxMain, object: &VoxObject) -> Option<FoldedRef> {
 #[derive(Default)]
 struct MaterialPlan {
     name: String,
-    material_idx: HashMap<U32Id<BVoxMaterial>, u8>,
+    material_indices: HashMap<U32Id<BVoxMaterial>, u8>,
     materials: Vec<VMaxMaterial>,
 }
 
@@ -682,13 +682,13 @@ fn material_plan(
 
     // A color-only palette folds no materials; every material writes index 0.
     if folded.material_property_ids.is_empty() {
-        let material_idx = palette
+        let material_indices = palette
             .iter_materials()
             .map(|material_id| (material_id, 0))
             .collect();
         return Ok(MaterialPlan {
             name,
-            material_idx,
+            material_indices,
             materials: Vec::new(),
         });
     }
@@ -698,7 +698,7 @@ fn material_plan(
     // hand-edited ext can still exceed the single-byte budget, so it is checked.
     if let Some(provenance) = provenance.filter(|palette| !palette.materials.is_empty()) {
         let first_property_id = folded.material_property_ids[0].1;
-        let mut material_idx = HashMap::new();
+        let mut material_indices = HashMap::new();
         for material_id in palette.iter_materials() {
             let index = palette
                 .value_id(material_id, first_property_id)
@@ -709,7 +709,7 @@ fn material_plan(
                      {MATERIAL_SLOTS} material slots"
                 )));
             }
-            material_idx.insert(material_id, index as u8);
+            material_indices.insert(material_id, index as u8);
         }
         let materials = provenance
             .materials
@@ -719,7 +719,7 @@ fn material_plan(
             .collect();
         return Ok(MaterialPlan {
             name,
-            material_idx,
+            material_indices,
             materials,
         });
     }
@@ -758,7 +758,7 @@ fn derive_materials(
     // each slot, the reference its emissive is read against.
     let mut base_luminances: Vec<Option<f64>> = Vec::new();
     let mut index_of: HashMap<Vec<U32Id<BVoxValuePoolValue>>, u8> = HashMap::new();
-    let mut material_idx = HashMap::new();
+    let mut material_indices = HashMap::new();
     for material_id in palette.iter_materials() {
         let signature: Vec<U32Id<BVoxValuePoolValue>> = folded
             .material_property_ids
@@ -769,8 +769,8 @@ fn derive_materials(
                     .unwrap_or(U32Id::from_u32(0))
             })
             .collect();
-        let idx = match index_of.get(&signature) {
-            Some(&idx) => idx,
+        let material_index = match index_of.get(&signature) {
+            Some(&material_index) => material_index,
             None => {
                 if signatures.len() >= MATERIAL_SLOTS {
                     return Err(Error::invalid(format!(
@@ -778,14 +778,14 @@ fn derive_materials(
                          palette holds only that many material slots"
                     )));
                 }
-                let idx = signatures.len() as u8;
+                let material_index = signatures.len() as u8;
                 signatures.push(signature.clone());
                 base_luminances.push(base_luminance(material_id));
-                index_of.insert(signature, idx);
-                idx
+                index_of.insert(signature, material_index);
+                material_index
             }
         };
-        material_idx.insert(material_id, idx);
+        material_indices.insert(material_id, material_index);
     }
     let materials = signatures
         .iter()
@@ -803,7 +803,7 @@ fn derive_materials(
         .collect();
     Ok(MaterialPlan {
         name,
-        material_idx,
+        material_indices,
         materials,
     })
 }
@@ -970,8 +970,8 @@ fn reconstruct_voxels(
                 .expect("a live voxel is within the grid");
             let material_id =
                 layer_id.and_then(|layer_id| object.voxel_material(voxel_id, layer_id));
-            let color_idx = match (folded, material_id) {
-                (Some(folded), Some(material_id)) => color_index(state, folded, material_id)?,
+            let color_index = match (folded, material_id) {
+                (Some(folded), Some(material_id)) => voxel_color_index(state, folded, material_id)?,
                 // A colorless voxel still needs a non-empty index, so it takes 1,
                 // not the empty index 0.
                 _ => 1,
@@ -979,8 +979,8 @@ fn reconstruct_voxels(
             // Voxel Max's material byte is 0-based: byte `n` selects
             // `materials[n]`. The per-color material map in the sidecar (`lc`)
             // drives what renders, but the byte is kept consistent with it.
-            let material_idx = material_id
-                .and_then(|material_id| plan.material_idx.get(&material_id).copied())
+            let material_index = material_id
+                .and_then(|material_id| plan.material_indices.get(&material_id).copied())
                 .unwrap_or(0);
             Ok(VMaxVoxel {
                 position: [
@@ -988,8 +988,8 @@ fn reconstruct_voxels(
                     position.y as i32 + box_min[1],
                     position.z as i32 + box_min[2],
                 ],
-                material_idx,
-                color_idx,
+                material_idx: material_index,
+                color_idx: color_index,
             })
         })
         .collect()
@@ -999,7 +999,7 @@ fn reconstruct_voxels(
 /// `baseColorFactor`. Errors when the color value id reaches
 /// [`PALETTE_COLORS`], one past the last usable color, so a padded source
 /// palette is fine as long as its referenced colors fit.
-fn color_index(
+fn voxel_color_index(
     state: &VoxMain,
     folded: &FoldedRef,
     material_id: U32Id<BVoxMaterial>,
@@ -1230,7 +1230,7 @@ fn color_material_map(
             else {
                 continue;
             };
-            let Some(&byte) = plan.material_idx.get(&material_id) else {
+            let Some(&byte) = plan.material_indices.get(&material_id) else {
                 continue;
             };
             if let Some(slot) = lc.get_mut(cell as usize) {

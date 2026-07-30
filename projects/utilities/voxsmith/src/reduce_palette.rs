@@ -366,21 +366,21 @@ fn octree(points: Vec<Point>, target: usize) -> Vec<Vec<Point>> {
             }
         }
 
-        let Some((node, _)) = best else { break };
+        let Some((node_index, _)) = best else { break };
 
-        let children = nodes[node].children;
+        let children = nodes[node_index].children;
 
         let mut folded = 0;
 
-        for child in children.into_iter().filter(|&c| c >= 0) {
-            let taken = mem::take(&mut nodes[child as usize].points);
+        for child_index in children.into_iter().filter(|&c| c >= 0) {
+            let taken = mem::take(&mut nodes[child_index as usize].points);
 
-            nodes[node].points.extend(taken);
+            nodes[node_index].points.extend(taken);
 
             folded += 1;
         }
 
-        nodes[node].children = [-1; 8];
+        nodes[node_index].children = [-1; 8];
 
         leaves = leaves - folded + 1;
     }
@@ -615,7 +615,7 @@ fn dither_layer(
     // Reassignment rewrites the full sample row, so find the layer order and
     // this layer's slot once.
     let layer_ids: Vec<_> = object.iter_layers().map(|(layer_id, _)| layer_id).collect();
-    let slot = layer_ids
+    let slot_index = layer_ids
         .iter()
         .position(|&other_layer_id| other_layer_id == layer_id)
         .expect("the layer is one of the object's");
@@ -667,7 +667,7 @@ fn dither_layer(
                         .expect("a live voxel samples every layer")
                 })
                 .collect();
-            row[slot] = U32Id::from_u32(chosen.material_id);
+            row[slot_index] = U32Id::from_u32(chosen.material_id);
             state
                 .retain_voxel(object_id, voxel_id, &row)
                 .expect("a live voxel takes a full-arity row of palette materials");
@@ -937,10 +937,10 @@ mod tests {
         let palette_id = state.add_palette(palette).unwrap();
         object.add_layer(palette_id, material_ids[0]);
 
-        for &(position, color) in voxels {
+        for &(position, color_index) in voxels {
             let voxel_id = object.voxel_id(position).unwrap();
             object
-                .retain_voxel(voxel_id, &[material_ids[color]])
+                .retain_voxel(voxel_id, &[material_ids[color_index]])
                 .unwrap();
         }
 

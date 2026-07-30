@@ -727,8 +727,8 @@ mod tests {
 
     /// The `#RRGGBBAA` hex of the `baseColorFactor` a given voxel samples.
     fn voxel_hex(state: &VoxMain, position: TyVector3U32) -> String {
-        let (value_pool, index) = voxel_attribute(state, position, BASE_COLOR_FACTOR);
-        match value_pool.value(index) {
+        let (value_pool, value_id) = voxel_attribute(state, position, BASE_COLOR_FACTOR);
+        match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Srgba(&[r, g, b, a])) => {
                 TySrgbaU8::from([byte(r), byte(g), byte(b), byte(a)]).to_hex()
             }
@@ -738,8 +738,8 @@ mod tests {
 
     /// The numeric value of one float attribute a given voxel samples.
     fn voxel_number(state: &VoxMain, position: TyVector3U32, attribute: &str) -> f64 {
-        let (value_pool, index) = voxel_attribute(state, position, attribute);
-        match value_pool.value(index) {
+        let (value_pool, value_id) = voxel_attribute(state, position, attribute);
+        match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Float(number)) => number,
             other => panic!("expected a float pool for {attribute}, got {other:?}"),
         }
@@ -1570,8 +1570,8 @@ mod tests {
         .unwrap();
 
         let origin = TyVector3U32::new(0, 0, 0);
-        let (value_pool, index) = voxel_attribute(&state, origin, EMISSIVE_FACTOR);
-        let [r, g, b] = match value_pool.value(index) {
+        let (value_pool, value_id) = voxel_attribute(&state, origin, EMISSIVE_FACTOR);
+        let [r, g, b] = match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Srgb(&color)) => color,
             other => panic!("expected an sRGB emissiveFactor pool, got {other:?}"),
         };

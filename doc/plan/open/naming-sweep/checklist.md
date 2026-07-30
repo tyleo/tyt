@@ -119,12 +119,14 @@ Gate: workspace green; the voxcore gate grep returns only id-pool mentions
       gltf, mesh, and voxj files on the survey's per-file list, including
       the bare-`id` locals, destructures, and closures under the Q2
       policy.
-- [ ] Index suffixes and the misnamed ids: the `_index` renames in
+- [x] Index suffixes and the misnamed ids: the `_index` renames in
       `from_vmax_file.rs`, `from_mvox_file.rs`, `reduce_palette.rs`, and
       `to_vmax_file.rs`; the `_idx` cluster in `write_vmax.rs`, keeping the
       Voxel-Max wire-struct field names; and the seven `index` bindings
       holding a `U32Id<BVoxValuePoolValue>` (`from_gltf_bytes.rs` and
-      `to_vmax_file.rs`, plus `PoolColumn::indices` to `value_ids`).
+      `to_vmax_file.rs`, plus `PoolColumn::indices` to `value_ids`, and
+      the three value-id `index` locals inside the `ValuePoolColumn`
+      builders).
 - [ ] Prose, one docs commit: the roughly 90 comment and doc lines on the
       survey list.
 - [ ] The message commit: the `order_palette_colors.rs` and

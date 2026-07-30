@@ -283,11 +283,11 @@ fn build_hierarchy(
         let name = node.attributes.name.clone().unwrap_or_default();
         let vox_node = match &node.body {
             MVoxSceneNodeBody::Transform(transform) => {
-                let child = resolve(&position_of_id, transform.child)?;
-                referenced[child] = true;
+                let child_index = resolve(&position_of_id, transform.child)?;
+                referenced[child_index] = true;
                 VoxHierarchyNode {
                     name,
-                    child_node_ids: vec![U32Id::from_u32(child as u32)],
+                    child_node_ids: vec![U32Id::from_u32(child_index as u32)],
                     child_object_ids: Vec::new(),
                     transform: transform_from_frames(&transform.frames),
                 }
@@ -295,11 +295,11 @@ fn build_hierarchy(
             MVoxSceneNodeBody::Group(group) => {
                 let mut child_node_ids = Vec::with_capacity(group.children.len());
                 let mut seen = HashSet::new();
-                for &child in &group.children {
-                    let child = resolve(&position_of_id, child)?;
-                    referenced[child] = true;
-                    if seen.insert(child) {
-                        child_node_ids.push(U32Id::from_u32(child as u32));
+                for &child_id in &group.children {
+                    let child_index = resolve(&position_of_id, child_id)?;
+                    referenced[child_index] = true;
+                    if seen.insert(child_index) {
+                        child_node_ids.push(U32Id::from_u32(child_index as u32));
                     }
                 }
                 VoxHierarchyNode {
@@ -737,11 +737,11 @@ mod tests {
         let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
             .expect("a 2x1x1 grid is within the dense limit");
         wide.add_layer(palette_id, material_id(0));
-        for (x, color) in [(0u32, 1u32), (1, 2)] {
+        for (x, material_index) in [(0u32, 1u32), (1, 2)] {
             let voxel_id = wide
                 .voxel_id(TyVector3U32::new(x, 0, 0))
                 .expect("a position within the grid");
-            wide.retain_voxel(voxel_id, &[material_id(color)])
+            wide.retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
         }
         state.add_object(wide).unwrap();

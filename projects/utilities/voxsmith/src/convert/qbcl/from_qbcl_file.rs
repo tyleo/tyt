@@ -451,11 +451,11 @@ mod tests {
         let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
             .expect("a 2x1x1 grid is within the dense limit");
         wide.add_layer(palette_id, material_id(0));
-        for (x, color) in [(0u32, 0u32), (1, 1)] {
+        for (x, material_index) in [(0u32, 0u32), (1, 1)] {
             let voxel_id = wide
                 .voxel_id(TyVector3U32::new(x, 0, 0))
                 .expect("a position within the grid");
-            wide.retain_voxel(voxel_id, &[material_id(color)])
+            wide.retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
         }
         state.add_object(wide).unwrap();
@@ -550,9 +550,9 @@ mod tests {
             }
             let index = index as u32;
             let y = index % size_y;
-            let layer = index / size_y;
-            let z = layer % size_z;
-            let x = layer / size_z;
+            let zx_index = index / size_y;
+            let z = zx_index % size_z;
+            let x = zx_index / size_z;
             set.insert((
                 matrix.position[0] + x as i32,
                 matrix.position[1] + y as i32,

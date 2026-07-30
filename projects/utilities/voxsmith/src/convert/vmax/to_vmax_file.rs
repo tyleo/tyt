@@ -367,11 +367,11 @@ mod tests {
         let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
             .expect("a 2x1x1 grid is within the dense limit");
         wide.add_layer(palette_id, material_id(0));
-        for (x, color) in [(0u32, 0u32), (1, 1)] {
+        for (x, material_index) in [(0u32, 0u32), (1, 1)] {
             let voxel_id = wide
                 .voxel_id(TyVector3U32::new(x, 0, 0))
                 .expect("a position within the grid");
-            wide.retain_voxel(voxel_id, &[material_id(color)])
+            wide.retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
         }
         state.add_object(wide).unwrap();
@@ -575,7 +575,7 @@ mod tests {
         let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Two unit objects, a red one (material 0) and a green one (material 1).
-        for color in [0u32, 1] {
+        for material_index in [0u32, 1] {
             let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
                 .expect("a 1x1x1 grid is within the dense limit");
             object.add_layer(palette_id, material_id(0));
@@ -583,7 +583,7 @@ mod tests {
                 .voxel_id(TyVector3U32::new(0, 0, 0))
                 .expect("a position within the grid");
             object
-                .retain_voxel(voxel_id, &[material_id(color)])
+                .retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
             state.add_object(object).unwrap();
         }
@@ -659,12 +659,12 @@ mod tests {
     ) -> VoxObject {
         let mut object = VoxObject::new(String::new(), bounds).expect("within the dense limit");
         object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
-        for &([x, y, z], material) in voxels {
+        for &([x, y, z], material_index) in voxels {
             let voxel_id = object
                 .voxel_id(TyVector3U32::new(x, y, z))
                 .expect("a position within the grid");
             object
-                .retain_voxel(voxel_id, &[U32Id::<BVoxMaterial>::from_u32(material)])
+                .retain_voxel(voxel_id, &[U32Id::<BVoxMaterial>::from_u32(material_index)])
                 .expect("one sample for the one layer");
         }
         object
@@ -679,23 +679,23 @@ mod tests {
         )
     }
 
-    /// A node placing object `object` at `transform`.
-    fn object_node(name: &str, object: u32, transform: TyTransformF64) -> VoxHierarchyNode {
+    /// A node placing object `object_id` at `transform`.
+    fn object_node(name: &str, object_id: u32, transform: TyTransformF64) -> VoxHierarchyNode {
         VoxHierarchyNode {
             name: name.to_owned(),
             child_node_ids: Vec::new(),
-            child_object_ids: vec![U32Id::<BVoxObject>::from_u32(object)],
+            child_object_ids: vec![U32Id::<BVoxObject>::from_u32(object_id)],
             transform,
         }
     }
 
     /// A group node parenting the given child nodes at `transform`.
-    fn group_node(name: &str, children: &[u32], transform: TyTransformF64) -> VoxHierarchyNode {
+    fn group_node(name: &str, child_ids: &[u32], transform: TyTransformF64) -> VoxHierarchyNode {
         VoxHierarchyNode {
             name: name.to_owned(),
-            child_node_ids: children
+            child_node_ids: child_ids
                 .iter()
-                .map(|&c| U32Id::<BVoxHierarchyNode>::from_u32(c))
+                .map(|&child_id| U32Id::<BVoxHierarchyNode>::from_u32(child_id))
                 .collect(),
             child_object_ids: Vec::new(),
             transform,
@@ -1312,20 +1312,20 @@ mod tests {
                 .expect("one material");
             let scalar = |attribute: &str| -> f64 {
                 let property_id = material_palette.property_id_by_name(attribute).unwrap();
-                let (value_pool, index) = reloaded
+                let (value_pool, value_id) = reloaded
                     .material_value(palette_id, material_id, property_id)
                     .unwrap();
-                match value_pool.value(index) {
+                match value_pool.value(value_id) {
                     Some(VoxValuePoolValueRef::Float(number)) => number,
                     _ => panic!("a scalar attribute is a float pool"),
                 }
             };
             let flag = |attribute: &str| -> bool {
                 let property_id = material_palette.property_id_by_name(attribute).unwrap();
-                let (value_pool, index) = reloaded
+                let (value_pool, value_id) = reloaded
                     .material_value(palette_id, material_id, property_id)
                     .unwrap();
-                match value_pool.value(index) {
+                match value_pool.value(value_id) {
                     Some(VoxValuePoolValueRef::Bool(flag)) => flag,
                     _ => panic!("shadows is a bool pool"),
                 }
@@ -1397,10 +1397,10 @@ mod tests {
         let property_id = material_palette
             .property_id_by_name("emissiveStrength")
             .unwrap();
-        let (value_pool, index) = reloaded
+        let (value_pool, value_id) = reloaded
             .material_value(palette_id, material_id, property_id)
             .unwrap();
-        let sic = match value_pool.value(index) {
+        let sic = match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Float(number)) => number,
             _ => panic!("emissiveStrength is a float pool"),
         };

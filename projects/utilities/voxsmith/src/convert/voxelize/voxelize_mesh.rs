@@ -361,14 +361,14 @@ fn build_palette(
         .map(|index| {
             palette
                 .add_material(vec![
-                    base_color.indices[index],
-                    metallic.indices[index],
-                    roughness.indices[index],
-                    emissive_factor.indices[index],
-                    emissive_strength.indices[index],
-                    occlusion.indices[index],
-                    ior.indices[index],
-                    transmission.indices[index],
+                    base_color.value_ids[index],
+                    metallic.value_ids[index],
+                    roughness.value_ids[index],
+                    emissive_factor.value_ids[index],
+                    emissive_strength.value_ids[index],
+                    occlusion.value_ids[index],
+                    ior.value_ids[index],
+                    transmission.value_ids[index],
                 ])
                 .expect("one value id for each property")
         })
@@ -390,7 +390,7 @@ struct ValuePoolColumn<T> {
     values: Vec<T>,
 
     /// Per distinct material, its value id into [`values`](Self::values).
-    indices: Vec<U32Id<BVoxValuePoolValue>>,
+    value_ids: Vec<U32Id<BVoxValuePoolValue>>,
 }
 
 /// A four-component sRGB color pool over the extracted color, deduplicated by its
@@ -401,18 +401,18 @@ fn srgba_value_pool(
 ) -> ValuePoolColumn<[f64; 4]> {
     let mut values = Vec::new();
     let mut lookup: HashMap<[u8; 4], U32Id<BVoxValuePoolValue>> = HashMap::new();
-    let indices = materials
+    let value_ids = materials
         .iter()
         .map(|material| {
             let color = get(material);
             *lookup.entry(<[u8; 4]>::from(color)).or_insert_with(|| {
-                let index = U32Id::from_u32(values.len() as u32);
+                let value_id = U32Id::from_u32(values.len() as u32);
                 values.push(<[f64; 4]>::from(color.into_format::<f64, f64>()));
-                index
+                value_id
             })
         })
         .collect();
-    ValuePoolColumn { values, indices }
+    ValuePoolColumn { values, value_ids }
 }
 
 /// A three-component sRGB color pool over the extracted color, deduplicated by
@@ -424,20 +424,20 @@ fn srgb_value_pool(
 ) -> ValuePoolColumn<[f64; 3]> {
     let mut values = Vec::new();
     let mut lookup: HashMap<[u8; 3], U32Id<BVoxValuePoolValue>> = HashMap::new();
-    let indices = materials
+    let value_ids = materials
         .iter()
         .map(|material| {
             let color = get(material);
             *lookup
                 .entry([color.red, color.green, color.blue])
                 .or_insert_with(|| {
-                    let index = U32Id::from_u32(values.len() as u32);
+                    let value_id = U32Id::from_u32(values.len() as u32);
                     values.push(<[f64; 3]>::from(color.into_format::<f64, f64>().color));
-                    index
+                    value_id
                 })
         })
         .collect();
-    ValuePoolColumn { values, indices }
+    ValuePoolColumn { values, value_ids }
 }
 
 /// A float pool over the extracted scalar, deduplicated by its bit pattern.
@@ -447,18 +447,18 @@ fn float_value_pool(
 ) -> ValuePoolColumn<f64> {
     let mut values = Vec::new();
     let mut lookup: HashMap<u64, U32Id<BVoxValuePoolValue>> = HashMap::new();
-    let indices = materials
+    let value_ids = materials
         .iter()
         .map(|material| {
             let value = get(material);
             *lookup.entry(value.to_bits()).or_insert_with(|| {
-                let index = U32Id::from_u32(values.len() as u32);
+                let value_id = U32Id::from_u32(values.len() as u32);
                 values.push(value);
-                index
+                value_id
             })
         })
         .collect();
-    ValuePoolColumn { values, indices }
+    ValuePoolColumn { values, value_ids }
 }
 
 /// A float pool bounded on both sides.
