@@ -12,8 +12,8 @@ use branded_id::{
 /// [`VoxMain`](crate::VoxMain) alongside the ext.
 ///
 /// This is the struct-of-arrays backing store. [`VoxMain`](crate::VoxMain)
-/// owns mutation logic over these fields; they are crate-private so the pools
-/// and columns stay in sync.
+/// owns mutation logic over these fields; they are crate-private so the
+/// id pools and columns stay in sync.
 #[derive(Debug, Default)]
 pub struct VoxRuntimeState {
     /// Value-pool id pool.
@@ -100,7 +100,7 @@ impl VoxRuntimeState {
 
 impl Drop for VoxRuntimeState {
     fn drop(&mut self) {
-        // Safety: each column holds a value for every id in its pool; the
+        // Safety: each column holds a value for every id in its id pool; the
         // fields free their own storage on drop.
         unsafe {
             self.value_pools.release_all(&self.value_pool_ids);

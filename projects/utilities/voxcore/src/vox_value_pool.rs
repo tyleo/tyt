@@ -8,8 +8,8 @@ use branded_id::{
 };
 use std::mem;
 
-/// A shared pool of values, one [`VoxValuePoolKind`] column keyed by a pool of
-/// value ids.
+/// A shared value pool: one [`VoxValuePoolKind`] column keyed by an id pool
+/// of value ids.
 ///
 /// Build a value pool with the constructor for its kind (for example
 /// [`float`](Self::float) or [`srgba`](Self::srgba)), which checks its input
@@ -281,7 +281,7 @@ impl VoxValuePool {
     }
 
     /// Deep copy. Liveness lives in the id pool, so the column can't derive
-    /// `Clone`. Rebuild it against the cloned pool.
+    /// `Clone`. Rebuild it against the cloned id pool.
     pub fn clone_value_pool(&self) -> Self {
         let kind = match &self.kind {
             VoxValuePoolKind::Json { values } => VoxValuePoolKind::Json {
@@ -358,8 +358,8 @@ impl VoxValuePool {
     /// palette cells that point at these values.
     pub(crate) fn gc_values(&mut self) -> IdRemap<BVoxValuePoolValue, u32> {
         let remap = self.value_ids.gc();
-        // Safety: the column was in sync with the pre-gc pool, and nothing has
-        // retained or released since.
+        // Safety: the column was in sync with the pre-gc id pool, and nothing
+        // has retained or released since.
         unsafe {
             match &mut self.kind {
                 VoxValuePoolKind::Json { values } => values.gc(&remap),
@@ -403,7 +403,7 @@ impl VoxValuePool {
 
 impl Drop for VoxValuePool {
     fn drop(&mut self) {
-        // Safety: the column holds a value for every id in the pool.
+        // Safety: the column holds a value for every id in the id pool.
         unsafe {
             match &mut self.kind {
                 VoxValuePoolKind::Json { values } => values.release_all(&self.value_ids),

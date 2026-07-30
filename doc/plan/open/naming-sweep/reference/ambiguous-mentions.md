@@ -30,3 +30,17 @@ ruling time), ruling, why.
   split across comment lines read as a bare-pool line to the line-based
   gate grep; rewrapped so "Value pools" sits on one line, wording
   unchanged.
+- `vox_gc_remap.rs:12` — value pool. "indexed by the pool's old id" on
+  the `value_pool_values` field: the index is the value pool's pre-gc
+  id. Hidden from the docs-commit grep by "value pool" earlier on the
+  line; landed with the id-pool commit.
+- `vox_palette.rs:138` — value pool. "a value in the pool that property
+  draws from": the wrap put "a" on the previous line, so the
+  docs-commit pattern missed it; landed with the id-pool commit.
+- `vox_main.rs:993` — id pool. "compact its own reference pool": the
+  object's layer references live in its layer id pool, so it reads
+  "its own layer id pool".
+- `vox_value_pool.rs:11` — both entities in one line. "A shared pool of
+  values ... keyed by a pool of value ids": the first defines the value
+  pool itself and reads "A shared value pool"; the second is the id
+  pool of value ids.

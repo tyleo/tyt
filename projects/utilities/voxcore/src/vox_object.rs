@@ -39,7 +39,7 @@ pub struct VoxObject {
     /// Which cells are filled, one bit per voxel id.
     liveness: VoxLiveness,
 
-    /// Pool shared by `layer_palette_ids` and `samples`.
+    /// Layer id pool shared by `layer_palette_ids` and `samples`.
     layer_ids: IdStruct<BVoxLayer>,
 
     /// The palette each layer references, in layer order.
@@ -307,7 +307,7 @@ impl VoxObject {
     }
 
     /// Deep copy. Liveness lives in the id pools, so the columns can't derive
-    /// `Clone`; rebuild them against the cloned pools.
+    /// `Clone`; rebuild them against the cloned id pools.
     pub fn clone_object(&self) -> Self {
         // The inner sample columns own storage, so clone them one by one;
         // `layer_palette_ids` is Copy-valued and clones wholesale below.
@@ -417,9 +417,9 @@ impl VoxObject {
         }
     }
 
-    /// Rewrites this object's cross-references to match pools a
+    /// Rewrites this object's cross-references to match id pools a
     /// [`VoxMain`](crate::VoxMain) is compacting, then compacts its own layer
-    /// pool. Each layer's palette is translated through `palette_remap`, and
+    /// id pool. Each layer's palette is translated through `palette_remap`, and
     /// each layer's live-voxel sample materials through the `material_remaps`
     /// entry for the referenced palette's pre-gc id. Requires a referentially
     /// valid object, so every translation resolves.
@@ -457,10 +457,10 @@ impl VoxObject {
             }
         }
 
-        // Compact the layer pool; the values above were already translated, so
-        // this only relabels layer keys.
+        // Compact the layer id pool; the values above were already translated,
+        // so this only relabels layer keys.
         let layer_remap = self.layer_ids.gc();
-        // Safety: both columns were in sync with the pre-gc layer pool, and
+        // Safety: both columns were in sync with the pre-gc layer id pool, and
         // nothing has retained or released since.
         unsafe { self.samples.gc(&layer_remap) };
         unsafe { self.layer_palette_ids.gc(&layer_remap) };
@@ -471,7 +471,7 @@ impl Drop for VoxObject {
     fn drop(&mut self) {
         // Safety: every `layer_ids` id has a value in both columns. Sample
         // materials are Copy, so dropping the inner columns frees their storage
-        // and the voxel pool needs no part here.
+        // and the voxel id pool needs no part here.
         unsafe {
             self.layer_palette_ids.release_all(&self.layer_ids);
             self.samples.release_all(&self.layer_ids);

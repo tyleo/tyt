@@ -608,7 +608,10 @@ impl VoxMain {
                 node_id
             })
             .collect();
-        debug_assert_eq!(ids, prospective_ids, "the pool assigned the predicted ids");
+        debug_assert_eq!(
+            ids, prospective_ids,
+            "the id pool assigned the predicted ids"
+        );
         Ok(ids)
     }
 
@@ -966,13 +969,13 @@ impl VoxMain {
         // value pool moved before gc is renumbered here and every property's
         // value-pool id is rewritten to match.
         let value_pool_remap = self.runtime_state.value_pool_ids.gc();
-        // Safety: the value-pool column was in sync with the pre-gc pool, and
-        // nothing has retained or released since.
+        // Safety: the value-pool column was in sync with the pre-gc id pool,
+        // and nothing has retained or released since.
         unsafe { self.runtime_state.value_pools.gc(&value_pool_remap) };
 
-        // Compact each palette's own pools, so the material relabelings are
+        // Compact each palette's own id pools, so the material relabelings are
         // ready when object samples are translated below. They are indexed by
-        // old palette id, so the column covers the palette pool's whole id
+        // old palette id, so the column covers the palette id pool's whole id
         // space. Cells translate through the value relabelings first, while
         // each property still names its value pool's pre-gc id.
         let palette_id_space = self.runtime_state.palette_ids.peek_next_fresh().to_u32() as usize;
@@ -986,14 +989,14 @@ impl VoxMain {
             material_remaps[palette_id.to_usize_id()] = palette.gc();
         }
 
-        // Compact the palette pool.
+        // Compact the palette id pool.
         let palette_remap = self.runtime_state.palette_ids.gc();
-        // Safety: the palette column was in sync with the pre-gc palette pool,
-        // and nothing has retained or released since.
+        // Safety: the palette column was in sync with the pre-gc palette
+        // id pool, and nothing has retained or released since.
         unsafe { self.runtime_state.palettes.gc(&palette_remap) };
 
         // Rewrite each object's palette references and sample cells, then
-        // compact its own reference pool.
+        // compact its own layer id pool.
         let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
         for object_id in object_ids {
             // Safety: retained object ids have a value.
@@ -1001,16 +1004,16 @@ impl VoxMain {
                 .gc(&palette_remap, &material_remaps);
         }
 
-        // Compact the object pool.
+        // Compact the object id pool.
         let object_remap = self.runtime_state.object_ids.gc();
-        // Safety: the object column was in sync with the pre-gc object pool,
+        // Safety: the object column was in sync with the pre-gc object id pool,
         // and nothing has retained or released since.
         unsafe { self.runtime_state.objects.gc(&object_remap) };
 
-        // Compact the node pool, then translate child links and roots, which
+        // Compact the node id pool, then translate child links and roots, which
         // point at the relabeled nodes and objects.
         let node_remap = self.runtime_state.hierarchy_node_ids.gc();
-        // Safety: the node column was in sync with the pre-gc node pool, and
+        // Safety: the node column was in sync with the pre-gc node id pool, and
         // nothing has retained or released since.
         unsafe { self.runtime_state.hierarchy_nodes.gc(&node_remap) };
 
@@ -1212,8 +1215,8 @@ impl VoxMain {
 
         // Object layer palette refs and live-voxel sample materials. Checks are
         // by id retention, not index range, so they hold whether or not
-        // removals have left the pools with holes. Two layers may reference the
-        // same palette, so there is no duplicate-layer rule.
+        // removals have left the id pools with holes. Two layers may reference
+        // the same palette, so there is no duplicate-layer rule.
         for (object_id, object) in self.iter_objects() {
             let mut layer_palettes = Vec::with_capacity(object.layer_count());
             for (layer_id, palette_id) in object.iter_layers() {
@@ -1293,7 +1296,7 @@ impl VoxMain {
         }
 
         // Acyclicity; every child is now known live. Works over the retained
-        // node ids by position, so it holds whether or not the pool has
+        // node ids by position, so it holds whether or not the node id pool has
         // holes.
         let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
         let index_of: HashMap<U32Id<BVoxHierarchyNode>, usize> = node_ids
@@ -1319,8 +1322,8 @@ impl VoxMain {
         Ok(())
     }
 
-    /// Deep copy. The runtime scene rebuilds its columns against fresh id
-    /// pools.
+    /// Deep copy. The runtime scene rebuilds its columns against fresh
+    /// id pools.
     pub fn clone_state(&self) -> Self {
         Self {
             runtime_state: self.runtime_state.clone_runtime_state(),

@@ -81,7 +81,7 @@ suffixes and the spelled-out value pool, one iteration per crate, in order:
 - [x] The message commit: the four `Display` strings in `error.rs` and the
       three `unreachable!` messages in `vox_value_pool.rs` spell value pool
       out.
-- [ ] Expand the bare id-pool prose to "id pool" forms (Q1), one docs
+- [x] Expand the bare id-pool prose to "id pool" forms (Q1), one docs
       commit.
 
 Gate: workspace green; the voxcore gate grep returns only id-pool mentions

@@ -135,8 +135,8 @@ impl VoxPalette {
     }
 
     /// The value id `material_id` draws for `property_id`, identifying a
-    /// value in the pool that property draws from, or `None` if either id is
-    /// not this palette's. Read the value pool a [`VoxMain`](crate::VoxMain)
+    /// value in the value pool that property draws from, or `None` if either id
+    /// is not this palette's. Read the value pool a [`VoxMain`](crate::VoxMain)
     /// holds by that id for the value.
     pub fn value_id(
         &self,
@@ -204,7 +204,7 @@ impl VoxPalette {
     }
 
     /// Deep copy. Liveness lives in the id pools, so the columns can't derive
-    /// `Clone`; rebuild them against the cloned pools.
+    /// `Clone`; rebuild them against the cloned id pools.
     pub fn clone_palette(&self) -> Self {
         let mut properties = IdField::new();
         for property_id in self.property_ids.iter() {
@@ -272,7 +272,7 @@ impl VoxPalette {
         Some(())
     }
 
-    /// Compacts the property and material pools back to a contiguous
+    /// Compacts the property and material id pools back to a contiguous
     /// `0..len`, moving every value to its relabeled id, and returns the
     /// material relabeling so a [`VoxMain`](crate::VoxMain) can translate the
     /// samples that point at these materials. Properties are referenced only
@@ -282,21 +282,21 @@ impl VoxPalette {
     pub(crate) fn gc(&mut self) -> IdRemap<BVoxMaterial, u32> {
         let property_remap = self.property_ids.gc();
         // Safety: the property column was in sync with the pre-gc property
-        // pool, and nothing has retained or released since.
+        // id pool, and nothing has retained or released since.
         unsafe { self.properties.gc(&property_remap) };
 
         let material_ids: Vec<_> = self.material_ids.iter().collect();
         for material_id in material_ids {
             // Safety: a retained material holds a value id for every pre-gc
             // property id, and the remap came from this palette's
-            // property pool.
+            // property id pool.
             let row = unsafe { self.materials.get_mut(material_id) };
             unsafe { row.gc(&property_remap) };
         }
 
         let material_remap = self.material_ids.gc();
         // Safety: the material column was in sync with the pre-gc material
-        // pool, and nothing has retained or released since.
+        // id pool, and nothing has retained or released since.
         unsafe { self.materials.gc(&material_remap) };
 
         // Rebuild the name index against the relabeled property ids.
@@ -405,7 +405,7 @@ impl Drop for VoxPalette {
         // ids are Copy, so releasing the inner IdField frees the buffer with
         // nothing to release per property. The properties own name
         // strings, freed by releasing them.
-        // Safety: each column holds a value for every id in its pool.
+        // Safety: each column holds a value for every id in its id pool.
         unsafe {
             self.materials.release_all(&self.material_ids);
             self.properties.release_all(&self.property_ids);
