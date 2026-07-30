@@ -137,8 +137,12 @@ Gate: workspace green; the voxcore gate grep returns only id-pool mentions
       `pooled copy` in `from_mvox_file.rs`, and the mixed
       value-pool-and-bare lines in `reduce_palette.rs` and
       `vox_palette_from_voxj_palette.rs`.
-- [ ] The message commit: the `order_palette_colors.rs` and
-      `resolve_cell_color.rs` failure texts spell value pool out.
+- [x] The message commit: the `order_palette_colors.rs` and
+      `resolve_cell_color.rs` failure texts spell value pool out, plus the
+      failure texts that drifted past the survey: the seven `unreachable!`
+      kind-mismatch texts in `voxj_value_pool_from_vox_value_pool.rs` and
+      the seven test `panic!` texts in `voxelize_mesh.rs`,
+      `from_gltf_bytes.rs`, and `to_vmax_file.rs`.
 
 Gate: workspace green; the voxsmith gate grep returns nothing.
 

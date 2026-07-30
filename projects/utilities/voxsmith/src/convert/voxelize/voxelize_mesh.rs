@@ -645,7 +645,7 @@ mod tests {
             .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
             Some(VoxValuePoolValueRef::Float(number)) => number,
-            other => panic!("expected a float pool, got {other:?}"),
+            other => panic!("expected a float value pool, got {other:?}"),
         }
     }
 

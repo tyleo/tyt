@@ -1319,7 +1319,7 @@ mod tests {
                     .unwrap();
                 match value_pool.value(value_id) {
                     Some(VoxValuePoolValueRef::Float(number)) => number,
-                    _ => panic!("a scalar attribute is a float pool"),
+                    _ => panic!("a scalar attribute is a float value pool"),
                 }
             };
             let flag = |attribute: &str| -> bool {
@@ -1329,7 +1329,7 @@ mod tests {
                     .unwrap();
                 match value_pool.value(value_id) {
                     Some(VoxValuePoolValueRef::Bool(flag)) => flag,
-                    _ => panic!("shadows is a bool pool"),
+                    _ => panic!("shadows is a bool value pool"),
                 }
             };
             // Metalness and roughness round-trip through Voxel Max's 0.1 to 0.9
@@ -1404,7 +1404,7 @@ mod tests {
             .unwrap();
         let sic = match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Float(number)) => number,
-            _ => panic!("emissiveStrength is a float pool"),
+            _ => panic!("emissiveStrength is a float value pool"),
         };
 
         // The gray is achromatic, so its linear luminance is one linearized

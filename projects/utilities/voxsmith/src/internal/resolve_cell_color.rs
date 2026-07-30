@@ -39,7 +39,7 @@ pub fn resolve_cell_color<'a>(
 /// The error for a `baseColorFactor` drawing from a non-color value pool.
 fn non_color_value_pool(object: &VoxObject) -> Error {
     Error::invalid(format!(
-        "object {:?}: baseColorFactor draws from a non-color pool",
+        "object {:?}: baseColorFactor draws from a non-color value pool",
         object.name()
     ))
 }

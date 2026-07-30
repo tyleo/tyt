@@ -732,7 +732,7 @@ mod tests {
             Some(VoxValuePoolValueRef::Srgba(&[r, g, b, a])) => {
                 TySrgbaU8::from([byte(r), byte(g), byte(b), byte(a)]).to_hex()
             }
-            other => panic!("unexpected baseColorFactor pool {other:?}"),
+            other => panic!("unexpected baseColorFactor value pool {other:?}"),
         }
     }
 
@@ -741,7 +741,7 @@ mod tests {
         let (value_pool, value_id) = voxel_attribute(state, position, attribute);
         match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Float(number)) => number,
-            other => panic!("expected a float pool for {attribute}, got {other:?}"),
+            other => panic!("expected a float value pool for {attribute}, got {other:?}"),
         }
     }
 
@@ -1573,7 +1573,7 @@ mod tests {
         let (value_pool, value_id) = voxel_attribute(&state, origin, EMISSIVE_FACTOR);
         let [r, g, b] = match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Srgb(&color)) => color,
-            other => panic!("expected an sRGB emissiveFactor pool, got {other:?}"),
+            other => panic!("expected an sRGB emissiveFactor value pool, got {other:?}"),
         };
         assert!(r < 0.01 && b < 0.01, "emissiveFactor red {r} blue {b}");
         assert!((g - 188.0 / 255.0).abs() < 0.01, "emissiveFactor green {g}");
