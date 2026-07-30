@@ -198,7 +198,7 @@ fn build_object(
     palette_provenance.push(Some(folded.provenance));
 
     // Back-fill the layer with material 0; the live voxels overwrite theirs.
-    vox_object.add_layer(folded.palette, U32Id::<BVoxMaterial>::from_u32(0));
+    vox_object.add_layer(folded.palette_id, U32Id::<BVoxMaterial>::from_u32(0));
 
     for voxel in &voxels {
         // Shift the voxel from its model position into the build volume; an
@@ -215,9 +215,9 @@ fn build_object(
             ))
         })?;
 
-        let material = folded.combos[&combo_key(voxel, folded.has_materials)];
+        let material_id = folded.combo_material_ids[&combo_key(voxel, folded.has_materials)];
         vox_object
-            .retain_voxel(voxel_id, &[material])
+            .retain_voxel(voxel_id, &[material_id])
             .map_err(|_| {
                 invalid(format!(
                     "object \"{}\" has a malformed voxel sample",
@@ -233,13 +233,13 @@ fn build_object(
 /// to sample its voxels and record its ext provenance.
 struct FoldedPalette {
     /// The palette id in the state.
-    palette: U32Id<BVoxPalette>,
+    palette_id: U32Id<BVoxPalette>,
 
     /// The ext provenance carrying the name and exact material list.
     provenance: VoxelMaxPalette,
 
     /// Each used color-and-material combination's material id.
-    combos: HashMap<(u8, u8), U32Id<BVoxMaterial>>,
+    combo_material_ids: HashMap<(u8, u8), U32Id<BVoxMaterial>>,
 
     /// Whether the object carries materials.
     has_materials: bool,
@@ -269,14 +269,18 @@ fn folded_palette(
     // one value id per property.
     let mut palette = VoxPalette::default();
     let mut color_axis: Vec<bool> = Vec::new();
-    let color_pool = state.add_value_pool(VoxValuePool::srgba(
+    let color_value_pool_id = state.add_value_pool(VoxValuePool::srgba(
         colors
             .iter()
             .map(|color| <[f64; 4]>::from(TySrgbaU8::from(*color).into_format::<f64, f64>()))
             .collect(),
     )?);
     palette
-        .add_property(BASE_COLOR_FACTOR.to_owned(), color_pool, U32Id::from_u32(0))
+        .add_property(
+            BASE_COLOR_FACTOR.to_owned(),
+            color_value_pool_id,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
     color_axis.push(true);
 
@@ -287,7 +291,7 @@ fn folded_palette(
     // `absorption` have no glTF counterpart. The exact coefficients ride in the
     // ext for a byte-exact write-back.
     if has_materials {
-        let metallic = float_value_pool(
+        let metallic_value_pool_id = float_value_pool(
             state,
             materials
                 .iter()
@@ -295,10 +299,14 @@ fn folded_palette(
                 .collect(),
         )?;
         palette
-            .add_property(METALLIC_FACTOR.to_owned(), metallic, U32Id::from_u32(0))
+            .add_property(
+                METALLIC_FACTOR.to_owned(),
+                metallic_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .expect("the property names are distinct");
         color_axis.push(false);
-        let roughness = float_value_pool(
+        let roughness_value_pool_id = float_value_pool(
             state,
             materials
                 .iter()
@@ -306,7 +314,11 @@ fn folded_palette(
                 .collect(),
         )?;
         palette
-            .add_property(ROUGHNESS_FACTOR.to_owned(), roughness, U32Id::from_u32(0))
+            .add_property(
+                ROUGHNESS_FACTOR.to_owned(),
+                roughness_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .expect("the property names are distinct");
         color_axis.push(false);
         // Voxel Max glows in the voxel's own base color, so an emissive
@@ -315,7 +327,7 @@ fn folded_palette(
         // emissive is then `emissiveFactor` times `emissiveStrength` per glTF, so
         // the color leads the strength that scales it.
         if materials.iter().any(|m| m.sic > 0.0) {
-            let emissive_color = state.add_value_pool(VoxValuePool::srgb(
+            let emissive_color_value_pool_id = state.add_value_pool(VoxValuePool::srgb(
                 colors
                     .iter()
                     .map(|color| {
@@ -328,15 +340,20 @@ fn folded_palette(
             palette
                 .add_property(
                     EMISSIVE_FACTOR.to_owned(),
-                    emissive_color,
+                    emissive_color_value_pool_id,
                     U32Id::from_u32(0),
                 )
                 .expect("the property names are distinct");
             color_axis.push(true);
         }
-        let emissive = float_value_pool(state, materials.iter().map(|m| m.sic).collect())?;
+        let emissive_value_pool_id =
+            float_value_pool(state, materials.iter().map(|m| m.sic).collect())?;
         palette
-            .add_property(EMISSIVE_STRENGTH.to_owned(), emissive, U32Id::from_u32(0))
+            .add_property(
+                EMISSIVE_STRENGTH.to_owned(),
+                emissive_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .expect("the property names are distinct");
         color_axis.push(false);
 
@@ -345,7 +362,7 @@ fn folded_palette(
         // transmission and absorption; its absence rides in the ext.
         if materials.iter().any(|m| m.md.is_some()) {
             let default_ior = default_scalar(IOR).expect("ior has a glTF default");
-            let ior = float_value_pool(
+            let ior_value_pool_id = float_value_pool(
                 state,
                 materials
                     .iter()
@@ -353,30 +370,40 @@ fn folded_palette(
                     .collect(),
             )?;
             palette
-                .add_property(IOR.to_owned(), ior, U32Id::from_u32(0))
+                .add_property(IOR.to_owned(), ior_value_pool_id, U32Id::from_u32(0))
                 .expect("the property names are distinct");
             color_axis.push(false);
-            let transmission = float_value_pool(state, dispersion(&materials, |d| d.transmission))?;
+            let transmission_value_pool_id =
+                float_value_pool(state, dispersion(&materials, |d| d.transmission))?;
             palette
                 .add_property(
                     TRANSMISSION_FACTOR.to_owned(),
-                    transmission,
+                    transmission_value_pool_id,
                     U32Id::from_u32(0),
                 )
                 .expect("the property names are distinct");
             color_axis.push(false);
-            let absorption = float_value_pool(state, dispersion(&materials, |d| d.absorption))?;
+            let absorption_value_pool_id =
+                float_value_pool(state, dispersion(&materials, |d| d.absorption))?;
             palette
-                .add_property(ABSORPTION.to_owned(), absorption, U32Id::from_u32(0))
+                .add_property(
+                    ABSORPTION.to_owned(),
+                    absorption_value_pool_id,
+                    U32Id::from_u32(0),
+                )
                 .expect("the property names are distinct");
             color_axis.push(false);
         }
 
-        let shadows = state.add_value_pool(VoxValuePool::boolean(
+        let shadows_value_pool_id = state.add_value_pool(VoxValuePool::boolean(
             materials.iter().map(|m| m.sh).collect(),
         )?);
         palette
-            .add_property(SHADOWS.to_owned(), shadows, U32Id::from_u32(0))
+            .add_property(
+                SHADOWS.to_owned(),
+                shadows_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .expect("the property names are distinct");
         color_axis.push(false);
     }
@@ -392,7 +419,7 @@ fn folded_palette(
         .collect();
     keys.sort_unstable();
     keys.dedup();
-    let mut combos: HashMap<(u8, u8), U32Id<BVoxMaterial>> = HashMap::new();
+    let mut combo_material_ids: HashMap<(u8, u8), U32Id<BVoxMaterial>> = HashMap::new();
     for key in keys {
         let color = u32::from(key.0).saturating_sub(1);
         let material = u32::from(key.1);
@@ -400,21 +427,21 @@ fn folded_palette(
             .iter()
             .map(|&is_color| U32Id::from_u32(if is_color { color } else { material }))
             .collect();
-        let id = palette
+        let material_id = palette
             .add_material(value_ids)
             .expect("one value id per property");
-        combos.insert(key, id);
+        combo_material_ids.insert(key, material_id);
     }
 
-    let palette = state.add_palette(palette)?;
+    let palette_id = state.add_palette(palette)?;
     let provenance = VoxelMaxPalette {
         name,
         materials: materials.iter().map(voxel_max_material).collect(),
     };
     Ok(FoldedPalette {
-        palette,
+        palette_id,
         provenance,
-        combos,
+        combo_material_ids,
         has_materials,
     })
 }
@@ -834,8 +861,8 @@ mod tests {
     fn empty_object_without_content_box_loads_from_its_view_box() {
         let state = from_vmax_file(&empty_object_with_view_box_only())
             .expect("an empty object with only a build volume must load");
-        let id = U32Id::<BVoxObject>::from_u32(0);
-        let object = state.object(id).expect("the one object");
+        let object_id = U32Id::<BVoxObject>::from_u32(0);
+        let object = state.object(object_id).expect("the one object");
         // The object's grid is the build volume (the 32^3 `vp`); it has no live
         // voxels, so its derived runtime extent is empty.
         assert_eq!(object.bounds(), TyVector3U32::new(32, 32, 32));

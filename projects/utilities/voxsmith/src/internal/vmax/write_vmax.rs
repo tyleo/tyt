@@ -129,7 +129,7 @@ pub fn write_vmax(
 
         if node.child_object_ids.is_empty() {
             let ind = node_ind(ext_node, true, &mut ind_counter);
-            let (center, half) = subtree_box_local(state, placement.id, &mut box_memo);
+            let (center, half) = subtree_box_local(state, placement.node_id, &mut box_memo);
             groups.push(group_from_node(node, ext_node, ind, center, half));
             continue;
         }
@@ -412,7 +412,7 @@ fn apply_scene_camera(
 /// path the way voxcore renders it, and a node reachable from no root is
 /// dropped just as voxcore never places it.
 struct Placement<'a> {
-    id: U32Id<BVoxHierarchyNode>,
+    node_id: U32Id<BVoxHierarchyNode>,
     node: &'a VoxHierarchyNode,
     ext: VoxelMaxNode,
 }
@@ -424,8 +424,8 @@ fn ext_placements<'a>(state: &'a VoxMain, voxel_max: &VoxelMaxExt) -> Vec<Placem
     state
         .iter_hierarchy_nodes()
         .enumerate()
-        .map(|(index, (id, node))| Placement {
-            id,
+        .map(|(index, (node_id, node))| Placement {
+            node_id,
             node,
             ext: voxel_max
                 .hierarchy_nodes
@@ -452,25 +452,27 @@ fn ext_placements<'a>(state: &'a VoxMain, voxel_max: &VoxelMaxExt) -> Vec<Placem
 fn synthesize_placements(state: &VoxMain) -> Vec<Placement<'_>> {
     let mut placements = Vec::new();
     let mut counter = 0usize;
-    for &root in state.root_hierarchy_node_ids() {
-        push_placement(state, root, None, &mut counter, &mut placements);
+    for &root_id in state.root_hierarchy_node_ids() {
+        push_placement(state, root_id, None, &mut counter, &mut placements);
     }
     placements
 }
 
-/// Emits a placement for the node `id` under `parent_id`, then recurses into
-/// its child nodes. Each occurrence takes a fresh synthesized UUID, so a node
-/// reached by several paths becomes a distinct scene node per path; child nodes
-/// attach to this occurrence's id, which is also the id of the node's first
-/// object.
+/// Emits a placement for the node `node_id` under `parent_id`, then recurses
+/// into its child nodes. Each occurrence takes a fresh synthesized UUID, so a
+/// node reached by several paths becomes a distinct scene node per path; child
+/// nodes attach to this occurrence's id, which is also the id of the node's
+/// first object.
 fn push_placement<'a>(
     state: &'a VoxMain,
-    id: U32Id<BVoxHierarchyNode>,
+    node_id: U32Id<BVoxHierarchyNode>,
     parent_id: Option<String>,
     counter: &mut usize,
     placements: &mut Vec<Placement<'a>>,
 ) {
-    let node = state.hierarchy_node(id).expect("a valid hierarchy node");
+    let node = state
+        .hierarchy_node(node_id)
+        .expect("a valid hierarchy node");
     let ext_id = synth_uuid(*counter);
     *counter += 1;
     // The content box and placement are derived from the native bounds and node
@@ -487,9 +489,9 @@ fn push_placement<'a>(
         pivot_align: Some(DEFAULT_PIVOT_ALIGN.to_owned()),
         selected: None,
     };
-    placements.push(Placement { id, node, ext });
-    for &child in &node.child_node_ids {
-        push_placement(state, child, Some(ext_id.clone()), counter, placements);
+    placements.push(Placement { node_id, node, ext });
+    for &child_id in &node.child_node_ids {
+        push_placement(state, child_id, Some(ext_id.clone()), counter, placements);
     }
 }
 
@@ -625,9 +627,9 @@ fn object_view_box(origin: [i32; 3], size: TyVector3U32) -> VMaxViewBox {
 /// `baseColorFactor` property, and the material properties in
 /// order.
 struct FoldedRef {
-    palette: U32Id<BVoxPalette>,
-    color: Option<U32Id<BVoxProperty>>,
-    materials: Vec<(String, U32Id<BVoxProperty>)>,
+    palette_id: U32Id<BVoxPalette>,
+    color_property_id: Option<U32Id<BVoxProperty>>,
+    material_property_ids: Vec<(String, U32Id<BVoxProperty>)>,
 }
 
 /// The one folded palette an object references on its single layer, or `None`
@@ -635,16 +637,16 @@ struct FoldedRef {
 fn folded_ref(state: &VoxMain, object: &VoxObject) -> Option<FoldedRef> {
     let (_, palette_id) = object.iter_layers().next()?;
     let palette = state.palette(palette_id)?;
-    let color = palette.property_id_by_name(BASE_COLOR_FACTOR);
-    let materials = palette
+    let color_property_id = palette.property_id_by_name(BASE_COLOR_FACTOR);
+    let material_property_ids = palette
         .iter_properties()
-        .filter(|(id, _)| Some(*id) != color)
-        .map(|(id, property)| (property.name.clone(), id))
+        .filter(|(property_id, _)| Some(*property_id) != color_property_id)
+        .map(|(property_id, property)| (property.name.clone(), property_id))
         .collect();
     Some(FoldedRef {
-        palette: palette_id,
-        color,
-        materials,
+        palette_id,
+        color_property_id,
+        material_property_ids,
     })
 }
 
@@ -669,18 +671,20 @@ fn material_plan(
     ext_palettes: &[Option<VoxelMaxPalette>],
 ) -> Result<MaterialPlan> {
     let provenance = ext_palettes
-        .get(folded.palette.to_u32() as usize)
+        .get(folded.palette_id.to_u32() as usize)
         .and_then(|palette| palette.as_ref());
     let name = provenance
         .map(|palette| palette.name.clone())
         .unwrap_or_default();
-    let palette = state.palette(folded.palette).expect("a referenced palette");
+    let palette = state
+        .palette(folded.palette_id)
+        .expect("a referenced palette");
 
     // A color-only palette folds no materials; every material writes index 0.
-    if folded.materials.is_empty() {
+    if folded.material_property_ids.is_empty() {
         let material_idx = palette
             .iter_materials()
-            .map(|material| (material, 0))
+            .map(|material_id| (material_id, 0))
             .collect();
         return Ok(MaterialPlan {
             name,
@@ -693,19 +697,19 @@ fn material_plan(
     // the 0-based value id is the material byte, below the material count. A
     // hand-edited ext can still exceed the single-byte budget, so it is checked.
     if let Some(provenance) = provenance.filter(|palette| !palette.materials.is_empty()) {
-        let first = folded.materials[0].1;
+        let first_property_id = folded.material_property_ids[0].1;
         let mut material_idx = HashMap::new();
-        for material in palette.iter_materials() {
+        for material_id in palette.iter_materials() {
             let index = palette
-                .value_id(material, first)
-                .map_or(0, |id| id.to_u32());
+                .value_id(material_id, first_property_id)
+                .map_or(0, |value_id| value_id.to_u32());
             if index >= MATERIAL_SLOTS as u32 {
                 return Err(Error::invalid(format!(
                     "a voxel references material {index}, but a Voxel Max palette holds only \
                      {MATERIAL_SLOTS} material slots"
                 )));
             }
-            material_idx.insert(material, index as u8);
+            material_idx.insert(material_id, index as u8);
         }
         let materials = provenance
             .materials
@@ -738,10 +742,10 @@ fn derive_materials(
 ) -> Result<MaterialPlan> {
     // The linear luminance of a material's base color, the reference Voxel Max
     // glows against, or `None` when the palette carries no base color.
-    let base_luminance = |material| -> Option<f64> {
-        let color = folded.color?;
-        let value_id = palette.value_id(material, color)?;
-        let value_pool = property_value_pool(state, folded.palette, color)?;
+    let base_luminance = |material_id| -> Option<f64> {
+        let color_property_id = folded.color_property_id?;
+        let value_id = palette.value_id(material_id, color_property_id)?;
+        let value_pool = property_value_pool(state, folded.palette_id, color_property_id)?;
         let [r, g, b, _] = value_pool_color(value_pool, value_id)?;
         let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
             .into_format::<f64, f64>()
@@ -755,13 +759,13 @@ fn derive_materials(
     let mut base_luminances: Vec<Option<f64>> = Vec::new();
     let mut index_of: HashMap<Vec<U32Id<BVoxValuePoolValue>>, u8> = HashMap::new();
     let mut material_idx = HashMap::new();
-    for material in palette.iter_materials() {
+    for material_id in palette.iter_materials() {
         let signature: Vec<U32Id<BVoxValuePoolValue>> = folded
-            .materials
+            .material_property_ids
             .iter()
-            .map(|(_, property)| {
+            .map(|(_, property_id)| {
                 palette
-                    .value_id(material, *property)
+                    .value_id(material_id, *property_id)
                     .unwrap_or(U32Id::from_u32(0))
             })
             .collect();
@@ -776,12 +780,12 @@ fn derive_materials(
                 }
                 let idx = signatures.len() as u8;
                 signatures.push(signature.clone());
-                base_luminances.push(base_luminance(material));
+                base_luminances.push(base_luminance(material_id));
                 index_of.insert(signature, idx);
                 idx
             }
         };
-        material_idx.insert(material, idx);
+        material_idx.insert(material_id, idx);
     }
     let materials = signatures
         .iter()
@@ -789,8 +793,8 @@ fn derive_materials(
         .map(|(slot, signature)| {
             derived_material(
                 state,
-                folded.palette,
-                &folded.materials,
+                folded.palette_id,
+                &folded.material_property_ids,
                 slot,
                 signature,
                 base_luminances[slot],
@@ -810,7 +814,7 @@ fn derive_materials(
 /// see [`pbr_factor_to_vm_coefficient`].
 fn derived_material(
     state: &VoxMain,
-    palette: U32Id<BVoxPalette>,
+    palette_id: U32Id<BVoxPalette>,
     properties: &[(String, U32Id<BVoxProperty>)],
     slot: usize,
     signature: &[U32Id<BVoxValuePoolValue>],
@@ -818,11 +822,21 @@ fn derived_material(
 ) -> VMaxMaterial {
     let scalar = |property: &str| -> Option<f64> {
         let position = properties.iter().position(|(name, _)| name == property)?;
-        value_pool_scalar(state, palette, properties[position].1, signature[position])
+        value_pool_scalar(
+            state,
+            palette_id,
+            properties[position].1,
+            signature[position],
+        )
     };
     let flag = |property: &str| -> Option<bool> {
         let position = properties.iter().position(|(name, _)| name == property)?;
-        value_pool_flag(state, palette, properties[position].1, signature[position])
+        value_pool_flag(
+            state,
+            palette_id,
+            properties[position].1,
+            signature[position],
+        )
     };
     // The emissive color's linear luminance at this slot, or `None` when the
     // property is absent. Folded into Voxel Max's single self-illumination
@@ -831,7 +845,7 @@ fn derived_material(
         let position = properties
             .iter()
             .position(|(name, _)| name == EMISSIVE_FACTOR)?;
-        let value_pool = property_value_pool(state, palette, properties[position].1)?;
+        let value_pool = property_value_pool(state, palette_id, properties[position].1)?;
         let [r, g, b, _] = value_pool_color(value_pool, signature[position])?;
         let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
             .into_format::<f64, f64>()
@@ -900,11 +914,11 @@ fn vmax_material(slot: usize, material: &VoxelMaxMaterial) -> VMaxMaterial {
 /// `None`.
 fn value_pool_scalar(
     state: &VoxMain,
-    palette: U32Id<BVoxPalette>,
-    property: U32Id<BVoxProperty>,
+    palette_id: U32Id<BVoxPalette>,
+    property_id: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
 ) -> Option<f64> {
-    match property_value_pool(state, palette, property)?.value(value_id) {
+    match property_value_pool(state, palette_id, property_id)?.value(value_id) {
         Some(VoxValuePoolValueRef::Float(number)) => Some(number),
         _ => None,
     }
@@ -914,11 +928,11 @@ fn value_pool_scalar(
 /// `None`.
 fn value_pool_flag(
     state: &VoxMain,
-    palette: U32Id<BVoxPalette>,
-    property: U32Id<BVoxProperty>,
+    palette_id: U32Id<BVoxPalette>,
+    property_id: U32Id<BVoxProperty>,
     value_id: U32Id<BVoxValuePoolValue>,
 ) -> Option<bool> {
-    match property_value_pool(state, palette, property)?.value(value_id) {
+    match property_value_pool(state, palette_id, property_id)?.value(value_id) {
         Some(VoxValuePoolValueRef::Bool(flag)) => Some(flag),
         _ => None,
     }
@@ -927,10 +941,13 @@ fn value_pool_flag(
 /// The value pool a property draws from.
 fn property_value_pool(
     state: &VoxMain,
-    palette: U32Id<BVoxPalette>,
-    property: U32Id<BVoxProperty>,
+    palette_id: U32Id<BVoxPalette>,
+    property_id: U32Id<BVoxProperty>,
 ) -> Option<&VoxValuePool> {
-    let value_pool_id = state.palette(palette)?.property(property)?.value_pool_id;
+    let value_pool_id = state
+        .palette(palette_id)?
+        .property(property_id)?
+        .value_pool_id;
     state.value_pool(value_pool_id)
 }
 
@@ -944,16 +961,17 @@ fn reconstruct_voxels(
     plan: &MaterialPlan,
     box_min: [i32; 3],
 ) -> Result<Vec<VMaxVoxel>> {
-    let layer = object.iter_layers().next().map(|(layer, _)| layer);
+    let layer_id = object.iter_layers().next().map(|(layer_id, _)| layer_id);
     object
         .iter_live()
-        .map(|voxel| {
+        .map(|voxel_id| {
             let position = object
-                .voxel_position(voxel)
+                .voxel_position(voxel_id)
                 .expect("a live voxel is within the grid");
-            let material = layer.and_then(|layer| object.voxel_material(voxel, layer));
-            let color_idx = match (folded, material) {
-                (Some(folded), Some(material)) => color_index(state, folded, material)?,
+            let material_id =
+                layer_id.and_then(|layer_id| object.voxel_material(voxel_id, layer_id));
+            let color_idx = match (folded, material_id) {
+                (Some(folded), Some(material_id)) => color_index(state, folded, material_id)?,
                 // A colorless voxel still needs a non-empty index, so it takes 1,
                 // not the empty index 0.
                 _ => 1,
@@ -961,8 +979,8 @@ fn reconstruct_voxels(
             // Voxel Max's material byte is 0-based: byte `n` selects
             // `materials[n]`. The per-color material map in the sidecar (`lc`)
             // drives what renders, but the byte is kept consistent with it.
-            let material_idx = material
-                .and_then(|material| plan.material_idx.get(&material).copied())
+            let material_idx = material_id
+                .and_then(|material_id| plan.material_idx.get(&material_id).copied())
                 .unwrap_or(0);
             Ok(VMaxVoxel {
                 position: [
@@ -981,14 +999,18 @@ fn reconstruct_voxels(
 /// `baseColorFactor`. Errors when the color value id reaches
 /// [`PALETTE_COLORS`], one past the last usable color, so a padded source
 /// palette is fine as long as its referenced colors fit.
-fn color_index(state: &VoxMain, folded: &FoldedRef, material: U32Id<BVoxMaterial>) -> Result<u8> {
-    let Some(color) = folded.color else {
+fn color_index(
+    state: &VoxMain,
+    folded: &FoldedRef,
+    material_id: U32Id<BVoxMaterial>,
+) -> Result<u8> {
+    let Some(color_property_id) = folded.color_property_id else {
         return Ok(1);
     };
     let index = state
-        .palette(folded.palette)
-        .and_then(|palette| palette.value_id(material, color))
-        .map_or(0, |id| id.to_u32());
+        .palette(folded.palette_id)
+        .and_then(|palette| palette.value_id(material_id, color_property_id))
+        .map_or(0, |value_id| value_id.to_u32());
     if index >= PALETTE_COLORS as u32 {
         return Err(Error::invalid(format!(
             "a voxel references color cell {index}, but a Voxel Max palette holds only \
@@ -1013,7 +1035,8 @@ fn build_palette(
 ) -> String {
     // An object with no color property borrows the default palette name; an empty
     // reference is one Voxel Max cannot resolve. No file is written for it.
-    let Some((palette_id, color)) = folded.and_then(|folded| Some((folded.palette, folded.color?)))
+    let Some((palette_id, color_property_id)) =
+        folded.and_then(|folded| Some((folded.palette_id, folded.color_property_id?)))
     else {
         return FALLBACK_PALETTE.to_owned();
     };
@@ -1026,7 +1049,7 @@ fn build_palette(
     let stem = palette_files.len() + 1;
     let pal = format!("palette{stem}.png");
 
-    let colors = color_palette_colors(state, palette_id, color);
+    let colors = color_palette_colors(state, palette_id, color_property_id);
     if matches!(
         voxel_max_color_format,
         VoxelMaxColorFormat::Png | VoxelMaxColorFormat::All
@@ -1050,7 +1073,7 @@ fn build_palette(
         };
         // The per-color material map Voxel Max renders from: each used color
         // cell carries a bit for the material it draws.
-        let (lc, indices, current) = color_material_map(state, palette_id, color, plan);
+        let (lc, indices, current) = color_material_map(state, palette_id, color_property_id, plan);
         palette_settings_files.insert(
             sidecar,
             material_settings(
@@ -1073,11 +1096,11 @@ fn build_palette(
 /// is rejected by [`reconstruct_voxels`].
 fn color_palette_colors(
     state: &VoxMain,
-    palette: U32Id<BVoxPalette>,
-    color: U32Id<BVoxProperty>,
+    palette_id: U32Id<BVoxPalette>,
+    color_property_id: U32Id<BVoxProperty>,
 ) -> Vec<[u8; 4]> {
     let mut cells: Vec<[u8; 4]> = Vec::new();
-    if let Some(value_pool) = property_value_pool(state, palette, color) {
+    if let Some(value_pool) = property_value_pool(state, palette_id, color_property_id) {
         for (value_id, _) in value_pool.iter_values().take(PALETTE_COLORS) {
             cells.push(value_pool_color(value_pool, value_id).unwrap_or([0, 0, 0, 0]));
         }
@@ -1190,8 +1213,8 @@ fn default_material(slot: usize) -> VMaxMaterial {
 /// the per-voxel byte.
 fn color_material_map(
     state: &VoxMain,
-    palette: U32Id<BVoxPalette>,
-    color: U32Id<BVoxProperty>,
+    palette_id: U32Id<BVoxPalette>,
+    color_property_id: U32Id<BVoxProperty>,
     plan: &MaterialPlan,
 ) -> (Vec<u8>, Vec<i64>, i64) {
     let mut lc = vec![0u8; 256];
@@ -1199,12 +1222,15 @@ fn color_material_map(
         return (lc, Vec::new(), 0);
     }
     let mut cells: BTreeSet<u32> = BTreeSet::new();
-    if let Some(palette_ref) = state.palette(palette) {
-        for material in palette_ref.iter_materials() {
-            let Some(cell) = palette_ref.value_id(material, color).map(|id| id.to_u32()) else {
+    if let Some(palette_ref) = state.palette(palette_id) {
+        for material_id in palette_ref.iter_materials() {
+            let Some(cell) = palette_ref
+                .value_id(material_id, color_property_id)
+                .map(|value_id| value_id.to_u32())
+            else {
                 continue;
             };
-            let Some(&byte) = plan.material_idx.get(&material) else {
+            let Some(&byte) = plan.material_idx.get(&material_id) else {
                 continue;
             };
             if let Some(slot) = lc.get_mut(cell as usize) {
@@ -1270,14 +1296,14 @@ fn subtree_box_local(
         .hierarchy_node(node_id)
         .expect("a valid hierarchy node");
     let mut bounds: Option<([f64; 3], [f64; 3])> = None;
-    for &object in &node.child_object_ids {
-        let (center, half) = object_box_local(state, object);
+    for &object_id in &node.child_object_ids {
+        let (center, half) = object_box_local(state, object_id);
         extend_bounds(&mut bounds, center, half);
     }
-    for &child in &node.child_node_ids {
-        let (child_center, child_half) = subtree_box_local(state, child, memo);
+    for &child_id in &node.child_node_ids {
+        let (child_center, child_half) = subtree_box_local(state, child_id, memo);
         let transform = state
-            .hierarchy_node(child)
+            .hierarchy_node(child_id)
             .expect("a valid child node")
             .transform;
         let center = transform
@@ -1468,8 +1494,8 @@ fn secondary_uuid(node_id: &str, slot: usize) -> String {
 }
 
 /// The filename suffix for an object: empty for object 0, then its numeric id.
-fn suffix(object: U32Id<BVoxObject>) -> String {
-    let index = object.to_u32();
+fn suffix(object_id: U32Id<BVoxObject>) -> String {
+    let index = object_id.to_u32();
     if index == 0 {
         String::new()
     } else {

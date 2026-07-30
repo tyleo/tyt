@@ -69,7 +69,7 @@ pub fn voxelize_mesh(
 
     let mut state = VoxMain::default();
 
-    let (palette, samples, default_material) = build_palette(&mut state, &cell_materials)?;
+    let (palette, sample_ids, default_material_id) = build_palette(&mut state, &cell_materials)?;
 
     let palette_id = state.add_palette(palette)?;
 
@@ -82,13 +82,13 @@ pub fn voxelize_mesh(
 
     let mut object = VoxObject::new(object_name, counts).map_err(|_| grid_too_large(counts))?;
 
-    object.add_layer(palette_id, default_material);
+    object.add_layer(palette_id, default_material_id);
 
-    for (index, sample) in samples.iter().enumerate() {
-        if let Some(material) = sample {
-            let voxel = U32Id::from_u32(index as u32);
+    for (index, sample_id) in sample_ids.iter().enumerate() {
+        if let Some(material_id) = sample_id {
+            let voxel_id = U32Id::from_u32(index as u32);
             object
-                .retain_voxel(voxel, &[*material])
+                .retain_voxel(voxel_id, &[*material_id])
                 .expect("a grid index is a live voxel sampling the one layer");
         }
     }
@@ -289,72 +289,75 @@ fn build_palette(
 
     // Register the pools and add each property. All properties precede any
     // material, so no material carries a back-fill placeholder value id.
-    let base_color_pool = state.add_value_pool(VoxValuePool::srgba(base_color.values)?);
-    let metallic_pool = state.add_value_pool(bounded_float(metallic.values, 0.0, 1.0)?);
-    let roughness_pool = state.add_value_pool(bounded_float(roughness.values, 0.0, 1.0)?);
-    let emissive_factor_pool = state.add_value_pool(VoxValuePool::srgb(emissive_factor.values)?);
-    let emissive_strength_pool = state.add_value_pool(float_above(emissive_strength.values, 0.0)?);
-    let occlusion_pool = state.add_value_pool(bounded_float(occlusion.values, 0.0, 1.0)?);
-    let ior_pool = state.add_value_pool(float_above(ior.values, 1.0)?);
-    let transmission_pool = state.add_value_pool(bounded_float(transmission.values, 0.0, 1.0)?);
+    let base_color_value_pool_id = state.add_value_pool(VoxValuePool::srgba(base_color.values)?);
+    let metallic_value_pool_id = state.add_value_pool(bounded_float(metallic.values, 0.0, 1.0)?);
+    let roughness_value_pool_id = state.add_value_pool(bounded_float(roughness.values, 0.0, 1.0)?);
+    let emissive_factor_value_pool_id =
+        state.add_value_pool(VoxValuePool::srgb(emissive_factor.values)?);
+    let emissive_strength_value_pool_id =
+        state.add_value_pool(float_above(emissive_strength.values, 0.0)?);
+    let occlusion_value_pool_id = state.add_value_pool(bounded_float(occlusion.values, 0.0, 1.0)?);
+    let ior_value_pool_id = state.add_value_pool(float_above(ior.values, 1.0)?);
+    let transmission_value_pool_id =
+        state.add_value_pool(bounded_float(transmission.values, 0.0, 1.0)?);
 
     let mut palette = VoxPalette::default();
     palette
         .add_property(
             BASE_COLOR_FACTOR.to_owned(),
-            base_color_pool,
+            base_color_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
         .add_property(
             METALLIC_FACTOR.to_owned(),
-            metallic_pool,
+            metallic_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
         .add_property(
             ROUGHNESS_FACTOR.to_owned(),
-            roughness_pool,
+            roughness_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
         .add_property(
             EMISSIVE_FACTOR.to_owned(),
-            emissive_factor_pool,
+            emissive_factor_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
         .add_property(
             EMISSIVE_STRENGTH.to_owned(),
-            emissive_strength_pool,
+            emissive_strength_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
         .add_property(
             OCCLUSION_STRENGTH.to_owned(),
-            occlusion_pool,
+            occlusion_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
-        .add_property(IOR.to_owned(), ior_pool, U32Id::from_u32(0))
+        .add_property(IOR.to_owned(), ior_value_pool_id, U32Id::from_u32(0))
         .expect("the property names are distinct");
     palette
         .add_property(
             TRANSMISSION_FACTOR.to_owned(),
-            transmission_pool,
+            transmission_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
 
     // One material per distinct mesh material, its value ids in property
     // order.
-    let materials: Vec<U32Id<BVoxMaterial>> = (0..distinct.len())
+    let material_ids: Vec<U32Id<BVoxMaterial>> = (0..distinct.len())
         .map(|index| {
             palette
                 .add_material(vec![
@@ -371,14 +374,14 @@ fn build_palette(
         })
         .collect();
 
-    let samples = cell_indices
+    let sample_ids = cell_indices
         .iter()
-        .map(|&index| index.map(|index| materials[index]))
+        .map(|&index| index.map(|index| material_ids[index]))
         .collect();
 
-    let default_material = materials[0];
+    let default_material_id = material_ids[0];
 
-    Ok((palette, samples, default_material))
+    Ok((palette, sample_ids, default_material_id))
 }
 
 /// A deduplicated pool column and each distinct material's value id into it.
@@ -630,13 +633,13 @@ mod tests {
     /// `emissiveStrength` property.
     fn sampled_strength(state: &VoxMain, position: TyVector3U32) -> f64 {
         let (_, object) = state.iter_objects().next().unwrap();
-        let (layer, palette_id) = object.iter_layers().next().unwrap();
+        let (layer_id, palette_id) = object.iter_layers().next().unwrap();
         let palette = state.palette(palette_id).unwrap();
-        let property = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
-        let voxel = object.voxel_id(position).unwrap();
-        let material = object.voxel_material(voxel, layer).unwrap();
+        let property_id = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
+        let voxel_id = object.voxel_id(position).unwrap();
+        let material_id = object.voxel_material(voxel_id, layer_id).unwrap();
         match state
-            .material_value(palette_id, material, property)
+            .material_value(palette_id, material_id, property_id)
             .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
             Some(VoxValuePoolValueRef::Float(number)) => number,
@@ -658,8 +661,8 @@ mod tests {
         // deduplicated pool's one value.
         let (_, palette) = state.iter_palettes().next().unwrap();
         assert_eq!(palette.iter_materials().count(), 2);
-        let property = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
-        let value_pool_id = palette.property(property).unwrap().value_pool_id;
+        let property_id = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
+        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
         assert_eq!(state.value_pool(value_pool_id).unwrap().values_len(), 1);
         assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 2.0);
         assert_eq!(sampled_strength(&state, TyVector3U32::new(1, 0, 0)), 2.0);

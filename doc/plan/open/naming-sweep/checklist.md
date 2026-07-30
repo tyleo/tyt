@@ -109,7 +109,7 @@ Gate: workspace green; the voxcore gate grep returns only id-pool mentions
       flatten added to `internal/gltf/used_materials.rs`.
       `order_palette_colors.rs` drifted clean of its `pool_ref` before this
       iteration.
-- [ ] Id suffixes, the six hot files: `internal/vmax/write_vmax.rs`,
+- [x] Id suffixes, the six hot files: `internal/vmax/write_vmax.rs`,
       `reduce_palette.rs`, `convert/vmax/to_vmax_file.rs`,
       `convert/voxelize/voxelize_mesh.rs`, `internal/gltf/bake_atlas.rs`,
       and `convert/vmax/from_vmax_file.rs`.
