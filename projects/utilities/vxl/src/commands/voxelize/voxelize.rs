@@ -1,6 +1,9 @@
 use crate::{
     Dependencies, Error, MeshFormat, NoneOr, Result, Rgba, VoxjEncodingOptions,
-    commands::{FillMode, GridResolutionOptions, MaterialMode, QuantizeOptions, SurfaceMode},
+    commands::{
+        FillMode, GridResolutionOptions, MaterialMode, OutOfRangeFactor, QuantizeOptions,
+        SurfaceMode,
+    },
 };
 use clap::Parser;
 use std::path::PathBuf;
@@ -52,6 +55,12 @@ pub struct Voxelize {
     #[arg(value_name = "name", long)]
     name: Option<String>,
 
+    /// What a source material factor outside its glTF range does, such as a
+    /// `metallicFactor` above `1`. `error` names the factor and refuses the
+    /// mesh. `clamp` clamps into the range and voxelizes on.
+    #[arg(value_name = "out-of-range-factor", long, default_value = "error")]
+    out_of_range_factor: OutOfRangeFactor,
+
     #[command(flatten)]
     quantize_options: QuantizeOptions,
 
@@ -89,6 +98,7 @@ impl Voxelize {
             encoding,
             format,
             color_format,
+            self.out_of_range_factor,
         )
     }
 

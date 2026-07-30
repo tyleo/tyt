@@ -1,13 +1,15 @@
 /// Inverse of [`pack_bits`](crate::pack_bits): reads `count` values of `width`
-/// bits each, MSB-first, 8 per byte. Bytes past the end of `bytes` read as
-/// zero.
+/// bits each, MSB-first, 8 per byte. `bytes` must cover all `count * width` of
+/// them, which each caller checks against the decoded length first.
 pub fn unpack_bits(bytes: &[u8], width: u32, count: usize) -> Vec<u32> {
     let mut out = Vec::with_capacity(count);
     let mut bit_pos = 0usize;
     for _ in 0..count {
         let mut value = 0u32;
         for _ in 0..width {
-            let byte = bytes.get(bit_pos / 8).copied().unwrap_or(0);
+            let byte = *bytes
+                .get(bit_pos / 8)
+                .expect("the caller checked the bytes cover count * width bits");
             let bit = (byte >> (7 - bit_pos % 8)) & 1;
             value = (value << 1) | bit as u32;
             bit_pos += 1;

@@ -2,10 +2,10 @@ use crate::{
     Format, MeshFormat, Result, SelectIndex, VoxjColorFormat, VoxjEncoding, VoxjFormat, Width,
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
-        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
-        PaletteListLayout, PaletteReduction, PaletteShowLabel, PaletteShowLayout,
-        PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
-        TextureShape, ValidateLayout,
+        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeFactor,
+        PaletteListFields, PaletteListLayout, PaletteReduction, PaletteShowLabel,
+        PaletteShowLayout, PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage,
+        SurfaceMode, TextureShape, ValidateLayout,
     },
 };
 use std::{num::NonZeroU8, path::Path};
@@ -102,6 +102,8 @@ pub trait Dependencies {
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
     /// * `color_format` - the on-wire encoding for sRGB color value pools.
+    /// * `out_of_range_factor` - whether a source material factor outside its
+    ///   glTF range errors or clamps.
     #[allow(clippy::too_many_arguments)]
     fn voxelize(
         &self,
@@ -118,6 +120,7 @@ pub trait Dependencies {
         encoding: VoxjEncoding,
         format: VoxjFormat,
         color_format: VoxjColorFormat,
+        out_of_range_factor: OutOfRangeFactor,
     ) -> Result<()>;
 
     /// Resolves the object selectors against the voxel file at `input` to the

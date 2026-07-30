@@ -801,7 +801,7 @@ fn derive_materials(
                 base_luminances[slot],
             )
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     Ok(MaterialPlan {
         name,
         material_indices,
@@ -820,7 +820,7 @@ fn derived_material(
     slot: usize,
     signature: &[U32Id<BVoxValuePoolValue>],
     base_luminance: Option<f64>,
-) -> VMaxMaterial {
+) -> Result<VMaxMaterial> {
     let scalar = |property: &str| -> Option<f64> {
         let position = properties.iter().position(|(name, _)| name == property)?;
         value_pool_scalar(
@@ -855,10 +855,13 @@ fn derived_material(
     };
     let carries = |property: &str| -> bool { properties.iter().any(|(name, _)| name == property) };
     let dispersed = carries(IOR) || carries(TRANSMISSION_FACTOR) || carries(ABSORPTION);
-    VMaxMaterial {
+    Ok(VMaxMaterial {
         mi: (slot + 1).to_string(),
-        mc: pbr_factor_to_vm_coefficient(scalar(METALLIC_FACTOR).unwrap_or(0.0)),
-        rc: pbr_factor_to_vm_coefficient(scalar(ROUGHNESS_FACTOR).unwrap_or(0.0)),
+        mc: pbr_factor_to_vm_coefficient(scalar(METALLIC_FACTOR).unwrap_or(0.0), METALLIC_FACTOR)?,
+        rc: pbr_factor_to_vm_coefficient(
+            scalar(ROUGHNESS_FACTOR).unwrap_or(0.0),
+            ROUGHNESS_FACTOR,
+        )?,
         // Voxel Max glows in the voxel's base color at coefficient `sic`, so
         // the emissive folds to its luminance relative to the base color, times
         // `emissiveStrength`. This inverts the from-vmax split, which emits the
@@ -886,7 +889,7 @@ fn derived_material(
             ior: scalar(IOR).unwrap_or(1.5),
             transmission: scalar(TRANSMISSION_FACTOR).unwrap_or(0.0),
         }),
-    }
+    })
 }
 
 /// Rebuilds a Voxel Max material from its exact ext copy. The `mi` token is

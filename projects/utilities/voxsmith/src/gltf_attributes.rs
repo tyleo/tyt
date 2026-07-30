@@ -42,3 +42,29 @@ pub(crate) fn default_scalar(key: &str) -> Option<f64> {
         _ => None,
     }
 }
+
+/// The range the glTF spec gives a recommended scalar attribute, as an
+/// inclusive `(min, max)` with a `max` of `None` for an unbounded top, or `None`
+/// for a key outside the vocabulary.
+pub(crate) fn scalar_range(key: &str) -> Option<(f64, Option<f64>)> {
+    match key {
+        METALLIC_FACTOR | ROUGHNESS_FACTOR | OCCLUSION_STRENGTH | TRANSMISSION_FACTOR => {
+            Some((0.0, Some(1.0)))
+        }
+        EMISSIVE_STRENGTH => Some((0.0, None)),
+        IOR => Some((1.0, None)),
+        _ => None,
+    }
+}
+
+/// The glTF spec default for a recommended color attribute, as sRGB `[r, g, b,
+/// a]` bytes, or `None` for a key with no standard default, such as a custom
+/// attribute. A three-component color takes opaque alpha.
+#[cfg(feature = "gltf")]
+pub(crate) fn default_color(key: &str) -> Option<[u8; 4]> {
+    match key {
+        BASE_COLOR_FACTOR => Some([255, 255, 255, 255]),
+        EMISSIVE_FACTOR => Some([0, 0, 0, 255]),
+        _ => None,
+    }
+}

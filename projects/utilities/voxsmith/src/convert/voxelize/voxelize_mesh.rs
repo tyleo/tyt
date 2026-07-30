@@ -1,7 +1,8 @@
 use crate::{
     BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, FillMode, IOR, METALLIC_FACTOR,
-    MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, Result, SurfaceMode,
-    TRANSMISSION_FACTOR, VoxelGrid, sample_material, voxelize_triangles,
+    MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS_FACTOR,
+    Result, SurfaceMode, TRANSMISSION_FACTOR, VoxelGrid, sample_material, scalar_range,
+    voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
@@ -35,6 +36,8 @@ const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 /// * `node_scale` - the placing node's uniform scale.
 /// * `name` - object-name override; `None` uses the mesh's own name.
 /// * `fallback_name` - the object name when neither `name` nor the mesh has one.
+/// * `out_of_range` - whether a source factor outside its glTF spec range
+///   errors or clamps.
 #[allow(clippy::too_many_arguments)]
 pub fn voxelize_mesh(
     mesh: &Mesh,
@@ -46,6 +49,7 @@ pub fn voxelize_mesh(
     node_scale: f64,
     name: Option<&str>,
     fallback_name: &str,
+    out_of_range: OutOfRangeFactor,
 ) -> Result<VoxMain> {
     if mesh.triangles.is_empty() {
         return Err(Error::invalid("mesh has no triangle geometry"));
@@ -69,7 +73,8 @@ pub fn voxelize_mesh(
 
     let mut state = VoxMain::default();
 
-    let (palette, sample_ids, default_material_id) = build_palette(&mut state, &cell_materials)?;
+    let (palette, sample_ids, default_material_id) =
+        build_palette(&mut state, &cell_materials, out_of_range)?;
 
     let palette_id = state.add_palette(palette)?;
 
@@ -246,10 +251,12 @@ type PaletteBuild = (
 /// cell's material. Every glTF property draws from a deduplicated value pool
 /// added to `state`: a property carrying one value id per material.
 /// The default material is the first built, or a lone white material for an
-/// all-empty grid, so the palette is never empty.
+/// all-empty grid, so the palette is never empty. A factor outside its glTF
+/// spec range follows `out_of_range`.
 fn build_palette(
     state: &mut VoxMain,
     cell_materials: &[Option<MeshMaterial>],
+    out_of_range: OutOfRangeFactor,
 ) -> Result<PaletteBuild> {
     // Merge near-identical materials into a distinct list, first seen in raster
     // order, remembering each filled cell's position in it.
@@ -275,32 +282,32 @@ fn build_palette(
     }
 
     // One deduplicated value pool per property, plus each distinct material's
-    // value id into it. The bounded scalars clamp to their value pool range so
-    // the value pools build.
+    // value id into it.
     let base_color = srgba_value_pool(&distinct, |material| material.base_color);
-    let metallic = float_value_pool(&distinct, |material| material.metallic.clamp(0.0, 1.0));
-    let roughness = float_value_pool(&distinct, |material| material.roughness.clamp(0.0, 1.0));
+    let metallic = float_value_pool(&distinct, |material| material.metallic);
+    let roughness = float_value_pool(&distinct, |material| material.roughness);
     let emissive_factor = srgb_value_pool(&distinct, |material| material.emissive_factor);
-    let emissive_strength =
-        float_value_pool(&distinct, |material| material.emissive_strength.max(0.0));
-    let occlusion = float_value_pool(&distinct, |material| material.occlusion.clamp(0.0, 1.0));
-    let ior = float_value_pool(&distinct, |material| material.ior.max(1.0));
-    let transmission =
-        float_value_pool(&distinct, |material| material.transmission.clamp(0.0, 1.0));
+    let emissive_strength = float_value_pool(&distinct, |material| material.emissive_strength);
+    let occlusion = float_value_pool(&distinct, |material| material.occlusion);
+    let ior = float_value_pool(&distinct, |material| material.ior);
+    let transmission = float_value_pool(&distinct, |material| material.transmission);
 
     // Register the value pools and add each property. All properties precede
     // any material, so no material carries a back-fill placeholder value id.
+    let scalars = |values, key| factor_value_pool(values, key, out_of_range);
     let base_color_value_pool_id = state.add_value_pool(VoxValuePool::srgba(base_color.values)?);
-    let metallic_value_pool_id = state.add_value_pool(bounded_float(metallic.values, 0.0, 1.0)?);
-    let roughness_value_pool_id = state.add_value_pool(bounded_float(roughness.values, 0.0, 1.0)?);
+    let metallic_value_pool_id = state.add_value_pool(scalars(metallic.values, METALLIC_FACTOR)?);
+    let roughness_value_pool_id =
+        state.add_value_pool(scalars(roughness.values, ROUGHNESS_FACTOR)?);
     let emissive_factor_value_pool_id =
         state.add_value_pool(VoxValuePool::srgb(emissive_factor.values)?);
     let emissive_strength_value_pool_id =
-        state.add_value_pool(float_above(emissive_strength.values, 0.0)?);
-    let occlusion_value_pool_id = state.add_value_pool(bounded_float(occlusion.values, 0.0, 1.0)?);
-    let ior_value_pool_id = state.add_value_pool(float_above(ior.values, 1.0)?);
+        state.add_value_pool(scalars(emissive_strength.values, EMISSIVE_STRENGTH)?);
+    let occlusion_value_pool_id =
+        state.add_value_pool(scalars(occlusion.values, OCCLUSION_STRENGTH)?);
+    let ior_value_pool_id = state.add_value_pool(scalars(ior.values, IOR)?);
     let transmission_value_pool_id =
-        state.add_value_pool(bounded_float(transmission.values, 0.0, 1.0)?);
+        state.add_value_pool(scalars(transmission.values, TRANSMISSION_FACTOR)?);
 
     let mut palette = VoxPalette::default();
     palette
@@ -464,20 +471,44 @@ fn float_value_pool(
     ValuePoolColumn { values, value_ids }
 }
 
-/// A float value pool bounded on both sides.
-fn bounded_float(values: Vec<f64>, min: f64, max: f64) -> Result<VoxValuePool> {
-    Ok(VoxValuePool::float(
-        VoxBound::Number(min),
-        VoxBound::Number(max),
-        values,
-    )?)
-}
+/// A float value pool over `values`, bounded by the range the glTF spec gives
+/// `key`. A value outside that range follows `out_of_range`. A NaN has no
+/// clamped value, so it errors either way.
+fn factor_value_pool(
+    values: Vec<f64>,
+    key: &str,
+    out_of_range: OutOfRangeFactor,
+) -> Result<VoxValuePool> {
+    let (min, max) = scalar_range(key).expect("the voxelizer writes glTF scalar attributes");
+    let range = match max {
+        Some(max) => format!("{min} to {max}"),
+        None => format!("{min} or greater"),
+    };
 
-/// A float value pool bounded below and unbounded above.
-fn float_above(values: Vec<f64>, min: f64) -> Result<VoxValuePool> {
+    let values = values
+        .into_iter()
+        .map(|value| {
+            let clamped = match max {
+                Some(max) => value.clamp(min, max),
+                None => value.max(min),
+            };
+
+            // An in-range value is its own clamp. A NaN equals neither.
+            if value == clamped {
+                Ok(value)
+            } else if out_of_range == OutOfRangeFactor::Clamp && !value.is_nan() {
+                Ok(clamped)
+            } else {
+                Err(Error::invalid(format!(
+                    "`{key}` is {value}, outside the glTF range {range}"
+                )))
+            }
+        })
+        .collect::<Result<Vec<f64>>>()?;
+
     Ok(VoxValuePool::float(
         VoxBound::Number(min),
-        VoxBound::None,
+        max.map_or(VoxBound::None, VoxBound::Number),
         values,
     )?)
 }
@@ -588,8 +619,8 @@ fn grid_too_large(counts: TyVector3U32) -> Error {
 #[cfg(test)]
 mod tests {
     use crate::{
-        EMISSIVE_STRENGTH, FillMode, MaterialMode, Mesh, MeshMaterial, MeshTriangle,
-        MeshTriangleUvs, SurfaceMode, voxelize_mesh,
+        EMISSIVE_STRENGTH, FillMode, METALLIC_FACTOR, MaterialMode, Mesh, MeshMaterial,
+        MeshTriangle, MeshTriangleUvs, OutOfRangeFactor, Result, SurfaceMode, voxelize_mesh,
     };
     use ty_math::{TySrgbaU8, TyVector3F64, TyVector3U32};
     use voxcore::{VoxMain, VoxValuePoolValueRef};
@@ -616,8 +647,11 @@ mod tests {
         }
     }
 
-    /// Voxelizes the two-cell mesh per-primitive.
-    fn voxelize(materials: Vec<MeshMaterial>) -> VoxMain {
+    /// Voxelizes the two-cell mesh per-primitive under `out_of_range`.
+    fn voxelize_with(
+        materials: Vec<MeshMaterial>,
+        out_of_range: OutOfRangeFactor,
+    ) -> Result<VoxMain> {
         voxelize_mesh(
             &two_cell_mesh(materials),
             TyVector3U32::new(2, 1, 1),
@@ -628,8 +662,14 @@ mod tests {
             1.0,
             None,
             "mesh",
+            out_of_range,
         )
-        .unwrap()
+    }
+
+    /// Voxelizes the two-cell mesh per-primitive, rejecting an out-of-range
+    /// factor.
+    fn voxelize(materials: Vec<MeshMaterial>) -> VoxMain {
+        voxelize_with(materials, OutOfRangeFactor::Error).unwrap()
     }
 
     /// The strength the given voxel's material samples from the
@@ -698,9 +738,68 @@ mod tests {
             1.0,
             None,
             "mesh",
+            OutOfRangeFactor::Error,
         )
         .unwrap();
 
         assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 0.0);
+    }
+
+    /// The two-cell mesh's materials with the right one's `metallicFactor` out
+    /// of the glTF range.
+    fn over_metallic() -> Vec<MeshMaterial> {
+        let matte = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+
+        let mut over = MeshMaterial::flat(TySrgbaU8::new(0, 0, 255, 255));
+        over.metallic = 1.5;
+
+        vec![matte, over]
+    }
+
+    #[test]
+    fn an_out_of_range_factor_errors_by_default() {
+        let error = voxelize_with(over_metallic(), OutOfRangeFactor::Error).unwrap_err();
+
+        // The factor and the value both point back at the source mesh.
+        let message = error.to_string();
+        assert!(message.contains(METALLIC_FACTOR), "{message}");
+        assert!(message.contains("1.5"), "{message}");
+    }
+
+    #[test]
+    fn an_out_of_range_factor_clamps_when_asked() {
+        let state = voxelize_with(over_metallic(), OutOfRangeFactor::Clamp).unwrap();
+
+        // Both materials land on the bounded value pool, the out-of-range one
+        // at the range's top.
+        let (_, palette) = state.iter_palettes().next().unwrap();
+        let property_id = palette.property_id_by_name(METALLIC_FACTOR).unwrap();
+        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
+        let value_pool = state.value_pool(value_pool_id).unwrap();
+        let values: Vec<VoxValuePoolValueRef> = value_pool
+            .iter_values()
+            .map(|(value_id, _)| value_pool.value(value_id).unwrap())
+            .collect();
+        assert_eq!(
+            values,
+            vec![
+                VoxValuePoolValueRef::Float(0.0),
+                VoxValuePoolValueRef::Float(1.0)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_nan_factor_errors_under_either_mode() {
+        // A NaN has no clamped value, so asking to clamp does not admit it.
+        let nan_metallic = || {
+            let matte = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+            let mut broken = MeshMaterial::flat(TySrgbaU8::new(0, 0, 255, 255));
+            broken.metallic = f64::NAN;
+            vec![matte, broken]
+        };
+
+        assert!(voxelize_with(nan_metallic(), OutOfRangeFactor::Error).is_err());
+        assert!(voxelize_with(nan_metallic(), OutOfRangeFactor::Clamp).is_err());
     }
 }

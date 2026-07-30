@@ -1,8 +1,8 @@
 use crate::{
     MeshFormat, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat,
     commands::{
-        ColorSpace, Dither, FillMode, GridResolution, MaterialMode, PaletteReduction,
-        QuantizeMethod, ResolutionAxis, SurfaceMode,
+        ColorSpace, Dither, FillMode, GridResolution, MaterialMode, OutOfRangeFactor,
+        PaletteReduction, QuantizeMethod, ResolutionAxis, SurfaceMode,
     },
     implementation,
 };
@@ -12,8 +12,9 @@ use voxcore::VoxMain;
 use voxsmith::{
     ColorSpace as VoxsmithColorSpace, Dither as VoxsmithDither, EditStateMode,
     FillMode as VoxsmithFillMode, MaterialMode as VoxsmithMaterialMode,
-    ReductionMethod as VoxsmithReductionMethod, SurfaceMode as VoxsmithSurfaceMode,
-    from_gltf_bytes, order_palette_colors, reduce_palette, voxelize_mesh,
+    OutOfRangeFactor as VoxsmithOutOfRangeFactor, ReductionMethod as VoxsmithReductionMethod,
+    SurfaceMode as VoxsmithSurfaceMode, from_gltf_bytes, order_palette_colors, reduce_palette,
+    voxelize_mesh,
 };
 
 /// Voxelizes the glTF or GLB mesh at `input` into a Voxel Json document at
@@ -36,6 +37,7 @@ pub fn voxelize(
     encoding: VoxjEncoding,
     format: VoxjFormat,
     color_format: VoxjColorFormat,
+    out_of_range_factor: OutOfRangeFactor,
 ) -> Result<()> {
     let bytes = fs::read(input)?;
 
@@ -61,6 +63,7 @@ pub fn voxelize(
         node_scale,
         name,
         stem,
+        out_of_range_mode(out_of_range_factor),
     )?;
 
     reduce_generated_palette(&mut state, reduction)?;
@@ -179,6 +182,14 @@ fn material_mode_mode(material_mode: MaterialMode) -> VoxsmithMaterialMode {
         MaterialMode::PerPrimitive => VoxsmithMaterialMode::PerPrimitive,
         MaterialMode::PerTexel => VoxsmithMaterialMode::PerTexel,
         MaterialMode::Flat => VoxsmithMaterialMode::Flat,
+    }
+}
+
+/// Maps a CLI out-of-range choice to the voxsmith out-of-range factor mode.
+fn out_of_range_mode(out_of_range_factor: OutOfRangeFactor) -> VoxsmithOutOfRangeFactor {
+    match out_of_range_factor {
+        OutOfRangeFactor::Error => VoxsmithOutOfRangeFactor::Error,
+        OutOfRangeFactor::Clamp => VoxsmithOutOfRangeFactor::Clamp,
     }
 }
 

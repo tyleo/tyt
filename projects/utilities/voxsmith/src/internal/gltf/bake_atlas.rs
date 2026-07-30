@@ -1,6 +1,6 @@
 use crate::{
     BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, MaterialBake,
-    MaterialChannel, Result, UsedMaterials, default_scalar, value_pool_color,
+    MaterialChannel, Result, UsedMaterials, default_color, default_scalar, value_pool_color,
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
@@ -24,7 +24,7 @@ pub(crate) fn bake_atlas_pixels(
     // Only the emissive bake normalizes each texel by the mesh's greatest
     // strength.
     let max_strength = match bake {
-        MaterialBake::EmissiveColor => max_emissive_strength(used),
+        MaterialBake::EmissiveColor => max_emissive_strength(used)?,
         _ => 0.0,
     };
 
@@ -47,9 +47,11 @@ fn bake_texel(
     max_strength: f64,
 ) -> Result<[u8; 4]> {
     match bake {
-        MaterialBake::RgbaColor => Ok(color_bytes(used.attribute(index, BASE_COLOR_FACTOR))),
+        MaterialBake::RgbaColor => {
+            color_bytes(used.attribute(index, BASE_COLOR_FACTOR), BASE_COLOR_FACTOR)
+        }
 
-        MaterialBake::EmissiveColor => Ok(emissive_color_bytes(used, index, max_strength)),
+        MaterialBake::EmissiveColor => emissive_color_bytes(used, index, max_strength),
 
         MaterialBake::Packing(channels) => {
             // A packing fills R, G, B from its channels; an unnamed channel and
@@ -86,9 +88,20 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
             // Read the source as a `0..1` fraction, invert if asked, then scale
             // to a byte, so a scalar and a color component inject the same way.
             let fraction = match component {
-                Some(component) => component_byte(color_bytes(value), *component) as f64 / 255.0,
-                None => scalar_value(value, key).clamp(0.0, 1.0),
+                Some(component) => {
+                    component_byte(color_bytes(value, key)?, *component) as f64 / 255.0
+                }
+                None => scalar_value(value, key)?,
             };
+
+            // The check precedes the conversion, since `to_unorm8` clamps on its
+            // own and an attribute the spec leaves unbounded above, such as
+            // `emissiveStrength`, reaches here.
+            if !(0.0..=1.0).contains(&fraction) {
+                return Err(Error::invalid(format!(
+                    "`{key}` is {fraction}, outside the 0 to 1 a packed channel stores"
+                )));
+            }
 
             let fraction = if *invert { 1.0 - fraction } else { fraction };
 
@@ -97,25 +110,22 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
     }
 }
 
-/// A color attribute's RGBA bytes, defaulting to opaque white (the base-color
-/// spec default) when the value is absent or its value pool is not a color
-/// kind.
-fn color_bytes(value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>) -> [u8; 4] {
-    color_bytes_or(value, [255, 255, 255, 255])
-}
-
 /// A color attribute's RGBA bytes, decoded by the bound value pool's kind, or
-/// `default` when the value is absent or its value pool is not a color kind. An
-/// sRGB value pool holds sRGB-encoded components in `[0, 1]`; a linear
-/// value pool holds scene-linear components re-encoded to sRGB here. A
-/// three-component color takes opaque alpha.
-fn color_bytes_or(
+/// `key`'s glTF spec default when no layer binds it. An sRGB value pool holds
+/// sRGB-encoded components in `[0, 1]`. A linear value pool holds scene-linear
+/// components re-encoded to sRGB here. A three-component color takes opaque
+/// alpha. Errors when the bound value pool is not a color kind, or when an
+/// unbound `key` has no spec default.
+fn color_bytes(
     value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
-    default: [u8; 4],
-) -> [u8; 4] {
-    value
-        .and_then(|(value_pool, value_id)| value_pool_color(value_pool, value_id))
-        .unwrap_or(default)
+    key: &str,
+) -> Result<[u8; 4]> {
+    let Some((value_pool, value_id)) = value else {
+        return default_color(key).ok_or_else(|| unbound(key));
+    };
+
+    value_pool_color(value_pool, value_id)
+        .ok_or_else(|| Error::invalid(format!("`{key}` draws from a value pool holding no color")))
 }
 
 /// One color component as a byte.
@@ -128,35 +138,51 @@ fn component_byte(rgba: [u8; 4], component: ColorChannel) -> u8 {
     }
 }
 
-/// A scalar attribute's value from a `float`, `int`, or `bool` value pool,
-/// defaulting to its spec default (or `0` for a key with no standard default)
-/// when absent or not one of those value pools. A `bool` reads as `1` or `0`.
-fn scalar_value(value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>, key: &str) -> f64 {
-    let fallback = || default_scalar(key).unwrap_or(0.0);
-    match value.and_then(|(value_pool, value_id)| value_pool.value(value_id)) {
-        Some(VoxValuePoolValueRef::Float(number)) => number,
-        Some(VoxValuePoolValueRef::Int(number)) => number as f64,
-        Some(VoxValuePoolValueRef::Bool(flag)) => {
-            if flag {
-                1.0
-            } else {
-                0.0
-            }
-        }
-        _ => fallback(),
+/// A scalar attribute's value from a `float`, `int`, or `bool` value pool, or
+/// `key`'s glTF spec default when no layer binds it. A `bool` reads as `1` or
+/// `0`. Errors when the bound value pool is not one of those kinds, or when an
+/// unbound `key` has no spec default.
+fn scalar_value(
+    value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
+    key: &str,
+) -> Result<f64> {
+    let Some((value_pool, value_id)) = value else {
+        return default_scalar(key).ok_or_else(|| unbound(key));
+    };
+
+    // `VoxMain::add_palette` checks every material's value against its
+    // property's value pool, so a bound attribute always resolves.
+    let value = value_pool
+        .value(value_id)
+        .expect("a palette's material draws a value its property's value pool holds");
+
+    match value {
+        VoxValuePoolValueRef::Float(number) => Ok(number),
+        VoxValuePoolValueRef::Int(number) => Ok(number as f64),
+        VoxValuePoolValueRef::Bool(flag) => Ok(if flag { 1.0 } else { 0.0 }),
+        _ => Err(Error::invalid(format!(
+            "`{key}` draws from a value pool holding no scalar"
+        ))),
     }
+}
+
+/// The error for a `key` no layer binds that has no glTF spec default.
+fn unbound(key: &str) -> Error {
+    Error::invalid(format!(
+        "`{key}` is not bound by any of the object's layers and has no glTF default"
+    ))
 }
 
 /// The emissive texel for the material at `index`: its `emissiveFactor`
 /// scaled in linear light by `emissiveStrength / max_strength`. Per-voxel
 /// strengths survive as a gradient, and a flat
 /// `KHR_materials_emissive_strength` of `max_strength` restores the absolute
-/// scale. An absent color is black.
-fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -> [u8; 4] {
-    let color = color_bytes_or(used.attribute(index, EMISSIVE_FACTOR), [0, 0, 0, 255]);
+/// scale. An absent color is black, its spec default.
+fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -> Result<[u8; 4]> {
+    let color = color_bytes(used.attribute(index, EMISSIVE_FACTOR), EMISSIVE_FACTOR)?;
 
     let fraction = if max_strength > 0.0 {
-        material_scalar(used, index, EMISSIVE_STRENGTH) / max_strength
+        material_scalar(used, index, EMISSIVE_STRENGTH)? / max_strength
     } else {
         0.0
     };
@@ -172,22 +198,22 @@ fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -
         1.0,
     );
 
-    TySrgbaF64::from_linear(scaled)
+    Ok(TySrgbaF64::from_linear(scaled)
         .into_format::<u8, u8>()
-        .into()
+        .into())
 }
 
 /// The greatest `emissiveStrength` among the used materials.
-pub(crate) fn max_emissive_strength(used: &UsedMaterials) -> f64 {
+pub(crate) fn max_emissive_strength(used: &UsedMaterials) -> Result<f64> {
     (0..used.len())
         .map(|index| material_scalar(used, index, EMISSIVE_STRENGTH))
-        .fold(0.0, f64::max)
+        .try_fold(0.0f64, |max, strength| strength.map(|value| max.max(value)))
 }
 
 /// The scalar attribute `key` of the material at `index` in `used`, or its spec
 /// default when the material omits it. The flat factor the material document
 /// writes back for the KHR extension attributes.
-pub(crate) fn material_scalar(used: &UsedMaterials, index: usize, key: &str) -> f64 {
+pub(crate) fn material_scalar(used: &UsedMaterials, index: usize, key: &str) -> Result<f64> {
     scalar_value(used.attribute(index, key), key)
 }
 
@@ -196,7 +222,7 @@ mod tests {
     use crate::{
         AtlasShape, BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH,
         METALLIC_FACTOR, MaterialBake, MaterialChannel, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR,
-        atlas_dimensions, bake_atlas_pixels, resolve_used_materials,
+        Result, atlas_dimensions, bake_atlas_pixels, resolve_used_materials,
     };
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
@@ -511,5 +537,114 @@ mod tests {
         let [r, g, b, a] = [pixels[4], pixels[5], pixels[6], pixels[7]];
         assert_eq!((g, b, a), (r, r, 255));
         assert!((180..=195).contains(&r), "half strength folded to {r}");
+    }
+
+    /// Bakes `bake` over a one-voxel object whose one layer binds `key` to
+    /// `value_pool`.
+    fn bake_one(key: &str, value_pool: VoxValuePool, bake: &MaterialBake) -> Result<Vec<u8>> {
+        let mut state = VoxMain::default();
+        let value_pool_id = state.add_value_pool(value_pool);
+
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property(key.to_owned(), value_pool_id, value_id(0))
+            .unwrap();
+        let material_id = palette.add_material(vec![value_id(0)]).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.add_layer(palette_id, material_id);
+        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[material_id]).unwrap();
+        let object_id = state.add_object(object).unwrap();
+
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap())?;
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit)?;
+
+        bake_atlas_pixels(&used, bake, width, height)
+    }
+
+    /// An unbounded-above `float` value pool holding `value`, the shape
+    /// `emissiveStrength` takes.
+    fn strength_value_pool(value: f64) -> VoxValuePool {
+        VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![value]).unwrap()
+    }
+
+    #[test]
+    fn a_scalar_past_one_errors_rather_than_saturating() {
+        // `emissiveStrength` runs 0 upward, so an HDR strength has no byte in a
+        // packed channel and must not bake as full white.
+        let bake = MaterialBake::Packing(vec![scalar(EMISSIVE_STRENGTH, false)]);
+        let error = bake_one(EMISSIVE_STRENGTH, strength_value_pool(4.0), &bake).unwrap_err();
+
+        let message = error.to_string();
+        assert!(message.contains(EMISSIVE_STRENGTH), "{message}");
+        assert!(message.contains('4'), "{message}");
+    }
+
+    #[test]
+    fn a_scalar_at_the_range_ends_still_bakes() {
+        // The check rejects only what the channel cannot hold. The endpoints fit.
+        let bake = MaterialBake::Packing(vec![scalar(EMISSIVE_STRENGTH, false)]);
+        let pixels = bake_one(EMISSIVE_STRENGTH, strength_value_pool(1.0), &bake).unwrap();
+        assert_eq!(pixels[0], 255);
+
+        let pixels = bake_one(EMISSIVE_STRENGTH, strength_value_pool(0.0), &bake).unwrap();
+        assert_eq!(pixels[0], 0);
+    }
+
+    #[test]
+    fn a_color_packed_as_a_scalar_errors() {
+        let color = VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
+        let bake = MaterialBake::Packing(vec![scalar(METALLIC_FACTOR, false)]);
+
+        assert!(bake_one(METALLIC_FACTOR, color, &bake).is_err());
+    }
+
+    #[test]
+    fn a_scalar_baked_as_a_color_errors() {
+        // The rgba bake reads `baseColorFactor` whole, so a scalar value pool
+        // under it has no color to decode.
+        let number = VoxValuePool::float(VoxBound::None, VoxBound::None, vec![0.5]).unwrap();
+
+        assert!(bake_one(BASE_COLOR_FACTOR, number, &MaterialBake::RgbaColor).is_err());
+    }
+
+    #[test]
+    fn an_unbound_custom_key_errors() {
+        let (state, object_id) = single_layer_state();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
+
+        // No layer binds `subsurface` and the glTF spec gives it no default, so
+        // there is nothing to bake.
+        let bake = MaterialBake::Packing(vec![scalar("subsurface", false)]);
+        assert!(bake_atlas_pixels(&used, &bake, width, height).is_err());
+    }
+
+    #[test]
+    fn an_unbound_color_component_bakes_its_own_spec_default() {
+        let (state, object_id) = single_layer_state();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
+
+        // The palette binds no `emissiveFactor`. Its spec default is black,
+        // while `baseColorFactor` defaults to white.
+        let bake = MaterialBake::Packing(vec![MaterialChannel::Attribute {
+            key: EMISSIVE_FACTOR.to_owned(),
+            component: Some(ColorChannel::R),
+            invert: false,
+        }]);
+        let pixels = bake_atlas_pixels(&used, &bake, width, height).unwrap();
+        assert_eq!(pixels[0], 0);
+
+        // Unbound, `baseColorFactor` would take white. This palette binds it red.
+        let bake = MaterialBake::Packing(vec![MaterialChannel::Attribute {
+            key: BASE_COLOR_FACTOR.to_owned(),
+            component: Some(ColorChannel::R),
+            invert: false,
+        }]);
+        let pixels = bake_atlas_pixels(&used, &bake, width, height).unwrap();
+        assert_eq!(pixels[0], 255);
     }
 }

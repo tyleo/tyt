@@ -117,6 +117,21 @@ fn decode_samples(
     channel_counts: &[usize],
     n: usize,
 ) -> Result<Vec<Vec<u32>>> {
+    // Every encoding must yield one channel per layer. Checked before decoding,
+    // since each encoding carries one channel per encoded entry and a packed
+    // channel's bit width reads its layer's material count.
+    let encoded = match block {
+        VoxjSampleBlock::RawJson(channels) => channels.len(),
+        VoxjSampleBlock::RleJson(channels) => channels.len(),
+        VoxjSampleBlock::PackedBase64(channels) => channels.len(),
+    };
+    if encoded != channel_counts.len() {
+        return Err(invalid_data(format!(
+            "sample block has {encoded} channels, expected {} (one per layer)",
+            channel_counts.len()
+        )));
+    }
+
     let channels: Vec<Vec<u32>> = match block {
         VoxjSampleBlock::RawJson(channels) => channels.clone(),
 
@@ -129,11 +144,7 @@ fn decode_samples(
             .iter()
             .enumerate()
             .map(|(c, base64)| {
-                // Width by `get` with a fallback rather than direct indexing,
-                // unlike the encoder: hostile input may carry more channels
-                // than layers, and the arity check below runs only after each
-                // channel decodes.
-                let width = packed_width(channel_counts.get(c).copied().unwrap_or(1));
+                let width = packed_width(channel_counts[c]);
                 let bytes = BASE64.decode(base64).map_err(Error::Base64)?;
                 check_packed_bytes(
                     &bytes,
@@ -145,15 +156,8 @@ fn decode_samples(
             .collect::<Result<Vec<_>>>()?,
     };
 
-    // Every encoding must yield one channel per layer, each holding a value
-    // for every voxel; otherwise the object's samples are malformed.
-    if channels.len() != channel_counts.len() {
-        return Err(invalid_data(format!(
-            "sample block has {} channels, expected {} (one per layer)",
-            channels.len(),
-            channel_counts.len()
-        )));
-    }
+    // Each channel must hold a value for every voxel. A short one leaves the
+    // object's samples malformed.
     if let Some(channel) = channels.iter().find(|channel| channel.len() != n) {
         return Err(invalid_data(format!(
             "sample channel has {} values, expected {n}",

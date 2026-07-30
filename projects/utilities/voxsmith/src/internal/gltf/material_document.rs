@@ -52,7 +52,10 @@ pub(crate) fn build_material_document(
     let geometry = mesh_slices(
         object,
         request.method,
-        &|voxel_id| used.material_index(voxel_id).unwrap_or(0),
+        &|voxel_id| {
+            used.material_index(voxel_id)
+                .expect("the sweep keys only the live voxels the used set indexed")
+        },
         true,
     );
 
@@ -168,7 +171,7 @@ pub(crate) fn build_material_document(
         images.push(image);
     }
 
-    let extensions = material_extensions(&used);
+    let extensions = material_extensions(&used)?;
 
     let material = build_material(&request.maps, &extensions);
 
@@ -224,7 +227,7 @@ pub(crate) fn build_material_document(
 /// when it differs from the glTF spec default so a plain export stays clean.
 /// `ior` and `transmissionFactor` come from the first used material;
 /// `emissiveStrength` is the mesh's greatest strength.
-fn material_extensions(used: &UsedMaterials) -> Map<String, Value> {
+fn material_extensions(used: &UsedMaterials) -> Result<Map<String, Value>> {
     let mut extensions = Map::new();
 
     for (key, extension, field) in [
@@ -235,9 +238,9 @@ fn material_extensions(used: &UsedMaterials) -> Map<String, Value> {
             "transmissionFactor",
         ),
     ] {
-        let value = material_scalar(used, 0, key);
+        let value = material_scalar(used, 0, key)?;
 
-        if value != default_scalar(key).unwrap_or(0.0) {
+        if value != default_scalar(key).expect("ior and transmissionFactor have glTF defaults") {
             extensions.insert(extension.to_owned(), json!({ field: value }));
         }
     }
@@ -245,15 +248,16 @@ fn material_extensions(used: &UsedMaterials) -> Map<String, Value> {
     // With an emissive map the greatest strength restores the scale its texels
     // were normalized by; without one it carries the flat factor like ior and
     // transmission. Skipped when it is the default 1 or the mesh emits nothing.
-    let max = max_emissive_strength(used);
-    if max > 0.0 && max != default_scalar(EMISSIVE_STRENGTH).unwrap_or(0.0) {
+    let max = max_emissive_strength(used)?;
+    let default = default_scalar(EMISSIVE_STRENGTH).expect("emissiveStrength has a glTF default");
+    if max > 0.0 && max != default {
         extensions.insert(
             "KHR_materials_emissive_strength".to_owned(),
             json!({ "emissiveStrength": max }),
         );
     }
 
-    extensions
+    Ok(extensions)
 }
 
 /// How one image is carried, given the storage mode and container.

@@ -12,10 +12,10 @@ use std::{
 };
 use voxcore::{VoxEffectivePalette, VoxMain, VoxObject, VoxValuePool, VoxValuePoolKind};
 use voxsmith::{
-    AtlasShape, ColorChannel, GltfAttributeKind, MaterialBake, MaterialChannel, MaterialMap,
-    MaterialMeshRequest, MaterialSlot, MeshMethod as VoxsmithMeshMethod,
-    ResourceStorage as VoxsmithResourceStorage, object_to_glb_bytes, object_to_gltf_bytes,
-    object_to_material_glb, object_to_material_gltf,
+    AtlasShape, BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH,
+    GltfAttributeKind, MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest,
+    MaterialSlot, MeshMethod as VoxsmithMeshMethod, ResourceStorage as VoxsmithResourceStorage,
+    object_to_glb_bytes, object_to_gltf_bytes, object_to_material_glb, object_to_material_gltf,
 };
 
 /// Meshes the object at index `object_index` of the voxel file at `input` into
@@ -107,20 +107,50 @@ fn validate_maps(state: &VoxMain, object: &VoxObject, maps: &[MeshTextureMap]) -
         .map_err(|error| IOError::new(ErrorKind::InvalidInput, error))?;
 
     for map in maps {
-        let TextureBake::Packing(packing) = &map.bake else {
-            continue;
-        };
+        match &map.bake {
+            TextureBake::Packing(packing) => {
+                for source in packing.sources() {
+                    let ChannelSource::Property { key, component, .. } = source else {
+                        continue;
+                    };
 
-        for source in packing.sources() {
-            let ChannelSource::Property { key, component, .. } = source else {
-                continue;
-            };
+                    validate_channel(&effective, &key, component)?;
+                }
+            }
 
-            validate_channel(&effective, &key, component)?;
+            // The color bakes name no channels. Each reads a fixed property
+            // whole, so it is checked against the kind it reads that property as.
+            TextureBake::RgbaColor => validate_color(&effective, BASE_COLOR_FACTOR)?,
+
+            TextureBake::EmissiveColor => {
+                validate_color(&effective, EMISSIVE_FACTOR)?;
+                validate_scalar(&effective, EMISSIVE_STRENGTH)?;
+            }
         }
     }
 
     Ok(())
+}
+
+/// Validates that `key` reads as a color, for a bake that takes it whole.
+fn validate_color(effective: &VoxEffectivePalette, key: &str) -> Result<()> {
+    match channel_kind(effective, key)? {
+        ChannelKind::Color { .. } => Ok(()),
+        ChannelKind::Scalar => Err(Error::usage(format!(
+            "`{key}` is a scalar, and this bake reads it as a color"
+        ))),
+    }
+}
+
+/// Validates that `key` reads as a scalar, for a bake that takes it as a plain
+/// factor.
+fn validate_scalar(effective: &VoxEffectivePalette, key: &str) -> Result<()> {
+    match channel_kind(effective, key)? {
+        ChannelKind::Scalar => Ok(()),
+        ChannelKind::Color { .. } => Err(Error::usage(format!(
+            "`{key}` is a color, and this bake reads it as a scalar"
+        ))),
+    }
 }
 
 /// Validates one property channel against its kind: a color must name a
@@ -279,7 +309,7 @@ fn atlas_shape(shape: TextureShape) -> AtlasShape {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_channel;
+    use super::{validate_channel, validate_color, validate_scalar};
     use crate::ColorComponent;
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
@@ -429,6 +459,39 @@ mod tests {
             "subsurface",
             Some(ColorComponent::R)
         ));
+    }
+
+    /// Whether `key` validates as a whole color, then as a scalar, against an
+    /// object layering the given palettes in order.
+    fn validates_whole(
+        state: &VoxMain,
+        palette_ids: &[U32Id<BVoxPalette>],
+        key: &str,
+    ) -> (bool, bool) {
+        let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        for &palette_id in palette_ids {
+            object.add_layer(palette_id, U32Id::from_u32(0));
+        }
+        let effective = state.effective_palette(&object).unwrap();
+        (
+            validate_color(&effective, key).is_ok(),
+            validate_scalar(&effective, key).is_ok(),
+        )
+    }
+
+    #[test]
+    fn a_whole_read_property_is_checked_against_the_kind_it_is_read_as() {
+        // The rgba and emissive bakes name no channel, so each fixed property
+        // is checked whole before it reaches the baker.
+        let (state, palette_id) = palette_state();
+        assert_eq!(
+            validates_whole(&state, &[palette_id], "tint"),
+            (true, false)
+        );
+        assert_eq!(
+            validates_whole(&state, &[palette_id], "gloss"),
+            (false, true)
+        );
     }
 
     #[test]

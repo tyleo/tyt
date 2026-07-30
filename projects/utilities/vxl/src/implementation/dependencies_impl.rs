@@ -3,10 +3,10 @@ use crate::{
     VoxjFormat, Width,
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
-        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, PaletteListFields,
-        PaletteListLayout, PaletteReduction, PaletteShowLabel, PaletteShowLayout,
-        PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage, SurfaceMode,
-        TextureShape, ValidateLayout,
+        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeFactor,
+        PaletteListFields, PaletteListLayout, PaletteReduction, PaletteShowLabel,
+        PaletteShowLayout, PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage,
+        SurfaceMode, TextureShape, ValidateLayout,
     },
     implementation,
 };
@@ -79,6 +79,7 @@ impl Dependencies for DependenciesImpl {
         encoding: VoxjEncoding,
         format: VoxjFormat,
         color_format: VoxjColorFormat,
+        out_of_range_factor: OutOfRangeFactor,
     ) -> Result<()> {
         implementation::voxelize(
             input,
@@ -94,6 +95,7 @@ impl Dependencies for DependenciesImpl {
             encoding,
             format,
             color_format,
+            out_of_range_factor,
         )
     }
 
