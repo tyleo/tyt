@@ -1,6 +1,7 @@
 # Naming Sweep Plan
 
-Status: **open.** Iteration 1 (`voxcore`) is in progress.
+Status: **open.** Iteration 1 (`voxcore`) is complete and awaiting the
+owner's gate review; iteration 2 (`voxsmith`) is next.
 
 This plan carries the naming rules the recent `voxcore` and voxj commit
 series established across the crates that still miss them. Three rules, one
