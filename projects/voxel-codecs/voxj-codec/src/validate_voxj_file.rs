@@ -101,9 +101,9 @@ mod tests {
         }
     }
 
-    /// `valid_file` with `value_pool` appended as an extra, unreferenced value
-    /// pool. No palette binds it, so a content fault in `value_pool` is the
-    /// document's only failure and isolates the value-pools check.
+    /// `valid_file` with `value_pool` appended as an extra, unreferenced
+    /// value pool. No palette binds it, so a content fault in `value_pool` is
+    /// the document's only failure and isolates the value-pools check.
     fn file_with_extra_value_pool(value_pool: VoxjValuePool) -> VoxjFile {
         let mut file = valid_file();
         file.main.runtime_state.value_pools.push(value_pool);

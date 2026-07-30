@@ -2,10 +2,10 @@ use crate::{VoxjBound, VoxjValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A shared pool of values, all of one shape. The variant is the value pool's
-/// kind: the bounded kinds carry `min`/`max` and typed numeric values, the
-/// unbounded kinds carry only their values. Palettes reference value pools by
-/// index and read values out by value-index.
+/// A shared value pool, its values all of one shape. The variant is the
+/// value pool's kind: the bounded kinds carry `min`/`max` and typed numeric
+/// values, the unbounded kinds carry only their values. Palettes reference
+/// value pools by index and read values out by value-index.
 ///
 /// Serde tags the variant by a `kind` field, so the wire shape is
 /// `{ "kind", "values" }` plus `min`/`max` on the bounded kinds. Value shapes
@@ -20,13 +20,13 @@ use serde::{Deserialize, Serialize};
 pub enum VoxjValuePool {
     /// Arbitrary JSON values, including `null`.
     Json {
-        /// The pooled values.
+        /// The value pool's values.
         values: Vec<VoxjValue>,
     },
 
     /// Boolean values.
     Bool {
-        /// The pooled values.
+        /// The value pool's values.
         values: Vec<bool>,
     },
 
@@ -38,7 +38,7 @@ pub enum VoxjValuePool {
         /// Upper bound, a finite number or `"none"`.
         max: VoxjBound,
 
-        /// The pooled values.
+        /// The value pool's values.
         values: Vec<f64>,
     },
 
@@ -50,49 +50,49 @@ pub enum VoxjValuePool {
         /// Upper bound, a finite number or `"none"`.
         max: VoxjBound,
 
-        /// The pooled values.
+        /// The value pool's values.
         values: Vec<i64>,
     },
 
     /// String values.
     String {
-        /// The pooled values.
+        /// The value pool's values.
         values: Vec<String>,
     },
 
     /// Three-component sRGB float colors, each component in `[0, 1]`.
     SrgbFloat {
-        /// The pooled colors.
+        /// The value pool's colors.
         values: Vec<[f64; 3]>,
     },
 
     /// `#RRGGBB` sRGB hex color strings.
     SrgbHex {
-        /// The pooled colors.
+        /// The value pool's colors.
         values: Vec<String>,
     },
 
     /// Four-component sRGB float colors, each component in `[0, 1]`.
     SrgbaFloat {
-        /// The pooled colors.
+        /// The value pool's colors.
         values: Vec<[f64; 4]>,
     },
 
     /// `#RRGGBBAA` sRGB hex color strings.
     SrgbaHex {
-        /// The pooled colors.
+        /// The value pool's colors.
         values: Vec<String>,
     },
 
     /// Three-component linear float colors, each component `>= 0`.
     LinearRgbFloat {
-        /// The pooled colors.
+        /// The value pool's colors.
         values: Vec<[f64; 3]>,
     },
 
     /// Four-component linear float colors, each component `>= 0`.
     LinearRgbaFloat {
-        /// The pooled colors.
+        /// The value pool's colors.
         values: Vec<[f64; 4]>,
     },
 }

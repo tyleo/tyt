@@ -202,11 +202,12 @@ report-command output assertions are unchanged outside the message commit.
 - [x] One commit renaming the outer subject indices in the seven `check_*`
       functions to `<entity>_index` (the survey's 14 sites), message texts
       unchanged.
-- [ ] Bare-pool prose the survey missed, one docs commit: the nine
-      `The pooled values` and `The pooled colors` field docs and the type
-      doc's `A shared pool of values` in `voxj/src/voxj_value_pool.rs`, plus
-      the wrap-split mentions in `voxj-codec`'s `validate_voxj_file.rs:105`
-      and `check_value_pools.rs:6`. Iteration 3's gate surfaced these with a
+- [x] Bare-pool prose the survey missed, one docs commit: the eleven
+      `The pooled values` and `The pooled colors` field docs (the count read
+      nine before the recount) and the type doc's `A shared pool of values`
+      in `voxj/src/voxj_value_pool.rs`, plus the wrap-split mentions in
+      `voxj-codec`'s `validate_voxj_file.rs:105` and
+      `check_value_pools.rs:6`. Iteration 3's gate surfaced these with a
       grep that also strips the id-pool forms, so a bare mention could not
       hide behind a spelled-out one on its line.
 

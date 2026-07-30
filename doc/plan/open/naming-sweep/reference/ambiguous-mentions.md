@@ -52,3 +52,7 @@ ruling time), ruling, why.
   "value pool" or "Value pools" earlier, so the gate grep's line-based
   exclusion hid the trailing bare mention through iteration 1; spelled out
   during iteration 3's gate.
+- `validate_voxj_file.rs:105` and `check_value_pools.rs:6` — already
+  correct, wrap artifacts. Both wrapped "value pool" across two lines, so
+  the line-based gate grep read the trailing half as a bare mention;
+  rewrapped so each sits on one line, wording unchanged.
