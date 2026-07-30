@@ -175,13 +175,13 @@ fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKin
         .expect("a resolved name identifies one of the effective palette's properties")
         .value_pool();
 
-    pool_kind(value_pool, key)
+    value_pool_kind(value_pool, key)
 }
 
 /// Classifies a bound value pool into a channel kind, rejecting a pool that has
 /// no texel value: a string or json pool.
-fn pool_kind(pool: &VoxValuePool, key: &str) -> Result<ChannelKind> {
-    match pool.kind() {
+fn value_pool_kind(value_pool: &VoxValuePool, key: &str) -> Result<ChannelKind> {
+    match value_pool.kind() {
         VoxValuePoolKind::Srgb { .. } | VoxValuePoolKind::LinearRgb { .. } => {
             Ok(ChannelKind::Color { alpha: false })
         }
@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[test]
-    fn a_string_pool_has_no_texel_value() {
+    fn a_string_value_pool_has_no_texel_value() {
         let mut state = VoxMain::default();
         let tag_value_pool_id =
             state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]).unwrap());

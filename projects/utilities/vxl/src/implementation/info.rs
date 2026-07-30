@@ -360,10 +360,15 @@ mod tests {
     /// material.
     fn tight_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let colors_value_pool_id =
+            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), pool, U32Id::from_u32(0))
+            .add_property(
+                "baseColorFactor".to_owned(),
+                colors_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
         let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette_id = state.add_palette(palette).unwrap();

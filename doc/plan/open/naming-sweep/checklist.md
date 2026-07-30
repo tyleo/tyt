@@ -172,10 +172,13 @@ Gate: workspace green; the voxsmith gate grep returns nothing.
       Moot: `Mesh::layer`, its `--layer` flag, and the `layer` parameters
       went away with the layer-flatten rework, so there is no
       `--layer-index` to move.
-- [ ] Value-pool identifiers: `pool_kind` in `mesh_object.rs`; the `pool`
-      and `pool_id` locals and the `pool: &VoxValuePool` parameters in
-      `palette_show.rs`; the `srgba_pool` test helper; the fixture locals
-      (`let pool` and kin); the three test names saying bare pool.
+- [x] Value-pool identifiers: `pool_kind` in `mesh_object.rs`; the
+      `pool: &VoxValuePool` parameters in `palette_show.rs` (its `pool` and
+      `pool_id` locals landed with voxcore's parameter rename); the
+      `srgba_pool` test helper; the fixture locals (`let pool` and kin) in
+      `palette_show.rs`, `info.rs`, and `hierarchy_show.rs`; and the four
+      test names saying bare pool (the survey's three plus
+      `mesh_object.rs`'s).
 - [ ] Prose, one docs commit: the comment and doc lines in
       `palette_show.rs`, `mesh_object.rs`, `channel_source.rs`,
       `dependencies.rs`, `write_voxj_document.rs`,
