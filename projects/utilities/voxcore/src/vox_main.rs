@@ -51,9 +51,9 @@ impl VoxMain {
                 }
             }
         }
-        let id = self.runtime_state.object_ids.retain();
-        self.runtime_state.objects.retain(id, object);
-        Ok(id)
+        let object_id = self.runtime_state.object_ids.retain();
+        self.runtime_state.objects.retain(object_id, object);
+        Ok(object_id)
     }
 
     /// Number of objects.
@@ -73,10 +73,11 @@ impl VoxMain {
     /// Objects in listing order, as `(id, object)`.
     pub fn iter_objects(&self) -> impl Iterator<Item = (U32Id<BVoxObject>, &VoxObject)> + '_ {
         // Safety: retained ids have a value.
-        self.runtime_state
-            .object_ids
-            .iter()
-            .map(move |id| (id, unsafe { self.runtime_state.objects.get(id) }))
+        self.runtime_state.object_ids.iter().map(move |object_id| {
+            (object_id, unsafe {
+                self.runtime_state.objects.get(object_id)
+            })
+        })
     }
 
     /// Adds a layer referencing `palette_id` to object `object_id`, after its
@@ -267,9 +268,9 @@ impl VoxMain {
                 }
             }
         }
-        let id = self.runtime_state.palette_ids.retain();
-        self.runtime_state.palettes.retain(id, palette);
-        Ok(id)
+        let palette_id = self.runtime_state.palette_ids.retain();
+        self.runtime_state.palettes.retain(palette_id, palette);
+        Ok(palette_id)
     }
 
     /// Number of shared palettes.
@@ -292,7 +293,11 @@ impl VoxMain {
         self.runtime_state
             .palette_ids
             .iter()
-            .map(move |id| (id, unsafe { self.runtime_state.palettes.get(id) }))
+            .map(move |palette_id| {
+                (palette_id, unsafe {
+                    self.runtime_state.palettes.get(palette_id)
+                })
+            })
     }
 
     /// Moves palette `id` to position `index` in the listing, shifting the
@@ -403,9 +408,11 @@ impl VoxMain {
 
     /// Adds a shared value pool at the end of the listing, returning its id.
     pub fn add_value_pool(&mut self, value_pool: VoxValuePool) -> U32Id<BVoxValuePool> {
-        let id = self.runtime_state.value_pool_ids.retain();
-        self.runtime_state.value_pools.retain(id, value_pool);
-        id
+        let value_pool_id = self.runtime_state.value_pool_ids.retain();
+        self.runtime_state
+            .value_pools
+            .retain(value_pool_id, value_pool);
+        value_pool_id
     }
 
     /// Number of shared value pools.
@@ -430,7 +437,11 @@ impl VoxMain {
         self.runtime_state
             .value_pool_ids
             .iter()
-            .map(move |id| (id, unsafe { self.runtime_state.value_pools.get(id) }))
+            .map(move |value_pool_id| {
+                (value_pool_id, unsafe {
+                    self.runtime_state.value_pools.get(value_pool_id)
+                })
+            })
     }
 
     /// Moves value pool `id` to position `index` in the listing, shifting the
@@ -541,9 +552,9 @@ impl VoxMain {
         node: VoxHierarchyNode,
     ) -> Result<U32Id<BVoxHierarchyNode>> {
         self.check_inserted_node(&node, 0, &HashSet::new())?;
-        let id = self.runtime_state.hierarchy_node_ids.retain();
-        self.runtime_state.hierarchy_nodes.retain(id, node);
-        Ok(id)
+        let node_id = self.runtime_state.hierarchy_node_ids.retain();
+        self.runtime_state.hierarchy_nodes.retain(node_id, node);
+        Ok(node_id)
     }
 
     /// Adds a batch of hierarchy nodes at the end of the listing, assigning
@@ -578,7 +589,7 @@ impl VoxMain {
         let index_of: HashMap<U32Id<BVoxHierarchyNode>, usize> = prospective_ids
             .iter()
             .enumerate()
-            .map(|(index, &id)| (id, index))
+            .map(|(node_index, &node_id)| (node_id, node_index))
             .collect();
         let children: Vec<&[U32Id<BVoxHierarchyNode>]> = nodes
             .iter()
@@ -591,9 +602,9 @@ impl VoxMain {
         let ids: Vec<U32Id<BVoxHierarchyNode>> = nodes
             .into_iter()
             .map(|node| {
-                let id = self.runtime_state.hierarchy_node_ids.retain();
-                self.runtime_state.hierarchy_nodes.retain(id, node);
-                id
+                let node_id = self.runtime_state.hierarchy_node_ids.retain();
+                self.runtime_state.hierarchy_nodes.retain(node_id, node);
+                node_id
             })
             .collect();
         debug_assert_eq!(ids, prospective_ids, "the pool assigned the predicted ids");
@@ -677,7 +688,11 @@ impl VoxMain {
         self.runtime_state
             .hierarchy_node_ids
             .iter()
-            .map(move |id| (id, unsafe { self.runtime_state.hierarchy_nodes.get(id) }))
+            .map(move |node_id| {
+                (node_id, unsafe {
+                    self.runtime_state.hierarchy_nodes.get(node_id)
+                })
+            })
     }
 
     /// The scene's roots: hierarchy node ids.
@@ -830,9 +845,11 @@ impl VoxMain {
         // Safety: the palette id is retained.
         let palette_ref = unsafe { self.runtime_state.palettes.get(palette_id) };
         for (&material_id, &replacement_id) in replacement_ids {
-            for id in [material_id, replacement_id] {
-                if !palette_ref.contains_material(id) {
-                    return Err(Error::UnknownMaterial { material_id: id });
+            for checked_material_id in [material_id, replacement_id] {
+                if !palette_ref.contains_material(checked_material_id) {
+                    return Err(Error::UnknownMaterial {
+                        material_id: checked_material_id,
+                    });
                 }
             }
             if replacement_ids.contains_key(&replacement_id) {
@@ -1042,7 +1059,7 @@ impl VoxMain {
         let mut referenced_ids: HashMap<U32Id<BVoxValuePool>, HashSet<U32Id<BVoxValuePoolValue>>> =
             value_pool_ids
                 .iter()
-                .map(|&id| (id, HashSet::new()))
+                .map(|&value_pool_id| (value_pool_id, HashSet::new()))
                 .collect();
 
         for palette_id in self.runtime_state.palette_ids.iter() {
@@ -1278,7 +1295,7 @@ impl VoxMain {
         let index_of: HashMap<U32Id<BVoxHierarchyNode>, usize> = node_ids
             .iter()
             .enumerate()
-            .map(|(index, &id)| (id, index))
+            .map(|(node_index, &node_id)| (node_id, node_index))
             .collect();
         let children: Vec<&[U32Id<BVoxHierarchyNode>]> = node_ids
             .iter()
@@ -2531,7 +2548,10 @@ mod tests {
         // get wrong, listing `c_id` before `b_id`.
         assert_eq!(state.remove_palette(a_id), Ok(()));
         assert_eq!(
-            state.iter_palettes().map(|(id, _)| id).collect::<Vec<_>>(),
+            state
+                .iter_palettes()
+                .map(|(palette_id, _)| palette_id)
+                .collect::<Vec<_>>(),
             [b_id, c_id]
         );
     }
@@ -2586,7 +2606,10 @@ mod tests {
 
         // Both layers on `a_id` are gone and the survivors keep their order.
         assert_eq!(
-            state.iter_palettes().map(|(id, _)| id).collect::<Vec<_>>(),
+            state
+                .iter_palettes()
+                .map(|(palette_id, _)| palette_id)
+                .collect::<Vec<_>>(),
             [b_id, c_id]
         );
         let object_ref = state.object(object_id).unwrap();
@@ -2636,7 +2659,7 @@ mod tests {
         assert_eq!(
             state
                 .iter_hierarchy_nodes()
-                .map(|(id, _)| id)
+                .map(|(node_id, _)| node_id)
                 .collect::<Vec<_>>(),
             [b_id, c_id]
         );
@@ -2678,7 +2701,10 @@ mod tests {
 
         assert_eq!(state.move_palette(b_id, 0), Ok(()));
         assert_eq!(
-            state.iter_palettes().map(|(id, _)| id).collect::<Vec<_>>(),
+            state
+                .iter_palettes()
+                .map(|(palette_id, _)| palette_id)
+                .collect::<Vec<_>>(),
             [b_id, a_id]
         );
         assert_eq!(state.palette_index(b_id), Some(0));
@@ -2707,7 +2733,7 @@ mod tests {
         assert_eq!(
             state
                 .iter_value_pools()
-                .map(|(id, _)| id)
+                .map(|(value_pool_id, _)| value_pool_id)
                 .collect::<Vec<_>>(),
             [b_id, a_id]
         );
@@ -2834,7 +2860,7 @@ mod tests {
         assert_eq!(
             state
                 .iter_objects()
-                .map(|(id, _)| id.to_u32())
+                .map(|(object_id, _)| object_id.to_u32())
                 .collect::<Vec<_>>(),
             [0, 1]
         );
@@ -2861,7 +2887,7 @@ mod tests {
         assert_eq!(
             value_pool
                 .iter_values()
-                .map(|(id, _)| id.to_u32())
+                .map(|(value_id, _)| value_id.to_u32())
                 .collect::<Vec<_>>(),
             [0, 1]
         );
@@ -2923,7 +2949,7 @@ mod tests {
         assert_eq!(
             state
                 .iter_value_pools()
-                .map(|(id, _)| id.to_u32())
+                .map(|(value_pool_id, _)| value_pool_id.to_u32())
                 .collect::<Vec<_>>(),
             [0, 1]
         );
@@ -3018,7 +3044,7 @@ mod tests {
                 .object(object_id)
                 .unwrap()
                 .iter_layers()
-                .map(|(id, _)| id)
+                .map(|(layer_id, _)| layer_id)
                 .collect::<Vec<_>>(),
             [overlay_id, base_id]
         );

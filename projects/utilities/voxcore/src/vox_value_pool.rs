@@ -254,7 +254,7 @@ impl VoxValuePool {
     ) -> impl Iterator<Item = (U32Id<BVoxValuePoolValue>, VoxValuePoolValueRef<'_>)> + '_ {
         self.value_ids
             .iter()
-            .map(move |id| (id, self.value_ref(id)))
+            .map(move |value_id| (value_id, self.value_ref(value_id)))
     }
 
     /// The listing position of value `id`, or `None` if `id` is not one of
@@ -518,8 +518,8 @@ fn columns<T>(values: Vec<T>) -> (IdStruct<BVoxValuePoolValue>, IdField<BVoxValu
     let mut ids = IdStruct::new();
     let mut column = IdField::with_capacity(values.len());
     for value in values {
-        let id = ids.retain();
-        column.retain(id, value);
+        let value_id = ids.retain();
+        column.retain(value_id, value);
     }
     (ids, column)
 }
@@ -530,9 +530,9 @@ fn cloned<T: Clone>(
     column: &IdField<BVoxValuePoolValue, T>,
 ) -> IdField<BVoxValuePoolValue, T> {
     let mut copy = IdField::with_capacity(ids.len());
-    for id in ids.iter() {
+    for value_id in ids.iter() {
         // Safety: retained ids have a value.
-        copy.retain(id, unsafe { column.get(id) }.clone());
+        copy.retain(value_id, unsafe { column.get(value_id) }.clone());
     }
     copy
 }

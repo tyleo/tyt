@@ -97,7 +97,7 @@ impl VoxPalette {
         // Safety: retained ids have a value.
         self.property_ids
             .iter()
-            .map(move |id| (id, unsafe { self.properties.get(id) }))
+            .map(move |property_id| (property_id, unsafe { self.properties.get(property_id) }))
     }
 
     /// Adds a material with one value id per property, in
@@ -458,7 +458,7 @@ mod tests {
         assert_eq!(
             palette
                 .iter_properties()
-                .map(|(id, p)| (id, p.name.as_str()))
+                .map(|(property_id, property)| (property_id, property.name.as_str()))
                 .collect::<Vec<_>>(),
             [(metallic_id, "metallic_id"), (ior_id, "ior_id")]
         );
@@ -625,7 +625,7 @@ mod tests {
         assert_eq!(
             palette
                 .iter_properties()
-                .map(|(id, property)| (id, property.name.as_str()))
+                .map(|(property_id, property)| (property_id, property.name.as_str()))
                 .collect::<Vec<_>>(),
             [(b_id, "b"), (c_id, "c")]
         );
@@ -637,7 +637,7 @@ mod tests {
         assert_eq!(
             palette
                 .iter_properties()
-                .map(|(id, _)| id)
+                .map(|(property_id, _)| property_id)
                 .collect::<Vec<_>>(),
             [b_id, c_id, d_id]
         );
@@ -684,7 +684,7 @@ mod tests {
         assert_eq!(
             palette
                 .iter_properties()
-                .map(|(id, _)| id)
+                .map(|(property_id, _)| property_id)
                 .collect::<Vec<_>>(),
             [c_id, a_id, b_id]
         );
@@ -705,7 +705,7 @@ mod tests {
         assert_eq!(
             palette
                 .iter_properties()
-                .map(|(id, _)| id)
+                .map(|(property_id, _)| property_id)
                 .collect::<Vec<_>>(),
             [c_id, a_id, b_id]
         );

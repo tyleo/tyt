@@ -117,7 +117,7 @@ mod tests {
     use crate::{BVoxVoxel, VoxLiveness};
     use branded_id::U32Id;
 
-    fn id(index: u32) -> U32Id<BVoxVoxel> {
+    fn voxel_id(index: u32) -> U32Id<BVoxVoxel> {
         U32Id::from_u32(index)
     }
 
@@ -128,14 +128,14 @@ mod tests {
         assert!(!liveness.is_empty());
 
         for index in [0, 1, 63, 64, 65, 129] {
-            assert!(!liveness.is_live(id(index)));
-            liveness.set_live(id(index), true);
-            assert!(liveness.is_live(id(index)));
+            assert!(!liveness.is_live(voxel_id(index)));
+            liveness.set_live(voxel_id(index), true);
+            assert!(liveness.is_live(voxel_id(index)));
         }
 
-        liveness.set_live(id(64), false);
-        assert!(!liveness.is_live(id(64)));
-        assert!(liveness.is_live(id(65)));
+        liveness.set_live(voxel_id(64), false);
+        assert!(!liveness.is_live(voxel_id(64)));
+        assert!(liveness.is_live(voxel_id(65)));
     }
 
     #[test]
@@ -143,11 +143,14 @@ mod tests {
         let mut liveness = VoxLiveness::new(200);
         let live = [3, 64, 65, 130, 199];
         for index in live {
-            liveness.set_live(id(index), true);
+            liveness.set_live(voxel_id(index), true);
         }
 
         assert_eq!(liveness.count_live(), live.len());
-        let got: Vec<u32> = liveness.iter_live().map(|id| id.to_u32()).collect();
+        let got: Vec<u32> = liveness
+            .iter_live()
+            .map(|voxel_id| voxel_id.to_u32())
+            .collect();
         assert_eq!(got, live);
     }
 
@@ -158,7 +161,7 @@ mod tests {
         // [130, 192) must still panic rather than silently set a trailing bit,
         // which would corrupt count_live / iter_live / equality.
         let mut liveness = VoxLiveness::new(130);
-        liveness.set_live(id(150), true);
+        liveness.set_live(voxel_id(150), true);
     }
 
     #[test]

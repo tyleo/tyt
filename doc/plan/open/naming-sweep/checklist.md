@@ -66,7 +66,7 @@ suffixes and the spelled-out value pool, one iteration per crate, in order:
 - [x] The index residue: `first_cycle_position`'s `start` and `node`
       bindings and its two callers' `index` and `position` locals become
       `_index` forms, matching the swept voxj-codec twin.
-- [ ] The bare-`id` bindings under the Q2 policy: the seven loop bindings
+- [x] The bare-`id` bindings under the Q2 policy: the seven loop bindings
       (`vox_runtime_state.rs`, `vox_object.rs`, `vox_main.rs`,
       `vox_value_pool.rs`) and the closure arguments take entity names; the
       accessor subject parameters stay `id`.

@@ -49,27 +49,39 @@ impl VoxRuntimeState {
     /// types can't derive `Clone`.
     pub(crate) fn clone_runtime_state(&self) -> Self {
         let mut value_pools = IdField::new();
-        for id in self.value_pool_ids.iter() {
+        for value_pool_id in self.value_pool_ids.iter() {
             // Safety: retained ids have a value.
-            value_pools.retain(id, unsafe { self.value_pools.get(id) }.clone_value_pool());
+            value_pools.retain(
+                value_pool_id,
+                unsafe { self.value_pools.get(value_pool_id) }.clone_value_pool(),
+            );
         }
 
         let mut palettes = IdField::new();
-        for id in self.palette_ids.iter() {
+        for palette_id in self.palette_ids.iter() {
             // Safety: retained ids have a value.
-            palettes.retain(id, unsafe { self.palettes.get(id) }.clone_palette());
+            palettes.retain(
+                palette_id,
+                unsafe { self.palettes.get(palette_id) }.clone_palette(),
+            );
         }
 
         let mut objects = IdField::new();
-        for id in self.object_ids.iter() {
+        for object_id in self.object_ids.iter() {
             // Safety: retained ids have a value.
-            objects.retain(id, unsafe { self.objects.get(id) }.clone_object());
+            objects.retain(
+                object_id,
+                unsafe { self.objects.get(object_id) }.clone_object(),
+            );
         }
 
         let mut hierarchy_nodes = IdField::new();
-        for id in self.hierarchy_node_ids.iter() {
+        for node_id in self.hierarchy_node_ids.iter() {
             // Safety: retained ids have a value.
-            hierarchy_nodes.retain(id, unsafe { self.hierarchy_nodes.get(id) }.clone());
+            hierarchy_nodes.retain(
+                node_id,
+                unsafe { self.hierarchy_nodes.get(node_id) }.clone(),
+            );
         }
 
         Self {
