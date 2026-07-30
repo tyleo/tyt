@@ -135,7 +135,8 @@ fn describe(bound: VoxjBound) -> String {
     }
 }
 
-/// Every hex color is `#` followed by exactly `digits` uppercase hex characters.
+/// Every hex color is `#` followed by exactly `digits` uppercase hex
+/// characters.
 fn check_hex(value_pool_index: usize, values: &[String], digits: usize, failures: &mut Failures) {
     for (value_index, value) in values.iter().enumerate() {
         if !is_hex_color(value, digits) {

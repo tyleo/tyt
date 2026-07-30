@@ -4,8 +4,8 @@ use voxj::VoxjFile;
 /// Checks a [`VoxjFile`] against every one of the format's document rules and
 /// returns one [`VoxjCheck`] per check, in a fixed order, each marked passed,
 /// failed (with one message per problem found), or unverifiable. Unlike
-/// [`validate_voxj_file`](crate::validate_voxj_file()), which stops at the first
-/// failure, this runs them all so a report can list every problem.
+/// [`validate_voxj_file`](crate::validate_voxj_file()), which stops at the
+/// first failure, this runs them all so a report can list every problem.
 ///
 /// The checks, in report order, are:
 /// 1. `version`: the version is recognized.
