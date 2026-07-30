@@ -358,13 +358,13 @@ mod tests {
 
     /// Tags a triangle soup with one material so the geometry tests can build
     /// [`MeshTriangle`]s from plain points.
-    fn tagged(points: Vec<[[f64; 3]; 3]>, material: u32) -> Vec<MeshTriangle> {
+    fn tagged(points: Vec<[[f64; 3]; 3]>, material_index: u32) -> Vec<MeshTriangle> {
         points
             .into_iter()
             .map(|points| MeshTriangle {
                 points: points.map(|[x, y, z]| TyVector3F64::new(x, y, z)),
                 uvs: MeshTriangleUvs::default(),
-                material,
+                material_index,
             })
             .collect()
     }

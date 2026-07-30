@@ -170,8 +170,9 @@ fn primitive_cells(mesh: &Mesh, grid: &VoxelGrid) -> Vec<Option<MeshMaterial>> {
     grid.triangle
         .iter()
         .map(|&covering| {
-            covering
-                .map(|triangle| mesh.materials[mesh.triangles[triangle as usize].material as usize])
+            covering.map(|triangle| {
+                mesh.materials[mesh.triangles[triangle as usize].material_index as usize]
+            })
         })
         .collect()
 }
@@ -596,14 +597,14 @@ mod tests {
     /// A two-cell mesh over a `2x1x1` grid: one triangle inside each unit
     /// cell, the left tagged material `0` and the right material `1`.
     fn two_cell_mesh(materials: Vec<MeshMaterial>) -> Mesh {
-        let triangle = |cell: f64, material: u32| MeshTriangle {
+        let triangle = |cell: f64, material_index: u32| MeshTriangle {
             points: [
                 TyVector3F64::new(cell + 0.2, 0.2, 0.5),
                 TyVector3F64::new(cell + 0.8, 0.2, 0.5),
                 TyVector3F64::new(cell + 0.5, 0.8, 0.5),
             ],
             uvs: MeshTriangleUvs::default(),
-            material,
+            material_index,
         };
 
         Mesh {

@@ -103,8 +103,8 @@ pub(crate) fn build_material_document(
 
     let uvs_offset = blob.len();
 
-    for &material in &geometry.materials {
-        for value in texel_center(material, atlas_width, atlas_height) {
+    for &material_index in &geometry.material_indices {
+        for value in texel_center(material_index, atlas_width, atlas_height) {
             blob.extend_from_slice(&value.to_le_bytes());
         }
     }

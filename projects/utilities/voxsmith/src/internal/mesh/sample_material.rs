@@ -57,7 +57,7 @@ pub(crate) fn sample_material(
     let mut accum = vec![CellAccum::default(); cells];
 
     for (index, triangle) in triangles.iter().enumerate() {
-        let material_maps = &maps[triangle.material as usize];
+        let material_maps = &maps[triangle.material_index as usize];
         if !samplable(triangle, material_maps) {
             continue;
         }
@@ -127,8 +127,8 @@ fn resolve_cell(
 ) -> Option<MeshMaterial> {
     let covering = grid.triangle[cell]? as usize;
     let triangle = &triangles[covering];
-    let material_maps = &maps[triangle.material as usize];
-    let mut material = materials[triangle.material as usize];
+    let material_maps = &maps[triangle.material_index as usize];
+    let mut material = materials[triangle.material_index as usize];
 
     let accum = if scatter.count > 0 {
         *scatter
@@ -422,7 +422,7 @@ mod tests {
                 ]),
                 ..Default::default()
             },
-            material: 0,
+            material_index: 0,
         };
         let materials = vec![MeshMaterial::flat(TySrgbaU8::new(255, 255, 255, 255))];
         let textures = vec![MeshTexture::new(1, 1, vec![[255, 0, 0, 255]])];

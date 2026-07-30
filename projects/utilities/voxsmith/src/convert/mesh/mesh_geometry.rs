@@ -24,7 +24,7 @@ pub struct MeshGeometry {
     /// [`positions`](Self::positions), when meshed with a material key; empty
     /// for the pure-geometry mesh. Every vertex of a quad shares one index,
     /// since material-keyed meshing merges only same-material faces.
-    pub materials: Vec<u32>,
+    pub material_indices: Vec<u32>,
 }
 
 impl MeshGeometry {

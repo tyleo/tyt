@@ -13,5 +13,5 @@ pub(crate) struct MeshTriangle {
     pub uvs: MeshTriangleUvs,
 
     /// Index into the mesh's material table of the material this triangle uses.
-    pub material: u32,
+    pub material_index: u32,
 }

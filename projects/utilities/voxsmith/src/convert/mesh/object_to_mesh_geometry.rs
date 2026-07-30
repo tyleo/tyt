@@ -19,8 +19,8 @@ pub fn object_to_mesh_geometry(object: &VoxObject, method: MeshMethod) -> MeshGe
 
 /// Triangulates `object` with a per-voxel material `key`, so greedy meshing
 /// merges only faces whose voxels share a key and every vertex records its key
-/// in [`MeshGeometry::materials`]. `object_to_mesh_geometry` is this with a
-/// constant key and no material tracking.
+/// in [`MeshGeometry::material_indices`]. `object_to_mesh_geometry` is this
+/// with a constant key and no material tracking.
 pub(crate) fn mesh_slices(
     object: &VoxObject,
     method: MeshMethod,
@@ -290,7 +290,7 @@ fn push_face(
         geometry.normals.push(normal);
 
         if track_materials {
-            geometry.materials.push(material);
+            geometry.material_indices.push(material);
         }
     }
 
@@ -377,7 +377,7 @@ mod tests {
         // materials.
         let pure = object_to_mesh_geometry(&object, MeshMethod::Greedy);
         assert_eq!(pure.quad_count(), 6);
-        assert!(pure.materials.is_empty());
+        assert!(pure.material_indices.is_empty());
 
         // Two materials along x (voxel id 0 vs 1) split every face that spanned
         // both voxels: the two end caps stay, the four side faces each split in
@@ -389,12 +389,12 @@ mod tests {
             true,
         );
         assert_eq!(keyed.quad_count(), 10);
-        assert_eq!(keyed.materials.len(), keyed.vertex_count());
+        assert_eq!(keyed.material_indices.len(), keyed.vertex_count());
         assert!(
             keyed
-                .materials
+                .material_indices
                 .iter()
-                .all(|&material| material == 0 || material == 1)
+                .all(|&material_index| material_index == 0 || material_index == 1)
         );
     }
 
@@ -405,8 +405,13 @@ mod tests {
         // One material still merges into a box, but every vertex records it.
         let keyed = mesh_slices(&object, MeshMethod::Greedy, &|_| 0, true);
         assert_eq!(keyed.quad_count(), 6);
-        assert_eq!(keyed.materials.len(), keyed.vertex_count());
-        assert!(keyed.materials.iter().all(|&material| material == 0));
+        assert_eq!(keyed.material_indices.len(), keyed.vertex_count());
+        assert!(
+            keyed
+                .material_indices
+                .iter()
+                .all(|&material_index| material_index == 0)
+        );
     }
 
     #[test]

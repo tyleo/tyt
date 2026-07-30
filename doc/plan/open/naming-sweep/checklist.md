@@ -143,6 +143,12 @@ Gate: workspace green; the voxcore gate grep returns only id-pool mentions
       kind-mismatch texts in `voxj_value_pool_from_vox_value_pool.rs` and
       the seven test `panic!` texts in `voxelize_mesh.rs`,
       `from_gltf_bytes.rs`, and `to_vmax_file.rs`.
+- [x] Gate residue the heuristic grep surfaced: `MeshTriangle::material`
+      and `MeshGeometry::materials` hold indices into the mesh material
+      table and become `material_index` and `material_indices` with the
+      locals that feed and read them. The greedy mesher's material-key
+      bindings keep their names: the key is a merge key, not a positional
+      index, and the pure-geometry path keys every face with a constant.
 
 Gate: workspace green; the voxsmith gate grep returns nothing.
 

@@ -113,7 +113,7 @@ fn collect_node(
 
             let gltf_material = primitive.material();
 
-            let material = material_slot(&gltf_material, mesh, slots, images, image_slots);
+            let material_index = material_slot(&gltf_material, mesh, slots, images, image_slots);
 
             // The TEXCOORD set each map slot declares, in the fixed slot order
             // base color, metallic-roughness, emissive, occlusion.
@@ -161,7 +161,7 @@ fn collect_node(
                             mesh.triangles.push(MeshTriangle {
                                 points: [a, b, c],
                                 uvs: face_slot_uvs(&slot_uvs, corners),
-                                material,
+                                material_index,
                             });
                         }
                     }
@@ -175,7 +175,7 @@ fn collect_node(
                         mesh.triangles.push(MeshTriangle {
                             points: [face[0], face[1], face[2]],
                             uvs: face_slot_uvs(&slot_uvs, [base, base + 1, base + 2]),
-                            material,
+                            material_index,
                         });
                     }
                 }
