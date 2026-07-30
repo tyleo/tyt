@@ -43,14 +43,14 @@ mod tests {
     use branded_id::U32Id;
     use gltf::{Gltf, image::Source};
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxLayer, BVoxObject, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{BVoxObject, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The 8-byte PNG signature.
     const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
     /// A 2x1x1 bar whose two voxels are red and blue through one
     /// `baseColorFactor` palette, so the mesh uses two materials.
-    fn red_blue_bar() -> (VoxMain, U32Id<BVoxObject>, U32Id<BVoxLayer>) {
+    fn red_blue_bar() -> (VoxMain, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
         let base = state.add_value_pool(
@@ -66,21 +66,20 @@ mod tests {
         let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        let layer = object.add_layer(palette_id, red);
+        object.add_layer(palette_id, red);
         for (x, material) in [(0, red), (1, blue)] {
             let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel, &[material]).unwrap();
         }
         let object_id = state.add_object(object).unwrap();
 
-        (state, object_id, layer)
+        (state, object_id)
     }
 
-    /// An albedo (base-color) request under `storage`, reading `layer`.
-    fn albedo_request(storage: ResourceStorage, layer: U32Id<BVoxLayer>) -> MaterialMeshRequest {
+    /// An albedo (base-color) request under `storage`.
+    fn albedo_request(storage: ResourceStorage) -> MaterialMeshRequest {
         MaterialMeshRequest {
             method: MeshMethod::Greedy,
-            layer,
             scale: 1.0,
             maps: vec![MaterialMap {
                 name: "bar-albedo.png".to_owned(),
@@ -94,11 +93,11 @@ mod tests {
 
     #[test]
     fn embeds_a_base_color_material_and_a_uv_set() {
-        let (state, object_id, layer) = red_blue_bar();
+        let (state, object_id) = red_blue_bar();
         let files = object_to_material_glb(
             &state,
             state.object(object_id).unwrap(),
-            &albedo_request(ResourceStorage::Embedded, layer),
+            &albedo_request(ResourceStorage::Embedded),
         )
         .unwrap();
 
@@ -133,11 +132,11 @@ mod tests {
 
     #[test]
     fn external_storage_writes_a_sidecar_and_references_it() {
-        let (state, object_id, layer) = red_blue_bar();
+        let (state, object_id) = red_blue_bar();
         let files = object_to_material_glb(
             &state,
             state.object(object_id).unwrap(),
-            &albedo_request(ResourceStorage::External, layer),
+            &albedo_request(ResourceStorage::External),
         )
         .unwrap();
 

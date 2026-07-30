@@ -5,13 +5,12 @@ use crate::{
     },
     implementation,
 };
-use branded_id::U32Id;
 use std::{
     fs,
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use voxcore::{BVoxLayer, BVoxPalette, VoxMain, VoxObject, VoxValuePool, VoxValuePoolKind};
+use voxcore::{VoxEffectivePalette, VoxMain, VoxObject, VoxValuePool, VoxValuePoolKind};
 use voxsmith::{
     AtlasShape, ColorChannel, GltfAttributeKind, MaterialBake, MaterialChannel, MaterialMap,
     MaterialMeshRequest, MaterialSlot, MeshMethod as VoxsmithMeshMethod,
@@ -20,11 +19,11 @@ use voxsmith::{
 };
 
 /// Meshes the object at index `object` of the voxel file at `input` into a mesh
-/// at `output`. With no `maps` it writes pure geometry; otherwise it bakes the
-/// materials of the object's layer `layer`, a 0-based index into its layers,
-/// into textures the mesh samples, writing any loose images beside `output`.
-/// The object index is a position into the document's objects, as
-/// [`resolve_objects`] returns.
+/// at `output`. With no `maps` it writes pure geometry. Otherwise it bakes the
+/// object's flattened layer materials, merged per property name by the
+/// format's layer-override rule, into textures the mesh samples, writing any
+/// loose images beside `output`. The object index is a position into the
+/// document's objects, as [`resolve_objects`] returns.
 ///
 /// [`resolve_objects`]: crate::implementation::resolve_objects
 #[allow(clippy::too_many_arguments)]
@@ -36,7 +35,6 @@ pub fn mesh_object(
     scale: f64,
     method: MeshMethod,
     object: usize,
-    layer: usize,
     maps: &[MeshTextureMap],
     storage: ResourceStorage,
     texture_shape: TextureShape,
@@ -65,22 +63,12 @@ pub fn mesh_object(
         return Ok(());
     }
 
-    // The material path bakes one layer's materials, chosen by `--layer`.
-    let layer_id = resolve_layer(object, layer)?;
-
-    // The maps read properties from that layer's palette, so validate each
-    // channel's component against the property's kind before baking.
-    let palette = object
-        .iter_layers()
-        .nth(layer)
-        .map(|(_, palette)| palette)
-        .expect("resolve_layer verified the layer exists");
-
-    validate_maps(&state, palette, layer, maps)?;
+    // The maps read each property through its winning layer, so validate each
+    // channel's component against the winning pool's kind before baking.
+    validate_maps(&state, object, maps)?;
 
     let request = MaterialMeshRequest {
         method,
-        layer: layer_id,
         scale,
         maps: maps.iter().map(material_map).collect(),
         storage: resource_storage(storage),
@@ -104,27 +92,6 @@ pub fn mesh_object(
     Ok(())
 }
 
-/// Resolves the `--layer` ordinal to the object's layer id, a 0-based index
-/// into its layers in reference order. Errors when the object has no such
-/// layer.
-fn resolve_layer(object: &VoxObject, layer: usize) -> Result<U32Id<BVoxLayer>> {
-    object
-        .iter_layers()
-        .nth(layer)
-        .map(|(id, _)| id)
-        .ok_or_else(|| {
-            IOError::new(
-                ErrorKind::InvalidInput,
-                format!(
-                    "object `{}` has no layer {layer}; it has {} layer(s)",
-                    object.name(),
-                    object.layer_count(),
-                ),
-            )
-            .into()
-        })
-}
-
 /// The kind a channel reads a property as, fixing whether it may name a color
 /// component.
 enum ChannelKind {
@@ -132,14 +99,13 @@ enum ChannelKind {
     Scalar,
 }
 
-/// Validates every map's property channels against the meshed layer's palette;
-/// `layer` is the `--layer` ordinal for the error text.
-fn validate_maps(
-    state: &VoxMain,
-    palette: U32Id<BVoxPalette>,
-    layer: usize,
-    maps: &[MeshTextureMap],
-) -> Result<()> {
+/// Validates every map's property channels against the object's effective
+/// palette, each key's kind read through its winning layer.
+fn validate_maps(state: &VoxMain, object: &VoxObject, maps: &[MeshTextureMap]) -> Result<()> {
+    let effective = state
+        .effective_palette(object)
+        .map_err(|error| IOError::new(ErrorKind::InvalidInput, error))?;
+
     for map in maps {
         let TextureBake::Packing(packing) = &map.bake else {
             continue;
@@ -150,7 +116,7 @@ fn validate_maps(
                 continue;
             };
 
-            validate_channel(state, palette, layer, &key, component)?;
+            validate_channel(&effective, &key, component)?;
         }
     }
 
@@ -160,13 +126,11 @@ fn validate_maps(
 /// Validates one property channel against its kind: a color must name a
 /// component and `.a` needs alpha, a scalar must name none.
 fn validate_channel(
-    state: &VoxMain,
-    palette: U32Id<BVoxPalette>,
-    layer: usize,
+    effective: &VoxEffectivePalette,
     key: &str,
     component: Option<ColorComponent>,
 ) -> Result<()> {
-    match channel_kind(state, palette, layer, key)? {
+    match channel_kind(effective, key)? {
         ChannelKind::Color { alpha } => match component {
             None => Err(Error::usage(format!(
                 "`{key}` is a color; name a component, as `{key}.r`"
@@ -187,41 +151,29 @@ fn validate_channel(
     }
 }
 
-/// The kind of the property `key` in the meshed layer: its bound pool's kind
-/// when a property carries it, else the voxj unbound-default rule, a glTF
-/// built-in by its spec kind and a custom property an error.
-fn channel_kind(
-    state: &VoxMain,
-    palette: U32Id<BVoxPalette>,
-    layer: usize,
-    key: &str,
-) -> Result<ChannelKind> {
-    let palette = state
-        .palette(palette)
-        .expect("the meshed layer references a palette the state holds");
-
-    let Some(property_id) = palette.property_id_by_name(key) else {
-        // Absent from the palette: the voxj format's unbound-default rule. A
-        // glTF built-in takes its spec kind and bakes its default; a custom
+/// The kind of the property `key`: its winning layer's pool kind when a layer
+/// supplies it, else the voxj unbound-default rule, a glTF built-in by its
+/// spec kind and a custom property an error.
+fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKind> {
+    let Some(property_id) = effective.property_id_by_name(key) else {
+        // No layer supplies it: the voxj format's unbound-default rule. A
+        // glTF built-in takes its spec kind and bakes its default. A custom
         // property has no default, so its type cannot be inferred.
         return match GltfAttributeKind::of(key) {
             Some(GltfAttributeKind::ColorRgba) => Ok(ChannelKind::Color { alpha: true }),
             Some(GltfAttributeKind::ColorRgb) => Ok(ChannelKind::Color { alpha: false }),
             Some(GltfAttributeKind::Scalar) => Ok(ChannelKind::Scalar),
             None => Err(Error::usage(format!(
-                "`{key}` is not bound in the meshed layer's palette (layer {layer}), so its type \
-                 cannot be inferred; bind it in the palette or map a glTF property"
+                "`{key}` is not bound by any of the object's layers, so its type cannot be \
+                 inferred; bind it in a palette or map a glTF property"
             ))),
         };
     };
 
-    let pool_id = palette
+    let pool = effective
         .property(property_id)
-        .expect("a property id from this palette resolves")
-        .pool_id;
-    let pool = state
-        .value_pool(pool_id)
-        .expect("a property references a pool the state holds");
+        .expect("a resolved name identifies one of the effective palette's properties")
+        .value_pool();
 
     pool_kind(pool, key)
 }
@@ -327,7 +279,7 @@ fn atlas_shape(shape: TextureShape) -> AtlasShape {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_layer, validate_channel};
+    use super::validate_channel;
     use crate::ColorComponent;
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
@@ -338,45 +290,6 @@ mod tests {
     /// The branded value id `index`.
     fn value(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
-    }
-
-    /// A standalone object with `layers` layers over one shared palette. The
-    /// backing state is dropped; the object owns its layer set.
-    fn object_with_layers(layers: usize) -> VoxObject {
-        let mut state = VoxMain::default();
-        let pool = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
-        let mut palette = VoxPalette::default();
-        palette
-            .add_property("baseColorFactor".to_owned(), pool, U32Id::from_u32(0))
-            .unwrap();
-        let material = palette.add_material(vec![value(0)]).unwrap();
-        let palette = state.add_palette(palette).unwrap();
-
-        let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        for _ in 0..layers {
-            object.add_layer(palette, material);
-        }
-        object
-    }
-
-    #[test]
-    fn resolves_each_layer_by_its_ordinal() {
-        let object = object_with_layers(2);
-        let ids: Vec<_> = object.iter_layers().map(|(id, _)| id).collect();
-        assert_eq!(resolve_layer(&object, 0).unwrap(), ids[0]);
-        assert_eq!(resolve_layer(&object, 1).unwrap(), ids[1]);
-    }
-
-    #[test]
-    fn rejects_a_layer_past_the_last() {
-        let object = object_with_layers(2);
-        assert!(resolve_layer(&object, 2).is_err());
-    }
-
-    #[test]
-    fn rejects_the_default_layer_on_a_layerless_object() {
-        let object = object_with_layers(0);
-        assert!(resolve_layer(&object, 0).is_err());
     }
 
     /// A one-palette document binding `tint` to a four-component color, `glow`
@@ -409,40 +322,65 @@ mod tests {
         (state, palette)
     }
 
-    /// Whether `key` with `component` validates against `palette`, meshed as
-    /// layer 0.
+    /// Whether `key` with `component` validates against an object layering the
+    /// given palettes in order.
     fn validates(
         state: &VoxMain,
-        palette: U32Id<BVoxPalette>,
+        palette_ids: &[U32Id<BVoxPalette>],
         key: &str,
         component: Option<ColorComponent>,
     ) -> bool {
-        validate_channel(state, palette, 0, key, component).is_ok()
+        let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        for &palette_id in palette_ids {
+            object.add_layer(palette_id, U32Id::from_u32(0));
+        }
+        let effective = state.effective_palette(&object).unwrap();
+        validate_channel(&effective, key, component).is_ok()
     }
 
     #[test]
     fn a_present_color_reads_by_component() {
         let (state, palette) = palette_state();
         // `tint` is an srgba pool: a component is required, and `.a` is allowed.
-        assert!(!validates(&state, palette, "tint", None));
-        assert!(validates(&state, palette, "tint", Some(ColorComponent::R)));
-        assert!(validates(&state, palette, "tint", Some(ColorComponent::A)));
+        assert!(!validates(&state, &[palette], "tint", None));
+        assert!(validates(
+            &state,
+            &[palette],
+            "tint",
+            Some(ColorComponent::R)
+        ));
+        assert!(validates(
+            &state,
+            &[palette],
+            "tint",
+            Some(ColorComponent::A)
+        ));
     }
 
     #[test]
     fn a_present_three_component_color_rejects_alpha() {
         let (state, palette) = palette_state();
-        assert!(validates(&state, palette, "glow", Some(ColorComponent::B)));
-        assert!(!validates(&state, palette, "glow", Some(ColorComponent::A)));
+        assert!(validates(
+            &state,
+            &[palette],
+            "glow",
+            Some(ColorComponent::B)
+        ));
+        assert!(!validates(
+            &state,
+            &[palette],
+            "glow",
+            Some(ColorComponent::A)
+        ));
     }
 
     #[test]
     fn a_present_scalar_rejects_a_component() {
         let (state, palette) = palette_state();
-        assert!(validates(&state, palette, "gloss", None));
+        assert!(validates(&state, &[palette], "gloss", None));
         assert!(!validates(
             &state,
-            palette,
+            &[palette],
             "gloss",
             Some(ColorComponent::R)
         ));
@@ -456,21 +394,21 @@ mod tests {
         // scalar, emissiveFactor a three-component color.
         assert!(validates(
             &state,
-            palette,
+            &[palette],
             "baseColorFactor",
             Some(ColorComponent::A)
         ));
-        assert!(!validates(&state, palette, "baseColorFactor", None));
-        assert!(validates(&state, palette, "occlusionStrength", None));
+        assert!(!validates(&state, &[palette], "baseColorFactor", None));
+        assert!(validates(&state, &[palette], "occlusionStrength", None));
         assert!(!validates(
             &state,
-            palette,
+            &[palette],
             "occlusionStrength",
             Some(ColorComponent::R)
         ));
         assert!(!validates(
             &state,
-            palette,
+            &[palette],
             "emissiveFactor",
             Some(ColorComponent::A)
         ));
@@ -481,10 +419,10 @@ mod tests {
         let (state, palette) = palette_state();
         // `subsurface` is neither bound nor a glTF property, so its type cannot
         // be inferred, whether or not a component is named.
-        assert!(!validates(&state, palette, "subsurface", None));
+        assert!(!validates(&state, &[palette], "subsurface", None));
         assert!(!validates(
             &state,
-            palette,
+            &[palette],
             "subsurface",
             Some(ColorComponent::R)
         ));
@@ -501,6 +439,50 @@ mod tests {
         palette.add_material(vec![value(0)]).unwrap();
         let palette = state.add_palette(palette).unwrap();
 
-        assert!(!validates(&state, palette, "tag", None));
+        assert!(!validates(&state, &[palette], "tag", None));
+    }
+
+    #[test]
+    fn a_key_takes_its_winning_layers_kind() {
+        // Two palettes bind `finish` to different kinds: a float scalar and a
+        // four-component color. The last layer's palette wins, so the layer
+        // order flips which component rule applies.
+        let mut state = VoxMain::default();
+        let scalar = state.add_value_pool(
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.5]).unwrap(),
+        );
+        let color = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+
+        let mut scalar_palette = VoxPalette::default();
+        scalar_palette
+            .add_property("finish".to_owned(), scalar, U32Id::from_u32(0))
+            .unwrap();
+        scalar_palette.add_material(vec![value(0)]).unwrap();
+        let scalar_id = state.add_palette(scalar_palette).unwrap();
+
+        let mut color_palette = VoxPalette::default();
+        color_palette
+            .add_property("finish".to_owned(), color, U32Id::from_u32(0))
+            .unwrap();
+        color_palette.add_material(vec![value(0)]).unwrap();
+        let color_id = state.add_palette(color_palette).unwrap();
+
+        // Color wins: a component is required and `.a` allowed.
+        assert!(!validates(&state, &[scalar_id, color_id], "finish", None));
+        assert!(validates(
+            &state,
+            &[scalar_id, color_id],
+            "finish",
+            Some(ColorComponent::A)
+        ));
+
+        // Scalar wins: no component allowed.
+        assert!(validates(&state, &[color_id, scalar_id], "finish", None));
+        assert!(!validates(
+            &state,
+            &[color_id, scalar_id],
+            "finish",
+            Some(ColorComponent::R)
+        ));
     }
 }

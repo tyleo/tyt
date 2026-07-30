@@ -37,9 +37,10 @@ off as they land.
 - [x] `--select` hierarchy-path glob object selector: a node path selects its
       subtree, repeatable, union over all values. See
       [conventions](reference/conventions.md).
-- [x] `--atlas` layout `ValueEnum`: palette (one texel per material of the baked
-      layer's palette, placed at its material index, shared by every mesh on that
-      palette) and unwrap (per-mesh UV) layouts. See [mesh](reference/mesh.md).
+- [x] `--atlas` layout `ValueEnum`: palette (one texel per distinct flattened
+      material, the object's layers merged per property name by the format's
+      layer-override resolution) and unwrap (per-mesh UV) layouts. See
+      [mesh](reference/mesh.md).
 - [x] `--texture-map` channel parser: channel sources (`R`/`G`/`B`/`A` = `attr`
       | `1-attr` | `attr.r`/`.g`/`.b`/`.a` color component | `0` | `1` |
       `computed-occlusion`) and the RGBA packing, with `smoothness` accepted as
@@ -49,8 +50,8 @@ off as they land.
       roughness, smoothness). See [mesh](reference/mesh.md).
 - [x] `--define-attribute` binding: `ColorComponent` and `AttributeBinding`
       (`name=key`, a pure rename alias). The type is not declared: `mesh` reads it
-      from the key's value pool in the meshed layer's palette at bake, a color
-      pool exposing components and a scalar pool read whole, and an absent
+      from the key's value pool in its winning layer's palette at bake, a color
+      pool exposing components and a scalar pool read whole, and an unbound
       attribute follows the format's unbound-default rule (a glTF built-in bakes
       its spec default, a custom key errors). The former `AttributeType` enum and
       the `[:type]` suffix are gone; the file is the single source of type truth.
@@ -106,11 +107,11 @@ off as they land.
       computed-occlusion, roughness, smoothness) and the `pbr` bundle, repeatable;
       `--texture-name <preset> <file-name>` / `--texture-name-prefix <prefix>`
       naming; `--texture-map <file-name> <channels>`; `--define-attribute
-      <name>=<key>`; `--layer` (0-based
-      object-layer index whose materials this mesh bakes, default `0`); and
+      <name>=<key>`; and
       `--texture-storage` (embedded / external / both); default names from the
-      output stem, unique per bake. (The `--atlas palette` path;
-      `computed-occlusion` errors until the unwrap atlas lands.)
+      output stem, unique per bake. The bake flattens the object's layers per
+      property name by the format's layer-override resolution. (The `--atlas
+      palette` path; `computed-occlusion` errors until the unwrap atlas lands.)
 - [ ] Vertex attribute maps: `--vertex <preset>` presets (albedo →
       `COLOR_0`, computed-occlusion → `COLOR_0` darken, metallic / roughness /
       emissive / occlusion / smoothness → scalar `_NAME`, orm / mse /

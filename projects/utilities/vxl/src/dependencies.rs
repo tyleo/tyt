@@ -142,8 +142,10 @@ pub trait Dependencies {
 
     /// Meshes the object at index `object` of the voxel file at `input` into a
     /// glTF or GLB mesh at `output`, with no hierarchy-node transform. With no
-    /// `maps` it is pure geometry; otherwise it bakes the palette materials into
-    /// textures the mesh's UVs sample, writing any loose images beside `output`.
+    /// `maps` it is pure geometry. Otherwise it bakes the object's flattened
+    /// layer materials, merged per property name by the format's
+    /// layer-override rule, into textures the mesh's UVs sample, writing any
+    /// loose images beside `output`.
     ///
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.
@@ -155,8 +157,6 @@ pub trait Dependencies {
     /// * `method` - the meshing strategy.
     /// * `object` - the object's index into the document, as
     ///   [`resolve_objects`](Self::resolve_objects) returns.
-    /// * `layer` - the object layer whose materials bake, a 0-based index into
-    ///   the object's layers in reference order; ignored for pure geometry.
     /// * `maps` - the material maps to bake, each its own image, in order; empty
     ///   for pure geometry.
     /// * `storage` - where the baked images go.
@@ -172,7 +172,6 @@ pub trait Dependencies {
         scale: f64,
         method: MeshMethod,
         object: usize,
-        layer: usize,
         maps: &[MeshTextureMap],
         storage: ResourceStorage,
         texture_shape: TextureShape,

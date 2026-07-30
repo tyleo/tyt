@@ -64,10 +64,6 @@ is a separate mode left for a later pass.
 10. `--select-index <index>`: choose the object by position, an integer or an
    `a-b` range. Repeatable; unions with `--select` as above. See
    [Object selectors](conventions.md#object-selectors).
-11. `--layer <index>` (default `0`): the object layer whose materials this mesh
-   bakes, a 0-based index into the object's layers in reference order, defaulting
-   to the first. Only the material and texture bakes read it; pure-geometry
-   meshing ignores it, and selecting a layer past the object's last errors.
 
 ## Material and texture maps
 
@@ -78,16 +74,15 @@ which properties they read. Properties a material omits fall back to their spec 
 so a map never fails for a missing property. `--atlas` sets how
 the atlas is laid out and how the mesh's UVs index it:
 
-1. `palette` (default): one texel per palette material, placed at its material
-   index. The atlas depends only on the palette set, not the geometry, so every
-   mesh on those palettes gets a byte-identical texture and identical UVs, and
-   meshes that share a palette share its maps. Many faces sample one texel. This
-   is the compact, shareable form. `mesh` bakes a single layer, the one `--layer`
-   selects and the object's first by default, so the atlas is just one texel per
-   material of that layer's palette; the object's other layers never multiply into
-   it, and it stays a pure function of the baked palette and shareable across
-   every mesh baking that palette. A many-layer object that needs every layer is
-   better served by `--vertex palette-layers`.
+1. `palette` (default): one texel per distinct flattened material. `mesh`
+   bakes the object's layers merged per property name by the format's
+   layer-override resolution, each property read through the last layer whose
+   palette supplies it, so a voxel's texel is keyed by the tuple of materials
+   it samples in those winning layers. Many faces sample one texel. A
+   single-layer object keeps the compact, shareable one-texel-per-material
+   form, so meshes baking that palette share its maps; a multi-layer object's
+   atlas holds one texel per distinct material combination its voxels use,
+   which depends on the object's layer stack rather than any single palette.
 2. `unwrap`: each face takes its own texel from a per-mesh UV unwrap, so the
    atlas is unique to one mesh and larger. Use it for spatially varying data
    that one texel per material cannot hold, such as `computed-occlusion`
@@ -198,7 +193,8 @@ generically, so a palette may
 carry keys beyond the recommended set in
 [Properties](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties),
 and a binding gives one such key a name a packing can use. A binding reads the
-key from the meshed layer's material. Its two tokens are:
+key through its winning layer, the last layer whose palette supplies it. Its
+two tokens are:
 
 1. `property`: the reference used in `--texture-map` and `--vertex-map`. It
    shadows a built-in property name on collision, so `--define-property
@@ -206,17 +202,17 @@ key from the meshed layer's material. Its two tokens are:
    instead. The shadowing is scoped to the custom packings; the `--texture` and
    `--vertex` presets always read the spec properties. The reference carries no
    whitespace, since `--texture-map` reads it as a bare token.
-2. `name`: the voxel-json property key read from the meshed layer's material.
+2. `name`: the voxel-json property key read from its winning layer's material.
    As its own token it may be quoted, so a name with spaces, as
    `--define-property emissive "super emissive thing"`, is reachable only
    through such an alias.
 
 The property's type is not declared: it is read from the value pool the key
-binds in the meshed layer's palette when the document loads. A color pool
+binds in its winning layer's palette when the document loads. A color pool
 exposes the
 `r`, `g`, `b`, and (with alpha) `a` components a packing reads as `<property>.r`
 and so on; a `float`, `int`, or `bool` pool is a scalar, read whole. A property
-absent from that palette follows the format's unbound-default rule: a glTF
+no layer binds follows the format's unbound-default rule: a glTF
 built-in bakes its spec default, so `baseColorFactor.a` and `occlusionStrength`
 need no binding, while a custom key, which has no default, is an error.
 
@@ -273,7 +269,7 @@ seam.
    into `_ORM`, `_MSE`, and so on, packed across the attribute's components
    exactly as the texture preset packs them across channels. Custom attributes.
 5. `palette-index`: one index per vertex into a flattened table of the distinct
-   materials the baked layer uses, written as a scalar into `_PALETTEINDEX` with
+   materials the mesh uses, written as a scalar into `_PALETTEINDEX` with
    that table shipped as [palette data](#palette-data). A custom shader looks the
    material up by index rather than sampling a texture: the most compact carrier
    and the exact-value alternative to the palette atlas. The table is the distinct
@@ -286,9 +282,10 @@ seam.
    order: the last layer supplying a property wins. Its data sums the layer sizes
    rather than multiplying them and depends only on the palette set, so it stays
    shareable across meshes and is the compact carrier for a many-layer object; it
-   is also the only carrier that preserves every layer's material rather than
-   collapsing to a single selected layer. A single-layer object reduces to one
-   `_PALETTEINDEX0` and the one palette. Custom; not read by a generic viewer.
+   is also the only carrier that preserves every layer's material separately
+   rather than flattening to the per-property winners. A single-layer object
+   reduces to one `_PALETTEINDEX0` and the one palette. Custom; not read by a
+   generic viewer.
 
 A preset writes to the default attribute listed above; `--vertex-target
 <preset> <target>` overrides it, repeatable, the vertex twin of `--texture-name`,

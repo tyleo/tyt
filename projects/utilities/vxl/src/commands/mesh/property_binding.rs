@@ -1,9 +1,9 @@
 use crate::{Error, Result};
 
 /// A binding aliasing a custom voxel property key to a name a packing can read.
-/// It renames a key from the meshed layer's palette, the layer `mesh`'s
-/// `--layer` selects and the first by default; the value's type is read from
-/// that key's value pool at bake, not declared here.
+/// It renames a key from the object's layers, read through the key's winning
+/// layer, the last layer whose palette supplies it. The value's type is read
+/// from that key's value pool at bake, not declared here.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PropertyBinding {
     name: String,
@@ -40,7 +40,7 @@ impl PropertyBinding {
         &self.name
     }
 
-    /// The voxel property key read from the meshed layer's material.
+    /// The voxel property key read from its winning layer's material.
     pub fn key(&self) -> &str {
         &self.key
     }

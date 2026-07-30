@@ -63,11 +63,6 @@ pub struct Mesh {
     )]
     texture_shape: TextureShape,
 
-    /// The object layer whose materials this mesh bakes, a 0-based index into
-    /// the object's layers in reference order, defaulting to the first.
-    #[arg(value_name = "layer", long, default_value = "0")]
-    layer: usize,
-
     /// Bake a preset material map or bundle, repeatable, as `--texture albedo
     /// --texture orm` or `--texture pbr`. A bundle expands to several single
     /// maps.
@@ -119,7 +114,8 @@ pub struct Mesh {
 
     /// Name a custom property for `--texture-map`, `<property> <name>`,
     /// repeatable, as `--define-property sss subsurface`. The property's type
-    /// is read from its value pool in the meshed layer's palette, not declared.
+    /// is read from its value pool in its winning layer's palette, not
+    /// declared.
     #[arg(
         value_names = ["property", "name"],
         long = "define-property",
@@ -212,7 +208,6 @@ impl Mesh {
             self.voxel_size.0,
             self.method,
             object,
-            self.layer,
             &maps,
             storage,
             self.texture_shape,
@@ -592,15 +587,6 @@ mod tests {
             "pbr",
             "x.png"
         ]));
-    }
-
-    #[test]
-    fn the_layer_selector_defaults_to_the_first_layer_and_parses_a_value() {
-        let default = Mesh::try_parse_from(["mesh", "model.vox"]).unwrap();
-        assert_eq!(default.layer, 0);
-
-        let chosen = Mesh::try_parse_from(["mesh", "model.vox", "--layer", "2"]).unwrap();
-        assert_eq!(chosen.layer, 2);
     }
 
     #[test]

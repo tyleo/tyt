@@ -1234,10 +1234,8 @@ mod tests {
         .unwrap();
 
         let (_, object) = state.iter_objects().next().unwrap();
-        let layer = object.iter_layers().next().unwrap().0;
         let request = MaterialMeshRequest {
             method: MeshMethod::Greedy,
-            layer,
             scale: 1.0,
             maps: Vec::new(),
             storage: ResourceStorage::Embedded,

@@ -1,5 +1,5 @@
 use crate::{
-    EMISSIVE_STRENGTH, Error, IOR, MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage,
+    EMISSIVE_STRENGTH, IOR, MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage,
     Result, TRANSMISSION_FACTOR, UsedMaterials, atlas_dimensions, bake_atlas_pixels,
     default_scalar, encode_rgba8_png, material_scalar, max_emissive_strength, mesh_slices,
     resolve_used_materials, texel_center,
@@ -34,20 +34,20 @@ pub(crate) struct MaterialDocument {
 }
 
 /// Meshes `object` material-aware and lays it out as a glTF document with a
-/// texel-center UV set and a material sampling the baked palette atlas. Each
-/// requested map becomes one image and texture; recognized maps fill their glTF
-/// slot and the rest are listed under the material's `extras`. `target` decides
-/// how embedded images travel, and `request.storage` whether they are embedded,
-/// loose, or both. An object with no geometry yields an empty scene. Errors if
-/// `request.layer` is not one of `object`'s layers.
+/// texel-center UV set and a material sampling the baked material atlas, the
+/// object's layers merged per property name by the format's override rule.
+/// Each requested map becomes one image and texture. Recognized maps fill
+/// their glTF slot and the rest are listed under the material's `extras`.
+/// `target` decides how embedded images travel, and `request.storage` whether
+/// they are embedded, loose, or both. An object with no geometry yields an
+/// empty scene. Errors if a layer references a palette `state` does not hold.
 pub(crate) fn build_material_document(
     state: &VoxMain,
     object: &VoxObject,
     request: &MaterialMeshRequest,
     target: MeshTarget,
 ) -> Result<MaterialDocument> {
-    let used = resolve_used_materials(object, request.layer)
-        .ok_or_else(|| Error::invalid("the selected layer is not one of the object's layers"))?;
+    let used = resolve_used_materials(state, object)?;
 
     let geometry = mesh_slices(
         object,
@@ -136,7 +136,7 @@ pub(crate) fn build_material_document(
     let mut sidecars = Vec::new();
 
     for map in &request.maps {
-        let pixels = bake_atlas_pixels(state, &used, &map.bake, atlas_width, atlas_height)?;
+        let pixels = bake_atlas_pixels(&used, &map.bake, atlas_width, atlas_height)?;
         let png = encode_rgba8_png(atlas_width, atlas_height, &pixels)?;
 
         let image = match placement(request.storage, target) {
@@ -168,7 +168,7 @@ pub(crate) fn build_material_document(
         images.push(image);
     }
 
-    let extensions = material_extensions(state, &used);
+    let extensions = material_extensions(&used);
 
     let material = build_material(&request.maps, &extensions);
 
@@ -224,7 +224,7 @@ pub(crate) fn build_material_document(
 /// when it differs from the glTF spec default so a plain export stays clean.
 /// `ior` and `transmissionFactor` come from the first used material;
 /// `emissiveStrength` is the mesh's greatest strength.
-fn material_extensions(state: &VoxMain, used: &UsedMaterials) -> Map<String, Value> {
+fn material_extensions(used: &UsedMaterials) -> Map<String, Value> {
     let mut extensions = Map::new();
 
     for (key, extension, field) in [
@@ -235,7 +235,7 @@ fn material_extensions(state: &VoxMain, used: &UsedMaterials) -> Map<String, Val
             "transmissionFactor",
         ),
     ] {
-        let value = material_scalar(state, used, 0, key);
+        let value = material_scalar(used, 0, key);
 
         if value != default_scalar(key).unwrap_or(0.0) {
             extensions.insert(extension.to_owned(), json!({ field: value }));
@@ -245,7 +245,7 @@ fn material_extensions(state: &VoxMain, used: &UsedMaterials) -> Map<String, Val
     // With an emissive map the greatest strength restores the scale its texels
     // were normalized by; without one it carries the flat factor like ior and
     // transmission. Skipped when it is the default 1 or the mesh emits nothing.
-    let max = max_emissive_strength(state, used);
+    let max = max_emissive_strength(used);
     if max > 0.0 && max != default_scalar(EMISSIVE_STRENGTH).unwrap_or(0.0) {
         extensions.insert(
             "KHR_materials_emissive_strength".to_owned(),

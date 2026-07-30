@@ -4,7 +4,7 @@ use crate::{
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
-use voxcore::{BVoxValuePoolValue, VoxMain, VoxValuePool, VoxValuePoolValueRef};
+use voxcore::{BVoxValuePoolValue, VoxValuePool, VoxValuePoolValueRef};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
 /// `width` x `height` texels, one texel per material placed row-major from the
@@ -12,7 +12,6 @@ use voxcore::{BVoxValuePoolValue, VoxMain, VoxValuePool, VoxValuePoolValueRef};
 /// buffer's layout matches [`atlas_dimensions`](crate::atlas_dimensions) over
 /// `used.len()`, so the UVs sampling it read each material's texel.
 pub(crate) fn bake_atlas_pixels(
-    state: &VoxMain,
     used: &UsedMaterials,
     bake: &MaterialBake,
     width: u32,
@@ -25,12 +24,12 @@ pub(crate) fn bake_atlas_pixels(
     // Only the emissive bake normalizes each texel by the mesh's greatest
     // strength.
     let max_strength = match bake {
-        MaterialBake::EmissiveColor => max_emissive_strength(state, used),
+        MaterialBake::EmissiveColor => max_emissive_strength(used),
         _ => 0.0,
     };
 
     for index in 0..used.len() {
-        let rgba = bake_texel(state, used, bake, index, max_strength)?;
+        let rgba = bake_texel(used, bake, index, max_strength)?;
 
         let offset = index * 4;
 
@@ -42,21 +41,15 @@ pub(crate) fn bake_atlas_pixels(
 
 /// The RGBA bytes of the material at `index` under `bake`.
 fn bake_texel(
-    state: &VoxMain,
     used: &UsedMaterials,
     bake: &MaterialBake,
     index: usize,
     max_strength: f64,
 ) -> Result<[u8; 4]> {
     match bake {
-        MaterialBake::RgbaColor => Ok(color_bytes(material_attribute(
-            state,
-            used,
-            index,
-            BASE_COLOR_FACTOR,
-        ))),
+        MaterialBake::RgbaColor => Ok(color_bytes(used.attribute(index, BASE_COLOR_FACTOR))),
 
-        MaterialBake::EmissiveColor => Ok(emissive_color_bytes(state, used, index, max_strength)),
+        MaterialBake::EmissiveColor => Ok(emissive_color_bytes(used, index, max_strength)),
 
         MaterialBake::Packing(channels) => {
             // A packing fills R, G, B from its channels; an unnamed channel and
@@ -64,7 +57,7 @@ fn bake_texel(
             let mut rgba = [0u8, 0u8, 0u8, 255u8];
 
             for (channel_index, channel) in channels.iter().enumerate() {
-                rgba[channel_index] = channel_byte(state, used, index, channel)?;
+                rgba[channel_index] = channel_byte(used, index, channel)?;
             }
 
             Ok(rgba)
@@ -73,12 +66,7 @@ fn bake_texel(
 }
 
 /// The `0..255` byte one channel contributes for the material at `index`.
-fn channel_byte(
-    state: &VoxMain,
-    used: &UsedMaterials,
-    index: usize,
-    channel: &MaterialChannel,
-) -> Result<u8> {
+fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -> Result<u8> {
     match channel {
         MaterialChannel::Zero => Ok(0),
 
@@ -93,7 +81,7 @@ fn channel_byte(
             component,
             invert,
         } => {
-            let value = material_attribute(state, used, index, key);
+            let value = used.attribute(index, key);
 
             // Read the source as a `0..1` fraction, invert if asked, then scale
             // to a byte, so a scalar and a color component inject the same way.
@@ -107,21 +95,6 @@ fn channel_byte(
             Ok(fraction.to_unorm8())
         }
     }
-}
-
-/// What the material at `index` draws for attribute `key`: the value pool the
-/// property draws from and the value id into it, read from the material's
-/// cell. `None` when `index` is out of range or no property carries `key`.
-fn material_attribute<'a>(
-    state: &'a VoxMain,
-    used: &UsedMaterials,
-    index: usize,
-    key: &str,
-) -> Option<(&'a VoxValuePool, U32Id<BVoxValuePoolValue>)> {
-    let material = used.material(index)?;
-    let palette = used.palette();
-    let property = state.palette(palette)?.property_id_by_name(key)?;
-    state.material_value(palette, material, property)
 }
 
 /// A color attribute's RGBA bytes, defaulting to opaque white (the base-color
@@ -178,19 +151,11 @@ fn scalar_value(value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>, key: 
 /// strengths survive as a gradient, and a flat
 /// `KHR_materials_emissive_strength` of `max_strength` restores the absolute
 /// scale. An absent color is black.
-fn emissive_color_bytes(
-    state: &VoxMain,
-    used: &UsedMaterials,
-    index: usize,
-    max_strength: f64,
-) -> [u8; 4] {
-    let color = color_bytes_or(
-        material_attribute(state, used, index, EMISSIVE_FACTOR),
-        [0, 0, 0, 255],
-    );
+fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -> [u8; 4] {
+    let color = color_bytes_or(used.attribute(index, EMISSIVE_FACTOR), [0, 0, 0, 255]);
 
     let fraction = if max_strength > 0.0 {
-        material_scalar(state, used, index, EMISSIVE_STRENGTH) / max_strength
+        material_scalar(used, index, EMISSIVE_STRENGTH) / max_strength
     } else {
         0.0
     };
@@ -212,22 +177,17 @@ fn emissive_color_bytes(
 }
 
 /// The greatest `emissiveStrength` among the used materials.
-pub(crate) fn max_emissive_strength(state: &VoxMain, used: &UsedMaterials) -> f64 {
+pub(crate) fn max_emissive_strength(used: &UsedMaterials) -> f64 {
     (0..used.len())
-        .map(|index| material_scalar(state, used, index, EMISSIVE_STRENGTH))
+        .map(|index| material_scalar(used, index, EMISSIVE_STRENGTH))
         .fold(0.0, f64::max)
 }
 
 /// The scalar attribute `key` of the material at `index` in `used`, or its spec
 /// default when the material omits it. The flat factor the material document
 /// writes back for the KHR extension attributes.
-pub(crate) fn material_scalar(
-    state: &VoxMain,
-    used: &UsedMaterials,
-    index: usize,
-    key: &str,
-) -> f64 {
-    scalar_value(material_attribute(state, used, index, key), key)
+pub(crate) fn material_scalar(used: &UsedMaterials, index: usize, key: &str) -> f64 {
+    scalar_value(used.attribute(index, key), key)
 }
 
 #[cfg(test)]
@@ -240,8 +200,7 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{
-        BVoxLayer, BVoxObject, BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette,
-        VoxValuePool,
+        BVoxObject, BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool,
     };
 
     /// The branded value id `index`.
@@ -262,7 +221,7 @@ mod tests {
     /// `metallicFactor`, and `roughnessFactor` over three pools, with a
     /// three-voxel object whose voxels sample three materials in raster order:
     /// (red, shiny, smooth), (red, matte, rough), (blue, matte, rough).
-    fn single_layer_state() -> (VoxMain, U32Id<BVoxObject>, U32Id<BVoxLayer>) {
+    fn single_layer_state() -> (VoxMain, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
         let base = state.add_value_pool(
@@ -301,7 +260,7 @@ mod tests {
         let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
-        let layer = object.add_layer(palette_id, red_shiny);
+        object.add_layer(palette_id, red_shiny);
 
         for (x, material) in [(0, red_shiny), (1, red_matte), (2, blue_matte)] {
             let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
@@ -310,19 +269,18 @@ mod tests {
 
         let object_id = state.add_object(object).unwrap();
 
-        (state, object_id, layer)
+        (state, object_id)
     }
 
     #[test]
     fn albedo_reads_the_base_color() {
-        let (state, object_id, layer) = single_layer_state();
+        let (state, object_id) = single_layer_state();
         let object = state.object(object_id).unwrap();
-        let used = resolve_used_materials(object, layer).unwrap();
+        let used = resolve_used_materials(&state, object).unwrap();
         assert_eq!(used.len(), 3);
 
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
-        let pixels =
-            bake_atlas_pixels(&state, &used, &MaterialBake::RgbaColor, width, height).unwrap();
+        let pixels = bake_atlas_pixels(&used, &MaterialBake::RgbaColor, width, height).unwrap();
 
         // Materials 0 and 1 both take the red base; material 2 is blue. The
         // fourth texel is padding.
@@ -334,12 +292,12 @@ mod tests {
 
     #[test]
     fn a_scalar_packing_reads_the_metallic_factor() {
-        let (state, object_id, layer) = single_layer_state();
-        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let (state, object_id) = single_layer_state();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let metallic = MaterialBake::Packing(vec![scalar(METALLIC_FACTOR, false)]);
-        let pixels = bake_atlas_pixels(&state, &used, &metallic, width, height).unwrap();
+        let pixels = bake_atlas_pixels(&used, &metallic, width, height).unwrap();
         // Only material 0 is metallic (1.0); the rest are matte (0.0).
         assert_eq!(pixels[0], 255);
         assert_eq!(pixels[4], 0);
@@ -360,18 +318,18 @@ mod tests {
         let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        let layer = object.add_layer(palette_id, on);
+        object.add_layer(palette_id, on);
         for (x, material) in [(0, on), (1, off)] {
             let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel, &[material]).unwrap();
         }
         let object_id = state.add_object(object).unwrap();
 
-        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let mask = MaterialBake::Packing(vec![scalar("flag", false)]);
-        let pixels = bake_atlas_pixels(&state, &used, &mask, width, height).unwrap();
+        let pixels = bake_atlas_pixels(&used, &mask, width, height).unwrap();
         // A true voxel bakes 255, a false voxel bakes 0.
         assert_eq!(pixels[0], 255);
         assert_eq!(pixels[4], 0);
@@ -401,18 +359,18 @@ mod tests {
         let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        let layer = object.add_layer(palette_id, red);
+        object.add_layer(palette_id, red);
         for (x, material) in [(0, red), (1, blue)] {
             let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel, &[material]).unwrap();
         }
         let object_id = state.add_object(object).unwrap();
 
-        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let bake = MaterialBake::Packing(vec![scalar(EMISSIVE_STRENGTH, false)]);
-        let pixels = bake_atlas_pixels(&state, &used, &bake, width, height).unwrap();
+        let pixels = bake_atlas_pixels(&used, &bake, width, height).unwrap();
         // 0.5 scales to the unorm byte 128 in both texels.
         assert_eq!(pixels[0], 128);
         assert_eq!(pixels[4], 128);
@@ -420,12 +378,12 @@ mod tests {
 
     #[test]
     fn inversion_turns_roughness_into_smoothness() {
-        let (state, object_id, layer) = single_layer_state();
-        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let (state, object_id) = single_layer_state();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let smoothness = MaterialBake::Packing(vec![scalar(ROUGHNESS_FACTOR, true)]);
-        let pixels = bake_atlas_pixels(&state, &used, &smoothness, width, height).unwrap();
+        let pixels = bake_atlas_pixels(&used, &smoothness, width, height).unwrap();
         // Material 0 is roughness 0.0 -> smoothness 1.0; material 1 is roughness
         // 1.0 -> smoothness 0.0.
         assert_eq!(pixels[0], 255);
@@ -434,13 +392,13 @@ mod tests {
 
     #[test]
     fn a_missing_attribute_falls_back_to_its_spec_default() {
-        let (state, object_id, layer) = single_layer_state();
-        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let (state, object_id) = single_layer_state();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         // The palette carries no `occlusionStrength`, whose spec default is 1.
         let occlusion = MaterialBake::Packing(vec![scalar(OCCLUSION_STRENGTH, false)]);
-        let pixels = bake_atlas_pixels(&state, &used, &occlusion, width, height).unwrap();
+        let pixels = bake_atlas_pixels(&used, &occlusion, width, height).unwrap();
         assert_eq!(pixels[0], 255);
         assert_eq!(pixels[4], 255);
         assert_eq!(pixels[8], 255);
@@ -448,8 +406,8 @@ mod tests {
 
     #[test]
     fn a_color_component_reads_one_channel() {
-        let (state, object_id, layer) = single_layer_state();
-        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let (state, object_id) = single_layer_state();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let red = MaterialBake::Packing(vec![MaterialChannel::Attribute {
@@ -457,19 +415,19 @@ mod tests {
             component: Some(ColorChannel::R),
             invert: false,
         }]);
-        let pixels = bake_atlas_pixels(&state, &used, &red, width, height).unwrap();
+        let pixels = bake_atlas_pixels(&used, &red, width, height).unwrap();
         assert_eq!(pixels[0], 255); // material 0 is red
         assert_eq!(pixels[8], 0); // material 2 is blue
     }
 
     #[test]
     fn computed_occlusion_is_rejected_under_the_palette_atlas() {
-        let (state, object_id, layer) = single_layer_state();
-        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let (state, object_id) = single_layer_state();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let bake = MaterialBake::Packing(vec![MaterialChannel::ComputedOcclusion]);
-        assert!(bake_atlas_pixels(&state, &used, &bake, width, height).is_err());
+        assert!(bake_atlas_pixels(&used, &bake, width, height).is_err());
     }
 
     #[test]
@@ -496,17 +454,16 @@ mod tests {
         let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        let layer = object.add_layer(palette_id, full_blue);
+        object.add_layer(palette_id, full_blue);
         for (x, material) in [(0, full_blue), (1, dim_white)] {
             let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel, &[material]).unwrap();
         }
         let object_id = state.add_object(object).unwrap();
 
-        let used = resolve_used_materials(state.object(object_id).unwrap(), layer).unwrap();
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
-        let pixels =
-            bake_atlas_pixels(&state, &used, &MaterialBake::EmissiveColor, width, height).unwrap();
+        let pixels = bake_atlas_pixels(&used, &MaterialBake::EmissiveColor, width, height).unwrap();
 
         // Blue at the max strength stays full blue.
         assert_eq!(&pixels[0..4], &[0, 0, 255, 255]);

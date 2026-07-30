@@ -76,13 +76,12 @@ Rationale for the non-obvious choices, for reviewers.
    file already carries it (see note 9): a color pool exposes `r`/`g`/`b`/`a`
    components, a scalar pool is read whole. It shadows a built-in on collision,
    scoped to the custom packings so a binding never silently changes a
-   `--texture` or `--vertex` preset. The binding reads the key from the meshed
-   layer's material, the layer `mesh` selects with `--layer` and the first by
-   default, the same layer the rest of `mesh` bakes, rather than naming a
-   separate source. `mesh` bakes one selected layer rather than applying the
-   format's layer-override resolution, so each layer is one palette and every
-   voxel samples one material in it; reaching another layer's value is
-   just another `--layer`. The built-in `baseColorFactor` is itself a color, so
+   `--texture` or `--vertex` preset. The binding reads the key through the
+   format's layer-override resolution, the same flatten the rest of `mesh`
+   bakes, rather than naming a separate source. `mesh` merges the object's
+   layers per property name, each property read from the last layer whose
+   palette supplies it, so a key resolves to one winning layer and every voxel
+   samples one material in it. The built-in `baseColorFactor` is itself a color, so
    `baseColorFactor.a` and an RGBA split need no binding,
    complementing the whole-color `albedo` preset. Inline `N:` and `.component`
    qualifiers with no declaration were dropped: they give no reusable name.
@@ -91,8 +90,8 @@ Rationale for the non-obvious choices, for reviewers.
    is the single source of type truth, for a built-in and a custom key alike.
    `show` reads it inline as it prints concrete materials; `mesh` defers the same
    read to the bake, since a `--texture-map` packing is compiled before the
-   document loads, and validates each channel's component against the pool kind
-   once the layer's palette is in hand. A property absent from that palette
+   document loads, and validates each channel's component against the winning
+   layer's pool kind once the document is in hand. A property no layer binds
    follows the format's unbound-default rule: a glTF built-in takes its spec kind
    and default, a custom key is an error. `--type` stays as an optional override
    on `show` so a preview can assert a type and read a custom key exactly as the
@@ -151,16 +150,17 @@ Rationale for the non-obvious choices, for reviewers.
     application-specific `_NAME` attributes only a custom shader reads. The
     palette indirection comes in two shapes because an object keeps a palette
     per layer, which no single index spans: `palette-index` flattens to the
-    distinct materials of the layer `mesh` bakes, one `_PALETTEINDEX` into a
+    distinct materials the mesh uses, one `_PALETTEINDEX` into a
     per-mesh table, the smallest carrier; `palette-layers` keeps every layer, one
     `_PALETTEINDEXn` per layer plus each layer's palette, summing rather than
     multiplying the layer sizes, staying shareable across meshes, and alone
-    preserving every layer's material rather than only the baked one. A product
+    preserving every layer's material separately rather than the flattened
+    per-property winners. A product
     index over every layer combination was rejected: `palette-layers` is both
     smaller and shareable, so the product never wins. The texture
-    `--atlas palette` keys on the baked layer's palette instead, since per-layer
-    textures would need a custom shader and forfeit the atlas's portability, so
-    per-layer material lives on the vertex carrier.
+    `--atlas palette` flattens to the per-property winners instead, since
+    per-layer textures would need a custom shader and forfeit the atlas's
+    portability, so per-layer material lives on the vertex carrier.
 13. Texture images and the palette data each store `embedded`, `external`, or
     `both`, with a format-driven default: `embedded` for a `.glb`, `external`
     for a `.gltf`, so zero-config output matches what each glTF form normally

@@ -1,12 +1,11 @@
 use crate::{
-    AtlasShape, Error, MaterialBake, Result, atlas_dimensions, bake_atlas_pixels, encode_rgba8_png,
+    AtlasShape, MaterialBake, Result, atlas_dimensions, bake_atlas_pixels, encode_rgba8_png,
     resolve_used_materials,
 };
-use branded_id::U32Id;
-use voxcore::{BVoxLayer, VoxMain, VoxObject};
+use voxcore::{VoxMain, VoxObject};
 
-/// A baked palette material atlas: the shared texel dimensions and one PNG image
-/// per requested [`MaterialBake`], in request order.
+/// A baked material atlas: the shared texel dimensions and one PNG image per
+/// requested [`MaterialBake`], in request order.
 pub struct MaterialAtlas {
     /// Atlas width in texels.
     pub width: u32,
@@ -18,29 +17,29 @@ pub struct MaterialAtlas {
     pub images: Vec<Vec<u8>>,
 }
 
-/// Bakes `bakes` over the materials `object` uses in layer `layer` into a
-/// [`MaterialAtlas`]: one texel per distinct material the object samples, laid
-/// out per `shape`, each image a PNG. `state` resolves the object's referenced
-/// palettes. This is the geometry-free material bake the palette atlas shares
-/// with the textured mesh writer, and the surface a bake-only material command
-/// builds on. Errors if `layer` is not one of `object`'s layers, or if `shape`
-/// is too small to hold the materials.
+/// Bakes `bakes` over the flattened materials `object` uses into a
+/// [`MaterialAtlas`], the object's layers merged per property name by the
+/// format's override rule: one texel per distinct material tuple the object
+/// samples across its winning layers, laid out per `shape`, each image a PNG.
+/// `state` resolves the object's referenced palettes. This is the
+/// geometry-free material bake the palette atlas shares with the textured
+/// mesh writer, and the surface a bake-only material command builds on.
+/// Errors if a layer references a palette `state` does not hold, or if
+/// `shape` is too small to hold the materials.
 pub fn object_to_material_atlas(
     state: &VoxMain,
     object: &VoxObject,
-    layer: U32Id<BVoxLayer>,
     bakes: &[MaterialBake],
     shape: AtlasShape,
 ) -> Result<MaterialAtlas> {
-    let used = resolve_used_materials(object, layer)
-        .ok_or_else(|| Error::invalid("the selected layer is not one of the object's layers"))?;
+    let used = resolve_used_materials(state, object)?;
 
     let (width, height) = atlas_dimensions(used.len(), shape)?;
 
     let mut images = Vec::with_capacity(bakes.len());
 
     for bake in bakes {
-        let pixels = bake_atlas_pixels(state, &used, bake, width, height)?;
+        let pixels = bake_atlas_pixels(&used, bake, width, height)?;
 
         images.push(encode_rgba8_png(width, height, &pixels)?);
     }
@@ -59,11 +58,21 @@ mod tests {
         object_to_material_atlas,
     };
     use branded_id::U32Id;
+    use std::io::Cursor;
     use ty_math::TyVector3U32;
     use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The 8-byte PNG signature.
     const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+
+    /// Decodes a PNG into its RGBA8 bytes.
+    fn decode_rgba8_png(bytes: &[u8]) -> Vec<u8> {
+        let mut reader = png::Decoder::new(Cursor::new(bytes)).read_info().unwrap();
+        let mut pixels = vec![0u8; reader.output_buffer_size().unwrap()];
+        let info = reader.next_frame(&mut pixels).unwrap();
+        pixels.truncate(info.buffer_size());
+        pixels
+    }
 
     #[test]
     fn bakes_one_png_per_requested_map() {
@@ -79,7 +88,7 @@ mod tests {
         let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        let layer = object.add_layer(palette_id, red);
+        object.add_layer(palette_id, red);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[red]).unwrap();
 
@@ -97,7 +106,6 @@ mod tests {
         let atlas = object_to_material_atlas(
             &state,
             state.object(object_id).unwrap(),
-            layer,
             &bakes,
             AtlasShape::Fit,
         )
@@ -110,5 +118,29 @@ mod tests {
         for image in &atlas.images {
             assert!(image.starts_with(&PNG_MAGIC));
         }
+    }
+
+    #[test]
+    fn a_layerless_object_bakes_one_texel_of_spec_defaults() {
+        let mut state = VoxMain::default();
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel, &[]).unwrap();
+        let object_id = state.add_object(object).unwrap();
+
+        let atlas = object_to_material_atlas(
+            &state,
+            state.object(object_id).unwrap(),
+            &[MaterialBake::RgbaColor],
+            AtlasShape::Fit,
+        )
+        .unwrap();
+
+        // The empty identity key gives one texel, the base color's spec
+        // default of opaque white.
+        assert_eq!((atlas.width, atlas.height), (1, 1));
+        let pixels = decode_rgba8_png(&atlas.images[0]);
+        assert_eq!(pixels, [255, 255, 255, 255]);
     }
 }

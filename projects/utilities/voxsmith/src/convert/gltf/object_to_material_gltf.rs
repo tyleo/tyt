@@ -60,14 +60,13 @@ mod tests {
         let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("cube".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        let layer = object.add_layer(palette_id, red);
+        object.add_layer(palette_id, red);
         let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel, &[red]).unwrap();
         let object_id = state.add_object(object).unwrap();
 
         let request = MaterialMeshRequest {
             method: MeshMethod::Greedy,
-            layer,
             scale: 1.0,
             maps,
             storage,
