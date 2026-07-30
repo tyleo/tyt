@@ -39,15 +39,15 @@ pub fn to_qbcl_file(state: &VoxMain) -> Result<QbclFile> {
         )));
     }
 
-    let roots = state.root_hierarchy_node_ids();
-    let [root] = roots else {
+    let root_ids = state.root_hierarchy_node_ids();
+    let [root_id] = root_ids else {
         return Err(Error::invalid(format!(
             "a Qubicle .qbcl file needs exactly one root, but the state has {}",
-            roots.len()
+            root_ids.len()
         )));
     };
 
-    let root = rebuild_node(*root, state, &ext.nodes)?;
+    let root = rebuild_node(*root_id, state, &ext.nodes)?;
 
     Ok(QbclFile {
         program_version: ext.program_version,
@@ -76,20 +76,23 @@ pub fn to_qbcl_file(state: &VoxMain) -> Result<QbclFile> {
     })
 }
 
-/// Rebuilds one scene node and its subtree from the hierarchy node `id` and its
-/// aligned ext provenance.
+/// Rebuilds one scene node and its subtree from the hierarchy node `node_id`
+/// and its aligned ext provenance.
 fn rebuild_node(
-    id: U32Id<BVoxHierarchyNode>,
+    node_id: U32Id<BVoxHierarchyNode>,
     state: &VoxMain,
     nodes: &[QubicleQbclNode],
 ) -> Result<QbclNode> {
-    let hierarchy = state
-        .hierarchy_node(id)
-        .ok_or_else(|| Error::invalid(format!("hierarchy node {} does not exist", id.to_u32())))?;
-    let provenance = nodes.get(id.to_u32() as usize).ok_or_else(|| {
+    let hierarchy = state.hierarchy_node(node_id).ok_or_else(|| {
+        Error::invalid(format!(
+            "hierarchy node {} does not exist",
+            node_id.to_u32()
+        ))
+    })?;
+    let provenance = nodes.get(node_id.to_u32() as usize).ok_or_else(|| {
         Error::invalid(format!(
             "qubicle-qbcl ext has no entry for hierarchy node {}",
-            id.to_u32()
+            node_id.to_u32()
         ))
     })?;
 
@@ -145,7 +148,7 @@ fn rebuild_children(
     hierarchy
         .child_node_ids
         .iter()
-        .map(|&child| rebuild_node(child, state, nodes))
+        .map(|&child_id| rebuild_node(child_id, state, nodes))
         .collect()
 }
 
@@ -248,11 +251,11 @@ fn synthesize_qbcl(state: &VoxMain) -> Result<QbclFile> {
     let mut children: Vec<QbclNode> = state
         .root_hierarchy_node_ids()
         .iter()
-        .map(|&root| builder.emit_node(state, root, TyVector3I32::new(0, 0, 0)))
+        .map(|&root_id| builder.emit_node(state, root_id, TyVector3I32::new(0, 0, 0)))
         .collect::<Result<_>>()?;
-    for (id, object) in state.iter_objects() {
-        if !builder.placed.contains(&id.to_u32()) {
-            children.push(builder.emit_object_node(state, id, object, [0, 0, 0])?);
+    for (object_id, object) in state.iter_objects() {
+        if !builder.placed.contains(&object_id.to_u32()) {
+            children.push(builder.emit_object_node(state, object_id, object, [0, 0, 0])?);
         }
     }
 
@@ -288,7 +291,7 @@ impl QbclBuilder {
         node_id: U32Id<BVoxHierarchyNode>,
         parent: TyVector3I32,
     ) -> Result<QbclNode> {
-        let (name, child_objects, child_nodes, world) = {
+        let (name, child_object_ids, child_node_ids, world) = {
             let node = state
                 .hierarchy_node(node_id)
                 .expect("a hierarchy id from the state resolves");
@@ -302,18 +305,20 @@ impl QbclBuilder {
             )
         };
 
-        let objects: Vec<(U32Id<BVoxObject>, &VoxObject)> = child_objects
+        let objects: Vec<(U32Id<BVoxObject>, &VoxObject)> = child_object_ids
             .iter()
-            .filter_map(|&id| state.object(id).map(|object| (id, object)))
+            .filter_map(|&object_id| state.object(object_id).map(|object| (object_id, object)))
             .collect();
         let mut objects = objects.into_iter();
         let first = objects.next();
 
         let mut children: Vec<QbclNode> = objects
-            .map(|(id, object)| self.emit_object_node(state, id, object, world.to_array()))
+            .map(|(object_id, object)| {
+                self.emit_object_node(state, object_id, object, world.to_array())
+            })
             .collect::<Result<_>>()?;
-        for child in child_nodes {
-            children.push(self.emit_node(state, child, world)?);
+        for child_id in child_node_ids {
+            children.push(self.emit_node(state, child_id, world)?);
         }
 
         let body = match first {
@@ -323,11 +328,11 @@ impl QbclBuilder {
             }),
             // The object is the author's build volume, so the matrix keeps its
             // dimensions and voxel positions directly.
-            Some((id, object)) if children.is_empty() => {
-                QbclNodeBody::Matrix(self.synthesize_matrix(id, object, world.to_array(), state)?)
-            }
-            Some((id, object)) => QbclNodeBody::Compound(QbclCompound {
-                matrix: self.synthesize_matrix(id, object, world.to_array(), state)?,
+            Some((object_id, object)) if children.is_empty() => QbclNodeBody::Matrix(
+                self.synthesize_matrix(object_id, object, world.to_array(), state)?,
+            ),
+            Some((object_id, object)) => QbclNodeBody::Compound(QbclCompound {
+                matrix: self.synthesize_matrix(object_id, object, world.to_array(), state)?,
                 children,
             }),
         };
@@ -377,13 +382,13 @@ impl QbclBuilder {
         let mut voxels = vec![QbclVoxel::default(); volume];
 
         let cell_color = resolve_cell_color_or_transparent(state, object)?;
-        for voxel in object.iter_live() {
+        for voxel_id in object.iter_live() {
             let cell = object
-                .voxel_position(voxel)
+                .voxel_position(voxel_id)
                 .expect("a live voxel is within the grid");
             // A Qubicle voxel stores no alpha, so the sampled color's alpha is
             // dropped.
-            let [r, g, b, _] = cell_color.color(voxel);
+            let [r, g, b, _] = cell_color.color(voxel_id);
             // Storage order: index = y + size_y * (z + size_z * x).
             let index = cell.y as usize
                 + size_y as usize * (cell.z as usize + size_z as usize * cell.x as usize);

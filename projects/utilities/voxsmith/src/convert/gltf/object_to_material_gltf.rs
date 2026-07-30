@@ -50,19 +50,24 @@ mod tests {
     fn cube_gltf(maps: Vec<MaterialMap>, storage: ResourceStorage) -> Vec<u8> {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let base_value_pool_id =
+            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), base, U32Id::from_u32(0))
+            .add_property(
+                BASE_COLOR_FACTOR.to_owned(),
+                base_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let red_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("cube".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, red);
-        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        object.retain_voxel(voxel, &[red]).unwrap();
+        object.add_layer(palette_id, red_id);
+        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[red_id]).unwrap();
         let object_id = state.add_object(object).unwrap();
 
         let request = MaterialMeshRequest {

@@ -3,14 +3,14 @@ use branded_id::U32Id;
 use std::collections::HashSet;
 use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain};
 
-/// Reorders `palette`'s `baseColorFactor` colors to material order: each
+/// Reorders `palette_id`'s `baseColorFactor` colors to material order: each
 /// material's color in turn, then the colors no material uses. Rendering is
 /// unchanged. A no-op without a `baseColorFactor` property.
 ///
 /// Requires a referentially valid state, which
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) checks.
-pub fn order_palette_colors(state: &mut VoxMain, palette: U32Id<BVoxPalette>) {
-    let Some(palette_ref) = state.palette(palette) else {
+pub fn order_palette_colors(state: &mut VoxMain, palette_id: U32Id<BVoxPalette>) {
+    let Some(palette_ref) = state.palette(palette_id) else {
         return;
     };
     let Some(color_id) = palette_ref.property_id_by_name(BASE_COLOR_FACTOR) else {
@@ -31,8 +31,8 @@ pub fn order_palette_colors(state: &mut VoxMain, palette: U32Id<BVoxPalette>) {
     let mut new_order: Vec<U32Id<BVoxValuePoolValue>> = Vec::with_capacity(value_pool.values_len());
     let mut seen: HashSet<U32Id<BVoxValuePoolValue>> =
         HashSet::with_capacity(value_pool.values_len());
-    for material in palette_ref.iter_materials() {
-        let Some(value_id) = palette_ref.value_id(material, color_id) else {
+    for material_id in palette_ref.iter_materials() {
+        let Some(value_id) = palette_ref.value_id(material_id, color_id) else {
             continue;
         };
         if seen.insert(value_id) {
@@ -61,7 +61,7 @@ mod tests {
         let mut state = VoxMain::default();
         // Three colors; materials reference them out of order: blue, red,
         // green.
-        let pool = state.add_value_pool(
+        let value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red
                 [0.0, 1.0, 0.0, 1.0], // 1 green
@@ -70,12 +70,16 @@ mod tests {
             .unwrap(),
         );
         let mut palette = VoxPalette::default();
-        let color = palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
+        let color_property_id = palette
+            .add_property(
+                BASE_COLOR_FACTOR.to_owned(),
+                value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        let blue = palette.add_material(vec![U32Id::from_u32(2)]).unwrap();
-        let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let green = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
+        let blue_id = palette.add_material(vec![U32Id::from_u32(2)]).unwrap();
+        let red_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let green_id = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
         let palette_id = state.add_palette(palette).unwrap();
         state.validate().unwrap();
 
@@ -84,7 +88,7 @@ mod tests {
         // The pool lists the colors in material order. Ids and what each
         // material resolves to are unchanged.
         assert_eq!(
-            state.value_pool(pool),
+            state.value_pool(value_pool_id),
             Some(
                 &VoxValuePool::srgba(vec![
                     [0.0, 0.0, 1.0, 1.0],
@@ -99,16 +103,25 @@ mod tests {
         // After a gc the material color value ids follow the listing: 0, 1, 2.
         state.gc();
         let palette = state.palette(palette_id).unwrap();
-        assert_eq!(palette.value_id(blue, color), Some(U32Id::from_u32(0)));
-        assert_eq!(palette.value_id(red, color), Some(U32Id::from_u32(1)));
-        assert_eq!(palette.value_id(green, color), Some(U32Id::from_u32(2)));
+        assert_eq!(
+            palette.value_id(blue_id, color_property_id),
+            Some(U32Id::from_u32(0))
+        );
+        assert_eq!(
+            palette.value_id(red_id, color_property_id),
+            Some(U32Id::from_u32(1))
+        );
+        assert_eq!(
+            palette.value_id(green_id, color_property_id),
+            Some(U32Id::from_u32(2))
+        );
         state.validate().unwrap();
     }
 
     #[test]
     fn orders_colors_past_an_unused_color_and_a_hole() {
         let mut state = VoxMain::default();
-        let pool = state.add_value_pool(
+        let value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red
                 [0.0, 1.0, 0.0, 1.0], // 1 green
@@ -120,7 +133,11 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
+            .add_property(
+                BASE_COLOR_FACTOR.to_owned(),
+                value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
         palette.add_material(vec![U32Id::from_u32(2)]).unwrap();
         palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
@@ -129,7 +146,7 @@ mod tests {
 
         // Hole the pool, so the live value ids the reorder walks are sparse.
         state
-            .remove_value_pool_value(pool, U32Id::from_u32(4), U32Id::from_u32(0))
+            .remove_value_pool_value(value_pool_id, U32Id::from_u32(4), U32Id::from_u32(0))
             .unwrap();
         state.validate().unwrap();
 
@@ -137,7 +154,7 @@ mod tests {
 
         // The three drawn colors lead in material order, then the unused one.
         assert_eq!(
-            state.value_pool(pool),
+            state.value_pool(value_pool_id),
             Some(
                 &VoxValuePool::srgba(vec![
                     [0.0, 0.0, 1.0, 1.0],

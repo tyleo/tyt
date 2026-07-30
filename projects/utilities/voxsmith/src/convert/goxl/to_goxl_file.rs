@@ -115,12 +115,18 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
 /// other alpha is kept.
 fn synthesize_goxl(state: &VoxMain) -> Result<GoxlFile> {
     let mut builder = GoxlBuilder::default();
-    for &root in state.root_hierarchy_node_ids() {
-        builder.emit_node(state, root, TyVector3I32::new(0, 0, 0))?;
+    for &root_id in state.root_hierarchy_node_ids() {
+        builder.emit_node(state, root_id, TyVector3I32::new(0, 0, 0))?;
     }
-    for (id, object) in state.iter_objects() {
-        if !builder.placed.contains(&id.to_u32()) {
-            builder.emit_object(state, id, object, TyVector3I32::new(0, 0, 0), object.name())?;
+    for (object_id, object) in state.iter_objects() {
+        if !builder.placed.contains(&object_id.to_u32()) {
+            builder.emit_object(
+                state,
+                object_id,
+                object,
+                TyVector3I32::new(0, 0, 0),
+                object.name(),
+            )?;
         }
     }
 
@@ -151,7 +157,7 @@ impl GoxlBuilder {
         node_id: U32Id<BVoxHierarchyNode>,
         parent: TyVector3I32,
     ) -> Result<()> {
-        let (name, child_objects, child_nodes, world) = {
+        let (name, child_object_ids, child_node_ids, world) = {
             let node = state
                 .hierarchy_node(node_id)
                 .expect("a hierarchy id from the state resolves");
@@ -165,13 +171,13 @@ impl GoxlBuilder {
             )
         };
 
-        for object_id in child_objects {
+        for object_id in child_object_ids {
             if let Some(object) = state.object(object_id) {
                 self.emit_object(state, object_id, object, world, &name)?;
             }
         }
-        for child in child_nodes {
-            self.emit_node(state, child, world)?;
+        for child_id in child_node_ids {
+            self.emit_node(state, child_id, world)?;
         }
 
         Ok(())
@@ -196,9 +202,9 @@ impl GoxlBuilder {
         let edge = GoxlBlock::SIZE as i32;
         let stride = GoxlBlock::SIZE as usize;
         let mut tiles: BTreeMap<[i32; 3], Vec<GoxlVoxel>> = BTreeMap::new();
-        for voxel in object.iter_live() {
+        for voxel_id in object.iter_live() {
             let position = object
-                .voxel_position(voxel)
+                .voxel_position(voxel_id)
                 .expect("a live voxel is within the grid");
             let world_position = (world + position.as_ivec3()).to_array();
             let origin = [
@@ -212,7 +218,7 @@ impl GoxlBuilder {
                 (world_position[2] - origin[2]) as usize,
             ];
             let index = local[0] + stride * (local[1] + stride * local[2]);
-            let rgba = cell_color.color(voxel);
+            let rgba = cell_color.color(voxel_id);
             let block = tiles
                 .entry(origin)
                 .or_insert_with(|| vec![GoxlVoxel::default(); GoxlBlock::SIZE.pow(3) as usize]);
@@ -268,9 +274,9 @@ fn block_from_object(state: &VoxMain, object: &VoxObject) -> Result<GoxlBlock> {
             for x in 0..size {
                 let voxel = object
                     .voxel_id(TyVector3U32::new(x, y, z))
-                    .filter(|&id| object.is_live(id))
-                    .map(|id| {
-                        let [r, g, b, a] = cell_color.color(id);
+                    .filter(|&voxel_id| object.is_live(voxel_id))
+                    .map(|voxel_id| {
+                        let [r, g, b, a] = cell_color.color(voxel_id);
                         GoxlVoxel { r, g, b, a }
                     })
                     .unwrap_or_default();

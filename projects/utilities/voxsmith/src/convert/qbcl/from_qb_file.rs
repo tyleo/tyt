@@ -23,16 +23,16 @@ use voxcore::{
 pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
-    let (palette, materials) = build_palette(&mut state, file);
+    let (palette, material_ids) = build_palette(&mut state, file);
     let palette_id = state.add_palette(palette)?;
 
     let mut matrices = Vec::with_capacity(file.matrices.len());
-    let mut roots = Vec::with_capacity(file.matrices.len());
+    let mut root_ids = Vec::with_capacity(file.matrices.len());
     for matrix in &file.matrices {
         // The matrix grid becomes the object's build volume directly; it may
         // carry empty margin around the live voxels. The visibility bytes are
         // read from that same grid.
-        let object = build_object(matrix, palette_id, &materials)?;
+        let object = build_object(matrix, palette_id, &material_ids)?;
         let visibility = visibility_of(&object, matrix);
         let object_id = state.add_object(object)?;
         let node = VoxHierarchyNode {
@@ -41,14 +41,14 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
             child_object_ids: vec![object_id],
             transform: translation(matrix.position),
         };
-        roots.push(state.add_hierarchy_node(node)?);
+        root_ids.push(state.add_hierarchy_node(node)?);
         matrices.push(QubicleQbMatrix {
             name: matrix.name.clone(),
             position: matrix.position,
             visibility,
         });
     }
-    state.set_root_hierarchy_node_ids(roots)?;
+    state.set_root_hierarchy_node_ids(root_ids)?;
 
     let ext = QubicleQbExtWrapper {
         qubicle_qb: QubicleQbExt {
@@ -93,24 +93,28 @@ fn build_palette(
 
     // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB pool as
     // float components in `[0, 1]`; each material draws one value id into it.
-    let pool = state.add_value_pool(
+    let value_pool_id = state.add_value_pool(
         VoxValuePool::srgb(order.iter().map(|&color| color_floats(color)).collect())
             .expect("byte-derived components are in range and the list is non-empty"),
     );
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
+        .add_property(
+            BASE_COLOR_FACTOR.to_owned(),
+            value_pool_id,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
-    let mut materials = HashMap::with_capacity(order.len());
+    let mut material_ids = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
-        let material = palette
+        let material_id = palette
             .add_material(vec![U32Id::from_u32(index as u32)])
             .expect("one value id for the one property");
-        materials.insert(*color, material);
+        material_ids.insert(*color, material_id);
     }
 
-    (palette, materials)
+    (palette, material_ids)
 }
 
 /// Builds an object from a matrix: a dense grid sized by the matrix,
@@ -118,8 +122,8 @@ fn build_palette(
 /// color material. Errors on an oversized grid.
 fn build_object(
     matrix: &QbMatrix,
-    palette: U32Id<BVoxPalette>,
-    materials: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
+    palette_id: U32Id<BVoxPalette>,
+    material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
 ) -> Result<VoxObject> {
     let [size_x, size_y, size_z] = matrix.size;
     let mut object = VoxObject::new(String::new(), TyVector3U32::new(size_x, size_y, size_z))
@@ -130,7 +134,7 @@ fn build_object(
             ))
         })?;
 
-    object.add_layer(palette, U32Id::<BVoxMaterial>::from_u32(0));
+    object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
 
     for z in 0..size_z {
         for y in 0..size_y {
@@ -141,15 +145,15 @@ fn build_object(
                 if voxel.is_empty() {
                     continue;
                 }
-                let material = materials
+                let material_id = material_ids
                     .get(&[voxel.r, voxel.g, voxel.b])
                     .copied()
                     .expect("every solid color is in the palette");
-                let id = object
+                let voxel_id = object
                     .voxel_id(TyVector3U32::new(x, y, z))
                     .expect("a coordinate inside the matrix is inside the grid");
                 object
-                    .retain_voxel(id, &[material])
+                    .retain_voxel(voxel_id, &[material_id])
                     .expect("one sample for the one layer");
             }
         }
@@ -163,9 +167,9 @@ fn build_object(
 fn visibility_of(object: &VoxObject, matrix: &QbMatrix) -> Vec<u8> {
     object
         .iter_live()
-        .map(|id| {
+        .map(|voxel_id| {
             let position = object
-                .voxel_position(id)
+                .voxel_position(voxel_id)
                 .expect("a live voxel is within the grid");
             matrix
                 .voxel(position.x, position.y, position.z)

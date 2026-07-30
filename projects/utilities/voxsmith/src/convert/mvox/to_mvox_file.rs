@@ -34,9 +34,12 @@ pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
 
     // The forward path adds exactly one palette and references it from every
     // object on one layer; each material's color resolves through its pool.
-    let palette = state.iter_palettes().next().map(|(id, _)| id);
+    let palette_id = state
+        .iter_palettes()
+        .next()
+        .map(|(palette_id, _)| palette_id);
     let file_palette = ext.palette_present.then(|| MVoxPalette {
-        colors: colors_from_palette(state, palette),
+        colors: colors_from_palette(state, palette_id),
     });
 
     let materials = build_materials(&ext);
@@ -110,22 +113,25 @@ pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
 /// The 256 palette colors read back through `baseColorFactor`: material `index`
 /// gives color index `index`. Transparent where the palette or its color
 /// property is absent.
-fn colors_from_palette(state: &VoxMain, palette: Option<U32Id<BVoxPalette>>) -> [MVoxColor; 256] {
+fn colors_from_palette(
+    state: &VoxMain,
+    palette_id: Option<U32Id<BVoxPalette>>,
+) -> [MVoxColor; 256] {
     let mut colors = [MVoxColor::default(); 256];
-    let Some(palette) = palette else {
+    let Some(palette_id) = palette_id else {
         return colors;
     };
-    let Some(property) = state
-        .palette(palette)
+    let Some(property_id) = state
+        .palette(palette_id)
         .and_then(|palette| palette.property_id_by_name(BASE_COLOR_FACTOR))
     else {
         return colors;
     };
     for (index, color) in colors.iter_mut().enumerate() {
-        let material = U32Id::<BVoxMaterial>::from_u32(index as u32);
+        let material_id = U32Id::<BVoxMaterial>::from_u32(index as u32);
         if let Some([r, g, b, a]) = state
-            .material_value(palette, material, property)
-            .and_then(|(value_pool, value)| value_pool_color(value_pool, value))
+            .material_value(palette_id, material_id, property_id)
+            .and_then(|(value_pool, value_id)| value_pool_color(value_pool, value_id))
         {
             *color = MVoxColor::new(r, g, b, a);
         }
@@ -174,7 +180,7 @@ fn material_type_from_token(token: &str) -> MVoxMaterialType {
 /// its color index.
 fn model_from_object(object: &VoxObject) -> MVoxModel {
     let bounds = object.bounds();
-    let layer = object.iter_layers().next().map(|(layer, _)| layer);
+    let layer_id = object.iter_layers().next().map(|(layer_id, _)| layer_id);
 
     let voxels = object
         .iter_live()
@@ -182,9 +188,9 @@ fn model_from_object(object: &VoxObject) -> MVoxModel {
             let position = object
                 .voxel_position(voxel_id)
                 .expect("a live voxel is within the grid");
-            let color_index = layer
-                .and_then(|layer| object.voxel_material(voxel_id, layer))
-                .map_or(0, |material| material.to_u32() as u8);
+            let color_index = layer_id
+                .and_then(|layer_id| object.voxel_material(voxel_id, layer_id))
+                .map_or(0, |material_id| material_id.to_u32() as u8);
             MVoxVoxel {
                 x: position.x as u8,
                 y: position.y as u8,
@@ -302,8 +308,8 @@ fn synthesize_palette(state: &VoxMain) -> Result<(MVoxPalette, HashMap<[u8; 4], 
         let Some(cell_color) = resolve_cell_color(state, object)? else {
             continue;
         };
-        for voxel in object.iter_live() {
-            let rgba = cell_color.color(voxel);
+        for voxel_id in object.iter_live() {
+            let rgba = cell_color.color(voxel_id);
             if color_index.contains_key(&rgba) {
                 continue;
             }
@@ -343,12 +349,12 @@ fn synthesize_model(
     let cell_color = resolve_cell_color_or_transparent(state, object)?;
     let voxels = object
         .iter_live()
-        .map(|voxel| {
+        .map(|voxel_id| {
             let position = object
-                .voxel_position(voxel)
+                .voxel_position(voxel_id)
                 .expect("a live voxel is within the grid");
             let index = color_index
-                .get(&cell_color.color(voxel))
+                .get(&cell_color.color(voxel_id))
                 .copied()
                 .unwrap_or(0);
             MVoxVoxel {
@@ -381,11 +387,11 @@ fn synthesize_scene(state: &VoxMain) -> Vec<MVoxSceneNode> {
     let mut roots: Vec<i32> = state
         .root_hierarchy_node_ids()
         .iter()
-        .map(|&node| builder.emit_node(state, node))
+        .map(|&node_id| builder.emit_node(state, node_id))
         .collect();
-    for (id, object) in state.iter_objects() {
-        if !builder.placed.contains(&id.to_u32()) {
-            roots.push(builder.emit_object(id, object));
+    for (object_id, object) in state.iter_objects() {
+        if !builder.placed.contains(&object_id.to_u32()) {
+            roots.push(builder.emit_object(object_id, object));
         }
     }
 
@@ -422,7 +428,7 @@ impl SceneBuilder {
         let transform = self.allocate();
         let group = self.allocate();
 
-        let (child_nodes, child_objects, translation) = {
+        let (child_node_ids, child_object_ids, translation) = {
             let node = state
                 .hierarchy_node(node_id)
                 .expect("a hierarchy id from the state resolves");
@@ -433,11 +439,11 @@ impl SceneBuilder {
             )
         };
 
-        let mut children: Vec<i32> = child_nodes
+        let mut children: Vec<i32> = child_node_ids
             .iter()
-            .map(|&child| self.emit_node(state, child))
+            .map(|&child_id| self.emit_node(state, child_id))
             .collect();
-        for &object_id in &child_objects {
+        for &object_id in &child_object_ids {
             if let Some(object) = state.object(object_id) {
                 children.push(self.emit_object(object_id, object));
             }

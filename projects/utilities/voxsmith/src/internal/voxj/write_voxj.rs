@@ -66,7 +66,7 @@ pub fn write_voxj(
     let root_nodes = state
         .root_hierarchy_node_ids()
         .iter()
-        .map(|id| id.to_u32() as usize)
+        .map(|node_id| node_id.to_u32() as usize)
         .collect();
 
     // Editor state, aligned by index with the objects. Each entry is the

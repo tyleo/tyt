@@ -106,7 +106,7 @@ fn sweep(
                     }
                 }
 
-                let voxel = object
+                let voxel_id = object
                     .voxel_id(TyVector3U32::new(
                         position[0] as u32,
                         position[1] as u32,
@@ -114,7 +114,7 @@ fn sweep(
                     ))
                     .expect("a live voxel is within the grid");
 
-                mask[vv as usize * w + uu as usize] = Some(key(voxel));
+                mask[vv as usize * w + uu as usize] = Some(key(voxel_id));
             }
         }
 
@@ -177,7 +177,7 @@ fn live_at(object: &VoxObject, position: [i64; 3], bounds: [u32; 3]) -> bool {
 
     object
         .voxel_id(position)
-        .is_some_and(|id| object.is_live(id))
+        .is_some_and(|voxel_id| object.is_live(voxel_id))
 }
 
 /// Greedily fuses a slice `mask` (width `w`, height `h`) into maximal
@@ -313,8 +313,8 @@ mod tests {
         )
         .unwrap();
         for &[x, y, z] in live {
-            let id = object.voxel_id(TyVector3U32::new(x, y, z)).unwrap();
-            object.retain_voxel(id, &[]).unwrap();
+            let voxel_id = object.voxel_id(TyVector3U32::new(x, y, z)).unwrap();
+            object.retain_voxel(voxel_id, &[]).unwrap();
         }
         object
     }
@@ -382,7 +382,12 @@ mod tests {
         // Two materials along x (voxel id 0 vs 1) split every face that spanned
         // both voxels: the two end caps stay, the four side faces each split in
         // two, for ten quads.
-        let keyed = mesh_slices(&object, MeshMethod::Greedy, &|voxel| voxel.to_u32(), true);
+        let keyed = mesh_slices(
+            &object,
+            MeshMethod::Greedy,
+            &|voxel_id| voxel_id.to_u32(),
+            true,
+        );
         assert_eq!(keyed.quad_count(), 10);
         assert_eq!(keyed.materials.len(), keyed.vertex_count());
         assert!(

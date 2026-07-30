@@ -36,8 +36,8 @@ mod tests {
     #[test]
     fn gltf_text_embeds_the_buffer_and_parses() {
         let mut object = VoxObject::new("cube".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        let id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        object.retain_voxel(id, &[]).unwrap();
+        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[]).unwrap();
 
         let bytes = object_to_gltf_bytes(&object, MeshMethod::Culled, 1.0).unwrap();
 

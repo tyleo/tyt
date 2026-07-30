@@ -76,12 +76,18 @@ mod tests {
         assert_eq!(out.property_count(), 2);
         assert_eq!(out.material_count(), 3);
 
-        let base = out.property_id_by_name("baseColorFactor").unwrap();
-        let metallic = out.property_id_by_name("metallicFactor").unwrap();
-        let material_2 = out.iter_materials().nth(2).unwrap();
+        let base_property_id = out.property_id_by_name("baseColorFactor").unwrap();
+        let metallic_property_id = out.property_id_by_name("metallicFactor").unwrap();
+        let material_2_id = out.iter_materials().nth(2).unwrap();
         // Material 2 reads value id 2 for base color and 1 for metallic.
-        assert_eq!(out.value_id(material_2, base), Some(U32Id::from_u32(2)));
-        assert_eq!(out.value_id(material_2, metallic), Some(U32Id::from_u32(1)));
+        assert_eq!(
+            out.value_id(material_2_id, base_property_id),
+            Some(U32Id::from_u32(2))
+        );
+        assert_eq!(
+            out.value_id(material_2_id, metallic_property_id),
+            Some(U32Id::from_u32(1))
+        );
     }
 
     #[test]

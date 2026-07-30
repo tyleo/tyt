@@ -34,8 +34,8 @@ pub fn tighten(object: &VoxObject) -> (VoxObject, (TyVector3U32, TyVector3I32)) 
 /// `0`. The filler is overwritten when a voxel is re-lived and is never read for
 /// an empty voxel, so a uniform filler suffices.
 fn copy_layers(from: &VoxObject, to: &mut VoxObject) {
-    for (_, palette) in from.iter_layers() {
-        to.add_layer(palette, U32Id::<BVoxMaterial>::from_u32(0));
+    for (_, palette_id) in from.iter_layers() {
+        to.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
     }
 }
 
@@ -43,22 +43,23 @@ fn copy_layers(from: &VoxObject, to: &mut VoxObject) {
 /// its samples. `to` must already share `from`'s layers and contain every
 /// shifted position.
 fn copy_voxels(from: &VoxObject, to: &mut VoxObject, offset: TyVector3I32) {
-    let layers: Vec<_> = from.iter_layers().map(|(layer, _)| layer).collect();
-    for voxel in from.iter_live() {
+    let layer_ids: Vec<_> = from.iter_layers().map(|(layer_id, _)| layer_id).collect();
+    for voxel_id in from.iter_live() {
         let p = from
-            .voxel_position(voxel)
+            .voxel_position(voxel_id)
             .expect("a live voxel is within the grid");
         let position = (p.as_ivec3() + offset).as_uvec3();
-        let id = to
+        let shifted_voxel_id = to
             .voxel_id(position)
             .expect("the shifted voxel is within the target grid");
-        let samples: Vec<_> = layers
+        let samples: Vec<_> = layer_ids
             .iter()
-            .map(|&layer| {
-                from.voxel_material(voxel, layer)
+            .map(|&layer_id| {
+                from.voxel_material(voxel_id, layer_id)
                     .expect("a live voxel samples every layer")
             })
             .collect();
-        to.retain_voxel(id, &samples).expect("one sample per layer");
+        to.retain_voxel(shifted_voxel_id, &samples)
+            .expect("one sample per layer");
     }
 }

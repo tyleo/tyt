@@ -40,15 +40,15 @@ pub fn to_qbt_file(state: &VoxMain) -> Result<QbtFile> {
         )));
     }
 
-    let roots = state.root_hierarchy_node_ids();
-    let [root] = roots else {
+    let root_ids = state.root_hierarchy_node_ids();
+    let [root_id] = root_ids else {
         return Err(Error::invalid(format!(
             "a Qubicle .qbt file needs exactly one root, but the state has {}",
-            roots.len()
+            root_ids.len()
         )));
     };
 
-    let root = rebuild_node(*root, state, &ext.nodes)?;
+    let root = rebuild_node(*root_id, state, &ext.nodes)?;
 
     Ok(QbtFile {
         version: ext.version,
@@ -62,20 +62,23 @@ pub fn to_qbt_file(state: &VoxMain) -> Result<QbtFile> {
     })
 }
 
-/// Rebuilds one scene node and its subtree from the hierarchy node `id` and its
-/// aligned ext provenance.
+/// Rebuilds one scene node and its subtree from the hierarchy node `node_id`
+/// and its aligned ext provenance.
 fn rebuild_node(
-    id: U32Id<BVoxHierarchyNode>,
+    node_id: U32Id<BVoxHierarchyNode>,
     state: &VoxMain,
     nodes: &[QubicleQbtNode],
 ) -> Result<QbtNode> {
-    let hierarchy = state
-        .hierarchy_node(id)
-        .ok_or_else(|| Error::invalid(format!("hierarchy node {} does not exist", id.to_u32())))?;
-    let provenance = nodes.get(id.to_u32() as usize).ok_or_else(|| {
+    let hierarchy = state.hierarchy_node(node_id).ok_or_else(|| {
+        Error::invalid(format!(
+            "hierarchy node {} does not exist",
+            node_id.to_u32()
+        ))
+    })?;
+    let provenance = nodes.get(node_id.to_u32() as usize).ok_or_else(|| {
         Error::invalid(format!(
             "qubicle-qbt ext has no entry for hierarchy node {}",
-            id.to_u32()
+            node_id.to_u32()
         ))
     })?;
 
@@ -137,7 +140,7 @@ fn rebuild_children(
     hierarchy
         .child_node_ids
         .iter()
-        .map(|&child| rebuild_node(child, state, nodes))
+        .map(|&child_id| rebuild_node(child_id, state, nodes))
         .collect()
 }
 

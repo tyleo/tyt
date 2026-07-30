@@ -25,11 +25,17 @@ use voxcore::{
 pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
-    let (palette, materials) = build_palette(&mut state, &file.root);
+    let (palette, material_ids) = build_palette(&mut state, &file.root);
     let palette_id = state.add_palette(palette)?;
 
     let mut nodes = Vec::new();
-    let root_id = build_node(&file.root, &mut state, palette_id, &materials, &mut nodes)?;
+    let root_id = build_node(
+        &file.root,
+        &mut state,
+        palette_id,
+        &material_ids,
+        &mut nodes,
+    )?;
     state.set_root_hierarchy_node_ids(vec![root_id])?;
 
     let ext = QubicleQbtExtWrapper {
@@ -56,15 +62,15 @@ pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
 fn build_node(
     node: &QbtNode,
     state: &mut VoxMain,
-    palette: U32Id<BVoxPalette>,
-    materials: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
+    palette_id: U32Id<BVoxPalette>,
+    material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
     nodes: &mut Vec<QubicleQbtNode>,
 ) -> Result<U32Id<BVoxHierarchyNode>> {
-    let id = match node {
+    let node_id = match node {
         QbtNode::Matrix(matrix) => {
             // The matrix grid becomes the object's build volume directly; it
             // may carry empty margin. The masks are read from that same grid.
-            let object = build_object(matrix, palette, materials)?;
+            let object = build_object(matrix, palette_id, material_ids)?;
             let masks = masks_of(&object, matrix);
             let object_id = state.add_object(object)?;
             let hierarchy = VoxHierarchyNode {
@@ -73,7 +79,7 @@ fn build_node(
                 child_object_ids: vec![object_id],
                 transform: translation(matrix.position),
             };
-            let id = state.add_hierarchy_node(hierarchy)?;
+            let node_id = state.add_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Matrix {
                 name: matrix.name.clone(),
                 position: matrix.position,
@@ -81,12 +87,12 @@ fn build_node(
                 pivot: matrix.pivot,
                 masks,
             });
-            id
+            node_id
         }
         QbtNode::Model(model) => {
             let mut child_node_ids = Vec::with_capacity(model.children.len());
             for child in &model.children {
-                child_node_ids.push(build_node(child, state, palette, materials, nodes)?);
+                child_node_ids.push(build_node(child, state, palette_id, material_ids, nodes)?);
             }
             let hierarchy = VoxHierarchyNode {
                 name: String::new(),
@@ -94,18 +100,18 @@ fn build_node(
                 child_object_ids: Vec::new(),
                 transform: TyTransformF64::default(),
             };
-            let id = state.add_hierarchy_node(hierarchy)?;
+            let node_id = state.add_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Model);
-            id
+            node_id
         }
         QbtNode::Compound(compound) => {
             let mut child_node_ids = Vec::with_capacity(compound.children.len());
             for child in &compound.children {
-                child_node_ids.push(build_node(child, state, palette, materials, nodes)?);
+                child_node_ids.push(build_node(child, state, palette_id, material_ids, nodes)?);
             }
             // The compound grid becomes the object's build volume directly; it
             // may carry empty margin. The masks are read from that same grid.
-            let object = build_object(&compound.matrix, palette, materials)?;
+            let object = build_object(&compound.matrix, palette_id, material_ids)?;
             let masks = masks_of(&object, &compound.matrix);
             let object_id = state.add_object(object)?;
             let hierarchy = VoxHierarchyNode {
@@ -114,7 +120,7 @@ fn build_node(
                 child_object_ids: vec![object_id],
                 transform: translation(compound.matrix.position),
             };
-            let id = state.add_hierarchy_node(hierarchy)?;
+            let node_id = state.add_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Compound {
                 name: compound.matrix.name.clone(),
                 position: compound.matrix.position,
@@ -122,7 +128,7 @@ fn build_node(
                 pivot: compound.matrix.pivot,
                 masks,
             });
-            id
+            node_id
         }
         QbtNode::Unknown(unknown) => {
             let hierarchy = VoxHierarchyNode {
@@ -131,15 +137,15 @@ fn build_node(
                 child_object_ids: Vec::new(),
                 transform: TyTransformF64::default(),
             };
-            let id = state.add_hierarchy_node(hierarchy)?;
+            let node_id = state.add_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Unknown {
                 type_id: unknown.type_id,
                 data: unknown.data.clone(),
             });
-            id
+            node_id
         }
     };
-    Ok(id)
+    Ok(node_id)
 }
 
 /// Builds the one shared palette: a color pool of one entry per distinct color
@@ -160,24 +166,28 @@ fn build_palette(
 
     // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB pool as
     // float components in `[0, 1]`; each material draws one value id into it.
-    let pool = state.add_value_pool(
+    let value_pool_id = state.add_value_pool(
         VoxValuePool::srgb(order.iter().map(|&color| color_floats(color)).collect())
             .expect("byte-derived components are in range and the list is non-empty"),
     );
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(BASE_COLOR_FACTOR.to_owned(), pool, U32Id::from_u32(0))
+        .add_property(
+            BASE_COLOR_FACTOR.to_owned(),
+            value_pool_id,
+            U32Id::from_u32(0),
+        )
         .expect("the property names are distinct");
-    let mut materials = HashMap::with_capacity(order.len());
+    let mut material_ids = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
-        let material = palette
+        let material_id = palette
             .add_material(vec![U32Id::from_u32(index as u32)])
             .expect("one value id for the one property");
-        materials.insert(*color, material);
+        material_ids.insert(*color, material_id);
     }
 
-    (palette, materials)
+    (palette, material_ids)
 }
 
 /// Collects the distinct colors of a node and its subtree, in first-seen order.
@@ -217,8 +227,8 @@ fn collect_matrix(matrix: &QbtMatrix, order: &mut Vec<[u8; 3]>, seen: &mut HashS
 /// color material. Errors on an oversized grid.
 fn build_object(
     matrix: &QbtMatrix,
-    palette: U32Id<BVoxPalette>,
-    materials: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
+    palette_id: U32Id<BVoxPalette>,
+    material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
 ) -> Result<VoxObject> {
     let [size_x, size_y, size_z] = matrix.size;
     let mut object = VoxObject::new(String::new(), TyVector3U32::new(size_x, size_y, size_z))
@@ -229,7 +239,7 @@ fn build_object(
             ))
         })?;
 
-    object.add_layer(palette, U32Id::<BVoxMaterial>::from_u32(0));
+    object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
 
     for x in 0..size_x {
         for y in 0..size_y {
@@ -240,15 +250,15 @@ fn build_object(
                 if voxel.is_empty() {
                     continue;
                 }
-                let material = materials
+                let material_id = material_ids
                     .get(&[voxel.r, voxel.g, voxel.b])
                     .copied()
                     .expect("every solid color is in the palette");
-                let id = object
+                let voxel_id = object
                     .voxel_id(TyVector3U32::new(x, y, z))
                     .expect("a coordinate inside the matrix is inside the grid");
                 object
-                    .retain_voxel(id, &[material])
+                    .retain_voxel(voxel_id, &[material_id])
                     .expect("one sample for the one layer");
             }
         }
@@ -262,9 +272,9 @@ fn build_object(
 fn masks_of(object: &VoxObject, matrix: &QbtMatrix) -> Vec<u8> {
     object
         .iter_live()
-        .map(|id| {
+        .map(|voxel_id| {
             let position = object
-                .voxel_position(id)
+                .voxel_position(voxel_id)
                 .expect("a live voxel is within the grid");
             matrix
                 .voxel(position.x, position.y, position.z)

@@ -18,7 +18,10 @@ pub fn voxj_palette_from_vox_palette(palette: &VoxPalette) -> VoxjPalette {
 
     // Property ids, reused to read each material's row in property
     // order.
-    let property_ids: Vec<_> = palette.iter_properties().map(|(id, _)| id).collect();
+    let property_ids: Vec<_> = palette
+        .iter_properties()
+        .map(|(property_id, _)| property_id)
+        .collect();
 
     let materials = palette
         .iter_materials()

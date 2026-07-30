@@ -88,12 +88,12 @@ pub fn vox_object_from_voxj_decoded_object(
             )));
         }
 
-        let materials: Vec<U32Id<BVoxMaterial>> = row
+        let material_ids: Vec<U32Id<BVoxMaterial>> = row
             .iter()
-            .map(|&material| material.to_u32_id::<BVoxMaterial>())
+            .map(|&material_index| material_index.to_u32_id::<BVoxMaterial>())
             .collect();
 
-        out.retain_voxel(voxel_id, &materials)
+        out.retain_voxel(voxel_id, &material_ids)
             .expect("the row has one material per layer");
     }
 

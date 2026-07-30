@@ -113,7 +113,7 @@ Gate: workspace green; the voxcore gate grep returns only id-pool mentions
       `reduce_palette.rs`, `convert/vmax/to_vmax_file.rs`,
       `convert/voxelize/voxelize_mesh.rs`, `internal/gltf/bake_atlas.rs`,
       and `convert/vmax/from_vmax_file.rs`.
-- [ ] Id suffixes, the converter family and helpers: the qbcl, goxl, and
+- [x] Id suffixes, the converter family and helpers: the qbcl, goxl, and
       mvox readers and writers, `order_palette_colors.rs`,
       `internal/grid.rs`, `internal/gltf/used_materials.rs`, and the small
       gltf, mesh, and voxj files on the survey's per-file list, including

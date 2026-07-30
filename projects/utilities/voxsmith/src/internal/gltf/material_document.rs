@@ -52,7 +52,7 @@ pub(crate) fn build_material_document(
     let geometry = mesh_slices(
         object,
         request.method,
-        &|voxel| used.material_index(voxel).unwrap_or(0),
+        &|voxel_id| used.material_index(voxel_id).unwrap_or(0),
         true,
     );
 

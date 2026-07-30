@@ -10,12 +10,12 @@ pub fn voxj_hierarchy_node_from_vox_hierarchy_node(node: &VoxHierarchyNode) -> V
         child_nodes: node
             .child_node_ids
             .iter()
-            .map(|id| id.to_u32() as usize)
+            .map(|node_id| node_id.to_u32() as usize)
             .collect(),
         child_objects: node
             .child_object_ids
             .iter()
-            .map(|id| id.to_u32() as usize)
+            .map(|object_id| object_id.to_u32() as usize)
             .collect(),
         transform: voxj_transform_from_vox_transform(&node.transform),
     }

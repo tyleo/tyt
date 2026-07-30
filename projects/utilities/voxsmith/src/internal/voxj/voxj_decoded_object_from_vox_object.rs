@@ -29,9 +29,9 @@ pub fn voxj_decoded_object_from_vox_object(
         .live_extent()
         .unwrap_or((TyVector3U32::new(0, 0, 0), TyVector3U32::new(0, 0, 0)));
 
-    let layers: Vec<usize> = object
+    let palette_indices: Vec<usize> = object
         .iter_layers()
-        .map(|(_, palette)| palette.to_u32() as usize)
+        .map(|(_, palette_id)| palette_id.to_u32() as usize)
         .collect();
 
     // Layer ids, reused for each voxel's sample row: the wire's channel
@@ -61,7 +61,7 @@ pub fn voxj_decoded_object_from_vox_object(
 
     VoxjDecodedObject {
         name: object.name().to_owned(),
-        layers,
+        layers: palette_indices,
         bounds: size.to_array(),
         origin: (origin + min.as_ivec3()).to_array(),
         positions,

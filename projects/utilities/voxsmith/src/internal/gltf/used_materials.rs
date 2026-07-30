@@ -44,11 +44,11 @@ impl<'a> UsedMaterials<'a> {
         self.keys.len()
     }
 
-    /// The atlas texel `voxel` samples, its identity key's position in the
-    /// used set, or `None` if `voxel` is not a live voxel of the resolved
+    /// The atlas texel `voxel_id` samples, its identity key's position in the
+    /// used set, or `None` if `voxel_id` is not a live voxel of the resolved
     /// object.
-    pub(crate) fn material_index(&self, voxel: U32Id<BVoxVoxel>) -> Option<u32> {
-        self.index_of.get(&voxel).copied()
+    pub(crate) fn material_index(&self, voxel_id: U32Id<BVoxVoxel>) -> Option<u32> {
+        self.index_of.get(&voxel_id).copied()
     }
 
     /// What the texel at `index` draws for the property named `key`: the

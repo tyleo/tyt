@@ -53,23 +53,27 @@ mod tests {
     fn red_blue_bar() -> (VoxMain, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        let base = state.add_value_pool(
+        let base_value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR_FACTOR.to_owned(), base, U32Id::from_u32(0))
+            .add_property(
+                BASE_COLOR_FACTOR.to_owned(),
+                base_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        let red = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let blue = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
+        let red_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let blue_id = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
         let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_layer(palette_id, red);
-        for (x, material) in [(0, red), (1, blue)] {
-            let voxel = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
-            object.retain_voxel(voxel, &[material]).unwrap();
+        object.add_layer(palette_id, red_id);
+        for (x, material_id) in [(0, red_id), (1, blue_id)] {
+            let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
+            object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
         let object_id = state.add_object(object).unwrap();
 

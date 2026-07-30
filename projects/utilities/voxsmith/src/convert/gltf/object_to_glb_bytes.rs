@@ -40,8 +40,8 @@ mod tests {
     fn bar() -> VoxObject {
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(1, 1, 2)).unwrap();
         for z in 0..2 {
-            let id = object.voxel_id(TyVector3U32::new(0, 0, z)).unwrap();
-            object.retain_voxel(id, &[]).unwrap();
+            let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, z)).unwrap();
+            object.retain_voxel(voxel_id, &[]).unwrap();
         }
         object
     }
