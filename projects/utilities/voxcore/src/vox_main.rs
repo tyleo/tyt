@@ -568,8 +568,8 @@ impl VoxMain {
 
         let batch_ids: HashSet<U32Id<BVoxHierarchyNode>> =
             prospective_ids.iter().copied().collect();
-        for (index, node) in nodes.iter().enumerate() {
-            self.check_inserted_node(node, index, &batch_ids)?;
+        for (node_index, node) in nodes.iter().enumerate() {
+            self.check_inserted_node(node, node_index, &batch_ids)?;
         }
 
         // An edge leaving the batch lands on an already-live node, whose
@@ -584,8 +584,8 @@ impl VoxMain {
             .iter()
             .map(|node| node.child_node_ids.as_slice())
             .collect();
-        if let Some(index) = first_cycle_position(&children, &index_of) {
-            return Err(Error::InsertedCycle { index });
+        if let Some(node_index) = first_cycle_node_index(&children, &index_of) {
+            return Err(Error::InsertedCycle { index: node_index });
         }
 
         let ids: Vec<U32Id<BVoxHierarchyNode>> = nodes
@@ -600,14 +600,14 @@ impl VoxMain {
         Ok(ids)
     }
 
-    /// Checks a node about to be inserted at listing position `index` of its
-    /// batch: every child node resolves against this state or the batch's
+    /// Checks a node about to be inserted at listing position `node_index` of
+    /// its batch: every child node resolves against this state or the batch's
     /// prospective ids, every child object is live, no child repeats, and the
     /// transform is finite with a non-zero scale and a unit rotation.
     fn check_inserted_node(
         &self,
         node: &VoxHierarchyNode,
-        index: usize,
+        node_index: usize,
         batch_ids: &HashSet<U32Id<BVoxHierarchyNode>>,
     ) -> Result<()> {
         let mut seen_child_node_ids = HashSet::with_capacity(node.child_node_ids.len());
@@ -616,7 +616,10 @@ impl VoxMain {
                 return Err(Error::UnknownHierarchyNode { node_id: child_id });
             }
             if !seen_child_node_ids.insert(child_id) {
-                return Err(Error::InsertedDuplicateChildNode { index, child_id });
+                return Err(Error::InsertedDuplicateChildNode {
+                    index: node_index,
+                    child_id,
+                });
             }
         }
         let mut seen_child_object_ids = HashSet::with_capacity(node.child_object_ids.len());
@@ -625,7 +628,10 @@ impl VoxMain {
                 return Err(Error::UnknownObject { object_id });
             }
             if !seen_child_object_ids.insert(object_id) {
-                return Err(Error::InsertedDuplicateChildObject { index, object_id });
+                return Err(Error::InsertedDuplicateChildObject {
+                    index: node_index,
+                    object_id,
+                });
             }
         }
 
@@ -634,17 +640,17 @@ impl VoxMain {
         let position = node.transform.position;
         let scale = node.transform.scale;
         if !vector_is_finite(position) || !vector_is_finite(scale) {
-            return Err(Error::InsertedNonFiniteTransform { index });
+            return Err(Error::InsertedNonFiniteTransform { index: node_index });
         }
         if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
-            return Err(Error::InsertedZeroScale { index });
+            return Err(Error::InsertedZeroScale { index: node_index });
         }
         if !node
             .transform
             .rotation
             .is_normalized_within(UNIT_ROTATION_TOLERANCE)
         {
-            return Err(Error::InsertedNonUnitRotation { index });
+            return Err(Error::InsertedNonUnitRotation { index: node_index });
         }
         Ok(())
     }
@@ -1283,9 +1289,9 @@ impl VoxMain {
                     .as_slice()
             })
             .collect();
-        if let Some(position) = first_cycle_position(&children, &index_of) {
+        if let Some(node_index) = first_cycle_node_index(&children, &index_of) {
             return Err(Error::Cycle {
-                node_id: node_ids[position],
+                node_id: node_ids[node_index],
             });
         }
 
@@ -1302,18 +1308,18 @@ impl VoxMain {
     }
 }
 
-/// The `children` position of a node lying on a `child_node_ids` cycle, or `None`
-/// if the graph is acyclic.
+/// The `children` index of a node lying on a `child_node_ids` cycle, or
+/// `None` if the graph is acyclic.
 ///
-/// `children` holds each node's child ids at that node's position, and
-/// `index_of` maps a child id back to its position. A child missing from
-/// `index_of` leads outside the checked set, where no edge can return, so it is
-/// skipped.
+/// `children` holds each node's child ids at that node's index, and
+/// `index_of` maps a child id back to its index. A child missing from
+/// `index_of` leads outside the checked set, where no edge can return, so it
+/// is skipped.
 ///
 /// The walk is an iterative three-colour DFS, so a deep chain cannot overflow
 /// the stack. A back edge into an in-progress node is a cycle; revisiting a
 /// finished one is not.
-fn first_cycle_position(
+fn first_cycle_node_index(
     children: &[&[U32Id<BVoxHierarchyNode>]],
     index_of: &HashMap<U32Id<BVoxHierarchyNode>, usize>,
 ) -> Option<usize> {
@@ -1324,33 +1330,32 @@ fn first_cycle_position(
     let count = children.len();
     let mut colour = vec![WHITE; count];
 
-    for start in 0..count {
-        if colour[start] != WHITE {
+    for start_index in 0..count {
+        if colour[start_index] != WHITE {
             continue;
         }
-        colour[start] = GREY;
-        // Each frame is a node position plus how many children we have
-        // walked.
-        let mut stack: Vec<(usize, usize)> = vec![(start, 0)];
-        while let Some(&(node, cursor)) = stack.last() {
-            let node_children = children[node];
+        colour[start_index] = GREY;
+        // Each frame is a node index plus how many children we have walked.
+        let mut stack: Vec<(usize, usize)> = vec![(start_index, 0)];
+        while let Some(&(node_index, cursor)) = stack.last() {
+            let node_children = children[node_index];
             match (cursor < node_children.len()).then(|| node_children[cursor]) {
                 Some(child_id) => {
                     stack.last_mut().unwrap().1 += 1;
-                    let Some(&child_position) = index_of.get(&child_id) else {
+                    let Some(&child_index) = index_of.get(&child_id) else {
                         continue;
                     };
-                    match colour[child_position] {
+                    match colour[child_index] {
                         WHITE => {
-                            colour[child_position] = GREY;
-                            stack.push((child_position, 0));
+                            colour[child_index] = GREY;
+                            stack.push((child_index, 0));
                         }
-                        GREY => return Some(child_position),
+                        GREY => return Some(child_index),
                         _ => {}
                     }
                 }
                 None => {
-                    colour[node] = BLACK;
+                    colour[node_index] = BLACK;
                     stack.pop();
                 }
             }

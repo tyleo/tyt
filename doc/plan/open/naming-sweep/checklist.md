@@ -63,7 +63,7 @@ suffixes and the spelled-out value pool, one iteration per crate, in order:
       `second_pool_id`, `wild_pool_id`, and kin), the four test names
       saying bare pool, and the debug dump format string in `vox_main.rs`
       (`|pool {pool_id:?}`), whose snapshot text changes with it.
-- [ ] The index residue: `first_cycle_position`'s `start` and `node`
+- [x] The index residue: `first_cycle_position`'s `start` and `node`
       bindings and its two callers' `index` and `position` locals become
       `_index` forms, matching the swept voxj-codec twin.
 - [ ] The bare-`id` bindings under the Q2 policy: the seven loop bindings
