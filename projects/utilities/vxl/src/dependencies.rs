@@ -140,8 +140,8 @@ pub trait Dependencies {
         select_index: &[SelectIndex],
     ) -> Result<Vec<usize>>;
 
-    /// Meshes the object at index `object` of the voxel file at `input` into a
-    /// glTF or GLB mesh at `output`, with no hierarchy-node transform. With no
+    /// Meshes the object at index `object_index` of the voxel file at `input`
+    /// into a glTF or GLB mesh at `output`, with no hierarchy-node transform. With no
     /// `maps` it is pure geometry. Otherwise it bakes the object's flattened
     /// layer materials, merged per property name by the format's
     /// layer-override rule, into textures the mesh's UVs sample, writing any
@@ -155,7 +155,7 @@ pub trait Dependencies {
     /// * `format` - the target mesh container.
     /// * `scale` - meters per voxel, applied as a uniform scale to every vertex.
     /// * `method` - the meshing strategy.
-    /// * `object` - the object's index into the document, as
+    /// * `object_index` - the object's index into the document, as
     ///   [`resolve_objects`](Self::resolve_objects) returns.
     /// * `maps` - the material maps to bake, each its own image, in order; empty
     ///   for pure geometry.
@@ -171,7 +171,7 @@ pub trait Dependencies {
         format: MeshFormat,
         scale: f64,
         method: MeshMethod,
-        object: usize,
+        object_index: usize,
         maps: &[MeshTextureMap],
         storage: ResourceStorage,
         texture_shape: TextureShape,

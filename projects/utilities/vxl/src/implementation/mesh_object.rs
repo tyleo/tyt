@@ -18,8 +18,8 @@ use voxsmith::{
     object_to_material_glb, object_to_material_gltf,
 };
 
-/// Meshes the object at index `object` of the voxel file at `input` into a mesh
-/// at `output`. With no `maps` it writes pure geometry. Otherwise it bakes the
+/// Meshes the object at index `object_index` of the voxel file at `input` into a
+/// mesh at `output`. With no `maps` it writes pure geometry. Otherwise it bakes the
 /// object's flattened layer materials, merged per property name by the
 /// format's layer-override rule, into textures the mesh samples, writing any
 /// loose images beside `output`. The object index is a position into the
@@ -34,17 +34,17 @@ pub fn mesh_object(
     format: MeshFormat,
     scale: f64,
     method: MeshMethod,
-    object: usize,
+    object_index: usize,
     maps: &[MeshTextureMap],
     storage: ResourceStorage,
     texture_shape: TextureShape,
 ) -> Result<()> {
     let state = implementation::load_state(input, from)?;
 
-    let (_, object) = state.iter_objects().nth(object).ok_or_else(|| {
+    let (_, object) = state.iter_objects().nth(object_index).ok_or_else(|| {
         IOError::new(
             ErrorKind::InvalidInput,
-            format!("object index {object} is out of range"),
+            format!("object index {object_index} is out of range"),
         )
     })?;
 

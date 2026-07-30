@@ -164,13 +164,14 @@ Gate: workspace green; the voxsmith gate grep returns nothing.
       policy (the placement-helper subject parameters stay `id`).
       `mesh_object.rs`'s main-code palette locals drifted away with the
       layer flatten, leaving only its test fixtures.
-- [ ] Index suffixes: `Mesh::layer` to `layer_index`, the derived flag
-      following to `--layer-index`, noted in the commit body; the `object`
-      and `layer` parameters on `Dependencies` and
-      `DependenciesImpl`; `mesh_object.rs`; `palette_show.rs`
-      (`Collection::palette`, the `index` parameters, `channel`);
-      `resolve_objects.rs`; `hierarchy_show.rs` (`parent`, `this`,
-      `instance`).
+- [x] Index suffixes: the `object` parameter on `Dependencies` and
+      `DependenciesImpl` and the `mesh.rs` locals feeding it;
+      `mesh_object.rs`; `palette_show.rs` (`Collection::palette`, the
+      `index` parameters, `channel`); `resolve_objects.rs`;
+      `hierarchy_show.rs` (`parent`, `this`, `parents`, `instance`).
+      Moot: `Mesh::layer`, its `--layer` flag, and the `layer` parameters
+      went away with the layer-flatten rework, so there is no
+      `--layer-index` to move.
 - [ ] Value-pool identifiers: `pool_kind` in `mesh_object.rs`; the `pool`
       and `pool_id` locals and the `pool: &VoxValuePool` parameters in
       `palette_show.rs`; the `srgba_pool` test helper; the fixture locals

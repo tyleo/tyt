@@ -172,7 +172,7 @@ impl Mesh {
 
         let maps = self.resolve_maps(&output)?;
 
-        let objects = dependencies.resolve_objects(
+        let object_indices = dependencies.resolve_objects(
             &self.input,
             self.from,
             &self.select,
@@ -182,8 +182,8 @@ impl Mesh {
         // `mesh` outputs one object, so the selection must name exactly one; the
         // resolver stays flag-agnostic and this policy, with its flag-named
         // guidance, lives here on the command.
-        let object = match objects.as_slice() {
-            [object] => *object,
+        let object_index = match object_indices.as_slice() {
+            [object_index] => *object_index,
 
             [] => {
                 return Err(Error::usage(
@@ -191,11 +191,11 @@ impl Mesh {
                 ));
             }
 
-            objects => {
+            object_indices => {
                 return Err(Error::usage(format!(
                     "the selection resolved to {} objects, but `mesh` outputs exactly one; \
                      narrow it with --select or --select-index",
-                    objects.len(),
+                    object_indices.len(),
                 )));
             }
         };
@@ -207,7 +207,7 @@ impl Mesh {
             format,
             self.voxel_size.0,
             self.method,
-            object,
+            object_index,
             &maps,
             storage,
             self.texture_shape,

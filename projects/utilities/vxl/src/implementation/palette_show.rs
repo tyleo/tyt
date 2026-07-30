@@ -88,7 +88,7 @@ fn terminal_columns() -> Option<usize> {
 /// it.
 struct Collection {
     /// The resolved palette index, even when the selector used `*`.
-    palette: usize,
+    palette_index: usize,
     /// The property key, without any color component.
     key: String,
     /// The color component read from the property, when one was given.
@@ -124,10 +124,10 @@ fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Resul
     for selector in selectors {
         match selector.palette {
             PaletteRef::All => {
-                for (index, palette) in palettes.iter().enumerate() {
+                for (palette_index, palette) in palettes.iter().enumerate() {
                     expand_property(
                         state,
-                        index,
+                        palette_index,
                         palette,
                         &selector.property,
                         selector.format,
@@ -136,19 +136,19 @@ fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Resul
                     )?;
                 }
             }
-            PaletteRef::Index(index) => {
-                let palette = palettes.get(index).ok_or_else(|| {
+            PaletteRef::Index(palette_index) => {
+                let palette = palettes.get(palette_index).ok_or_else(|| {
                     IOError::new(
                         ErrorKind::InvalidInput,
                         format!(
-                            "palette index {index} is out of range; the document has {} palette(s)",
+                            "palette index {palette_index} is out of range; the document has {} palette(s)",
                             palettes.len()
                         ),
                     )
                 })?;
                 expand_property(
                     state,
-                    index,
+                    palette_index,
                     palette,
                     &selector.property,
                     selector.format,
@@ -166,7 +166,7 @@ fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Resul
 /// property it lacks instead of erroring.
 fn expand_property(
     state: &VoxMain,
-    index: usize,
+    palette_index: usize,
     palette: &VoxPalette,
     property: &PropertyRef,
     format: PaletteShowFormat,
@@ -176,7 +176,14 @@ fn expand_property(
     match property {
         PropertyRef::All => {
             for name in implementation::property_names(palette) {
-                collections.push(build_collection(state, index, palette, name, None, format)?);
+                collections.push(build_collection(
+                    state,
+                    palette_index,
+                    palette,
+                    name,
+                    None,
+                    format,
+                )?);
             }
         }
         PropertyRef::Key { key, component } => {
@@ -187,14 +194,19 @@ fn expand_property(
                 return Err(IOError::new(
                     ErrorKind::InvalidInput,
                     format!(
-                        "palette {index} has no property `{key}`; available properties: {}",
+                        "palette {palette_index} has no property `{key}`; available properties: {}",
                         available_keys(palette)
                     ),
                 )
                 .into());
             }
             collections.push(build_collection(
-                state, index, palette, key, *component, format,
+                state,
+                palette_index,
+                palette,
+                key,
+                *component,
+                format,
             )?);
         }
     }
@@ -206,7 +218,7 @@ fn expand_property(
 /// color, then samples the property's values.
 fn build_collection(
     state: &VoxMain,
-    index: usize,
+    palette_index: usize,
     palette: &VoxPalette,
     key: &str,
     component: Option<ColorComponent>,
@@ -265,7 +277,7 @@ fn build_collection(
         .collect();
 
     Ok(Collection {
-        palette: index,
+        palette_index,
         key: key.to_string(),
         component,
         format,
@@ -331,11 +343,11 @@ fn sample_color(
     let bytes = color_bytes(pool, value_id);
     match component {
         Some(component) => {
-            let channel = component_index(component);
+            let channel_index = component_index(component);
             if srgb {
-                TreeGridJsonValue::unorm8(bytes[channel])
+                TreeGridJsonValue::unorm8(bytes[channel_index])
             } else {
-                TreeGridJsonValue::unorm(color_floats(pool, value_id)[channel])
+                TreeGridJsonValue::unorm(color_floats(pool, value_id)[channel_index])
             }
         }
         None if srgb => {
@@ -496,10 +508,11 @@ fn build_grid(collections: Vec<Collection>) -> TreeGrid<TreeGridJsonValueCells> 
     let mut property_node: Option<(String, U32Id<BTreeGridNode>)> = None;
     for collection in collections {
         let palette_node_id = match palette_node {
-            Some((index, node_id)) if index == collection.palette => node_id,
+            Some((palette_index, node_id)) if palette_index == collection.palette_index => node_id,
             _ => {
-                let node_id = grid.add_root(TreeGridLabel::bare(collection.palette.to_string()));
-                palette_node = Some((collection.palette, node_id));
+                let node_id =
+                    grid.add_root(TreeGridLabel::bare(collection.palette_index.to_string()));
+                palette_node = Some((collection.palette_index, node_id));
                 property_node = None;
                 node_id
             }
@@ -1165,7 +1178,7 @@ mod tests {
             resolve_collections(&state, &selectors(&[("*", "metallicFactor", "value")])).unwrap();
         let labels: Vec<(usize, &str)> = collections
             .iter()
-            .map(|c| (c.palette, c.key.as_str()))
+            .map(|c| (c.palette_index, c.key.as_str()))
             .collect();
         assert_eq!(labels, [(0, "metallicFactor")]);
     }

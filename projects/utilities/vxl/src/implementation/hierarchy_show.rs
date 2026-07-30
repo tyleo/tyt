@@ -253,7 +253,7 @@ impl<'a> Scene<'a> {
                 path: self.object_name(object_id).to_string(),
                 entity: Entity::Object(object_id),
                 parent_world: identity,
-                parent: None,
+                parent_index: None,
             });
         }
 
@@ -267,7 +267,7 @@ impl<'a> Scene<'a> {
         node_id: NodeId,
         path: String,
         parent_world: TyTransformF64,
-        parent: Option<usize>,
+        parent_index: Option<usize>,
         branch: &mut HashSet<NodeId>,
         out: &mut Vec<Placement>,
     ) {
@@ -275,12 +275,12 @@ impl<'a> Scene<'a> {
             return;
         };
 
-        let this = out.len();
+        let this_index = out.len();
         out.push(Placement {
             path: path.clone(),
             entity: Entity::Node(node_id),
             parent_world,
-            parent,
+            parent_index,
         });
 
         if !branch.insert(node_id) {
@@ -294,13 +294,13 @@ impl<'a> Scene<'a> {
                 path: child_path(&path, self.object_name(object_id)),
                 entity: Entity::Object(object_id),
                 parent_world: world,
-                parent: Some(this),
+                parent_index: Some(this_index),
             });
         }
 
         for &child_id in &node.child_node_ids {
             let child_path = child_path(&path, self.node_name(child_id));
-            self.enumerate_from(child_id, child_path, world, Some(this), branch, out);
+            self.enumerate_from(child_id, child_path, world, Some(this_index), branch, out);
         }
 
         branch.remove(&node_id);
@@ -337,11 +337,11 @@ impl<'a> Scene<'a> {
             .into());
         }
 
-        let parents: Vec<Option<usize>> = placements
+        let parent_indices: Vec<Option<usize>> = placements
             .iter()
-            .map(|placement| placement.parent)
+            .map(|placement| placement.parent_index)
             .collect();
-        let selection = TreeSelection::from_matches(matched, &parents);
+        let selection = TreeSelection::from_matches(matched, &parent_indices);
 
         let selected = flagged_paths(&placements, selection.selected());
         let visible = flagged_paths(&placements, selection.visible());
@@ -383,7 +383,7 @@ struct Placement {
 
     /// The placing parent's index in the enumeration, `None` at a section
     /// root or an orphan object.
-    parent: Option<usize>,
+    parent_index: Option<usize>,
 }
 
 /// A placement's entity: a hierarchy node or a leaf object.
@@ -498,19 +498,19 @@ impl Walk<'_> {
     /// The instance index of node `id`: how many of its placements have already
     /// been shown, recording this one.
     fn node_instance(&mut self, id: NodeId) -> usize {
-        let slot = &mut self.seen_nodes[id.to_usize_id()];
-        let index = *slot;
-        *slot += 1;
-        index
+        let shown = &mut self.seen_nodes[id.to_usize_id()];
+        let instance_index = *shown;
+        *shown += 1;
+        instance_index
     }
 
     /// The instance index of object `id`: how many of its placements have
     /// already been shown, recording this one.
     fn object_instance(&mut self, id: ObjectId) -> usize {
-        let slot = &mut self.seen_objects[id.to_usize_id()];
-        let index = *slot;
-        *slot += 1;
-        index
+        let shown = &mut self.seen_objects[id.to_usize_id()];
+        let instance_index = *shown;
+        *shown += 1;
+        instance_index
     }
 
     /// Adds a node under `parent_id`, or as a grid root when there is none.
@@ -669,17 +669,17 @@ impl Walk<'_> {
 
         // The instance index counts placements of this id already shown; it is
         // present only for a shared node, and a nonzero index is a repeat.
-        let instance = (scene.node_placement(id) >= 2).then(|| self.node_instance(id));
+        let instance_index = (scene.node_placement(id) >= 2).then(|| self.node_instance(id));
 
         // Under collapse, a repeat placement outside a cycle is stubbed; the
         // nonzero instance index already marks it as a repeat.
         let collapsed_stub =
-            self.collapse_instances && !is_cycle && instance.is_some_and(|index| index > 0);
+            self.collapse_instances && !is_cycle && instance_index.is_some_and(|index| index > 0);
 
         let mut tag = format!("node: {}", id.to_u32());
 
-        if let Some(index) = instance {
-            tag.push_str(&format!(", instance: {index}"));
+        if let Some(instance_index) = instance_index {
+            tag.push_str(&format!(", instance: {instance_index}"));
         }
 
         if is_cycle {
@@ -812,12 +812,12 @@ impl Walk<'_> {
             return;
         };
 
-        let instance = (scene.object_placement(id) >= 2).then(|| self.object_instance(id));
+        let instance_index = (scene.object_placement(id) >= 2).then(|| self.object_instance(id));
 
         let mut tag = format!("object: {}", id.to_u32());
 
-        if let Some(index) = instance {
-            tag.push_str(&format!(", instance: {index}"));
+        if let Some(instance_index) = instance_index {
+            tag.push_str(&format!(", instance: {instance_index}"));
         }
 
         let grid_node_id = self.add_node(parent_id, TreeGridLabel::quoted(object.name()));

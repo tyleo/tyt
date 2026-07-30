@@ -50,8 +50,11 @@ fn select_objects(
 
     let mut chosen = vec![false; object_ids.len()];
 
-    for (index, chosen_flag) in chosen.iter_mut().enumerate() {
-        if select_index.iter().any(|selector| selector.contains(index)) {
+    for (object_index, chosen_flag) in chosen.iter_mut().enumerate() {
+        if select_index
+            .iter()
+            .any(|selector| selector.contains(object_index))
+        {
             *chosen_flag = true;
         }
     }
@@ -61,7 +64,7 @@ fn select_objects(
     }
 
     Ok((0..object_ids.len())
-        .filter(|&index| chosen[index])
+        .filter(|&object_index| chosen[object_index])
         .collect())
 }
 
