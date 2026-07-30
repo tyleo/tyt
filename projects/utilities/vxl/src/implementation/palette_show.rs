@@ -99,17 +99,17 @@ struct Collection {
     samples: Vec<TreeGridJsonValue>,
 }
 
-/// How a bound pool's kind renders in `palette show`: a color, in sRGB or
-/// linear space and with three or four components; a plain number; or any other
-/// value shown as text with no swatch.
+/// How a bound value pool's kind renders in `palette show`: a color, in sRGB
+/// or linear space and with three or four components; a plain number; or any
+/// other value shown as text with no swatch.
 #[derive(Clone, Copy)]
 enum Kind {
-    /// A color pool: `srgb` distinguishes sRGB from linear space, `components`
-    /// is 3 or 4.
+    /// A color value pool: `srgb` distinguishes sRGB from linear space,
+    /// `components` is 3 or 4.
     Color { srgb: bool, components: usize },
-    /// A `float` or `int` pool.
+    /// A `float` or `int` value pool.
     Number,
-    /// A `bool`, `string`, or `json` pool.
+    /// A `bool`, `string`, or `json` value pool.
     Other,
 }
 
@@ -213,9 +213,9 @@ fn expand_property(
     Ok(())
 }
 
-/// Builds one collection from a present property: classifies the bound pool by
-/// kind, rejects a color component on a non-color and `.a` on a three-component
-/// color, then samples the property's values.
+/// Builds one collection from a present property: classifies the bound value
+/// pool by kind, rejects a color component on a non-color and `.a` on a
+/// three-component color, then samples the property's values.
 fn build_collection(
     state: &VoxMain,
     palette_index: usize,
@@ -285,8 +285,8 @@ fn build_collection(
     })
 }
 
-/// How a pool's kind renders: a color with its space and component count, a
-/// number, or any other value.
+/// How a value pool's kind renders: a color with its space and component
+/// count, a number, or any other value.
 fn classify(value_pool: &VoxValuePool) -> Kind {
     match value_pool.kind() {
         VoxValuePoolKind::Srgb { .. } => Kind::Color {
@@ -312,7 +312,7 @@ fn classify(value_pool: &VoxValuePool) -> Kind {
     }
 }
 
-/// The sample for the value at `value_id` under its pool `kind` and an
+/// The sample for the value at `value_id` under its value pool `kind` and an
 /// optional color `component`.
 fn sample(
     value_pool: &VoxValuePool,
@@ -405,9 +405,9 @@ fn sample_other(
 }
 
 /// The sRGB `[r, g, b, a]` bytes for the color at `value_id`, mirroring the
-/// shared pool color decode: sRGB components map straight to bytes, linear
-/// components re-encode to sRGB, and a three-component color takes opaque
-/// alpha.
+/// shared value pool color decode: sRGB components map straight to bytes,
+/// linear components re-encode to sRGB, and a three-component color takes
+/// opaque alpha.
 fn color_bytes(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> [u8; 4] {
     match value_pool.value(value_id) {
         Some(VoxValuePoolValueRef::Srgb(&[r, g, b])) => {
@@ -443,7 +443,7 @@ fn color_floats(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) 
     }
 }
 
-/// Whether a color pool carries an alpha component.
+/// Whether a color value pool carries an alpha component.
 fn alpha_component(value_pool: &VoxValuePool) -> bool {
     matches!(
         value_pool.kind(),
@@ -481,7 +481,7 @@ fn number_json(value: f64) -> Value {
     }
 }
 
-/// A [`VoxValue`] from a `json` pool as a [`serde_json::Value`].
+/// A [`VoxValue`] from a `json` value pool as a [`serde_json::Value`].
 fn vox_value_to_json(value: &VoxValue) -> Value {
     match value {
         VoxValue::Bool(boolean) => Value::Bool(*boolean),
@@ -647,8 +647,8 @@ mod tests {
         U32Id::from_u32(index as u32)
     }
 
-    /// An `Srgba` pool of the given 8-bit colors, each byte divided by 255, the
-    /// way the converters store colors.
+    /// An `Srgba` value pool of the given 8-bit colors, each byte divided by
+    /// 255, the way the converters store colors.
     fn srgba_value_pool(state: &mut VoxMain, colors: &[[u8; 4]]) -> U32Id<BVoxValuePool> {
         let values = colors
             .iter()
@@ -1228,7 +1228,8 @@ mod tests {
         assert_eq!(component, "0.\"baseColorFactor\".r 255 0\n");
     }
 
-    /// One palette binding `tint` to a three-component `Srgb` pool holding a red.
+    /// One palette binding `tint` to a three-component `Srgb` value pool
+    /// holding a red.
     fn three_component_state() -> VoxMain {
         let mut state = VoxMain::default();
         let tint_value_pool_id =
@@ -1262,7 +1263,8 @@ mod tests {
     #[test]
     fn a_linear_color_renders_functional_notation() {
         let mut state = VoxMain::default();
-        // A linear pool carries HDR components above 1 that no hex can hold.
+        // A linear value pool carries HDR components above 1 that no hex can
+        // hold.
         let emissive_value_pool_id =
             state.add_value_pool(VoxValuePool::linear_rgba(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
@@ -1363,7 +1365,7 @@ mod tests {
 
     #[test]
     fn a_shared_value_pool_cell_repeats_per_material() {
-        // Both material rows draw the strength pool's one value, so the
+        // Both material rows draw the strength value pool's one value, so the
         // column shows it twice.
         let mut state = VoxMain::default();
         let strengths_value_pool_id = state.add_value_pool(

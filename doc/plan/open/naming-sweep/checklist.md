@@ -179,11 +179,13 @@ Gate: workspace green; the voxsmith gate grep returns nothing.
       `palette_show.rs`, `info.rs`, and `hierarchy_show.rs`; and the four
       test names saying bare pool (the survey's three plus
       `mesh_object.rs`'s).
-- [ ] Prose, one docs commit: the comment and doc lines in
+- [x] Prose, one docs commit: the comment and doc lines in
       `palette_show.rs`, `mesh_object.rs`, `channel_source.rs`,
       `dependencies.rs`, `write_voxj_document.rs`,
       `voxj_encoding_options.rs`, `voxj_color_format.rs`, and
-      `voxelize.rs`.
+      `voxelize.rs`. The survey's `info.rs` and `hierarchy_show.rs` prose
+      lines were fixture identifiers, not comments, so they landed with the
+      identifier commit.
 - [ ] The message commit: the `mesh_object.rs` "bound to a string or json
       pool" text spells value pool out.
 

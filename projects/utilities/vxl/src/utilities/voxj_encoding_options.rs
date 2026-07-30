@@ -60,8 +60,8 @@ impl VoxjEncodingOptions {
             .unwrap_or(VoxjFormat::Json)
     }
 
-    /// The color space and encoding for the written color pools, defaulting to
-    /// sRGB `float`.
+    /// The color space and encoding for the written color value pools,
+    /// defaulting to sRGB `float`.
     pub fn color_format(&self) -> VoxjColorFormat {
         self.color_format
     }

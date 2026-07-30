@@ -26,7 +26,7 @@ impl ChannelSource {
     /// Resolves this source's property key against the `--define-property`
     /// bindings and rejects `computed-occlusion` under the palette atlas. The
     /// color component is validated later, once the document loads, against the
-    /// key's pool kind, since the type lives in the file, not the flags.
+    /// key's value pool kind, since the type lives in the file, not the flags.
     pub(crate) fn resolve(&self, bindings: &[PropertyBinding]) -> Result<ChannelSource> {
         let ChannelSource::Property {
             key,
@@ -233,7 +233,7 @@ mod tests {
         assert_eq!(resolved, property(ROUGHNESS_FACTOR, true));
 
         // A component rides through the rename unchanged; its validity against
-        // the pool kind is checked later, at the bake.
+        // the value pool kind is checked later, at the bake.
         let resolved = component("tint", ColorComponent::R, false)
             .resolve(&bindings())
             .unwrap();
@@ -253,7 +253,7 @@ mod tests {
     fn resolve_no_longer_validates_the_component() {
         // The type is unknown until the document loads, so resolve accepts both
         // a scalar with a component and a color with none; the `mesh`
-        // implementation validates each against its pool kind.
+        // implementation validates each against its value pool kind.
         assert!(
             component(METALLIC_FACTOR, ColorComponent::R, false)
                 .resolve(&bindings())

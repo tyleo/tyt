@@ -77,7 +77,7 @@ pub fn voxelize(
 
     // The reduction and the reorder both keep value ids stable, so compact them
     // to listing order before writing: the writer serializes each material cell
-    // as an index into the pool it emits in listing order.
+    // as an index into the value pool it emits in listing order.
     state.gc();
 
     implementation::write_voxj_document(

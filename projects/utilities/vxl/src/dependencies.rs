@@ -65,7 +65,7 @@ pub trait Dependencies {
     /// * `output` - the `.voxj` or `.voxjz` document to write.
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
-    /// * `color_format` - the on-wire encoding for sRGB color pools.
+    /// * `color_format` - the on-wire encoding for sRGB color value pools.
     /// * `ext` - when false, omits the user-defined `ext` extension block.
     /// * `edit_state` - when to record each object's editor build volume.
     #[allow(clippy::too_many_arguments)]
@@ -100,7 +100,7 @@ pub trait Dependencies {
     /// * `reduction` - the palette material cap and its clustering controls.
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
-    /// * `color_format` - the on-wire encoding for sRGB color pools.
+    /// * `color_format` - the on-wire encoding for sRGB color value pools.
     #[allow(clippy::too_many_arguments)]
     fn voxelize(
         &self,

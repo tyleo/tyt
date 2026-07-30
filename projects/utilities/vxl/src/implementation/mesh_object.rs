@@ -64,7 +64,7 @@ pub fn mesh_object(
     }
 
     // The maps read each property through its winning layer, so validate each
-    // channel's component against the winning pool's kind before baking.
+    // channel's component against the winning value pool's kind before baking.
     validate_maps(&state, object, maps)?;
 
     let request = MaterialMeshRequest {
@@ -151,9 +151,9 @@ fn validate_channel(
     }
 }
 
-/// The kind of the property `key`: its winning layer's pool kind when a layer
-/// supplies it, else the voxj unbound-default rule, a glTF built-in by its
-/// spec kind and a custom property an error.
+/// The kind of the property `key`: its winning layer's value pool kind when a
+/// layer supplies it, else the voxj unbound-default rule, a glTF built-in by
+/// its spec kind and a custom property an error.
 fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKind> {
     let Some(property_id) = effective.property_id_by_name(key) else {
         // No layer supplies it: the voxj format's unbound-default rule. A
@@ -178,8 +178,8 @@ fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKin
     value_pool_kind(value_pool, key)
 }
 
-/// Classifies a bound value pool into a channel kind, rejecting a pool that has
-/// no texel value: a string or json pool.
+/// Classifies a bound value pool into a channel kind, rejecting a value pool
+/// that has no texel value: a string or json value pool.
 fn value_pool_kind(value_pool: &VoxValuePool, key: &str) -> Result<ChannelKind> {
     match value_pool.kind() {
         VoxValuePoolKind::Srgb { .. } | VoxValuePoolKind::LinearRgb { .. } => {
@@ -343,7 +343,8 @@ mod tests {
     #[test]
     fn a_present_color_reads_by_component() {
         let (state, palette_id) = palette_state();
-        // `tint` is an srgba pool: a component is required, and `.a` is allowed.
+        // `tint` is an srgba value pool: a component is required, and `.a` is
+        // allowed.
         assert!(!validates(&state, &[palette_id], "tint", None));
         assert!(validates(
             &state,

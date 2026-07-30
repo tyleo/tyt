@@ -17,7 +17,7 @@ use voxsmith::{ColorFormat, EditStateMode, VoxjFileBuilder};
 /// * `output` - the `.voxj` or `.voxjz` path to write.
 /// * `encoding` - the per-object block encodings.
 /// * `format` - the output container and printing form.
-/// * `color_format` - the on-wire encoding for sRGB color pools.
+/// * `color_format` - the on-wire encoding for sRGB color value pools.
 /// * `ext` - when false, drops the user-defined `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
 pub fn write_voxj_document(
