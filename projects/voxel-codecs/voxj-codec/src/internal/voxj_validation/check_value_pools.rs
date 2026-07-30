@@ -2,24 +2,24 @@ use crate::{Check, Failures};
 use voxj::{VoxjBound, VoxjMain, VoxjValuePool};
 
 /// Every value pool is well-formed per spec rule 9: `values` is non-empty; each
-/// int or float value lies within the pool's `min`/`max`; an int pool's numeric
-/// bounds are integer-valued; `min <= max` when both are finite; hex colors
-/// match their kind's pattern; and float color components lie in their color
-/// space's range.
+/// int or float value lies within the value pool's `min`/`max`; an int value
+/// pool's numeric bounds are integer-valued; `min <= max` when both are finite;
+/// hex colors match their kind's pattern; and float color components lie in
+/// their color space's range.
 ///
-/// A value's JSON shape is guaranteed at parse by the typed pool model: a bound
-/// is present only on `int` and `float`, `null` is rejected outside a `json`
-/// pool, and a color array has exactly its kind's length. So this check covers
-/// only the content rules parse cannot see: emptiness, numeric bounds, hex
-/// text, and color-component ranges. The `json`, `bool`, and `string` kinds add
-/// no content rule past non-emptiness.
+/// A value's JSON shape is guaranteed at parse by the typed value-pool model: a
+/// bound is present only on `int` and `float`, `null` is rejected outside a
+/// `json` value pool, and a color array has exactly its kind's length. So this
+/// check covers only the content rules parse cannot see: emptiness, numeric
+/// bounds, hex text, and color-component ranges. The `json`, `bool`, and
+/// `string` kinds add no content rule past non-emptiness.
 pub fn check_value_pools(main: &VoxjMain, failures: &mut Failures) {
-    for (index, pool) in main.runtime_state.value_pools.iter().enumerate() {
+    for (index, value_pool) in main.runtime_state.value_pools.iter().enumerate() {
         if !failures.go() {
             return;
         }
 
-        if pool.values_len() == 0 {
+        if value_pool.values_len() == 0 {
             failures.report(
                 Check::ValuePools,
                 format!("value pool {index} has no values"),
@@ -29,7 +29,7 @@ pub fn check_value_pools(main: &VoxjMain, failures: &mut Failures) {
             }
         }
 
-        match pool {
+        match value_pool {
             VoxjValuePool::Float { min, max, values } => {
                 check_numeric(index, *min, *max, false, values.iter().copied(), failures);
             }
@@ -52,8 +52,8 @@ pub fn check_value_pools(main: &VoxjMain, failures: &mut Failures) {
     }
 }
 
-/// An int or float pool's bounds are well-formed and every value lies within
-/// them. `integer` marks an int pool, whose numeric bounds must be
+/// An int or float value pool's bounds are well-formed and every value lies
+/// within them. `integer` marks an int value pool, whose numeric bounds must be
 /// integer-valued; both kinds present their values as `f64`, so a large int
 /// bound compares within `f64` precision, ample for the format's small ranges.
 fn check_numeric(
@@ -72,7 +72,7 @@ fn check_numeric(
                 failures.report(
                     Check::ValuePools,
                     format!(
-                        "value pool {index} is an int pool but its {side} bound \
+                        "value pool {index} is an int value pool but its {side} bound \
                          {number} is not integer-valued"
                     ),
                 );

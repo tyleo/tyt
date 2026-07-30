@@ -6,7 +6,7 @@ use voxj::{VoxjMain, VoxjPalette, VoxjRuntimeState};
 /// 1. every property has a non-empty name, distinct within the palette, and
 ///    an in-range value pool;
 /// 2. materials hold at least one row, one per material, each of exactly
-///    one value-index per property, within the pool that property binds.
+///    one value-index per property, within the value pool that property binds.
 pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
     for (index, palette) in state.palettes.iter().enumerate() {
@@ -23,7 +23,7 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
                 failures.report(
                     Check::Palettes,
                     format!(
-                        "palette {index} property {property_index} references value pool {}, but the document has {} pools",
+                        "palette {index} property {property_index} references value pool {}, but the document has {} value pools",
                         property.value_pool,
                         state.value_pools.len()
                     ),
@@ -68,8 +68,8 @@ fn check_name<'a>(
     }
 }
 
-/// Every materials row holds exactly one value-index per property, and
-/// every value-index falls within the values of the pool its property names.
+/// Every materials row holds exactly one value-index per property, and every
+/// value-index falls within the values of the value pool its property names.
 fn check_materials(
     index: usize,
     palette: &VoxjPalette,
@@ -96,21 +96,21 @@ fn check_materials(
 
         for (property_index, &value_index) in row.iter().enumerate() {
             // The row arity matches here, so the property always resolves; its
-            // pool resolves only when the value pool is in range, already
+            // value pool resolves only when the reference is in range, already
             // reported above when it is not.
-            let Some(pool) = state
+            let Some(value_pool) = state
                 .value_pools
                 .get(palette.properties[property_index].value_pool)
             else {
                 continue;
             };
-            let pool_len = pool.values_len();
-            if value_index >= pool_len {
+            let value_pool_len = value_pool.values_len();
+            if value_index >= value_pool_len {
                 failures.report(
                     Check::Palettes,
                     format!(
                         "palette {index} material {material_index} value-index {value_index} \
-                         is out of range for a pool with {pool_len} values"
+                         is out of range for a value pool with {value_pool_len} values"
                     ),
                 );
                 if !failures.go() {

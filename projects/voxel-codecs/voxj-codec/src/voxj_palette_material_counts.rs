@@ -34,7 +34,7 @@ mod tests {
     use crate::voxj_palette_material_counts;
     use voxj::{VoxjPalette, VoxjProperty};
 
-    /// A palette of `m` materials: one property over pool 0, its rows
+    /// A palette of `m` materials: one property over value pool 0, its rows
     /// the value-indices `0..m`.
     fn palette(m: usize) -> VoxjPalette {
         VoxjPalette {

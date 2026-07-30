@@ -55,8 +55,8 @@ mod tests {
         VoxjValuePool,
     };
 
-    /// An `srgba-hex` pool of four colors backing the property's
-    /// value-indices, and an unreferenced one-value `float` pool.
+    /// An `srgba-hex` value pool of four colors backing the property's
+    /// value-indices, and an unreferenced one-value `float` value pool.
     fn value_pools() -> Vec<VoxjValuePool> {
         vec![
             VoxjValuePool::SrgbaHex {
@@ -103,8 +103,8 @@ mod tests {
     }
 
     /// The same small, complete, valid document the fail-fast tests use: one
-    /// four-material palette over a single color pool, an object sampling it
-    /// across two voxels, and a two-node DAG with a root.
+    /// four-material palette over a single color value pool, an object sampling
+    /// it across two voxels, and a two-node DAG with a root.
     fn valid_file() -> VoxjFile {
         VoxjFile {
             version: 1,
@@ -220,8 +220,8 @@ mod tests {
     #[test]
     fn rejects_materials_value_index_out_of_range() {
         let mut file = valid_file();
-        // Pool 0 has four values, so value-index 9 in material 3's row is out
-        // of range.
+        // Value pool 0 has four values, so value-index 9 in material 3's row
+        // is out of range.
         file.main.runtime_state.palettes[0].materials = vec![vec![0], vec![1], vec![2], vec![9]];
         let checks = check_voxj_file(&file);
         assert!(matches!(
@@ -252,8 +252,8 @@ mod tests {
     #[test]
     fn reports_value_pool_content_failure() {
         let mut file = valid_file();
-        // An extra, unreferenced float pool whose value sits above its max, so
-        // the value-pools check is the only one that fails.
+        // An extra, unreferenced float value pool whose value sits above its
+        // max, so the value-pools check is the only one that fails.
         file.main
             .runtime_state
             .value_pools
@@ -267,8 +267,8 @@ mod tests {
             status(&checks, "value-pools"),
             VoxjCheckStatus::Failed(_)
         ));
-        // The referenced palette's own pool is untouched, so palettes still
-        // pass: the report is attributed to the right check.
+        // The referenced palette's own value pool is untouched, so palettes
+        // still pass: the report is attributed to the right check.
         assert_eq!(*status(&checks, "palettes"), VoxjCheckStatus::Passed);
     }
 
