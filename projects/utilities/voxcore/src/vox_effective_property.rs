@@ -24,7 +24,7 @@ pub struct VoxEffectiveProperty<'a> {
     /// The supplying property in the winning palette.
     pub(crate) property_id: U32Id<BVoxProperty>,
 
-    /// The pool the property draws values from.
+    /// The value pool the property draws values from.
     pub(crate) value_pool: &'a VoxValuePool,
 }
 
@@ -44,7 +44,7 @@ impl<'a> VoxEffectiveProperty<'a> {
         self.palette_id
     }
 
-    /// The pool the property draws values from.
+    /// The value pool the property draws values from.
     pub fn value_pool(&self) -> &'a VoxValuePool {
         self.value_pool
     }

@@ -11,7 +11,7 @@ use std::mem;
 /// A shared pool of values, one [`VoxValuePoolKind`] column keyed by a pool of
 /// value ids.
 ///
-/// Build a pool with the constructor for its kind (for example
+/// Build a value pool with the constructor for its kind (for example
 /// [`float`](Self::float) or [`srgba`](Self::srgba)), which checks its input
 /// and retains one id per value in the given order. Read values back by id with
 /// [`value`](Self::value) or in listing order with
@@ -19,7 +19,7 @@ use std::mem;
 /// kind and bounds.
 #[derive(Debug)]
 pub struct VoxValuePool {
-    /// Value id pool. Its listing order is the pool's value order.
+    /// Value id pool. Its listing order is the value pool's value order.
     value_ids: IdStruct<BVoxValuePoolValue>,
 
     /// The kind and its typed value column, keyed by `value_ids`.
@@ -27,7 +27,7 @@ pub struct VoxValuePool {
 }
 
 impl VoxValuePool {
-    /// Creates a `json` pool holding `values`, retaining ids in order.
+    /// Creates a `json` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if `values` is empty.
     pub fn json(values: Vec<VoxValue>) -> Result<Self> {
         let (value_ids, values) = columns(values);
@@ -38,7 +38,7 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates a `bool` pool holding `values`, retaining ids in order.
+    /// Creates a `bool` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if `values` is empty.
     pub fn boolean(values: Vec<bool>) -> Result<Self> {
         let (value_ids, values) = columns(values);
@@ -49,7 +49,7 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates a `float` pool bounded by `min`/`max` holding `values`,
+    /// Creates a `float` value pool bounded by `min`/`max` holding `values`,
     /// retaining ids in order. Errors, building nothing, if:
     ///
     /// 1. `values` is empty
@@ -64,7 +64,7 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates an `int` pool bounded by `min`/`max` holding `values`,
+    /// Creates an `int` value pool bounded by `min`/`max` holding `values`,
     /// retaining ids in order. Errors, building nothing, if:
     ///
     /// 1. `values` is empty
@@ -80,7 +80,7 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates a `string` pool holding `values`, retaining ids in order.
+    /// Creates a `string` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if `values` is empty.
     pub fn string(values: Vec<String>) -> Result<Self> {
         let (value_ids, values) = columns(values);
@@ -91,7 +91,7 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates an `srgb` pool holding `values`, retaining ids in order.
+    /// Creates an `srgb` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if `values` is empty or a component is
     /// outside `[0, 1]`.
     pub fn srgb(values: Vec<[f64; 3]>) -> Result<Self> {
@@ -103,7 +103,7 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates an `srgba` pool holding `values`, retaining ids in order.
+    /// Creates an `srgba` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if `values` is empty or a component is
     /// outside `[0, 1]`.
     pub fn srgba(values: Vec<[f64; 4]>) -> Result<Self> {
@@ -115,8 +115,8 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates a `linear-rgb` pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty or a component is
+    /// Creates a `linear-rgb` value pool holding `values`, retaining ids in
+    /// order. Errors, building nothing, if `values` is empty or a component is
     /// non-finite or negative.
     pub fn linear_rgb(values: Vec<[f64; 3]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
@@ -127,8 +127,8 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates a `linear-rgba` pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty or a component is
+    /// Creates a `linear-rgba` value pool holding `values`, retaining ids in
+    /// order. Errors, building nothing, if `values` is empty or a component is
     /// non-finite or negative.
     pub fn linear_rgba(values: Vec<[f64; 4]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
@@ -139,7 +139,7 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Maps a freshly built pool's first flaw onto the creation errors.
+    /// Maps a freshly built value pool's first flaw onto the creation errors.
     fn checked(self) -> Result<Self> {
         match self.first_flaw() {
             None => Ok(self),
@@ -151,9 +151,10 @@ impl VoxValuePool {
         }
     }
 
-    /// The pool's first well-formedness flaw, or `None` if it is well formed.
-    /// The constructors gate on this, so a flaw found later is a voxcore bug;
-    /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
+    /// The value pool's first well-formedness flaw, or `None` if it is well
+    /// formed. The constructors gate on this, so a flaw found later is a
+    /// voxcore bug; [`VoxMain::validate`](crate::VoxMain::validate) audits for
+    /// one anyway.
     pub(crate) fn first_flaw(&self) -> Option<VoxValuePoolFlaw> {
         if self.value_ids.is_empty() {
             return Some(VoxValuePoolFlaw::Empty);
@@ -232,18 +233,18 @@ impl VoxValuePool {
         &self.kind
     }
 
-    /// The number of values in the pool, across every kind.
+    /// The number of values in the value pool, across every kind.
     pub fn values_len(&self) -> usize {
         self.value_ids.len()
     }
 
-    /// Whether `id` is one of this pool's values.
+    /// Whether `id` is one of this value pool's values.
     pub fn contains_value(&self, id: U32Id<BVoxValuePoolValue>) -> bool {
         self.value_ids.is_retained(id)
     }
 
-    /// The value at `id`, typed by the pool's kind, or `None` if `id` is not
-    /// one of this pool's values.
+    /// The value at `id`, typed by the value pool's kind, or `None` if `id` is
+    /// not one of this value pool's values.
     pub fn value(&self, id: U32Id<BVoxValuePoolValue>) -> Option<VoxValuePoolValueRef<'_>> {
         self.value_ids.is_retained(id).then(|| self.value_ref(id))
     }
@@ -258,14 +259,14 @@ impl VoxValuePool {
     }
 
     /// The listing position of value `id`, or `None` if `id` is not one of
-    /// this pool's values.
+    /// this value pool's values.
     pub fn value_index(&self, id: U32Id<BVoxValuePoolValue>) -> Option<usize> {
         self.value_ids.index_of(id)
     }
 
     /// Moves value `id` to listing position `index`, shifting the values
     /// between its old and new positions one slot. Errors, changing nothing,
-    /// if `id` is not one of this pool's values or `index` is at or past
+    /// if `id` is not one of this value pool's values or `index` is at or past
     /// [`values_len`](Self::values_len).
     pub fn move_value(&mut self, id: U32Id<BVoxValuePoolValue>, index: usize) -> Result<()> {
         if !self.value_ids.is_retained(id) {
@@ -323,8 +324,8 @@ impl VoxValuePool {
     }
 
     /// Releases value `id`, keeping the surviving values' listing order. The
-    /// id must be one of this pool's values. The caller repoints any palette
-    /// cell drawing it first.
+    /// id must be one of this value pool's values. The caller repoints any
+    /// palette cell drawing it first.
     pub(crate) fn release_value_stable(&mut self, id: U32Id<BVoxValuePoolValue>) {
         // Safety: the id is retained, so it has a value in the column.
         unsafe {
@@ -343,8 +344,8 @@ impl VoxValuePool {
         self.value_ids.release_stable(id);
     }
 
-    /// Rewrites the listing order to `new_order_ids`. `None`, changing nothing, if
-    /// `new_order_ids` does not list every value id exactly once.
+    /// Rewrites the listing order to `new_order_ids`. `None`, changing nothing,
+    /// if `new_order_ids` does not list every value id exactly once.
     pub(crate) fn set_value_order(
         &mut self,
         new_order_ids: &[U32Id<BVoxValuePoolValue>],
@@ -583,8 +584,8 @@ mod tests {
         let mut b = VoxValuePool::int(VoxBound::None, VoxBound::None, vec![2, 1]).unwrap();
         assert_ne!(a, b);
 
-        // Moving b's values into a's order makes the pools equal, even though
-        // their id labels now differ per position.
+        // Moving b's values into a's order makes the value pools equal, even
+        // though their id labels now differ per position.
         b.move_value(U32Id::from_u32(1), 0).unwrap();
         assert_eq!(a, b);
 
@@ -632,8 +633,8 @@ mod tests {
     fn clone_value_pool_is_an_independent_deep_copy() {
         let mut value_pool =
             VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]).unwrap();
-        // Hole the pool first: equality compares values in listing order, so
-        // only reading back by id catches a clone that relabels.
+        // Hole the value pool first: equality compares values in listing order,
+        // so only reading back by id catches a clone that relabels.
         value_pool.release_value_stable(U32Id::from_u32(1));
 
         let mut copy = value_pool.clone_value_pool();
@@ -753,8 +754,8 @@ mod tests {
 
     #[test]
     fn linear_rgb_rejects_a_non_finite_component() {
-        // A linear pool is only lower-bounded, so `+Infinity` would pass a bare
-        // `>= 0` test; the finiteness guard must reject it.
+        // A `linear-rgb` value pool is only lower-bounded, so `+Infinity` would
+        // pass a bare `>= 0` test; the finiteness guard must reject it.
         assert_eq!(
             VoxValuePool::linear_rgb(vec![[0.0, f64::INFINITY, 0.0]]).unwrap_err(),
             Error::MalformedValuePoolValue {

@@ -89,8 +89,8 @@ mod tests {
     }
 
     /// Adds a palette with one property per `(name, value id)` entry on
-    /// `value_pool_id` and one material drawing the listed value ids, and returns its
-    /// id.
+    /// `value_pool_id` and one material drawing the listed value ids, and
+    /// returns its id.
     fn palette_over(
         state: &mut VoxMain,
         value_pool_id: U32Id<BVoxValuePool>,

@@ -70,7 +70,7 @@ suffixes and the spelled-out value pool, one iteration per crate, in order:
       (`vox_runtime_state.rs`, `vox_object.rs`, `vox_main.rs`,
       `vox_value_pool.rs`) and the closure arguments take entity names; the
       accessor subject parameters stay `id`.
-- [ ] Prose, one docs commit: the roughly 108 bare-pool doc lines meaning a
+- [x] Prose, one docs commit: the roughly 108 bare-pool doc lines meaning a
       value pool: `vox_value_pool_value_ref.rs` (all nine variant docs),
       `vox_value_pool.rs` (the nine constructor docs and the type and
       accessor docs), `error.rs`, the `vox_main.rs` rustdoc and internal

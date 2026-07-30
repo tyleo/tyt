@@ -103,7 +103,7 @@ impl VoxPalette {
     /// Adds a material with one value id per property, in
     /// [`iter_properties`](Self::iter_properties) order, and returns its id.
     /// Errors, changing nothing, if `value_ids` has the wrong length. Each
-    /// value id must be one of its property's pool's values, which
+    /// value id must be one of its property's value pool's values, which
     /// [`VoxMain::add_palette`](crate::VoxMain::add_palette) checks on insert.
     pub fn add_material(
         &mut self,
@@ -136,8 +136,8 @@ impl VoxPalette {
 
     /// The value id `material_id` draws for `property_id`, identifying a
     /// value in the pool that property draws from, or `None` if either id is
-    /// not this palette's. Read the pool a [`VoxMain`](crate::VoxMain) holds
-    /// by that id for the value.
+    /// not this palette's. Read the value pool a [`VoxMain`](crate::VoxMain)
+    /// holds by that id for the value.
     pub fn value_id(
         &self,
         material_id: U32Id<BVoxMaterial>,
@@ -277,8 +277,8 @@ impl VoxPalette {
     /// material relabeling so a [`VoxMain`](crate::VoxMain) can translate the
     /// samples that point at these materials. Properties are referenced only
     /// within this palette, so their relabelings stay internal. Value ids
-    /// point into the referenced pools, whose contents gc does not touch, so
-    /// they stay valid.
+    /// point into the referenced value pools, whose contents gc does not touch,
+    /// so they stay valid.
     pub(crate) fn gc(&mut self) -> IdRemap<BVoxMaterial, u32> {
         let property_remap = self.property_ids.gc();
         // Safety: the property column was in sync with the pre-gc property
@@ -314,8 +314,7 @@ impl VoxPalette {
     }
 
     /// Repoints each material's cell for a property on `value_pool_id` that
-    /// draws
-    /// `old_id` to `new_id`. Used by
+    /// draws `old_id` to `new_id`. Used by
     /// [`VoxMain::remove_value_pool_value`](crate::VoxMain::remove_value_pool_value)
     /// before `old_id` is released.
     pub(crate) fn repoint_value_pool_value(
@@ -350,16 +349,16 @@ impl VoxPalette {
     }
 
     /// Translates each material's cells through the value relabeling of the
-    /// pool its property draws from, matching value pools a
+    /// value pool its property draws from, matching value pools a
     /// [`VoxMain`](crate::VoxMain) is compacting. `remaps` is indexed by the
-    /// pool's pre-gc id. Requires a referentially valid palette, so every cell
-    /// draws a live value.
+    /// value pool's pre-gc id. Requires a referentially valid palette, so every
+    /// cell draws a live value.
     pub(crate) fn relabel_value_pool_values(
         &mut self,
         remaps: &IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>>,
     ) {
-        // Each property's pool, found once so each material's row is visited
-        // once for all of them.
+        // Each property's value pool, found once so each material's row is
+        // visited once for all of them.
         let property_value_pool_ids: Vec<_> = self
             .property_ids
             .iter()
@@ -384,9 +383,10 @@ impl VoxPalette {
         }
     }
 
-    /// Translates every property's pool id through `remap`, matching a
+    /// Translates every property's value-pool id through `remap`, matching a
     /// value-pool store a [`VoxMain`](crate::VoxMain) is compacting. Requires
-    /// a referentially valid palette, so every property names a live pool.
+    /// a referentially valid palette, so every property names a live
+    /// value pool.
     pub(crate) fn relabel_value_pools(&mut self, remap: &IdRemap<BVoxValuePool, u32>) {
         let property_ids: Vec<_> = self.property_ids.iter().collect();
         for property_id in property_ids {
@@ -521,7 +521,8 @@ mod tests {
             .add_property("baseColorFactor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
 
-        // A second property under the same name, even on a different pool.
+        // A second property under the same name, even on a different
+        // value pool.
         assert_eq!(
             palette.add_property("baseColorFactor".to_owned(), value_pool_id(1), value_id(0)),
             Err(Error::DuplicatePropertyName {

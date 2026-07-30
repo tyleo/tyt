@@ -440,8 +440,8 @@ impl VoxObject {
             // Safety: same retained layer id.
             *unsafe { self.layer_palette_ids.get_mut(layer_id) } = new_palette_id;
 
-            // Translate each live voxel's sample material through that palette's
-            // relabeling; non-live voxels' filler cells are exempt.
+            // Translate each live voxel's sample material through that
+            // palette's relabeling; non-live voxels' filler cells are exempt.
             let material_remap = &material_remaps[old_palette_id.to_usize_id()];
             // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };

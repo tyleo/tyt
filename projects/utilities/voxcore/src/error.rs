@@ -18,7 +18,7 @@ pub enum Error {
     EmptyValuePoolValues,
 
     /// A value pool was given malformed `min`/`max` bounds at construction:
-    /// non-finite, not integer-valued for an `int` pool, or `min` greater
+    /// non-finite, not integer-valued for an `int` value pool, or `min` greater
     /// than `max`.
     MalformedValuePoolBound,
 
@@ -48,7 +48,7 @@ pub enum Error {
     /// A mutation named a material that is not one of the palette's.
     UnknownMaterial { material_id: U32Id<BVoxMaterial> },
 
-    /// A mutation named a value that is not one of the pool's.
+    /// A mutation named a value that is not one of the value pool's.
     UnknownValuePoolValue { value_id: U32Id<BVoxValuePoolValue> },
 
     /// A mutation named a layer that is not one of the object's.
@@ -63,7 +63,7 @@ pub enum Error {
     /// A removal named its own removed id as the replacement.
     SelfReplacement,
 
-    /// A reorder did not list each of the pool's value ids exactly once.
+    /// A reorder did not list each of the value pool's value ids exactly once.
     ValuePoolValueOrder,
 
     /// A voxel was given a sample count different from the layer count.
@@ -87,7 +87,7 @@ pub enum Error {
     },
 
     /// An inserted palette's material draws a value for this property that is
-    /// not one of the property's pool's.
+    /// not one of the property's value pool's.
     MaterialValueRef {
         property_id: U32Id<BVoxProperty>,
         material_id: U32Id<BVoxMaterial>,
@@ -139,7 +139,7 @@ pub enum Error {
     InsertedCycle { index: usize },
 
     /// A value pool's `min`/`max` bounds are malformed: non-finite, not
-    /// integer-valued for an `int` pool, or `min` greater than `max`.
+    /// integer-valued for an `int` value pool, or `min` greater than `max`.
     ValuePoolBound { value_pool_id: U32Id<BVoxValuePool> },
 
     /// A value pool holds a value that is malformed for its kind or outside its
@@ -156,7 +156,8 @@ pub enum Error {
         value_pool_id: U32Id<BVoxValuePool>,
     },
 
-    /// A material's value id for a property is not one of the pool's values.
+    /// A material's value id for a property is not one of the value pool's
+    /// values.
     MaterialValue {
         palette_id: U32Id<BVoxPalette>,
         property_id: U32Id<BVoxProperty>,
