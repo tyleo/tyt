@@ -36,7 +36,7 @@ impl VoxPalette {
     /// back-filling existing materials with `default_value_id` so every
     /// material keeps one value id per property. Errors, changing nothing, if
     /// a property already has this name. `default_value_id` must be one of
-    /// `pool_id`'s values, which
+    /// `value_pool_id`'s values, which
     /// [`VoxMain::add_palette`](crate::VoxMain::add_palette) checks on
     /// insert.
     pub fn add_property(
@@ -313,7 +313,8 @@ impl VoxPalette {
         material_remap
     }
 
-    /// Repoints each material's cell for a property on `pool_id` that draws
+    /// Repoints each material's cell for a property on `value_pool_id` that
+    /// draws
     /// `old_id` to `new_id`. Used by
     /// [`VoxMain::remove_value_pool_value`](crate::VoxMain::remove_value_pool_value)
     /// before `old_id` is released.
@@ -323,8 +324,8 @@ impl VoxPalette {
         old_id: U32Id<BVoxValuePoolValue>,
         new_id: U32Id<BVoxValuePoolValue>,
     ) {
-        // The properties on `pool_id`, found once so each material's row
-        // is visited once for all of them.
+        // The properties on `value_pool_id`, found once so each material's
+        // row is visited once for all of them.
         let pool_property_ids: Vec<_> = self
             .property_ids
             .iter()

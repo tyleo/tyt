@@ -317,13 +317,14 @@ impl VoxMain {
         self.runtime_state.palette_ids.index_of(id)
     }
 
-    /// Adds a property named `name` on `pool_id` to palette `palette_id`,
-    /// back-filling its existing materials with `default_value_id`, and
-    /// returns the property's id. Errors, changing nothing, if:
+    /// Adds a property named `name` on `value_pool_id` to palette
+    /// `palette_id`, back-filling its existing materials with
+    /// `default_value_id`, and returns the property's id. Errors, changing
+    /// nothing, if:
     ///
     /// 1. `palette_id` is not one of this state's
-    /// 2. `pool_id` is not one of this state's
-    /// 3. `default_value_id` is not one of `pool_id`'s values
+    /// 2. `value_pool_id` is not one of this state's
+    /// 3. `default_value_id` is not one of `value_pool_id`'s values
     /// 4. the palette already has a property named `name`
     pub fn add_property(
         &mut self,
@@ -401,9 +402,9 @@ impl VoxMain {
     }
 
     /// Adds a shared value pool at the end of the listing, returning its id.
-    pub fn add_value_pool(&mut self, pool: VoxValuePool) -> U32Id<BVoxValuePool> {
+    pub fn add_value_pool(&mut self, value_pool: VoxValuePool) -> U32Id<BVoxValuePool> {
         let id = self.runtime_state.value_pool_ids.retain();
-        self.runtime_state.value_pools.retain(id, pool);
+        self.runtime_state.value_pools.retain(id, value_pool);
         id
     }
 
@@ -505,7 +506,7 @@ impl VoxMain {
                     palette_id,
                     palette,
                     property_id,
-                    pool: value_pool,
+                    value_pool,
                 };
 
                 match property_id_by_name.get(property.name.as_str()) {
@@ -859,12 +860,13 @@ impl VoxMain {
         Ok(())
     }
 
-    /// Removes `value_id` from `pool_id`, first repointing every palette cell
+    /// Removes `value_id` from `value_pool_id`, first repointing every palette
+    /// cell
     /// that draws it onto `replacement_id` so no material is left without a
     /// value. Leaves a hole until [`gc`](Self::gc) renumbers. Errors,
     /// changing nothing, if:
     ///
-    /// 1. `pool_id` is not one of this state's pools
+    /// 1. `value_pool_id` is not one of this state's pools
     /// 2. `value_id` or `replacement_id` is not one of that pool's values
     /// 3. `replacement_id` is `value_id` itself
     pub fn remove_value_pool_value(
@@ -1068,11 +1070,11 @@ impl VoxMain {
         }
     }
 
-    /// Reorders `pool_id`'s values to `new_order_ids`, which lists the pool's
-    /// value ids in their new listing order. Value ids are stable, so what
-    /// every material resolves to is unchanged. Errors, changing nothing, if
-    /// `pool_id` is not one of this state's or `new_order_ids` does not list
-    /// each of the pool's value ids exactly once.
+    /// Reorders `value_pool_id`'s values to `new_order_ids`, which lists the
+    /// pool's value ids in their new listing order. Value ids are stable, so
+    /// what every material resolves to is unchanged. Errors, changing nothing,
+    /// if `value_pool_id` is not one of this state's or `new_order_ids` does
+    /// not list each of the pool's value ids exactly once.
     pub fn reorder_value_pool(
         &mut self,
         value_pool_id: U32Id<BVoxValuePool>,

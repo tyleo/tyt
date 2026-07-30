@@ -47,7 +47,7 @@ suffixes and the spelled-out value pool, one iteration per crate, in order:
       `VoxValuePool::clone_pool` to `clone_value_pool`. Update the forced
       voxsmith and vxl call sites in the same commit, taking only the new
       API names.
-- [ ] Public and `pub(crate)` parameter names and their rustdoc references:
+- [x] Public and `pub(crate)` parameter names and their rustdoc references:
       `pool_id` on `VoxMain::add_property`,
       `VoxMain::remove_value_pool_value`, `VoxMain::reorder_value_pool`,
       `VoxPalette::add_property`, and
