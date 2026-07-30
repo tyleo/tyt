@@ -25,6 +25,15 @@ cargo check
 - Doc comments (`///`) on all public items
 - `#[arg]` attributes always start with `value_name` (e.g., `#[arg(value_name = "input-fbx")]`, `#[arg(value_name = "max-iterations", long)]`)
 
+## Errors
+
+- Bias toward errors over hiding them. A value that does not fit its
+  destination is an error, never silently clamped, coerced, defaulted, or
+  dropped.
+- A defensive fallback that papers over a check made upstream is the same bug.
+  `expect` what an earlier validation guarantees, so a gap fails with its reason
+  instead of quietly substituting a default.
+
 ## Module structure
 
 - One public item per file — the file is a private `mod` in its parent `mod.rs` or `lib.rs`
