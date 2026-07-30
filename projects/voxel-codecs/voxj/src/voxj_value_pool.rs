@@ -2,10 +2,10 @@ use crate::{VoxjBound, VoxjValue};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A shared pool of values, all of one shape. The variant is the pool's kind:
-/// the bounded kinds carry `min`/`max` and typed numeric values, the unbounded
-/// kinds carry only their values. Palettes reference pools by index and read
-/// values out by value-index.
+/// A shared pool of values, all of one shape. The variant is the value pool's
+/// kind: the bounded kinds carry `min`/`max` and typed numeric values, the
+/// unbounded kinds carry only their values. Palettes reference value pools by
+/// index and read values out by value-index.
 ///
 /// Serde tags the variant by a `kind` field, so the wire shape is
 /// `{ "kind", "values" }` plus `min`/`max` on the bounded kinds. Value shapes
@@ -98,7 +98,7 @@ pub enum VoxjValuePool {
 }
 
 impl VoxjValuePool {
-    /// The number of values in the pool, across every kind. A palette's
+    /// The number of values in the value pool, across every kind. A palette's
     /// value-indices must fall in `[0, values_len)`.
     pub fn values_len(&self) -> usize {
         match self {

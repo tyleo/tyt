@@ -18,6 +18,6 @@ pub struct VoxjPalette {
     /// Row-major materials: at least one row, one per material, each of
     /// exactly `properties.len()` value-indices in property order, so
     /// the material count `M` is `materials.len()`. `materials[m][b]` is a
-    /// value-index into the pool bound by property `b`.
+    /// value-index into the value pool bound by property `b`.
     pub materials: Vec<Vec<usize>>,
 }

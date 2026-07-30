@@ -23,8 +23,8 @@ mod tests {
     };
     use serde_json::{Value, json};
 
-    /// Covers the full palette surface: two palettes sharing a pool, and one
-    /// channel per layer.
+    /// Covers the full palette surface: two palettes sharing a value pool, and
+    /// one channel per layer.
     fn document() -> VoxjFile {
         VoxjFile {
             version: 1,
