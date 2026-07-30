@@ -1,8 +1,13 @@
 # Naming Sweep Plan
 
-Status: **open.** All four iterations are complete and awaiting the owner's
-gate review: 1 (`voxcore`), 2 (`voxsmith`), 3 (`vxl`), and 4 (voxj-codec).
-Closing the plan is the owner's call.
+Status: **closed.** All four iterations landed and passed their gates:
+1 (`voxcore`), 2 (`voxsmith`), 3 (`vxl`), and 4 (voxj-codec). Branded-id
+bindings carry `_id` and `_ids`, entity-named index bindings carry `_index`,
+and value pool is spelled out across identifiers, prose, and messages; the
+value-pool gate grep returns nothing for any of the five crates, and the
+workspace builds, lints, and tests green. The one entity the sweep
+deliberately left alone is `voxcore`'s branded-id pools, whose prose reads
+"id pool" per Q1.
 
 This plan carries the naming rules the recent `voxcore` and voxj commit
 series established across the crates that still miss them. Three rules, one
@@ -73,9 +78,9 @@ in the crate. Two failure messages say bare "pool".
 
 **vxl.** About 300 id-suffix lines concentrated in 8 files while 108 of 118
 files are clean; `implementation/hierarchy_show.rs` alone holds about 155,
-mostly treegrid node ids. About 45 index lines, including
-`Mesh::layer`, whose field name derives the `--layer` flag, so the flag
-follows the rename. About 81 value-pool lines with exactly one user-visible message
+mostly treegrid node ids. About 45 index lines, including `Mesh::layer`,
+whose field name derives the `--layer` flag, so the flag follows the rename.
+About 81 value-pool lines with exactly one user-visible message
 (`mesh_object.rs`, "bound to a string or json pool"). The report commands
 (`palette_show`, `palette_list`, `info`, `hierarchy_show`, `validate`)
 assert exact rendered output in their tests, a safety net: none of those
