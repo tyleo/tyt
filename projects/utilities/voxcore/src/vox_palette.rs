@@ -326,7 +326,7 @@ impl VoxPalette {
     ) {
         // The properties on `value_pool_id`, found once so each material's
         // row is visited once for all of them.
-        let pool_property_ids: Vec<_> = self
+        let value_pool_property_ids: Vec<_> = self
             .property_ids
             .iter()
             .filter(|&property_id| {
@@ -334,12 +334,12 @@ impl VoxPalette {
                 unsafe { self.properties.get(property_id) }.value_pool_id == value_pool_id
             })
             .collect();
-        if !pool_property_ids.is_empty() {
+        if !value_pool_property_ids.is_empty() {
             for material_id in self.material_ids.iter() {
                 // Safety: a retained material holds a value id for every
                 // property, and the row is keyed by property id.
                 let row = unsafe { self.materials.get_mut(material_id) };
-                for &property_id in &pool_property_ids {
+                for &property_id in &value_pool_property_ids {
                     let slot = unsafe { row.get_mut(property_id) };
                     if *slot == old_id {
                         *slot = new_id;
@@ -360,7 +360,7 @@ impl VoxPalette {
     ) {
         // Each property's pool, found once so each material's row is visited
         // once for all of them.
-        let property_pool_ids: Vec<_> = self
+        let property_value_pool_ids: Vec<_> = self
             .property_ids
             .iter()
             .map(|property_id| {
@@ -375,9 +375,9 @@ impl VoxPalette {
             // Safety: a retained material holds a value id for every property,
             // and the row is keyed by property id.
             let row = unsafe { self.materials.get_mut(material_id) };
-            for &(property_id, pool_id) in &property_pool_ids {
+            for &(property_id, value_pool_id) in &property_value_pool_ids {
                 let slot = unsafe { row.get_mut(property_id) };
-                *slot = remaps[pool_id.to_usize_id()]
+                *slot = remaps[value_pool_id.to_usize_id()]
                     .new_id(*slot)
                     .expect("a material cell draws a live value in a valid state");
             }

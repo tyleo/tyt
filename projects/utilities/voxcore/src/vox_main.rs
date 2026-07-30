@@ -921,23 +921,28 @@ impl VoxMain {
         // Compact each pool's values first, recording the value relabelings
         // by the pool's pre-gc id so the palette pass below can translate its
         // cells before pool ids move.
-        let pool_id_space = self.runtime_state.value_pool_ids.peek_next_fresh().to_u32() as usize;
+        let value_pool_id_space =
+            self.runtime_state.value_pool_ids.peek_next_fresh().to_u32() as usize;
         let mut value_pool_value_remaps: IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>> =
-            IdVec::from_vec((0..pool_id_space).map(|_| IdRemap::default()).collect());
-        for pool_id in self.runtime_state.value_pool_ids.iter() {
+            IdVec::from_vec(
+                (0..value_pool_id_space)
+                    .map(|_| IdRemap::default())
+                    .collect(),
+            );
+        for value_pool_id in self.runtime_state.value_pool_ids.iter() {
             // Safety: retained pool ids have a value.
-            let pool = unsafe { self.runtime_state.value_pools.get_mut(pool_id) };
-            value_pool_value_remaps[pool_id.to_usize_id()] = pool.gc_values();
+            let value_pool = unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) };
+            value_pool_value_remaps[value_pool_id.to_usize_id()] = value_pool.gc_values();
         }
 
         // Compact the shared value-pool store, then relabel every palette
         // property's pool, so the pool ids are settled before palettes are
         // compacted. Pool ids follow the listing, so a pool moved before gc is
         // renumbered here and every property's pool id is rewritten to match.
-        let pool_remap = self.runtime_state.value_pool_ids.gc();
+        let value_pool_remap = self.runtime_state.value_pool_ids.gc();
         // Safety: the value-pool column was in sync with the pre-gc pool, and
         // nothing has retained or released since.
-        unsafe { self.runtime_state.value_pools.gc(&pool_remap) };
+        unsafe { self.runtime_state.value_pools.gc(&value_pool_remap) };
 
         // Compact each palette's own pools, so the material relabelings are
         // ready when object samples are translated below. They are indexed by
@@ -951,7 +956,7 @@ impl VoxMain {
             // Safety: retained palette ids have a value.
             let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
             palette.relabel_value_pool_values(&value_pool_value_remaps);
-            palette.relabel_value_pools(&pool_remap);
+            palette.relabel_value_pools(&value_pool_remap);
             material_remaps[palette_id.to_usize_id()] = palette.gc();
         }
 
@@ -1006,7 +1011,7 @@ impl VoxMain {
         }
 
         VoxGcRemap {
-            value_pools: pool_remap,
+            value_pools: value_pool_remap,
             value_pool_values: value_pool_value_remaps,
             objects: object_remap,
             palettes: palette_remap,
@@ -1027,9 +1032,12 @@ impl VoxMain {
     /// 3. the state stays referentially valid
     pub fn prune_value_pools(&mut self) {
         // The value ids each pool still has a material referencing.
-        let pool_ids: Vec<_> = self.runtime_state.value_pool_ids.iter().collect();
+        let value_pool_ids: Vec<_> = self.runtime_state.value_pool_ids.iter().collect();
         let mut referenced_ids: HashMap<U32Id<BVoxValuePool>, HashSet<U32Id<BVoxValuePoolValue>>> =
-            pool_ids.iter().map(|&id| (id, HashSet::new())).collect();
+            value_pool_ids
+                .iter()
+                .map(|&id| (id, HashSet::new()))
+                .collect();
 
         for palette_id in self.runtime_state.palette_ids.iter() {
             // Safety: retained palette ids have a value.
@@ -1049,14 +1057,14 @@ impl VoxMain {
 
         // Release each pool's unreferenced entries. A pool nothing references
         // is left whole.
-        for &pool_id in &pool_ids {
-            let keep_ids = &referenced_ids[&pool_id];
+        for &value_pool_id in &value_pool_ids {
+            let keep_ids = &referenced_ids[&value_pool_id];
             if keep_ids.is_empty() {
                 continue;
             }
             // Safety: retained pool ids have a value.
-            let pool = unsafe { self.runtime_state.value_pools.get_mut(pool_id) };
-            let doomed_ids: Vec<_> = pool
+            let value_pool = unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) };
+            let doomed_ids: Vec<_> = value_pool
                 .iter_values()
                 .map(|(value_id, _)| value_id)
                 .filter(|value_id| !keep_ids.contains(value_id))
@@ -1065,7 +1073,7 @@ impl VoxMain {
             // dropping the last one first leaves nothing to shift and keeps
             // the prune linear where front-to-back release is quadratic.
             for value_id in doomed_ids.into_iter().rev() {
-                pool.release_value_stable(value_id);
+                value_pool.release_value_stable(value_id);
             }
         }
     }
