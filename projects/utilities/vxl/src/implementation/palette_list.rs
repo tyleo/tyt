@@ -41,11 +41,11 @@ pub fn palette_list(
 fn select_palettes<'a>(state: &'a VoxMain, filters: &[SelectIndex]) -> Result<Vec<Entry<'a>>> {
     let selected: Vec<Entry> = state
         .iter_palettes()
-        .filter(|(id, _)| {
+        .filter(|(palette_id, _)| {
             filters.is_empty()
                 || filters
                     .iter()
-                    .any(|filter| filter.contains(id.to_u32() as usize))
+                    .any(|filter| filter.contains(palette_id.to_u32() as usize))
         })
         .collect();
     if !filters.is_empty() && selected.is_empty() {
@@ -85,13 +85,16 @@ fn build_grid(
     fields: PaletteListFields,
 ) -> TreeGrid<TreeGridJsonValueCells> {
     let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
-    let root = grid.add_root(TreeGridLabel::bare("palettes"));
-    for (id, palette) in palettes {
-        let branch = grid.add_child(root, TreeGridLabel::bare(id.to_u32().to_string()));
+    let root_id = grid.add_root(TreeGridLabel::bare("palettes"));
+    for (palette_id, palette) in palettes {
+        let branch_id = grid.add_child(
+            root_id,
+            TreeGridLabel::bare(palette_id.to_u32().to_string()),
+        );
         if fields.materials {
-            let count = grid.add_child(branch, TreeGridLabel::bare("materialCount"));
+            let material_count_id = grid.add_child(branch_id, TreeGridLabel::bare("materialCount"));
             grid.push_value(
-                count,
+                material_count_id,
                 TreeGridJsonValue::int(palette.material_count() as i64),
             );
         }
@@ -100,14 +103,14 @@ fn build_grid(
                 .into_iter()
                 .map(|name| TreeGridLabel::quoted(name.to_owned()))
                 .collect();
-            add_names_subtree(&mut grid, branch, "properties", names);
+            add_names_subtree(&mut grid, branch_id, "properties", names);
         }
         if fields.objects {
-            let names = referencing_names(state, *id)
+            let names = referencing_names(state, *palette_id)
                 .into_iter()
                 .map(TreeGridLabel::quoted)
                 .collect();
-            add_names_subtree(&mut grid, branch, "objects", names);
+            add_names_subtree(&mut grid, branch_id, "objects", names);
         }
     }
     grid
@@ -119,63 +122,71 @@ fn build_grid(
 /// column appears in every row.
 fn build_records_grid(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> TreeGrid {
     let mut grid = TreeGrid::new();
-    let root = grid.add_root(TreeGridLabel::bare("palettes"));
-    for (id, palette) in palettes {
-        let row = grid.add_child(root, TreeGridLabel::bare(id.to_u32().to_string()));
+    let root_id = grid.add_root(TreeGridLabel::bare("palettes"));
+    for (palette_id, palette) in palettes {
+        let row_id = grid.add_child(
+            root_id,
+            TreeGridLabel::bare(palette_id.to_u32().to_string()),
+        );
         if fields.properties {
             let cell = implementation::property_names(palette).join(", ");
-            let node = grid.add_child(row, TreeGridLabel::bare("properties"));
-            grid.push_value(node, TreeGridValue::new(cell));
+            let node_id = grid.add_child(row_id, TreeGridLabel::bare("properties"));
+            grid.push_value(node_id, TreeGridValue::new(cell));
         }
         if fields.materials {
-            let node = grid.add_child(row, TreeGridLabel::bare("materials"));
+            let node_id = grid.add_child(row_id, TreeGridLabel::bare("materials"));
             grid.push_value(
-                node,
+                node_id,
                 TreeGridValue::new(palette.material_count().to_string()),
             );
         }
         if fields.objects {
-            let node = grid.add_child(row, TreeGridLabel::bare("used by"));
+            let node_id = grid.add_child(row_id, TreeGridLabel::bare("used by"));
             grid.push_value(
-                node,
-                TreeGridValue::new(referencing_names(state, *id).join(", ")),
+                node_id,
+                TreeGridValue::new(referencing_names(state, *palette_id).join(", ")),
             );
         }
     }
     grid
 }
 
-/// Adds a `header` subtree under `parent` with one child per label, or a
+/// Adds a `header` subtree under `parent_id` with one child per label, or a
 /// `header: []` leaf when `labels` is empty.
 fn add_names_subtree(
     grid: &mut TreeGrid<TreeGridJsonValueCells>,
-    parent: U32Id<BTreeGridNode>,
+    parent_id: U32Id<BTreeGridNode>,
     header: &str,
     labels: Vec<TreeGridLabel>,
 ) {
-    let subtree = grid.add_child(parent, TreeGridLabel::bare(header));
+    let subtree_id = grid.add_child(parent_id, TreeGridLabel::bare(header));
     if labels.is_empty() {
-        grid.push_value(subtree, TreeGridJsonValue::new("[]"));
+        grid.push_value(subtree_id, TreeGridJsonValue::new("[]"));
         return;
     }
     for label in labels {
-        grid.add_child(subtree, label);
+        grid.add_child(subtree_id, label);
     }
 }
 
-/// The objects that reference `palette`, in object order, as `(index, name)`.
-/// An object appears once however many of its layers reference the palette.
-fn referencing_objects(state: &VoxMain, palette: U32Id<BVoxPalette>) -> Vec<(u32, &str)> {
+/// The objects that reference `palette_id`, in object order, as
+/// `(index, name)`. An object appears once however many of its layers
+/// reference the palette.
+fn referencing_objects(state: &VoxMain, palette_id: U32Id<BVoxPalette>) -> Vec<(u32, &str)> {
     state
         .iter_objects()
-        .filter(|(_, object)| object.iter_layers().any(|(_, id)| id == palette))
-        .map(|(id, object)| (id.to_u32(), object.name()))
+        .filter(|(_, object)| {
+            object
+                .iter_layers()
+                .any(|(_, layer_palette_id)| layer_palette_id == palette_id)
+        })
+        .map(|(object_id, object)| (object_id.to_u32(), object.name()))
         .collect()
 }
 
-/// The names of the objects that reference `palette`, in object order.
-fn referencing_names(state: &VoxMain, palette: U32Id<BVoxPalette>) -> Vec<&str> {
-    referencing_objects(state, palette)
+/// The names of the objects that reference `palette_id`, in object order.
+fn referencing_names(state: &VoxMain, palette_id: U32Id<BVoxPalette>) -> Vec<&str> {
+    referencing_objects(state, palette_id)
         .into_iter()
         .map(|(_, name)| name)
         .collect()
@@ -194,7 +205,7 @@ mod tests {
     use voxcore::{BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The branded value id `index`.
-    fn value(index: usize) -> U32Id<BVoxValuePoolValue> {
+    fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
     }
 
@@ -217,7 +228,7 @@ mod tests {
         // Colors and metallic values back the properties; only the property
         // names and material counts reach the listing, so the values are
         // arbitrary.
-        let colors = state.add_value_pool(
+        let colors_value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(vec![
                 [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 1.0],
@@ -225,35 +236,51 @@ mod tests {
             ])
             .unwrap(),
         );
-        let metallic = state.add_value_pool(
+        let metallic_value_pool_id = state.add_value_pool(
             VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 1.0])
                 .unwrap(),
         );
 
         let mut zero = VoxPalette::default();
-        zero.add_property("baseColorFactor".to_owned(), colors, U32Id::from_u32(0))
-            .unwrap();
-        zero.add_property("metallicFactor".to_owned(), metallic, U32Id::from_u32(0))
-            .unwrap();
-        let zero_material = zero.add_material(vec![value(0), value(0)]).unwrap();
-        zero.add_material(vec![value(1), value(1)]).unwrap();
-        let zero = state.add_palette(zero).unwrap();
+        zero.add_property(
+            "baseColorFactor".to_owned(),
+            colors_value_pool_id,
+            U32Id::from_u32(0),
+        )
+        .unwrap();
+        zero.add_property(
+            "metallicFactor".to_owned(),
+            metallic_value_pool_id,
+            U32Id::from_u32(0),
+        )
+        .unwrap();
+        let zero_material_id = zero.add_material(vec![value_id(0), value_id(0)]).unwrap();
+        zero.add_material(vec![value_id(1), value_id(1)]).unwrap();
+        let zero_palette_id = state.add_palette(zero).unwrap();
 
         let mut one = VoxPalette::default();
-        one.add_property("baseColorFactor".to_owned(), colors, U32Id::from_u32(0))
-            .unwrap();
-        one.add_property("emissiveStrength".to_owned(), metallic, U32Id::from_u32(0))
-            .unwrap();
-        let one_material = one.add_material(vec![value(2), value(1)]).unwrap();
-        let one = state.add_palette(one).unwrap();
+        one.add_property(
+            "baseColorFactor".to_owned(),
+            colors_value_pool_id,
+            U32Id::from_u32(0),
+        )
+        .unwrap();
+        one.add_property(
+            "emissiveStrength".to_owned(),
+            metallic_value_pool_id,
+            U32Id::from_u32(0),
+        )
+        .unwrap();
+        let one_material_id = one.add_material(vec![value_id(2), value_id(1)]).unwrap();
+        let one_palette_id = state.add_palette(one).unwrap();
 
         let mut a = VoxObject::new("a".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        a.add_layer(zero, zero_material);
+        a.add_layer(zero_palette_id, zero_material_id);
         state.add_object(a).unwrap();
 
         let mut b = VoxObject::new("b".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        b.add_layer(zero, zero_material);
-        b.add_layer(one, one_material);
+        b.add_layer(zero_palette_id, zero_material_id);
+        b.add_layer(one_palette_id, one_material_id);
         state.add_object(b).unwrap();
 
         state
@@ -411,12 +438,17 @@ mod tests {
     #[test]
     fn an_unreferenced_palette_lists_no_users() {
         let mut state = VoxMain::default();
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
+        let colors_value_pool_id =
+            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), colors, U32Id::from_u32(0))
+            .add_property(
+                "baseColorFactor".to_owned(),
+                colors_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
 
         assert_eq!(
@@ -440,12 +472,17 @@ mod tests {
     #[test]
     fn an_unreferenced_palette_shows_an_empty_objects_branch() {
         let mut state = VoxMain::default();
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
+        let colors_value_pool_id =
+            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), colors, U32Id::from_u32(0))
+            .add_property(
+                "baseColorFactor".to_owned(),
+                colors_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
 
         assert_eq!(

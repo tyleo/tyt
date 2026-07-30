@@ -85,26 +85,29 @@ fn render_markdown(checks: &[VoxjCheck], name: &str) -> String {
 /// `failures` child.
 fn build_json_grid(checks: &[VoxjCheck], name: &str) -> TreeGrid<TreeGridJsonValueCells> {
     let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
-    let name_root = grid.add_root(TreeGridLabel::bare("name"));
-    grid.push_value(name_root, TreeGridJsonValue::new(name));
-    let valid = grid.add_root(TreeGridLabel::bare("valid"));
-    grid.push_value(valid, TreeGridJsonValue::bool(failed_count(checks) == 0));
+    let name_root_id = grid.add_root(TreeGridLabel::bare("name"));
+    grid.push_value(name_root_id, TreeGridJsonValue::new(name));
+    let valid_root_id = grid.add_root(TreeGridLabel::bare("valid"));
+    grid.push_value(
+        valid_root_id,
+        TreeGridJsonValue::bool(failed_count(checks) == 0),
+    );
 
-    let root = grid.add_root(TreeGridLabel::bare("checks"));
+    let root_id = grid.add_root(TreeGridLabel::bare("checks"));
     for check in checks {
-        let node = grid.add_child(root, TreeGridLabel::bare(check.name));
+        let node_id = grid.add_child(root_id, TreeGridLabel::bare(check.name));
         match &check.status {
             VoxjCheckStatus::Passed => {
-                grid.push_value(node, TreeGridJsonValue::new("passed"));
+                grid.push_value(node_id, TreeGridJsonValue::new("passed"));
             }
             VoxjCheckStatus::Unverifiable => {
-                grid.push_value(node, TreeGridJsonValue::new("unverifiable"));
+                grid.push_value(node_id, TreeGridJsonValue::new("unverifiable"));
             }
             VoxjCheckStatus::Failed(messages) => {
-                grid.push_value(node, TreeGridJsonValue::new("failed"));
-                let failures = grid.add_child(node, TreeGridLabel::bare("failures"));
+                grid.push_value(node_id, TreeGridJsonValue::new("failed"));
+                let failures_id = grid.add_child(node_id, TreeGridLabel::bare("failures"));
                 for message in messages {
-                    grid.push_value(failures, TreeGridJsonValue::new(message.clone()));
+                    grid.push_value(failures_id, TreeGridJsonValue::new(message.clone()));
                 }
             }
         }

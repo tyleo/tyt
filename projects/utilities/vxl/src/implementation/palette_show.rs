@@ -256,9 +256,9 @@ fn build_collection(
     // this palette's own property id always resolves.
     let samples = palette
         .iter_materials()
-        .map(|material| {
+        .map(|material_id| {
             let value_id = palette
-                .value_id(material, property_id)
+                .value_id(material_id, property_id)
                 .expect("a material holds a value for every property");
             sample(value_pool, value_id, kind, component)
         })
@@ -495,34 +495,40 @@ fn build_grid(collections: Vec<Collection>) -> TreeGrid<TreeGridJsonValueCells> 
     let mut palette_node: Option<(usize, U32Id<BTreeGridNode>)> = None;
     let mut property_node: Option<(String, U32Id<BTreeGridNode>)> = None;
     for collection in collections {
-        let palette = match palette_node {
-            Some((index, id)) if index == collection.palette => id,
+        let palette_node_id = match palette_node {
+            Some((index, node_id)) if index == collection.palette => node_id,
             _ => {
-                let id = grid.add_root(TreeGridLabel::bare(collection.palette.to_string()));
-                palette_node = Some((collection.palette, id));
+                let node_id = grid.add_root(TreeGridLabel::bare(collection.palette.to_string()));
+                palette_node = Some((collection.palette, node_id));
                 property_node = None;
-                id
+                node_id
             }
         };
-        let data = match collection.component {
+        let data_node_id = match collection.component {
             Some(component) => {
-                let property = match &property_node {
-                    Some((key, id)) if *key == collection.key => *id,
-                    _ => grid.add_child(palette, TreeGridLabel::quoted(collection.key.as_str())),
+                let property_node_id = match &property_node {
+                    Some((key, node_id)) if *key == collection.key => *node_id,
+                    _ => grid.add_child(
+                        palette_node_id,
+                        TreeGridLabel::quoted(collection.key.as_str()),
+                    ),
                 };
-                property_node = Some((collection.key, property));
+                property_node = Some((collection.key, property_node_id));
                 let letter = component_letter(component).to_string();
-                grid.add_child(property, TreeGridLabel::bare(letter))
+                grid.add_child(property_node_id, TreeGridLabel::bare(letter))
             }
             None => {
                 // A data node is always fresh, so a property selected twice
                 // keeps one collection per selector.
-                let id = grid.add_child(palette, TreeGridLabel::quoted(collection.key.as_str()));
-                property_node = Some((collection.key, id));
-                id
+                let node_id = grid.add_child(
+                    palette_node_id,
+                    TreeGridLabel::quoted(collection.key.as_str()),
+                );
+                property_node = Some((collection.key, node_id));
+                node_id
             }
         };
-        let node = grid.node_mut(data);
+        let node = grid.node_mut(data_node_id);
         node.format = cell_format(collection.format);
         node.values = collection.samples;
     }
@@ -618,7 +624,7 @@ mod tests {
     };
 
     /// The branded value id `index`.
-    fn value(index: usize) -> U32Id<BVoxValuePoolValue> {
+    fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
     }
 
@@ -645,33 +651,42 @@ mod tests {
     fn sample_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        let colors_zero = srgba_pool(&mut state, &[[255, 0, 0, 255], [0, 255, 0, 128]]);
-        let metallic = state.add_value_pool(
+        let colors_zero_value_pool_id =
+            srgba_pool(&mut state, &[[255, 0, 0, 255], [0, 255, 0, 128]]);
+        let metallic_value_pool_id = state.add_value_pool(
             VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![1.0, 0.2])
                 .unwrap(),
         );
-        let colors_one = srgba_pool(&mut state, &[[0, 0, 255, 255]]);
+        let colors_one_value_pool_id = srgba_pool(&mut state, &[[0, 0, 255, 255]]);
 
         let mut first = VoxPalette::default();
         first
             .add_property(
                 "baseColorFactor".to_owned(),
-                colors_zero,
+                colors_zero_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         first
-            .add_property("metallicFactor".to_owned(), metallic, U32Id::from_u32(0))
+            .add_property(
+                "metallicFactor".to_owned(),
+                metallic_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        first.add_material(vec![value(0), value(0)]).unwrap();
-        first.add_material(vec![value(1), value(1)]).unwrap();
+        first.add_material(vec![value_id(0), value_id(0)]).unwrap();
+        first.add_material(vec![value_id(1), value_id(1)]).unwrap();
         state.add_palette(first).unwrap();
 
         let mut second = VoxPalette::default();
         second
-            .add_property("baseColorFactor".to_owned(), colors_one, U32Id::from_u32(0))
+            .add_property(
+                "baseColorFactor".to_owned(),
+                colors_one_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        second.add_material(vec![value(0)]).unwrap();
+        second.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(second).unwrap();
 
         state
@@ -748,13 +763,18 @@ mod tests {
     #[test]
     fn swatch_spaces_values_with_no_swatch() {
         let mut state = VoxMain::default();
-        let shadows = state.add_value_pool(VoxValuePool::boolean(vec![true, false]).unwrap());
+        let shadows_value_pool_id =
+            state.add_value_pool(VoxValuePool::boolean(vec![true, false]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("shadows".to_owned(), shadows, U32Id::from_u32(0))
+            .add_property(
+                "shadows".to_owned(),
+                shadows_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
-        palette.add_material(vec![value(1)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
+        palette.add_material(vec![value_id(1)]).unwrap();
         state.add_palette(palette).unwrap();
 
         // Bools have no swatch, so swatch format spaces them rather than
@@ -1197,7 +1217,7 @@ mod tests {
         palette
             .add_property("tint".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
         state
     }
@@ -1229,7 +1249,7 @@ mod tests {
         palette
             .add_property("emissiveFactor".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
 
         let output = show(
@@ -1250,8 +1270,8 @@ mod tests {
         palette
             .add_property("count".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
-        palette.add_material(vec![value(1)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
+        palette.add_material(vec![value_id(1)]).unwrap();
         state.add_palette(palette).unwrap();
 
         let output = show(&state, &[("0", "count", "value")], PaletteShowLayout::Rows);
@@ -1272,7 +1292,7 @@ mod tests {
         palette
             .add_property("extra".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
 
         // The array survives into both the text and JSON layouts.
@@ -1298,7 +1318,7 @@ mod tests {
         palette
             .add_property(String::new(), pool, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
 
         // An empty name prints quoted as `""` rather than vanishing after the
@@ -1322,15 +1342,19 @@ mod tests {
         // Both material rows draw the strength pool's one value, so the
         // column shows it twice.
         let mut state = VoxMain::default();
-        let strengths = state.add_value_pool(
+        let strengths_value_pool_id = state.add_value_pool(
             VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![2.0]).unwrap(),
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property("emissiveStrength".to_owned(), strengths, U32Id::from_u32(0))
+            .add_property(
+                "emissiveStrength".to_owned(),
+                strengths_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
 
         let output = show(

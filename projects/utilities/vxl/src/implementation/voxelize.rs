@@ -67,9 +67,12 @@ pub fn voxelize(
 
     // Canonicalize the generated palette so its materials reference colors in
     // listing order rather than the order voxelize and reduction left.
-    let palette = state.iter_palettes().next().map(|(palette, _)| palette);
-    if let Some(palette) = palette {
-        order_palette_colors(&mut state, palette);
+    let palette_id = state
+        .iter_palettes()
+        .next()
+        .map(|(palette_id, _)| palette_id);
+    if let Some(palette_id) = palette_id {
+        order_palette_colors(&mut state, palette_id);
     }
 
     // The reduction and the reorder both keep value ids stable, so compact them
@@ -136,13 +139,13 @@ fn reduce_generated_palette(state: &mut VoxMain, reduction: PaletteReduction) ->
         return Ok(());
     };
 
-    let Some((palette, _)) = state.iter_palettes().next() else {
+    let Some((palette_id, _)) = state.iter_palettes().next() else {
         return Ok(());
     };
 
     reduce_palette(
         state,
-        palette,
+        palette_id,
         max_materials,
         reduction_method(reduction.method),
         color_space(reduction.space),

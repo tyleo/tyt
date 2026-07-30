@@ -147,17 +147,17 @@ impl<'a> Scene<'a> {
         let mut object_placements: IdVec<BVoxObject, usize> =
             IdVec::from_vec(vec![0; state.object_count()]);
 
-        for &root in state.root_hierarchy_node_ids() {
-            bump(&mut node_placements, root);
+        for &root_id in state.root_hierarchy_node_ids() {
+            bump(&mut node_placements, root_id);
         }
 
         for (_, node) in state.iter_hierarchy_nodes() {
-            for &child in &node.child_node_ids {
-                bump(&mut node_placements, child);
+            for &child_id in &node.child_node_ids {
+                bump(&mut node_placements, child_id);
             }
 
-            for &object in &node.child_object_ids {
-                bump(&mut object_placements, object);
+            for &object_id in &node.child_object_ids {
+                bump(&mut object_placements, object_id);
             }
         }
 
@@ -169,7 +169,7 @@ impl<'a> Scene<'a> {
     }
 
     /// The scene's roots, hierarchy node ids in listing order.
-    fn roots(&self) -> &[NodeId] {
+    fn root_ids(&self) -> &[NodeId] {
         self.state.root_hierarchy_node_ids()
     }
 
@@ -208,20 +208,20 @@ impl<'a> Scene<'a> {
     }
 
     /// Node ids that are neither a root nor a child, in listing order.
-    fn unplaced_nodes(&self) -> Vec<NodeId> {
+    fn unplaced_node_ids(&self) -> Vec<NodeId> {
         self.state
             .iter_hierarchy_nodes()
-            .map(|(id, _)| id)
-            .filter(|&id| self.node_placement(id) == 0)
+            .map(|(node_id, _)| node_id)
+            .filter(|&node_id| self.node_placement(node_id) == 0)
             .collect()
     }
 
     /// Object ids that no node places, in listing order.
-    fn orphan_objects(&self) -> Vec<ObjectId> {
+    fn orphan_object_ids(&self) -> Vec<ObjectId> {
         self.state
             .iter_objects()
-            .map(|(id, _)| id)
-            .filter(|&id| self.object_placement(id) == 0)
+            .map(|(object_id, _)| object_id)
+            .filter(|&object_id| self.object_placement(object_id) == 0)
             .collect()
     }
 
@@ -237,21 +237,21 @@ impl<'a> Scene<'a> {
         let mut branch = HashSet::new();
         let identity = TyTransformF64::default();
 
-        for &root in self.roots() {
-            let path = self.node_name(root).to_string();
-            self.enumerate_from(root, path, identity, None, &mut branch, &mut out);
+        for &root_id in self.root_ids() {
+            let path = self.node_name(root_id).to_string();
+            self.enumerate_from(root_id, path, identity, None, &mut branch, &mut out);
         }
 
-        for id in self.unplaced_nodes() {
-            let path = self.node_name(id).to_string();
-            self.enumerate_from(id, path, identity, None, &mut branch, &mut out);
+        for node_id in self.unplaced_node_ids() {
+            let path = self.node_name(node_id).to_string();
+            self.enumerate_from(node_id, path, identity, None, &mut branch, &mut out);
         }
 
         // An orphan object has just its name as a path and no placing node.
-        for id in self.orphan_objects() {
+        for object_id in self.orphan_object_ids() {
             out.push(Placement {
-                path: self.object_name(id).to_string(),
-                entity: Entity::Object(id),
+                path: self.object_name(object_id).to_string(),
+                entity: Entity::Object(object_id),
                 parent_world: identity,
                 parent: None,
             });
@@ -261,49 +261,49 @@ impl<'a> Scene<'a> {
     }
 
     /// Records this node placement and its child objects, then descends into its
-    /// child nodes unless `id` is already on the current branch, a cycle.
+    /// child nodes unless `node_id` is already on the current branch, a cycle.
     fn enumerate_from(
         &self,
-        id: NodeId,
+        node_id: NodeId,
         path: String,
         parent_world: TyTransformF64,
         parent: Option<usize>,
         branch: &mut HashSet<NodeId>,
         out: &mut Vec<Placement>,
     ) {
-        let Some(node) = self.state.hierarchy_node(id) else {
+        let Some(node) = self.state.hierarchy_node(node_id) else {
             return;
         };
 
         let this = out.len();
         out.push(Placement {
             path: path.clone(),
-            entity: Entity::Node(id),
+            entity: Entity::Node(node_id),
             parent_world,
             parent,
         });
 
-        if !branch.insert(id) {
+        if !branch.insert(node_id) {
             return;
         }
 
         let world = parent_world.compose(&node.transform);
 
-        for &object in &node.child_object_ids {
+        for &object_id in &node.child_object_ids {
             out.push(Placement {
-                path: child_path(&path, self.object_name(object)),
-                entity: Entity::Object(object),
+                path: child_path(&path, self.object_name(object_id)),
+                entity: Entity::Object(object_id),
                 parent_world: world,
                 parent: Some(this),
             });
         }
 
-        for &child in &node.child_node_ids {
-            let child_path = child_path(&path, self.node_name(child));
-            self.enumerate_from(child, child_path, world, Some(this), branch, out);
+        for &child_id in &node.child_node_ids {
+            let child_path = child_path(&path, self.node_name(child_id));
+            self.enumerate_from(child_id, child_path, world, Some(this), branch, out);
         }
 
-        branch.remove(&id);
+        branch.remove(&node_id);
     }
 
     /// Builds the selection filter for `pattern`, erroring on a malformed
@@ -513,18 +513,18 @@ impl Walk<'_> {
         index
     }
 
-    /// Adds a node under `parent`, or as a grid root when there is none.
-    fn add_node(&mut self, parent: Option<GridNodeId>, label: TreeGridLabel) -> GridNodeId {
-        match parent {
-            Some(parent) => self.grid.add_child(parent, label),
+    /// Adds a node under `parent_id`, or as a grid root when there is none.
+    fn add_node(&mut self, parent_id: Option<GridNodeId>, label: TreeGridLabel) -> GridNodeId {
+        match parent_id {
+            Some(parent_id) => self.grid.add_child(parent_id, label),
             None => self.grid.add_root(label),
         }
     }
 
-    /// Adds a leaf under `parent` carrying one pre-formatted value.
-    fn add_value_leaf(&mut self, parent: GridNodeId, label: impl Into<String>, text: String) {
-        let leaf = self.grid.add_child(parent, TreeGridLabel::bare(label));
-        self.grid.push_value(leaf, TreeGridValue::new(text));
+    /// Adds a leaf under `parent_id` carrying one pre-formatted value.
+    fn add_value_leaf(&mut self, parent_id: GridNodeId, label: impl Into<String>, text: String) {
+        let leaf_id = self.grid.add_child(parent_id, TreeGridLabel::bare(label));
+        self.grid.push_value(leaf_id, TreeGridValue::new(text));
     }
 
     /// Populates the whole scene into the grid.
@@ -539,12 +539,12 @@ impl Walk<'_> {
     /// The `root` section, then the `unplaced` section of unplaced nodes and
     /// orphan objects.
     fn run_sections(&mut self) {
-        let roots = self.scene.roots().to_vec();
-        self.build_group("root", &roots, &[]);
+        let root_ids = self.scene.root_ids().to_vec();
+        self.build_group("root", &root_ids, &[]);
 
-        let unplaced = self.scene.unplaced_nodes();
-        let orphans = self.scene.orphan_objects();
-        self.build_group("unplaced", &unplaced, &orphans);
+        let unplaced_node_ids = self.scene.unplaced_node_ids();
+        let orphan_object_ids = self.scene.orphan_object_ids();
+        self.build_group("unplaced", &unplaced_node_ids, &orphan_object_ids);
     }
 
     /// Adds the match roots as a flat list, each behind an `ancestors` marker
@@ -557,30 +557,32 @@ impl Walk<'_> {
         };
 
         for placement in &roots {
-            let parent = placement
+            let parent_id = placement
                 .path
                 .contains('/')
                 .then(|| self.grid.add_root(TreeGridLabel::bare("ancestors")));
 
-            self.build_placement(placement, parent);
+            self.build_placement(placement, parent_id);
         }
     }
 
     /// Builds one match root: a node with its subtree, or a leaf object.
-    fn build_placement(&mut self, placement: &Placement, parent: Option<GridNodeId>) {
+    fn build_placement(&mut self, placement: &Placement, parent_id: Option<GridNodeId>) {
         match placement.entity {
-            Entity::Node(id) => {
+            Entity::Node(node_id) => {
                 let mut branch = HashSet::new();
                 self.build_node(
-                    id,
-                    parent,
+                    node_id,
+                    parent_id,
                     &placement.path,
                     placement.parent_world,
                     &mut branch,
                 );
             }
 
-            Entity::Object(id) => self.build_object(id, parent, placement.parent_world),
+            Entity::Object(object_id) => {
+                self.build_object(object_id, parent_id, placement.parent_world)
+            }
         }
     }
 
@@ -592,35 +594,35 @@ impl Walk<'_> {
     /// Builds one section: a bare `header` root over the visible top-level
     /// nodes then objects, skipped entirely when empty.
     fn build_group(&mut self, header: &str, node_ids: &[NodeId], object_ids: &[ObjectId]) {
-        let nodes: Vec<NodeId> = node_ids
+        let visible_node_ids: Vec<NodeId> = node_ids
             .iter()
             .copied()
-            .filter(|&id| self.top_visible(id))
+            .filter(|&node_id| self.top_visible(node_id))
             .collect();
 
-        let objects: Vec<ObjectId> = object_ids
+        let visible_object_ids: Vec<ObjectId> = object_ids
             .iter()
             .copied()
-            .filter(|&id| self.top_object_visible(id))
+            .filter(|&object_id| self.top_object_visible(object_id))
             .collect();
 
-        if nodes.is_empty() && objects.is_empty() {
+        if visible_node_ids.is_empty() && visible_object_ids.is_empty() {
             return;
         }
 
-        let section = self.grid.add_root(TreeGridLabel::bare(header));
+        let section_id = self.grid.add_root(TreeGridLabel::bare(header));
 
         // A section root has no parent, so it starts from the identity.
         let identity = TyTransformF64::default();
         let mut branch = HashSet::new();
 
-        for &id in &nodes {
-            let path = self.scene.node_name(id).to_string();
-            self.build_node(id, Some(section), &path, identity, &mut branch);
+        for &node_id in &visible_node_ids {
+            let path = self.scene.node_name(node_id).to_string();
+            self.build_node(node_id, Some(section_id), &path, identity, &mut branch);
         }
 
-        for &id in &objects {
-            self.build_object(id, Some(section), identity);
+        for &object_id in &visible_object_ids {
+            self.build_object(object_id, Some(section_id), identity);
         }
     }
 
@@ -648,7 +650,7 @@ impl Walk<'_> {
     fn build_node(
         &mut self,
         id: NodeId,
-        parent: Option<GridNodeId>,
+        parent_id: Option<GridNodeId>,
         path: &str,
         parent_world: TyTransformF64,
         branch: &mut HashSet<NodeId>,
@@ -657,7 +659,7 @@ impl Walk<'_> {
 
         let Some(node) = scene.state.hierarchy_node(id) else {
             self.add_node(
-                parent,
+                parent_id,
                 TreeGridLabel::bare(format!("missing node {}", id.to_u32())),
             );
             return;
@@ -684,10 +686,10 @@ impl Walk<'_> {
             tag.push_str(", cycle: true");
         }
 
-        let grid_node = self.add_node(parent, TreeGridLabel::quoted(node.name.as_str()));
+        let grid_node_id = self.add_node(parent_id, TreeGridLabel::quoted(node.name.as_str()));
 
         self.grid
-            .push_value(grid_node, TreeGridValue::new(format!("{{{tag}}}")));
+            .push_value(grid_node_id, TreeGridValue::new(format!("{{{tag}}}")));
 
         if is_cycle || collapsed_stub {
             return;
@@ -698,49 +700,49 @@ impl Walk<'_> {
         let world = parent_world.compose(&local);
 
         if self.views.transforms.is_some() {
-            self.build_transform(grid_node, local, world);
+            self.build_transform(grid_node_id, local, world);
         }
 
         // The child nodes that lead to a selection and the child objects that are
         // selected; without a filter every child shows.
-        let mut child_nodes: Vec<(NodeId, String)> = Vec::new();
-        for &child in &node.child_node_ids {
-            let child_path = child_path(path, scene.node_name(child));
+        let mut visible_child_nodes: Vec<(NodeId, String)> = Vec::new();
+        for &child_id in &node.child_node_ids {
+            let child_path = child_path(path, scene.node_name(child_id));
             if self
                 .filter
                 .as_ref()
                 .is_none_or(|f| f.shows_node(&child_path))
             {
-                child_nodes.push((child, child_path));
+                visible_child_nodes.push((child_id, child_path));
             }
         }
 
-        let mut child_objects: Vec<ObjectId> = Vec::new();
-        for &object in &node.child_object_ids {
-            let object_path = child_path(path, scene.object_name(object));
+        let mut visible_child_object_ids: Vec<ObjectId> = Vec::new();
+        for &object_id in &node.child_object_ids {
+            let object_path = child_path(path, scene.object_name(object_id));
             if self
                 .filter
                 .as_ref()
                 .is_none_or(|f| f.shows_object(&object_path))
             {
-                child_objects.push(object);
+                visible_child_object_ids.push(object_id);
             }
         }
 
-        let has_children = !child_nodes.is_empty() || !child_objects.is_empty();
+        let has_children = !visible_child_nodes.is_empty() || !visible_child_object_ids.is_empty();
 
         branch.insert(id);
 
         if self.collapse_descendants() && self.is_root(path) && has_children {
             self.grid
-                .add_child(grid_node, TreeGridLabel::bare("descendants"));
+                .add_child(grid_node_id, TreeGridLabel::bare("descendants"));
         } else {
-            for (child, child_path) in child_nodes {
-                self.build_node(child, Some(grid_node), &child_path, world, branch);
+            for (child_id, child_path) in visible_child_nodes {
+                self.build_node(child_id, Some(grid_node_id), &child_path, world, branch);
             }
 
-            for object in child_objects {
-                self.build_object(object, Some(grid_node), world);
+            for object_id in visible_child_object_ids {
+                self.build_object(object_id, Some(grid_node_id), world);
             }
         }
 
@@ -751,7 +753,7 @@ impl Walk<'_> {
     /// composed world space.
     fn build_transform(
         &mut self,
-        parent: GridNodeId,
+        parent_id: GridNodeId,
         local: TyTransformF64,
         world: TyTransformF64,
     ) {
@@ -761,9 +763,9 @@ impl Walk<'_> {
 
         let transform = if view.world { world } else { local };
 
-        let subtree = self
+        let subtree_id = self
             .grid
-            .add_child(parent, TreeGridLabel::bare("transform"));
+            .add_child(parent_id, TreeGridLabel::bare("transform"));
 
         let mut rotation = transform.rotation.to_euler_radians();
 
@@ -774,19 +776,19 @@ impl Walk<'_> {
         let precision = view.precision;
 
         self.add_value_leaf(
-            subtree,
+            subtree_id,
             "position",
             format!("[{}]", format_vec3(transform.position, precision)),
         );
 
         self.add_value_leaf(
-            subtree,
+            subtree_id,
             "rotation",
             format!("[{}]", format_vec3(rotation, precision)),
         );
 
         self.add_value_leaf(
-            subtree,
+            subtree_id,
             "scale",
             format!("[{}]", format_vec3(transform.scale, precision)),
         );
@@ -797,14 +799,14 @@ impl Walk<'_> {
     fn build_object(
         &mut self,
         id: ObjectId,
-        parent: Option<GridNodeId>,
+        parent_id: Option<GridNodeId>,
         placing_world: TyTransformF64,
     ) {
         let scene = self.scene;
 
         let Some(object) = scene.state.object(id) else {
             self.add_node(
-                parent,
+                parent_id,
                 TreeGridLabel::bare(format!("missing object {}", id.to_u32())),
             );
             return;
@@ -818,17 +820,17 @@ impl Walk<'_> {
             tag.push_str(&format!(", instance: {index}"));
         }
 
-        let grid_node = self.add_node(parent, TreeGridLabel::quoted(object.name()));
+        let grid_node_id = self.add_node(parent_id, TreeGridLabel::quoted(object.name()));
 
         self.grid
-            .push_value(grid_node, TreeGridValue::new(format!("{{{tag}}}")));
+            .push_value(grid_node_id, TreeGridValue::new(format!("{{{tag}}}")));
 
         for row in self.object_rows(object, placing_world) {
-            self.build_object_row(&row, grid_node);
+            self.build_object_row(&row, grid_node_id);
         }
 
         if self.views.layers {
-            self.build_layers(grid_node, object);
+            self.build_layers(grid_node_id, object);
         }
     }
 
@@ -895,7 +897,7 @@ impl Walk<'_> {
     }
 
     /// Builds one geometry row; an absent grid reads `null`.
-    fn build_object_row(&mut self, row: &ObjectRow, parent: GridNodeId) {
+    fn build_object_row(&mut self, row: &ObjectRow, parent_id: GridNodeId) {
         match row {
             ObjectRow::Value {
                 label,
@@ -907,34 +909,34 @@ impl Walk<'_> {
                     None => "null".to_string(),
                 };
 
-                self.add_value_leaf(parent, *label, text);
+                self.add_value_leaf(parent_id, *label, text);
             }
 
             ObjectRow::Count { label, value } => {
-                self.add_value_leaf(parent, *label, value.to_string())
+                self.add_value_leaf(parent_id, *label, value.to_string())
             }
 
             ObjectRow::Bounds {
                 label,
                 corners: None,
                 ..
-            } => self.add_value_leaf(parent, *label, "null".to_string()),
+            } => self.add_value_leaf(parent_id, *label, "null".to_string()),
 
             ObjectRow::Bounds {
                 label,
                 corners: Some((min, max)),
                 precision,
             } => {
-                let subtree = self.grid.add_child(parent, TreeGridLabel::bare(*label));
+                let subtree_id = self.grid.add_child(parent_id, TreeGridLabel::bare(*label));
 
                 self.add_value_leaf(
-                    subtree,
+                    subtree_id,
                     "min",
                     format!("[{}]", format_vec3(*min, *precision)),
                 );
 
                 self.add_value_leaf(
-                    subtree,
+                    subtree_id,
                     "max",
                     format!("[{}]", format_vec3(*max, *precision)),
                 );
@@ -944,20 +946,22 @@ impl Walk<'_> {
 
     /// Builds the `layers` subtree, one child per layer, `layers: []` when the
     /// object has none.
-    fn build_layers(&mut self, parent: GridNodeId, object: &VoxObject) {
+    fn build_layers(&mut self, parent_id: GridNodeId, object: &VoxObject) {
         if object.layer_count() == 0 {
-            self.add_value_leaf(parent, "layers", "[]".to_string());
+            self.add_value_leaf(parent_id, "layers", "[]".to_string());
             return;
         }
 
-        let subtree = self.grid.add_child(parent, TreeGridLabel::bare("layers"));
+        let subtree_id = self
+            .grid
+            .add_child(parent_id, TreeGridLabel::bare("layers"));
 
         for (_, palette_id) in object.iter_layers() {
             match self.scene.state.palette(palette_id) {
                 Some(palette) => {
                     let materials = palette.material_count();
                     self.add_value_leaf(
-                        subtree,
+                        subtree_id,
                         palette_id.to_u32().to_string(),
                         format!("{{materials: {materials}}}"),
                     );
@@ -965,7 +969,7 @@ impl Walk<'_> {
 
                 None => {
                     self.grid.add_child(
-                        subtree,
+                        subtree_id,
                         TreeGridLabel::bare(format!("missing palette {}", palette_id.to_u32())),
                     );
                 }
@@ -1218,8 +1222,8 @@ mod tests {
         for x in lo.0..=hi.0 {
             for y in lo.1..=hi.1 {
                 for z in lo.2..=hi.2 {
-                    let id = object.voxel_id(TyVector3U32::new(x, y, z)).unwrap();
-                    object.retain_voxel(id, &[]).unwrap();
+                    let voxel_id = object.voxel_id(TyVector3U32::new(x, y, z)).unwrap();
+                    object.retain_voxel(voxel_id, &[]).unwrap();
                 }
             }
         }
@@ -1271,11 +1275,11 @@ mod tests {
     /// A root placing one object under one node.
     fn simple_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let body = state.add_object(object("body")).unwrap();
-        let root = state
-            .add_hierarchy_node(node("root", vec![], vec![body]))
+        let body_id = state.add_object(object("body")).unwrap();
+        let root_id = state
+            .add_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
     }
 
@@ -1283,20 +1287,20 @@ mod tests {
     /// places one object: the leaf is instanced.
     fn instanced_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let head = state.add_object(object("head")).unwrap();
-        let leaf = state
-            .add_hierarchy_node(node("leaf", vec![], vec![head]))
+        let head_id = state.add_object(object("head")).unwrap();
+        let leaf_id = state
+            .add_hierarchy_node(node("leaf", vec![], vec![head_id]))
             .unwrap();
-        let arm_a = state
-            .add_hierarchy_node(node("armA", vec![leaf], vec![]))
+        let arm_a_id = state
+            .add_hierarchy_node(node("armA", vec![leaf_id], vec![]))
             .unwrap();
-        let arm_b = state
-            .add_hierarchy_node(node("armB", vec![leaf], vec![]))
+        let arm_b_id = state
+            .add_hierarchy_node(node("armB", vec![leaf_id], vec![]))
             .unwrap();
-        let root = state
-            .add_hierarchy_node(node("root", vec![arm_a, arm_b], vec![]))
+        let root_id = state
+            .add_hierarchy_node(node("root", vec![arm_a_id, arm_b_id], vec![]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
     }
 
@@ -1305,24 +1309,24 @@ mod tests {
     /// armA 2, armB 3, root 4; object ids: handMesh 0, footMesh 1.
     fn pattern_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let hand_mesh = state.add_object(object("handMesh")).unwrap();
-        let foot_mesh = state.add_object(object("footMesh")).unwrap();
-        let hand = state
-            .add_hierarchy_node(node("hand", vec![], vec![hand_mesh]))
+        let hand_mesh_id = state.add_object(object("handMesh")).unwrap();
+        let foot_mesh_id = state.add_object(object("footMesh")).unwrap();
+        let hand_id = state
+            .add_hierarchy_node(node("hand", vec![], vec![hand_mesh_id]))
             .unwrap();
-        let foot = state
-            .add_hierarchy_node(node("foot", vec![], vec![foot_mesh]))
+        let foot_id = state
+            .add_hierarchy_node(node("foot", vec![], vec![foot_mesh_id]))
             .unwrap();
-        let arm_a = state
-            .add_hierarchy_node(node("armA", vec![hand], vec![]))
+        let arm_a_id = state
+            .add_hierarchy_node(node("armA", vec![hand_id], vec![]))
             .unwrap();
-        let arm_b = state
-            .add_hierarchy_node(node("armB", vec![foot], vec![]))
+        let arm_b_id = state
+            .add_hierarchy_node(node("armB", vec![foot_id], vec![]))
             .unwrap();
-        let root = state
-            .add_hierarchy_node(node("root", vec![arm_a, arm_b], vec![]))
+        let root_id = state
+            .add_hierarchy_node(node("root", vec![arm_a_id, arm_b_id], vec![]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
     }
 
@@ -1345,30 +1349,30 @@ mod tests {
     fn palette_ref_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        let first = add_palette_with_materials(&mut state, 2);
-        let first_material = state
-            .palette(first)
+        let first_palette_id = add_palette_with_materials(&mut state, 2);
+        let first_material_id = state
+            .palette(first_palette_id)
             .unwrap()
             .iter_materials()
             .next()
             .unwrap();
-        let second = add_palette_with_materials(&mut state, 3);
-        let second_material = state
-            .palette(second)
+        let second_palette_id = add_palette_with_materials(&mut state, 3);
+        let second_material_id = state
+            .palette(second_palette_id)
             .unwrap()
             .iter_materials()
             .next()
             .unwrap();
 
         let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        body.add_layer(first, first_material);
-        body.add_layer(second, second_material);
+        body.add_layer(first_palette_id, first_material_id);
+        body.add_layer(second_palette_id, second_material_id);
         let body_id = state.add_object(body).unwrap();
 
-        let root = state
+        let root_id = state
             .add_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
     }
 
@@ -1377,7 +1381,7 @@ mod tests {
     /// the runtime grid is a 4x4x4 box at node-relative origin (0, 0, 0).
     fn geometry_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let body = state
+        let body_id = state
             .add_object(object_live(
                 "body",
                 (6, 6, 6),
@@ -1386,10 +1390,10 @@ mod tests {
                 (4, 4, 4),
             ))
             .unwrap();
-        let root = state
-            .add_hierarchy_node(node("root", vec![], vec![body]))
+        let root_id = state
+            .add_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
     }
 
@@ -1484,18 +1488,18 @@ mod tests {
     #[test]
     fn markdown_lists_unplaced_nodes_and_orphan_objects() {
         let mut state = VoxMain::default();
-        let body = state.add_object(object("body")).unwrap();
+        let body_id = state.add_object(object("body")).unwrap();
         // `looseMesh` (object 1) is placed by no node: an orphan object.
         state.add_object(object("looseMesh")).unwrap();
-        let spare_child = state.add_object(object("spareChild")).unwrap();
-        let root = state
-            .add_hierarchy_node(node("root", vec![], vec![body]))
+        let spare_child_id = state.add_object(object("spareChild")).unwrap();
+        let root_id = state
+            .add_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         // `spareNode` is neither a root nor a child: an unplaced library node.
         state
-            .add_hierarchy_node(node("spareNode", vec![], vec![spare_child]))
+            .add_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let output = show(&state, None, false, false, false);
         assert_eq!(
@@ -1582,17 +1586,17 @@ mod tests {
     #[test]
     fn an_orphan_object_is_selectable_by_name() {
         let mut state = VoxMain::default();
-        let body = state.add_object(object("body")).unwrap();
+        let body_id = state.add_object(object("body")).unwrap();
         // `looseMesh` (object 1) is placed by no node: an orphan object.
         state.add_object(object("looseMesh")).unwrap();
-        let spare_child = state.add_object(object("spareChild")).unwrap();
-        let root = state
-            .add_hierarchy_node(node("root", vec![], vec![body]))
+        let spare_child_id = state.add_object(object("spareChild")).unwrap();
+        let root_id = state
+            .add_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         state
-            .add_hierarchy_node(node("spareNode", vec![], vec![spare_child]))
+            .add_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         // The orphan object matches; nothing else does, so only it shows.
         let output = show_many(&state, &["looseMesh"], false, false, false);
@@ -1645,11 +1649,11 @@ mod tests {
         // Empty names collapse the object's path onto its parent node's, so
         // match-rootness must come from the parent link, not the path.
         let mut state = VoxMain::default();
-        let body = state.add_object(object("")).unwrap();
-        let root = state
-            .add_hierarchy_node(node("", vec![], vec![body]))
+        let body_id = state.add_object(object("")).unwrap();
+        let root_id = state
+            .add_hierarchy_node(node("", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let output = show(&state, Some("*"), false, true, false);
         assert_eq!(
@@ -1669,16 +1673,16 @@ mod tests {
     #[test]
     fn transforms_local_prepend_the_node_transform() {
         let mut state = VoxMain::default();
-        let body = state.add_object(object("body")).unwrap();
-        let root = state
+        let body_id = state.add_object(object("body")).unwrap();
+        let root_id = state
             .add_hierarchy_node(node_xf(
                 "root",
                 xf((1.0, 2.0, 3.0), 90.0, (1.0, 1.0, 1.0)),
                 vec![],
-                vec![body],
+                vec![body_id],
             ))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let view = TransformView {
             world: false,
@@ -1748,7 +1752,7 @@ mod tests {
         // A 2x2x2 object fully live from the corner: build volume equals the tight
         // extent, so it has no distinct edit grid and every edit row is `null`.
         let mut state = VoxMain::default();
-        let body = state
+        let body_id = state
             .add_object(object_live(
                 "body",
                 (2, 2, 2),
@@ -1757,10 +1761,10 @@ mod tests {
                 (1, 1, 1),
             ))
             .unwrap();
-        let root = state
-            .add_hierarchy_node(node("root", vec![], vec![body]))
+        let root_id = state
+            .add_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let views = HierarchyViews {
             edit_origins: Some(OriginView {
@@ -1799,11 +1803,11 @@ mod tests {
         let mut state = VoxMain::default();
         let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(3, 3, 3)).unwrap();
         body.set_origin(TyVector3I32::new(-1, -1, -1));
-        let body = state.add_object(body).unwrap();
-        let root = state
-            .add_hierarchy_node(node("root", vec![], vec![body]))
+        let body_id = state.add_object(body).unwrap();
+        let root_id = state
+            .add_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let views = HierarchyViews {
             edit_extents: Some(2),
@@ -1835,7 +1839,7 @@ mod tests {
         // A unit object fully live at the grid corner under a node translated to
         // +10x. Its runtime origin is (0, 0, 0) locally, (10, 0, 0) in world.
         let mut state = VoxMain::default();
-        let body = state
+        let body_id = state
             .add_object(object_live(
                 "body",
                 (1, 1, 1),
@@ -1844,15 +1848,15 @@ mod tests {
                 (0, 0, 0),
             ))
             .unwrap();
-        let root = state
+        let root_id = state
             .add_hierarchy_node(node_xf(
                 "root",
                 xf((10.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
                 vec![],
-                vec![body],
+                vec![body_id],
             ))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let local = render_views(
             &state,
@@ -1890,24 +1894,24 @@ mod tests {
         // A child at local +1x under a parent translated to +10x sits at world
         // +11x.
         let mut state = VoxMain::default();
-        let body = state.add_object(object("body")).unwrap();
-        let child = state
+        let body_id = state.add_object(object("body")).unwrap();
+        let child_id = state
             .add_hierarchy_node(node_xf(
                 "child",
                 xf((1.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
                 vec![],
-                vec![body],
+                vec![body_id],
             ))
             .unwrap();
-        let root = state
+        let root_id = state
             .add_hierarchy_node(node_xf(
                 "root",
                 xf((10.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
-                vec![child],
+                vec![child_id],
                 vec![],
             ))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let view = TransformView {
             world: true,
@@ -2041,11 +2045,11 @@ mod tests {
         // A nameless node and an object whose name carries a space both print
         // quoted; the `root` section header stays unquoted.
         let mut state = VoxMain::default();
-        let mesh = state.add_object(object("my mesh")).unwrap();
-        let root = state
-            .add_hierarchy_node(node("", vec![], vec![mesh]))
+        let mesh_id = state.add_object(object("my mesh")).unwrap();
+        let root_id = state
+            .add_hierarchy_node(node("", vec![], vec![mesh_id]))
             .unwrap();
-        state.set_root_hierarchy_node_ids(vec![root]).unwrap();
+        state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
         let output = show(&state, None, false, false, false);
         assert_eq!(

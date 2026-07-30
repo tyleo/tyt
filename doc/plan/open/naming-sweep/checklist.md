@@ -154,14 +154,16 @@ Gate: workspace green; the voxsmith gate grep returns nothing.
 
 ## Iteration 3: vxl
 
-- [ ] Id suffixes: `implementation/hierarchy_show.rs` (the walkers, the
+- [x] Id suffixes: `implementation/hierarchy_show.rs` (the walkers, the
       treegrid node ids, and the test fixtures), `resolve_objects.rs`,
       `info.rs`, `palette_list.rs` (including the `count` binding that
       holds a node id), `palette_show.rs`, `mesh_object.rs`, `validate.rs`,
       `voxelize.rs`, the entity-named test helpers that return ids
-      (`fn value`, `fn object`), and the bare-`id` destructures and
-      closures under the Q2 policy (the placement-helper subject
-      parameters stay `id`).
+      (`fn value`, `fn object`, and `resolve_objects.rs`'s sibling
+      `fn node`), and the bare-`id` destructures and closures under the Q2
+      policy (the placement-helper subject parameters stay `id`).
+      `mesh_object.rs`'s main-code palette locals drifted away with the
+      layer flatten, leaving only its test fixtures.
 - [ ] Index suffixes: `Mesh::layer` to `layer_index`, the derived flag
       following to `--layer-index`, noted in the commit body; the `object`
       and `layer` parameters on `Dependencies` and

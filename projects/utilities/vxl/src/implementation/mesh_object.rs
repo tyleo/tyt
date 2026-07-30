@@ -288,7 +288,7 @@ mod tests {
     };
 
     /// The branded value id `index`.
-    fn value(index: usize) -> U32Id<BVoxValuePoolValue> {
+    fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
     }
 
@@ -297,29 +297,31 @@ mod tests {
     fn palette_state() -> (VoxMain, U32Id<BVoxPalette>) {
         let mut state = VoxMain::default();
 
-        let tint = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
-        let glow = state.add_value_pool(VoxValuePool::srgb(vec![[0.0, 1.0, 0.0]]).unwrap());
-        let gloss = state.add_value_pool(
+        let tint_value_pool_id =
+            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let glow_value_pool_id =
+            state.add_value_pool(VoxValuePool::srgb(vec![[0.0, 1.0, 0.0]]).unwrap());
+        let gloss_value_pool_id = state.add_value_pool(
             VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.5]).unwrap(),
         );
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tint".to_owned(), tint, U32Id::from_u32(0))
+            .add_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property("glow".to_owned(), glow, U32Id::from_u32(0))
+            .add_property("glow".to_owned(), glow_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property("gloss".to_owned(), gloss, U32Id::from_u32(0))
+            .add_property("gloss".to_owned(), gloss_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_material(vec![value(0), value(0), value(0)])
+            .add_material(vec![value_id(0), value_id(0), value_id(0)])
             .unwrap();
 
-        let palette = state.add_palette(palette).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
 
-        (state, palette)
+        (state, palette_id)
     }
 
     /// Whether `key` with `component` validates against an object layering the
@@ -340,18 +342,18 @@ mod tests {
 
     #[test]
     fn a_present_color_reads_by_component() {
-        let (state, palette) = palette_state();
+        let (state, palette_id) = palette_state();
         // `tint` is an srgba pool: a component is required, and `.a` is allowed.
-        assert!(!validates(&state, &[palette], "tint", None));
+        assert!(!validates(&state, &[palette_id], "tint", None));
         assert!(validates(
             &state,
-            &[palette],
+            &[palette_id],
             "tint",
             Some(ColorComponent::R)
         ));
         assert!(validates(
             &state,
-            &[palette],
+            &[palette_id],
             "tint",
             Some(ColorComponent::A)
         ));
@@ -359,16 +361,16 @@ mod tests {
 
     #[test]
     fn a_present_three_component_color_rejects_alpha() {
-        let (state, palette) = palette_state();
+        let (state, palette_id) = palette_state();
         assert!(validates(
             &state,
-            &[palette],
+            &[palette_id],
             "glow",
             Some(ColorComponent::B)
         ));
         assert!(!validates(
             &state,
-            &[palette],
+            &[palette_id],
             "glow",
             Some(ColorComponent::A)
         ));
@@ -376,11 +378,11 @@ mod tests {
 
     #[test]
     fn a_present_scalar_rejects_a_component() {
-        let (state, palette) = palette_state();
-        assert!(validates(&state, &[palette], "gloss", None));
+        let (state, palette_id) = palette_state();
+        assert!(validates(&state, &[palette_id], "gloss", None));
         assert!(!validates(
             &state,
-            &[palette],
+            &[palette_id],
             "gloss",
             Some(ColorComponent::R)
         ));
@@ -388,27 +390,27 @@ mod tests {
 
     #[test]
     fn an_absent_builtin_takes_its_spec_kind() {
-        let (state, palette) = palette_state();
+        let (state, palette_id) = palette_state();
         // None are bound, so each validates by its glTF spec kind and bakes its
         // default: baseColorFactor is a four-component color, occlusionStrength a
         // scalar, emissiveFactor a three-component color.
         assert!(validates(
             &state,
-            &[palette],
+            &[palette_id],
             "baseColorFactor",
             Some(ColorComponent::A)
         ));
-        assert!(!validates(&state, &[palette], "baseColorFactor", None));
-        assert!(validates(&state, &[palette], "occlusionStrength", None));
+        assert!(!validates(&state, &[palette_id], "baseColorFactor", None));
+        assert!(validates(&state, &[palette_id], "occlusionStrength", None));
         assert!(!validates(
             &state,
-            &[palette],
+            &[palette_id],
             "occlusionStrength",
             Some(ColorComponent::R)
         ));
         assert!(!validates(
             &state,
-            &[palette],
+            &[palette_id],
             "emissiveFactor",
             Some(ColorComponent::A)
         ));
@@ -416,13 +418,13 @@ mod tests {
 
     #[test]
     fn an_absent_custom_property_is_an_error() {
-        let (state, palette) = palette_state();
+        let (state, palette_id) = palette_state();
         // `subsurface` is neither bound nor a glTF property, so its type cannot
         // be inferred, whether or not a component is named.
-        assert!(!validates(&state, &[palette], "subsurface", None));
+        assert!(!validates(&state, &[palette_id], "subsurface", None));
         assert!(!validates(
             &state,
-            &[palette],
+            &[palette_id],
             "subsurface",
             Some(ColorComponent::R)
         ));
@@ -431,15 +433,16 @@ mod tests {
     #[test]
     fn a_string_pool_has_no_texel_value() {
         let mut state = VoxMain::default();
-        let tag = state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]).unwrap());
+        let tag_value_pool_id =
+            state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tag".to_owned(), tag, U32Id::from_u32(0))
+            .add_property("tag".to_owned(), tag_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value(0)]).unwrap();
-        let palette = state.add_palette(palette).unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
 
-        assert!(!validates(&state, &[palette], "tag", None));
+        assert!(!validates(&state, &[palette_id], "tag", None));
     }
 
     #[test]
@@ -448,39 +451,54 @@ mod tests {
         // four-component color. The last layer's palette wins, so the layer
         // order flips which component rule applies.
         let mut state = VoxMain::default();
-        let scalar = state.add_value_pool(
+        let scalar_value_pool_id = state.add_value_pool(
             VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.5]).unwrap(),
         );
-        let color = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let color_value_pool_id =
+            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut scalar_palette = VoxPalette::default();
         scalar_palette
-            .add_property("finish".to_owned(), scalar, U32Id::from_u32(0))
+            .add_property(
+                "finish".to_owned(),
+                scalar_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
-        scalar_palette.add_material(vec![value(0)]).unwrap();
-        let scalar_id = state.add_palette(scalar_palette).unwrap();
+        scalar_palette.add_material(vec![value_id(0)]).unwrap();
+        let scalar_palette_id = state.add_palette(scalar_palette).unwrap();
 
         let mut color_palette = VoxPalette::default();
         color_palette
-            .add_property("finish".to_owned(), color, U32Id::from_u32(0))
+            .add_property("finish".to_owned(), color_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        color_palette.add_material(vec![value(0)]).unwrap();
-        let color_id = state.add_palette(color_palette).unwrap();
+        color_palette.add_material(vec![value_id(0)]).unwrap();
+        let color_palette_id = state.add_palette(color_palette).unwrap();
 
         // Color wins: a component is required and `.a` allowed.
-        assert!(!validates(&state, &[scalar_id, color_id], "finish", None));
+        assert!(!validates(
+            &state,
+            &[scalar_palette_id, color_palette_id],
+            "finish",
+            None
+        ));
         assert!(validates(
             &state,
-            &[scalar_id, color_id],
+            &[scalar_palette_id, color_palette_id],
             "finish",
             Some(ColorComponent::A)
         ));
 
         // Scalar wins: no component allowed.
-        assert!(validates(&state, &[color_id, scalar_id], "finish", None));
+        assert!(validates(
+            &state,
+            &[color_palette_id, scalar_palette_id],
+            "finish",
+            None
+        ));
         assert!(!validates(
             &state,
-            &[color_id, scalar_id],
+            &[color_palette_id, scalar_palette_id],
             "finish",
             Some(ColorComponent::R)
         ));

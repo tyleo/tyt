@@ -74,69 +74,95 @@ fn render_tables(state: &VoxMain, format: Format, voxj_version: Option<u32>, nam
 fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>) -> TreeGrid {
     let mut grid = TreeGrid::new();
 
-    let document = grid.add_root(TreeGridLabel::bare("Document"));
-    add_cell(&mut grid, document, "Format", format.name().to_string());
+    let document_root_id = grid.add_root(TreeGridLabel::bare("Document"));
+    add_cell(
+        &mut grid,
+        document_root_id,
+        "Format",
+        format.name().to_string(),
+    );
     if let Some(version) = voxj_version {
-        add_cell(&mut grid, document, "Voxj version", version.to_string());
+        add_cell(
+            &mut grid,
+            document_root_id,
+            "Voxj version",
+            version.to_string(),
+        );
     }
     add_cell(
         &mut grid,
-        document,
+        document_root_id,
         "Has ext",
         yes_no(state.ext().is_some()).to_string(),
     );
     add_cell(
         &mut grid,
-        document,
+        document_root_id,
         "Has edit",
         yes_no(has_edit(state)).to_string(),
     );
 
-    let palettes = grid.add_root(TreeGridLabel::bare("Palettes"));
-    for (id, palette) in state.iter_palettes() {
-        let row = grid.add_child(palettes, TreeGridLabel::bare(id.to_u32().to_string()));
+    let palettes_root_id = grid.add_root(TreeGridLabel::bare("Palettes"));
+    for (palette_id, palette) in state.iter_palettes() {
+        let row_id = grid.add_child(
+            palettes_root_id,
+            TreeGridLabel::bare(palette_id.to_u32().to_string()),
+        );
         add_cell(
             &mut grid,
-            row,
+            row_id,
             "Properties",
             implementation::property_names(palette).join(", "),
         );
         add_cell(
             &mut grid,
-            row,
+            row_id,
             "Materials",
             palette.material_count().to_string(),
         );
     }
 
-    let objects = grid.add_root(TreeGridLabel::bare("Objects"));
-    for (id, object) in state.iter_objects() {
-        let row = grid.add_child(objects, TreeGridLabel::bare(id.to_u32().to_string()));
+    let objects_root_id = grid.add_root(TreeGridLabel::bare("Objects"));
+    for (object_id, object) in state.iter_objects() {
+        let row_id = grid.add_child(
+            objects_root_id,
+            TreeGridLabel::bare(object_id.to_u32().to_string()),
+        );
         let origin = object.origin();
         let edit = match edit_bounds(object) {
             Some(edit) => dimensions(edit),
             None => "-".to_string(),
         };
-        add_cell(&mut grid, row, "Name", object.name().to_string());
-        add_cell(&mut grid, row, "Bounds", dimensions(content_bounds(object)));
-        add_cell(&mut grid, row, "Edit bounds", edit);
+        add_cell(&mut grid, row_id, "Name", object.name().to_string());
         add_cell(
             &mut grid,
-            row,
+            row_id,
+            "Bounds",
+            dimensions(content_bounds(object)),
+        );
+        add_cell(&mut grid, row_id, "Edit bounds", edit);
+        add_cell(
+            &mut grid,
+            row_id,
             "Origin",
             format!("{}, {}, {}", origin.x, origin.y, origin.z),
         );
-        add_cell(&mut grid, row, "Voxels", object.live_count().to_string());
-        add_cell(&mut grid, row, "Layers", object.layer_count().to_string());
+        add_cell(&mut grid, row_id, "Voxels", object.live_count().to_string());
+        add_cell(
+            &mut grid,
+            row_id,
+            "Layers",
+            object.layer_count().to_string(),
+        );
     }
     grid
 }
 
 /// Adds a `label` node bearing `value` as one pre-formatted cell under
-/// `parent`.
-fn add_cell(grid: &mut TreeGrid, parent: U32Id<BTreeGridNode>, label: &str, value: String) {
-    let node = grid.add_child(parent, TreeGridLabel::bare(label));
-    grid.push_value(node, TreeGridValue::new(value));
+/// `parent_id`.
+fn add_cell(grid: &mut TreeGrid, parent_id: U32Id<BTreeGridNode>, label: &str, value: String) {
+    let node_id = grid.add_child(parent_id, TreeGridLabel::bare(label));
+    grid.push_value(node_id, TreeGridValue::new(value));
 }
 
 /// The report tree the JSON layouts render as the shared envelope:
@@ -149,63 +175,69 @@ fn build_json_grid(
 ) -> TreeGrid<TreeGridJsonValueCells> {
     let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
 
-    let document = grid.add_root(TreeGridLabel::bare("document"));
+    let document_root_id = grid.add_root(TreeGridLabel::bare("document"));
     add_field(
         &mut grid,
-        document,
+        document_root_id,
         "format",
         TreeGridJsonValue::new(format.name()),
     );
     if let Some(version) = voxj_version {
         add_field(
             &mut grid,
-            document,
+            document_root_id,
             "voxj_version",
             TreeGridJsonValue::int(i64::from(version)),
         );
     }
     add_field(
         &mut grid,
-        document,
+        document_root_id,
         "has_ext",
         TreeGridJsonValue::bool(state.ext().is_some()),
     );
     add_field(
         &mut grid,
-        document,
+        document_root_id,
         "has_edit",
         TreeGridJsonValue::bool(has_edit(state)),
     );
 
-    let palettes = grid.add_root(TreeGridLabel::bare("palettes"));
-    for (id, palette) in state.iter_palettes() {
-        let branch = grid.add_child(palettes, TreeGridLabel::bare(id.to_u32().to_string()));
-        let properties = grid.add_child(branch, TreeGridLabel::bare("properties"));
+    let palettes_root_id = grid.add_root(TreeGridLabel::bare("palettes"));
+    for (palette_id, palette) in state.iter_palettes() {
+        let branch_id = grid.add_child(
+            palettes_root_id,
+            TreeGridLabel::bare(palette_id.to_u32().to_string()),
+        );
+        let properties_id = grid.add_child(branch_id, TreeGridLabel::bare("properties"));
         for name in implementation::property_names(palette) {
-            grid.add_child(properties, TreeGridLabel::quoted(name.to_owned()));
+            grid.add_child(properties_id, TreeGridLabel::quoted(name.to_owned()));
         }
         add_field(
             &mut grid,
-            branch,
+            branch_id,
             "materials",
             TreeGridJsonValue::int(palette.material_count() as i64),
         );
     }
 
-    let objects = grid.add_root(TreeGridLabel::bare("objects"));
-    for (id, object) in state.iter_objects() {
-        let branch = grid.add_child(objects, TreeGridLabel::bare(id.to_u32().to_string()));
+    let objects_root_id = grid.add_root(TreeGridLabel::bare("objects"));
+    for (object_id, object) in state.iter_objects() {
+        let branch_id = grid.add_child(
+            objects_root_id,
+            TreeGridLabel::bare(object_id.to_u32().to_string()),
+        );
         let bounds = content_bounds(object);
         let origin = object.origin();
         add_field(
             &mut grid,
-            branch,
+            branch_id,
             "name",
             TreeGridJsonValue::new(object.name()),
         );
         add_triple(
             &mut grid,
-            branch,
+            branch_id,
             "bounds",
             [
                 i64::from(bounds.0),
@@ -216,14 +248,14 @@ fn build_json_grid(
         if let Some(edit) = edit_bounds(object) {
             add_triple(
                 &mut grid,
-                branch,
+                branch_id,
                 "edit_bounds",
                 [i64::from(edit.0), i64::from(edit.1), i64::from(edit.2)],
             );
         }
         add_triple(
             &mut grid,
-            branch,
+            branch_id,
             "origin",
             [
                 i64::from(origin.x),
@@ -233,13 +265,13 @@ fn build_json_grid(
         );
         add_field(
             &mut grid,
-            branch,
+            branch_id,
             "voxels",
             TreeGridJsonValue::int(object.live_count() as i64),
         );
         add_field(
             &mut grid,
-            branch,
+            branch_id,
             "layers",
             TreeGridJsonValue::int(object.layer_count() as i64),
         );
@@ -247,27 +279,27 @@ fn build_json_grid(
     grid
 }
 
-/// Adds a `label` node bearing one typed `value` under `parent`.
+/// Adds a `label` node bearing one typed `value` under `parent_id`.
 fn add_field(
     grid: &mut TreeGrid<TreeGridJsonValueCells>,
-    parent: U32Id<BTreeGridNode>,
+    parent_id: U32Id<BTreeGridNode>,
     label: &str,
     value: TreeGridJsonValue,
 ) {
-    let node = grid.add_child(parent, TreeGridLabel::bare(label));
-    grid.push_value(node, value);
+    let node_id = grid.add_child(parent_id, TreeGridLabel::bare(label));
+    grid.push_value(node_id, value);
 }
 
-/// Adds a `label` node whose series is an integer triple under `parent`.
+/// Adds a `label` node whose series is an integer triple under `parent_id`.
 fn add_triple(
     grid: &mut TreeGrid<TreeGridJsonValueCells>,
-    parent: U32Id<BTreeGridNode>,
+    parent_id: U32Id<BTreeGridNode>,
     label: &str,
     triple: [i64; 3],
 ) {
-    let node = grid.add_child(parent, TreeGridLabel::bare(label));
+    let node_id = grid.add_child(parent_id, TreeGridLabel::bare(label));
     for component in triple {
-        grid.push_value(node, TreeGridJsonValue::int(component));
+        grid.push_value(node_id, TreeGridJsonValue::int(component));
     }
 }
 
@@ -333,13 +365,13 @@ mod tests {
         palette
             .add_property("baseColorFactor".to_owned(), pool, U32Id::from_u32(0))
             .unwrap();
-        let material = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette = state.add_palette(palette).unwrap();
+        let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette, material);
-        let voxel = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
-        object.retain_voxel(voxel, &[material]).unwrap();
+        object.add_layer(palette_id, material_id);
+        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[material_id]).unwrap();
         state.add_object(object).unwrap();
         state
     }
@@ -454,8 +486,8 @@ mod tests {
         // margin.
         let mut state = VoxMain::default();
         let mut object = VoxObject::new("margin".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
-        let voxel = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
-        object.retain_voxel(voxel, &[]).unwrap();
+        let voxel_id = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[]).unwrap();
         state.add_object(object).unwrap();
 
         let tables = render(
@@ -490,25 +522,34 @@ mod tests {
     #[test]
     fn reports_two_layers_over_two_palettes() {
         let mut state = VoxMain::default();
-        let strengths = state.add_value_pool(
+        let strengths_value_pool_id = state.add_value_pool(
             VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![2.0]).unwrap(),
         );
         let mut glow = VoxPalette::default();
-        glow.add_property("emissiveStrength".to_owned(), strengths, U32Id::from_u32(0))
-            .unwrap();
-        let glow_material = glow.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let glow = state.add_palette(glow).unwrap();
+        glow.add_property(
+            "emissiveStrength".to_owned(),
+            strengths_value_pool_id,
+            U32Id::from_u32(0),
+        )
+        .unwrap();
+        let glow_material_id = glow.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let glow_palette_id = state.add_palette(glow).unwrap();
 
-        let colors = state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let colors_value_pool_id =
+            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut base = VoxPalette::default();
-        base.add_property("baseColorFactor".to_owned(), colors, U32Id::from_u32(0))
-            .unwrap();
-        let material = base.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let base = state.add_palette(base).unwrap();
+        base.add_property(
+            "baseColorFactor".to_owned(),
+            colors_value_pool_id,
+            U32Id::from_u32(0),
+        )
+        .unwrap();
+        let material_id = base.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let base_palette_id = state.add_palette(base).unwrap();
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(base, material);
-        object.add_layer(glow, glow_material);
+        object.add_layer(base_palette_id, material_id);
+        object.add_layer(glow_palette_id, glow_material_id);
         state.add_object(object).unwrap();
 
         let tables = render(
