@@ -430,7 +430,7 @@ impl VoxMain {
             .then(|| unsafe { self.runtime_state.value_pools.get(id) })
     }
 
-    /// Value pools in listing order, as `(id, pool)`.
+    /// Value pools in listing order, as `(id, value_pool)`.
     pub fn iter_value_pools(
         &self,
     ) -> impl Iterator<Item = (U32Id<BVoxValuePool>, &VoxValuePool)> + '_ {
@@ -468,11 +468,11 @@ impl VoxMain {
     }
 
     /// Resolves what `material_id` in `palette_id` draws for `property_id`:
-    /// the value pool the property draws from and the value id in that pool.
-    /// `None` if any id is not this state's, `property_id` is not
-    /// `palette_id`'s, or the property names a value pool this state does not
-    /// hold. Read the value at that id out of the returned value pool by the
-    /// value pool's kind.
+    /// the value pool the property draws from and the value id it holds in
+    /// that value pool. `None` if any id is not this state's, `property_id`
+    /// is not `palette_id`'s, or the property names a value pool this state
+    /// does not hold. Read the value at that id out of the returned
+    /// value pool by the value pool's kind.
     pub fn material_value(
         &self,
         palette_id: U32Id<BVoxPalette>,
@@ -888,12 +888,11 @@ impl VoxMain {
     }
 
     /// Removes `value_id` from `value_pool_id`, first repointing every palette
-    /// cell
-    /// that draws it onto `replacement_id` so no material is left without a
-    /// value. Leaves a hole until [`gc`](Self::gc) renumbers. Errors,
+    /// cell that draws it onto `replacement_id` so no material is left without
+    /// a value. Leaves a hole until [`gc`](Self::gc) renumbers. Errors,
     /// changing nothing, if:
     ///
-    /// 1. `value_pool_id` is not one of this state's pools
+    /// 1. `value_pool_id` is not one of this state's value pools
     /// 2. `value_id` or `replacement_id` is not one of that value pool's values
     /// 3. `replacement_id` is `value_id` itself
     pub fn remove_value_pool_value(
