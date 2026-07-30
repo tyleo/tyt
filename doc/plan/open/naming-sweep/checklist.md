@@ -78,7 +78,7 @@ suffixes and the spelled-out value pool, one iteration per crate, in order:
       `vox_value_pool_flaw.rs`, `vox_value_pool_kind.rs`,
       `vox_gc_remap.rs`, and the test comments. Judge each line against the
       id-pool guard; log the close calls.
-- [ ] The message commit: the four `Display` strings in `error.rs` and the
+- [x] The message commit: the four `Display` strings in `error.rs` and the
       three `unreachable!` messages in `vox_value_pool.rs` spell value pool
       out.
 - [ ] Expand the bare id-pool prose to "id pool" forms (Q1), one docs

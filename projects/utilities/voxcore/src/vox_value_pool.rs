@@ -166,7 +166,7 @@ impl VoxValuePool {
                 }
                 for (value_id, value) in self.iter_values() {
                     let VoxValuePoolValueRef::Float(number) = value else {
-                        unreachable!("a float pool yields float values");
+                        unreachable!("a float value pool yields float values");
                     };
                     if !number.is_finite() || !value_in_bounds(min, max, number) {
                         return Some(VoxValuePoolFlaw::Value(value_id));
@@ -179,7 +179,7 @@ impl VoxValuePool {
                 }
                 for (value_id, value) in self.iter_values() {
                     let VoxValuePoolValueRef::Int(number) = value else {
-                        unreachable!("an int pool yields int values");
+                        unreachable!("an int value pool yields int values");
                     };
                     if !int_value_in_bounds(min, max, number) {
                         return Some(VoxValuePoolFlaw::Value(value_id));
@@ -211,7 +211,7 @@ impl VoxValuePool {
                 VoxValuePoolValueRef::Srgba(color) => color,
                 VoxValuePoolValueRef::LinearRgb(color) => color,
                 VoxValuePoolValueRef::LinearRgba(color) => color,
-                _ => unreachable!("a color pool yields color values"),
+                _ => unreachable!("a color value pool yields color values"),
             };
             for &component in components {
                 let in_range = if linear {

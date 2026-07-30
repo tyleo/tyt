@@ -284,7 +284,11 @@ impl Display for Error {
                 material_id.to_u32()
             ),
             Error::UnknownValuePoolValue { value_id } => {
-                write!(f, "value {} is not one of the pool's", value_id.to_u32())
+                write!(
+                    f,
+                    "value {} is not one of the value pool's",
+                    value_id.to_u32()
+                )
             }
             Error::UnknownLayer { layer_id } => {
                 write!(f, "layer {} is not one of the object's", layer_id.to_u32())
@@ -304,7 +308,7 @@ impl Display for Error {
             }
             Error::ValuePoolValueOrder => write!(
                 f,
-                "the new order does not list each of the pool's value ids exactly once"
+                "the new order does not list each of the value pool's value ids exactly once"
             ),
             Error::SampleArity { samples, layers } => {
                 write!(f, "{samples} samples were given for {layers} layers")
@@ -335,7 +339,7 @@ impl Display for Error {
             } => write!(
                 f,
                 "the inserted palette's material {} draws a value for property {} that is not one \
-                 of its pool's",
+                 of its value pool's",
                 material_id.to_u32(),
                 property_id.to_u32()
             ),
@@ -426,7 +430,7 @@ impl Display for Error {
                 material_id,
             } => write!(
                 f,
-                "palette {} material {} has a value id for property {} that is not one of the pool's values",
+                "palette {} material {} has a value id for property {} that is not one of the value pool's values",
                 palette_id.to_u32(),
                 material_id.to_u32(),
                 property_id.to_u32()
