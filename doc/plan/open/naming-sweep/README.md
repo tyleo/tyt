@@ -1,8 +1,8 @@
 # Naming Sweep Plan
 
-Status: **open.** Iterations 1 (`voxcore`), 2 (`voxsmith`), and 3 (`vxl`)
-are complete and awaiting the owner's gate review; iteration 4 (voxj-codec)
-is next.
+Status: **open.** All four iterations are complete and awaiting the owner's
+gate review: 1 (`voxcore`), 2 (`voxsmith`), 3 (`vxl`), and 4 (voxj-codec).
+Closing the plan is the owner's call.
 
 This plan carries the naming rules the recent `voxcore` and voxj commit
 series established across the crates that still miss them. Three rules, one
@@ -84,9 +84,10 @@ assertions may change outside a dedicated message commit.
 **voxj and voxj-codec** (iteration 4): the wire keys `valuePool` and
 `valuePools` are the sanctioned short forms. The survey read these crates as
 having zero bare mentions; iteration 3's gate found fourteen prose lines it
-missed, listed in the checklist's iteration 4. The `_index` sweep missed one shape: the outer subject index of
-the seven `check_*` functions, 14 sites, bare `index` while every nested
-index is suffixed. Q3 folds them into this plan.
+missed, listed in the checklist's iteration 4. The `_index` sweep missed one
+shape: the outer subject index of the seven `check_*` functions, 14 sites,
+bare `index` while every nested index is suffixed. Q3 folds them into this
+plan.
 
 ## What is settled
 
