@@ -1425,7 +1425,7 @@ mod tests {
     }
 
     /// Adds an unbounded `int` value pool holding `values` and returns its id.
-    fn int_pool(state: &mut VoxMain, values: Vec<i64>) -> U32Id<BVoxValuePool> {
+    fn int_value_pool(state: &mut VoxMain, values: Vec<i64>) -> U32Id<BVoxValuePool> {
         state.add_value_pool(VoxValuePool::int(VoxBound::None, VoxBound::None, values).unwrap())
     }
 
@@ -1437,24 +1437,24 @@ mod tests {
         palette
     }
 
-    /// A palette with one property "v" on `pool_id` and two materials,
+    /// A palette with one property "v" on `value_pool_id` and two materials,
     /// drawing value ids 0 and 1.
-    fn two_material_palette(pool_id: U32Id<BVoxValuePool>) -> VoxPalette {
+    fn two_material_palette(value_pool_id: U32Id<BVoxValuePool>) -> VoxPalette {
         let mut palette = VoxPalette::default();
         palette
-            .add_property("v".to_owned(), pool_id, value_id(0))
+            .add_property("v".to_owned(), value_pool_id, value_id(0))
             .unwrap();
         palette.add_material(vec![value_id(0)]).unwrap();
         palette.add_material(vec![value_id(1)]).unwrap();
         palette
     }
 
-    /// A palette with one property "v" on `pool_id` and one material
+    /// A palette with one property "v" on `value_pool_id` and one material
     /// drawing value id `index`.
-    fn one_material_palette(pool_id: U32Id<BVoxValuePool>, index: u32) -> VoxPalette {
+    fn one_material_palette(value_pool_id: U32Id<BVoxValuePool>, index: u32) -> VoxPalette {
         let mut palette = VoxPalette::default();
         palette
-            .add_property("v".to_owned(), pool_id, value_id(0))
+            .add_property("v".to_owned(), value_pool_id, value_id(0))
             .unwrap();
         palette.add_material(vec![value_id(index)]).unwrap();
         palette
@@ -1497,16 +1497,16 @@ mod tests {
         // An id past the pool is not one of this state's.
         assert_eq!(state.value_pool(U32Id::<BVoxValuePool>::from_u32(2)), None);
 
-        let mut pools = state.iter_value_pools();
+        let mut value_pools = state.iter_value_pools();
         assert!(matches!(
-            pools.next().map(|(_, pool)| pool.kind()),
+            value_pools.next().map(|(_, value_pool)| value_pool.kind()),
             Some(VoxValuePoolKind::Srgba { .. })
         ));
         assert!(matches!(
-            pools.next().map(|(_, pool)| pool.kind()),
+            value_pools.next().map(|(_, value_pool)| value_pool.kind()),
             Some(VoxValuePoolKind::Float { .. })
         ));
-        assert!(pools.next().is_none());
+        assert!(value_pools.next().is_none());
     }
 
     #[test]
@@ -1573,7 +1573,7 @@ mod tests {
     #[test]
     fn prune_value_pools_keeps_entries_any_palette_still_uses() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![10, 20, 30]);
+        let ints_id = int_value_pool(&mut state, vec![10, 20, 30]);
         // Palette a draws id 0, palette b draws id 2, and id 1 is unused.
         let mut a = VoxPalette::default();
         let a_property_id = a
@@ -1665,9 +1665,9 @@ mod tests {
         let a = state.palette(a_id).unwrap();
         assert_eq!(a.value_id(a_blue_id, a_property_id), Some(value_id(2)));
         assert_eq!(a.value_id(a_red_id, a_property_id), Some(value_id(0)));
-        let pool = state.value_pool(colors_id).unwrap();
+        let value_pool = state.value_pool(colors_id).unwrap();
         assert_eq!(
-            pool.value(value_id(2)),
+            value_pool.value(value_id(2)),
             Some(VoxValuePoolValueRef::Srgba(&[0.0, 0.0, 1.0, 1.0]))
         );
         assert_eq!(
@@ -1683,7 +1683,7 @@ mod tests {
     #[test]
     fn reorder_value_pool_rejects_a_non_permutation_without_changing_state() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![10, 20, 30]);
+        let ints_id = int_value_pool(&mut state, vec![10, 20, 30]);
 
         // A repeated id, a wrong length, an id not the pool's, and an unknown
         // pool all reject.
@@ -1715,9 +1715,9 @@ mod tests {
     }
 
     #[test]
-    fn prune_value_pools_leaves_a_fully_referenced_pool() {
+    fn prune_value_pools_leaves_a_fully_referenced_value_pool() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![1, 2]);
+        let ints_id = int_value_pool(&mut state, vec![1, 2]);
         let mut palette = VoxPalette::default();
         palette
             .add_property("v".to_owned(), ints_id, value_id(0))
@@ -1852,7 +1852,7 @@ mod tests {
     #[test]
     fn add_object_rejects_a_bad_sample_material() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![7]);
+        let ints_id = int_value_pool(&mut state, vec![7]);
         let live_palette_id = state.add_palette(one_material_palette(ints_id, 0)).unwrap();
 
         // The layer back-fills the live voxel with material 9, beyond the
@@ -1998,13 +1998,13 @@ mod tests {
     #[test]
     fn remove_object_and_palette_then_gc_renumbers_and_resolves() {
         let mut state = VoxMain::default();
-        let pool_a_id = int_pool(&mut state, vec![10]);
-        let pool_b_id = int_pool(&mut state, vec![20]);
+        let value_pool_a_id = int_value_pool(&mut state, vec![10]);
+        let value_pool_b_id = int_value_pool(&mut state, vec![20]);
         let palette_a_id = state
-            .add_palette(one_material_palette(pool_a_id, 0))
+            .add_palette(one_material_palette(value_pool_a_id, 0))
             .unwrap();
         let palette_b_id = state
-            .add_palette(one_material_palette(pool_b_id, 0))
+            .add_palette(one_material_palette(value_pool_b_id, 0))
             .unwrap();
 
         let mut a = unit_object("a");
@@ -2043,11 +2043,11 @@ mod tests {
         let property_id = U32Id::<BVoxProperty>::from_u32(0);
         assert_eq!(state.object(object_id).unwrap().name(), "b");
         // Material 0 resolves through property 0 to pool B's value 20.
-        let (pool, resolved_value_id) = state
+        let (value_pool, resolved_value_id) = state
             .material_value(live_palette_id, material_id(0), property_id)
             .unwrap();
         assert_eq!(
-            pool.value(resolved_value_id),
+            value_pool.value(resolved_value_id),
             Some(VoxValuePoolValueRef::Int(20))
         );
         assert_eq!(
@@ -2090,8 +2090,14 @@ mod tests {
             remap.materials[palette_b_id.to_usize_id()].new_id(material_id(0)),
             Some(material_id(0))
         );
-        assert_eq!(remap.value_pools.new_id(pool_a_id), Some(pool_a_id));
-        assert_eq!(remap.value_pools.new_id(pool_b_id), Some(pool_b_id));
+        assert_eq!(
+            remap.value_pools.new_id(value_pool_a_id),
+            Some(value_pool_a_id)
+        );
+        assert_eq!(
+            remap.value_pools.new_id(value_pool_b_id),
+            Some(value_pool_b_id)
+        );
     }
 
     #[test]
@@ -2131,7 +2137,7 @@ mod tests {
     #[test]
     fn remove_material_repaints_live_voxels_onto_the_replacement() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![0, 1]);
+        let ints_id = int_value_pool(&mut state, vec![0, 1]);
         let mut palette = VoxPalette::default();
         palette
             .add_property("v".to_owned(), ints_id, value_id(0))
@@ -2185,7 +2191,7 @@ mod tests {
     #[test]
     fn remove_materials_merges_a_batch_in_one_pass() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![0, 1, 2, 3]);
+        let ints_id = int_value_pool(&mut state, vec![0, 1, 2, 3]);
         let mut palette = VoxPalette::default();
         palette
             .add_property("v".to_owned(), ints_id, value_id(0))
@@ -2245,7 +2251,7 @@ mod tests {
     #[test]
     fn validate_and_gc_handle_a_high_id_sample_after_a_material_hole() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![0, 1, 2]);
+        let ints_id = int_value_pool(&mut state, vec![0, 1, 2]);
         let mut palette = VoxPalette::default();
         palette
             .add_property("v".to_owned(), ints_id, value_id(0))
@@ -2282,11 +2288,11 @@ mod tests {
             .voxel_material(live_voxel_id, layer_id)
             .unwrap();
         let property_id = U32Id::<BVoxProperty>::from_u32(0);
-        let (pool, resolved_value_id) = state
+        let (value_pool, resolved_value_id) = state
             .material_value(live_palette_id, sampled_id, property_id)
             .unwrap();
         assert_eq!(
-            pool.value(resolved_value_id),
+            value_pool.value(resolved_value_id),
             Some(VoxValuePoolValueRef::Int(2))
         );
         assert_eq!(state.palette(live_palette_id).unwrap().material_count(), 2);
@@ -2391,35 +2397,35 @@ mod tests {
         // (red) and metallic id 0 (0.0).
         let object = state.object(U32Id::<BVoxObject>::from_u32(0)).unwrap();
         let sampled_id = object.voxel_material(v0_id, base_id).unwrap();
-        let (pool, resolved_value_id) = state
+        let (value_pool, resolved_value_id) = state
             .material_value(live_palette_id, sampled_id, color_id)
             .unwrap();
         assert_eq!(
-            pool.value(resolved_value_id),
+            value_pool.value(resolved_value_id),
             Some(VoxValuePoolValueRef::Srgba(&[1.0, 0.0, 0.0, 1.0]))
         );
-        let (pool, resolved_value_id) = state
+        let (value_pool, resolved_value_id) = state
             .material_value(live_palette_id, sampled_id, metal_id)
             .unwrap();
         assert_eq!(
-            pool.value(resolved_value_id),
+            value_pool.value(resolved_value_id),
             Some(VoxValuePoolValueRef::Float(0.0))
         );
 
         // The overlay layer at v0 samples shiny_green, drawing color id 1
         // (green), proving the two layers resolve independently.
         let overlay_sampled_id = object.voxel_material(v0_id, overlay_id).unwrap();
-        let (pool, resolved_value_id) = state
+        let (value_pool, resolved_value_id) = state
             .material_value(live_palette_id, overlay_sampled_id, color_id)
             .unwrap();
         assert_eq!(
-            pool.value(resolved_value_id),
+            value_pool.value(resolved_value_id),
             Some(VoxValuePoolValueRef::Srgba(&[0.0, 1.0, 0.0, 1.0]))
         );
     }
 
     #[test]
-    fn add_palette_rejects_a_dangling_property_pool() {
+    fn add_palette_rejects_a_dangling_property_value_pool() {
         let mut state = VoxMain::default();
         let mut palette = VoxPalette::default();
         // The property references pool id 0, but the state holds no pools.
@@ -2438,9 +2444,9 @@ mod tests {
     }
 
     #[test]
-    fn add_palette_rejects_a_material_value_id_not_in_the_pool() {
+    fn add_palette_rejects_a_material_value_id_not_in_the_value_pool() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![0, 1]);
+        let ints_id = int_value_pool(&mut state, vec![0, 1]);
         let mut palette = VoxPalette::default();
         let property_id = palette
             .add_property("v".to_owned(), ints_id, value_id(0))
@@ -2460,7 +2466,7 @@ mod tests {
     #[test]
     fn validate_reports_a_stale_value_id_after_a_missed_rewrite() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![10, 20]);
+        let ints_id = int_value_pool(&mut state, vec![10, 20]);
         let mut palette = VoxPalette::default();
         let property_id = palette
             .add_property("v".to_owned(), ints_id, value_id(0))
@@ -2472,8 +2478,8 @@ mod tests {
         // Release the drawn value directly, skipping the cell rewrite
         // remove_value_pool_value performs, so the material's cell holds a stale id.
         // Safety: the pool id is retained.
-        let pool_ref = unsafe { state.runtime_state.value_pools.get_mut(ints_id) };
-        pool_ref.release_value_stable(value_id(1));
+        let value_pool_ref = unsafe { state.runtime_state.value_pools.get_mut(ints_id) };
+        value_pool_ref.release_value_stable(value_id(1));
 
         assert_eq!(
             state.validate(),
@@ -2528,7 +2534,7 @@ mod tests {
     #[test]
     fn remove_palette_detaches_every_layer_drawing_it() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![10, 20]);
+        let ints_id = int_value_pool(&mut state, vec![10, 20]);
         let a_id = state.add_palette(two_material_palette(ints_id)).unwrap();
         let b_id = state.add_palette(two_material_palette(ints_id)).unwrap();
         let c_id = state.add_palette(two_material_palette(ints_id)).unwrap();
@@ -2689,8 +2695,8 @@ mod tests {
     #[test]
     fn move_value_pool_reorders_the_listing_and_validates() {
         let mut state = VoxMain::default();
-        let a_id = int_pool(&mut state, vec![1]);
-        let b_id = int_pool(&mut state, vec![2]);
+        let a_id = int_value_pool(&mut state, vec![1]);
+        let b_id = int_value_pool(&mut state, vec![2]);
 
         assert_eq!(state.move_value_pool(b_id, 0), Ok(()));
         assert_eq!(
@@ -2719,7 +2725,7 @@ mod tests {
     #[test]
     fn remove_value_pool_value_repoints_cells_preserves_order_and_validates() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![10, 20, 30]);
+        let ints_id = int_value_pool(&mut state, vec![10, 20, 30]);
         // Two palettes draw the doomed value, so both must be repointed.
         let a = one_material_palette(ints_id, 0);
         let a_id = state.add_palette(a).unwrap();
@@ -2792,7 +2798,7 @@ mod tests {
     #[test]
     fn gc_after_moves_renumbers_to_listing_order() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![1, 2]);
+        let ints_id = int_value_pool(&mut state, vec![1, 2]);
         let mut palette = VoxPalette::default();
         let property_id = palette
             .add_property("v".to_owned(), ints_id, value_id(0))
@@ -2838,11 +2844,18 @@ mod tests {
             remap.value_pool_values[ints_id.to_usize_id()].new_id(value_id(0)),
             Some(value_id(1))
         );
-        let pool = state.value_pool(ints_id).unwrap();
-        assert_eq!(pool.value(value_id(0)), Some(VoxValuePoolValueRef::Int(2)));
-        assert_eq!(pool.value(value_id(1)), Some(VoxValuePoolValueRef::Int(1)));
+        let value_pool = state.value_pool(ints_id).unwrap();
         assert_eq!(
-            pool.iter_values()
+            value_pool.value(value_id(0)),
+            Some(VoxValuePoolValueRef::Int(2))
+        );
+        assert_eq!(
+            value_pool.value(value_id(1)),
+            Some(VoxValuePoolValueRef::Int(1))
+        );
+        assert_eq!(
+            value_pool
+                .iter_values()
                 .map(|(id, _)| id.to_u32())
                 .collect::<Vec<_>>(),
             [0, 1]
@@ -2856,10 +2869,10 @@ mod tests {
     }
 
     #[test]
-    fn gc_after_a_pool_move_relabels_pools_and_each_pool_s_values() {
+    fn gc_after_a_value_pool_move_relabels_value_pools_and_each_value_pool_s_values() {
         let mut state = VoxMain::default();
-        let first_value_pool_id = int_pool(&mut state, vec![10, 20]);
-        let second_value_pool_id = int_pool(&mut state, vec![30, 40, 50]);
+        let first_value_pool_id = int_value_pool(&mut state, vec![10, 20]);
+        let second_value_pool_id = int_value_pool(&mut state, vec![30, 40, 50]);
         let mut palette = VoxPalette::default();
         // Both properties come before the material, so neither is back-filled.
         let first_id = palette
@@ -2934,18 +2947,18 @@ mod tests {
 
         // The material still reads the same two numbers, through the relabeled
         // pool ids and the relabeled cells.
-        let (pool_ref, resolved_value_id) = state
+        let (value_pool_ref, resolved_value_id) = state
             .material_value(palette_id, live_material_id, first_id)
             .unwrap();
         assert_eq!(
-            pool_ref.value(resolved_value_id),
+            value_pool_ref.value(resolved_value_id),
             Some(VoxValuePoolValueRef::Int(20))
         );
-        let (pool_ref, resolved_value_id) = state
+        let (value_pool_ref, resolved_value_id) = state
             .material_value(palette_id, live_material_id, second_id)
             .unwrap();
         assert_eq!(
-            pool_ref.value(resolved_value_id),
+            value_pool_ref.value(resolved_value_id),
             Some(VoxValuePoolValueRef::Int(30))
         );
     }
@@ -2953,7 +2966,7 @@ mod tests {
     #[test]
     fn object_methods_edit_an_inserted_object() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![1, 2]);
+        let ints_id = int_value_pool(&mut state, vec![1, 2]);
         let palette_id = state.add_palette(two_material_palette(ints_id)).unwrap();
         let object_id = state.add_object(unit_object("o")).unwrap();
 
@@ -3020,7 +3033,7 @@ mod tests {
     #[test]
     fn object_methods_reject_bad_ids() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![1, 2]);
+        let ints_id = int_value_pool(&mut state, vec![1, 2]);
         let live_palette_id = state.add_palette(two_material_palette(ints_id)).unwrap();
         let object_id = state.add_object(unit_object("o")).unwrap();
 
@@ -3069,7 +3082,7 @@ mod tests {
     #[test]
     fn palette_methods_edit_an_inserted_palette() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![10, 20]);
+        let ints_id = int_value_pool(&mut state, vec![10, 20]);
         let palette_id = state.add_palette(one_material_palette(ints_id, 0)).unwrap();
 
         // add_property back-fills the existing material with the default.
@@ -3110,7 +3123,7 @@ mod tests {
     #[test]
     fn palette_methods_reject_bad_ids() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![10, 20]);
+        let ints_id = int_value_pool(&mut state, vec![10, 20]);
         let palette_id = state.add_palette(one_material_palette(ints_id, 0)).unwrap();
 
         let ghost_id = U32Id::<BVoxPalette>::from_u32(9);
@@ -3179,7 +3192,7 @@ mod tests {
     #[test]
     fn remove_material_cannot_empty_a_palette() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![10]);
+        let ints_id = int_value_pool(&mut state, vec![10]);
         let palette_id = state.add_palette(one_material_palette(ints_id, 0)).unwrap();
         let only_id = state
             .palette(palette_id)
@@ -3208,9 +3221,12 @@ mod tests {
     /// id pools, the roots, and the ext, and stops at each entity's edge.
     fn snapshot(state: &VoxMain) -> String {
         let mut out = format!("{state:?}");
-        for (pool_id, pool) in state.iter_value_pools() {
-            let values: Vec<_> = pool.iter_values().collect();
-            out += &format!("|pool {pool_id:?} {:?} {values:?}", pool.kind());
+        for (value_pool_id, value_pool) in state.iter_value_pools() {
+            let values: Vec<_> = value_pool.iter_values().collect();
+            out += &format!(
+                "|value pool {value_pool_id:?} {:?} {values:?}",
+                value_pool.kind()
+            );
         }
         for (palette_id, palette) in state.iter_palettes() {
             let properties: Vec<_> = palette.iter_properties().collect();
@@ -3259,7 +3275,7 @@ mod tests {
     #[test]
     fn rejected_mutations_change_nothing() {
         let mut state = VoxMain::default();
-        let ints_id = int_pool(&mut state, vec![10, 20]);
+        let ints_id = int_value_pool(&mut state, vec![10, 20]);
         let live_palette_id = state.add_palette(two_material_palette(ints_id)).unwrap();
         let object_id = state.add_object(unit_object("o")).unwrap();
         let layer_id = state

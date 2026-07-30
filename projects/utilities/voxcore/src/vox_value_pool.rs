@@ -547,37 +547,38 @@ mod tests {
     }
 
     #[test]
-    fn bounded_float_pool_reads_back_in_order() {
-        let pool = VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![0.0, 0.5, 1.0])
-            .unwrap();
+    fn bounded_float_value_pool_reads_back_in_order() {
+        let value_pool =
+            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![0.0, 0.5, 1.0])
+                .unwrap();
 
-        assert_eq!(pool.values_len(), 3);
-        let values: Vec<_> = pool.iter_values().collect();
+        assert_eq!(value_pool.values_len(), 3);
+        let values: Vec<_> = value_pool.iter_values().collect();
         assert_eq!(values.len(), 3);
         assert_eq!(
             values[1],
             (U32Id::from_u32(1), VoxValuePoolValueRef::Float(0.5))
         );
         assert_eq!(
-            pool.value(U32Id::from_u32(2)),
+            value_pool.value(U32Id::from_u32(2)),
             Some(VoxValuePoolValueRef::Float(1.0))
         );
-        assert_eq!(pool.value(U32Id::from_u32(3)), None);
+        assert_eq!(value_pool.value(U32Id::from_u32(3)), None);
     }
 
     #[test]
-    fn color_pool_holds_typed_float_components() {
-        let pool = VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
+    fn color_value_pool_holds_typed_float_components() {
+        let value_pool = VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
 
-        assert_eq!(pool.values_len(), 1);
+        assert_eq!(value_pool.values_len(), 1);
         assert_eq!(
-            pool.value(U32Id::from_u32(0)),
+            value_pool.value(U32Id::from_u32(0)),
             Some(VoxValuePoolValueRef::Srgba(&[1.0, 0.0, 0.0, 1.0]))
         );
     }
 
     #[test]
-    fn pools_compare_by_kind_bounds_and_ordered_values() {
+    fn value_pools_compare_by_kind_bounds_and_ordered_values() {
         let a = VoxValuePool::int(VoxBound::None, VoxBound::None, vec![1, 2]).unwrap();
         let mut b = VoxValuePool::int(VoxBound::None, VoxBound::None, vec![2, 1]).unwrap();
         assert_ne!(a, b);
@@ -599,12 +600,12 @@ mod tests {
 
     #[test]
     fn move_value_reorders_the_listing_and_validates() {
-        let mut pool =
+        let mut value_pool =
             VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]).unwrap();
         let b_id = U32Id::from_u32(1);
 
-        assert_eq!(pool.move_value(b_id, 2), Ok(()));
-        let order: Vec<_> = pool
+        assert_eq!(value_pool.move_value(b_id, 2), Ok(()));
+        let order: Vec<_> = value_pool
             .iter_values()
             .map(|(_, value)| match value {
                 VoxValuePoolValueRef::String(text) => text.to_owned(),
@@ -612,15 +613,15 @@ mod tests {
             })
             .collect();
         assert_eq!(order, ["a", "c", "b"]);
-        assert_eq!(pool.value_index(b_id), Some(2));
+        assert_eq!(value_pool.value_index(b_id), Some(2));
 
         // An out-of-range index and an unknown id are rejected.
         assert_eq!(
-            pool.move_value(b_id, 3),
+            value_pool.move_value(b_id, 3),
             Err(Error::IndexPastCount { index: 3, count: 3 })
         );
         assert_eq!(
-            pool.move_value(U32Id::from_u32(9), 0),
+            value_pool.move_value(U32Id::from_u32(9), 0),
             Err(Error::UnknownValuePoolValue {
                 value_id: U32Id::from_u32(9)
             })

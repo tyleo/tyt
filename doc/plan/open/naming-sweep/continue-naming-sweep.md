@@ -47,16 +47,17 @@ surrounding code, not the wording, and log the call in
   warnings`, `cargo test -p voxcore -p voxsmith -p vxl`, and the gate greps
   from the checklist's ground rules.
 
-## Stage, do not commit
+## Commit per concern, review per iteration
 
-- `git add` everything, including checklist and reference edits. Do not
-  commit, push, or amend.
-- Present for review: what changed and why, the files grouped logically,
-  lint and test results, and a proposed commit message in the repo's style
-  (a Conventional Commits subject, `refactor(voxel)!` for a breaking
-  voxcore rename, plus the assistant Co-Authored-By trailer from
-  `CLAUDE.md`).
-- Wait for the owner. Commit only on explicit approval.
+- Drive the current iteration to its gate in one session, committing each
+  concern as it lands with a message in the repo's style (a Conventional
+  Commits subject, `refactor(voxel)!` for a breaking voxcore rename, plus
+  the assistant Co-Authored-By trailer from `CLAUDE.md`). Include the
+  checklist and reference edits in the concern's commit.
+- At the gate, present the whole iteration for review: the commits, what
+  changed and why, lint and test results, and the gate grep output.
+- Do not push or amend. The owner reviews the landed series and says how
+  to proceed.
 
 ## Do not
 

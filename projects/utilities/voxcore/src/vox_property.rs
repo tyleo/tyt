@@ -19,7 +19,7 @@ mod tests {
     use branded_id::U32Id;
 
     #[test]
-    fn holds_a_name_and_a_pool() {
+    fn holds_a_name_and_a_value_pool() {
         let property = VoxProperty {
             name: "baseColorFactor".to_owned(),
             value_pool_id: U32Id::<BVoxValuePool>::from_u32(2),

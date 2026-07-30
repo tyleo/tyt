@@ -56,7 +56,7 @@ suffixes and the spelled-out value pool, one iteration per crate, in order:
 - [x] Internal bindings and locals: `pool_ref`, `pool`, `pools`,
       `pool_id_space`, `pool_remap`, `pool_ids`, `pool_property_ids`, and
       `property_pool_ids` in `vox_main.rs` and `vox_palette.rs`.
-- [ ] Test identifiers: the helpers (`pool_id` in `vox_main.rs` and
+- [x] Test identifiers: the helpers (`pool_id` in `vox_main.rs` and
       `vox_palette.rs`, `int_pool` in `vox_main.rs` and
       `vox_effective_palette.rs`, the `pool_id` parameters on the palette
       helpers), the locals (`pool_a_id`, `pool_b_id`, `first_pool_id`,
