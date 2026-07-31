@@ -37,32 +37,30 @@ off as they land.
 - [x] `--select` hierarchy-path glob object selector: a node path selects its
       subtree, repeatable, union over all values. See
       [conventions](reference/conventions.md).
-- [x] `--atlas` layout `ValueEnum`: palette (one texel per distinct flattened
-      material, the object's layers merged per property name by the format's
-      layer-override resolution) and unwrap (per-mesh UV) layouts. See
-      [mesh](reference/mesh.md).
-- [x] `--texture-map` channel parser: channel sources (`R`/`G`/`B`/`A` = `attr`
-      | `1-attr` | `attr.r`/`.g`/`.b`/`.a` color component | `0` | `1` |
-      `computed-occlusion`) and the RGBA packing, with `smoothness` accepted as
-      `1-roughness`. See [mesh](reference/mesh.md).
+- [x] `--atlas` layout `ValueEnum`: `palette` shipped, one texel per distinct
+      flattened material the object uses, its layers merged per property name
+      by the format's layer-override resolution; `unwrap` (per-mesh UV) hidden
+      until it lands. See [mesh](reference/mesh.md#the-palette-atlas).
+- [x] `--texture-map` channel parser: channel sources (`R`/`G`/`B`/`A` =
+      `property` | `1-property` | `property.r`/`.g`/`.b`/`.a` color component |
+      `0` | `1` | `computed-occlusion`) and the RGBA packing, sized by the
+      highest channel named. See [mesh](reference/mesh.md#channel-expressions).
 - [x] `--texture` preset packings (albedo, orm, metallic-roughness,
-      metallic-smoothness, mse, emissive, occlusion, computed-occlusion,
-      roughness, smoothness). See [mesh](reference/mesh.md).
-- [x] `--define-attribute` binding: `ColorComponent` and `AttributeBinding`
-      (`name=key`, a pure rename alias). The type is not declared: `mesh` reads it
-      from the key's value pool in its winning layer's palette at bake, a color
-      pool exposing components and a scalar pool read whole, and an unbound
-      attribute follows the format's unbound-default rule (a glTF built-in bakes
-      its spec default, a custom key errors). The former `AttributeType` enum and
-      the `[:type]` suffix are gone; the file is the single source of type truth.
-      See [mesh](reference/mesh.md).
-- [ ] `--vertex` / `--vertex-map` carrier: preset-to-attribute-name mapping
-      (`albedo`/`computed-occlusion` → `COLOR_0`, the scalar/packed presets →
-      `_NAME`, `palette-index` → `_PALETTEINDEX` over a per-mesh used-combos
-      table, `palette-layers` → `_PALETTEINDEX0..n` over per-layer palettes),
-      reusing the `--texture-map` channel parser and `--define-property`; emit
-      glTF vertex attributes (`COLOR_0` standard, `_NAME` custom) and write the
-      `PaletteData` JSON per `--palette-storage`. See [mesh](reference/mesh.md).
+      metallic-smoothness, mse, emissive, occlusion, roughness, smoothness) and
+      the `pbr` bundle; `computed-occlusion` hidden until the unwrap atlas
+      lands. See [mesh](reference/mesh.md).
+- [x] `--define-property <property> <name>` binding, a pure rename alias giving
+      a custom voxel-json key a name a packing reads. The type is not declared:
+      `mesh` reads it from the key's value pool in its winning layer's palette,
+      a color pool exposing components and a scalar pool read whole, and a key
+      no layer binds follows the format's unbound-default rule (a glTF built-in
+      bakes its spec default, a custom key errors). See
+      [mesh](reference/mesh.md#channel-expressions).
+- [ ] `--vertex` / `--vertex-map` carrier: the vertex twins of the texture
+      flags, writing `COLOR_0` and custom `_NAME` attributes, the
+      `palette-index` / `palette-layers` index presets, and the `PaletteData`
+      JSON per `--palette-storage`. See
+      [mesh Deferred](reference/mesh.md#deferred).
 - [x] `ResourceStorage` `ValueEnum` (`embedded` | `external` | `both`) backing
       `--texture-storage` and `--palette-storage`, defaulting per target
       (`embedded` for `.glb`, `external` for `.gltf`): embed images in the glb
@@ -99,29 +97,21 @@ off as they land.
       `1.0`, baked into every vertex; glTF is meter-native), `--method`, and the
       `--select` / `--select-index` object selectors, `--select` matched through
       the shared `pathspec` gitignore engine like `hierarchy show`.
-- [ ] `--atlas` and the `--computed-occlusion-strength` /
-      `--computed-occlusion-min-brightness` / `--computed-occlusion-color-space`
-      tuning (land with the texture / occlusion maps below).
-- [x] Material maps: `--texture <preset>` presets (albedo, orm,
-      metallic-roughness, metallic-smoothness, mse, emissive, occlusion,
-      computed-occlusion, roughness, smoothness) and the `pbr` bundle, repeatable;
-      `--texture-name <preset> <file-name>` / `--texture-name-prefix <prefix>`
-      naming; `--texture-map <file-name> <channels>`; `--define-attribute
-      <name>=<key>`; and
-      `--texture-storage` (embedded / external / both); default names from the
-      output stem, unique per bake. The bake flattens the object's layers per
-      property name by the format's layer-override resolution. (The `--atlas
-      palette` path; `computed-occlusion` errors until the unwrap atlas lands.)
-- [ ] Vertex attribute maps: `--vertex <preset>` presets (albedo →
-      `COLOR_0`, computed-occlusion → `COLOR_0` darken, metallic / roughness /
-      emissive / occlusion / smoothness → scalar `_NAME`, orm / mse /
-      metallic-roughness / metallic-smoothness → packed `_NAME`, palette-index →
-      `_PALETTEINDEX` over a per-mesh used-combos table, palette-layers →
-      `_PALETTEINDEX0..n` over per-layer palettes), the `PaletteData` JSON
-      written per `--palette-storage` (extras / `-palette.json` / both),
-      `--vertex-target <preset> <target>` overriding a preset's attribute, and
-      `--vertex-map <target> <channels>` reusing the `--texture-map` channel
-      grammar and `--define-property`.
+- [ ] `--atlas unwrap` and the `--computed-occlusion-*` tuning flags, landing
+      with the computed-occlusion maps. See
+      [mesh Deferred](reference/mesh.md#deferred).
+- [x] Material maps: `--texture <preset>` presets and the `pbr` bundle,
+      repeatable; `--texture-name <preset> <file-name>` /
+      `--texture-name-prefix <file-name>` naming; `--texture-map <file-name>
+      <channels>`; `--define-property <property> <name>`; `--texture-shape`;
+      and `--texture-storage`; default names from the output stem, unique per
+      bake. The bake flattens the object's layers per property name by the
+      format's layer-override resolution. The `--atlas palette` path;
+      `computed-occlusion` errors until the unwrap atlas lands.
+- [ ] Vertex attribute maps: `--vertex <preset>`, `--vertex-target <preset>
+      <target>`, `--vertex-map <target> <channels>`, and the `PaletteData` JSON
+      per `--palette-storage`. See
+      [mesh Deferred](reference/mesh.md#deferred).
 - [x] `Dependencies::resolve_objects` and `mesh_object` and their impls, the
       flag-agnostic split that replaces the planned single `Dependencies::mesh`:
       the impl resolves the selectors to object indices and meshes by index,

@@ -2,344 +2,220 @@
 
 _Part of the [Vxl Command-Line Reference](../README.md)._
 
+_Superseded: the mesh plan is moving to [`doc/plan/open/mesh`](../../mesh/),
+the [value language](../../mesh/value-language.md) and
+[profile language](../../mesh/profile-language.md) subplans with their
+[open questions](../../mesh/open-questions.md).
+[Orphaned options](../../mesh/orphaned-options.md) lists what this page
+holds that the new plan has yet to absorb._
+
 ```
 vxl mesh <input> [output] [options]
 ```
 
-Triangulates voxels into a mesh and optionally writes the voxels' material into
-the mesh, either as textures the mesh's UVs sample or as per-vertex attributes.
-The default output path is the input stem with the mesh extension; the mesh
-format is inferred from the output extension or set with `--to`.
+Triangulates one object's voxels into a glTF mesh. It can also bake the
+object's palette materials into textures the mesh's UVs sample. The default
+output path is the input stem with the mesh extension. The format comes from
+`--to`, else the output extension, else `.glb`.
 
-`mesh` outputs one object as pure geometry: the object's voxel grid is meshed on
-its own, with no hierarchy-node transform applied, since the common case is
-pulling a leaf object out without placement. Pass `--select` or `--select-index`
-to choose which object; see [Object selectors](conventions.md#object-selectors).
-The selectors may resolve to several objects, but how to output more than one is
-not settled, so for now `mesh` errors unless the selection is exactly one object,
-including a multi-object document meshed with no selector. Assembling a placed
-scene from the hierarchy, baking the node transforms and instancing in
-[Hierarchy Nodes](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#hierarchy-nodes),
-is a separate mode left for a later pass.
+```
+vxl mesh turret.voxj                  # turret.glb, geometry only
+vxl mesh turret.voxj --texture pbr    # + embedded albedo, orm, and emissive maps
+```
+
+`mesh` writes one object as pure geometry, with no hierarchy-node transform
+applied. The common case is pulling a leaf object out without placement.
+`--select` and `--select-index` choose the object; the selection must resolve
+to exactly one, so a multi-object document needs a selector. See
+[Object selectors](conventions.md#object-selectors). Assembling a placed scene
+from the hierarchy is a separate [deferred](#deferred) mode.
 
 1. `--to` `gltf` | `glb`: target mesh format, glTF text (`.gltf`) or binary
-   (`.glb`); glTF is the only mesh format written for now. Inferred from the
-   output extension when omitted.
+   (`.glb`). Inferred from the output extension when omitted, defaulting to
+   `.glb`.
 2. `--from <format>`: source voxel format. Inferred from the input extension
    when omitted.
-3. `--voxel-size <meters>` (default `1.0`): the real-world edge length of
-   one voxel in meters, applied as a uniform scale to every output vertex, the
-   mesh twin of `voxelize`'s `--voxel-size`. The voxel-json format is unitless,
-   with one unit per voxel, so `--voxel-size`
-   is where that grid gains a physical size: `1.0` sizes a voxel at one meter,
-   `0.01` at one
-   centimeter, and `0.001` at one millimeter. glTF is meter-native, so the mesh
-   writes `<meters>` per voxel and opens at that real size. Scale affects vertex
-   positions only and leaves UVs, normals, and vertex colors unchanged.
+3. `--voxel-size <meters>` (default `1.0`): the real-world edge length of one
+   voxel in meters, the mesh twin of `voxelize`'s `--voxel-size`. The voxel
+   grid is unitless and glTF is meter-native, so this is where a voxel gains a
+   physical size: `1.0` opens at one meter per voxel, `0.01` at one
+   centimeter. Applied as a uniform scale to vertex positions only.
 4. `--method` `greedy` | `culled` | `naive` (default `greedy`): meshing
    strategy. `greedy` merges coplanar, same-material faces into the fewest
-   quads and has the lowest triangle count. `culled` emits one quad per
-   solid-empty boundary face without merging. `naive` emits all six faces of
-   every solid voxel, including hidden interior faces, and has the highest
-   triangle count. Choose `culled` or `naive` only when you need stable
-   per-voxel topology for further per-face editing.
-5. `--computed-occlusion-strength <0..1>` (default `1.0`): scales how much
-   computed occlusion darkens, from `0` for none to `1` for the full effect.
-   Applies to computed occlusion wherever it is written, the
-   `--vertex computed-occlusion` attribute or the `computed-occlusion` map.
-6. `--computed-occlusion-min-brightness <0..1>` (default `0.0`): floor on the
-   brightness the deepest occlusion reaches, so crevices never darken below it.
-   `0` lets occlusion reach black.
-7. `--computed-occlusion-color-space` `linear` | `srgb` (default `linear`): the
-   space the occlusion values are written in. `linear` is correct for glTF and
-   other PBR data textures; `srgb` matches pipelines that multiply occlusion in
-   sRGB space.
-8. `--atlas` `palette` | `unwrap` (default `palette`): material-map atlas layout;
-   see [Material and texture maps](#material-and-texture-maps).
-9. `--select <glob>`: choose the object by hierarchy path, matched as
-   `hierarchy show` matches node paths, so a node path selects its subtree.
-   Repeatable; the result is the union of every `--select` and `--select-index`
-   value. See [Object selectors](conventions.md#object-selectors). The selection
-   must resolve to one object, as above.
-10. `--select-index <index>`: choose the object by position, an integer or an
-   `a-b` range. Repeatable; unions with `--select` as above. See
-   [Object selectors](conventions.md#object-selectors).
+   quads. `culled` emits one quad per solid-empty boundary face, unmerged.
+   `naive` emits all six faces of every solid voxel, hidden interior faces
+   included. Choose `culled` or `naive` only when you need stable per-voxel
+   topology.
+5. `--atlas` `palette` (default `palette`): material-map atlas layout.
+   `palette` is the only layout for now: one texel per flattened material the
+   mesh uses. See [The palette atlas](#the-palette-atlas). An `unwrap` layout
+   is [deferred](#deferred).
+6. `--texture-shape` `line` | `fit` | `square` | `pot` | `<n>` (default
+   `pot`): the atlas canvas. `line` is a single row of texels, `fit` the
+   near-square packing, `square` the smallest square, `pot` the smallest
+   square power of two, and `<n>` an exact `n`x`n` canvas, rejected when too
+   small. Unused cells are transparent black the mesh never samples.
+7. `--texture <preset>`: bake a preset material map. Repeatable, as
+   `--texture albedo --texture orm`. The presets:
+   1. `albedo`: RGBA base color from `baseColorFactor`.
+   2. `orm`: R = `occlusionStrength`, G = `roughnessFactor`,
+      B = `metallicFactor`.
+   3. `metallic-roughness`: R = `0`, G = `roughnessFactor`,
+      B = `metallicFactor`.
+   4. `metallic-smoothness`: R = `metallicFactor`, A = smoothness
+      (`1-roughnessFactor`), G and B = `0`.
+   5. `mse`: R = `metallicFactor`, G = smoothness, B = `emissiveStrength`.
+   6. `emissive`: `emissiveFactor` scaled by `emissiveStrength`, so a surface
+      glows in its own color. The strongest material's strength is written as
+      `KHR_materials_emissive_strength`.
+   7. `occlusion`: grayscale `occlusionStrength`.
+   8. `roughness`: grayscale `roughnessFactor`.
+   9. `smoothness`: grayscale `1-roughnessFactor`.
 
-## Material and texture maps
+   The one bundle, `pbr`, expands to `albedo`, `orm`, and `emissive`.
+8. `--texture-name <preset> <file-name>`: name one preset's file exactly, as
+   `--texture-name albedo skin.png`. Repeatable. The preset must be a
+   single-map preset, must be baked, and may be named once.
+9. `--texture-name-prefix <file-name>`: replace the default `<output-stem>-`
+   prefix on every preset file `--texture-name` does not name. The preset
+   follows the prefix verbatim, so the prefix carries its own separator:
+   `hero-` writes `hero-albedo.png`, `test.` writes `test.albedo.png`.
+10. `--texture-map <file-name> <channels>`: bake a custom packing. Repeatable.
+    See [Channel expressions](#channel-expressions).
+11. `--define-property <property> <name>`: name a custom voxel-json property
+    so a custom packing can read it. Repeatable. See
+    [Channel expressions](#channel-expressions).
+12. `--texture-storage` `embedded` | `external` | `both`: where the baked
+    images go. `embedded` packs them into the mesh, a `.glb` binary chunk or a
+    `.gltf` data URI. `external` writes loose `.png` files beside the mesh.
+    `both` embeds the copy the mesh references and writes the loose files as
+    working copies. Defaults to `embedded` for `.glb` and `external` for
+    `.gltf`.
+13. `--select <glob>`: choose the object by hierarchy path, matched the way
+    `hierarchy show` matches node paths, so a node path selects its subtree.
+    Repeatable; unions with `--select-index`. See
+    [Object selectors](conventions.md#object-selectors).
+14. `--select-index <index>`: choose the object by position, an integer or an
+    `a-b` range. Repeatable; unions with `--select`.
 
-A material map is one image whose channels are filled from a material's
-properties, so maps that read properties share one atlas and differ only in
-which properties they read. Properties a material omits fall back to their spec defaults from
-[Properties](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties),
-so a map never fails for a missing property. `--atlas` sets how
-the atlas is laid out and how the mesh's UVs index it:
+Every map file name is written beside the mesh. A name or prefix that is
+empty or holds a path separator errors, and so do two maps resolving to the
+same file name.
 
-1. `palette` (default): one texel per distinct flattened material. `mesh`
-   bakes the object's layers merged per property name by the format's
-   layer-override resolution, each property read through the last layer whose
-   palette supplies it, so a voxel's texel is keyed by the tuple of materials
-   it samples in those winning layers. Many faces sample one texel. A
-   single-layer object keeps the compact, shareable one-texel-per-material
-   form, so meshes baking that palette share its maps; a multi-layer object's
-   atlas holds one texel per distinct material combination its voxels use,
-   which depends on the object's layer stack rather than any single palette.
-2. `unwrap`: each face takes its own texel from a per-mesh UV unwrap, so the
-   atlas is unique to one mesh and larger. Use it for spatially varying data
-   that one texel per material cannot hold, such as `computed-occlusion`
-   baked from the voxel geometry.
+## The palette atlas
 
-`computed-occlusion` is occlusion computed from the voxel geometry, the same
-quantity `--vertex computed-occlusion` writes to vertex colors (see
-[Vertex attribute maps](#vertex-attribute-maps)). It
-varies across a surface, so it cannot occupy a palette texel and always bakes
-into an unwrap layout for its own image. Under `--atlas palette` the shared
-palette maps keep the mesh's primary UV set and the occlusion image takes a
-second, unwrap UV set, so one mesh carries both the compact shared material
-maps and a per-mesh occlusion bake. Under `--atlas unwrap` every map already
-shares the one unwrap set and occlusion is another image on it. The second UV
-set needs a mesh format that stores more than one, which glTF does, so a glTF
-target can pair palette material maps with `computed-occlusion`.
+All the maps of one bake share a single atlas layout: one texel per distinct
+flattened material. The object's layers merge per property name by the
+format's layer-override resolution, each property read through the last layer
+whose palette supplies its name, so a voxel's texel is keyed by the tuple of
+materials it samples in those winning layers, deduplicated in first-seen
+raster order. A single-layer object reduces to one texel per material its
+voxels use. Each map fills the same layout from its own properties, so
 
-`--texture-storage` `embedded` | `external` | `both` chooses where the images
-go. `external` writes each map as a separate `.png` beside the mesh, the
-`{stem}-mse.png` paths below; `embedded` packs them into the mesh itself, a
-`.glb` binary chunk or a base64 data URI in a `.gltf`; and `both` embeds the
-copy the mesh references and also writes the loose `.png` files. The default
-follows the target, `embedded` for a `.glb` and `external` for a `.gltf`,
-matching how each form carries its other resources. Under `both` the mesh reads
-the embedded copy, so the loose files are working copies to edit and re-bake
-from, which is why a texture-heavy mesh is easier to iterate on as `external`.
+```
+vxl mesh turret.voxj --to gltf --texture albedo --texture orm
+```
 
-Maps come from `--texture` for the named presets and `--texture-map` for a custom
-packing, both repeatable once per output image, with `--texture-name` and
-`--texture-name-prefix` naming the preset images.
+writes `turret.gltf`, `turret-albedo.png`, and `turret-orm.png`, the two
+images the same size with the same flattened material at the same texel.
+Every face's UVs sit at its texel center, read with a nearest-neighbor
+sampler and clamped wrapping, so a face samples exactly its texel. The atlas
+depends on the materials the object uses, so it is per-mesh, not shared
+across meshes.
 
-`--texture <preset>` writes a preset map, repeatable, as in
-`--texture albedo --texture orm`. A value is one of the single-map presets or a
-bundle that expands to several; the single presets are:
+A property a material leaves unset takes its glTF spec default, so a map
+never fails on a missing property. Once maps are baked, greedy meshing merges
+only faces that share a flattened material, since a merged quad samples one
+texel; pure geometry merges on shape alone.
 
-1. `albedo`: RGBA base color from `baseColorFactor`. Four channels.
-2. `orm`: glTF occlusion-roughness-metallic packing, R = `occlusionStrength`,
-   G = `roughnessFactor`, B = `metallicFactor`. Three channels.
-3. `metallic-roughness`: glTF metallic-roughness packing, G = `roughnessFactor`,
-   B = `metallicFactor`, R = `0`. Three channels.
-4. `metallic-smoothness`: Unity metallic-smoothness packing, R = `metallicFactor`,
-   A = `smoothness`, G and B = `0`. Four channels.
-5. `mse`: the custom MSE packing, R = `metallicFactor`, G = `smoothness`,
-   B = `emissiveStrength`. Three channels. This is the voxel-native form of the
-   MSE texture the material tooling builds from image maps.
-6. `emissive`: the emissive color, `emissiveFactor` scaled by `emissiveStrength`,
-   so the surface glows in its own emissive color rather than a flat white. RGB,
-   for the glTF emissive slot. The raw `emissiveStrength` stays a scalar for
-   `--texture-map` and the packings that read it, such as `mse`.
-7. `occlusion`: grayscale `occlusionStrength`. One channel.
-8. `computed-occlusion`: grayscale occlusion computed from the voxel geometry
-   rather than read from the `occlusionStrength` property. One channel. Always
-   bakes into an unwrap layout; see the atlas notes above.
-9. `roughness`: grayscale `roughnessFactor`. One channel.
-10. `smoothness`: grayscale `smoothness`. One channel.
+A preset with a standard glTF slot binds it: `albedo` to `baseColorTexture`,
+`metallic-roughness` to `metallicRoughnessTexture`, `orm` to both
+`occlusionTexture` and `metallicRoughnessTexture` sharing one image,
+`occlusion` to `occlusionTexture`, and `emissive` to `emissiveTexture`. The
+slotless presets (`mse`, `metallic-smoothness`, `roughness`, `smoothness`)
+and every `--texture-map` packing are instead listed by name under the
+material's `extras.vxl.maps`, where a generic viewer ignores them and a
+custom pipeline finds them.
 
-A bundle expands to several single maps in order:
+## Channel expressions
 
-1. `pbr`: the glTF PBR set, `albedo`, `orm`, and `emissive`.
+`--texture-map <file-name> <channels>` bakes a custom packing. `channels` is
+one argument: a comma-separated list over `R=<expr>`, `G=<expr>`, `B=<expr>`,
+and `A=<expr>`. This reproduces the `mse` preset:
 
-A preset map's file name comes from a three-level precedence, highest first:
+```
+vxl mesh model.voxj --texture-map model-mse.png R=metallicFactor,G=1-roughnessFactor,B=emissiveStrength
+```
 
-1. `--texture-name <preset> <file-name>`, repeatable, names one preset's map
-   exactly, as `--texture-name albedo skin.png`. The preset is a single-map
-   preset, never a bundle, since a bundle names several files and so no single
-   one. Naming a preset that is not being baked, or naming one twice, is an error.
-2. `--texture-name-prefix <prefix>` replaces the default `<output-stem>-` prefix
-   for every preset map with no explicit `--texture-name`; the preset name
-   follows verbatim, so the prefix carries its own separator. `--texture-name-prefix
-   hero-` writes `hero-albedo.png` and `hero-orm.png`, while `test.` writes
-   `test.albedo.png`.
-3. Otherwise the default is the output stem plus the preset, `turret-albedo.png`
-   for `turret.glb`.
+The image's channel count is the highest channel named; an unnamed channel is
+`0`. Each `<expr>` is one of:
 
-Both naming flags compose with a bundle: `--texture pbr --texture-name albedo
-skin.png` names the bundle's albedo map `skin.png` while the prefix or stem names
-the rest. Every map name is a file name written beside the mesh, so a value
-holding a path separator, or an empty prefix, is an error rather than silently
-stripped to its file name, and two maps that resolve to the same file name are an
-error.
+1. `<property>`: a scalar property by its voxel-json key, as
+   `metallicFactor`.
+2. `<property>.<r|g|b|a>`: one component of a color property, as
+   `baseColorFactor.r`.
+3. `1-<property>`: the inverse, as `1-roughnessFactor`.
+4. `0` | `1`: a constant.
 
-`--texture-map <file-name> <channels>` writes a custom packing, also repeatable.
-The `channels` argument is a comma-separated list of `R=<expr>`, `G=<expr>`,
-`B=<expr>`, and optional `A=<expr>`, where `<expr>` is a property name,
-`1-<property>` for an inverted property, one color component as
-`<property>.r`, `.g`, `.b`, or `.a`, the constant `0` or `1`, or
-`computed-occlusion` for the geometry-derived occlusion. The channel
-count is the number of channels named; an omitted channel is `0`. For example
-`--texture-map model-mse.png R=metallicFactor,G=1-roughnessFactor,B=emissiveStrength`
-reproduces `--texture mse`, and swapping `G=roughnessFactor` writes roughness
-instead of its inverse. A packing that names `computed-occlusion` always bakes
-into an unwrap layout, as `--texture-map ao.png R=computed-occlusion` does.
+A property's type is never declared on the command line. It is read from the
+value pool its key binds in its winning layer's palette, the last layer whose
+palette supplies the name: a color pool exposes `.r`, `.g`, `.b`, and, with
+alpha, `.a`, and is read one component at a time; a `float`, `int`, or `bool`
+pool is a scalar, read whole and rejecting a component. A key no layer
+supplies follows the format's
+[unbound-default rule](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties):
+a glTF built-in bakes its spec default, a custom key errors.
 
-A color property is read one component at a time. `baseColorFactor` is a color,
-so `R=baseColorFactor.a` writes its straight alpha and
-`R=baseColorFactor.r,G=baseColorFactor.g,B=baseColorFactor.b,A=baseColorFactor.a`
-splits the color across four channels; a component reads a byte from the stored
-color. Naming a color with no component, as in `R=baseColorFactor`, is an error,
-and `--texture albedo` is the way to write the whole color. A scalar names no
-component, so `metallicFactor.r` is an error, and a color with no alpha
-rejects `.a`: `emissiveFactor` is a three-component color, so `emissiveFactor.a`
-is an error.
+`--define-property <property> <name>` gives a custom voxel-json key a name a
+packing can read: `property` is the token used in `<channels>`, `name` is the
+voxel-json key. The key is its own argument, so it may be quoted, and a key
+with spaces is reachable only through an alias. A binding shadows a built-in
+of the same name within the custom packings; the `--texture` presets always
+read the spec properties. With a palette binding `tint` to an `srgba` pool,
 
-`--define-property <property> <name>` names a custom
-property so `--texture-map` and `--vertex-map` can read it, repeatable, as in
-`--define-property sss subsurface`. The voxel-json format stores properties
-generically, so a palette may
-carry keys beyond the recommended set in
-[Properties](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties),
-and a binding gives one such key a name a packing can use. A binding reads the
-key through its winning layer, the last layer whose palette supplies it. Its
-two tokens are:
+```
+vxl mesh model.voxj --define-property tint tint --texture-map paint.png R=tint.r,G=tint.g,B=tint.b,A=baseColorFactor.a
+```
 
-1. `property`: the reference used in `--texture-map` and `--vertex-map`. It
-   shadows a built-in property name on collision, so `--define-property
-   roughnessFactor micro-rough` makes `R=roughnessFactor` read `micro-rough`
-   instead. The shadowing is scoped to the custom packings; the `--texture` and
-   `--vertex` presets always read the spec properties. The reference carries no
-   whitespace, since `--texture-map` reads it as a bare token.
-2. `name`: the voxel-json property key read from its winning layer's material.
-   As its own token it may be quoted, so a name with spaces, as
-   `--define-property emissive "super emissive thing"`, is reachable only
-   through such an alias.
+packs the custom `tint` color into RGB and the base color's alpha into `A`.
 
-The property's type is not declared: it is read from the value pool the key
-binds in its winning layer's palette when the document loads. A color pool
-exposes the
-`r`, `g`, `b`, and (with alpha) `a` components a packing reads as `<property>.r`
-and so on; a `float`, `int`, or `bool` pool is a scalar, read whole. A property
-no layer binds follows the format's unbound-default rule: a glTF
-built-in bakes its spec default, so `baseColorFactor.a` and `occlusionStrength`
-need no binding, while a custom key, which has no default, is an error.
+## Deferred
 
-For example, with a palette binding `tint` to an `srgba` pool, `--define-property
-tint tint` then `--texture-map
-paint.png R=tint.r,G=tint.g,B=tint.b,A=baseColorFactor.a` packs the custom `tint`
-color into RGB and the base color's alpha into `A`.
+Designed but unbuilt. The hidden CLI values (`--atlas unwrap`,
+`--texture computed-occlusion`) parse but error until their features land. A
+proposed redesign of the map flags around an expression language lives in the
+[mesh value language](../../mesh/value-language.md) subplan.
 
-## Vertex attribute maps
+### Vertex attribute maps
 
-A material map reads a material's properties the same way whether it lands in a
-texture or on the mesh's vertices; only the carrier differs. The
-[texture maps](#material-and-texture-maps) above write through `--texture` and
-`--texture-map`, sampled by the mesh's UVs; `--vertex` and `--vertex-map` write
-the same resolved values to glTF vertex attributes, one value per vertex, with no
-texture and no UV set. The source grammar is shared: `--vertex-map` reads the
-same `<channels>` expressions as `--texture-map`, and `--define-property` names
-custom properties for both. Vertex attributes need geometry, so unlike texture
-maps they have no `material`-command equivalent.
+The texture flags' vertex twins: the same resolved values written to glTF
+vertex attributes, one value per face corner, with no texture and no UV set.
+Only `COLOR_0` is portable glTF. The rest are application-specific `_NAME`
+attributes that only a custom shader reads.
 
-The attribute name a value lands in decides whether a generic glTF viewer reads
-it. glTF's metallic-roughness shading reads one per-vertex slot, `COLOR_0`, a
-vec4 that multiplies the base color, so per-vertex color is portable but
-per-vertex metallic, roughness, and the rest are not: they go in
-application-specific attributes, whose names glTF requires to start with `_` and
-that only a custom shader reads. A generic viewer stores and ignores them.
+1. `--vertex <preset>`: the texture presets, packed the same way. `albedo`
+   writes `COLOR_0`. `computed-occlusion` multiplies into `COLOR_0` to darken
+   it. The scalar presets write `_METALLIC`, `_ROUGHNESS`, and so on; the
+   packed presets write `_ORM`, `_MSE`, and so on. Two vertex-only presets
+   carry indices instead of values:
+   1. `palette-index`: one index per vertex into a per-mesh table of the
+      distinct flattened materials the mesh uses, written as `_PALETTEINDEX`.
+   2. `palette-layers`: one index per layer per vertex, written as
+      `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on, with each layer's
+      palette shipped verbatim. A shader combines the indexed materials by
+      the format's layer-override order: the last layer supplying a property
+      wins. The only carrier that keeps every layer separately rather than
+      the flattened per-property winners.
+2. `--vertex-target <preset> <target>`: override a preset's attribute name,
+   as `--vertex-target computed-occlusion _AO`. Repeatable.
+3. `--vertex-map <target> <channels>`: a custom packing into `COLOR_0` or a
+   `_NAME` attribute, sharing the [channel grammar](#channel-expressions) and
+   `--define-property`.
+4. `--palette-storage` `embedded` | `external` | `both`: where the palette
+   tables go, glTF `extras.vxl` or a `<stem>-palette.json` sidecar carrying
+   the identical JSON. Defaults like `--texture-storage`.
 
-A vertex carries one value per face corner. Greedy meshing merges only coplanar,
-same-material faces, so every corner of a merged quad shares one material and
-per-vertex material stays constant across the quad with no extra splitting;
-`culled` and `naive` already carry one value per face corner. `computed-occlusion`
-is the exception: it takes each corner's value from the three voxels meeting
-there, four discrete levels, so it varies within a quad and forces per-face
-resolution. With `--method greedy` two faces merge only when their occlusion
-matches along the shared edge, so flat runs still merge into large quads while
-concave seams split, and when a quad's four corners are uneven the triangle
-diagonal is chosen to keep the darker pair together so interpolation does not
-seam.
-
-`--vertex <preset>` writes a preset to vertices, repeatable, the vertex twin of
-`--texture`. The names reuse the texture presets and pack the same way:
-
-1. `albedo`: RGBA base color from `baseColorFactor` into `COLOR_0`. Portable; a
-   glTF viewer renders it as the per-vertex base color with no texture.
-2. `computed-occlusion`: occlusion computed from the voxel geometry, multiplied
-   into `COLOR_0` to darken the base color, tuned by the `--computed-occlusion-*`
-   options above. Override the target with `--vertex-target computed-occlusion
-   _AO` (below) to write it as a standalone custom scalar instead of darkening
-   the color.
-3. `metallic`, `roughness`, `emissive`, `occlusion`, `smoothness`: one scalar
-   into `_METALLIC`, `_ROUGHNESS`, and so on, the name a `_` plus the preset
-   uppercased. Custom attributes a custom shader reads.
-4. `orm`, `mse`, `metallic-roughness`, `metallic-smoothness`: the packed presets,
-   into `_ORM`, `_MSE`, and so on, packed across the attribute's components
-   exactly as the texture preset packs them across channels. Custom attributes.
-5. `palette-index`: one index per vertex into a flattened table of the distinct
-   materials the mesh uses, written as a scalar into `_PALETTEINDEX` with
-   that table shipped as [palette data](#palette-data). A custom shader looks the
-   material up by index rather than sampling a texture: the most compact carrier
-   and the exact-value alternative to the palette atlas. The table is the distinct
-   materials used, so it is per-mesh, not shared across meshes. Custom; not read
-   by a generic viewer.
-6. `palette-layers`: one index per layer per vertex, written as scalars
-   `_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on, with each layer's palette
-   shipped verbatim as [palette data](#palette-data). A custom shader
-   combines the indexed materials, canonically by the format's layer-override
-   order: the last layer supplying a property wins. Its data sums the layer sizes
-   rather than multiplying them and depends only on the palette set, so it stays
-   shareable across meshes and is the compact carrier for a many-layer object; it
-   is also the only carrier that preserves every layer's material separately
-   rather than flattening to the per-property winners. A single-layer object
-   reduces to one `_PALETTEINDEX0` and the one palette. Custom; not read by a
-   generic viewer.
-
-A preset writes to the default attribute listed above; `--vertex-target
-<preset> <target>` overrides it, repeatable, the vertex twin of `--texture-name`,
-as `--vertex-target computed-occlusion _AO`. A target is a fixed glTF attribute
-name rather than a stem-derived file name, so there is no prefix twin, and
-overriding a preset that is not being written, or overriding one twice, is an
-error.
-
-`--vertex-map <target> <channels>` writes a custom packing to a named attribute,
-repeatable, the vertex twin of `--texture-map`. `target` is `COLOR_0` or a custom
-`_NAME`, and `channels` is the same comma-separated `R=<expr>,G=<expr>,...` list,
-so `--vertex-map _ORM R=occlusionStrength,G=roughnessFactor,B=metallicFactor`
-packs ORM into a vec3 attribute and
-`--vertex-map COLOR_0 R=baseColorFactor.r,G=baseColorFactor.g,B=baseColorFactor.b,A=baseColorFactor.a`
-writes the base color. The component count follows the channels named: one is a scalar,
-two a vec2, three a vec3, four a vec4. A packing that names `computed-occlusion`
-resolves it per corner as above.
-
-The two carriers compose in one run: write base color to `COLOR_0` and bake PBR
-into a shared palette atlas, or carry everything on vertices for a texture-free
-mesh. `--atlas` sets only the texture layout and never affects vertex attributes.
-
-## Palette data
-
-`--vertex palette-index` and `--vertex palette-layers` write only an index per
-vertex; the table that turns an index into a material is a small block of JSON.
-`--palette-storage` `embedded` | `external` | `both` chooses where it goes:
-
-1. `embedded`: in the glTF document's `extras`, under a `vxl` key, so the table
-   travels inside the `.gltf` or `.glb` and a custom loader reads `extras.vxl`.
-2. `external`: in a sidecar JSON file beside the mesh, the mesh stem plus
-   `-palette.json`, so `model.gltf` pairs with `model-palette.json`. Easier to
-   read and edit on its own.
-3. `both`: write the `extras` block and the sidecar file; the embedded copy is
-   the one a loader should trust, the file a loose working copy.
-
-The default follows the target, `embedded` for a `.glb` and `external` for a
-`.gltf`, the same split as `--texture-storage`. Either way a generic glTF viewer
-ignores the data, since it is not a glTF material; these carriers need a custom
-loader. The sidecar file's top-level object is exactly the value of `extras.vxl`,
-so the two forms carry byte-identical content in different places. Examples below
-are JSONC for readability; a real file is plain JSON.
-
-The top-level `kind` says which carrier wrote it. A material is an object of
-voxel-json
-[property](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties)
-keys to values: a color is a `#RRGGBBAA` hex string, a scalar is a number, and an
-omitted property takes its spec default, so a material lists only what it sets.
-An unrecognized `version` is rejected.
-
-### `kind: "palette-index"`
-
-`_PALETTEINDEX` on each vertex indexes `materials`, one entry per distinct
-material the mesh uses:
+The palette data (examples in JSONC; a real file is plain JSON):
 
 ```jsonc
 {
@@ -353,70 +229,65 @@ material the mesh uses:
 }
 ```
 
-### `kind: "palette-layers"`
-
-`_PALETTEINDEX0`, `_PALETTEINDEX1`, and so on index `layers[0]`, `layers[1]`, and
-so on, one entry per layer in the object's `layers` order. A custom shader
-combines the indexed materials, canonically by the format's layer-override
-order, each property taking its value from the last layer that supplies it:
-
 ```jsonc
 {
   "version": 1,
   "kind": "palette-layers",
   "layers": [
     [ // layer 0 (base), indexed by _PALETTEINDEX0
-      { "baseColorFactor": "#FF0000FF", "tint": "#880000FF" },
-      { "baseColorFactor": "#0000FFFF", "tint": "#000088FF" }
+      { "baseColorFactor": "#FF0000FF" },
+      { "baseColorFactor": "#0000FFFF" }
     ],
     [ // layer 1 (finish), indexed by _PALETTEINDEX1
-      { "roughnessFactor": 0.9, "tint": "#FFFFFFFF" },
-      { "roughnessFactor": 0.1, "tint": "#FFFF00FF" }
+      { "roughnessFactor": 0.9 },
+      { "roughnessFactor": 0.1 }
     ]
   ]
 }
 ```
 
-For the three voxels A = (base 0, finish 0), B = (base 0, finish 1), and
-C = (base 1, finish 1), `_PALETTEINDEX0` is `0, 0, 1` and `_PALETTEINDEX1` is
-`0, 1, 1`.
-
-### TypeScript Schema
-
 ```typescript
-// The palette data the palette-index and palette-layers vertex carriers write,
-// either in glTF `extras.vxl` or in a `<stem>-palette.json` sidecar; the two
-// carry identical content.
 type PaletteData = PaletteIndexData | PaletteLayersData;
 
 interface PaletteIndexData {
   version: 1;
   kind: "palette-index";
-  // _PALETTEINDEX on each vertex indexes this array; one entry per distinct
-  // material the mesh uses.
-  materials: Material[];
+  materials: Material[]; // indexed by _PALETTEINDEX
 }
 
 interface PaletteLayersData {
   version: 1;
   kind: "palette-layers";
-  // _PALETTEINDEX0, _PALETTEINDEX1, ... index layers[0], layers[1], ..., one
-  // entry per layer in the object's `layers` order; the canonical
-  // combination is the format's layer-override order, the last layer
-  // supplying a property winning.
-  layers: Material[][];
+  layers: Material[][]; // layers[n] indexed by _PALETTEINDEXn
 }
 
-// Property keys to values, following the voxel-json Properties vocabulary: a
-// color is a `#RRGGBBAA` hex string, a scalar is a number. An omitted property
-// takes its spec default, so a material lists only what it sets.
+// Voxel-json property keys to values: a color is a `#RRGGBBAA` hex string,
+// a scalar a number. An omitted property takes its spec default.
 type Material = { [property: string]: string | number };
 ```
 
-## Future work
+### Computed occlusion and the unwrap atlas
 
-A later pass may add `--computed-occlusion-radius` and
-`--computed-occlusion-falloff` for a sampled neighborhood model that gathers
-occluders out to a distance and weights them by a falloff curve, giving smoother
-and wider gradients. They do not apply to the current discrete corner method,
-which has a fixed one-voxel reach, so they are left out until that model lands.
+`computed-occlusion` is occlusion computed from the voxel geometry, each face
+corner reading the voxels that meet there. It varies across a surface, so as
+a texture it needs `--atlas unwrap`, a per-mesh UV unwrap with a texel per
+face. Under `--atlas palette` it would ride a second, unwrap UV set beside
+the shared palette maps. As `--vertex computed-occlusion` it darkens
+`COLOR_0`; greedy merging splits quads only where corner occlusion disagrees.
+Three flags tune it wherever it is written:
+
+1. `--computed-occlusion-strength <0..1>` (default `1.0`): scales how much it
+   darkens.
+2. `--computed-occlusion-min-brightness <0..1>` (default `0.0`): floor on the
+   darkest crevice.
+3. `--computed-occlusion-color-space` `linear` | `srgb` (default `linear`):
+   the space the values are written in.
+
+A sampled neighborhood model (a radius and a falloff curve) is a possible
+extension beyond the discrete corner method.
+
+### Scene assembly
+
+A separate mode selecting hierarchy nodes and baking their transforms and
+instancing into one placed mesh, complementing the pure-geometry object
+selectors. With it comes a story for outputting more than one object.

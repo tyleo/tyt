@@ -2,7 +2,8 @@
 
 *Part of the [Vxl Command-Line Reference](../README.md).*
 
-Rationale for the non-obvious choices, for reviewers.
+Rationale for the non-obvious choices, for reviewers. The `mesh` command's
+design lives in [mesh](mesh.md).
 
 1. No standalone `optimize`, `pack`, or `unpack`. Every one is a special case
    of `to voxj`, which already owns encoding and container selection, so adding
@@ -13,43 +14,7 @@ Rationale for the non-obvious choices, for reviewers.
    `to vmax` infer source format, keeps one home for the material options, and
    leaves room for more mesh formats without a subcommand per format. glTF is the
    only mesh format for now. `voxelize` is the conventional verb for the inverse.
-3. Material maps come from `--texture <preset>` for the named presets and bundles
-   and `--texture-map <file-name> <channels>` for a custom packing. The presets
-   name the common packings, ORM and MSE included, so the common cases are one
-   flag, while `--texture-map` expresses any channel-to-property packing without
-   a code change. No flag packs several tokens into one quoted string: `--texture`
-   is a plain, repeatable value enum clap validates and completes, with a map's
-   file name split out to `--texture-name <preset> <file-name>` and
-   `--texture-name-prefix`, and `--texture-map` takes its file name and channel
-   list as two arguments, rather than packing a filename, channel count, palette
-   index, and material list into one argument as the original `--texture` flag
-   did. The channel list keeps its commas because the RGBA packing is one
-   structured value, and an arity that varied with a layout token would need a
-   greedy parser that swallows the optional `output` positional. `smoothness` is
-   accepted as the derived `1 - roughnessFactor`, so it need not be spelled
-   `1-roughnessFactor`. The same flags back
-   the standalone `material` command so textures can be re-baked without
-   re-meshing; both derive the same atlas, so the maps stay aligned to the mesh
-   UVs.
-4. The material atlas has two layouts, `--atlas palette` and `--atlas unwrap`.
-   Palette is the default because it is tiny and, keyed to the palette index
-   rather than the per-mesh material set, identical for every mesh on a palette,
-   so meshes share one set of maps. Unwrap trades that sharing for a per-mesh UV
-   unwrap that can hold spatially varying bakes a single texel per material
-   cannot, such as ambient occlusion in the map instead of vertex colors.
-5. `mesh` outputs an object as pure geometry, narrowed by object selectors. The
-   main use is pulling leaf objects out with no transform data, so selection
-   targets objects, by index, the canonical reference, or by a glob over the
-   hierarchy path, matched as `hierarchy show` matches node paths so a node path
-   selects its subtree. Index and path are separate repeatable options,
-   `--select-index` and `--select`, rather than one option that guesses whether a
-   value is an index or a glob, since a name made only of digits is unaddressable
-   under that guess. They are flags, not positionals, because the optional
-   `output` positional is the house convention and trailing optional positionals
-   would be ambiguous. `mesh` errors when the selection is not exactly one object;
-   how to output several, and whether to bake a node's subtree, transforms, and
-   instancing into one placed mesh, is a deferred, separate mode.
-6. Quantize, remap, and `voxelize`'s `--max-palette-materials` share one reduction
+3. Quantize, remap, and `voxelize`'s `--max-palette-materials` share one reduction
    rule: material follows color. Reducing the compared property
    (`baseColorFactor` by default) clusters materials by it and collapses each
    cluster to one representative material, so a material's other properties ride
@@ -60,123 +25,58 @@ Rationale for the non-obvious choices, for reviewers.
    than an average, and the three commands share one engine and its `--method` /
    `--space` / `--dither` controls. The accepted cost is that fusing two colors
    fuses their materials too.
-7. Quantize and remap take either a full document or a bare palette JSON, the
+4. Quantize and remap take either a full document or a bare palette JSON, the
    remap `--target` shape. The palette transform is the same either way; a
    document additionally carries voxels, so it can dither the rewritten samples
    in 3D order and narrow that dithering with the object selectors, while a bare
    palette has nothing to walk and skips both. Reusing the selectors keeps one
    addressing model across mesh, material, quantize, and remap.
-8. Custom properties reach `--texture-map` and `--vertex-map` through a declared
-   binding, `--define-property <property> <name>`, rather than inline qualifiers. The
-   voxel-json format stores properties generically, so a packing must read a key
-   the presets do not name; the binding gives that key a name a packing can use,
-   so the grammar stays a flat `name`, `1-name`, or `name.component`, reusable
-   across channels, images, and vertex attributes. The value's type is not
-   declared but read from the key's value pool when the document loads, since the
-   file already carries it (see note 9): a color pool exposes `r`/`g`/`b`/`a`
-   components, a scalar pool is read whole. It shadows a built-in on collision,
-   scoped to the custom packings so a binding never silently changes a
-   `--texture` or `--vertex` preset. The binding reads the key through the
-   format's layer-override resolution, the same flatten the rest of `mesh`
-   bakes, rather than naming a separate source. `mesh` merges the object's
-   layers per property name, each property read from the last layer whose
-   palette supplies it, so a key resolves to one winning layer and every voxel
-   samples one material in it. The built-in `baseColorFactor` is itself a color, so
-   `baseColorFactor.a` and an RGBA split need no binding,
-   complementing the whole-color `albedo` preset. Inline `N:` and `.component`
-   qualifiers with no declaration were dropped: they give no reusable name.
-9. `palette show` and `mesh` both read a property's type from its bound value
-   pool's kind, a color kind for a color and a scalar kind for a number; the file
-   is the single source of type truth, for a built-in and a custom key alike.
-   `show` reads it inline as it prints concrete materials; `mesh` defers the same
-   read to the bake, since a `--texture-map` packing is compiled before the
-   document loads, and validates each channel's component against the winning
-   layer's pool kind once the document is in hand. A property no layer binds
-   follows the format's unbound-default rule: a glTF built-in takes its spec kind
-   and default, a custom key is an error. `--type` stays as an optional override
-   on `show` so a preview can assert a type and read a custom key exactly as the
-   mesh packing will. The
-   `.component` grammar is reused from `--texture-map`, so `baseColorFactor.a`
-   means one thing across show, mesh, and the packings; it is read-only inspection sugar,
-   scoped to show, so the mutating palette commands keep whole-property
-   semantics. `auto` keeps numeric output for scalars and swatches only true
-   colors, beside their hex. `swatch` and `swatch-value` extend swatches to
-   scalars and extracted channels as a grayscale ramp, since a single `0..1`
-   value renders as gray, the first printing the swatch alone and the second
-   adding the exact hex or number beside it, while `value` drops the swatch for
-   piping.
-10. `voxelize` separates geometry from color. `--fill-mode` chooses a filled body
-    or a hollow shell; `--material-mode` chooses where color comes from and
-    defaults to `auto`, sampling `per-texel` when the mesh is textured and
-    `per-primitive` when it is not. Per-primitive reads each material's flat
-    factors into one palette material per material, exact and tiny for stylized
-    meshes;
-    per-texel samples the maps at each voxel's surface point, area-averaged so
-    fine texture does not alias into a muddy palette; `flat` ignores the mesh for
-    a one-color body. Per-primitive is not a rival of per-texel but a part of it:
-    any sampling first attributes a voxel to a material and reads its factors, and
-    a `solid` body's interior voxels sit on no surface and fall back to that
-    factor regardless, so the two modes share one path and per-texel only adds the
-    texel sampler. `--fill-color` is the color the modes cannot sample: the whole
-    body under `flat`, white when omitted, or only the invented interior of a
-    `solid` per-* body, leaving the sampled exterior alone; a set color is rejected
-    for a hollow shell, which is all surface. `auto` engages per-texel on textured
-    meshes because importing a textured model implies wanting its surface color,
-    while the explicit modes override that guess. The flat color mode is named
-    `flat`, not `solid`, so it does not collide with `--fill-mode solid`, which is
-    geometry.
-11. `voxelize --max-palette-materials` bounds the generated palette, defaulting to 256 (a
-    one-byte sample index and the familiar color ceiling). It auto-reduces with a
-    warning rather than erroring or truncating, since a textured mesh exceeding
-    the cap is the normal case, and reuses the `palette quantize` engine and its
-    `--method` / `--space` / `--dither` controls rather than inventing its own, so
-    the inline cap and the standalone command cannot diverge; `none` disables it
-    for bit-exact materials. Sampling drops no PBR: voxelize writes the same
-    `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
-    `emissiveStrength`, and `occlusionStrength` properties `mesh` bakes, so the
-    two are inverses.
-12. Vertex attribute maps share the texture maps' source grammar and add only a
-    carrier. A map resolves a material value the same way whether it lands in a
-    texel or on a vertex, so `--vertex` and `--vertex-map` reuse the
-    `--texture`/`--texture-map` presets, the `--texture-map` channel grammar, and
-    `--define-property`, differing only in destination. This folds the former
-    `--vertex-computed-occlusion` boolean into `--vertex computed-occlusion`, one
-    cell of the general family, and leaves the texture presets untouched. A
-    separate `--atlas vertex` was rejected: atlas is a texture layout, while the
-    carrier is chosen per map by `--texture` versus `--vertex`, so color can ride
-    on vertices while PBR bakes to a shared atlas in the same run. `COLOR_0` is
-    glTF's only per-vertex PBR slot, so per-vertex color is portable while
-    per-vertex metallic, roughness, and the palette presets go in
-    application-specific `_NAME` attributes only a custom shader reads. The
-    palette indirection comes in two shapes because an object keeps a palette
-    per layer, which no single index spans: `palette-index` flattens to the
-    distinct materials the mesh uses, one `_PALETTEINDEX` into a
-    per-mesh table, the smallest carrier; `palette-layers` keeps every layer, one
-    `_PALETTEINDEXn` per layer plus each layer's palette, summing rather than
-    multiplying the layer sizes, staying shareable across meshes, and alone
-    preserving every layer's material separately rather than the flattened
-    per-property winners. A product
-    index over every layer combination was rejected: `palette-layers` is both
-    smaller and shareable, so the product never wins. The texture
-    `--atlas palette` flattens to the per-property winners instead, since
-    per-layer textures would need a custom shader and forfeit the atlas's
-    portability, so per-layer material lives on the vertex carrier.
-13. Texture images and the palette data each store `embedded`, `external`, or
-    `both`, with a format-driven default: `embedded` for a `.glb`, `external`
-    for a `.gltf`, so zero-config output matches what each glTF form normally
-    carries while either can be forced. `embedded` keeps one shippable file (a
-    `.glb` chunk or a `.gltf` data URI for images, the palette under
-    `extras.vxl`); `external` writes loose `.png` and `-palette.json` files that
-    are easier to iterate on; `both` embeds the copy the mesh references and also
-    drops the loose files as working sources, so a deliverable stays
-    self-contained while its textures stay editable. The two resources take
-    separate flags, `--texture-storage` and `--palette-storage`, because the
-    common workflow keeps textures external for tweaking while the palette data
-    rides inside the mesh. The palette data is plain JSON, not a binary buffer,
-    for the same reasons voxel-json is plain JSON: openable and diffable, and a
-    loader parses it once before packing it into a uniform buffer or palette
-    texture; the same JSON object is the `extras.vxl` value and the sidecar
-    file's whole content.
+5. `palette show` reads a property's type from its bound value pool's kind, a
+   color kind for a color and a scalar kind for a number; the file is the single
+   source of type truth, for a built-in and a custom key alike, the same rule
+   the [`mesh` packings](mesh.md#channel-expressions) bake by. A property absent
+   from a palette follows the format's unbound-default rule: a glTF built-in
+   takes its spec kind and default, a custom key is an error. `--type` stays as
+   an optional override on `show` so a preview can assert a type and read a
+   custom key exactly as a mesh packing will. The `.component` grammar is shared
+   with the mesh channel expressions, so `baseColorFactor.a` means one thing
+   across show, mesh, and the packings; it is read-only inspection sugar, scoped
+   to show, so the mutating palette commands keep whole-property semantics.
+   `auto` keeps numeric output for scalars and swatches only true colors, beside
+   their hex. `swatch` and `swatch-value` extend swatches to scalars and
+   extracted channels as a grayscale ramp, since a single `0..1` value renders
+   as gray, the first printing the swatch alone and the second adding the exact
+   hex or number beside it, while `value` drops the swatch for piping.
+6. `voxelize` separates geometry from color. `--fill-mode` chooses a filled body
+   or a hollow shell; `--material-mode` chooses where color comes from and
+   defaults to `auto`, sampling `per-texel` when the mesh is textured and
+   `per-primitive` when it is not. Per-primitive reads each material's flat
+   factors into one palette material per material, exact and tiny for stylized
+   meshes;
+   per-texel samples the maps at each voxel's surface point, area-averaged so
+   fine texture does not alias into a muddy palette; `flat` ignores the mesh for
+   a one-color body. Per-primitive is not a rival of per-texel but a part of it:
+   any sampling first attributes a voxel to a material and reads its factors, and
+   a `solid` body's interior voxels sit on no surface and fall back to that
+   factor regardless, so the two modes share one path and per-texel only adds the
+   texel sampler. `--fill-color` is the color the modes cannot sample: the whole
+   body under `flat`, white when omitted, or only the invented interior of a
+   `solid` per-* body, leaving the sampled exterior alone; a set color is rejected
+   for a hollow shell, which is all surface. `auto` engages per-texel on textured
+   meshes because importing a textured model implies wanting its surface color,
+   while the explicit modes override that guess. The flat color mode is named
+   `flat`, not `solid`, so it does not collide with `--fill-mode solid`, which is
+   geometry.
+7. `voxelize --max-palette-materials` bounds the generated palette, defaulting to 256 (a
+   one-byte sample index and the familiar color ceiling). It auto-reduces with a
+   warning rather than erroring or truncating, since a textured mesh exceeding
+   the cap is the normal case, and reuses the `palette quantize` engine and its
+   `--method` / `--space` / `--dither` controls rather than inventing its own, so
+   the inline cap and the standalone command cannot diverge; `none` disables it
+   for bit-exact materials. Sampling drops no PBR: voxelize writes the same
+   `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
+   `emissiveStrength`, and `occlusionStrength` properties `mesh` bakes, so the
+   two are inverses.
 
 ## Future and nice-to-haves
 
