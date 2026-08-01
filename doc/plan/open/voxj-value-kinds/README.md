@@ -65,10 +65,11 @@ point. The format states that once. No kind repeats it.
 
 Every kind is one JSON shape, and a value pool is its `kind` and its
 `values`. Nothing else rides it. The Rust column is one value; the kind's
-variant holds a `Vec` of it (see [the Rust shape](#the-rust-shape)). The six color kinds are gone: `srgb-hex`
-and `srgba-hex` lose their spelling, `srgb-float` and `srgba-float` lose
-their transfer, and all four land on `vec-3-float` / `vec-4-float` alongside
-`linear-rgb-float` and `linear-rgba-float`.
+variant holds a `Vec` of it (see [the Rust shape](#the-rust-shape)). The
+six color kinds are gone: `srgb-hex` and `srgba-hex` lose their spelling,
+`srgb-float` and `srgba-float` lose their transfer, and all four land on
+`vec-3-float` / `vec-4-float` alongside `linear-rgb-float` and
+`linear-rgba-float`.
 
 ```jsonc
 // before
@@ -100,8 +101,8 @@ its range.
 
 The format already draws that line. Structure is a hard contract: kinds,
 encodings, indices, counts. Property meaning is convention: names are
-advisory, and a consumer ignores one it does not recognize. A range is
-property meaning. `0..1` is a fact about `metallicFactor`, not a fact about
+advisory, and a consumer ignores one it does not recognize. A range sits on
+the convention side: `0..1` is a fact about `metallic`, not a fact about
 the value pool it binds.
 
 A `min`/`max` on the value pool cannot carry that fact, for three reasons:
@@ -110,14 +111,14 @@ A `min`/`max` on the value pool cannot carry that fact, for three reasons:
    and nothing checks the restatement, so the validator would enforce
    values against a claim with no authority behind it.
 2. It answers to no one property. The format's own example binds one
-   `float` value pool to both `metallicFactor` and `roughnessFactor`.
+   `float` value pool to both `metallic` and `roughness`.
 3. An interval is too weak. `KHR_materials_ior` permits `0` for "does not
    refract" alongside `>= 1`, and no `min`/`max` spells
    `{0} union [1, inf)`.
 
 So the ranges live in voxsmith, which already owns the glTF conventions,
 and they live once: one vocabulary check walks every bound property and
-errors on any value outside its factor's range. Code spells each range
+errors on any value outside that property's range. Code spells each range
 exactly, `ior`'s union included. Confirm the exact schema wording before
 writing it. Every boundary calls that one function instead of growing its
 own:
@@ -140,7 +141,7 @@ boundary that reads it:
 // loads: the shape is right, and shape is all a load checks
 { "kind": "float", "values": [7] }
 
-// fails in the glTF export, where a palette binds it to metallicFactor:
+// fails in the glTF export, where a palette binds it to metallic:
 // 7 is outside [0, 1]
 ```
 
@@ -189,8 +190,8 @@ another:
 
 ```jsonc
 "properties": [
-  { "name": "emissiveFactor", "valuePool": 0 }, // read as a color
-  { "name": "customNormal", "valuePool": 1 }    // read as numbers
+  { "name": "emissiveColor", "valuePool": 0 }, // read as a color
+  { "name": "customNormal", "valuePool": 1 }   // read as numbers
 ]
 ```
 
@@ -241,6 +242,43 @@ property is a reference into the glTF texture array, and voxj has no
 texture concept because the palette is the texture. A glTF material
 carrying a `baseColorTexture` bakes on the way in. Worth stating in the
 format doc as a scope boundary.
+
+## The property names
+
+The properties whose glTF field carries a `Factor` suffix drop it in voxj:
+
+| glTF field           | voxj property   |
+| -------------------- | --------------- |
+| `baseColorFactor`    | `baseColor`     |
+| `metallicFactor`     | `metallic`      |
+| `roughnessFactor`    | `roughness`     |
+| `emissiveFactor`     | `emissiveColor` |
+| `transmissionFactor` | `transmission`  |
+
+`occlusionStrength`, `emissiveStrength`, and `ior` already name the thing
+itself and do not change.
+
+In glTF, `Factor` names one term of `factor * texture[uv]`. voxj stores the
+product, so the suffix asserts a factorization the format does not have. It
+does not even buy field identity at the boundary: the export bakes the
+palette into an atlas, so a value authored under `baseColorFactor` would
+land in `baseColorTexture`'s texels while the exported `baseColorFactor`
+stays `1`.
+
+The vocabulary already names one resolved value: `occlusionStrength` is
+glTF's `occlusionTexture.strength` flattened to what it means. The rename
+generalizes that convention. Nothing is invented either: base color,
+metallic, and roughness are the PBR parameter names, and `metallicFactor`
+is glTF's serialization field for one of them. The conventions table keeps
+one glTF citation per row, so the by-reference lookup survives the
+spelling.
+
+Alone, this rename is the one crossing in the redesign that would fail
+silently: unknown property names are ignored by design, so an old file's
+`baseColorFactor` would quietly no-op and render defaults. It rides the
+same hard break as the kinds instead: a realistic old file already rejects
+on its color kinds or its `min`/`max` keys, and the fixtures regenerate
+once for everything.
 
 ## The Rust shape
 
@@ -297,7 +335,9 @@ Breaking, and safely so: every crossing fails loudly in both directions.
 There is no silent misread in either direction, so `version` stays `1`. The
 repo has no external consumers, and the voxj redesign already renamed the
 property vocabulary in place at `version: 1`. The recommendation is the same
-hard break with no aliases, regenerating the fixtures.
+hard break with no aliases, regenerating the fixtures. The property rename
+rides inside it; alone it would fail silently (see
+[the property names](#the-property-names)).
 
 ## palette show
 
@@ -313,13 +353,13 @@ fn classify(value_pool: &VoxValuePool) -> Kind
 fn classify(property_name: &str, value_pool: &VoxValuePool) -> Kind
 ```
 
-The requirement: every idiomatic factor renders exactly as it does today.
-`baseColorFactor` and `emissiveFactor` draw color swatches, with hex text and
+The requirement: every idiomatic property renders exactly as it does today.
+`baseColor` and `emissiveColor` draw color swatches, with hex text and
 per-channel reads intact, and the swatch encodes linear to sRGB at display.
-The numeric factors keep their grayscale swatches through the `float` kind. A
-custom key defaults to plain numbers, since a `vec-3-float` is a color or a
-normal and the value pool no longer says which. `--type` already exists to
-assert color for it.
+The numeric properties keep their grayscale swatches through the `float`
+kind. A custom key defaults to plain numbers, since a `vec-3-float` is a
+color or a normal and the value pool no longer says which. `--type` already
+exists to assert color for it.
 
 ## Blast radius
 
@@ -328,9 +368,9 @@ been confirmed so far. Expect the implementation to surface more.
 
 1. `projects/voxel-codecs/voxj/docs/voxel-json-file-format.md`: the kind
    table, the notes, validation rules 9 and 10, the TypeScript schema, the
-   examples, the format-wide sentence fixing the color space, the sentence
-   scoping ranges to the property vocabulary, and the texture scope
-   boundary.
+   examples, the property names in the glTF conventions table, the
+   format-wide sentence fixing the color space, the sentence scoping ranges
+   to the property vocabulary, and the texture scope boundary.
 2. `projects/voxel-codecs/voxj/src/`: `voxj_value_pool.rs` carries the six
    color variants to delete, the six vector variants to add, and the
    `min`/`max` fields to drop. One file arrives, the sentinel serde module,
