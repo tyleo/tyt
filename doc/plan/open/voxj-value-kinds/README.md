@@ -1,14 +1,14 @@
 # voxj value kinds
 
-Status: **design settled, unplanned.** One rule for the voxel-json
+One rule for the voxel-json
 [value pool kinds](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#value-pool-kinds):
-plain bounded vectors replace the color vocabulary, and the format gains a
-home for non-color data. This page is the design. The ordered steps are not
-written yet.
+a kind is a JSON shape and nothing more. Plain vectors replace the color
+vocabulary, range checks move out to the tools, and the format gains a home
+for non-color data.
 
 ## The decision
 
-**The file stores one form of every value.**
+**The file stores one form of every value, and a kind is only a shape.**
 
 Today the format has three kinds that all hold the same opaque red:
 
@@ -27,8 +27,8 @@ The change: the file stores one form, and the boundaries convert. The form
 kept is linear light. Every glTF material factor is linear, so the glTF
 export boundary needs no conversion.
 
-Once the spelling and the transfer are gone, a color is a bounded array of
-numbers. That is what glTF's own schema calls it:
+Once the spelling and the transfer are gone, a color is an array of numbers.
+That is all glTF's own schema has to say about it:
 
 ```jsonc
 // glTF's schema for baseColorFactor
@@ -40,31 +40,34 @@ numbers. That is what glTF's own schema calls it:
 }
 ```
 
-glTF has no color type. Neither does voxj.
+glTF has no color type. Neither does voxj. The shape becomes the kind, and
+the range stays with the property (see
+[where ranges live](#where-ranges-live)).
 
 ## The vocabulary
 
 Every color in voxj is linear light with sRGB primaries and the D65 white
 point. The format states that once. No kind repeats it.
 
-| Kind          | JSON                     | Record       |
-| ------------- | ------------------------ | ------------ |
-| `json`        | any JSON, including null | -            |
-| `string`      | string                   | -            |
-| `bool`        | boolean                  | -            |
-| `int`         | number                   | `min`, `max` |
-| `float`       | number                   | `min`, `max` |
-| `vec-2-int`   | number[2]                | `min`, `max` |
-| `vec-3-int`   | number[3]                | `min`, `max` |
-| `vec-4-int`   | number[4]                | `min`, `max` |
-| `vec-2-float` | number[2]                | `min`, `max` |
-| `vec-3-float` | number[3]                | `min`, `max` |
-| `vec-4-float` | number[4]                | `min`, `max` |
+| Kind          | JSON                     | Rust        |
+| ------------- | ------------------------ | ----------- |
+| `json`        | any JSON, including null | `VoxjValue` |
+| `string`      | string                   | `String`    |
+| `bool`        | boolean                  | `bool`      |
+| `int`         | number                   | `i64`       |
+| `float`       | number                   | `f64`       |
+| `vec-2-int`   | number[2]                | `[i64; 2]`  |
+| `vec-3-int`   | number[3]                | `[i64; 3]`  |
+| `vec-4-int`   | number[4]                | `[i64; 4]`  |
+| `vec-2-float` | number[2]                | `[f64; 2]`  |
+| `vec-3-float` | number[3]                | `[f64; 3]`  |
+| `vec-4-float` | number[4]                | `[f64; 4]`  |
 
-Every kind is one JSON shape with a declared range, and `min`/`max` is the
-only record vocabulary. The six color kinds are gone. `srgb-hex` and
-`srgba-hex` lose their spelling, `srgb-float` and `srgba-float` lose their
-transfer, and all four land on `vec-3-float` / `vec-4-float` alongside
+Every kind is one JSON shape, and a value pool is its `kind` and its
+`values`. Nothing else rides it. The Rust column is one value; the kind's
+variant holds a `Vec` of it (see [the Rust shape](#the-rust-shape)). The six color kinds are gone: `srgb-hex`
+and `srgba-hex` lose their spelling, `srgb-float` and `srgba-float` lose
+their transfer, and all four land on `vec-3-float` / `vec-4-float` alongside
 `linear-rgb-float` and `linear-rgba-float`.
 
 ```jsonc
@@ -73,56 +76,109 @@ transfer, and all four land on `vec-3-float` / `vec-4-float` alongside
 { "kind": "linear-rgb-float", "values": [[2, 0, 0]] }
 
 // after
-{ "kind": "vec-4-float", "min": 0, "max": 1, "values": [[1, 0, 0, 1]] }
-{ "kind": "vec-3-float", "min": 0, "max": "inf", "values": [[2, 0, 0]] }
+{ "kind": "vec-4-float", "values": [[1, 0, 0, 1]] }
+{ "kind": "vec-3-float", "values": [[2, 0, 0]] }
 ```
 
 The vector kinds also hold what no color kind could:
 
 ```jsonc
 // normals
-{ "kind": "vec-3-float", "min": -1, "max": 1,
-  "values": [[0, 0, 1], [1, 0, 0]] }
+{ "kind": "vec-3-float", "values": [[0, 0, 1], [1, 0, 0]] }
 
 // grid coordinates
-{ "kind": "vec-2-int", "min": 0, "max": 15, "values": [[3, 7]] }
+{ "kind": "vec-2-int", "values": [[3, 7]] }
 ```
 
 A scalar is not a one-element vector. `0.5` and `[0.5]` are different JSON,
 so `int` and `float` stay distinct from the vector kinds.
 
-## Bounds
+## Where ranges live
 
-`min` and `max` are required on every numeric kind and absent from `json`,
-`string`, and `bool`. On a vector kind they apply to each component. A
-per-component bound asserts nothing about magnitude: `-1..1` on a
-`vec-3-float` does not make it a unit vector.
+No kind carries `min`/`max`. The format checks every value's shape and never
+its range.
 
-A bound is a finite number, `"inf"`, or `"-inf"`. The string `"none"` is
-retired.
+The format already draws that line. Structure is a hard contract: kinds,
+encodings, indices, counts. Property meaning is convention: names are
+advisory, and a consumer ignores one it does not recognize. A range is
+property meaning. `0..1` is a fact about `metallicFactor`, not a fact about
+the value pool it binds.
+
+A `min`/`max` on the value pool cannot carry that fact, for three reasons:
+
+1. Nobody vouches for it. A bound restates the property's range per file,
+   and nothing checks the restatement, so the validator would enforce
+   values against a claim with no authority behind it.
+2. It answers to no one property. The format's own example binds one
+   `float` value pool to both `metallicFactor` and `roughnessFactor`.
+3. An interval is too weak. `KHR_materials_ior` permits `0` for "does not
+   refract" alongside `>= 1`, and no `min`/`max` spells
+   `{0} union [1, inf)`.
+
+So the ranges live in voxsmith, which already owns the glTF conventions,
+and they live once: one vocabulary check walks every bound property and
+errors on any value outside its factor's range. Code spells each range
+exactly, `ior`'s union included. Confirm the exact schema wording before
+writing it. Every boundary calls that one function instead of growing its
+own:
+
+1. The glTF export runs it before writing, so nothing out of range reaches
+   a `.glb`.
+2. The glTF import can run it on what it read, so a bad source file errors
+   at entry instead of at the next export.
+3. An 8-bit palette import never trips it: a component cannot decode
+   outside `[0, 1]`.
+4. `palette show` needs classification, not ranges: it keys on the property
+   name, with `--type` to assert what a name alone cannot (see
+   [palette show](#palette-show)).
+
+Loading a voxj file calls none of this. A load checks shape and structure,
+so an out-of-range value loads without complaint and fails at the first
+boundary that reads it:
 
 ```jsonc
-{ "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] }
-{ "kind": "float", "min": 0, "max": "inf", "values": [1.5, "inf"] }
-{ "kind": "vec-2-int", "min": "-inf", "max": "inf", "values": [[-40, 3]] }
+// loads: the shape is right, and shape is all a load checks
+{ "kind": "float", "values": [7] }
+
+// fails in the glTF export, where a palette binds it to metallicFactor:
+// 7 is outside [0, 1]
 ```
 
-The sentinel spelling matters because JSON has no infinity literal.
-serde_json writes `f64::INFINITY` as `null`, so without the sentinel an
-infinite value silently becomes null on write.
+A custom property has no checkable range at all: the format does not
+understand its meaning, and only its producer knows the intended domain.
+That check belongs in the producer's tooling, next to whatever writes the
+value.
 
-1. A `float` or `vec-*-float` value may be `"inf"` or `"-inf"`, since the float
-   domain holds them. This is what makes glTF's `attenuationDistance` writable.
-   Its default is `+Infinity`.
-2. An `int` or `vec-*-int` value is finite, even when its bounds are infinite.
-   An unbounded integer range is meaningful. An infinite integer is not.
-3. An `int` value or bound is a JSON integer literal. An integer has one
-   spelling, so `3.0` and `3e0` reject.
-4. `NaN` rejects everywhere. It has no ordering, so it cannot be
-   bounds-checked.
-5. `int` values and integer bounds lie in `[-(2^53 - 1), 2^53 - 1]` and
-   reject beyond, so a JS consumer cannot silently lose one. The Hilbert
-   encoding already caps itself at `2^53` for the same reason.
+The late failure is the trade, and it is a scope statement, not a hole:
+shape is the format's contract, and ranges ride the property vocabulary. If
+it ever hurts, the cure is one more call site for the same vocabulary
+check, a lint command, not bounds in the format.
+
+## The value domains
+
+Dropping bounds does not loosen the domains. Every numeric kind keeps its
+values exact:
+
+1. A `float` or `vec-*-float` value is a finite number, `"inf"`, or
+   `"-inf"`. JSON has no infinity literal and serde_json writes
+   `f64::INFINITY` as `null`, so without the sentinels an infinite value
+   silently becomes null on write. They are what make glTF's
+   `attenuationDistance`, default `+Infinity`, writable.
+2. An `int` or `vec-*-int` value is finite. An infinite integer means
+   nothing, so `"inf"` and `"-inf"` reject as int values.
+3. An `int` value is a JSON integer literal. An integer has one spelling, so
+   `3.0` and `3e0` reject.
+4. `NaN` rejects everywhere. JSON cannot spell it, and the write side errors
+   instead of inventing a spelling.
+5. `int` values lie in `[-(2^53 - 1), 2^53 - 1]` and reject beyond, so a JS
+   consumer cannot silently lose one. The Hilbert encoding already caps
+   itself at `2^53` for the same reason.
+
+```jsonc
+{ "kind": "float", "values": [0, 0.5, "inf"] } // fine
+{ "kind": "int", "values": [3.0] }             // rejects: 3.0 is not 3
+{ "kind": "int", "values": ["inf"] }           // rejects: no infinite int
+```
 
 ## What still reads a color
 
@@ -176,97 +232,67 @@ extensions: `emissive_strength`, `ior`, `specular`, `transmission`,
 `alphaMode` needs no enum kind, because a `string` value pool's values
 already are its closed set.
 
-Two gaps remain, both narrow:
+`KHR_materials_ior` is the one factor whose range is not an interval. The
+split never touches the file; the vocabulary check spells it exactly (see
+[where ranges live](#where-ranges-live)).
 
-1. `KHR_materials_ior` permits `0` as a special "does not refract" value
-   alongside `>= 1`, and a single `min`/`max` interval cannot express
-   `{0} union [1, inf)`. Write `min: 0, max: "inf"` and accept that `(0, 1)`
-   validates when glTF would reject it. Confirm the exact schema wording
-   before writing the rule.
-2. No texture bindings. Any `*Texture` property is a reference into the glTF
-   texture array, and voxj has no texture concept because the palette is the
-   texture. A glTF material carrying a `baseColorTexture` bakes on the way
-   in. Worth stating in the format doc as a scope boundary.
+One gap remains, and it is narrow: no texture bindings. Any `*Texture`
+property is a reference into the glTF texture array, and voxj has no
+texture concept because the palette is the texture. A glTF material
+carrying a `baseColorTexture` bakes on the way in. Worth stating in the
+format doc as a scope boundary.
 
 ## The Rust shape
 
-A bound lives in its kind's value domain, extended with infinities. `VoxjBound`
-is deleted. Its reason to exist was `"none"`, a value no domain can spell. With
-`"none"` retired, each domain extends in its own way.
-
-Float kinds extend natively, since `f64` already holds every finite number and
-both infinities: `min` and `max` are plain `f64`, with `f64::INFINITY` and
-`f64::NEG_INFINITY` for the sentinels. Bounds checks are bare IEEE comparisons.
-No value is below `-inf` and none is above `+inf`, so the infinite cases need no
-arms of their own:
+`VoxjValuePool` is an enum on `Vec`: one variant per kind, the `Vec` as its
+whole payload. No variant carries a `values` field. The adjacently tagged
+derive spells that key once for all of them, and `deny_unknown_fields`
+keeps the wire closed:
 
 ```rust
-// before: every check unwraps the enum
-let below = matches!(min, VoxjBound::Number(low) if value < low);
-
-// after: IEEE comparison already knows what an infinite bound means
-let below = value < min;
-```
-
-The sentinel encoding is one serde module over `f64`, shared by `min`, `max`,
-and the float values. It reads a number, `"inf"`, or `"-inf"`. It writes the
-sentinel strings for infinities, errors on NaN, and writes an integral number as
-a JSON integer so `1` does not round-trip as `1.0`. Bounds and float values
-follow the same rules, so one module serves both. `values` stays `Vec<f64>` and
-`Vec<[f64; N]>`.
-
-Int kinds have no native infinity, so their extension is an enum:
-
-```rust
-/// A bound on an int kind: an integer or an infinity. Variant order gives the
-/// derived ordering: NegInf < Finite(n) < Inf.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum VoxjIntBound {
-    NegInf,
-    Finite(i64),
-    Inf,
-}
-```
-
-The bounds check is `min <= Finite(value) && Finite(value) <= max`, exact in
-`i64` with no cast through `f64`. The type also absorbs rules the validator used
-to carry. A `3.5` bound rejects at parse, because the visitor demands an
-integer, so the integer-valued bound check in `check_value_pools` is deleted. An
-int value cannot be infinite by construction, since `i64` has no infinity to
-hold: the wire strings `"inf"` and `"-inf"` reject as int values while staying
-legal as int bounds.
-
-The wire enum stays a plain `#[serde(tag = "kind")]` derive, one variant per
-kind with typed value shapes:
-
-```rust
+#[serde(tag = "kind", content = "values", deny_unknown_fields)]
 pub enum VoxjValuePool {
     // json, string, and bool keep their shapes
-    Float { min: f64, max: f64, values: Vec<f64> },
-    Int { min: VoxjIntBound, max: VoxjIntBound, values: Vec<i64> },
-    Vec3Float { min: f64, max: f64, values: Vec<[f64; 3]> },
-    Vec3Int { min: VoxjIntBound, max: VoxjIntBound, values: Vec<[i64; 3]> },
+    Int(Vec<i64>),
+    Float(Vec<f64>),
+    Vec3Int(Vec<[i64; 3]>),
+    Vec3Float(Vec<[f64; 3]>),
     // vec-2 and vec-4 follow their vec-3 sibling
 }
 ```
 
-A malformed value, a missing bound, and a stray bound on `json` all still reject
-at parse. NaN cannot arrive by parse either: JSON has no NaN literal, and the
-serde module admits only the two sentinel strings.
+`VoxjBound` is deleted, and no bound type replaces it. There is nothing
+left to spell.
 
-voxcore's `VoxValuePoolKind`, `VoxValuePool`, and `VoxValuePoolValueRef` take
-the same treatment. `VoxBound` is deleted the same way, and `VoxIntBound` is
-added beside it.
+The float variants are not serde-bare. One serde module over `f64` serves
+every float payload, with array forms for the `[f64; N]` shapes. It
+reads a number, `"inf"`, or `"-inf"`; it writes the sentinel strings for
+infinities, errors on NaN, and writes an integral number as a JSON integer
+so `1` does not round-trip as `1.0`.
+
+The int visitor says what `i64` alone cannot: a value outside
+`[-(2^53 - 1), 2^53 - 1]` rejects, and so does a fractional or exponent
+spelling, so `3.0` fails in the parse rather than in a validation rule.
+`values` non-empty stays a validation rule, since a `Vec` cannot say it.
+
+A stray `min` on any kind rejects in the parse itself, because the derive
+denies unknown keys, so validation keeps no bounds arm at all. NaN cannot
+arrive by parse either: JSON has no NaN literal, and the serde module
+admits only the two sentinel strings.
+
+voxcore's `VoxValuePoolKind`, `VoxValuePool`, and `VoxValuePoolValueRef`
+take the same treatment, and `VoxBound` is deleted the same way.
 
 ## Compatibility
 
 Breaking, and safely so: every crossing fails loudly in both directions.
 
 1. Old file, new reader: the six color kinds are unrecognized and reject. A
-   surviving `float` or `int` value pool rejects too, because `"none"` is no
-   longer a legal bound.
+   surviving `float` or `int` value pool rejects too, because its `min` and
+   `max` are unknown keys.
 2. New file, old reader: `vec-3-float` is an unrecognized kind and rejects,
-   and `"inf"` is not a legal bound value.
+   and a `float` or `int` value pool arrives without the `min`/`max` an old
+   reader requires.
 
 There is no silent misread in either direction, so `version` stays `1`. The
 repo has no external consumers, and the voxj redesign already renamed the
@@ -275,9 +301,9 @@ hard break with no aliases, regenerating the fixtures.
 
 ## palette show
 
-`palette show` is the one display surface that infers color from the format, so
-the change lands hardest here. Today its `classify` switches on the value pool's
-kind, and the color kinds are gone:
+`palette show` is the one display surface that infers color from the format,
+so the change lands hardest here. Today its `classify` switches on the value
+pool's kind, and the color kinds are gone:
 
 ```rust
 // before: the value pool's kind says color
@@ -289,10 +315,10 @@ fn classify(property_name: &str, value_pool: &VoxValuePool) -> Kind
 
 The requirement: every idiomatic factor renders exactly as it does today.
 `baseColorFactor` and `emissiveFactor` draw color swatches, with hex text and
-per-channel reads intact, and the swatch encodes linear to sRGB at display. The
-numeric factors keep their grayscale swatches through the untouched `float`
-kind. A custom key defaults to plain numbers, since a `vec-3-float` is a color
-or a normal and the value pool no longer says which. `--type` already exists to
+per-channel reads intact, and the swatch encodes linear to sRGB at display.
+The numeric factors keep their grayscale swatches through the `float` kind. A
+custom key defaults to plain numbers, since a `vec-3-float` is a color or a
+normal and the value pool no longer says which. `--type` already exists to
 assert color for it.
 
 ## Blast radius
@@ -302,31 +328,37 @@ been confirmed so far. Expect the implementation to surface more.
 
 1. `projects/voxel-codecs/voxj/docs/voxel-json-file-format.md`: the kind
    table, the notes, validation rules 9 and 10, the TypeScript schema, the
-   examples, the format-wide sentence fixing the color space, and the
-   texture scope boundary.
+   examples, the format-wide sentence fixing the color space, the sentence
+   scoping ranges to the property vocabulary, and the texture scope
+   boundary.
 2. `projects/voxel-codecs/voxj/src/`: `voxj_value_pool.rs` carries the six
-   color variants to delete and the six vector variants to add. Two files
-   arrive, the sentinel serde module and `voxj_int_bound.rs`, and
-   `voxj_bound.rs` is deleted. `voxj_file.rs` uses color kinds in its examples.
+   color variants to delete, the six vector variants to add, and the
+   `min`/`max` fields to drop. One file arrives, the sentinel serde module,
+   and `voxj_bound.rs` is deleted. `voxj_file.rs` uses color kinds in its
+   examples.
 3. `projects/voxel-codecs/voxj-codec/src/`: `validate_voxj_file.rs`,
    `check_voxj_file.rs`, and `internal/voxj_validation/check_value_pools.rs`
-   hold the per-kind value checks, the bound rules, and the `2^53` cap. The
-   integer-valued bound check moves from validation into the parse.
+   hold the per-kind value checks and the bound rules. The bound rules
+   delete, the per-kind checks shrink to shape checks, and the int rules,
+   one spelling and the `2^53` cap, move from validation into the parse.
 4. `projects/utilities/voxcore/src/`: `vox_value_pool_kind.rs`,
    `vox_value_pool.rs`, `vox_value_pool_value_ref.rs`,
-   `vox_value_pool_flaw.rs`, `vox_main.rs`. `vox_bound.rs` is deleted and
-   `vox_int_bound.rs` is added.
+   `vox_value_pool_flaw.rs`, `vox_main.rs`. `vox_bound.rs` is deleted.
 5. `projects/utilities/voxsmith/src/`: `internal/value_pool_color.rs` (see
    [what still reads a color](#what-still-reads-a-color)),
    `internal/voxj/vox_value_pool_from_voxj_value_pool.rs`,
    `internal/voxj/voxj_value_pool_from_vox_value_pool.rs`,
    `convert/voxj/from_voxj_file.rs`, `convert/gltf/from_gltf_bytes.rs`, the
    atlas bake's color reads, and the palette reduction's.
-   `convert/voxj/color_format.rs` is deleted.
+   `convert/voxj/color_format.rs` is deleted. One file also arrives: the
+   vocabulary check from [where ranges live](#where-ranges-live), the
+   single function the boundaries call; its exact home is not confirmed
+   yet.
 6. `projects/utilities/vxl/src/`: `utilities/voxj_color_format.rs` deleted
    along with its `--color-format` flag, and `implementation/mesh_object.rs`
-   (its channel-kind classification). `implementation/palette_show.rs` reworks
-   `classify` to key on the property name, per [palette show](#palette-show).
+   (its channel-kind classification). `implementation/palette_show.rs`
+   reworks `classify` to key on the property name, per
+   [palette show](#palette-show).
 7. `projects/voxel-codecs/voxj/Cargo.toml` and `voxj-codec/Cargo.toml`: add
    `float_roundtrip` to `serde_json`. It is on in `vmax-codec` and off in
    both of these. An 8-bit color component decodes to a linear value that
