@@ -7,7 +7,7 @@ pub enum PaletteShowLabel {
     #[value(name = "none")]
     None,
 
-    /// Full dot-joined paths, like `0."baseColorFactor".a`.
+    /// Full dot-joined paths, like `0."baseColor".a`.
     #[value(name = "concat")]
     Concat,
 

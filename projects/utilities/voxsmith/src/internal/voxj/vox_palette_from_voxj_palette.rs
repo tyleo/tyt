@@ -66,18 +66,15 @@ mod tests {
     #[test]
     fn maps_material_rows_one_to_one() {
         let palette = VoxjPalette {
-            properties: vec![
-                property("baseColorFactor", 0),
-                property("metallicFactor", 1),
-            ],
+            properties: vec![property("baseColor", 0), property("metallic", 1)],
             materials: vec![vec![0, 2], vec![1, 0], vec![2, 1]],
         };
         let out = vox_palette_from_voxj_palette(&palette).unwrap();
         assert_eq!(out.property_count(), 2);
         assert_eq!(out.material_count(), 3);
 
-        let base_property_id = out.property_id_by_name("baseColorFactor").unwrap();
-        let metallic_property_id = out.property_id_by_name("metallicFactor").unwrap();
+        let base_property_id = out.property_id_by_name("baseColor").unwrap();
+        let metallic_property_id = out.property_id_by_name("metallic").unwrap();
         let material_2_id = out.iter_materials().nth(2).unwrap();
         // Material 2 reads value id 2 for base color and 1 for metallic.
         assert_eq!(

@@ -316,14 +316,14 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                "baseColorFactor".to_owned(),
+                "baseColor".to_owned(),
                 color_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
             .add_property(
-                "metallicFactor".to_owned(),
+                "metallic".to_owned(),
                 metallic_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -629,7 +629,7 @@ mod tests {
             .into()
     }
 
-    /// Adds a folded palette binding `baseColorFactor` to a value pool of the
+    /// Adds a folded palette binding `baseColor` to a value pool of the
     /// given colors, with one material per color so a material's index is its
     /// color index, and returns the palette id.
     fn add_rgba_palette(state: &mut VoxMain, hexes: &[&str]) -> U32Id<BVoxPalette> {
@@ -638,11 +638,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
-                "baseColorFactor".to_owned(),
-                value_pool_id,
-                U32Id::from_u32(0),
-            )
+            .add_property("baseColor".to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         for index in 0..hexes.len() {
             palette
@@ -1263,13 +1259,13 @@ mod tests {
             let shadows = state.add_value_pool(VoxValuePool::boolean(vec![true]).unwrap());
             let mut palette = VoxPalette::default();
             palette
-                .add_property("baseColorFactor".to_owned(), color, U32Id::from_u32(0))
+                .add_property("baseColor".to_owned(), color, U32Id::from_u32(0))
                 .unwrap();
             palette
-                .add_property("metallicFactor".to_owned(), metallic, U32Id::from_u32(0))
+                .add_property("metallic".to_owned(), metallic, U32Id::from_u32(0))
                 .unwrap();
             palette
-                .add_property("roughnessFactor".to_owned(), roughness, U32Id::from_u32(0))
+                .add_property("roughness".to_owned(), roughness, U32Id::from_u32(0))
                 .unwrap();
             palette
                 .add_property("emissiveStrength".to_owned(), emissive, U32Id::from_u32(0))
@@ -1306,7 +1302,7 @@ mod tests {
             let reloaded = from_vmax_file(&file).unwrap();
             let (palette_id, material_palette) = reloaded
                 .iter_palettes()
-                .find(|(_, palette)| palette.property_id_by_name("metallicFactor").is_some())
+                .find(|(_, palette)| palette.property_id_by_name("metallic").is_some())
                 .expect("a material palette survives");
             let material_id = material_palette
                 .iter_materials()
@@ -1336,8 +1332,8 @@ mod tests {
             // coefficient range, so they return within f64 rounding of the
             // linear map rather than bit-exact. Emissive stays a raw scalar.
             let close = |a: f64, b: f64| (a - b).abs() < 1e-6;
-            assert!(close(scalar("metallicFactor"), 0.5));
-            assert!(close(scalar("roughnessFactor"), 0.25));
+            assert!(close(scalar("metallic"), 0.5));
+            assert!(close(scalar("roughness"), 0.25));
             assert_eq!(scalar("emissiveStrength"), 2.0);
             assert!(flag("shadows"));
         }
@@ -1359,11 +1355,11 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), color, U32Id::from_u32(0))
+            .add_property("baseColor".to_owned(), color, U32Id::from_u32(0))
             .unwrap();
         palette
             .add_property(
-                "emissiveFactor".to_owned(),
+                "emissiveColor".to_owned(),
                 emissive_color,
                 U32Id::from_u32(0),
             )

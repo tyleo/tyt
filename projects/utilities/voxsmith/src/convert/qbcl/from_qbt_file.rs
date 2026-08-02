@@ -1,6 +1,5 @@
 use crate::{
-    BASE_COLOR_FACTOR, Error, QubicleQbtExt, QubicleQbtExtWrapper, QubicleQbtNode, Result,
-    to_vox_value,
+    BASE_COLOR, Error, QubicleQbtExt, QubicleQbtExtWrapper, QubicleQbtNode, Result, to_vox_value,
 };
 use branded_id::U32Id;
 use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
@@ -13,7 +12,7 @@ use voxcore::{
 
 /// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a [`VoxMain`].
 ///
-/// Matrix and compound grids become objects sharing one `baseColorFactor`
+/// Matrix and compound grids become objects sharing one `baseColor`
 /// palette, and the scene tree becomes the hierarchy nodes. The state with no
 /// native voxcore home, such as the per-voxel visibility masks, matrix names,
 /// placements, scales, and pivots, the color map, the global scale, the
@@ -150,7 +149,7 @@ fn build_node(
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
 /// color across every matrix and compound voxel in the tree, bound to
-/// `baseColorFactor`, with one material per color and a map from a color to its
+/// `baseColor`, with one material per color and a map from a color to its
 /// material. The value pool is added to `state`. A tree with no solid voxels
 /// gets a single placeholder color so objects have a default material to
 /// sample.
@@ -175,11 +174,7 @@ fn build_palette(
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(
-            BASE_COLOR_FACTOR.to_owned(),
-            value_pool_id,
-            U32Id::from_u32(0),
-        )
+        .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
         .expect("the property names are distinct");
     let mut material_ids = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {

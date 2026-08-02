@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR_FACTOR, Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelExtWrapper,
-    MagicaVoxelFrame, MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
+    BASE_COLOR, Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
+    MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
     MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, to_vox_value,
 };
 use branded_id::U32Id;
@@ -72,7 +72,7 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
 }
 
 /// Builds the shared palette: one material per color index `0..=255`, so a
-/// material's index is its color index. `baseColorFactor` binds a color
+/// material's index is its color index. `baseColor` binds a color
 /// value pool; with materials, `type` and the six scalar fields bind their own
 /// value pools. An absent or non-finite field takes a default, since a
 /// value pool holds no null and a float value pool rejects a non-finite value;
@@ -115,7 +115,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     );
     palette
         .add_property(
-            BASE_COLOR_FACTOR.to_owned(),
+            BASE_COLOR.to_owned(),
             color_value_pool_id,
             U32Id::from_u32(0),
         )
@@ -517,7 +517,7 @@ fn invalid(message: String) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR_FACTOR, from_mvox_bytes, from_mvox_file, to_mvox_bytes, to_mvox_file};
+    use crate::{BASE_COLOR, from_mvox_bytes, from_mvox_file, to_mvox_bytes, to_mvox_file};
     use branded_id::U32Id;
     use mvox::{
         MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer,
@@ -707,7 +707,7 @@ mod tests {
     fn source_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        // One baseColorFactor palette: a transparent placeholder, then red,
+        // One baseColor palette: a transparent placeholder, then red,
         // green, blue.
         let value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(
@@ -720,11 +720,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
-                value_pool_id,
-                U32Id::from_u32(0),
-            )
+            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         for index in 0..4 {
             palette

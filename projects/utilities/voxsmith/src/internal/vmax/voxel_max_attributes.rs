@@ -1,7 +1,7 @@
 //! Voxel Max's custom palette-attribute names. The rest of a Voxel Max
-//! material maps onto the shared glTF vocabulary (`baseColorFactor`,
-//! `metallicFactor`, `roughnessFactor`, `emissiveStrength`, `ior`,
-//! `transmissionFactor`); these two have no glTF counterpart and stay custom, so
+//! material maps onto the shared glTF vocabulary (`baseColor`,
+//! `metallic`, `roughness`, `emissiveStrength`, `ior`,
+//! `transmission`); these two have no glTF counterpart and stay custom, so
 //! the reader and writer share one spelling.
 
 /// Whether a material casts shadows, a custom bool attribute (Voxel Max `sh`).

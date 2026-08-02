@@ -1,5 +1,5 @@
 use crate::{
-    BASE_COLOR_FACTOR, Error, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
+    BASE_COLOR, Error, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
     MagicaVoxelNodeBody, Result, ext_for, from_vox_value, resolve_cell_color,
     resolve_cell_color_or_transparent, value_pool_color,
 };
@@ -111,7 +111,7 @@ pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
     })
 }
 
-/// The 256 palette colors read back through `baseColorFactor`: material `index`
+/// The 256 palette colors read back through `baseColor`: material `index`
 /// gives color index `index`. Transparent where the palette or its color
 /// property is absent.
 fn colors_from_palette(
@@ -124,7 +124,7 @@ fn colors_from_palette(
     };
     let Some(property_id) = state
         .palette(palette_id)
-        .and_then(|palette| palette.property_id_by_name(BASE_COLOR_FACTOR))
+        .and_then(|palette| palette.property_id_by_name(BASE_COLOR))
     else {
         return colors;
     };

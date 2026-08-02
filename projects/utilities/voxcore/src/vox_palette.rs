@@ -467,7 +467,7 @@ mod tests {
     fn add_material_rejects_wrong_arity_without_changing_state() {
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColorFactor".to_owned(), value_pool_id(0), value_id(0))
+            .add_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
         // One property, but two value ids supplied.
         assert_eq!(
@@ -484,55 +484,43 @@ mod tests {
     fn property_id_by_name_indexes_and_survives_gc() {
         let mut palette = VoxPalette::default();
         let color_id = palette
-            .add_property("baseColorFactor".to_owned(), value_pool_id(0), value_id(0))
+            .add_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
         let metal_id = palette
-            .add_property("metallicFactor".to_owned(), value_pool_id(1), value_id(0))
+            .add_property("metallic".to_owned(), value_pool_id(1), value_id(0))
             .unwrap();
 
-        assert_eq!(
-            palette.property_id_by_name("baseColorFactor"),
-            Some(color_id)
-        );
-        assert_eq!(
-            palette.property_id_by_name("metallicFactor"),
-            Some(metal_id)
-        );
+        assert_eq!(palette.property_id_by_name("baseColor"), Some(color_id));
+        assert_eq!(palette.property_id_by_name("metallic"), Some(metal_id));
         assert_eq!(palette.property_id_by_name("missing"), None);
 
         // Removing a property drops it from the index; gc renumbers the rest
         // and the index follows.
         palette.remove_property(color_id).unwrap();
-        assert_eq!(palette.property_id_by_name("baseColorFactor"), None);
+        assert_eq!(palette.property_id_by_name("baseColor"), None);
         palette.gc();
         let metal_id = U32Id::<BVoxProperty>::from_u32(0);
-        assert_eq!(
-            palette.property_id_by_name("metallicFactor"),
-            Some(metal_id)
-        );
-        assert_eq!(palette.property_id_by_name("baseColorFactor"), None);
+        assert_eq!(palette.property_id_by_name("metallic"), Some(metal_id));
+        assert_eq!(palette.property_id_by_name("baseColor"), None);
     }
 
     #[test]
     fn add_property_rejects_a_name_already_in_use() {
         let mut palette = VoxPalette::default();
         let first_id = palette
-            .add_property("baseColorFactor".to_owned(), value_pool_id(0), value_id(0))
+            .add_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
 
         // A second property under the same name, even on a different
         // value pool.
         assert_eq!(
-            palette.add_property("baseColorFactor".to_owned(), value_pool_id(1), value_id(0)),
+            palette.add_property("baseColor".to_owned(), value_pool_id(1), value_id(0)),
             Err(Error::DuplicatePropertyName {
-                name: "baseColorFactor".to_owned()
+                name: "baseColor".to_owned()
             })
         );
         assert_eq!(palette.property_count(), 1);
-        assert_eq!(
-            palette.property_id_by_name("baseColorFactor"),
-            Some(first_id)
-        );
+        assert_eq!(palette.property_id_by_name("baseColor"), Some(first_id));
         assert_eq!(
             palette.property(first_id).unwrap().value_pool_id,
             value_pool_id(0)
@@ -543,12 +531,12 @@ mod tests {
     fn add_property_back_fills_existing_materials_with_the_default() {
         let mut palette = VoxPalette::default();
         let color_id = palette
-            .add_property("baseColorFactor".to_owned(), value_pool_id(0), value_id(0))
+            .add_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
         let material_id = palette.add_material(vec![value_id(7)]).unwrap();
 
         let added_id = palette
-            .add_property("metallicFactor".to_owned(), value_pool_id(1), value_id(3))
+            .add_property("metallic".to_owned(), value_pool_id(1), value_id(3))
             .unwrap();
         assert_eq!(palette.value_id(material_id, color_id), Some(value_id(7)));
         assert_eq!(palette.value_id(material_id, added_id), Some(value_id(3)));
@@ -558,13 +546,13 @@ mod tests {
     fn clone_palette_is_an_independent_deep_copy() {
         let mut palette = VoxPalette::default();
         let property_id = palette
-            .add_property("baseColorFactor".to_owned(), value_pool_id(0), value_id(0))
+            .add_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
         let material_id = palette.add_material(vec![value_id(2)]).unwrap();
 
         let copy = palette.clone_palette();
         assert_eq!(copy.value_id(material_id, property_id), Some(value_id(2)));
-        assert_eq!(copy.property(property_id).unwrap().name, "baseColorFactor");
+        assert_eq!(copy.property(property_id).unwrap().name, "baseColor");
 
         // Mutating the original must not touch the copy.
         palette.add_material(vec![value_id(5)]).unwrap();

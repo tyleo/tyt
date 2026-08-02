@@ -1,19 +1,19 @@
-use crate::{BASE_COLOR_FACTOR, CellColor, Error, Result, value_pool_color};
+use crate::{BASE_COLOR, CellColor, Error, Result, value_pool_color};
 use branded_id::IdVec;
 use voxcore::{VoxMain, VoxObject};
 
 /// The [`CellColor`] read for `object`, picked from its winning
-/// `baseColorFactor` supplier in the effective palette: a table of per-material
+/// `baseColor` supplier in the effective palette: a table of per-material
 /// colors, read through the material each voxel samples in the winning layer.
 /// All decoding happens here. A supplier drawing from a non-color value pool
 /// errors, as does a layer referencing a palette the state does not hold.
-/// `Ok(None)` when no layer supplies `baseColorFactor`.
+/// `Ok(None)` when no layer supplies `baseColor`.
 pub fn resolve_cell_color<'a>(
     state: &VoxMain,
     object: &'a VoxObject,
 ) -> Result<Option<CellColor<'a>>> {
     let effective = state.effective_palette(object)?;
-    let Some(property_id) = effective.property_id_by_name(BASE_COLOR_FACTOR) else {
+    let Some(property_id) = effective.property_id_by_name(BASE_COLOR) else {
         return Ok(None);
     };
     let property = effective
@@ -36,17 +36,17 @@ pub fn resolve_cell_color<'a>(
     Ok(Some(CellColor::new(object, property.layer_id(), colors)))
 }
 
-/// The error for a `baseColorFactor` drawing from a non-color value pool.
+/// The error for a `baseColor` drawing from a non-color value pool.
 fn non_color_value_pool(object: &VoxObject) -> Error {
     Error::invalid(format!(
-        "object {:?}: baseColorFactor draws from a non-color value pool",
+        "object {:?}: baseColor draws from a non-color value pool",
         object.name()
     ))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR_FACTOR, resolve_cell_color};
+    use crate::{BASE_COLOR, resolve_cell_color};
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
@@ -60,11 +60,7 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
-                value_pool_id,
-                U32Id::from_u32(0),
-            )
+            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         let red_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let blue_id = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
@@ -108,11 +104,7 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
-                value_pool_id,
-                U32Id::from_u32(0),
-            )
+            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
         let palette_id = state.add_palette(palette).unwrap();

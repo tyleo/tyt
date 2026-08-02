@@ -119,7 +119,7 @@ mod tests {
         ColorComponent,
         commands::{ChannelSource, PropertyBinding},
     };
-    use voxsmith::{BASE_COLOR_FACTOR, METALLIC_FACTOR, ROUGHNESS_FACTOR};
+    use voxsmith::{BASE_COLOR, METALLIC, ROUGHNESS};
 
     fn property(key: &str, invert: bool) -> ChannelSource {
         ChannelSource::Property {
@@ -148,7 +148,7 @@ mod tests {
     /// Two aliases, `gloss` and `tint`, so resolution has a rename to apply.
     fn bindings() -> Vec<PropertyBinding> {
         vec![
-            PropertyBinding::new("gloss", ROUGHNESS_FACTOR).unwrap(),
+            PropertyBinding::new("gloss", ROUGHNESS).unwrap(),
             PropertyBinding::new("tint", "tint").unwrap(),
         ]
     }
@@ -166,36 +166,36 @@ mod tests {
     #[test]
     fn parses_property_and_inverse() {
         assert_eq!(
-            "metallicFactor".parse::<ChannelSource>().unwrap(),
-            property(METALLIC_FACTOR, false)
+            "metallic".parse::<ChannelSource>().unwrap(),
+            property(METALLIC, false)
         );
         assert_eq!(
-            "1-metallicFactor".parse::<ChannelSource>().unwrap(),
-            property(METALLIC_FACTOR, true)
+            "1-metallic".parse::<ChannelSource>().unwrap(),
+            property(METALLIC, true)
         );
     }
 
     #[test]
     fn parses_inverted_roughness() {
         assert_eq!(
-            "roughnessFactor".parse::<ChannelSource>().unwrap(),
-            property(ROUGHNESS_FACTOR, false)
+            "roughness".parse::<ChannelSource>().unwrap(),
+            property(ROUGHNESS, false)
         );
         assert_eq!(
-            "1-roughnessFactor".parse::<ChannelSource>().unwrap(),
-            property(ROUGHNESS_FACTOR, true)
+            "1-roughness".parse::<ChannelSource>().unwrap(),
+            property(ROUGHNESS, true)
         );
     }
 
     #[test]
     fn parses_color_components() {
         assert_eq!(
-            "baseColorFactor.r".parse::<ChannelSource>().unwrap(),
-            component(BASE_COLOR_FACTOR, ColorComponent::R, false)
+            "baseColor.r".parse::<ChannelSource>().unwrap(),
+            component(BASE_COLOR, ColorComponent::R, false)
         );
         assert_eq!(
-            "1-baseColorFactor.a".parse::<ChannelSource>().unwrap(),
-            component(BASE_COLOR_FACTOR, ColorComponent::A, true)
+            "1-baseColor.a".parse::<ChannelSource>().unwrap(),
+            component(BASE_COLOR, ColorComponent::A, true)
         );
     }
 
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_color_component() {
-        assert!("baseColorFactor.z".parse::<ChannelSource>().is_err());
+        assert!("baseColor.z".parse::<ChannelSource>().is_err());
     }
 
     #[test]
@@ -228,9 +228,9 @@ mod tests {
 
     #[test]
     fn a_binding_resolves_to_its_concrete_key() {
-        // The alias `gloss` renames to the layer's `roughnessFactor`.
+        // The alias `gloss` renames to the layer's `roughness`.
         let resolved = property("gloss", true).resolve(&bindings()).unwrap();
-        assert_eq!(resolved, property(ROUGHNESS_FACTOR, true));
+        assert_eq!(resolved, property(ROUGHNESS, true));
 
         // A component rides through the rename unchanged; its validity against
         // the value pool kind is checked later, at the bake.
@@ -255,12 +255,12 @@ mod tests {
         // a scalar with a component and a color with none; the `mesh`
         // implementation validates each against its value pool kind.
         assert!(
-            component(METALLIC_FACTOR, ColorComponent::R, false)
+            component(METALLIC, ColorComponent::R, false)
                 .resolve(&bindings())
                 .is_ok()
         );
         assert!(
-            property_with(BASE_COLOR_FACTOR, None, false)
+            property_with(BASE_COLOR, None, false)
                 .resolve(&bindings())
                 .is_ok()
         );

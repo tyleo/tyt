@@ -5,27 +5,27 @@
 //! constants name only the recommended glTF-aligned set.
 
 /// The base color, a color attribute. glTF `baseColorFactor`.
-pub const BASE_COLOR_FACTOR: &str = "baseColorFactor";
+pub const BASE_COLOR: &str = "baseColor";
 
 /// Metalness, a `0..1` scalar. glTF `metallicFactor`.
-pub const METALLIC_FACTOR: &str = "metallicFactor";
+pub const METALLIC: &str = "metallic";
 
 /// Roughness, a `0..1` scalar. glTF `roughnessFactor`.
-pub const ROUGHNESS_FACTOR: &str = "roughnessFactor";
+pub const ROUGHNESS: &str = "roughness";
 
 /// Ambient-occlusion strength, a `0..1` scalar. glTF `occlusionStrength`.
 pub const OCCLUSION_STRENGTH: &str = "occlusionStrength";
 
 /// Transmission, a `0..1` scalar. glTF `transmissionFactor`.
-pub const TRANSMISSION_FACTOR: &str = "transmissionFactor";
+pub const TRANSMISSION: &str = "transmission";
 
 /// Index of refraction, a `1..` scalar. glTF `ior`.
 pub const IOR: &str = "ior";
 
 /// The emissive color, a color attribute with no alpha. glTF `emissiveFactor`.
-pub const EMISSIVE_FACTOR: &str = "emissiveFactor";
+pub const EMISSIVE_COLOR: &str = "emissiveColor";
 
-/// Emissive strength scaling [`EMISSIVE_FACTOR`], a `0..` scalar. glTF's
+/// Emissive strength scaling [`EMISSIVE_COLOR`], a `0..` scalar. glTF's
 /// `KHR_materials_emissive_strength` `emissiveStrength`.
 pub const EMISSIVE_STRENGTH: &str = "emissiveStrength";
 
@@ -33,12 +33,12 @@ pub const EMISSIVE_STRENGTH: &str = "emissiveStrength";
 /// with no standard default, such as a custom attribute.
 pub(crate) fn default_scalar(key: &str) -> Option<f64> {
     match key {
-        METALLIC_FACTOR => Some(1.0),
-        ROUGHNESS_FACTOR => Some(1.0),
+        METALLIC => Some(1.0),
+        ROUGHNESS => Some(1.0),
         OCCLUSION_STRENGTH => Some(1.0),
         EMISSIVE_STRENGTH => Some(1.0),
         IOR => Some(1.5),
-        TRANSMISSION_FACTOR => Some(0.0),
+        TRANSMISSION => Some(0.0),
         _ => None,
     }
 }
@@ -48,9 +48,7 @@ pub(crate) fn default_scalar(key: &str) -> Option<f64> {
 /// for a key outside the vocabulary.
 pub(crate) fn scalar_range(key: &str) -> Option<(f64, Option<f64>)> {
     match key {
-        METALLIC_FACTOR | ROUGHNESS_FACTOR | OCCLUSION_STRENGTH | TRANSMISSION_FACTOR => {
-            Some((0.0, Some(1.0)))
-        }
+        METALLIC | ROUGHNESS | OCCLUSION_STRENGTH | TRANSMISSION => Some((0.0, Some(1.0))),
         EMISSIVE_STRENGTH => Some((0.0, None)),
         IOR => Some((1.0, None)),
         _ => None,
@@ -63,8 +61,8 @@ pub(crate) fn scalar_range(key: &str) -> Option<(f64, Option<f64>)> {
 #[cfg(feature = "gltf")]
 pub(crate) fn default_color(key: &str) -> Option<[u8; 4]> {
     match key {
-        BASE_COLOR_FACTOR => Some([255, 255, 255, 255]),
-        EMISSIVE_FACTOR => Some([0, 0, 0, 255]),
+        BASE_COLOR => Some([255, 255, 255, 255]),
+        EMISSIVE_COLOR => Some([0, 0, 0, 255]),
         _ => None,
     }
 }

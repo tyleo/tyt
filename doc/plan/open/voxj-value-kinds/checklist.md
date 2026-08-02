@@ -137,22 +137,22 @@ The `Factor` suffix drops from the five voxj property names
 `occlusionStrength`, `emissiveStrength`, and `ior` stay). Workspace green
 throughout; one workspace-wide commit, split only if review needs it.
 
-- [ ] The vocabulary source: `voxsmith/src/gltf_attributes.rs` constant
+- [x] The vocabulary source: `voxsmith/src/gltf_attributes.rs` constant
       values and identifiers (`BASE_COLOR_FACTOR` becomes `BASE_COLOR`
       valued `"baseColor"`, and kin), `default_scalar`, `scalar_range`,
       and `default_color` in lockstep, and `gltf_attribute_kind.rs`. Doc
       comments keep their glTF field citations.
-- [ ] The constant users in voxsmith and vxl (the survey's per-file
+- [x] The constant users in voxsmith and vxl (the survey's per-file
       list: the converters, the atlas bake, the palette reduction, the
       vmax writer, the mesh commands), with the
       `material_document.rs` tuple that pairs the voxj constant with the
       wire literal `"transmissionFactor"` kept as two strings.
-- [ ] The bare literals in the crates below voxsmith: voxcore
+- [x] The bare literals in the crates below voxsmith: voxcore
       (`vox_palette.rs`, `vox_main.rs`, `vox_property.rs` doc examples),
       voxj-codec (`validate_voxj_file.rs`, `check_voxj_file.rs`,
       `voxj_palette_material_counts.rs`), and voxj (`voxj_file.rs` test
       fixture).
-- [ ] The bare literals in voxsmith's own test modules, which the
+- [x] The bare literals in voxsmith's own test modules, which the
       constants cannot reach: `convert/vmax/to_vmax_file.rs` (12),
       `convert/voxj/from_voxj_file.rs` (11),
       `internal/voxj/vox_palette_from_voxj_palette.rs` (4), and
@@ -164,15 +164,15 @@ throughout; one workspace-wide commit, split only if review needs it.
       `expect`, and the `scalar("metallicFactor")` and
       `scalar("roughnessFactor")` at L1339-1340 panic on the `unwrap`
       inside the closure at L1316.
-- [ ] The vxl test fixtures and expectations (`palette_show.rs`,
+- [x] The vxl test fixtures and expectations (`palette_show.rs`,
       `palette_list.rs`, `info.rs`, `hierarchy_show.rs`, the mesh command
       tests), re-baselining the `--width 30` expectation whose comment
       counts the `baseColorFactor` prefix width.
-- [ ] The prose carrying the vocabulary: the clap help text in the vxl
+- [x] The prose carrying the vocabulary: the clap help text in the vxl
       mesh, voxelize, and palette commands, the voxsmith
       `out_of_range_factor.rs` docs, the internal doc comments on the
       survey's list, and the `resolve_cell_color.rs` failure text.
-- [ ] Decide and log: whether `internal/mesh/mesh_material.rs`'s internal
+- [x] Decide and log: whether `internal/mesh/mesh_material.rs`'s internal
       `emissive_factor` field keeps its name (the mesh side genuinely
       samples factor times texture).
 

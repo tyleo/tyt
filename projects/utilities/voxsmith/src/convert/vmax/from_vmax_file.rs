@@ -1,8 +1,8 @@
 use crate::{
-    ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
-    ROUGHNESS_FACTOR, Result, SHADOWS, TRANSMISSION_FACTOR, VoxelMaxExt, VoxelMaxExtWrapper,
-    VoxelMaxMaterial, VoxelMaxMaterialDispersion, VoxelMaxNode, VoxelMaxObjectState,
-    VoxelMaxPalette, default_scalar, to_vox_value, vm_coefficient_to_pbr_factor,
+    ABSORPTION, BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC, ROUGHNESS,
+    Result, SHADOWS, TRANSMISSION, VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxMaterial,
+    VoxelMaxMaterialDispersion, VoxelMaxNode, VoxelMaxObjectState, VoxelMaxPalette, default_scalar,
+    to_vox_value, vm_coefficient_to_pbr_factor,
 };
 use branded_id::U32Id;
 use std::collections::HashMap;
@@ -249,7 +249,7 @@ struct FoldedPalette {
 /// value pools to `state`.
 ///
 /// The color value pool is the object's full color table in order, so a
-/// material's `baseColorFactor` value-index is `color_idx - 1`. Each material
+/// material's `baseColor` value-index is `color_idx - 1`. Each material
 /// scalar value pool holds one value per Voxel Max material, in order; the
 /// material byte is 0-based, so a voxel's value-index is its `material_idx`.
 /// The exact material list rides in the ext provenance for a byte-exact
@@ -264,7 +264,7 @@ fn folded_palette(
     let (name, materials) = material_list(serde, object);
     let has_materials = !materials.is_empty();
 
-    // `baseColorFactor` and `emissiveFactor` read the voxel's color cell; every
+    // `baseColor` and `emissiveColor` read the voxel's color cell; every
     // material scalar reads its material byte. `color_axis` records each
     // property's axis in property order, so a folded material gathers
     // one value id per property.
@@ -278,7 +278,7 @@ fn folded_palette(
     )?);
     palette
         .add_property(
-            BASE_COLOR_FACTOR.to_owned(),
+            BASE_COLOR.to_owned(),
             color_value_pool_id,
             U32Id::from_u32(0),
         )
@@ -301,7 +301,7 @@ fn folded_palette(
         )?;
         palette
             .add_property(
-                METALLIC_FACTOR.to_owned(),
+                METALLIC.to_owned(),
                 metallic_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -316,7 +316,7 @@ fn folded_palette(
         )?;
         palette
             .add_property(
-                ROUGHNESS_FACTOR.to_owned(),
+                ROUGHNESS.to_owned(),
                 roughness_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -324,7 +324,7 @@ fn folded_palette(
         color_axis.push(false);
         // Voxel Max glows in the voxel's own base color, so an emissive
         // material's color is its base color. The property appears only when
-        // some material emits, and rides the color axis like `baseColorFactor`; the
+        // some material emits, and rides the color axis like `baseColor`; the
         // emissive is then `emissiveFactor` times `emissiveStrength` per glTF, so
         // the color leads the strength that scales it.
         if materials.iter().any(|m| m.sic > 0.0) {
@@ -340,7 +340,7 @@ fn folded_palette(
             )?);
             palette
                 .add_property(
-                    EMISSIVE_FACTOR.to_owned(),
+                    EMISSIVE_COLOR.to_owned(),
                     emissive_color_value_pool_id,
                     U32Id::from_u32(0),
                 )
@@ -378,7 +378,7 @@ fn folded_palette(
                 float_value_pool(state, dispersion(&materials, |d| d.transmission))?;
             palette
                 .add_property(
-                    TRANSMISSION_FACTOR.to_owned(),
+                    TRANSMISSION.to_owned(),
                     transmission_value_pool_id,
                     U32Id::from_u32(0),
                 )

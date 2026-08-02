@@ -251,13 +251,13 @@ fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
     let base_color =
         TySrgbaF64::from_linear(linear_rgba(pbr.base_color_factor())).into_format::<u8, u8>();
 
-    let emissive_factor = emissive_srgb(material.emissive_factor());
+    let emissive_color = emissive_srgb(material.emissive_factor());
 
     MeshMaterial {
         base_color,
         metallic: pbr.metallic_factor() as f64,
         roughness: pbr.roughness_factor() as f64,
-        emissive_factor,
+        emissive_color,
         emissive_strength: material.emissive_strength().unwrap_or(1.0) as f64,
         occlusion: 1.0,
         ior: material.ior().unwrap_or(1.5) as f64,
@@ -465,9 +465,9 @@ fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC_FACTOR,
-        MaterialMode, OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS_FACTOR, Result, SurfaceMode,
-        TRANSMISSION_FACTOR, from_gltf_bytes, voxelize_mesh,
+        BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC, MaterialMode,
+        OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS, Result, SurfaceMode, TRANSMISSION,
+        from_gltf_bytes, voxelize_mesh,
     };
     use branded_id::U32Id;
     use png::{BitDepth, ColorType, Encoder};
@@ -726,14 +726,14 @@ mod tests {
             .unwrap()
     }
 
-    /// The `#RRGGBBAA` hex of the `baseColorFactor` a given voxel samples.
+    /// The `#RRGGBBAA` hex of the `baseColor` a given voxel samples.
     fn voxel_hex(state: &VoxMain, position: TyVector3U32) -> String {
-        let (value_pool, value_id) = voxel_attribute(state, position, BASE_COLOR_FACTOR);
+        let (value_pool, value_id) = voxel_attribute(state, position, BASE_COLOR);
         match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Srgba(&[r, g, b, a])) => {
                 TySrgbaU8::from([byte(r), byte(g), byte(b), byte(a)]).to_hex()
             }
-            other => panic!("unexpected baseColorFactor value pool {other:?}"),
+            other => panic!("unexpected baseColor value pool {other:?}"),
         }
     }
 
@@ -1096,14 +1096,14 @@ mod tests {
                 .map(|(_, property)| property.name.as_str())
                 .collect::<Vec<_>>(),
             [
-                BASE_COLOR_FACTOR,
-                METALLIC_FACTOR,
-                ROUGHNESS_FACTOR,
-                EMISSIVE_FACTOR,
+                BASE_COLOR,
+                METALLIC,
+                ROUGHNESS,
+                EMISSIVE_COLOR,
                 EMISSIVE_STRENGTH,
                 OCCLUSION_STRENGTH,
                 IOR,
-                TRANSMISSION_FACTOR,
+                TRANSMISSION,
             ]
         );
         assert_eq!(
@@ -1165,8 +1165,8 @@ mod tests {
         assert_eq!(palette.material_count(), 1);
         let origin = TyVector3U32::new(0, 0, 0);
         assert_eq!(voxel_hex(&state, origin), "#FFBC00FF");
-        assert_eq!(voxel_number(&state, origin, METALLIC_FACTOR), 0.25);
-        assert_eq!(voxel_number(&state, origin, ROUGHNESS_FACTOR), 0.75);
+        assert_eq!(voxel_number(&state, origin, METALLIC), 0.25);
+        assert_eq!(voxel_number(&state, origin, ROUGHNESS), 0.75);
         assert_eq!(voxel_number(&state, origin, OCCLUSION_STRENGTH), 1.0);
     }
 
@@ -1190,7 +1190,7 @@ mod tests {
         let origin = TyVector3U32::new(0, 0, 0);
         // glTF factors are f32, widened to f64 on store.
         assert_eq!(voxel_number(&state, origin, IOR), 1.4f32 as f64);
-        assert_eq!(voxel_number(&state, origin, TRANSMISSION_FACTOR), 0.5);
+        assert_eq!(voxel_number(&state, origin, TRANSMISSION), 0.5);
         assert_eq!(voxel_number(&state, origin, EMISSIVE_STRENGTH), 3.0);
     }
 
@@ -1212,7 +1212,7 @@ mod tests {
 
         let origin = TyVector3U32::new(0, 0, 0);
         assert_eq!(voxel_number(&state, origin, IOR), 1.5);
-        assert_eq!(voxel_number(&state, origin, TRANSMISSION_FACTOR), 0.0);
+        assert_eq!(voxel_number(&state, origin, TRANSMISSION), 0.0);
     }
 
     #[test]
@@ -1527,8 +1527,8 @@ mod tests {
         )
         .unwrap();
 
-        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), METALLIC_FACTOR);
-        let roughness = voxel_number(&state, TyVector3U32::new(0, 0, 0), ROUGHNESS_FACTOR);
+        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), METALLIC);
+        let roughness = voxel_number(&state, TyVector3U32::new(0, 0, 0), ROUGHNESS);
         assert!(
             (metallic - 0.5 * 64.0 / 255.0).abs() < 0.01,
             "metallic {metallic}"
@@ -1543,7 +1543,7 @@ mod tests {
     fn per_texel_reads_emissive_as_an_srgb_color() {
         // Emissive is sampled as a color, not collapsed to a scalar. A green of
         // 188 sRGB decodes to ~0.503 linear, is tinted by the unit factor, then
-        // re-encodes to ~188 (~0.737 as a float), so the stored emissiveFactor is
+        // re-encodes to ~188 (~0.737 as a float), so the stored emissiveColor is
         // green with no red or blue and the strength stays the material's unit
         // factor.
         let emissive = png_rgba(1, 1, &[[0, 188, 0, 255]]);
@@ -1571,13 +1571,13 @@ mod tests {
         .unwrap();
 
         let origin = TyVector3U32::new(0, 0, 0);
-        let (value_pool, value_id) = voxel_attribute(&state, origin, EMISSIVE_FACTOR);
+        let (value_pool, value_id) = voxel_attribute(&state, origin, EMISSIVE_COLOR);
         let [r, g, b] = match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Srgb(&color)) => color,
-            other => panic!("expected an sRGB emissiveFactor value pool, got {other:?}"),
+            other => panic!("expected an sRGB emissiveColor value pool, got {other:?}"),
         };
-        assert!(r < 0.01 && b < 0.01, "emissiveFactor red {r} blue {b}");
-        assert!((g - 188.0 / 255.0).abs() < 0.01, "emissiveFactor green {g}");
+        assert!(r < 0.01 && b < 0.01, "emissiveColor red {r} blue {b}");
+        assert!((g - 188.0 / 255.0).abs() < 0.01, "emissiveColor green {g}");
         assert_eq!(
             voxel_number(&state, origin, EMISSIVE_STRENGTH),
             1.0,
@@ -1660,7 +1660,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(voxel_hex(&state, TyVector3U32::new(0, 0, 0)), "#FF0000FF");
-        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), METALLIC_FACTOR);
+        let metallic = voxel_number(&state, TyVector3U32::new(0, 0, 0), METALLIC);
         assert!((metallic - 1.0).abs() < 1e-9, "metallic {metallic}");
     }
 }

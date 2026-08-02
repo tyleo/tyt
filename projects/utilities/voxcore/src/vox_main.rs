@@ -1563,7 +1563,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         let property_id = palette
-            .add_property("baseColorFactor".to_owned(), colors_id, value_id(0))
+            .add_property("baseColor".to_owned(), colors_id, value_id(0))
             .unwrap();
         let green_id = palette.add_material(vec![value_id(1)]).unwrap();
         let white_id = palette.add_material(vec![value_id(3)]).unwrap();
@@ -1650,14 +1650,14 @@ mod tests {
         );
         let mut a = VoxPalette::default();
         let a_property_id = a
-            .add_property("baseColorFactor".to_owned(), colors_id, value_id(0))
+            .add_property("baseColor".to_owned(), colors_id, value_id(0))
             .unwrap();
         let a_blue_id = a.add_material(vec![value_id(2)]).unwrap();
         let a_red_id = a.add_material(vec![value_id(0)]).unwrap();
         let a_id = state.add_palette(a).unwrap();
         let mut b = VoxPalette::default();
         let b_property_id = b
-            .add_property("baseColorFactor".to_owned(), colors_id, value_id(0))
+            .add_property("baseColor".to_owned(), colors_id, value_id(0))
             .unwrap();
         let b_green_id = b.add_material(vec![value_id(1)]).unwrap();
         let b_id = state.add_palette(b).unwrap();
@@ -2382,10 +2382,10 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         let color_id = palette
-            .add_property("baseColorFactor".to_owned(), colors_id, value_id(0))
+            .add_property("baseColor".to_owned(), colors_id, value_id(0))
             .unwrap();
         let metal_id = palette
-            .add_property("metallicFactor".to_owned(), metallic_id, value_id(0))
+            .add_property("metallic".to_owned(), metallic_id, value_id(0))
             .unwrap();
         let matte_red_id = palette
             .add_material(vec![value_id(0), value_id(0)])
@@ -2452,7 +2452,7 @@ mod tests {
         // The property references value-pool id 0, but the state holds no
         // value pools.
         let property_id = palette
-            .add_property("baseColorFactor".to_owned(), value_pool_id(0), value_id(0))
+            .add_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
         palette.add_material(vec![value_id(0)]).unwrap();
         assert_eq!(

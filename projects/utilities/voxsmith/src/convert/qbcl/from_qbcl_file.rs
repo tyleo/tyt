@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR_FACTOR, Error, QubicleQbclExt, QubicleQbclExtWrapper, QubicleQbclMetadata,
-    QubicleQbclNode, QubicleQbclNodeBody, QubicleQbclThumbnail, Result, to_vox_value,
+    BASE_COLOR, Error, QubicleQbclExt, QubicleQbclExtWrapper, QubicleQbclMetadata, QubicleQbclNode,
+    QubicleQbclNodeBody, QubicleQbclThumbnail, Result, to_vox_value,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMatrix, QbclMetadata, QbclNode, QbclNodeBody};
@@ -14,7 +14,7 @@ use voxcore::{
 /// Loads a decoded Qubicle Construction Library [`QbclFile`] into a
 /// [`VoxMain`].
 ///
-/// Matrix and compound grids become objects sharing one `baseColorFactor`
+/// Matrix and compound grids become objects sharing one `baseColor`
 /// palette, and the scene tree becomes the hierarchy nodes. The state with no
 /// native voxcore home, such as the per-voxel visibility masks, node names and
 /// editor flags, the model transform chunks, matrix placements and pivots, the
@@ -151,7 +151,7 @@ fn build_node(
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
 /// color across every matrix and compound voxel in the tree, bound to
-/// `baseColorFactor`, with one material per color and a map from a color to its
+/// `baseColor`, with one material per color and a map from a color to its
 /// material. The value pool is added to `state`. A tree with no solid voxels
 /// gets a single placeholder color so objects have a default material to
 /// sample.
@@ -176,11 +176,7 @@ fn build_palette(
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(
-            BASE_COLOR_FACTOR.to_owned(),
-            value_pool_id,
-            U32Id::from_u32(0),
-        )
+        .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
         .expect("the property names are distinct");
     let mut material_ids = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
@@ -320,7 +316,7 @@ fn color_floats(color: [u8; 3]) -> [f64; 3] {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR_FACTOR, from_qbcl_bytes, from_qbcl_file, to_qbcl_bytes, to_qbcl_file};
+    use crate::{BASE_COLOR, from_qbcl_bytes, from_qbcl_file, to_qbcl_bytes, to_qbcl_file};
     use branded_id::U32Id;
     use qbcl::qbcl::{
         QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode,
@@ -417,13 +413,13 @@ mod tests {
     }
 
     /// A state carrying no format ext, built straight from voxcore: a red-green
-    /// object and a blue object sharing one `baseColorFactor` palette, placed by
+    /// object and a blue object sharing one `baseColor` palette, placed by
     /// a hierarchy of a nested group and two roots. This is the cross-format
     /// synthesis input.
     fn source_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        // One baseColorFactor palette: red, green, blue.
+        // One baseColor palette: red, green, blue.
         let value_pool_id = state.add_value_pool(
             VoxValuePool::srgb(
                 ["#FF0000", "#00FF00", "#0000FF"]
@@ -435,11 +431,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
-                value_pool_id,
-                U32Id::from_u32(0),
-            )
+            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         for index in 0..3 {
             palette

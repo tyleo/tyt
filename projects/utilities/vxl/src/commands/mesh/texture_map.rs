@@ -43,7 +43,7 @@ mod tests {
 
     #[test]
     fn pairs_a_name_and_channels() {
-        let map = TextureMap::new("skin.png", "R=metallicFactor").unwrap();
+        let map = TextureMap::new("skin.png", "R=metallic").unwrap();
         let resolved = map.resolve(&[]).unwrap();
         assert_eq!(resolved.name, "skin.png");
         assert_eq!(resolved.slot, None);
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn rejects_a_path_name_or_bad_channels() {
-        assert!(TextureMap::new("textures/skin.png", "R=metallicFactor").is_err());
-        assert!(TextureMap::new("skin.png", "X=metallicFactor").is_err());
+        assert!(TextureMap::new("textures/skin.png", "R=metallic").is_err());
+        assert!(TextureMap::new("skin.png", "X=metallic").is_err());
     }
 }

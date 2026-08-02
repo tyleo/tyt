@@ -21,11 +21,11 @@ mod tests {
     #[test]
     fn holds_a_name_and_a_value_pool() {
         let property = VoxProperty {
-            name: "baseColorFactor".to_owned(),
+            name: "baseColor".to_owned(),
             value_pool_id: U32Id::<BVoxValuePool>::from_u32(2),
         };
 
-        assert_eq!(property.name, "baseColorFactor");
+        assert_eq!(property.name, "baseColor");
         assert_eq!(property.value_pool_id, U32Id::from_u32(2));
     }
 }

@@ -664,8 +664,8 @@ mod tests {
         state.add_value_pool(VoxValuePool::srgba(values).unwrap())
     }
 
-    /// A document with two palettes: palette 0 has `baseColorFactor` and
-    /// `metallicFactor` with two materials, palette 1 has `baseColorFactor` with
+    /// A document with two palettes: palette 0 has `baseColor` and
+    /// `metallic` with two materials, palette 1 has `baseColor` with
     /// one material.
     fn sample_state() -> VoxMain {
         let mut state = VoxMain::default();
@@ -681,14 +681,14 @@ mod tests {
         let mut first = VoxPalette::default();
         first
             .add_property(
-                "baseColorFactor".to_owned(),
+                "baseColor".to_owned(),
                 colors_zero_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         first
             .add_property(
-                "metallicFactor".to_owned(),
+                "metallic".to_owned(),
                 metallic_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -700,7 +700,7 @@ mod tests {
         let mut second = VoxPalette::default();
         second
             .add_property(
-                "baseColorFactor".to_owned(),
+                "baseColor".to_owned(),
                 colors_one_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -747,10 +747,10 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[("0", "baseColorFactor", "value")],
+            &[("0", "baseColor", "value")],
             PaletteShowLayout::Rows,
         );
-        assert_eq!(output, "0.\"baseColorFactor\" #FF0000FF #00FF0080\n");
+        assert_eq!(output, "0.\"baseColor\" #FF0000FF #00FF0080\n");
     }
 
     #[test]
@@ -758,11 +758,11 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[("0", "baseColorFactor.a", "value")],
+            &[("0", "baseColor.a", "value")],
             PaletteShowLayout::Rows,
         );
         // Alpha bytes FF and 80 as 0..255 integers.
-        assert_eq!(output, "0.\"baseColorFactor\".a 255 128\n");
+        assert_eq!(output, "0.\"baseColor\".a 255 128\n");
     }
 
     #[test]
@@ -770,12 +770,12 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[("0", "baseColorFactor", "swatch")],
+            &[("0", "baseColor", "swatch")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(
             output,
-            "0.\"baseColorFactor\" \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
+            "0.\"baseColor\" \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
         );
     }
 
@@ -810,29 +810,26 @@ mod tests {
     fn rows_pad_only_the_label_not_the_values() {
         let state = sample_state();
         // The labels pad to the longest so each row's first value aligns, but
-        // the values are not column-aligned: `metallicFactor` stays compact
-        // rather than padding out to the wider `baseColorFactor` columns.
+        // the values are not column-aligned: `metallic` stays compact
+        // rather than padding out to the wider `baseColor` columns.
         let output = show(
             &state,
-            &[
-                ("0", "baseColorFactor", "value"),
-                ("0", "metallicFactor", "value"),
-            ],
+            &[("0", "baseColor", "value"), ("0", "metallic", "value")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(
             output,
-            "0.\"baseColorFactor\" #FF0000FF #00FF0080\n\
+            "0.\"baseColor\" #FF0000FF #00FF0080\n\
              \n\
-             0.\"metallicFactor\"  1 0.2\n"
+             0.\"metallic\"  1 0.2\n"
         );
     }
 
     #[test]
     fn rows_wrap_cells_to_the_width() {
         let state = sample_state();
-        let grid = grid_for(&state, &[("0", "baseColorFactor", "value")]);
-        // Width 30 leaves 10 columns after the `0."baseColorFactor" ` prefix:
+        let grid = grid_for(&state, &[("0", "baseColor", "value")]);
+        // Width 30 leaves 16 columns after the `0."baseColor" ` prefix:
         // one 9-wide hex fits per line, so the second wraps under the first.
         let output = render(
             &grid,
@@ -845,14 +842,14 @@ mod tests {
         .unwrap();
         assert_eq!(
             output,
-            "0.\"baseColorFactor\" #FF0000FF\n                    #00FF0080\n"
+            "0.\"baseColor\" #FF0000FF\n              #00FF0080\n"
         );
     }
 
     #[test]
     fn rows_with_label_none_drop_the_label_column() {
         let state = sample_state();
-        let grid = grid_for(&state, &[("0", "baseColorFactor", "value")]);
+        let grid = grid_for(&state, &[("0", "baseColor", "value")]);
         let output = render(
             &grid,
             PaletteShowLayout::Rows,
@@ -881,11 +878,11 @@ mod tests {
         .unwrap();
         assert_eq!(
             output,
-            "0.\"baseColorFactor\" \x1b[48;2;255;0;0m  \x1b[0m #FF0000FF \x1b[48;2;0;255;0m  \x1b[0m #00FF0080\n\
+            "0.\"baseColor\" \x1b[48;2;255;0;0m  \x1b[0m #FF0000FF \x1b[48;2;0;255;0m  \x1b[0m #00FF0080\n\
              \n\
-             0.\"metallicFactor\"  1 0.2\n\
+             0.\"metallic\"  1 0.2\n\
              \n\
-             1.\"baseColorFactor\" \x1b[48;2;0;0;255m  \x1b[0m #0000FFFF\n"
+             1.\"baseColor\" \x1b[48;2;0;0;255m  \x1b[0m #0000FFFF\n"
         );
     }
 
@@ -896,17 +893,14 @@ mod tests {
         // backward, so pre-order keeps the selector order.
         let output = show(
             &state,
-            &[
-                ("1", "baseColorFactor", "value"),
-                ("0", "baseColorFactor", "value"),
-            ],
+            &[("1", "baseColor", "value"), ("0", "baseColor", "value")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(
             output,
-            "1.\"baseColorFactor\" #0000FFFF\n\
+            "1.\"baseColor\" #0000FFFF\n\
              \n\
-             0.\"baseColorFactor\" #FF0000FF #00FF0080\n"
+             0.\"baseColor\" #FF0000FF #00FF0080\n"
         );
     }
 
@@ -915,17 +909,14 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[
-                ("0", "baseColorFactor", "value"),
-                ("0", "baseColorFactor", "swatch"),
-            ],
+            &[("0", "baseColor", "value"), ("0", "baseColor", "swatch")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(
             output,
-            "0.\"baseColorFactor\" #FF0000FF #00FF0080\n\
+            "0.\"baseColor\" #FF0000FF #00FF0080\n\
              \n\
-             0.\"baseColorFactor\" \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
+             0.\"baseColor\" \x1b[48;2;255;0;0m  \x1b[0m\x1b[48;2;0;255;0m  \x1b[0m\n"
         );
     }
 
@@ -934,15 +925,12 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[
-                ("0", "baseColorFactor.a", "value"),
-                ("1", "baseColorFactor.a", "value"),
-            ],
+            &[("0", "baseColor.a", "value"), ("1", "baseColor.a", "value")],
             PaletteShowLayout::Columns,
         );
         assert_eq!(
             output,
-            "0.\"baseColorFactor\".a 1.\"baseColorFactor\".a\n255                   255\n128\n"
+            "0.\"baseColor\".a 1.\"baseColor\".a\n255             255\n128\n"
         );
     }
 
@@ -951,10 +939,7 @@ mod tests {
         let state = sample_state();
         let grid = grid_for(
             &state,
-            &[
-                ("0", "baseColorFactor.a", "value"),
-                ("1", "baseColorFactor.a", "value"),
-            ],
+            &[("0", "baseColor.a", "value"), ("1", "baseColor.a", "value")],
         );
         let output = render(
             &grid,
@@ -974,14 +959,14 @@ mod tests {
         let output = show(&state, &[("0", "*", "value")], PaletteShowLayout::Hierarchy);
         assert_eq!(
             output,
-            "└ 0\n  ├ \"baseColorFactor\": #FF0000FF #00FF0080\n  └ \"metallicFactor\": 1 0.2\n"
+            "└ 0\n  ├ \"baseColor\": #FF0000FF #00FF0080\n  └ \"metallic\": 1 0.2\n"
         );
     }
 
     #[test]
     fn header_labels_group_rows_under_palette_headings() {
         let state = sample_state();
-        let grid = grid_for(&state, &[("*", "baseColorFactor", "value")]);
+        let grid = grid_for(&state, &[("*", "baseColor", "value")]);
         let output = render(
             &grid,
             PaletteShowLayout::Rows,
@@ -993,14 +978,14 @@ mod tests {
         .unwrap();
         assert_eq!(
             output,
-            "# 0\n\n\"baseColorFactor\" #FF0000FF #00FF0080\n\n# 1\n\n\"baseColorFactor\" #0000FFFF\n"
+            "# 0\n\n\"baseColor\" #FF0000FF #00FF0080\n\n# 1\n\n\"baseColor\" #0000FFFF\n"
         );
     }
 
     #[test]
     fn a_header_level_shifts_the_headings() {
         let state = sample_state();
-        let grid = grid_for(&state, &[("*", "baseColorFactor", "value")]);
+        let grid = grid_for(&state, &[("*", "baseColor", "value")]);
         let output = render(
             &grid,
             PaletteShowLayout::Rows,
@@ -1018,30 +1003,30 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[("*", "baseColorFactor", "value")],
+            &[("*", "baseColor", "value")],
             PaletteShowLayout::Tables,
         );
         assert_eq!(
             output,
             "# 0\n\
              \n\
-             | #   | \"baseColorFactor\" |\n\
-             | --- | ----------------- |\n\
-             | 0   | #FF0000FF         |\n\
-             | 1   | #00FF0080         |\n\
+             | #   | \"baseColor\" |\n\
+             | --- | ----------- |\n\
+             | 0   | #FF0000FF   |\n\
+             | 1   | #00FF0080   |\n\
              \n\
              # 1\n\
              \n\
-             | #   | \"baseColorFactor\" |\n\
-             | --- | ----------------- |\n\
-             | 0   | #0000FFFF         |\n"
+             | #   | \"baseColor\" |\n\
+             | --- | ----------- |\n\
+             | 0   | #0000FFFF   |\n"
         );
     }
 
     #[test]
     fn flat_tables_fill_one_aligned_comparison_table() {
         let state = sample_state();
-        let grid = grid_for(&state, &[("*", "baseColorFactor", "value")]);
+        let grid = grid_for(&state, &[("*", "baseColor", "value")]);
         let output = render(
             &grid,
             PaletteShowLayout::Tables,
@@ -1053,17 +1038,17 @@ mod tests {
         .unwrap();
         assert_eq!(
             output,
-            "| #   | 0.\"baseColorFactor\" | 1.\"baseColorFactor\" |\n\
-             | --- | ------------------- | ------------------- |\n\
-             | 0   | #FF0000FF           | #0000FFFF           |\n\
-             | 1   | #00FF0080           |                     |\n"
+            "| #   | 0.\"baseColor\" | 1.\"baseColor\" |\n\
+             | --- | ------------- | ------------- |\n\
+             | 0   | #FF0000FF     | #0000FFFF     |\n\
+             | 1   | #00FF0080     |               |\n"
         );
     }
 
     #[test]
     fn records_tables_list_one_property_per_row() {
         let state = sample_state();
-        let grid = grid_for(&state, &[("*", "baseColorFactor", "value")]);
+        let grid = grid_for(&state, &[("*", "baseColor", "value")]);
         let output = render(
             &grid,
             PaletteShowLayout::Tables,
@@ -1077,15 +1062,15 @@ mod tests {
             output,
             "# 0\n\
              \n\
-             | label             | value               |\n\
-             | ----------------- | ------------------- |\n\
-             | \"baseColorFactor\" | #FF0000FF #00FF0080 |\n\
+             | label       | value               |\n\
+             | ----------- | ------------------- |\n\
+             | \"baseColor\" | #FF0000FF #00FF0080 |\n\
              \n\
              # 1\n\
              \n\
-             | label             | value     |\n\
-             | ----------------- | --------- |\n\
-             | \"baseColorFactor\" | #0000FFFF |\n"
+             | label       | value     |\n\
+             | ----------- | --------- |\n\
+             | \"baseColor\" | #0000FFFF |\n"
         );
     }
 
@@ -1094,10 +1079,7 @@ mod tests {
         let state = sample_state();
         let grid = grid_for(
             &state,
-            &[
-                ("0", "baseColorFactor", "value"),
-                ("0", "baseColorFactor.a", "value"),
-            ],
+            &[("0", "baseColor", "value"), ("0", "baseColor.a", "value")],
         );
         let output = render(
             &grid,
@@ -1112,16 +1094,16 @@ mod tests {
             output,
             "# 0\n\
              \n\
-             | label             | value               | a       |\n\
-             | ----------------- | ------------------- | ------- |\n\
-             | \"baseColorFactor\" | #FF0000FF #00FF0080 | 255 128 |\n"
+             | label       | value               | a       |\n\
+             | ----------- | ------------------- | ------- |\n\
+             | \"baseColor\" | #FF0000FF #00FF0080 | 255 128 |\n"
         );
     }
 
     #[test]
     fn a_label_mode_on_the_hierarchy_layout_is_invalid_input() {
         let state = sample_state();
-        let grid = grid_for(&state, &[("0", "baseColorFactor", "value")]);
+        let grid = grid_for(&state, &[("0", "baseColor", "value")]);
         let result = render(
             &grid,
             PaletteShowLayout::Hierarchy,
@@ -1138,15 +1120,12 @@ mod tests {
         let state = sample_state();
         let output = show(
             &state,
-            &[
-                ("0", "baseColorFactor", "value"),
-                ("0", "baseColorFactor.a", "value"),
-            ],
+            &[("0", "baseColor", "value"), ("0", "baseColor.a", "value")],
             PaletteShowLayout::JsonCompact,
         );
         assert_eq!(
             output,
-            "[{\"label\":\"0\",\"children\":[{\"label\":\"baseColorFactor\",\
+            "[{\"label\":\"0\",\"children\":[{\"label\":\"baseColor\",\
              \"values\":[\"#FF0000FF\",\"#00FF0080\"],\"children\":[\
              {\"label\":\"a\",\"values\":[255,128]}]}]}]\n"
         );
@@ -1155,10 +1134,8 @@ mod tests {
     #[test]
     fn pretty_json_is_indented_and_matches_compact() {
         let state = sample_state();
-        let fields: &[(&str, &str, &str)] = &[
-            ("0", "baseColorFactor", "value"),
-            ("0", "baseColorFactor.a", "value"),
-        ];
+        let fields: &[(&str, &str, &str)] =
+            &[("0", "baseColor", "value"), ("0", "baseColor.a", "value")];
         let pretty = show(&state, fields, PaletteShowLayout::JsonPretty);
         let compact = show(&state, fields, PaletteShowLayout::JsonCompact);
         // Indented, and carrying the same data as the compact form.
@@ -1173,28 +1150,26 @@ mod tests {
         let state = sample_state();
         let collections = resolve_collections(&state, &selectors(&[("0", "*", "value")])).unwrap();
         let keys: Vec<&str> = collections.iter().map(|c| c.key.as_str()).collect();
-        assert_eq!(keys, ["baseColorFactor", "metallicFactor"]);
+        assert_eq!(keys, ["baseColor", "metallic"]);
     }
 
     #[test]
     fn star_palette_skips_a_palette_lacking_a_named_property() {
         let state = sample_state();
-        // Only palette 0 has `metallicFactor`; palette 1 is skipped, not an error.
+        // Only palette 0 has `metallic`; palette 1 is skipped, not an error.
         let collections =
-            resolve_collections(&state, &selectors(&[("*", "metallicFactor", "value")])).unwrap();
+            resolve_collections(&state, &selectors(&[("*", "metallic", "value")])).unwrap();
         let labels: Vec<(usize, &str)> = collections
             .iter()
             .map(|c| (c.palette_index, c.key.as_str()))
             .collect();
-        assert_eq!(labels, [(0, "metallicFactor")]);
+        assert_eq!(labels, [(0, "metallic")]);
     }
 
     #[test]
     fn named_palette_out_of_range_is_an_error() {
         let state = sample_state();
-        assert!(
-            resolve_collections(&state, &selectors(&[("5", "baseColorFactor", "value")])).is_err()
-        );
+        assert!(resolve_collections(&state, &selectors(&[("5", "baseColor", "value")])).is_err());
     }
 
     #[test]
@@ -1206,9 +1181,7 @@ mod tests {
     #[test]
     fn a_component_on_a_scalar_is_an_error() {
         let state = sample_state();
-        assert!(
-            resolve_collections(&state, &selectors(&[("0", "metallicFactor.r", "value")])).is_err()
-        );
+        assert!(resolve_collections(&state, &selectors(&[("0", "metallic.r", "value")])).is_err());
     }
 
     #[test]
@@ -1216,16 +1189,16 @@ mod tests {
         let state = sample_state();
         let scalar = show(
             &state,
-            &[("0", "metallicFactor", "auto")],
+            &[("0", "metallic", "auto")],
             PaletteShowLayout::Rows,
         );
-        assert_eq!(scalar, "0.\"metallicFactor\" 1 0.2\n");
+        assert_eq!(scalar, "0.\"metallic\" 1 0.2\n");
         let component = show(
             &state,
-            &[("0", "baseColorFactor.r", "auto")],
+            &[("0", "baseColor.r", "auto")],
             PaletteShowLayout::Rows,
         );
-        assert_eq!(component, "0.\"baseColorFactor\".r 255 0\n");
+        assert_eq!(component, "0.\"baseColor\".r 255 0\n");
     }
 
     /// One palette binding `tint` to a three-component `Srgb` value pool
@@ -1270,7 +1243,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                "emissiveFactor".to_owned(),
+                "emissiveColor".to_owned(),
                 emissive_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -1280,10 +1253,10 @@ mod tests {
 
         let output = show(
             &state,
-            &[("0", "emissiveFactor", "value")],
+            &[("0", "emissiveColor", "value")],
             PaletteShowLayout::Rows,
         );
-        assert_eq!(output, "0.\"emissiveFactor\" lrgba(2, 1, 0.5, 1)\n");
+        assert_eq!(output, "0.\"emissiveColor\" lrgba(2, 1, 0.5, 1)\n");
     }
 
     #[test]

@@ -22,7 +22,7 @@ use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 /// transparent zero voxel.
 ///
 /// Errors when a `goxel` ext is present but cannot be deserialized, or when an
-/// object's `baseColorFactor` draws from a non-color value pool.
+/// object's `baseColor` draws from a non-color value pool.
 pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
     let ext = match ext_for(state, "goxel") {
         Some(ext) => from_vox_value::<GoxelExtWrapper>(ext)?.goxel,
@@ -31,7 +31,7 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
 
     // Each object is the author's build volume (a fixed Goxel 16-cube), so a
     // block is written from it directly at the original positions, its voxel
-    // colors read through the object's `baseColorFactor` layer.
+    // colors read through the object's `baseColor` layer.
     let blocks = state
         .iter_objects()
         .map(|(_, object)| block_from_object(state, object))
@@ -262,7 +262,7 @@ fn solid_voxel(rgba: [u8; 4]) -> GoxlVoxel {
 
 /// Rebuilds a `16 x 16 x 16` block from an object: each grid cell takes its
 /// color from the voxel's sampled material through the object's
-/// `baseColorFactor` layer, or the transparent zero voxel when empty.
+/// `baseColor` layer, or the transparent zero voxel when empty.
 fn block_from_object(state: &VoxMain, object: &VoxObject) -> Result<GoxlBlock> {
     let size = GoxlBlock::SIZE;
     let cell_color = resolve_cell_color_or_transparent(state, object)?;

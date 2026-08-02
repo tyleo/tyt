@@ -1,11 +1,11 @@
-use crate::BASE_COLOR_FACTOR;
+use crate::BASE_COLOR;
 use branded_id::U32Id;
 use std::collections::HashSet;
 use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain};
 
-/// Reorders `palette_id`'s `baseColorFactor` colors to material order: each
+/// Reorders `palette_id`'s `baseColor` colors to material order: each
 /// material's color in turn, then the colors no material uses. Rendering is
-/// unchanged. A no-op without a `baseColorFactor` property.
+/// unchanged. A no-op without a `baseColor` property.
 ///
 /// Requires a referentially valid state, which
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) checks.
@@ -13,7 +13,7 @@ pub fn order_palette_colors(state: &mut VoxMain, palette_id: U32Id<BVoxPalette>)
     let Some(palette_ref) = state.palette(palette_id) else {
         return;
     };
-    let Some(color_id) = palette_ref.property_id_by_name(BASE_COLOR_FACTOR) else {
+    let Some(color_id) = palette_ref.property_id_by_name(BASE_COLOR) else {
         return;
     };
     let Some(value_pool_id) = palette_ref
@@ -52,7 +52,7 @@ pub fn order_palette_colors(state: &mut VoxMain, palette_id: U32Id<BVoxPalette>)
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR_FACTOR, order_palette_colors};
+    use crate::{BASE_COLOR, order_palette_colors};
     use branded_id::U32Id;
     use voxcore::{VoxMain, VoxPalette, VoxValuePool};
 
@@ -71,11 +71,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         let color_property_id = palette
-            .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
-                value_pool_id,
-                U32Id::from_u32(0),
-            )
+            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         let blue_id = palette.add_material(vec![U32Id::from_u32(2)]).unwrap();
         let red_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
@@ -133,11 +129,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
-                value_pool_id,
-                U32Id::from_u32(0),
-            )
+            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette.add_material(vec![U32Id::from_u32(2)]).unwrap();
         palette.add_material(vec![U32Id::from_u32(0)]).unwrap();

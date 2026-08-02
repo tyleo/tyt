@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR_FACTOR, Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer,
-    GoxelLight, GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, to_vox_value,
+    BASE_COLOR, Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer, GoxelLight,
+    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, to_vox_value,
 };
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
@@ -13,7 +13,7 @@ use voxcore::{
 
 /// Loads a decoded Goxel [`GoxlFile`] into a [`VoxMain`].
 ///
-/// The shared `BL16` voxel blocks become objects sharing one `baseColorFactor`
+/// The shared `BL16` voxel blocks become objects sharing one `baseColor`
 /// palette, and the `LAYR` layers become the hierarchy nodes, each placing the
 /// blocks it stamps. The state with no native voxcore home, such as the image
 /// metadata, preview, materials, cameras, light, per-layer metadata, the clone
@@ -48,7 +48,7 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
 }
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
-/// color across every block's solid voxels, bound to `baseColorFactor`, with
+/// color across every block's solid voxels, bound to `baseColor`, with
 /// one material per color and a map from a color to its material. The
 /// value pool is added to `state`. A file with no solid voxels gets a single
 /// placeholder color so objects have a default material to sample.
@@ -87,11 +87,7 @@ fn build_palette(
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(
-            BASE_COLOR_FACTOR.to_owned(),
-            value_pool_id,
-            U32Id::from_u32(0),
-        )
+        .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
         .expect("the property names are distinct");
     let mut material_ids = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
@@ -275,7 +271,7 @@ fn shape_token(shape: GoxlShape) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR_FACTOR, from_goxl_bytes, from_goxl_file, to_goxl_bytes, to_goxl_file};
+    use crate::{BASE_COLOR, from_goxl_bytes, from_goxl_file, to_goxl_bytes, to_goxl_file};
     use branded_id::U32Id;
     use goxl::{
         GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
@@ -458,7 +454,7 @@ mod tests {
     fn source_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        // One baseColorFactor palette: a transparent placeholder, then red,
+        // One baseColor palette: a transparent placeholder, then red,
         // green, blue.
         let value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(
@@ -471,11 +467,7 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
-                value_pool_id,
-                U32Id::from_u32(0),
-            )
+            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         for index in 0..4 {
             palette

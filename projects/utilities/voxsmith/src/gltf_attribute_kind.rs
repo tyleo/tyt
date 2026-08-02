@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, IOR, METALLIC_FACTOR,
-    OCCLUSION_STRENGTH, ROUGHNESS_FACTOR, TRANSMISSION_FACTOR,
+    BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, OCCLUSION_STRENGTH, ROUGHNESS,
+    TRANSMISSION,
 };
 
 /// The kind of a recommended glTF attribute: a four- or three-component color,
@@ -8,14 +8,14 @@ use crate::{
 /// glTF attribute takes its spec default, a custom one has none.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GltfAttributeKind {
-    /// A four-component color with straight alpha: `baseColorFactor`.
+    /// A four-component color with straight alpha: `baseColor`.
     ColorRgba,
 
-    /// A three-component color with no alpha: `emissiveFactor`.
+    /// A three-component color with no alpha: `emissiveColor`.
     ColorRgb,
 
-    /// A scalar: `metallicFactor`, `roughnessFactor`, `occlusionStrength`,
-    /// `emissiveStrength`, `ior`, or `transmissionFactor`.
+    /// A scalar: `metallic`, `roughness`, `occlusionStrength`,
+    /// `emissiveStrength`, `ior`, or `transmission`.
     Scalar,
 }
 
@@ -24,10 +24,11 @@ impl GltfAttributeKind {
     /// custom key outside it.
     pub fn of(key: &str) -> Option<Self> {
         match key {
-            BASE_COLOR_FACTOR => Some(Self::ColorRgba),
-            EMISSIVE_FACTOR => Some(Self::ColorRgb),
-            METALLIC_FACTOR | ROUGHNESS_FACTOR | OCCLUSION_STRENGTH | EMISSIVE_STRENGTH | IOR
-            | TRANSMISSION_FACTOR => Some(Self::Scalar),
+            BASE_COLOR => Some(Self::ColorRgba),
+            EMISSIVE_COLOR => Some(Self::ColorRgb),
+            METALLIC | ROUGHNESS | OCCLUSION_STRENGTH | EMISSIVE_STRENGTH | IOR | TRANSMISSION => {
+                Some(Self::Scalar)
+            }
             _ => None,
         }
     }
@@ -35,16 +36,16 @@ impl GltfAttributeKind {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR_FACTOR, EMISSIVE_FACTOR, GltfAttributeKind, OCCLUSION_STRENGTH};
+    use crate::{BASE_COLOR, EMISSIVE_COLOR, GltfAttributeKind, OCCLUSION_STRENGTH};
 
     #[test]
     fn classifies_the_two_colors_and_a_scalar() {
         assert_eq!(
-            GltfAttributeKind::of(BASE_COLOR_FACTOR),
+            GltfAttributeKind::of(BASE_COLOR),
             Some(GltfAttributeKind::ColorRgba)
         );
         assert_eq!(
-            GltfAttributeKind::of(EMISSIVE_FACTOR),
+            GltfAttributeKind::of(EMISSIVE_COLOR),
             Some(GltfAttributeKind::ColorRgb)
         );
         assert_eq!(

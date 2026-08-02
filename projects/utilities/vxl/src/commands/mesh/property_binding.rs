@@ -52,9 +52,9 @@ mod tests {
 
     #[test]
     fn pairs_a_property_and_name() {
-        let binding = PropertyBinding::new("gloss", "roughnessFactor").unwrap();
+        let binding = PropertyBinding::new("gloss", "roughness").unwrap();
         assert_eq!(binding.name(), "gloss");
-        assert_eq!(binding.key(), "roughnessFactor");
+        assert_eq!(binding.key(), "roughness");
     }
 
     #[test]
@@ -83,6 +83,6 @@ mod tests {
     fn rejects_whitespace_in_the_property() {
         // The `<property>` is typed as a bare token in --texture-map, so it
         // cannot carry spaces even though its bound name may.
-        assert!(PropertyBinding::new("super gloss", "roughnessFactor").is_err());
+        assert!(PropertyBinding::new("super gloss", "roughness").is_err());
     }
 }

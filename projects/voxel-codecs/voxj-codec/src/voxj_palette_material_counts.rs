@@ -39,7 +39,7 @@ mod tests {
     fn palette(m: usize) -> VoxjPalette {
         VoxjPalette {
             properties: vec![VoxjProperty {
-                name: "baseColorFactor".to_owned(),
+                name: "baseColor".to_owned(),
                 value_pool: 0,
             }],
             materials: (0..m).map(|i| vec![i]).collect(),

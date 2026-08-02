@@ -5,7 +5,7 @@ use clap::ValueEnum;
 /// that expands to several. One flat enum so clap validates and completes both.
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub enum TextureArg {
-    /// RGBA base color from `baseColorFactor`. Four channels.
+    /// RGBA base color from `baseColor`. Four channels.
     #[value(name = "albedo")]
     Albedo,
 
@@ -28,7 +28,7 @@ pub enum TextureArg {
     #[value(name = "mse")]
     Mse,
 
-    /// The emissive color: `emissiveFactor` scaled by `emissiveStrength`, so the
+    /// The emissive color: `emissiveColor` scaled by `emissiveStrength`, so the
     /// glTF emissive slot glows in the surface's own emissive color.
     #[value(name = "emissive")]
     Emissive,
@@ -42,11 +42,11 @@ pub enum TextureArg {
     #[value(name = "computed-occlusion", hide = true)]
     ComputedOcclusion,
 
-    /// Grayscale `roughnessFactor`. One channel.
+    /// Grayscale `roughness`. One channel.
     #[value(name = "roughness")]
     Roughness,
 
-    /// Grayscale `smoothness`, the derived `1-roughnessFactor`. One channel.
+    /// Grayscale `smoothness`, the derived `1-roughness`. One channel.
     #[value(name = "smoothness")]
     Smoothness,
 

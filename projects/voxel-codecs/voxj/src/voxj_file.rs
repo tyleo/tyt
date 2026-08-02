@@ -43,7 +43,7 @@ mod tests {
                     palettes: vec![
                         VoxjPalette {
                             properties: vec![VoxjProperty {
-                                name: "baseColorFactor".to_owned(),
+                                name: "baseColor".to_owned(),
                                 value_pool: 1,
                             }],
                             materials: vec![vec![0], vec![1]],
@@ -100,7 +100,7 @@ mod tests {
                     "palettes": [
                         {
                             "properties": [
-                                { "name": "baseColorFactor", "valuePool": 1 },
+                                { "name": "baseColor", "valuePool": 1 },
                             ],
                             "materials": [[0], [1]],
                         },

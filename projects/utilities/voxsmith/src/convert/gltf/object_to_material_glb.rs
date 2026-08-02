@@ -37,8 +37,8 @@ pub fn object_to_material_glb(
 #[cfg(test)]
 mod tests {
     use crate::{
-        AtlasShape, BASE_COLOR_FACTOR, MaterialBake, MaterialMap, MaterialMeshRequest,
-        MaterialSlot, MeshMethod, ResourceStorage, object_to_material_glb,
+        AtlasShape, BASE_COLOR, MaterialBake, MaterialMap, MaterialMeshRequest, MaterialSlot,
+        MeshMethod, ResourceStorage, object_to_material_glb,
     };
     use branded_id::U32Id;
     use gltf::{Gltf, image::Source};
@@ -49,7 +49,7 @@ mod tests {
     const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
     /// A 2x1x1 bar whose two voxels are red and blue through one
-    /// `baseColorFactor` palette, so the mesh uses two materials.
+    /// `baseColor` palette, so the mesh uses two materials.
     fn red_blue_bar() -> (VoxMain, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
@@ -60,7 +60,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
+                BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )

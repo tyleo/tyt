@@ -12,9 +12,9 @@ use std::{
 };
 use voxcore::{VoxEffectivePalette, VoxMain, VoxObject, VoxValuePool, VoxValuePoolKind};
 use voxsmith::{
-    AtlasShape, BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH,
-    GltfAttributeKind, MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest,
-    MaterialSlot, MeshMethod as VoxsmithMeshMethod, ResourceStorage as VoxsmithResourceStorage,
+    AtlasShape, BASE_COLOR, ColorChannel, EMISSIVE_COLOR, EMISSIVE_STRENGTH, GltfAttributeKind,
+    MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest, MaterialSlot,
+    MeshMethod as VoxsmithMeshMethod, ResourceStorage as VoxsmithResourceStorage,
     object_to_glb_bytes, object_to_gltf_bytes, object_to_material_glb, object_to_material_gltf,
 };
 
@@ -120,10 +120,10 @@ fn validate_maps(state: &VoxMain, object: &VoxObject, maps: &[MeshTextureMap]) -
 
             // The color bakes name no channels. Each reads a fixed property
             // whole, so it is checked against the kind it reads that property as.
-            TextureBake::RgbaColor => validate_color(&effective, BASE_COLOR_FACTOR)?,
+            TextureBake::RgbaColor => validate_color(&effective, BASE_COLOR)?,
 
             TextureBake::EmissiveColor => {
-                validate_color(&effective, EMISSIVE_FACTOR)?;
+                validate_color(&effective, EMISSIVE_COLOR)?;
                 validate_scalar(&effective, EMISSIVE_STRENGTH)?;
             }
         }
@@ -423,15 +423,15 @@ mod tests {
     fn an_absent_builtin_takes_its_spec_kind() {
         let (state, palette_id) = palette_state();
         // None are bound, so each validates by its glTF spec kind and bakes its
-        // default: baseColorFactor is a four-component color, occlusionStrength a
-        // scalar, emissiveFactor a three-component color.
+        // default: baseColor is a four-component color, occlusionStrength a
+        // scalar, emissiveColor a three-component color.
         assert!(validates(
             &state,
             &[palette_id],
-            "baseColorFactor",
+            "baseColor",
             Some(ColorComponent::A)
         ));
-        assert!(!validates(&state, &[palette_id], "baseColorFactor", None));
+        assert!(!validates(&state, &[palette_id], "baseColor", None));
         assert!(validates(&state, &[palette_id], "occlusionStrength", None));
         assert!(!validates(
             &state,
@@ -442,7 +442,7 @@ mod tests {
         assert!(!validates(
             &state,
             &[palette_id],
-            "emissiveFactor",
+            "emissiveColor",
             Some(ColorComponent::A)
         ));
     }

@@ -258,7 +258,7 @@ fn apply(
     // material's flat factor, since it is a per-material scalar the texture does
     // not carry.
     if maps.emissive.is_some() && triangle.uvs.emissive.is_some() {
-        material.emissive_factor = TySrgbaF64::from_linear(TyLinSrgbaF64::new(
+        material.emissive_color = TySrgbaF64::from_linear(TyLinSrgbaF64::new(
             accum.emissive[0] / n,
             accum.emissive[1] / n,
             accum.emissive[2] / n,

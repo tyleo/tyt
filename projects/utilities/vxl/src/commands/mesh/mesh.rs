@@ -95,11 +95,11 @@ pub struct Mesh {
     /// the mesh, no path separator.
     ///
     /// Each `<expr>` is one of:
-    /// - `<property>`: a voxel property by name, as `metallicFactor` or
-    ///   `baseColorFactor`
+    /// - `<property>`: a voxel property by name, as `metallic` or
+    ///   `baseColor`
     /// - `<property>.<r|g|b|a>`: one component of a color property, as
-    ///   `baseColorFactor.r`
-    /// - `1-<property>`: the inverse `1 - value`, as `1-roughnessFactor`
+    ///   `baseColor.r`
+    /// - `1-<property>`: the inverse `1 - value`, as `1-roughness`
     /// - 0, 1: a constant channel
     ///
     /// Property keys are voxj properties or `--define-property` aliases.
@@ -476,7 +476,7 @@ mod tests {
                     "albedo",
                     "--texture-map",
                     "skin.png",
-                    "R=metallicFactor"
+                    "R=metallic"
                 ],
                 "model.glb",
             ),
@@ -520,7 +520,7 @@ mod tests {
             "albedo",
             "--texture-map",
             "model-albedo.png",
-            "R=metallicFactor",
+            "R=metallic",
         ]));
     }
 
@@ -545,7 +545,7 @@ mod tests {
         assert!(!resolves(&[
             "--texture-map",
             "textures/skin.png",
-            "R=metallicFactor",
+            "R=metallic",
         ]));
     }
 

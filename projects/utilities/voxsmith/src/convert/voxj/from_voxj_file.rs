@@ -176,13 +176,13 @@ mod tests {
                         },
                     ],
                     palettes: vec![
-                        numbered_palette("baseColorFactor", 0, 6),
+                        numbered_palette("baseColor", 0, 6),
                         // Two properties over the bounded value pools, one row
-                        // per material: material 0 = { metallicFactor: 0.0,
-                        // ior: 1.5 }, material 1 = { metallicFactor: 0.5,
+                        // per material: material 0 = { metallic: 0.0,
+                        // ior: 1.5 }, material 1 = { metallic: 0.5,
                         // ior: 2.0 }.
                         VoxjPalette {
-                            properties: vec![property("metallicFactor", 1), property("ior", 2)],
+                            properties: vec![property("metallic", 1), property("ior", 2)],
                             materials: vec![vec![0, 0], vec![1, 1]],
                         },
                     ],
@@ -338,7 +338,7 @@ mod tests {
                         vec![[0, 0, 0], [1, 0, 0]],
                         vec![vec![0], vec![1]],
                     )],
-                    palettes: vec![numbered_palette("baseColorFactor", 0, 2)],
+                    palettes: vec![numbered_palette("baseColor", 0, 2)],
                     nodes: Vec::new(),
                     root_nodes: Vec::new(),
                 },
@@ -497,9 +497,9 @@ mod tests {
     #[test]
     fn remove_first_layer_then_gc_keeps_layer_order() {
         let palettes = vec![
-            numbered_palette("baseColorFactor", 0, 2),
-            numbered_palette("baseColorFactor", 0, 2),
-            numbered_palette("baseColorFactor", 0, 2),
+            numbered_palette("baseColor", 0, 2),
+            numbered_palette("baseColor", 0, 2),
+            numbered_palette("baseColor", 0, 2),
         ];
         let file = VoxjFile {
             version: 1,
@@ -606,7 +606,7 @@ mod tests {
                         voxel_positions: VoxjPositionBlock::RawJson(Vec::new()),
                         voxel_samples: VoxjSampleBlock::RawJson(vec![Vec::new()]),
                     }],
-                    palettes: vec![numbered_palette("baseColorFactor", 0, 1)],
+                    palettes: vec![numbered_palette("baseColor", 0, 1)],
                     nodes: Vec::new(),
                     root_nodes: Vec::new(),
                 },
@@ -624,10 +624,7 @@ mod tests {
     #[test]
     fn round_trips_sibling_variant_palettes() {
         let variant = |strength: usize| VoxjPalette {
-            properties: vec![
-                property("baseColorFactor", 0),
-                property("emissiveStrength", 1),
-            ],
+            properties: vec![property("baseColor", 0), property("emissiveStrength", 1)],
             materials: vec![vec![0, strength], vec![1, strength]],
         };
         let file = VoxjFile {
@@ -702,7 +699,7 @@ mod tests {
                         vec![[0, 0, 0]],
                         vec![vec![0]],
                     )],
-                    palettes: vec![numbered_palette("baseColorFactor", 0, 2)],
+                    palettes: vec![numbered_palette("baseColor", 0, 2)],
                     nodes: Vec::new(),
                     root_nodes: Vec::new(),
                 },

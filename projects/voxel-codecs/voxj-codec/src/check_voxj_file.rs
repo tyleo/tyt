@@ -71,12 +71,12 @@ mod tests {
     }
 
     /// A palette of `materials` materials: one property binding
-    /// `baseColorFactor` to value pool 0, its rows the value-indices
+    /// `baseColor` to value pool 0, its rows the value-indices
     /// `0..materials`.
     fn palette(materials: usize) -> VoxjPalette {
         VoxjPalette {
             properties: vec![VoxjProperty {
-                name: "baseColorFactor".to_owned(),
+                name: "baseColor".to_owned(),
                 value_pool: 0,
             }],
             materials: (0..materials).map(|i| vec![i]).collect(),
@@ -237,7 +237,7 @@ mod tests {
         // palettes check.
         file.main.runtime_state.palettes.push(VoxjPalette {
             properties: vec![VoxjProperty {
-                name: "baseColorFactor".to_owned(),
+                name: "baseColor".to_owned(),
                 value_pool: 0,
             }],
             materials: vec![],

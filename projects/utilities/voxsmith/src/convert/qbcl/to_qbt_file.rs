@@ -158,7 +158,7 @@ fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result
 }
 
 /// Rebuilds a matrix grid from an object: each solid voxel's color comes from
-/// the object's `baseColorFactor` layer and its mask from the aligned ext mask
+/// the object's `baseColor` layer and its mask from the aligned ext mask
 /// list, placed in `.qbt` storage order. Errors if the mask count does not
 /// match the object's solid voxels.
 #[allow(clippy::too_many_arguments)]

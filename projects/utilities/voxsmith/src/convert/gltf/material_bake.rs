@@ -5,11 +5,11 @@ use crate::MaterialChannel;
 /// channel.
 #[derive(Clone, Debug, PartialEq)]
 pub enum MaterialBake {
-    /// The straight-RGBA base color from the `baseColorFactor` attribute, four
+    /// The straight-RGBA base color from the `baseColor` attribute, four
     /// channels.
     RgbaColor,
 
-    /// The `emissiveFactor` color, three channels (RGB), opaque. The
+    /// The `emissiveColor` color, three channels (RGB), opaque. The
     /// `emissiveStrength` rides on the material as a flat
     /// `KHR_materials_emissive_strength` factor, not folded into the texel.
     EmissiveColor,

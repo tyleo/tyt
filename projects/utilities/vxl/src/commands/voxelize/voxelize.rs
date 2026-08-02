@@ -56,7 +56,7 @@ pub struct Voxelize {
     name: Option<String>,
 
     /// What a source material factor outside its glTF range does, such as a
-    /// `metallicFactor` above `1`. `error` names the factor and refuses the
+    /// `metallic` above `1`. `error` names the factor and refuses the
     /// mesh. `clamp` clamps into the range and voxelizes on.
     #[arg(value_name = "out-of-range-factor", long, default_value = "error")]
     out_of_range_factor: OutOfRangeFactor,

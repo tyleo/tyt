@@ -3,7 +3,7 @@
 //! other format carries the plain 0 to 1 glTF factor. The slider percent is
 //! `(coefficient - 0.1) / 0.8`, so a coefficient of 0.1 reads as 0 percent and
 //! 0.9 reads as 100 percent. The Voxel Max reader and writer convert at the
-//! boundary so the shared `metallicFactor` and `roughnessFactor` value pools
+//! boundary so the shared `metallic` and `roughness` value pools
 //! stay on the 0 to 1 glTF range. An outgoing factor off the glTF range errors,
 //! since no slider reads it. An incoming coefficient off the slider span is
 //! something a file can carry, so it projects to the nearest end. The exact
@@ -51,7 +51,7 @@ pub(crate) fn vm_coefficient_to_pbr_factor(coefficient: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{METALLIC_FACTOR, pbr_factor_to_vm_coefficient, vm_coefficient_to_pbr_factor};
+    use crate::{METALLIC, pbr_factor_to_vm_coefficient, vm_coefficient_to_pbr_factor};
 
     /// Whether two coefficients agree within f64 rounding of the linear map.
     fn close(a: f64, b: f64) -> bool {
@@ -60,7 +60,7 @@ mod tests {
 
     /// The coefficient for `factor`, read as metalness.
     fn coefficient(factor: f64) -> f64 {
-        pbr_factor_to_vm_coefficient(factor, METALLIC_FACTOR).unwrap()
+        pbr_factor_to_vm_coefficient(factor, METALLIC).unwrap()
     }
 
     fn factor(coefficient: f64) -> f64 {
@@ -92,8 +92,8 @@ mod tests {
 
     #[test]
     fn rejects_a_factor_outside_the_gltf_range() {
-        assert!(pbr_factor_to_vm_coefficient(-1.0, METALLIC_FACTOR).is_err());
-        assert!(pbr_factor_to_vm_coefficient(2.0, METALLIC_FACTOR).is_err());
+        assert!(pbr_factor_to_vm_coefficient(-1.0, METALLIC).is_err());
+        assert!(pbr_factor_to_vm_coefficient(2.0, METALLIC).is_err());
     }
 
     #[test]

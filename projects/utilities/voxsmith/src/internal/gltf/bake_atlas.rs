@@ -1,5 +1,5 @@
 use crate::{
-    BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, MaterialBake,
+    BASE_COLOR, ColorChannel, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, MaterialBake,
     MaterialChannel, Result, UsedMaterials, default_color, default_scalar, value_pool_color,
 };
 use branded_id::U32Id;
@@ -47,9 +47,7 @@ fn bake_texel(
     max_strength: f64,
 ) -> Result<[u8; 4]> {
     match bake {
-        MaterialBake::RgbaColor => {
-            color_bytes(used.attribute(index, BASE_COLOR_FACTOR), BASE_COLOR_FACTOR)
-        }
+        MaterialBake::RgbaColor => color_bytes(used.attribute(index, BASE_COLOR), BASE_COLOR),
 
         MaterialBake::EmissiveColor => emissive_color_bytes(used, index, max_strength),
 
@@ -173,13 +171,13 @@ fn unbound(key: &str) -> Error {
     ))
 }
 
-/// The emissive texel for the material at `index`: its `emissiveFactor`
+/// The emissive texel for the material at `index`: its `emissiveColor`
 /// scaled in linear light by `emissiveStrength / max_strength`. Per-voxel
 /// strengths survive as a gradient, and a flat
 /// `KHR_materials_emissive_strength` of `max_strength` restores the absolute
 /// scale. An absent color is black, its spec default.
 fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -> Result<[u8; 4]> {
-    let color = color_bytes(used.attribute(index, EMISSIVE_FACTOR), EMISSIVE_FACTOR)?;
+    let color = color_bytes(used.attribute(index, EMISSIVE_COLOR), EMISSIVE_COLOR)?;
 
     let fraction = if max_strength > 0.0 {
         material_scalar(used, index, EMISSIVE_STRENGTH)? / max_strength
@@ -220,9 +218,9 @@ pub(crate) fn material_scalar(used: &UsedMaterials, index: usize, key: &str) -> 
 #[cfg(test)]
 mod tests {
     use crate::{
-        AtlasShape, BASE_COLOR_FACTOR, ColorChannel, EMISSIVE_FACTOR, EMISSIVE_STRENGTH,
-        METALLIC_FACTOR, MaterialBake, MaterialChannel, OCCLUSION_STRENGTH, ROUGHNESS_FACTOR,
-        Result, atlas_dimensions, bake_atlas_pixels, resolve_used_materials,
+        AtlasShape, BASE_COLOR, ColorChannel, EMISSIVE_COLOR, EMISSIVE_STRENGTH, METALLIC,
+        MaterialBake, MaterialChannel, OCCLUSION_STRENGTH, ROUGHNESS, Result, atlas_dimensions,
+        bake_atlas_pixels, resolve_used_materials,
     };
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
@@ -244,8 +242,8 @@ mod tests {
         }
     }
 
-    /// A single-layer document: one palette carrying `baseColorFactor`,
-    /// `metallicFactor`, and `roughnessFactor` over three value pools, with a
+    /// A single-layer document: one palette carrying `baseColor`,
+    /// `metallic`, and `roughness` over three value pools, with a
     /// three-voxel object whose voxels sample three materials in raster order:
     /// (red, shiny, smooth), (red, matte, rough), (blue, matte, rough).
     fn single_layer_state() -> (VoxMain, U32Id<BVoxObject>) {
@@ -266,21 +264,21 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
+                BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
             .add_property(
-                METALLIC_FACTOR.to_owned(),
+                METALLIC.to_owned(),
                 metallic_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
             .add_property(
-                ROUGHNESS_FACTOR.to_owned(),
+                ROUGHNESS.to_owned(),
                 roughness_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -330,12 +328,12 @@ mod tests {
     }
 
     #[test]
-    fn a_scalar_packing_reads_the_metallic_factor() {
+    fn a_scalar_packing_reads_the_metallic_property() {
         let (state, object_id) = single_layer_state();
         let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
-        let metallic = MaterialBake::Packing(vec![scalar(METALLIC_FACTOR, false)]);
+        let metallic = MaterialBake::Packing(vec![scalar(METALLIC, false)]);
         let pixels = bake_atlas_pixels(&used, &metallic, width, height).unwrap();
         // Only material 0 is metallic (1.0); the rest are matte (0.0).
         assert_eq!(pixels[0], 255);
@@ -390,7 +388,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
+                BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -434,7 +432,7 @@ mod tests {
         let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
-        let smoothness = MaterialBake::Packing(vec![scalar(ROUGHNESS_FACTOR, true)]);
+        let smoothness = MaterialBake::Packing(vec![scalar(ROUGHNESS, true)]);
         let pixels = bake_atlas_pixels(&used, &smoothness, width, height).unwrap();
         // Material 0 is roughness 0.0 -> smoothness 1.0; material 1 is roughness
         // 1.0 -> smoothness 0.0.
@@ -463,7 +461,7 @@ mod tests {
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
         let red = MaterialBake::Packing(vec![MaterialChannel::Attribute {
-            key: BASE_COLOR_FACTOR.to_owned(),
+            key: BASE_COLOR.to_owned(),
             component: Some(ColorChannel::R),
             invert: false,
         }]);
@@ -486,7 +484,7 @@ mod tests {
     fn emissive_color_folds_strength_toward_the_mesh_max() {
         let mut state = VoxMain::default();
 
-        // emissiveFactor is sRGB; strengths 1.0 and 0.5 fold into the texels as
+        // emissiveColor is sRGB; strengths 1.0 and 0.5 fold into the texels as
         // fractions of the mesh max, 1.0.
         let factor_value_pool_id = state
             .add_value_pool(VoxValuePool::srgb(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]).unwrap());
@@ -497,7 +495,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                EMISSIVE_FACTOR.to_owned(),
+                EMISSIVE_COLOR.to_owned(),
                 factor_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -596,18 +594,18 @@ mod tests {
     #[test]
     fn a_color_packed_as_a_scalar_errors() {
         let color = VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
-        let bake = MaterialBake::Packing(vec![scalar(METALLIC_FACTOR, false)]);
+        let bake = MaterialBake::Packing(vec![scalar(METALLIC, false)]);
 
-        assert!(bake_one(METALLIC_FACTOR, color, &bake).is_err());
+        assert!(bake_one(METALLIC, color, &bake).is_err());
     }
 
     #[test]
     fn a_scalar_baked_as_a_color_errors() {
-        // The rgba bake reads `baseColorFactor` whole, so a scalar value pool
+        // The rgba bake reads `baseColor` whole, so a scalar value pool
         // under it has no color to decode.
         let number = VoxValuePool::float(VoxBound::None, VoxBound::None, vec![0.5]).unwrap();
 
-        assert!(bake_one(BASE_COLOR_FACTOR, number, &MaterialBake::RgbaColor).is_err());
+        assert!(bake_one(BASE_COLOR, number, &MaterialBake::RgbaColor).is_err());
     }
 
     #[test]
@@ -628,19 +626,19 @@ mod tests {
         let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
-        // The palette binds no `emissiveFactor`. Its spec default is black,
-        // while `baseColorFactor` defaults to white.
+        // The palette binds no `emissiveColor`. Its spec default is black,
+        // while `baseColor` defaults to white.
         let bake = MaterialBake::Packing(vec![MaterialChannel::Attribute {
-            key: EMISSIVE_FACTOR.to_owned(),
+            key: EMISSIVE_COLOR.to_owned(),
             component: Some(ColorChannel::R),
             invert: false,
         }]);
         let pixels = bake_atlas_pixels(&used, &bake, width, height).unwrap();
         assert_eq!(pixels[0], 0);
 
-        // Unbound, `baseColorFactor` would take white. This palette binds it red.
+        // Unbound, `baseColor` would take white. This palette binds it red.
         let bake = MaterialBake::Packing(vec![MaterialChannel::Attribute {
-            key: BASE_COLOR_FACTOR.to_owned(),
+            key: BASE_COLOR.to_owned(),
             component: Some(ColorChannel::R),
             invert: false,
         }]);

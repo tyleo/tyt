@@ -285,7 +285,7 @@ mod tests {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             assert_eq!(used.material_index(voxel_id), Some(0));
         }
-        assert_eq!(used.attribute(0, "baseColorFactor"), None);
+        assert_eq!(used.attribute(0, "baseColor"), None);
     }
 
     #[test]

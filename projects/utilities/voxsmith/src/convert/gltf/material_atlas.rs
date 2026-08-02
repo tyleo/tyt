@@ -54,8 +54,7 @@ pub fn object_to_material_atlas(
 #[cfg(test)]
 mod tests {
     use crate::{
-        AtlasShape, BASE_COLOR_FACTOR, MaterialBake, MaterialChannel, ROUGHNESS_FACTOR,
-        object_to_material_atlas,
+        AtlasShape, BASE_COLOR, MaterialBake, MaterialChannel, ROUGHNESS, object_to_material_atlas,
     };
     use branded_id::U32Id;
     use std::io::Cursor;
@@ -84,7 +83,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
+                BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -102,7 +101,7 @@ mod tests {
         let bakes = [
             MaterialBake::RgbaColor,
             MaterialBake::Packing(vec![MaterialChannel::Attribute {
-                key: ROUGHNESS_FACTOR.to_owned(),
+                key: ROUGHNESS.to_owned(),
                 component: None,
                 invert: false,
             }]),

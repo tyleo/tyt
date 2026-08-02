@@ -1,8 +1,8 @@
 use crate::{
     EMISSIVE_STRENGTH, IOR, MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage,
-    Result, TRANSMISSION_FACTOR, UsedMaterials, atlas_dimensions, bake_atlas_pixels,
-    default_scalar, encode_rgba8_png, material_scalar, max_emissive_strength, mesh_slices,
-    resolve_used_materials, texel_center,
+    Result, TRANSMISSION, UsedMaterials, atlas_dimensions, bake_atlas_pixels, default_scalar,
+    encode_rgba8_png, material_scalar, max_emissive_strength, mesh_slices, resolve_used_materials,
+    texel_center,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
@@ -233,14 +233,14 @@ fn material_extensions(used: &UsedMaterials) -> Result<Map<String, Value>> {
     for (key, extension, field) in [
         (IOR, "KHR_materials_ior", "ior"),
         (
-            TRANSMISSION_FACTOR,
+            TRANSMISSION,
             "KHR_materials_transmission",
             "transmissionFactor",
         ),
     ] {
         let value = material_scalar(used, 0, key)?;
 
-        if value != default_scalar(key).expect("ior and transmissionFactor have glTF defaults") {
+        if value != default_scalar(key).expect("ior and transmission have glTF defaults") {
             extensions.insert(extension.to_owned(), json!({ field: value }));
         }
     }

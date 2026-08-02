@@ -1,4 +1,4 @@
-use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, Result, value_pool_color};
+use crate::{BASE_COLOR, ColorSpace, Dither, ReductionMethod, Result, value_pool_color};
 use branded_id::U32Id;
 use std::{cmp::Ordering, collections::HashMap, mem};
 use ty_math::{
@@ -13,7 +13,7 @@ use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, Vo
 /// [`VoxMain::prune_value_pools`]. Either way the state stays valid, with the
 /// surviving value ids left for [`VoxMain::gc`] to compact.
 ///
-/// Materials cluster by the `baseColorFactor` property and each cluster
+/// Materials cluster by the `baseColor` property and each cluster
 /// collapses onto one real representative, so a merged voxel takes the
 /// representative's whole material. Colorless materials are left untouched.
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
@@ -45,7 +45,7 @@ pub fn reduce_palette(
 }
 
 /// Reduces `palette` in `state` to at most `max_materials` materials:
-/// materials cluster by `baseColorFactor` and each cluster collapses onto one
+/// materials cluster by `baseColor` and each cluster collapses onto one
 /// real representative, so a merged voxel takes the representative's whole
 /// material. Colorless materials are left untouched.
 ///
@@ -70,8 +70,8 @@ fn reduce_materials(
         return Ok(None);
     }
 
-    // The `baseColorFactor` property; only colored materials cluster.
-    let color_property_id = palette_ref.property_id_by_name(BASE_COLOR_FACTOR);
+    // The `baseColor` property; only colored materials cluster.
+    let color_property_id = palette_ref.property_id_by_name(BASE_COLOR);
 
     let colored: Vec<(u32, [u8; 4])> = match color_property_id {
         Some(property_id) => palette_ref
@@ -161,7 +161,7 @@ struct Point {
     population: u64,
 }
 
-/// The sRGB bytes of a material's `baseColorFactor`, or `None` if the value is
+/// The sRGB bytes of a material's `baseColor`, or `None` if the value is
 /// absent or its bound value pool is not a color kind. Resolves the bound
 /// value-pool value and decodes it with [`value_pool_color`].
 fn material_color(
@@ -774,7 +774,7 @@ fn bayer(x: u32, y: u32, z: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR_FACTOR, ColorSpace, Dither, ReductionMethod, reduce_palette};
+    use crate::{BASE_COLOR, ColorSpace, Dither, ReductionMethod, reduce_palette};
     use branded_id::U32Id;
     use ty_math::{TyFloatExt, TyVector3U32};
     use voxcore::{
@@ -796,7 +796,7 @@ mod tests {
         [byte(0), byte(1), byte(2), byte(3)].map(|b| b as f64 / 255.0)
     }
 
-    /// The `#RRGGBBAA` hex of a material's `baseColorFactor`, uppercase.
+    /// The `#RRGGBBAA` hex of a material's `baseColor`, uppercase.
     fn material_hex(
         state: &VoxMain,
         palette_id: U32Id<BVoxPalette>,
@@ -805,14 +805,14 @@ mod tests {
         let property_id = state
             .palette(palette_id)
             .unwrap()
-            .property_id_by_name(BASE_COLOR_FACTOR)
+            .property_id_by_name(BASE_COLOR)
             .unwrap();
         match state
             .material_value(palette_id, material_id, property_id)
             .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
             Some(VoxValuePoolValueRef::Srgba(&color)) => hex_of(color),
-            other => panic!("material has no srgba baseColorFactor: {other:?}"),
+            other => panic!("material has no srgba baseColor: {other:?}"),
         }
     }
 
@@ -835,7 +835,7 @@ mod tests {
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        // baseColorFactor draws from an sRGBA color value pool; tag draws from
+        // baseColor draws from an sRGBA color value pool; tag draws from
         // an unbounded float value pool with one distinct value per material.
         let base_value_pool_id = state.add_value_pool(
             VoxValuePool::srgba(colors.iter().map(|color| srgba(color)).collect()).unwrap(),
@@ -852,7 +852,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
+                BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -897,7 +897,7 @@ mod tests {
         state.palette(palette_id).unwrap().material_count()
     }
 
-    /// The set of baseColorFactor hexes still in the palette.
+    /// The set of baseColor hexes still in the palette.
     fn colors(state: &VoxMain, palette_id: U32Id<BVoxPalette>) -> Vec<String> {
         state
             .palette(palette_id)
@@ -907,7 +907,7 @@ mod tests {
             .collect()
     }
 
-    /// One object of size `bounds` with a `baseColorFactor` palette of `colors`
+    /// One object of size `bounds` with a `baseColor` palette of `colors`
     /// and one live voxel per `(position, color-index)` entry, so a dither test
     /// can place a known color at a known position.
     fn grid_state(
@@ -924,7 +924,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
+                BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -948,7 +948,7 @@ mod tests {
         (state, palette_id, object_id)
     }
 
-    /// The baseColorFactor hex the voxel at `position` samples, through the
+    /// The baseColor hex the voxel at `position` samples, through the
     /// object's one layer.
     fn voxel_color(
         state: &VoxMain,
@@ -1225,7 +1225,7 @@ mod tests {
         // prunes the merged-away color and its tag from the value pools.
         let (mut state, palette_id, _) =
             state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
-        assert_eq!(value_pool_len(&state, BASE_COLOR_FACTOR), 3);
+        assert_eq!(value_pool_len(&state, BASE_COLOR), 3);
 
         let outcome = reduce_palette(
             &mut state,
@@ -1240,7 +1240,7 @@ mod tests {
         assert_eq!(outcome, Some((3, 2)));
 
         // Both value pools now carry only the two survivors' values.
-        assert_eq!(value_pool_len(&state, BASE_COLOR_FACTOR), 2);
+        assert_eq!(value_pool_len(&state, BASE_COLOR), 2);
         assert_eq!(value_pool_len(&state, "tag"), 2);
         assert_eq!(state.validate(), Ok(()));
         // The survivors still resolve to their original colors.
@@ -1251,7 +1251,7 @@ mod tests {
 
     #[test]
     fn a_colorless_palette_is_left_untouched() {
-        // The palette carries no `baseColorFactor`, so every material counts
+        // The palette carries no `baseColor`, so every material counts
         // as colorless and the reduction no-ops even over the cap.
         let mut state = VoxMain::default();
         let tag_value_pool_id = state.add_value_pool(
@@ -1359,7 +1359,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(material_count(&state, palette_id), 2);
-        assert_eq!(value_pool_len(&state, BASE_COLOR_FACTOR), 3);
+        assert_eq!(value_pool_len(&state, BASE_COLOR), 3);
         assert_eq!(state.validate(), Ok(()));
     }
 }

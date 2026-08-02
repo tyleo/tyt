@@ -1,8 +1,7 @@
 use crate::{
-    BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, FillMode, IOR, METALLIC_FACTOR,
-    MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS_FACTOR,
-    Result, SurfaceMode, TRANSMISSION_FACTOR, VoxelGrid, sample_material, scalar_range,
-    voxelize_triangles,
+    BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, FillMode, IOR, METALLIC, MaterialMode,
+    Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS, Result, SurfaceMode,
+    TRANSMISSION, VoxelGrid, sample_material, scalar_range, voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
@@ -286,7 +285,7 @@ fn build_palette(
     let base_color = srgba_value_pool(&distinct, |material| material.base_color);
     let metallic = float_value_pool(&distinct, |material| material.metallic);
     let roughness = float_value_pool(&distinct, |material| material.roughness);
-    let emissive_factor = srgb_value_pool(&distinct, |material| material.emissive_factor);
+    let emissive_color = srgb_value_pool(&distinct, |material| material.emissive_color);
     let emissive_strength = float_value_pool(&distinct, |material| material.emissive_strength);
     let occlusion = float_value_pool(&distinct, |material| material.occlusion);
     let ior = float_value_pool(&distinct, |material| material.ior);
@@ -296,45 +295,44 @@ fn build_palette(
     // any material, so no material carries a back-fill placeholder value id.
     let scalars = |values, key| factor_value_pool(values, key, out_of_range);
     let base_color_value_pool_id = state.add_value_pool(VoxValuePool::srgba(base_color.values)?);
-    let metallic_value_pool_id = state.add_value_pool(scalars(metallic.values, METALLIC_FACTOR)?);
-    let roughness_value_pool_id =
-        state.add_value_pool(scalars(roughness.values, ROUGHNESS_FACTOR)?);
-    let emissive_factor_value_pool_id =
-        state.add_value_pool(VoxValuePool::srgb(emissive_factor.values)?);
+    let metallic_value_pool_id = state.add_value_pool(scalars(metallic.values, METALLIC)?);
+    let roughness_value_pool_id = state.add_value_pool(scalars(roughness.values, ROUGHNESS)?);
+    let emissive_color_value_pool_id =
+        state.add_value_pool(VoxValuePool::srgb(emissive_color.values)?);
     let emissive_strength_value_pool_id =
         state.add_value_pool(scalars(emissive_strength.values, EMISSIVE_STRENGTH)?);
     let occlusion_value_pool_id =
         state.add_value_pool(scalars(occlusion.values, OCCLUSION_STRENGTH)?);
     let ior_value_pool_id = state.add_value_pool(scalars(ior.values, IOR)?);
     let transmission_value_pool_id =
-        state.add_value_pool(scalars(transmission.values, TRANSMISSION_FACTOR)?);
+        state.add_value_pool(scalars(transmission.values, TRANSMISSION)?);
 
     let mut palette = VoxPalette::default();
     palette
         .add_property(
-            BASE_COLOR_FACTOR.to_owned(),
+            BASE_COLOR.to_owned(),
             base_color_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
         .add_property(
-            METALLIC_FACTOR.to_owned(),
+            METALLIC.to_owned(),
             metallic_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
         .add_property(
-            ROUGHNESS_FACTOR.to_owned(),
+            ROUGHNESS.to_owned(),
             roughness_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
         .add_property(
-            EMISSIVE_FACTOR.to_owned(),
-            emissive_factor_value_pool_id,
+            EMISSIVE_COLOR.to_owned(),
+            emissive_color_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
@@ -357,7 +355,7 @@ fn build_palette(
         .expect("the property names are distinct");
     palette
         .add_property(
-            TRANSMISSION_FACTOR.to_owned(),
+            TRANSMISSION.to_owned(),
             transmission_value_pool_id,
             U32Id::from_u32(0),
         )
@@ -372,7 +370,7 @@ fn build_palette(
                     base_color.value_ids[index],
                     metallic.value_ids[index],
                     roughness.value_ids[index],
-                    emissive_factor.value_ids[index],
+                    emissive_color.value_ids[index],
                     emissive_strength.value_ids[index],
                     occlusion.value_ids[index],
                     ior.value_ids[index],
@@ -520,7 +518,7 @@ type MaterialKey = ([u8; 4], u64, u64, [u8; 3], u64, u64, u64, u64);
 
 /// The [`MaterialKey`] for a material.
 fn material_key(material: &MeshMaterial) -> MaterialKey {
-    let emissive = material.emissive_factor;
+    let emissive = material.emissive_color;
     (
         <[u8; 4]>::from(material.base_color),
         material.metallic.to_bits(),
@@ -619,8 +617,8 @@ fn grid_too_large(counts: TyVector3U32) -> Error {
 #[cfg(test)]
 mod tests {
     use crate::{
-        EMISSIVE_STRENGTH, FillMode, METALLIC_FACTOR, MaterialMode, Mesh, MeshMaterial,
-        MeshTriangle, MeshTriangleUvs, OutOfRangeFactor, Result, SurfaceMode, voxelize_mesh,
+        EMISSIVE_STRENGTH, FillMode, METALLIC, MaterialMode, Mesh, MeshMaterial, MeshTriangle,
+        MeshTriangleUvs, OutOfRangeFactor, Result, SurfaceMode, voxelize_mesh,
     };
     use ty_math::{TySrgbaU8, TyVector3F64, TyVector3U32};
     use voxcore::{VoxMain, VoxValuePoolValueRef};
@@ -745,7 +743,7 @@ mod tests {
         assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 0.0);
     }
 
-    /// The two-cell mesh's materials with the right one's `metallicFactor` out
+    /// The two-cell mesh's materials with the right one's `metallic` out
     /// of the glTF range.
     fn over_metallic() -> Vec<MeshMaterial> {
         let matte = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
@@ -762,7 +760,7 @@ mod tests {
 
         // The factor and the value both point back at the source mesh.
         let message = error.to_string();
-        assert!(message.contains(METALLIC_FACTOR), "{message}");
+        assert!(message.contains(METALLIC), "{message}");
         assert!(message.contains("1.5"), "{message}");
     }
 
@@ -773,7 +771,7 @@ mod tests {
         // Both materials land on the bounded value pool, the out-of-range one
         // at the range's top.
         let (_, palette) = state.iter_palettes().next().unwrap();
-        let property_id = palette.property_id_by_name(METALLIC_FACTOR).unwrap();
+        let property_id = palette.property_id_by_name(METALLIC).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
         let value_pool = state.value_pool(value_pool_id).unwrap();
         let values: Vec<VoxValuePoolValueRef> = value_pool

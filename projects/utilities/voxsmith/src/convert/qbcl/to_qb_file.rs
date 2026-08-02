@@ -62,7 +62,7 @@ pub fn to_qb_file(state: &VoxMain) -> Result<QbFile> {
 }
 
 /// Rebuilds a matrix grid from an object: each solid voxel's color comes from
-/// the object's `baseColorFactor` layer and its visibility from the aligned ext
+/// the object's `baseColor` layer and its visibility from the aligned ext
 /// list, placed in `.qb` storage order. Errors if the visibility count does not
 /// match the object's solid voxels.
 fn matrix_from_object(

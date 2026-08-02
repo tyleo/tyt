@@ -356,7 +356,7 @@ mod tests {
     use ty_math::TyVector3U32;
     use voxcore::{VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
-    /// One `baseColorFactor` palette and one tight 1x1x1 object sampling its one
+    /// One `baseColor` palette and one tight 1x1x1 object sampling its one
     /// material.
     fn tight_state() -> VoxMain {
         let mut state = VoxMain::default();
@@ -365,7 +365,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                "baseColorFactor".to_owned(),
+                "baseColor".to_owned(),
                 colors_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -401,9 +401,9 @@ mod tests {
              | Has ext      | no    |\n\
              | Has edit     | no    |\n\
              \n## Palettes\n\n\
-             | label | Properties      | Materials |\n\
-             | ----- | --------------- | --------- |\n\
-             | 0     | baseColorFactor | 1         |\n\
+             | label | Properties | Materials |\n\
+             | ----- | ---------- | --------- |\n\
+             | 0     | baseColor  | 1         |\n\
              \n## Objects\n\n\
              | label | Name | Bounds | Edit bounds | Origin  | Voxels | Layers |\n\
              | ----- | ---- | ------ | ----------- | ------- | ------ | ------ |\n\
@@ -428,7 +428,7 @@ mod tests {
              {\"label\":\"has_ext\",\"values\":[false]},\
              {\"label\":\"has_edit\",\"values\":[false]}]},\
              {\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
-             {\"label\":\"properties\",\"children\":[{\"label\":\"baseColorFactor\"}]},\
+             {\"label\":\"properties\",\"children\":[{\"label\":\"baseColor\"}]},\
              {\"label\":\"materials\",\"values\":[1]}]}]},\
              {\"label\":\"objects\",\"children\":[{\"label\":\"0\",\"children\":[\
              {\"label\":\"name\",\"values\":[\"body\"]},\
@@ -544,7 +544,7 @@ mod tests {
             state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut base = VoxPalette::default();
         base.add_property(
-            "baseColorFactor".to_owned(),
+            "baseColor".to_owned(),
             colors_value_pool_id,
             U32Id::from_u32(0),
         )
@@ -565,7 +565,7 @@ mod tests {
             InfoLayout::Tables,
         );
         assert!(tables.contains("| 0     | emissiveStrength | 1         |\n"));
-        assert!(tables.contains("| 1     | baseColorFactor  | 1         |\n"));
+        assert!(tables.contains("| 1     | baseColor        | 1         |\n"));
 
         let json = render(
             &state,

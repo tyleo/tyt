@@ -46,11 +46,11 @@ mod tests {
     }
 
     /// A palette of `materials` materials: one property binding
-    /// `baseColorFactor` to value pool 0, its rows the value-indices
+    /// `baseColor` to value pool 0, its rows the value-indices
     /// `0..materials`.
     fn palette(materials: usize) -> VoxjPalette {
         VoxjPalette {
-            properties: vec![property("baseColorFactor", 0)],
+            properties: vec![property("baseColor", 0)],
             materials: (0..materials).map(|i| vec![i]).collect(),
         }
     }
@@ -235,10 +235,7 @@ mod tests {
         // Two properties of the same name; keep the row arity valid so the
         // duplicate is the only fault.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            properties: vec![
-                property("baseColorFactor", 0),
-                property("baseColorFactor", 0),
-            ],
+            properties: vec![property("baseColor", 0), property("baseColor", 0)],
             materials: (0..4).map(|i| vec![i, i]).collect(),
         };
         assert!(validate_voxj_file(&file).is_err());
@@ -271,7 +268,7 @@ mod tests {
     fn rejects_property_value_pool_out_of_range() {
         let mut file = valid_file();
         // The document has two value pools; value pool 9 is out of range.
-        file.main.runtime_state.palettes[0].properties = vec![property("baseColorFactor", 9)];
+        file.main.runtime_state.palettes[0].properties = vec![property("baseColor", 9)];
         assert!(validate_voxj_file(&file).is_err());
     }
 
@@ -281,7 +278,7 @@ mod tests {
         // An extra, unreferenced palette with no materials; the missing
         // materials are the document's only fault.
         file.main.runtime_state.palettes.push(VoxjPalette {
-            properties: vec![property("baseColorFactor", 0)],
+            properties: vec![property("baseColor", 0)],
             materials: vec![],
         });
         assert!(validate_voxj_file(&file).is_err());
@@ -293,10 +290,7 @@ mod tests {
         // Two properties but a short second row; every row must hold
         // exactly one value-index per property.
         file.main.runtime_state.palettes[0] = VoxjPalette {
-            properties: vec![
-                property("baseColorFactor", 0),
-                property("metallicFactor", 0),
-            ],
+            properties: vec![property("baseColor", 0), property("metallic", 0)],
             materials: vec![vec![0, 1], vec![0]],
         };
         assert!(validate_voxj_file(&file).is_err());

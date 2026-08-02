@@ -1331,7 +1331,7 @@ mod tests {
         state
     }
 
-    /// Adds a palette with `count` `baseColorFactor` materials to `state`; only
+    /// Adds a palette with `count` `baseColor` materials to `state`; only
     /// the material count matters to the tree, so every color is the same.
     fn add_palette_with_materials(state: &mut VoxMain, count: usize) -> U32Id<BVoxPalette> {
         let colors_value_pool_id =
@@ -1339,7 +1339,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                "baseColorFactor".to_owned(),
+                "baseColor".to_owned(),
                 colors_value_pool_id,
                 U32Id::from_u32(0),
             )

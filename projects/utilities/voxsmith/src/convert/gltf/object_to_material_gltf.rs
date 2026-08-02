@@ -36,7 +36,7 @@ pub fn object_to_material_gltf(
 #[cfg(test)]
 mod tests {
     use crate::{
-        AtlasShape, BASE_COLOR_FACTOR, METALLIC_FACTOR, MaterialBake, MaterialChannel, MaterialMap,
+        AtlasShape, BASE_COLOR, METALLIC, MaterialBake, MaterialChannel, MaterialMap,
         MaterialMeshRequest, MaterialSlot, MeshMethod, ResourceStorage, object_to_material_gltf,
     };
     use branded_id::U32Id;
@@ -45,7 +45,7 @@ mod tests {
     use ty_math::TyVector3U32;
     use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
-    /// A one-voxel red cube through a single `baseColorFactor` palette, and the
+    /// A one-voxel red cube through a single `baseColor` palette, and the
     /// request the test bakes; `maps` and `storage` vary per test.
     fn cube_gltf(maps: Vec<MaterialMap>, storage: ResourceStorage) -> Vec<u8> {
         let mut state = VoxMain::default();
@@ -56,7 +56,7 @@ mod tests {
         let mut palette = VoxPalette::default();
         palette
             .add_property(
-                BASE_COLOR_FACTOR.to_owned(),
+                BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
@@ -122,7 +122,7 @@ mod tests {
                     name: "cube-mse.png".to_owned(),
                     slot: MaterialSlot::None,
                     bake: MaterialBake::Packing(vec![MaterialChannel::Attribute {
-                        key: METALLIC_FACTOR.to_owned(),
+                        key: METALLIC.to_owned(),
                         component: None,
                         invert: false,
                     }]),

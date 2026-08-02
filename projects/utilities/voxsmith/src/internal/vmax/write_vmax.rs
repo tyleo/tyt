@@ -1,8 +1,8 @@
 use crate::{
-    ABSORPTION, BASE_COLOR_FACTOR, EMISSIVE_FACTOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC_FACTOR,
-    ROUGHNESS_FACTOR, Result, SHADOWS, SceneCameraSource, TRANSMISSION_FACTOR, VoxelMaxColorFormat,
-    VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, ext_for,
-    from_vox_value, pbr_factor_to_vm_coefficient, tighten, value_pool_color,
+    ABSORPTION, BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC, ROUGHNESS,
+    Result, SHADOWS, SceneCameraSource, TRANSMISSION, VoxelMaxColorFormat, VoxelMaxExt,
+    VoxelMaxExtWrapper, VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, ext_for, from_vox_value,
+    pbr_factor_to_vm_coefficient, tighten, value_pool_color,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -624,7 +624,7 @@ fn object_view_box(origin: [i32; 3], size: TyVector3U32) -> VMaxViewBox {
 }
 
 /// The folded palette an object references: the palette id, the optional
-/// `baseColorFactor` property, and the material properties in
+/// `baseColor` property, and the material properties in
 /// order.
 struct FoldedRef {
     palette_id: U32Id<BVoxPalette>,
@@ -637,7 +637,7 @@ struct FoldedRef {
 fn folded_ref(state: &VoxMain, object: &VoxObject) -> Option<FoldedRef> {
     let (_, palette_id) = object.iter_layers().next()?;
     let palette = state.palette(palette_id)?;
-    let color_property_id = palette.property_id_by_name(BASE_COLOR_FACTOR);
+    let color_property_id = palette.property_id_by_name(BASE_COLOR);
     let material_property_ids = palette
         .iter_properties()
         .filter(|(property_id, _)| Some(*property_id) != color_property_id)
@@ -845,7 +845,7 @@ fn derived_material(
     let emissive_luminance = || -> Option<f64> {
         let position = properties
             .iter()
-            .position(|(name, _)| name == EMISSIVE_FACTOR)?;
+            .position(|(name, _)| name == EMISSIVE_COLOR)?;
         let value_pool = property_value_pool(state, palette_id, properties[position].1)?;
         let [r, g, b, _] = value_pool_color(value_pool, signature[position])?;
         let linear: TyLinSrgbaF64 = TySrgbaU8::from([r, g, b, 255])
@@ -854,14 +854,11 @@ fn derived_material(
         Some(0.2126 * linear.red + 0.7152 * linear.green + 0.0722 * linear.blue)
     };
     let carries = |property: &str| -> bool { properties.iter().any(|(name, _)| name == property) };
-    let dispersed = carries(IOR) || carries(TRANSMISSION_FACTOR) || carries(ABSORPTION);
+    let dispersed = carries(IOR) || carries(TRANSMISSION) || carries(ABSORPTION);
     Ok(VMaxMaterial {
         mi: (slot + 1).to_string(),
-        mc: pbr_factor_to_vm_coefficient(scalar(METALLIC_FACTOR).unwrap_or(0.0), METALLIC_FACTOR)?,
-        rc: pbr_factor_to_vm_coefficient(
-            scalar(ROUGHNESS_FACTOR).unwrap_or(0.0),
-            ROUGHNESS_FACTOR,
-        )?,
+        mc: pbr_factor_to_vm_coefficient(scalar(METALLIC).unwrap_or(0.0), METALLIC)?,
+        rc: pbr_factor_to_vm_coefficient(scalar(ROUGHNESS).unwrap_or(0.0), ROUGHNESS)?,
         // Voxel Max glows in the voxel's base color at coefficient `sic`, so
         // the emissive folds to its luminance relative to the base color, times
         // `emissiveStrength`. This inverts the from-vmax split, which emits the
@@ -887,7 +884,7 @@ fn derived_material(
         md: dispersed.then(|| VMaxMaterialDispersion {
             absorption: scalar(ABSORPTION).unwrap_or(0.0),
             ior: scalar(IOR).unwrap_or(1.5),
-            transmission: scalar(TRANSMISSION_FACTOR).unwrap_or(0.0),
+            transmission: scalar(TRANSMISSION).unwrap_or(0.0),
         }),
     })
 }
@@ -954,7 +951,7 @@ fn property_value_pool(
 }
 
 /// Re-bases the tight object's voxels to absolute model space, recovering each
-/// one's `color_idx` from its material's `baseColorFactor` value id and its
+/// one's `color_idx` from its material's `baseColor` value id and its
 /// `material_idx` from the material plan. A colorless voxel takes index 1.
 fn reconstruct_voxels(
     state: &VoxMain,
@@ -998,7 +995,7 @@ fn reconstruct_voxels(
 }
 
 /// The 1-based Voxel Max color index a `material` samples through
-/// `baseColorFactor`. Errors when the color value id reaches
+/// `baseColor`. Errors when the color value id reaches
 /// [`PALETTE_COLORS`], one past the last usable color, so a padded source
 /// palette is fine as long as its referenced colors fit.
 fn voxel_color_index(

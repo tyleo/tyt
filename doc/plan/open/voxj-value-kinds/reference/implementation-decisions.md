@@ -25,6 +25,25 @@ emissive-composition paragraph folds into the conventions table. The
 texture scope paragraph does not land: the absence of texture bindings
 is by construction, and the boundary bake is tool documentation.
 
+## Iteration 3 rulings
+
+2026-08-02. `mesh_material.rs`'s `emissive_factor` field renames to
+`emissive_color`. The factor-times-texture argument for keeping it proves
+too much: every sibling field already carries the resolved-parameter name
+(`base_color`, `transmission`, `occlusion`) while multiplying a texture
+the same way, so the suffix marked one field out of eight for a property
+all of them share. The glTF citations in the doc comments keep the wire
+spellings.
+
+Two comments in the renamed files stay on the glTF spellings because
+they cite glTF's own composition, not the voxj vocabulary:
+`from_vmax_file.rs`'s "`emissiveFactor` times `emissiveStrength` per
+glTF" and `material_document.rs`'s doc on the KHR extension fields it
+writes back. The test names
+`per_texel_multiplies_the_base_color_factor_into_the_texel` and
+`khr_extension_factors_round_trip_through_a_mesh_export` also keep
+"factor": they describe the glTF material fields the import reads.
+
 ## Iteration 2 review rulings
 
 2026-08-02, at the iteration 2 gate review. Three wording rulings from

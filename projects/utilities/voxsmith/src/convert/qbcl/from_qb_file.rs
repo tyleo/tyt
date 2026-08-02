@@ -1,6 +1,5 @@
 use crate::{
-    BASE_COLOR_FACTOR, Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result,
-    to_vox_value,
+    BASE_COLOR, Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result, to_vox_value,
 };
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbZAxisOrientation};
@@ -12,7 +11,7 @@ use voxcore::{
 
 /// Loads a decoded Qubicle Binary [`QbFile`] into a [`VoxMain`].
 ///
-/// Each matrix becomes an object sharing one `baseColorFactor` palette, placed
+/// Each matrix becomes an object sharing one `baseColor` palette, placed
 /// by a hierarchy node at the matrix's scene position. The state with no native
 /// voxcore home, such as the header flags, matrix names, positions, and the
 /// per-voxel visibility bytes, rides in a `qubicle-qb` ext so the file can be
@@ -66,7 +65,7 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
 }
 
 /// Builds the one shared palette: a color value pool of one entry per distinct
-/// color across every matrix's solid voxels, bound to `baseColorFactor`, with
+/// color across every matrix's solid voxels, bound to `baseColor`, with
 /// one material per color and a map from a color to its material. The
 /// value pool is added to `state`. A file with no solid voxels gets a single
 /// placeholder color so objects have a default material to sample.
@@ -101,11 +100,7 @@ fn build_palette(
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(
-            BASE_COLOR_FACTOR.to_owned(),
-            value_pool_id,
-            U32Id::from_u32(0),
-        )
+        .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
         .expect("the property names are distinct");
     let mut material_ids = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {

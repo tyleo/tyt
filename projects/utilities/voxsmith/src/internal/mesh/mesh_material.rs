@@ -1,9 +1,9 @@
 use ty_math::TySrgbaU8;
 
 /// A mesh material's flat PBR factors in the glTF metallic-roughness attribute
-/// vocabulary a voxel palette material carries: `baseColorFactor`,
-/// `metallicFactor`, `roughnessFactor`, `emissiveFactor`, `emissiveStrength`,
-/// `occlusionStrength`, `ior`, and `transmissionFactor`. This is the
+/// vocabulary a voxel palette material carries: `baseColor`, `metallic`,
+/// `roughness`, `emissiveColor`, `emissiveStrength`, `occlusionStrength`,
+/// `ior`, and `transmission`. This is the
 /// per-primitive material: one material per mesh material, read from its
 /// factors alone. The voxelizer turns each distinct material into one palette
 /// material over value pools bound by these names.
@@ -21,9 +21,9 @@ pub(crate) struct MeshMaterial {
 
     /// Emissive color in the sRGB storage encoding. glTF `emissiveFactor` carries
     /// no alpha, so the alpha is held opaque and ignored.
-    pub emissive_factor: TySrgbaU8,
+    pub emissive_color: TySrgbaU8,
 
-    /// Emissive strength scaling [`emissive_factor`](Self::emissive_factor), `0+`.
+    /// Emissive strength scaling [`emissive_color`](Self::emissive_color), `0+`.
     /// glTF's `KHR_materials_emissive_strength`.
     pub emissive_strength: f64,
 
@@ -46,7 +46,7 @@ impl MeshMaterial {
             base_color,
             metallic: 0.0,
             roughness: 1.0,
-            emissive_factor: TySrgbaU8::new(0, 0, 0, 255),
+            emissive_color: TySrgbaU8::new(0, 0, 0, 255),
             emissive_strength: 0.0,
             occlusion: 1.0,
             ior: 1.5,
