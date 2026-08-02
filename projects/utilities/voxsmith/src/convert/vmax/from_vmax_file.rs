@@ -2,7 +2,7 @@ use crate::{
     ABSORPTION, BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC, ROUGHNESS,
     Result, SHADOWS, TRANSMISSION, VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxMaterial,
     VoxelMaxMaterialDispersion, VoxelMaxNode, VoxelMaxObjectState, VoxelMaxPalette, default_scalar,
-    to_vox_value, vm_coefficient_to_pbr_factor,
+    linear_color_from_srgba_u8, to_vox_value, vm_coefficient_to_pbr_factor,
 };
 use branded_id::U32Id;
 use std::collections::HashMap;
@@ -16,8 +16,8 @@ use vmax::{
 };
 use vmax_codec::{VMaxVoxel, decode_vmax_snapshots};
 use voxcore::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePool, VoxBound,
-    VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePool, VoxHierarchyNode,
+    VoxMain, VoxObject, VoxPalette, VoxValuePool,
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`
@@ -270,10 +270,10 @@ fn folded_palette(
     // one value id per property.
     let mut palette = VoxPalette::default();
     let mut color_axis: Vec<bool> = Vec::new();
-    let color_value_pool_id = state.add_value_pool(VoxValuePool::srgba(
+    let color_value_pool_id = state.add_value_pool(VoxValuePool::vec_4_float(
         colors
             .iter()
-            .map(|color| <[f64; 4]>::from(TySrgbaU8::from(*color).into_format::<f64, f64>()))
+            .map(|color| <[f64; 4]>::from(linear_color_from_srgba_u8(TySrgbaU8::from(*color))))
             .collect(),
     )?);
     palette
@@ -328,13 +328,12 @@ fn folded_palette(
         // emissive is then `emissiveFactor` times `emissiveStrength` per glTF, so
         // the color leads the strength that scales it.
         if materials.iter().any(|m| m.sic > 0.0) {
-            let emissive_color_value_pool_id = state.add_value_pool(VoxValuePool::srgb(
+            let emissive_color_value_pool_id = state.add_value_pool(VoxValuePool::vec_3_float(
                 colors
                     .iter()
                     .map(|color| {
-                        let [r, g, b, _] =
-                            <[f64; 4]>::from(TySrgbaU8::from(*color).into_format::<f64, f64>());
-                        [r, g, b]
+                        let linear = linear_color_from_srgba_u8(TySrgbaU8::from(*color));
+                        [linear.red, linear.green, linear.blue]
                     })
                     .collect(),
             )?);
@@ -499,15 +498,15 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
     }
 }
 
-/// An unbounded float value pool over `values`, defaulting a non-finite
-/// coefficient to zero so the value pool builds; the exact value rides in the
-/// ext. Errors when `values` is empty.
+/// A float value pool over `values`, defaulting a non-finite coefficient to
+/// zero so the value pool builds; the exact value rides in the ext. Errors
+/// when `values` is empty.
 fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
     let values = values
         .into_iter()
         .map(|v| if v.is_finite() { v } else { 0.0 })
         .collect();
-    Ok(state.add_value_pool(VoxValuePool::float(VoxBound::None, VoxBound::None, values)?))
+    Ok(state.add_value_pool(VoxValuePool::float(values)?))
 }
 
 /// Each material's dispersion field `read`, or zero where dispersion is absent.

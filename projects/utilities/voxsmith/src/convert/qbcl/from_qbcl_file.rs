@@ -1,11 +1,11 @@
 use crate::{
     BASE_COLOR, Error, QubicleQbclExt, QubicleQbclExtWrapper, QubicleQbclMetadata, QubicleQbclNode,
-    QubicleQbclNodeBody, QubicleQbclThumbnail, Result, to_vox_value,
+    QubicleQbclNodeBody, QubicleQbclThumbnail, Result, linear_color_from_srgba_u8, to_vox_value,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMatrix, QbclMetadata, QbclNode, QbclNodeBody};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TySrgbU8, TyTransformF64, TyVector3I32, TyVector3U32};
+use ty_math::{TySrgbaU8, TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -166,12 +166,12 @@ fn build_palette(
         order.push([0, 0, 0]);
     }
 
-    // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB
-    // value pool as float components in `[0, 1]`; each material draws one value
+    // A Qubicle voxel carries no alpha, so colors decode to linear light and
+    // ride in a shared `vec-3-float` value pool; each material draws one value
     // id into it.
     let value_pool_id = state.add_value_pool(
-        VoxValuePool::srgb(order.iter().map(|&color| color_floats(color)).collect())
-            .expect("byte-derived components are in range and the list is non-empty"),
+        VoxValuePool::vec_3_float(order.iter().map(|&color| color_floats(color)).collect())
+            .expect("byte-derived components are finite and the list is non-empty"),
     );
 
     let mut palette = VoxPalette::default();
@@ -309,14 +309,19 @@ fn translation(position: [i32; 3]) -> TyTransformF64 {
     TyTransformF64::from_translation(TyVector3I32::from_array(position).as_dvec3())
 }
 
-/// The float sRGB components in `[0, 1]` of an `[r, g, b]` byte color.
+/// The linear-light components of an `[r, g, b]` byte color.
 fn color_floats(color: [u8; 3]) -> [f64; 3] {
-    TySrgbU8::from(color).into_format::<f64>().into()
+    let [red, green, blue] = color;
+    let linear = linear_color_from_srgba_u8(TySrgbaU8::new(red, green, blue, 255));
+    [linear.red, linear.green, linear.blue]
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR, from_qbcl_bytes, from_qbcl_file, to_qbcl_bytes, to_qbcl_file};
+    use crate::{
+        BASE_COLOR, from_qbcl_bytes, from_qbcl_file, linear_color_from_srgba_u8, to_qbcl_bytes,
+        to_qbcl_file,
+    };
     use branded_id::U32Id;
     use qbcl::qbcl::{
         QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode,
@@ -403,13 +408,11 @@ mod tests {
         }
     }
 
-    /// The float sRGB components in `[0, 1]` of a `#RRGGBB` hex string.
-    fn srgb(hex: &str) -> [f64; 3] {
-        TySrgbaU8::from_hex(hex)
-            .expect("a valid hex color")
-            .into_format::<f64, f64>()
-            .color
-            .into()
+    /// The linear-light components of a `#RRGGBB` hex string.
+    fn linear_rgb(hex: &str) -> [f64; 3] {
+        let linear =
+            linear_color_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color"));
+        [linear.red, linear.green, linear.blue]
     }
 
     /// A state carrying no format ext, built straight from voxcore: a red-green
@@ -421,10 +424,10 @@ mod tests {
 
         // One baseColor palette: red, green, blue.
         let value_pool_id = state.add_value_pool(
-            VoxValuePool::srgb(
+            VoxValuePool::vec_3_float(
                 ["#FF0000", "#00FF00", "#0000FF"]
                     .iter()
-                    .map(|hex| srgb(hex))
+                    .map(|hex| linear_rgb(hex))
                     .collect(),
             )
             .unwrap(),

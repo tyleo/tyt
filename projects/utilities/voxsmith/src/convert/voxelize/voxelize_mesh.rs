@@ -1,19 +1,20 @@
 use crate::{
     BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, FillMode, IOR, METALLIC, MaterialMode,
     Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS, Result, SurfaceMode,
-    TRANSMISSION, VoxelGrid, sample_material, scalar_range, voxelize_triangles,
+    TRANSMISSION, VoxelGrid, linear_color_from_srgba_u8, sample_material, scalar_range,
+    voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
-use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
+use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
-    BVoxMaterial, BVoxValuePoolValue, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
+    BVoxMaterial, BVoxValuePoolValue, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
 };
 
 /// The color a body with no sampled surface falls back to when `fill_color` is
-/// `None`: opaque white. Held as bytes since palette's `Srgba` has no const
-/// constructor; wrap it with `TySrgbaU8::from` at each use site.
+/// `None`: opaque white. Held as sRGB bytes like a caller's fill color; decode
+/// it with [`linear_color_from_srgba_u8`] at each use site.
 const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
 /// Voxelizes a [`Mesh`] into a [`VoxMain`] of one object placed by one root
@@ -161,7 +162,7 @@ fn resolve_materials(
 
 /// Every filled cell takes the one fill color (white when `none`).
 fn flat_cells(grid: &VoxelGrid, fill_color: Option<[u8; 4]>) -> Vec<Option<MeshMaterial>> {
-    let material = MeshMaterial::flat(fill_srgba(fill_color));
+    let material = MeshMaterial::flat(fill_linear_color(fill_color));
     grid.filled
         .iter()
         .map(|&filled| filled.then_some(material))
@@ -215,8 +216,8 @@ fn fill_interior(
     }
 
     match fill_color {
-        Some([r, g, b, a]) => {
-            let fill = MeshMaterial::flat(TySrgbaU8::new(r, g, b, a));
+        Some(color) => {
+            let fill = MeshMaterial::flat(fill_linear_color(Some(color)));
             for (cell, triangle) in grid.triangle.iter().enumerate() {
                 if grid.filled[cell] && triangle.is_none() {
                     cell_materials[cell] = Some(fill);
@@ -229,7 +230,7 @@ fn fill_interior(
                 if grid.filled[cell] && grid.triangle[cell].is_none() {
                     let resolved = nearest[cell]
                         .and_then(|source| cell_materials[source])
-                        .unwrap_or_else(|| MeshMaterial::flat(TySrgbaU8::from(DEFAULT_FILL)));
+                        .unwrap_or_else(|| MeshMaterial::flat(fill_linear_color(None)));
                     cell_materials[cell] = Some(resolved);
                 }
             }
@@ -277,15 +278,15 @@ fn build_palette(
     // An all-empty grid still needs a non-empty palette so its value pools and
     // default material are valid; give it a lone white material.
     if distinct.is_empty() {
-        distinct.push(MeshMaterial::flat(TySrgbaU8::from(DEFAULT_FILL)));
+        distinct.push(MeshMaterial::flat(fill_linear_color(None)));
     }
 
     // One deduplicated value pool per property, plus each distinct material's
     // value id into it.
-    let base_color = srgba_value_pool(&distinct, |material| material.base_color);
+    let base_color = rgba_value_pool(&distinct, |material| material.base_color);
     let metallic = float_value_pool(&distinct, |material| material.metallic);
     let roughness = float_value_pool(&distinct, |material| material.roughness);
-    let emissive_color = srgb_value_pool(&distinct, |material| material.emissive_color);
+    let emissive_color = rgb_value_pool(&distinct, |material| material.emissive_color);
     let emissive_strength = float_value_pool(&distinct, |material| material.emissive_strength);
     let occlusion = float_value_pool(&distinct, |material| material.occlusion);
     let ior = float_value_pool(&distinct, |material| material.ior);
@@ -294,11 +295,12 @@ fn build_palette(
     // Register the value pools and add each property. All properties precede
     // any material, so no material carries a back-fill placeholder value id.
     let scalars = |values, key| factor_value_pool(values, key, out_of_range);
-    let base_color_value_pool_id = state.add_value_pool(VoxValuePool::srgba(base_color.values)?);
+    let base_color_value_pool_id =
+        state.add_value_pool(VoxValuePool::vec_4_float(base_color.values)?);
     let metallic_value_pool_id = state.add_value_pool(scalars(metallic.values, METALLIC)?);
     let roughness_value_pool_id = state.add_value_pool(scalars(roughness.values, ROUGHNESS)?);
     let emissive_color_value_pool_id =
-        state.add_value_pool(VoxValuePool::srgb(emissive_color.values)?);
+        state.add_value_pool(VoxValuePool::vec_3_float(emissive_color.values)?);
     let emissive_strength_value_pool_id =
         state.add_value_pool(scalars(emissive_strength.values, EMISSIVE_STRENGTH)?);
     let occlusion_value_pool_id =
@@ -400,21 +402,21 @@ struct ValuePoolColumn<T> {
     value_ids: Vec<U32Id<BVoxValuePoolValue>>,
 }
 
-/// A four-component sRGB color value pool over the extracted color,
-/// deduplicated by its 8-bit bytes and stored as float components in `[0, 1]`.
-fn srgba_value_pool(
+/// A four-component color value pool over the extracted linear color,
+/// deduplicated by its components' bit patterns.
+fn rgba_value_pool(
     materials: &[MeshMaterial],
-    get: impl Fn(&MeshMaterial) -> TySrgbaU8,
+    get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
 ) -> ValuePoolColumn<[f64; 4]> {
     let mut values = Vec::new();
-    let mut lookup: HashMap<[u8; 4], U32Id<BVoxValuePoolValue>> = HashMap::new();
+    let mut lookup: HashMap<[u64; 4], U32Id<BVoxValuePoolValue>> = HashMap::new();
     let value_ids = materials
         .iter()
         .map(|material| {
-            let color = get(material);
-            *lookup.entry(<[u8; 4]>::from(color)).or_insert_with(|| {
+            let color = <[f64; 4]>::from(get(material));
+            *lookup.entry(color.map(f64::to_bits)).or_insert_with(|| {
                 let value_id = U32Id::from_u32(values.len() as u32);
-                values.push(<[f64; 4]>::from(color.into_format::<f64, f64>()));
+                values.push(color);
                 value_id
             })
         })
@@ -422,26 +424,24 @@ fn srgba_value_pool(
     ValuePoolColumn { values, value_ids }
 }
 
-/// A three-component sRGB color value pool over the extracted color,
-/// deduplicated by its 8-bit bytes and stored as float components in `[0, 1]`;
-/// the alpha is dropped.
-fn srgb_value_pool(
+/// A three-component color value pool over the extracted linear color,
+/// deduplicated by its components' bit patterns; the alpha is dropped.
+fn rgb_value_pool(
     materials: &[MeshMaterial],
-    get: impl Fn(&MeshMaterial) -> TySrgbaU8,
+    get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
 ) -> ValuePoolColumn<[f64; 3]> {
     let mut values = Vec::new();
-    let mut lookup: HashMap<[u8; 3], U32Id<BVoxValuePoolValue>> = HashMap::new();
+    let mut lookup: HashMap<[u64; 3], U32Id<BVoxValuePoolValue>> = HashMap::new();
     let value_ids = materials
         .iter()
         .map(|material| {
             let color = get(material);
-            *lookup
-                .entry([color.red, color.green, color.blue])
-                .or_insert_with(|| {
-                    let value_id = U32Id::from_u32(values.len() as u32);
-                    values.push(<[f64; 3]>::from(color.into_format::<f64, f64>().color));
-                    value_id
-                })
+            let color = [color.red, color.green, color.blue];
+            *lookup.entry(color.map(f64::to_bits)).or_insert_with(|| {
+                let value_id = U32Id::from_u32(values.len() as u32);
+                values.push(color);
+                value_id
+            })
         })
         .collect();
     ValuePoolColumn { values, value_ids }
@@ -469,9 +469,9 @@ fn float_value_pool(
     ValuePoolColumn { values, value_ids }
 }
 
-/// A float value pool over `values`, bounded by the range the glTF spec gives
-/// `key`. A value outside that range follows `out_of_range`. A NaN has no
-/// clamped value, so it errors either way.
+/// A float value pool over `values`, checked against the range the glTF spec
+/// gives `key`. A value outside that range follows `out_of_range`. A NaN has
+/// no clamped value, so it errors either way.
 fn factor_value_pool(
     values: Vec<f64>,
     key: &str,
@@ -504,26 +504,22 @@ fn factor_value_pool(
         })
         .collect::<Result<Vec<f64>>>()?;
 
-    Ok(VoxValuePool::float(
-        VoxBound::Number(min),
-        max.map_or(VoxBound::None, VoxBound::Number),
-        values,
-    )?)
+    Ok(VoxValuePool::float(values)?)
 }
 
-/// A hashable identity for a material: its two 8-bit colors and the bit patterns
-/// of its scalar factors, so cells with the same material map to one palette
-/// material.
-type MaterialKey = ([u8; 4], u64, u64, [u8; 3], u64, u64, u64, u64);
+/// A hashable identity for a material: the bit patterns of its two colors'
+/// components and its scalar factors, so cells with the same material map to
+/// one palette material.
+type MaterialKey = ([u64; 4], u64, u64, [u64; 3], u64, u64, u64, u64);
 
 /// The [`MaterialKey`] for a material.
 fn material_key(material: &MeshMaterial) -> MaterialKey {
     let emissive = material.emissive_color;
     (
-        <[u8; 4]>::from(material.base_color),
+        <[f64; 4]>::from(material.base_color).map(f64::to_bits),
         material.metallic.to_bits(),
         material.roughness.to_bits(),
-        [emissive.red, emissive.green, emissive.blue],
+        [emissive.red, emissive.green, emissive.blue].map(f64::to_bits),
         material.emissive_strength.to_bits(),
         material.occlusion.to_bits(),
         material.ior.to_bits(),
@@ -595,12 +591,10 @@ fn for_each_neighbor(cell: usize, nx: usize, ny: usize, nz: usize, mut visit: im
     }
 }
 
-/// The fill color as a stored sRGB color, defaulting to opaque white for `none`.
-fn fill_srgba(fill_color: Option<[u8; 4]>) -> TySrgbaU8 {
-    match fill_color {
-        Some([r, g, b, a]) => TySrgbaU8::new(r, g, b, a),
-        None => TySrgbaU8::from(DEFAULT_FILL),
-    }
+/// The fill color decoded to linear light, defaulting to opaque white for
+/// `none`.
+fn fill_linear_color(fill_color: Option<[u8; 4]>) -> TyLinSrgbaF64 {
+    linear_color_from_srgba_u8(TySrgbaU8::from(fill_color.unwrap_or(DEFAULT_FILL)))
 }
 
 /// The error for a grid past voxcore's dense-grid cell limit.
@@ -620,7 +614,7 @@ mod tests {
         EMISSIVE_STRENGTH, FillMode, METALLIC, MaterialMode, Mesh, MeshMaterial, MeshTriangle,
         MeshTriangleUvs, OutOfRangeFactor, Result, SurfaceMode, voxelize_mesh,
     };
-    use ty_math::{TySrgbaU8, TyVector3F64, TyVector3U32};
+    use ty_math::{TyLinSrgbaF64, TyVector3F64, TyVector3U32};
     use voxcore::{VoxMain, VoxValuePoolValueRef};
 
     /// A two-cell mesh over a `2x1x1` grid: one triangle inside each unit
@@ -690,10 +684,10 @@ mod tests {
 
     #[test]
     fn a_shared_strength_repeats_one_value_pool_value() {
-        let mut emissive = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+        let mut emissive = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
         emissive.emissive_strength = 2.0;
 
-        let mut other = MeshMaterial::flat(TySrgbaU8::new(0, 0, 255, 255));
+        let mut other = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
         other.emissive_strength = 2.0;
 
         let state = voxelize(vec![emissive, other]);
@@ -711,10 +705,10 @@ mod tests {
 
     #[test]
     fn mixed_strengths_sample_per_material() {
-        let mut dim = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+        let mut dim = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
         dim.emissive_strength = 1.0;
 
-        let mut bright = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+        let mut bright = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
         bright.emissive_strength = 3.0;
 
         let state = voxelize(vec![dim, bright]);
@@ -746,9 +740,9 @@ mod tests {
     /// The two-cell mesh's materials with the right one's `metallic` out
     /// of the glTF range.
     fn over_metallic() -> Vec<MeshMaterial> {
-        let matte = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
+        let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
 
-        let mut over = MeshMaterial::flat(TySrgbaU8::new(0, 0, 255, 255));
+        let mut over = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
         over.metallic = 1.5;
 
         vec![matte, over]
@@ -791,8 +785,8 @@ mod tests {
     fn a_nan_factor_errors_under_either_mode() {
         // A NaN has no clamped value, so asking to clamp does not admit it.
         let nan_metallic = || {
-            let matte = MeshMaterial::flat(TySrgbaU8::new(255, 0, 0, 255));
-            let mut broken = MeshMaterial::flat(TySrgbaU8::new(0, 0, 255, 255));
+            let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
+            let mut broken = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
             broken.metallic = f64::NAN;
             vec![matte, broken]
         };

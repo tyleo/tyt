@@ -1,7 +1,8 @@
 use crate::{
     BASE_COLOR, Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
     MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
-    MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, to_vox_value,
+    MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, linear_color_from_srgba_u8,
+    to_vox_value,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -17,8 +18,8 @@ use ty_math::{
     TyVector3I32, TyVector3U32,
 };
 use voxcore::{
-    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode, VoxMain,
-    VoxObject, VoxPalette, VoxValuePool,
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject,
+    VoxPalette, VoxValuePool,
 };
 
 /// Color indices in a MagicaVoxel palette: one material per index `0..=255`.
@@ -105,13 +106,13 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     let color_bytes: Vec<[u8; 4]> = colors.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
     let (distinct_colors, color_indices) = intern(&color_bytes, |&color| color);
     let color_value_pool_id = state.add_value_pool(
-        VoxValuePool::srgba(
+        VoxValuePool::vec_4_float(
             distinct_colors
                 .iter()
-                .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
+                .map(|&color| <[f64; 4]>::from(linear_color_from_srgba_u8(TySrgbaU8::from(color))))
                 .collect(),
         )
-        .expect("byte-derived components are in range and the palette is non-empty"),
+        .expect("byte-derived components are finite and the palette is non-empty"),
     );
     palette
         .add_property(
@@ -160,16 +161,16 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
                         .get(&(index as i32))
                         .copied()
                         .and_then(read)
-                        // The codec accepts a non-finite scalar, but a Float
-                        // value pool must be finite; default it. The ext keeps
-                        // the exact value.
+                        // The codec accepts a non-finite scalar; NaN cannot
+                        // enter a float value pool, so default any non-finite
+                        // value. The ext keeps the exact one.
                         .filter(|value| value.is_finite())
                         .map_or(0.0, |value| value as f64)
                 })
                 .collect();
             let (distinct, indices) = intern(&values, |value| value.to_bits());
             let value_pool_id = state.add_value_pool(
-                VoxValuePool::float(VoxBound::None, VoxBound::None, distinct)
+                VoxValuePool::float(distinct)
                     .expect("the scalars are finite and every palette cell yields one"),
             );
             palette
@@ -517,7 +518,10 @@ fn invalid(message: String) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR, from_mvox_bytes, from_mvox_file, to_mvox_bytes, to_mvox_file};
+    use crate::{
+        BASE_COLOR, from_mvox_bytes, from_mvox_file, linear_color_from_srgba_u8, to_mvox_bytes,
+        to_mvox_file,
+    };
     use branded_id::U32Id;
     use mvox::{
         MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer,
@@ -538,12 +542,9 @@ mod tests {
         (key.to_owned(), value.to_owned())
     }
 
-    /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
-    fn srgba(hex: &str) -> [f64; 4] {
-        TySrgbaU8::from_hex(hex)
-            .expect("a valid hex color")
-            .into_format::<f64, f64>()
-            .into()
+    /// The linear-light components of a `#RRGGBBAA` hex string.
+    fn linear_rgba(hex: &str) -> [f64; 4] {
+        linear_color_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
     }
 
     /// A file exercising every modeled chunk: two models, a custom palette, a
@@ -710,10 +711,10 @@ mod tests {
         // One baseColor palette: a transparent placeholder, then red,
         // green, blue.
         let value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(
+            VoxValuePool::vec_4_float(
                 ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
                     .iter()
-                    .map(|hex| srgba(hex))
+                    .map(|hex| linear_rgba(hex))
                     .collect(),
             )
             .unwrap(),

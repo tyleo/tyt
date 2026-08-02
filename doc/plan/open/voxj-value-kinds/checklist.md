@@ -277,7 +277,7 @@ Gate: `cargo test -p voxcore` green.
 The largest iteration; three commits, refined further at execution if a
 chunk outgrows review.
 
-- [ ] The voxj seam: `vox_value_pool_from_voxj_value_pool.rs` and
+- [x] The voxj seam: `vox_value_pool_from_voxj_value_pool.rs` and
       `voxj_value_pool_from_vox_value_pool.rs` become one-to-one kind
       maps (the hex decode and the `ColorFormat` dispatch go);
       `convert/voxj/color_format.rs` deletes with
@@ -286,7 +286,7 @@ chunk outgrows review.
       `from_voxj_file.rs` fixtures move to the new kinds; the independent
       transfer reference implementations in the write-side tests move to
       the boundary tests instead of deleting.
-- [ ] The linear pivot: `value_pool_color` accepts `Vec3Float` and
+- [x] The linear pivot: `value_pool_color` accepts `Vec3Float` and
       `Vec4Float` and takes color-ness from its callers (seven call
       sites, five files), a 3-component value taking opaque alpha; every
       color value pool construction site moves to the vector constructors
@@ -315,7 +315,7 @@ chunk outgrows review.
       `--out-of-range-factor` clamp policy the new error-only check does
       not have. Decide whether the new function absorbs it or sits beside
       it, and log that.
-- [ ] The exactness test: all 256 values of `k/255` survive u8 to linear
+- [x] The exactness test: all 256 values of `k/255` survive u8 to linear
       to u8 as identity, through the same conversions the importers and
       exporters call. It passes on today's transfer, so it lands as a
       regression guard rather than as a reason to change one.

@@ -62,7 +62,7 @@ mod tests {
         // Three colors; materials reference them out of order: blue, red,
         // green.
         let value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![
+            VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red
                 [0.0, 1.0, 0.0, 1.0], // 1 green
                 [0.0, 0.0, 1.0, 1.0], // 2 blue
@@ -86,7 +86,7 @@ mod tests {
         assert_eq!(
             state.value_pool(value_pool_id),
             Some(
-                &VoxValuePool::srgba(vec![
+                &VoxValuePool::vec_4_float(vec![
                     [0.0, 0.0, 1.0, 1.0],
                     [1.0, 0.0, 0.0, 1.0],
                     [0.0, 1.0, 0.0, 1.0],
@@ -118,7 +118,7 @@ mod tests {
     fn orders_colors_past_an_unused_color_and_a_hole() {
         let mut state = VoxMain::default();
         let value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![
+            VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red
                 [0.0, 1.0, 0.0, 1.0], // 1 green
                 [0.0, 0.0, 1.0, 1.0], // 2 blue
@@ -149,7 +149,7 @@ mod tests {
         assert_eq!(
             state.value_pool(value_pool_id),
             Some(
-                &VoxValuePool::srgba(vec![
+                &VoxValuePool::vec_4_float(vec![
                     [0.0, 0.0, 1.0, 1.0],
                     [1.0, 0.0, 0.0, 1.0],
                     [0.0, 1.0, 0.0, 1.0],

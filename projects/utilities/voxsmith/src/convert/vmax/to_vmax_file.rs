@@ -18,7 +18,8 @@ pub fn to_vmax_file(
 mod tests {
     use crate::{
         SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
-        from_vmax_file, resolve_cell_color_or_transparent, to_vmax_file, to_vox_value,
+        from_vmax_file, linear_color_from_srgba_u8, resolve_cell_color_or_transparent,
+        to_vmax_file, to_vox_value,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
@@ -31,8 +32,8 @@ mod tests {
     };
     use vmax_codec::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots};
     use voxcore::{
-        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxBound, VoxHierarchyNode,
-        VoxMain, VoxMap, VoxObject, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolValueRef,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain,
+        VoxMap, VoxObject, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolValueRef,
     };
 
     fn material(
@@ -300,19 +301,13 @@ mod tests {
     #[test]
     fn errors_when_derived_materials_exceed_the_byte_budget() {
         let mut state = VoxMain::default();
-        let color_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgba(vec![color_floats("#FF0000FF")]).unwrap());
+        let color_value_pool_id = state
+            .add_value_pool(VoxValuePool::vec_4_float(vec![color_floats("#FF0000FF")]).unwrap());
         // 256 distinct metallic values give 256 distinct material signatures,
         // one past the byte budget; the color value pool stays a single
         // in-range color.
-        let metallic_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(
-                VoxBound::None,
-                VoxBound::None,
-                (0..256u32).map(f64::from).collect(),
-            )
-            .unwrap(),
-        );
+        let metallic_value_pool_id = state
+            .add_value_pool(VoxValuePool::float((0..256u32).map(f64::from).collect()).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property(
@@ -620,13 +615,10 @@ mod tests {
         );
     }
 
-    /// The `[f64; 4]` components of a `#RRGGBB` or `#RRGGBBAA` color, each byte
-    /// over 255. A missing alpha defaults to opaque.
+    /// The linear-light `[f64; 4]` components of a `#RRGGBB` or `#RRGGBBAA`
+    /// color. A missing alpha defaults to opaque.
     fn color_floats(hex: &str) -> [f64; 4] {
-        TySrgbaU8::from_hex(hex)
-            .expect("a valid hex color")
-            .into_format::<f64, f64>()
-            .into()
+        linear_color_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
     }
 
     /// Adds a folded palette binding `baseColor` to a value pool of the
@@ -634,7 +626,7 @@ mod tests {
     /// color index, and returns the palette id.
     fn add_rgba_palette(state: &mut VoxMain, hexes: &[&str]) -> U32Id<BVoxPalette> {
         let value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(hexes.iter().map(|hex| color_floats(hex)).collect()).unwrap(),
+            VoxValuePool::vec_4_float(hexes.iter().map(|hex| color_floats(hex)).collect()).unwrap(),
         );
         let mut palette = VoxPalette::default();
         palette
@@ -1248,11 +1240,10 @@ mod tests {
             // One folded palette binding a color plus the four material
             // attributes, with a single material. No ext, so the writer derives
             // the Voxel Max material from the value pools.
-            let color =
-                state.add_value_pool(VoxValuePool::srgba(vec![color_floats("#FF0000FF")]).unwrap());
-            let float = |value: f64| {
-                VoxValuePool::float(VoxBound::None, VoxBound::None, vec![value]).unwrap()
-            };
+            let color = state.add_value_pool(
+                VoxValuePool::vec_4_float(vec![color_floats("#FF0000FF")]).unwrap(),
+            );
+            let float = |value: f64| VoxValuePool::float(vec![value]).unwrap();
             let metallic = state.add_value_pool(float(0.5));
             let roughness = state.add_value_pool(float(0.25));
             let emissive = state.add_value_pool(float(2.0));
@@ -1346,13 +1337,11 @@ mod tests {
     #[test]
     fn derives_emissive_relative_to_the_base_color() {
         let mut state = VoxMain::default();
-        let color =
-            state.add_value_pool(VoxValuePool::srgba(vec![color_floats("#808080FF")]).unwrap());
+        let color = state
+            .add_value_pool(VoxValuePool::vec_4_float(vec![color_floats("#808080FF")]).unwrap());
         let emissive_color =
-            state.add_value_pool(VoxValuePool::srgb(vec![[1.0, 1.0, 1.0]]).unwrap());
-        let strength = state.add_value_pool(
-            VoxValuePool::float(VoxBound::None, VoxBound::None, vec![2.0]).unwrap(),
-        );
+            state.add_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 1.0, 1.0]]).unwrap());
+        let strength = state.add_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property("baseColor".to_owned(), color, U32Id::from_u32(0))

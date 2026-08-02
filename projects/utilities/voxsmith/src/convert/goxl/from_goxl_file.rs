@@ -1,6 +1,7 @@
 use crate::{
     BASE_COLOR, Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer, GoxelLight,
-    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, to_vox_value,
+    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, linear_color_from_srgba_u8,
+    to_vox_value,
 };
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
@@ -73,16 +74,16 @@ fn build_palette(
         order.push([0, 0, 0, 0]);
     }
 
-    // Colors ride in a shared sRGBA value pool as float components in `[0, 1]`;
-    // each material draws one value id into it.
+    // Colors decode to linear light and ride in a shared `vec-4-float` value
+    // pool; each material draws one value id into it.
     let value_pool_id = state.add_value_pool(
-        VoxValuePool::srgba(
+        VoxValuePool::vec_4_float(
             order
                 .iter()
-                .map(|&color| <[f64; 4]>::from(TySrgbaU8::from(color).into_format::<f64, f64>()))
+                .map(|&color| <[f64; 4]>::from(linear_color_from_srgba_u8(TySrgbaU8::from(color))))
                 .collect(),
         )
-        .expect("byte-derived components are in range and the list is non-empty"),
+        .expect("byte-derived components are finite and the list is non-empty"),
     );
 
     let mut palette = VoxPalette::default();
@@ -271,7 +272,10 @@ fn shape_token(shape: GoxlShape) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR, from_goxl_bytes, from_goxl_file, to_goxl_bytes, to_goxl_file};
+    use crate::{
+        BASE_COLOR, from_goxl_bytes, from_goxl_file, linear_color_from_srgba_u8, to_goxl_bytes,
+        to_goxl_file,
+    };
     use branded_id::U32Id;
     use goxl::{
         GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
@@ -286,12 +290,9 @@ mod tests {
         VoxPalette, VoxValue, VoxValuePool,
     };
 
-    /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
-    fn srgba(hex: &str) -> [f64; 4] {
-        TySrgbaU8::from_hex(hex)
-            .expect("a valid hex color")
-            .into_format::<f64, f64>()
-            .into()
+    /// The linear-light components of a `#RRGGBBAA` hex string.
+    fn linear_rgba(hex: &str) -> [f64; 4] {
+        linear_color_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
     }
 
     /// A `4 x 4` matrix with distinct float cells, for transform and box
@@ -457,10 +458,10 @@ mod tests {
         // One baseColor palette: a transparent placeholder, then red,
         // green, blue.
         let value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(
+            VoxValuePool::vec_4_float(
                 ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
                     .iter()
-                    .map(|hex| srgba(hex))
+                    .map(|hex| linear_rgba(hex))
                     .collect(),
             )
             .unwrap(),

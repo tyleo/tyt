@@ -19,6 +19,14 @@ mod resolve_cell_color_or_transparent;
 #[cfg(feature = "_color")]
 mod value_pool_color;
 
+// The one sRGB transfer voxsmith applies, at its 8-bit boundaries: the color
+// codecs decode and encode palette colors through it, and the mesh side
+// decodes texture texels and encodes atlas texels through it.
+#[cfg(any(feature = "_color", feature = "_mesh"))]
+mod linear_color_from_srgba_u8;
+#[cfg(any(feature = "_color", feature = "_mesh"))]
+mod srgba_u8_from_linear_color;
+
 // Tightening a build-volume object to its live extent is wanted only by the
 // Voxel Max writer.
 #[cfg(feature = "vmax")]
@@ -61,6 +69,11 @@ pub(crate) use resolve_cell_color::*;
 pub(crate) use resolve_cell_color_or_transparent::*;
 #[cfg(feature = "_color")]
 pub(crate) use value_pool_color::*;
+
+#[cfg(any(feature = "_color", feature = "_mesh"))]
+pub(crate) use linear_color_from_srgba_u8::*;
+#[cfg(any(feature = "_color", feature = "_mesh"))]
+pub(crate) use srgba_u8_from_linear_color::*;
 
 #[cfg(feature = "vmax")]
 pub(crate) use grid::*;

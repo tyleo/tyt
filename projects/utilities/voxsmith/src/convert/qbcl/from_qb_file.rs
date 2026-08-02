@@ -1,10 +1,11 @@
 use crate::{
-    BASE_COLOR, Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result, to_vox_value,
+    BASE_COLOR, Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result,
+    linear_color_from_srgba_u8, to_vox_value,
 };
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbZAxisOrientation};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TySrgbU8, TyTransformF64, TyVector3I32, TyVector3U32};
+use ty_math::{TySrgbaU8, TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette, VoxValuePool,
 };
@@ -90,12 +91,12 @@ fn build_palette(
         order.push([0, 0, 0]);
     }
 
-    // A Qubicle voxel carries no alpha, so colors ride in a shared sRGB
-    // value pool as float components in `[0, 1]`; each material draws one value
+    // A Qubicle voxel carries no alpha, so colors decode to linear light and
+    // ride in a shared `vec-3-float` value pool; each material draws one value
     // id into it.
     let value_pool_id = state.add_value_pool(
-        VoxValuePool::srgb(order.iter().map(|&color| color_floats(color)).collect())
-            .expect("byte-derived components are in range and the list is non-empty"),
+        VoxValuePool::vec_3_float(order.iter().map(|&color| color_floats(color)).collect())
+            .expect("byte-derived components are finite and the list is non-empty"),
     );
 
     let mut palette = VoxPalette::default();
@@ -179,9 +180,11 @@ fn translation(position: [i32; 3]) -> TyTransformF64 {
     TyTransformF64::from_translation(TyVector3I32::from_array(position).as_dvec3())
 }
 
-/// The float sRGB components in `[0, 1]` of an `[r, g, b]` byte color.
+/// The linear-light components of an `[r, g, b]` byte color.
 fn color_floats(color: [u8; 3]) -> [f64; 3] {
-    TySrgbU8::from(color).into_format::<f64>().into()
+    let [red, green, blue] = color;
+    let linear = linear_color_from_srgba_u8(TySrgbaU8::new(red, green, blue, 255));
+    [linear.red, linear.green, linear.blue]
 }
 
 #[cfg(test)]

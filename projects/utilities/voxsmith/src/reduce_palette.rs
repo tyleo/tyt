@@ -162,8 +162,8 @@ struct Point {
 }
 
 /// The sRGB bytes of a material's `baseColor`, or `None` if the value is
-/// absent or its bound value pool is not a color kind. Resolves the bound
-/// value-pool value and decodes it with [`value_pool_color`].
+/// absent or its bound value pool holds no float vectors. Resolves the bound
+/// value-pool value and encodes it with [`value_pool_color`].
 fn material_color(
     state: &VoxMain,
     palette_id: U32Id<BVoxPalette>,
@@ -774,12 +774,15 @@ fn bayer(x: u32, y: u32, z: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR, ColorSpace, Dither, ReductionMethod, reduce_palette};
+    use crate::{
+        BASE_COLOR, ColorSpace, Dither, ReductionMethod, linear_color_from_srgba_u8,
+        reduce_palette, srgba_u8_from_linear_color,
+    };
     use branded_id::U32Id;
-    use ty_math::{TyFloatExt, TyVector3U32};
+    use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector3U32};
     use voxcore::{
-        BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue, VoxBound, VoxMain, VoxObject,
-        VoxPalette, VoxValuePool, VoxValuePoolValueRef,
+        BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette,
+        VoxValuePool, VoxValuePoolValueRef,
     };
 
     /// The branded value id `index`.
@@ -787,13 +790,13 @@ mod tests {
         U32Id::from_u32(index as u32)
     }
 
-    /// The float sRGB components in `[0, 1]` of a `#RRGGBBAA` hex string.
-    fn srgba(hex: &str) -> [f64; 4] {
+    /// The linear-light components of a `#RRGGBBAA` hex string.
+    fn linear_rgba(hex: &str) -> [f64; 4] {
         let digits = hex.strip_prefix('#').expect("a leading #");
         let byte = |index: usize| {
             u8::from_str_radix(&digits[index * 2..index * 2 + 2], 16).expect("two hex digits")
         };
-        [byte(0), byte(1), byte(2), byte(3)].map(|b| b as f64 / 255.0)
+        linear_color_from_srgba_u8(TySrgbaU8::new(byte(0), byte(1), byte(2), byte(3))).into()
     }
 
     /// The `#RRGGBBAA` hex of a material's `baseColor`, uppercase.
@@ -811,14 +814,14 @@ mod tests {
             .material_value(palette_id, material_id, property_id)
             .and_then(|(value_pool, value_id)| value_pool.value(value_id))
         {
-            Some(VoxValuePoolValueRef::Srgba(&color)) => hex_of(color),
+            Some(VoxValuePoolValueRef::Vec4Float(&color)) => hex_of(color),
             other => panic!("material has no srgba baseColor: {other:?}"),
         }
     }
 
-    /// A `#RRGGBBAA` uppercase hex string of float sRGB components in `[0, 1]`.
+    /// A `#RRGGBBAA` uppercase hex string of a stored linear color.
     fn hex_of(color: [f64; 4]) -> String {
-        let bytes = color.map(|c| c.to_unorm8());
+        let bytes = <[u8; 4]>::from(srgba_u8_from_linear_color(TyLinSrgbaF64::from(color)));
         format!(
             "#{:02X}{:02X}{:02X}{:02X}",
             bytes[0], bytes[1], bytes[2], bytes[3]
@@ -838,15 +841,11 @@ mod tests {
         // baseColor draws from an sRGBA color value pool; tag draws from
         // an unbounded float value pool with one distinct value per material.
         let base_value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(colors.iter().map(|color| srgba(color)).collect()).unwrap(),
+            VoxValuePool::vec_4_float(colors.iter().map(|color| linear_rgba(color)).collect())
+                .unwrap(),
         );
         let tag_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(
-                VoxBound::None,
-                VoxBound::None,
-                (0..colors.len()).map(|index| index as f64).collect(),
-            )
-            .unwrap(),
+            VoxValuePool::float((0..colors.len()).map(|index| index as f64).collect()).unwrap(),
         );
 
         let mut palette = VoxPalette::default();
@@ -918,7 +917,8 @@ mod tests {
         let mut state = VoxMain::default();
 
         let base_value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(colors.iter().map(|color| srgba(color)).collect()).unwrap(),
+            VoxValuePool::vec_4_float(colors.iter().map(|color| linear_rgba(color)).collect())
+                .unwrap(),
         );
 
         let mut palette = VoxPalette::default();
@@ -1255,12 +1255,7 @@ mod tests {
         // as colorless and the reduction no-ops even over the cap.
         let mut state = VoxMain::default();
         let tag_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(
-                VoxBound::None,
-                VoxBound::None,
-                (0..3).map(|index| index as f64).collect(),
-            )
-            .unwrap(),
+            VoxValuePool::float((0..3).map(|index| index as f64).collect()).unwrap(),
         );
 
         let mut palette = VoxPalette::default();
@@ -1303,9 +1298,7 @@ mod tests {
         // lands.
         let (mut state, palette_id, object_id) =
             state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
-        let strength_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::None, VoxBound::None, vec![1.5]).unwrap(),
-        );
+        let strength_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
 
         let mut glow_palette = VoxPalette::default();
         glow_palette

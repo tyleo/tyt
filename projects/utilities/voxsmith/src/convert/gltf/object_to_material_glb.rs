@@ -54,7 +54,7 @@ mod tests {
         let mut state = VoxMain::default();
 
         let base_value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
+            VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
 
         let mut palette = VoxPalette::default();

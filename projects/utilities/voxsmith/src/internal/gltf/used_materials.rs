@@ -137,7 +137,7 @@ mod tests {
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{
-        BVoxPalette, BVoxValuePool, BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette,
+        BVoxPalette, BVoxValuePool, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette,
         VoxValuePool, VoxValuePoolValueRef,
     };
 
@@ -149,7 +149,7 @@ mod tests {
     /// Adds an unbounded `float` value pool holding `values` and returns its
     /// id.
     fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> U32Id<BVoxValuePool> {
-        state.add_value_pool(VoxValuePool::float(VoxBound::None, VoxBound::None, values).unwrap())
+        state.add_value_pool(VoxValuePool::float(values).unwrap())
     }
 
     /// Adds a palette binding each `(name, value id)` entry on `value_pool_id`

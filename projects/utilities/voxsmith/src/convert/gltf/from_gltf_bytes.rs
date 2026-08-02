@@ -13,8 +13,7 @@ use gltf::{
 };
 use std::collections::HashMap;
 use ty_math::{
-    TyFloatExt, TyLinSrgbaF64, TyMatrix4x4F64, TySrgbaF64, TySrgbaU8, TyVector2F64, TyVector3Ext,
-    TyVector3F64,
+    TyFloatExt, TyLinSrgbaF64, TyMatrix4x4F64, TyVector2F64, TyVector3Ext, TyVector3F64,
 };
 
 /// Reads a glTF or GLB byte slice into a [`Mesh`]: every triangle in world
@@ -239,8 +238,9 @@ fn material_slot(
 
 /// Reads a glTF material's flat factors into a [`MeshMaterial`]:
 /// 1. base color, metallic, and roughness from the metallic-roughness model;
-///    the base color is sRGB-encoded, its alpha scaled straight.
-/// 2. emissive color sRGB-encoded from `emissiveFactor`.
+///    every factor is linear and passes through untouched.
+/// 2. emissive color from `emissiveFactor`, opaque since the slot carries no
+///    alpha.
 /// 3. emissive strength, ior, and transmission from their KHR extensions,
 ///    defaulting to 1, 1.5, and 0 when absent.
 ///
@@ -248,16 +248,18 @@ fn material_slot(
 fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
     let pbr = material.pbr_metallic_roughness();
 
-    let base_color =
-        TySrgbaF64::from_linear(linear_rgba(pbr.base_color_factor())).into_format::<u8, u8>();
-
-    let emissive_color = emissive_srgb(material.emissive_factor());
+    let emissive = material.emissive_factor();
 
     MeshMaterial {
-        base_color,
+        base_color: linear_rgba(pbr.base_color_factor()),
         metallic: pbr.metallic_factor() as f64,
         roughness: pbr.roughness_factor() as f64,
-        emissive_color,
+        emissive_color: TyLinSrgbaF64::new(
+            emissive[0] as f64,
+            emissive[1] as f64,
+            emissive[2] as f64,
+            1.0,
+        ),
         emissive_strength: material.emissive_strength().unwrap_or(1.0) as f64,
         occlusion: 1.0,
         ior: material.ior().unwrap_or(1.5) as f64,
@@ -266,14 +268,6 @@ fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
             .map(|transmission| transmission.transmission_factor() as f64)
             .unwrap_or(0.0),
     }
-}
-
-/// A glTF linear-RGB emissive factor sRGB-encoded to a stored color, its alpha
-/// held opaque since the emissive slot carries none.
-fn emissive_srgb(factor: [f32; 3]) -> TySrgbaU8 {
-    let linear = TyLinSrgbaF64::new(factor[0] as f64, factor[1] as f64, factor[2] as f64, 1.0);
-
-    TySrgbaF64::from_linear(linear).into_format::<u8, u8>()
 }
 
 /// A material's texture bindings, decoding each referenced image into `textures`
@@ -467,11 +461,11 @@ mod tests {
     use crate::{
         BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC, MaterialMode,
         OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS, Result, SurfaceMode, TRANSMISSION,
-        from_gltf_bytes, voxelize_mesh,
+        from_gltf_bytes, srgba_u8_from_linear_color, voxelize_mesh,
     };
     use branded_id::U32Id;
     use png::{BitDepth, ColorType, Encoder};
-    use ty_math::{TyFloatExt, TyHexColor, TySrgbaU8, TyVector3U32};
+    use ty_math::{TyHexColor, TyLinSrgbaF64, TySrgbaU8, TyVector3U32};
     use voxcore::{BVoxValuePoolValue, VoxMain, VoxValuePool, VoxValuePoolValueRef};
 
     /// A minimal binary glTF (GLB) of an axis-aligned box spanning `[0, sx]`,
@@ -726,12 +720,13 @@ mod tests {
             .unwrap()
     }
 
-    /// The `#RRGGBBAA` hex of the `baseColor` a given voxel samples.
+    /// The `#RRGGBBAA` hex of the `baseColor` a given voxel samples, encoded
+    /// to sRGB from the stored linear color.
     fn voxel_hex(state: &VoxMain, position: TyVector3U32) -> String {
         let (value_pool, value_id) = voxel_attribute(state, position, BASE_COLOR);
         match value_pool.value(value_id) {
-            Some(VoxValuePoolValueRef::Srgba(&[r, g, b, a])) => {
-                TySrgbaU8::from([byte(r), byte(g), byte(b), byte(a)]).to_hex()
+            Some(VoxValuePoolValueRef::Vec4Float(&[r, g, b, a])) => {
+                srgba_u8_from_linear_color(TyLinSrgbaF64::new(r, g, b, a)).to_hex()
             }
             other => panic!("unexpected baseColor value pool {other:?}"),
         }
@@ -744,11 +739,6 @@ mod tests {
             Some(VoxValuePoolValueRef::Float(number)) => number,
             other => panic!("expected a float value pool for {attribute}, got {other:?}"),
         }
-    }
-
-    /// One sRGB float component in `[0, 1]` mapped to a byte.
-    fn byte(component: f64) -> u8 {
-        component.to_unorm8()
     }
 
     /// Encodes `texels` (row-major RGBA8) into a PNG of the given size.
@@ -1138,9 +1128,10 @@ mod tests {
     }
 
     #[test]
-    fn per_primitive_reads_the_pbr_factors_and_srgb_encodes_the_base_color() {
-        // Linear base color [1, 0.5, 0] sRGB-encodes to #FFBC00; a dropped gamma
-        // would give #FF8000 instead.
+    fn per_primitive_passes_the_pbr_factors_through_linear() {
+        // The glTF base color factor is linear light, the form the value pool
+        // stores, so it imports bit-exact; its sRGB display encoding is
+        // #FFBC00, where a curve applied on import would shift it to #FF8000.
         let state = voxelize(
             &box_glb(
                 1.0,
@@ -1164,6 +1155,11 @@ mod tests {
         let (_, palette) = state.iter_palettes().next().unwrap();
         assert_eq!(palette.material_count(), 1);
         let origin = TyVector3U32::new(0, 0, 0);
+        let (value_pool, value_id) = voxel_attribute(&state, origin, BASE_COLOR);
+        assert_eq!(
+            value_pool.value(value_id),
+            Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.5, 0.0, 1.0]))
+        );
         assert_eq!(voxel_hex(&state, origin), "#FFBC00FF");
         assert_eq!(voxel_number(&state, origin, METALLIC), 0.25);
         assert_eq!(voxel_number(&state, origin, ROUGHNESS), 0.75);
@@ -1540,12 +1536,11 @@ mod tests {
     }
 
     #[test]
-    fn per_texel_reads_emissive_as_an_srgb_color() {
+    fn per_texel_decodes_the_emissive_texture_to_linear() {
         // Emissive is sampled as a color, not collapsed to a scalar. A green of
-        // 188 sRGB decodes to ~0.503 linear, is tinted by the unit factor, then
-        // re-encodes to ~188 (~0.737 as a float), so the stored emissiveColor is
-        // green with no red or blue and the strength stays the material's unit
-        // factor.
+        // 188 sRGB decodes to ~0.503 linear and is tinted by the unit factor,
+        // so the stored emissiveColor is that linear green with no red or blue
+        // and the strength stays the material's unit factor.
         let emissive = png_rgba(1, 1, &[[0, 188, 0, 255]]);
         let glb = pbr_quad_glb(
             full_square(),
@@ -1573,11 +1568,11 @@ mod tests {
         let origin = TyVector3U32::new(0, 0, 0);
         let (value_pool, value_id) = voxel_attribute(&state, origin, EMISSIVE_COLOR);
         let [r, g, b] = match value_pool.value(value_id) {
-            Some(VoxValuePoolValueRef::Srgb(&color)) => color,
-            other => panic!("expected an sRGB emissiveColor value pool, got {other:?}"),
+            Some(VoxValuePoolValueRef::Vec3Float(&color)) => color,
+            other => panic!("expected an emissiveColor value pool, got {other:?}"),
         };
         assert!(r < 0.01 && b < 0.01, "emissiveColor red {r} blue {b}");
-        assert!((g - 188.0 / 255.0).abs() < 0.01, "emissiveColor green {g}");
+        assert!((g - 0.503).abs() < 0.01, "emissiveColor green {g}");
         assert_eq!(
             voxel_number(&state, origin, EMISSIVE_STRENGTH),
             1.0,

@@ -49,13 +49,13 @@ mod tests {
     use crate::{BASE_COLOR, resolve_cell_color};
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     #[test]
     fn a_supplier_reads_each_voxel_through_its_material() {
         let mut state = VoxMain::default();
         let value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
+            VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
 
         let mut palette = VoxPalette::default();
@@ -98,9 +98,7 @@ mod tests {
     #[test]
     fn a_supplier_over_a_non_color_value_pool_errors() {
         let mut state = VoxMain::default();
-        let value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::None, VoxBound::None, vec![1.0]).unwrap(),
-        );
+        let value_pool_id = state.add_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette

@@ -115,3 +115,23 @@ wire spells them, so the model holds them. Ranges stay out entirely.
 The constructors keep the kind-name spelling for the vector kinds:
 `vec_3_float` for `vec-3-float`, digit separated, not the variant-derived
 `vec3_float`.
+
+## Iteration 7 rulings
+
+2026-08-02. The one sRGB transfer lives in an internal helper pair:
+`linear_color_from_srgba_u8` decodes an 8-bit color to `TyLinSrgbaF64`
+and `srgba_u8_from_linear_color` encodes it back, gated on
+`any(_color, _mesh)` because the color codecs and the mesh side both
+cross the boundary. Every 8-bit crossing calls the pair: the goxl, mvox,
+qb-family, and vmax importers, the voxelizer's fill colors, the texture
+texel reads, the atlas texel writes, and `value_pool_color`. The u8
+identity test and the independent transfer references from the old
+write-side seam tests live beside the encode helper.
+
+`MeshMaterial`'s two colors turn `TyLinSrgbaF64`, so the voxelizer's
+material dedup and its color columns key on f64 bit patterns instead of
+8-bit codes: per-texel sampling merges only bit-identical sampled
+colors, the finer palette granularity the README accepts for storing
+the sampled value exactly. Test fixtures that author colors as hex
+decode them through the same helper, so byte-level expectations survive
+unchanged.

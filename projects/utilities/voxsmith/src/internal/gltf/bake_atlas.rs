@@ -108,12 +108,11 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
     }
 }
 
-/// A color attribute's RGBA bytes, decoded by the bound value pool's kind, or
-/// `key`'s glTF spec default when no layer binds it. An sRGB value pool holds
-/// sRGB-encoded components in `[0, 1]`. A linear value pool holds scene-linear
-/// components re-encoded to sRGB here. A three-component color takes opaque
-/// alpha. Errors when the bound value pool is not a color kind, or when an
-/// unbound `key` has no spec default.
+/// A color attribute's RGBA bytes, or `key`'s glTF spec default when no layer
+/// binds it. The bound value pool holds linear-light components re-encoded to
+/// sRGB here, and a three-component color takes opaque alpha. Errors when the
+/// bound value pool holds no float vectors, or when an unbound `key` has no
+/// spec default.
 fn color_bytes(
     value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
     key: &str,
@@ -224,9 +223,7 @@ mod tests {
     };
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{
-        BVoxObject, BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool,
-    };
+    use voxcore::{BVoxObject, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The branded value id `index`.
     fn value_id(index: u32) -> U32Id<BVoxValuePoolValue> {
@@ -250,16 +247,12 @@ mod tests {
         let mut state = VoxMain::default();
 
         let base_value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
+            VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
-        let metallic_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![1.0, 0.0])
-                .unwrap(),
-        );
-        let roughness_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 1.0])
-                .unwrap(),
-        );
+        let metallic_value_pool_id =
+            state.add_value_pool(VoxValuePool::float(vec![1.0, 0.0]).unwrap());
+        let roughness_value_pool_id =
+            state.add_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -379,11 +372,9 @@ mod tests {
         // bake the same half strength.
         let mut state = VoxMain::default();
         let base_value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
+            VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
-        let strength_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![0.5]).unwrap(),
-        );
+        let strength_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -486,11 +477,11 @@ mod tests {
 
         // emissiveColor is sRGB; strengths 1.0 and 0.5 fold into the texels as
         // fractions of the mesh max, 1.0.
-        let factor_value_pool_id = state
-            .add_value_pool(VoxValuePool::srgb(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]).unwrap());
-        let strength_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![1.0, 0.5]).unwrap(),
+        let factor_value_pool_id = state.add_value_pool(
+            VoxValuePool::vec_3_float(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]).unwrap(),
         );
+        let strength_value_pool_id =
+            state.add_value_pool(VoxValuePool::float(vec![1.0, 0.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -565,7 +556,7 @@ mod tests {
     /// An unbounded-above `float` value pool holding `value`, the shape
     /// `emissiveStrength` takes.
     fn strength_value_pool(value: f64) -> VoxValuePool {
-        VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![value]).unwrap()
+        VoxValuePool::float(vec![value]).unwrap()
     }
 
     #[test]
@@ -593,7 +584,7 @@ mod tests {
 
     #[test]
     fn a_color_packed_as_a_scalar_errors() {
-        let color = VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
+        let color = VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
         let bake = MaterialBake::Packing(vec![scalar(METALLIC, false)]);
 
         assert!(bake_one(METALLIC, color, &bake).is_err());
@@ -603,7 +594,7 @@ mod tests {
     fn a_scalar_baked_as_a_color_errors() {
         // The rgba bake reads `baseColor` whole, so a scalar value pool
         // under it has no color to decode.
-        let number = VoxValuePool::float(VoxBound::None, VoxBound::None, vec![0.5]).unwrap();
+        let number = VoxValuePool::float(vec![0.5]).unwrap();
 
         assert!(bake_one(BASE_COLOR, number, &MaterialBake::RgbaColor).is_err());
     }

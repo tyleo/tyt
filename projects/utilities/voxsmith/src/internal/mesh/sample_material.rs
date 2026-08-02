@@ -1,8 +1,9 @@
 use crate::{
     GridSpace, MeshBaseColorMap, MeshEmissiveMap, MeshMaterial, MeshMaterialMaps,
     MeshMetallicRoughnessMap, MeshOcclusionMap, MeshSampler, MeshTexture, MeshTriangle, VoxelGrid,
+    linear_color_from_srgba_u8,
 };
-use ty_math::{TyLinSrgbaF64, TySrgbaF64, TySrgbaU8, TyVector2F64, TyVector3F64, TyVector3U32};
+use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector2F64, TyVector3F64, TyVector3U32};
 
 /// Barycentric samples per grid unit of a triangle's longest edge, so a triangle
 /// spanning `k` voxels is sampled about `2k` times along it.
@@ -27,9 +28,8 @@ const THIRD: f64 = 1.0 / 3.0;
 /// every surface cell resolves; a non-surface cell is `None`.
 ///
 /// The color space is chosen per map: base color and emissive decode sRGB, while
-/// metallic-roughness and occlusion are straight linear data. The 8-bit
-/// re-encoding of the color is the epsilon merge, and the finish attributes merge
-/// on their float bit patterns downstream.
+/// metallic-roughness and occlusion are straight linear data. The sampled
+/// attributes merge on their float bit patterns downstream.
 ///
 /// # Arguments
 /// * `triangles` - the mesh triangles, carrying per-map texture coordinates.
@@ -240,13 +240,12 @@ fn apply(
     let n = accum.count as f64;
 
     if maps.base_color.is_some() && triangle.uvs.base_color.is_some() {
-        material.base_color = TySrgbaF64::from_linear(TyLinSrgbaF64::new(
+        material.base_color = TyLinSrgbaF64::new(
             accum.base_color[0] / n,
             accum.base_color[1] / n,
             accum.base_color[2] / n,
             accum.base_color[3] / n,
-        ))
-        .into_format::<u8, u8>();
+        );
     }
 
     if maps.metallic_roughness.is_some() && triangle.uvs.metallic_roughness.is_some() {
@@ -258,13 +257,12 @@ fn apply(
     // material's flat factor, since it is a per-material scalar the texture does
     // not carry.
     if maps.emissive.is_some() && triangle.uvs.emissive.is_some() {
-        material.emissive_color = TySrgbaF64::from_linear(TyLinSrgbaF64::new(
+        material.emissive_color = TyLinSrgbaF64::new(
             accum.emissive[0] / n,
             accum.emissive[1] / n,
             accum.emissive[2] / n,
             1.0,
-        ))
-        .into_format::<u8, u8>();
+        );
     }
 
     if maps.occlusion.is_some() && triangle.uvs.occlusion.is_some() {
@@ -276,10 +274,7 @@ fn apply(
 /// factor.
 fn base_color_linear(texture: &MeshTexture, uv: TyVector2F64, map: &MeshBaseColorMap) -> [f64; 4] {
     let texel = texture.sample(uv.x, uv.y, map.sampler.wrap_s, map.sampler.wrap_t);
-    let color = TySrgbaU8::from(texel)
-        .into_format::<f64, f64>()
-        .into_linear()
-        * map.factor;
+    let color = linear_color_from_srgba_u8(TySrgbaU8::from(texel)) * map.factor;
     [color.red, color.green, color.blue, color.alpha]
 }
 
@@ -299,9 +294,7 @@ fn metallic_roughness(
 /// component-wise by the linear emissive factor.
 fn emissive(texture: &MeshTexture, uv: TyVector2F64, map: &MeshEmissiveMap) -> [f64; 3] {
     let texel = texture.sample(uv.x, uv.y, map.sampler.wrap_s, map.sampler.wrap_t);
-    let color: TyLinSrgbaF64 = TySrgbaU8::from(texel)
-        .into_format::<f64, f64>()
-        .into_linear();
+    let color = linear_color_from_srgba_u8(TySrgbaU8::from(texel));
     [
         color.red * map.factor[0],
         color.green * map.factor[1],
@@ -398,7 +391,7 @@ mod tests {
         MeshBaseColorMap, MeshMaterial, MeshMaterialMaps, MeshSampler, MeshTexture, MeshTriangle,
         MeshTriangleUvs, MeshWrap, sample_material, voxelize_triangles,
     };
-    use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector2F64, TyVector3F64, TyVector3U32};
+    use ty_math::{TyLinSrgbaF64, TyVector2F64, TyVector3F64, TyVector3U32};
 
     /// Every surface cell of a textured mesh resolves to a material, through the
     /// scatter or the point-sample fallback, never staying `None`. A `None`
@@ -424,7 +417,7 @@ mod tests {
             },
             material_index: 0,
         };
-        let materials = vec![MeshMaterial::flat(TySrgbaU8::new(255, 255, 255, 255))];
+        let materials = vec![MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 1.0, 1.0, 1.0))];
         let textures = vec![MeshTexture::new(1, 1, vec![[255, 0, 0, 255]])];
         let maps = vec![MeshMaterialMaps {
             base_color: Some(MeshBaseColorMap {
@@ -449,7 +442,7 @@ mod tests {
             if covering.is_some() {
                 assert_eq!(
                     sampled[cell].map(|material| material.base_color),
-                    Some(TySrgbaU8::new(255, 0, 0, 255)),
+                    Some(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0)),
                     "surface cell {cell} left uncolored"
                 );
             }
