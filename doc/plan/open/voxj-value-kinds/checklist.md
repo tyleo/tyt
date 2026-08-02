@@ -353,7 +353,30 @@ Gate: the whole workspace green: `cargo fmt --all -- --check`,
 `cargo clippy --workspace --all-targets -- -D warnings`,
 `cargo test --workspace`.
 
-## Iteration 9: closeout
+## Iteration 9: one label vocabulary per command
+
+Unrelated to the value-kinds work; it sits at the end so the fix never
+rides a voxj commit, and lands in its own commit at the owner's request
+(2026-08-02).
+
+- [ ] One format decision across `hierarchy show`, `palette show`,
+      `palette list`, and `info`: a field has one label, spelled the
+      same in every layout, and no command relabels per layout.
+      `palette show` (every label is data) and `hierarchy show` (one
+      grid, hierarchy and JSON only) already comply. `palette list`
+      does not: its tree/JSON grid says `materialCount` and `objects`
+      where its tables grid says `materials` and `used by`. `info`
+      does not: it splits a Title-Case display grid (`Properties`,
+      `Has ext`) from its snake_case JSON grid (`properties`,
+      `has_ext`). The recommendation is the machine labels everywhere,
+      the convention the compliant two already follow; the owner picks
+      the convention and the surviving label for each forked field at
+      execution, fixtures re-baseline, and the ruling lands in the
+      decisions log.
+
+Gate: `cargo test -p vxl --all-features` green; owner review.
+
+## Iteration 10: closeout
 
 - [ ] Regenerate `submodules/tyt-assets/scratch/energy-turret.voxj` from
       its sibling `energy-turret.glb`: a tyt-assets commit plus the
