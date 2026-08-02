@@ -17,13 +17,8 @@ pub enum Error {
     /// A value pool was given no values at construction.
     EmptyValuePoolValues,
 
-    /// A value pool was given malformed `min`/`max` bounds at construction:
-    /// non-finite, not integer-valued for an `int` value pool, or `min` greater
-    /// than `max`.
-    MalformedValuePoolBound,
-
-    /// A value pool was given a value that is malformed for its kind or
-    /// outside its bounds.
+    /// A value pool was given a value outside its kind's value domain: a NaN
+    /// float value or component, or an int beyond `2^53 - 1` in magnitude.
     MalformedValuePoolValue { value_id: U32Id<BVoxValuePoolValue> },
 
     /// An object grid of this many cells would exceed
@@ -138,12 +133,7 @@ pub enum Error {
     /// reaching the node at this listing index.
     InsertedCycle { index: usize },
 
-    /// A value pool's `min`/`max` bounds are malformed: non-finite, not
-    /// integer-valued for an `int` value pool, or `min` greater than `max`.
-    ValuePoolBound { value_pool_id: U32Id<BVoxValuePool> },
-
-    /// A value pool holds a value that is malformed for its kind or outside its
-    /// bounds.
+    /// A value pool holds a value outside its kind's value domain.
     ValuePoolValue {
         value_pool_id: U32Id<BVoxValuePool>,
         value_id: U32Id<BVoxValuePoolValue>,
@@ -234,12 +224,9 @@ impl Display for Error {
             Error::EmptyValuePoolValues => {
                 write!(f, "a value pool needs at least one value")
             }
-            Error::MalformedValuePoolBound => {
-                write!(f, "the value pool's min/max bounds are malformed")
-            }
             Error::MalformedValuePoolValue { value_id } => write!(
                 f,
-                "value {} is malformed for its kind or out of bounds",
+                "value {} is outside its kind's value domain",
                 value_id.to_u32()
             ),
             Error::GridCellCap { cells } => write!(
@@ -397,19 +384,12 @@ impl Display for Error {
                 "the inserted hierarchy nodes contain a cycle reaching the node at listing index \
                  {index}"
             ),
-            Error::ValuePoolBound { value_pool_id } => {
-                write!(
-                    f,
-                    "value pool {} has malformed min/max bounds",
-                    value_pool_id.to_u32()
-                )
-            }
             Error::ValuePoolValue {
                 value_pool_id,
                 value_id,
             } => write!(
                 f,
-                "value pool {} value {} is malformed for its kind or out of bounds",
+                "value pool {} value {} is outside its kind's value domain",
                 value_pool_id.to_u32(),
                 value_id.to_u32()
             ),

@@ -245,11 +245,11 @@ Gate: `cargo test -p voxj-codec` green.
 
 ## Iteration 6: voxcore
 
-- [ ] Rework `vox_value_pool_kind.rs` to the eleven kinds (the four color
+- [x] Rework `vox_value_pool_kind.rs` to the eleven kinds (the four color
       variants and the `Float`/`Int` bounds go; six vector variants
       arrive on `IdField` payloads) and `vox_value_pool_value_ref.rs` to
       match.
-- [ ] `vox_value_pool.rs`: the four color constructors delete, `float`
+- [x] `vox_value_pool.rs`: the four color constructors delete, `float`
       and `int` lose their bound parameters, six vector constructors
       arrive; the six kind matches (`first_flaw`, `clone_value_pool`,
       `release_value_stable`, `gc_values`, `value_ref`, `Drop`) cover the
@@ -258,7 +258,7 @@ Gate: `cargo test -p voxj-codec` green.
       voxj's parse now). Decide and log what value flaw checking remains
       now that the wire owns the domain rules (for example whether a NaN
       component still flaws).
-- [ ] Delete `vox_bound.rs`; update `lib.rs`; drop
+- [x] Delete `vox_bound.rs`; update `lib.rs`; drop
       `VoxValuePoolFlaw::Bound`, both of `error.rs`'s bound variants, and
       the `vox_main.rs` `validate` mapping arm. The two variants are
       `MalformedValuePoolBound` on the construction path and
@@ -266,7 +266,7 @@ Gate: `cargo test -p voxj-codec` green.
       that mapping arm. `Error` is public and not `non_exhaustive`, so an
       orphaned variant draws no warning and no gate grep matches it. The
       surviving `ValuePoolValue` doc still says "or outside its bounds".
-- [ ] Test fixtures across `vox_main.rs`, `vox_value_pool.rs`, and
+- [x] Test fixtures across `vox_main.rs`, `vox_value_pool.rs`, and
       `vox_effective_palette.rs`; the bound, color range, and exactness
       tests delete with the machinery they cover.
 

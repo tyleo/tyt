@@ -1131,9 +1131,8 @@ impl VoxMain {
     /// voxcore bug, never a caller error. The checks stay as the specification
     /// of what the mutations preserve:
     ///
-    /// 1. every value pool is non-empty, its values well-formed for its kind,
-    ///    and its `min`/`max` finite, integer-valued for an `int` value pool,
-    ///    and ordered
+    /// 1. every value pool is non-empty and every value within its kind's
+    ///    value domain
     /// 2. per palette:
     ///    1. every property names a live value pool
     ///    2. no property name repeats
@@ -1153,17 +1152,14 @@ impl VoxMain {
     /// A node may have several parents, since the hierarchy is a DAG; that
     /// sharing is not a cycle.
     pub fn validate(&self) -> Result<()> {
-        // Value pools are non-empty and their values and bounds well-formed for
-        // their kind. This runs first, so a palette that reads a malformed
-        // value pool is reported after the value pool it reads.
+        // Value pools are non-empty and their values within their kind's value
+        // domain. This runs first, so a palette that reads a malformed value
+        // pool is reported after the value pool it reads.
         for (value_pool_id, value_pool) in self.iter_value_pools() {
             match value_pool.first_flaw() {
                 None => {}
                 Some(VoxValuePoolFlaw::Empty) => {
                     return Err(Error::EmptyValuePool { value_pool_id });
-                }
-                Some(VoxValuePoolFlaw::Bound) => {
-                    return Err(Error::ValuePoolBound { value_pool_id });
                 }
                 Some(VoxValuePoolFlaw::Value(value_id)) => {
                     return Err(Error::ValuePoolValue {
@@ -1390,8 +1386,8 @@ fn first_cycle_node_index(
 mod tests {
     use crate::{
         BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty,
-        BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxBound, VoxHierarchyNode,
-        VoxMain, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef,
+        BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxHierarchyNode, VoxMain,
+        VoxObject, VoxPalette, VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef,
     };
     use branded_id::U32Id;
     use std::collections::HashMap;
@@ -1445,9 +1441,9 @@ mod tests {
         object
     }
 
-    /// Adds an unbounded `int` value pool holding `values` and returns its id.
+    /// Adds an `int` value pool holding `values` and returns its id.
     fn int_value_pool(state: &mut VoxMain, values: Vec<i64>) -> U32Id<BVoxValuePool> {
-        state.add_value_pool(VoxValuePool::int(VoxBound::None, VoxBound::None, values).unwrap())
+        state.add_value_pool(VoxValuePool::int(values).unwrap())
     }
 
     /// A palette holding one empty material and no properties, the smallest
@@ -1498,18 +1494,15 @@ mod tests {
     fn add_and_read_back_value_pools_in_listing_order() {
         let mut state = VoxMain::default();
         let colors_id =
-            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
-        let metallic_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 1.0])
-                .unwrap(),
-        );
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let metallic_id = state.add_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
 
         assert_eq!(state.value_pool_count(), 2);
         assert_eq!(colors_id, U32Id::<BVoxValuePool>::from_u32(0));
         assert_eq!(metallic_id.to_u32(), 1);
         assert!(matches!(
             state.value_pool(colors_id).map(VoxValuePool::kind),
-            Some(VoxValuePoolKind::Srgba { .. })
+            Some(VoxValuePoolKind::Vec4Float { .. })
         ));
         assert_eq!(
             state.value_pool(metallic_id).map(VoxValuePool::values_len),
@@ -1521,7 +1514,7 @@ mod tests {
         let mut value_pools = state.iter_value_pools();
         assert!(matches!(
             value_pools.next().map(|(_, value_pool)| value_pool.kind()),
-            Some(VoxValuePoolKind::Srgba { .. })
+            Some(VoxValuePoolKind::Vec4Float { .. })
         ));
         assert!(matches!(
             value_pools.next().map(|(_, value_pool)| value_pool.kind()),
@@ -1533,13 +1526,13 @@ mod tests {
     #[test]
     fn clone_state_deep_copies_value_pools() {
         let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::int(VoxBound::None, VoxBound::None, vec![7]).unwrap());
+        state.add_value_pool(VoxValuePool::int(vec![7]).unwrap());
 
         let copy = state.clone_state();
         assert_eq!(copy.value_pool_count(), 1);
         assert_eq!(
             copy.value_pool(U32Id::<BVoxValuePool>::from_u32(0)),
-            Some(&VoxValuePool::int(VoxBound::None, VoxBound::None, vec![7]).unwrap())
+            Some(&VoxValuePool::int(vec![7]).unwrap())
         );
 
         // Mutating the original must not touch the copy.
@@ -1553,7 +1546,7 @@ mod tests {
         let mut state = VoxMain::default();
         // Four colors; the palette references only the middle two.
         let colors_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![
+            VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red, unused
                 [0.0, 1.0, 0.0, 1.0], // 1 green, used
                 [0.0, 0.0, 1.0, 1.0], // 2 blue, unused
@@ -1576,7 +1569,10 @@ mod tests {
         // material cells keep their ids. gc owns the renumbering.
         assert_eq!(
             state.value_pool(colors_id),
-            Some(&VoxValuePool::srgba(vec![[0.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]]).unwrap())
+            Some(
+                &VoxValuePool::vec_4_float(vec![[0.0, 1.0, 0.0, 1.0], [1.0, 1.0, 1.0, 1.0]])
+                    .unwrap()
+            )
         );
         let palette = state.palette(palette_id).unwrap();
         assert_eq!(palette.value_id(green_id, property_id), Some(value_id(1)));
@@ -1616,7 +1612,7 @@ mod tests {
         // survivors keep their ids until gc.
         assert_eq!(
             state.value_pool(ints_id),
-            Some(&VoxValuePool::int(VoxBound::None, VoxBound::None, vec![10, 30]).unwrap())
+            Some(&VoxValuePool::int(vec![10, 30]).unwrap())
         );
         assert_eq!(
             state
@@ -1641,7 +1637,7 @@ mod tests {
         // Three colors. Two palettes bind the value pool, each with materials
         // drawing scattered ids.
         let colors_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![
+            VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red
                 [0.0, 1.0, 0.0, 1.0], // 1 green
                 [0.0, 0.0, 1.0, 1.0], // 2 blue
@@ -1673,7 +1669,7 @@ mod tests {
         assert_eq!(
             state.value_pool(colors_id),
             Some(
-                &VoxValuePool::srgba(vec![
+                &VoxValuePool::vec_4_float(vec![
                     [0.0, 0.0, 1.0, 1.0],
                     [1.0, 0.0, 0.0, 1.0],
                     [0.0, 1.0, 0.0, 1.0]
@@ -1689,7 +1685,7 @@ mod tests {
         let value_pool = state.value_pool(colors_id).unwrap();
         assert_eq!(
             value_pool.value(value_id(2)),
-            Some(VoxValuePoolValueRef::Srgba(&[0.0, 0.0, 1.0, 1.0]))
+            Some(VoxValuePoolValueRef::Vec4Float(&[0.0, 0.0, 1.0, 1.0]))
         );
         assert_eq!(
             state
@@ -1731,7 +1727,7 @@ mod tests {
         );
         assert_eq!(
             state.value_pool(ints_id),
-            Some(&VoxValuePool::int(VoxBound::None, VoxBound::None, vec![10, 20, 30]).unwrap())
+            Some(&VoxValuePool::int(vec![10, 20, 30]).unwrap())
         );
     }
 
@@ -2374,12 +2370,9 @@ mod tests {
         // validate it, gc it, and read a material's resolved values back.
         let mut state = VoxMain::default();
         let colors_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]]).unwrap(),
+            VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]]).unwrap(),
         );
-        let metallic_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 1.0])
-                .unwrap(),
-        );
+        let metallic_id = state.add_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
         let mut palette = VoxPalette::default();
         let color_id = palette
             .add_property("baseColor".to_owned(), colors_id, value_id(0))
@@ -2423,7 +2416,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             value_pool.value(resolved_value_id),
-            Some(VoxValuePoolValueRef::Srgba(&[1.0, 0.0, 0.0, 1.0]))
+            Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0]))
         );
         let (value_pool, resolved_value_id) = state
             .material_value(live_palette_id, sampled_id, metal_id)
@@ -2441,7 +2434,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             value_pool.value(resolved_value_id),
-            Some(VoxValuePoolValueRef::Srgba(&[0.0, 1.0, 0.0, 1.0]))
+            Some(VoxValuePoolValueRef::Vec4Float(&[0.0, 1.0, 0.0, 1.0]))
         );
     }
 
@@ -2795,7 +2788,7 @@ mod tests {
         assert_eq!(b_ref.value_id(b_last_id, b_property_id), Some(value_id(2)));
         assert_eq!(
             state.value_pool(ints_id),
-            Some(&VoxValuePool::int(VoxBound::None, VoxBound::None, vec![20, 30]).unwrap())
+            Some(&VoxValuePool::int(vec![20, 30]).unwrap())
         );
         state.validate().unwrap();
 
@@ -3447,9 +3440,7 @@ mod tests {
         match rng.below(21) {
             0 => {
                 let values = (0..1 + rng.below(3)).map(|v| v as i64).collect();
-                state.add_value_pool(
-                    VoxValuePool::int(VoxBound::None, VoxBound::None, values).unwrap(),
-                );
+                state.add_value_pool(VoxValuePool::int(values).unwrap());
             }
             1 => {
                 let mut palette = VoxPalette::default();

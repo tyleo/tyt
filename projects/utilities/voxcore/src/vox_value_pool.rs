@@ -1,5 +1,5 @@
 use crate::{
-    BVoxValuePoolValue, Error, Result, VoxBound, VoxValue, VoxValuePoolFlaw, VoxValuePoolKind,
+    BVoxValuePoolValue, Error, Result, VoxValue, VoxValuePoolFlaw, VoxValuePoolKind,
     VoxValuePoolValueRef,
 };
 use branded_id::{
@@ -12,11 +12,11 @@ use std::mem;
 /// value ids.
 ///
 /// Build a value pool with the constructor for its kind (for example
-/// [`float`](Self::float) or [`srgba`](Self::srgba)), which checks its input
-/// and retains one id per value in the given order. Read values back by id with
-/// [`value`](Self::value) or in listing order with
+/// [`float`](Self::float) or [`vec_4_float`](Self::vec_4_float)), which checks
+/// its input and retains one id per value in the given order. Read values back
+/// by id with [`value`](Self::value) or in listing order with
 /// [`iter_values`](Self::iter_values), and match [`kind`](Self::kind) for the
-/// kind and bounds.
+/// kind.
 #[derive(Debug)]
 pub struct VoxValuePool {
     /// Value id pool. Its listing order is the value pool's value order.
@@ -27,17 +27,6 @@ pub struct VoxValuePool {
 }
 
 impl VoxValuePool {
-    /// Creates a `json` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty.
-    pub fn json(values: Vec<VoxValue>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
-            value_ids,
-            kind: VoxValuePoolKind::Json { values },
-        }
-        .checked()
-    }
-
     /// Creates a `bool` value pool holding `values`, retaining ids in order.
     /// Errors, building nothing, if `values` is empty.
     pub fn boolean(values: Vec<bool>) -> Result<Self> {
@@ -49,33 +38,36 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates a `float` value pool bounded by `min`/`max` holding `values`,
-    /// retaining ids in order. Errors, building nothing, if:
-    ///
-    /// 1. `values` is empty
-    /// 2. a bound is non-finite or the bounds are unordered
-    /// 3. a value is non-finite or outside the bounds
-    pub fn float(min: VoxBound, max: VoxBound, values: Vec<f64>) -> Result<Self> {
+    /// Creates a `float` value pool holding `values`, retaining ids in order.
+    /// Errors, building nothing, if `values` is empty or a value is NaN.
+    pub fn float(values: Vec<f64>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Float { min, max, values },
+            kind: VoxValuePoolKind::Float { values },
         }
         .checked()
     }
 
-    /// Creates an `int` value pool bounded by `min`/`max` holding `values`,
-    /// retaining ids in order. Errors, building nothing, if:
-    ///
-    /// 1. `values` is empty
-    /// 2. a bound is non-finite or not integer-valued, or the bounds are
-    ///    unordered
-    /// 3. a value is outside the bounds
-    pub fn int(min: VoxBound, max: VoxBound, values: Vec<i64>) -> Result<Self> {
+    /// Creates an `int` value pool holding `values`, retaining ids in order.
+    /// Errors, building nothing, if `values` is empty or a value's magnitude
+    /// exceeds `2^53 - 1`.
+    pub fn int(values: Vec<i64>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Int { min, max, values },
+            kind: VoxValuePoolKind::Int { values },
+        }
+        .checked()
+    }
+
+    /// Creates a `json` value pool holding `values`, retaining ids in order.
+    /// Errors, building nothing, if `values` is empty.
+    pub fn json(values: Vec<VoxValue>) -> Result<Self> {
+        let (value_ids, values) = columns(values);
+        Self {
+            value_ids,
+            kind: VoxValuePoolKind::Json { values },
         }
         .checked()
     }
@@ -91,50 +83,74 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Creates an `srgb` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty or a component is outside
-    /// `[0, 1]`.
-    pub fn srgb(values: Vec<[f64; 3]>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
-            value_ids,
-            kind: VoxValuePoolKind::Srgb { values },
-        }
-        .checked()
-    }
-
-    /// Creates an `srgba` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty or a component is outside
-    /// `[0, 1]`.
-    pub fn srgba(values: Vec<[f64; 4]>) -> Result<Self> {
-        let (value_ids, values) = columns(values);
-        Self {
-            value_ids,
-            kind: VoxValuePoolKind::Srgba { values },
-        }
-        .checked()
-    }
-
-    /// Creates a `linear-rgb` value pool holding `values`, retaining ids in
+    /// Creates a `vec-2-float` value pool holding `values`, retaining ids in
     /// order. Errors, building nothing, if `values` is empty or a component is
-    /// non-finite or negative.
-    pub fn linear_rgb(values: Vec<[f64; 3]>) -> Result<Self> {
+    /// NaN.
+    pub fn vec_2_float(values: Vec<[f64; 2]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::LinearRgb { values },
+            kind: VoxValuePoolKind::Vec2Float { values },
         }
         .checked()
     }
 
-    /// Creates a `linear-rgba` value pool holding `values`, retaining ids in
-    /// order. Errors, building nothing, if `values` is empty or a component is
-    /// non-finite or negative.
-    pub fn linear_rgba(values: Vec<[f64; 4]>) -> Result<Self> {
+    /// Creates a `vec-2-int` value pool holding `values`, retaining ids in
+    /// order. Errors, building nothing, if `values` is empty or a component's
+    /// magnitude exceeds `2^53 - 1`.
+    pub fn vec_2_int(values: Vec<[i64; 2]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::LinearRgba { values },
+            kind: VoxValuePoolKind::Vec2Int { values },
+        }
+        .checked()
+    }
+
+    /// Creates a `vec-3-float` value pool holding `values`, retaining ids in
+    /// order. Errors, building nothing, if `values` is empty or a component is
+    /// NaN.
+    pub fn vec_3_float(values: Vec<[f64; 3]>) -> Result<Self> {
+        let (value_ids, values) = columns(values);
+        Self {
+            value_ids,
+            kind: VoxValuePoolKind::Vec3Float { values },
+        }
+        .checked()
+    }
+
+    /// Creates a `vec-3-int` value pool holding `values`, retaining ids in
+    /// order. Errors, building nothing, if `values` is empty or a component's
+    /// magnitude exceeds `2^53 - 1`.
+    pub fn vec_3_int(values: Vec<[i64; 3]>) -> Result<Self> {
+        let (value_ids, values) = columns(values);
+        Self {
+            value_ids,
+            kind: VoxValuePoolKind::Vec3Int { values },
+        }
+        .checked()
+    }
+
+    /// Creates a `vec-4-float` value pool holding `values`, retaining ids in
+    /// order. Errors, building nothing, if `values` is empty or a component is
+    /// NaN.
+    pub fn vec_4_float(values: Vec<[f64; 4]>) -> Result<Self> {
+        let (value_ids, values) = columns(values);
+        Self {
+            value_ids,
+            kind: VoxValuePoolKind::Vec4Float { values },
+        }
+        .checked()
+    }
+
+    /// Creates a `vec-4-int` value pool holding `values`, retaining ids in
+    /// order. Errors, building nothing, if `values` is empty or a component's
+    /// magnitude exceeds `2^53 - 1`.
+    pub fn vec_4_int(values: Vec<[i64; 4]>) -> Result<Self> {
+        let (value_ids, values) = columns(values);
+        Self {
+            value_ids,
+            kind: VoxValuePoolKind::Vec4Int { values },
         }
         .checked()
     }
@@ -144,7 +160,6 @@ impl VoxValuePool {
         match self.first_flaw() {
             None => Ok(self),
             Some(VoxValuePoolFlaw::Empty) => Err(Error::EmptyValuePoolValues),
-            Some(VoxValuePoolFlaw::Bound) => Err(Error::MalformedValuePoolBound),
             Some(VoxValuePoolFlaw::Value(value_id)) => {
                 Err(Error::MalformedValuePoolValue { value_id })
             }
@@ -152,83 +167,37 @@ impl VoxValuePool {
     }
 
     /// The value pool's first well-formedness flaw, or `None` if it is well
-    /// formed. The constructors gate on this, so a flaw found later is a
-    /// voxcore bug; [`VoxMain::validate`](crate::VoxMain::validate) audits for
-    /// one anyway.
+    /// formed: the value pool is non-empty and every value is within its
+    /// kind's value domain. The constructors gate on this, so a flaw found
+    /// later is a voxcore bug;
+    /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
     pub(crate) fn first_flaw(&self) -> Option<VoxValuePoolFlaw> {
         if self.value_ids.is_empty() {
             return Some(VoxValuePoolFlaw::Empty);
         }
-        match &self.kind {
-            VoxValuePoolKind::Float { min, max, .. } => {
-                if !bounds_well_formed(min, max, false) {
-                    return Some(VoxValuePoolFlaw::Bound);
-                }
-                for (value_id, value) in self.iter_values() {
-                    let VoxValuePoolValueRef::Float(number) = value else {
-                        unreachable!("a float value pool yields float values");
-                    };
-                    if !number.is_finite() || !value_in_bounds(min, max, number) {
-                        return Some(VoxValuePoolFlaw::Value(value_id));
-                    }
-                }
-            }
-            VoxValuePoolKind::Int { min, max, .. } => {
-                if !bounds_well_formed(min, max, true) {
-                    return Some(VoxValuePoolFlaw::Bound);
-                }
-                for (value_id, value) in self.iter_values() {
-                    let VoxValuePoolValueRef::Int(number) = value else {
-                        unreachable!("an int value pool yields int values");
-                    };
-                    if !int_value_in_bounds(min, max, number) {
-                        return Some(VoxValuePoolFlaw::Value(value_id));
-                    }
-                }
-            }
-            VoxValuePoolKind::Srgb { .. } | VoxValuePoolKind::Srgba { .. } => {
-                return self.first_color_flaw(false);
-            }
-            VoxValuePoolKind::LinearRgb { .. } | VoxValuePoolKind::LinearRgba { .. } => {
-                return self.first_color_flaw(true);
-            }
-            VoxValuePoolKind::Json { .. }
-            | VoxValuePoolKind::Bool { .. }
-            | VoxValuePoolKind::String { .. } => {}
-        }
-        None
-    }
-
-    /// The first color value with a component outside its space's range:
-    /// sRGB in `[0, 1]`, linear finite and `>= 0`. The sRGB range test
-    /// rejects any non-finite component on its own; the linear side is only
-    /// lower-bounded, so it guards finiteness explicitly to reject
-    /// `+Infinity`, which would otherwise pass `>= 0`.
-    fn first_color_flaw(&self, linear: bool) -> Option<VoxValuePoolFlaw> {
         for (value_id, value) in self.iter_values() {
-            let components: &[f64] = match value {
-                VoxValuePoolValueRef::Srgb(color) => color,
-                VoxValuePoolValueRef::Srgba(color) => color,
-                VoxValuePoolValueRef::LinearRgb(color) => color,
-                VoxValuePoolValueRef::LinearRgba(color) => color,
-                _ => unreachable!("a color value pool yields color values"),
+            let in_domain = match value {
+                VoxValuePoolValueRef::Float(value) => float_in_domain(value),
+                VoxValuePoolValueRef::Int(value) => int_in_domain(value),
+                VoxValuePoolValueRef::Vec2Float(components) => floats_in_domain(components),
+                VoxValuePoolValueRef::Vec2Int(components) => ints_in_domain(components),
+                VoxValuePoolValueRef::Vec3Float(components) => floats_in_domain(components),
+                VoxValuePoolValueRef::Vec3Int(components) => ints_in_domain(components),
+                VoxValuePoolValueRef::Vec4Float(components) => floats_in_domain(components),
+                VoxValuePoolValueRef::Vec4Int(components) => ints_in_domain(components),
+                VoxValuePoolValueRef::Bool(_)
+                | VoxValuePoolValueRef::Json(_)
+                | VoxValuePoolValueRef::String(_) => true,
             };
-            for &component in components {
-                let in_range = if linear {
-                    component.is_finite() && component >= 0.0
-                } else {
-                    (0.0..=1.0).contains(&component)
-                };
-                if !in_range {
-                    return Some(VoxValuePoolFlaw::Value(value_id));
-                }
+            if !in_domain {
+                return Some(VoxValuePoolFlaw::Value(value_id));
             }
         }
         None
     }
 
-    /// The kind and bounds, for matching. Read the values through
-    /// [`value`](Self::value) and [`iter_values`](Self::iter_values).
+    /// The kind, for matching. Read the values through [`value`](Self::value)
+    /// and [`iter_values`](Self::iter_values).
     pub fn kind(&self) -> &VoxValuePoolKind {
         &self.kind
     }
@@ -284,35 +253,37 @@ impl VoxValuePool {
     /// `Clone`. Rebuild it against the cloned id pool.
     pub fn clone_value_pool(&self) -> Self {
         let kind = match &self.kind {
-            VoxValuePoolKind::Json { values } => VoxValuePoolKind::Json {
-                values: cloned(&self.value_ids, values),
-            },
             VoxValuePoolKind::Bool { values } => VoxValuePoolKind::Bool {
                 values: cloned(&self.value_ids, values),
             },
-            VoxValuePoolKind::Float { min, max, values } => VoxValuePoolKind::Float {
-                min: *min,
-                max: *max,
+            VoxValuePoolKind::Float { values } => VoxValuePoolKind::Float {
                 values: cloned(&self.value_ids, values),
             },
-            VoxValuePoolKind::Int { min, max, values } => VoxValuePoolKind::Int {
-                min: *min,
-                max: *max,
+            VoxValuePoolKind::Int { values } => VoxValuePoolKind::Int {
+                values: cloned(&self.value_ids, values),
+            },
+            VoxValuePoolKind::Json { values } => VoxValuePoolKind::Json {
                 values: cloned(&self.value_ids, values),
             },
             VoxValuePoolKind::String { values } => VoxValuePoolKind::String {
                 values: cloned(&self.value_ids, values),
             },
-            VoxValuePoolKind::Srgb { values } => VoxValuePoolKind::Srgb {
+            VoxValuePoolKind::Vec2Float { values } => VoxValuePoolKind::Vec2Float {
                 values: cloned(&self.value_ids, values),
             },
-            VoxValuePoolKind::Srgba { values } => VoxValuePoolKind::Srgba {
+            VoxValuePoolKind::Vec2Int { values } => VoxValuePoolKind::Vec2Int {
                 values: cloned(&self.value_ids, values),
             },
-            VoxValuePoolKind::LinearRgb { values } => VoxValuePoolKind::LinearRgb {
+            VoxValuePoolKind::Vec3Float { values } => VoxValuePoolKind::Vec3Float {
                 values: cloned(&self.value_ids, values),
             },
-            VoxValuePoolKind::LinearRgba { values } => VoxValuePoolKind::LinearRgba {
+            VoxValuePoolKind::Vec3Int { values } => VoxValuePoolKind::Vec3Int {
+                values: cloned(&self.value_ids, values),
+            },
+            VoxValuePoolKind::Vec4Float { values } => VoxValuePoolKind::Vec4Float {
+                values: cloned(&self.value_ids, values),
+            },
+            VoxValuePoolKind::Vec4Int { values } => VoxValuePoolKind::Vec4Int {
                 values: cloned(&self.value_ids, values),
             },
         };
@@ -330,15 +301,17 @@ impl VoxValuePool {
         // Safety: the id is retained, so it has a value in the column.
         unsafe {
             match &mut self.kind {
-                VoxValuePoolKind::Json { values } => values.release(id),
                 VoxValuePoolKind::Bool { values } => values.release(id),
-                VoxValuePoolKind::Float { values, .. } => values.release(id),
-                VoxValuePoolKind::Int { values, .. } => values.release(id),
+                VoxValuePoolKind::Float { values } => values.release(id),
+                VoxValuePoolKind::Int { values } => values.release(id),
+                VoxValuePoolKind::Json { values } => values.release(id),
                 VoxValuePoolKind::String { values } => values.release(id),
-                VoxValuePoolKind::Srgb { values } => values.release(id),
-                VoxValuePoolKind::Srgba { values } => values.release(id),
-                VoxValuePoolKind::LinearRgb { values } => values.release(id),
-                VoxValuePoolKind::LinearRgba { values } => values.release(id),
+                VoxValuePoolKind::Vec2Float { values } => values.release(id),
+                VoxValuePoolKind::Vec2Int { values } => values.release(id),
+                VoxValuePoolKind::Vec3Float { values } => values.release(id),
+                VoxValuePoolKind::Vec3Int { values } => values.release(id),
+                VoxValuePoolKind::Vec4Float { values } => values.release(id),
+                VoxValuePoolKind::Vec4Int { values } => values.release(id),
             }
         }
         self.value_ids.release_stable(id);
@@ -362,15 +335,17 @@ impl VoxValuePool {
         // has retained or released since.
         unsafe {
             match &mut self.kind {
-                VoxValuePoolKind::Json { values } => values.gc(&remap),
                 VoxValuePoolKind::Bool { values } => values.gc(&remap),
-                VoxValuePoolKind::Float { values, .. } => values.gc(&remap),
-                VoxValuePoolKind::Int { values, .. } => values.gc(&remap),
+                VoxValuePoolKind::Float { values } => values.gc(&remap),
+                VoxValuePoolKind::Int { values } => values.gc(&remap),
+                VoxValuePoolKind::Json { values } => values.gc(&remap),
                 VoxValuePoolKind::String { values } => values.gc(&remap),
-                VoxValuePoolKind::Srgb { values } => values.gc(&remap),
-                VoxValuePoolKind::Srgba { values } => values.gc(&remap),
-                VoxValuePoolKind::LinearRgb { values } => values.gc(&remap),
-                VoxValuePoolKind::LinearRgba { values } => values.gc(&remap),
+                VoxValuePoolKind::Vec2Float { values } => values.gc(&remap),
+                VoxValuePoolKind::Vec2Int { values } => values.gc(&remap),
+                VoxValuePoolKind::Vec3Float { values } => values.gc(&remap),
+                VoxValuePoolKind::Vec3Int { values } => values.gc(&remap),
+                VoxValuePoolKind::Vec4Float { values } => values.gc(&remap),
+                VoxValuePoolKind::Vec4Int { values } => values.gc(&remap),
             }
         }
         remap
@@ -381,20 +356,28 @@ impl VoxValuePool {
         // Safety: the id is retained, so it has a value in the column.
         unsafe {
             match &self.kind {
-                VoxValuePoolKind::Json { values } => VoxValuePoolValueRef::Json(values.get(id)),
                 VoxValuePoolKind::Bool { values } => VoxValuePoolValueRef::Bool(*values.get(id)),
-                VoxValuePoolKind::Float { values, .. } => {
-                    VoxValuePoolValueRef::Float(*values.get(id))
-                }
-                VoxValuePoolKind::Int { values, .. } => VoxValuePoolValueRef::Int(*values.get(id)),
+                VoxValuePoolKind::Float { values } => VoxValuePoolValueRef::Float(*values.get(id)),
+                VoxValuePoolKind::Int { values } => VoxValuePoolValueRef::Int(*values.get(id)),
+                VoxValuePoolKind::Json { values } => VoxValuePoolValueRef::Json(values.get(id)),
                 VoxValuePoolKind::String { values } => VoxValuePoolValueRef::String(values.get(id)),
-                VoxValuePoolKind::Srgb { values } => VoxValuePoolValueRef::Srgb(values.get(id)),
-                VoxValuePoolKind::Srgba { values } => VoxValuePoolValueRef::Srgba(values.get(id)),
-                VoxValuePoolKind::LinearRgb { values } => {
-                    VoxValuePoolValueRef::LinearRgb(values.get(id))
+                VoxValuePoolKind::Vec2Float { values } => {
+                    VoxValuePoolValueRef::Vec2Float(values.get(id))
                 }
-                VoxValuePoolKind::LinearRgba { values } => {
-                    VoxValuePoolValueRef::LinearRgba(values.get(id))
+                VoxValuePoolKind::Vec2Int { values } => {
+                    VoxValuePoolValueRef::Vec2Int(values.get(id))
+                }
+                VoxValuePoolKind::Vec3Float { values } => {
+                    VoxValuePoolValueRef::Vec3Float(values.get(id))
+                }
+                VoxValuePoolKind::Vec3Int { values } => {
+                    VoxValuePoolValueRef::Vec3Int(values.get(id))
+                }
+                VoxValuePoolKind::Vec4Float { values } => {
+                    VoxValuePoolValueRef::Vec4Float(values.get(id))
+                }
+                VoxValuePoolKind::Vec4Int { values } => {
+                    VoxValuePoolValueRef::Vec4Int(values.get(id))
                 }
             }
         }
@@ -406,26 +389,27 @@ impl Drop for VoxValuePool {
         // Safety: the column holds a value for every id in the id pool.
         unsafe {
             match &mut self.kind {
-                VoxValuePoolKind::Json { values } => values.release_all(&self.value_ids),
                 VoxValuePoolKind::Bool { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Float { values, .. } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Int { values, .. } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Float { values } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Int { values } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Json { values } => values.release_all(&self.value_ids),
                 VoxValuePoolKind::String { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Srgb { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Srgba { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::LinearRgb { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::LinearRgba { values } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec2Float { values } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec2Int { values } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec3Float { values } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec3Int { values } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec4Float { values } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec4Int { values } => values.release_all(&self.value_ids),
             }
         }
     }
 }
 
 impl PartialEq for VoxValuePool {
-    /// Compares kind, bounds, and values in listing order. The id labels
-    /// underneath the listing do not take part.
+    /// Compares kind and values in listing order. The id labels underneath the
+    /// listing do not take part.
     fn eq(&self, other: &Self) -> bool {
         mem::discriminant(&self.kind) == mem::discriminant(&other.kind)
-            && bounds(&self.kind) == bounds(&other.kind)
             && self
                 .iter_values()
                 .map(|(_, value)| value)
@@ -433,84 +417,32 @@ impl PartialEq for VoxValuePool {
     }
 }
 
-/// A bounded kind's `min` and `max`, or `None` for a kind carrying no bounds.
-fn bounds(kind: &VoxValuePoolKind) -> Option<(VoxBound, VoxBound)> {
-    match kind {
-        VoxValuePoolKind::Float { min, max, .. } | VoxValuePoolKind::Int { min, max, .. } => {
-            Some((*min, *max))
-        }
-        _ => None,
-    }
+/// The largest magnitude an int value may carry: `2^53 - 1`, the widest span a
+/// consumer reading numbers as doubles keeps exact.
+const MAX_INT_MAGNITUDE: i64 = (1 << 53) - 1;
+
+/// Whether `value` is within the float value domain: any number but NaN, the
+/// infinities included.
+fn float_in_domain(value: f64) -> bool {
+    !value.is_nan()
 }
 
-/// Whether `min`/`max` are well formed: each numeric bound is finite (and
-/// integer-valued when `integer`), and `min <= max` when both are numbers.
-fn bounds_well_formed(min: &VoxBound, max: &VoxBound, integer: bool) -> bool {
-    let number_ok = |bound: &VoxBound| match bound {
-        VoxBound::None => true,
-        VoxBound::Number(number) => number.is_finite() && !(integer && number.fract() != 0.0),
-    };
-    let ordered = match (min, max) {
-        (VoxBound::Number(low), VoxBound::Number(high)) => low <= high,
-        _ => true,
-    };
-    number_ok(min) && number_ok(max) && ordered
+/// Whether every component of a float vector is within the float value domain.
+fn floats_in_domain(components: &[f64]) -> bool {
+    components
+        .iter()
+        .all(|&component| float_in_domain(component))
 }
 
-/// Whether `value` lies within `min`/`max`, each side unbounded when `None`.
-fn value_in_bounds(min: &VoxBound, max: &VoxBound, value: f64) -> bool {
-    let low_ok = match min {
-        VoxBound::Number(low) => value >= *low,
-        VoxBound::None => true,
-    };
-    let high_ok = match max {
-        VoxBound::Number(high) => value <= *high,
-        VoxBound::None => true,
-    };
-    low_ok && high_ok
+/// Whether `value` is within the int value domain: magnitude at most
+/// [`MAX_INT_MAGNITUDE`].
+fn int_in_domain(value: i64) -> bool {
+    (-MAX_INT_MAGNITUDE..=MAX_INT_MAGNITUDE).contains(&value)
 }
 
-/// Whether integer `value` lies within `min`/`max`, each side unbounded when
-/// `None`. The integer sibling of [`value_in_bounds`]: it compares in the
-/// integer domain, since casting an `i64` past 2^53 to `f64` rounds and could
-/// carry it across a bound. Each numeric bound is finite and integer-valued,
-/// which [`bounds_well_formed`] establishes first.
-fn int_value_in_bounds(min: &VoxBound, max: &VoxBound, value: i64) -> bool {
-    let low_ok = match min {
-        VoxBound::Number(low) => int_at_least(value, *low),
-        VoxBound::None => true,
-    };
-    let high_ok = match max {
-        VoxBound::Number(high) => int_at_most(value, *high),
-        VoxBound::None => true,
-    };
-    low_ok && high_ok
-}
-
-/// Exact `value >= bound` for a finite integer-valued `bound`. `i64::MAX as
-/// f64` rounds up to 2^63 and `i64::MIN as f64` is exactly -2^63, so the two
-/// range tests filter every bound outside the `i64` range; the remainder
-/// converts to `i64` exactly.
-fn int_at_least(value: i64, bound: f64) -> bool {
-    if bound >= i64::MAX as f64 {
-        false
-    } else if bound < i64::MIN as f64 {
-        true
-    } else {
-        value >= bound as i64
-    }
-}
-
-/// Exact `value <= bound` for a finite integer-valued `bound`. The mirror of
-/// [`int_at_least`].
-fn int_at_most(value: i64, bound: f64) -> bool {
-    if bound >= i64::MAX as f64 {
-        true
-    } else if bound < i64::MIN as f64 {
-        false
-    } else {
-        value <= bound as i64
-    }
+/// Whether every component of an int vector is within the int value domain.
+fn ints_in_domain(components: &[i64]) -> bool {
+    components.iter().all(|&component| int_in_domain(component))
 }
 
 /// Builds the paired id pool and value column for `values`, retaining ids in
@@ -540,7 +472,7 @@ fn cloned<T: Clone>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{BVoxValuePoolValue, Error, VoxBound, VoxValuePool, VoxValuePoolValueRef};
+    use crate::{BVoxValuePoolValue, Error, VoxValuePool, VoxValuePoolValueRef};
     use branded_id::U32Id;
 
     fn value_id(index: u32) -> U32Id<BVoxValuePoolValue> {
@@ -548,10 +480,8 @@ mod tests {
     }
 
     #[test]
-    fn bounded_float_value_pool_reads_back_in_order() {
-        let value_pool =
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![0.0, 0.5, 1.0])
-                .unwrap();
+    fn float_value_pool_reads_back_in_order() {
+        let value_pool = VoxValuePool::float(vec![0.0, 0.5, 1.0]).unwrap();
 
         assert_eq!(value_pool.values_len(), 3);
         let values: Vec<_> = value_pool.iter_values().collect();
@@ -568,20 +498,20 @@ mod tests {
     }
 
     #[test]
-    fn color_value_pool_holds_typed_float_components() {
-        let value_pool = VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
+    fn vector_value_pool_holds_typed_components() {
+        let value_pool = VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
 
         assert_eq!(value_pool.values_len(), 1);
         assert_eq!(
             value_pool.value(U32Id::from_u32(0)),
-            Some(VoxValuePoolValueRef::Srgba(&[1.0, 0.0, 0.0, 1.0]))
+            Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0]))
         );
     }
 
     #[test]
-    fn value_pools_compare_by_kind_bounds_and_ordered_values() {
-        let a = VoxValuePool::int(VoxBound::None, VoxBound::None, vec![1, 2]).unwrap();
-        let mut b = VoxValuePool::int(VoxBound::None, VoxBound::None, vec![2, 1]).unwrap();
+    fn value_pools_compare_by_kind_and_ordered_values() {
+        let a = VoxValuePool::int(vec![1, 2]).unwrap();
+        let mut b = VoxValuePool::int(vec![2, 1]).unwrap();
         assert_ne!(a, b);
 
         // Moving b's values into a's order makes the value pools equal, even
@@ -589,14 +519,9 @@ mod tests {
         b.move_value(U32Id::from_u32(1), 0).unwrap();
         assert_eq!(a, b);
 
-        // Same values, different bounds.
-        let c = VoxValuePool::int(VoxBound::Number(0.0), VoxBound::None, vec![1, 2]).unwrap();
+        // Same numbers, different kind.
+        let c = VoxValuePool::float(vec![1.0, 2.0]).unwrap();
         assert_ne!(a, c);
-
-        // Same shape, different kind.
-        let d = VoxValuePool::srgb(vec![[0.0, 0.0, 0.0]]).unwrap();
-        let e = VoxValuePool::linear_rgb(vec![[0.0, 0.0, 0.0]]).unwrap();
-        assert_ne!(d, e);
     }
 
     #[test]
@@ -656,41 +581,21 @@ mod tests {
             Error::EmptyValuePoolValues
         );
         assert_eq!(
-            VoxValuePool::srgba(vec![]).unwrap_err(),
+            VoxValuePool::vec_4_float(vec![]).unwrap_err(),
             Error::EmptyValuePoolValues
         );
     }
 
     #[test]
-    fn float_rejects_unordered_bounds() {
-        assert_eq!(
-            VoxValuePool::float(VoxBound::Number(1.0), VoxBound::Number(0.0), vec![0.5])
-                .unwrap_err(),
-            Error::MalformedValuePoolBound
-        );
+    fn float_accepts_the_infinities() {
+        assert!(VoxValuePool::float(vec![f64::INFINITY, f64::NEG_INFINITY, 0.5]).is_ok());
+        assert!(VoxValuePool::vec_3_float(vec![[0.0, f64::INFINITY, f64::NEG_INFINITY]]).is_ok());
     }
 
     #[test]
-    fn float_rejects_a_non_finite_bound() {
+    fn float_rejects_a_nan_value() {
         assert_eq!(
-            VoxValuePool::float(VoxBound::Number(f64::NAN), VoxBound::None, vec![0.5]).unwrap_err(),
-            Error::MalformedValuePoolBound
-        );
-    }
-
-    #[test]
-    fn int_rejects_a_non_integer_bound() {
-        assert_eq!(
-            VoxValuePool::int(VoxBound::Number(0.5), VoxBound::None, vec![1]).unwrap_err(),
-            Error::MalformedValuePoolBound
-        );
-    }
-
-    #[test]
-    fn float_rejects_a_value_out_of_bounds() {
-        assert_eq!(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 2.0])
-                .unwrap_err(),
+            VoxValuePool::float(vec![0.0, f64::NAN]).unwrap_err(),
             Error::MalformedValuePoolValue {
                 value_id: value_id(1)
             }
@@ -698,9 +603,27 @@ mod tests {
     }
 
     #[test]
-    fn float_rejects_a_non_finite_value() {
+    fn vector_float_rejects_a_nan_component() {
         assert_eq!(
-            VoxValuePool::float(VoxBound::None, VoxBound::None, vec![f64::NAN]).unwrap_err(),
+            VoxValuePool::vec_3_float(vec![[0.0, 0.0, 0.0], [0.0, f64::NAN, 0.0]]).unwrap_err(),
+            Error::MalformedValuePoolValue {
+                value_id: value_id(1)
+            }
+        );
+    }
+
+    #[test]
+    fn int_rejects_a_value_beyond_the_cap() {
+        const MAX_MAGNITUDE: i64 = (1 << 53) - 1;
+        assert!(VoxValuePool::int(vec![MAX_MAGNITUDE, -MAX_MAGNITUDE]).is_ok());
+        assert_eq!(
+            VoxValuePool::int(vec![0, MAX_MAGNITUDE + 1]).unwrap_err(),
+            Error::MalformedValuePoolValue {
+                value_id: value_id(1)
+            }
+        );
+        assert_eq!(
+            VoxValuePool::int(vec![-MAX_MAGNITUDE - 1]).unwrap_err(),
             Error::MalformedValuePoolValue {
                 value_id: value_id(0)
             }
@@ -708,56 +631,9 @@ mod tests {
     }
 
     #[test]
-    fn int_compares_values_against_bounds_exactly() {
-        // 2^53 + 1 rounds down to 2^53 as f64, so a float comparison would
-        // wrongly accept it against a max of 2^53; the integer-domain
-        // comparison rejects it.
-        const MAX: i64 = 1 << 53;
+    fn vector_int_rejects_a_component_beyond_the_cap() {
         assert_eq!(
-            VoxValuePool::int(
-                VoxBound::None,
-                VoxBound::Number(MAX as f64),
-                vec![MAX, MAX + 1],
-            )
-            .unwrap_err(),
-            Error::MalformedValuePoolValue {
-                value_id: value_id(1)
-            }
-        );
-    }
-
-    #[test]
-    fn srgb_rejects_a_component_out_of_range() {
-        assert_eq!(
-            VoxValuePool::srgb(vec![[0.0, 0.0, 0.0], [0.0, 1.5, 0.0]]).unwrap_err(),
-            Error::MalformedValuePoolValue {
-                value_id: value_id(1)
-            }
-        );
-    }
-
-    #[test]
-    fn linear_rgb_accepts_hdr_components() {
-        // Linear colors allow components above 1 for HDR.
-        assert!(VoxValuePool::linear_rgb(vec![[0.0, 4.0, 12.0]]).is_ok());
-    }
-
-    #[test]
-    fn linear_rgba_rejects_a_negative_component() {
-        assert_eq!(
-            VoxValuePool::linear_rgba(vec![[0.0, -0.1, 0.0, 1.0]]).unwrap_err(),
-            Error::MalformedValuePoolValue {
-                value_id: value_id(0)
-            }
-        );
-    }
-
-    #[test]
-    fn linear_rgb_rejects_a_non_finite_component() {
-        // A `linear-rgb` value pool is only lower-bounded, so `+Infinity` would
-        // pass a bare `>= 0` test; the finiteness guard must reject it.
-        assert_eq!(
-            VoxValuePool::linear_rgb(vec![[0.0, f64::INFINITY, 0.0]]).unwrap_err(),
+            VoxValuePool::vec_2_int(vec![[0, 1 << 53]]).unwrap_err(),
             Error::MalformedValuePoolValue {
                 value_id: value_id(0)
             }

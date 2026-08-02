@@ -1,4 +1,4 @@
-use crate::{BVoxValuePoolValue, VoxBound, VoxValue};
+use crate::{BVoxValuePoolValue, VoxValue};
 use branded_id::soa::IdField;
 
 /// The kind of a [`VoxValuePool`](crate::VoxValuePool) and its typed value
@@ -8,43 +8,31 @@ use branded_id::soa::IdField;
 /// directly is unsafe. Read through
 /// [`VoxValuePool::value`](crate::VoxValuePool::value) or
 /// [`VoxValuePool::iter_values`](crate::VoxValuePool::iter_values), and match
-/// this enum for the kind and bounds.
+/// this enum for the kind.
 #[derive(Debug)]
 pub enum VoxValuePoolKind {
-    /// Arbitrary [`VoxValue`]s, including null.
-    Json {
-        /// The value pool's values.
-        values: IdField<BVoxValuePoolValue, VoxValue>,
-    },
-
     /// Boolean values.
     Bool {
         /// The value pool's values.
         values: IdField<BVoxValuePoolValue, bool>,
     },
 
-    /// Finite floating-point values within `min`/`max`.
+    /// Float values: finite numbers or the infinities, never NaN.
     Float {
-        /// Lower bound, a finite number or unbounded.
-        min: VoxBound,
-
-        /// Upper bound, a finite number or unbounded.
-        max: VoxBound,
-
         /// The value pool's values.
         values: IdField<BVoxValuePoolValue, f64>,
     },
 
-    /// Integer values within `min`/`max`.
+    /// Int values, magnitude at most `2^53 - 1`.
     Int {
-        /// Lower bound, a finite number or unbounded.
-        min: VoxBound,
-
-        /// Upper bound, a finite number or unbounded.
-        max: VoxBound,
-
         /// The value pool's values.
         values: IdField<BVoxValuePoolValue, i64>,
+    },
+
+    /// Arbitrary [`VoxValue`]s, including null.
+    Json {
+        /// The value pool's values.
+        values: IdField<BVoxValuePoolValue, VoxValue>,
     },
 
     /// String values.
@@ -53,27 +41,39 @@ pub enum VoxValuePoolKind {
         values: IdField<BVoxValuePoolValue, String>,
     },
 
-    /// Three-component sRGB colors, each float component in `[0, 1]`.
-    Srgb {
-        /// The value pool's colors.
+    /// Two-component float vectors.
+    Vec2Float {
+        /// The value pool's values.
+        values: IdField<BVoxValuePoolValue, [f64; 2]>,
+    },
+
+    /// Two-component int vectors.
+    Vec2Int {
+        /// The value pool's values.
+        values: IdField<BVoxValuePoolValue, [i64; 2]>,
+    },
+
+    /// Three-component float vectors.
+    Vec3Float {
+        /// The value pool's values.
         values: IdField<BVoxValuePoolValue, [f64; 3]>,
     },
 
-    /// Four-component sRGB colors, each float component in `[0, 1]`.
-    Srgba {
-        /// The value pool's colors.
+    /// Three-component int vectors.
+    Vec3Int {
+        /// The value pool's values.
+        values: IdField<BVoxValuePoolValue, [i64; 3]>,
+    },
+
+    /// Four-component float vectors.
+    Vec4Float {
+        /// The value pool's values.
         values: IdField<BVoxValuePoolValue, [f64; 4]>,
     },
 
-    /// Three-component linear colors, each float component `>= 0`.
-    LinearRgb {
-        /// The value pool's colors.
-        values: IdField<BVoxValuePoolValue, [f64; 3]>,
-    },
-
-    /// Four-component linear colors, each float component `>= 0`.
-    LinearRgba {
-        /// The value pool's colors.
-        values: IdField<BVoxValuePoolValue, [f64; 4]>,
+    /// Four-component int vectors.
+    Vec4Int {
+        /// The value pool's values.
+        values: IdField<BVoxValuePoolValue, [i64; 4]>,
     },
 }

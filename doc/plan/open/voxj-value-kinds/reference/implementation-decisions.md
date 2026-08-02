@@ -101,3 +101,17 @@ which stopped being authoritative once the spec landed.
    shape. JSON's types are coarser than the kinds: `int` and `float` are
    both one JSON number, and a `float` value's sentinels are strings.
    JSON stays only where the file's literal spelling is the subject.
+
+## Iteration 6 rulings
+
+2026-08-02. voxcore keeps exactly the wire's value domains as construction
+gates: a float value or vector component flaws when NaN, an int value or
+component flaws beyond `2^53 - 1` in magnitude, and nothing else flaws. A
+value the wire can never serialize is an error at its source, not at the
+first save, and anything laxer would let a NaN live silently in the model.
+The infinities are admitted where today's `Float` kind rejected them: the
+wire spells them, so the model holds them. Ranges stay out entirely.
+
+The constructors keep the kind-name spelling for the vector kinds:
+`vec_3_float` for `vec-3-float`, digit separated, not the variant-derived
+`vec3_float`.

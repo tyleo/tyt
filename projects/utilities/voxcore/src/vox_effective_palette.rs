@@ -73,8 +73,8 @@ impl<'a> VoxEffectivePalette<'a> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BVoxPalette, BVoxValuePool, BVoxValuePoolValue, Error, VoxBound, VoxMain, VoxObject,
-        VoxPalette, VoxValuePool, VoxValuePoolValueRef,
+        BVoxPalette, BVoxValuePool, BVoxValuePoolValue, Error, VoxMain, VoxObject, VoxPalette,
+        VoxValuePool, VoxValuePoolValueRef,
     };
     use branded_id::{U32Id, UsizeId};
     use ty_math::TyVector3U32;
@@ -83,9 +83,9 @@ mod tests {
         U32Id::from_u32(index)
     }
 
-    /// Adds an unbounded `int` value pool holding `values` and returns its id.
+    /// Adds an `int` value pool holding `values` and returns its id.
     fn int_value_pool(state: &mut VoxMain, values: Vec<i64>) -> U32Id<BVoxValuePool> {
-        state.add_value_pool(VoxValuePool::int(VoxBound::None, VoxBound::None, values).unwrap())
+        state.add_value_pool(VoxValuePool::int(values).unwrap())
     }
 
     /// Adds a palette with one property per `(name, value id)` entry on

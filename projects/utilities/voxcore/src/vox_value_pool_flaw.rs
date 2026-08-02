@@ -7,10 +7,6 @@ pub(crate) enum VoxValuePoolFlaw {
     /// The value pool holds no values.
     Empty,
 
-    /// A `min`/`max` bound is non-finite, not integer-valued for an `int`
-    /// value pool, or `min` is greater than `max`.
-    Bound,
-
-    /// The value at this id is malformed for its kind or outside the bounds.
+    /// The value at this id is outside its kind's value domain.
     Value(U32Id<BVoxValuePoolValue>),
 }
