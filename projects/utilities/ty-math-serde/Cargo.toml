@@ -8,4 +8,4 @@ description = "Serde-compatible parity types for ty-math."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-ty-math = { version = "0.1.0" }
+ty-math = { version = "0.1.12", features = ["color"] }
