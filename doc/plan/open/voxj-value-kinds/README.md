@@ -285,15 +285,23 @@ once for everything.
 `VoxjValuePool` is an enum on `Vec`: one variant per kind, the `Vec` as its
 whole payload. No variant carries a `values` field. The adjacently tagged
 derive spells that key once for all of them, and `deny_unknown_fields`
-keeps the wire closed:
+keeps the wire closed. The vector kinds spell their own names, because
+kebab-case breaks before a capital and never before a digit:
 
 ```rust
-#[serde(tag = "kind", content = "values", deny_unknown_fields)]
+#[serde(
+    tag = "kind",
+    content = "values",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
 pub enum VoxjValuePool {
     // json, string, and bool keep their shapes
     Int(Vec<i64>),
     Float(Vec<f64>),
+    #[serde(rename = "vec-3-int")]
     Vec3Int(Vec<[i64; 3]>),
+    #[serde(rename = "vec-3-float")]
     Vec3Float(Vec<[f64; 3]>),
     // vec-2 and vec-4 follow their vec-3 sibling
 }
