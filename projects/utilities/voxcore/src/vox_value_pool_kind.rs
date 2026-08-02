@@ -17,13 +17,13 @@ pub enum VoxValuePoolKind {
         values: IdField<BVoxValuePoolValue, bool>,
     },
 
-    /// Float values: finite numbers or the infinities, never NaN.
+    /// Float values: finite numbers or the infinities.
     Float {
         /// The value pool's values.
         values: IdField<BVoxValuePoolValue, f64>,
     },
 
-    /// Int values, magnitude at most `2^53 - 1`.
+    /// Int values: magnitude at most `2^53 - 1`.
     Int {
         /// The value pool's values.
         values: IdField<BVoxValuePoolValue, i64>,

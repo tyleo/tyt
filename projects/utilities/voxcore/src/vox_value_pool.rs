@@ -421,8 +421,8 @@ impl PartialEq for VoxValuePool {
 /// consumer reading numbers as doubles keeps exact.
 const MAX_INT_MAGNITUDE: i64 = (1 << 53) - 1;
 
-/// Whether `value` is within the float value domain: any number but NaN, the
-/// infinities included.
+/// Whether `value` is within the float value domain: a finite number or an
+/// infinity.
 fn float_in_domain(value: f64) -> bool {
     !value.is_nan()
 }
