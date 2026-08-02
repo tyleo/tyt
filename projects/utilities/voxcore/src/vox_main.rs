@@ -6,7 +6,7 @@ use crate::{
 };
 use branded_id::{IdVec, U32Id, UsizeId, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
-use ty_math::{TyQuaternionExt, TyVector3F64, TyVector3I32, UNIT_ROTATION_TOLERANCE};
+use ty_math::{TyQuaternionExt, TyVector3I32, UNIT_ROTATION_TOLERANCE};
 
 /// The in-memory state of a voxel model: its objects, shared palettes, scene
 /// hierarchy, and roots.
@@ -653,7 +653,7 @@ impl VoxMain {
         // component fails the unit-length check.
         let position = node.transform.position;
         let scale = node.transform.scale;
-        if !vector_is_finite(position) || !vector_is_finite(scale) {
+        if !position.is_finite() || !scale.is_finite() {
             return Err(Error::InsertedNonFiniteTransform { index: node_index });
         }
         if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
@@ -1269,7 +1269,7 @@ impl VoxMain {
             // component fails the unit-length check below.
             let position = node.transform.position;
             let scale = node.transform.scale;
-            if !vector_is_finite(position) || !vector_is_finite(scale) {
+            if !position.is_finite() || !scale.is_finite() {
                 return Err(Error::NonFiniteTransform { node_id });
             }
             if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
@@ -1384,11 +1384,6 @@ fn first_cycle_node_index(
     }
 
     None
-}
-
-/// Whether every component of `vector` is finite.
-fn vector_is_finite(vector: TyVector3F64) -> bool {
-    vector.x.is_finite() && vector.y.is_finite() && vector.z.is_finite()
 }
 
 #[cfg(test)]

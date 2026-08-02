@@ -8,4 +8,4 @@ description = "Core types for working with voxels."
 
 [dependencies]
 branded-id = "0.1.9"
-ty-math = "0.1.11"
+ty-math = { version = "0.1.12", default-features = false }
