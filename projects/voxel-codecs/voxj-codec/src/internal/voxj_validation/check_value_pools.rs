@@ -2,9 +2,8 @@ use crate::{Check, Failures};
 use voxj::VoxjMain;
 
 /// Every value pool has non-empty `values`, the one clause of spec rule 9 the
-/// typed value-pool model cannot enforce: an unrecognized kind, an unknown
-/// key, and a value outside its kind's value-shape all reject at parse, but an
-/// empty `values` is a well-typed `Vec`.
+/// typed value-pool model cannot enforce: an empty `values` is a well-typed
+/// `Vec`.
 pub fn check_value_pools(main: &VoxjMain, failures: &mut Failures) {
     for (value_pool_index, value_pool) in main.runtime_state.value_pools.iter().enumerate() {
         if !failures.go() {
