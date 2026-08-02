@@ -86,27 +86,23 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ColorFormat, EditStateMode, VoxjFileBuilder, from_voxj_bytes, from_voxj_file,
-        to_voxj_bytes, to_voxj_file, to_voxjz_bytes,
+        EditStateMode, VoxjFileBuilder, from_voxj_bytes, from_voxj_file, to_voxj_bytes,
+        to_voxj_file, to_voxjz_bytes,
     };
     use branded_id::U32Id;
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
     use voxcore::{BVoxLayer, BVoxObject, BVoxPalette};
     use voxj::{
-        VoxjBound, VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap,
-        VoxjObject, VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState,
-        VoxjSampleBlock, VoxjTransform, VoxjValue, VoxjValuePool,
+        VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject,
+        VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock,
+        VoxjTransform, VoxjValue, VoxjValuePool,
     };
     use voxj_codec::{decode_voxj_object, voxj_palette_material_counts};
 
-    /// An unbounded `float` value pool of ascending values `0.0 ..= (n - 1)`,
-    /// so a material reading value-index `m` resolves to `m` as a float.
+    /// A `float` value pool of ascending values `0.0 ..= (n - 1)`, so a
+    /// material reading value-index `m` resolves to `m` as a float.
     fn numbered_value_pool(n: usize) -> VoxjValuePool {
-        VoxjValuePool::Float {
-            min: VoxjBound::None,
-            max: VoxjBound::None,
-            values: (0..n).map(|i| i as f64).collect(),
-        }
+        VoxjValuePool::Float((0..n).map(|i| i as f64).collect())
     }
 
     /// A one-property palette over `value_pool` with `n` materials,
@@ -151,9 +147,9 @@ mod tests {
     }
 
     /// A document exercising every field: a sparse object, a tight object
-    /// sampling one palette over two layers, a multi-property palette over a
-    /// shared bounded value pool, a hierarchy with a non-identity transform,
-    /// roots, and a nested `ext`.
+    /// sampling one palette over two layers, a multi-property palette over
+    /// scalar value pools, a hierarchy with a non-identity transform, roots,
+    /// and a nested `ext`.
     fn sample_file() -> VoxjFile {
         VoxjFile {
             version: 1,
@@ -162,18 +158,10 @@ mod tests {
                     value_pools: vec![
                         // value pool 0: six base values, bound by palette 0.
                         numbered_value_pool(6),
-                        // value pool 1: metallic in [0, 1].
-                        VoxjValuePool::Float {
-                            min: VoxjBound::Number(0.0),
-                            max: VoxjBound::Number(1.0),
-                            values: vec![0.0, 0.5, 1.0],
-                        },
-                        // value pool 2: ior in [1, none).
-                        VoxjValuePool::Float {
-                            min: VoxjBound::Number(1.0),
-                            max: VoxjBound::None,
-                            values: vec![1.5, 2.0],
-                        },
+                        // value pool 1: metallic values.
+                        VoxjValuePool::Float(vec![0.0, 0.5, 1.0]),
+                        // value pool 2: ior values.
+                        VoxjValuePool::Float(vec![1.5, 2.0]),
                     ],
                     palettes: vec![
                         numbered_palette("baseColor", 0, 6),
@@ -575,20 +563,6 @@ mod tests {
         assert!(from_voxj_file(&file).is_err());
     }
 
-    /// A `float` value-pool value outside its declared `min`/`max` is rejected
-    /// when the value pool is built.
-    #[test]
-    fn rejects_value_outside_value_pool_bounds() {
-        let mut file = sample_file();
-        // value pool 1 is metallic in [0, 1]; push a value above the max.
-        file.main.runtime_state.value_pools[1] = VoxjValuePool::Float {
-            min: VoxjBound::Number(0.0),
-            max: VoxjBound::Number(1.0),
-            values: vec![0.0, 0.5, 2.0],
-        };
-        assert!(from_voxj_file(&file).is_err());
-    }
-
     /// A voxelless object (tight bounds `[0, 0, 0]`) still carries one empty
     /// channel per layer and round-trips rather than being rejected.
     #[test]
@@ -651,47 +625,36 @@ mod tests {
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
-    /// An `srgba-hex` value pool canonicalizes to `srgba-float` on read, and
-    /// the default writer keeps it float, dividing each 8-bit byte by 255.
+    /// Every vector kind maps one to one through the vox state: the values
+    /// come back bit-identical, colors and plain vectors alike.
     #[test]
-    fn hex_color_canonicalizes_to_float_by_default() {
-        let file = hex_color_file();
+    fn round_trips_vector_value_pools() {
+        let file = vector_kind_file();
         let state = from_voxj_file(&file).unwrap();
         let written = to_voxj_file(&state).unwrap();
-        assert_eq!(
-            written.main.runtime_state.value_pools,
-            vec![VoxjValuePool::SrgbaFloat {
-                // 0x80 alpha divides to exactly the decoder's 128.0 / 255.0.
-                values: vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 128.0 / 255.0]],
-            }]
-        );
-    }
-
-    /// With `ColorFormat::Hex` the writer re-encodes an sRGB color value pool
-    /// as hex, and byte-valued components round-trip through float exactly.
-    #[test]
-    fn hex_color_format_round_trips_hex() {
-        let file = hex_color_file();
-        let state = from_voxj_file(&file).unwrap();
-        let written = VoxjFileBuilder::new(&state)
-            .color_format(ColorFormat::Hex)
-            .build()
-            .unwrap();
         assert_eq!(
             written.main.runtime_state.value_pools,
             file.main.runtime_state.value_pools
         );
     }
 
-    /// A one-voxel object over an `srgba-hex` base-color palette.
-    fn hex_color_file() -> VoxjFile {
+    /// A one-voxel object over a palette binding one property per vector kind.
+    fn vector_kind_file() -> VoxjFile {
         VoxjFile {
             version: 1,
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
-                    value_pools: vec![VoxjValuePool::SrgbaHex {
-                        values: vec!["#FF0000FF".to_owned(), "#00FF0080".to_owned()],
-                    }],
+                    value_pools: vec![
+                        VoxjValuePool::Vec2Float(vec![[0.25, 0.75]]),
+                        VoxjValuePool::Vec2Int(vec![[3, 7]]),
+                        VoxjValuePool::Vec3Float(vec![[2.5, 0.0, 1.0]]),
+                        VoxjValuePool::Vec3Int(vec![[-1, 0, 1]]),
+                        VoxjValuePool::Vec4Float(vec![
+                            [1.0, 0.0, 0.0, 1.0],
+                            [0.0, 1.0, 0.0, 128.0 / 255.0],
+                        ]),
+                        VoxjValuePool::Vec4Int(vec![[0, 1, 2, 3]]),
+                    ],
                     objects: vec![object(
                         "o",
                         vec![0],
@@ -699,7 +662,17 @@ mod tests {
                         vec![[0, 0, 0]],
                         vec![vec![0]],
                     )],
-                    palettes: vec![numbered_palette("baseColor", 0, 2)],
+                    palettes: vec![VoxjPalette {
+                        properties: vec![
+                            property("customUv", 0),
+                            property("customCell", 1),
+                            property("emissiveColor", 2),
+                            property("customAxis", 3),
+                            property("baseColor", 4),
+                            property("customTint", 5),
+                        ],
+                        materials: vec![vec![0, 0, 0, 0, 0, 0], vec![0, 0, 0, 0, 1, 0]],
+                    }],
                     nodes: Vec::new(),
                     root_nodes: Vec::new(),
                 },

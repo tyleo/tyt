@@ -1,20 +1,18 @@
-use crate::{ColorFormat, EditStateMode, Result, write_voxj};
+use crate::{EditStateMode, Result, write_voxj};
 use voxcore::VoxMain;
 use voxj::VoxjFile;
 use voxj_codec::{PositionEncoding, SampleEncoding};
 
 /// Builds a [`VoxjFile`] from a [`VoxMain`], the configurable form of
 /// [`to_voxj_file`](crate::to_voxj_file). It defaults to the smallest
-/// per-object block encodings, keeps the user-defined ext block, records the
-/// edit state automatically, and uses the default color format, the same
-/// document that function writes.
+/// per-object block encodings, keeps the user-defined ext block, and records
+/// the edit state automatically, the same document that function writes.
 pub struct VoxjFileBuilder<'a> {
     state: &'a VoxMain,
     position_encoding: Option<PositionEncoding>,
     sample_encoding: Option<SampleEncoding>,
     ext: bool,
     edit_state: EditStateMode,
-    color_format: ColorFormat,
 }
 
 impl<'a> VoxjFileBuilder<'a> {
@@ -26,7 +24,6 @@ impl<'a> VoxjFileBuilder<'a> {
             sample_encoding: None,
             ext: true,
             edit_state: EditStateMode::Auto,
-            color_format: ColorFormat::Float,
         }
     }
 
@@ -57,13 +54,6 @@ impl<'a> VoxjFileBuilder<'a> {
         self
     }
 
-    /// Sets the on-wire encoding for sRGB color value pools; the default is
-    /// [`ColorFormat::Float`].
-    pub fn color_format(mut self, color_format: ColorFormat) -> Self {
-        self.color_format = color_format;
-        self
-    }
-
     /// Builds the [`VoxjFile`].
     pub fn build(self) -> Result<VoxjFile> {
         write_voxj(
@@ -72,7 +62,6 @@ impl<'a> VoxjFileBuilder<'a> {
             self.sample_encoding,
             self.ext,
             self.edit_state,
-            self.color_format,
         )
     }
 }

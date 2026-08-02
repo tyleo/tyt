@@ -1,5 +1,5 @@
 use crate::{
-    ColorFormat, EditStateMode, Error, Result, voxj_decoded_object_from_vox_object,
+    EditStateMode, Error, Result, voxj_decoded_object_from_vox_object,
     voxj_hierarchy_node_from_vox_hierarchy_node, voxj_palette_from_vox_palette,
     voxj_value_from_vox_value, voxj_value_pool_from_vox_value_pool,
 };
@@ -30,18 +30,16 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// * `sample` - sample-block encoding, or `None` to search for the smallest.
 /// * `ext` - when false, omits the user-defined `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-/// * `color_format` - the on-wire encoding for sRGB color value pools.
 pub fn write_voxj(
     state: &VoxMain,
     position: Option<PositionEncoding>,
     sample: Option<SampleEncoding>,
     ext: bool,
     edit_state: EditStateMode,
-    color_format: ColorFormat,
 ) -> Result<VoxjFile> {
     let value_pools = state
         .iter_value_pools()
-        .map(|(_, value_pool)| voxj_value_pool_from_vox_value_pool(value_pool, color_format))
+        .map(|(_, value_pool)| voxj_value_pool_from_vox_value_pool(value_pool))
         .collect::<Vec<_>>();
 
     let palettes = state

@@ -1,4 +1,3 @@
-mod color_format;
 mod edit_state_mode;
 mod from_voxj_bytes;
 mod from_voxj_file;
@@ -9,7 +8,6 @@ mod to_voxjz_bytes;
 mod to_voxjz_bytes_with;
 mod voxj_file_builder;
 
-pub use color_format::*;
 pub use edit_state_mode::*;
 pub use from_voxj_bytes::*;
 pub use from_voxj_file::*;
