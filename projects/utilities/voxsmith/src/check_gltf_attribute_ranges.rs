@@ -13,13 +13,16 @@ const COLOR_RANGE: GltfRange = GltfRange {
 /// name's glTF schema range, erroring on the first value a material draws
 /// outside it, `ior`'s union of exactly `0` and `[1, inf)` included.
 ///
-/// A range is a fact about the property name, not the format, so a value
-/// pool loads unchecked and this one function is what the glTF boundaries
-/// run: the export before writing, so nothing out of range reaches a mesh
-/// file, and the import on what it read, so a bad source errors at entry. A
-/// name outside the vocabulary has no checkable range and passes, as does a
-/// value of a shape the name does not read; the boundary that reads it
-/// errors on the shape itself.
+/// A range is a fact about the property name, not the format, so a value pool
+/// loads unchecked and the glTF boundaries run this one function instead of
+/// growing their own:
+///
+/// 1. the export before writing, so nothing out of range reaches a mesh file
+/// 2. the import on what it read, so a bad source errors at entry
+///
+/// A name outside the vocabulary has no checkable range and passes, as does a
+/// value of a shape the name does not read. The boundary that reads the value
+/// errors on its shape.
 pub fn check_gltf_attribute_ranges(state: &VoxMain) -> Result<()> {
     for (palette_id, palette) in state.iter_palettes() {
         for (property_id, property) in palette.iter_properties() {
@@ -126,8 +129,8 @@ mod tests {
 
     #[test]
     fn spells_the_ior_union_exactly() {
-        // Zero means "does not refract" and passes; between the union's parts
-        // rejects.
+        // Zero means "does not refract" and passes. A value between the
+        // union's parts rejects.
         let state = state_with(IOR, VoxValuePool::float(vec![0.0, 1.5]).unwrap());
         assert!(check_gltf_attribute_ranges(&state).is_ok());
 

@@ -13,8 +13,8 @@ use voxcore::{
 };
 
 /// The color a body with no sampled surface falls back to when `fill_color` is
-/// `None`: opaque white. Held as sRGB bytes like a caller's fill color; decode
-/// it with [`linear_color_from_srgba_u8`] at each use site.
+/// `None`: opaque white. Held as sRGB bytes, the form a caller's fill color
+/// arrives in. Decode it with [`linear_color_from_srgba_u8`] at each use site.
 const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
 /// Voxelizes a [`Mesh`] into a [`VoxMain`] of one object placed by one root
@@ -439,7 +439,7 @@ fn rgba_value_pool(
 }
 
 /// A three-component color value pool over the extracted linear color,
-/// deduplicated by its components' bit patterns; the alpha is dropped.
+/// deduplicated by its components' bit patterns. The alpha is dropped.
 fn rgb_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,

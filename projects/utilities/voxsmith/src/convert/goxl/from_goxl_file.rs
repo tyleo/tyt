@@ -75,7 +75,7 @@ fn build_palette(
     }
 
     // Colors decode to linear light and ride in a shared `vec-4-float` value
-    // pool; each material draws one value id into it.
+    // pool. Each material draws one value id into it.
     let value_pool_id = state.add_value_pool(
         VoxValuePool::vec_4_float(
             order

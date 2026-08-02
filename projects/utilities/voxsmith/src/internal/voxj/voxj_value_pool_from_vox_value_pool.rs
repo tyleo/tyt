@@ -3,7 +3,7 @@ use voxcore::{VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef};
 use voxj::VoxjValuePool;
 
 /// Converts a [`VoxValuePool`] into a [`VoxjValuePool`], kind by kind, its
-/// values in listing order. Every kind maps one to one; `json` values recurse
+/// values in listing order. Every kind maps one to one. `json` values recurse
 /// through [`voxj_value_from_vox_value`].
 pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjValuePool {
     match value_pool.kind() {

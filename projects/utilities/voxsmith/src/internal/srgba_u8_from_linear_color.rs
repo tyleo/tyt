@@ -1,12 +1,11 @@
 use ty_math::{TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
 
 /// Encodes a linear-light color to 8-bit sRGB, the display- and export-side
-/// half of the one transfer voxsmith applies at its boundaries, the exact
-/// inverse of
-/// [`linear_color_from_srgba_u8`](crate::linear_color_from_srgba_u8) on every
-/// 8-bit code. Each color component encodes through the sRGB transfer and
-/// quantizes, clamped to `[0, 1]`; the alpha carries no gamma, so it only
-/// quantizes.
+/// half of the one transfer voxsmith applies at its boundaries. On every
+/// 8-bit code it is the exact inverse of
+/// [`linear_color_from_srgba_u8`](crate::linear_color_from_srgba_u8). Each
+/// color component encodes through the sRGB transfer and quantizes, clamped
+/// to `[0, 1]`. The alpha carries no gamma, so it only quantizes.
 pub(crate) fn srgba_u8_from_linear_color(color: TyLinSrgbaF64) -> TySrgbaU8 {
     TySrgbaF64::from_linear(color).into_format::<u8, u8>()
 }

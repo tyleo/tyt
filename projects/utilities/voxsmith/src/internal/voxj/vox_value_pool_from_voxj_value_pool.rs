@@ -3,7 +3,7 @@ use voxcore::VoxValuePool;
 use voxj::VoxjValuePool;
 
 /// Converts a [`VoxjValuePool`] into a [`VoxValuePool`], kind by kind. Every
-/// kind maps one to one, carrying its values across unchanged; `json` values
+/// kind maps one to one, carrying its values across unchanged. `json` values
 /// recurse through [`vox_value_from_voxj_value`].
 ///
 /// Errors if the value pool is empty or a value is outside its kind's value

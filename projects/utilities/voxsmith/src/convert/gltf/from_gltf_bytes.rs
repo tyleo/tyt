@@ -237,12 +237,12 @@ fn material_slot(
 }
 
 /// Reads a glTF material's flat factors into a [`MeshMaterial`]:
-/// 1. base color, metallic, and roughness from the metallic-roughness model;
-///    every factor is linear and passes through untouched.
+/// 1. base color, metallic, and roughness from the metallic-roughness
+///    model, all linear and passed through untouched
 /// 2. emissive color from `emissiveFactor`, opaque since the slot carries no
-///    alpha.
+///    alpha
 /// 3. emissive strength, ior, and transmission from their KHR extensions,
-///    defaulting to 1, 1.5, and 0 when absent.
+///    defaulting to 1, 1.5, and 0 when absent
 ///
 /// Occlusion has no flat glTF factor and defaults to 1.
 fn mesh_material_from_gltf(material: &Material) -> MeshMaterial {
@@ -1130,7 +1130,7 @@ mod tests {
     #[test]
     fn per_primitive_passes_the_pbr_factors_through_linear() {
         // The glTF base color factor is linear light, the form the value pool
-        // stores, so it imports bit-exact; its sRGB display encoding is
+        // stores, so it imports bit-exact. Its sRGB display encoding is
         // #FFBC00, where a curve applied on import would shift it to #FF8000.
         let state = voxelize(
             &box_glb(

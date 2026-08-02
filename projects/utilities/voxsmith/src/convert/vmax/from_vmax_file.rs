@@ -499,7 +499,7 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
 }
 
 /// A float value pool over `values`, defaulting a non-finite coefficient to
-/// zero so the value pool builds; the exact value rides in the ext. Errors
+/// zero so the value pool builds. The exact value rides in the ext. Errors
 /// when `values` is empty.
 fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
     let values = values

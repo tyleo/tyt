@@ -161,9 +161,9 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
                         .get(&(index as i32))
                         .copied()
                         .and_then(read)
-                        // The codec accepts a non-finite scalar; NaN cannot
-                        // enter a float value pool, so default any non-finite
-                        // value. The ext keeps the exact one.
+                        // The codec accepts a non-finite scalar. NaN cannot
+                        // enter a float value pool, so any non-finite value
+                        // defaults. The ext keeps the exact one.
                         .filter(|value| value.is_finite())
                         .map_or(0.0, |value| value as f64)
                 })

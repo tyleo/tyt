@@ -166,7 +166,7 @@ fn build_palette(
     }
 
     // A Qubicle voxel carries no alpha, so colors decode to linear light and
-    // ride in a shared `vec-3-float` value pool; each material draws one value
+    // ride in a shared `vec-3-float` value pool. Each material draws one value
     // id into it.
     let value_pool_id = state.add_value_pool(
         VoxValuePool::vec_3_float(order.iter().map(|&color| color_floats(color)).collect())
