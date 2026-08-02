@@ -15,7 +15,7 @@ mod tests {
     use serde_json::{Value, json};
     use voxj::{
         VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject, VoxjPositionBlock,
-        VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
+        VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValuePool,
     };
 
     fn document() -> VoxjFile {
@@ -76,6 +76,22 @@ mod tests {
         let decoded = from_voxj_file_bytes(&bytes).unwrap();
         assert_eq!(decoded, file);
         assert!(decoded.main.ext.is_none());
+    }
+
+    // These three values mis-parse by one ULP without serde_json's
+    // float_roundtrip feature, so this round trip proves the manifest
+    // carries it.
+    #[test]
+    fn seventeen_digit_floats_save_and_load_byte_identical() {
+        let mut file = document();
+        file.main.runtime_state.value_pools = vec![VoxjValuePool::Float(vec![
+            0.0009105809506465125,
+            0.21586050011389926,
+            0.9734452903984125,
+        ])];
+        let bytes = to_voxj_file_bytes(&file).unwrap();
+        let reloaded = from_voxj_file_bytes(&bytes).unwrap();
+        assert_eq!(to_voxj_file_bytes(&reloaded).unwrap(), bytes);
     }
 
     #[test]

@@ -6,10 +6,15 @@ license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Encodes voxj types into .voxj / .voxjz documents."
 keywords = ["voxel", "voxj", "json", "3d", "codec"]
-categories = ["parser-implementations", "encoding", "game-development", "graphics"]
+categories = [
+    "parser-implementations",
+    "encoding",
+    "game-development",
+    "graphics",
+]
 
 [dependencies]
 base64 = "0.22"
 flate2 = "1"
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 voxj = { version = "0.1.1", features = ["serde"] }

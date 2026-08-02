@@ -233,9 +233,9 @@ features and every test is gated on `serde`.
       `validate_voxj_file.rs` tests: the bound, hex, and color range
       tests go; the shared fixture moves to the new kinds; the structural
       majority survives on edited fixtures.
-- [ ] `Cargo.toml`: serde_json gains `float_roundtrip` beside
+- [x] `Cargo.toml`: serde_json gains `float_roundtrip` beside
       `preserve_order`.
-- [ ] The byte-identity test: a `float` value pool holding
+- [x] The byte-identity test: a `float` value pool holding
       17-significant-digit values saves and loads byte-identical, proven
       by `cargo test -p voxj-codec` (a workspace build already unifies
       the feature on through vmax-codec, so only the per-crate run proves
