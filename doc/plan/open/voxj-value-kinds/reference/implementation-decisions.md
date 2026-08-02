@@ -16,4 +16,11 @@ explained. The checklist already names four that must land here:
 4. Whether `internal/mesh/mesh_material.rs`'s `emissive_factor` field
    keeps its name.
 
-No entries yet.
+## Iteration 1 rulings that diverge from the README
+
+2026-08-02. The format defines no color, so the linear-light statement
+is vocabulary convention and sits in the glTF conventions section
+beside the ranges, not in Value Pool Kinds as a format-wide rule. The
+emissive-composition paragraph folds into the conventions table. The
+texture scope paragraph does not land: the absence of texture bindings
+is by construction, and the boundary bake is tool documentation.

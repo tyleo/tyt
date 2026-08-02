@@ -88,7 +88,7 @@ Iterate [reference/format-design.md](reference/format-design.md) with the
 owner until approved. Nothing else starts first; the format gets perfect
 here, not in the spec commit.
 
-- [ ] Draft `reference/format-design.md`: the target text for every spec
+- [x] Draft `reference/format-design.md`: the target text for every spec
       section the change touches, both the rename and the kinds in one
       document. The sections: the kind table (the eleven shape kinds,
       typical-use column on the renamed names) and its notes, the value
@@ -108,7 +108,7 @@ here, not in the spec commit.
       sentence fixing linear light with sRGB primaries and the D65 white
       point, the sentence scoping ranges to the property vocabulary, and
       the texture scope boundary.
-- [ ] Owner reads the draft; fold in wording and structure edits until
+- [x] Owner reads the draft; fold in wording and structure edits until
       the text stands on its own. A design ruling the review surfaces is
       the owner's to make; record it in the decisions log (the README
       stays as approved).
@@ -123,6 +123,9 @@ Gate: the owner approves format-design.md.
       together.
 - [ ] Sweep the whole spec for stale color-kind, transfer, bound, or
       `Factor` wording the section list missed.
+- [ ] Sweep the whole spec's comment blocks for hanging indents: a lead
+      line's sub-items sit flush after a blank `//` line, never indented
+      under the lead.
 
 Gate: the spec matches format-design.md; the reference file stops being
 authoritative and the spec is, for any detail the plan leaves implicit.
