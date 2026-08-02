@@ -135,3 +135,19 @@ colors, the finer palette granularity the README accepts for storing
 the sampled value exactly. Test fixtures that author colors as hex
 decode them through the same helper, so byte-level expectations survive
 unchanged.
+
+The vocabulary range check is `check_gltf_attribute_ranges`, a public
+top-level function over a whole `VoxMain`. It walks every palette
+property the vocabulary names and checks the values materials draw; an
+undrawn value pool entry reaches no glTF factor and passes. It does not
+absorb `scalar_range`: the table stays in `gltf_attributes.rs`,
+upgraded to return `GltfRange` (an interval plus an admits-zero flag
+spelling `ior`'s `{0} union [1, inf)`), and the check and the
+voxelizer's `--out-of-range-factor` policy both read it, which retires
+the old `1..` disagreement and admits `ior` `0` everywhere. The clamp
+policy stays the voxelizer's: `factor_value_pool` keeps it for scalars
+and the new `factor_color` extends it to the two color factors'
+components, which the deleted u8 encode used to clamp silently. Both
+glTF boundaries run the check itself: the export at the top of
+`build_material_document` and the import at the end of `voxelize_mesh`,
+the entry-side guarantee after the policy pass.

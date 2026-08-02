@@ -37,8 +37,8 @@ pub fn object_to_material_glb(
 #[cfg(test)]
 mod tests {
     use crate::{
-        AtlasShape, BASE_COLOR, MaterialBake, MaterialMap, MaterialMeshRequest, MaterialSlot,
-        MeshMethod, ResourceStorage, object_to_material_glb,
+        AtlasShape, BASE_COLOR, METALLIC, MaterialBake, MaterialMap, MaterialMeshRequest,
+        MaterialSlot, MeshMethod, ResourceStorage, object_to_material_glb,
     };
     use branded_id::U32Id;
     use gltf::{Gltf, image::Source};
@@ -132,6 +132,55 @@ mod tests {
         let uvs: Vec<[f32; 2]> = reader.read_tex_coords(0).unwrap().into_f32().collect();
         let positions: Vec<[f32; 3]> = reader.read_positions().unwrap().collect();
         assert_eq!(uvs.len(), positions.len());
+    }
+
+    #[test]
+    fn an_out_of_range_vocabulary_value_fails_the_export() {
+        // A metallic outside the glTF `[0, 1]` trips the vocabulary range
+        // check before anything is written.
+        let mut state = VoxMain::default();
+        let base_value_pool_id =
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let metallic_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
+
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property(
+                BASE_COLOR.to_owned(),
+                base_value_pool_id,
+                U32Id::from_u32(0),
+            )
+            .unwrap();
+        palette
+            .add_property(
+                METALLIC.to_owned(),
+                metallic_value_pool_id,
+                U32Id::from_u32(0),
+            )
+            .unwrap();
+        let material_id = palette
+            .add_material(vec![U32Id::from_u32(0), U32Id::from_u32(0)])
+            .unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
+
+        let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.add_layer(palette_id, material_id);
+        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[material_id]).unwrap();
+        let object_id = state.add_object(object).unwrap();
+
+        let result = object_to_material_glb(
+            &state,
+            state.object(object_id).unwrap(),
+            &albedo_request(ResourceStorage::Embedded),
+        );
+
+        let message = match result {
+            Err(error) => error.to_string(),
+            Ok(_) => panic!("the export accepted an out-of-range metallic"),
+        };
+        assert!(message.contains(METALLIC), "{message}");
+        assert!(message.contains("1.5"), "{message}");
     }
 
     #[test]

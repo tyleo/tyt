@@ -303,7 +303,7 @@ chunk outgrows review.
       to linear to u8 as identity on all 256 codes, so no boundary moves
       to palette's u8 lookup tables. Alpha is never transfer-encoded
       anywhere.
-- [ ] The vocabulary range check, one new file (decide its home and log
+- [x] The vocabulary range check, one new file (decide its home and log
       it): a single function walks every bound property and errors on any
       value outside that property's range, each range spelled exactly
       from [reference/gltf-ranges.md](reference/gltf-ranges.md), `ior`'s

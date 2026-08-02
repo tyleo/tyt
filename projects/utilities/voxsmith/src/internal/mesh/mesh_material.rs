@@ -29,7 +29,8 @@ pub(crate) struct MeshMaterial {
     /// Flat ambient occlusion, `0..=1` (`1` = none). glTF `occlusionStrength`.
     pub occlusion: f64,
 
-    /// Index of refraction, `1+`. glTF `KHR_materials_ior`.
+    /// Index of refraction: `0` for "does not refract", else `1+`. glTF
+    /// `KHR_materials_ior`.
     pub ior: f64,
 
     /// Transmitted fraction, `0..=1`. glTF `KHR_materials_transmission`.

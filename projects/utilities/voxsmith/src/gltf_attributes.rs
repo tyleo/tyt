@@ -4,6 +4,8 @@
 //! stay free strings, so a format's custom attributes remain expressible; these
 //! constants name only the recommended glTF-aligned set.
 
+use crate::GltfRange;
+
 /// The base color, a color attribute. glTF `baseColorFactor`.
 pub const BASE_COLOR: &str = "baseColor";
 
@@ -19,7 +21,8 @@ pub const OCCLUSION_STRENGTH: &str = "occlusionStrength";
 /// Transmission, a `0..1` scalar. glTF `transmissionFactor`.
 pub const TRANSMISSION: &str = "transmission";
 
-/// Index of refraction, a `1..` scalar. glTF `ior`.
+/// Index of refraction: `0` for "does not refract", else a `1..` scalar.
+/// glTF `ior`.
 pub const IOR: &str = "ior";
 
 /// The emissive color, a color attribute with no alpha. glTF `emissiveFactor`.
@@ -43,14 +46,26 @@ pub(crate) fn default_scalar(key: &str) -> Option<f64> {
     }
 }
 
-/// The range the glTF spec gives a recommended scalar attribute, as an
-/// inclusive `(min, max)` with a `max` of `None` for an unbounded top, or `None`
-/// for a key outside the vocabulary.
-pub(crate) fn scalar_range(key: &str) -> Option<(f64, Option<f64>)> {
+/// The range the glTF spec gives a recommended scalar attribute, or `None`
+/// for a key outside the vocabulary. `ior`'s union of exactly `0` and
+/// `[1, inf)` rides [`GltfRange::admits_zero`].
+pub(crate) fn scalar_range(key: &str) -> Option<GltfRange> {
     match key {
-        METALLIC | ROUGHNESS | OCCLUSION_STRENGTH | TRANSMISSION => Some((0.0, Some(1.0))),
-        EMISSIVE_STRENGTH => Some((0.0, None)),
-        IOR => Some((1.0, None)),
+        METALLIC | ROUGHNESS | OCCLUSION_STRENGTH | TRANSMISSION => Some(GltfRange {
+            min: 0.0,
+            max: Some(1.0),
+            admits_zero: false,
+        }),
+        EMISSIVE_STRENGTH => Some(GltfRange {
+            min: 0.0,
+            max: None,
+            admits_zero: false,
+        }),
+        IOR => Some(GltfRange {
+            min: 1.0,
+            max: None,
+            admits_zero: true,
+        }),
         _ => None,
     }
 }

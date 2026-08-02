@@ -1,8 +1,8 @@
 use crate::{
     EMISSIVE_STRENGTH, IOR, MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage,
-    Result, TRANSMISSION, UsedMaterials, atlas_dimensions, bake_atlas_pixels, default_scalar,
-    encode_rgba8_png, material_scalar, max_emissive_strength, mesh_slices, resolve_used_materials,
-    texel_center,
+    Result, TRANSMISSION, UsedMaterials, atlas_dimensions, bake_atlas_pixels,
+    check_gltf_attribute_ranges, default_scalar, encode_rgba8_png, material_scalar,
+    max_emissive_strength, mesh_slices, resolve_used_materials, texel_center,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
@@ -40,13 +40,18 @@ pub(crate) struct MaterialDocument {
 /// their glTF slot and the rest are listed under the material's `extras`.
 /// `target` decides how embedded images travel, and `request.storage` whether
 /// they are embedded, loose, or both. An object with no geometry yields an
-/// empty scene. Errors if a layer references a palette `state` does not hold.
+/// empty scene. Errors if a layer references a palette `state` does not hold,
+/// or if a vocabulary property's value is outside its glTF range.
 pub(crate) fn build_material_document(
     state: &VoxMain,
     object: &VoxObject,
     request: &MaterialMeshRequest,
     target: MeshTarget,
 ) -> Result<MaterialDocument> {
+    // Nothing out of range reaches a mesh file: the vocabulary range check
+    // gates the export before anything is written.
+    check_gltf_attribute_ranges(state)?;
+
     let used = resolve_used_materials(state, object)?;
 
     let geometry = mesh_slices(
