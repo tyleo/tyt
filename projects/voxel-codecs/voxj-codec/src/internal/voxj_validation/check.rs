@@ -5,9 +5,7 @@ pub enum Check {
     /// The version is recognized.
     Version,
 
-    /// Every value pool has non-empty values within its kind: numeric values
-    /// within `min`/`max`, integer-valued int bounds, `min <= max`, hex colors
-    /// matching their pattern, and float color components in range.
+    /// Every value pool has non-empty `values`.
     ValuePools,
 
     /// Per palette:

@@ -70,6 +70,18 @@ The text round-trip test pins three of the 8-bit linear-decode values
 (the `k = 3`, `128`, and `252` codes) measured to mis-parse by one ULP
 without `float_roundtrip` on serde_json 1.0.150.
 
+## Iteration 5 rulings
+
+2026-08-02. `check_value_pools` keeps no per-kind match at all. The only
+surviving rule is non-emptiness, which `values_len` answers for every
+kind, so the eleven-arm match the checklist anticipated has nothing to
+do and does not appear.
+
+`accepts_unbounded_and_hdr_value_pools` deletes alongside the eight
+reject tests the survey counted. It accepted edge cases of the deleted
+bound and color machinery, and on the new kinds it would only restate
+the valid-file acceptance.
+
 ## Iteration 2 review rulings
 
 2026-08-02, at the iteration 2 gate review. Three wording rulings from

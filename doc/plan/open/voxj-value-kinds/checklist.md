@@ -220,12 +220,12 @@ features and every test is gated on `serde`.
 
 ## Iteration 5: voxj-codec
 
-- [ ] Shrink `internal/voxj_validation/check_value_pools.rs` to shape
+- [x] Shrink `internal/voxj_validation/check_value_pools.rs` to shape
       checks: non-empty `values` stays a validation rule; the bound rules
       (`check_numeric`, `describe`), the hex rules (`check_hex`,
       `is_hex_color`), and the color range rules (`check_colors`) delete;
       the match covers the eleven kinds.
-- [ ] Rewrite the `check_voxj_file.rs` check-list doc (the `value-pools`
+- [x] Rewrite the `check_voxj_file.rs` check-list doc (the `value-pools`
       item becomes a shape statement) and the same vocabulary where it
       appears a second time, on `Check::ValuePools` in
       `internal/voxj_validation/check.rs`, which restates the bound, hex,

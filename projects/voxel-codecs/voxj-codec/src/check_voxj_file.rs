@@ -9,8 +9,7 @@ use voxj::VoxjFile;
 ///
 /// The checks, in report order, are:
 /// 1. `version`: the version is recognized.
-/// 2. `value-pools`: every value pool has non-empty values within its kind,
-///    with in-range numeric bounds and in-range color components.
+/// 2. `value-pools`: every value pool has non-empty values.
 /// 3. `palettes`:
 ///    1. every property has a non-empty name, distinct within the palette,
 ///       and an in-range value pool;
@@ -50,23 +49,16 @@ mod tests {
     use crate::{VoxjCheck, VoxjCheckStatus, check_voxj_file};
     use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
     use voxj::{
-        VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
-        VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
-        VoxjValuePool,
+        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjPositionBlock,
+        VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValuePool,
     };
 
-    /// An `srgba-hex` value pool of four colors backing the property's
+    /// A `vec-4-float` value pool of four colors backing the property's
     /// value-indices, and an unreferenced one-value `float` value pool.
     fn value_pools() -> Vec<VoxjValuePool> {
         vec![
-            VoxjValuePool::SrgbaHex {
-                values: vec!["#000000FF".to_owned(); 4],
-            },
-            VoxjValuePool::Float {
-                min: VoxjBound::None,
-                max: VoxjBound::None,
-                values: vec![1.5],
-            },
+            VoxjValuePool::Vec4Float(vec![[0.0, 0.0, 0.0, 1.0]; 4]),
+            VoxjValuePool::Float(vec![1.5]),
         ]
     }
 
@@ -250,18 +242,14 @@ mod tests {
     }
 
     #[test]
-    fn reports_value_pool_content_failure() {
+    fn reports_empty_value_pool_failure() {
         let mut file = valid_file();
-        // An extra, unreferenced float value pool whose value sits above its
-        // max, so the value-pools check is the only one that fails.
+        // An extra, unreferenced empty value pool, so the value-pools check is
+        // the only one that fails.
         file.main
             .runtime_state
             .value_pools
-            .push(VoxjValuePool::Float {
-                min: VoxjBound::Number(0.0),
-                max: VoxjBound::Number(1.0),
-                values: vec![2.0],
-            });
+            .push(VoxjValuePool::Float(vec![]));
         let checks = check_voxj_file(&file);
         assert!(matches!(
             status(&checks, "value-pools"),
