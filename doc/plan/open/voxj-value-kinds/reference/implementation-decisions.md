@@ -44,6 +44,32 @@ writes back. The test names
 `khr_extension_factors_round_trip_through_a_mesh_export` also keep
 "factor": they describe the glTF material fields the import reads.
 
+## Iteration 4 rulings
+
+2026-08-02. The sentinel serde surface is one private `values` module
+inside `voxj_value_pool.rs`, whole behind the `serde` cfg, with mirrored
+`float` and `int` submodules: `serialize` and `deserialize` over the
+scalar payload at each submodule's root, and an `array` submodule whose
+pair is const-generic over the `[T; N]` payloads. The enum attaches
+them per field: `#[serde(with = "values::float")]` on `Float`,
+`#[serde(with = "values::float::array")]` on the float vectors, and the
+int kinds likewise. The plumbing lives in the enum's own file because a
+standalone with-module file cannot keep one public item per file: serde
+fixes the module's two-function surface (owner ruling, 2026-08-02). The
+enum variants sit in alphabetical order, matching the spec's kind
+table (same ruling).
+
+Two write-side rules the plan left implicit. The int write errors on a
+value beyond `2^53 - 1` in magnitude, the parse's own cap, so a
+`Vec<i64>` built in code cannot write an out-of-spec file. The float
+integral-as-integer write admits values strictly below `i64::MAX as
+f64`: that constant rounds up to `2^63`, and an inclusive bound would
+saturate the cast and write `2^63` as `2^63 - 1`.
+
+The text round-trip test pins three of the 8-bit linear-decode values
+(the `k = 3`, `128`, and `252` codes) measured to mis-parse by one ULP
+without `float_roundtrip` on serde_json 1.0.150.
+
 ## Iteration 2 review rulings
 
 2026-08-02, at the iteration 2 gate review. Three wording rulings from

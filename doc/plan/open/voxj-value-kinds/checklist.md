@@ -186,7 +186,7 @@ design, and the vxl-commands pages that sweep at closeout).
 Opens the red window: voxj-codec, voxsmith, vxl, tyt-vmax, and tyt stay
 red until iteration 8 closes it.
 
-- [ ] Rewrite `voxj_value_pool.rs` to the adjacently tagged enum on `Vec`
+- [x] Rewrite `voxj_value_pool.rs` to the adjacently tagged enum on `Vec`
       (`tag = "kind"`, `content = "values"`, `rename_all = "kebab-case"`,
       `deny_unknown_fields`): the six color variants and the `min`/`max`
       fields go, the six vector variants arrive, `values_len` covers the
@@ -196,21 +196,21 @@ red until iteration 8 closes it.
       inserts a separator only before an uppercase character and never
       before a digit, so `Vec3Float` would otherwise spell itself
       `vec3-float`.
-- [ ] Add the sentinel serde module, one new file: a float value reads a
-      finite number, `"inf"`, or `"-inf"`; infinities write the sentinel
+- [x] Add the sentinel serde module: a float value reads a finite
+      number, `"inf"`, or `"-inf"`; infinities write the sentinel
       strings; NaN errors on write; an integral number writes as a JSON
       integer so `1` does not round-trip as `1.0`; array forms cover the
       `[f64; N]` payloads.
-- [ ] Add the int visitor: a value beyond `2^53 - 1` in magnitude
+- [x] Add the int visitor: a value beyond `2^53 - 1` in magnitude
       rejects, a fractional or exponent spelling rejects in the parse,
       and array forms cover the `[i64; N]` payloads.
-- [ ] Delete `voxj_bound.rs`; update `lib.rs`; move `voxj_file.rs`'s
+- [x] Delete `voxj_bound.rs`; update `lib.rs`; move `voxj_file.rs`'s
       `document()` and `wire_document()` fixtures to the new kinds.
-- [ ] `Cargo.toml`: the dev serde_json gains `float_roundtrip`. The
+- [x] `Cargo.toml`: the dev serde_json gains `float_roundtrip`. The
       feature bears on text parsing only, and the crate's tests go
       through `to_value` and `from_value`, so pair it with a `to_string`
       and `from_str` case or the manifest change proves nothing here.
-- [ ] In-crate tests: sentinel round-trips, NaN write error, integral
+- [x] In-crate tests: sentinel round-trips, NaN write error, integral
       float written as an integer, the int cap and spelling rejections, a
       stray `min` rejecting through `deny_unknown_fields`.
 

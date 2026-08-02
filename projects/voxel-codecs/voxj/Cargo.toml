@@ -12,7 +12,7 @@ categories = ["data-structures", "game-development", "graphics"]
 serde = { version = "1", features = ["derive"], optional = true }
 
 [dev-dependencies]
-serde_json = "1"
+serde_json = { version = "1", features = ["float_roundtrip"] }
 
 [features]
 serde = ["dep:serde"]

@@ -1,6 +1,5 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 
-mod voxj_bound;
 mod voxj_edit_object;
 mod voxj_edit_state;
 mod voxj_file;
@@ -17,7 +16,6 @@ mod voxj_transform;
 mod voxj_value;
 mod voxj_value_pool;
 
-pub use voxj_bound::*;
 pub use voxj_edit_object::*;
 pub use voxj_edit_state::*;
 pub use voxj_file::*;

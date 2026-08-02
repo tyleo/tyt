@@ -17,9 +17,8 @@ pub struct VoxjFile {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
     use crate::{
-        VoxjBound, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette,
-        VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform,
-        VoxjValuePool,
+        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjPositionBlock,
+        VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValuePool,
     };
     use serde_json::{Value, json};
 
@@ -31,14 +30,8 @@ mod tests {
             main: VoxjMain {
                 runtime_state: VoxjRuntimeState {
                     value_pools: vec![
-                        VoxjValuePool::Float {
-                            min: VoxjBound::None,
-                            max: VoxjBound::None,
-                            values: vec![1.0, 2.5],
-                        },
-                        VoxjValuePool::SrgbHex {
-                            values: vec!["#FF0000".to_owned(), "#00FF00".to_owned()],
-                        },
+                        VoxjValuePool::Float(vec![1.0, 2.5]),
+                        VoxjValuePool::Vec4Float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]]),
                     ],
                     palettes: vec![
                         VoxjPalette {
@@ -89,13 +82,11 @@ mod tests {
             "main": {
                 "runtimeState": {
                     "valuePools": [
+                        { "kind": "float", "values": [1, 2.5] },
                         {
-                            "kind": "float",
-                            "min": "none",
-                            "max": "none",
-                            "values": [1.0, 2.5],
+                            "kind": "vec-4-float",
+                            "values": [[1, 0, 0, 1], [0, 1, 0, 1]],
                         },
-                        { "kind": "srgb-hex", "values": ["#FF0000", "#00FF00"] },
                     ],
                     "palettes": [
                         {
