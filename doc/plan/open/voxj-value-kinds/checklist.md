@@ -117,13 +117,13 @@ Gate: the owner approves format-design.md.
 
 ## Iteration 2: the spec, one change
 
-- [ ] Rewrite `projects/voxel-codecs/voxj/docs/voxel-json-file-format.md`
+- [x] Rewrite `projects/voxel-codecs/voxj/docs/voxel-json-file-format.md`
       to the approved design in one commit. No code changes. Every
       section from the format-design draft, the rename and the kinds
       together.
-- [ ] Sweep the whole spec for stale color-kind, transfer, bound, or
+- [x] Sweep the whole spec for stale color-kind, transfer, bound, or
       `Factor` wording the section list missed.
-- [ ] Sweep the whole spec's comment blocks for hanging indents: a lead
+- [x] Sweep the whole spec's comment blocks for hanging indents: a lead
       line's sub-items sit flush after a blank `//` line, never indented
       under the lead.
 

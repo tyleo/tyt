@@ -204,56 +204,68 @@ Positions and samples interact, so choose them as a pair. Encoding is offline, s
 
 ## Value Pools
 
-Value pools live in `main.runtimeState.valuePools`, a shared array referenced by index, siblings of `objects` and `palettes`. A value pool holds `values`, all of one value-shape given by `kind`. `kind` tags the shape of the values. Palettes reference pools by index (see [Palettes](#palettes)).
+Value pools live in `main.runtimeState.valuePools`, a shared array referenced by index, siblings of `objects` and `palettes`. A value pool holds `values`, all of one value-shape given by `kind`. Palettes reference value pools by index (see [Palettes](#palettes)).
 
 ```jsonc
 // a value pool: shared values of one shape
 {
-  // value-shape tag (see Value Pool Kinds)
-  "kind": "srgba-hex",
+  // value-shape tag
+  "kind": "vec-4-float",
 
   // plain JSON literals, each well-formed for `kind`, indexed by value-index
-  "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
+  "values": [
+    [1, 0, 0, 1],
+    [0, 1, 0, 1],
+    [0, 0, 1, 1],
+  ],
 }
 
-// only `int` and `float` pools carry `min`/`max`; each a number or "none"
-{ "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] }
-{ "kind": "float", "min": 1, "max": "none", "values": [1.5, 1.33] } // >= 1
-{ "kind": "int", "min": 0, "max": 255, "values": [0, 128, 255] }
+// scalar value pools
+{ "kind": "float", "values": [0, 0.5, 1] }
+{ "kind": "int", "values": [0, 128, 255] }
 
-// color pools carry no `min`/`max`; the color space fixes the range
-{ "kind": "srgba-float", "values": [[1, 0, 0, 1]] } // sRGB, each in [0, 1]
-{ "kind": "linear-rgb-float", "values": [[2, 0, 0]] } // linear, each >= 0 (HDR)
+// the same vector kind holds colors under one property name and plain
+// numbers under another (see Properties)
+{ "kind": "vec-2-int", "values": [[3, 7]] }
+{ "kind": "vec-3-float", "values": [[0, 0, 1], [1, 0, 0]] }
 ```
 
 ### Value Pool Kinds
 
-`kind` is a closed vocabulary tagging the shape of a pool's `values`. Every kind's `values` are plain readable JSON literals; declaring a kind enables validation: a consumer must understand a file's kinds to validate it, and must reject a file whose `kind` it does not recognize (see [Versioning and Extensibility](#versioning-and-extensibility)).
+`kind` is a closed vocabulary naming the shape of a value pool's `values`. Every kind's `values` are plain readable JSON literals, and the declared kind types the whole array. A consumer must reject a file whose `kind` it does not recognize (see [Versioning and Extensibility](#versioning-and-extensibility)).
 
-| `kind`              | JSON form            | Constraint                                | Example `values`             | Typical properties                                                                            |
-| ------------------- | -------------------- | ----------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------- |
-| `json`              | any JSON, incl. null | none                                      | `[{"k": 1}, "x", 3]`         | any custom property                                                                           |
-| `bool`              | boolean              | `true` / `false`                          | `[true, false]`              | flags                                                                                         |
-| `float`             | number               | floating-point-valued; within `min`/`max` | `[0, 0.5, 1]`                | metallicFactor, roughnessFactor, occlusionStrength, transmissionFactor, emissiveStrength, ior |
-| `int`               | number               | integer-valued, within `min`/`max`        | `[0, 1, 2, 7]`               | ids, counts, indices                                                                          |
-| `string`            | string               | must be a string                          | `["low", "high"]`            | enumerated tags                                                                               |
-| `srgb-float`        | number[3]            | 3 finite numbers in `[0, 1]`, sRGB        | `[[1, 0, 0], [0.5, 0.5, 0]]` | emissiveFactor, sRGB float                                                                    |
-| `srgb-hex`          | string               | matches `^#[0-9A-F]{6}$`                  | `["#FF0000", "#204080"]`     | emissiveFactor; opaque custom colors                                                          |
-| `srgba-float`       | number[4]            | 4 finite numbers in `[0, 1]`, sRGB        | `[[1, 0, 0, 1]]`             | baseColorFactor, sRGB float                                                                   |
-| `srgba-hex`         | string               | matches `^#[0-9A-F]{8}$`                  | `["#FF0000FF"]`              | baseColorFactor, the default color kind                                                       |
-| `linear-rgb-float`  | number[3]            | 3 finite numbers `>= 0`, linear           | `[[1, 0, 0], [0, 0.5, 1]]`   | emissiveFactor, linear                                                                        |
-| `linear-rgba-float` | number[4]            | 4 finite numbers `>= 0`, linear           | `[[1, 0, 0, 1]]`             | baseColorFactor, linear                                                                       |
+| `kind`        | JSON form                | Example `values`         | Typical properties                                                          |
+| ------------- | ------------------------ | ------------------------ | --------------------------------------------------------------------------- |
+| `bool`        | boolean                  | `[true, false]`          | flags                                                                       |
+| `float`       | number                   | `[0, 0.5, "inf"]`        | emissiveStrength, ior, metallic, occlusionStrength, roughness, transmission |
+| `int`         | number                   | `[0, 1, 2, 7]`           | counts, ids, indices                                                        |
+| `json`        | any JSON, including null | `[{"k": 1}, "x", 3]`     | any custom property                                                         |
+| `string`      | string                   | `["low", "high"]`        | enumerated tags                                                             |
+| `vec-2-float` | number[2]                | `[[0.25, 0.75]]`         | custom float pairs                                                          |
+| `vec-2-int`   | number[2]                | `[[3, 7]]`               | 2D grid coordinates                                                         |
+| `vec-3-float` | number[3]                | `[[1, 0, 0], [0, 0, 1]]` | emissiveColor, normals                                                      |
+| `vec-3-int`   | number[3]                | `[[3, 7, 1]]`            | 3D grid coordinates                                                         |
+| `vec-4-float` | number[4]                | `[[1, 0, 0, 1]]`         | baseColor                                                                   |
+| `vec-4-int`   | number[4]                | `[[3, 7, 1, 0]]`         | custom integer 4-tuples                                                     |
 
 Notes:
 
-1. `float` is a continuous, finite number; `int` is its integer-valued sibling. `min` and `max` bounds apply only to `int` and `float`; on those two both are required, and no other kind may carry them.
-2. `min` and `max` each take a finite number or the string `"none"` for unbounded on that side, and both are always written out. A numeric bound must be integer-valued on `int`; when both bounds are finite numbers, `min <= max`.
-3. Colors come in hex and float forms across two color spaces. `srgb-hex` / `srgba-hex` are `#RRGGBB` / `#RRGGBBAA` sRGB strings, the human-editable default. `srgb-float` / `srgba-float` are sRGB float components in `[0, 1]`; `linear-rgb-float` / `linear-rgba-float` are the linear components `>= 0`, so linear carries HDR. Colors carry no `min`/`max`; each color kind's range is fixed by its color space. Hex is sRGB only; a linear color is always written in float form.
-4. `kind` is required and has no default; the bounded kinds require both `min` and `max`. A value pool has no optional fields.
+1. A kind is one value-shape, and the shape is the whole contract. What a value means, a color, a normal, a count, is the binding property's concern (see [Properties](#properties)).
+2. A float value is a finite JSON number, the string `"inf"`, or the string `"-inf"`. JSON has no infinity literal, so the sentinel strings spell the two infinities. `NaN` has no spelling and writers error on it.
+3. An int value is a JSON number spelled as an integer, so `3.0` and `3e0` reject. Its magnitude is at most `2^53 - 1`, so a consumer reading numbers as doubles cannot silently lose one. `"inf"` and `"-inf"` reject as int values: an infinite integer means nothing.
+4. A vector kind's value is an array of exactly the kind's length: float values for the `vec-*-float` kinds, int values for the `vec-*-int` kinds. A scalar is not a one-element vector: `0.5` and `[0.5]` are different JSON, so `int` and `float` stand apart from the vector kinds.
+5. A kind carries no range. A range is a fact about the binding property and rides the property vocabulary (see [Properties](#properties)).
+6. `kind` is required and has no default. A value pool has no optional fields.
+
+```jsonc
+{ "kind": "float", "values": [0, 0.5, "inf"] } // fine
+{ "kind": "int", "values": [3.0] }             // rejects: 3.0 is not 3
+{ "kind": "int", "values": ["inf"] }           // rejects: no infinite int
+```
 
 ## Palettes
 
-A palette binds property names to shared [value pools](#value-pools), then lists the distinct materials it uses as rows over those pools. A voxel samples a material in each layer by its index in that layer's palette. A palette may be referenced by any number of layers and objects (see [Objects](#objects)).
+A palette binds property names to shared [value pools](#value-pools), then lists the distinct materials it uses as rows over those value pools. A voxel samples a material in each layer by its index in that layer's palette. A palette may be referenced by any number of layers and objects (see [Objects](#objects)).
 
 A material is one row of value-indices, one per property, so with no properties every row is empty. A palette holds at least one material, and the material count `M` is `materials.length`:
 
@@ -263,18 +275,19 @@ A material is one row of value-indices, one per property, so with no properties 
   // Order fixes the value-index order in each `materials` row. No duplicate
   // name.
   "properties": [
-    { "name": "baseColorFactor", "valuePool": 0 },
-    { "name": "metallicFactor", "valuePool": 1 },
+    { "name": "baseColor", "valuePool": 0 },
+    { "name": "metallic", "valuePool": 1 },
   ],
 
   // one row per material, a value-index per property, in property order.
-  // `materials[m][b]` is a value-index into the pool bound by
+  // `materials[m][b]` is a value-index into the value pool bound by
   // `properties[b]`. A voxel samples material `m` in `[0, M)`; resolve it
   // by reading across its row:
-  //   material 0 = {
-  //     baseColorFactor: pool0.values[0],
-  //     metallicFactor: pool1.values[2]
-  //   }
+  //
+  // material 0 = {
+  //   baseColor: valuePools[0].values[0],
+  //   metallic: valuePools[1].values[2]
+  // }
   "materials": [
     [0, 2], // material 0
     [1, 0], // material 1
@@ -292,35 +305,41 @@ To resolve a voxel's properties:
 
 ### Sharing Idioms
 
-One pool cell can feed any number of materials, and editing it updates them all:
+One value pool cell can feed any number of materials, and editing it updates them all:
 
 1. All materials of one palette share a value: every row repeats the same value-index.
-2. Per-object variation over a shared base: sibling palettes that share the same pools and differ in one column. Switching an object between variants is a one-integer edit in `layers`; the channel data is identical across variants.
+2. Per-object variation over a shared base: sibling palettes that share the same value pools and differ in one column. Switching an object between variants is a one-integer edit in `layers`; the channel data is identical across variants.
 
-Idiom 2, two lamp objects sharing their pools but glowing at different strengths:
+Idiom 2, two lamp objects sharing their value pools but glowing at different strengths:
 
 ```jsonc
 "valuePools": [
   // 0: lamp colors
-  { "kind": "srgba-hex", "values": ["#FFDD88FF", "#FF3300FF"] },
+  {
+    "kind": "vec-4-float",
+    "values": [
+      [1, 0.7, 0.25, 1],
+      [1, 0.04, 0, 1],
+    ],
+  },
   // 1: emissive strengths
-  { "kind": "float", "min": 0, "max": "none", "values": [5, 40] },
+  { "kind": "float", "values": [5, 40] },
 ],
 
 "palettes": [
   // 0: the lamp variant; every row repeats strength cell 0
   {
     "properties": [
-      { "name": "baseColorFactor", "valuePool": 0 },
+      { "name": "baseColor", "valuePool": 0 },
       { "name": "emissiveStrength", "valuePool": 1 },
     ],
     "materials": [[0, 0], [1, 0]],
   },
 
-  // 1: the sign variant: the same pools, the next strength cell
+  // 1: the sign variant: the same value pools, the next strength cell
   {
     "properties": [
-      { "name": "baseColorFactor", "valuePool": 0 },
+      { "name": "baseColor", "valuePool": 0 },
       { "name": "emissiveStrength", "valuePool": 1 },
     ],
     "materials": [[0, 1], [1, 1]],
@@ -338,28 +357,26 @@ Idiom 2, two lamp objects sharing their pools but glowing at different strengths
 
 ### Properties
 
-A property is a named material parameter, listed in a palette's `properties[].name`. The format pairs each name with a value pool and leaves its meaning and value range as convention between producer and consumer. A consumer ignores any property name it does not recognize, so extending the vocabulary never breaks an older reader (see [Versioning and Extensibility](#versioning-and-extensibility)).
+A property is a named material parameter, listed in a palette's `properties[].name`. The format pairs each name with a value pool and leaves its meaning and value range as convention between producer and consumer; tools that understand the vocabulary may check a range like `metallic`'s `[0, 1]`. A consumer ignores any property name it does not recognize, so any tool may bind names of its own (see [Versioning and Extensibility](#versioning-and-extensibility)).
 
 voxj's recommended vocabulary is glTF's, below. The format neither requires nor privileges it; it is the convention voxj tools target.
 
 #### glTF conventions
 
-The recommended property vocabulary is glTF's metallic-roughness model. A voxj material maps one-to-one onto a glTF material, and the defaults below are glTF's own. Each property binds a value pool of one of the kinds listed, and an unbound property renders at its default:
+The recommended property vocabulary is glTF's metallic-roughness model. A material that follows it maps onto a glTF material, and the defaults below are glTF's own. Each property binds a value pool of the kind listed, and an unbound property renders at its default.
 
-| Property             | Kind                                                         | Range | Default     | Meaning                                                                            |
-| -------------------- | ------------------------------------------------------------ | ----- | ----------- | ---------------------------------------------------------------------------------- |
-| `baseColorFactor`    | `srgba-hex` (default), `srgba-float`, or `linear-rgba-float` |       | `#FFFFFFFF` | Base color, straight alpha = opacity (glTF `baseColorFactor`)                      |
-| `metallicFactor`     | `float`, `min: 0`, `max: 1`                                  | 0-1   | `1`         | Metalness (glTF `metallicFactor`)                                                  |
-| `roughnessFactor`    | `float`, `min: 0`, `max: 1`                                  | 0-1   | `1`         | Roughness (glTF `roughnessFactor`)                                                 |
-| `occlusionStrength`  | `float`, `min: 0`, `max: 1`                                  | 0-1   | `1`         | Flat ambient occlusion, 1 = none (glTF `occlusionTexture.strength`)                |
-| `emissiveFactor`     | `srgb-hex` (default), `srgb-float`, or `linear-rgb-float`    |       | `#000000`   | Emissive color, black = none (glTF `emissiveFactor`)                               |
-| `emissiveStrength`   | `float`, `min: 0`                                            | 0+    | `1`         | Multiplies emissive color in linear space (glTF `KHR_materials_emissive_strength`) |
-| `ior`                | `float`, `min: 1`                                            | 1+    | `1.5`       | Index of refraction (glTF `KHR_materials_ior`)                                     |
-| `transmissionFactor` | `float`, `min: 0`, `max: 1`                                  | 0-1   | `0`         | Light transmission through surface (glTF `KHR_materials_transmission`)             |
+| Property            | Kind          | Range             | Default        | Meaning                                                                |
+| ------------------- | ------------- | ----------------- | -------------- | ---------------------------------------------------------------------- |
+| `baseColor`         | `vec-4-float` | each in `[0, 1]`  | `[1, 1, 1, 1]` | Base color, straight alpha = opacity (glTF `baseColorFactor`)          |
+| `emissiveColor`     | `vec-3-float` | each in `[0, 1]`  | `[0, 0, 0]`    | Emissive color, black = none (glTF `emissiveFactor`)                   |
+| `emissiveStrength`  | `float`       | `[0, inf)`        | `1`            | Multiplies emissive color (glTF `KHR_materials_emissive_strength`)     |
+| `ior`               | `float`       | `0` or `[1, inf)` | `1.5`          | Index of refraction (glTF `KHR_materials_ior`)                         |
+| `metallic`          | `float`       | `[0, 1]`          | `1`            | Metalness (glTF `metallicFactor`)                                      |
+| `occlusionStrength` | `float`       | `[0, 1]`          | `1`            | Flat ambient occlusion, 1 = none (glTF `occlusionTexture.strength`)    |
+| `roughness`         | `float`       | `[0, 1]`          | `1`            | Roughness (glTF `roughnessFactor`)                                     |
+| `transmission`      | `float`       | `[0, 1]`          | `0`            | Light transmission through surface (glTF `KHR_materials_transmission`) |
 
-A color property binds a hex or float-component color kind in either the sRGB or linear space (see [Value Pool Kinds](#value-pool-kinds)); hex, which is sRGB only, is the authoring default. Base color takes an alpha-carrying kind and emission an alpha-less one, and all forms carry the same color.
-
-Emission is two properties. `emissiveFactor` is the emitted color, `srgb-hex` by default or a vector form, no alpha, default `#000000` for no emission, authored and linearized like `baseColorFactor`. `emissiveStrength` is a numeric multiplier over that color, `float` with `min: 0`, default `1`; values above `1` push emission into HDR/bloom range. Rendered emission is `linearize(emissiveFactor) * emissiveStrength`. The defaults compose: a black color emits nothing at any strength, and a color left at the default strength `1` emits at face value, so a material that sets only `emissiveFactor` emits that color at strength 1.
+The two color properties hold linear light with sRGB primaries and the D65 white point: `baseColor` is 4 components with straight alpha, `emissiveColor` is 3 with none. The binding name is what makes a value a color, so the color space is vocabulary convention like the ranges. A producer authoring from sRGB applies the sRGB transfer to the color components before writing.
 
 ## Hierarchy Nodes
 
@@ -440,8 +457,8 @@ Each edit grid must contain its object's runtime grid: on every axis the edit `o
 
 1. An unrecognized `version` must be rejected.
 2. An unknown `encoding` (positions or samples) must be rejected; the block cannot be safely decoded.
-3. An unrecognized value pool `kind` must be rejected: the pool's values cannot be safely validated, exactly as an unknown `encoding` cannot be safely decoded, and it must never be reinterpreted or downgraded. `kind` is required and has no default.
-4. Unknown property **names** in `properties` are ignored, since properties are advisory and convention-based, so adding properties is backward compatible.
+3. An unrecognized value pool `kind` must be rejected: its values cannot be safely decoded, exactly as an unknown `encoding`'s data cannot, and it must never be reinterpreted or downgraded. `kind` is required and has no default.
+4. Unknown property **names** in `properties` are ignored: properties are advisory and convention-based, so one tool's names pass through another's reader untouched.
 5. Ignore vs reject: unknown property names are ignored; unknown `kind`, `encoding`, and `version`, and unknown object keys in any core structure, are rejected. Each is a contract a consumer must understand to make its guarantees.
 
 ## Validation
@@ -452,8 +469,8 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 
 1. `version` is recognized.
 2. Every `encoding`, on both `voxelPositions` and `voxelSamples`, is recognized.
-3. Types are exact and nothing is coerced. A string where a number is expected, or the reverse, rejects. Every integer-valued number has no fractional part, and every number is finite, so `NaN` and `+/-Infinity` reject.
-4. `null` rejects everywhere except in a `json`-kind pool's `values` and inside `main.ext`.
+3. Types are exact and nothing is coerced. A string where a number is expected, or the reverse, rejects. A number where an integer is expected is spelled as an integer. Every number is finite, so `NaN` and `+/-Infinity` reject; the sentinel strings `"inf"` and `"-inf"` are a float value's own spelling for the infinities (see [Value Pool Kinds](#value-pool-kinds)).
+4. `null` rejects everywhere except in a `json` value pool's `values` and inside `main.ext`.
 5. Unknown keys reject in every closed structure: file, `main`, `runtimeState`, `editState`, object, encoding block, palette, property, value pool, transform, hierarchy node, and edit object. The only open points are `main.ext` and property names.
 6. All indices are in range:
    1. each object `layers` entry indexes `runtimeState.palettes`.
@@ -465,23 +482,16 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 8. **Objects**, per object:
    1. `layers` is present, an array of integers, possibly empty.
    2. `voxelPositions` and `voxelSamples` are present; the Positions and Samples rules check their structure.
-9. **Value pools** (`runtimeState.valuePools`): an array, possibly empty. Each pool's keys are drawn only from { `kind`, `values`, `min`, `max` }.
+9. **Value pools** (`runtimeState.valuePools`): an array, possibly empty. Each value pool has exactly the keys `kind` and `values`.
    1. `kind` is present and recognized.
-   2. `values` is present, a non-empty array, with no `null` entry unless `kind` is `json`. Every entry is well-formed for `kind`:
-      1. `json`: any JSON value, including `null`.
-      2. `string`: a JSON string.
-      3. `bool`: a JSON boolean.
-      4. `int`: an integer-valued finite number within `min`/`max`.
-      5. `float`: a finite number within `min`/`max`.
-      6. `srgb-hex`: matches `^#[0-9A-F]{6}$`.
-      7. `srgba-hex`: matches `^#[0-9A-F]{8}$`.
-      8. `srgb-float`: an array of exactly 3 finite numbers, each in `[0, 1]`; `linear-rgb-float`: exactly 3 finite numbers, each `>= 0`.
-      9. `srgba-float`: an array of exactly 4 finite numbers, each in `[0, 1]`; `linear-rgba-float`: exactly 4 finite numbers, each `>= 0`.
-   3. `min` and `max`:
-      1. both present when `kind` is `int` or `float`, and both absent for every other kind.
-      2. each is a finite number or the string `none`, meaning unbounded on that side.
-      3. a numeric bound is integer-valued when `kind` is `int`.
-      4. `min <= max` when both are finite numbers.
+   2. `values` is present, a non-empty array, with no `null` entry unless `kind` is `json`. Every entry is the shape `kind` declares (see [Value Pool Kinds](#value-pool-kinds)):
+      1. `bool`: a JSON boolean.
+      2. `float`: a float value.
+      3. `int`: an int value.
+      4. `json`: any JSON value, including `null`.
+      5. `string`: a JSON string.
+      6. `vec-2-float`, `vec-3-float`, `vec-4-float`: an array of exactly 2, 3, or 4 float values.
+      7. `vec-2-int`, `vec-3-int`, `vec-4-int`: an array of exactly 2, 3, or 4 int values.
 10. **Palettes** (`runtimeState.palettes`): an array, possibly empty. Each palette's keys are drawn only from { `properties`, `materials` }.
     1. `properties` is an array, possibly empty; each property has exactly the keys `name`, a non-empty string, and `valuePool`, an integer.
     2. no two properties share a `name`.
@@ -517,38 +527,50 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
   "main": {
     "runtimeState": {
       "valuePools": [
+        // 0: base colors
         {
-          "kind": "srgba-hex",
-          "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"],
+          "kind": "vec-4-float",
+          "values": [
+            [1, 0, 0, 1],
+            [0, 1, 0, 1],
+            [0, 0, 1, 1],
+          ],
         },
 
-        // one shared float pool, bound by `metallicFactor` and
-        // `roughnessFactor`
-        { "kind": "float", "min": 0, "max": 1, "values": [0, 0.5, 1] },
+        // 1: one shared float value pool, bound by `metallic` and
+        // `roughness`
+        { "kind": "float", "values": [0, 0.5, 1] },
 
-        { "kind": "srgb-hex", "values": ["#000000", "#FF6600"] },
+        // 2: emissive colors
+        {
+          "kind": "vec-3-float",
+          "values": [
+            [0, 0, 0],
+            [1, 0.25, 0],
+          ],
+        },
 
-        { "kind": "linear-rgba-float", "values": [[1, 0, 0, 1]] },
+        // 3: the base color layer 1 overrides with
+        { "kind": "vec-4-float", "values": [[1, 1, 0, 1]] },
 
-        // emissive strengths, one cell per variant palette
-        { "kind": "float", "min": 0, "max": "none", "values": [1, 5] },
+        // 4: emissive strengths, one cell per variant palette
+        { "kind": "float", "values": [1, 5] },
       ],
 
       "palettes": [
-        // value pool 1 is bound twice, to `metallicFactor` and
-        // `roughnessFactor`
+        // value pool 1 is bound twice, to `metallic` and `roughness`
         {
           "properties": [
-            { "name": "baseColorFactor", "valuePool": 0 },
-            { "name": "metallicFactor", "valuePool": 1 },
-            { "name": "roughnessFactor", "valuePool": 1 },
-            { "name": "emissiveFactor", "valuePool": 2 },
+            { "name": "baseColor", "valuePool": 0 },
+            { "name": "metallic", "valuePool": 1 },
+            { "name": "roughness", "valuePool": 1 },
+            { "name": "emissiveColor", "valuePool": 2 },
             { "name": "emissiveStrength", "valuePool": 4 },
           ],
 
           // one row per material, a value-index per property. Material 2
-          // resolves to `baseColorFactor` #0000FFFF, `metallicFactor` 0.5,
-          // `roughnessFactor` 0, `emissiveFactor` #FF6600,
+          // resolves to `baseColor` [0, 0, 1, 1], `metallic` 0.5,
+          // `roughness` 0, `emissiveColor` [1, 0.25, 0],
           // `emissiveStrength` 1.
           "materials": [
             [0, 2, 1, 0, 0],
@@ -557,20 +579,21 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
           ],
         },
 
-        // base color authored in linear form instead of hex
+        // a one-property palette; layered over palette 0 it overrides
+        // `baseColor` only
         {
-          "properties": [{ "name": "baseColorFactor", "valuePool": 3 }],
+          "properties": [{ "name": "baseColor", "valuePool": 3 }],
           "materials": [[0]],
         },
 
-        // the bright variant of palette 0: the same pools and rows,
+        // the bright variant of palette 0: the same value pools and rows,
         // differing only in the `emissiveStrength` column
         {
           "properties": [
-            { "name": "baseColorFactor", "valuePool": 0 },
-            { "name": "metallicFactor", "valuePool": 1 },
-            { "name": "roughnessFactor", "valuePool": 1 },
-            { "name": "emissiveFactor", "valuePool": 2 },
+            { "name": "baseColor", "valuePool": 0 },
+            { "name": "metallic", "valuePool": 1 },
+            { "name": "roughness", "valuePool": 1 },
+            { "name": "emissiveColor", "valuePool": 2 },
             { "name": "emissiveStrength", "valuePool": 4 },
           ],
 
@@ -600,13 +623,14 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
           },
 
           // two layers, back to front: palette 0, then palette 1. Both bind
-          // `baseColorFactor`, so the later layer supplies it; the other
+          // `baseColor`, so the later layer supplies it; the other
           // properties come from layer 0.
           "layers": [0, 1],
 
           // one channel per layer, each a material index per voxel:
-          //   layer 0 -> materials 0, 2 of palette 0
-          //   layer 1 -> materials 0, 0 of palette 1
+          //
+          // layer 0 -> materials 0, 2 of palette 0
+          // layer 1 -> materials 0, 0 of palette 1
           "voxelSamples": {
             "encoding": "raw-json",
             "data": [
@@ -781,7 +805,7 @@ interface Palette {
   materials: number[][];
 }
 
-// One property bound to a whole pool, one value-index per material.
+// One property bound to a whole value pool, one value-index per material.
 interface Property {
   // property name (see Properties); advisory, unknown names ignored
   name: string;
@@ -790,57 +814,44 @@ interface Property {
   valuePool: number;
 }
 
-// A shared pool of values, all of one shape given by `kind`, each kind's
-// values typed to its shape. Only `int` and `float` carry `min`/`max`, each
-// a finite number or "none"; a color kind's range is fixed by its color
-// space, so no color kind carries bounds.
+// A shared value pool: `values` all of the one value-shape `kind` names.
+
+// A float value: a finite number, "inf", or "-inf"; NaN has no spelling.
+type FloatValue = number | "inf" | "-inf";
+
+// An int value: a number spelled as an integer, magnitude at most
+// 2^53 - 1.
+type IntValue = number;
+
 type ValuePool =
-  // arbitrary JSON, including `null`
-  | { kind: "json"; values: JsonValue[] }
-  // booleans
   | { kind: "bool"; values: boolean[] }
-  // finite floats within `min`/`max`
-  | {
-      kind: "float";
-      min: number | "none";
-      max: number | "none";
-      values: number[];
-    }
-  // integers within `min`/`max`
-  | {
-      kind: "int";
-      min: number | "none";
-      max: number | "none";
-      values: number[];
-    }
-  // strings
+  | { kind: "float"; values: FloatValue[] }
+  | { kind: "int"; values: IntValue[] }
+  | { kind: "json"; values: JsonValue[] }
   | { kind: "string"; values: string[] }
-  // sRGB float colors, each component in `[0, 1]`
-  | { kind: "srgb-float"; values: [number, number, number][] }
-  // `#RRGGBB` sRGB hex strings
-  | { kind: "srgb-hex"; values: string[] }
-  // sRGB float colors with alpha, each component in [0, 1]
-  | { kind: "srgba-float"; values: [number, number, number, number][] }
-  // `#RRGGBBAA` sRGB hex strings
-  | { kind: "srgba-hex"; values: string[] }
-  // linear float colors, each component `>= 0`
-  | { kind: "linear-rgb-float"; values: [number, number, number][] }
-  // linear float colors with alpha, each component >= 0
-  | { kind: "linear-rgba-float"; values: [number, number, number, number][] };
+  | { kind: "vec-2-float"; values: [FloatValue, FloatValue][] }
+  | { kind: "vec-2-int"; values: [IntValue, IntValue][] }
+  | { kind: "vec-3-float"; values: [FloatValue, FloatValue, FloatValue][] }
+  | { kind: "vec-3-int"; values: [IntValue, IntValue, IntValue][] }
+  | {
+      kind: "vec-4-float";
+      values: [FloatValue, FloatValue, FloatValue, FloatValue][];
+    }
+  | { kind: "vec-4-int"; values: [IntValue, IntValue, IntValue, IntValue][] };
 
 // Closed value-shape vocabulary (see Value Pool Kinds).
-type PoolKind =
-  | "json"
+type ValuePoolKind =
   | "bool"
   | "float"
   | "int"
+  | "json"
   | "string"
-  | "srgb-float"
-  | "srgb-hex"
-  | "srgba-float"
-  | "srgba-hex"
-  | "linear-rgb-float"
-  | "linear-rgba-float";
+  | "vec-2-float"
+  | "vec-2-int"
+  | "vec-3-float"
+  | "vec-3-int"
+  | "vec-4-float"
+  | "vec-4-int";
 
 type JsonValue =
   | string
@@ -1030,7 +1041,7 @@ function rleDecode(rle: number[]): number[] {
 // <= 131072) for this reason.
 
 // 1. Hilbert: a position <-> its 3D Hilbert-curve index (Skilling's transform),
-//    `bits` bits per axis.
+// `bits` bits per axis.
 function hilbertEncode(x: number, y: number, z: number, bits: number): number {
   const axes = [x, y, z];
   const topBit = 1 << (bits - 1);
@@ -1098,8 +1109,8 @@ function hilbertDecode(index: number, bits: number): [number, number, number] {
 }
 
 // 2. Delta: an ascending integer sequence <-> its successive differences.
-//    `deltaDecode` is the prefix sum; `deltaEncode` assumes ascending
-//    input, which keeps every delta after the first strictly positive.
+// `deltaDecode` is the prefix sum; `deltaEncode` assumes ascending input, which
+// keeps every delta after the first strictly positive.
 function deltaEncode(values: number[]): number[] {
   return values.map((v, i) => (i === 0 ? v : v - values[i - 1]));
 }
@@ -1115,7 +1126,7 @@ function deltaDecode(deltas: number[]): number[] {
 }
 
 // 3. Varint: a non-negative integer array <-> an unsigned-LEB128 byte stream.
-//    Uses arithmetic (not `<<` / `>>`) so values above `2^31` stay exact.
+// Uses arithmetic (not `<<` / `>>`) so values above `2^31` stay exact.
 function varintEncode(values: number[]): Uint8Array {
   const out: number[] = [];
   for (let v of values) {

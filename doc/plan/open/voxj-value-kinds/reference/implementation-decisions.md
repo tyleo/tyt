@@ -24,3 +24,23 @@ beside the ranges, not in Value Pool Kinds as a format-wide rule. The
 emissive-composition paragraph folds into the conventions table. The
 texture scope paragraph does not land: the absence of texture bindings
 is by construction, and the boundary bake is tool documentation.
+
+## Iteration 2 review rulings
+
+2026-08-02, at the iteration 2 gate review. Three wording rulings from
+the owner, folded into the spec commit. They override format-design.md,
+which stopped being authoritative once the spec landed.
+
+1. Between two phrasings carrying the same content, the shorter one
+   stands. The Value Pools opening keeps the terse holds-values
+   sentence, and the Value Pool Kinds intro drops the per-kind reading
+   examples that restate the kind table.
+2. Only the worst clause chains restructure into sentences: a run-on
+   gluing three claims splits, and an idiomatic single colon or
+   semicolon stays.
+3. A self-explanatory table column gets no introducing sentence. The
+   Range column note went.
+4. The kinds speak the format's own vocabulary, value-shape, never JSON
+   shape. JSON's types are coarser than the kinds: `int` and `float` are
+   both one JSON number, and a `float` value's sentinels are strings.
+   JSON stays only where the file's literal spelling is the subject.
