@@ -5,7 +5,10 @@ use crate::{
     linear_color_from_srgba_u8, sample_material, scalar_range, voxelize_triangles,
 };
 use branded_id::U32Id;
-use std::collections::{HashMap, VecDeque};
+use std::{
+    collections::{HashMap, VecDeque},
+    hash::Hash,
+};
 use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxValuePoolValue, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
@@ -422,20 +425,11 @@ fn rgba_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
 ) -> ValuePoolColumn<[f64; 4]> {
-    let mut values = Vec::new();
-    let mut lookup: HashMap<[u64; 4], U32Id<BVoxValuePoolValue>> = HashMap::new();
-    let value_ids = materials
-        .iter()
-        .map(|material| {
-            let color = <[f64; 4]>::from(get(material));
-            *lookup.entry(color.map(f64::to_bits)).or_insert_with(|| {
-                let value_id = U32Id::from_u32(values.len() as u32);
-                values.push(color);
-                value_id
-            })
-        })
-        .collect();
-    ValuePoolColumn { values, value_ids }
+    value_pool_column(
+        materials,
+        |material| <[f64; 4]>::from(get(material)),
+        |color| color.map(f64::to_bits),
+    )
 }
 
 /// A three-component color value pool over the extracted linear color,
@@ -444,21 +438,14 @@ fn rgb_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
 ) -> ValuePoolColumn<[f64; 3]> {
-    let mut values = Vec::new();
-    let mut lookup: HashMap<[u64; 3], U32Id<BVoxValuePoolValue>> = HashMap::new();
-    let value_ids = materials
-        .iter()
-        .map(|material| {
+    value_pool_column(
+        materials,
+        |material| {
             let color = get(material);
-            let color = [color.red, color.green, color.blue];
-            *lookup.entry(color.map(f64::to_bits)).or_insert_with(|| {
-                let value_id = U32Id::from_u32(values.len() as u32);
-                values.push(color);
-                value_id
-            })
-        })
-        .collect();
-    ValuePoolColumn { values, value_ids }
+            [color.red, color.green, color.blue]
+        },
+        |color| color.map(f64::to_bits),
+    )
 }
 
 /// A float value pool over the extracted scalar, deduplicated by its bit
@@ -467,13 +454,23 @@ fn float_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> f64,
 ) -> ValuePoolColumn<f64> {
+    value_pool_column(materials, |material| get(material), |value| value.to_bits())
+}
+
+/// A deduplicated value pool column: each material's extracted value interned
+/// by `key`, the distinct values kept in first-seen order.
+fn value_pool_column<T, K: Eq + Hash>(
+    materials: &[MeshMaterial],
+    get: impl Fn(&MeshMaterial) -> T,
+    key: impl Fn(&T) -> K,
+) -> ValuePoolColumn<T> {
     let mut values = Vec::new();
-    let mut lookup: HashMap<u64, U32Id<BVoxValuePoolValue>> = HashMap::new();
+    let mut lookup: HashMap<K, U32Id<BVoxValuePoolValue>> = HashMap::new();
     let value_ids = materials
         .iter()
         .map(|material| {
             let value = get(material);
-            *lookup.entry(value.to_bits()).or_insert_with(|| {
+            *lookup.entry(key(&value)).or_insert_with(|| {
                 let value_id = U32Id::from_u32(values.len() as u32);
                 values.push(value);
                 value_id
