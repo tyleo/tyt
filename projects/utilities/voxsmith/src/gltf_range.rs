@@ -26,6 +26,7 @@ impl GltfRange {
     /// `value` clamped onto the interval. The zero the union admits is a
     /// marker, not a clamp target, so an out-of-range value lands on the
     /// interval's nearest end. NaN has no clamp and stays NaN.
+    #[cfg(feature = "_mesh")]
     pub fn clamp(self, value: f64) -> f64 {
         value.clamp(self.min, self.max.unwrap_or(f64::INFINITY))
     }
@@ -76,6 +77,7 @@ mod tests {
         assert!(!IOR.contains(f64::NAN));
     }
 
+    #[cfg(feature = "_mesh")]
     #[test]
     fn the_clamp_targets_the_interval_not_the_zero() {
         assert_eq!(IOR.clamp(0.5), 1.0);

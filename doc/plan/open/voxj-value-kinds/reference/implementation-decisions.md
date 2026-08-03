@@ -165,6 +165,10 @@ color's fields. Raw `[u8; 4]` survives only where the data is genuinely
 bytes: the pixel buffer write and the packing arm, whose packed channels
 are not an sRGB color, so a color type would mislabel them.
 
+2026-08-03. `GltfRange::clamp` gates on `_mesh` beside its only callers,
+the voxelizer's policy helpers, so a default-feature build carries no
+dead clamp.
+
 The vocabulary range check is `check_gltf_property_ranges`, a public
 top-level function over a whole `VoxMain`. It walks every palette
 property the vocabulary names and checks the values materials draw; an
