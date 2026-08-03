@@ -26,6 +26,8 @@ mod value_pool_color;
 mod linear_color_from_srgba_u8;
 #[cfg(any(feature = "_color", feature = "_mesh"))]
 mod srgba_u8_from_linear_color;
+#[cfg(any(feature = "_color", feature = "_mesh"))]
+mod value_pool_linear_color;
 
 // Tightening a build-volume object to its live extent is wanted only by the
 // Voxel Max writer.
@@ -74,6 +76,8 @@ pub(crate) use value_pool_color::*;
 pub(crate) use linear_color_from_srgba_u8::*;
 #[cfg(any(feature = "_color", feature = "_mesh"))]
 pub(crate) use srgba_u8_from_linear_color::*;
+#[cfg(any(feature = "_color", feature = "_mesh"))]
+pub(crate) use value_pool_linear_color::*;
 
 #[cfg(feature = "vmax")]
 pub(crate) use grid::*;

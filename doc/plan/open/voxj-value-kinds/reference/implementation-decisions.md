@@ -136,6 +136,16 @@ the sampled value exactly. Test fixtures that author colors as hex
 decode them through the same helper, so byte-level expectations survive
 unchanged.
 
+2026-08-03, after the gate review. The atlas bake reads colors linear:
+`value_pool_linear_color` is the base read, `value_pool_color` its 8-bit
+encoding, and the emissive fold scales the exact stored color and
+encodes once, so a texel rounds only at the boundary instead of before
+and after the scale. The vmax writer keeps deriving `sic` from
+`value_pool_color`'s quantized bytes on purpose: the vmax palette stores
+the base color as u8 and Voxel Max glows in that stored color, so the
+luminance ratio reads the color the file carries, not the exact value it
+was quantized from.
+
 The vocabulary range check is `check_gltf_attribute_ranges`, a public
 top-level function over a whole `VoxMain`. It walks every palette
 property the vocabulary names and checks the values materials draw; an
