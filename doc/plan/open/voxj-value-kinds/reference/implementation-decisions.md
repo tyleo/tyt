@@ -156,7 +156,7 @@ the base color as u8 and Voxel Max glows in that stored color, so the
 luminance ratio reads the color the file carries, not the exact value it
 was quantized from.
 
-The vocabulary range check is `check_gltf_attribute_ranges`, a public
+The vocabulary range check is `check_gltf_property_ranges`, a public
 top-level function over a whole `VoxMain`. It walks every palette
 property the vocabulary names and checks the values materials draw; an
 undrawn value pool entry reaches no glTF factor and passes. It does not

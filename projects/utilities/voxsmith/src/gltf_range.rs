@@ -1,7 +1,7 @@
 use crate::{Error, Result};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
-/// The glTF schema range of one vocabulary attribute: an inclusive interval
+/// The glTF schema range of one vocabulary property: an inclusive interval
 /// from `min` to `max`, optionally unioned with exactly zero, the shape
 /// `KHR_materials_ior` gives `ior` for "does not refract".
 #[derive(Clone, Copy, Debug, PartialEq)]

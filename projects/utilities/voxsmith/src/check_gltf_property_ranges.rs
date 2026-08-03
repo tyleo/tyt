@@ -15,7 +15,7 @@ use voxcore::{VoxMain, VoxValuePoolValueRef};
 /// A name outside the vocabulary has no checkable range and passes, as does a
 /// value of a shape the name does not read. The boundary that reads the value
 /// errors on its shape.
-pub fn check_gltf_attribute_ranges(state: &VoxMain) -> Result<()> {
+pub fn check_gltf_property_ranges(state: &VoxMain) -> Result<()> {
     for (palette_id, palette) in state.iter_palettes() {
         for (property_id, property) in palette.iter_properties() {
             let name = &property.name;
@@ -25,7 +25,7 @@ pub fn check_gltf_attribute_ranges(state: &VoxMain) -> Result<()> {
             let range = match kind {
                 GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba => COLOR_RANGE,
                 GltfAttributeKind::Scalar => {
-                    scalar_range(name).expect("every scalar vocabulary attribute has a range")
+                    scalar_range(name).expect("every scalar vocabulary property has a range")
                 }
             };
 
@@ -69,7 +69,7 @@ fn check_components(name: &str, components: &[f64], range: GltfRange) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, check_gltf_attribute_ranges};
+    use crate::{BASE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, check_gltf_property_ranges};
     use branded_id::U32Id;
     use voxcore::{VoxMain, VoxPalette, VoxValuePool};
 
@@ -91,21 +91,21 @@ mod tests {
     #[test]
     fn passes_in_range_values_and_unranged_names() {
         let state = state_with(METALLIC, VoxValuePool::float(vec![1.0]).unwrap());
-        assert!(check_gltf_attribute_ranges(&state).is_ok());
+        assert!(check_gltf_property_ranges(&state).is_ok());
 
         // `emissiveStrength` is unbounded above.
         let state = state_with(EMISSIVE_STRENGTH, VoxValuePool::float(vec![7.0]).unwrap());
-        assert!(check_gltf_attribute_ranges(&state).is_ok());
+        assert!(check_gltf_property_ranges(&state).is_ok());
 
         // A custom name has no checkable range.
         let state = state_with("subsurface", VoxValuePool::float(vec![7.0]).unwrap());
-        assert!(check_gltf_attribute_ranges(&state).is_ok());
+        assert!(check_gltf_property_ranges(&state).is_ok());
     }
 
     #[test]
     fn errors_on_a_scalar_outside_its_range() {
         let state = state_with(METALLIC, VoxValuePool::float(vec![1.5]).unwrap());
-        let message = check_gltf_attribute_ranges(&state).unwrap_err().to_string();
+        let message = check_gltf_property_ranges(&state).unwrap_err().to_string();
         assert!(message.contains(METALLIC), "{message}");
         assert!(message.contains("1.5"), "{message}");
     }
@@ -115,10 +115,10 @@ mod tests {
         // Zero means "does not refract" and passes. A value between the
         // union's parts rejects.
         let state = state_with(IOR, VoxValuePool::float(vec![0.0, 1.5]).unwrap());
-        assert!(check_gltf_attribute_ranges(&state).is_ok());
+        assert!(check_gltf_property_ranges(&state).is_ok());
 
         let state = state_with(IOR, VoxValuePool::float(vec![0.5]).unwrap());
-        let message = check_gltf_attribute_ranges(&state).unwrap_err().to_string();
+        let message = check_gltf_property_ranges(&state).unwrap_err().to_string();
         assert!(message.contains(IOR), "{message}");
     }
 
@@ -128,7 +128,7 @@ mod tests {
             BASE_COLOR,
             VoxValuePool::vec_4_float(vec![[1.5, 0.0, 0.0, 1.0]]).unwrap(),
         );
-        let message = check_gltf_attribute_ranges(&state).unwrap_err().to_string();
+        let message = check_gltf_property_ranges(&state).unwrap_err().to_string();
         assert!(message.contains(BASE_COLOR), "{message}");
     }
 
@@ -137,6 +137,6 @@ mod tests {
         // The second value is out of range, and no material draws it: only
         // drawn values reach a glTF factor, so it passes.
         let state = state_with(METALLIC, VoxValuePool::float(vec![1.0, 7.0]).unwrap());
-        assert!(check_gltf_attribute_ranges(&state).is_ok());
+        assert!(check_gltf_property_ranges(&state).is_ok());
     }
 }

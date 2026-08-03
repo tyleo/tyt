@@ -1,7 +1,7 @@
 use crate::{
     BASE_COLOR, COLOR_RANGE, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, FillMode, GltfRange, IOR,
     METALLIC, MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeProperty, ROUGHNESS,
-    Result, SurfaceMode, TRANSMISSION, VoxelGrid, check_gltf_attribute_ranges,
+    Result, SurfaceMode, TRANSMISSION, VoxelGrid, check_gltf_property_ranges,
     lin_srgba_f64_from_srgba_u8, sample_material, scalar_range, voxelize_triangles,
 };
 use branded_id::U32Id;
@@ -122,7 +122,7 @@ pub fn voxelize_mesh(
     // The vocabulary range check the export also runs. The values were
     // checked or clamped above, so this is the entry-side guarantee that
     // nothing out of range leaves the import.
-    check_gltf_attribute_ranges(&state)?;
+    check_gltf_property_ranges(&state)?;
 
     Ok(state)
 }

@@ -34,7 +34,7 @@ mod internal;
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
 pub(crate) use internal::*;
 
-mod check_gltf_attribute_ranges;
+mod check_gltf_property_ranges;
 mod color_space;
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
 mod convert;
@@ -48,7 +48,7 @@ mod reduce_palette;
 mod reduction_method;
 mod result;
 
-pub use check_gltf_attribute_ranges::*;
+pub use check_gltf_property_ranges::*;
 pub use color_space::*;
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
 pub use convert::*;
