@@ -1,6 +1,6 @@
 use crate::{
     BASE_COLOR, Error, QubicleQbtExt, QubicleQbtExtWrapper, QubicleQbtNode, Result,
-    lin_srgba_from_srgba_u8, to_vox_value,
+    lin_srgba_f64_from_srgba_u8, to_vox_value,
 };
 use branded_id::U32Id;
 use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
@@ -289,7 +289,7 @@ fn translation(position: [i32; 3]) -> TyTransformF64 {
 /// The linear-light components of an `[r, g, b]` byte color.
 fn color_floats(color: [u8; 3]) -> [f64; 3] {
     let [red, green, blue] = color;
-    let linear = lin_srgba_from_srgba_u8(TySrgbaU8::new(red, green, blue, 255));
+    let linear = lin_srgba_f64_from_srgba_u8(TySrgbaU8::new(red, green, blue, 255));
     [linear.red, linear.green, linear.blue]
 }
 

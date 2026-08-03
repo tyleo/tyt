@@ -2,7 +2,7 @@ use crate::{
     BASE_COLOR, COLOR_RANGE, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, FillMode, GltfRange, IOR,
     METALLIC, MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeProperty, ROUGHNESS,
     Result, SurfaceMode, TRANSMISSION, VoxelGrid, check_gltf_attribute_ranges,
-    lin_srgba_from_srgba_u8, sample_material, scalar_range, voxelize_triangles,
+    lin_srgba_f64_from_srgba_u8, sample_material, scalar_range, voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::{
@@ -17,7 +17,7 @@ use voxcore::{
 
 /// The color a body with no sampled surface falls back to when `fill_color` is
 /// `None`: opaque white. Held as sRGB bytes, the form a caller's fill color
-/// arrives in. Decode it with [`lin_srgba_from_srgba_u8`] at each use site.
+/// arrives in. Decode it with [`lin_srgba_f64_from_srgba_u8`] at each use site.
 const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
 /// Voxelizes a [`Mesh`] into a [`VoxMain`] of one object placed by one root
@@ -170,7 +170,7 @@ fn resolve_materials(
 
 /// Every filled cell takes the one fill color (white when `none`).
 fn flat_cells(grid: &VoxelGrid, fill_color: Option<[u8; 4]>) -> Vec<Option<MeshMaterial>> {
-    let material = MeshMaterial::flat(fill_lin_srgba_color(fill_color));
+    let material = MeshMaterial::flat(fill_lin_srgba_f64_color(fill_color));
     grid.filled
         .iter()
         .map(|&filled| filled.then_some(material))
@@ -225,7 +225,7 @@ fn fill_interior(
 
     match fill_color {
         Some(color) => {
-            let fill = MeshMaterial::flat(fill_lin_srgba_color(Some(color)));
+            let fill = MeshMaterial::flat(fill_lin_srgba_f64_color(Some(color)));
             for (cell, triangle) in grid.triangle.iter().enumerate() {
                 if grid.filled[cell] && triangle.is_none() {
                     cell_materials[cell] = Some(fill);
@@ -238,7 +238,7 @@ fn fill_interior(
                 if grid.filled[cell] && grid.triangle[cell].is_none() {
                     let resolved = nearest[cell]
                         .and_then(|source| cell_materials[source])
-                        .unwrap_or_else(|| MeshMaterial::flat(fill_lin_srgba_color(None)));
+                        .unwrap_or_else(|| MeshMaterial::flat(fill_lin_srgba_f64_color(None)));
                     cell_materials[cell] = Some(resolved);
                 }
             }
@@ -286,7 +286,7 @@ fn build_palette(
     // An all-empty grid still needs a non-empty palette so its value pools and
     // default material are valid; give it a lone white material.
     if distinct.is_empty() {
-        distinct.push(MeshMaterial::flat(fill_lin_srgba_color(None)));
+        distinct.push(MeshMaterial::flat(fill_lin_srgba_f64_color(None)));
     }
 
     // The color properties follow the same policy as the scalars: every
@@ -300,10 +300,10 @@ fn build_palette(
 
     // One deduplicated value pool per property, plus each distinct material's
     // value id into it.
-    let base_color = lin_srgba_value_pool(&distinct, |material| material.base_color);
+    let base_color = lin_srgba_f64_value_pool(&distinct, |material| material.base_color);
     let metallic = f64_value_pool(&distinct, |material| material.metallic);
     let roughness = f64_value_pool(&distinct, |material| material.roughness);
-    let emissive_color = lin_srgb_value_pool(&distinct, |material| material.emissive_color);
+    let emissive_color = lin_srgb_f64_value_pool(&distinct, |material| material.emissive_color);
     let emissive_strength = f64_value_pool(&distinct, |material| material.emissive_strength);
     let occlusion = f64_value_pool(&distinct, |material| material.occlusion);
     let ior = f64_value_pool(&distinct, |material| material.ior);
@@ -421,7 +421,7 @@ struct ValuePoolColumn<T> {
 
 /// A four-component color value pool over the extracted linear color,
 /// deduplicated by its components' bit patterns.
-fn lin_srgba_value_pool(
+fn lin_srgba_f64_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
 ) -> ValuePoolColumn<[f64; 4]> {
@@ -434,7 +434,7 @@ fn lin_srgba_value_pool(
 
 /// A three-component color value pool over the extracted linear color,
 /// deduplicated by its components' bit patterns. The alpha is dropped.
-fn lin_srgb_value_pool(
+fn lin_srgb_f64_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
 ) -> ValuePoolColumn<[f64; 3]> {
@@ -616,8 +616,8 @@ fn for_each_neighbor(cell: usize, nx: usize, ny: usize, nz: usize, mut visit: im
 
 /// The fill color decoded to linear light, defaulting to opaque white for
 /// `none`.
-fn fill_lin_srgba_color(fill_color: Option<[u8; 4]>) -> TyLinSrgbaF64 {
-    lin_srgba_from_srgba_u8(TySrgbaU8::from(fill_color.unwrap_or(DEFAULT_FILL)))
+fn fill_lin_srgba_f64_color(fill_color: Option<[u8; 4]>) -> TyLinSrgbaF64 {
+    lin_srgba_f64_from_srgba_u8(TySrgbaU8::from(fill_color.unwrap_or(DEFAULT_FILL)))
 }
 
 /// The error for a grid past voxcore's dense-grid cell limit.

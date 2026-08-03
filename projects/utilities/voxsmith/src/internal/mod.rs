@@ -23,9 +23,9 @@ mod value_pool_color;
 // codecs decode and encode palette colors through it, and the mesh side
 // decodes texture texels and encodes atlas texels through it.
 #[cfg(any(feature = "_color", feature = "_mesh"))]
-mod lin_srgba_from_srgba_u8;
+mod lin_srgba_f64_from_srgba_u8;
 #[cfg(any(feature = "_color", feature = "_mesh"))]
-mod srgba_u8_from_lin_srgba;
+mod srgba_u8_from_lin_srgba_f64;
 #[cfg(any(feature = "_color", feature = "_mesh"))]
 mod value_pool_linear_color;
 
@@ -73,9 +73,9 @@ pub(crate) use resolve_cell_color_or_transparent::*;
 pub(crate) use value_pool_color::*;
 
 #[cfg(any(feature = "_color", feature = "_mesh"))]
-pub(crate) use lin_srgba_from_srgba_u8::*;
+pub(crate) use lin_srgba_f64_from_srgba_u8::*;
 #[cfg(any(feature = "_color", feature = "_mesh"))]
-pub(crate) use srgba_u8_from_lin_srgba::*;
+pub(crate) use srgba_u8_from_lin_srgba_f64::*;
 #[cfg(any(feature = "_color", feature = "_mesh"))]
 pub(crate) use value_pool_linear_color::*;
 

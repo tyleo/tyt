@@ -119,8 +119,8 @@ The constructors keep the kind-name spelling for the vector kinds:
 ## Iteration 7 rulings
 
 2026-08-02. The one sRGB transfer lives in an internal helper pair:
-`lin_srgba_from_srgba_u8` decodes an 8-bit color to `TyLinSrgbaF64`
-and `srgba_u8_from_lin_srgba` encodes it back, gated on
+`lin_srgba_f64_from_srgba_u8` decodes an 8-bit color to `TyLinSrgbaF64`
+and `srgba_u8_from_lin_srgba_f64` encodes it back, gated on
 `any(_color, _mesh)` because the color codecs and the mesh side both
 cross the boundary. Every 8-bit crossing calls the pair: the goxl, mvox,
 qb-family, and vmax importers, the voxelizer's fill colors, the texture

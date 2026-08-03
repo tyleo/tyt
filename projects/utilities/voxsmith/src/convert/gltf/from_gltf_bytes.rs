@@ -461,7 +461,7 @@ mod tests {
     use crate::{
         BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC, MaterialMode,
         OCCLUSION_STRENGTH, OutOfRangeProperty, ROUGHNESS, Result, SurfaceMode, TRANSMISSION,
-        from_gltf_bytes, srgba_u8_from_lin_srgba, voxelize_mesh,
+        from_gltf_bytes, srgba_u8_from_lin_srgba_f64, voxelize_mesh,
     };
     use branded_id::U32Id;
     use png::{BitDepth, ColorType, Encoder};
@@ -726,7 +726,7 @@ mod tests {
         let (value_pool, value_id) = voxel_attribute(state, position, BASE_COLOR);
         match value_pool.value(value_id) {
             Some(VoxValuePoolValueRef::Vec4Float(&[r, g, b, a])) => {
-                srgba_u8_from_lin_srgba(TyLinSrgbaF64::new(r, g, b, a)).to_hex()
+                srgba_u8_from_lin_srgba_f64(TyLinSrgbaF64::new(r, g, b, a)).to_hex()
             }
             other => panic!("unexpected baseColor value pool {other:?}"),
         }

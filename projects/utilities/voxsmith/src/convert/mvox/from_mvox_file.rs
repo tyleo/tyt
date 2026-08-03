@@ -1,7 +1,8 @@
 use crate::{
     BASE_COLOR, Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
     MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
-    MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, lin_srgba_from_srgba_u8, to_vox_value,
+    MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, lin_srgba_f64_from_srgba_u8,
+    to_vox_value,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -108,7 +109,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
         VoxValuePool::vec_4_float(
             distinct_colors
                 .iter()
-                .map(|&color| <[f64; 4]>::from(lin_srgba_from_srgba_u8(TySrgbaU8::from(color))))
+                .map(|&color| <[f64; 4]>::from(lin_srgba_f64_from_srgba_u8(TySrgbaU8::from(color))))
                 .collect(),
         )
         .expect("byte-derived components are finite and the palette is non-empty"),
@@ -518,7 +519,7 @@ fn invalid(message: String) -> Error {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, from_mvox_bytes, from_mvox_file, lin_srgba_from_srgba_u8, to_mvox_bytes,
+        BASE_COLOR, from_mvox_bytes, from_mvox_file, lin_srgba_f64_from_srgba_u8, to_mvox_bytes,
         to_mvox_file,
     };
     use branded_id::U32Id;
@@ -543,7 +544,7 @@ mod tests {
 
     /// The linear-light components of a `#RRGGBBAA` hex string.
     fn linear_rgba(hex: &str) -> [f64; 4] {
-        lin_srgba_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
+        lin_srgba_f64_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
     }
 
     /// A file exercising every modeled chunk: two models, a custom palette, a

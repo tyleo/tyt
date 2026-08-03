@@ -1,4 +1,4 @@
-use crate::{srgba_u8_from_lin_srgba, value_pool_linear_color};
+use crate::{srgba_u8_from_lin_srgba_f64, value_pool_linear_color};
 use branded_id::U32Id;
 use ty_math::TyLinSrgbaF64;
 use voxcore::{BVoxValuePoolValue, VoxValuePool};
@@ -11,7 +11,7 @@ pub fn value_pool_color(
     value_id: U32Id<BVoxValuePoolValue>,
 ) -> Option<[u8; 4]> {
     let color = value_pool_linear_color(value_pool, value_id)?;
-    Some(<[u8; 4]>::from(srgba_u8_from_lin_srgba(
+    Some(<[u8; 4]>::from(srgba_u8_from_lin_srgba_f64(
         TyLinSrgbaF64::from(color),
     )))
 }
