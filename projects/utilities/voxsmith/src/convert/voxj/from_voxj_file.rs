@@ -146,10 +146,7 @@ mod tests {
         }
     }
 
-    /// A document exercising every field: a sparse object, a tight object
-    /// sampling one palette over two layers, a multi-property palette over
-    /// scalar value pools, a hierarchy with a non-identity transform, roots,
-    /// and a nested `ext`.
+    /// A document exercising every field.
     fn sample_file() -> VoxjFile {
         VoxjFile {
             version: 1,
@@ -165,7 +162,7 @@ mod tests {
                     ],
                     palettes: vec![
                         numbered_palette("baseColor", 0, 6),
-                        // Two properties over the bounded value pools, one row
+                        // Two properties over the scalar value pools, one row
                         // per material: material 0 = { metallic: 0.0,
                         // ior: 1.5 }, material 1 = { metallic: 0.5,
                         // ior: 2.0 }.
