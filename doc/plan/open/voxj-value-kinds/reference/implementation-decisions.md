@@ -194,3 +194,31 @@ components, which the deleted u8 encode used to clamp silently. Both
 glTF boundaries run the check itself: the export at the top of
 `build_material_document` and the import at the end of `voxelize_mesh`,
 the entry-side guarantee after the policy pass.
+
+## Iteration 8 rulings
+
+2026-08-03. The mesh channel classification promotes the name wholesale:
+the glTF vocabulary classifies a name it holds whatever shape a palette
+binds it to, and the bound shape classifies only custom keys, float
+vectors as colors (the component read asserting the color-ness the shape
+alone cannot), `float`, `int`, and `bool` as scalars, and every other
+shape a no-texel-value error. A vocabulary name bound to an
+off-vocabulary shape passes the pre-flight and errors in the bake, which
+reads by shape and names the mismatch.
+
+2026-08-03. `palette show` regains a `--type` flag; the V2 selector
+rework had dropped it because the value pool kind then said color, and
+the README's "`--type` already exists" describes the design-notes
+intent, not the landed CLI. One value, `color`, command-wide: it reads
+the selected custom `vec-3-float` and `vec-4-float` value pools as
+colors, and it never touches a glTF vocabulary name, so a wildcard
+selection stays usable under it.
+
+2026-08-03. The hex-versus-functional color display turns value-driven:
+a color value pool whose every component lies in `[0, 1]` displays as
+8-bit sRGB, hex wholes and byte components, and a pool with any
+component outside displays the exact stored linear values, `lrgba(...)`
+wholes and float components. The old display keyed the same split on the
+sRGB-versus-linear kind; scanning the values keeps both renderings,
+idiomatic files on hex and HDR files exact, where encoding
+unconditionally would clamp an HDR component into a lying `FF`.

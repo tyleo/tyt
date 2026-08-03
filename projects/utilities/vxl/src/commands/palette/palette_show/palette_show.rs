@@ -1,6 +1,9 @@
 use crate::{
     Dependencies, Error, Format, Result, Width,
-    commands::{PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PropertySelector},
+    commands::{
+        PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PaletteShowType,
+        PropertySelector,
+    },
 };
 use clap::Parser;
 use std::{
@@ -33,6 +36,12 @@ pub struct PaletteShow {
         action = clap::ArgAction::Append,
     )]
     property: Vec<String>,
+
+    /// Assert how the selected custom properties read, which their names alone
+    /// cannot say: `color` reads a custom `vec-3-float` or `vec-4-float` value
+    /// pool as a color. A glTF vocabulary name classifies by name.
+    #[arg(value_name = "type", long)]
+    r#type: Option<PaletteShowType>,
 
     /// How to arrange the collections, and the serialization to emit.
     #[arg(value_name = "layout", long, default_value = "rows")]
@@ -76,6 +85,7 @@ impl PaletteShow {
             &self.input,
             self.from,
             &selectors,
+            self.r#type,
             self.layout,
             self.label,
             self.header_level,

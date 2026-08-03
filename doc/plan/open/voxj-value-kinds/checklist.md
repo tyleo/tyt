@@ -342,14 +342,15 @@ Closes the red window.
 - [x] `mesh_object.rs`: the channel kind comes from the property name
       (promote the existing `GltfAttributeKind::of` fallback over the
       kind switch); a `string` or `json` value pool still errors.
-- [ ] `palette_show.rs`: `classify(property_name, value_pool)` keys on
+- [x] `palette_show.rs`: `classify(property_name, value_pool)` keys on
       the name per the glTF vocabulary; the sample, swatch, and alpha
       helpers follow; the swatch encodes linear to sRGB at display, alpha
       untouched; every idiomatic property renders exactly as it does
       today (color swatches with hex text and per-channel reads for
       `baseColor` and `emissiveColor`, grayscale swatches for the numeric
       properties); a custom key defaults to plain numbers, with `--type`
-      asserting color for it.
+      asserting color for it (the flag returns; V2 had dropped it, per
+      the decisions log).
 - [ ] Fixtures and inline expectations across `palette_show.rs`,
       `palette_list.rs`, `info.rs`, and `hierarchy_show.rs`.
 

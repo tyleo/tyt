@@ -2,7 +2,7 @@ use crate::{
     ColorComponent, Format, Result, Width,
     commands::{
         PaletteRef, PaletteShowFormat, PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape,
-        PropertyRef, PropertySelector,
+        PaletteShowType, PropertyRef, PropertySelector,
     },
     implementation,
 };
@@ -25,6 +25,7 @@ use voxcore::{
     BVoxValuePoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolKind,
     VoxValuePoolValueRef,
 };
+use voxsmith::GltfAttributeKind;
 
 /// Loads the voxel file at `input` and prints the value collections named by
 /// `selectors`, each a property's values down a palette, populated into a
@@ -35,6 +36,7 @@ pub fn palette_show(
     input: &Path,
     from: Option<Format>,
     selectors: &[PropertySelector],
+    r#type: Option<PaletteShowType>,
     layout: PaletteShowLayout,
     label: Option<PaletteShowLabel>,
     header_level: Option<NonZeroU8>,
@@ -42,7 +44,7 @@ pub fn palette_show(
     width: Width,
 ) -> Result<()> {
     let state = implementation::load_state(input, from)?;
-    let collections = resolve_collections(&state, selectors)?;
+    let collections = resolve_collections(&state, selectors, r#type)?;
     let grid = build_grid(collections);
     let output = render(&grid, layout, label, header_level, table_shape, width)?;
     implementation::write_stdout(output.as_bytes())
@@ -99,17 +101,19 @@ struct Collection {
     samples: Vec<TreeGridJsonValue>,
 }
 
-/// How a bound value pool's kind renders in `palette show`: a color, in sRGB or
-/// linear space and with three or four components; a plain number; or any other
-/// value shown as text with no swatch.
+/// How a property's values render in `palette show`: a color with three or
+/// four components; a plain number; or any other value shown as text with no
+/// swatch.
 #[derive(Clone, Copy)]
 enum Kind {
-    /// A color value pool: `srgb` distinguishes sRGB from linear space,
-    /// `components` is 3 or 4.
-    Color { srgb: bool, components: usize },
+    /// A float-vector value pool read as a color: `components` is 3 or 4, and
+    /// `fits_srgb8` says every component lies in `[0, 1]`, so the collection
+    /// displays as 8-bit sRGB; an HDR value pool displays exact linear
+    /// functional notation instead.
+    Color { components: usize, fits_srgb8: bool },
     /// A `float` or `int` value pool.
     Number,
-    /// A `bool`, `string`, or `json` value pool.
+    /// Any other value pool.
     Other,
 }
 
@@ -118,7 +122,11 @@ enum Kind {
 /// `*` palette or `*` property expands to one collection per match; a named
 /// palette or property that is absent is an error, while a `*` palette quietly
 /// skips a palette that lacks a named property.
-fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Result<Vec<Collection>> {
+fn resolve_collections(
+    state: &VoxMain,
+    selectors: &[PropertySelector],
+    r#type: Option<PaletteShowType>,
+) -> Result<Vec<Collection>> {
     let palettes: Vec<&VoxPalette> = state.iter_palettes().map(|(_, palette)| palette).collect();
     let mut collections = Vec::new();
     for selector in selectors {
@@ -130,6 +138,7 @@ fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Resul
                         palette_index,
                         palette,
                         &selector.property,
+                        r#type,
                         selector.format,
                         true,
                         &mut collections,
@@ -151,6 +160,7 @@ fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Resul
                     palette_index,
                     palette,
                     &selector.property,
+                    r#type,
                     selector.format,
                     false,
                     &mut collections,
@@ -164,11 +174,13 @@ fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Resul
 /// Expands one selector's property against one palette, pushing the resulting
 /// collections. A `palette_is_wild` palette, one from a `*`, skips a named
 /// property it lacks instead of erroring.
+#[allow(clippy::too_many_arguments)]
 fn expand_property(
     state: &VoxMain,
     palette_index: usize,
     palette: &VoxPalette,
     property: &PropertyRef,
+    r#type: Option<PaletteShowType>,
     format: PaletteShowFormat,
     palette_is_wild: bool,
     collections: &mut Vec<Collection>,
@@ -182,6 +194,7 @@ fn expand_property(
                     palette,
                     name,
                     None,
+                    r#type,
                     format,
                 )?);
             }
@@ -206,6 +219,7 @@ fn expand_property(
                 palette,
                 key,
                 *component,
+                r#type,
                 format,
             )?);
         }
@@ -213,8 +227,8 @@ fn expand_property(
     Ok(())
 }
 
-/// Builds one collection from a present property: classifies the bound
-/// value pool by kind, rejects a color component on a non-color and `.a` on a
+/// Builds one collection from a present property: classifies it by name and
+/// bound shape, rejects a color component on a non-color and `.a` on a
 /// three-component color, then samples the property's values.
 fn build_collection(
     state: &VoxMain,
@@ -222,6 +236,7 @@ fn build_collection(
     palette: &VoxPalette,
     key: &str,
     component: Option<ColorComponent>,
+    r#type: Option<PaletteShowType>,
     format: PaletteShowFormat,
 ) -> Result<Collection> {
     let property_id = palette
@@ -234,7 +249,7 @@ fn build_collection(
     let value_pool = state
         .value_pool(value_pool_id)
         .expect("a property references a value pool the state holds");
-    let kind = classify(value_pool);
+    let kind = classify(key, value_pool, r#type);
 
     // A color component names one channel: it applies only to a color, and `.a`
     // only to a four-component color.
@@ -285,34 +300,55 @@ fn build_collection(
     })
 }
 
-/// How a value pool's kind renders: a color with its space and component count,
-/// a number, or any other value.
-fn classify(value_pool: &VoxValuePool) -> Kind {
+/// How the property `key`'s values render. No value pool kind says color: the
+/// glTF vocabulary says it for a name it holds, and `--type color` says it for
+/// a custom key, whose float vector is otherwise a color or a normal with
+/// nothing to tell them apart. The bound shape supplies the component count.
+fn classify(key: &str, value_pool: &VoxValuePool, r#type: Option<PaletteShowType>) -> Kind {
+    let color = match GltfAttributeKind::of(key) {
+        Some(GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba) => true,
+        Some(GltfAttributeKind::Scalar) => false,
+        None => matches!(r#type, Some(PaletteShowType::Color)),
+    };
     match value_pool.kind() {
-        VoxValuePoolKind::Srgb { .. } => Kind::Color {
-            srgb: true,
+        VoxValuePoolKind::Vec3Float(_) if color => Kind::Color {
             components: 3,
+            fits_srgb8: fits_srgb8(value_pool),
         },
-        VoxValuePoolKind::Srgba { .. } => Kind::Color {
-            srgb: true,
+        VoxValuePoolKind::Vec4Float(_) if color => Kind::Color {
             components: 4,
+            fits_srgb8: fits_srgb8(value_pool),
         },
-        VoxValuePoolKind::LinearRgb { .. } => Kind::Color {
-            srgb: false,
-            components: 3,
-        },
-        VoxValuePoolKind::LinearRgba { .. } => Kind::Color {
-            srgb: false,
-            components: 4,
-        },
-        VoxValuePoolKind::Float { .. } | VoxValuePoolKind::Int { .. } => Kind::Number,
-        VoxValuePoolKind::Bool { .. }
-        | VoxValuePoolKind::String { .. }
-        | VoxValuePoolKind::Json { .. } => Kind::Other,
+        VoxValuePoolKind::Float(_) | VoxValuePoolKind::Int(_) => Kind::Number,
+        VoxValuePoolKind::Bool(_)
+        | VoxValuePoolKind::Json(_)
+        | VoxValuePoolKind::String(_)
+        | VoxValuePoolKind::Vec2Float(_)
+        | VoxValuePoolKind::Vec2Int(_)
+        | VoxValuePoolKind::Vec3Float(_)
+        | VoxValuePoolKind::Vec3Int(_)
+        | VoxValuePoolKind::Vec4Float(_)
+        | VoxValuePoolKind::Vec4Int(_) => Kind::Other,
     }
 }
 
-/// The sample for the value at `value_id` under its value pool `kind` and an
+/// Whether every component of every color in the value pool lies in `[0, 1]`,
+/// so the collection displays as 8-bit sRGB; an HDR value pool displays exact
+/// linear functional notation instead, which no hex can hold.
+fn fits_srgb8(value_pool: &VoxValuePool) -> bool {
+    value_pool.iter_values().all(|(_, value)| match value {
+        VoxValuePoolValueRef::Vec3Float(color) => color
+            .iter()
+            .all(|component| (0.0..=1.0).contains(component)),
+        VoxValuePoolValueRef::Vec4Float(color) => color
+            .iter()
+            .all(|component| (0.0..=1.0).contains(component)),
+        // classify() reads only float vectors as colors.
+        _ => false,
+    })
+}
+
+/// The sample for the value at `value_id` under its property's `kind` and an
 /// optional color `component`.
 fn sample(
     value_pool: &VoxValuePool,
@@ -321,37 +357,41 @@ fn sample(
     component: Option<ColorComponent>,
 ) -> TreeGridJsonValue {
     match kind {
-        Kind::Color { srgb, .. } => sample_color(value_pool, value_id, srgb, component),
+        Kind::Color {
+            components,
+            fits_srgb8,
+        } => sample_color(value_pool, value_id, components, fits_srgb8, component),
         Kind::Number => sample_number(value_pool, value_id),
         Kind::Other => sample_other(value_pool, value_id),
     }
 }
 
-/// The sample for a color value:
+/// The sample for a stored linear color:
 ///
-/// 1. A whole sRGB color: hex with a color swatch.
-/// 2. A whole linear color: `lrgb(...)` / `lrgba(...)` functional notation
+/// 1. A whole color in `[0, 1]`: sRGB hex with a color swatch.
+/// 2. A whole HDR color: exact `lrgb(...)` / `lrgba(...)` functional notation
 ///    with a color swatch.
-/// 3. One `component` channel: a byte (sRGB) or float (linear) with a
-///    grayscale swatch.
+/// 3. One `component` channel: an sRGB byte (in `[0, 1]`) or a linear float
+///    (HDR) with a grayscale swatch.
 fn sample_color(
     value_pool: &VoxValuePool,
     value_id: U32Id<BVoxValuePoolValue>,
-    srgb: bool,
+    components: usize,
+    fits_srgb8: bool,
     component: Option<ColorComponent>,
 ) -> TreeGridJsonValue {
     let bytes = color_bytes(value_pool, value_id);
     match component {
         Some(component) => {
             let channel_index = component_index(component);
-            if srgb {
+            if fits_srgb8 {
                 TreeGridJsonValue::unorm8(bytes[channel_index])
             } else {
                 TreeGridJsonValue::unorm(color_floats(value_pool, value_id)[channel_index])
             }
         }
-        None if srgb => {
-            if alpha_component(value_pool) {
+        None if fits_srgb8 => {
+            if components == 4 {
                 TreeGridJsonValue::srgba8(bytes)
             } else {
                 TreeGridJsonValue::srgb8([bytes[0], bytes[1], bytes[2]])
@@ -359,7 +399,7 @@ fn sample_color(
         }
         None => {
             let floats = color_floats(value_pool, value_id);
-            if alpha_component(value_pool) {
+            if components == 4 {
                 TreeGridJsonValue::lin_rgba(TyLinSrgbaF64::new(
                     floats[0], floats[1], floats[2], floats[3],
                 ))
@@ -386,8 +426,9 @@ fn sample_number(
     TreeGridJsonValue::unorm(value)
 }
 
-/// The sample for a `bool`, `string`, or `json` value: its text and native JSON
-/// with no swatch.
+/// The sample for any other value: its text and native JSON with no swatch. A
+/// float vector no name or `--type` reads as a color and an int vector render
+/// as their number arrays.
 fn sample_other(
     value_pool: &VoxValuePool,
     value_id: U32Id<BVoxValuePoolValue>,
@@ -398,57 +439,62 @@ fn sample_other(
         Some(VoxValuePoolValueRef::Json(value)) => {
             TreeGridJsonValue::json(vox_value_to_json(value))
         }
-        // classify() routes only Bool, String, and Json here, and a validated
-        // document draws only retained values.
+        Some(VoxValuePoolValueRef::Vec2Float(vector)) => float_array_json(vector),
+        Some(VoxValuePoolValueRef::Vec3Float(vector)) => float_array_json(vector),
+        Some(VoxValuePoolValueRef::Vec4Float(vector)) => float_array_json(vector),
+        Some(VoxValuePoolValueRef::Vec2Int(vector)) => int_array_json(vector),
+        Some(VoxValuePoolValueRef::Vec3Int(vector)) => int_array_json(vector),
+        Some(VoxValuePoolValueRef::Vec4Int(vector)) => int_array_json(vector),
+        // classify() routes float and int to Number, and a validated document
+        // draws only retained values.
         _ => TreeGridJsonValue::json(Value::Null),
     }
 }
 
-/// The sRGB `[r, g, b, a]` bytes for the color at `value_id`, mirroring the
-/// shared value pool color decode: sRGB components map straight to bytes,
-/// linear components re-encode to sRGB, and a three-component color takes
-/// opaque alpha.
+/// A float vector as a JSON array, each component spelled as a number.
+fn float_array_json(vector: &[f64]) -> TreeGridJsonValue {
+    TreeGridJsonValue::json(Value::Array(
+        vector
+            .iter()
+            .map(|&component| number_json(component))
+            .collect(),
+    ))
+}
+
+/// An int vector as a JSON array.
+fn int_array_json(vector: &[i64]) -> TreeGridJsonValue {
+    TreeGridJsonValue::json(Value::Array(
+        vector.iter().map(|&component| json!(component)).collect(),
+    ))
+}
+
+/// The `[r, g, b, a]` bytes for the stored linear color at `value_id`, encoded
+/// to sRGB at display; the alpha only quantizes, and a three-component color
+/// takes opaque alpha.
 fn color_bytes(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> [u8; 4] {
     match value_pool.value(value_id) {
-        Some(VoxValuePoolValueRef::Srgb(&[r, g, b])) => {
-            <[u8; 4]>::from(TySrgbaF64::new(r, g, b, 1.0).into_format::<u8, u8>())
-        }
-        Some(VoxValuePoolValueRef::Srgba(&[r, g, b, a])) => {
-            <[u8; 4]>::from(TySrgbaF64::new(r, g, b, a).into_format::<u8, u8>())
-        }
-        Some(VoxValuePoolValueRef::LinearRgb(&[r, g, b])) => <[u8; 4]>::from(
+        Some(VoxValuePoolValueRef::Vec3Float(&[r, g, b])) => <[u8; 4]>::from(
             TySrgbaF64::from_linear(TyLinSrgbaF64::new(r, g, b, 1.0)).into_format::<u8, u8>(),
         ),
-        Some(VoxValuePoolValueRef::LinearRgba(&[r, g, b, a])) => <[u8; 4]>::from(
+        Some(VoxValuePoolValueRef::Vec4Float(&[r, g, b, a])) => <[u8; 4]>::from(
             TySrgbaF64::from_linear(TyLinSrgbaF64::new(r, g, b, a)).into_format::<u8, u8>(),
         ),
-        // classify() routes only color kinds here, and a validated document
-        // draws only retained values.
+        // classify() reads only float vectors as colors, and a validated
+        // document draws only retained values.
         _ => [0, 0, 0, 0],
     }
 }
 
-/// The natural-range float components of the color at `value_id`, three or
-/// four long by kind.
+/// The stored linear float components of the color at `value_id`, three or
+/// four long by shape.
 fn color_floats(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> Vec<f64> {
     match value_pool.value(value_id) {
-        Some(VoxValuePoolValueRef::Srgb(color)) | Some(VoxValuePoolValueRef::LinearRgb(color)) => {
-            color.to_vec()
-        }
-        Some(VoxValuePoolValueRef::Srgba(color))
-        | Some(VoxValuePoolValueRef::LinearRgba(color)) => color.to_vec(),
-        // classify() routes only color kinds here, and a validated document
-        // draws only retained values.
+        Some(VoxValuePoolValueRef::Vec3Float(color)) => color.to_vec(),
+        Some(VoxValuePoolValueRef::Vec4Float(color)) => color.to_vec(),
+        // classify() reads only float vectors as colors, and a validated
+        // document draws only retained values.
         _ => Vec::new(),
     }
-}
-
-/// Whether a color value pool carries an alpha component.
-fn alpha_component(value_pool: &VoxValuePool) -> bool {
-    matches!(
-        value_pool.kind(),
-        VoxValuePoolKind::Srgba { .. } | VoxValuePoolKind::LinearRgba { .. }
-    )
 }
 
 /// The `0..3` index of a color component into an `[r, g, b, a]` array.
@@ -631,37 +677,37 @@ fn resolve_options<T>(resolved: StdResult<T, TreeGridError>) -> Result<T> {
 mod tests {
     use crate::{
         Width,
-        commands::{PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PropertySelector},
+        commands::{
+            PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PaletteShowType,
+            PropertySelector,
+        },
         implementation::palette_show::{build_grid, render, resolve_collections},
     };
     use branded_id::U32Id;
     use serde_json::Value;
     use std::num::NonZeroU8;
     use treegrid::{TreeGrid, TreeGridJsonValueCells};
-    use voxcore::{
-        BVoxValuePool, BVoxValuePoolValue, VoxBound, VoxMain, VoxPalette, VoxValue, VoxValuePool,
-    };
+    use ty_math::TySrgbaU8;
+    use voxcore::{BVoxValuePool, BVoxValuePoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool};
 
     /// The branded value id `index`.
     fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
     }
 
-    /// An `Srgba` value pool of the given 8-bit colors, each byte divided by
-    /// 255, the way the converters store colors.
-    fn srgba_value_pool(state: &mut VoxMain, colors: &[[u8; 4]]) -> U32Id<BVoxValuePool> {
+    /// A `vec-4-float` value pool of the given 8-bit sRGB colors, each decoded
+    /// to linear light, the way the importers store colors.
+    fn lin_srgba_f64_value_pool(state: &mut VoxMain, colors: &[[u8; 4]]) -> U32Id<BVoxValuePool> {
         let values = colors
             .iter()
-            .map(|color| {
-                [
-                    color[0] as f64 / 255.0,
-                    color[1] as f64 / 255.0,
-                    color[2] as f64 / 255.0,
-                    color[3] as f64 / 255.0,
-                ]
+            .map(|&[red, green, blue, alpha]| {
+                let linear = TySrgbaU8::new(red, green, blue, alpha)
+                    .into_format::<f64, f64>()
+                    .into_linear();
+                [linear.red, linear.green, linear.blue, linear.alpha]
             })
             .collect();
-        state.add_value_pool(VoxValuePool::srgba(values).unwrap())
+        state.add_value_pool(VoxValuePool::vec_4_float(values).unwrap())
     }
 
     /// A document with two palettes: palette 0 has `baseColor` and
@@ -671,12 +717,10 @@ mod tests {
         let mut state = VoxMain::default();
 
         let colors_zero_value_pool_id =
-            srgba_value_pool(&mut state, &[[255, 0, 0, 255], [0, 255, 0, 128]]);
-        let metallic_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![1.0, 0.2])
-                .unwrap(),
-        );
-        let colors_one_value_pool_id = srgba_value_pool(&mut state, &[[0, 0, 255, 255]]);
+            lin_srgba_f64_value_pool(&mut state, &[[255, 0, 0, 255], [0, 255, 0, 128]]);
+        let metallic_value_pool_id =
+            state.add_value_pool(VoxValuePool::float(vec![1.0, 0.2]).unwrap());
+        let colors_one_value_pool_id = lin_srgba_f64_value_pool(&mut state, &[[0, 0, 255, 255]]);
 
         let mut first = VoxPalette::default();
         first
@@ -720,12 +764,13 @@ mod tests {
             .collect()
     }
 
-    /// The populated grid for the selectors, resolved against `state`.
+    /// The populated grid for the selectors, resolved against `state` with no
+    /// asserted type.
     fn grid_for(
         state: &VoxMain,
         fields: &[(&str, &str, &str)],
     ) -> TreeGrid<TreeGridJsonValueCells> {
-        build_grid(resolve_collections(state, &selectors(fields)).unwrap())
+        build_grid(resolve_collections(state, &selectors(fields), None).unwrap())
     }
 
     /// Renders the selectors under `layout` with default label options and no
@@ -866,7 +911,7 @@ mod tests {
     fn default_selector_shows_every_palette_and_property() {
         let state = sample_state();
         let collections =
-            resolve_collections(&state, &[PropertySelector::default_all_auto()]).unwrap();
+            resolve_collections(&state, &[PropertySelector::default_all_auto()], None).unwrap();
         let output = render(
             &build_grid(collections),
             PaletteShowLayout::Rows,
@@ -1148,7 +1193,8 @@ mod tests {
     #[test]
     fn star_property_expands_to_every_property() {
         let state = sample_state();
-        let collections = resolve_collections(&state, &selectors(&[("0", "*", "value")])).unwrap();
+        let collections =
+            resolve_collections(&state, &selectors(&[("0", "*", "value")]), None).unwrap();
         let keys: Vec<&str> = collections.iter().map(|c| c.key.as_str()).collect();
         assert_eq!(keys, ["baseColor", "metallic"]);
     }
@@ -1158,7 +1204,7 @@ mod tests {
         let state = sample_state();
         // Only palette 0 has `metallic`; palette 1 is skipped, not an error.
         let collections =
-            resolve_collections(&state, &selectors(&[("*", "metallic", "value")])).unwrap();
+            resolve_collections(&state, &selectors(&[("*", "metallic", "value")]), None).unwrap();
         let labels: Vec<(usize, &str)> = collections
             .iter()
             .map(|c| (c.palette_index, c.key.as_str()))
@@ -1169,19 +1215,25 @@ mod tests {
     #[test]
     fn named_palette_out_of_range_is_an_error() {
         let state = sample_state();
-        assert!(resolve_collections(&state, &selectors(&[("5", "baseColor", "value")])).is_err());
+        assert!(
+            resolve_collections(&state, &selectors(&[("5", "baseColor", "value")]), None).is_err()
+        );
     }
 
     #[test]
     fn named_property_absent_on_a_named_palette_is_an_error() {
         let state = sample_state();
-        assert!(resolve_collections(&state, &selectors(&[("0", "missing", "value")])).is_err());
+        assert!(
+            resolve_collections(&state, &selectors(&[("0", "missing", "value")]), None).is_err()
+        );
     }
 
     #[test]
     fn a_component_on_a_scalar_is_an_error() {
         let state = sample_state();
-        assert!(resolve_collections(&state, &selectors(&[("0", "metallic.r", "value")])).is_err());
+        assert!(
+            resolve_collections(&state, &selectors(&[("0", "metallic.r", "value")]), None).is_err()
+        );
     }
 
     #[test]
@@ -1201,15 +1253,19 @@ mod tests {
         assert_eq!(component, "0.\"baseColor\".r 255 0\n");
     }
 
-    /// One palette binding `tint` to a three-component `Srgb` value pool
-    /// holding a red.
+    /// One palette binding `emissiveColor`, three components per the glTF
+    /// vocabulary, to a `vec-3-float` value pool holding a red.
     fn three_component_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let tint_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgb(vec![[1.0, 0.0, 0.0]]).unwrap());
+        let emissive_value_pool_id =
+            state.add_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
+            .add_property(
+                "emissiveColor".to_owned(),
+                emissive_value_pool_id,
+                U32Id::from_u32(0),
+            )
             .unwrap();
         palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
@@ -1219,27 +1275,42 @@ mod tests {
     #[test]
     fn a_three_component_color_renders_hex_without_alpha() {
         let state = three_component_state();
-        let output = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Rows);
+        let output = show(
+            &state,
+            &[("0", "emissiveColor", "value")],
+            PaletteShowLayout::Rows,
+        );
         // Six hex digits, no alpha pair.
-        assert_eq!(output, "0.\"tint\" #FF0000\n");
+        assert_eq!(output, "0.\"emissiveColor\" #FF0000\n");
     }
 
     #[test]
     fn a_three_component_color_has_no_alpha_component() {
         let state = three_component_state();
         // `.a` is out of range on a three-component color, but `.r` reads.
-        assert!(resolve_collections(&state, &selectors(&[("0", "tint.a", "value")])).is_err());
-        let red = show(&state, &[("0", "tint.r", "value")], PaletteShowLayout::Rows);
-        assert_eq!(red, "0.\"tint\".r 255\n");
+        assert!(
+            resolve_collections(
+                &state,
+                &selectors(&[("0", "emissiveColor.a", "value")]),
+                None
+            )
+            .is_err()
+        );
+        let red = show(
+            &state,
+            &[("0", "emissiveColor.r", "value")],
+            PaletteShowLayout::Rows,
+        );
+        assert_eq!(red, "0.\"emissiveColor\".r 255\n");
     }
 
     #[test]
-    fn a_linear_color_renders_functional_notation() {
+    fn an_hdr_color_renders_functional_notation() {
         let mut state = VoxMain::default();
-        // A linear value pool carries HDR components above 1 that no hex can
-        // hold.
+        // A component above 1 has no hex spelling, so the exact stored linear
+        // values render functional.
         let emissive_value_pool_id =
-            state.add_value_pool(VoxValuePool::linear_rgba(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property(
@@ -1259,12 +1330,85 @@ mod tests {
         assert_eq!(output, "0.\"emissiveColor\" lrgba(2, 1, 0.5, 1)\n");
     }
 
+    /// One palette binding the custom `tint` to a `vec-3-float` value pool
+    /// holding a red, which no name classifies.
+    fn custom_vector_state() -> VoxMain {
+        let mut state = VoxMain::default();
+        let tint_value_pool_id =
+            state.add_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
+            .unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
+        state.add_palette(palette).unwrap();
+        state
+    }
+
+    #[test]
+    fn a_custom_float_vector_defaults_to_plain_numbers() {
+        let state = custom_vector_state();
+        // A custom vec-3-float is a color or a normal, and nothing says which,
+        // so it renders its numbers and carries no color component.
+        let output = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Rows);
+        assert_eq!(output, "0.\"tint\" [1,0,0]\n");
+        assert!(
+            resolve_collections(&state, &selectors(&[("0", "tint.r", "value")]), None).is_err()
+        );
+    }
+
+    #[test]
+    fn type_color_asserts_color_for_a_custom_key() {
+        let state = custom_vector_state();
+        let collections = resolve_collections(
+            &state,
+            &selectors(&[("0", "tint", "value"), ("0", "tint.r", "value")]),
+            Some(PaletteShowType::Color),
+        )
+        .unwrap();
+        let output = render(
+            &build_grid(collections),
+            PaletteShowLayout::Rows,
+            None,
+            None,
+            None,
+            Width::Unlimited,
+        )
+        .unwrap();
+        assert_eq!(
+            output,
+            "0.\"tint\"   #FF0000\n\
+             \n\
+             0.\"tint\".r 255\n"
+        );
+    }
+
+    #[test]
+    fn type_color_never_reclassifies_a_vocabulary_name() {
+        let state = sample_state();
+        // `metallic` is a scalar by name, so the assertion does not touch it.
+        let collections = resolve_collections(
+            &state,
+            &selectors(&[("0", "metallic", "value")]),
+            Some(PaletteShowType::Color),
+        )
+        .unwrap();
+        let output = render(
+            &build_grid(collections),
+            PaletteShowLayout::Rows,
+            None,
+            None,
+            None,
+            Width::Unlimited,
+        )
+        .unwrap();
+        assert_eq!(output, "0.\"metallic\" 1 0.2\n");
+    }
+
     #[test]
     fn an_int_value_pool_renders_integers() {
         let mut state = VoxMain::default();
-        let count_value_pool_id = state.add_value_pool(
-            VoxValuePool::int(VoxBound::Number(0.0), VoxBound::None, vec![3, 7]).unwrap(),
-        );
+        let count_value_pool_id = state.add_value_pool(VoxValuePool::int(vec![3, 7]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property("count".to_owned(), count_value_pool_id, U32Id::from_u32(0))
@@ -1341,9 +1485,7 @@ mod tests {
         // Both material rows draw the strength value pool's one value, so the
         // column shows it twice.
         let mut state = VoxMain::default();
-        let strengths_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![2.0]).unwrap(),
-        );
+        let strengths_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property(
