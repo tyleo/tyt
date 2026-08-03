@@ -1,61 +1,19 @@
+#[cfg(feature = "color")]
+mod color;
 mod ty_bounds;
 mod ty_bounds_f32;
 mod ty_bounds_f64;
-#[cfg(feature = "color")]
-mod ty_cielab_color;
-#[cfg(feature = "color")]
-mod ty_cielab_color_f32;
-#[cfg(feature = "color")]
-mod ty_cielab_color_f64;
-#[cfg(feature = "color")]
-mod ty_color_to_vector3;
 mod ty_float_ext;
-#[cfg(feature = "color")]
-mod ty_hex_color;
-#[cfg(feature = "color")]
-mod ty_lin_srgb;
-#[cfg(feature = "color")]
-mod ty_lin_srgb_f32;
-#[cfg(feature = "color")]
-mod ty_lin_srgb_f64;
-#[cfg(feature = "color")]
-mod ty_lin_srgba;
-#[cfg(feature = "color")]
-mod ty_lin_srgba_f32;
-#[cfg(feature = "color")]
-mod ty_lin_srgba_f64;
 mod ty_matrix4x4;
 mod ty_matrix4x4_ext;
 mod ty_matrix4x4_f32;
 mod ty_matrix4x4_f64;
-#[cfg(feature = "color")]
-mod ty_oklab_color;
-#[cfg(feature = "color")]
-mod ty_oklab_color_f32;
-#[cfg(feature = "color")]
-mod ty_oklab_color_f64;
 mod ty_pose;
 mod ty_pose_f64;
 mod ty_quaternion;
 mod ty_quaternion_ext;
 mod ty_quaternion_f32;
 mod ty_quaternion_f64;
-#[cfg(feature = "color")]
-mod ty_srgb;
-#[cfg(feature = "color")]
-mod ty_srgb_f32;
-#[cfg(feature = "color")]
-mod ty_srgb_f64;
-#[cfg(feature = "color")]
-mod ty_srgb_u8;
-#[cfg(feature = "color")]
-mod ty_srgba;
-#[cfg(feature = "color")]
-mod ty_srgba_f32;
-#[cfg(feature = "color")]
-mod ty_srgba_f64;
-#[cfg(feature = "color")]
-mod ty_srgba_u8;
 mod ty_transform;
 mod ty_transform_f64;
 mod ty_uniform_trs;
@@ -76,64 +34,22 @@ mod ty_vector4_f64;
 mod unit_rotation_tolerance;
 mod zero_length_tolerance;
 
+#[cfg(feature = "color")]
+pub use color::*;
 pub use ty_bounds::*;
 pub use ty_bounds_f32::*;
 pub use ty_bounds_f64::*;
-#[cfg(feature = "color")]
-pub use ty_cielab_color::*;
-#[cfg(feature = "color")]
-pub use ty_cielab_color_f32::*;
-#[cfg(feature = "color")]
-pub use ty_cielab_color_f64::*;
-#[cfg(feature = "color")]
-pub use ty_color_to_vector3::*;
 pub use ty_float_ext::*;
-#[cfg(feature = "color")]
-pub use ty_hex_color::*;
-#[cfg(feature = "color")]
-pub use ty_lin_srgb::*;
-#[cfg(feature = "color")]
-pub use ty_lin_srgb_f32::*;
-#[cfg(feature = "color")]
-pub use ty_lin_srgb_f64::*;
-#[cfg(feature = "color")]
-pub use ty_lin_srgba::*;
-#[cfg(feature = "color")]
-pub use ty_lin_srgba_f32::*;
-#[cfg(feature = "color")]
-pub use ty_lin_srgba_f64::*;
 pub use ty_matrix4x4::*;
 pub use ty_matrix4x4_ext::*;
 pub use ty_matrix4x4_f32::*;
 pub use ty_matrix4x4_f64::*;
-#[cfg(feature = "color")]
-pub use ty_oklab_color::*;
-#[cfg(feature = "color")]
-pub use ty_oklab_color_f32::*;
-#[cfg(feature = "color")]
-pub use ty_oklab_color_f64::*;
 pub use ty_pose::*;
 pub use ty_pose_f64::*;
 pub use ty_quaternion::*;
 pub use ty_quaternion_ext::*;
 pub use ty_quaternion_f32::*;
 pub use ty_quaternion_f64::*;
-#[cfg(feature = "color")]
-pub use ty_srgb::*;
-#[cfg(feature = "color")]
-pub use ty_srgb_f32::*;
-#[cfg(feature = "color")]
-pub use ty_srgb_f64::*;
-#[cfg(feature = "color")]
-pub use ty_srgb_u8::*;
-#[cfg(feature = "color")]
-pub use ty_srgba::*;
-#[cfg(feature = "color")]
-pub use ty_srgba_f32::*;
-#[cfg(feature = "color")]
-pub use ty_srgba_f64::*;
-#[cfg(feature = "color")]
-pub use ty_srgba_u8::*;
 pub use ty_transform::*;
 pub use ty_transform_f64::*;
 pub use ty_uniform_trs::*;
@@ -153,8 +69,3 @@ pub use ty_vector4_f32::*;
 pub use ty_vector4_f64::*;
 pub use unit_rotation_tolerance::*;
 pub use zero_length_tolerance::*;
-
-// palette is an implementation detail of the color aliases; re-export the
-// conversion traits and the Lab white point so consumers never name `palette`.
-#[cfg(feature = "color")]
-pub use palette::{FromColor, IntoColor, white_point::D65};
