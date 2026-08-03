@@ -1,7 +1,7 @@
 use crate::{
     Dependencies, Error, MeshFormat, NoneOr, Result, Rgba, VoxjEncodingOptions,
     commands::{
-        FillMode, GridResolutionOptions, MaterialMode, OutOfRangeFactor, QuantizeOptions,
+        FillMode, GridResolutionOptions, MaterialMode, OutOfRangeProperty, QuantizeOptions,
         SurfaceMode,
     },
 };
@@ -55,11 +55,11 @@ pub struct Voxelize {
     #[arg(value_name = "name", long)]
     name: Option<String>,
 
-    /// What a source material factor outside its glTF range does, such as a
-    /// `metallic` above `1`. `error` names the factor and refuses the
-    /// mesh. `clamp` clamps into the range and voxelizes on.
-    #[arg(value_name = "out-of-range-factor", long, default_value = "error")]
-    out_of_range_factor: OutOfRangeFactor,
+    /// What a source material value outside its property's glTF range does,
+    /// such as a `metallic` above `1`. `error` names the property and refuses
+    /// the mesh. `clamp` clamps onto the range and voxelizes on.
+    #[arg(value_name = "out-of-range-property", long, default_value = "error")]
+    out_of_range_property: OutOfRangeProperty,
 
     #[command(flatten)]
     quantize_options: QuantizeOptions,
@@ -95,7 +95,7 @@ impl Voxelize {
             reduction,
             encoding,
             format,
-            self.out_of_range_factor,
+            self.out_of_range_property,
         )
     }
 

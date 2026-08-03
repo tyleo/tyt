@@ -335,7 +335,7 @@ Closes the red window.
       the plumbing through `dependencies.rs`, `dependencies_impl.rs`,
       `to_voxj.rs`, `voxelize.rs`, and `write_voxj_document.rs`. The vmax
       `--color-format` stays.
-- [ ] Rename the voxelize `--out-of-range-factor` flag, its
+- [x] Rename the voxelize `--out-of-range-factor` flag, its
       `out_of_range_factor.rs` file, and its help prose to the property
       vocabulary, following voxsmith's `OutOfRangeProperty` (owner
       ruling, 2026-08-03, in the decisions log).

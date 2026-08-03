@@ -1,7 +1,7 @@
 use crate::{
     MeshFormat, Result, VoxjEncoding, VoxjFormat,
     commands::{
-        ColorSpace, Dither, FillMode, GridResolution, MaterialMode, OutOfRangeFactor,
+        ColorSpace, Dither, FillMode, GridResolution, MaterialMode, OutOfRangeProperty,
         PaletteReduction, QuantizeMethod, ResolutionAxis, SurfaceMode,
     },
     implementation,
@@ -12,7 +12,7 @@ use voxcore::VoxMain;
 use voxsmith::{
     ColorSpace as VoxsmithColorSpace, Dither as VoxsmithDither, EditStateMode,
     FillMode as VoxsmithFillMode, MaterialMode as VoxsmithMaterialMode,
-    OutOfRangeFactor as VoxsmithOutOfRangeFactor, ReductionMethod as VoxsmithReductionMethod,
+    OutOfRangeProperty as VoxsmithOutOfRangeProperty, ReductionMethod as VoxsmithReductionMethod,
     SurfaceMode as VoxsmithSurfaceMode, from_gltf_bytes, order_palette_colors, reduce_palette,
     voxelize_mesh,
 };
@@ -36,7 +36,7 @@ pub fn voxelize(
     reduction: PaletteReduction,
     encoding: VoxjEncoding,
     format: VoxjFormat,
-    out_of_range_factor: OutOfRangeFactor,
+    out_of_range_property: OutOfRangeProperty,
 ) -> Result<()> {
     let bytes = fs::read(input)?;
 
@@ -62,7 +62,7 @@ pub fn voxelize(
         node_scale,
         name,
         stem,
-        out_of_range_mode(out_of_range_factor),
+        out_of_range_mode(out_of_range_property),
     )?;
 
     reduce_generated_palette(&mut state, reduction)?;
@@ -183,11 +183,11 @@ fn material_mode_mode(material_mode: MaterialMode) -> VoxsmithMaterialMode {
     }
 }
 
-/// Maps a CLI out-of-range choice to the voxsmith out-of-range factor mode.
-fn out_of_range_mode(out_of_range_factor: OutOfRangeFactor) -> VoxsmithOutOfRangeFactor {
-    match out_of_range_factor {
-        OutOfRangeFactor::Error => VoxsmithOutOfRangeFactor::Error,
-        OutOfRangeFactor::Clamp => VoxsmithOutOfRangeFactor::Clamp,
+/// Maps a CLI out-of-range choice to the voxsmith out-of-range property mode.
+fn out_of_range_mode(out_of_range_property: OutOfRangeProperty) -> VoxsmithOutOfRangeProperty {
+    match out_of_range_property {
+        OutOfRangeProperty::Error => VoxsmithOutOfRangeProperty::Error,
+        OutOfRangeProperty::Clamp => VoxsmithOutOfRangeProperty::Clamp,
     }
 }
 

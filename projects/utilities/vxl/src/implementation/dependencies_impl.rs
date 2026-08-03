@@ -2,7 +2,7 @@ use crate::{
     Dependencies, Format, MeshFormat, Result, SelectIndex, VoxjEncoding, VoxjFormat, Width,
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
-        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeFactor,
+        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeProperty,
         PaletteListFields, PaletteListLayout, PaletteReduction, PaletteShowLabel,
         PaletteShowLayout, PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage,
         SurfaceMode, TextureShape, ValidateLayout,
@@ -67,7 +67,7 @@ impl Dependencies for DependenciesImpl {
         reduction: PaletteReduction,
         encoding: VoxjEncoding,
         format: VoxjFormat,
-        out_of_range_factor: OutOfRangeFactor,
+        out_of_range_property: OutOfRangeProperty,
     ) -> Result<()> {
         implementation::voxelize(
             input,
@@ -82,7 +82,7 @@ impl Dependencies for DependenciesImpl {
             reduction,
             encoding,
             format,
-            out_of_range_factor,
+            out_of_range_property,
         )
     }
 
