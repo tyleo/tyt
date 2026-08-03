@@ -460,7 +460,7 @@ fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
 mod tests {
     use crate::{
         BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC, MaterialMode,
-        OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS, Result, SurfaceMode, TRANSMISSION,
+        OCCLUSION_STRENGTH, OutOfRangeProperty, ROUGHNESS, Result, SurfaceMode, TRANSMISSION,
         from_gltf_bytes, srgba_u8_from_lin_srgba, voxelize_mesh,
     };
     use branded_id::U32Id;
@@ -698,7 +698,7 @@ mod tests {
             node_scale,
             name,
             fallback_name,
-            OutOfRangeFactor::Error,
+            OutOfRangeProperty::Error,
         )
     }
 

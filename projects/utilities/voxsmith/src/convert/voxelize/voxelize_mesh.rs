@@ -1,6 +1,6 @@
 use crate::{
     BASE_COLOR, COLOR_RANGE, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, FillMode, GltfRange, IOR,
-    METALLIC, MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS,
+    METALLIC, MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeProperty, ROUGHNESS,
     Result, SurfaceMode, TRANSMISSION, VoxelGrid, check_gltf_attribute_ranges,
     lin_srgba_from_srgba_u8, sample_material, scalar_range, voxelize_triangles,
 };
@@ -39,8 +39,8 @@ const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 /// * `node_scale` - the placing node's uniform scale.
 /// * `name` - object-name override; `None` uses the mesh's own name.
 /// * `fallback_name` - the object name when neither `name` nor the mesh has one.
-/// * `out_of_range` - whether a source factor outside its glTF spec range
-///   errors or clamps.
+/// * `out_of_range` - whether a material value outside its property's glTF
+///   range errors or clamps.
 #[allow(clippy::too_many_arguments)]
 pub fn voxelize_mesh(
     mesh: &Mesh,
@@ -52,7 +52,7 @@ pub fn voxelize_mesh(
     node_scale: f64,
     name: Option<&str>,
     fallback_name: &str,
-    out_of_range: OutOfRangeFactor,
+    out_of_range: OutOfRangeProperty,
 ) -> Result<VoxMain> {
     if mesh.triangles.is_empty() {
         return Err(Error::invalid("mesh has no triangle geometry"));
@@ -119,7 +119,7 @@ pub fn voxelize_mesh(
 
     state.push_root_hierarchy_node_id(node_id)?;
 
-    // The vocabulary range check the export also runs. The factors were
+    // The vocabulary range check the export also runs. The values were
     // checked or clamped above, so this is the entry-side guarantee that
     // nothing out of range leaves the import.
     check_gltf_attribute_ranges(&state)?;
@@ -259,12 +259,12 @@ type PaletteBuild = (
 /// cell's material. Every glTF property draws from a deduplicated value pool
 /// added to `state`: a property carrying one value id per material.
 /// The default material is the first built, or a lone white material for an
-/// all-empty grid, so the palette is never empty. A factor outside its glTF
-/// spec range follows `out_of_range`.
+/// all-empty grid, so the palette is never empty. A value outside its
+/// property's glTF range follows `out_of_range`.
 fn build_palette(
     state: &mut VoxMain,
     cell_materials: &[Option<MeshMaterial>],
-    out_of_range: OutOfRangeFactor,
+    out_of_range: OutOfRangeProperty,
 ) -> Result<PaletteBuild> {
     // Merge near-identical materials into a distinct list, first seen in raster
     // order, remembering each filled cell's position in it.
@@ -289,13 +289,13 @@ fn build_palette(
         distinct.push(MeshMaterial::flat(fill_linear_color(None)));
     }
 
-    // The color factors follow the same policy as the scalars: every
+    // The color properties follow the same policy as the scalars: every
     // component of `baseColor`, alpha included, and `emissiveColor` lies in
     // the glTF `[0, 1]`.
     for material in &mut distinct {
-        material.base_color = factor_color(material.base_color, BASE_COLOR, out_of_range)?;
+        material.base_color = property_color(material.base_color, BASE_COLOR, out_of_range)?;
         material.emissive_color =
-            factor_color(material.emissive_color, EMISSIVE_COLOR, out_of_range)?;
+            property_color(material.emissive_color, EMISSIVE_COLOR, out_of_range)?;
     }
 
     // One deduplicated value pool per property, plus each distinct material's
@@ -311,7 +311,7 @@ fn build_palette(
 
     // Register the value pools and add each property. All properties precede
     // any material, so no material carries a back-fill placeholder value id.
-    let scalars = |values, key| factor_value_pool(values, key, out_of_range);
+    let scalars = |values, key| property_value_pool(values, key, out_of_range);
     let base_color_value_pool_id =
         state.add_value_pool(VoxValuePool::vec_4_float(base_color.values)?);
     let metallic_value_pool_id = state.add_value_pool(scalars(metallic.values, METALLIC)?);
@@ -481,49 +481,49 @@ fn value_pool_column<T, K: Eq + Hash>(
 }
 
 /// A float value pool over `values`, checked against the range the glTF spec
-/// gives `key`. A value outside that range follows `out_of_range`. A NaN has
-/// no clamped value, so it errors either way.
-fn factor_value_pool(
+/// gives the property `key`. A value outside that range follows
+/// `out_of_range`. A NaN has no clamped value, so it errors either way.
+fn property_value_pool(
     values: Vec<f64>,
     key: &str,
-    out_of_range: OutOfRangeFactor,
+    out_of_range: OutOfRangeProperty,
 ) -> Result<VoxValuePool> {
     let range = scalar_range(key).expect("the voxelizer writes glTF scalar attributes");
 
     let values = values
         .into_iter()
-        .map(|value| factor_value(value, range, key, out_of_range))
+        .map(|value| property_value(value, range, key, out_of_range))
         .collect::<Result<Vec<f64>>>()?;
 
     Ok(VoxValuePool::float(values)?)
 }
 
-/// A color factor with every component checked against [`COLOR_RANGE`]. A
+/// A color value with every component checked against [`COLOR_RANGE`]. A
 /// component outside it follows `out_of_range`. A NaN has no clamped value,
 /// so it errors either way.
-fn factor_color(
+fn property_color(
     color: TyLinSrgbaF64,
     key: &str,
-    out_of_range: OutOfRangeFactor,
+    out_of_range: OutOfRangeProperty,
 ) -> Result<TyLinSrgbaF64> {
     let mut components = <[f64; 4]>::from(color);
     for component in &mut components {
-        *component = factor_value(*component, COLOR_RANGE, key, out_of_range)?;
+        *component = property_value(*component, COLOR_RANGE, key, out_of_range)?;
     }
     Ok(TyLinSrgbaF64::from(components))
 }
 
-/// One factor value under the out-of-range policy: its clamp under
-/// [`OutOfRangeFactor::Clamp`], else itself when in `range` and the range
+/// One property value under the out-of-range policy: its clamp under
+/// [`OutOfRangeProperty::Clamp`], else itself when in `range` and the range
 /// error otherwise. An in-range value is its own clamp, and a NaN has no
 /// clamp, so it errors under either policy.
-fn factor_value(
+fn property_value(
     value: f64,
     range: GltfRange,
     key: &str,
-    out_of_range: OutOfRangeFactor,
+    out_of_range: OutOfRangeProperty,
 ) -> Result<f64> {
-    if out_of_range == OutOfRangeFactor::Clamp && !value.is_nan() {
+    if out_of_range == OutOfRangeProperty::Clamp && !value.is_nan() {
         return Ok(range.clamp(value));
     }
     range.check(key, value)?;
@@ -635,7 +635,7 @@ fn grid_too_large(counts: TyVector3U32) -> Error {
 mod tests {
     use crate::{
         BASE_COLOR, EMISSIVE_STRENGTH, FillMode, METALLIC, MaterialMode, Mesh, MeshMaterial,
-        MeshTriangle, MeshTriangleUvs, OutOfRangeFactor, Result, SurfaceMode, voxelize_mesh,
+        MeshTriangle, MeshTriangleUvs, OutOfRangeProperty, Result, SurfaceMode, voxelize_mesh,
     };
     use ty_math::{TyLinSrgbaF64, TyVector3F64, TyVector3U32};
     use voxcore::{VoxMain, VoxValuePoolValueRef};
@@ -665,7 +665,7 @@ mod tests {
     /// Voxelizes the two-cell mesh per-primitive under `out_of_range`.
     fn voxelize_with(
         materials: Vec<MeshMaterial>,
-        out_of_range: OutOfRangeFactor,
+        out_of_range: OutOfRangeProperty,
     ) -> Result<VoxMain> {
         voxelize_mesh(
             &two_cell_mesh(materials),
@@ -682,9 +682,9 @@ mod tests {
     }
 
     /// Voxelizes the two-cell mesh per-primitive, rejecting an out-of-range
-    /// factor.
+    /// value.
     fn voxelize(materials: Vec<MeshMaterial>) -> VoxMain {
-        voxelize_with(materials, OutOfRangeFactor::Error).unwrap()
+        voxelize_with(materials, OutOfRangeProperty::Error).unwrap()
     }
 
     /// The strength the given voxel's material samples from the
@@ -753,7 +753,7 @@ mod tests {
             1.0,
             None,
             "mesh",
-            OutOfRangeFactor::Error,
+            OutOfRangeProperty::Error,
         )
         .unwrap();
 
@@ -772,18 +772,18 @@ mod tests {
     }
 
     #[test]
-    fn an_out_of_range_factor_errors_by_default() {
-        let error = voxelize_with(over_metallic(), OutOfRangeFactor::Error).unwrap_err();
+    fn an_out_of_range_scalar_errors_by_default() {
+        let error = voxelize_with(over_metallic(), OutOfRangeProperty::Error).unwrap_err();
 
-        // The factor and the value both point back at the source mesh.
+        // The property and the value both point back at the source mesh.
         let message = error.to_string();
         assert!(message.contains(METALLIC), "{message}");
         assert!(message.contains("1.5"), "{message}");
     }
 
     #[test]
-    fn an_out_of_range_factor_clamps_when_asked() {
-        let state = voxelize_with(over_metallic(), OutOfRangeFactor::Clamp).unwrap();
+    fn an_out_of_range_scalar_clamps_when_asked() {
+        let state = voxelize_with(over_metallic(), OutOfRangeProperty::Clamp).unwrap();
 
         // Both materials land on the bounded value pool, the out-of-range one
         // at the range's top.
@@ -812,7 +812,7 @@ mod tests {
         let mut hollow = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
         hollow.ior = 0.0;
 
-        assert!(voxelize_with(vec![matte, hollow], OutOfRangeFactor::Error).is_ok());
+        assert!(voxelize_with(vec![matte, hollow], OutOfRangeProperty::Error).is_ok());
     }
 
     /// The two-cell mesh's materials with the right one's `baseColor` red
@@ -825,7 +825,7 @@ mod tests {
 
     #[test]
     fn an_out_of_range_color_errors_by_default() {
-        let error = voxelize_with(over_red(), OutOfRangeFactor::Error).unwrap_err();
+        let error = voxelize_with(over_red(), OutOfRangeProperty::Error).unwrap_err();
 
         let message = error.to_string();
         assert!(message.contains("baseColor"), "{message}");
@@ -834,7 +834,7 @@ mod tests {
 
     #[test]
     fn an_out_of_range_color_clamps_when_asked() {
-        let state = voxelize_with(over_red(), OutOfRangeFactor::Clamp).unwrap();
+        let state = voxelize_with(over_red(), OutOfRangeProperty::Clamp).unwrap();
 
         // The hot red clamps onto the matte one, so the deduplicated
         // baseColor value pool holds one value.
@@ -851,7 +851,7 @@ mod tests {
     }
 
     #[test]
-    fn a_nan_factor_errors_under_either_mode() {
+    fn a_nan_scalar_errors_under_either_mode() {
         // A NaN has no clamped value, so asking to clamp does not admit it.
         let nan_metallic = || {
             let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
@@ -860,7 +860,7 @@ mod tests {
             vec![matte, broken]
         };
 
-        assert!(voxelize_with(nan_metallic(), OutOfRangeFactor::Error).is_err());
-        assert!(voxelize_with(nan_metallic(), OutOfRangeFactor::Clamp).is_err());
+        assert!(voxelize_with(nan_metallic(), OutOfRangeProperty::Error).is_err());
+        assert!(voxelize_with(nan_metallic(), OutOfRangeProperty::Clamp).is_err());
     }
 }

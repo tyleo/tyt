@@ -136,6 +136,16 @@ the sampled value exactly. Test fixtures that author colors as hex
 decode them through the same helper, so byte-level expectations survive
 unchanged.
 
+2026-08-03, after the gate review. `OutOfRangeFactor` is
+`OutOfRangeProperty`, with its file and the voxelizer's
+`property_value`, `property_color`, and `property_value_pool` helpers:
+the policy names voxj property values, not glTF wire fields, so the
+factor spelling ends with the iteration 3 rename, the same ruling that
+took `mesh_material.rs`'s `emissive_factor`. Prose citing the glTF
+source material's own composition ("flat PBR factors") keeps its
+spelling. vxl's `--out-of-range-factor` flag follows in iteration 8;
+the checklist carries it.
+
 2026-08-03, after the gate review. The atlas bake reads colors linear:
 `value_pool_linear_color` is the base read, `value_pool_color` its 8-bit
 encoding, and the emissive fold scales the exact stored color and

@@ -481,7 +481,7 @@ mod tests {
 
         // emissiveColor is sRGB; strengths 1.0 and 0.5 fold into the texels as
         // fractions of the mesh max, 1.0.
-        let factor_value_pool_id = state.add_value_pool(
+        let emissive_color_value_pool_id = state.add_value_pool(
             VoxValuePool::vec_3_float(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]).unwrap(),
         );
         let strength_value_pool_id =
@@ -491,7 +491,7 @@ mod tests {
         palette
             .add_property(
                 EMISSIVE_COLOR.to_owned(),
-                factor_value_pool_id,
+                emissive_color_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
