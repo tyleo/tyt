@@ -5,6 +5,8 @@
 //! constants name only the recommended glTF-aligned set.
 
 use crate::GltfRange;
+#[cfg(feature = "gltf")]
+use ty_math::TyLinSrgbaF64;
 
 /// The base color, a color attribute. glTF `baseColorFactor`.
 pub const BASE_COLOR: &str = "baseColor";
@@ -78,14 +80,14 @@ pub(crate) const COLOR_RANGE: GltfRange = GltfRange {
     admits_zero: false,
 };
 
-/// The glTF spec default for a recommended color attribute, as sRGB `[r, g, b,
-/// a]` bytes, or `None` for a key with no standard default, such as a custom
-/// attribute. A three-component color takes opaque alpha.
+/// The glTF spec default for a recommended color attribute, the linear factor
+/// the glTF schema states, or `None` for a key with no standard default, such
+/// as a custom attribute. A three-component color takes opaque alpha.
 #[cfg(feature = "gltf")]
-pub(crate) fn default_color(key: &str) -> Option<[u8; 4]> {
+pub(crate) fn default_lin_srgba_f64_color(key: &str) -> Option<TyLinSrgbaF64> {
     match key {
-        BASE_COLOR => Some([255, 255, 255, 255]),
-        EMISSIVE_COLOR => Some([0, 0, 0, 255]),
+        BASE_COLOR => Some(TyLinSrgbaF64::new(1.0, 1.0, 1.0, 1.0)),
+        EMISSIVE_COLOR => Some(TyLinSrgbaF64::new(0.0, 0.0, 0.0, 1.0)),
         _ => None,
     }
 }

@@ -1,7 +1,7 @@
 use crate::{
     BASE_COLOR, ColorChannel, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, MaterialBake,
-    MaterialChannel, Result, UsedMaterials, default_color, default_scalar,
-    lin_srgba_f64_from_srgba_u8, srgba_u8_from_lin_srgba_f64, value_pool_lin_srgba_f64_color,
+    MaterialChannel, Result, UsedMaterials, default_lin_srgba_f64_color, default_scalar,
+    srgba_u8_from_lin_srgba_f64, value_pool_lin_srgba_f64_color,
 };
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaU8};
 use voxcore::VoxValuePoolValueRef;
@@ -47,9 +47,13 @@ fn bake_texel(
     max_strength: f64,
 ) -> Result<[u8; 4]> {
     match bake {
-        MaterialBake::RgbaColor => base_color_bytes(used, index),
+        MaterialBake::RgbaColor => Ok(<[u8; 4]>::from(base_color_srgba_u8(used, index)?)),
 
-        MaterialBake::EmissiveColor => emissive_color_bytes(used, index, max_strength),
+        MaterialBake::EmissiveColor => Ok(<[u8; 4]>::from(emissive_color_srgba_u8(
+            used,
+            index,
+            max_strength,
+        )?)),
 
         MaterialBake::Packing(channels) => {
             // A packing fills R, G, B from its channels; an unnamed channel and
@@ -85,7 +89,7 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
             // to a byte, so a scalar and a color component inject the same way.
             let fraction = match component {
                 Some(component) => {
-                    component_byte(material_color_bytes(used, index, key)?, *component) as f64
+                    component_byte(material_srgba_u8_color(used, index, key)?, *component) as f64
                         / 255.0
                 }
                 None => material_scalar(used, index, key)?,
@@ -107,11 +111,11 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
     }
 }
 
-/// The color attribute `key` of the material at `index`, re-encoded to sRGB
-/// bytes: [`material_lin_srgba_f64_color`]'s read for an 8-bit consumer.
-fn material_color_bytes(used: &UsedMaterials, index: usize, key: &str) -> Result<[u8; 4]> {
+/// The color attribute `key` of the material at `index`, re-encoded to 8-bit
+/// sRGB: [`material_lin_srgba_f64_color`]'s read for an 8-bit consumer.
+fn material_srgba_u8_color(used: &UsedMaterials, index: usize, key: &str) -> Result<TySrgbaU8> {
     let color = material_lin_srgba_f64_color(used, index, key)?;
-    Ok(<[u8; 4]>::from(srgba_u8_from_lin_srgba_f64(color)))
+    Ok(srgba_u8_from_lin_srgba_f64(color))
 }
 
 /// The color attribute `key` of the material at `index` in linear light, or
@@ -124,8 +128,7 @@ fn material_lin_srgba_f64_color(
     key: &str,
 ) -> Result<TyLinSrgbaF64> {
     let Some((value_pool, value_id)) = used.attribute(index, key) else {
-        let bytes = default_color(key).ok_or_else(|| unbound(key))?;
-        return Ok(lin_srgba_f64_from_srgba_u8(TySrgbaU8::from(bytes)));
+        return default_lin_srgba_f64_color(key).ok_or_else(|| unbound(key));
     };
 
     value_pool_lin_srgba_f64_color(value_pool, value_id)
@@ -133,12 +136,12 @@ fn material_lin_srgba_f64_color(
 }
 
 /// One color component as a byte.
-fn component_byte(rgba: [u8; 4], component: ColorChannel) -> u8 {
+fn component_byte(color: TySrgbaU8, component: ColorChannel) -> u8 {
     match component {
-        ColorChannel::R => rgba[0],
-        ColorChannel::G => rgba[1],
-        ColorChannel::B => rgba[2],
-        ColorChannel::A => rgba[3],
+        ColorChannel::R => color.red,
+        ColorChannel::G => color.green,
+        ColorChannel::B => color.blue,
+        ColorChannel::A => color.alpha,
     }
 }
 
@@ -151,8 +154,8 @@ fn unbound(key: &str) -> Error {
 
 /// The albedo texel for the material at `index`: its `baseColor` re-encoded
 /// to sRGB.
-fn base_color_bytes(used: &UsedMaterials, index: usize) -> Result<[u8; 4]> {
-    material_color_bytes(used, index, BASE_COLOR)
+fn base_color_srgba_u8(used: &UsedMaterials, index: usize) -> Result<TySrgbaU8> {
+    material_srgba_u8_color(used, index, BASE_COLOR)
 }
 
 /// The emissive texel for the material at `index`: its `emissiveColor`
@@ -160,7 +163,11 @@ fn base_color_bytes(used: &UsedMaterials, index: usize) -> Result<[u8; 4]> {
 /// once, at the texel write. Per-voxel strengths survive as a gradient, and a
 /// flat `KHR_materials_emissive_strength` of `max_strength` restores the
 /// absolute scale. An absent color is black, its spec default.
-fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -> Result<[u8; 4]> {
+fn emissive_color_srgba_u8(
+    used: &UsedMaterials,
+    index: usize,
+    max_strength: f64,
+) -> Result<TySrgbaU8> {
     let color = material_lin_srgba_f64_color(used, index, EMISSIVE_COLOR)?;
 
     let fraction = if max_strength > 0.0 {
@@ -176,7 +183,7 @@ fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -
         1.0,
     );
 
-    Ok(<[u8; 4]>::from(srgba_u8_from_lin_srgba_f64(scaled)))
+    Ok(srgba_u8_from_lin_srgba_f64(scaled))
 }
 
 /// The greatest `emissiveStrength` among the used materials.

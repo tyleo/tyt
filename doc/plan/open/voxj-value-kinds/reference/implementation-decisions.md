@@ -157,6 +157,14 @@ the base color as u8 and Voxel Max glows in that stored color, so the
 luminance ratio reads the color the file carries, not the exact value it
 was quantized from.
 
+2026-08-03, after the gate review. The atlas color path deals in the exact
+color types end to end: `default_lin_srgba_f64_color` states the spec
+default as the linear factor the glTF schema itself spells, the material
+color resolvers return `TySrgbaU8`, and `component_byte` reads a typed
+color's fields. Raw `[u8; 4]` survives only where the data is genuinely
+bytes: the pixel buffer write and the packing arm, whose packed channels
+are not an sRGB color, so a color type would mislabel them.
+
 The vocabulary range check is `check_gltf_property_ranges`, a public
 top-level function over a whole `VoxMain`. It walks every palette
 property the vocabulary names and checks the values materials draw; an
