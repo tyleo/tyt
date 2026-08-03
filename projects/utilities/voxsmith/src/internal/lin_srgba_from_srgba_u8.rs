@@ -4,6 +4,6 @@ use ty_math::{TyLinSrgbaF64, TySrgbaU8};
 /// one transfer voxsmith applies at its boundaries. Each color component
 /// normalizes to `[0, 1]` and decodes through the sRGB transfer. The alpha
 /// carries no gamma, so it only normalizes.
-pub(crate) fn linear_color_from_srgba_u8(color: TySrgbaU8) -> TyLinSrgbaF64 {
+pub(crate) fn lin_srgba_from_srgba_u8(color: TySrgbaU8) -> TyLinSrgbaF64 {
     color.into_format::<f64, f64>().into_linear()
 }

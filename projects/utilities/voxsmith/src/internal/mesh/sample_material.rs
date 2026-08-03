@@ -1,7 +1,7 @@
 use crate::{
     GridSpace, MeshBaseColorMap, MeshEmissiveMap, MeshMaterial, MeshMaterialMaps,
     MeshMetallicRoughnessMap, MeshOcclusionMap, MeshSampler, MeshTexture, MeshTriangle, VoxelGrid,
-    linear_color_from_srgba_u8,
+    lin_srgba_from_srgba_u8,
 };
 use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector2F64, TyVector3F64, TyVector3U32};
 
@@ -274,7 +274,7 @@ fn apply(
 /// factor.
 fn base_color_linear(texture: &MeshTexture, uv: TyVector2F64, map: &MeshBaseColorMap) -> [f64; 4] {
     let texel = texture.sample(uv.x, uv.y, map.sampler.wrap_s, map.sampler.wrap_t);
-    let color = linear_color_from_srgba_u8(TySrgbaU8::from(texel)) * map.factor;
+    let color = lin_srgba_from_srgba_u8(TySrgbaU8::from(texel)) * map.factor;
     [color.red, color.green, color.blue, color.alpha]
 }
 
@@ -294,7 +294,7 @@ fn metallic_roughness(
 /// component-wise by the linear emissive factor.
 fn emissive(texture: &MeshTexture, uv: TyVector2F64, map: &MeshEmissiveMap) -> [f64; 3] {
     let texel = texture.sample(uv.x, uv.y, map.sampler.wrap_s, map.sampler.wrap_t);
-    let color = linear_color_from_srgba_u8(TySrgbaU8::from(texel));
+    let color = lin_srgba_from_srgba_u8(TySrgbaU8::from(texel));
     [
         color.red * map.factor[0],
         color.green * map.factor[1],

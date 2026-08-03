@@ -18,8 +18,8 @@ pub fn to_vmax_file(
 mod tests {
     use crate::{
         SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
-        from_vmax_file, linear_color_from_srgba_u8, resolve_cell_color_or_transparent,
-        to_vmax_file, to_vox_value,
+        from_vmax_file, lin_srgba_from_srgba_u8, resolve_cell_color_or_transparent, to_vmax_file,
+        to_vox_value,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
@@ -618,7 +618,7 @@ mod tests {
     /// The linear-light `[f64; 4]` components of a `#RRGGBB` or `#RRGGBBAA`
     /// color. A missing alpha defaults to opaque.
     fn color_floats(hex: &str) -> [f64; 4] {
-        linear_color_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
+        lin_srgba_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
     }
 
     /// Adds a folded palette binding `baseColor` to a value pool of the

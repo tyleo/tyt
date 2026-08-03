@@ -1,7 +1,6 @@
 use crate::{
     BASE_COLOR, Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer, GoxelLight,
-    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, linear_color_from_srgba_u8,
-    to_vox_value,
+    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, lin_srgba_from_srgba_u8, to_vox_value,
 };
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
@@ -80,7 +79,7 @@ fn build_palette(
         VoxValuePool::vec_4_float(
             order
                 .iter()
-                .map(|&color| <[f64; 4]>::from(linear_color_from_srgba_u8(TySrgbaU8::from(color))))
+                .map(|&color| <[f64; 4]>::from(lin_srgba_from_srgba_u8(TySrgbaU8::from(color))))
                 .collect(),
         )
         .expect("byte-derived components are finite and the list is non-empty"),
@@ -273,7 +272,7 @@ fn shape_token(shape: GoxlShape) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, from_goxl_bytes, from_goxl_file, linear_color_from_srgba_u8, to_goxl_bytes,
+        BASE_COLOR, from_goxl_bytes, from_goxl_file, lin_srgba_from_srgba_u8, to_goxl_bytes,
         to_goxl_file,
     };
     use branded_id::U32Id;
@@ -292,7 +291,7 @@ mod tests {
 
     /// The linear-light components of a `#RRGGBBAA` hex string.
     fn linear_rgba(hex: &str) -> [f64; 4] {
-        linear_color_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
+        lin_srgba_from_srgba_u8(TySrgbaU8::from_hex(hex).expect("a valid hex color")).into()
     }
 
     /// A `4 x 4` matrix with distinct float cells, for transform and box

@@ -2,7 +2,7 @@ use crate::{
     BASE_COLOR, COLOR_RANGE, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, FillMode, GltfRange, IOR,
     METALLIC, MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS,
     Result, SurfaceMode, TRANSMISSION, VoxelGrid, check_gltf_attribute_ranges,
-    linear_color_from_srgba_u8, sample_material, scalar_range, voxelize_triangles,
+    lin_srgba_from_srgba_u8, sample_material, scalar_range, voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::{
@@ -17,7 +17,7 @@ use voxcore::{
 
 /// The color a body with no sampled surface falls back to when `fill_color` is
 /// `None`: opaque white. Held as sRGB bytes, the form a caller's fill color
-/// arrives in. Decode it with [`linear_color_from_srgba_u8`] at each use site.
+/// arrives in. Decode it with [`lin_srgba_from_srgba_u8`] at each use site.
 const DEFAULT_FILL: [u8; 4] = [255, 255, 255, 255];
 
 /// Voxelizes a [`Mesh`] into a [`VoxMain`] of one object placed by one root
@@ -617,7 +617,7 @@ fn for_each_neighbor(cell: usize, nx: usize, ny: usize, nz: usize, mut visit: im
 /// The fill color decoded to linear light, defaulting to opaque white for
 /// `none`.
 fn fill_linear_color(fill_color: Option<[u8; 4]>) -> TyLinSrgbaF64 {
-    linear_color_from_srgba_u8(TySrgbaU8::from(fill_color.unwrap_or(DEFAULT_FILL)))
+    lin_srgba_from_srgba_u8(TySrgbaU8::from(fill_color.unwrap_or(DEFAULT_FILL)))
 }
 
 /// The error for a grid past voxcore's dense-grid cell limit.

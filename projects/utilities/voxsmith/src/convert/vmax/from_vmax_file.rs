@@ -2,7 +2,7 @@ use crate::{
     ABSORPTION, BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC, ROUGHNESS,
     Result, SHADOWS, TRANSMISSION, VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxMaterial,
     VoxelMaxMaterialDispersion, VoxelMaxNode, VoxelMaxObjectState, VoxelMaxPalette, default_scalar,
-    linear_color_from_srgba_u8, to_vox_value, vm_coefficient_to_pbr_factor,
+    lin_srgba_from_srgba_u8, to_vox_value, vm_coefficient_to_pbr_factor,
 };
 use branded_id::U32Id;
 use std::collections::HashMap;
@@ -273,7 +273,7 @@ fn folded_palette(
     let color_value_pool_id = state.add_value_pool(VoxValuePool::vec_4_float(
         colors
             .iter()
-            .map(|color| <[f64; 4]>::from(linear_color_from_srgba_u8(TySrgbaU8::from(*color))))
+            .map(|color| <[f64; 4]>::from(lin_srgba_from_srgba_u8(TySrgbaU8::from(*color))))
             .collect(),
     )?);
     palette
@@ -332,7 +332,7 @@ fn folded_palette(
                 colors
                     .iter()
                     .map(|color| {
-                        let linear = linear_color_from_srgba_u8(TySrgbaU8::from(*color));
+                        let linear = lin_srgba_from_srgba_u8(TySrgbaU8::from(*color));
                         [linear.red, linear.green, linear.blue]
                     })
                     .collect(),

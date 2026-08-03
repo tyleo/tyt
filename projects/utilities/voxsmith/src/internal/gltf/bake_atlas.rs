@@ -1,7 +1,7 @@
 use crate::{
     BASE_COLOR, ColorChannel, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, MaterialBake,
-    MaterialChannel, Result, UsedMaterials, default_color, default_scalar,
-    linear_color_from_srgba_u8, srgba_u8_from_linear_color, value_pool_linear_color,
+    MaterialChannel, Result, UsedMaterials, default_color, default_scalar, lin_srgba_from_srgba_u8,
+    srgba_u8_from_lin_srgba, value_pool_linear_color,
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaU8};
@@ -115,7 +115,7 @@ fn color_bytes(
     key: &str,
 ) -> Result<[u8; 4]> {
     let color = linear_color(value, key)?;
-    Ok(<[u8; 4]>::from(srgba_u8_from_linear_color(
+    Ok(<[u8; 4]>::from(srgba_u8_from_lin_srgba(
         TyLinSrgbaF64::from(color),
     )))
 }
@@ -130,9 +130,9 @@ fn linear_color(
 ) -> Result<[f64; 4]> {
     let Some((value_pool, value_id)) = value else {
         let bytes = default_color(key).ok_or_else(|| unbound(key))?;
-        return Ok(<[f64; 4]>::from(linear_color_from_srgba_u8(
-            TySrgbaU8::from(bytes),
-        )));
+        return Ok(<[f64; 4]>::from(lin_srgba_from_srgba_u8(TySrgbaU8::from(
+            bytes,
+        ))));
     };
 
     value_pool_linear_color(value_pool, value_id)
@@ -201,7 +201,7 @@ fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -
 
     let scaled = TyLinSrgbaF64::new(red * fraction, green * fraction, blue * fraction, 1.0);
 
-    Ok(<[u8; 4]>::from(srgba_u8_from_linear_color(scaled)))
+    Ok(<[u8; 4]>::from(srgba_u8_from_lin_srgba(scaled)))
 }
 
 /// The greatest `emissiveStrength` among the used materials.

@@ -775,8 +775,8 @@ fn bayer(x: u32, y: u32, z: u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, ColorSpace, Dither, ReductionMethod, linear_color_from_srgba_u8,
-        reduce_palette, srgba_u8_from_linear_color,
+        BASE_COLOR, ColorSpace, Dither, ReductionMethod, lin_srgba_from_srgba_u8, reduce_palette,
+        srgba_u8_from_lin_srgba,
     };
     use branded_id::U32Id;
     use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector3U32};
@@ -796,7 +796,7 @@ mod tests {
         let byte = |index: usize| {
             u8::from_str_radix(&digits[index * 2..index * 2 + 2], 16).expect("two hex digits")
         };
-        linear_color_from_srgba_u8(TySrgbaU8::new(byte(0), byte(1), byte(2), byte(3))).into()
+        lin_srgba_from_srgba_u8(TySrgbaU8::new(byte(0), byte(1), byte(2), byte(3))).into()
     }
 
     /// The `#RRGGBBAA` hex of a material's `baseColor`, uppercase.
@@ -821,7 +821,7 @@ mod tests {
 
     /// A `#RRGGBBAA` uppercase hex string of a stored linear color.
     fn hex_of(color: [f64; 4]) -> String {
-        let bytes = <[u8; 4]>::from(srgba_u8_from_linear_color(TyLinSrgbaF64::from(color)));
+        let bytes = <[u8; 4]>::from(srgba_u8_from_lin_srgba(TyLinSrgbaF64::from(color)));
         format!(
             "#{:02X}{:02X}{:02X}{:02X}",
             bytes[0], bytes[1], bytes[2], bytes[3]
