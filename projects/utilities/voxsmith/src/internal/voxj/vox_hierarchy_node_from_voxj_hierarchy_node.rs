@@ -1,6 +1,6 @@
 use crate::{Error, Result};
 use branded_id::U32Id;
-use ty_math::{TyQuaternion, TyTransformF64, TyVector3};
+use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64};
 use voxcore::VoxHierarchyNode;
 use voxj::{VoxjHierarchyNode, VoxjTransform};
 
@@ -73,14 +73,14 @@ fn vox_transform_from_voxj_transform(transform: &VoxjTransform) -> Result<TyTran
     }
 
     Ok(TyTransformF64::new(
-        TyVector3::from_array(transform.position),
-        TyQuaternion::from_xyzw(
+        TyVector3F64::from_array(transform.position),
+        TyQuaternionF64::from_xyzw(
             rotation_x / magnitude,
             rotation_y / magnitude,
             rotation_z / magnitude,
             rotation_w / magnitude,
         ),
-        TyVector3::new(scale_x, scale_y, scale_z),
+        TyVector3F64::new(scale_x, scale_y, scale_z),
     ))
 }
 

@@ -9,7 +9,7 @@ description = "Hierarchical-data rendering: populate a forest of labeled, data-b
 [dependencies]
 branded-id = "0.1.7"
 serde_json = { version = "1", features = ["preserve_order"], optional = true }
-ty-math = { version = "0.1.8", optional = true }
+ty-math = { version = "0.2.0", optional = true }
 
 [features]
 default = ["render_columns", "render_hierarchy", "render_rows", "render_tables"]

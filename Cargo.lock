@@ -1748,7 +1748,7 @@ version = "0.1.0"
 
 [[package]]
 name = "ty-math"
-version = "0.1.12"
+version = "0.2.0"
 dependencies = [
  "glam",
  "palette",
@@ -1756,7 +1756,7 @@ dependencies = [
 
 [[package]]
 name = "ty-math-serde"
-version = "0.1.6"
+version = "0.2.0"
 dependencies = [
  "serde",
  "ty-math",

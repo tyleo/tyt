@@ -556,8 +556,9 @@ collapse to one. The types live in `ty-math` beside its existing space-agnostic
 `TyRgbaColor`, split by storage form versus compute form. `TySrgbaColor` is
 byte-backed (`r` / `g` / `b` / `a: u8`), the 8-bit sRGB storage code voxj keeps as
 `#RRGGBBAA`; it has no arithmetic, so the only way to compute is to leave for
-linear via `to_linear_rgb`. `TyLinearRgbColor` / `TyOklabColor` / `TyCielabColor`
-are the float working spaces, generic over `T` with f32/f64 aliases; the
+linear via `to_linear_rgb`. `TyLinearRgbColor<T>` / `TyOklabColor<T>` /
+`TyCielabColor<T>` are the float working spaces, generic over `T` with f32/f64
+aliases; the
 conversions are impl'd at f64, where every consumer here lives and where the
 high-precision perceptual matrices avoid the `excessive_precision` clippy lint an
 f32 instantiation would trip (an OKLab-in-`u8` is meaningless, so the generic
@@ -980,7 +981,7 @@ normals, and triangle indices) and two writers, `object_to_glb_bytes` and
 
 `MeshGeometry` carries its positions and normals as ty-math `TyVector3F32`, not
 bare `[f32; 3]`, so the mesher reuses the crate's vector math rather than
-open-coding it: the outward-winding test is `TyVector3::cross(...).dot(&normal)`,
+open-coding it: the outward-winding test is `TyVector3F32::cross(...).dot(&normal)`,
 and the writer's glTF accessor bounds are a `component_min_with` /
 `component_max_with` fold. The vectors flatten to the `[f32; 3]` glTF wants with
 `to_array` at the one buffer-packing boundary.

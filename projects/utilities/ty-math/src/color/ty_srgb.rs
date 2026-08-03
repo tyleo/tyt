@@ -1,10 +1,9 @@
 use palette::Srgb;
 
-/// An sRGB color without alpha, backed by [`palette::Srgb`]. The three-component
-/// companion to [`TySrgba`](crate::TySrgba); the color space is the type
-/// identity and `T` is the storage axis (`u8` bytes or `f32` / `f64` normalized
-/// `[0, 1]`).
-pub type TySrgb<T = f32> = Srgb<T>;
+/// An sRGB color without alpha, backed by [`palette::Srgb`]. The color space is
+/// the type identity and `T` is the storage axis (`u8` bytes or `f32` / `f64`
+/// normalized `[0, 1]`).
+pub type TySrgb<T> = Srgb<T>;
 
 #[cfg(test)]
 mod tests {

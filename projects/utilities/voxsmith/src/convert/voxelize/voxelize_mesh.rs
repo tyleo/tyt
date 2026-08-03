@@ -6,7 +6,7 @@ use crate::{
 };
 use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
-use ty_math::{TySrgbaU8, TyTransformF64, TyVector3, TyVector3U32};
+use ty_math::{TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxValuePoolValue, VoxBound, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
@@ -102,7 +102,7 @@ pub fn voxelize_mesh(
 
     // One root node placing the object and carrying the real-world scale.
     let transform = TyTransformF64 {
-        scale: TyVector3::splat(node_scale),
+        scale: TyVector3F64::splat(node_scale),
         ..Default::default()
     };
 

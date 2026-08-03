@@ -1,6 +1,6 @@
 [package]
 name = "ty-math-serde"
-version = "0.1.6"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -8,4 +8,4 @@ description = "Serde-compatible parity types for ty-math."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-ty-math = { version = "0.1.12", features = ["color"] }
+ty-math = { version = "0.2.0", features = ["color"] }

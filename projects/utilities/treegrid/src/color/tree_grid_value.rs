@@ -1,6 +1,9 @@
 use crate::{TreeGridSwatch, TreeGridValue};
 use std::fmt::Display;
-use ty_math::{TyFloatExt, TyLinSrgb, TyLinSrgba, TySrgb, TySrgba};
+use ty_math::{
+    TyFloatExt, TyLinSrgb, TyLinSrgbF64, TyLinSrgba, TyLinSrgbaF64, TySrgb, TySrgbF64, TySrgba,
+    TySrgbaF64,
+};
 
 // The `TyFloatExt` bound pins `T` to f32 / f64: the 8-bit forms go
 // through `srgb8` / `srgba8`, not the float quantize. Color math
@@ -13,7 +16,7 @@ impl TreeGridValue {
     /// component to a byte.
     pub fn srgb<T: Copy + Display + TyFloatExt + Into<f64>>(color: TySrgb<T>) -> Self {
         let [r, g, b] = <[T; 3]>::from(color);
-        let bytes = TySrgb::<f64>::new(r.into(), g.into(), b.into()).into_format::<u8>();
+        let bytes = TySrgbF64::new(r.into(), g.into(), b.into()).into_format::<u8>();
         Self::new(format!("rgb({r}, {g}, {b})")).with_swatch(TreeGridSwatch::Color(bytes.into()))
     }
 
@@ -22,7 +25,7 @@ impl TreeGridValue {
     /// quantized rgb part.
     pub fn srgba<T: Copy + Display + TyFloatExt + Into<f64>>(color: TySrgba<T>) -> Self {
         let [r, g, b, a] = <[T; 4]>::from(color);
-        let bytes = TySrgba::<f64>::new(r.into(), g.into(), b.into(), a.into())
+        let bytes = TySrgbaF64::new(r.into(), g.into(), b.into(), a.into())
             .into_format::<u8, u8>()
             .color;
         Self::new(format!("rgba({r}, {g}, {b}, {a})"))
@@ -35,8 +38,8 @@ impl TreeGridValue {
     /// a byte; out-of-gamut components clamp in the quantize.
     pub fn lin_rgb<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgb<T>) -> Self {
         let [r, g, b] = <[T; 3]>::from(color);
-        let linear = TyLinSrgb::<f64>::new(r.into(), g.into(), b.into());
-        let bytes = TySrgb::<f64>::from_linear(linear).into_format::<u8>();
+        let linear = TyLinSrgbF64::new(r.into(), g.into(), b.into());
+        let bytes = TySrgbF64::from_linear(linear).into_format::<u8>();
         Self::new(format!("lrgb({r}, {g}, {b})")).with_swatch(TreeGridSwatch::Color(bytes.into()))
     }
 
@@ -46,8 +49,8 @@ impl TreeGridValue {
     /// components clamp in the quantize.
     pub fn lin_rgba<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgba<T>) -> Self {
         let [r, g, b, a] = <[T; 4]>::from(color);
-        let linear = TyLinSrgba::<f64>::new(r.into(), g.into(), b.into(), a.into());
-        let bytes = TySrgba::<f64>::from_linear(linear)
+        let linear = TyLinSrgbaF64::new(r.into(), g.into(), b.into(), a.into());
+        let bytes = TySrgbaF64::from_linear(linear)
             .into_format::<u8, u8>()
             .color;
         Self::new(format!("lrgba({r}, {g}, {b}, {a})"))

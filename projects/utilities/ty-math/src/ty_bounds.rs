@@ -1,5 +1,3 @@
-use crate::TyBoundsF64;
-
 /// Generates a concrete axis-aligned bounding box (a center and per-axis
 /// half-extents) over a glam vector and its scalar. glam has no AABB type, so the
 /// box stays a hand-rolled struct whose bodies run on glam vector ops.
@@ -83,6 +81,3 @@ macro_rules! impl_ty_bounds {
 }
 
 pub(crate) use impl_ty_bounds;
-
-/// An axis-aligned bounding box, backed by glam. The bare name is the `f64` form.
-pub type TyBounds = TyBoundsF64;

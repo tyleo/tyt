@@ -1,9 +1,9 @@
 use palette::LinSrgba;
 
 /// A linear-light RGBA color with straight alpha, backed by
-/// [`palette::LinSrgba`], the linear counterpart of [`TySrgba`](crate::TySrgba).
-/// Components are nominally `[0, 1]` and may exceed it out of gamut.
-pub type TyLinSrgba<T = f32> = LinSrgba<T>;
+/// [`palette::LinSrgba`]. Components are nominally `[0, 1]` and may exceed it
+/// out of gamut.
+pub type TyLinSrgba<T> = LinSrgba<T>;
 
 #[cfg(test)]
 mod tests {

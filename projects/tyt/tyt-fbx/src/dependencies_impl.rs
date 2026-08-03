@@ -7,7 +7,7 @@ use std::{
     path::{Path, PathBuf},
     result::Result as StdResult,
 };
-use ty_math::{TySrgba, TyVector3};
+use ty_math::{TySrgbaF32, TyVector3F64};
 use tyt_injection::serde_json::Value;
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -50,8 +50,8 @@ impl Dependencies for DependenciesImpl {
 
     fn serialize_points_and_colors_json(
         &self,
-        points: &[TyVector3],
-        colors: &[Vec<TySrgba>],
+        points: &[TyVector3F64],
+        colors: &[Vec<TySrgbaF32>],
     ) -> Result<Vec<u8>> {
         Ok(tyt_injection::serialize_points_and_colors_json(
             points, colors,

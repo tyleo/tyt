@@ -3,7 +3,7 @@ use std::{
     ffi::OsStr,
     path::{Path, PathBuf},
 };
-use ty_math::{TySrgba, TyVector3};
+use ty_math::{TySrgbaF32, TyVector3F64};
 
 pub trait Dependencies {
     fn create_temp_dir(&self) -> Result<PathBuf>;
@@ -30,8 +30,8 @@ pub trait Dependencies {
 
     fn serialize_points_and_colors_json(
         &self,
-        points: &[TyVector3],
-        colors: &[Vec<TySrgba>],
+        points: &[TyVector3F64],
+        colors: &[Vec<TySrgbaF32>],
     ) -> Result<Vec<u8>>;
 
     fn load_image_rgba(&self, path: &Path) -> Result<(Vec<u8>, u32, u32)>;

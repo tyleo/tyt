@@ -244,7 +244,7 @@ follow, changing palette dedup granularity.
 
 There is no color crate of our own; the transfer is the `palette` crate's
 `IntoLinear`/`FromLinear`, reached through ty-math's type aliases
-(`TySrgba`, `TyLinSrgba`, and kin). Every current 8-bit path normalizes by
+(`TySrgbaF64`, `TyLinSrgbaF64`, and kin). Every current 8-bit path normalizes by
 255 into `f64` and then applies the analytic curve
 (`into_format::<f64, f64>().into_linear()`), and that pair is already an
 exact inverse over all 256 codes: measured against palette 0.7.6 with the

@@ -20,7 +20,7 @@ treegrid = { version = "0.1.0", default-features = false, features = [
     "render_hierarchy",
 ] }
 treeselect = "0.1.0"
-ty-math = { version = "0.1.0", optional = true }
+ty-math = { version = "0.2.0", optional = true }
 tyt-common = { version = "0.1.0" }
 tyt-injection = { version = "0.1.0", optional = true }
 vmax-codec = { version = "0.1.0", optional = true }

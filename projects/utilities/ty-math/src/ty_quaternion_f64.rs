@@ -1,4 +1,4 @@
 use glam::DQuat;
 
-/// A quaternion `(x, y, z, w)` with `f64` components.
+/// A quaternion `(x, y, z, w)` with `f64` components, backed by glam.
 pub type TyQuaternionF64 = DQuat;

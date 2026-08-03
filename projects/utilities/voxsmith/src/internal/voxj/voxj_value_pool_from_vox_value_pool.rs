@@ -257,7 +257,7 @@ mod tests {
     }
 
     /// The sRGB transfer inverse, kept in the test as an independent reference
-    /// for the production decode (`TySrgba::into_linear`).
+    /// for the production decode (`TySrgbaF64::into_linear`).
     fn srgb_to_linear(component: f64) -> f64 {
         if component <= 0.040_45 {
             component / 12.92

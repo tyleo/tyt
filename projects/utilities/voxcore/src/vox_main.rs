@@ -1395,7 +1395,7 @@ mod tests {
     };
     use branded_id::U32Id;
     use std::collections::HashMap;
-    use ty_math::{TyQuaternion, TyVector3, TyVector3I32, TyVector3U32};
+    use ty_math::{TyQuaternionF64, TyVector3F64, TyVector3I32, TyVector3U32};
 
     fn node_id(index: u32) -> U32Id<BVoxHierarchyNode> {
         U32Id::from_u32(index)
@@ -1958,7 +1958,7 @@ mod tests {
     fn add_hierarchy_node_rejects_a_zero_scale() {
         let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
-        node.transform.scale = TyVector3::new(1.0, 0.0, 1.0);
+        node.transform.scale = TyVector3F64::new(1.0, 0.0, 1.0);
         assert_eq!(
             state.add_hierarchy_node(node),
             Err(Error::InsertedZeroScale { index: 0 })
@@ -1971,7 +1971,7 @@ mod tests {
         let mut node = VoxHierarchyNode::default();
         // NaN slips past the zero-scale check (NaN == 0.0 is false), so the
         // finiteness check must catch it first.
-        node.transform.scale = TyVector3::new(1.0, f64::NAN, 1.0);
+        node.transform.scale = TyVector3F64::new(1.0, f64::NAN, 1.0);
         assert_eq!(
             state.add_hierarchy_node(node),
             Err(Error::InsertedNonFiniteTransform { index: 0 })
@@ -1982,7 +1982,7 @@ mod tests {
     fn add_hierarchy_node_rejects_a_non_finite_position() {
         let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
-        node.transform.position = TyVector3::new(0.0, 0.0, f64::INFINITY);
+        node.transform.position = TyVector3F64::new(0.0, 0.0, f64::INFINITY);
         assert_eq!(
             state.add_hierarchy_node(node),
             Err(Error::InsertedNonFiniteTransform { index: 0 })
@@ -1994,7 +1994,7 @@ mod tests {
         let mut state = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         // Length squared 4, well outside the unit tolerance.
-        node.transform.rotation = TyQuaternion::from_xyzw(0.0, 0.0, 0.0, 2.0);
+        node.transform.rotation = TyQuaternionF64::from_xyzw(0.0, 0.0, 0.0, 2.0);
         assert_eq!(
             state.add_hierarchy_node(node),
             Err(Error::InsertedNonUnitRotation { index: 0 })

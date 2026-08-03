@@ -224,12 +224,12 @@ fn dither(dither: Dither) -> VoxsmithDither {
 mod tests {
     use super::resolve_grid;
     use crate::commands::{GridResolution, ResolutionAxis};
-    use ty_math::{TyVector3, TyVector3U32};
+    use ty_math::{TyVector3F64, TyVector3U32};
 
     #[test]
     fn axis_voxel_count_sizes_the_longest_axis_and_preserves_aspect() {
         let (counts, node_scale) = resolve_grid(
-            TyVector3::new(4.0, 2.0, 1.0),
+            TyVector3F64::new(4.0, 2.0, 1.0),
             GridResolution::AxisVoxelCount {
                 axis: ResolutionAxis::Long,
                 count: 4,
@@ -243,7 +243,7 @@ mod tests {
     fn axis_voxel_count_sizes_the_shortest_axis() {
         // The shortest axis (z, 1 wide) at 4 voxels scales x to 16 and y to 8.
         let (counts, _) = resolve_grid(
-            TyVector3::new(4.0, 2.0, 1.0),
+            TyVector3F64::new(4.0, 2.0, 1.0),
             GridResolution::AxisVoxelCount {
                 axis: ResolutionAxis::Short,
                 count: 4,
@@ -256,7 +256,7 @@ mod tests {
     fn axis_voxel_count_sizes_a_named_axis() {
         // The y axis (2 wide) at 4 voxels scales x to 8 and z to 2.
         let (counts, _) = resolve_grid(
-            TyVector3::new(4.0, 2.0, 1.0),
+            TyVector3F64::new(4.0, 2.0, 1.0),
             GridResolution::AxisVoxelCount {
                 axis: ResolutionAxis::Y,
                 count: 4,
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn axis_voxel_count_keeps_a_zero_axis_at_one_voxel() {
         let (counts, _) = resolve_grid(
-            TyVector3::new(4.0, 0.0, 2.0),
+            TyVector3F64::new(4.0, 0.0, 2.0),
             GridResolution::AxisVoxelCount {
                 axis: ResolutionAxis::Long,
                 count: 4,
@@ -281,7 +281,7 @@ mod tests {
     fn meters_per_voxel_rounds_each_axis_up_and_records_the_size() {
         // 3 / 2 = 1.5 -> 2 voxels per axis.
         let (counts, node_scale) = resolve_grid(
-            TyVector3::new(3.0, 4.0, 3.0),
+            TyVector3F64::new(3.0, 4.0, 3.0),
             GridResolution::MetersPerVoxel(2.0),
         );
         assert_eq!(counts, TyVector3U32::new(2, 2, 2));

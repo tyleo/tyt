@@ -6,7 +6,7 @@ use std::{
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
-use ty_math::{TySrgba, TyVector3};
+use ty_math::{TySrgbaF32, TyVector3F64};
 
 /// Creates a cloud of random points inside a mesh volume (or on the surface with `--surface`) within an FBX file.
 #[derive(Clone, Debug, Parser)]
@@ -42,7 +42,7 @@ pub struct CreatePointCloud {
 }
 
 struct SampledPoint {
-    position: TyVector3,
+    position: TyVector3F64,
     triangle_index: usize,
     bary_u: f64,
     bary_v: f64,
@@ -76,13 +76,13 @@ impl CreatePointCloud {
             sample_volume_points_with_barycentrics(&vertices, &triangles, num_points, max_iter)?
         };
 
-        let points: Vec<TyVector3> = if let Some(s) = scale {
+        let points: Vec<TyVector3F64> = if let Some(s) = scale {
             sampled.iter().map(|sp| sp.position * s).collect()
         } else {
             sampled.iter().map(|sp| sp.position).collect()
         };
 
-        let color_layers: Vec<Vec<TySrgba>> = texture
+        let color_layers: Vec<Vec<TySrgbaF32>> = texture
             .iter()
             .map(|texture_path| {
                 let (pixels, img_w, img_h) = dependencies.load_image_rgba(texture_path)?;
@@ -104,7 +104,7 @@ fn parse_error(msg: impl Into<String>) -> Error {
     Error::IO(IOError::new(ErrorKind::InvalidData, msg.into()))
 }
 
-fn triangle_area(a: TyVector3, b: TyVector3, c: TyVector3) -> f64 {
+fn triangle_area(a: TyVector3F64, b: TyVector3F64, c: TyVector3F64) -> f64 {
     0.5 * (b - a).cross(c - a).length()
 }
 
@@ -140,7 +140,7 @@ fn random_barycentric(rng: &mut u64) -> (f64, f64, f64) {
 }
 
 fn sample_surface_points_with_barycentrics(
-    vertices: &[TyVector3],
+    vertices: &[TyVector3F64],
     triangles: &[[usize; 3]],
     num_points: usize,
 ) -> Result<Vec<SampledPoint>> {
@@ -185,7 +185,7 @@ fn sample_surface_points_with_barycentrics(
     Ok(sampled)
 }
 
-fn compute_aabb(vertices: &[TyVector3]) -> (TyVector3, TyVector3) {
+fn compute_aabb(vertices: &[TyVector3F64]) -> (TyVector3F64, TyVector3F64) {
     let mut min = vertices[0];
     let mut max = vertices[0];
     for v in &vertices[1..] {
@@ -212,11 +212,11 @@ fn compute_aabb(vertices: &[TyVector3]) -> (TyVector3, TyVector3) {
 }
 
 fn ray_triangle_intersects(
-    origin: &TyVector3,
-    dir: &TyVector3,
-    v0: &TyVector3,
-    v1: &TyVector3,
-    v2: &TyVector3,
+    origin: &TyVector3F64,
+    dir: &TyVector3F64,
+    v0: &TyVector3F64,
+    v1: &TyVector3F64,
+    v2: &TyVector3F64,
 ) -> bool {
     let epsilon = 1e-10;
     let edge1 = *v1 - *v0;
@@ -241,8 +241,12 @@ fn ray_triangle_intersects(
     t > epsilon
 }
 
-fn is_inside_mesh(point: &TyVector3, vertices: &[TyVector3], triangles: &[[usize; 3]]) -> bool {
-    let dir = TyVector3::new(1.0, 0.0, 0.0);
+fn is_inside_mesh(
+    point: &TyVector3F64,
+    vertices: &[TyVector3F64],
+    triangles: &[[usize; 3]],
+) -> bool {
+    let dir = TyVector3F64::new(1.0, 0.0, 0.0);
     let mut count = 0u32;
     for tri in triangles {
         if ray_triangle_intersects(
@@ -259,7 +263,7 @@ fn is_inside_mesh(point: &TyVector3, vertices: &[TyVector3], triangles: &[[usize
 }
 
 fn sample_volume_points_with_barycentrics(
-    vertices: &[TyVector3],
+    vertices: &[TyVector3F64],
     triangles: &[[usize; 3]],
     num_points: usize,
     max_iterations: usize,
@@ -278,7 +282,7 @@ fn sample_volume_points_with_barycentrics(
     let mut iterations = 0usize;
     while sampled.len() < num_points && iterations < max_iterations {
         iterations += 1;
-        let candidate = TyVector3::new(
+        let candidate = TyVector3F64::new(
             min.x + random_f64(&mut rng) * (max.x - min.x),
             min.y + random_f64(&mut rng) * (max.y - min.y),
             min.z + random_f64(&mut rng) * (max.z - min.z),
@@ -310,10 +314,10 @@ fn sample_volume_points_with_barycentrics(
 }
 
 fn closest_point_on_mesh(
-    point: &TyVector3,
-    vertices: &[TyVector3],
+    point: &TyVector3F64,
+    vertices: &[TyVector3F64],
     triangles: &[[usize; 3]],
-) -> (TyVector3, usize, f64, f64, f64) {
+) -> (TyVector3F64, usize, f64, f64, f64) {
     let mut best_dist_sq = f64::MAX;
     let mut best_pos = *point;
     let mut best_idx = 0;
@@ -344,11 +348,11 @@ fn closest_point_on_mesh(
 }
 
 fn closest_point_on_triangle(
-    p: &TyVector3,
-    a: &TyVector3,
-    b: &TyVector3,
-    c: &TyVector3,
-) -> (TyVector3, f64, f64, f64) {
+    p: &TyVector3F64,
+    a: &TyVector3F64,
+    b: &TyVector3F64,
+    c: &TyVector3F64,
+) -> (TyVector3F64, f64, f64, f64) {
     let ab = *b - *a;
     let ac = *c - *a;
     let ap = *p - *a;
@@ -405,7 +409,7 @@ fn sample_texture(
     img_w: u32,
     img_h: u32,
     sample: &SampledPoint,
-) -> TySrgba {
+) -> TySrgbaF32 {
     let tri_uvs = &uvs[sample.triangle_index];
     let tex_u = tri_uvs[0][0] * sample.bary_u
         + tri_uvs[1][0] * sample.bary_v
@@ -426,5 +430,5 @@ fn sample_texture(
     let b = pixels[idx + 2] as f32 / 255.0;
     let a = pixels[idx + 3] as f32 / 255.0;
 
-    TySrgba::new(r, g, b, a)
+    TySrgbaF32::new(r, g, b, a)
 }
