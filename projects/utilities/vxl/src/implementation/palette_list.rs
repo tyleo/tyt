@@ -202,7 +202,7 @@ mod tests {
     use branded_id::U32Id;
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The branded value id `index`.
     fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {
@@ -229,17 +229,15 @@ mod tests {
         // names and material counts reach the listing, so the values are
         // arbitrary.
         let colors_value_pool_id = state.add_value_pool(
-            VoxValuePool::srgba(vec![
+            VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 1.0],
                 [0.0, 0.0, 1.0, 1.0],
             ])
             .unwrap(),
         );
-        let metallic_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.0, 1.0])
-                .unwrap(),
-        );
+        let metallic_value_pool_id =
+            state.add_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
 
         let mut zero = VoxPalette::default();
         zero.add_property(
@@ -439,7 +437,7 @@ mod tests {
     fn an_unreferenced_palette_lists_no_users() {
         let mut state = VoxMain::default();
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property(
@@ -473,7 +471,7 @@ mod tests {
     fn an_unreferenced_palette_shows_an_empty_objects_branch() {
         let mut state = VoxMain::default();
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property(

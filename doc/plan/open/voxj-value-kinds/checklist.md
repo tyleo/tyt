@@ -351,8 +351,11 @@ Closes the red window.
       properties); a custom key defaults to plain numbers, with `--type`
       asserting color for it (the flag returns; V2 had dropped it, per
       the decisions log).
-- [ ] Fixtures and inline expectations across `palette_show.rs`,
-      `palette_list.rs`, `info.rs`, and `hierarchy_show.rs`.
+- [x] Fixtures and inline expectations across `palette_show.rs`,
+      `palette_list.rs`, `info.rs`, and `hierarchy_show.rs`. Every
+      expectation survived on re-fixtured inputs: the `[0, 1]` colors
+      the fixtures store decode to linear and encode back to the same
+      bytes, so only the constructors changed.
 
 Gate: the whole workspace green: `cargo fmt --all -- --check`,
 `cargo clippy --workspace --all-targets -- -D warnings`,

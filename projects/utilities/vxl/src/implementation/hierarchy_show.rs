@@ -1335,7 +1335,7 @@ mod tests {
     /// the material count matters to the tree, so every color is the same.
     fn add_palette_with_materials(state: &mut VoxMain, count: usize) -> U32Id<BVoxPalette> {
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgba(vec![[0.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[0.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property(

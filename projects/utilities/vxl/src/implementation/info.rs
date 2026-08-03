@@ -354,14 +354,14 @@ mod tests {
     use branded_id::U32Id;
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// One `baseColor` palette and one tight 1x1x1 object sampling its one
     /// material.
     fn tight_state() -> VoxMain {
         let mut state = VoxMain::default();
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
             .add_property(
@@ -527,9 +527,7 @@ mod tests {
     #[test]
     fn reports_two_layers_over_two_palettes() {
         let mut state = VoxMain::default();
-        let strengths_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::None, vec![2.0]).unwrap(),
-        );
+        let strengths_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
         let mut glow = VoxPalette::default();
         glow.add_property(
             "emissiveStrength".to_owned(),
@@ -541,7 +539,7 @@ mod tests {
         let glow_palette_id = state.add_palette(glow).unwrap();
 
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut base = VoxPalette::default();
         base.add_property(
             "baseColor".to_owned(),
