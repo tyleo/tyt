@@ -116,6 +116,10 @@ The constructors keep the kind-name spelling for the vector kinds:
 `vec_3_float` for `vec-3-float`, digit separated, not the variant-derived
 `vec3_float`.
 
+2026-08-03, after the gate review. `VoxValuePoolKind` carries its column
+as a tuple field: the struct form's one `values` field restated what the
+variant already says.
+
 ## Iteration 7 rulings
 
 2026-08-02. The one sRGB transfer lives in an internal helper pair:

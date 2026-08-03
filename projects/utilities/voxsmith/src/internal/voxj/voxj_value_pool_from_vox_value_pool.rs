@@ -7,7 +7,7 @@ use voxj::VoxjValuePool;
 /// through [`voxj_value_from_vox_value`].
 pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjValuePool {
     match value_pool.kind() {
-        VoxValuePoolKind::Bool { .. } => VoxjValuePool::Bool(
+        VoxValuePoolKind::Bool(..) => VoxjValuePool::Bool(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -17,7 +17,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::Float { .. } => VoxjValuePool::Float(
+        VoxValuePoolKind::Float(..) => VoxjValuePool::Float(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -27,7 +27,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::Int { .. } => VoxjValuePool::Int(
+        VoxValuePoolKind::Int(..) => VoxjValuePool::Int(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -37,7 +37,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::Json { .. } => VoxjValuePool::Json(
+        VoxValuePoolKind::Json(..) => VoxjValuePool::Json(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -47,7 +47,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::String { .. } => VoxjValuePool::String(
+        VoxValuePoolKind::String(..) => VoxjValuePool::String(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -59,7 +59,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::Vec2Float { .. } => VoxjValuePool::Vec2Float(
+        VoxValuePoolKind::Vec2Float(..) => VoxjValuePool::Vec2Float(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -71,7 +71,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::Vec2Int { .. } => VoxjValuePool::Vec2Int(
+        VoxValuePoolKind::Vec2Int(..) => VoxjValuePool::Vec2Int(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -83,7 +83,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::Vec3Float { .. } => VoxjValuePool::Vec3Float(
+        VoxValuePoolKind::Vec3Float(..) => VoxjValuePool::Vec3Float(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -95,7 +95,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::Vec3Int { .. } => VoxjValuePool::Vec3Int(
+        VoxValuePoolKind::Vec3Int(..) => VoxjValuePool::Vec3Int(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -107,7 +107,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::Vec4Float { .. } => VoxjValuePool::Vec4Float(
+        VoxValuePoolKind::Vec4Float(..) => VoxjValuePool::Vec4Float(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {
@@ -119,7 +119,7 @@ pub fn voxj_value_pool_from_vox_value_pool(value_pool: &VoxValuePool) -> VoxjVal
                 .collect(),
         ),
 
-        VoxValuePoolKind::Vec4Int { .. } => VoxjValuePool::Vec4Int(
+        VoxValuePoolKind::Vec4Int(..) => VoxjValuePool::Vec4Int(
             value_pool
                 .iter_values()
                 .map(|(_, value)| match value {

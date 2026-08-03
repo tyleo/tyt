@@ -1502,7 +1502,7 @@ mod tests {
         assert_eq!(metallic_id.to_u32(), 1);
         assert!(matches!(
             state.value_pool(colors_id).map(VoxValuePool::kind),
-            Some(VoxValuePoolKind::Vec4Float { .. })
+            Some(VoxValuePoolKind::Vec4Float(..))
         ));
         assert_eq!(
             state.value_pool(metallic_id).map(VoxValuePool::values_len),
@@ -1514,11 +1514,11 @@ mod tests {
         let mut value_pools = state.iter_value_pools();
         assert!(matches!(
             value_pools.next().map(|(_, value_pool)| value_pool.kind()),
-            Some(VoxValuePoolKind::Vec4Float { .. })
+            Some(VoxValuePoolKind::Vec4Float(..))
         ));
         assert!(matches!(
             value_pools.next().map(|(_, value_pool)| value_pool.kind()),
-            Some(VoxValuePoolKind::Float { .. })
+            Some(VoxValuePoolKind::Float(..))
         ));
         assert!(value_pools.next().is_none());
     }

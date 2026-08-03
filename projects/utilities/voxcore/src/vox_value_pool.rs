@@ -33,7 +33,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Bool { values },
+            kind: VoxValuePoolKind::Bool(values),
         }
         .checked()
     }
@@ -44,7 +44,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Float { values },
+            kind: VoxValuePoolKind::Float(values),
         }
         .checked()
     }
@@ -56,7 +56,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Int { values },
+            kind: VoxValuePoolKind::Int(values),
         }
         .checked()
     }
@@ -67,7 +67,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Json { values },
+            kind: VoxValuePoolKind::Json(values),
         }
         .checked()
     }
@@ -78,7 +78,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::String { values },
+            kind: VoxValuePoolKind::String(values),
         }
         .checked()
     }
@@ -90,7 +90,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Vec2Float { values },
+            kind: VoxValuePoolKind::Vec2Float(values),
         }
         .checked()
     }
@@ -102,7 +102,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Vec2Int { values },
+            kind: VoxValuePoolKind::Vec2Int(values),
         }
         .checked()
     }
@@ -114,7 +114,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Vec3Float { values },
+            kind: VoxValuePoolKind::Vec3Float(values),
         }
         .checked()
     }
@@ -126,7 +126,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Vec3Int { values },
+            kind: VoxValuePoolKind::Vec3Int(values),
         }
         .checked()
     }
@@ -138,7 +138,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Vec4Float { values },
+            kind: VoxValuePoolKind::Vec4Float(values),
         }
         .checked()
     }
@@ -150,7 +150,7 @@ impl VoxValuePool {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
-            kind: VoxValuePoolKind::Vec4Int { values },
+            kind: VoxValuePoolKind::Vec4Int(values),
         }
         .checked()
     }
@@ -253,39 +253,37 @@ impl VoxValuePool {
     /// `Clone`. Rebuild it against the cloned id pool.
     pub fn clone_value_pool(&self) -> Self {
         let kind = match &self.kind {
-            VoxValuePoolKind::Bool { values } => VoxValuePoolKind::Bool {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::Float { values } => VoxValuePoolKind::Float {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::Int { values } => VoxValuePoolKind::Int {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::Json { values } => VoxValuePoolKind::Json {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::String { values } => VoxValuePoolKind::String {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::Vec2Float { values } => VoxValuePoolKind::Vec2Float {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::Vec2Int { values } => VoxValuePoolKind::Vec2Int {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::Vec3Float { values } => VoxValuePoolKind::Vec3Float {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::Vec3Int { values } => VoxValuePoolKind::Vec3Int {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::Vec4Float { values } => VoxValuePoolKind::Vec4Float {
-                values: cloned(&self.value_ids, values),
-            },
-            VoxValuePoolKind::Vec4Int { values } => VoxValuePoolKind::Vec4Int {
-                values: cloned(&self.value_ids, values),
-            },
+            VoxValuePoolKind::Bool(values) => {
+                VoxValuePoolKind::Bool(cloned(&self.value_ids, values))
+            }
+            VoxValuePoolKind::Float(values) => {
+                VoxValuePoolKind::Float(cloned(&self.value_ids, values))
+            }
+            VoxValuePoolKind::Int(values) => VoxValuePoolKind::Int(cloned(&self.value_ids, values)),
+            VoxValuePoolKind::Json(values) => {
+                VoxValuePoolKind::Json(cloned(&self.value_ids, values))
+            }
+            VoxValuePoolKind::String(values) => {
+                VoxValuePoolKind::String(cloned(&self.value_ids, values))
+            }
+            VoxValuePoolKind::Vec2Float(values) => {
+                VoxValuePoolKind::Vec2Float(cloned(&self.value_ids, values))
+            }
+            VoxValuePoolKind::Vec2Int(values) => {
+                VoxValuePoolKind::Vec2Int(cloned(&self.value_ids, values))
+            }
+            VoxValuePoolKind::Vec3Float(values) => {
+                VoxValuePoolKind::Vec3Float(cloned(&self.value_ids, values))
+            }
+            VoxValuePoolKind::Vec3Int(values) => {
+                VoxValuePoolKind::Vec3Int(cloned(&self.value_ids, values))
+            }
+            VoxValuePoolKind::Vec4Float(values) => {
+                VoxValuePoolKind::Vec4Float(cloned(&self.value_ids, values))
+            }
+            VoxValuePoolKind::Vec4Int(values) => {
+                VoxValuePoolKind::Vec4Int(cloned(&self.value_ids, values))
+            }
         };
 
         Self {
@@ -301,17 +299,17 @@ impl VoxValuePool {
         // Safety: the id is retained, so it has a value in the column.
         unsafe {
             match &mut self.kind {
-                VoxValuePoolKind::Bool { values } => values.release(id),
-                VoxValuePoolKind::Float { values } => values.release(id),
-                VoxValuePoolKind::Int { values } => values.release(id),
-                VoxValuePoolKind::Json { values } => values.release(id),
-                VoxValuePoolKind::String { values } => values.release(id),
-                VoxValuePoolKind::Vec2Float { values } => values.release(id),
-                VoxValuePoolKind::Vec2Int { values } => values.release(id),
-                VoxValuePoolKind::Vec3Float { values } => values.release(id),
-                VoxValuePoolKind::Vec3Int { values } => values.release(id),
-                VoxValuePoolKind::Vec4Float { values } => values.release(id),
-                VoxValuePoolKind::Vec4Int { values } => values.release(id),
+                VoxValuePoolKind::Bool(values) => values.release(id),
+                VoxValuePoolKind::Float(values) => values.release(id),
+                VoxValuePoolKind::Int(values) => values.release(id),
+                VoxValuePoolKind::Json(values) => values.release(id),
+                VoxValuePoolKind::String(values) => values.release(id),
+                VoxValuePoolKind::Vec2Float(values) => values.release(id),
+                VoxValuePoolKind::Vec2Int(values) => values.release(id),
+                VoxValuePoolKind::Vec3Float(values) => values.release(id),
+                VoxValuePoolKind::Vec3Int(values) => values.release(id),
+                VoxValuePoolKind::Vec4Float(values) => values.release(id),
+                VoxValuePoolKind::Vec4Int(values) => values.release(id),
             }
         }
         self.value_ids.release_stable(id);
@@ -335,17 +333,17 @@ impl VoxValuePool {
         // has retained or released since.
         unsafe {
             match &mut self.kind {
-                VoxValuePoolKind::Bool { values } => values.gc(&remap),
-                VoxValuePoolKind::Float { values } => values.gc(&remap),
-                VoxValuePoolKind::Int { values } => values.gc(&remap),
-                VoxValuePoolKind::Json { values } => values.gc(&remap),
-                VoxValuePoolKind::String { values } => values.gc(&remap),
-                VoxValuePoolKind::Vec2Float { values } => values.gc(&remap),
-                VoxValuePoolKind::Vec2Int { values } => values.gc(&remap),
-                VoxValuePoolKind::Vec3Float { values } => values.gc(&remap),
-                VoxValuePoolKind::Vec3Int { values } => values.gc(&remap),
-                VoxValuePoolKind::Vec4Float { values } => values.gc(&remap),
-                VoxValuePoolKind::Vec4Int { values } => values.gc(&remap),
+                VoxValuePoolKind::Bool(values) => values.gc(&remap),
+                VoxValuePoolKind::Float(values) => values.gc(&remap),
+                VoxValuePoolKind::Int(values) => values.gc(&remap),
+                VoxValuePoolKind::Json(values) => values.gc(&remap),
+                VoxValuePoolKind::String(values) => values.gc(&remap),
+                VoxValuePoolKind::Vec2Float(values) => values.gc(&remap),
+                VoxValuePoolKind::Vec2Int(values) => values.gc(&remap),
+                VoxValuePoolKind::Vec3Float(values) => values.gc(&remap),
+                VoxValuePoolKind::Vec3Int(values) => values.gc(&remap),
+                VoxValuePoolKind::Vec4Float(values) => values.gc(&remap),
+                VoxValuePoolKind::Vec4Int(values) => values.gc(&remap),
             }
         }
         remap
@@ -356,29 +354,23 @@ impl VoxValuePool {
         // Safety: the id is retained, so it has a value in the column.
         unsafe {
             match &self.kind {
-                VoxValuePoolKind::Bool { values } => VoxValuePoolValueRef::Bool(*values.get(id)),
-                VoxValuePoolKind::Float { values } => VoxValuePoolValueRef::Float(*values.get(id)),
-                VoxValuePoolKind::Int { values } => VoxValuePoolValueRef::Int(*values.get(id)),
-                VoxValuePoolKind::Json { values } => VoxValuePoolValueRef::Json(values.get(id)),
-                VoxValuePoolKind::String { values } => VoxValuePoolValueRef::String(values.get(id)),
-                VoxValuePoolKind::Vec2Float { values } => {
+                VoxValuePoolKind::Bool(values) => VoxValuePoolValueRef::Bool(*values.get(id)),
+                VoxValuePoolKind::Float(values) => VoxValuePoolValueRef::Float(*values.get(id)),
+                VoxValuePoolKind::Int(values) => VoxValuePoolValueRef::Int(*values.get(id)),
+                VoxValuePoolKind::Json(values) => VoxValuePoolValueRef::Json(values.get(id)),
+                VoxValuePoolKind::String(values) => VoxValuePoolValueRef::String(values.get(id)),
+                VoxValuePoolKind::Vec2Float(values) => {
                     VoxValuePoolValueRef::Vec2Float(values.get(id))
                 }
-                VoxValuePoolKind::Vec2Int { values } => {
-                    VoxValuePoolValueRef::Vec2Int(values.get(id))
-                }
-                VoxValuePoolKind::Vec3Float { values } => {
+                VoxValuePoolKind::Vec2Int(values) => VoxValuePoolValueRef::Vec2Int(values.get(id)),
+                VoxValuePoolKind::Vec3Float(values) => {
                     VoxValuePoolValueRef::Vec3Float(values.get(id))
                 }
-                VoxValuePoolKind::Vec3Int { values } => {
-                    VoxValuePoolValueRef::Vec3Int(values.get(id))
-                }
-                VoxValuePoolKind::Vec4Float { values } => {
+                VoxValuePoolKind::Vec3Int(values) => VoxValuePoolValueRef::Vec3Int(values.get(id)),
+                VoxValuePoolKind::Vec4Float(values) => {
                     VoxValuePoolValueRef::Vec4Float(values.get(id))
                 }
-                VoxValuePoolKind::Vec4Int { values } => {
-                    VoxValuePoolValueRef::Vec4Int(values.get(id))
-                }
+                VoxValuePoolKind::Vec4Int(values) => VoxValuePoolValueRef::Vec4Int(values.get(id)),
             }
         }
     }
@@ -389,17 +381,17 @@ impl Drop for VoxValuePool {
         // Safety: the column holds a value for every id in the id pool.
         unsafe {
             match &mut self.kind {
-                VoxValuePoolKind::Bool { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Float { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Int { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Json { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::String { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec2Float { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec2Int { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec3Float { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec3Int { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec4Float { values } => values.release_all(&self.value_ids),
-                VoxValuePoolKind::Vec4Int { values } => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Bool(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Float(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Int(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Json(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::String(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec2Float(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec2Int(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec3Float(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec3Int(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec4Float(values) => values.release_all(&self.value_ids),
+                VoxValuePoolKind::Vec4Int(values) => values.release_all(&self.value_ids),
             }
         }
     }
