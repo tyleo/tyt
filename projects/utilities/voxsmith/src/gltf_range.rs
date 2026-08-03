@@ -1,3 +1,4 @@
+use crate::{Error, Result};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// The glTF schema range of one vocabulary attribute: an inclusive interval
@@ -27,6 +28,18 @@ impl GltfRange {
     /// interval's nearest end. NaN has no clamp and stays NaN.
     pub fn clamp(self, value: f64) -> f64 {
         value.clamp(self.min, self.max.unwrap_or(f64::INFINITY))
+    }
+
+    /// Errors unless `value` lies in the range, naming the vocabulary
+    /// property `name` that binds it.
+    pub fn check(self, name: &str, value: f64) -> Result<()> {
+        if self.contains(value) {
+            Ok(())
+        } else {
+            Err(Error::invalid(format!(
+                "`{name}` is {value}, outside the glTF range {self}"
+            )))
+        }
     }
 }
 

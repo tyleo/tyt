@@ -70,6 +70,14 @@ pub(crate) fn scalar_range(key: &str) -> Option<GltfRange> {
     }
 }
 
+/// The `[0, 1]` every component of a recommended color attribute lies in, per
+/// the glTF schema of `baseColorFactor` and `emissiveFactor`.
+pub(crate) const COLOR_RANGE: GltfRange = GltfRange {
+    min: 0.0,
+    max: Some(1.0),
+    admits_zero: false,
+};
+
 /// The glTF spec default for a recommended color attribute, as sRGB `[r, g, b,
 /// a]` bytes, or `None` for a key with no standard default, such as a custom
 /// attribute. A three-component color takes opaque alpha.

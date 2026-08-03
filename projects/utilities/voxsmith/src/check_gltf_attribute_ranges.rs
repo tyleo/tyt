@@ -1,13 +1,5 @@
-use crate::{BASE_COLOR, EMISSIVE_COLOR, Error, GltfRange, Result, scalar_range};
+use crate::{COLOR_RANGE, GltfAttributeKind, GltfRange, Result, scalar_range};
 use voxcore::{VoxMain, VoxValuePoolValueRef};
-
-/// The `[0, 1]` every component of a vocabulary color lies in, per the glTF
-/// schema of `baseColorFactor` and `emissiveFactor`.
-const COLOR_RANGE: GltfRange = GltfRange {
-    min: 0.0,
-    max: Some(1.0),
-    admits_zero: false,
-};
 
 /// Checks every palette property named by the glTF vocabulary against that
 /// name's glTF schema range, erroring on the first value a material draws
@@ -26,11 +18,16 @@ const COLOR_RANGE: GltfRange = GltfRange {
 pub fn check_gltf_attribute_ranges(state: &VoxMain) -> Result<()> {
     for (palette_id, palette) in state.iter_palettes() {
         for (property_id, property) in palette.iter_properties() {
-            let scalar = scalar_range(&property.name);
-            let color = matches!(property.name.as_str(), BASE_COLOR | EMISSIVE_COLOR);
-            if scalar.is_none() && !color {
+            let name = &property.name;
+            let Some(kind) = GltfAttributeKind::of(name) else {
                 continue;
-            }
+            };
+            let range = match kind {
+                GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba => COLOR_RANGE,
+                GltfAttributeKind::Scalar => {
+                    scalar_range(name).expect("every scalar vocabulary attribute has a range")
+                }
+            };
 
             for material_id in palette.iter_materials() {
                 let Some(value) = state
@@ -40,20 +37,21 @@ pub fn check_gltf_attribute_ranges(state: &VoxMain) -> Result<()> {
                     continue;
                 };
 
-                match (value, scalar) {
-                    (VoxValuePoolValueRef::Float(number), Some(range)) => {
-                        check(&property.name, number, range)?
-                    }
-                    (VoxValuePoolValueRef::Int(number), Some(range)) => {
-                        check(&property.name, number as f64, range)?
-                    }
-                    (VoxValuePoolValueRef::Vec3Float(components), None) if color => {
-                        check_components(&property.name, components)?
-                    }
-                    (VoxValuePoolValueRef::Vec4Float(components), None) if color => {
-                        check_components(&property.name, components)?
-                    }
-                    _ => {}
+                match kind {
+                    GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba => match value {
+                        VoxValuePoolValueRef::Vec3Float(components) => {
+                            check_components(name, components, range)?
+                        }
+                        VoxValuePoolValueRef::Vec4Float(components) => {
+                            check_components(name, components, range)?
+                        }
+                        _ => {}
+                    },
+                    GltfAttributeKind::Scalar => match value {
+                        VoxValuePoolValueRef::Float(number) => range.check(name, number)?,
+                        VoxValuePoolValueRef::Int(number) => range.check(name, number as f64)?,
+                        _ => {}
+                    },
                 }
             }
         }
@@ -61,25 +59,10 @@ pub fn check_gltf_attribute_ranges(state: &VoxMain) -> Result<()> {
     Ok(())
 }
 
-/// Errors unless `value` lies in `range`.
-fn check(name: &str, value: f64, range: GltfRange) -> Result<()> {
-    if range.contains(value) {
-        Ok(())
-    } else {
-        Err(Error::invalid(format!(
-            "`{name}` is {value}, outside the glTF range {range}"
-        )))
-    }
-}
-
-/// Errors unless every component of a vocabulary color lies in `[0, 1]`.
-fn check_components(name: &str, components: &[f64]) -> Result<()> {
+/// Errors unless every component of a vocabulary color lies in `range`.
+fn check_components(name: &str, components: &[f64], range: GltfRange) -> Result<()> {
     for &component in components {
-        if !COLOR_RANGE.contains(component) {
-            return Err(Error::invalid(format!(
-                "`{name}` component is {component}, outside the glTF range {COLOR_RANGE}"
-            )));
-        }
+        range.check(name, component)?;
     }
     Ok(())
 }

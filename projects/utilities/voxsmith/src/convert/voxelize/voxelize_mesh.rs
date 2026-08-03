@@ -1,8 +1,8 @@
 use crate::{
-    BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, FillMode, GltfRange, IOR, METALLIC,
-    MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS, Result,
-    SurfaceMode, TRANSMISSION, VoxelGrid, check_gltf_attribute_ranges, linear_color_from_srgba_u8,
-    sample_material, scalar_range, voxelize_triangles,
+    BASE_COLOR, COLOR_RANGE, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, FillMode, GltfRange, IOR,
+    METALLIC, MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeFactor, ROUGHNESS,
+    Result, SurfaceMode, TRANSMISSION, VoxelGrid, check_gltf_attribute_ranges,
+    linear_color_from_srgba_u8, sample_material, scalar_range, voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::collections::{HashMap, VecDeque};
@@ -501,7 +501,7 @@ fn factor_value_pool(
     Ok(VoxValuePool::float(values)?)
 }
 
-/// A color factor with every component checked against the glTF `[0, 1]`. A
+/// A color factor with every component checked against [`COLOR_RANGE`]. A
 /// component outside it follows `out_of_range`. A NaN has no clamped value,
 /// so it errors either way.
 fn factor_color(
@@ -509,36 +509,28 @@ fn factor_color(
     key: &str,
     out_of_range: OutOfRangeFactor,
 ) -> Result<TyLinSrgbaF64> {
-    let range = GltfRange {
-        min: 0.0,
-        max: Some(1.0),
-        admits_zero: false,
-    };
-
     let mut components = <[f64; 4]>::from(color);
     for component in &mut components {
-        *component = factor_value(*component, range, key, out_of_range)?;
+        *component = factor_value(*component, COLOR_RANGE, key, out_of_range)?;
     }
     Ok(TyLinSrgbaF64::from(components))
 }
 
-/// One factor value under the out-of-range policy: itself when in `range`,
-/// its clamp under [`OutOfRangeFactor::Clamp`], else the range error.
+/// One factor value under the out-of-range policy: its clamp under
+/// [`OutOfRangeFactor::Clamp`], else itself when in `range` and the range
+/// error otherwise. An in-range value is its own clamp, and a NaN has no
+/// clamp, so it errors under either policy.
 fn factor_value(
     value: f64,
     range: GltfRange,
     key: &str,
     out_of_range: OutOfRangeFactor,
 ) -> Result<f64> {
-    if range.contains(value) {
-        Ok(value)
-    } else if out_of_range == OutOfRangeFactor::Clamp && !value.is_nan() {
-        Ok(range.clamp(value))
-    } else {
-        Err(Error::invalid(format!(
-            "`{key}` is {value}, outside the glTF range {range}"
-        )))
+    if out_of_range == OutOfRangeFactor::Clamp && !value.is_nan() {
+        return Ok(range.clamp(value));
     }
+    range.check(key, value)?;
+    Ok(value)
 }
 
 /// A hashable identity for a material: the bit patterns of its two colors'
