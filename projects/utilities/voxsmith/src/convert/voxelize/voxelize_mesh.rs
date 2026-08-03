@@ -300,14 +300,14 @@ fn build_palette(
 
     // One deduplicated value pool per property, plus each distinct material's
     // value id into it.
-    let base_color = rgba_value_pool(&distinct, |material| material.base_color);
-    let metallic = float_value_pool(&distinct, |material| material.metallic);
-    let roughness = float_value_pool(&distinct, |material| material.roughness);
-    let emissive_color = rgb_value_pool(&distinct, |material| material.emissive_color);
-    let emissive_strength = float_value_pool(&distinct, |material| material.emissive_strength);
-    let occlusion = float_value_pool(&distinct, |material| material.occlusion);
-    let ior = float_value_pool(&distinct, |material| material.ior);
-    let transmission = float_value_pool(&distinct, |material| material.transmission);
+    let base_color = lin_srgba_value_pool(&distinct, |material| material.base_color);
+    let metallic = f64_value_pool(&distinct, |material| material.metallic);
+    let roughness = f64_value_pool(&distinct, |material| material.roughness);
+    let emissive_color = lin_srgb_value_pool(&distinct, |material| material.emissive_color);
+    let emissive_strength = f64_value_pool(&distinct, |material| material.emissive_strength);
+    let occlusion = f64_value_pool(&distinct, |material| material.occlusion);
+    let ior = f64_value_pool(&distinct, |material| material.ior);
+    let transmission = f64_value_pool(&distinct, |material| material.transmission);
 
     // Register the value pools and add each property. All properties precede
     // any material, so no material carries a back-fill placeholder value id.
@@ -421,7 +421,7 @@ struct ValuePoolColumn<T> {
 
 /// A four-component color value pool over the extracted linear color,
 /// deduplicated by its components' bit patterns.
-fn rgba_value_pool(
+fn lin_srgba_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
 ) -> ValuePoolColumn<[f64; 4]> {
@@ -434,7 +434,7 @@ fn rgba_value_pool(
 
 /// A three-component color value pool over the extracted linear color,
 /// deduplicated by its components' bit patterns. The alpha is dropped.
-fn rgb_value_pool(
+fn lin_srgb_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> TyLinSrgbaF64,
 ) -> ValuePoolColumn<[f64; 3]> {
@@ -450,7 +450,7 @@ fn rgb_value_pool(
 
 /// A float value pool over the extracted scalar, deduplicated by its bit
 /// pattern.
-fn float_value_pool(
+fn f64_value_pool(
     materials: &[MeshMaterial],
     get: impl Fn(&MeshMaterial) -> f64,
 ) -> ValuePoolColumn<f64> {
