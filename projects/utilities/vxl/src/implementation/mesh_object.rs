@@ -64,7 +64,7 @@ pub fn mesh_object(
     }
 
     // The maps read each property through its winning layer, so validate each
-    // channel's component against the winning value pool's kind before baking.
+    // channel's component against the kind its property reads as before baking.
     validate_maps(&state, object, maps)?;
 
     let request = MaterialMeshRequest {
@@ -181,23 +181,25 @@ fn validate_channel(
     }
 }
 
-/// The kind of the property `key`: its winning layer's value pool kind when a
-/// layer supplies it, else the voxj unbound-default rule, a glTF built-in by
-/// its spec kind and a custom property an error.
+/// The kind of the property `key`. The glTF vocabulary classifies a name it
+/// holds, bound or not: no value pool kind says color, so the name fixes how
+/// a bake reads the property. A custom key classifies by its winning value
+/// pool's shape, and unbound it errors: it has no spec default and no shape
+/// to read.
 fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKind> {
+    if let Some(kind) = GltfAttributeKind::of(key) {
+        return Ok(match kind {
+            GltfAttributeKind::ColorRgba => ChannelKind::Color { alpha: true },
+            GltfAttributeKind::ColorRgb => ChannelKind::Color { alpha: false },
+            GltfAttributeKind::Scalar => ChannelKind::Scalar,
+        });
+    }
+
     let Some(property_id) = effective.property_id_by_name(key) else {
-        // No layer supplies it: the voxj format's unbound-default rule. A
-        // glTF built-in takes its spec kind and bakes its default. A custom
-        // property has no default, so its type cannot be inferred.
-        return match GltfAttributeKind::of(key) {
-            Some(GltfAttributeKind::ColorRgba) => Ok(ChannelKind::Color { alpha: true }),
-            Some(GltfAttributeKind::ColorRgb) => Ok(ChannelKind::Color { alpha: false }),
-            Some(GltfAttributeKind::Scalar) => Ok(ChannelKind::Scalar),
-            None => Err(Error::usage(format!(
-                "`{key}` is not bound by any of the object's layers, so its type cannot be \
-                 inferred; bind it in a palette or map a glTF property"
-            ))),
-        };
+        return Err(Error::usage(format!(
+            "`{key}` is not bound by any of the object's layers, so its type cannot be \
+             inferred; bind it in a palette or map a glTF property"
+        )));
     };
 
     let value_pool = effective
@@ -208,22 +210,26 @@ fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKin
     value_pool_kind(value_pool, key)
 }
 
-/// Classifies a bound value pool into a channel kind, rejecting a value pool
-/// that has no texel value: a string or json value pool.
+/// Classifies a bound custom property by its value pool's shape: a float,
+/// int, or bool value reads as a scalar, and a float vector reads as a
+/// color, the component read asserting the color-ness the shape alone cannot.
+/// The other shapes have no texel value.
 fn value_pool_kind(value_pool: &VoxValuePool, key: &str) -> Result<ChannelKind> {
     match value_pool.kind() {
-        VoxValuePoolKind::Srgb { .. } | VoxValuePoolKind::LinearRgb { .. } => {
-            Ok(ChannelKind::Color { alpha: false })
+        VoxValuePoolKind::Bool(_) | VoxValuePoolKind::Float(_) | VoxValuePoolKind::Int(_) => {
+            Ok(ChannelKind::Scalar)
         }
-        VoxValuePoolKind::Srgba { .. } | VoxValuePoolKind::LinearRgba { .. } => {
-            Ok(ChannelKind::Color { alpha: true })
-        }
-        VoxValuePoolKind::Float { .. }
-        | VoxValuePoolKind::Int { .. }
-        | VoxValuePoolKind::Bool { .. } => Ok(ChannelKind::Scalar),
-        VoxValuePoolKind::String { .. } | VoxValuePoolKind::Json { .. } => Err(Error::usage(
-            format!("`{key}` is bound to a string or json value pool, which has no texel value"),
-        )),
+        VoxValuePoolKind::Vec3Float(_) => Ok(ChannelKind::Color { alpha: false }),
+        VoxValuePoolKind::Vec4Float(_) => Ok(ChannelKind::Color { alpha: true }),
+        VoxValuePoolKind::Json(_)
+        | VoxValuePoolKind::String(_)
+        | VoxValuePoolKind::Vec2Float(_)
+        | VoxValuePoolKind::Vec2Int(_)
+        | VoxValuePoolKind::Vec3Int(_)
+        | VoxValuePoolKind::Vec4Int(_) => Err(Error::usage(format!(
+            "`{key}` is bound to a value pool with no texel value; a channel reads a float, \
+             int, or bool scalar or a vec-3-float or vec-4-float color"
+        ))),
     }
 }
 
@@ -267,7 +273,7 @@ fn material_channel(source: &ChannelSource) -> MaterialChannel {
             key,
             component,
             invert,
-        } => MaterialChannel::Attribute {
+        } => MaterialChannel::Property {
             key: key.clone(),
             component: component
                 .as_ref()
@@ -313,9 +319,7 @@ mod tests {
     use crate::ColorComponent;
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{
-        BVoxPalette, BVoxValuePoolValue, VoxBound, VoxMain, VoxObject, VoxPalette, VoxValuePool,
-    };
+    use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The branded value id `index`.
     fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {
@@ -328,12 +332,10 @@ mod tests {
         let mut state = VoxMain::default();
 
         let tint_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let glow_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgb(vec![[0.0, 1.0, 0.0]]).unwrap());
-        let gloss_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.5]).unwrap(),
-        );
+            state.add_value_pool(VoxValuePool::vec_3_float(vec![[0.0, 1.0, 0.0]]).unwrap());
+        let gloss_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
@@ -373,8 +375,8 @@ mod tests {
     #[test]
     fn a_present_color_reads_by_component() {
         let (state, palette_id) = palette_state();
-        // `tint` is an srgba value pool: a component is required, and `.a` is
-        // allowed.
+        // `tint` is a vec-4-float value pool: a component is required, and `.a`
+        // is allowed.
         assert!(!validates(&state, &[palette_id], "tint", None));
         assert!(validates(
             &state,
@@ -448,6 +450,29 @@ mod tests {
     }
 
     #[test]
+    fn a_bound_builtin_takes_its_vocabulary_kind() {
+        // `metallic` binds to a vec-4-float value pool, but the glTF
+        // vocabulary says scalar, and the name decides for a name it holds.
+        let mut state = VoxMain::default();
+        let value_pool_id =
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property("metallic".to_owned(), value_pool_id, U32Id::from_u32(0))
+            .unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
+
+        assert!(validates(&state, &[palette_id], "metallic", None));
+        assert!(!validates(
+            &state,
+            &[palette_id],
+            "metallic",
+            Some(ColorComponent::R)
+        ));
+    }
+
+    #[test]
     fn an_absent_custom_property_is_an_error() {
         let (state, palette_id) = palette_state();
         // `subsurface` is neither bound nor a glTF property, so its type cannot
@@ -510,16 +535,35 @@ mod tests {
     }
 
     #[test]
+    fn an_int_vector_value_pool_has_no_texel_value() {
+        let mut state = VoxMain::default();
+        let cell_value_pool_id =
+            state.add_value_pool(VoxValuePool::vec_3_int(vec![[1, 2, 3]]).unwrap());
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property("cell".to_owned(), cell_value_pool_id, U32Id::from_u32(0))
+            .unwrap();
+        palette.add_material(vec![value_id(0)]).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
+
+        assert!(!validates(&state, &[palette_id], "cell", None));
+        assert!(!validates(
+            &state,
+            &[palette_id],
+            "cell",
+            Some(ColorComponent::R)
+        ));
+    }
+
+    #[test]
     fn a_key_takes_its_winning_layers_kind() {
         // Two palettes bind `finish` to different kinds: a float scalar and a
         // four-component color. The last layer's palette wins, so the layer
         // order flips which component rule applies.
         let mut state = VoxMain::default();
-        let scalar_value_pool_id = state.add_value_pool(
-            VoxValuePool::float(VoxBound::Number(0.0), VoxBound::Number(1.0), vec![0.5]).unwrap(),
-        );
+        let scalar_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
         let color_value_pool_id =
-            state.add_value_pool(VoxValuePool::srgba(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut scalar_palette = VoxPalette::default();
         scalar_palette
