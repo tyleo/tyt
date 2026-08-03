@@ -1,6 +1,4 @@
-use crate::{
-    Format, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat, commands::EditState, implementation,
-};
+use crate::{Format, Result, VoxjEncoding, VoxjFormat, commands::EditState, implementation};
 use std::path::Path;
 use voxsmith::EditStateMode;
 
@@ -8,14 +6,12 @@ use voxsmith::EditStateMode;
 /// round-tripping through voxcore: the input is loaded into a
 /// [`VoxMain`](voxcore::VoxMain), encoded back to a voxj document with the
 /// chosen block `encoding`, then serialized in the container `format` selects.
-#[allow(clippy::too_many_arguments)]
 pub fn to_voxj(
     input: &Path,
     from: Option<Format>,
     output: &Path,
     encoding: VoxjEncoding,
     format: VoxjFormat,
-    color_format: VoxjColorFormat,
     ext: bool,
     edit_state: EditState,
 ) -> Result<()> {
@@ -25,7 +21,6 @@ pub fn to_voxj(
         output,
         encoding,
         format,
-        color_format,
         ext,
         edit_state_mode(edit_state),
     )

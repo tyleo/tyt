@@ -1,5 +1,5 @@
 use crate::{
-    Format, MeshFormat, Result, SelectIndex, VoxjColorFormat, VoxjEncoding, VoxjFormat, Width,
+    Format, MeshFormat, Result, SelectIndex, VoxjEncoding, VoxjFormat, Width,
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
         HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeFactor,
@@ -65,7 +65,6 @@ pub trait Dependencies {
     /// * `output` - the `.voxj` or `.voxjz` document to write.
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
-    /// * `color_format` - the on-wire encoding for sRGB color value pools.
     /// * `ext` - when false, omits the user-defined `ext` extension block.
     /// * `edit_state` - when to record each object's editor build volume.
     #[allow(clippy::too_many_arguments)]
@@ -76,7 +75,6 @@ pub trait Dependencies {
         output: &Path,
         encoding: VoxjEncoding,
         format: VoxjFormat,
-        color_format: VoxjColorFormat,
         ext: bool,
         edit_state: EditState,
     ) -> Result<()>;
@@ -101,7 +99,6 @@ pub trait Dependencies {
     /// * `reduction` - the palette material cap and its clustering controls.
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
-    /// * `color_format` - the on-wire encoding for sRGB color value pools.
     /// * `out_of_range_factor` - whether a source material factor outside its
     ///   glTF range errors or clamps.
     #[allow(clippy::too_many_arguments)]
@@ -119,7 +116,6 @@ pub trait Dependencies {
         reduction: PaletteReduction,
         encoding: VoxjEncoding,
         format: VoxjFormat,
-        color_format: VoxjColorFormat,
         out_of_range_factor: OutOfRangeFactor,
     ) -> Result<()>;
 

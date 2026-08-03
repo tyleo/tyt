@@ -80,8 +80,6 @@ impl Voxelize {
 
         let encoding = self.encoding_options.encoding();
 
-        let color_format = self.encoding_options.color_format();
-
         let reduction = self.quantize_options.resolve();
 
         dependencies.voxelize(
@@ -97,7 +95,6 @@ impl Voxelize {
             reduction,
             encoding,
             format,
-            color_format,
             self.out_of_range_factor,
         )
     }

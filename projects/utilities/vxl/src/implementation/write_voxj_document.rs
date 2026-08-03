@@ -1,13 +1,11 @@
-use crate::{
-    Result, VoxjColorFormat, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding,
-};
+use crate::{Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding};
 use std::{fs, path::Path};
 use voxcore::VoxMain;
 use voxj_codec::{
     PositionEncoding, SampleEncoding, to_voxj_file_bytes, to_voxj_pretty_file_bytes,
     to_voxjz_file_bytes,
 };
-use voxsmith::{ColorFormat, EditStateMode, VoxjFileBuilder};
+use voxsmith::{EditStateMode, VoxjFileBuilder};
 
 /// Encodes a voxel state into a Voxel Json document and writes it, shared by
 /// every command that produces a voxj document.
@@ -17,7 +15,6 @@ use voxsmith::{ColorFormat, EditStateMode, VoxjFileBuilder};
 /// * `output` - the `.voxj` or `.voxjz` path to write.
 /// * `encoding` - the per-object block encodings.
 /// * `format` - the output container and printing form.
-/// * `color_format` - the on-wire encoding for sRGB color value pools.
 /// * `ext` - when false, drops the user-defined `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
 pub fn write_voxj_document(
@@ -25,18 +22,12 @@ pub fn write_voxj_document(
     output: &Path,
     encoding: VoxjEncoding,
     format: VoxjFormat,
-    color_format: VoxjColorFormat,
     ext: bool,
     edit_state: EditStateMode,
 ) -> Result<()> {
     let file = VoxjFileBuilder::new(state)
         .position_encoding(position_encoding(encoding.position))
         .sample_encoding(sample_encoding(encoding.sample))
-        .color_format(match color_format {
-            VoxjColorFormat::Float => ColorFormat::Float,
-            VoxjColorFormat::Hex => ColorFormat::Hex,
-            VoxjColorFormat::LinearFloat => ColorFormat::LinearFloat,
-        })
         .ext(ext)
         .edit_state(edit_state)
         .build()?;

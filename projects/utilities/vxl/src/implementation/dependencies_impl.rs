@@ -1,6 +1,5 @@
 use crate::{
-    Dependencies, Format, MeshFormat, Result, SelectIndex, VoxjColorFormat, VoxjEncoding,
-    VoxjFormat, Width,
+    Dependencies, Format, MeshFormat, Result, SelectIndex, VoxjEncoding, VoxjFormat, Width,
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
         HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeFactor,
@@ -47,20 +46,10 @@ impl Dependencies for DependenciesImpl {
         output: &Path,
         encoding: VoxjEncoding,
         format: VoxjFormat,
-        color_format: VoxjColorFormat,
         ext: bool,
         edit_state: EditState,
     ) -> Result<()> {
-        implementation::to_voxj(
-            input,
-            from,
-            output,
-            encoding,
-            format,
-            color_format,
-            ext,
-            edit_state,
-        )
+        implementation::to_voxj(input, from, output, encoding, format, ext, edit_state)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -78,7 +67,6 @@ impl Dependencies for DependenciesImpl {
         reduction: PaletteReduction,
         encoding: VoxjEncoding,
         format: VoxjFormat,
-        color_format: VoxjColorFormat,
         out_of_range_factor: OutOfRangeFactor,
     ) -> Result<()> {
         implementation::voxelize(
@@ -94,7 +82,6 @@ impl Dependencies for DependenciesImpl {
             reduction,
             encoding,
             format,
-            color_format,
             out_of_range_factor,
         )
     }

@@ -42,7 +42,6 @@ pub struct ToVoxj {
 impl ToVoxj {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let encoding = self.encoding_options.encoding();
-        let color_format = self.encoding_options.color_format();
         let (format, output) = self
             .encoding_options
             .resolve_output(&self.input, self.output);
@@ -52,7 +51,6 @@ impl ToVoxj {
             &output,
             encoding,
             format,
-            color_format,
             self.ext,
             self.edit_state,
         )

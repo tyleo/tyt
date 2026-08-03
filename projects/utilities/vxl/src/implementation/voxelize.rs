@@ -1,5 +1,5 @@
 use crate::{
-    MeshFormat, Result, VoxjColorFormat, VoxjEncoding, VoxjFormat,
+    MeshFormat, Result, VoxjEncoding, VoxjFormat,
     commands::{
         ColorSpace, Dither, FillMode, GridResolution, MaterialMode, OutOfRangeFactor,
         PaletteReduction, QuantizeMethod, ResolutionAxis, SurfaceMode,
@@ -36,7 +36,6 @@ pub fn voxelize(
     reduction: PaletteReduction,
     encoding: VoxjEncoding,
     format: VoxjFormat,
-    color_format: VoxjColorFormat,
     out_of_range_factor: OutOfRangeFactor,
 ) -> Result<()> {
     let bytes = fs::read(input)?;
@@ -88,7 +87,6 @@ pub fn voxelize(
         output,
         encoding,
         format,
-        color_format,
         false,
         EditStateMode::Never,
     )

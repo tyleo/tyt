@@ -330,7 +330,7 @@ iteration edits.
 
 Closes the red window.
 
-- [ ] Delete `utilities/voxj_color_format.rs` and the voxj
+- [x] Delete `utilities/voxj_color_format.rs` and the voxj
       `--color-format` flag in `utilities/voxj_encoding_options.rs`, with
       the plumbing through `dependencies.rs`, `dependencies_impl.rs`,
       `to_voxj.rs`, `voxelize.rs`, and `write_voxj_document.rs`. The vmax
