@@ -147,7 +147,8 @@ spelling. vxl's `--out-of-range-factor` flag follows in iteration 8;
 the checklist carries it.
 
 2026-08-03, after the gate review. The atlas bake reads colors linear:
-`value_pool_linear_color` is the base read, `value_pool_color` its 8-bit
+`value_pool_lin_srgba_f64_color` is the base read, typed as the color it
+reads, `value_pool_color` its 8-bit
 encoding, and the emissive fold scales the exact stored color and
 encodes once, so a texel rounds only at the boundary instead of before
 and after the scale. The vmax writer keeps deriving `sic` from

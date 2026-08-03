@@ -1,7 +1,7 @@
 use crate::{
     BASE_COLOR, ColorChannel, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, MaterialBake,
     MaterialChannel, Result, UsedMaterials, default_color, default_scalar,
-    lin_srgba_f64_from_srgba_u8, srgba_u8_from_lin_srgba_f64, value_pool_linear_color,
+    lin_srgba_f64_from_srgba_u8, srgba_u8_from_lin_srgba_f64, value_pool_lin_srgba_f64_color,
 };
 use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaU8};
@@ -109,33 +109,30 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
     }
 }
 
-/// A color attribute's RGBA bytes: [`linear_color`] re-encoded to sRGB.
+/// A color attribute's RGBA bytes: [`lin_srgba_f64_color`] re-encoded to
+/// sRGB.
 fn color_bytes(
     value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
     key: &str,
 ) -> Result<[u8; 4]> {
-    let color = linear_color(value, key)?;
-    Ok(<[u8; 4]>::from(srgba_u8_from_lin_srgba_f64(
-        TyLinSrgbaF64::from(color),
-    )))
+    let color = lin_srgba_f64_color(value, key)?;
+    Ok(<[u8; 4]>::from(srgba_u8_from_lin_srgba_f64(color)))
 }
 
-/// A color attribute's linear-light components, or `key`'s glTF spec default
-/// when no layer binds it. A three-component color takes opaque alpha. Errors
-/// when the bound value pool holds no float vectors, or when an unbound `key`
-/// has no spec default.
-fn linear_color(
+/// A color attribute's linear-light color, or `key`'s glTF spec default when
+/// no layer binds it. A three-component value takes opaque alpha. Errors
+/// when the bound value pool holds no float vectors, or when an unbound
+/// `key` has no spec default.
+fn lin_srgba_f64_color(
     value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
     key: &str,
-) -> Result<[f64; 4]> {
+) -> Result<TyLinSrgbaF64> {
     let Some((value_pool, value_id)) = value else {
         let bytes = default_color(key).ok_or_else(|| unbound(key))?;
-        return Ok(<[f64; 4]>::from(lin_srgba_f64_from_srgba_u8(
-            TySrgbaU8::from(bytes),
-        )));
+        return Ok(lin_srgba_f64_from_srgba_u8(TySrgbaU8::from(bytes)));
     };
 
-    value_pool_linear_color(value_pool, value_id)
+    value_pool_lin_srgba_f64_color(value_pool, value_id)
         .ok_or_else(|| Error::invalid(format!("`{key}` draws from a value pool holding no color")))
 }
 
@@ -190,8 +187,7 @@ fn unbound(key: &str) -> Error {
 /// flat `KHR_materials_emissive_strength` of `max_strength` restores the
 /// absolute scale. An absent color is black, its spec default.
 fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -> Result<[u8; 4]> {
-    let [red, green, blue, _] =
-        linear_color(used.attribute(index, EMISSIVE_COLOR), EMISSIVE_COLOR)?;
+    let color = lin_srgba_f64_color(used.attribute(index, EMISSIVE_COLOR), EMISSIVE_COLOR)?;
 
     let fraction = if max_strength > 0.0 {
         material_scalar(used, index, EMISSIVE_STRENGTH)? / max_strength
@@ -199,7 +195,12 @@ fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -
         0.0
     };
 
-    let scaled = TyLinSrgbaF64::new(red * fraction, green * fraction, blue * fraction, 1.0);
+    let scaled = TyLinSrgbaF64::new(
+        color.red * fraction,
+        color.green * fraction,
+        color.blue * fraction,
+        1.0,
+    );
 
     Ok(<[u8; 4]>::from(srgba_u8_from_lin_srgba_f64(scaled)))
 }
