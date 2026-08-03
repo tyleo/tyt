@@ -2,12 +2,8 @@
 
 _Part of the [Vxl Command-Line Reference](../README.md)._
 
-_Superseded: the mesh plan is moving to [`doc/plan/open/mesh`](../../mesh/),
-the [value language](../../mesh/value-language.md) and
-[profile language](../../mesh/profile-language.md) subplans with their
-[open questions](../../mesh/open-questions.md).
-[Orphaned options](../../mesh/orphaned-options.md) lists what this page
-holds that the new plan has yet to absorb._
+_Superseded: the [mesh plan](../../mesh/README.md) absorbs everything
+this page holds._
 
 ```
 vxl mesh <input> [output] [options]
