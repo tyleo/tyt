@@ -80,7 +80,7 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
             "computed-occlusion requires an unwrap atlas, which is not yet supported",
         )),
 
-        MaterialChannel::Attribute {
+        MaterialChannel::Property {
             key,
             component,
             invert,
@@ -96,7 +96,7 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
             };
 
             // The check precedes the conversion, since `to_unorm8` clamps on its
-            // own and an attribute the spec leaves unbounded above, such as
+            // own and a property the spec leaves unbounded above, such as
             // `emissiveStrength`, reaches here.
             if !(0.0..=1.0).contains(&fraction) {
                 return Err(Error::invalid(format!(
@@ -237,7 +237,7 @@ mod tests {
 
     /// A `key`-only scalar packing channel.
     fn scalar(key: &str, invert: bool) -> MaterialChannel {
-        MaterialChannel::Attribute {
+        MaterialChannel::Property {
             key: key.to_owned(),
             component: None,
             invert,
@@ -456,7 +456,7 @@ mod tests {
         let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
 
-        let red = MaterialBake::Packing(vec![MaterialChannel::Attribute {
+        let red = MaterialBake::Packing(vec![MaterialChannel::Property {
             key: BASE_COLOR.to_owned(),
             component: Some(ColorChannel::R),
             invert: false,
@@ -624,7 +624,7 @@ mod tests {
 
         // The palette binds no `emissiveColor`. Its spec default is black,
         // while `baseColor` defaults to white.
-        let bake = MaterialBake::Packing(vec![MaterialChannel::Attribute {
+        let bake = MaterialBake::Packing(vec![MaterialChannel::Property {
             key: EMISSIVE_COLOR.to_owned(),
             component: Some(ColorChannel::R),
             invert: false,
@@ -633,7 +633,7 @@ mod tests {
         assert_eq!(pixels[0], 0);
 
         // Unbound, `baseColor` would take white. This palette binds it red.
-        let bake = MaterialBake::Packing(vec![MaterialChannel::Attribute {
+        let bake = MaterialBake::Packing(vec![MaterialChannel::Property {
             key: BASE_COLOR.to_owned(),
             component: Some(ColorChannel::R),
             invert: false,

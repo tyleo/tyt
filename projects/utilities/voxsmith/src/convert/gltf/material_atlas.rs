@@ -100,7 +100,7 @@ mod tests {
 
         let bakes = [
             MaterialBake::RgbaColor,
-            MaterialBake::Packing(vec![MaterialChannel::Attribute {
+            MaterialBake::Packing(vec![MaterialChannel::Property {
                 key: ROUGHNESS.to_owned(),
                 component: None,
                 invert: false,

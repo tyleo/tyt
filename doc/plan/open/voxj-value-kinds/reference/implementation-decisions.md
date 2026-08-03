@@ -144,7 +144,8 @@ factor spelling ends with the iteration 3 rename, the same ruling that
 took `mesh_material.rs`'s `emissive_factor`. Prose citing the glTF
 source material's own composition ("flat PBR factors") keeps its
 spelling. vxl's `--out-of-range-factor` flag follows in iteration 8;
-the checklist carries it.
+the checklist carries it. `MaterialChannel::Attribute` renames to
+`Property` under the same ruling.
 
 2026-08-03, after the gate review. The atlas bake reads colors linear:
 `value_pool_lin_srgba_f64_color` is the base read, typed as the color it

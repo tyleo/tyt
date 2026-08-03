@@ -121,7 +121,7 @@ mod tests {
                 MaterialMap {
                     name: "cube-mse.png".to_owned(),
                     slot: MaterialSlot::None,
-                    bake: MaterialBake::Packing(vec![MaterialChannel::Attribute {
+                    bake: MaterialBake::Packing(vec![MaterialChannel::Property {
                         key: METALLIC.to_owned(),
                         component: None,
                         invert: false,
