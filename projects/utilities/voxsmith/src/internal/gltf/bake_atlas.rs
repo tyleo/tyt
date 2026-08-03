@@ -3,9 +3,8 @@ use crate::{
     MaterialChannel, Result, UsedMaterials, default_color, default_scalar,
     lin_srgba_f64_from_srgba_u8, srgba_u8_from_lin_srgba_f64, value_pool_lin_srgba_f64_color,
 };
-use branded_id::U32Id;
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaU8};
-use voxcore::{BVoxValuePoolValue, VoxValuePool, VoxValuePoolValueRef};
+use voxcore::VoxValuePoolValueRef;
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
 /// `width` x `height` texels, one texel per material placed row-major from the
@@ -48,7 +47,7 @@ fn bake_texel(
     max_strength: f64,
 ) -> Result<[u8; 4]> {
     match bake {
-        MaterialBake::RgbaColor => color_bytes(used.attribute(index, BASE_COLOR), BASE_COLOR),
+        MaterialBake::RgbaColor => base_color_bytes(used, index),
 
         MaterialBake::EmissiveColor => emissive_color_bytes(used, index, max_strength),
 
@@ -82,15 +81,14 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
             component,
             invert,
         } => {
-            let value = used.attribute(index, key);
-
             // Read the source as a `0..1` fraction, invert if asked, then scale
             // to a byte, so a scalar and a color component inject the same way.
             let fraction = match component {
                 Some(component) => {
-                    component_byte(color_bytes(value, key)?, *component) as f64 / 255.0
+                    component_byte(material_color_bytes(used, index, key)?, *component) as f64
+                        / 255.0
                 }
-                None => scalar_value(value, key)?,
+                None => material_scalar(used, index, key)?,
             };
 
             // The check precedes the conversion, since `to_unorm8` clamps on its
@@ -109,25 +107,23 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
     }
 }
 
-/// A color attribute's RGBA bytes: [`lin_srgba_f64_color`] re-encoded to
-/// sRGB.
-fn color_bytes(
-    value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
-    key: &str,
-) -> Result<[u8; 4]> {
-    let color = lin_srgba_f64_color(value, key)?;
+/// The color attribute `key` of the material at `index`, re-encoded to sRGB
+/// bytes: [`material_lin_srgba_f64_color`]'s read for an 8-bit consumer.
+fn material_color_bytes(used: &UsedMaterials, index: usize, key: &str) -> Result<[u8; 4]> {
+    let color = material_lin_srgba_f64_color(used, index, key)?;
     Ok(<[u8; 4]>::from(srgba_u8_from_lin_srgba_f64(color)))
 }
 
-/// A color attribute's linear-light color, or `key`'s glTF spec default when
-/// no layer binds it. A three-component value takes opaque alpha. Errors
-/// when the bound value pool holds no float vectors, or when an unbound
-/// `key` has no spec default.
-fn lin_srgba_f64_color(
-    value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
+/// The color attribute `key` of the material at `index` in linear light, or
+/// `key`'s glTF spec default when no layer binds it. A three-component value
+/// takes opaque alpha. Errors when the bound value pool holds no float
+/// vectors, or when an unbound `key` has no spec default.
+fn material_lin_srgba_f64_color(
+    used: &UsedMaterials,
+    index: usize,
     key: &str,
 ) -> Result<TyLinSrgbaF64> {
-    let Some((value_pool, value_id)) = value else {
+    let Some((value_pool, value_id)) = used.attribute(index, key) else {
         let bytes = default_color(key).ok_or_else(|| unbound(key))?;
         return Ok(lin_srgba_f64_from_srgba_u8(TySrgbaU8::from(bytes)));
     };
@@ -146,39 +142,17 @@ fn component_byte(rgba: [u8; 4], component: ColorChannel) -> u8 {
     }
 }
 
-/// A scalar attribute's value from a `float`, `int`, or `bool` value pool, or
-/// `key`'s glTF spec default when no layer binds it. A `bool` reads as `1` or
-/// `0`. Errors when the bound value pool is not one of those kinds, or when an
-/// unbound `key` has no spec default.
-fn scalar_value(
-    value: Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)>,
-    key: &str,
-) -> Result<f64> {
-    let Some((value_pool, value_id)) = value else {
-        return default_scalar(key).ok_or_else(|| unbound(key));
-    };
-
-    // `VoxMain::add_palette` checks every material's value against its
-    // property's value pool, so a bound attribute always resolves.
-    let value = value_pool
-        .value(value_id)
-        .expect("a palette's material draws a value its property's value pool holds");
-
-    match value {
-        VoxValuePoolValueRef::Float(number) => Ok(number),
-        VoxValuePoolValueRef::Int(number) => Ok(number as f64),
-        VoxValuePoolValueRef::Bool(flag) => Ok(if flag { 1.0 } else { 0.0 }),
-        _ => Err(Error::invalid(format!(
-            "`{key}` draws from a value pool holding no scalar"
-        ))),
-    }
-}
-
 /// The error for a `key` no layer binds that has no glTF spec default.
 fn unbound(key: &str) -> Error {
     Error::invalid(format!(
         "`{key}` is not bound by any of the object's layers and has no glTF default"
     ))
+}
+
+/// The albedo texel for the material at `index`: its `baseColor` re-encoded
+/// to sRGB.
+fn base_color_bytes(used: &UsedMaterials, index: usize) -> Result<[u8; 4]> {
+    material_color_bytes(used, index, BASE_COLOR)
 }
 
 /// The emissive texel for the material at `index`: its `emissiveColor`
@@ -187,7 +161,7 @@ fn unbound(key: &str) -> Error {
 /// flat `KHR_materials_emissive_strength` of `max_strength` restores the
 /// absolute scale. An absent color is black, its spec default.
 fn emissive_color_bytes(used: &UsedMaterials, index: usize, max_strength: f64) -> Result<[u8; 4]> {
-    let color = lin_srgba_f64_color(used.attribute(index, EMISSIVE_COLOR), EMISSIVE_COLOR)?;
+    let color = material_lin_srgba_f64_color(used, index, EMISSIVE_COLOR)?;
 
     let fraction = if max_strength > 0.0 {
         material_scalar(used, index, EMISSIVE_STRENGTH)? / max_strength
@@ -212,11 +186,30 @@ pub(crate) fn max_emissive_strength(used: &UsedMaterials) -> Result<f64> {
         .try_fold(0.0f64, |max, strength| strength.map(|value| max.max(value)))
 }
 
-/// The scalar attribute `key` of the material at `index` in `used`, or its spec
-/// default when the material omits it. The flat factor the material document
-/// writes back for the KHR extension attributes.
+/// The scalar attribute `key` of the material at `index` in `used`: a
+/// `float` or `int` value, a `bool` read as `1` or `0`, or `key`'s glTF spec
+/// default when no layer binds it. The flat factor the material document
+/// writes back for the KHR extension attributes. Errors when the bound value
+/// pool holds no scalar, or when an unbound `key` has no spec default.
 pub(crate) fn material_scalar(used: &UsedMaterials, index: usize, key: &str) -> Result<f64> {
-    scalar_value(used.attribute(index, key), key)
+    let Some((value_pool, value_id)) = used.attribute(index, key) else {
+        return default_scalar(key).ok_or_else(|| unbound(key));
+    };
+
+    // `VoxMain::add_palette` checks every material's value against its
+    // property's value pool, so a bound attribute always resolves.
+    let value = value_pool
+        .value(value_id)
+        .expect("a palette's material draws a value its property's value pool holds");
+
+    match value {
+        VoxValuePoolValueRef::Float(number) => Ok(number),
+        VoxValuePoolValueRef::Int(number) => Ok(number as f64),
+        VoxValuePoolValueRef::Bool(flag) => Ok(if flag { 1.0 } else { 0.0 }),
+        _ => Err(Error::invalid(format!(
+            "`{key}` draws from a value pool holding no scalar"
+        ))),
+    }
 }
 
 #[cfg(test)]
