@@ -34,6 +34,7 @@ mod internal;
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
 pub(crate) use internal::*;
 
+#[cfg(feature = "_mesh")]
 mod check_gltf_property_ranges;
 mod color_space;
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
@@ -42,12 +43,14 @@ mod dither;
 mod error;
 mod gltf_attribute_kind;
 mod gltf_attributes;
+#[cfg(feature = "_mesh")]
 mod gltf_range;
 mod order_palette_colors;
 mod reduce_palette;
 mod reduction_method;
 mod result;
 
+#[cfg(feature = "_mesh")]
 pub use check_gltf_property_ranges::*;
 pub use color_space::*;
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
@@ -56,6 +59,7 @@ pub use dither::*;
 pub use error::*;
 pub use gltf_attribute_kind::*;
 pub use gltf_attributes::*;
+#[cfg(feature = "_mesh")]
 pub(crate) use gltf_range::*;
 pub use order_palette_colors::*;
 pub use reduce_palette::*;

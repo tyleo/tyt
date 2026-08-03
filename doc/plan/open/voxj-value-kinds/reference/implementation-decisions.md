@@ -170,9 +170,14 @@ color's fields. Raw `[u8; 4]` survives only where the data is genuinely
 bytes: the pixel buffer write and the packing arm, whose packed channels
 are not an sRGB color, so a color type would mislabel them.
 
-2026-08-03. `GltfRange::clamp` gates on `_mesh` beside its only callers,
-the voxelizer's policy helpers, so a default-feature build carries no
-dead clamp.
+2026-08-03. The range apparatus gates whole on `_mesh`: `gltf_range`,
+`check_gltf_property_ranges`, and the range tables in
+`gltf_attributes.rs`. Every consumer sits behind a glTF boundary
+feature, and the module-level gate keeps `GltfRange` in one piece
+instead of striping `clamp`. `gltf_attributes.rs` itself stays
+unconditional: the name consts are every codec importer's binding
+vocabulary, and `default_scalar` serves the vmax importer as well as
+glTF, so no single capability gate fits the file.
 
 The vocabulary range check is `check_gltf_property_ranges`, a public
 top-level function over a whole `VoxMain`. It walks every palette

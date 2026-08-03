@@ -4,6 +4,7 @@
 //! stay free strings, so a format's custom attributes remain expressible; these
 //! constants name only the recommended glTF-aligned set.
 
+#[cfg(feature = "_mesh")]
 use crate::GltfRange;
 #[cfg(feature = "gltf")]
 use ty_math::TyLinSrgbaF64;
@@ -51,6 +52,7 @@ pub(crate) fn default_scalar(key: &str) -> Option<f64> {
 /// The range the glTF spec gives a recommended scalar attribute, or `None`
 /// for a key outside the vocabulary. `ior`'s union of exactly `0` and
 /// `[1, inf)` rides [`GltfRange::admits_zero`].
+#[cfg(feature = "_mesh")]
 pub(crate) fn scalar_range(key: &str) -> Option<GltfRange> {
     match key {
         METALLIC | ROUGHNESS | OCCLUSION_STRENGTH | TRANSMISSION => Some(GltfRange {
@@ -74,6 +76,7 @@ pub(crate) fn scalar_range(key: &str) -> Option<GltfRange> {
 
 /// The `[0, 1]` every component of a recommended color attribute lies in, per
 /// the glTF schema of `baseColorFactor` and `emissiveFactor`.
+#[cfg(feature = "_mesh")]
 pub(crate) const COLOR_RANGE: GltfRange = GltfRange {
     min: 0.0,
     max: Some(1.0),
