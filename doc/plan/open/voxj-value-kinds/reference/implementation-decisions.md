@@ -222,3 +222,29 @@ wholes and float components. The old display keyed the same split on the
 sRGB-versus-linear kind; scanning the values keeps both renderings,
 idiomatic files on hex and HDR files exact, where encoding
 unconditionally would clamp an HDR component into a lying `FF`.
+
+## Iteration 9 rulings
+
+2026-08-03. The linear functional notation spells `lin_srgb(...)` and
+`lin_srgba(...)`, following the workspace's linear-sRGB color names.
+The spelling lives in treegrid's value rendering
+(`color/tree_grid_value.rs`), so iteration 10 re-baselines treegrid's
+text and tests alongside vxl's expectations.
+
+2026-08-04. The selector carries four fixed fields, presentation and
+reading each their own shell word, instead of a composite
+`<presentation>:<reading>` third field. Any fixed arity chunks clap's
+flattened list unambiguously, so four costs nothing there, and separate
+words keep each field a closed vocabulary that help documents and
+completion can offer per position; a composite token can never
+complete. Full per-position completion may need clap_complete's dynamic
+engine; the split is its precondition either way.
+
+2026-08-04. A hex reading spells a component as its two-digit hex pair,
+never a decimal byte. The owner's rule is honor or error, nothing
+quietly respelled, and honoring beats erroring: it needs no error arm
+and no `auto` special case, since a vocabulary color name's component
+just inherits `srgb-hex` and prints its pair. Explicit component
+selections re-baseline from decimal bytes to hex pairs in iteration 10;
+the bare default selector renders whole properties only, so bare output
+is untouched.

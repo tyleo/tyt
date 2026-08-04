@@ -22,16 +22,19 @@ crate per iteration in dependency order.
    `doc/plan/open/voxj-value-kinds/reference/format-design.md`. Once the
    iteration 2 spec commit lands, the authoritative format doc is
    `projects/voxel-codecs/voxj/docs/voxel-json-file-format.md`; use it for
-   any detail the plan leaves implicit.
+   any detail the plan leaves implicit. Iterations 9 and 10 work the same
+   way on `doc/plan/open/voxj-value-kinds/reference/palette-show-design.md`:
+   the owner approves the palette show design before iteration 10 codes
+   it, and `--type` deletes with that iteration.
 
 ## The rules that must not be botched
 
 - Order is strict: the spec commit does not start before the owner
   approves format-design.md, and no code moves before the spec lands.
   The rename lands before the kind iterations.
-- Iteration 1 items are owner conversations: present the relevant
-  format-design.md text, incorporate the answer, and fold it into the
-  draft. Only the owner closes a design question.
+- Iteration 1 and iteration 9 items are owner conversations: present
+  the relevant design-page text, incorporate the answer, and fold it
+  into the draft. Only the owner closes a design question.
 - The glTF wire keeps its `Factor` field names: the serde_json output
   keys in `material_document.rs`, the `gltf` crate accessor calls and the
   test GLB builders in `from_gltf_bytes.rs`, and the spec table's per-row

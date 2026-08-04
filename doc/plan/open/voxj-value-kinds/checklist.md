@@ -18,7 +18,10 @@ The per-session resume prompt is
 - Iteration order is strict: the format design is approved before the
   spec commit, the spec lands before any code moves, and the rename lands
   before the kind iterations. Once the spec lands it is authoritative for
-  any detail the plan leaves implicit.
+  any detail the plan leaves implicit. The same gate guards the palette
+  show rework: the owner approves
+  [reference/palette-show-design.md](reference/palette-show-design.md)
+  in iteration 9 before iteration 10 codes it.
 - One concern per commit, one iteration per session where it fits, owner
   review at each gate. `docs(voxj)` for spec commits, `docs(plan)` for
   plan-page commits, `feat`/`refactor` with `!` where a public surface
@@ -361,7 +364,48 @@ Gate: the whole workspace green: `cargo fmt --all -- --check`,
 `cargo clippy --workspace --all-targets -- -D warnings`,
 `cargo test --workspace`.
 
-## Iteration 9: one label vocabulary per command
+## Iteration 9: palette show design
+
+Iterate
+[reference/palette-show-design.md](reference/palette-show-design.md)
+with the owner until approved. Nothing else starts first; the selector
+gets perfect here, not in the code. The design replaces iteration 8's
+`--type` flag: a selector carries two axes, what to show and how to
+format it, the format naming the transfer and the hex-versus-numbers
+spelling explicitly, and the component suffix gains `.x`/`.y`/`.z`/`.w`
+beside `.r`/`.g`/`.b`/`.a`.
+
+- [x] Draft `reference/palette-show-design.md`: the four-field
+      selector with its presentation and reading tables, the
+      shape-level component suffix with both alias sets, the `auto`
+      defaults that keep every idiomatic property rendering exactly as
+      today, and the deletion of `--type`.
+- [ ] Owner reads the draft and closes its open rulings; fold each
+      ruling into the body and log it in the decisions log.
+
+Gate: the owner approves palette-show-design.md.
+
+## Iteration 10: the palette show format in code
+
+- [ ] The four-field selector: `--property` takes
+      `<palette> <property> <presentation> <reading>`, and the readings
+      land per the approved design with their transfer, spelling,
+      swatch, and error rules; the `auto` defaults keep every idiomatic
+      property rendering exactly as today. The functional spellings
+      live in treegrid's `color/tree_grid_value.rs`, so its text and
+      tests re-baseline alongside vxl's.
+- [ ] The component suffix turns shape-level, with the `.x`/`.y`/`.z`/
+      `.w` aliases landing in the shared component parser, which
+      carries them into the mesh channel expressions.
+- [ ] `--type` deletes: the flag, `palette_show_type.rs`, and the type
+      parameter on `Dependencies::palette_show`.
+- [ ] Fixtures, inline expectations, and the clap help prose across the
+      palette show command and its selector types re-baseline.
+
+Gate: `cargo test -p vxl --all-features` green; bare `palette show`
+output byte-identical on the idiomatic fixtures; owner review.
+
+## Iteration 11: one label vocabulary per command
 
 Unrelated to the value-kinds work; it sits at the end so the fix never
 rides a voxj commit, and lands in its own commit at the owner's request
@@ -384,7 +428,7 @@ rides a voxj commit, and lands in its own commit at the owner's request
 
 Gate: `cargo test -p vxl --all-features` green; owner review.
 
-## Iteration 10: closeout
+## Iteration 12: closeout
 
 - [ ] Regenerate `submodules/tyt-assets/scratch/energy-turret.voxj` from
       its sibling `energy-turret.glb`: a tyt-assets commit plus the
@@ -399,6 +443,10 @@ Gate: `cargo test -p vxl --all-features` green; owner review.
       `reference/implementation-decisions.md`,
       `reference/palette/README.md`, `reference/palette/list.md`,
       `reference/palette/quantize.md`, and `reference/palette/show.md`.
+      `reference/palette/show.md` and `reference/mesh.md` additionally
+      sweep to the approved palette show design: the four-field
+      selector, the shape-level component suffix with both alias sets,
+      and no `--type`.
 - [ ] Run both gate greps from the ground rules; read any residue against
       the wire rule and clear or log it.
 - [ ] Close the plan: status note at the top of the README and the move
