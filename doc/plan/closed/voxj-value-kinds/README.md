@@ -1,5 +1,17 @@
 # voxj value kinds
 
+Status: **closed** (2026-08-05). The spec landed the shape-only kind
+vocabulary in one commit, the `Factor` rename and the kind rework landed
+crate by crate in dependency order (voxj, voxj-codec, voxcore, voxsmith,
+vxl), and the palette show selector landed on the approved four-field
+design. The closeout regenerated the one on-disk asset, swept the open
+vxl-commands pages, and read both gate greps clean; the workspace builds,
+lints, and tests green. The executable steps lived in
+[checklist.md](checklist.md), the code-level rulings in
+[reference/implementation-decisions.md](reference/implementation-decisions.md),
+and the grep residue in
+[reference/survey.md](reference/survey.md#closeout-grep-residue).
+
 One rule for the voxel-json
 [value pool kinds](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#value-pool-kinds):
 a kind is a JSON shape and nothing more. Plain vectors replace the color

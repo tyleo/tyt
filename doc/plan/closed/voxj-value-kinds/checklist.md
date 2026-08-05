@@ -454,7 +454,7 @@ Gate: `cargo test -p vxl --all-features` green; owner review.
       survey's closeout-residue section logs the four groups, including
       the mesh plan's unswept vocabulary and the reading names the kind
       grep now matches by design.
-- [ ] Close the plan: status note at the top of the README and the move
+- [x] Close the plan: status note at the top of the README and the move
       to `doc/plan/closed`.
 
 Gate: greps clean, workspace green, owner sign-off. Close the plan.

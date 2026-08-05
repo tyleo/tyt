@@ -26,7 +26,7 @@ for implementation choices a reviewer of the Rust would want explained.
 > and rebuilt `palette show` on a four-field `--property` selector whose
 > reading field replaces `--type`. Read the entries against that change
 > too; its decisions are logged in
-> [voxj-value-kinds](../../voxj-value-kinds/reference/implementation-decisions.md).
+> [voxj-value-kinds](../../../closed/voxj-value-kinds/reference/implementation-decisions.md).
 
 ## MeshFormat
 
