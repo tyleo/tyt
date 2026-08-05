@@ -101,15 +101,13 @@ struct Collection {
     samples: Vec<TreeGridJsonValue>,
 }
 
-/// How a property's values render in `palette show`: a color with three or
-/// four components; a plain number; or any other value shown as text with no
-/// swatch.
+/// How a property's values render in `palette show`.
 #[derive(Clone, Copy)]
 enum Kind {
-    /// A float-vector value pool read as a color: `components` is 3 or 4, and
+    /// A float-vector value pool read as a color. `components` is 3 or 4, and
     /// `fits_srgb8` says every component lies in `[0, 1]`, so the collection
-    /// displays as 8-bit sRGB; an HDR value pool displays exact linear
-    /// functional notation instead.
+    /// displays as 8-bit sRGB. An HDR value pool displays exact linear
+    /// functional notation.
     Color { components: usize, fits_srgb8: bool },
     /// A `float` or `int` value pool.
     Number,
@@ -227,9 +225,7 @@ fn expand_property(
     Ok(())
 }
 
-/// Builds one collection from a present property: classifies it by name and
-/// bound shape, rejects a color component on a non-color and `.a` on a
-/// three-component color, then samples the property's values.
+/// Builds one collection from a property the caller verified present.
 fn build_collection(
     state: &VoxMain,
     palette_index: usize,
@@ -300,10 +296,10 @@ fn build_collection(
     })
 }
 
-/// How the property `key`'s values render. No value pool kind says color: the
-/// glTF vocabulary says it for a name it holds, and `--type color` says it for
-/// a custom key, whose float vector is otherwise a color or a normal with
-/// nothing to tell them apart. The bound shape supplies the component count.
+/// How the property `key`'s values render. A glTF vocabulary name takes its
+/// vocabulary kind. A custom key is a color only under `--type color`, since
+/// a float vector alone could hold a color or a normal. The bound shape
+/// supplies the component count.
 fn classify(key: &str, value_pool: &VoxValuePool, r#type: Option<PaletteShowType>) -> Kind {
     let color = match GltfAttributeKind::of(key) {
         Some(GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba) => true,
@@ -333,8 +329,8 @@ fn classify(key: &str, value_pool: &VoxValuePool, r#type: Option<PaletteShowType
 }
 
 /// Whether every component of every color in the value pool lies in `[0, 1]`,
-/// so the collection displays as 8-bit sRGB; an HDR value pool displays exact
-/// linear functional notation instead, which no hex can hold.
+/// so the collection displays as 8-bit sRGB. An HDR value pool displays exact
+/// linear functional notation, which no hex can hold.
 fn fits_srgb8(value_pool: &VoxValuePool) -> bool {
     value_pool.iter_values().all(|(_, value)| match value {
         VoxValuePoolValueRef::Vec3Float(color) => color
@@ -368,11 +364,11 @@ fn sample(
 
 /// The sample for a stored linear color:
 ///
-/// 1. A whole color in `[0, 1]`: sRGB hex with a color swatch.
-/// 2. A whole HDR color: exact `lrgb(...)` / `lrgba(...)` functional notation
-///    with a color swatch.
-/// 3. One `component` channel: an sRGB byte (in `[0, 1]`) or a linear float
-///    (HDR) with a grayscale swatch.
+/// 1. A whole color in `[0, 1]`: sRGB hex with a color swatch
+/// 2. A whole HDR color: exact `lrgb(...)` / `lrgba(...)` functional
+///    notation with a color swatch
+/// 3. One `component` channel: an sRGB byte for a color in `[0, 1]`, a
+///    linear float for HDR, with a grayscale swatch
 fn sample_color(
     value_pool: &VoxValuePool,
     value_id: U32Id<BVoxValuePoolValue>,
@@ -426,9 +422,8 @@ fn sample_number(
     TreeGridJsonValue::unorm(value)
 }
 
-/// The sample for any other value: its text and native JSON with no swatch. A
-/// float vector no name or `--type` reads as a color and an int vector render
-/// as their number arrays.
+/// The sample for any other value: its text and native JSON with no swatch.
+/// A vector renders its number array.
 fn sample_other(
     value_pool: &VoxValuePool,
     value_id: U32Id<BVoxValuePoolValue>,
@@ -468,9 +463,9 @@ fn int_array_json(vector: &[i64]) -> TreeGridJsonValue {
     ))
 }
 
-/// The `[r, g, b, a]` bytes for the stored linear color at `value_id`, encoded
-/// to sRGB at display; the alpha only quantizes, and a three-component color
-/// takes opaque alpha.
+/// The `[r, g, b, a]` bytes for the stored linear color at `value_id`,
+/// encoded to sRGB at display. The alpha only quantizes, and a
+/// three-component color takes opaque alpha.
 fn color_bytes(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) -> [u8; 4] {
     match value_pool.value(value_id) {
         Some(VoxValuePoolValueRef::Vec3Float(&[r, g, b])) => <[u8; 4]>::from(
@@ -1330,8 +1325,8 @@ mod tests {
         assert_eq!(output, "0.\"emissiveColor\" lrgba(2, 1, 0.5, 1)\n");
     }
 
-    /// One palette binding the custom `tint` to a `vec-3-float` value pool
-    /// holding a red, which no name classifies.
+    /// One palette binding the custom `tint`, a key outside the glTF
+    /// vocabulary, to a `vec-3-float` value pool holding a red.
     fn custom_vector_state() -> VoxMain {
         let mut state = VoxMain::default();
         let tint_value_pool_id =
@@ -1348,8 +1343,8 @@ mod tests {
     #[test]
     fn a_custom_float_vector_defaults_to_plain_numbers() {
         let state = custom_vector_state();
-        // A custom vec-3-float is a color or a normal, and nothing says which,
-        // so it renders its numbers and carries no color component.
+        // A custom vec-3-float could hold a color or a normal, so it renders
+        // plain numbers and has no color components.
         let output = show(&state, &[("0", "tint", "value")], PaletteShowLayout::Rows);
         assert_eq!(output, "0.\"tint\" [1,0,0]\n");
         assert!(
@@ -1386,7 +1381,8 @@ mod tests {
     #[test]
     fn type_color_never_reclassifies_a_vocabulary_name() {
         let state = sample_state();
-        // `metallic` is a scalar by name, so the assertion does not touch it.
+        // The glTF vocabulary classifies `metallic` as a scalar, so the
+        // `--type color` assertion has no effect on it.
         let collections = resolve_collections(
             &state,
             &selectors(&[("0", "metallic", "value")]),

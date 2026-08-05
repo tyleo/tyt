@@ -226,8 +226,7 @@ pub trait Dependencies {
     /// * `from` - source format, inferred from `input`'s extension when `None`.
     /// * `selectors` - the `--property` selectors, each naming one or more
     ///   value collections, in render order.
-    /// * `type` - an asserted reading for the selected custom properties,
-    ///   which their names alone cannot classify.
+    /// * `type` - an asserted reading for the selected custom properties.
     /// * `layout` - how to arrange the collections, and the serialization to
     ///   emit.
     /// * `label` - how the text layouts label each collection; `None` means

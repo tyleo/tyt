@@ -181,11 +181,10 @@ fn validate_channel(
     }
 }
 
-/// The kind of the property `key`. The glTF vocabulary classifies a name it
-/// holds, bound or not: no value pool kind says color, so the name fixes how
-/// a bake reads the property. A custom key classifies by its winning value
-/// pool's shape, and unbound it errors: it has no spec default and no shape
-/// to read.
+/// The kind of the property `key`. A glTF vocabulary name takes its
+/// vocabulary kind whatever shape it is bound to. A custom key takes the
+/// shape of its winning value pool, and errors when unbound: it has no spec
+/// default and no shape to read.
 fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKind> {
     if let Some(kind) = GltfAttributeKind::of(key) {
         return Ok(match kind {
@@ -210,10 +209,8 @@ fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKin
     value_pool_kind(value_pool, key)
 }
 
-/// Classifies a bound custom property by its value pool's shape: a float,
-/// int, or bool value reads as a scalar, and a float vector reads as a
-/// color, the component read asserting the color-ness the shape alone cannot.
-/// The other shapes have no texel value.
+/// Classifies a bound custom property by its value pool's shape. A component
+/// read on a float vector is the caller's color assertion.
 fn value_pool_kind(value_pool: &VoxValuePool, key: &str) -> Result<ChannelKind> {
     match value_pool.kind() {
         VoxValuePoolKind::Bool(_) | VoxValuePoolKind::Float(_) | VoxValuePoolKind::Int(_) => {
@@ -451,8 +448,8 @@ mod tests {
 
     #[test]
     fn a_bound_builtin_takes_its_vocabulary_kind() {
-        // `metallic` binds to a vec-4-float value pool, but the glTF
-        // vocabulary says scalar, and the name decides for a name it holds.
+        // The vocabulary kind wins over the bound shape: `metallic` stays a
+        // scalar on a vec-4-float value pool.
         let mut state = VoxMain::default();
         let value_pool_id =
             state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());

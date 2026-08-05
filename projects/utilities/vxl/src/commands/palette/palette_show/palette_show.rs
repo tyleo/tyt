@@ -37,9 +37,9 @@ pub struct PaletteShow {
     )]
     property: Vec<String>,
 
-    /// Assert how the selected custom properties read, which their names alone
-    /// cannot say: `color` reads a custom `vec-3-float` or `vec-4-float` value
-    /// pool as a color. A glTF vocabulary name classifies by name.
+    /// How the selected custom properties read: `color` reads a custom
+    /// `vec-3-float` or `vec-4-float` value pool as a color. A glTF
+    /// vocabulary name classifies by name.
     #[arg(value_name = "type", long)]
     r#type: Option<PaletteShowType>,
 
