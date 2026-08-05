@@ -35,7 +35,7 @@ impl TreeGridValue {
     /// Creates a float-component linear RGB color value:
     /// `lin_srgb(r, g, b)` functional text, with a color swatch
     /// transfer-encoding each component to sRGB and quantizing it to
-    /// a byte; out-of-gamut components clamp in the quantize.
+    /// a byte. Out-of-gamut components clamp in the quantize.
     pub fn lin_srgb<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgb<T>) -> Self {
         let [r, g, b] = <[T; 3]>::from(color);
         let linear = TyLinSrgbF64::new(r.into(), g.into(), b.into());
@@ -46,7 +46,7 @@ impl TreeGridValue {
 
     /// Creates a float-component linear RGB color value with alpha:
     /// `lin_srgba(r, g, b, a)` functional text, with a color swatch
-    /// of the transfer-encoded, quantized rgb part; out-of-gamut
+    /// of the transfer-encoded, quantized rgb part. Out-of-gamut
     /// components clamp in the quantize.
     pub fn lin_srgba<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgba<T>) -> Self {
         let [r, g, b, a] = <[T; 4]>::from(color);
