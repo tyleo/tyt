@@ -7,9 +7,9 @@ use clap::ValueEnum;
 /// never transfer-encodes.
 #[derive(Clone, Copy, Debug, PartialEq, ValueEnum)]
 pub enum PaletteShowReading {
-    /// By key: a glTF vocabulary color name reads `srgb-hex`, or
-    /// `linear-float` when a stored component leaves `[0, 1]`. Everything
-    /// else reads `plain`.
+    /// By key: a glTF vocabulary color name reads `srgb-hex`, so a shape or
+    /// component outside the vocabulary's standards errors and needs an
+    /// explicit reading. Everything else assumes `plain`.
     #[value(name = "auto")]
     Auto,
 

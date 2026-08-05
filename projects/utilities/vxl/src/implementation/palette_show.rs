@@ -304,30 +304,32 @@ fn color_shape(value_pool: &VoxValuePool) -> bool {
 
 /// Resolves a selector's reading for the property `key`. The three color
 /// readings are the color assertion and require a color-shaped value pool.
-/// `auto` resolves per key: a glTF vocabulary color name on a color shape
-/// reads `srgb-hex`, or `linear-float` when a stored component leaves
-/// `[0, 1]`, so an HDR color stays exact. Everything else reads `plain`.
+/// `auto` interprets a known glTF property by its vocabulary kind: a color
+/// name reads `srgb-hex` and errors off a color shape, and the reading's
+/// range rule holds an out-of-range color to an explicit `linear-float` or
+/// `plain`. Everything else assumes `plain`.
 fn resolve_reading(
     key: &str,
     value_pool: &VoxValuePool,
     reading: PaletteShowReading,
 ) -> Result<Reading> {
     match reading {
-        PaletteShowReading::Auto => {
-            let color_name = matches!(
-                GltfAttributeKind::of(key),
-                Some(GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba)
-            );
-            Ok(if color_name && color_shape(value_pool) {
-                if fits_srgb8(value_pool) {
-                    Reading::SrgbHex
-                } else {
-                    Reading::LinearFloat
+        PaletteShowReading::Auto => match GltfAttributeKind::of(key) {
+            Some(GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba) => {
+                if !color_shape(value_pool) {
+                    return Err(IOError::new(
+                        ErrorKind::InvalidInput,
+                        format!(
+                            "property `{key}` names a glTF color and must bind a vec-3-float or \
+                             vec-4-float value pool"
+                        ),
+                    )
+                    .into());
                 }
-            } else {
-                Reading::Plain
-            })
-        }
+                Ok(Reading::SrgbHex)
+            }
+            Some(GltfAttributeKind::Scalar) | None => Ok(Reading::Plain),
+        },
         PaletteShowReading::LinearFloat => {
             color_reading(key, value_pool, "linear-float", Reading::LinearFloat)
         }
@@ -359,22 +361,6 @@ fn color_reading(
         )
         .into())
     }
-}
-
-/// Whether every component of every color in the value pool lies in `[0, 1]`,
-/// so the `auto` reading displays it as 8-bit sRGB. An HDR value pool falls
-/// back to exact linear functional notation, which no hex can hold.
-fn fits_srgb8(value_pool: &VoxValuePool) -> bool {
-    value_pool.iter_values().all(|(_, value)| match value {
-        VoxValuePoolValueRef::Vec3Float(color) => color
-            .iter()
-            .all(|component| (0.0..=1.0).contains(component)),
-        VoxValuePoolValueRef::Vec4Float(color) => color
-            .iter()
-            .all(|component| (0.0..=1.0).contains(component)),
-        // The auto resolution scans only color-shaped value pools.
-        _ => false,
-    })
 }
 
 /// The sample for the value at `value_id` under the resolved `reading` and an
@@ -1414,10 +1400,10 @@ mod tests {
     }
 
     #[test]
-    fn an_hdr_color_renders_functional_notation() {
+    fn an_hdr_vocabulary_color_errors_under_auto() {
         let mut state = VoxMain::default();
-        // A component above 1 has no hex spelling, so the exact stored linear
-        // values render functional.
+        // The vocabulary bounds a glTF color at [0, 1], so auto errors on the
+        // HDR red and an explicit reading spells the exact stored values.
         let emissive_value_pool_id =
             state.add_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
@@ -1431,12 +1417,54 @@ mod tests {
         palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
 
+        assert!(
+            resolve_collections(
+                &state,
+                &selectors(&[("0", "emissiveColor", "value", "auto")]),
+            )
+            .is_err()
+        );
         let output = show(
             &state,
-            &[("0", "emissiveColor", "value", "auto")],
+            &[("0", "emissiveColor", "value", "linear-float")],
             PaletteShowLayout::Rows,
         );
         assert_eq!(output, "0.\"emissiveColor\" lin_srgba(2, 1, 0.5, 1)\n");
+    }
+
+    #[test]
+    fn a_vocabulary_color_off_its_shape_errors_under_auto() {
+        let mut state = VoxMain::default();
+        // `baseColor` names a glTF color, so a binding no color reading
+        // spells is an error under auto, whatever the shape holds.
+        let base_color_value_pool_id =
+            state.add_value_pool(VoxValuePool::vec_3_int(vec![[1, 0, 0]]).unwrap());
+        let strength_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property(
+                "baseColor".to_owned(),
+                base_color_value_pool_id,
+                U32Id::from_u32(0),
+            )
+            .unwrap();
+        palette
+            .add_property(
+                "emissiveColor".to_owned(),
+                strength_value_pool_id,
+                U32Id::from_u32(0),
+            )
+            .unwrap();
+        palette
+            .add_material(vec![value_id(0), value_id(0)])
+            .unwrap();
+        state.add_palette(palette).unwrap();
+
+        for key in ["baseColor", "emissiveColor"] {
+            assert!(
+                resolve_collections(&state, &selectors(&[("0", key, "value", "auto")])).is_err()
+            );
+        }
     }
 
     /// One palette binding the custom `tint`, a key outside the glTF
@@ -1527,10 +1555,10 @@ mod tests {
     fn the_readings_spell_one_color_per_the_design_examples() {
         let state = custom_tint_vec_4_state();
         let row = |fields| show(&state, &[fields], PaletteShowLayout::Rows);
-        // The sRGB readings encode the stored 0.25 to 0.537099, byte 0x89.
-        // The linear reading keeps the stored numbers, and alpha never
-        // transfer-encodes. A component respells under the same reading
-        // through either alias set.
+        // The sRGB readings encode the stored 0.25 to 0.537099, byte 0x89;
+        // the linear reading keeps the stored numbers; alpha never
+        // transfer-encodes. A component respells under the same reading, and
+        // either alias set addresses it.
         assert_eq!(
             row(("0", "tint", "value", "auto")),
             "0.\"tint\" [1,0,0.25,0.5]\n"
@@ -1606,7 +1634,7 @@ mod tests {
         palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
 
-        // An int vector's component reads its stored int. The width still
+        // An int vector's component reads its stored int; the width still
         // bounds the index, and no color reading spells an int vector.
         let output = show(
             &state,

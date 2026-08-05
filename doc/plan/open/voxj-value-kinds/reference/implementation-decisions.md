@@ -292,3 +292,13 @@ included: `srgb-hex` quantizes alpha to a byte and a byte cannot spell
 channel's byte from the whole-color quantize, so the hex-pair spelling
 and the swatch agree; under `plain` the raw ramp stays, since no color
 is asserted.
+
+2026-08-05, at the iteration 10 gate review. `auto` interprets a known
+glTF property by its vocabulary kind and holds it to the vocabulary's
+standards: a color name reads `srgb-hex`, a binding no color reading
+spells errors, and the HDR fallback deletes, so a vocabulary color
+holding a component outside `[0, 1]` errors under `auto` and renders
+only under an explicit `linear-float` or `plain`. Only a key outside
+the vocabulary assumes `plain`. This supersedes the design page's
+`auto` fallback, the iteration 8 value-driven display ruling behind
+it, and this iteration's auto-never-errors ruling (owner ruling).
