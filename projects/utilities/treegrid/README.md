@@ -108,14 +108,14 @@ let json = grid.render_json_compact();
 ```
 
 Float-component colors ride the optional `ty-math` feature: `srgb` /
-`srgba` / `lin_rgb` / `lin_rgba` constructors take the
+`srgba` / `lin_srgb` / `lin_srgba` constructors take the
 component-generic ty-math color family and render functional-notation
 text with a quantized (for linear colors, transfer-encoded) swatch,
 all color math through ty-math:
 
 ```rust
-let value = TreeGridValue::lin_rgba(TyLinSrgbaF64::new(2.0, 1.0, 0.5, 1.0));
-// text "lrgba(2, 1, 0.5, 1)", HDR red clamped in the swatch alone
+let value = TreeGridValue::lin_srgba(TyLinSrgbaF64::new(2.0, 1.0, 0.5, 1.0));
+// text "lin_srgba(2, 1, 0.5, 1)", HDR red clamped in the swatch alone
 ```
 
 Selection, value sampling, precision policy, terminal-width detection,

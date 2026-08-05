@@ -23,19 +23,19 @@ impl TreeGridJsonValue {
     }
 
     /// Creates a float-component linear RGB color value:
-    /// [`TreeGridValue::lin_rgb`] paired with a number array.
-    pub fn lin_rgb<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgb<T>) -> Self {
+    /// [`TreeGridValue::lin_srgb`] paired with a number array.
+    pub fn lin_srgb<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgb<T>) -> Self {
         Self {
-            value: TreeGridValue::lin_rgb(color),
+            value: TreeGridValue::lin_srgb(color),
             json: Some(components_json(<[T; 3]>::from(color).map(Into::into))),
         }
     }
 
     /// Creates a float-component linear RGB color value with alpha:
-    /// [`TreeGridValue::lin_rgba`] paired with a number array.
-    pub fn lin_rgba<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgba<T>) -> Self {
+    /// [`TreeGridValue::lin_srgba`] paired with a number array.
+    pub fn lin_srgba<T: Copy + Display + TyFloatExt + Into<f64>>(color: TyLinSrgba<T>) -> Self {
         Self {
-            value: TreeGridValue::lin_rgba(color),
+            value: TreeGridValue::lin_srgba(color),
             json: Some(components_json(<[T; 4]>::from(color).map(Into::into))),
         }
     }
@@ -72,8 +72,8 @@ mod tests {
     }
 
     #[test]
-    fn lin_rgb_pairs_the_linear_components() {
-        let value = TreeGridJsonValue::lin_rgb(TyLinSrgbF64::new(0.0, 1.0, 0.5));
+    fn lin_srgb_pairs_the_linear_components() {
+        let value = TreeGridJsonValue::lin_srgb(TyLinSrgbF64::new(0.0, 1.0, 0.5));
 
         // The JSON carries the linear components, not the encoded
         // swatch bytes.
@@ -81,12 +81,12 @@ mod tests {
     }
 
     #[test]
-    fn lin_rgba_keeps_an_hdr_component_at_full_fidelity() {
-        let value = TreeGridJsonValue::lin_rgba(TyLinSrgbaF64::new(2.0, 1.0, 0.5, 1.0));
+    fn lin_srgba_keeps_an_hdr_component_at_full_fidelity() {
+        let value = TreeGridJsonValue::lin_srgba(TyLinSrgbaF64::new(2.0, 1.0, 0.5, 1.0));
 
         assert_eq!(
             value.value,
-            TreeGridValue::lin_rgba(TyLinSrgbaF64::new(2.0, 1.0, 0.5, 1.0))
+            TreeGridValue::lin_srgba(TyLinSrgbaF64::new(2.0, 1.0, 0.5, 1.0))
         );
         assert_eq!(value.json, Some(json!([2, 1, 0.5, 1])));
     }

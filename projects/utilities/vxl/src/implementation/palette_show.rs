@@ -365,8 +365,8 @@ fn sample(
 /// The sample for a stored linear color:
 ///
 /// 1. A whole color in `[0, 1]`: sRGB hex with a color swatch
-/// 2. A whole HDR color: exact `lrgb(...)` / `lrgba(...)` functional
-///    notation with a color swatch
+/// 2. A whole HDR color: exact `lin_srgb(...)` / `lin_srgba(...)`
+///    functional notation with a color swatch
 /// 3. One `component` channel: an sRGB byte for a color in `[0, 1]`, a
 ///    linear float for HDR, with a grayscale swatch
 fn sample_color(
@@ -396,11 +396,11 @@ fn sample_color(
         None => {
             let floats = color_floats(value_pool, value_id);
             if components == 4 {
-                TreeGridJsonValue::lin_rgba(TyLinSrgbaF64::new(
+                TreeGridJsonValue::lin_srgba(TyLinSrgbaF64::new(
                     floats[0], floats[1], floats[2], floats[3],
                 ))
             } else {
-                TreeGridJsonValue::lin_rgb(TyLinSrgbF64::new(floats[0], floats[1], floats[2]))
+                TreeGridJsonValue::lin_srgb(TyLinSrgbF64::new(floats[0], floats[1], floats[2]))
             }
         }
     }
@@ -1322,7 +1322,7 @@ mod tests {
             &[("0", "emissiveColor", "value")],
             PaletteShowLayout::Rows,
         );
-        assert_eq!(output, "0.\"emissiveColor\" lrgba(2, 1, 0.5, 1)\n");
+        assert_eq!(output, "0.\"emissiveColor\" lin_srgba(2, 1, 0.5, 1)\n");
     }
 
     /// One palette binding the custom `tint`, a key outside the glTF
