@@ -380,7 +380,7 @@ beside `.r`/`.g`/`.b`/`.a`.
       shape-level component suffix with both alias sets, the `auto`
       defaults that keep every idiomatic property rendering exactly as
       today, and the deletion of `--type`.
-- [ ] Owner reads the draft and closes its open rulings; fold each
+- [x] Owner reads the draft and closes its open rulings; fold each
       ruling into the body and log it in the decisions log.
 
 Gate: the owner approves palette-show-design.md.

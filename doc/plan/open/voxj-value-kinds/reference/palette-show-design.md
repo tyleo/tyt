@@ -1,9 +1,8 @@
 # palette show design
 
 The target design for the `palette show` selector, drafted for the
-owner's review; iteration 10 lands it in code once approved. The open
-rulings at the end are the owner's to close; a ruling folds into the
-body and lands in the decisions log.
+owner's review; iteration 10 lands it in code once approved. The
+rulings that shaped it are in the decisions log.
 
 ## The two axes
 
@@ -76,32 +75,27 @@ hex versus numbers.
 | -------------- | -------- | ---------------------------------- | ----------------- |
 | `auto`         | by key   | the key's default                  | the key's default |
 | `linear-float` | no       | `lin_srgb(...)` / `lin_srgba(...)` | stored float      |
-| `linear-hex`   | no       | `#RRGGBB` / `#RRGGBBAA`            | raw hex pair      |
 | `plain`        | no       | the stored array                   | the stored number |
 | `srgb-float`   | yes      | `srgb(...)` / `srgba(...)`         | encoded float     |
 | `srgb-hex`     | yes      | `#RRGGBB` / `#RRGGBBAA`            | encoded hex pair  |
 
-1. The four color readings apply to float vectors only and error on
+1. The three color readings apply to float vectors only and error on
    every other kind. `plain` applies to every kind: the stored value as
    it is, arrays and text included.
 2. A color reading is the color assertion. A custom `vec-3-float` under
-   `value:srgb-hex` renders hex; under the defaults it renders numbers.
+   `value srgb-hex` renders hex; under the defaults it renders numbers.
    This is what replaces `--type`, per selector instead of per command.
-3. Alpha never transfer-encodes. An `srgb` reading encodes the color
-   components and only quantizes alpha.
-4. Every reading except `linear-float` and `plain` requires each
-   spelled component in `[0, 1]` and errors outside it, never clamps: a
-   byte cannot spell `2`, and the transfer is defined on `[0, 1]`.
-5. A hex reading spells a component as its two-digit hex pair, the same
+3. Alpha never transfer-encodes: `srgb-hex` quantizes it raw, and
+   `srgb-float` passes it through.
+4. The two sRGB readings require each spelled component in `[0, 1]` and
+   error outside it, never clamp: the transfer is defined on `[0, 1]`,
+   and a byte cannot spell `2`.
+5. `srgb-hex` spells a component as its two-digit hex pair, the same
    pair the whole-vector spelling carries: `tint.b` under `srgb-hex` is
    `89`, never the decimal `137`. The reading says hex, so nothing
    quietly respells as decimal.
-6. The swatch agrees with the text: a hex reading's swatch shows the
-   bytes its text spells, and a float reading's swatch shows the
-   color's sRGB appearance. `srgb-hex`, `srgb-float`, and
-   `linear-float` therefore all show the encoded color, while
-   `linear-hex` shows its raw quantized bytes, the way a viewer shows a
-   linear-byte texture such as a normal map.
+6. The swatch always shows the color's sRGB appearance, whatever
+   reading spells the text.
 
 The examples fix the palette field and read one custom `tint` property
 bound to a `vec-4-float` value pool holding `[1, 0, 0.25, 0.5]`; each
@@ -111,18 +105,17 @@ row is the selector's last three fields as typed.
 | ------------------------------- | ---------------------------- |
 | `tint value auto`               | `[1,0,0.25,0.5]`             |
 | `tint value srgb-hex`           | `#FF008980`                  |
-| `tint value linear-hex`         | `#FF004080`                  |
+| `tint value srgb-float`         | `srgba(1, 0, 0.537099, 0.5)` |
 | `tint value linear-float`       | `lin_srgba(1, 0, 0.25, 0.5)` |
 | `tint swatch-value srgb-hex`    | the swatch, then `#FF008980` |
 | `tint.b value srgb-hex`         | `89`                         |
 | `tint.z value auto`             | `0.25`                       |
 
-The first row is the custom-key default, `plain`. The second and third
-differ only on the transfer axis: the stored `0.25` encodes to byte
-`0x89` and quantizes raw to `0x40`. The last two address the same
-component through either alias set: the hex reading spells its pair,
-and the default reads the stored float. `srgb-float` has no example
-until ruling 4 settles its spelling.
+The first row is the custom-key default, `plain`. The next three spell
+one color: the sRGB readings encode the stored `0.25` to `0.537099`,
+byte `0x89`, and the linear reading keeps the stored numbers. The last
+two address the same component through either alias set: the hex
+reading spells its pair, and the default reads the stored float.
 
 ## The `auto` defaults
 
@@ -137,7 +130,7 @@ The `auto` reading resolves per key from the glTF vocabulary:
 
 Bare `vxl palette show` renders every idiomatic property exactly as
 today; the bare selector renders whole properties only. An explicitly
-selected component respells under a hex reading, its hex pair where
+selected component respells under `srgb-hex`, its hex pair where
 today prints a decimal byte. A custom vector's components become
 readable without any assertion, and its color rendering moves from
 `--type color` to a reading on its own selector.
@@ -147,17 +140,3 @@ readable without any assertion, and its color rendering moves from
 The `--type` flag, `PaletteShowType`, and the type parameter on
 `Dependencies::palette_show`. The name-keyed classification survives
 only as the `auto` defaults above.
-
-## Open rulings
-
-1. `linear-hex`: keep or drop. The recommendation is keep; it is the
-   byte spelling of linear-byte data, and dropping it leaves a hole in
-   the reading matrix that hex-means-sRGB convention alone justifies.
-2. The swatch rule (rule 5): confirm that `linear-hex` shows raw bytes
-   while the float readings show appearance.
-3. The shared component parser carries `.x`/`.y`/`.z`/`.w` into the
-   mesh channel expressions; confirm that ripple.
-4. `srgb-float`'s whole-vector text: confirm the `srgb(...)` /
-   `srgba(...)` functional notations, or a plain array instead. The
-   linear spellings are ruled: `lin_srgb(...)` / `lin_srgba(...)`, the
-   vocabulary's linear-sRGB names (owner, 2026-08-03).

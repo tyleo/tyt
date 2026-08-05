@@ -248,3 +248,14 @@ just inherits `srgb-hex` and prints its pair. Explicit component
 selections re-baseline from decimal bytes to hex pairs in iteration 10;
 the bare default selector renders whole properties only, so bare output
 is untouched.
+
+2026-08-04. The four open rulings close, and the reading table lands at
+five readings. `linear-hex` drops: hex always spells a real sRGB color,
+the raw numbers stay readable through `plain` and `linear-float`, and a
+byte spelling that reads wrong anywhere hex means color was not worth
+its niche inspection use. With it goes the only reading whose swatch
+and text could disagree, so the swatch rule is unconditional: every
+swatch shows the color's sRGB appearance. `srgb-float` spells
+`srgb(...)` / `srgba(...)`, symmetric with the ruled linear notations.
+The `.x`/`.y`/`.z`/`.w` aliases land in the shared component parser and
+ride into the mesh channel expressions.
