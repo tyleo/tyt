@@ -26,9 +26,10 @@ pub struct PaletteShow {
 
     /// A repeatable selector naming a value collection, three fields:
     /// `<palette> <property> <format>`. The palette is an index or `*`, the
-    /// property a key with an optional `.r`/`.g`/`.b`/`.a` color component or
-    /// `*`, and the format one of `auto`, `swatch`, `value`, `swatch-value`.
-    /// Defaults to `'*' '*' auto` when omitted.
+    /// property a key with an optional `.r`/`.g`/`.b`/`.a` or
+    /// `.x`/`.y`/`.z`/`.w` component or `*`, and the format one of `auto`,
+    /// `swatch`, `value`, `swatch-value`. Defaults to `'*' '*' auto` when
+    /// omitted.
     #[arg(
         value_names = ["palette", "property", "format"],
         long = "property",

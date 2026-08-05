@@ -1,24 +1,25 @@
-use crate::ColorComponent;
+use crate::VectorComponent;
 
 /// The property field of a `--property` selector: one property key,
-/// optionally narrowed to a color component, or every property of the palette.
+/// optionally narrowed to one vector component, or every property of the
+/// palette.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PropertyRef {
     /// Every property of the palette.
     All,
-    /// One property by key, optionally narrowed to one color `component`.
+    /// One property by key, optionally narrowed to one vector `component`.
     Key {
         /// The property key, with any trailing `.component` stripped off.
         key: String,
-        /// The color component to read, or `None` for the whole value.
-        component: Option<ColorComponent>,
+        /// The vector component to read, or `None` for the whole value.
+        component: Option<VectorComponent>,
     },
 }
 
 impl PropertyRef {
     /// Parses the property field: `*` for every property, else a key with an
-    /// optional trailing `.r`/`.g`/`.b`/`.a` color component. A longer dotted
-    /// suffix stays part of the key.
+    /// optional trailing `.r`/`.g`/`.b`/`.a` or `.x`/`.y`/`.z`/`.w`
+    /// component. A longer dotted suffix stays part of the key.
     pub fn parse(value: &str) -> Result<Self, String> {
         if value == "*" {
             return Ok(PropertyRef::All);
@@ -27,7 +28,7 @@ impl PropertyRef {
             Some((head, tail))
                 if tail.len() == 1 && tail.chars().all(|c| c.is_ascii_alphabetic()) =>
             {
-                (head, Some(tail.parse::<ColorComponent>()?))
+                (head, Some(tail.parse::<VectorComponent>()?))
             }
             _ => (value, None),
         };
@@ -43,7 +44,7 @@ impl PropertyRef {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ColorComponent, commands::PropertyRef};
+    use crate::{VectorComponent, commands::PropertyRef};
 
     #[test]
     fn parses_a_star() {
@@ -62,12 +63,19 @@ mod tests {
     }
 
     #[test]
-    fn parses_a_trailing_color_component() {
+    fn parses_a_trailing_component_from_either_alias_set() {
         assert_eq!(
             PropertyRef::parse("rgba.a").unwrap(),
             PropertyRef::Key {
                 key: "rgba".to_string(),
-                component: Some(ColorComponent::A),
+                component: Some(VectorComponent::A),
+            }
+        );
+        assert_eq!(
+            PropertyRef::parse("normal.y").unwrap(),
+            PropertyRef::Key {
+                key: "normal".to_string(),
+                component: Some(VectorComponent::Y),
             }
         );
     }
@@ -85,7 +93,7 @@ mod tests {
 
     #[test]
     fn rejects_an_unknown_component() {
-        assert!(PropertyRef::parse("rgba.z").is_err());
+        assert!(PropertyRef::parse("rgba.q").is_err());
     }
 
     #[test]

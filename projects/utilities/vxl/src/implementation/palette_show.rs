@@ -1,5 +1,5 @@
 use crate::{
-    ColorComponent, Format, Result, Width,
+    Format, Result, VectorComponent, Width,
     commands::{
         PaletteRef, PaletteShowFormat, PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape,
         PaletteShowType, PropertyRef, PropertySelector,
@@ -94,7 +94,7 @@ struct Collection {
     /// The property key, without any color component.
     key: String,
     /// The color component read from the property, when one was given.
-    component: Option<ColorComponent>,
+    component: Option<VectorComponent>,
     /// How each value renders.
     format: PaletteShowFormat,
     /// One sample per palette material in material order.
@@ -231,7 +231,7 @@ fn build_collection(
     palette_index: usize,
     palette: &VoxPalette,
     key: &str,
-    component: Option<ColorComponent>,
+    component: Option<VectorComponent>,
     r#type: Option<PaletteShowType>,
     format: PaletteShowFormat,
 ) -> Result<Collection> {
@@ -247,16 +247,18 @@ fn build_collection(
         .expect("a property references a value pool the state holds");
     let kind = classify(key, value_pool, r#type);
 
-    // A color component names one channel: it applies only to a color, and `.a`
-    // only to a four-component color.
+    // A component names one channel: it applies only to a color, and the
+    // alpha index only to a four-component color.
     if let Some(component) = component {
         match kind {
             Kind::Color { components, .. } => {
-                if component == ColorComponent::A && components < 4 {
+                if component.index() >= components {
                     return Err(IOError::new(
                         ErrorKind::InvalidInput,
                         format!(
-                            "property `{key}` is a three-component color and has no `.a` component"
+                            "property `{key}` is a three-component color and has no `.{}` \
+                             component",
+                            component.letter()
                         ),
                     )
                     .into());
@@ -267,7 +269,7 @@ fn build_collection(
                     ErrorKind::InvalidInput,
                     format!(
                         "property `{key}` is not a color and has no `.{}` component",
-                        component_letter(component)
+                        component.letter()
                     ),
                 )
                 .into());
@@ -350,7 +352,7 @@ fn sample(
     value_pool: &VoxValuePool,
     value_id: U32Id<BVoxValuePoolValue>,
     kind: Kind,
-    component: Option<ColorComponent>,
+    component: Option<VectorComponent>,
 ) -> TreeGridJsonValue {
     match kind {
         Kind::Color {
@@ -374,12 +376,12 @@ fn sample_color(
     value_id: U32Id<BVoxValuePoolValue>,
     components: usize,
     fits_srgb8: bool,
-    component: Option<ColorComponent>,
+    component: Option<VectorComponent>,
 ) -> TreeGridJsonValue {
     let bytes = color_bytes(value_pool, value_id);
     match component {
         Some(component) => {
-            let channel_index = component_index(component);
+            let channel_index = component.index();
             if fits_srgb8 {
                 TreeGridJsonValue::unorm8(bytes[channel_index])
             } else {
@@ -492,26 +494,6 @@ fn color_floats(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) 
     }
 }
 
-/// The `0..3` index of a color component into an `[r, g, b, a]` array.
-fn component_index(component: ColorComponent) -> usize {
-    match component {
-        ColorComponent::R => 0,
-        ColorComponent::G => 1,
-        ColorComponent::B => 2,
-        ColorComponent::A => 3,
-    }
-}
-
-/// The lowercase letter naming a color component.
-fn component_letter(component: ColorComponent) -> char {
-    match component {
-        ColorComponent::R => 'r',
-        ColorComponent::G => 'g',
-        ColorComponent::B => 'b',
-        ColorComponent::A => 'a',
-    }
-}
-
 /// A number as JSON: an integer when it is integral and fits `i64`, else a
 /// float, so it reads as it does in the text layouts.
 fn number_json(value: f64) -> Value {
@@ -574,7 +556,7 @@ fn build_grid(collections: Vec<Collection>) -> TreeGrid<TreeGridJsonValueCells> 
                     ),
                 };
                 property_node = Some((collection.key, property_node_id));
-                let letter = component_letter(component).to_string();
+                let letter = component.letter().to_string();
                 grid.add_child(property_node_id, TreeGridLabel::bare(letter))
             }
             None => {

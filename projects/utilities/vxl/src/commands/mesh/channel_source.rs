@@ -1,4 +1,4 @@
-use crate::{ColorComponent, Error, Result, commands::PropertyBinding};
+use crate::{Error, Result, VectorComponent, commands::PropertyBinding};
 use std::{result::Result as StdResult, str::FromStr};
 
 /// One channel's value in a material map: a property by name, optionally one
@@ -10,7 +10,7 @@ pub enum ChannelSource {
     /// inverted to `1 - value` when `invert` is set.
     Property {
         key: String,
-        component: Option<ColorComponent>,
+        component: Option<VectorComponent>,
         invert: bool,
     },
     /// The constant `0`.
@@ -74,8 +74,9 @@ impl FromStr for ChannelSource {
 
     /// Parses one channel expression. `0` and `1` are the constants,
     /// `computed-occlusion` the geometry-derived occlusion, a leading `1-`
-    /// inverts a property, and a trailing `.r`/`.g`/`.b`/`.a` reads one
-    /// color component. A property reference carries no whitespace.
+    /// inverts a property, and a trailing `.r`/`.g`/`.b`/`.a` or
+    /// `.x`/`.y`/`.z`/`.w` reads one component. A property reference carries
+    /// no whitespace.
     fn from_str(value: &str) -> StdResult<Self, Self::Err> {
         match value {
             "0" => return Ok(ChannelSource::Zero),
@@ -87,13 +88,14 @@ impl FromStr for ChannelSource {
             Some(rest) => (rest, true),
             None => (value, false),
         };
-        // A trailing `.r`/`.g`/`.b`/`.a` selects one color component; a longer
-        // suffix is part of the name, so dotted keys pass through unsplit.
+        // A trailing component letter from either alias set selects one
+        // component; a longer suffix is part of the name, so dotted keys pass
+        // through unsplit.
         let (name, component) = match body.rsplit_once('.') {
             Some((head, tail))
                 if tail.len() == 1 && tail.chars().all(|c| c.is_ascii_alphabetic()) =>
             {
-                (head, Some(tail.parse::<ColorComponent>()?))
+                (head, Some(tail.parse::<VectorComponent>()?))
             }
             _ => (body, None),
         };
@@ -116,7 +118,7 @@ impl FromStr for ChannelSource {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ColorComponent,
+        VectorComponent,
         commands::{ChannelSource, PropertyBinding},
     };
     use voxsmith::{BASE_COLOR, METALLIC, ROUGHNESS};
@@ -129,7 +131,7 @@ mod tests {
         }
     }
 
-    fn property_with(key: &str, component: Option<ColorComponent>, invert: bool) -> ChannelSource {
+    fn property_with(key: &str, component: Option<VectorComponent>, invert: bool) -> ChannelSource {
         ChannelSource::Property {
             key: key.to_string(),
             component,
@@ -137,7 +139,7 @@ mod tests {
         }
     }
 
-    fn component(key: &str, component: ColorComponent, invert: bool) -> ChannelSource {
+    fn component(key: &str, component: VectorComponent, invert: bool) -> ChannelSource {
         ChannelSource::Property {
             key: key.to_string(),
             component: Some(component),
@@ -188,14 +190,18 @@ mod tests {
     }
 
     #[test]
-    fn parses_color_components() {
+    fn parses_components_from_either_alias_set() {
         assert_eq!(
             "baseColor.r".parse::<ChannelSource>().unwrap(),
-            component(BASE_COLOR, ColorComponent::R, false)
+            component(BASE_COLOR, VectorComponent::R, false)
         );
         assert_eq!(
             "1-baseColor.a".parse::<ChannelSource>().unwrap(),
-            component(BASE_COLOR, ColorComponent::A, true)
+            component(BASE_COLOR, VectorComponent::A, true)
+        );
+        assert_eq!(
+            "normal.x".parse::<ChannelSource>().unwrap(),
+            component("normal", VectorComponent::X, false)
         );
     }
 
@@ -214,8 +220,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_color_component() {
-        assert!("baseColor.z".parse::<ChannelSource>().is_err());
+    fn rejects_an_unknown_component() {
+        assert!("baseColor.q".parse::<ChannelSource>().is_err());
     }
 
     #[test]
@@ -234,10 +240,10 @@ mod tests {
 
         // A component rides through the rename unchanged; its validity against
         // the value pool kind is checked later, at the bake.
-        let resolved = component("tint", ColorComponent::R, false)
+        let resolved = component("tint", VectorComponent::R, false)
             .resolve(&bindings())
             .unwrap();
-        assert_eq!(resolved, component("tint", ColorComponent::R, false));
+        assert_eq!(resolved, component("tint", VectorComponent::R, false));
     }
 
     #[test]
@@ -255,7 +261,7 @@ mod tests {
         // a scalar with a component and a color with none; the `mesh`
         // implementation validates each against its value pool kind.
         assert!(
-            component(METALLIC, ColorComponent::R, false)
+            component(METALLIC, VectorComponent::R, false)
                 .resolve(&bindings())
                 .is_ok()
         );

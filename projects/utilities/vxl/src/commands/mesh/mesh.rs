@@ -97,8 +97,9 @@ pub struct Mesh {
     /// Each `<expr>` is one of:
     /// - `<property>`: a voxel property by name, as `metallic` or
     ///   `baseColor`
-    /// - `<property>.<r|g|b|a>`: one component of a color property, as
-    ///   `baseColor.r`
+    /// - `<property>.<component>`: one component of a color property, as
+    ///   `baseColor.r`; the letters `r|g|b|a` and `x|y|z|w` address the
+    ///   same four indices
     /// - `1-<property>`: the inverse `1 - value`, as `1-roughness`
     /// - 0, 1: a constant channel
     ///

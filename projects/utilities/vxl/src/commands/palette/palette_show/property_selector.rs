@@ -38,7 +38,7 @@ impl PropertySelector {
 #[cfg(test)]
 mod tests {
     use crate::{
-        ColorComponent,
+        VectorComponent,
         commands::{PaletteRef, PaletteShowFormat, PropertyRef, PropertySelector},
     };
 
@@ -50,7 +50,7 @@ mod tests {
             selector.property,
             PropertyRef::Key {
                 key: "rgba".to_string(),
-                component: Some(ColorComponent::A),
+                component: Some(VectorComponent::A),
             }
         );
         assert!(matches!(selector.format, PaletteShowFormat::Value));

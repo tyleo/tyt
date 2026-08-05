@@ -1,5 +1,5 @@
 use crate::{
-    ColorComponent, Error, Format, MeshFormat, Result,
+    Error, Format, MeshFormat, Result, VectorComponent,
     commands::{
         ChannelSource, MeshMethod, MeshTextureMap, ResourceStorage, TextureBake, TextureShape,
     },
@@ -158,14 +158,14 @@ fn validate_scalar(effective: &VoxEffectivePalette, key: &str) -> Result<()> {
 fn validate_channel(
     effective: &VoxEffectivePalette,
     key: &str,
-    component: Option<ColorComponent>,
+    component: Option<VectorComponent>,
 ) -> Result<()> {
     match channel_kind(effective, key)? {
         ChannelKind::Color { alpha } => match component {
             None => Err(Error::usage(format!(
                 "`{key}` is a color; name a component, as `{key}.r`"
             ))),
-            Some(ColorComponent::A) if !alpha => Err(Error::usage(format!(
+            Some(component) if component.index() == 3 && !alpha => Err(Error::usage(format!(
                 "`{key}` is a color with no alpha; use r, g, or b"
             ))),
             _ => Ok(()),
@@ -173,7 +173,7 @@ fn validate_channel(
         ChannelKind::Scalar => {
             if component.is_some() {
                 return Err(Error::usage(format!(
-                    "`{key}` is a scalar and has no color component"
+                    "`{key}` is a scalar and has no component"
                 )));
             }
             Ok(())
@@ -280,13 +280,13 @@ fn material_channel(source: &ChannelSource) -> MaterialChannel {
     }
 }
 
-/// Maps a CLI color component to the voxsmith color channel.
-fn color_channel(component: ColorComponent) -> ColorChannel {
+/// Maps a CLI vector component to the voxsmith color channel it indexes.
+fn color_channel(component: VectorComponent) -> ColorChannel {
     match component {
-        ColorComponent::R => ColorChannel::R,
-        ColorComponent::G => ColorChannel::G,
-        ColorComponent::B => ColorChannel::B,
-        ColorComponent::A => ColorChannel::A,
+        VectorComponent::R | VectorComponent::X => ColorChannel::R,
+        VectorComponent::G | VectorComponent::Y => ColorChannel::G,
+        VectorComponent::B | VectorComponent::Z => ColorChannel::B,
+        VectorComponent::A | VectorComponent::W => ColorChannel::A,
     }
 }
 
@@ -313,7 +313,7 @@ fn atlas_shape(shape: TextureShape) -> AtlasShape {
 #[cfg(test)]
 mod tests {
     use super::{validate_channel, validate_color, validate_scalar};
-    use crate::ColorComponent;
+    use crate::VectorComponent;
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
     use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool};
@@ -359,7 +359,7 @@ mod tests {
         state: &VoxMain,
         palette_ids: &[U32Id<BVoxPalette>],
         key: &str,
-        component: Option<ColorComponent>,
+        component: Option<VectorComponent>,
     ) -> bool {
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         for &palette_id in palette_ids {
@@ -379,13 +379,13 @@ mod tests {
             &state,
             &[palette_id],
             "tint",
-            Some(ColorComponent::R)
+            Some(VectorComponent::R)
         ));
         assert!(validates(
             &state,
             &[palette_id],
             "tint",
-            Some(ColorComponent::A)
+            Some(VectorComponent::A)
         ));
     }
 
@@ -396,13 +396,20 @@ mod tests {
             &state,
             &[palette_id],
             "glow",
-            Some(ColorComponent::B)
+            Some(VectorComponent::B)
+        ));
+        // Both aliases of the alpha index reject.
+        assert!(!validates(
+            &state,
+            &[palette_id],
+            "glow",
+            Some(VectorComponent::A)
         ));
         assert!(!validates(
             &state,
             &[palette_id],
             "glow",
-            Some(ColorComponent::A)
+            Some(VectorComponent::W)
         ));
     }
 
@@ -414,7 +421,7 @@ mod tests {
             &state,
             &[palette_id],
             "gloss",
-            Some(ColorComponent::R)
+            Some(VectorComponent::R)
         ));
     }
 
@@ -428,7 +435,7 @@ mod tests {
             &state,
             &[palette_id],
             "baseColor",
-            Some(ColorComponent::A)
+            Some(VectorComponent::A)
         ));
         assert!(!validates(&state, &[palette_id], "baseColor", None));
         assert!(validates(&state, &[palette_id], "occlusionStrength", None));
@@ -436,13 +443,13 @@ mod tests {
             &state,
             &[palette_id],
             "occlusionStrength",
-            Some(ColorComponent::R)
+            Some(VectorComponent::R)
         ));
         assert!(!validates(
             &state,
             &[palette_id],
             "emissiveColor",
-            Some(ColorComponent::A)
+            Some(VectorComponent::A)
         ));
     }
 
@@ -465,7 +472,7 @@ mod tests {
             &state,
             &[palette_id],
             "metallic",
-            Some(ColorComponent::R)
+            Some(VectorComponent::R)
         ));
     }
 
@@ -479,7 +486,7 @@ mod tests {
             &state,
             &[palette_id],
             "subsurface",
-            Some(ColorComponent::R)
+            Some(VectorComponent::R)
         ));
     }
 
@@ -548,7 +555,7 @@ mod tests {
             &state,
             &[palette_id],
             "cell",
-            Some(ColorComponent::R)
+            Some(VectorComponent::R)
         ));
     }
 
@@ -591,7 +598,7 @@ mod tests {
             &state,
             &[scalar_palette_id, color_palette_id],
             "finish",
-            Some(ColorComponent::A)
+            Some(VectorComponent::A)
         ));
 
         // Scalar wins: no component allowed.
@@ -605,7 +612,7 @@ mod tests {
             &state,
             &[color_palette_id, scalar_palette_id],
             "finish",
-            Some(ColorComponent::R)
+            Some(VectorComponent::R)
         ));
     }
 }
