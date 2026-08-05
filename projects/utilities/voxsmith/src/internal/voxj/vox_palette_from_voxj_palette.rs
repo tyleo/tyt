@@ -10,9 +10,9 @@ use voxj::VoxjPalette;
 /// `valuePool` becoming a value-pool id. `materials` carries over one row per
 /// material, a value-index per property.
 ///
-/// Errors on a duplicate property name or a row whose length disagrees with the
-/// properties. Value-pool-reference and value-id ranges are checked when the
-/// palette is inserted by
+/// Errors on a duplicate property name, a row whose length disagrees with the
+/// properties, or a value-index past the id space. Value-pool-reference and
+/// value-id ranges are checked when the palette is inserted by
 /// [`VoxMain::add_palette`](voxcore::VoxMain::add_palette).
 pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette> {
     let mut out = VoxPalette::default();
@@ -36,8 +36,19 @@ pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette
     for (index, row) in palette.materials.iter().enumerate() {
         let value_ids = row
             .iter()
-            .map(|&value_index| (value_index as u32).to_u32_id())
-            .collect();
+            .map(|&value_index| {
+                // A wire index past the id space would wrap onto a real value
+                // and bind the material to a value the file never named.
+                u32::try_from(value_index)
+                    .map(U32Ext::to_u32_id)
+                    .map_err(|_| {
+                        Error::Invalid(format!(
+                            "palette material {index} names value-index {value_index}, past the \
+                             value-index space"
+                        ))
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
         out.add_material(value_ids).map_err(|_| {
             Error::Invalid(format!(
                 "palette material {index} has {} value-indices but {} properties",
@@ -123,6 +134,17 @@ mod tests {
         let palette = VoxjPalette {
             properties: vec![property("a", 0), property("b", 1)],
             materials: vec![vec![0, 1], vec![0]],
+        };
+        assert!(vox_palette_from_voxj_palette(&palette).is_err());
+    }
+
+    #[test]
+    fn rejects_a_value_index_past_the_id_space() {
+        // A `usize` index past `u32` would wrap onto a real value and bind the
+        // material to a value the file never named.
+        let palette = VoxjPalette {
+            properties: vec![property("a", 0)],
+            materials: vec![vec![1usize << 32]],
         };
         assert!(vox_palette_from_voxj_palette(&palette).is_err());
     }

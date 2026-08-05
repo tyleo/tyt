@@ -17,10 +17,11 @@ pub(crate) struct GltfRange {
 }
 
 impl GltfRange {
-    /// Whether `value` lies in the range. NaN lies in no range.
+    /// Whether `value` lies in the range. An unbounded top means arbitrarily
+    /// large and finite, so no infinity lies in a range, and neither does NaN.
     pub fn contains(self, value: f64) -> bool {
         (self.admits_zero && value == 0.0)
-            || (value >= self.min && self.max.is_none_or(|max| value <= max))
+            || (value.is_finite() && value >= self.min && self.max.is_none_or(|max| value <= max))
     }
 
     /// `value` clamped onto the interval. The zero the union admits is a
@@ -74,6 +75,23 @@ mod tests {
         assert!(!IOR.contains(0.5));
         assert!(!IOR.contains(-1.0));
         assert!(!IOR.contains(f64::NAN));
+    }
+
+    /// An unbounded top admits every finite value and no infinity: the spec
+    /// ranges are `[0, inf)` and `{0} union [1, inf)`, both half-open, and
+    /// serde_json spells a non-finite number `null`.
+    #[test]
+    fn an_unbounded_top_excludes_the_infinities() {
+        let unbounded = GltfRange {
+            min: 0.0,
+            max: None,
+            admits_zero: false,
+        };
+        assert!(unbounded.contains(f64::MAX));
+        assert!(!unbounded.contains(f64::INFINITY));
+        assert!(!unbounded.contains(f64::NEG_INFINITY));
+        assert!(!IOR.contains(f64::INFINITY));
+        assert!(!IOR.contains(f64::NEG_INFINITY));
     }
 
     #[test]

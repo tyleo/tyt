@@ -558,8 +558,8 @@ mod tests {
         bake_atlas_pixels(&used, bake, width, height)
     }
 
-    /// An unbounded-above `float` value pool holding `value`, the shape
-    /// `emissiveStrength` takes.
+    /// A `float` value pool holding `value`, the shape `emissiveStrength`
+    /// takes; the property is unbounded above.
     fn strength_value_pool(value: f64) -> VoxValuePool {
         VoxValuePool::float(vec![value]).unwrap()
     }

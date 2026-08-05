@@ -146,8 +146,7 @@ mod tests {
         U32Id::from_u32(index)
     }
 
-    /// Adds an unbounded `float` value pool holding `values` and returns its
-    /// id.
+    /// Adds a `float` value pool holding `values` and returns its id.
     fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> U32Id<BVoxValuePool> {
         state.add_value_pool(VoxValuePool::float(values).unwrap())
     }

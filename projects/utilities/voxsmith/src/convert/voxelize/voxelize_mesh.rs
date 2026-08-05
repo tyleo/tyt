@@ -513,17 +513,21 @@ fn property_color(
     Ok(TyLinSrgbaF64::from(components))
 }
 
-/// One property value under the out-of-range policy: its clamp under
-/// [`OutOfRangeProperty::Clamp`], else itself when in `range` and the range
-/// error otherwise. An in-range value is its own clamp, and a NaN has no
-/// clamp, so it errors under either policy.
+/// One property value under the out-of-range policy: itself when it lies in
+/// `range`, else its clamp under [`OutOfRangeProperty::Clamp`] and the range
+/// error otherwise. An in-range value is its own clamp, which is what keeps
+/// the clamp off `ior`'s admitted zero, and a non-finite value has no clamp
+/// on the interval, so it errors under either policy.
 fn property_value(
     value: f64,
     range: GltfRange,
     key: &str,
     out_of_range: OutOfRangeProperty,
 ) -> Result<f64> {
-    if out_of_range == OutOfRangeProperty::Clamp && !value.is_nan() {
+    if range.contains(value) {
+        return Ok(value);
+    }
+    if out_of_range == OutOfRangeProperty::Clamp && value.is_finite() {
         return Ok(range.clamp(value));
     }
     range.check(key, value)?;
@@ -634,7 +638,7 @@ fn grid_too_large(counts: TyVector3U32) -> Error {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, EMISSIVE_STRENGTH, FillMode, METALLIC, MaterialMode, Mesh, MeshMaterial,
+        BASE_COLOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC, MaterialMode, Mesh, MeshMaterial,
         MeshTriangle, MeshTriangleUvs, OutOfRangeProperty, Result, SurfaceMode, voxelize_mesh,
     };
     use ty_math::{TyLinSrgbaF64, TyVector3F64, TyVector3U32};
@@ -785,8 +789,8 @@ mod tests {
     fn an_out_of_range_scalar_clamps_when_asked() {
         let state = voxelize_with(over_metallic(), OutOfRangeProperty::Clamp).unwrap();
 
-        // Both materials land on the bounded value pool, the out-of-range one
-        // at the range's top.
+        // Both materials land on the value pool, the out-of-range one at the
+        // range's top.
         let (_, palette) = state.iter_palettes().next().unwrap();
         let property_id = palette.property_id_by_name(METALLIC).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
@@ -862,5 +866,54 @@ mod tests {
 
         assert!(voxelize_with(nan_metallic(), OutOfRangeProperty::Error).is_err());
         assert!(voxelize_with(nan_metallic(), OutOfRangeProperty::Clamp).is_err());
+    }
+
+    #[test]
+    fn an_infinite_scalar_errors_under_either_mode() {
+        // `emissiveStrength` is unbounded above, but an unbounded top means
+        // arbitrarily large and finite: the wire spells an infinity and the
+        // glTF factor cannot, so it has no clamp on the interval either.
+        let infinite_strength = || {
+            let matte = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
+            let mut broken = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
+            broken.emissive_strength = f64::INFINITY;
+            vec![matte, broken]
+        };
+
+        assert!(voxelize_with(infinite_strength(), OutOfRangeProperty::Error).is_err());
+        assert!(voxelize_with(infinite_strength(), OutOfRangeProperty::Clamp).is_err());
+    }
+
+    #[test]
+    fn the_clamp_leaves_the_ior_union_zero_alone() {
+        // `ior` reads `{0} union [1, inf)`, and zero means "does not refract".
+        // It is in range, so the clamp policy has nothing to do to it; only a
+        // value between the union's parts lands on the interval's end.
+        let iors = || {
+            let mut refracting = MeshMaterial::flat(TyLinSrgbaF64::new(1.0, 0.0, 0.0, 1.0));
+            refracting.ior = 0.0;
+            let mut between = MeshMaterial::flat(TyLinSrgbaF64::new(0.0, 0.0, 1.0, 1.0));
+            between.ior = 0.5;
+            vec![refracting, between]
+        };
+
+        let state = voxelize_with(iors(), OutOfRangeProperty::Clamp).unwrap();
+        let (_, palette) = state.iter_palettes().next().unwrap();
+        let property_id = palette.property_id_by_name(IOR).unwrap();
+        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
+        let value_pool = state.value_pool(value_pool_id).unwrap();
+        let values: Vec<VoxValuePoolValueRef> = value_pool
+            .iter_values()
+            .map(|(value_id, _)| value_pool.value(value_id).unwrap())
+            .collect();
+
+        assert!(
+            values.contains(&VoxValuePoolValueRef::Float(0.0)),
+            "the admitted zero clamped away: {values:?}"
+        );
+        assert!(
+            values.contains(&VoxValuePoolValueRef::Float(1.0)),
+            "{values:?}"
+        );
     }
 }

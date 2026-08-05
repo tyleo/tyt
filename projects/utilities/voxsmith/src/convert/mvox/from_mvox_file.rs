@@ -122,8 +122,8 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
         )
         .expect("the property names are distinct");
 
-    // The scalars are custom MagicaVoxel attributes with no glTF bounds, so
-    // their float value pools are unbounded.
+    // The scalars are custom MagicaVoxel attributes, so the glTF vocabulary
+    // range check does not reach them.
     let mut attribute_indices: Vec<Vec<u32>> = Vec::new();
     if has_materials {
         const SCALARS: [(&str, ScalarField); 6] = [

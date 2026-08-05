@@ -17,9 +17,9 @@ pub fn to_vmax_file(
 #[cfg(test)]
 mod tests {
     use crate::{
-        SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxExtWrapper,
-        from_vmax_file, lin_srgba_f64_from_srgba_u8, resolve_cell_color_or_transparent,
-        to_vmax_file, to_vox_value,
+        BASE_COLOR, SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt,
+        VoxelMaxExtWrapper, from_vmax_file, lin_srgba_f64_from_srgba_u8,
+        resolve_cell_color_or_transparent, to_vmax_file, to_vox_value,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
@@ -245,6 +245,37 @@ mod tests {
             contents_vmax_pngs: BTreeMap::new(),
             group_pngs: BTreeMap::new(),
         }
+    }
+
+    #[test]
+    fn a_non_color_base_color_errors_rather_than_writing_a_blank_palette() {
+        // A transparent stand-in would write a model Voxel Max renders as
+        // entirely invisible, at exit 0.
+        let mut state = VoxMain::default();
+        let value_pool_id = state.add_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+            .unwrap();
+        let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::splat(1)).unwrap();
+        object.add_layer(palette_id, material_id);
+        object
+            .retain_voxel(U32Id::from_u32(0), &[material_id])
+            .unwrap();
+        let object_id = state.add_object(object).unwrap();
+        let node_id = state
+            .add_hierarchy_node(VoxHierarchyNode {
+                child_object_ids: vec![object_id],
+                ..Default::default()
+            })
+            .unwrap();
+        state.push_root_hierarchy_node_id(node_id).unwrap();
+
+        let error = to_vmax_file(&state, VoxelMaxColorFormat::All).unwrap_err();
+        assert!(error.to_string().contains(BASE_COLOR), "{error}");
     }
 
     #[test]

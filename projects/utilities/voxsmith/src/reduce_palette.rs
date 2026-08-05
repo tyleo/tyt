@@ -838,8 +838,8 @@ mod tests {
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        // baseColor draws from an sRGBA color value pool; tag draws from
-        // an unbounded float value pool with one distinct value per material.
+        // baseColor draws from a linear `vec-4-float` value pool; tag draws
+        // from a `float` one with a distinct value per material.
         let base_value_pool_id = state.add_value_pool(
             VoxValuePool::vec_4_float(colors.iter().map(|color| linear_rgba(color)).collect())
                 .unwrap(),

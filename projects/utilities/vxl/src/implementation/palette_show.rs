@@ -482,10 +482,10 @@ fn sample_plain(
         VoxValuePoolValueRef::Json(value) => TreeGridJsonValue::json(vox_value_to_json(value)),
         VoxValuePoolValueRef::String(text) => TreeGridJsonValue::new(text.to_owned()),
         VoxValuePoolValueRef::Vec2Float(vector) => float_array_json(vector),
-        VoxValuePoolValueRef::Vec3Float(vector) => float_array_json(vector),
-        VoxValuePoolValueRef::Vec4Float(vector) => float_array_json(vector),
         VoxValuePoolValueRef::Vec2Int(vector) => int_array_json(vector),
+        VoxValuePoolValueRef::Vec3Float(vector) => float_array_json(vector),
         VoxValuePoolValueRef::Vec3Int(vector) => int_array_json(vector),
+        VoxValuePoolValueRef::Vec4Float(vector) => float_array_json(vector),
         VoxValuePoolValueRef::Vec4Int(vector) => int_array_json(vector),
     }
 }
@@ -502,10 +502,10 @@ fn sample_plain_component(
         .expect("a material draws a retained value");
     match value {
         VoxValuePoolValueRef::Vec2Float(vector) => TreeGridJsonValue::unorm(vector[index]),
-        VoxValuePoolValueRef::Vec3Float(vector) => TreeGridJsonValue::unorm(vector[index]),
-        VoxValuePoolValueRef::Vec4Float(vector) => TreeGridJsonValue::unorm(vector[index]),
         VoxValuePoolValueRef::Vec2Int(vector) => TreeGridJsonValue::unorm(vector[index] as f64),
+        VoxValuePoolValueRef::Vec3Float(vector) => TreeGridJsonValue::unorm(vector[index]),
         VoxValuePoolValueRef::Vec3Int(vector) => TreeGridJsonValue::unorm(vector[index] as f64),
+        VoxValuePoolValueRef::Vec4Float(vector) => TreeGridJsonValue::unorm(vector[index]),
         VoxValuePoolValueRef::Vec4Int(vector) => TreeGridJsonValue::unorm(vector[index] as f64),
         _ => unreachable!("a component was validated against a vector shape"),
     }
@@ -585,9 +585,15 @@ fn color_floats(value_pool: &VoxValuePool, value_id: U32Id<BVoxValuePoolValue>) 
 }
 
 /// A number as JSON: an integer when it is integral and fits `i64`, else a
-/// float, so it reads as it does in the text layouts.
+/// float, so it reads as it does in the text layouts. JSON spells no infinity
+/// and serde_json writes one as `null`, so an infinite value carries the
+/// sentinel the wire spells it with.
 fn number_json(value: f64) -> Value {
-    if value.fract() == 0.0 && value.abs() < i64::MAX as f64 {
+    if value == f64::INFINITY {
+        Value::String("inf".to_owned())
+    } else if value == f64::NEG_INFINITY {
+        Value::String("-inf".to_owned())
+    } else if value.fract() == 0.0 && value.abs() < i64::MAX as f64 {
         json!(value as i64)
     } else {
         json!(value)

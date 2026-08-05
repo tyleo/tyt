@@ -1,8 +1,8 @@
 use crate::{
     ABSORPTION, BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC, ROUGHNESS,
     Result, SHADOWS, SceneCameraSource, TRANSMISSION, VoxelMaxColorFormat, VoxelMaxExt,
-    VoxelMaxExtWrapper, VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, ext_for, from_vox_value,
-    pbr_factor_to_vm_coefficient, tighten, value_pool_color,
+    VoxelMaxExtWrapper, VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, default_scalar, ext_for,
+    from_vox_value, pbr_factor_to_vm_coefficient, tighten, value_pool_color,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -231,7 +231,7 @@ pub fn write_vmax(
                 &mut palette_settings_files,
                 &mut palette_png_files,
                 voxel_max_color_format,
-            );
+            )?;
 
             let ind = node_ind(&object_ext, false, &mut ind_counter);
             objects.push(object_from_node(
@@ -821,14 +821,26 @@ fn derived_material(
     signature: &[U32Id<BVoxValuePoolValue>],
     base_luminance: Option<f64>,
 ) -> Result<VMaxMaterial> {
-    let scalar = |property: &str| -> Option<f64> {
-        let position = properties.iter().position(|(name, _)| name == property)?;
+    // `None` when the palette binds no such property, so the caller takes the
+    // vocabulary default. A property bound to a value pool holding no scalar
+    // errors instead: the palette names a value this writer cannot read, and a
+    // default would write a material the source never described.
+    let scalar = |property: &str| -> Result<Option<f64>> {
+        let Some(position) = properties.iter().position(|(name, _)| name == property) else {
+            return Ok(None);
+        };
         value_pool_scalar(
             state,
             palette_id,
             properties[position].1,
             signature[position],
         )
+        .map(Some)
+        .ok_or_else(|| {
+            Error::invalid(format!(
+                "`{property}` draws from a value pool holding no scalar"
+            ))
+        })
     };
     let flag = |property: &str| -> Option<bool> {
         let position = properties.iter().position(|(name, _)| name == property)?;
@@ -857,8 +869,11 @@ fn derived_material(
     let dispersed = carries(IOR) || carries(TRANSMISSION) || carries(ABSORPTION);
     Ok(VMaxMaterial {
         mi: (slot + 1).to_string(),
-        mc: pbr_factor_to_vm_coefficient(scalar(METALLIC).unwrap_or(0.0), METALLIC)?,
-        rc: pbr_factor_to_vm_coefficient(scalar(ROUGHNESS).unwrap_or(0.0), ROUGHNESS)?,
+        // An unbound property renders at its vocabulary default, the same one
+        // the glTF export writes, so the two exporters read one source model
+        // the same way.
+        mc: pbr_factor_to_vm_coefficient(unbound_scalar(scalar(METALLIC)?, METALLIC), METALLIC)?,
+        rc: pbr_factor_to_vm_coefficient(unbound_scalar(scalar(ROUGHNESS)?, ROUGHNESS), ROUGHNESS)?,
         // Voxel Max glows in the voxel's base color at coefficient `sic`, so
         // the emissive folds to its luminance relative to the base color, times
         // `emissiveStrength`. This inverts the from-vmax split, which emits the
@@ -869,23 +884,26 @@ fn derived_material(
         // strength stands alone.
         sic: match emissive_luminance() {
             Some(emissive) => {
-                let strength = scalar(EMISSIVE_STRENGTH).unwrap_or(1.0);
+                let strength = unbound_scalar(scalar(EMISSIVE_STRENGTH)?, EMISSIVE_STRENGTH);
                 match base_luminance {
                     Some(base) if base > 0.0 => strength * emissive / base,
                     _ => strength * emissive,
                 }
             }
-            None => scalar(EMISSIVE_STRENGTH).unwrap_or(0.0),
+            None => scalar(EMISSIVE_STRENGTH)?.unwrap_or(0.0),
         },
         // Voxel Max casts shadows by default; a source without a shadows flag,
         // such as glTF, takes that default.
         sh: flag(SHADOWS).unwrap_or(true),
         tc: None,
-        md: dispersed.then(|| VMaxMaterialDispersion {
-            absorption: scalar(ABSORPTION).unwrap_or(0.0),
-            ior: scalar(IOR).unwrap_or(1.5),
-            transmission: scalar(TRANSMISSION).unwrap_or(0.0),
-        }),
+        md: match dispersed {
+            true => Some(VMaxMaterialDispersion {
+                absorption: scalar(ABSORPTION)?.unwrap_or(0.0),
+                ior: unbound_scalar(scalar(IOR)?, IOR),
+                transmission: unbound_scalar(scalar(TRANSMISSION)?, TRANSMISSION),
+            }),
+            false => None,
+        },
     })
 }
 
@@ -909,6 +927,14 @@ fn vmax_material(slot: usize, material: &VoxelMaxMaterial) -> VMaxMaterial {
                 transmission: dispersion.transmission,
             }),
     }
+}
+
+/// `value` when the property is bound, else the glTF vocabulary default the
+/// format gives `key`, so an unbound property writes what it renders as.
+fn unbound_scalar(value: Option<f64>, key: &str) -> f64 {
+    value.unwrap_or_else(|| {
+        default_scalar(key).expect("a vocabulary scalar the vmax writer emits has a spec default")
+    })
 }
 
 /// The `f64` value at `value_id` in a property's `float` value pool, or `None`.
@@ -1031,16 +1057,16 @@ fn build_palette(
     palette_settings_files: &mut BTreeMap<String, VMaxPaletteSettingsVmaxpsbFile>,
     palette_png_files: &mut BTreeMap<String, VMaxPalettePngFile>,
     voxel_max_color_format: VoxelMaxColorFormat,
-) -> String {
+) -> Result<String> {
     // An object with no color property borrows the default palette name; an empty
     // reference is one Voxel Max cannot resolve. No file is written for it.
     let Some((palette_id, color_property_id)) =
         folded.and_then(|folded| Some((folded.palette_id, folded.color_property_id?)))
     else {
-        return FALLBACK_PALETTE.to_owned();
+        return Ok(FALLBACK_PALETTE.to_owned());
     };
     if let Some(name) = palette_files.get(&palette_id) {
-        return name.clone();
+        return Ok(name.clone());
     }
     // Voxel Max numbers palette files 1-based (`palette1`, `palette2`, ...); an
     // un-numbered `palette.png` breaks the plist color lookup when no image is
@@ -1048,7 +1074,7 @@ fn build_palette(
     let stem = palette_files.len() + 1;
     let pal = format!("palette{stem}.png");
 
-    let colors = color_palette_colors(state, palette_id, color_property_id);
+    let colors = color_palette_colors(state, palette_id, color_property_id)?;
     if matches!(
         voxel_max_color_format,
         VoxelMaxColorFormat::Png | VoxelMaxColorFormat::All
@@ -1086,26 +1112,34 @@ fn build_palette(
         );
     }
     palette_files.insert(palette_id, pal.clone());
-    pal
+    Ok(pal)
 }
 
 /// The color property's value pool decoded to exactly [`PALETTE_COLORS`]
 /// 0-based RGBA entries, padded with transparent entries or truncated to that
 /// count. Colors past the budget are dropped; a voxel that would reference one
 /// is rejected by [`reconstruct_voxels`].
+///
+/// Errors when the bound value pool holds no color, since a transparent stand-in
+/// would write a model Voxel Max renders as empty.
 fn color_palette_colors(
     state: &VoxMain,
     palette_id: U32Id<BVoxPalette>,
     color_property_id: U32Id<BVoxProperty>,
-) -> Vec<[u8; 4]> {
+) -> Result<Vec<[u8; 4]>> {
     let mut cells: Vec<[u8; 4]> = Vec::new();
     if let Some(value_pool) = property_value_pool(state, palette_id, color_property_id) {
         for (value_id, _) in value_pool.iter_values().take(PALETTE_COLORS) {
-            cells.push(value_pool_color(value_pool, value_id).unwrap_or([0, 0, 0, 0]));
+            let color = value_pool_color(value_pool, value_id).ok_or_else(|| {
+                Error::invalid(format!(
+                    "`{BASE_COLOR}` draws from a value pool holding no color"
+                ))
+            })?;
+            cells.push(color);
         }
     }
     cells.resize(PALETTE_COLORS, [0, 0, 0, 0]);
-    cells
+    Ok(cells)
 }
 
 /// Builds a settings sidecar carrying `colors`, `materials`, and the per-color

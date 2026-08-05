@@ -118,9 +118,13 @@ impl TreeGridJsonValue {
 }
 
 /// A number as JSON: an integer when it is integral and fits `i64`,
-/// else a float, so it reads as it does in the text layouts.
+/// else a float, so it reads as it does in the text layouts. JSON spells no
+/// infinity and serde_json writes one as `null`, so an infinite value carries
+/// its `Display` text instead, the same text the cell shows.
 pub(crate) fn number_json(value: f64) -> Value {
-    if value.fract() == 0.0 && value.abs() < i64::MAX as f64 {
+    if value.is_infinite() {
+        Value::String(value.to_string())
+    } else if value.fract() == 0.0 && value.abs() < i64::MAX as f64 {
         json!(value as i64)
     } else {
         json!(value)
@@ -158,6 +162,19 @@ mod tests {
     fn float_collapses_an_integral_value_to_a_json_integer() {
         assert_eq!(TreeGridJsonValue::float(1.0).json, Some(json!(1)));
         assert_eq!(TreeGridJsonValue::float(0.2).json, Some(json!(0.2)));
+    }
+
+    #[test]
+    fn an_infinite_float_carries_its_text_rather_than_null() {
+        // serde_json writes a non-finite number as `null`, which would drop
+        // the value the cell shows.
+        let positive = TreeGridJsonValue::float(f64::INFINITY);
+        let negative = TreeGridJsonValue::float(f64::NEG_INFINITY);
+
+        assert_eq!(positive.json, Some(json!("inf")));
+        assert_eq!(positive.value.text, "inf");
+        assert_eq!(negative.json, Some(json!("-inf")));
+        assert_eq!(negative.value.text, "-inf");
     }
 
     #[test]

@@ -195,7 +195,7 @@ shape and dimension. Nesting was dropped with it: the deferred
 [`PaletteData`](../vxl-commands/reference/mesh.md#deferred) is a fixed shape the exporter builds.
 
 This mirrors the voxel-json
-[value kinds](../voxj-value-kinds/README.md), which deleted their six
+[value kinds](../../closed/voxj-value-kinds/README.md), which deleted their six
 color kinds for the same reason. A color has two spellings and two transfers,
 which is four ways to write one value, and none of the four is a property of
 the value itself. Fix the spelling and drop the transfer and what is left is a
