@@ -41,8 +41,8 @@ mod color_space;
 mod convert;
 mod dither;
 mod error;
-mod gltf_attribute_kind;
-mod gltf_attributes;
+mod gltf_properties;
+mod gltf_property_kind;
 #[cfg(feature = "_mesh")]
 mod gltf_range;
 mod order_palette_colors;
@@ -57,8 +57,8 @@ pub use color_space::*;
 pub use convert::*;
 pub use dither::*;
 pub use error::*;
-pub use gltf_attribute_kind::*;
-pub use gltf_attributes::*;
+pub use gltf_properties::*;
+pub use gltf_property_kind::*;
 #[cfg(feature = "_mesh")]
 pub(crate) use gltf_range::*;
 pub use order_palette_colors::*;

@@ -302,3 +302,10 @@ only under an explicit `linear-float` or `plain`. Only a key outside
 the vocabulary assumes `plain`. This supersedes the design page's
 `auto` fallback, the iteration 8 value-driven display ruling behind
 it, and this iteration's auto-never-errors ruling (owner ruling).
+
+2026-08-05. The glTF vocabulary files spell property: `gltf_attributes.rs`
+becomes `gltf_properties.rs`, and `GltfAttributeKind` becomes
+`GltfPropertyKind` in `gltf_property_kind.rs`, their prose following
+(owner ruling). The wider `attribute` vocabulary in voxsmith, the
+`used_materials.rs` `attribute` accessor and the mesh sampling and
+atlas bake prose, stays for a separate ruling.

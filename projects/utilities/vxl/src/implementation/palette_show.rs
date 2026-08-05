@@ -25,7 +25,7 @@ use voxcore::{
     BVoxValuePoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolKind,
     VoxValuePoolValueRef,
 };
-use voxsmith::GltfAttributeKind;
+use voxsmith::GltfPropertyKind;
 
 /// Loads the voxel file at `input` and prints the value collections named by
 /// `selectors`, each a property's values down a palette, populated into a
@@ -314,8 +314,8 @@ fn resolve_reading(
     reading: PaletteShowReading,
 ) -> Result<Reading> {
     match reading {
-        PaletteShowReading::Auto => match GltfAttributeKind::of(key) {
-            Some(GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba) => {
+        PaletteShowReading::Auto => match GltfPropertyKind::of(key) {
+            Some(GltfPropertyKind::ColorRgb | GltfPropertyKind::ColorRgba) => {
                 if !color_shape(value_pool) {
                     return Err(IOError::new(
                         ErrorKind::InvalidInput,
@@ -328,7 +328,7 @@ fn resolve_reading(
                 }
                 Ok(Reading::SrgbHex)
             }
-            Some(GltfAttributeKind::Scalar) | None => Ok(Reading::Plain),
+            Some(GltfPropertyKind::Scalar) | None => Ok(Reading::Plain),
         },
         PaletteShowReading::LinearFloat => {
             color_reading(key, value_pool, "linear-float", Reading::LinearFloat)

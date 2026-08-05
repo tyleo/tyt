@@ -1,4 +1,4 @@
-use crate::{COLOR_RANGE, GltfAttributeKind, GltfRange, Result, scalar_range};
+use crate::{COLOR_RANGE, GltfPropertyKind, GltfRange, Result, scalar_range};
 use voxcore::{VoxMain, VoxValuePoolValueRef};
 
 /// Checks every palette property named by the glTF vocabulary against that
@@ -19,12 +19,12 @@ pub fn check_gltf_property_ranges(state: &VoxMain) -> Result<()> {
     for (palette_id, palette) in state.iter_palettes() {
         for (property_id, property) in palette.iter_properties() {
             let name = &property.name;
-            let Some(kind) = GltfAttributeKind::of(name) else {
+            let Some(kind) = GltfPropertyKind::of(name) else {
                 continue;
             };
             let range = match kind {
-                GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba => COLOR_RANGE,
-                GltfAttributeKind::Scalar => {
+                GltfPropertyKind::ColorRgb | GltfPropertyKind::ColorRgba => COLOR_RANGE,
+                GltfPropertyKind::Scalar => {
                     scalar_range(name).expect("every scalar vocabulary property has a range")
                 }
             };
@@ -38,7 +38,7 @@ pub fn check_gltf_property_ranges(state: &VoxMain) -> Result<()> {
                 };
 
                 match kind {
-                    GltfAttributeKind::ColorRgb | GltfAttributeKind::ColorRgba => match value {
+                    GltfPropertyKind::ColorRgb | GltfPropertyKind::ColorRgba => match value {
                         VoxValuePoolValueRef::Vec3Float(components) => {
                             check_components(name, components, range)?
                         }
@@ -47,7 +47,7 @@ pub fn check_gltf_property_ranges(state: &VoxMain) -> Result<()> {
                         }
                         _ => {}
                     },
-                    GltfAttributeKind::Scalar => match value {
+                    GltfPropertyKind::Scalar => match value {
                         VoxValuePoolValueRef::Float(number) => range.check(name, number)?,
                         VoxValuePoolValueRef::Int(number) => range.check(name, number as f64)?,
                         _ => {}

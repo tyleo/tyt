@@ -1056,7 +1056,7 @@ mod tests {
     }
 
     #[test]
-    fn flat_paints_the_whole_body_one_color_over_the_gltf_attributes() {
+    fn flat_paints_the_whole_body_one_color_over_the_gltf_properties() {
         let state = voxelize(
             &box_glb(1.0, 4.0, 1.0, None, None),
             TyVector3U32::new(1, 1, 4),
