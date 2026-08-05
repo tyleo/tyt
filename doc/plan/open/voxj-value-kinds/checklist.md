@@ -436,7 +436,7 @@ Gate: `cargo test -p vxl --all-features` green; owner review.
       (the survey's Assets note carries the correction). Verify the new
       file carries vector kinds, the renamed property names, and no
       `min`/`max` keys.
-- [ ] Sweep the open vxl-commands plan pages: `reference/mesh.md` (the
+- [x] Sweep the open vxl-commands plan pages: `reference/mesh.md` (the
       property names), `reference/to/voxj.md`, `reference/voxelize.md`,
       and `checklist.md` (the deleted `--color-format`),
       `reference/palette/remap.md` (the `srgba-hex` examples), and the

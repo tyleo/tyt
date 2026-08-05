@@ -57,20 +57,20 @@ from the hierarchy is a separate [deferred](#deferred) mode.
    small. Unused cells are transparent black the mesh never samples.
 7. `--texture <preset>`: bake a preset material map. Repeatable, as
    `--texture albedo --texture orm`. The presets:
-   1. `albedo`: RGBA base color from `baseColorFactor`.
-   2. `orm`: R = `occlusionStrength`, G = `roughnessFactor`,
-      B = `metallicFactor`.
-   3. `metallic-roughness`: R = `0`, G = `roughnessFactor`,
-      B = `metallicFactor`.
-   4. `metallic-smoothness`: R = `metallicFactor`, A = smoothness
-      (`1-roughnessFactor`), G and B = `0`.
-   5. `mse`: R = `metallicFactor`, G = smoothness, B = `emissiveStrength`.
-   6. `emissive`: `emissiveFactor` scaled by `emissiveStrength`, so a surface
+   1. `albedo`: RGBA base color from `baseColor`.
+   2. `orm`: R = `occlusionStrength`, G = `roughness`,
+      B = `metallic`.
+   3. `metallic-roughness`: R = `0`, G = `roughness`,
+      B = `metallic`.
+   4. `metallic-smoothness`: R = `metallic`, A = smoothness
+      (`1-roughness`), G and B = `0`.
+   5. `mse`: R = `metallic`, G = smoothness, B = `emissiveStrength`.
+   6. `emissive`: `emissiveColor` scaled by `emissiveStrength`, so a surface
       glows in its own color. The strongest material's strength is written as
       `KHR_materials_emissive_strength`.
    7. `occlusion`: grayscale `occlusionStrength`.
-   8. `roughness`: grayscale `roughnessFactor`.
-   9. `smoothness`: grayscale `1-roughnessFactor`.
+   8. `roughness`: grayscale `roughness`.
+   9. `smoothness`: grayscale `1-roughness`.
 
    The one bundle, `pbr`, expands to `albedo`, `orm`, and `emissive`.
 8. `--texture-name <preset> <file-name>`: name one preset's file exactly, as
@@ -144,24 +144,26 @@ one argument: a comma-separated list over `R=<expr>`, `G=<expr>`, `B=<expr>`,
 and `A=<expr>`. This reproduces the `mse` preset:
 
 ```
-vxl mesh model.voxj --texture-map model-mse.png R=metallicFactor,G=1-roughnessFactor,B=emissiveStrength
+vxl mesh model.voxj --texture-map model-mse.png R=metallic,G=1-roughness,B=emissiveStrength
 ```
 
 The image's channel count is the highest channel named; an unnamed channel is
 `0`. Each `<expr>` is one of:
 
 1. `<property>`: a scalar property by its voxel-json key, as
-   `metallicFactor`.
-2. `<property>.<r|g|b|a>`: one component of a color property, as
-   `baseColorFactor.r`.
-3. `1-<property>`: the inverse, as `1-roughnessFactor`.
+   `metallic`.
+2. `<property>.<component>`: one component of a vector property through
+   either alias set (`.r`/`.g`/`.b`/`.a` or `.x`/`.y`/`.z`/`.w`), as
+   `baseColor.r`.
+3. `1-<property>`: the inverse, as `1-roughness`.
 4. `0` | `1`: a constant.
 
-A property's type is never declared on the command line. It is read from the
-value pool its key binds in its winning layer's palette, the last layer whose
-palette supplies the name: a color pool exposes `.r`, `.g`, `.b`, and, with
-alpha, `.a`, and is read one component at a time; a `float`, `int`, or `bool`
-pool is a scalar, read whole and rejecting a component. A key no layer
+A property's type is never declared on the command line. A glTF vocabulary
+name has the vocabulary's type whatever a palette binds it to; a custom key
+takes its type from the shape of the value pool its key binds in its winning
+layer's palette, the last layer whose palette supplies the name: a float
+vector is a color, read one component at a time, and a `float`, `int`, or
+`bool` pool is a scalar, read whole and rejecting a component. A key no layer
 supplies follows the format's
 [unbound-default rule](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties):
 a glTF built-in bakes its spec default, a custom key errors.
@@ -171,10 +173,11 @@ packing can read: `property` is the token used in `<channels>`, `name` is the
 voxel-json key. The key is its own argument, so it may be quoted, and a key
 with spaces is reachable only through an alias. A binding shadows a built-in
 of the same name within the custom packings; the `--texture` presets always
-read the spec properties. With a palette binding `tint` to an `srgba` pool,
+read the spec properties. With a palette binding `tint` to a `vec-4-float`
+pool,
 
 ```
-vxl mesh model.voxj --define-property tint tint --texture-map paint.png R=tint.r,G=tint.g,B=tint.b,A=baseColorFactor.a
+vxl mesh model.voxj --define-property tint tint --texture-map paint.png R=tint.r,G=tint.g,B=tint.b,A=baseColor.a
 ```
 
 packs the custom `tint` color into RGB and the base color's alpha into `A`.
@@ -222,9 +225,9 @@ The palette data (examples in JSONC; a real file is plain JSON):
   "version": 1,
   "kind": "palette-index",
   "materials": [
-    { "baseColorFactor": "#FF0000FF", "roughnessFactor": 0.9 }, // index 0
-    { "baseColorFactor": "#FF0000FF", "roughnessFactor": 0.1 }, // index 1
-    { "baseColorFactor": "#0000FFFF", "roughnessFactor": 0.1 }  // index 2
+    { "baseColor": "#FF0000FF", "roughness": 0.9 }, // index 0
+    { "baseColor": "#FF0000FF", "roughness": 0.1 }, // index 1
+    { "baseColor": "#0000FFFF", "roughness": 0.1 }  // index 2
   ]
 }
 ```
@@ -235,12 +238,12 @@ The palette data (examples in JSONC; a real file is plain JSON):
   "kind": "palette-layers",
   "layers": [
     [ // layer 0 (base), indexed by _PALETTEINDEX0
-      { "baseColorFactor": "#FF0000FF" },
-      { "baseColorFactor": "#0000FFFF" }
+      { "baseColor": "#FF0000FF" },
+      { "baseColor": "#0000FFFF" }
     ],
     [ // layer 1 (finish), indexed by _PALETTEINDEX1
-      { "roughnessFactor": 0.9 },
-      { "roughnessFactor": 0.1 }
+      { "roughness": 0.9 },
+      { "roughness": 0.1 }
     ]
   ]
 }

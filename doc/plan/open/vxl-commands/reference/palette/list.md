@@ -16,24 +16,24 @@ a tree:
 ```
 palettes
 ├ 0
-│ ├ materialCount: 12
+│ ├ materials: 12
 │ ├ properties
-│ │ ├ "baseColorFactor"
-│ │ └ "metallicFactor"
+│ │ ├ "baseColor"
+│ │ └ "metallic"
 │ └ objects
 │   ├ "Object A"
 │   └ "Object B"
 └ 1
-  ├ materialCount: 2
+  ├ materials: 2
   ├ properties
-  │ ├ "baseColorFactor"
+  │ ├ "baseColor"
   │ └ "emissiveStrength"
   └ objects
     └ "Object B"
 ```
 
-From there, `vxl palette show <input> --property 1 '*' auto` prints palette 1's
-colors.
+From there, `vxl palette show <input> --property 1 '*' auto auto` prints
+palette 1's colors.
 
 ## Filters
 
@@ -53,7 +53,7 @@ each defaulting to shown so a bare `palette list` prints them all:
 2. `--show-materials` (default `true`): the material count.
 3. `--show-objects` (default `true`): the objects that reference the palette.
 
-`--show-objects false` drops the `used by` column in the table and the `objects`
+`--show-objects false` drops the `objects` column in the table and the `objects`
 branch in the tree, and the other two behave the same way.
 
 ## Layout
@@ -63,7 +63,7 @@ branch in the tree, and the other two behave the same way.
 
 1. `hierarchy` (default): the indented tree above, in the
    [`hierarchy show`](../hierarchy/show.md) idiom, a `palettes` header over one
-   branch per palette index, with the material count as a `materialCount: <n>`
+   branch per palette index, with the material count as a `materials: <n>`
    leaf and
    `properties` and `objects` as subtrees. Property keys and object names are
    user-entered, so they print quoted.
@@ -73,16 +73,16 @@ branch in the tree, and the other two behave the same way.
    ```
    # palettes
 
-   | label | properties                        | materials | used by            |
-   | ----- | --------------------------------- | --------- | ------------------ |
-   | 0     | baseColorFactor, metallicFactor   | 12        | Object A, Object B |
-   | 1     | baseColorFactor, emissiveStrength | 2         | Object B           |
-   | 2     | metallicFactor, roughnessFactor   | 1         | Object B           |
+   | label | properties                  | materials | objects            |
+   | ----- | --------------------------- | --------- | ------------------ |
+   | 0     | baseColor, metallic         | 12        | Object A, Object B |
+   | 1     | baseColor, emissiveStrength | 2         | Object B           |
+   | 2     | metallic, roughness         | 1         | Object B           |
    ```
 
 3. `json-pretty` and `json-compact`: the listing tree as pretty or compact
    JSON in the shared read-command envelope, one `{"label", "annotation"?,
    "values"?, "children"?}` record per tree node: the `palettes` root over one
    record per palette index, the material count as a native number under
-   `materialCount`, and the property and object names as child records, an
+   `materials`, and the property and object names as child records, an
    empty subtree the `"[]"` string value its tree leaf shows.

@@ -69,7 +69,7 @@ off as they land.
       [mesh](reference/mesh.md). (Image storage shipped with `mesh`; the palette
       JSON reuse lands with the vertex carriers.)
 - [x] Shared voxj encoding options (`--format`, `--encoding-preset`,
-      `--position-encoding`, `--sample-encoding`, `--color-format`) in
+      `--position-encoding`, `--sample-encoding`) in
       `VoxjEncodingOptions`, flattened by `to voxj` and `voxelize`;
       `--ext`/`--edit-state` stay on `to voxj`.
 - [x] `ValueEnum`s for the palette ops: quantize method, color space, dither,

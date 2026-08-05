@@ -28,10 +28,10 @@ its own format or a bare palette JSON.
    `--target` file's array when `--target` is given, otherwise a palette in the
    input document itself. Without `--target` it must name a palette other than
    the `--index` one being remapped.
-3. `--target-property <key>` (default `baseColorFactor`): the property compared
+3. `--target-property <key>` (default `baseColor`): the property compared
    when finding the nearest entry, in the target.
 4. `--index <n>` (default `0`): which palette in the input to remap from.
-5. `--property <key>` (default `baseColorFactor`): which property in the input
+5. `--property <key>` (default `baseColor`): which property in the input
    to compare.
 6. `--space` `oklab` | `lab` | `srgb` (default `oklab`): distance metric for the
    nearest-value search.
@@ -61,11 +61,14 @@ shared pools rather than inline in each palette. A single-palette target file:
 ```json
 {
   "valuePools": [
-    { "kind": "srgba-hex", "values": ["#1D2B53FF", "#7E2553FF", "#008751FF"] }
+    {
+      "kind": "vec-4-float",
+      "values": [[0, 0, 0.5, 1], [0.5, 0, 0.25, 1], [0, 0.5, 0.25, 1]]
+    }
   ],
   "palettes": [
     {
-      "properties": [{ "name": "baseColorFactor", "valuePool": 0 }],
+      "properties": [{ "name": "baseColor", "valuePool": 0 }],
       "materials": [[0], [1], [2]]
     }
   ]
@@ -83,26 +86,29 @@ A target file may hold several palettes; `--target-index` picks one:
 ```json
 {
   "valuePools": [
-    { "kind": "srgba-hex", "values": ["#FF0000FF", "#00FF00FF", "#0000FFFF"] },
-    { "kind": "float", "min": 0, "max": 1, "values": [1.0] },
-    { "kind": "float", "min": 0, "max": 1, "values": [0.2] }
+    {
+      "kind": "vec-4-float",
+      "values": [[1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1]]
+    },
+    { "kind": "float", "values": [1.0] },
+    { "kind": "float", "values": [0.2] }
   ],
   "palettes": [
     {
       "properties": [
-        { "name": "baseColorFactor", "valuePool": 0 },
-        { "name": "metallicFactor", "valuePool": 1 }
+        { "name": "baseColor", "valuePool": 0 },
+        { "name": "metallic", "valuePool": 1 }
       ],
       "materials": [[0, 0]]
     },
     {
-      "properties": [{ "name": "baseColorFactor", "valuePool": 0 }],
+      "properties": [{ "name": "baseColor", "valuePool": 0 }],
       "materials": [[1], [2]]
     },
     {
       "properties": [
-        { "name": "metallicFactor", "valuePool": 1 },
-        { "name": "roughnessFactor", "valuePool": 2 }
+        { "name": "metallic", "valuePool": 1 },
+        { "name": "roughness", "valuePool": 2 }
       ],
       "materials": [[0, 0]]
     }
@@ -110,7 +116,7 @@ A target file may hold several palettes; `--target-index` picks one:
 }
 ```
 
-`--target-index 1` selects the second palette, the two-color `baseColorFactor`
+`--target-index 1` selects the second palette, the two-color `baseColor`
 layer, as the target.
 
 The input may itself be a bare palette file, since it has the same shape as a

@@ -20,7 +20,7 @@ The reference writes `.voxj` for brevity.
 A document holds an ordered `palettes` array and a shared
 `runtimeState.valuePools` array the palettes reference by index. Each palette
 pairs an ordered set of `properties`, each naming a property
-(`baseColorFactor`, `metallicFactor`, `roughnessFactor`, and so on) with a
+(`baseColor`, `metallic`, `roughness`, and so on) with a
 value pool it draws from, and a `materials` table holding one row of
 value-indices per material, one per property. A voxel samples one
 material index per layer its object references through `layers`. Layers
@@ -29,8 +29,8 @@ and each property takes its value from the last layer that supplies it. This
 model is defined in
 [Palettes](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).
 The palette commands address a target their own way, described under
-[`vxl palette`](reference/palette/README.md); property keys are the glTF names
-such as `baseColorFactor`, not the old `rgba`.
+[`vxl palette`](reference/palette/README.md); property keys are the glTF
+vocabulary names such as `baseColor`.
 
 > Notation: `<required>`, `[optional]`, `[optional=default]`, and `flag` for a
 > presence or settable boolean.

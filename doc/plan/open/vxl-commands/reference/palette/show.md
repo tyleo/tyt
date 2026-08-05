@@ -3,7 +3,7 @@
 *Part of [`vxl palette`](README.md) in the [Vxl Command-Line Reference](../../README.md).*
 
 ```
-vxl palette show <input> [--property <palette> <property> <format>]... [--layout rows]
+vxl palette show <input> [--property <palette> <property> <presentation> <reading>]... [--layout rows]
     [--label concat] [--header-level <level>] [--table-shape nested] [--width terminal]
 ```
 
@@ -13,91 +13,123 @@ property compared across palettes, by repeating a single selector.
 
 ## The `--property` selector
 
-`--property` names a whole value collection at once. It takes three required
+`--property` names a whole value collection at once. It takes four required
 values and repeats to select several collections from one palette or across
 palettes in a single command:
 
 ```
---property <palette> <property> <format>
+--property <palette> <property> <presentation> <reading>
 ```
 
 1. `palette`: a palette index, or `*` for every palette.
-2. `property`: a property key, a key with a trailing `.r`, `.g`, `.b`, or
-   `.a` color component, or `*` for every property of the palette.
-3. `format`: how each value in the collection renders, one of `auto`, `swatch`,
-   `value`, and `swatch-value`.
+2. `property`: a property key, a key with a trailing component suffix
+   (`.r`/`.g`/`.b`/`.a` or `.x`/`.y`/`.z`/`.w`), or `*` for every property
+   of the palette.
+3. `presentation`: what renders, one of `auto`, `swatch`, `swatch-value`,
+   and `value`. See [Presentations](#presentations).
+4. `reading`: how the values spell, one of `auto`, `linear-float`, `plain`,
+   `srgb-float`, and `srgb-hex`. See [Readings](#readings).
 
 When no `--property` is given the command defaults to a single
-`--property '*' '*' auto`, every palette's every property auto-rendered, so a bare
-`vxl palette show <file>` is useful on its own. The default applies only in the
-absence of any `--property`; one or more selectors replace it rather than adding
-to it. Examples:
+`--property '*' '*' auto auto`, every palette's every property auto-rendered,
+so a bare `vxl palette show <file>` is useful on its own. The default applies
+only in the absence of any `--property`; one or more selectors replace it
+rather than adding to it. Examples:
 
 ```
 vxl palette show model.voxj                    # every property, auto-rendered
-vxl palette show model.voxj --property 0 baseColorFactor value
+vxl palette show model.voxj --property 0 baseColor value auto
 vxl palette show model.voxj \
-  --property 0 baseColorFactor swatch-value \
-  --property 0 metallicFactor value \
-  --property '*' roughnessFactor value
+  --property 0 baseColor swatch-value srgb-hex \
+  --property 0 metallic value plain \
+  --property '*' roughness value plain
 ```
 
-Three required values is deliberate. clap groups a repeated option per occurrence
-only at a fixed arity, so three fixed fields parse unambiguously where an
-optional trailing field would not, and only `*` needs quoting against the shell.
+Four required values is deliberate. clap flattens a repeatable multi-value
+option into one list, and the fixed arity is what chunks that list into
+selectors; each field is one shell word from a closed vocabulary, so help and
+completion can offer it per position, and only `*` needs quoting against the
+shell.
 
-There is no type field. `show` reads concrete values and classifies each by
-its bound value pool's kind, a color from a color-kind pool and a scalar from a
-number pool, and a number prints as it reads.
+There is no type field and no `--type` flag. A value pool carries only a
+shape, the property name classifies per the format's glTF vocabulary, and a
+color reading is the color assertion for a custom key, per selector instead
+of per command.
 
 ## Value collections and labels
 
 Each selector resolves to one or more value collections. A `*` palette or `*`
-property expands to one collection per match, so `'*' baseColorFactor` yields a
-collection for every palette that carries `baseColorFactor`. A property yields
+property expands to one collection per match, so `'*' baseColor` yields a
+collection for every palette that carries `baseColor`. A property yields
 one value per material in material order. Each collection is
 labeled by its path, `{palette}."{property}"`, the property quoted, with the
-component appended when one is read, as in `0."baseColorFactor"`,
-`1."baseColorFactor"`, and `0."baseColorFactor".a`. The
+component appended when one is read, as in `0."baseColor"`,
+`1."baseColor"`, and `0."baseColor".a`. The
 [`--label` flag](#labels) chooses how the text layouts spend that path.
 
 Collections come out in selector order, then palette order, then property order
 within a palette. A `*` that matches nothing
 yields no collection, while a named
 palette or property that is absent is an error, so a typo is caught but a broad
-`'*'` quietly skips a palette that lacks the property. A value that does not
-match its inferred type, such as a non-hex string under an inferred color, prints
-as its raw text.
+`'*'` quietly skips a palette that lacks the property.
 
-A color component is read as a byte from `0` to `255`, the value as stored in the
-hex, everywhere it appears. Alpha `FF` reads as `255`, not a `0..1` fraction, in
-both the rendered output and the JSON, which keeps the displayed channel faithful
-to the file and avoids long fractions. A grayscale swatch maps the byte to its
-gray level.
+A component suffix is shape addressing, not a color claim: it is legal on any
+vector value pool whose width exceeds its index, through either alias set,
+and the reading spells what it selects. Under `srgb-hex` a component spells
+its two-digit hex pair, the same pair the whole-color spelling carries; under
+the float readings it spells a float, and under `plain` the stored number. A
+component's grayscale swatch under a color reading maps the channel's byte
+from the whole-color quantize, so the hex pair and the swatch agree; under
+`plain` it maps the raw `0..1` value, since no color is asserted.
 
-## Formats
+## Presentations
 
-The third selector field renders each value:
+The third selector field chooses what renders:
 
-1. `auto`: a colored swatch beside its hex for a color, a bare number for a
-   scalar or a color component.
+1. `auto`: a colored swatch beside its text for a whole color, else bare
+   text.
 2. `swatch`: swatches alone with no text, a colored swatch for a color and a
    grayscale swatch for a scalar or component.
-3. `value`: raw values, the `#RRGGBBAA` hex for a color and the bare number
-   otherwise.
-4. `swatch-value`: each swatch followed by its value text, the colored swatch
-   with its hex and the grayscale swatch with its number.
+3. `value`: text alone.
+4. `swatch-value`: each swatch followed by its text.
 
-Wherever a format shows a color's text, an sRGB pool renders `#RRGGBBAA` hex
-(`#RRGGBB` without alpha) and a linear pool renders `lrgb(...)` / `lrgba(...)`
-functional notation, whose float components carry HDR values no hex can hold.
+`swatch` and `swatch-value` extend the grayscale ramp to scalars and
+components. A value with no visual, a `bool` for one, renders its text under
+every presentation. Every swatch shows the color's sRGB appearance, whatever
+reading spells the text.
+
+## Readings
+
+The fourth selector field spells the values, carrying the two choices a value
+pool's shape cannot say: whether the sRGB transfer applies, and hex versus
+numbers.
+
+1. `auto`: the key's default per the glTF vocabulary. A vocabulary color name
+   reads `srgb-hex` and holds to the vocabulary's standards, erroring on a
+   non-color shape or a component outside `[0, 1]`; everything else reads
+   `plain`: the vocabulary scalars, every custom key, and every non-vector
+   kind.
+2. `linear-float`: no transfer; `lin_srgb(...)` / `lin_srgba(...)` functional
+   text for a whole color, the stored float for a component.
+3. `plain`: no transfer; the stored value as it is, arrays and text included.
+4. `srgb-float`: the transfer applied; `srgb(...)` / `srgba(...)` functional
+   text for a whole color, the encoded float for a component.
+5. `srgb-hex`: the transfer applied; `#RRGGBB` / `#RRGGBBAA` for a whole
+   color, the two-digit hex pair for a component.
+
+The three color readings apply to `vec-3-float` and `vec-4-float` value pools
+only, whole or component, and error on every other shape; they are the color
+assertion a custom key needs. Alpha never transfer-encodes: `srgb-hex`
+quantizes it raw and `srgb-float` passes it through. The two sRGB readings
+require every spelled component in `[0, 1]`, alpha included, and error
+outside it, never clamp.
 
 ## Layouts
 
-`--layout` arranges the collections and chooses the serialization. It defaults to
-`rows` and is orthogonal to the per-collection format. The text layouts share
-that format and only place the collections; the two JSON layouts emit the
-records directly and ignore the format.
+`--layout` arranges the collections and chooses the serialization. It defaults
+to `rows` and is orthogonal to the per-collection presentation and reading.
+The text layouts share those and only place the collections; the two JSON
+layouts emit the records directly and ignore the presentation.
 
 1. `hierarchy`: a box-glyph tree of palettes, properties, and components, each
    collection's values inline on its node.
@@ -133,11 +165,11 @@ no-op.
 
 1. `none`: no labels. An error under `tables`, whose columns cannot be headed
    by nothing.
-2. `concat` (default): the full dot-joined path, as in `0."baseColorFactor".a`.
+2. `concat` (default): the full dot-joined path, as in `0."baseColor".a`.
    Inline on `rows` and `columns`; under `tables` the headings nest exactly
    like `header` but each carries its full path.
 3. `header`: the ancestor path becomes nested markdown headings, `# 0` and
-   `## "baseColorFactor"`, and each collection beneath is labeled by its leaf
+   `## "baseColor"`, and each collection beneath is labeled by its leaf
    segment alone, so palettes read as per-palette sections.
 
 `--header-level` sets the markdown level of the shallowest heading, so
@@ -149,11 +181,13 @@ renders as a bold `**label**` line instead.
 
 ## The JSON envelope
 
-The two JSON layouts emit the stored values in their native JSON types, a number
-as a number and a `#RRGGBBAA` as a string, so they ignore the selector's format
-field. The selectors still choose which palettes and properties appear, and a
-color component emits its byte. There is no `type` field; each value already
-carries its type. The payload is the shared read-command envelope: one record
+The two JSON layouts emit each value as its reading spells it, in its native
+JSON type: a `plain` number as a number, a hex whole or pair as a string, a
+functional spelling as its text. They ignore the selector's presentation,
+which only chooses the swatches the JSON does not carry. The selectors still
+choose which palettes and properties appear. There is no `type` field; each
+value already carries its type. The payload is the shared read-command
+envelope: one record
 per node of the collection tree, each `{"label", "annotation"?, "values"?,
 "children"?}`, with the raw unquoted segment as the label. A palette is a root
 record labeled by its resolved index even when the selector used `*`, a
@@ -168,9 +202,9 @@ record, so the records keep selector order:
     "label": "0",
     "children": [
       {
-        "label": "baseColorFactor",
+        "label": "baseColor",
         "values": ["#FF0000FF", "#00FF0080"],
-        "children": [{ "label": "a", "values": [255, 128] }]
+        "children": [{ "label": "a", "values": ["FF", "80"] }]
       },
       { "label": "emissiveStrength", "values": [5] }
     ]
@@ -211,16 +245,18 @@ read commands so they are settled once and shared:
 
 ## Checklist
 
-- [x] Replace `--index`, `--attribute`, `--type`, and `--format` with one
-      repeatable `--attribute <palette> <attribute> <format>` selector, three
-      required fields, defaulting to a single `'*' '*' auto` only when no
-      `--attribute` is given at all.
-- [x] Support `*` in the palette and attribute fields, expanding to one labeled
-      collection per match, under `{palette}.{attribute}[.component]` headers.
-- [x] Read a color component as a `0`-to-`255` byte everywhere, in both the
-      rendered output and the JSON.
-- [x] Render the four formats `auto`, `swatch`, `value`, and `swatch-value` per
-      collection.
+- [x] One repeatable `--property <palette> <property> <presentation>
+      <reading>` selector, four required fields, defaulting to a single
+      `'*' '*' auto auto` only when no `--property` is given at all; no
+      `--index`, `--attribute`, `--type`, or `--format` flags.
+- [x] Support `*` in the palette and property fields, expanding to one labeled
+      collection per match, under `{palette}."{property}"[.component]` labels.
+- [x] Read a component through either alias set on any wide-enough vector,
+      spelled by the reading: the hex pair under `srgb-hex`, floats under the
+      float readings, the stored number under `plain`.
+- [x] Render the four presentations `auto`, `swatch`, `value`, and
+      `swatch-value` and the five readings `auto`, `linear-float`, `plain`,
+      `srgb-float`, and `srgb-hex` per collection.
 - [x] Add `--layout`, defaulting to `row`, with `column` and a `markdown` table
       arranging the collections and `pretty-json` and `compact-json` emitting the
       records.

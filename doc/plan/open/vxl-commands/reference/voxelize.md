@@ -45,7 +45,7 @@ real-world voxel size with `--voxel-size`. When neither is given it defaults to
       `per-primitive` when it does not.
 
    Every mode writes the same properties [`mesh`](mesh.md) bakes back,
-   `baseColorFactor`, `metallicFactor`, `roughnessFactor`, `emissiveFactor`,
+   `baseColor`, `metallic`, `roughness`, `emissiveColor`,
    `emissiveStrength`, and `occlusionStrength`, so a voxelized model round-trips
    through `mesh`.
 6. `--fill-color <#RRGGBBAA>`: the color of voxels that have no sampled surface,
@@ -67,7 +67,7 @@ real-world voxel size with `--voxel-size`. When neither is given it defaults to
    each per-voxel sample index within one
    byte (the format packs it at `ceil(log2(materials))` bits) and matches the
    familiar 256-color ceiling; `none` disables the cap for bit-exact materials.
-   Reduction clusters on `baseColorFactor` and a merged material takes its cluster
+   Reduction clusters on `baseColor` and a merged material takes its cluster
    representative's whole set of values, so material follows color: materials that
    land in one color cluster collapse to one real representative material, not an
    averaged one. This is the same reduction [`palette quantize`](palette/quantize.md)
@@ -95,7 +95,7 @@ dimensions; `--resolution` has no real-world size to record. See
 [Coordinate System](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#coordinate-system).
 
 `voxelize` writes a voxel-json document and shares `to voxj`'s encoding options:
-`--format`, `--color-format`, `--encoding-preset`, `--position-encoding`, and
+`--format`, `--encoding-preset`, `--position-encoding`, and
 `--sample-encoding`, which default the same way they do there. It does not take `--ext` or
 `--edit-state`: a voxelized mesh has no source `ext` block to carry and no
 editor build volume to record.

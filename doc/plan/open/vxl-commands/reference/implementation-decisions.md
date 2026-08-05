@@ -18,7 +18,15 @@ for implementation choices a reviewer of the Rust would want explained.
 > (`hex` | `float`, default `float`) encoding option. Where an entry below names
 > an older term, read it against that rename; the redesign's own code-level
 > decisions are logged in
-> [voxj-redesign](../../voxj-redesign/reference/implementation-decisions.md).
+> [voxj-redesign](../../../closed/voxj-redesign/reference/implementation-decisions.md).
+> The voxj-value-kinds plan then dropped the `Factor` suffix from the five
+> property names (`baseColorFactor` became `baseColor`, `emissiveFactor`
+> became `emissiveColor`, and kin), replaced the color kinds and the value
+> pool bounds with plain vector kinds, deleted the voxj `--color-format`,
+> and rebuilt `palette show` on a four-field `--property` selector whose
+> reading field replaces `--type`. Read the entries against that change
+> too; its decisions are logged in
+> [voxj-value-kinds](../../voxj-value-kinds/reference/implementation-decisions.md).
 
 ## MeshFormat
 

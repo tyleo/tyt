@@ -3,7 +3,7 @@
 *Part of [`vxl palette`](README.md) in the [Vxl Command-Line Reference](../../README.md).*
 
 ```
-vxl palette quantize <input> [output] --max-palette-materials <n> [--index 0] [--property baseColorFactor] [options]
+vxl palette quantize <input> [output] --max-palette-materials <n> [--index 0] [--property baseColor] [options]
 ```
 
 Reduces the selected property of a palette to at most `--max-palette-materials`
@@ -21,11 +21,11 @@ output mirrors the input, a document in its own format or a bare palette JSON.
    keep. The selected property is clustered to this many values and each cluster
    collapses to one material.
 2. `--index <n>` (default `0`): which palette to quantize.
-3. `--property <key>` (default `baseColorFactor`): which property to cluster on.
+3. `--property <key>` (default `baseColor`): which property to cluster on.
 4. `--method` `median-cut` | `octree` | `kmeans` (default `median-cut`):
    clustering algorithm.
 5. `--space` `oklab` | `lab` | `srgb` (default `oklab`): distance metric used
-   when clustering. Applies to `baseColorFactor`.
+   when clustering. Applies to `baseColor`.
 6. `--dither` `none` | `floyd-steinberg` | `ordered` (default `none`): error
    diffusion when snapping values, walking each object's voxels in 3D order, not
    a 2D image. Needs a document; a bare palette has no voxels to walk.
