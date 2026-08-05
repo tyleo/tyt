@@ -7,7 +7,7 @@ pub enum PaletteShowTableShape {
     #[value(name = "nested")]
     Nested,
 
-    /// One table over every collection, the cross-palette comparison view.
+    /// One table over every value collection, the cross-palette comparison view.
     #[value(name = "flat")]
     Flat,
 

@@ -1,6 +1,6 @@
 use clap::ValueEnum;
 
-/// How a `palette show` collection's numbers spell: whether the sRGB
+/// How a `palette show` value collection's numbers spell: whether the sRGB
 /// transfer applies, and hex versus numbers. The three color readings,
 /// `linear-float`, `srgb-float`, and `srgb-hex`, are the color assertion
 /// and apply only to `vec-3-float` and `vec-4-float` value pools. Alpha

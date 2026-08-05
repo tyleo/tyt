@@ -226,9 +226,9 @@ pub trait Dependencies {
     /// * `from` - source format, inferred from `input`'s extension when `None`.
     /// * `selectors` - the `--property` selectors, each naming one or more
     ///   value collections, in render order.
-    /// * `layout` - how to arrange the collections, and the serialization to
+    /// * `layout` - how to arrange the value collections, and the serialization to
     ///   emit.
-    /// * `label` - how the text layouts label each collection; `None` means
+    /// * `label` - how the text layouts label each value collection; `None` means
     ///   full concat paths.
     /// * `header_level` - the markdown level of the shallowest heading a
     ///   heading-emitting render prints; `None` starts at `#`.

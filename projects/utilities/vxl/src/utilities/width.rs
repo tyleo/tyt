@@ -6,7 +6,7 @@ pub enum Width {
     /// Wrap to the terminal width, or not at all when stdout is not a terminal.
     Terminal,
 
-    /// Never wrap; one line per collection.
+    /// Never wrap; one line per value collection.
     Unlimited,
 
     /// Wrap to a fixed number of columns.

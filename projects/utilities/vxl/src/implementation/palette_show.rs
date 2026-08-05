@@ -43,8 +43,8 @@ pub fn palette_show(
     width: Width,
 ) -> Result<()> {
     let state = implementation::load_state(input, from)?;
-    let collections = resolve_collections(&state, selectors)?;
-    let grid = build_grid(collections);
+    let value_collections = resolve_value_collections(&state, selectors)?;
+    let grid = build_grid(value_collections);
     let output = render(&grid, layout, label, header_level, table_shape, width)?;
     implementation::write_stdout(output.as_bytes())
 }
@@ -85,7 +85,7 @@ fn terminal_columns() -> Option<usize> {
 }
 
 /// One resolved value collection: a property's values down one palette.
-struct Collection {
+struct ValueCollection {
     /// The resolved palette index, even when the selector used `*`.
     palette_index: usize,
     /// The property key, without any component.
@@ -107,26 +107,29 @@ enum Reading {
     SrgbHex,
 }
 
-/// Resolves the selectors against the document's palettes into collections in
-/// render order: selector order, then palette order, then property order. A
-/// `*` palette or `*` property expands to one collection per match; a named
-/// palette or property that is absent is an error, while a `*` palette quietly
-/// skips a palette that lacks a named property.
-fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Result<Vec<Collection>> {
+/// Resolves the selectors against the document's palettes into value
+/// collections in render order: selector order, then palette order, then
+/// property order. A `*` palette or `*` property expands to one value
+/// collection per match; a named palette or property that is absent is an
+/// error, while a `*` palette quietly skips a palette that lacks a named
+/// property.
+fn resolve_value_collections(
+    state: &VoxMain,
+    selectors: &[PropertySelector],
+) -> Result<Vec<ValueCollection>> {
     let palettes: Vec<&VoxPalette> = state.iter_palettes().map(|(_, palette)| palette).collect();
-    let mut collections = Vec::new();
+    let mut value_collections = Vec::new();
     for selector in selectors {
         match selector.palette {
             PaletteRef::All => {
                 for (palette_index, palette) in palettes.iter().enumerate() {
-                    expand_property(
+                    value_collections.extend(expand_property(
                         state,
                         palette_index,
                         palette,
                         selector,
                         true,
-                        &mut collections,
-                    )?;
+                    )?);
                 }
             }
             PaletteRef::Index(palette_index) => {
@@ -139,21 +142,20 @@ fn resolve_collections(state: &VoxMain, selectors: &[PropertySelector]) -> Resul
                         ),
                     )
                 })?;
-                expand_property(
+                value_collections.extend(expand_property(
                     state,
                     palette_index,
                     palette,
                     selector,
                     false,
-                    &mut collections,
-                )?;
+                )?);
             }
         }
     }
-    Ok(collections)
+    Ok(value_collections)
 }
 
-/// Expands one selector's property against one palette, pushing the resulting
+/// Expands one selector's property against one palette into its value
 /// collections. A `palette_is_wild` palette, one from a `*`, skips a named
 /// property it lacks instead of erroring.
 fn expand_property(
@@ -162,12 +164,12 @@ fn expand_property(
     palette: &VoxPalette,
     selector: &PropertySelector,
     palette_is_wild: bool,
-    collections: &mut Vec<Collection>,
-) -> Result<()> {
+) -> Result<Vec<ValueCollection>> {
     match &selector.property {
-        PropertyRef::All => {
-            for name in implementation::property_names(palette) {
-                collections.push(build_collection(
+        PropertyRef::All => implementation::property_names(palette)
+            .into_iter()
+            .map(|name| {
+                build_value_collection(
                     state,
                     palette_index,
                     palette,
@@ -175,13 +177,13 @@ fn expand_property(
                     None,
                     selector.presentation,
                     selector.reading,
-                )?);
-            }
-        }
+                )
+            })
+            .collect(),
         PropertyRef::Key { key, component } => {
             if palette.property_id_by_name(key).is_none() {
                 if palette_is_wild {
-                    return Ok(());
+                    return Ok(Vec::new());
                 }
                 return Err(IOError::new(
                     ErrorKind::InvalidInput,
@@ -192,7 +194,7 @@ fn expand_property(
                 )
                 .into());
             }
-            collections.push(build_collection(
+            Ok(vec![build_value_collection(
                 state,
                 palette_index,
                 palette,
@@ -200,14 +202,13 @@ fn expand_property(
                 *component,
                 selector.presentation,
                 selector.reading,
-            )?);
+            )?])
         }
     }
-    Ok(())
 }
 
-/// Builds one collection from a property the caller verified present.
-fn build_collection(
+/// Builds one value collection from a property the caller verified present.
+fn build_value_collection(
     state: &VoxMain,
     palette_index: usize,
     palette: &VoxPalette,
@@ -215,7 +216,7 @@ fn build_collection(
     component: Option<VectorComponent>,
     presentation: PaletteShowPresentation,
     reading: PaletteShowReading,
-) -> Result<Collection> {
+) -> Result<ValueCollection> {
     let property_id = palette
         .property_id_by_name(key)
         .expect("caller verified the property is present");
@@ -269,7 +270,7 @@ fn build_collection(
         })
         .collect::<Result<Vec<_>>>()?;
 
-    Ok(Collection {
+    Ok(ValueCollection {
         palette_index,
         key: key.to_string(),
         component,
@@ -615,53 +616,57 @@ fn available_keys(palette: &VoxPalette) -> String {
     implementation::property_names(palette).join(", ")
 }
 
-/// Populates a tree grid from the collections in order: palette root,
-/// property child, component leaf, with each collection's samples on its
-/// deepest node. A collection reuses the immediately preceding collection's
-/// palette and property nodes when they match, so a contiguous run shares
-/// its ancestors and pre-order keeps the selector order in every layout.
-fn build_grid(collections: Vec<Collection>) -> TreeGrid<TreeGridJsonValueCells> {
+/// Populates a tree grid from the value collections in order: palette root,
+/// property child, component leaf, with each value collection's samples on
+/// its deepest node. A value collection reuses the immediately preceding
+/// value collection's palette and property nodes when they match, so a
+/// contiguous run shares its ancestors and pre-order keeps the selector
+/// order in every layout.
+fn build_grid(value_collections: Vec<ValueCollection>) -> TreeGrid<TreeGridJsonValueCells> {
     let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
     let mut palette_node: Option<(usize, U32Id<BTreeGridNode>)> = None;
     let mut property_node: Option<(String, U32Id<BTreeGridNode>)> = None;
-    for collection in collections {
+    for value_collection in value_collections {
         let palette_node_id = match palette_node {
-            Some((palette_index, node_id)) if palette_index == collection.palette_index => node_id,
+            Some((palette_index, node_id)) if palette_index == value_collection.palette_index => {
+                node_id
+            }
             _ => {
-                let node_id =
-                    grid.add_root(TreeGridLabel::bare(collection.palette_index.to_string()));
-                palette_node = Some((collection.palette_index, node_id));
+                let node_id = grid.add_root(TreeGridLabel::bare(
+                    value_collection.palette_index.to_string(),
+                ));
+                palette_node = Some((value_collection.palette_index, node_id));
                 property_node = None;
                 node_id
             }
         };
-        let data_node_id = match collection.component {
+        let data_node_id = match value_collection.component {
             Some(component) => {
                 let property_node_id = match &property_node {
-                    Some((key, node_id)) if *key == collection.key => *node_id,
+                    Some((key, node_id)) if *key == value_collection.key => *node_id,
                     _ => grid.add_child(
                         palette_node_id,
-                        TreeGridLabel::quoted(collection.key.as_str()),
+                        TreeGridLabel::quoted(value_collection.key.as_str()),
                     ),
                 };
-                property_node = Some((collection.key, property_node_id));
+                property_node = Some((value_collection.key, property_node_id));
                 let letter = component.letter().to_string();
                 grid.add_child(property_node_id, TreeGridLabel::bare(letter))
             }
             None => {
                 // A data node is always fresh, so a property selected twice
-                // keeps one collection per selector.
+                // keeps one value collection per selector.
                 let node_id = grid.add_child(
                     palette_node_id,
-                    TreeGridLabel::quoted(collection.key.as_str()),
+                    TreeGridLabel::quoted(value_collection.key.as_str()),
                 );
-                property_node = Some((collection.key, node_id));
+                property_node = Some((value_collection.key, node_id));
                 node_id
             }
         };
         let node = grid.node_mut(data_node_id);
-        node.format = cell_format(collection.presentation);
-        node.values = collection.samples;
+        node.format = cell_format(value_collection.presentation);
+        node.values = value_collection.samples;
     }
     grid
 }
@@ -744,7 +749,7 @@ mod tests {
     use crate::{
         Width,
         commands::{PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PropertySelector},
-        implementation::palette_show::{build_grid, render, resolve_collections},
+        implementation::palette_show::{build_grid, render, resolve_value_collections},
     };
     use branded_id::U32Id;
     use serde_json::Value;
@@ -832,7 +837,7 @@ mod tests {
         state: &VoxMain,
         fields: &[(&str, &str, &str, &str)],
     ) -> TreeGrid<TreeGridJsonValueCells> {
-        build_grid(resolve_collections(state, &selectors(fields)).unwrap())
+        build_grid(resolve_value_collections(state, &selectors(fields)).unwrap())
     }
 
     /// Renders the selectors under `layout` with default label options and no
@@ -980,10 +985,10 @@ mod tests {
     #[test]
     fn default_selector_shows_every_palette_and_property() {
         let state = sample_state();
-        let collections =
-            resolve_collections(&state, &[PropertySelector::default_all_auto()]).unwrap();
+        let value_collections =
+            resolve_value_collections(&state, &[PropertySelector::default_all_auto()]).unwrap();
         let output = render(
-            &build_grid(collections),
+            &build_grid(value_collections),
             PaletteShowLayout::Rows,
             None,
             None,
@@ -1002,7 +1007,7 @@ mod tests {
     }
 
     #[test]
-    fn collections_render_in_selector_order() {
+    fn value_collections_render_in_selector_order() {
         let state = sample_state();
         // A palette revisited later starts a fresh root rather than merging
         // backward, so pre-order keeps the selector order.
@@ -1042,7 +1047,7 @@ mod tests {
     }
 
     #[test]
-    fn columns_stack_collections_under_labels() {
+    fn columns_stack_value_collections_under_labels() {
         let state = sample_state();
         let output = show(
             &state,
@@ -1287,9 +1292,9 @@ mod tests {
     #[test]
     fn star_property_expands_to_every_property() {
         let state = sample_state();
-        let collections =
-            resolve_collections(&state, &selectors(&[("0", "*", "value", "auto")])).unwrap();
-        let keys: Vec<&str> = collections.iter().map(|c| c.key.as_str()).collect();
+        let value_collections =
+            resolve_value_collections(&state, &selectors(&[("0", "*", "value", "auto")])).unwrap();
+        let keys: Vec<&str> = value_collections.iter().map(|c| c.key.as_str()).collect();
         assert_eq!(keys, ["baseColor", "metallic"]);
     }
 
@@ -1297,9 +1302,10 @@ mod tests {
     fn star_palette_skips_a_palette_lacking_a_named_property() {
         let state = sample_state();
         // Only palette 0 has `metallic`; palette 1 is skipped, not an error.
-        let collections =
-            resolve_collections(&state, &selectors(&[("*", "metallic", "value", "auto")])).unwrap();
-        let labels: Vec<(usize, &str)> = collections
+        let value_collections =
+            resolve_value_collections(&state, &selectors(&[("*", "metallic", "value", "auto")]))
+                .unwrap();
+        let labels: Vec<(usize, &str)> = value_collections
             .iter()
             .map(|c| (c.palette_index, c.key.as_str()))
             .collect();
@@ -1310,7 +1316,7 @@ mod tests {
     fn named_palette_out_of_range_is_an_error() {
         let state = sample_state();
         assert!(
-            resolve_collections(&state, &selectors(&[("5", "baseColor", "value", "auto")]))
+            resolve_value_collections(&state, &selectors(&[("5", "baseColor", "value", "auto")]))
                 .is_err()
         );
     }
@@ -1319,7 +1325,8 @@ mod tests {
     fn named_property_absent_on_a_named_palette_is_an_error() {
         let state = sample_state();
         assert!(
-            resolve_collections(&state, &selectors(&[("0", "missing", "value", "auto")])).is_err()
+            resolve_value_collections(&state, &selectors(&[("0", "missing", "value", "auto")]))
+                .is_err()
         );
     }
 
@@ -1327,7 +1334,7 @@ mod tests {
     fn a_component_on_a_scalar_is_an_error() {
         let state = sample_state();
         assert!(
-            resolve_collections(&state, &selectors(&[("0", "metallic.r", "value", "auto")]))
+            resolve_value_collections(&state, &selectors(&[("0", "metallic.r", "value", "auto")]))
                 .is_err()
         );
     }
@@ -1385,7 +1392,7 @@ mod tests {
         let state = three_component_state();
         // `.a` is out of the three-wide shape, but `.r` reads its hex pair.
         assert!(
-            resolve_collections(
+            resolve_value_collections(
                 &state,
                 &selectors(&[("0", "emissiveColor.a", "value", "auto")]),
             )
@@ -1418,7 +1425,7 @@ mod tests {
         state.add_palette(palette).unwrap();
 
         assert!(
-            resolve_collections(
+            resolve_value_collections(
                 &state,
                 &selectors(&[("0", "emissiveColor", "value", "auto")]),
             )
@@ -1462,7 +1469,8 @@ mod tests {
 
         for key in ["baseColor", "emissiveColor"] {
             assert!(
-                resolve_collections(&state, &selectors(&[("0", key, "value", "auto")])).is_err()
+                resolve_value_collections(&state, &selectors(&[("0", key, "value", "auto")]))
+                    .is_err()
             );
         }
     }
@@ -1501,7 +1509,8 @@ mod tests {
         );
         assert_eq!(component, "0.\"tint\".r 1\n");
         assert!(
-            resolve_collections(&state, &selectors(&[("0", "tint.w", "value", "auto")])).is_err()
+            resolve_value_collections(&state, &selectors(&[("0", "tint.w", "value", "auto")]))
+                .is_err()
         );
     }
 
@@ -1530,8 +1539,11 @@ mod tests {
         // `metallic` binds a float value pool, which no color reading spells.
         for reading in ["linear-float", "srgb-float", "srgb-hex"] {
             assert!(
-                resolve_collections(&state, &selectors(&[("0", "metallic", "value", reading)]))
-                    .is_err()
+                resolve_value_collections(
+                    &state,
+                    &selectors(&[("0", "metallic", "value", reading)])
+                )
+                .is_err()
             );
         }
     }
@@ -1606,7 +1618,7 @@ mod tests {
 
         for reading in ["srgb-hex", "srgb-float"] {
             assert!(
-                resolve_collections(&state, &selectors(&[("0", "tint", "value", reading)]))
+                resolve_value_collections(&state, &selectors(&[("0", "tint", "value", reading)]))
                     .is_err()
             );
         }
@@ -1643,11 +1655,11 @@ mod tests {
         );
         assert_eq!(output, "0.\"position\".x 3\n");
         assert!(
-            resolve_collections(&state, &selectors(&[("0", "position.w", "value", "auto")]))
+            resolve_value_collections(&state, &selectors(&[("0", "position.w", "value", "auto")]))
                 .is_err()
         );
         assert!(
-            resolve_collections(
+            resolve_value_collections(
                 &state,
                 &selectors(&[("0", "position.x", "value", "srgb-hex")]),
             )

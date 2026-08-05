@@ -36,11 +36,11 @@ pub struct PaletteShow {
     )]
     property: Vec<String>,
 
-    /// How to arrange the collections, and the serialization to emit.
+    /// How to arrange the value collections, and the serialization to emit.
     #[arg(value_name = "layout", long, default_value = "rows")]
     layout: PaletteShowLayout,
 
-    /// How the text layouts label each collection. Defaults to `concat`,
+    /// How the text layouts label each value collection. Defaults to `concat`,
     /// full dot-joined paths.
     #[arg(value_name = "label", long)]
     label: Option<PaletteShowLabel>,

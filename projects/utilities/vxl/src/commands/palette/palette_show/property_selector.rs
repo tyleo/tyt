@@ -11,7 +11,7 @@ pub struct PropertySelector {
     /// Which property, one key with an optional vector component or every
     /// property.
     pub(crate) property: PropertyRef,
-    /// What renders for each value in the collection.
+    /// What renders for each value in the value collection.
     pub(crate) presentation: PaletteShowPresentation,
     /// How each value's numbers spell.
     pub(crate) reading: PaletteShowReading,
