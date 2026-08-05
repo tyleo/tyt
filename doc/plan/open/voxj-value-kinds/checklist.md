@@ -387,19 +387,19 @@ Gate: the owner approves palette-show-design.md.
 
 ## Iteration 10: the palette show format in code
 
-- [ ] The four-field selector: `--property` takes
+- [x] The four-field selector: `--property` takes
       `<palette> <property> <presentation> <reading>`, and the readings
       land per the approved design with their transfer, spelling,
       swatch, and error rules; the `auto` defaults keep every idiomatic
       property rendering exactly as today. The functional spellings
       live in treegrid's `color/tree_grid_value.rs`, so its text and
       tests re-baseline alongside vxl's.
-- [ ] The component suffix turns shape-level, with the `.x`/`.y`/`.z`/
+- [x] The component suffix turns shape-level, with the `.x`/`.y`/`.z`/
       `.w` aliases landing in the shared component parser, which
       carries them into the mesh channel expressions.
-- [ ] `--type` deletes: the flag, `palette_show_type.rs`, and the type
+- [x] `--type` deletes: the flag, `palette_show_type.rs`, and the type
       parameter on `Dependencies::palette_show`.
-- [ ] Fixtures, inline expectations, and the clap help prose across the
+- [x] Fixtures, inline expectations, and the clap help prose across the
       palette show command and its selector types re-baseline.
 
 Gate: `cargo test -p vxl --all-features` green; bare `palette show`

@@ -259,3 +259,36 @@ swatch shows the color's sRGB appearance. `srgb-float` spells
 `srgb(...)` / `srgba(...)`, symmetric with the ruled linear notations.
 The `.x`/`.y`/`.z`/`.w` aliases land in the shared component parser and
 ride into the mesh channel expressions.
+
+## Iteration 10 rulings
+
+2026-08-04. The shared component parser is `VectorComponent`, eight
+spellings over four indices. The parse keeps the typed alias so a label
+echoes what the user wrote (`tint.z` never respells as `tint.b`), and
+`index()` collapses both sets for every consumer; the mesh side maps by
+index, so `.w` reads alpha wherever `.a` does.
+
+2026-08-04. The `srgb-float` reading rounds each encoded rgb component
+to six decimal places, the design example's precision
+(`srgba(1, 0, 0.537099, 0.5)`). The rounding is load-bearing: the
+transfer of an exact `1` computes as `0.9999999999999999`, which would
+otherwise spell a stored white as seventeen digits of noise. Alpha
+passes through unrounded, and the stored values stay exact under
+`linear-float` and `plain`.
+
+2026-08-04. The three color readings require `vec-3-float` or
+`vec-4-float`, whole or component: the design's "float vectors only"
+reads as the shapes a color can be, so a `vec-2-float` errors under
+them. `auto` never resolves to a reading that errors on the bound
+shape: a vocabulary color name bound to a non-color shape reads
+`plain`, keeping iteration 8's classification behavior.
+
+2026-08-04. The sRGB range rule covers every spelled component, alpha
+included: `srgb-hex` quantizes alpha to a byte and a byte cannot spell
+`2`, and an alpha outside `[0, 1]` is no more a color's alpha under
+`srgb-float`.
+
+2026-08-04. A component's grayscale swatch under a color reading is the
+channel's byte from the whole-color quantize, so the hex-pair spelling
+and the swatch agree; under `plain` the raw ramp stays, since no color
+is asserted.

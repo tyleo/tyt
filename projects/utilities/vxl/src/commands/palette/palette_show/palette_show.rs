@@ -1,9 +1,6 @@
 use crate::{
     Dependencies, Error, Format, Result, Width,
-    commands::{
-        PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PaletteShowType,
-        PropertySelector,
-    },
+    commands::{PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PropertySelector},
 };
 use clap::Parser;
 use std::{
@@ -24,25 +21,20 @@ pub struct PaletteShow {
     #[arg(value_name = "from", long)]
     from: Option<Format>,
 
-    /// A repeatable selector naming a value collection, three fields:
-    /// `<palette> <property> <format>`. The palette is an index or `*`, the
-    /// property a key with an optional `.r`/`.g`/`.b`/`.a` or
-    /// `.x`/`.y`/`.z`/`.w` component or `*`, and the format one of `auto`,
-    /// `swatch`, `value`, `swatch-value`. Defaults to `'*' '*' auto` when
-    /// omitted.
+    /// A repeatable selector naming a value collection, four fields:
+    /// `<palette> <property> <presentation> <reading>`. The palette is an
+    /// index or `*`; the property a key with an optional `.r`/`.g`/`.b`/`.a`
+    /// or `.x`/`.y`/`.z`/`.w` component, or `*`; the presentation one of
+    /// `auto`, `swatch`, `swatch-value`, `value`; the reading one of `auto`,
+    /// `linear-float`, `plain`, `srgb-float`, `srgb-hex`. Defaults to
+    /// `'*' '*' auto auto` when omitted.
     #[arg(
-        value_names = ["palette", "property", "format"],
+        value_names = ["palette", "property", "presentation", "reading"],
         long = "property",
-        num_args = 3,
+        num_args = 4,
         action = clap::ArgAction::Append,
     )]
     property: Vec<String>,
-
-    /// How the selected custom properties read: `color` reads a custom
-    /// `vec-3-float` or `vec-4-float` value pool as a color. A glTF
-    /// vocabulary name classifies by name.
-    #[arg(value_name = "type", long)]
-    r#type: Option<PaletteShowType>,
 
     /// How to arrange the collections, and the serialization to emit.
     #[arg(value_name = "layout", long, default_value = "rows")]
@@ -71,14 +63,14 @@ pub struct PaletteShow {
 
 impl PaletteShow {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
-        // clap fixes each occurrence at three values, so the flattened list
+        // clap fixes each occurrence at four values, so the flattened list
         // chunks cleanly into one selector per occurrence.
         let selectors = if self.property.is_empty() {
             vec![PropertySelector::default_all_auto()]
         } else {
             self.property
-                .chunks(3)
-                .map(|chunk| PropertySelector::parse(&chunk[0], &chunk[1], &chunk[2]))
+                .chunks(4)
+                .map(|chunk| PropertySelector::parse(&chunk[0], &chunk[1], &chunk[2], &chunk[3]))
                 .collect::<std::result::Result<Vec<_>, String>>()
                 .map_err(|message| Error::IO(IOError::new(ErrorKind::InvalidInput, message)))?
         };
@@ -86,7 +78,6 @@ impl PaletteShow {
             &self.input,
             self.from,
             &selectors,
-            self.r#type,
             self.layout,
             self.label,
             self.header_level,
