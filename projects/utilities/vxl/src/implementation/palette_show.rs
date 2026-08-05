@@ -84,9 +84,7 @@ fn terminal_columns() -> Option<usize> {
     None
 }
 
-/// One resolved value collection: a property's values down one palette,
-/// addressed by its palette index and property, with the presentation that
-/// renders it.
+/// One resolved value collection: a property's values down one palette.
 struct Collection {
     /// The resolved palette index, even when the selector used `*`.
     palette_index: usize,
@@ -103,13 +101,9 @@ struct Collection {
 /// A selector's reading with `auto` resolved to the key's default.
 #[derive(Clone, Copy)]
 enum Reading {
-    /// The stored linear values in functional notation.
     LinearFloat,
-    /// The stored value as it is.
     Plain,
-    /// Transfer-encoded floats in functional notation.
     SrgbFloat,
-    /// Transfer-encoded 8-bit hex.
     SrgbHex,
 }
 
@@ -312,7 +306,7 @@ fn color_shape(value_pool: &VoxValuePool) -> bool {
 /// readings are the color assertion and require a color-shaped value pool.
 /// `auto` resolves per key: a glTF vocabulary color name on a color shape
 /// reads `srgb-hex`, or `linear-float` when a stored component leaves
-/// `[0, 1]`, so an HDR color stays exact; everything else reads `plain`.
+/// `[0, 1]`, so an HDR color stays exact. Everything else reads `plain`.
 fn resolve_reading(
     key: &str,
     value_pool: &VoxValuePool,
@@ -385,7 +379,7 @@ fn fits_srgb8(value_pool: &VoxValuePool) -> bool {
 
 /// The sample for the value at `value_id` under the resolved `reading` and an
 /// optional vector `component`. An sRGB reading errors on a spelled component
-/// outside `[0, 1]`, never clamps.
+/// outside `[0, 1]`.
 fn sample(
     key: &str,
     value_pool: &VoxValuePool,
@@ -400,7 +394,7 @@ fn sample(
 }
 
 /// The sample for a whole value under `reading`. The color readings spell the
-/// stored linear color; `plain` spells any value as it is.
+/// stored linear color. `plain` spells any value as it is.
 fn sample_whole(
     key: &str,
     value_pool: &VoxValuePool,
@@ -420,7 +414,7 @@ fn sample_whole(
         Reading::SrgbFloat => {
             let floats = color_floats(value_pool, value_id);
             require_unit(key, &floats)?;
-            // The rgb components spell transfer-encoded; alpha passes through.
+            // The rgb components spell transfer-encoded. Alpha passes through.
             let encode = |component| round_six_decimals(encode_component(component));
             Ok(match floats[..] {
                 [r, g, b] => {
@@ -447,7 +441,7 @@ fn sample_whole(
 
 /// The sample for one component under `reading`. A color reading's grayscale
 /// swatch is the channel's sRGB appearance, the same byte the whole-vector
-/// spelling carries; `plain` maps the stored number onto the raw ramp.
+/// spelling carries. `plain` maps the stored number onto the raw ramp.
 fn sample_component(
     key: &str,
     value_pool: &VoxValuePool,
@@ -466,7 +460,7 @@ fn sample_component(
         Reading::SrgbFloat => {
             let stored = color_floats(value_pool, value_id)[index];
             require_unit(key, &[stored])?;
-            // The rgb components spell transfer-encoded; alpha passes through.
+            // The rgb components spell transfer-encoded. Alpha passes through.
             let spelled = if index < 3 {
                 round_six_decimals(encode_component(stored))
             } else {
@@ -485,9 +479,8 @@ fn sample_component(
     }
 }
 
-/// The `plain` sample for a whole value: a `float` or `int` number on the
-/// grayscale ramp, a vector as its number array, and text and JSON as they
-/// are.
+/// The `plain` sample for a whole value: the stored value as it is, with a
+/// `float` or `int` number on the grayscale ramp.
 fn sample_plain(
     value_pool: &VoxValuePool,
     value_id: U32Id<BVoxValuePoolValue>,
@@ -557,8 +550,7 @@ fn encode_component(component: f64) -> f64 {
 }
 
 /// Rounds an encoded component to six decimal places, the display precision
-/// of the `srgb-float` reading; the stored value stays exact under
-/// `linear-float` and `plain`.
+/// of the `srgb-float` reading.
 fn round_six_decimals(value: f64) -> f64 {
     (value * 1e6).round() / 1e6
 }
@@ -688,7 +680,7 @@ fn build_grid(collections: Vec<Collection>) -> TreeGrid<TreeGridJsonValueCells> 
     grid
 }
 
-/// The node cell format a `--property` presentation maps to; `auto` leaves
+/// The node cell format a `--property` presentation maps to. `auto` leaves
 /// the format unset so the grid's cell policy decides per value.
 fn cell_format(presentation: PaletteShowPresentation) -> Option<TreeGridCellFormat> {
     match presentation {
@@ -1466,8 +1458,8 @@ mod tests {
     fn a_custom_float_vector_defaults_to_plain_numbers() {
         let state = custom_vector_state();
         // A custom vec-3-float could hold a color or a normal, so it renders
-        // plain numbers; a component is shape addressing and reads its stored
-        // float, while an index past the width errors.
+        // plain numbers. A component reads its stored float, and an index
+        // past the width errors.
         let output = show(
             &state,
             &[("0", "tint", "value", "auto")],
@@ -1535,10 +1527,10 @@ mod tests {
     fn the_readings_spell_one_color_per_the_design_examples() {
         let state = custom_tint_vec_4_state();
         let row = |fields| show(&state, &[fields], PaletteShowLayout::Rows);
-        // The sRGB readings encode the stored 0.25 to 0.537099, byte 0x89;
-        // the linear reading keeps the stored numbers; alpha never
-        // transfer-encodes. A component respells under the same reading, and
-        // either alias set addresses it.
+        // The sRGB readings encode the stored 0.25 to 0.537099, byte 0x89.
+        // The linear reading keeps the stored numbers, and alpha never
+        // transfer-encodes. A component respells under the same reading
+        // through either alias set.
         assert_eq!(
             row(("0", "tint", "value", "auto")),
             "0.\"tint\" [1,0,0.25,0.5]\n"
@@ -1614,7 +1606,7 @@ mod tests {
         palette.add_material(vec![value_id(0)]).unwrap();
         state.add_palette(palette).unwrap();
 
-        // An int vector's component reads its stored int; the width still
+        // An int vector's component reads its stored int. The width still
         // bounds the index, and no color reading spells an int vector.
         let output = show(
             &state,

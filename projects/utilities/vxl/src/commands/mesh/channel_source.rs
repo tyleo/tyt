@@ -88,9 +88,9 @@ impl FromStr for ChannelSource {
             Some(rest) => (rest, true),
             None => (value, false),
         };
-        // A trailing component letter from either alias set selects one
-        // component; a longer suffix is part of the name, so dotted keys pass
-        // through unsplit.
+        // A trailing letter from either alias set selects one component. A
+        // longer suffix is part of the name, so dotted keys pass through
+        // unsplit.
         let (name, component) = match body.rsplit_once('.') {
             Some((head, tail))
                 if tail.len() == 1 && tail.chars().all(|c| c.is_ascii_alphabetic()) =>

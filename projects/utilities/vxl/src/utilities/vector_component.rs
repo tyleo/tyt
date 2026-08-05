@@ -2,8 +2,7 @@ use std::str::FromStr;
 
 /// One component of a vector value, addressed by index through either
 /// alias set: the color letters `r`/`g`/`b`/`a` or the vector letters
-/// `x`/`y`/`z`/`w`. Both aliases of an index address the same
-/// component; the parsed spelling survives for display.
+/// `x`/`y`/`z`/`w`. The parsed spelling survives for display.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum VectorComponent {
     /// Index 0, spelled `r`.
