@@ -309,3 +309,14 @@ becomes `gltf_properties.rs`, and `GltfAttributeKind` becomes
 (owner ruling). The wider `attribute` vocabulary in voxsmith, the
 `used_materials.rs` `attribute` accessor and the mesh sampling and
 atlas bake prose, stays for a separate ruling.
+
+## Iteration 11 rulings
+
+2026-08-05. The label convention is the machine labels everywhere: a
+field has one machine-spelled label in every layout, and no display
+respelling survives. `info`'s tables take its JSON grid's snake_case
+labels wholesale, retiring the Title-Case display set. `palette list`'s
+forked fields land on `materials` and `objects`, the nouns the
+`--show-materials` and `--show-objects` flags and the other commands
+already spell (`info`'s count is `materials`, and so is `hierarchy
+show`'s in its layer cells), so `materialCount` and `used by` go.

@@ -92,9 +92,9 @@ fn build_grid(
             TreeGridLabel::bare(palette_id.to_u32().to_string()),
         );
         if fields.materials {
-            let material_count_id = grid.add_child(branch_id, TreeGridLabel::bare("materialCount"));
+            let materials_id = grid.add_child(branch_id, TreeGridLabel::bare("materials"));
             grid.push_value(
-                material_count_id,
+                materials_id,
                 TreeGridJsonValue::int(palette.material_count() as i64),
             );
         }
@@ -141,7 +141,7 @@ fn build_records_grid(state: &VoxMain, palettes: &[Entry], fields: PaletteListFi
             );
         }
         if fields.objects {
-            let node_id = grid.add_child(row_id, TreeGridLabel::bare("used by"));
+            let node_id = grid.add_child(row_id, TreeGridLabel::bare("objects"));
             grid.push_value(
                 node_id,
                 TreeGridValue::new(referencing_names(state, *palette_id).join(", ")),
@@ -296,7 +296,7 @@ mod tests {
             render_all(&shared_state(), PaletteListLayout::Tables),
             "# palettes\n\
              \n\
-             | label | properties                  | materials | used by |\n\
+             | label | properties                  | materials | objects |\n\
              | ----- | --------------------------- | --------- | ------- |\n\
              | 0     | baseColor, metallic         | 2         | a, b    |\n\
              | 1     | baseColor, emissiveStrength | 1         | b       |\n"
@@ -330,7 +330,7 @@ mod tests {
             render_all(&shared_state(), PaletteListLayout::Hierarchy),
             "palettes\n\
              ├ 0\n\
-             │ ├ materialCount: 2\n\
+             │ ├ materials: 2\n\
              │ ├ properties\n\
              │ │ ├ \"baseColor\"\n\
              │ │ └ \"metallic\"\n\
@@ -338,7 +338,7 @@ mod tests {
              │   ├ \"a\"\n\
              │   └ \"b\"\n\
              └ 1\n\
-             \u{20}\u{20}├ materialCount: 1\n\
+             \u{20}\u{20}├ materials: 1\n\
              \u{20}\u{20}├ properties\n\
              \u{20}\u{20}│ ├ \"baseColor\"\n\
              \u{20}\u{20}│ └ \"emissiveStrength\"\n\
@@ -361,12 +361,12 @@ mod tests {
             output,
             "palettes\n\
              ├ 0\n\
-             │ ├ materialCount: 2\n\
+             │ ├ materials: 2\n\
              │ └ objects\n\
              │   ├ \"a\"\n\
              │   └ \"b\"\n\
              └ 1\n\
-             \u{20}\u{20}├ materialCount: 1\n\
+             \u{20}\u{20}├ materials: 1\n\
              \u{20}\u{20}└ objects\n\
              \u{20}\u{20}\u{20}\u{20}└ \"b\"\n"
         );
@@ -378,12 +378,12 @@ mod tests {
             render_all(&shared_state(), PaletteListLayout::JsonCompact),
             "[{\"label\":\"palettes\",\"children\":[\
              {\"label\":\"0\",\"children\":[\
-             {\"label\":\"materialCount\",\"values\":[2]},\
+             {\"label\":\"materials\",\"values\":[2]},\
              {\"label\":\"properties\",\"children\":[\
              {\"label\":\"baseColor\"},{\"label\":\"metallic\"}]},\
              {\"label\":\"objects\",\"children\":[{\"label\":\"a\"},{\"label\":\"b\"}]}]},\
              {\"label\":\"1\",\"children\":[\
-             {\"label\":\"materialCount\",\"values\":[1]},\
+             {\"label\":\"materials\",\"values\":[1]},\
              {\"label\":\"properties\",\"children\":[\
              {\"label\":\"baseColor\"},\
              {\"label\":\"emissiveStrength\"}]},\
@@ -412,7 +412,7 @@ mod tests {
             output,
             "# palettes\n\
              \n\
-             | label | properties                  | materials | used by |\n\
+             | label | properties                  | materials | objects |\n\
              | ----- | --------------------------- | --------- | ------- |\n\
              | 1     | baseColor, emissiveStrength | 1         | b       |\n"
         );
@@ -453,7 +453,7 @@ mod tests {
             render_all(&state, PaletteListLayout::Tables),
             "# palettes\n\
              \n\
-             | label | properties | materials | used by |\n\
+             | label | properties | materials | objects |\n\
              | ----- | ---------- | --------- | ------- |\n\
              | 0     | baseColor  | 1         |         |\n"
         );
@@ -461,7 +461,7 @@ mod tests {
         assert_eq!(
             render_all(&state, PaletteListLayout::JsonCompact),
             "[{\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
-             {\"label\":\"materialCount\",\"values\":[1]},\
+             {\"label\":\"materials\",\"values\":[1]},\
              {\"label\":\"properties\",\"children\":[{\"label\":\"baseColor\"}]},\
              {\"label\":\"objects\",\"values\":[\"[]\"]}]}]}]\n"
         );
@@ -487,7 +487,7 @@ mod tests {
             render_all(&state, PaletteListLayout::Hierarchy),
             "palettes\n\
              └ 0\n\
-             \u{20}\u{20}├ materialCount: 1\n\
+             \u{20}\u{20}├ materials: 1\n\
              \u{20}\u{20}├ properties\n\
              \u{20}\u{20}│ └ \"baseColor\"\n\
              \u{20}\u{20}└ objects: []\n"

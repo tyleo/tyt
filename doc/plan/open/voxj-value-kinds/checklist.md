@@ -411,7 +411,7 @@ Unrelated to the value-kinds work; it sits at the end so the fix never
 rides a voxj commit, and lands in its own commit at the owner's request
 (2026-08-02).
 
-- [ ] One format decision across `hierarchy show`, `palette show`,
+- [x] One format decision across `hierarchy show`, `palette show`,
       `palette list`, and `info`: a field has one label, spelled the
       same in every layout, and no command relabels per layout.
       `palette show` (every label is data) and `hierarchy show` (one

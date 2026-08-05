@@ -68,41 +68,41 @@ fn render_tables(state: &VoxMain, format: Format, voxj_version: Option<u32>, nam
     format!("# {name}\n\n{tables}")
 }
 
-/// The flat forest the markdown tables render: `Document`, `Palettes`, and
-/// `Objects` section roots whose rows bake every cell as one pre-formatted
+/// The flat forest the markdown tables render: `document`, `palettes`, and
+/// `objects` section roots whose rows bake every cell as one pre-formatted
 /// value under its column's label.
 fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>) -> TreeGrid {
     let mut grid = TreeGrid::new();
 
-    let document_root_id = grid.add_root(TreeGridLabel::bare("Document"));
+    let document_root_id = grid.add_root(TreeGridLabel::bare("document"));
     add_cell(
         &mut grid,
         document_root_id,
-        "Format",
+        "format",
         format.name().to_string(),
     );
     if let Some(version) = voxj_version {
         add_cell(
             &mut grid,
             document_root_id,
-            "Voxj version",
+            "voxj_version",
             version.to_string(),
         );
     }
     add_cell(
         &mut grid,
         document_root_id,
-        "Has ext",
+        "has_ext",
         yes_no(state.ext().is_some()).to_string(),
     );
     add_cell(
         &mut grid,
         document_root_id,
-        "Has edit",
+        "has_edit",
         yes_no(has_edit(state)).to_string(),
     );
 
-    let palettes_root_id = grid.add_root(TreeGridLabel::bare("Palettes"));
+    let palettes_root_id = grid.add_root(TreeGridLabel::bare("palettes"));
     for (palette_id, palette) in state.iter_palettes() {
         let row_id = grid.add_child(
             palettes_root_id,
@@ -111,18 +111,18 @@ fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>
         add_cell(
             &mut grid,
             row_id,
-            "Properties",
+            "properties",
             implementation::property_names(palette).join(", "),
         );
         add_cell(
             &mut grid,
             row_id,
-            "Materials",
+            "materials",
             palette.material_count().to_string(),
         );
     }
 
-    let objects_root_id = grid.add_root(TreeGridLabel::bare("Objects"));
+    let objects_root_id = grid.add_root(TreeGridLabel::bare("objects"));
     for (object_id, object) in state.iter_objects() {
         let row_id = grid.add_child(
             objects_root_id,
@@ -133,25 +133,25 @@ fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>
             Some(edit) => dimensions(edit),
             None => "-".to_string(),
         };
-        add_cell(&mut grid, row_id, "Name", object.name().to_string());
+        add_cell(&mut grid, row_id, "name", object.name().to_string());
         add_cell(
             &mut grid,
             row_id,
-            "Bounds",
+            "bounds",
             dimensions(content_bounds(object)),
         );
-        add_cell(&mut grid, row_id, "Edit bounds", edit);
+        add_cell(&mut grid, row_id, "edit_bounds", edit);
         add_cell(
             &mut grid,
             row_id,
-            "Origin",
+            "origin",
             format!("{}, {}, {}", origin.x, origin.y, origin.z),
         );
-        add_cell(&mut grid, row_id, "Voxels", object.live_count().to_string());
+        add_cell(&mut grid, row_id, "voxels", object.live_count().to_string());
         add_cell(
             &mut grid,
             row_id,
-            "Layers",
+            "layers",
             object.layer_count().to_string(),
         );
     }
@@ -167,7 +167,7 @@ fn add_cell(grid: &mut TreeGrid, parent_id: U32Id<BTreeGridNode>, label: &str, v
 
 /// The report tree the JSON layouts render as the shared envelope:
 /// `document`, `palettes`, and `objects` roots carrying each field as a
-/// typed value under a snake_case label.
+/// typed value under its label.
 fn build_json_grid(
     state: &VoxMain,
     format: Format,
@@ -393,19 +393,19 @@ mod tests {
         assert_eq!(
             output,
             "# test.voxj\n\n\
-             ## Document\n\n\
+             ## document\n\n\
              | label        | value |\n\
              | ------------ | ----- |\n\
-             | Format       | voxj  |\n\
-             | Voxj version | 2     |\n\
-             | Has ext      | no    |\n\
-             | Has edit     | no    |\n\
-             \n## Palettes\n\n\
-             | label | Properties | Materials |\n\
+             | format       | voxj  |\n\
+             | voxj_version | 2     |\n\
+             | has_ext      | no    |\n\
+             | has_edit     | no    |\n\
+             \n## palettes\n\n\
+             | label | properties | materials |\n\
              | ----- | ---------- | --------- |\n\
              | 0     | baseColor  | 1         |\n\
-             \n## Objects\n\n\
-             | label | Name | Bounds | Edit bounds | Origin  | Voxels | Layers |\n\
+             \n## objects\n\n\
+             | label | name | bounds | edit_bounds | origin  | voxels | layers |\n\
              | ----- | ---- | ------ | ----------- | ------- | ------ | ------ |\n\
              | 0     | body | 1x1x1  | -           | 0, 0, 0 | 1      | 1      |\n"
         );
@@ -472,8 +472,8 @@ mod tests {
             "model.mvox",
             InfoLayout::Tables,
         );
-        assert!(tables.contains("| Format   | mvox  |\n"));
-        assert!(!tables.contains("Voxj version"));
+        assert!(tables.contains("| format   | mvox  |\n"));
+        assert!(!tables.contains("voxj_version"));
 
         let json = render(
             &tight_state(),
@@ -502,7 +502,7 @@ mod tests {
             "sample.voxj",
             InfoLayout::Tables,
         );
-        assert!(tables.contains("| Has edit     | yes   |\n"));
+        assert!(tables.contains("| has_edit     | yes   |\n"));
         // Content 1x1x1, edit build volume 3x1x1, origin spaced.
         assert!(
             tables.contains(
