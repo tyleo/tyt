@@ -449,8 +449,11 @@ Gate: `cargo test -p vxl --all-features` green; owner review.
       sweep to the approved palette show design: the four-field
       selector, the shape-level component suffix with both alias sets,
       and no `--type`.
-- [ ] Run both gate greps from the ground rules; read any residue against
-      the wire rule and clear or log it.
+- [x] Run both gate greps from the ground rules; read any residue against
+      the wire rule and clear or log it. Every hit reads clean; the
+      survey's closeout-residue section logs the four groups, including
+      the mesh plan's unswept vocabulary and the reading names the kind
+      grep now matches by design.
 - [ ] Close the plan: status note at the top of the README and the move
       to `doc/plan/closed`.
 

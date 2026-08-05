@@ -317,6 +317,37 @@ bump was wrong: the submodule's `.gitignore` covers `/scratch/`, the file
 is untracked, and the overwrite touches no commit anywhere. Nothing in
 the workspace reads the file. No `.voxjz` exists anywhere.
 
+## Closeout grep residue
+
+Both gate greps ran at closeout (2026-08-05); every hit reads clean
+against the wire rule. What remains, and why it stays:
+
+1. The Factor grep under `projects`: the spec conventions table's per-row
+   glTF citations, voxsmith's wire contexts (the `material_document.rs`
+   output keys, the `from_gltf_bytes.rs` accessors and test GLB builders,
+   the doc-comment citations in `gltf_properties.rs` and
+   `mesh_material.rs`, the `from_vmax_file.rs` glTF-composition comment),
+   and treegrid's display sample data. All are the contexts the ground
+   rules allow.
+2. The Factor grep under `doc/plan/open`: the vxl-commands pages' glTF
+   wire contexts (`voxelize.md`'s and `checklist.md`'s per-primitive
+   factor reads) and the vxl-commands decisions log, whose header note
+   declares the entries a historical record and carries the rename as a
+   reading key. The `doc/plan/open/mesh` pages (`value-language.md`,
+   `profile-language.md`) still spell the pre-rename property vocabulary
+   throughout: that plan postdates the gate rule, its pages are unswept
+   design drafts, and the sweep belongs to the mesh plan's own execution,
+   not this closeout.
+3. The kind grep under `projects`: voxj's `old_color_kinds_reject` test
+   spells the six deleted kind strings to prove they reject, and the
+   `palette show` reading vocabulary reuses the `srgb-hex` and
+   `srgb-float` spellings for selector readings, a different concept the
+   approved palette show design names on purpose. No `VoxjBound` or
+   `VoxBound` identifier survives anywhere.
+4. The kind grep under `doc/plan/open`: the vxl-commands pages name the
+   readings, and `mesh/value-language.md` names `linear-rgb-float` once,
+   describing the deletion itself.
+
 ## Corrections to the README's blast radius
 
 The README expects the implementation to surface more; these five
