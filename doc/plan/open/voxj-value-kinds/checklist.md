@@ -430,10 +430,12 @@ Gate: `cargo test -p vxl --all-features` green; owner review.
 
 ## Iteration 12: closeout
 
-- [ ] Regenerate `submodules/tyt-assets/scratch/energy-turret.voxj` from
-      its sibling `energy-turret.glb`: a tyt-assets commit plus the
-      superproject gitlink bump. Verify the new file carries vector
-      kinds, the renamed property names, and no `min`/`max` keys.
+- [x] Regenerate `submodules/tyt-assets/scratch/energy-turret.voxj` from
+      its sibling `energy-turret.glb`. The submodule ignores `/scratch/`,
+      so the overwrite needs no tyt-assets commit and no gitlink bump
+      (the survey's Assets note carries the correction). Verify the new
+      file carries vector kinds, the renamed property names, and no
+      `min`/`max` keys.
 - [ ] Sweep the open vxl-commands plan pages: `reference/mesh.md` (the
       property names), `reference/to/voxj.md`, `reference/voxelize.md`,
       and `checklist.md` (the deleted `--color-format`),

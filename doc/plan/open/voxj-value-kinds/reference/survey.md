@@ -307,13 +307,15 @@ Identifiers: the six voxj color variants, 46 occurrences under
 ## Assets
 
 Exactly one on-disk voxj file exists:
-`submodules/tyt-assets/scratch/energy-turret.voxj` (2902 bytes, minified;
-six bounded `float` value pools, one `srgb-float`, one `srgba-float`, all
-eight property names). The submodule is pinned with `update = none`, so
-regeneration is a tyt-assets commit plus a superproject gitlink bump. Its
-sibling `energy-turret.glb` is the source to regenerate from. Nothing in
-the workspace reads the file, so it regenerates once, at closeout. No
-`.voxjz` exists anywhere.
+`submodules/tyt-assets/scratch/energy-turret.voxj`, regenerated at
+closeout (2026-08-05) from its sibling `energy-turret.glb` by the default
+`vxl voxelize` invocation, whose one-voxel-per-meter grid matches the
+asset's 16x13x11 bounds. It carries one `vec-4-float` pool, one
+`vec-3-float`, six plain `float`s, and the renamed property names. The
+survey's claim that regeneration takes a tyt-assets commit and a gitlink
+bump was wrong: the submodule's `.gitignore` covers `/scratch/`, the file
+is untracked, and the overwrite touches no commit anywhere. Nothing in
+the workspace reads the file. No `.voxjz` exists anywhere.
 
 ## Corrections to the README's blast radius
 
