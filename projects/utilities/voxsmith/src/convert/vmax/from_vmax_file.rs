@@ -498,13 +498,13 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
     }
 }
 
-/// A float value pool over `values`, defaulting a non-finite coefficient to
-/// zero so the value pool builds. The exact value rides in the ext. Errors
-/// when `values` is empty.
+/// A float value pool over `values`, defaulting a NaN coefficient to zero so
+/// the value pool builds. The infinities the wire spells carry across, and the
+/// exact value rides in the ext. Errors when `values` is empty.
 fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
     let values = values
         .into_iter()
-        .map(|v| if v.is_finite() { v } else { 0.0 })
+        .map(|v| if v.is_nan() { 0.0 } else { v })
         .collect();
     Ok(state.add_value_pool(VoxValuePool::float(values)?))
 }

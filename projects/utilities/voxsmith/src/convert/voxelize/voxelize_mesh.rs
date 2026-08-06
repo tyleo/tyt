@@ -205,8 +205,9 @@ fn sampled_cells(mesh: &Mesh, grid: &VoxelGrid, counts: TyVector3U32) -> Vec<Opt
 
 /// Paints every filled interior cell (a `solid` body's invented volume, carrying
 /// no surface material): the fill color when one is given, else the material of
-/// its nearest surface cell. A solid-enclosed interior always reaches a surface
-/// cell, so the white fallback is a defensive guard.
+/// its nearest surface cell. The flood reaches a surface cell from every
+/// enclosed interior cell, but a per-texel sample can leave that cell without a
+/// material, and white stands in there.
 fn fill_interior(
     grid: &VoxelGrid,
     counts: TyVector3U32,

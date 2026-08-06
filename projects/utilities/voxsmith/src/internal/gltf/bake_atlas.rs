@@ -87,10 +87,14 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
         } => {
             // Read the source as a `0..1` fraction, invert if asked, then scale
             // to a byte, so a scalar and a color component inject the same way.
+            // A color component is range-checked as stored, before the sRGB
+            // encode: that encode clamps on its own, so checking the byte it
+            // returns would pass every value.
             let fraction = match component {
                 Some(component) => {
-                    component_byte(material_srgba_u8_color(used, index, key)?, *component) as f64
-                        / 255.0
+                    let color = material_lin_srgba_f64_color(used, index, key)?;
+                    check_unit(key, lin_component(color, *component))?;
+                    component_byte(srgba_u8_from_lin_srgba_f64(color), *component) as f64 / 255.0
                 }
                 None => material_scalar(used, index, key)?,
             };
@@ -98,11 +102,7 @@ fn channel_byte(used: &UsedMaterials, index: usize, channel: &MaterialChannel) -
             // The check precedes the conversion, since `to_unorm8` clamps on its
             // own and a property the spec leaves unbounded above, such as
             // `emissiveStrength`, reaches here.
-            if !(0.0..=1.0).contains(&fraction) {
-                return Err(Error::invalid(format!(
-                    "`{key}` is {fraction}, outside the 0 to 1 a packed channel stores"
-                )));
-            }
+            check_unit(key, fraction)?;
 
             let fraction = if *invert { 1.0 - fraction } else { fraction };
 
@@ -133,6 +133,27 @@ fn material_lin_srgba_f64_color(
 
     value_pool_lin_srgba_f64_color(value_pool, value_id)
         .ok_or_else(|| Error::invalid(format!("`{key}` draws from a value pool holding no color")))
+}
+
+/// Errors unless `value` lies in the `0..1` a packed channel stores.
+fn check_unit(key: &str, value: f64) -> Result<()> {
+    if (0.0..=1.0).contains(&value) {
+        Ok(())
+    } else {
+        Err(Error::invalid(format!(
+            "`{key}` is {value}, outside the 0 to 1 a packed channel stores"
+        )))
+    }
+}
+
+/// One stored linear color component.
+fn lin_component(color: TyLinSrgbaF64, component: ColorChannel) -> f64 {
+    match component {
+        ColorChannel::A => color.alpha,
+        ColorChannel::B => color.blue,
+        ColorChannel::G => color.green,
+        ColorChannel::R => color.red,
+    }
 }
 
 /// One color component as a byte.
@@ -464,6 +485,41 @@ mod tests {
         let pixels = bake_atlas_pixels(&used, &red, width, height).unwrap();
         assert_eq!(pixels[0], 255); // material 0 is red
         assert_eq!(pixels[8], 0); // material 2 is blue
+    }
+
+    #[test]
+    fn an_out_of_range_color_component_errors_rather_than_baking_a_clamped_byte() {
+        // The sRGB quantize clamps, so a custom color component outside
+        // `[0, 1]` would bake the same byte a legal 1.0 does. A custom key has
+        // no vocabulary range, so this guard is the only one it meets.
+        let mut state = VoxMain::default();
+        let value_pool_id =
+            state.add_value_pool(VoxValuePool::vec_4_float(vec![[2.5, 0.0, 0.0, 1.0]]).unwrap());
+
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property("tint".to_owned(), value_pool_id, U32Id::from_u32(0))
+            .unwrap();
+        let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.add_layer(palette_id, material_id);
+        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[material_id]).unwrap();
+        let object_id = state.add_object(object).unwrap();
+
+        let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
+        let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
+
+        let bake = MaterialBake::Packing(vec![MaterialChannel::Property {
+            key: "tint".to_owned(),
+            component: Some(ColorChannel::R),
+            invert: false,
+        }]);
+        let error = bake_atlas_pixels(&used, &bake, width, height).unwrap_err();
+        assert!(error.to_string().contains("tint"), "{error}");
+        assert!(error.to_string().contains("2.5"), "{error}");
     }
 
     #[test]

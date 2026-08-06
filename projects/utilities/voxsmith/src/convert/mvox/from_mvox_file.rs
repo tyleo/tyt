@@ -75,10 +75,10 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
 /// Builds the shared palette: one material per color index `0..=255`, so a
 /// material's index is its color index. `baseColor` binds a color
 /// value pool; with materials, `type` and the six scalar fields bind their own
-/// value pools. An absent or non-finite field takes a default, since a
-/// value pool holds no null and a float value pool rejects a non-finite value;
-/// the exact optionals ride in the ext. Errors on a material id outside
-/// `0..=255` or a duplicate id.
+/// value pools. An absent field or a NaN takes a default, since a value pool
+/// holds no null and a float value pool rejects NaN; the infinities carry
+/// across, and the exact optionals ride in the ext. Errors on a material id
+/// outside `0..=255` or a duplicate id.
 fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     let colors = file.resolved_palette().colors;
     let has_materials = !file.materials.is_empty();
@@ -161,10 +161,10 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
                         .get(&(index as i32))
                         .copied()
                         .and_then(read)
-                        // The codec accepts a non-finite scalar. NaN cannot
-                        // enter a float value pool, so any non-finite value
-                        // defaults. The ext keeps the exact one.
-                        .filter(|value| value.is_finite())
+                        // The codec accepts a NaN, which no float value pool
+                        // holds, so it defaults. The infinities the wire
+                        // spells carry across.
+                        .filter(|value| !value.is_nan())
                         .map_or(0.0, |value| value as f64)
                 })
                 .collect();
@@ -519,8 +519,8 @@ fn invalid(message: String) -> Error {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, from_mvox_bytes, from_mvox_file, lin_srgba_f64_from_srgba_u8, to_mvox_bytes,
-        to_mvox_file,
+        BASE_COLOR, IOR, from_mvox_bytes, from_mvox_file, lin_srgba_f64_from_srgba_u8,
+        to_mvox_bytes, to_mvox_file,
     };
     use branded_id::U32Id;
     use mvox::{
@@ -535,7 +535,7 @@ mod tests {
     };
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
-        VoxPalette, VoxValue, VoxValuePool,
+        VoxPalette, VoxValue, VoxValuePool, VoxValuePoolValueRef,
     };
 
     fn pair(key: &str, value: &str) -> (String, String) {
@@ -927,9 +927,9 @@ mod tests {
         assert!(from_mvox_file(&file).is_err());
     }
 
-    /// The codec accepts a non-finite scalar, but a Float value pool must be
-    /// finite. from_mvox_file defaults the value-pool copy and the ext keeps
-    /// the exact value, so the material still round-trips.
+    /// The codec accepts a non-finite scalar. A float value pool rejects NaN
+    /// but holds the infinities, and the ext keeps the exact value either way,
+    /// so the material still round-trips.
     #[test]
     fn round_trips_a_non_finite_material_scalar() {
         let file = MVoxFile {
@@ -942,6 +942,20 @@ mod tests {
         };
         let state = from_mvox_file(&file).unwrap();
         assert_files_eq(&to_mvox_file(&state).unwrap(), &file);
+
+        // The infinity reaches the value pool rather than defaulting: the wire
+        // spells it and voxcore holds it.
+        let (_, palette) = state.iter_palettes().next().unwrap();
+        let property_id = palette.property_id_by_name(IOR).unwrap();
+        let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
+        let value_pool = state.value_pool(value_pool_id).unwrap();
+        assert!(
+            value_pool
+                .iter_values()
+                .filter_map(|(value_id, _)| value_pool.value(value_id))
+                .any(|value| value == VoxValuePoolValueRef::Float(f64::INFINITY)),
+            "the infinite ior defaulted away"
+        );
     }
 
     #[test]

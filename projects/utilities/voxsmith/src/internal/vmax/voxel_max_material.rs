@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 /// One Voxel Max material's exact coefficients, preserved in the `voxel-max`
 /// ext, aligned by index with a palette's material list.
 ///
-/// The folded palette's value pools carry a neutral, finite-defaulted copy of
-/// these for a cross-format consumer, but a material's optional dispersion and
-/// any non-finite coefficient cannot ride in a value pool, so the exact
-/// material is kept here and read back on write. The `mi` token is re-derived
+/// The folded palette's value pools carry a neutral copy of these for a
+/// cross-format consumer, but a material's optional dispersion and a NaN
+/// coefficient cannot ride in a value pool, so the exact material is kept here
+/// and read back on write. The `mi` token is re-derived
 /// from the slot and the transparency color `tc` is dropped, matching the
 /// writer's behavior.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]

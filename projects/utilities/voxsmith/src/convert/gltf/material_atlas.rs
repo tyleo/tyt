@@ -1,6 +1,6 @@
 use crate::{
-    AtlasShape, MaterialBake, Result, atlas_dimensions, bake_atlas_pixels, encode_rgba8_png,
-    resolve_used_materials,
+    AtlasShape, MaterialBake, Result, atlas_dimensions, bake_atlas_pixels,
+    check_gltf_property_ranges, encode_rgba8_png, resolve_used_materials,
 };
 use voxcore::{VoxMain, VoxObject};
 
@@ -24,14 +24,19 @@ pub struct MaterialAtlas {
 /// `state` resolves the object's referenced palettes. This is the
 /// geometry-free material bake the palette atlas shares with the textured
 /// mesh writer, and the surface a bake-only material command builds on.
-/// Errors if a layer references a palette `state` does not hold, or if
-/// `shape` is too small to hold the materials.
+/// Errors if a layer references a palette `state` does not hold, if a
+/// vocabulary property carries a value outside its glTF range, or if `shape`
+/// is too small to hold the materials.
 pub fn object_to_material_atlas(
     state: &VoxMain,
     object: &VoxObject,
     bakes: &[MaterialBake],
     shape: AtlasShape,
 ) -> Result<MaterialAtlas> {
+    // The texels this bakes reach a glTF material, so the boundary runs the
+    // same vocabulary check the mesh export does rather than growing its own.
+    check_gltf_property_ranges(state)?;
+
     let used = resolve_used_materials(state, object)?;
 
     let (width, height) = atlas_dimensions(used.len(), shape)?;
@@ -122,6 +127,37 @@ mod tests {
         for image in &atlas.images {
             assert!(image.starts_with(&PNG_MAGIC));
         }
+    }
+
+    #[test]
+    fn an_out_of_range_vocabulary_value_errors_before_the_bake() {
+        // The atlas is a glTF boundary, so it runs the vocabulary check its
+        // sibling mesh export runs rather than baking a lying texel.
+        let mut state = VoxMain::default();
+        let value_pool_id = state.add_value_pool(VoxValuePool::float(vec![2.5]).unwrap());
+
+        let mut palette = VoxPalette::default();
+        palette
+            .add_property(ROUGHNESS.to_owned(), value_pool_id, U32Id::from_u32(0))
+            .unwrap();
+        let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.add_palette(palette).unwrap();
+
+        let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.add_layer(palette_id, material_id);
+        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[material_id]).unwrap();
+        let object_id = state.add_object(object).unwrap();
+
+        let error = object_to_material_atlas(
+            &state,
+            state.object(object_id).unwrap(),
+            &[MaterialBake::RgbaColor],
+            AtlasShape::Fit,
+        )
+        .err()
+        .expect("an out-of-range roughness errors");
+        assert!(error.to_string().contains(ROUGHNESS), "{error}");
     }
 
     #[test]
