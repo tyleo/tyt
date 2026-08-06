@@ -49,7 +49,7 @@ pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
     let models = state
         .iter_objects()
         .map(|(_, object)| model_from_object(object))
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
     let scene_nodes = build_scene_nodes(state, &ext)?;
 
     let layers = ext
@@ -106,7 +106,15 @@ pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
         index_map: ext
             .index_map
             .as_deref()
-            .and_then(|map| <[u8; 256]>::try_from(map).ok()),
+            .map(|map| {
+                <[u8; 256]>::try_from(map).map_err(|_| {
+                    Error::Invalid(format!(
+                        "magica-voxel ext index map has {} entries, need exactly 256",
+                        map.len()
+                    ))
+                })
+            })
+            .transpose()?,
         unknown_chunks,
     })
 }
@@ -179,7 +187,11 @@ fn material_type_from_token(token: &str) -> MVoxMaterialType {
 /// per live cell, in ascending raster order, each taking its color index from
 /// the material it samples on the object's first layer. A material's index is
 /// its color index.
-fn model_from_object(object: &VoxObject) -> MVoxModel {
+///
+/// Errors when a material index or a voxel coordinate does not fit the byte
+/// MagicaVoxel stores it in, since a wrapped index paints the voxel from the
+/// wrong palette entry and a wrapped coordinate moves it.
+fn model_from_object(object: &VoxObject) -> Result<MVoxModel> {
     let bounds = object.bounds();
     let layer_id = object.iter_layers().next().map(|(layer_id, _)| layer_id);
 
@@ -189,22 +201,33 @@ fn model_from_object(object: &VoxObject) -> MVoxModel {
             let position = object
                 .voxel_position(voxel_id)
                 .expect("a live voxel is within the grid");
-            let color_index = layer_id
-                .and_then(|layer_id| object.voxel_material(voxel_id, layer_id))
-                .map_or(0, |material_id| material_id.to_u32() as u8);
-            MVoxVoxel {
-                x: position.x as u8,
-                y: position.y as u8,
-                z: position.z as u8,
+            let color_index =
+                match layer_id.and_then(|layer_id| object.voxel_material(voxel_id, layer_id)) {
+                    Some(material_id) => model_byte(material_id.to_u32(), "material index")?,
+                    None => 0,
+                };
+            Ok(MVoxVoxel {
+                x: model_byte(position.x, "voxel x")?,
+                y: model_byte(position.y, "voxel y")?,
+                z: model_byte(position.z, "voxel z")?,
                 color_index,
-            }
+            })
         })
-        .collect();
+        .collect::<Result<Vec<_>>>()?;
 
-    MVoxModel {
+    Ok(MVoxModel {
         size: [bounds.x, bounds.y, bounds.z],
         voxels,
-    }
+    })
+}
+
+/// `value` as the byte a MagicaVoxel model stores, or the error naming `label`.
+fn model_byte(value: u32, label: &str) -> Result<u8> {
+    u8::try_from(value).map_err(|_| {
+        Error::Invalid(format!(
+            "{label} {value} does not fit the byte a MagicaVoxel model stores"
+        ))
+    })
 }
 
 /// Rebuilds the scene nodes from the ext, one per entry in stored order. The

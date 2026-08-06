@@ -97,14 +97,27 @@ fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> Result<Vec<[
                      exceeds 131072"
                 )));
             }
+            // The curve over `bits` per axis runs `0..2^(3 * bits)`, so an
+            // index at or past that names no cell. Summing the deltas unchecked
+            // would wrap past `u64::MAX` and decode a position the file never
+            // spelled.
+            let extent = 1u64 << (3 * bits);
             let mut index = 0u64;
             decode_varint(&BASE64.decode(base64).map_err(Error::Base64)?)?
                 .iter()
                 .map(|&delta| {
-                    index += delta;
-                    decode_hilbert(index, bits)
+                    index = index
+                        .checked_add(delta)
+                        .filter(|&index| index < extent)
+                        .ok_or_else(|| {
+                            invalid_data(format!(
+                                "hilbert position block's deltas run past {extent}, the cell \
+                                 count of a {bits}-bit-per-axis curve"
+                            ))
+                        })?;
+                    Ok(decode_hilbert(index, bits))
                 })
-                .collect()
+                .collect::<Result<Vec<_>>>()?
         }
     })
 }
@@ -424,6 +437,22 @@ mod tests {
         let hilbert = VoxjPositionBlock::HilbertDeltaVarintBase64(String::new());
         let object = object(
             [131073, 1, 1],
+            hilbert,
+            VoxjSampleBlock::RawJson(vec![Vec::new()]),
+        );
+        assert!(decode_voxj_object(&object, &[4]).is_err());
+    }
+
+    /// A delta that runs the index past the curve names no cell. Summing it
+    /// unchecked would wrap past `u64::MAX` and decode a fabricated position.
+    #[test]
+    fn rejects_hilbert_deltas_past_the_curve() {
+        // `u64::MAX` as a varint: nine 0x FF continuation bytes then 0x01.
+        let mut varint = vec![0xFFu8; 9];
+        varint.push(0x01);
+        let hilbert = VoxjPositionBlock::HilbertDeltaVarintBase64(BASE64.encode(&varint));
+        let object = object(
+            [2, 2, 2],
             hilbert,
             VoxjSampleBlock::RawJson(vec![Vec::new()]),
         );

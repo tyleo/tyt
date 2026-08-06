@@ -93,7 +93,7 @@ pub fn write_vmax(
     let (voxel_max, placements) = match ext_for(state, "voxel-max") {
         Some(ext) => {
             let voxel_max = from_vox_value::<VoxelMaxExtWrapper>(ext)?.voxel_max;
-            let placements = ext_placements(state, &voxel_max);
+            let placements = ext_placements(state, &voxel_max)?;
             (voxel_max, placements)
         }
         None => {
@@ -420,8 +420,21 @@ struct Placement<'a> {
 /// Pairs each voxcore node with its ext entry by index, the placement the
 /// lossless path emits. A vmax-origin scene is a tree with one ext node per
 /// voxcore node, so this reproduces it exactly.
-fn ext_placements<'a>(state: &'a VoxMain, voxel_max: &VoxelMaxExt) -> Vec<Placement<'a>> {
-    state
+///
+/// An ext carrying no hierarchy at all, such as one holding only a camera,
+/// defaults every entry. One carrying a short list errors instead: it names
+/// some nodes and not others, and a defaulted entry would write an all-zero id
+/// and bounds Voxel Max cannot resolve.
+fn ext_placements<'a>(state: &'a VoxMain, voxel_max: &VoxelMaxExt) -> Result<Vec<Placement<'a>>> {
+    let node_count = state.hierarchy_node_count();
+    let stored = voxel_max.hierarchy_nodes.len();
+    if stored != 0 && stored < node_count {
+        return Err(Error::invalid(format!(
+            "voxel-max ext has {stored} hierarchy nodes but the state has {node_count}"
+        )));
+    }
+
+    Ok(state
         .iter_hierarchy_nodes()
         .enumerate()
         .map(|(index, (node_id, node))| Placement {
@@ -433,7 +446,7 @@ fn ext_placements<'a>(state: &'a VoxMain, voxel_max: &VoxelMaxExt) -> Vec<Placem
                 .cloned()
                 .unwrap_or_default(),
         })
-        .collect()
+        .collect())
 }
 
 /// Walks the hierarchy from the roots, emitting one [`Placement`] per node-path
