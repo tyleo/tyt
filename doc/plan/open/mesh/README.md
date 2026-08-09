@@ -22,5 +22,4 @@ design; the schedule is an
 4. [Implementation](implementation.md): the language crate, the
    ty-preferences work, the retired flags, the code deletions, and the
    open questions.
-5. [Open](open.md): the open calls, what settles them, and the doc
-   TODOs.
+5. [Open](open.md): the doc TODOs left on the plan.

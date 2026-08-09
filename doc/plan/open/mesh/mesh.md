@@ -183,27 +183,34 @@ selector. See
     palette's own rows under any select. Independent of every other
     flag: alone it is the bare index, and beside extras rows it is
     the join key a shader reads them by; see [Palettes](#palettes).
-29. `--value-profile <profile>`: applies a profile of values as if
+29. `--write-primitive-normal <primitive-index> <true | false>`
+    (default `true`): whether the indexed primitive writes `NORMAL`,
+    the mesher's computed normal, beside `POSITION`. glTF leaves
+    the attribute optional, a viewer deriving flat normals from the
+    triangles, and a voxel face is flat, so a conforming viewer
+    draws the same pixels either way; `false` drops the stream,
+    bytes a data primitive never reads.
+30. `--value-profile <profile>`: applies a profile of values as if
     each were a `--value` at the flag's own position; the built-ins
     ship in the binary and the rest come from `.vxlconfig`.
     Repeatable; see the [profile language](profile-language.md).
-30. `--output-profile <profile>`: applies an output profile, the
+31. `--output-profile <profile>`: applies an output profile, the
     run's whole surface, the geometry options, materials, primitives,
     files, and extras, expanded to the flags it spells, its `values`
     list applying its value profiles first. At most once per run; an
     explicit flag replaces the element it collides with; see the
     [profile language](profile-language.md).
-31. `--file-stem <file-stem>`: replaces `{file-stem}` in profile file
+32. `--file-stem <file-stem>`: replaces `{file-stem}` in profile file
     templates. The default is the output mesh's own stem, after the
     output path resolves, so an output of `turret.glb`, named or
     derived from the input, fills `{file-stem}-mse.png` as
     `turret-mse.png` with no flag at all, and renaming the mesh
     renames every templated file with it.
-32. `--select <glob>`: choose the object by hierarchy path, matched
+33. `--select <glob>`: choose the object by hierarchy path, matched
     the way `hierarchy show` matches node paths, so a node path
     selects its subtree. Repeatable; unions with `--select-index`. See
     [Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
-33. `--select-index <index>`: choose the object by position, an
+34. `--select-index <index>`: choose the object by position, an
     integer or an `a-b` range. Repeatable; unions with `--select`.
 
 A writer's arguments read destination first, then the source, then
@@ -212,8 +219,10 @@ encoding trailing: an assignment, the location before what fills it.
 A material or primitive index is part of the destination, so it
 rides ahead of the rest: which object, then what on it. A writer's
 name ends in its source kind: `-value` takes an expression and
-writes its value, `-file` an existing file, and `-index` the palette
-row number. A `<src-expr>` is any expression of the
+writes its value, `-file` an existing file, `-index` the palette
+row number, and `-normal` the mesher's computed normal, source and
+destination both fixed, so the flag carries only whether the write
+happens. A `<src-expr>` is any expression of the
 [value language](value-language.md), a defined name the simplest,
 and a `<src-file>` names an existing file.
 

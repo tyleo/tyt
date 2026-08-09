@@ -113,6 +113,8 @@ element expands to the flag it fires as:
       "select": "<expr>",
       // optional; omitted, the primitive carries no material
       "material": 0,
+      // optional, true omitted; false drops the NORMAL stream
+      "normal": true,
       "builtins": { "<ATTRIBUTE>": "<expr>" },
       "customs": {
         "<_NAME>": { "value": "<expr>", "transfer": "<linear | srgb>" }
@@ -138,7 +140,8 @@ The kinds are the flag grid's tails. A slot's `value` kind fires
 four extras flags, on the material or the mesh by where the entry
 sits; a primitives entry fires `--primitive` in list order, its
 `material` and `select` the flag's arguments, an omitted `material`
-firing `none` and an omitted `select` `true`, its `builtins` firing
+firing `none` and an omitted `select` `true`, its `normal` firing
+`--write-primitive-normal`, omitted `true`, its `builtins` firing
 `--write-primitive-builtin-value` tokenless like the flag, its
 `customs` `--write-primitive-custom-value` with their transfers, and
 its `indices` `--write-primitive-index` with their widths;

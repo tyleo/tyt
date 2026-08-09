@@ -61,7 +61,8 @@ The plain-or-array split is half an axis: an array also has a
 [domain](#domains) saying what its entries run over, the palette rows here
 and the mesh's faces or corners elsewhere. A [bool](#booleans) value shares
 the axis, though it is no vector: it has no components and takes no
-swizzle.
+swizzle. A [string](#strings) rides the axes the same way, no vector
+either, the type an enum slot and a palette tag speak.
 
 ## Domains
 
@@ -110,7 +111,8 @@ factor is one number, plain alone.
 A comparison makes a bool: `<`, `<=`, `>`, `>=`, `==`, and `!=` take
 a vec1 on each side and yield one, and the literals `true` and
 `false` spell one directly, plain, the two names reserved, a
-colliding name backtick-quoted. A wider comparison spells its
+colliding name backtick-quoted. `==` and `!=` also compare two
+[strings](#strings) by value. A wider comparison spells its
 fold: inside `any(c)` and `all(c)` the sides share a dimension or
 either is a vec1, broadcasting as it does through `*`, the
 components compare one by one, and the reduction folds the answers,
@@ -153,6 +155,102 @@ excepted, so `a + 1 > b && c > d` reads as `((a + 1) > b) && (c > d)`;
 see the [precedence note](#notes). `==` and `!=` compare floats
 exactly, right against an authored palette property and surprising
 against a computed value, where `0.1 + 0.2 == 0.3` is false.
+
+## Strings
+
+A string literal is double-quoted, `"MASK"`, the reserved quotes
+taking the job they were held for, and a string palette property,
+the voxj `string` kind, is an array like any property, one entry
+per flattened material. The type has the bool's footprint: no
+components, no swizzle, no arithmetic, and no coercion, a string
+never meeting a number or a bool. A literal is any characters
+except the quote, no escapes, the backtick-name rule again.
+
+Four operations touch the type. `==` and `!=` compare two strings
+into a bool, entry by entry, a plain side broadcasting across an
+array, and no other comparison applies, strings holding no order.
+`mix(x, y, cond)` picks between two strings by a bool, the bridge
+numbers already have. `e[i]` samples a string array at an entry.
+`default(name, fallback)` fills a string hole. The equality is the
+routing tool, an authored tag turning into a select:
+
+```
+--value glass 'tag == "glass"'
+--value solid '!glass'
+--material-count 2
+--primitive 0 solid
+--primitive 1 glass
+```
+
+A string reaches three destinations, each under `linear` alone,
+the identity token the bool takes: an enum material property, a
+JSON file value, and a JSON extras entry, the JSON forms writing
+the quoted string itself, so
+`--write-mesh-extra-json-value tag tag linear` lands
+`["glass", "steel"]` beside a palette index. Every numeric
+destination, a PNG, a texture, a vertex attribute, a factor,
+rejects a string.
+
+An enum property takes one word from the fixed list its format's
+schema spells, glTF's `alphaMode` taking `OPAQUE`, `MASK`, or
+`BLEND`. The property reads a plain string, and the writer checks
+the value against the list at the edge, an unknown token erroring
+with the format named, the unknown-slot rule again; no conversion
+exists in the language, only the destination knowing the list:
+
+```
+# static: cutout mode, spelled
+--write-material-slot-value 0 alphaMode '"MASK"'
+
+# computed: cutout only where the palette holds transparency
+--value mode 'mix("OPAQUE", "MASK", min(baseColorFactor.a) < 1)'
+--write-material-slot-value 0 alphaMode mode
+```
+
+In a shell, single quotes carry the inner double quotes through,
+the backtick advice again.
+
+## Color spaces
+
+Every expression evaluates in linear RGB, and the conversion
+functions visit other spaces as plain vec3 math: the language never
+tracks which space a vec3 sits in, the author does, the same trust
+the transfer tokens extend. Linear RGB is the hub, every space
+converting to and from it, so a hop between two others is two
+calls. The constructor names spell dimension, not meaning,
+`rgb(...)` assembling an Oklab triple as readily as a color, and
+components read best through the position alphabet, `lab.x` rather
+than `lab.r`.
+
+`oklabFromRgb(c)` and `rgbFromOklab(l)` visit Oklab, the perceptual
+space: equal numeric steps look like equal visual steps, where
+linear RGB crowds the distinguishable dark shades into a sliver of
+its range. Oklab is defined from linear sRGB, so the language's
+native form is exactly its input, the conversion two fixed matrices
+around a cube root and the inverse the same steps backward.
+`distance` there measures how different two colors look, `.x` is
+perceived lightness, 0 black to 1 white, `.y` runs green to red,
+and `.z` blue to yellow.
+
+```
+--value lab "oklabFromRgb(baseColorFactor.rgb)"
+--value reddish "distance(lab, oklabFromRgb(rgb(1, 0, 0))) < 0.25"
+--value darker "rgbFromOklab(lab * rgb(0.8, 1, 1))"   # dimmed, hue held
+```
+
+`oklchFromRgb(c)` and `rgbFromOklch(l)` visit Oklch, Oklab's polar
+form: `.x` the same lightness, `.y` chroma, 0 at gray and rising
+with colorfulness, `.z` hue. Hue as a plain number is the form's
+power: `mod(lch.z + 0.1, 1)` turns every material a tenth of the
+way around the wheel with lightness and chroma held.
+
+Hue is a turn in `0..1`, and a gray has none, `oklchFromRgb`
+answering hue 0 at zero chroma. `rgbFromOklch` errors on a hue
+outside `0..1`, the wrap staying the author's own `mod(h, 1)`, and
+on a negative chroma. A converted-back color can leave the gamut,
+components outside `0..1`, and no conversion clamps: an image
+writer already errors there, and the bound stays the author's
+`clamp`.
 
 ## JSON files
 
@@ -212,7 +310,8 @@ A bool writes as itself: `true` or `false`, an array of them per entry. Its
 token is `linear`, the identity, no transfer applied, which is already
 what `linear` means for a number; `srgb` on a bool errors, a transfer
 curve being a number's to take. The `0`/`1` form a runtime might want
-instead is spelled, `mix(0, 1, glowing)`.
+instead is spelled, `mix(0, 1, glowing)`. A [string](#strings) writes
+its quoted JSON form the same way, `linear` its only token.
 
 Merging at the flag is what keeps every value simple: a vector or a bool,
 never a grouping, so a dot postfix is always a swizzle and the checker
@@ -279,17 +378,21 @@ The property's own type decides how its expression reads:
 | `*Texture`       | an array expression to embed, or a file via `--write-material-slot-file` |
 | number or vector | a plain expression of that dimension                                     |
 | boolean          | a plain bool expression                                                  |
+| enum             | a plain string expression, one of the property's tokens                  |
 
 ```
 --write-material-slot-value 0 baseColorTexture albedo    # array value, embedded
 --write-material-slot-value 0 alphaCutoff "cutoff / 2"   # plain vec1 expression
 --write-material-slot-value 0 doubleSided true           # plain bool
+--write-material-slot-value 0 alphaMode '"MASK"'         # enum, a plain string
 --write-material-slot-file 0 baseColorTexture skin.png   # existing file, referenced
 ```
 
 A property that is not a texture is uniform across the atlas's one
 material, so its expression is plain, nothing per-material to compute.
-Double quotes stay reserved for future string literals.
+An enum property reads a plain [string](#strings), its value checked
+against the property's own token list, an unknown token erroring with
+the format named.
 
 A texture property takes its image from its argument. A value embeds: the
 bytes land in the mesh, the property points at them, and the slot's own
@@ -490,6 +593,7 @@ associativity for `+ - * / && ^ ||`.
                   | <vec3-expr>
                   | <vec4-expr>
                   | <bool-expr>
+                  | <string-expr>
 
 ; ============================================================
 ; vec1 (scalar) expressions
@@ -525,7 +629,20 @@ associativity for `+ - * / && ^ ||`.
                   | "max" "(" <vec1-expr> "," <vec1-expr> ")"
                   | "sum" "(" <vec1-expr> ")"                   ; palette sum
                   | "avg" "(" <vec1-expr> ")"                   ; palette mean
+                  | "dot" "(" <vec1-expr> "," <vec1-expr> ")"   ; component fold
+                  | "dot" "(" <vec2-expr> "," <vec2-expr> ")"
+                  | "dot" "(" <vec3-expr> "," <vec3-expr> ")"
+                  | "dot" "(" <vec4-expr> "," <vec4-expr> ")"
+                  | "length" "(" <vec1-expr> ")"
+                  | "length" "(" <vec2-expr> ")"
+                  | "length" "(" <vec3-expr> ")"
+                  | "length" "(" <vec4-expr> ")"
+                  | "distance" "(" <vec1-expr> "," <vec1-expr> ")"
+                  | "distance" "(" <vec2-expr> "," <vec2-expr> ")"
+                  | "distance" "(" <vec3-expr> "," <vec3-expr> ")"
+                  | "distance" "(" <vec4-expr> "," <vec4-expr> ")"
                   | "abs" "(" <vec1-expr> ")"
+                  | "normalize" "(" <vec1-expr> ")"
                   | "pow" "(" <vec1-expr> "," <vec1-expr> ")"
                   | "mod" "(" <vec1-expr> "," <vec1-expr> ")"
                   | "clamp" "(" <vec1-expr> "," <vec1-expr> "," <vec1-expr> ")"
@@ -583,6 +700,7 @@ associativity for `+ - * / && ^ ||`.
                   | "sum" "(" <vec2-expr> ")"
                   | "avg" "(" <vec2-expr> ")"
                   | "abs" "(" <vec2-expr> ")"
+                  | "normalize" "(" <vec2-expr> ")"
                   | "pow" "(" <vec2-expr> "," <vec2-expr> ")"
                   | "pow" "(" <vec2-expr> "," <vec1-expr> ")"
                   | "mod" "(" <vec2-expr> "," <vec2-expr> ")"
@@ -645,6 +763,8 @@ associativity for `+ - * / && ^ ||`.
                   | "sum" "(" <vec3-expr> ")"
                   | "avg" "(" <vec3-expr> ")"
                   | "abs" "(" <vec3-expr> ")"
+                  | "normalize" "(" <vec3-expr> ")"
+                  | "cross" "(" <vec3-expr> "," <vec3-expr> ")"
                   | "pow" "(" <vec3-expr> "," <vec3-expr> ")"
                   | "pow" "(" <vec3-expr> "," <vec1-expr> ")"
                   | "mod" "(" <vec3-expr> "," <vec3-expr> ")"
@@ -666,6 +786,10 @@ associativity for `+ - * / && ^ ||`.
                   | "faceAverage" "(" <vec3-expr> ")"
                   | "faceMin" "(" <vec3-expr> ")"
                   | "faceMax" "(" <vec3-expr> ")"
+                  | "oklabFromRgb" "(" <vec3-expr> ")"          ; color spaces
+                  | "rgbFromOklab" "(" <vec3-expr> ")"
+                  | "oklchFromRgb" "(" <vec3-expr> ")"
+                  | "rgbFromOklch" "(" <vec3-expr> ")"
                   | "default" "(" <name> "," <vec3-expr> ")"
 
 ; ============================================================
@@ -708,6 +832,7 @@ associativity for `+ - * / && ^ ||`.
                   | "sum" "(" <vec4-expr> ")"
                   | "avg" "(" <vec4-expr> ")"
                   | "abs" "(" <vec4-expr> ")"
+                  | "normalize" "(" <vec4-expr> ")"
                   | "pow" "(" <vec4-expr> "," <vec4-expr> ")"
                   | "pow" "(" <vec4-expr> "," <vec1-expr> ")"
                   | "mod" "(" <vec4-expr> "," <vec4-expr> ")"
@@ -757,6 +882,7 @@ associativity for `+ - * / && ^ ||`.
                   | "false"
                   | "(" <bool-expr> ")"
                   | <vec1-expr> <cmp-op> <vec1-expr>
+                  | <string-expr> <eq-op> <string-expr>   ; equality alone
                   | "any" "(" <comparison> ")"        ; or-fold of the components
                   | "all" "(" <comparison> ")"        ; and-fold of the components
 
@@ -774,6 +900,26 @@ associativity for `+ - * / && ^ ||`.
                   | <vec1-expr> <cmp-op> <vec4-expr>
 
 <cmp-op>        ::= "<" | "<=" | ">" | ">=" | "==" | "!="
+
+<eq-op>         ::= "==" | "!="
+
+; ============================================================
+; string expressions
+; ============================================================
+
+; Strings take no operators; postfix indexing samples an array
+; entry, and equality lives in <bool-prim>.
+<string-expr>   ::= <string-post>
+
+<string-post>   ::= <string-prim>
+                  | <string-post> "[" <vec1-expr> "]"
+
+<string-prim>   ::= <name>
+                  | <string-lit>
+                  | "(" <string-expr> ")"
+                  | "mix" "(" <string-expr> "," <string-expr> ","
+                             <bool-expr> ")"
+                  | "default" "(" <name> "," <string-expr> ")"
 
 ; ============================================================
 ; Swizzle selectors
@@ -818,9 +964,9 @@ associativity for `+ - * / && ^ ||`.
 ; ============================================================
 ; Lexical grammar
 ; Whitespace separates tokens and is otherwise insignificant,
-; except inside a backtick-quoted name (literal) and around
-; the postfix dot and index bracket (forbidden). Not modeled
-; below.
+; except inside a backtick-quoted name or string literal
+; (literal) and around the postfix dot and index bracket
+; (forbidden). Not modeled below.
 ; ============================================================
 
 <num>           ::= <digits>
@@ -850,6 +996,10 @@ associativity for `+ - * / && ^ ||`.
                   | "A" | "B" | ... | "Z"          ; informal shorthand
 
 <quoted-chars>  ::= any sequence of characters other than "`"   ; informal
+
+<string-lit>    ::= '"' <string-chars> '"'
+
+<string-chars>  ::= any sequence of characters other than '"'   ; informal
 ```
 
 ### Untyped grammar + checking rules (implementation form)
@@ -895,6 +1045,7 @@ run a checker over the AST using the dimension and shape rules that follow.
 <u-prim>     ::= <num>
                | "true"
                | "false"
+               | <string-lit>
                | <name>
                | "(" <u-expr> ")"
                | "r"    "(" <u-expr> ")"
@@ -920,6 +1071,15 @@ run a checker over the AST using the dimension and shape rules that follow.
                | "floor" "(" <u-expr> ")"
                | "ceil" "(" <u-expr> ")"
                | "round" "(" <u-expr> ")"
+               | "dot" "(" <u-expr> "," <u-expr> ")"
+               | "length" "(" <u-expr> ")"
+               | "distance" "(" <u-expr> "," <u-expr> ")"
+               | "normalize" "(" <u-expr> ")"
+               | "cross" "(" <u-expr> "," <u-expr> ")"
+               | "oklabFromRgb" "(" <u-expr> ")"
+               | "rgbFromOklab" "(" <u-expr> ")"
+               | "oklchFromRgb" "(" <u-expr> ")"
+               | "rgbFromOklch" "(" <u-expr> ")"
                | "faceAverage" "(" <u-expr> ")"
                | "faceMin" "(" <u-expr> ")"
                | "faceMax" "(" <u-expr> ")"
@@ -962,12 +1122,21 @@ Dimension rules for an expression `e` with dimension written `dim(e)`:
 | `any(c)`, `all(c)`       | `c` a comparison, `dim(a) = dim(b)` or either `= 1`                                                                                     | bool                  |
 | `!e`                     | `e` bool                                                                                                                                | bool                  |
 | `a && b`, `a ^ b`, `a \|\| b` | both bool                                                                                                                          | bool                  |
-| `mix(a, b, c)`           | `dim(a) = dim(b)`; `c` bool                                                                                                             | `dim(a)`              |
+| `mix(a, b, c)`           | `dim(a) = dim(b)`, or both strings; `c` bool                                                                                            | `dim(a)`              |
 | `faceAverage(e)`, `faceMin(e)`, `faceMax(e)` | any dimension                                                                                                       | `dim(e)`              |
+| `dot(a, b)`              | `dim(a) = dim(b)`                                                                                                                       | 1                     |
+| `length(e)`              | any dimension                                                                                                                           | 1                     |
+| `distance(a, b)`         | `dim(a) = dim(b)`                                                                                                                       | 1                     |
+| `normalize(e)`           | any dimension                                                                                                                           | `dim(e)`              |
+| `cross(a, b)`            | `dim(a) = dim(b) = 3`                                                                                                                   | 3                     |
+| the color conversions    | `dim(c) = 3`                                                                                                                            | 3                     |
+| `<string-lit>`           | (none)                                                                                                                                  | string                |
+| string `==`, `!=`        | both sides strings                                                                                                                      | bool                  |
 
 A vec1 broadcasts on the right of `/`, as the exponent of `pow`, on
 either side of `*`, and on either side of the comparison inside
-`any`/`all`.
+`any`/`all`. `dot`, `distance`, and `cross` take no broadcast: their
+sides share one dimension exactly.
 
 Shape rules, with a value either plain or an array over the effective palette
 (see [Shapes](#shapes)):
@@ -976,9 +1145,12 @@ Shape rules, with a value either plain or an array over the effective palette
    its definition's shape.
 2. The elementwise constructs, the operators, the constructors, swizzles,
    binary `min`/`max`, `abs`, `pow`, `mod`, `clamp`, `lerp`, `step`,
-   `smoothstep`, `floor`/`ceil`/`round`, and `default()`, pair arrays
-   element by element and broadcast plain values; the result is an array
-   when any operand is.
+   `smoothstep`, `floor`/`ceil`/`round`, `default()`, `dot`, `length`,
+   `distance`, `normalize`, `cross`, and the color conversions, pair
+   arrays element by element and broadcast plain values; the result is
+   an array when any operand is. `dot`, `length`, and `distance` fold
+   the components inside each entry, never entries across the domain,
+   so they reduce dimension to 1, not shape to plain.
 3. The reductions, unary `min`/`max` and `sum`/`avg`, require an array and
    yield a plain value, computed per component across its whole domain.
 4. `e[i]` requires `e` an array and `i` a plain exact non-negative integer
@@ -998,6 +1170,10 @@ Shape rules, with a value either plain or an array over the effective palette
    plain, and a corner array meeting a texture destination errors.
 8. `mix(a, b, cond)` follows rule 2 across `a`, `b`, and `cond`, the
    result's shape from any operand array.
+9. A string rides the same axes: a literal is plain, a string property
+   an array, its `==`/`!=` and `mix` pair entries by rule 2, `e[i]`
+   follows rule 4, and a string reaches an enum property plain, a JSON
+   destination in either shape, and nothing else.
 
 ### Functions
 
@@ -1037,44 +1213,99 @@ One item per function. Dimensions and shapes follow the tables above.
    abs(tint - avg(tint))   # each material's spread around the mean
    ```
 
-6. `pow(a, b)` is the componentwise exponent. A vec1 exponent broadcasts
-   across `a`, and `pow(vec1, vecN)` errors, matching the rule for `/`:
+6. `dot(a, b)` multiplies matching components and adds the products,
+   one number out. The sides share a dimension exactly, nothing
+   broadcasts, and a vec1 pair degenerates to the plain product:
 
    ```
-   pow(roughnessFactor, 2.2)   # steepens the roughness curve
+   dot(tint, rgb(0.2126, 0.7152, 0.0722))   # a luminance weighting
    ```
 
-7. `mod(a, b)` is the floored remainder, `a - b * floor(a / b)`, the form
-   that wraps. `mod(a, 0)` is non-finite and errors like any other:
+7. `length(e)` is the vector's magnitude, `pow(dot(e, e), 0.5)` under
+   one name; a vec1's length is its absolute value:
 
    ```
-   mod(hue + 0.618, 1)   # wraps back into 0..1
+   length(emissiveFactor)   # the emissive color's overall strength
    ```
 
-8. `clamp(x, lo, hi)` pins each component into `lo..hi`. A component with
-   `lo > hi` errors. An explicit `clamp` is the author naming a bound,
-   which is exactly what the write-time rules ask for:
+8. `distance(a, b)` is `length(a - b)`, the straight-line gap between
+   two points, read in [Oklab](#color-spaces) when the gap should
+   match what the eye sees:
 
    ```
-   clamp(strength / 4, 0, 1)   # the author's own bound
+   distance(lab, oklabFromRgb(rgb(1, 0, 0)))   # how far from red
    ```
 
-9. `lerp(a, b, t)` is `a + (b - a) * t`. `t` is unrestricted, so it
-   extrapolates outside `0..1`. The name is HLSL's, because it says
-   what the blend does; `mix` names the [bool chooser](#booleans)
-   instead:
+9. `normalize(e)` is `e / length(e)`, the direction alone at length 1.
+   A zero vector divides `0 / 0` and errors like any non-finite:
 
    ```
-   lerp(orm, rgb(1, 1, 1), 0.25)   # a quarter of the way to white
+   normalize(offset)   # the direction, the magnitude dropped
    ```
 
-10. `step(edge, x)` is 0 where `x < edge` and 1 elsewhere, the mask maker:
+10. `cross(a, b)` is the vec3 cross product, the vector perpendicular
+    to both sides:
+
+    ```
+    cross(u, v)   # a normal for the plane u and v span
+    ```
+
+11. `oklabFromRgb(c)` and `rgbFromOklab(l)` convert a vec3 between
+    linear RGB and Oklab, the perceptual space; see
+    [Color spaces](#color-spaces):
+
+    ```
+    oklabFromRgb(baseColorFactor.rgb).x   # perceived lightness
+    ```
+
+12. `oklchFromRgb(c)` and `rgbFromOklch(l)` convert a vec3 between
+    linear RGB and Oklch, Oklab's polar form, hue a number ordinary
+    arithmetic can shift; see [Color spaces](#color-spaces):
+
+    ```
+    mod(oklchFromRgb(tint).z + 0.1, 1)   # a tenth of a turn around
+    ```
+
+13. `pow(a, b)` is the componentwise exponent. A vec1 exponent
+    broadcasts across `a`, and `pow(vec1, vecN)` errors, matching the
+    rule for `/`:
+
+    ```
+    pow(roughnessFactor, 2.2)   # steepens the roughness curve
+    ```
+
+14. `mod(a, b)` is the floored remainder, `a - b * floor(a / b)`, the
+    form that wraps. `mod(a, 0)` is non-finite and errors like any
+    other:
+
+    ```
+    mod(hue + 0.618, 1)   # wraps back into 0..1
+    ```
+
+15. `clamp(x, lo, hi)` pins each component into `lo..hi`. A component
+    with `lo > hi` errors. An explicit `clamp` is the author naming a
+    bound, which is exactly what the write-time rules ask for:
+
+    ```
+    clamp(strength / 4, 0, 1)   # the author's own bound
+    ```
+
+16. `lerp(a, b, t)` is `a + (b - a) * t`. `t` is unrestricted, so it
+    extrapolates outside `0..1`. The name is HLSL's, because it says
+    what the blend does; `mix` names the [bool chooser](#booleans)
+    instead:
+
+    ```
+    lerp(orm, rgb(1, 1, 1), 0.25)   # a quarter of the way to white
+    ```
+
+17. `step(edge, x)` is 0 where `x < edge` and 1 elsewhere, the mask maker:
 
     ```
     step(0.001, emissiveStrength)   # 1 for every material that emits
     ```
 
-11. `smoothstep(lo, hi, x)` is the Hermite ramp: 0 at `lo`, 1 at `hi`,
+18. `smoothstep(lo, hi, x)` is the Hermite ramp: 0 at `lo`, 1 at `hi`,
     held flat outside. A component with `lo >= hi` errors, one step
     stricter than `clamp`, since the ramp divides by `hi - lo`:
 
@@ -1082,24 +1313,24 @@ One item per function. Dimensions and shapes follow the tables above.
     smoothstep(0.2, 0.8, occlusion)   # eases a mask edge
     ```
 
-12. `floor(e)` and `ceil(e)` snap each component to the integer below or
+19. `floor(e)` and `ceil(e)` snap each component to the integer below or
     above, and `round(e)` to the nearest, halves away from zero:
 
     ```
     round(smoothness * 4) / 4   # five even levels
     ```
 
-13. `mix(x, y, cond)` picks per entry: `x` where the bool is false, `y`
+20. `mix(x, y, cond)` picks per entry: `x` where the bool is false, `y`
     where it is true, GLSL's own bool overload of its `mix`. The
-    branches share a dimension and the result takes it, and the chooser
-    is the one place a bool meets numbers, the spelled bridge out of
-    the type:
+    branches share a dimension, or are both [strings](#strings), and
+    the result takes it, and the chooser is the one place a bool meets
+    numbers, the spelled bridge out of the type:
 
     ```
     mix(0, 1, glowing)   # the deliberate 0/1 mask
     ```
 
-14. `any(c)` and `all(c)` fold a comparison's component answers into
+21. `any(c)` and `all(c)` fold a comparison's component answers into
     one bool, `any` with or and `all` with and. The argument is a
     comparison spelled in place, its sides sharing a dimension or
     either a vec1, and the fold runs per entry, so an array
@@ -1110,7 +1341,7 @@ One item per function. Dimensions and shapes follow the tables above.
     all(baseColorFactor.rgb > 0.9)   # true where a color runs near white
     ```
 
-15. `faceAverage(e)`, `faceMin(e)`, and `faceMax(e)` step a corner
+22. `faceAverage(e)`, `faceMin(e)`, and `faceMax(e)` step a corner
     array down to a face array, each face's four corners reduced per
     component, the spelled descent of the [ladder](#domains); any
     other domain errors:
@@ -1119,7 +1350,7 @@ One item per function. Dimensions and shapes follow the tables above.
     faceAverage(computedOcclusion)   # one occlusion per face
     ```
 
-16. `default(name, fallback)` evaluates to `name` where it has a value
+23. `default(name, fallback)` evaluates to `name` where it has a value
     and to `fallback` where it does not: a `--value` name not yet
     defined, a property no layer supplies, or a material that leaves it
     unset, filled per element. `name` is bare or backtick-quoted, and
@@ -1136,15 +1367,18 @@ One item per function. Dimensions and shapes follow the tables above.
 **Backtick quoting.** Backticks quote a name a bare identifier
 cannot spell: spaces, a leading digit, or a reserved name. `foo bar` always
 lexes as two separate names; the value is written `` `foo bar` ``. Double
-quotes are not name quoting; they stay reserved for future string literals.
-In a shell, single-quote an expression holding backticks so the shell does
-not read them as command substitution.
+quotes are not name quoting; they spell [string](#strings) literals.
+In a shell, single-quote an expression holding backticks, which the shell
+would read as command substitution, or double quotes, which it would
+strip.
 
 **Reserved names.** The function names `r`, `rg`, `rgb`, `rgba`, `min`,
 `max`, `sum`, `avg`, `any`, `all`, `abs`, `pow`, `mod`, `clamp`,
-`lerp`, `mix`, `step`, `smoothstep`, `floor`, `ceil`, `round`,
-`faceAverage`, `faceMin`, `faceMax`, and `default` are keywords, and
-the literals `true` and `false` are reserved with them. A
+`lerp`, `mix`, `step`, `smoothstep`, `floor`, `ceil`, `round`, `dot`,
+`length`, `distance`, `normalize`, `cross`, `oklabFromRgb`,
+`rgbFromOklab`, `oklchFromRgb`, `rgbFromOklch`, `faceAverage`,
+`faceMin`, `faceMax`, and `default` are keywords, and the literals
+`true` and `false` are reserved with them. A
 property sharing one is reached by backtick-quoting: `` `min` `` is the
 name, `min(...)` the function.
 
@@ -1186,11 +1420,13 @@ exponent.
 
 **The function set stays small.** `sqrt(x)` is `pow(x, 0.5)`, `fract(x)` is
 `mod(x, 1)`, and a signed remap is `n * 0.5 + 0.5`, so none of them is a
-function.
+function. The vector set is the spelled exception: `normalize(e)` is
+`e / length(e)` and ships anyway, the set whole under the names the
+shader languages share.
 
 **Lexing.** Whitespace separates tokens and is otherwise insignificant, with
-two exceptions: inside a backtick-quoted name it is literal, and in a
-postfix it is forbidden. A postfix is attached: the dot and its member hug
+two exceptions: inside a backtick-quoted name or a string literal it is
+literal, and in a postfix it is forbidden. A postfix is attached: the dot and its member hug
 the source's final token, and an index bracket does the same. `v.rg` and
 `tint[0]` are postfixes; `v .rg`, `v. rg`, and `tint [0]` are all errors.
 Numbers use maximal munch: `1.5` is a single number token, and `.5` where
