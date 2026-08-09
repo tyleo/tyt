@@ -139,6 +139,7 @@ see [JSON files](#json-files):
 ```
 --value glowing "emissiveStrength > 0"   # bool array, one entry per material
 --value solid "!glowing"
+--material-count 2
 --primitive 0 solid
 --primitive 1 glowing
 ```
@@ -246,8 +247,9 @@ serves a reader that takes its colors display-encoded.
 `--write-material-slot-value <material-index> <dst-property>
 <src-expr>` sets one property of the indexed material, destination
 before source like every writer, the index riding first: which
-material, then what on it. The examples write material `0`, a bare
-run's only one. The property is the target format's own name, the leaf of its
+material, then what on it. The examples write material `0`, a
+`--material-count 1` ahead of them declaring it. The property is
+the target format's own name, the leaf of its
 material schema, so the flag invents no vocabulary and the writer
 does the nesting and the `extensionsUsed` bookkeeping:
 

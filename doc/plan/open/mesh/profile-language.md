@@ -84,7 +84,7 @@ element expands to the flag it fires as:
   },
 
   // one entry per material; the list's length is the material count,
-  // the --material-count mirror
+  // the --material-count mirror, an omitted or empty list count 0
   "materials": [
     {
       "name": "<name>",   // optional, the glTF material.name
@@ -105,11 +105,13 @@ element expands to the flag it fires as:
     }
   ],
 
-  // one entry per primitive, each hooked to a material by index
+  // one entry per primitive
   "primitives": [
     {
       "name": "<name>",       // optional, rides the primitive's extras
-      "select": "<expr>",   // the selects partition the faces
+      // optional, "true" omitted; the selects partition the faces
+      "select": "<expr>",
+      // optional; omitted, the primitive carries no material
       "material": 0,
       "builtins": { "<ATTRIBUTE>": "<expr>" },
       "customs": {
@@ -135,7 +137,8 @@ The kinds are the flag grid's tails. A slot's `value` kind fires
 `--write-material-slot-file`; an extras entry's four kinds fire the
 four extras flags, on the material or the mesh by where the entry
 sits; a primitives entry fires `--primitive` in list order, its
-`material` and `select` the flag's arguments, its `builtins` firing
+`material` and `select` the flag's arguments, an omitted `material`
+firing `none` and an omitted `select` `true`, its `builtins` firing
 `--write-primitive-builtin-value` tokenless like the flag, its
 `customs` `--write-primitive-custom-value` with their transfers, and
 its `indices` `--write-primitive-index` with their widths;
@@ -143,10 +146,10 @@ its `indices` `--write-primitive-index` with their widths;
 `--write-file-png-value` and `--write-file-json-value` per key; and
 each geometry key fires the flag it is named for. The `uvs` list spells
 the `--uv` flags in order. The defaults mirror the flags': an omitted
-geometry key takes its flag's default, an omitted `materials` is one
-bare material, an omitted `primitives` the implicit primitive holding
-every face on material `0`, and an omitted `uvs` derives from use the
-way the bare line does; see
+geometry key takes its flag's default, an omitted or empty
+`materials` carries no materials, an omitted or empty `primitives`
+the implicit primitive holding every face, and an omitted `uvs`
+derives from use the way the bare line does; see
 [Primitives and materials](mesh.md#primitives-and-materials) and
 [UV streams](mesh.md#uv-streams).
 
@@ -179,6 +182,7 @@ So with the output `turret.glb`, `--output-profile orm` expands to
 --value roughnessFactor "default(roughnessFactor, 1)"
 --value metallicFactor "default(metallicFactor, 1)"
 --value orm "rgb(occlusionStrength, roughnessFactor, metallicFactor)"
+--material-count 1
 --write-material-slot-value 0 occlusionTexture orm          # slots: kind value
 --write-material-slot-value 0 metallicRoughnessTexture orm
 ```
@@ -222,7 +226,8 @@ namespace.
 Loading checks every profile in the merged namespaces, so a broken
 config fails the first run after the edit rather than the run that
 first names the profile. Load-time checks are the ones that need no run
-context: the schema's shape, every expression parsing, every `basedOn`
+context: the schema's shape, an unknown key erroring rather than
+skipping, every expression parsing, every `basedOn`
 and `values` name resolving without a cycle, every `material` index
 inside its profile's material count, every `file` reference naming a
 written file, every `uvs` entry `row` or `face` named once, and no
@@ -494,13 +499,12 @@ material through
       },
 
       // The palette pattern: rows under the mesh's extras.vxl.values,
-      // the index they are read by on the primitive, and a bare
-      // material the runtime shades past.
+      // the index they are read by on the primitive, no material at
+      // all.
       "palette": {
         "values": ["albedo"],
-        "materials": [{}],
         "primitives": [
-          { "material": 0, "indices": { "_PALETTE": "u8" } }
+          { "indices": { "_PALETTE": "u8" } }
         ],
         "meshExtras": {
           "albedo": {
@@ -511,12 +515,12 @@ material through
         }
       },
 
-      // No textures: base color rides the vertices as COLOR_0.
+      // No textures: base color rides the vertices as COLOR_0, no
+      // material at all.
       "vertex-colors": {
         "values": ["albedo"],
-        "materials": [{}],
         "primitives": [
-          { "material": 0, "builtins": { "COLOR_0": "albedo" } }
+          { "builtins": { "COLOR_0": "albedo" } }
         ]
       },
 

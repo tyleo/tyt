@@ -5,17 +5,6 @@ settles them, with the doc TODOs at the end. The wider plan's
 questions live in the
 [implementation notes](implementation.md#open-questions)._
 
-## Material-less primitives
-
-Every primitive hooks to a material and every run carries at least
-one, `--material-count`'s default, while glTF leaves
-`primitive.material` optional, a default-material draw. A mesh of
-vertex values alone, `COLOR_0` and no material, has no spelling,
-even though a run with no textures already derives an empty UV
-list. Do materials become optional, a primitive carrying vertex
-values and no material index, and what does an empty `materials`
-list mean in a profile?
-
 ## Per-primitive normals
 
 Every primitive writes `NORMAL` beside `POSITION`. glTF leaves the

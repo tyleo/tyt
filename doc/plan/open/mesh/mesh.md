@@ -54,25 +54,27 @@ selector. See
    `square` the smallest square, and `<n>` an exact `n`x`n` canvas,
    rejected when too small. Unused cells are transparent black the mesh
    never samples.
-7. `--material-count <count>` (default `1`): how many materials the
+7. `--material-count <count>` (default `0`): how many materials the
    mesh carries, numbered from `0`. Every material flag names one by
    index, and an index at or above the count errors rather than
-   growing it; see
+   growing it, so a run that writes a material declares it first; see
    [Primitives and materials](#primitives-and-materials).
 8. `--material-name <material-index> <name>`: names a material, the
    glTF `material.name`. Optional; a material without the flag
    carries none.
-9. `--primitive <material-index> <src-expr>`: declares a primitive,
-   the material it draws with and the select that routes its faces,
-   primitives numbering from `0` in flag order. The value is a
+9. `--primitive <material-index | none> <src-expr>`: declares a
+   primitive, the material it draws with, `none` no material at
+   all, and the select that routes its faces, primitives numbering
+   from `0` in flag order. The value is a
    [bool](value-language.md#booleans) read at the
    [face domain](value-language.md#domains), lower domains climbing
    in, and the primitive takes every face whose entry is true. The
    selects partition the faces, so a face no select takes errors,
    and so does one two selects take. Without the flag the mesh has
-   one primitive, index 0, material 0, every face, addressable like
-   any other, and the first `--primitive` replaces it, so the
-   declared primitives are exactly the mesh's; see
+   one primitive, index 0, every face, drawing with material 0 when
+   the mesh carries materials and with none when it carries none,
+   addressable like any other, and the first `--primitive` replaces
+   it, so the declared primitives are exactly the mesh's; see
    [Primitives and materials](#primitives-and-materials).
 10. `--primitive-name <primitive-index> <name>`: names a primitive.
     glTF primitives carry no name field, so the name rides the
@@ -220,15 +222,27 @@ and a `<src-file>` names an existing file.
 A glTF mesh holds primitives, and a primitive is one draw: its own
 vertex data, its own triangle list, and at most one material, so two
 materials on one mesh means two primitives holding the faces each
-draws. By default a run has one material and one primitive, index 0,
-material 0, holding every face, addressable like any other, which
-is the whole story until a flag says otherwise: `--material-count`
+draws. By default a run carries no materials and one primitive,
+index 0, holding every face, addressable like any other, which is
+the whole story until a flag says otherwise: `--material-count`
 sets how many materials exist, and each
-`--primitive <material-index> <src-expr>` declares a primitive,
-the material it draws with and the select that routes its faces,
-the first flag replacing the implicit primitive. Everything is
+`--primitive <material-index | none> <src-expr>` declares a
+primitive, the material it draws with and the select that routes
+its faces, the first flag replacing the implicit primitive. The
+implicit primitive draws with material 0 when the mesh carries
+materials and with none when it carries none. Everything is
 0-indexed, and a flag naming an index at or above a count errors
 rather than growing it.
+
+A primitive can carry no material, `none` in the material position
+declaring it beside any count, so a data primitive rides beside
+drawn ones. glTF leaves `primitive.material` optional, a viewer
+drawing such a primitive with the spec's default material, every
+field at its default, the pixels an empty material produces, and
+`COLOR_0` multiplies into base color, so a mesh of vertex values
+alone still shows its colors. At count `0` the glTF carries no
+`materials` array, the spec forbidding an empty one, and a declared
+material no primitive draws is legal and emits unused.
 
 The select routes the faces. It names a
 [bool](value-language.md#booleans) value read at the
@@ -238,8 +252,8 @@ A row bool routes whole rows, every face taking its row's answer, a
 face bool routes faces one by one, reaching below the palette to
 what only the mesh knows, and a plain bool takes every face or
 none, `true` the whole-mesh select on any material. The selects
-partition the faces: a face no select takes is a face with no
-material, a silent default, and a face two selects take is two
+partition the faces: a face no select takes is a face no primitive
+holds, a silent drop, and a face two selects take is two
 flags claiming one destination, the errors the rest of the flag
 surface already throws. The partition covers the faces the mesher
 emits, so a row-bool partition of the used rows holds under every
