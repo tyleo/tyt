@@ -18,7 +18,7 @@ design; the schedule is an
 2. [Value language](value-language.md): values, shapes, domains,
    booleans, writers, slots, and the grammar.
 3. [Profile language](profile-language.md): the value and output
-   profiles, loading, and the built-ins.
+   profiles, the schema, loading, and the built-ins.
 4. [Implementation](implementation.md): the language crate, the
    ty-preferences work, the retired flags, the code deletions, and the
    open questions.

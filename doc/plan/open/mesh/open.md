@@ -9,9 +9,6 @@ plan's questions live in the
 
 Documentation work rather than design calls.
 
-1. A TypeScript schema for the whole
-   [profile language](profile-language.md), the config shape in one
-   block.
-2. More worked examples: command lines, profiles, and the glTF they
+1. More worked examples: command lines, profiles, and the glTF they
    produce. A glTF snippet spells every field from the root down to
    the leaf it shows, large leaves collapsed to `// ...`.

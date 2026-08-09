@@ -207,6 +207,100 @@ its file name literally, so a hyphenated profile keeps its hyphens: a
 `metallic-smoothness` profile writes `turret-metallic-smoothness.png`
 even though the value it bakes is `metallicSmoothness`.
 
+## Schema
+
+The whole config shape in one block, TypeScript as the notation: a
+union of literals is a token set, `?` marks a key whose omission
+takes its default, and a `kind` field picks which sibling fields
+exist. Nothing compiles it; [Loading](#loading) holds the checks
+that enforce it.
+
+```ts
+/** The `.vxlconfig` shape `vxl mesh` reads. */
+interface VxlConfig {
+  mesh?: {
+    valueProfiles?: Record<string, ValueProfile>;
+    outputProfiles?: Record<string, OutputProfile>;
+  };
+}
+
+/** An expression of the value language. */
+type Expr = string;
+
+/** A file name, `{file-stem}` replaced before use. */
+type FileTemplate = string;
+
+type Transfer = "linear" | "srgb";
+
+interface ValueProfile {
+  basedOn?: string[];
+  /** Binds computed occlusion under the name. */
+  computeOcclusion?: string;
+  values?: [name: string, expr: Expr][];
+}
+
+interface OutputProfile {
+  // the geometry options, each key its flag's argument
+  voxelSize?: number;
+  method?: "greedy" | "culled" | "naive";
+  atlas?: "palette" | "unwrap";
+  /** A number is the exact `n`x`n` canvas. */
+  textureShape?: "fit" | "line" | "pot" | "square" | number;
+
+  /** Value profiles applied first, in order. */
+  values?: string[];
+  /** UV streams in TEXCOORD order; omitted, the list derives from use. */
+  uvs?: ("row" | "face")[];
+
+  files?: {
+    png?: Record<FileTemplate, { transfer: Transfer; value: Expr }>;
+    json?: Record<
+      FileTemplate,
+      Record<string, { transfer: Transfer; value: Expr }>
+    >;
+  };
+
+  /** The list's length is the material count; omitted, count 0. */
+  materials?: MaterialEntry[];
+  /** Omitted, the implicit primitive holds every face. */
+  primitives?: PrimitiveEntry[];
+  meshExtras?: Record<string, ExtraEntry>;
+}
+
+interface MaterialEntry {
+  name?: string;
+  /** The resolved output format's own property names. */
+  slots?: Record<string, SlotEntry>;
+  extras?: Record<string, ExtraEntry>;
+}
+
+type SlotEntry =
+  | { kind: "value"; value: Expr }
+  | { kind: "file"; file: FileTemplate };
+
+type ExtraEntry =
+  | { kind: "image-file"; file: FileTemplate }
+  | { kind: "image-value"; value: Expr; transfer: Transfer }
+  | { kind: "json-file"; file: FileTemplate }
+  | { kind: "json-value"; value: Expr; transfer: Transfer };
+
+interface PrimitiveEntry {
+  name?: string;
+  /** Omitted: `"true"`, every face. */
+  select?: Expr;
+  /** Omitted: no material. */
+  material?: number;
+  /** Omitted: `true`, the `NORMAL` stream written. */
+  normal?: boolean;
+  /** Attributes glTF defines, `COLOR_0`, to expressions. */
+  builtins?: Record<string, Expr>;
+  /** Underscore-typed attribute names, `_MY_COLOR`. */
+  customs?: Record<string, { value: Expr; transfer: Transfer }>;
+  /** Underscore-typed attribute names to index widths. */
+  indices?: Record<string, "u8" | "u16">;
+}
+```
+
 ## Loading
 
 User-defined profiles live in `.vxlconfig` files, one in the home
