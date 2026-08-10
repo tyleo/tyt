@@ -93,17 +93,3 @@ pointer, and `both` is the two side by side.
 3. `png_bytes.rs` hardcodes RGBA; the sized-to-value rule needs grey,
    grey-alpha, and RGB, and the transfer chunks want the png crate's
    `set_source_srgb` and `set_source_gamma`.
-
-## Open questions
-
-1. The ordered steps. These pages are the design; the checklist and the
-   schedule for the crate work, the flag cutover, and the deletions get
-   drafted when the reference set settles.
-2. [`vxl material`](../vxl-commands/reference/material.md), whose
-   reference still takes the retired map flags and still says a
-   selection may cover several objects, which a per-object atlas cannot
-   serve. Deliberately deferred.
-3. Scene assembly, the placed-scene mode: selecting hierarchy nodes,
-   baking their transforms and instancing, and writing more than one
-   mesh. `mesh` writes one mesh, so the mode is a design of its own.
-   Deliberately deferred.
