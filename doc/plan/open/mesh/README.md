@@ -1,20 +1,23 @@
 # Mesh plan
 
-The plan for finishing [`vxl mesh`](mesh.md). The command ships today with
-geometry and palette-atlas textures behind preset flags. This plan completes the
-API. The material surface becomes a small expression language, so a material map
-is a value you write, with value profiles naming reusable sets of values and an
-output profile spelling a whole run in `.vxlconfig`. The rest of the command
-lands beside them: the unwrap atlas, computed occlusion, primitives and
-materials, vertex attributes, and the mesh palettes.
+This plan rewrites [`vxl mesh`](mesh.md). Today the command makes geometry and
+palette-atlas textures behind preset flags. The plan keeps the geometry core
+and redoes everything around it: the shipped map surface retires wholesale, so
+implementation starts by deleting that code. The new surface is a small
+expression language. A material map is a value that you write. A value profile
+names a reusable set of values. An output profile describes a full run in
+`.vxlconfig`. The plan also adds the parts the command never had: the unwrap
+atlas, computed occlusion, primitives and materials, vertex attributes, and the
+mesh palettes.
 
-1. [`vxl mesh`](mesh.md): the command, every argument and option, primitives and
-   materials, the two atlases, the UV streams, and the palettes.
-2. [Value language](value-language.md): values, shapes, domains, booleans,
-   writers, slots, and the grammar.
-3. [Profile language](profile-language.md): the value and output profiles, the
-   schema, loading, and the built-ins.
-4. [Worked examples](examples.md): six runs, each a command line or config and
-   the glTF it produces.
-5. [Implementation](implementation.md): the language crate, the ty-preferences
-   work, the retired flags, and the code deletions.
+1. [`vxl mesh`](mesh.md): the command reference, from its arguments to the
+   glTF a run emits.
+2. [Value language](value-language.md): the expression language for material
+   values. Expressions read the palette, and writers put the results in
+   images, JSON, and the mesh's own material.
+3. [Profile language](profile-language.md): the value and output profiles,
+   defined in a new `.vxlconfig` file or built into the binary.
+4. [Worked examples](examples.md): six runs. Each run shows a command line or a
+   config and the glTF that it makes.
+5. [Implementation](implementation.md): how the tool changes land, from the new
+   language crate to the code the rewrite deletes.
