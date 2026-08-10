@@ -285,10 +285,20 @@ vxl mesh turret.voxj
 ```
 
 ```jsonc
-"meshes": [ { "primitives": [
-  { "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 0 },
-  { "attributes": { "POSITION": 3, "NORMAL": 4 }, "indices": 5, "material": 1 }
-] } ]
+{
+  "asset": { "version": "2.0" },
+  "buffers": [ /* ... */ ],
+  "bufferViews": [ /* ... */ ],
+  "accessors": [ /* ... */ ],
+  "materials": [ {}, {} ],
+  "meshes": [ { "primitives": [
+    { "attributes": { "POSITION": 0, "NORMAL": 1 }, "indices": 2, "material": 0 },
+    { "attributes": { "POSITION": 3, "NORMAL": 4 }, "indices": 5, "material": 1 }
+  ] } ],
+  "nodes": [ { "mesh": 0 } ],
+  "scenes": [ { "nodes": [ 0 ] } ],
+  "scene": 0
+}
 ```
 
 A face select splits inside a row. Occlusion lives on the mesh, not
@@ -388,12 +398,29 @@ slot:
 //     --value ao "faceAverage(computedOcclusion)"
 //     --write-material-slot-value 0 occlusionTexture ao
 // row and face both write, so the streams derive [row, face]
-"materials": [ {
-  "pbrMetallicRoughness": {
-    "baseColorTexture": { "index": 0, "texCoord": 0 }   // the row stream
-  },
-  "occlusionTexture": { "index": 1, "texCoord": 1 }     // the face stream
-} ]
+{
+  "asset": { "version": "2.0" },
+  "buffers": [ /* ... */ ],
+  "bufferViews": [ /* ... */ ],
+  "accessors": [ /* ... */ ],
+  "images": [ /* ... */ ],
+  "samplers": [ /* ... */ ],
+  "textures": [ { "sampler": 0, "source": 0 }, { "sampler": 0, "source": 1 } ],
+  "materials": [ {
+    "pbrMetallicRoughness": {
+      "baseColorTexture": { "index": 0, "texCoord": 0 }   // the row stream
+    },
+    "occlusionTexture": { "index": 1, "texCoord": 1 }     // the face stream
+  } ],
+  "meshes": [ { "primitives": [ {
+    "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2, "TEXCOORD_1": 3 },
+    "indices": 4,
+    "material": 0
+  } ] } ],
+  "nodes": [ { "mesh": 0 } ],
+  "scenes": [ { "nodes": [ 0 ] } ],
+  "scene": 0
+}
 ```
 
 ## Palettes
@@ -431,18 +458,31 @@ can replace at will:
 //     --write-mesh-extra-json-value albedo albedo linear
 //     --write-mesh-extra-json-value emissive emissive linear
 //     --write-primitive-index 0 _PALETTE u8
-"meshes": [
-  {
+{
+  "asset": { "version": "2.0" },
+  "extensionsUsed": [ "KHR_materials_emissive_strength" ],
+  "buffers": [ /* ... */ ],
+  "bufferViews": [ /* ... */ ],
+  "accessors": [ /* ... */ ],
+  "images": [ /* ... */ ],
+  "samplers": [ /* ... */ ],
+  "textures": [ /* ... */ ],
+  "materials": [ /* ... */ ],
+  "meshes": [ {
     "primitives": [ {
       "attributes": { "POSITION": 0, "NORMAL": 1, "_PALETTE": 2 },
+      "indices": 3,
       "material": 0
     } ],
     "extras": { "vxl": { "values": {
       "albedo":   [ [1, 0, 0, 1], [1, 0, 0, 1], [0, 0, 1, 1] ],
       "emissive": [ [0, 0, 0],    [0, 0, 0],    [4, 3, 0]    ]
     } } }
-  }
-]
+  } ],
+  "nodes": [ { "mesh": 0 } ],
+  "scenes": [ { "nodes": [ 0 ] } ],
+  "scene": 0
+}
 ```
 
 A vec1 value's rows are numbers and a vecN value's are arrays of N,
@@ -472,17 +512,30 @@ copy:
 //     --write-file-json-value turret-values.json albedo albedo linear
 //     --write-mesh-extra-json-file albedo turret-values.json
 //     --write-primitive-index 0 _PALETTE u8
-"meshes": [
-  {
+{
+  "asset": { "version": "2.0" },
+  "extensionsUsed": [ "KHR_materials_emissive_strength" ],
+  "buffers": [ /* ... */ ],
+  "bufferViews": [ /* ... */ ],
+  "accessors": [ /* ... */ ],
+  "images": [ /* ... */ ],
+  "samplers": [ /* ... */ ],
+  "textures": [ /* ... */ ],
+  "materials": [ /* ... */ ],
+  "meshes": [ {
     "primitives": [ {
       "attributes": { "POSITION": 0, "NORMAL": 1, "_PALETTE": 2 },
+      "indices": 3,
       "material": 0
     } ],
     "extras": { "vxl": { "values": {
       "albedo": { "uri": "turret-values.json" }
     } } }
-  }
-]
+  } ],
+  "nodes": [ { "mesh": 0 } ],
+  "scenes": [ { "nodes": [ 0 ] } ],
+  "scene": 0
+}
 ```
 
 A mesh entry contests nothing a slot writes.
