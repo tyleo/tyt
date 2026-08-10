@@ -19,7 +19,8 @@ design; the schedule is an
    booleans, writers, slots, and the grammar.
 3. [Profile language](profile-language.md): the value and output
    profiles, the schema, loading, and the built-ins.
-4. [Implementation](implementation.md): the language crate, the
+4. [Worked examples](examples.md): six runs, each a command line or
+   config and the glTF it produces.
+5. [Implementation](implementation.md): the language crate, the
    ty-preferences work, the retired flags, the code deletions, and the
    open questions.
-5. [Open](open.md): the doc TODOs left on the plan.

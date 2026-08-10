@@ -107,5 +107,3 @@ pointer, and `both` is the two side by side.
    baking their transforms and instancing, and writing more than one
    mesh. `mesh` writes one mesh, so the mode is a design of its own.
    Deliberately deferred.
-4. The remaining calls and the doc TODOs, enumerated in
-   [open.md](open.md).
