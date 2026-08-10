@@ -7,8 +7,8 @@ implementation starts by deleting that code. The new surface is a small
 expression language. A material map is a value that you write. A value profile
 names a reusable set of values. An output profile describes a full run in
 `.vxlconfig`. The plan also adds the parts the command never had: the unwrap
-atlas, computed occlusion, primitives and materials, vertex attributes, and the
-mesh palettes.
+and corner atlases, computed occlusion, primitives and materials, vertex
+attributes, and the mesh palettes.
 
 1. [`vxl mesh`](mesh.md): the command reference, from its arguments to the
    glTF a run emits.

@@ -58,7 +58,6 @@ element expands to the flag it fires as:
   // omitted, a key leaves the flag's default
   "voxelSize": 1.0,
   "method": "<greedy | culled | naive>",
-  "atlas": "<palette | unwrap>",
   "textureShape": "<fit | line | pot | square | n>",
 
   // value profiles applied first, in order, as if each were a
@@ -66,7 +65,7 @@ element expands to the flag it fires as:
   "values": ["<value-profile>"],
 
   // UV streams in TEXCOORD order, the --uv list; omitted, the list
-  // derives from the domains the textures use
+  // derives from use, each texture at its value's own domain
   "uvs": ["row", "face"],
 
   // files written beside the mesh; a file's transfer lives here and
@@ -243,14 +242,13 @@ interface OutputProfile {
   // the geometry options, each key its flag's argument
   voxelSize?: number;
   method?: "greedy" | "culled" | "naive";
-  atlas?: "palette" | "unwrap";
-  /** A number is the exact `n`x`n` canvas. */
+  /** A number is the exact `n`x`n` canvas of cells. */
   textureShape?: "fit" | "line" | "pot" | "square" | number;
 
   /** Value profiles applied first, in order. */
   values?: string[];
   /** UV streams in TEXCOORD order; omitted, the list derives from use. */
-  uvs?: ("row" | "face")[];
+  uvs?: ("row" | "face" | "corner")[];
 
   files?: {
     png?: Record<FileTemplate, { transfer: Transfer; value: Expr }>;
@@ -327,8 +325,8 @@ context: the schema's shape, an unknown key erroring rather than
 skipping, every expression parsing, every `basedOn`
 and `values` name resolving without a cycle, every `material` index
 inside its profile's material count, every `file` reference naming a
-written file, every `uvs` entry `row` or `face` named once, and no
-element claiming one destination twice. The rest
+written file, every `uvs` entry `row`, `face`, or `corner` named once,
+and no element claiming one destination twice. The rest
 wait for the run that decides them: dimensions and shapes need the
 effective palette, slot names and their encodings need the resolved
 output format, and name bindings need the command line.
@@ -510,11 +508,11 @@ material through
         ]
       },
 
-      // Occlusion averaged down to faces and floored at 0.2. It reads
-      // no palette property, so no defaults mixin.
+      // Occlusion floored at 0.2, kept per corner. It reads no palette
+      // property, so no defaults mixin.
       "baked-ao": {
         "computeOcclusion": "computedOcclusion",
-        "values": [["ao", "max(faceAverage(computedOcclusion), 0.2)"]]
+        "values": [["ao", "max(computedOcclusion, 0.2)"]]
       },
 
       // basedOn emissive supplies maxStrength, emissive, and white.
@@ -621,8 +619,9 @@ material through
         ]
       },
 
-      // Computed occlusion into the standard slot, the face UV stream
-      // deriving; the value profile binds the name itself.
+      // Computed occlusion whole into the standard slot: a corner
+      // texture, the corner UV stream deriving; the value profile
+      // binds the name itself.
       "baked-ao": {
         "values": ["baked-ao"],
         "materials": [

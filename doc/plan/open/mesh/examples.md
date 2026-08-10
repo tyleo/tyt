@@ -266,22 +266,25 @@ at will. `NORMAL` stays: the runtime draws this
 mesh itself, so it wants the lighting data, and dropping the stream
 is the explicit `--write-primitive-normal 0 false`.
 
-## The unwrap atlas
+## Baked occlusion
 
-Occlusion varies across a surface, not per palette row, so it wants
-the [unwrap atlas](mesh.md#the-unwrap-atlas), a texel per face, and
-`step.voxj` has the inside corner that makes it visible:
+Occlusion varies across a surface, not per palette row, so its
+textures leave the palette layout: flat per face through the
+[unwrap atlas](mesh.md#the-unwrap-atlas), or smooth per corner
+through the [corner atlas](mesh.md#the-corner-atlas). This run bakes
+the flat form, and `step.voxj` has the inside corner that makes it
+visible:
 
 ```
-vxl mesh step.voxj --atlas unwrap
+vxl mesh step.voxj
     --compute-occlusion computedOcclusion
-    --value ao "faceAverage(computedOcclusion)"
+    --value ao "faceAvg(computedOcclusion)"
     --material-count 1
     --write-material-slot-value 0 occlusionTexture ao
 ```
 
 The corners along the riser's foot read below one, the open corners
-read one, and `faceAverage` steps the corner value down to the ten
+read one, and `faceAvg` steps the corner value down to the ten
 faces, one texel each, packed into the smallest power-of-two square
 holding ten, 4 by 4. Only a face value writes a texture, so the
 streams derive `[face]` and the one `TEXCOORD_0` is the face stream:
@@ -312,6 +315,21 @@ streams derive `[face]` and the one `TEXCOORD_0` is the face stream:
 The material carries exactly the one slot the run wrote, base color
 falling to the spec's white default, so the mesh renders as lit stone
 with darkened creases.
+
+Written whole, the corner value skips the reduction and bakes the
+[corner atlas](mesh.md#the-corner-atlas) instead:
+
+```
+vxl mesh step.voxj
+    --compute-occlusion computedOcclusion
+    --material-count 1
+    --write-material-slot-value 0 occlusionTexture computedOcclusion
+```
+
+Ten faces are ten 2x2 blocks, forty texels in a 4-by-4 canvas of
+cells, 8 by 8. The texture samples linear instead of nearest, the
+streams derive `[corner]`, and each crease shades smooth across its
+face instead of flat.
 
 ## A computed enum
 
