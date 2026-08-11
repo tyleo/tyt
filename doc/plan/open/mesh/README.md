@@ -17,7 +17,7 @@ attributes, and the mesh palettes.
    images, JSON, and the mesh's own material.
 3. [Profile language](profile-language.md): the value and output profiles,
    defined in a new `.vxlconfig` file or built into the binary.
-4. [Worked examples](examples.md): six runs. Each run shows a command line or a
-   config and the glTF that it makes.
+4. [Worked examples](examples.md): seven runs. Each run shows a profile, its
+   command line, and the glTF that it makes.
 5. [Implementation](implementation.md): how the tool changes land, from the new
    language crate to the code the rewrite deletes.

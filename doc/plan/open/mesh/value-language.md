@@ -26,7 +26,7 @@ broadcast a plain value across an array, so `1 - roughnessFactor` is an
 array; two arrays of one domain always align, and mixed domains climb the
 [ladder](#domains).
 
-```
+```sh
 --value cutoff "0.4"                      # plain vec1, a literal
 --value tint "baseColorFactor.rgb"        # array vec3, one element per material
 --value bright "tint * 1.2"               # array * plain broadcasts
@@ -37,7 +37,7 @@ array; two arrays of one domain always align, and mixed domains climb the
 palette, per component, to a plain value; the binary `min`/`max` are
 elementwise like the operators. The emissive bake is the canonical use:
 
-```
+```sh
 --value emissive "emissiveFactor * emissiveStrength / max(emissiveStrength)"
 ```
 
@@ -74,7 +74,7 @@ entry per face corner, exactly four per face, and
 is orthogonal to dimension: `albedo` is a row vec3, occlusion a corner
 vec1.
 
-```
+```sh
 # a four-row palette meshed into ten faces
 plain    1 entry
 row      4 entries    # one per palette row
@@ -115,7 +115,7 @@ and a face always has its four corners, so the hole opens only per row.
 method, and `rowSum` answers `0`, the empty sum. The guard is spelled
 through the sums, so a buried row takes the author's own answer:
 
-```
+```sh
 --compute-occlusion computedOcclusion
 --value aoFace "faceAvg(computedOcclusion)"
 --value faceCount "rowSum(face(1))"
@@ -156,18 +156,17 @@ cond)` is the spelled bridge out: it picks `x` or `y` per entry by
 the bool, so `mix(0, 1, glowing)` is the deliberate `0`/`1` mask; see
 [Functions](#functions). The climbs, `row`/`face`/`corner`, move a
 bool's entries and never touch them. Beyond these only grouping
-parentheses and `e[i]` apply, sampling a bool array at an entry. The type reaches
-three destinations: the select of
+parentheses and `e[i]` apply, sampling a bool array at an entry. The
+type reaches three destinations: the select of
 [`--primitive`](mesh.md#primitives-and-materials), which reads a
 bool at the face domain, lower domains climbing the ladder,
 `--write-file-json-value`, where a bool writes its own JSON form,
 and a boolean [material property](#material-slots), plain alone;
 see [JSON files](#json-files):
 
-```
+```sh
 --value glowing "emissiveStrength > 0"   # bool array, one entry per material
 --value solid "!glowing"
---material-count 2
 --primitive 0 solid
 --primitive 1 glowing
 ```
@@ -201,10 +200,9 @@ numbers already have. `e[i]` samples a string array at an entry.
 `row`/`face`/`corner`, lift a string's entries untouched. The
 equality is the routing tool, an authored tag turning into a select:
 
-```
+```sh
 --value glass 'tag == "glass"'
 --value solid '!glass'
---material-count 2
 --primitive 0 solid
 --primitive 1 glass
 ```
@@ -225,7 +223,7 @@ the value against the list at the edge, an unknown token erroring
 with the format named, the unknown-slot rule again; no conversion
 exists in the language, only the destination knowing the list:
 
-```
+```sh
 # static: cutout mode, spelled
 --write-material-slot-value 0 alphaMode '"MASK"'
 
@@ -259,7 +257,7 @@ around a cube root and the inverse the same steps backward.
 perceived lightness, 0 black to 1 white, `.y` runs green to red,
 and `.z` blue to yellow.
 
-```
+```sh
 --value lab "oklabFromRgb(baseColorFactor.rgb)"
 --value reddish "distance(lab, oklabFromRgb(rgb(1, 0, 0))) < 0.25"
 --value darker "rgbFromOklab(lab * rgb(0.8, 1, 1))"   # dimmed, hue held
@@ -286,7 +284,7 @@ writes one value under the name as its key. Repeating it on one
 path merges, so a file with several values is several flags rather
 than a grouping construct in the language:
 
-```
+```sh
 --write-file-json-value turret-pbr.json albedo albedo linear
 --write-file-json-value turret-pbr.json orm orm linear
 --write-file-json-value turret-pbr.json emissive emissive linear
@@ -296,16 +294,16 @@ than a grouping construct in the language:
 {
   "albedo": [
     [1, 0, 0, 1],
-    [0, 0, 1, 1]
+    [0, 0, 1, 1],
   ],
   "orm": [
     [1, 0.9, 0],
-    [1, 0.1, 1]
+    [1, 0.1, 1],
   ],
   "emissive": [
     [0, 0, 0],
-    [0.5, 0.5, 0]
-  ]
+    [0.5, 0.5, 0],
+  ],
 }
 ```
 
@@ -373,19 +371,25 @@ serves a reader that takes its colors display-encoded.
 `--write-material-slot-value <material-index> <dst-property>
 <src-expr>` sets one property of the indexed material, destination
 before source like every writer, the index riding first: which
-material, then what on it. The examples write material `0`, a
-`--material-count 1` ahead of them declaring it. The property is
-the target format's own name, the leaf of its
-material schema, so the flag invents no vocabulary and the writer
-does the nesting and the `extensionsUsed` bookkeeping:
+material, then what on it. The examples write material `0`, the
+mention declaring it. The property is the target format's own
+name, the leaf of its material schema, so the flag invents no
+vocabulary and the writer does the nesting and the
+`extensionsUsed` bookkeeping:
 
-```
---write-material-slot-value 0 baseColorTexture albedo         # pbrMetallicRoughness.baseColorTexture
---write-material-slot-value 0 metallicRoughnessTexture orm    # pbrMetallicRoughness.metallicRoughnessTexture
---write-material-slot-value 0 occlusionTexture orm            # occlusionTexture, sharing one image
---write-material-slot-value 0 emissiveTexture emissive        # emissiveTexture
---write-material-slot-value 0 emissiveStrength maxStrength    # extensions.KHR_materials_emissive_strength
---write-material-slot-value 0 ior glassIor                    # extensions.KHR_materials_ior
+```sh
+# pbrMetallicRoughness.baseColorTexture
+--write-material-slot-value 0 baseColorTexture albedo
+# pbrMetallicRoughness.metallicRoughnessTexture
+--write-material-slot-value 0 metallicRoughnessTexture orm
+# occlusionTexture, sharing one image
+--write-material-slot-value 0 occlusionTexture orm
+# emissiveTexture
+--write-material-slot-value 0 emissiveTexture emissive
+# extensions.KHR_materials_emissive_strength
+--write-material-slot-value 0 emissiveStrength maxStrength
+# extensions.KHR_materials_ior
+--write-material-slot-value 0 ior glassIor
 ```
 
 The vocabulary comes from the resolved output format, since one run writes
@@ -400,19 +404,19 @@ the format it checked against.
 
 The property's own type decides how its expression reads:
 
-| Property type    | Argument                                                                 |
-| ---------------- | ------------------------------------------------------------------------ |
-| `*Texture`       | an array expression to embed, or a file via `--write-material-slot-file` |
-| number or vector | a plain expression of that dimension                                     |
-| boolean          | a plain bool expression                                                  |
-| enum             | a plain string expression, one of the property's tokens                  |
+| Property type    | Argument                                                |
+| ---------------- | ------------------------------------------------------- |
+| `*Texture`       | an array expression to embed, or a file via `-file`     |
+| number or vector | a plain expression of that dimension                    |
+| boolean          | a plain bool expression                                 |
+| enum             | a plain string expression, one of the property's tokens |
 
-```
+```sh
 --write-material-slot-value 0 baseColorTexture albedo    # array value, embedded
 --write-material-slot-value 0 alphaCutoff "cutoff / 2"   # plain vec1 expression
 --write-material-slot-value 0 doubleSided true           # plain bool
 --write-material-slot-value 0 alphaMode '"MASK"'         # enum, a plain string
---write-material-slot-file 0 baseColorTexture skin.png   # existing file, referenced
+--write-material-slot-file 0 baseColorTexture skin.png   # a file, referenced
 ```
 
 A property that is not a texture is uniform across the atlas's one
@@ -487,11 +491,23 @@ texture referencing the named file by relative uri, and
 shapes cannot be confused:
 
 ```jsonc
-"extras": { "vxl": { "values": {
-  "heatScale": { "index": 3 },
-  "accentColor": [0.87, 0.44, 0.44],
-  "wear": { "uri": "turret-wear.json" }
-} } }
+{
+  "asset": { "version": "2.0" },
+  "materials": [
+    {
+      "extras": {
+        "vxl": {
+          "values": {
+            "heatScale": { "index": 3 },
+            "accentColor": [0.87, 0.44, 0.44],
+            "wear": { "uri": "turret-wear.json" },
+          },
+        },
+      },
+    },
+  ],
+  /* ... */
+}
 ```
 
 A conforming viewer ignores it all; your own runtime looks the name
@@ -568,7 +584,7 @@ collision.
 The value mixes like any other, and tuning is one expression each
 rather than a flag family:
 
-```
+```sh
 --compute-occlusion computedOcclusion
 --value ao "lerp(1, computedOcclusion, 0.8)"       # strength 0.8
 --value ao "max(computedOcclusion, 0.2)"           # min brightness 0.2
@@ -656,11 +672,11 @@ associativity for `+ - * / && ^ ||`.
                   | <name>
                   | "(" <vec1-expr> ")"
                   | "r" "(" <vec1-expr> ")"
-                  | "min" "(" <vec1-expr> ")"                   ; palette minimum
+                  | "min" "(" <vec1-expr> ")"                  ; palette minimum
                   | "min" "(" <vec1-expr> "," <vec1-expr> ")"
-                  | "max" "(" <vec1-expr> ")"                   ; palette maximum
+                  | "max" "(" <vec1-expr> ")"                  ; palette maximum
                   | "max" "(" <vec1-expr> "," <vec1-expr> ")"
-                  | "sum" "(" <vec1-expr> ")"                   ; palette sum
+                  | "sum" "(" <vec1-expr> ")"                  ; palette sum
                   | "avg" "(" <vec1-expr> ")"                   ; palette mean
                   | "dot" "(" <vec1-expr> "," <vec1-expr> ")"   ; component fold
                   | "dot" "(" <vec2-expr> "," <vec2-expr> ")"
@@ -948,8 +964,8 @@ associativity for `+ - * / && ^ ||`.
                   | "(" <bool-expr> ")"
                   | <vec1-expr> <cmp-op> <vec1-expr>
                   | <string-expr> <eq-op> <string-expr>   ; equality alone
-                  | "any" "(" <comparison> ")"        ; or-fold of the components
-                  | "all" "(" <comparison> ")"        ; and-fold of the components
+                  | "any" "(" <comparison> ")"        ; or-fold of components
+                  | "all" "(" <comparison> ")"        ; and-fold of components
                   | "row" "(" <bool-expr> ")"         ; domain climbs
                   | "face" "(" <bool-expr> ")"
                   | "corner" "(" <bool-expr> ")"
@@ -1172,47 +1188,61 @@ run a checker over the AST using the dimension and shape rules that follow.
 
 Dimension rules for an expression `e` with dimension written `dim(e)`:
 
-| Construct                | Requirement                                                                                                                             | Result dimension      |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| `a + b`, `a - b`         | `dim(a) = dim(b)`                                                                                                                       | `dim(a)`              |
-| `a * b`, `a / b`         | `dim(a) = dim(b)`, or `dim(b) = 1`; for `*` also `dim(a) = 1`                                                                           | the larger of the two |
-| `-e`                     | any dimension                                                                                                                           | `dim(e)`              |
-| `r(x)`                   | `dim(x) = 1`                                                                                                                            | 1                     |
-| `rg(x, y)`               | all args dimension 1                                                                                                                    | 2                     |
-| `rgb(x, y, z)`           | all args dimension 1                                                                                                                    | 3                     |
-| `rgba(x, y, z, w)`       | all args dimension 1                                                                                                                    | 4                     |
-| `e.s` (swizzle)          | one alphabet, `rgba` or `xyzw`; every component exists in `dim(e)`: `r`/`x` always, `g`/`y` needs >= 2, `b`/`z` needs >= 3, `a`/`w` needs 4; `1 <= len(s) <= 4`, repeats allowed | `len(s)`              |
-| `e[i]`                   | `dim(i) = 1`                                                                                                                            | `dim(e)`              |
-| `min(e)`, `max(e)`       | any dimension                                                                                                                           | `dim(e)`              |
-| `min(a, b)`, `max(a, b)` | `dim(a) = dim(b)`, or either `= 1`                                                                                                      | the larger of the two |
-| `sum(e)`, `avg(e)`       | any dimension                                                                                                                           | `dim(e)`              |
-| `abs(e)`, `round(e)`     | any dimension                                                                                                                           | `dim(e)`              |
-| `pow(a, b)`, `mod(a, b)` | `dim(a) = dim(b)`, or `dim(b) = 1`                                                                                                      | `dim(a)`              |
-| `clamp(x, lo, hi)`       | `dim(lo) = dim(hi)`, equal to `dim(x)` or 1                                                                                             | `dim(x)`              |
-| `lerp(a, b, t)`          | `dim(a) = dim(b)`; `dim(t) = dim(a)` or 1                                                                                               | `dim(a)`              |
-| `step(edge, x)`          | `dim(edge) = dim(x)`, or `dim(edge) = 1`                                                                                                | `dim(x)`              |
-| `smoothstep(lo, hi, x)`  | `dim(lo) = dim(hi)`, equal to `dim(x)` or 1                                                                                             | `dim(x)`              |
-| `floor(e)`, `ceil(e)`    | any dimension                                                                                                                           | `dim(e)`              |
-| `<num>`                  | (none)                                                                                                                                  | 1                     |
-| `true`, `false`          | (none)                                                                                                                                  | bool                  |
-| `<name>`                 | dimension of the value it names                                                                                                         | that dimension        |
-| `default(name, e)`       | `dim(name) = dim(e)` where `name` has a value                                                                                           | `dim(e)`              |
-| `a < b`, `a <= b`, `a > b`, `a >= b`, `a == b`, `a != b` | `dim(a) = dim(b) = 1`, numbers on both sides; wider sides only inside `any`/`all`                       | bool                  |
-| `any(c)`, `all(c)`       | `c` a comparison, `dim(a) = dim(b)` or either `= 1`                                                                                     | bool                  |
-| `!e`                     | `e` bool                                                                                                                                | bool                  |
-| `a && b`, `a ^ b`, `a \|\| b` | both bool                                                                                                                          | bool                  |
-| `mix(a, b, c)`           | `dim(a) = dim(b)`, or both strings; `c` bool                                                                                            | `dim(a)`              |
-| `faceAvg(e)`, `faceMin(e)`, `faceMax(e)`, `faceSum(e)` | any dimension                                                                                             | `dim(e)`              |
-| `rowAvg(e)`, `rowMin(e)`, `rowMax(e)`, `rowSum(e)` | any dimension                                                                                                 | `dim(e)`              |
-| `row(e)`, `face(e)`, `corner(e)` | any dimension, or bool, or string                                                                                               | `dim(e)`; a bool or string keeps its type |
-| `dot(a, b)`              | `dim(a) = dim(b)`                                                                                                                       | 1                     |
-| `length(e)`              | any dimension                                                                                                                           | 1                     |
-| `distance(a, b)`         | `dim(a) = dim(b)`                                                                                                                       | 1                     |
-| `normalize(e)`           | any dimension                                                                                                                           | `dim(e)`              |
-| `cross(a, b)`            | `dim(a) = dim(b) = 3`                                                                                                                   | 3                     |
-| the color conversions    | `dim(c) = 3`                                                                                                                            | 3                     |
-| `<string-lit>`           | (none)                                                                                                                                  | string                |
-| string `==`, `!=`        | both sides strings                                                                                                                      | bool                  |
+- `a + b`, `a - b`: `dim(a) = dim(b)`; result `dim(a)`.
+- `a * b`, `a / b`: `dim(a) = dim(b)`, or `dim(b) = 1`, for `*` also
+  `dim(a) = 1`; result the larger of the two.
+- `-e`: any dimension; result `dim(e)`.
+- `r(x)`, `rg(x, y)`, `rgb(x, y, z)`, `rgba(x, y, z, w)`: every argument
+  dimension 1; result 1 through 4.
+- `e.s`, a swizzle: one alphabet, `rgba` or `xyzw`; every component
+  exists in `dim(e)`: `r`/`x` always, `g`/`y` needs >= 2, `b`/`z` needs
+  > = 3, `a`/`w` needs 4; `1 <= len(s) <= 4`, repeats allowed; result
+  > `len(s)`.
+- `e[i]`: `dim(i) = 1`; result `dim(e)`.
+- `min(e)`, `max(e)`: any dimension; result `dim(e)`.
+- `min(a, b)`, `max(a, b)`: `dim(a) = dim(b)`, or either `= 1`; result
+  the larger of the two.
+- `sum(e)`, `avg(e)`: any dimension; result `dim(e)`.
+- `abs(e)`, `round(e)`: any dimension; result `dim(e)`.
+- `pow(a, b)`, `mod(a, b)`: `dim(a) = dim(b)`, or `dim(b) = 1`; result
+  `dim(a)`.
+- `clamp(x, lo, hi)`: `dim(lo) = dim(hi)`, equal to `dim(x)` or 1;
+  result `dim(x)`.
+- `lerp(a, b, t)`: `dim(a) = dim(b)`; `dim(t) = dim(a)` or 1; result
+  `dim(a)`.
+- `step(edge, x)`: `dim(edge) = dim(x)`, or `dim(edge) = 1`; result
+  `dim(x)`.
+- `smoothstep(lo, hi, x)`: `dim(lo) = dim(hi)`, equal to `dim(x)` or 1;
+  result `dim(x)`.
+- `floor(e)`, `ceil(e)`: any dimension; result `dim(e)`.
+- `<num>`: result 1.
+- `true`, `false`: result bool.
+- `<name>`: result the dimension of the value it names.
+- `default(name, e)`: `dim(name) = dim(e)` where `name` has a value;
+  result `dim(e)`.
+- `a < b`, `a <= b`, `a > b`, `a >= b`, `a == b`, `a != b`:
+  `dim(a) = dim(b) = 1`, numbers on both sides, wider sides only inside
+  `any`/`all`; result bool.
+- `any(c)`, `all(c)`: `c` a comparison, `dim(a) = dim(b)` or either
+  `= 1`; result bool.
+- `!e`: `e` bool; result bool.
+- `a && b`, `a ^ b`, `a || b`: both bool; result bool.
+- `mix(a, b, c)`: `dim(a) = dim(b)`, or both strings; `c` bool; result
+  `dim(a)`.
+- `faceAvg(e)`, `faceMin(e)`, `faceMax(e)`, `faceSum(e)`: any dimension;
+  result `dim(e)`.
+- `rowAvg(e)`, `rowMin(e)`, `rowMax(e)`, `rowSum(e)`: any dimension;
+  result `dim(e)`.
+- `row(e)`, `face(e)`, `corner(e)`: any dimension, or bool, or string;
+  result `dim(e)`, a bool or string keeping its type.
+- `dot(a, b)`: `dim(a) = dim(b)`; result 1.
+- `length(e)`: any dimension; result 1.
+- `distance(a, b)`: `dim(a) = dim(b)`; result 1.
+- `normalize(e)`: any dimension; result `dim(e)`.
+- `cross(a, b)`: `dim(a) = dim(b) = 3`; result 3.
+- the color conversions: `dim(c) = 3`; result 3.
+- `<string-lit>`: result string.
+- string `==`, `!=`: both sides strings; result bool.
 
 A vec1 broadcasts on the right of `/`, as the exponent of `pow`, on
 either side of `*`, and on either side of the comparison inside
@@ -1503,7 +1533,7 @@ needed when the arguments differ, as in `rg(u, v)`, and they spell
 `rgba` alone, one name per function. The parser takes any identifier
 after the dot; the checker limits the components.
 
-```
+```sh
 baseColorFactor.rgb   # vec4 to vec3, dropping alpha
 orm.g                 # one channel, roughness
 0.5.rrr               # a grey vec3 splat from one number
@@ -1531,14 +1561,14 @@ shader languages share.
 
 **Lexing.** Whitespace separates tokens and is otherwise insignificant, with
 two exceptions: inside a backtick-quoted name or a string literal it is
-literal, and in a postfix it is forbidden. A postfix is attached: the dot and its member hug
-the source's final token, and an index bracket does the same. `v.rg` and
-`tint[0]` are postfixes; `v .rg`, `v. rg`, and `tint [0]` are all errors.
-Numbers use maximal munch: `1.5` is a single number token, and `.5` where
-an expression is expected is a number. Since numbers are vec1 values,
-literals can be swizzled too. In `2.rr` the munch stops at `2`, since `2.`
-followed by a letter is not a number; the attached dot then begins a
-swizzle, giving a vec2 splat. `2.5.rr` works the same way.
+literal, and in a postfix it is forbidden. A postfix is attached: the dot
+and its member hug the source's final token, and an index bracket does the
+same. `v.rg` and `tint[0]` are postfixes; `v .rg`, `v. rg`, and `tint [0]`
+are all errors. Numbers use maximal munch: `1.5` is a single number token,
+and `.5` where an expression is expected is a number. Since numbers are vec1
+values, literals can be swizzled too. In `2.rr` the munch stops at `2`,
+since `2.` followed by a letter is not a number; the attached dot then
+begins a swizzle, giving a vec2 splat. `2.5.rr` works the same way.
 
 **Linear evaluation.** Every expression evaluates in linear space over
 floats. A color property decodes its stored form to linear on read; a
@@ -1592,5 +1622,5 @@ property like `emissiveStrength` travels.
 **Redefinition.** `--value` may redefine any name, a property or an earlier
 value. The right side is evaluated against the bindings visible at that
 point, so `--value roughnessFactor "pow(roughnessFactor, 2)"` reads the
-property and rebinds the name, and later expressions see the new value. There is no
-recursion.
+property and rebinds the name, and later expressions see the new value.
+There is no recursion.

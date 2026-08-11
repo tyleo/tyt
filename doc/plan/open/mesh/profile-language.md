@@ -28,7 +28,7 @@ were a `--value` at the flag's own position, `basedOn` first:
 depth-first in list order, every profile visited once, cycles an
 error, the profile's own values last. So
 
-```
+```sh
 --value a "0.5" --value-profile albedo --value b "a * 2"
 ```
 
@@ -53,83 +53,106 @@ ahead of an output shaped like the glTF it produces, and every
 element expands to the flag it fires as:
 
 ```jsonc
-"<name>": {
-  // the geometry options, each key the flag it is named for;
-  // omitted, a key leaves the flag's default
-  "voxelSize": 1.0,
-  "method": "<greedy | culled | naive>",
-  "textureShape": "<fit | line | pot | square | n>",
+{
+  "mesh": {
+    "outputProfiles": {
+      "<name>": {
+        // the geometry options, each key the flag it is named for;
+        // omitted, a key leaves the flag's default
+        "voxelSize": 1.0,
+        "method": "<culled | greedy | naive>",
+        "textureShape": "<fit | line | pot | square | n>",
 
-  // value profiles applied first, in order, as if each were a
-  // --value-profile at the --output-profile flag's position
-  "values": ["<value-profile>"],
+        // value profiles applied first, in order, as if each were a
+        // --value-profile at the --output-profile flag's position
+        "valueProfiles": ["<value-profile>"],
 
-  // UV streams in TEXCOORD order, the --uv list; omitted, the list
-  // derives from use, each texture at its value's own domain
-  "uvs": ["row", "face"],
+        // UV streams in TEXCOORD order, the --uv list; omitted, the
+        // list derives from use, each texture at its value's own
+        // domain
+        "uvs": ["row", "face"],
 
-  // files written beside the mesh; a file's transfer lives here and
-  // nowhere else
-  "files": {
-    "png": {
-      "<template>": { "transfer": "<linear | srgb>", "value": "<expr>" }
+        // files written beside the mesh; a file's transfer lives
+        // here and nowhere else
+        "files": {
+          "png": {
+            "<template>": {
+              "transfer": "<linear | srgb>",
+              "value": "<expr>",
+            },
+          },
+          "json": {
+            // the file's whole object, one { transfer, value } per key
+            "<template>": {
+              "<key>": {
+                "transfer": "<linear | srgb>",
+                "value": "<expr>",
+              },
+            },
+          },
+        },
+
+        // one entry per material; the list's length is the material
+        // count, the --material-count mirror, an omitted or empty
+        // list count 0
+        "materials": [
+          {
+            "name": "<name>", // optional, the glTF material.name
+            "slots": {
+              // kind value embeds or inlines an expression; kind
+              // file carries a file field referencing a written file
+              // instead
+              "<property>": { "kind": "value", "value": "<expr>" },
+            },
+            "extras": {
+              // kinds image-file, image-value, json-file,
+              // json-value: the -file kinds carry file, the -value
+              // kinds value and transfer
+              "<name>": {
+                "kind": "image-value",
+                "value": "<expr>",
+                "transfer": "<linear | srgb>",
+              },
+            },
+          },
+        ],
+
+        // one entry per primitive
+        "primitives": [
+          {
+            "name": "<name>", // optional, rides the primitive's extras
+            // optional, "true" omitted; the selects partition the faces
+            "select": "<expr>",
+            // optional; omitted, the primitive carries no material
+            "material": 0,
+            // optional, true omitted; false drops the NORMAL stream
+            "normal": true,
+            // optional; the primitive's UV streams in its own
+            // TEXCOORD order; omitted, the mesh list filtered to the
+            // material's need
+            "uvs": ["row", "face"],
+            "builtins": { "<ATTRIBUTE>": "<expr>" },
+            "customs": {
+              "<_NAME>": {
+                "value": "<expr>",
+                "transfer": "<linear | srgb>",
+              },
+            },
+            "indices": { "<_NAME>": "<u8 | u16>" },
+          },
+        ],
+
+        // the mesh's own extras, the same four kinds as a material's
+        "meshExtras": {
+          "<name>": {
+            "kind": "json-value",
+            "value": "<expr>",
+            "transfer": "<linear | srgb>",
+          },
+        },
+      },
     },
-    "json": {
-      // the file's whole object, one { transfer, value } per key
-      "<template>": {
-        "<key>": { "transfer": "<linear | srgb>", "value": "<expr>" }
-      }
-    }
   },
-
-  // one entry per material; the list's length is the material count,
-  // the --material-count mirror, an omitted or empty list count 0
-  "materials": [
-    {
-      "name": "<name>",   // optional, the glTF material.name
-      "slots": {
-        // kind value embeds or inlines an expression; kind file carries a
-        // file field referencing a written file instead
-        "<property>": { "kind": "value", "value": "<expr>" }
-      },
-      "extras": {
-        // kinds image-file, image-value, json-file, json-value: the
-        // -file kinds carry file, the -value kinds value and transfer
-        "<name>": {
-          "kind": "image-value",
-          "value": "<expr>",
-          "transfer": "<linear | srgb>"
-        }
-      }
-    }
-  ],
-
-  // one entry per primitive
-  "primitives": [
-    {
-      "name": "<name>",       // optional, rides the primitive's extras
-      // optional, "true" omitted; the selects partition the faces
-      "select": "<expr>",
-      // optional; omitted, the primitive carries no material
-      "material": 0,
-      // optional, true omitted; false drops the NORMAL stream
-      "normal": true,
-      "builtins": { "<ATTRIBUTE>": "<expr>" },
-      "customs": {
-        "<_NAME>": { "value": "<expr>", "transfer": "<linear | srgb>" }
-      },
-      "indices": { "<_NAME>": "<u8 | u16>" }
-    }
-  ],
-
-  // the mesh's own extras, the same four kinds as a material's
-  "meshExtras": {
-    "<name>": {
-      "kind": "json-value",
-      "value": "<expr>",
-      "transfer": "<linear | srgb>"
-    }
-  }
 }
 ```
 
@@ -140,7 +163,9 @@ four extras flags, on the material or the mesh by where the entry
 sits; a primitives entry fires `--primitive` in list order, its
 `material` and `select` the flag's arguments, an omitted `material`
 firing `none` and an omitted `select` `true`, its `normal` firing
-`--write-primitive-normal`, omitted `true`, its `builtins` firing
+`--write-primitive-normal`, omitted `true`, its `uvs` firing
+`--write-primitive-uv` per entry in order, omitted the mesh list
+filtered to the material's need, its `builtins` firing
 `--write-primitive-builtin-value` tokenless like the flag, its
 `customs` `--write-primitive-custom-value` with their transfers, and
 its `indices` `--write-primitive-index` with their widths;
@@ -179,8 +204,8 @@ spelling `greedy` meshes culled.
 
 So with the output `turret.glb`, `--output-profile orm` expands to
 
-```
---value occlusionStrength "default(occlusionStrength, 1)"   # values: orm
+```sh
+--value occlusionStrength "default(occlusionStrength, 1)"   # valueProfiles: orm
 --value roughnessFactor "default(roughnessFactor, 1)"
 --value metallicFactor "default(metallicFactor, 1)"
 --value orm "rgb(occlusionStrength, roughnessFactor, metallicFactor)"
@@ -193,7 +218,7 @@ with the unused defaults elided. The
 [`orm-files` variant](#user-defined-profiles) moves the image to a
 written file the slots reference:
 
-```
+```sh
 # the values as above
 --write-file-png-value turret-orm.png orm linear              # files.png
 --write-material-slot-file 0 occlusionTexture turret-orm.png  # slots: kind file
@@ -241,14 +266,14 @@ interface ValueProfile {
 interface OutputProfile {
   // the geometry options, each key its flag's argument
   voxelSize?: number;
-  method?: "greedy" | "culled" | "naive";
+  method?: "culled" | "greedy" | "naive";
   /** A number is the exact `n`x`n` canvas of cells. */
   textureShape?: "fit" | "line" | "pot" | "square" | number;
 
   /** Value profiles applied first, in order. */
-  values?: string[];
+  valueProfiles?: string[];
   /** UV streams in TEXCOORD order; omitted, the list derives from use. */
-  uvs?: ("row" | "face" | "corner")[];
+  uvs?: ("corner" | "face" | "row")[];
 
   files?: {
     png?: Record<FileTemplate, { transfer: Transfer; value: Expr }>;
@@ -290,6 +315,8 @@ interface PrimitiveEntry {
   material?: number;
   /** Omitted: `true`, the `NORMAL` stream written. */
   normal?: boolean;
+  /** Streams in the primitive's own order; omitted, filtered to need. */
+  uvs?: ("corner" | "face" | "row")[];
   /** Attributes glTF defines, `COLOR_0`, to expressions. */
   builtins?: Record<string, Expr>;
   /** Underscore-typed attribute names, `_MY_COLOR`. */
@@ -315,7 +342,7 @@ respells all of it, so an override never inherits stray elements from
 the layer below. The value-profile layers merge into one namespace
 before `basedOn` resolves, so a repo that overrides `defaults` changes
 every profile built on it, including one from the home config, and an
-output profile's `values` list resolves against the same merged
+output profile's `valueProfiles` list resolves against the same merged
 namespace.
 
 Loading checks every profile in the merged namespaces, so a broken
@@ -323,9 +350,9 @@ config fails the first run after the edit rather than the run that
 first names the profile. Load-time checks are the ones that need no run
 context: the schema's shape, an unknown key erroring rather than
 skipping, every expression parsing, every `basedOn`
-and `values` name resolving without a cycle, every `material` index
+and `valueProfiles` name resolving without a cycle, every `material`
 inside its profile's material count, every `file` reference naming a
-written file, every `uvs` entry `row`, `face`, or `corner` named once,
+written file, every `uvs` entry `corner`, `face`, or `row` named once,
 and no element claiming one destination twice. The rest
 wait for the run that decides them: dimensions and shapes need the
 effective palette, slot names and their encodings need the resolved
@@ -350,20 +377,20 @@ profiles:
       ["roughnessFactor", "default(roughnessFactor, 1)"],
       ["metallicFactor", "default(metallicFactor, 1)"],
       ["emissiveFactor", "default(emissiveFactor, rgb(0, 0, 0))"],
-      ["emissiveStrength", "default(emissiveStrength, 1)"]
-    ]
+      ["emissiveStrength", "default(emissiveStrength, 1)"],
+    ],
   },
 
   "albedo": {
     "basedOn": ["defaults"],
-    "values": [["albedo", "baseColorFactor"]]
+    "values": [["albedo", "baseColorFactor"]],
   },
 
   "orm": {
     "basedOn": ["defaults"],
     "values": [
-      ["orm", "rgb(occlusionStrength, roughnessFactor, metallicFactor)"]
-    ]
+      ["orm", "rgb(occlusionStrength, roughnessFactor, metallicFactor)"],
+    ],
   },
 
   // white pins emissiveFactor against glTF's black default.
@@ -373,11 +400,11 @@ profiles:
       ["maxStrength", "max(emissiveStrength)"],
       [
         "emissive",
-        "emissiveFactor * emissiveStrength / max(maxStrength, 0.001)"
+        "emissiveFactor * emissiveStrength / max(maxStrength, 0.001)",
       ],
-      ["white", "rgb(1, 1, 1)"]
-    ]
-  }
+      ["white", "rgb(1, 1, 1)"],
+    ],
+  },
 }
 ```
 
@@ -389,46 +416,46 @@ so a slot fixes each encoding and no entry carries a transfer:
 ```jsonc
 {
   "albedo": {
-    "values": ["albedo"],
+    "valueProfiles": ["albedo"],
     "materials": [
       {
         "slots": {
-          "baseColorTexture": { "kind": "value", "value": "albedo" }
-        }
-      }
-    ]
+          "baseColorTexture": { "kind": "value", "value": "albedo" },
+        },
+      },
+    ],
   },
 
   // One value may fill several slots.
   "orm": {
-    "values": ["orm"],
+    "valueProfiles": ["orm"],
     "materials": [
       {
         "slots": {
           "occlusionTexture": { "kind": "value", "value": "orm" },
-          "metallicRoughnessTexture": { "kind": "value", "value": "orm" }
-        }
-      }
-    ]
+          "metallicRoughnessTexture": { "kind": "value", "value": "orm" },
+        },
+      },
+    ],
   },
 
   "emissive": {
-    "values": ["emissive"],
+    "valueProfiles": ["emissive"],
     "materials": [
       {
         "slots": {
           "emissiveTexture": { "kind": "value", "value": "emissive" },
           "emissiveFactor": { "kind": "value", "value": "white" },
-          "emissiveStrength": { "kind": "value", "value": "maxStrength" }
-        }
-      }
-    ]
+          "emissiveStrength": { "kind": "value", "value": "maxStrength" },
+        },
+      },
+    ],
   },
 
   // Output profiles do not compose, so pbr is no bundle: it pulls the
   // three value profiles and spells the whole material itself.
   "pbr": {
-    "values": ["albedo", "orm", "emissive"],
+    "valueProfiles": ["albedo", "orm", "emissive"],
     "materials": [
       {
         "slots": {
@@ -437,11 +464,11 @@ so a slot fixes each encoding and no entry carries a transfer:
           "metallicRoughnessTexture": { "kind": "value", "value": "orm" },
           "emissiveTexture": { "kind": "value", "value": "emissive" },
           "emissiveFactor": { "kind": "value", "value": "white" },
-          "emissiveStrength": { "kind": "value", "value": "maxStrength" }
-        }
-      }
-    ]
-  }
+          "emissiveStrength": { "kind": "value", "value": "maxStrength" },
+        },
+      },
+    ],
+  },
 }
 ```
 
@@ -495,24 +522,24 @@ material through
           ["maxStrength", "max(emissiveStrength)"],
           [
             "mse",
-            "rgb(metallicFactor, smoothness, emissiveStrength / max(maxStrength, 0.001))"
-          ]
-        ]
+            "rgb(metallicFactor, smoothness, emissiveStrength / max(maxStrength, 0.001))",
+          ],
+        ],
       },
 
       "heat": {
         "basedOn": ["defaults"],
         "values": [
           ["heat", "step(0.001, emissiveStrength)"],
-          ["accent", "avg(baseColorFactor.rgb)"]
-        ]
+          ["accent", "avg(baseColorFactor.rgb)"],
+        ],
       },
 
       // Occlusion floored at 0.2, kept per corner. It reads no palette
       // property, so no defaults mixin.
       "baked-ao": {
         "computeOcclusion": "computedOcclusion",
-        "values": [["ao", "max(computedOcclusion, 0.2)"]]
+        "values": [["ao", "max(computedOcclusion, 0.2)"]],
       },
 
       // basedOn emissive supplies maxStrength, emissive, and white.
@@ -521,9 +548,9 @@ material through
         "values": [
           ["glowing", "emissiveStrength > 0"],
           ["solid", "!glowing"],
-          ["albedo", "baseColorFactor"]
-        ]
-      }
+          ["albedo", "baseColorFactor"],
+        ],
+      },
     },
 
     "outputProfiles": {
@@ -531,41 +558,44 @@ material through
       // palette's strongest strength and the raw intensity rides the
       // material slot.
       "mse": {
-        "values": ["mse"],
+        "valueProfiles": ["mse"],
         "files": {
           "png": {
-            "{file-stem}-mse.png": { "transfer": "linear", "value": "mse" }
-          }
+            "{file-stem}-mse.png": { "transfer": "linear", "value": "mse" },
+          },
         },
         "materials": [
           {
             "slots": {
-              "emissiveStrength": { "kind": "value", "value": "maxStrength" }
-            }
-          }
-        ]
+              "emissiveStrength": { "kind": "value", "value": "maxStrength" },
+            },
+          },
+        ],
       },
 
       // kind file references the written png where kind value would
       // embed.
       "orm-files": {
-        "values": ["orm"],
+        "valueProfiles": ["orm"],
         "files": {
           "png": {
-            "{file-stem}-orm.png": { "transfer": "linear", "value": "orm" }
-          }
+            "{file-stem}-orm.png": { "transfer": "linear", "value": "orm" },
+          },
         },
         "materials": [
           {
             "slots": {
-              "occlusionTexture": { "kind": "file", "file": "{file-stem}-orm.png" },
+              "occlusionTexture": {
+                "kind": "file",
+                "file": "{file-stem}-orm.png",
+              },
               "metallicRoughnessTexture": {
                 "kind": "file",
-                "file": "{file-stem}-orm.png"
-              }
-            }
-          }
-        ]
+                "file": "{file-stem}-orm.png",
+              },
+            },
+          },
+        ],
       },
 
       // A per-row heat mask and one accent color, entries a
@@ -573,11 +603,11 @@ material through
       // heat png writes and its extra references it; the plain accent
       // inlines its numbers.
       "heat": {
-        "values": ["heat"],
+        "valueProfiles": ["heat"],
         "files": {
           "png": {
-            "{file-stem}-heat.png": { "transfer": "linear", "value": "heat" }
-          }
+            "{file-stem}-heat.png": { "transfer": "linear", "value": "heat" },
+          },
         },
         "materials": [
           {
@@ -586,87 +616,83 @@ material through
               "accent": {
                 "kind": "json-value",
                 "value": "accent",
-                "transfer": "srgb"
-              }
-            }
-          }
-        ]
+                "transfer": "srgb",
+              },
+            },
+          },
+        ],
       },
 
       // The palette pattern: rows under the mesh's extras.vxl.values,
       // the index they are read by on the primitive, no material at
       // all.
       "palette": {
-        "values": ["albedo"],
-        "primitives": [
-          { "indices": { "_PALETTE": "u8" } }
-        ],
+        "valueProfiles": ["albedo"],
+        "primitives": [{ "indices": { "_PALETTE": "u8" } }],
         "meshExtras": {
           "albedo": {
             "kind": "json-value",
             "value": "albedo",
-            "transfer": "linear"
-          }
-        }
+            "transfer": "linear",
+          },
+        },
       },
 
       // No textures: base color rides the vertices as COLOR_0, no
       // material at all.
       "vertex-colors": {
-        "values": ["albedo"],
-        "primitives": [
-          { "builtins": { "COLOR_0": "albedo" } }
-        ]
+        "valueProfiles": ["albedo"],
+        "primitives": [{ "builtins": { "COLOR_0": "albedo" } }],
       },
 
       // Computed occlusion whole into the standard slot: a corner
       // texture, the corner UV stream deriving; the value profile
       // binds the name itself.
       "baked-ao": {
-        "values": ["baked-ao"],
+        "valueProfiles": ["baked-ao"],
         "materials": [
           {
             "slots": {
-              "occlusionTexture": { "kind": "value", "value": "ao" }
-            }
-          }
-        ]
+              "occlusionTexture": { "kind": "value", "value": "ao" },
+            },
+          },
+        ],
       },
 
       // Two materials, two primitives: the solid rows drawn plain,
       // the glowing rows with the emissive surface.
       "glow-split": {
-        "values": ["glow"],
+        "valueProfiles": ["glow"],
         "materials": [
           {
             "name": "body",
             "slots": {
-              "baseColorTexture": { "kind": "value", "value": "albedo" }
-            }
+              "baseColorTexture": { "kind": "value", "value": "albedo" },
+            },
           },
           {
             "name": "glow",
             "slots": {
               "baseColorFactor": { "kind": "value", "value": "white" },
               "emissiveTexture": { "kind": "value", "value": "emissive" },
-              "emissiveStrength": { "kind": "value", "value": "maxStrength" }
-            }
-          }
+              "emissiveStrength": { "kind": "value", "value": "maxStrength" },
+            },
+          },
         ],
         "primitives": [
           { "name": "body", "select": "solid", "material": 0 },
-          { "name": "glow", "select": "glowing", "material": 1 }
-        ]
-      }
-    }
-  }
+          { "name": "glow", "select": "glowing", "material": 1 },
+        ],
+      },
+    },
+  },
 }
 ```
 
 With the output `turret.glb`, `--output-profile glow-split` expands to
 
-```
---value maxStrength "max(emissiveStrength)"   # values: glow, basedOn emissive
+```sh
+--value maxStrength "max(emissiveStrength)"   # valueProfiles: glow, basedOn emissive
 --value emissive "emissiveFactor * emissiveStrength / max(maxStrength, 0.001)"
 --value white "rgb(1, 1, 1)"
 --value glowing "emissiveStrength > 0"
