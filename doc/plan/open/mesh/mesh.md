@@ -7,7 +7,7 @@ vxl mesh <input> [output] [options]
 ```
 
 `vxl mesh` triangulates one object's voxels into a mesh. It bakes the object's
-palette materials into values. The values ride along as textures, material
+palette materials into values. The values can ride along as textures, material
 fields, and files beside the mesh. The default output path is the input stem
 with the mesh extension. The format comes from `--to`, else the output
 extension, else `.glb`.
@@ -21,11 +21,11 @@ vxl mesh turret.voxj
   --output-profile pbr
 ```
 
-`mesh` writes one object as pure geometry. No hierarchy-node transform applies.
-The common case is pulling a leaf object out without placement. `--select` and
-`--select-index` choose the object, the default `--select *` taking every
-object. The selection must resolve to exactly one object, so a multi-object
-document needs a selector. See
+`mesh` writes one object as pure geometry with no hierarchy-node transform.
+`--select` and `--select-index` choose the object, the default `--select *`
+takes every object. The selection must resolve to exactly one object, so a
+multi-object document needs a selector and `--select *` only works for documents
+with one object. See
 [Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
 
 ## Options
@@ -53,7 +53,7 @@ document needs a selector. See
    meters; the writer converts into the target format's native unit. glTF is
    meter-native, so the size passes through. `1.0` opens at one meter per
    voxel, and `0.01` opens at one centimeter. The size applies as a uniform
-   scale to vertex positions only.
+   scale to vertex positions.
 
 4. `--method <culled | greedy | naive>`
    - Default: `greedy`
@@ -85,8 +85,8 @@ document needs a selector. See
 
    How many materials the mesh carries, numbered from `0`. Every material
    flag names one material by index, and the derived count is the highest
-   mentioned index plus one, a skipped index erroring. Spelled, the count is
-   the whole contract: an index at or above it errors rather than growing the
+   mentioned index plus one, a skipped index erroring. When defined, the count
+   is the whole contract: an index at or above it errors rather than growing the
    count, and an unmentioned index below it is a deliberate placeholder
    emitting an empty material; see
    [Primitives and materials](#primitives-and-materials).
@@ -94,8 +94,8 @@ document needs a selector. See
 7. `--material-name <material-index> <name>`
    - Repeatable: yes
 
-   Names a material. The name lands as the glTF `material.name`. Optional; a
-   material without the flag carries no name.
+   Names a material. The name lands as the glTF `material.name`. A material
+   without the flag carries no name.
 
 8. `--primitive <material-index | none> <src-expr>`
    - Default: the implicit primitive
@@ -118,21 +118,24 @@ document needs a selector. See
 9. `--primitive-name <primitive-index> <name>`
    - Repeatable: yes
 
-   Names a primitive. glTF primitives carry no name field, so the name rides
-   the primitive's `extras`. Optional.
+   Names a primitive. glTF primitives carry no name field, so the name lands
+   at `vxl.name` in the primitive's `extras`. A primitive without the flag
+   carries no name.
 
 10. `--uv <corner | face | row>`
     - Default: derives from use
     - Repeatable: yes
 
-    Declares the mesh's stream list in `TEXCOORD` order, one stream per flag.
-    The list is the bake contract: each texture bakes at the lowest listed
-    domain at or above its value's domain, so `--uv face` alone bakes row
-    maps per face. A texture whose domain sits above every listed entry
-    errors, since stepping down is never implicit. The derived list holds
-    each texture's own domain, a `--write-primitive-uv` mention joining in.
-    Each primitive writes the list filtered to its material's need unless
-    `--write-primitive-uv` spells its streams; see [UV streams](#uv-streams).
+    Declares the mesh's stream list in `TEXCOORD` order, one stream per flag,
+    a domain listed twice erroring. The list is the bake contract: each texture
+    bakes at the lowest listed domain at or above its value's domain, so
+    `--uv face` alone bakes row maps per face. A texture whose domain sits above
+    every listed entry errors, since stepping down is never implicit.
+    The derived list holds each texture's own domain and each domain
+    `--write-primitive-uv` names. The derived order is the ladder: row, then
+    face, then corner. Each primitive writes the list filtered to its
+    material's need unless `--write-primitive-uv` spells its streams; see
+    [UV streams](#uv-streams).
 
 11. `--compute-occlusion <dst-name>`
     - Repeatable: yes
@@ -298,11 +301,12 @@ document needs a selector. See
 
     Writes a UV stream on the indexed primitive. The source is the mesher's
     own coordinates, so the flag carries only which streams write, repeats
-    stacking in the primitive's `TEXCOORD` order. A spelled primitive writes
-    exactly its spelled streams, a `none` primitive's default filtering to
-    nothing. A spelling that omits a domain the material samples errors, a
-    draw reading a missing attribute. A spelled stream no texture bakes at is
-    legal and emits for an outside sampler; see [UV streams](#uv-streams).
+    stacking in the primitive's `TEXCOORD` order. A domain twice on one
+    primitive errors. A spelled primitive writes exactly its spelled streams,
+    a `none` primitive's default filtering to nothing. A spelling that omits a
+    domain the material samples errors, a draw reading a missing attribute. A
+    spelled stream no texture bakes at is legal and emits for an outside
+    sampler; see [UV streams](#uv-streams).
 
 30. `--value-profile <profile>`
     - Repeatable: yes
@@ -469,7 +473,7 @@ the others do not, `--value rest "!(metal || glass)"`, so the partition stays
 whole and every face still names its material.
 
 `--material-name` lands as the glTF `material.name`. glTF primitives carry no
-name field, so `--primitive-name` rides the primitive's `extras`.
+name field, so `--primitive-name` rides the primitive's `extras` at `vxl.name`.
 
 ## The palette atlas
 
