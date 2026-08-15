@@ -2,73 +2,78 @@
 
 _Part of the [mesh plan](README.md)._
 
-A profile is a named piece of configuration in one of two kinds. A
-value profile is a reusable set of values, the mixin `--value-profile`
-applies. An output profile is a run's whole surface, the geometry
-options, materials, primitives, files, and extras `--output-profile`
-expands into flags. Eight ship in the binary: the `defaults`, `albedo`, `orm`,
-and `emissive` value profiles and the `albedo`, `orm`, `emissive`, and
-`pbr` output profiles, so `--output-profile pbr` works before any
-`.vxlconfig` exists. The rest are user-defined under `.vxlconfig`'s
-`mesh.valueProfiles` and `mesh.outputProfiles` keys; the kinds are
-separate namespaces, so one name may serve in both. A config profile
-sharing a built-in's name replaces it wholesale, and extending a value
-profile is a new name with `basedOn`. Hyphenated profile names take
-camel-case value names, since `-` is subtraction in the
-[value language](value-language.md): a `metallic-smoothness` profile
-would bake `metallicSmoothness`.
+A profile is a named piece of configuration: the values it defines
+beside a run's output surface, the geometry options, materials,
+primitives, files, and extras. `--profile` applies one whole, and
+`--values-from` applies only a profile's values, so a profile holding
+values alone is a mixin. Five ship in the binary, the `defaults`
+mixin and the `albedo`, `orm`, `emissive`, and `pbr` profiles, so
+`--profile pbr` works before any `.vxlconfig` exists. The rest are
+user-defined under `.vxlconfig`'s `mesh.profiles` key. A config
+profile sharing a built-in's name replaces it wholesale, and
+extending a profile's values is a new name with `valuesFrom`.
+Hyphenated profile names take camel-case value names, since `-` is
+subtraction in the [value language](value-language.md): a
+`metallic-smoothness` profile would bake `metallicSmoothness`.
 
-## Value profiles
+## Profile values
 
-A value profile holds `values`, an optional `basedOn` list, and the
-optional `computeOcclusion` and `computeVoxelPosition` keys, and
-nothing else: it can define every name a run needs and still writes
-nothing.
-`--value-profile <profile>` applies the profile's values as if each
-were a `--value` at the flag's own position, `basedOn` first:
-depth-first in list order, every profile visited once, cycles an
-error, the profile's own values last. So
+A profile's values are its `values` list, an optional `valuesFrom`
+list, and the optional `computeOcclusion` and `computeVoxelPosition`
+keys. Each `values` entry is a fragment of the
+[program](value-language.md#programs), one or more `name = expr`
+bindings, the trailing `;` optional. A profile can define every name a
+run needs and still write nothing. `--values-from <profile>` appends a
+profile's bindings to the program at the flag's own position,
+`valuesFrom` first: depth-first in list order, every profile visited
+once, cycles an error, the profile's own values last. Only values and
+the compute bindings travel; a writer element applies through
+`--profile` alone. So
 
 ```sh
---value a "0.5" --value-profile albedo --value b "a * 2"
+--value "a = 0.5" --values-from albedo --value "b = a * 2"
 ```
 
-defines `a`, then the `defaults` mixin `albedo` builds on, then
+defines `a`, then the `defaults` mixin `albedo` imports, then
 `albedo`'s own values, then `b`, and redefinition stays let-style
 throughout, so a `--value` after the flag overrides a profile value
 and every later expression sees the override.
 
-A value profile requests
+A profile requests
 [computed occlusion](value-language.md#computed-occlusion) through its
 `computeOcclusion` key and
 [computed voxel position](value-language.md#computed-voxel-position)
 through its `computeVoxelPosition` key, each the flag's argument as
 its value, binding the name the way the flag does. Every request across
 profiles and flags binds its name to the one computation, so
-requests alias rather than collide. The binding rides `basedOn` with
-the values, since an inherited expression needs its name.
+requests alias rather than collide. The binding rides `valuesFrom`
+with the values, since an inherited expression needs its name.
 
-## Output profiles
+## The output surface
 
-`--output-profile <profile>` applies an output profile, at most one
-per run. The profile is the run's whole surface, the geometry options
-ahead of an output shaped like the glTF it produces, and every
-element expands to the flag it fires as:
+`--profile <profile>` applies a profile whole, at most one per run.
+Beyond its values, a profile is the run's surface, the geometry
+options ahead of an output shaped like the glTF it produces, and
+every element expands to the flag it fires as:
 
 ```jsonc
 {
   "mesh": {
-    "outputProfiles": {
+    "profiles": {
       "<name>": {
+        // the values; valuesFrom imports another profile's bindings
+        // ahead of this profile's own, appended to the program at the
+        // --profile flag's position
+        "valuesFrom": ["<profile>"],
+        "values": ["<name> = <expr>"],
+        "computeOcclusion": "<dst-name>",
+        "computeVoxelPosition": "<dst-name>",
+
         // the geometry options, each key the flag it is named for;
         // omitted, a key leaves the flag's default
         "voxelSize": 1.0,
         "method": "<culled | greedy | naive>",
         "textureShape": "<fit | line | pot | square | n>",
-
-        // value profiles applied first, in order, as if each were a
-        // --value-profile at the --output-profile flag's position
-        "valueProfiles": ["<value-profile>"],
 
         // UV streams in TEXCOORD order, the --uv list; omitted, the
         // list derives from use, each texture at its value's own
@@ -205,13 +210,13 @@ element, so any `--uv` flag replaces all of it, and a geometry flag
 replaces its key the same way: `--method culled` beside a profile
 spelling `greedy` meshes culled.
 
-So with the output `turret.glb`, `--output-profile orm` expands to
+So with the output `turret.glb`, `--profile orm` expands to
 
 ```sh
---value occlusionStrength "default(occlusionStrength, 1)"   # valueProfiles: orm
---value roughnessFactor "default(roughnessFactor, 1)"
---value metallicFactor "default(metallicFactor, 1)"
---value orm "rgb(occlusionStrength, roughnessFactor, metallicFactor)"
+--value "occlusionStrength = default(occlusionStrength, 1)"   # defaults mixin
+--value "roughnessFactor = default(roughnessFactor, 1)"
+--value "metallicFactor = default(metallicFactor, 1)"
+--value "orm = rgb(occlusionStrength, roughnessFactor, metallicFactor)"
 --material-count 1
 --write-material-slot-value 0 occlusionTexture orm          # slots: kind value
 --write-material-slot-value 0 metallicRoughnessTexture orm
@@ -246,10 +251,12 @@ that enforce it.
 /** The `.vxlconfig` shape `vxl mesh` reads. */
 interface VxlConfig {
   mesh?: {
-    valueProfiles?: Record<string, ValueProfile>;
-    outputProfiles?: Record<string, OutputProfile>;
+    profiles?: Record<string, Profile>;
   };
 }
+
+/** A fragment of the value program, one or more `name = expr` bindings. */
+type Bindings = string;
 
 /** An expression of the value language. */
 type Expr = string;
@@ -259,24 +266,21 @@ type FileTemplate = string;
 
 type Transfer = "linear" | "srgb";
 
-interface ValueProfile {
-  basedOn?: string[];
+interface Profile {
+  /** Values imported first, in order; writers never travel. */
+  valuesFrom?: string[];
   /** Binds computed occlusion under the name. */
   computeOcclusion?: string;
   /** Binds computed voxel position under the name. */
   computeVoxelPosition?: string;
-  values?: [name: string, expr: Expr][];
-}
+  values?: Bindings[];
 
-interface OutputProfile {
   // the geometry options, each key its flag's argument
   voxelSize?: number;
   method?: "culled" | "greedy" | "naive";
   /** A number is the exact `n`x`n` canvas of cells. */
   textureShape?: "fit" | "line" | "pot" | "square" | number;
 
-  /** Value profiles applied first, in order. */
-  valueProfiles?: string[];
   /** UV streams in TEXCOORD order; omitted, the list derives from use. */
   uvs?: ("corner" | "face" | "swatch" | "voxel")[];
 
@@ -339,23 +343,21 @@ ahead of the JSON parse, and a trailing comma stays the error strict
 JSON makes it. The crate work behind the loading lives in the
 [implementation notes](implementation.md#ty-preferences).
 
-Each kind resolves as its own three-layer stack: the built-ins, then
+The profiles resolve as a three-layer stack: the built-ins, then
 `~/.vxlconfig`, then `<git-root>/.vxlconfig`. Each profile name is read
 from the last layer that supplies it, wholesale, the rule the effective
-palette already follows per property: a layer that respells a profile
-respells all of it, so an override never inherits stray elements from
-the layer below. The value-profile layers merge into one namespace
-before `basedOn` resolves, so a repo that overrides `defaults` changes
-every profile built on it, including one from the home config, and an
-output profile's `valueProfiles` list resolves against the same merged
-namespace.
+palette already follows per property: a layer that redefines a profile
+redefines all of it, so an override never inherits stray elements from
+the layer below. The layers merge into one namespace before
+`valuesFrom` resolves, so a repo that overrides `defaults` changes
+every profile built on it, including one from the home config.
 
 Loading checks every profile in the merged namespaces, so a broken
 config fails the first run after the edit rather than the run that
 first names the profile. Load-time checks are the ones that need no run
 context: the schema's shape, an unknown key erroring rather than
-skipping, every expression parsing, every `basedOn`
-and `valueProfiles` name resolving without a cycle, every `material`
+skipping, every expression and every `values` fragment parsing,
+every `valuesFrom` name resolving without a cycle, every `material`
 inside its profile's material count, every `file` reference naming a
 written file, every `uvs` entry `corner`, `face`, `swatch`, or `voxel`
 named once, and no element claiming one destination twice. The rest
@@ -366,10 +368,12 @@ output format, and name bindings need the command line.
 ## Built-in profiles
 
 The built-ins are the bottom layer of the [stack](#loading). The
-binary embeds this section's maps as data and parses them at startup
+binary embeds this section's map as data and parses it at startup
 with the config deserializer, so the built-ins take the same schema by
-construction and every run exercises the parse path. The value
-profiles:
+construction and every run exercises the parse path. Every profile
+with materials omits `primitives`, taking the implicit primitive that
+holds every face on material `0`, and embeds, so a slot fixes each
+encoding and no entry carries a transfer:
 
 ```jsonc
 {
@@ -377,51 +381,18 @@ profiles:
   // entry shadows its property with a defaulted copy.
   "defaults": {
     "values": [
-      ["baseColorFactor", "default(baseColorFactor, rgba(1, 1, 1, 1))"],
-      ["occlusionStrength", "default(occlusionStrength, 1)"],
-      ["roughnessFactor", "default(roughnessFactor, 1)"],
-      ["metallicFactor", "default(metallicFactor, 1)"],
-      ["emissiveFactor", "default(emissiveFactor, rgb(0, 0, 0))"],
-      ["emissiveStrength", "default(emissiveStrength, 1)"],
+      "baseColorFactor = default(baseColorFactor, rgba(1, 1, 1, 1))",
+      "occlusionStrength = default(occlusionStrength, 1)",
+      "roughnessFactor = default(roughnessFactor, 1)",
+      "metallicFactor = default(metallicFactor, 1)",
+      "emissiveFactor = default(emissiveFactor, rgb(0, 0, 0))",
+      "emissiveStrength = default(emissiveStrength, 1)",
     ],
   },
 
   "albedo": {
-    "basedOn": ["defaults"],
-    "values": [["albedo", "baseColorFactor"]],
-  },
-
-  "orm": {
-    "basedOn": ["defaults"],
-    "values": [
-      ["orm", "rgb(occlusionStrength, roughnessFactor, metallicFactor)"],
-    ],
-  },
-
-  // white pins emissiveFactor against glTF's black default.
-  "emissive": {
-    "basedOn": ["defaults"],
-    "values": [
-      ["maxStrength", "max(emissiveStrength)"],
-      [
-        "emissive",
-        "emissiveFactor * emissiveStrength / max(maxStrength, 0.001)",
-      ],
-      ["white", "rgb(1, 1, 1)"],
-    ],
-  },
-}
-```
-
-and the output profiles, each pulling the value profiles it needs and
-spelling one material. Every one omits `primitives`, taking the
-implicit primitive that holds every face on material `0`, and embeds,
-so a slot fixes each encoding and no entry carries a transfer:
-
-```jsonc
-{
-  "albedo": {
-    "valueProfiles": ["albedo"],
+    "valuesFrom": ["defaults"],
+    "values": ["albedo = baseColorFactor"],
     "materials": [
       {
         "slots": {
@@ -433,7 +404,10 @@ so a slot fixes each encoding and no entry carries a transfer:
 
   // One value may fill several slots.
   "orm": {
-    "valueProfiles": ["orm"],
+    "valuesFrom": ["defaults"],
+    "values": [
+      "orm = rgb(occlusionStrength, roughnessFactor, metallicFactor)",
+    ],
     "materials": [
       {
         "slots": {
@@ -444,8 +418,14 @@ so a slot fixes each encoding and no entry carries a transfer:
     ],
   },
 
+  // white pins emissiveFactor against glTF's black default.
   "emissive": {
-    "valueProfiles": ["emissive"],
+    "valuesFrom": ["defaults"],
+    "values": [
+      "maxStrength = max(emissiveStrength)",
+      "emissive = emissiveFactor * emissiveStrength / max(maxStrength, 0.001)",
+      "white = rgb(1, 1, 1)",
+    ],
     "materials": [
       {
         "slots": {
@@ -457,10 +437,10 @@ so a slot fixes each encoding and no entry carries a transfer:
     ],
   },
 
-  // Output profiles do not compose, so pbr is no bundle: it pulls the
-  // three value profiles and spells the whole material itself.
+  // Output surfaces do not compose, so pbr is no bundle: it imports
+  // the three profiles' values and writes the whole material itself.
   "pbr": {
-    "valueProfiles": ["albedo", "orm", "emissive"],
+    "valuesFrom": ["albedo", "orm", "emissive"],
     "materials": [
       {
         "slots": {
@@ -502,11 +482,11 @@ black.
 
 ## User-defined profiles
 
-Every other profile lives under `.vxlconfig`'s `mesh.valueProfiles`
-and `mesh.outputProfiles` keys, in the same schema, and may build on
-the built-ins. `mse` packs metallic, smoothness, and normalized
-emissive strength into one mask; `orm-files` flips a built-in's slots
-from embedding to referencing; `heat` feeds a runtime of your own
+Every other profile lives under `.vxlconfig`'s `mesh.profiles` key,
+in the same schema, and may build on the built-ins. `mse` packs
+metallic, smoothness, and normalized emissive strength into one
+mask; `orm-files` flips a built-in's slots from embedding to
+referencing; `heat` feeds a runtime of your own
 through the material extras; `palette` writes the
 [palette pattern](mesh.md#palettes) whole, rows beside their index;
 `vertex-colors` skips textures and rides base color on the vertices;
@@ -519,51 +499,17 @@ material through
 ```jsonc
 {
   "mesh": {
-    "valueProfiles": {
-      "mse": {
-        "basedOn": ["defaults"],
-        "values": [
-          ["smoothness", "1 - roughnessFactor"],
-          ["maxStrength", "max(emissiveStrength)"],
-          [
-            "mse",
-            "rgb(metallicFactor, smoothness, emissiveStrength / max(maxStrength, 0.001))",
-          ],
-        ],
-      },
-
-      "heat": {
-        "basedOn": ["defaults"],
-        "values": [
-          ["heat", "step(0.001, emissiveStrength)"],
-          ["accent", "avg(baseColorFactor.rgb)"],
-        ],
-      },
-
-      // Occlusion floored at 0.2, kept per corner. It reads no palette
-      // property, so no defaults mixin.
-      "baked-ao": {
-        "computeOcclusion": "computedOcclusion",
-        "values": [["ao", "max(computedOcclusion, 0.2)"]],
-      },
-
-      // basedOn emissive supplies maxStrength, emissive, and white.
-      "glow": {
-        "basedOn": ["emissive"],
-        "values": [
-          ["glowing", "emissiveStrength > 0"],
-          ["solid", "!glowing"],
-          ["albedo", "baseColorFactor"],
-        ],
-      },
-    },
-
-    "outputProfiles": {
+    "profiles": {
       // emissiveStrength is unbounded, so the mask normalizes by the
       // palette's strongest strength and the raw intensity rides the
       // material slot.
       "mse": {
-        "valueProfiles": ["mse"],
+        "valuesFrom": ["defaults"],
+        "values": [
+          "smoothness = 1 - roughnessFactor",
+          "maxStrength = max(emissiveStrength)",
+          "mse = rgb(metallicFactor, smoothness, emissiveStrength / max(maxStrength, 0.001))",
+        ],
         "files": {
           "png": {
             "{file-stem}-mse.png": { "transfer": "linear", "value": "mse" },
@@ -581,7 +527,7 @@ material through
       // kind file references the written png where kind value would
       // embed.
       "orm-files": {
-        "valueProfiles": ["orm"],
+        "valuesFrom": ["orm"],
         "files": {
           "png": {
             "{file-stem}-orm.png": { "transfer": "linear", "value": "orm" },
@@ -608,7 +554,11 @@ material through
       // heat png writes and its extra references it; the plain accent
       // inlines its numbers.
       "heat": {
-        "valueProfiles": ["heat"],
+        "valuesFrom": ["defaults"],
+        "values": [
+          ["heat", "step(0.001, emissiveStrength)"],
+          ["accent", "avg(baseColorFactor.rgb)"],
+        ],
         "files": {
           "png": {
             "{file-stem}-heat.png": { "transfer": "linear", "value": "heat" },
@@ -632,7 +582,7 @@ material through
       // the index they are read by on the primitive, no material at
       // all.
       "palette": {
-        "valueProfiles": ["albedo"],
+        "valuesFrom": ["albedo"],
         "primitives": [{ "indices": { "_PALETTE": "u8" } }],
         "meshExtras": {
           "albedo": {
@@ -646,15 +596,16 @@ material through
       // No textures: base color rides the vertices as COLOR_0, no
       // material at all.
       "vertex-colors": {
-        "valueProfiles": ["albedo"],
+        "valuesFrom": ["albedo"],
         "primitives": [{ "builtins": { "COLOR_0": "albedo" } }],
       },
 
-      // Computed occlusion whole into the standard slot: a corner
-      // texture, the corner UV stream deriving; the value profile
-      // binds the name itself.
+      // Occlusion floored at 0.2 and baked whole into the standard
+      // slot: a corner texture, the corner UV stream deriving. It
+      // reads no palette property, so no defaults mixin.
       "baked-ao": {
-        "valueProfiles": ["baked-ao"],
+        "computeOcclusion": "computedOcclusion",
+        "values": ["ao = max(computedOcclusion, 0.2)"],
         "materials": [
           {
             "slots": {
@@ -665,9 +616,15 @@ material through
       },
 
       // Two materials, two primitives: the solid swatches drawn plain,
-      // the glowing swatches with the emissive surface.
+      // the glowing swatches with the emissive surface. valuesFrom
+      // emissive supplies maxStrength, emissive, and white.
       "glow-split": {
-        "valueProfiles": ["glow"],
+        "valuesFrom": ["emissive"],
+        "values": [
+          "glowing = emissiveStrength > 0",
+          "solid = !glowing",
+          "albedo = baseColorFactor",
+        ],
         "materials": [
           {
             "name": "body",
@@ -694,15 +651,15 @@ material through
 }
 ```
 
-With the output `turret.glb`, `--output-profile glow-split` expands to
+With the output `turret.glb`, `--profile glow-split` expands to
 
 ```sh
---value maxStrength "max(emissiveStrength)"   # valueProfiles: glow, basedOn emissive
---value emissive "emissiveFactor * emissiveStrength / max(maxStrength, 0.001)"
---value white "rgb(1, 1, 1)"
---value glowing "emissiveStrength > 0"
---value solid "!glowing"
---value albedo "baseColorFactor"
+--value "maxStrength = max(emissiveStrength)"   # valuesFrom: emissive
+--value "emissive = emissiveFactor * emissiveStrength / max(maxStrength, 0.001)"
+--value "white = rgb(1, 1, 1)"
+--value "glowing = emissiveStrength > 0"
+--value "solid = !glowing"
+--value "albedo = baseColorFactor"
 --material-count 2
 --material-name 0 body
 --material-name 1 glow

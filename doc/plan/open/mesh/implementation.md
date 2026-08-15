@@ -7,10 +7,11 @@ lives in the other pages._
 
 The language ships as its own crate, referencing none of the vxl
 crates. The crate owns the whole language: `parse` takes text to a
-syntax tree, `check` takes the tree and each name's type to the
-result type, and `eval` takes the tree and each name's value to the
-result. The name information comes in through an environment the
-caller supplies:
+syntax tree, a [program](value-language.md#programs) of bindings or a
+bare expression each through its own entry point, `check` takes the
+tree and each name's type to the result type, and `eval` takes the
+tree and each name's value to the result. The name information comes
+in through an environment the caller supplies:
 
 ```rust
 let tree = parse("rgb(occlusionStrength, roughnessFactor, metallicFactor)")?;
@@ -19,6 +20,11 @@ let ty = check(&tree, &env)?; // env: name -> Option<Type>, shape x dimension
 
 let value = eval(&tree, &env)?; // env: name -> Option<Value>, plain or array
 ```
+
+vxl assembles the program: a `;` appended to every `--value` and
+profile values fragment, the fragments joined in flag order, each
+origin kept, so a parse error names the flag or the profile entry
+rather than a position in the joined text.
 
 To the crate an array is a length, so the palette is vxl's
 interpretation: vxl binds the effective palette into the environment in
@@ -57,10 +63,10 @@ stays an error.
 ## Retired flags
 
 The design retires the shipped map surface. `--texture` gives way to
-the profile flags, `--value-profile` and `--output-profile`, a split
-that also retires the interim `--profile` and `--write-profile` pair:
-a values mixin is a value profile, and the writes ride the single
-output profile. The slots and writers replace `--texture-storage`: an
+the profile flags, `--values-from` and `--profile`, which replace the
+interim `--profile` and `--write-profile` pair: a values mixin is any
+profile's values through `--values-from`, and the writes ride the one
+`--profile`. The slots and writers replace `--texture-storage`: an
 image goes where its flag puts it, and the old `both` is a
 `--write-file-png-value` beside a `--write-material-slot-value`.
 `--value` replaces `--texture-map`, and backtick quoting reaches a

@@ -18,7 +18,7 @@ vxl mesh turret.voxj
 
 # + embedded albedo, orm, and emissive maps
 vxl mesh turret.voxj
-  --output-profile pbr
+  --profile pbr
 ```
 
 `mesh` writes one object as pure geometry with no hierarchy-node transform.
@@ -156,14 +156,16 @@ with one object. See
     not exist; see
     [Computed voxel position](value-language.md#computed-voxel-position).
 
-13. `--value <dst-name> <src-expr>`
+13. `--value <bindings>`
     - Repeatable: yes
 
-    Defines a value the writers and slots can name. Every property of the
-    effective palette is a name. Values evaluate in flag order, and
-    redefinition is let-style: a later `--value` overrides an earlier one,
-    and later expressions see the new value. The expression grammar is the
-    [value language](value-language.md).
+    Defines values the writers and slots can name. The argument holds one
+    or more `name = expr` bindings, `;` between them and optional at the
+    end; an all-whitespace argument errors. Every property of the
+    effective palette is a name. The run joins every `--value` and
+    profile values entry into one program, bindings evaluating in order
+    with let-style redefinition; see
+    [Programs](value-language.md#programs).
 
 14. `--write-file-json-value <dst-file> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
@@ -319,20 +321,22 @@ with one object. See
     spelled stream no texture bakes at is legal and emits for an outside
     sampler; see [UV streams](#uv-streams).
 
-31. `--value-profile <profile>`
+31. `--values-from <profile>`
     - Repeatable: yes
 
-    Applies a profile of values as if each were a `--value` at the flag's own
-    position. The built-ins ship in the binary, and the rest come from
-    `.vxlconfig`; see the [profile language](profile-language.md).
+    Appends a profile's bindings to the program at the flag's own
+    position, the profile's own `valuesFrom` imports first. Any writer
+    elements the profile holds stay behind; only `--profile` fires them. The
+    built-ins ship in the binary, and the rest come from `.vxlconfig`; see
+    the [profile language](profile-language.md).
 
-32. `--output-profile <profile>`
+32. `--profile <profile>`
     - Repeatable: no
 
-    Applies an output profile, a run's whole surface: the geometry options,
-    materials, primitives, files, and extras. The profile expands to the
-    flags it spells, and its `valueProfiles` list applies its value profiles
-    first. An explicit flag replaces the element it collides with; see the
+    Applies a profile whole, a run's full surface: the geometry options,
+    materials, primitives, files, and extras. The profile expands to its
+    flags, the `valuesFrom` values applying first. An explicit flag replaces
+    the element it collides with; see the
     [profile language](profile-language.md).
 
 33. `--file-stem <file-stem>`
@@ -360,15 +364,16 @@ with one object. See
     Chooses the object by position, an integer or an `a-b` range. Unions
     with `--select`.
 
-A writer's arguments read destination first, then source, then the token when
-one exists. The order is an assignment: the location before what fills it,
-`--value`'s own order with the encoding trailing. A material or primitive index
-is part of the destination, so it rides ahead of the rest: which object, then
-what on it. A writer's name ends in its source kind. `-value` takes an
-expression and writes its value. `-file` takes an existing file. `-index` takes
-the swatch number. `-normal` takes the mesher's computed normal; source and
-destination are both fixed, so the flag carries only whether the write happens.
-`-uv` takes the mesher's computed coordinates the same way; the flag carries
+A writer's arguments read destination first, then source, then the token
+when one exists. The order is an assignment: the location before what
+fills it, a binding's `name = expr` order with the encoding trailing. A
+material or primitive index is part of the destination, so it rides
+ahead of the rest: which object, then what on it. A writer's name ends
+in its source kind. `-value` takes an expression and writes its value.
+`-file` takes an existing file. `-index` takes the swatch number.
+`-normal` takes the mesher's computed normal; source and destination are
+both fixed, so the flag carries only whether the write happens. `-uv`
+takes the mesher's computed coordinates the same way; the flag carries
 only which streams write. A `<src-expr>` is any expression of the
 [value language](value-language.md), a defined name the simplest. A
 `<src-file>` names an existing file.
@@ -378,7 +383,7 @@ identical spelling included, so writing the same thing twice never passes as
 agreement: a slot filled twice, a material or primitive named twice, one JSON
 key written twice. A profile element is no second claim, since an explicit flag
 replaces it; see the [profile language](profile-language.md). The two exceptions
-bind names rather than write destinations: `--value` redefinition is let-style,
+bind names rather than write destinations: value bindings redefine let-style,
 and computed-occlusion requests alias, each binding its name to the one
 computation.
 
@@ -437,8 +442,8 @@ The selects split the model. Every face draws once with its swatch's material:
 ```sh
 # split: solid swatches with material 0, glowing swatches with material 1
 vxl mesh turret.voxj
-  --value glowing "emissiveStrength > 0"
-  --value solid "!glowing"
+  --value "glowing = emissiveStrength > 0"
+  --value "solid = !glowing"
   --primitive 0 solid
   --primitive 1 glowing
 ```
@@ -477,15 +482,15 @@ palette, so a crevice mask sends one swatch's seam faces to their own material:
 # dirt in the creases: material 1 takes the occluded faces
 vxl mesh statue.vox
   --compute-occlusion computedOcclusion
-  --value crevice "faceAvg(computedOcclusion) < 0.7"
-  --value open "!crevice"
+  --value "crevice = faceAvg(computedOcclusion) < 0.7"
+  --value "open = !crevice"
   --primitive 0 open
   --primitive 1 crevice
 ```
 
-A styled catch-all is an explicit complement. The last primitive selects what
-the others do not, `--value rest "!(metal || glass)"`, so the partition stays
-whole and every face still names its material.
+A styled catch-all is an explicit complement. The last primitive selects
+what the others do not, `--value "rest = !(metal || glass)"`, so the
+partition stays whole and every face still names its material.
 
 `--material-name` lands as the glTF `material.name`. glTF primitives carry no
 name field, so `--primitive-name` rides the primitive's `extras` at `vxl.name`.
@@ -503,7 +508,7 @@ Each map fills the same layout from its own value, so
 ```sh
 vxl mesh turret.voxj
   --to gltf
-  --output-profile pbr
+  --profile pbr
 ```
 
 writes `turret.gltf` with embedded albedo, orm, and emissive maps. Every map is
@@ -526,9 +531,9 @@ object's own raster order, the layout of every texture that bakes at the
 voxel domain. Each face's UVs sit at its voxel's texel center, read with a
 nearest-neighbor sampler and clamped wrapping, so a face samples exactly its
 voxel's texel. A texel needs whole faces, so a voxel stream in the run caps
-merging at the voxel: every face is a per-voxel quad under any `--method`,
-`greedy` collapsing to `culled`. A buried voxel's texel is transparent black
-like any unused cell, and the mesh never samples it.
+merging at the voxel. Every face is then a per-voxel quad under any
+`--method`, `greedy` collapsing to `culled`. A buried voxel's texel is
+transparent black like any unused cell, and the mesh never samples it.
 
 The layout serves values that vary per voxel, and
 [computed voxel position](value-language.md#computed-voxel-position) is the
@@ -538,8 +543,8 @@ domain's producer:
 # alternating layers, baked into the albedo
 vxl mesh turret.voxj
   --compute-voxel-position voxelPosition
-  --value bands "mod(voxelPosition.y, 2)"
-  --value albedo "baseColorFactor * lerp(0.8, 1, bands)"
+  --value "bands = mod(voxelPosition.y, 2)"
+  --value "albedo = baseColorFactor * lerp(0.8, 1, bands)"
   --write-material-slot-value 0 baseColorTexture albedo
 ```
 
@@ -626,9 +631,9 @@ flags claiming one destination, the usual error. No flag hand-wires a slot:
 
 ```jsonc
 // vxl mesh turret.voxj
-//   --output-profile albedo
+//   --profile albedo
 //   --compute-occlusion computedOcclusion
-//   --value ao "faceAvg(computedOcclusion)"
+//   --value "ao = faceAvg(computedOcclusion)"
 //   --write-material-slot-value 0 occlusionTexture ao
 // swatch and face both write, so the streams derive [swatch, face]
 {
@@ -696,7 +701,7 @@ can replace at will:
 
 ```jsonc
 // vxl mesh turret.voxj
-//   --output-profile pbr
+//   --profile pbr
 //   --write-mesh-extra-json-value albedo albedo linear
 //   --write-mesh-extra-json-value emissive emissive linear
 //   --write-primitive-index 0 _PALETTE u8
@@ -758,7 +763,7 @@ the json:
 
 ```jsonc
 // vxl mesh turret.voxj
-//   --output-profile pbr
+//   --profile pbr
 //   --write-file-json-value turret-values.json albedo albedo linear
 //   --write-mesh-extra-json-file albedo turret-values.json
 //   --write-primitive-index 0 _PALETTE u8
@@ -843,7 +848,7 @@ keyed by the group:
 
 ```sh
 vxl mesh turret.voxj
-  --output-profile pbr
+  --profile pbr
   --write-mesh-extra-json-value colorId colorId linear
   --write-primitive-index 0 _PALETTE u8
 ```

@@ -2,17 +2,40 @@
 
 _Part of the [mesh plan](README.md)._
 
-The expression language behind `vxl mesh`'s material values. `--value`
-defines vector-valued names over the effective palette, and the writer
-and slot flags listed in [`vxl mesh`](mesh.md#options) take expressions
-of their own, a defined name the simplest, putting the results in
-images, JSON files, and the mesh's own material.
+The expression language behind `vxl mesh`'s material values. A binding,
+`name = expr`, defines a vector-valued name over the effective palette,
+and a run gathers every binding it is given into one
+[program](#programs). The writer and slot flags listed in
+[`vxl mesh`](mesh.md#options) take expressions of their own, a defined
+name the simplest, putting the results in images, JSON files, and the
+mesh's own material.
 
 Mesh generates materials for a mesh based on the object's layers. The
 combination of layers results in an "effective palette", each property read
 through the last layer whose palette supplies its name; see
 [The palette atlas](mesh.md#the-palette-atlas). Each property of the
 effective palette can be used as a value in the final object's materials.
+
+## Programs
+
+A program is a sequence of statements, each a binding `name = expr`
+terminated by `;`. A statement binds and does nothing else, so a bare
+expression errors, a value computed and dropped. Bindings evaluate in
+order, and redefinition is let-style; see the [notes](#notes).
+
+No one writes a program whole. Each `--value` and each profile `values`
+entry is a fragment holding one or more bindings, the trailing `;`
+optional. The run appends a `;` to every fragment, joins them in flag
+order, profile values expanding at their flag's position, and parses
+the result once. An empty statement is legal, so the appended `;` costs
+nothing after a fragment's own. An all-whitespace fragment errors at
+its flag, and a parse error names its fragment's origin, the flag or
+the profile entry, never a position in the joined text.
+
+```sh
+--value "tint = baseColorFactor.rgb"
+--value "dim = tint * 0.5; bright = tint * 1.2"   # one fragment, two bindings
+```
 
 ## Shapes
 
@@ -27,10 +50,10 @@ array; two arrays of one domain always align, and mixed domains climb the
 [ladder](#domains).
 
 ```sh
---value cutoff "0.4"                      # plain vec1, a literal
---value tint "baseColorFactor.rgb"        # array vec3, one element per material
---value bright "tint * 1.2"               # array * plain broadcasts
---value mask "step(0.5, metallicFactor)"  # 1 where a material is metal
+--value "cutoff = 0.4"                      # plain vec1, a literal
+--value "tint = baseColorFactor.rgb"        # array vec3, one entry per material
+--value "bright = tint * 1.2"               # array * plain broadcasts
+--value "mask = step(0.5, metallicFactor)"  # 1 where a material is metal
 ```
 
 `max(e)`, `min(e)`, `sum(e)`, and `avg(e)` reduce an array across the
@@ -38,7 +61,7 @@ palette, per component, to a plain value; the binary `min`/`max` are
 elementwise like the operators. The emissive bake is the canonical use:
 
 ```sh
---value emissive "emissiveFactor * emissiveStrength / max(emissiveStrength)"
+--value "emissive = emissiveFactor * emissiveStrength / max(emissiveStrength)"
 ```
 
 Each material's emissive color, scaled into `0..1` of the palette's strongest
@@ -133,9 +156,9 @@ through the sums, so a buried swatch takes the author's own answer:
 
 ```sh
 --compute-occlusion computedOcclusion
---value aoFace "faceAvg(computedOcclusion)"
---value faceCount "swatchSum(face(1))"
---value ao "swatchSum(aoFace) / max(faceCount, 1)"   # buried swatch: 0
+--value "aoFace = faceAvg(computedOcclusion)"
+--value "faceCount = swatchSum(face(1))"
+--value "ao = swatchSum(aoFace) / max(faceCount, 1)"   # buried swatch: 0
 ```
 
 The destinations read by domain. A texture holds one texel per entry, so
@@ -181,8 +204,8 @@ and a boolean [material property](#material-slots), plain alone;
 see [JSON files](#json-files):
 
 ```sh
---value glowing "emissiveStrength > 0"   # bool array, one entry per material
---value solid "!glowing"
+--value "glowing = emissiveStrength > 0"   # bool array, one entry per material
+--value "solid = !glowing"
 --primitive 0 solid
 --primitive 1 glowing
 ```
@@ -217,8 +240,8 @@ numbers already have. `e[i]` samples a string array at an entry.
 equality is the routing tool, an authored tag turning into a select:
 
 ```sh
---value glass 'tag == "glass"'
---value solid '!glass'
+--value 'glass = tag == "glass"'
+--value 'solid = !glass'
 --primitive 0 solid
 --primitive 1 glass
 ```
@@ -244,7 +267,7 @@ exists in the language, only the destination knowing the list:
 --write-material-slot-value 0 alphaMode '"MASK"'
 
 # computed: cutout only where the palette holds transparency
---value mode 'mix("OPAQUE", "MASK", min(baseColorFactor.a) < 1)'
+--value 'mode = mix("OPAQUE", "MASK", min(baseColorFactor.a) < 1)'
 --write-material-slot-value 0 alphaMode mode
 ```
 
@@ -274,9 +297,9 @@ perceived lightness, 0 black to 1 white, `.y` runs green to red,
 and `.z` blue to yellow.
 
 ```sh
---value lab "oklabFromRgb(baseColorFactor.rgb)"
---value reddish "distance(lab, oklabFromRgb(rgb(1, 0, 0))) < 0.25"
---value darker "rgbFromOklab(lab * rgb(0.8, 1, 1))"   # dimmed, hue held
+--value "lab = oklabFromRgb(baseColorFactor.rgb)"
+--value "reddish = distance(lab, oklabFromRgb(rgb(1, 0, 0))) < 0.25"
+--value "darker = rgbFromOklab(lab * rgb(0.8, 1, 1))"   # dimmed, hue held
 ```
 
 `oklchFromRgb(c)` and `rgbFromOklch(l)` visit Oklch, Oklab's polar
@@ -588,25 +611,24 @@ first value that varies across a surface: every palette property is per
 swatch, which is why the unwrap and corner atlases exist.
 
 `--compute-occlusion <dst-name>` requests the computation and binds the
-result under the name, a corner vec1 in `0..1`, `1` fully open,
-bound ahead of every `--value` the way palette properties are. Nothing
-computes unrequested: without the flag the name does not exist, and an
-expression naming one is the ordinary unknown-name error. The request
-is explicit because it can change the geometry: written corner-exact,
-through a vertex attribute or a
-[corner texture](mesh.md#the-corner-atlas), the value makes greedy
-merging split a quad where its corner occlusion disagrees. Several
-requests bind their names to one computation, aliases rather than a
-collision.
+result under the name, a corner vec1 in `0..1`, `1` fully open, bound
+ahead of the program the way palette properties are. Nothing computes
+unrequested: without the flag the name does not exist, and an expression
+naming one is the ordinary unknown-name error. The request is explicit
+because it can change the geometry: written corner-exact, through a
+vertex attribute or a [corner texture](mesh.md#the-corner-atlas), the
+value makes greedy merging split a quad where its corner occlusion
+disagrees. Several requests bind their names to one computation, aliases
+rather than a collision.
 
 The value mixes like any other, and tuning is one expression each
 rather than a flag family:
 
 ```sh
 --compute-occlusion computedOcclusion
---value ao "lerp(1, computedOcclusion, 0.8)"       # strength 0.8
---value ao "max(computedOcclusion, 0.2)"           # min brightness 0.2
---value aoFace "faceAvg(ao)"                       # corners down to faces
+--value "ao = lerp(1, computedOcclusion, 0.8)"     # strength 0.8
+--value "ao = max(computedOcclusion, 0.2)"         # min brightness 0.2
+--value "aoFace = faceAvg(ao)"                     # corners down to faces
 --write-file-png-value turret-ao.png aoFace srgb   # color space: the token
 ```
 
@@ -636,30 +658,30 @@ first value that varies per voxel.
 
 `--compute-voxel-position <dst-name>` requests the computation and binds
 the result under the name, a voxel vec3 of whole numbers, each voxel's
-coordinates in the object's own grid, bound ahead of every `--value` the
-way palette properties are. Nothing computes unrequested: without the
-flag the name does not exist, and an expression naming one is the
-ordinary unknown-name error. The request is explicit because it can
-change the geometry: read at the faces or above, through a select, a
-vertex attribute, or a face or corner texture, a voxel value splits a
-merged greedy quad where its entries disagree, the corner-occlusion rule
-one rung down, and a texture baked at the voxel itself caps merging at
-the voxel outright; see [the voxel atlas](mesh.md#the-voxel-atlas).
-Several requests bind their names to one computation, aliases rather
-than a collision.
+coordinates in the object's own grid, bound ahead of the program the way
+palette properties are. Nothing computes unrequested: without the flag
+the name does not exist, and an expression naming one is the ordinary
+unknown-name error. The request is explicit because it can change the
+geometry. Read at the faces or above, through a select, a vertex
+attribute, or a face or corner texture, a voxel value splits a merged
+greedy quad where its entries disagree, the corner-occlusion rule one
+rung down. A texture baked at the voxel itself caps merging at the voxel
+outright; see [the voxel atlas](mesh.md#the-voxel-atlas). Several
+requests bind their names to one computation, aliases rather than a
+collision.
 
 The value mixes like any other, so a per-voxel pattern is one expression
 each:
 
 ```sh
 --compute-voxel-position voxelPosition
---value height "voxelPosition.y / max(voxelPosition.y)"   # 0..1 up the object
---value bands "mod(voxelPosition.y, 2)"                   # alternating layers
+--value "height = voxelPosition.y / max(voxelPosition.y)"   # 0..1 up the object
+--value "bands = mod(voxelPosition.y, 2)"                   # alternating layers
 ```
 
 A profile requests the value through its `computeVoxelPosition` key, the
 flag's argument as its value, the `computeOcclusion` pattern again; see
-the [profile language](profile-language.md#value-profiles).
+the [profile language](profile-language.md#profile-values).
 
 ## Grammar
 
@@ -672,6 +694,9 @@ encodes the dimension axis only; the shape axis (plain versus array, see
 compact untyped grammar plus those checking rules. It is the form to
 implement, since a parser cannot know a name's dimension from syntax
 alone.
+
+Both forms start at a [program](#programs) of `;`-terminated bindings,
+the empty statement legal, and differ only below the expression rule.
 
 A vec1 is a scalar. It is named like the other vectors so that swizzling and
 broadcasting work uniformly across all four dimensions.
@@ -686,7 +711,20 @@ associativity for `+ - * / && ^ ||`.
 
 ```bnf
 ; ============================================================
-; Start rule: an expression of any dimension
+; Start rule: a program of ;-terminated bindings; the empty
+; statement makes the fragment seams legal
+; ============================================================
+
+<program>       ::= <statement>
+                  | <statement> <program>
+
+<statement>     ::= <binding> ";"
+                  | ";"
+
+<binding>       ::= <name> "=" <expr>
+
+; ============================================================
+; An expression of any dimension
 ; ============================================================
 
 <expr>          ::= <vec1-expr>
@@ -1171,98 +1209,106 @@ refers to. The practical structure: parse with the untyped grammar below, then
 run a checker over the AST using the dimension and shape rules that follow.
 
 ```bnf
-<u-expr>     ::= <u-expr> "||" <u-xor>
-               | <u-xor>
+<u-program>   ::= <u-statement>
+                | <u-statement> <u-program>
 
-<u-xor>      ::= <u-xor> "^" <u-and>
-               | <u-and>
+<u-statement> ::= <u-binding> ";"
+                | ";"
 
-<u-and>      ::= <u-and> "&&" <u-cmp>
-               | <u-cmp>
+<u-binding>   ::= <name> "=" <u-expr>
+
+<u-expr>      ::= <u-expr> "||" <u-xor>
+                | <u-xor>
+
+<u-xor>       ::= <u-xor> "^" <u-and>
+                | <u-and>
+
+<u-and>       ::= <u-and> "&&" <u-cmp>
+                | <u-cmp>
 
 ; A chain like a < b < c parses; the checker rejects the bool
 ; operand its left comparison feeds the right one.
-<u-cmp>      ::= <u-cmp> <cmp-op> <u-add>
-               | <u-add>
+<u-cmp>       ::= <u-cmp> <cmp-op> <u-add>
+                | <u-add>
 
-<cmp-op>     ::= "<" | "<=" | ">" | ">=" | "==" | "!="
+<cmp-op>      ::= "<" | "<=" | ">" | ">=" | "==" | "!="
 
-<u-add>      ::= <u-add> "+" <u-term>
-               | <u-add> "-" <u-term>
-               | <u-term>
+<u-add>       ::= <u-add> "+" <u-term>
+                | <u-add> "-" <u-term>
+                | <u-term>
 
-<u-term>     ::= <u-term> "*" <u-unary>
-               | <u-term> "/" <u-unary>
-               | <u-unary>
+<u-term>      ::= <u-term> "*" <u-unary>
+                | <u-term> "/" <u-unary>
+                | <u-unary>
 
-<u-unary>    ::= "-" <u-unary>
-               | "!" <u-unary>
-               | <u-post>
+<u-unary>     ::= "-" <u-unary>
+                | "!" <u-unary>
+                | <u-post>
 
-<u-post>     ::= <u-post> "." <member>
-               | <u-post> "[" <u-expr> "]"
-               | <u-prim>
+<u-post>      ::= <u-post> "." <member>
+                | <u-post> "[" <u-expr> "]"
+                | <u-prim>
 
-<u-prim>     ::= <num>
-               | "true"
-               | "false"
-               | <string-lit>
-               | <name>
-               | "(" <u-expr> ")"
-               | "r"    "(" <u-expr> ")"
-               | "rg"   "(" <u-expr> "," <u-expr> ")"
-               | "rgb"  "(" <u-expr> "," <u-expr> "," <u-expr> ")"
-               | "rgba" "(" <u-expr> "," <u-expr> "," <u-expr> "," <u-expr> ")"
-               | "min"  "(" <u-expr> ")"
-               | "min"  "(" <u-expr> "," <u-expr> ")"
-               | "max"  "(" <u-expr> ")"
-               | "max"  "(" <u-expr> "," <u-expr> ")"
-               | "sum"  "(" <u-expr> ")"
-               | "avg"  "(" <u-expr> ")"
-               | "any"  "(" <u-expr> ")"
-               | "all"  "(" <u-expr> ")"
-               | "abs"  "(" <u-expr> ")"
-               | "pow"  "(" <u-expr> "," <u-expr> ")"
-               | "mod"  "(" <u-expr> "," <u-expr> ")"
-               | "clamp" "(" <u-expr> "," <u-expr> "," <u-expr> ")"
-               | "lerp" "(" <u-expr> "," <u-expr> "," <u-expr> ")"
-               | "mix"  "(" <u-expr> "," <u-expr> "," <u-expr> ")"
-               | "step" "(" <u-expr> "," <u-expr> ")"
-               | "smoothstep" "(" <u-expr> "," <u-expr> "," <u-expr> ")"
-               | "floor" "(" <u-expr> ")"
-               | "ceil" "(" <u-expr> ")"
-               | "round" "(" <u-expr> ")"
-               | "dot" "(" <u-expr> "," <u-expr> ")"
-               | "length" "(" <u-expr> ")"
-               | "distance" "(" <u-expr> "," <u-expr> ")"
-               | "normalize" "(" <u-expr> ")"
-               | "cross" "(" <u-expr> "," <u-expr> ")"
-               | "oklabFromRgb" "(" <u-expr> ")"
-               | "rgbFromOklab" "(" <u-expr> ")"
-               | "oklchFromRgb" "(" <u-expr> ")"
-               | "rgbFromOklch" "(" <u-expr> ")"
-               | "faceAvg" "(" <u-expr> ")"
-               | "faceMin" "(" <u-expr> ")"
-               | "faceMax" "(" <u-expr> ")"
-               | "faceSum" "(" <u-expr> ")"
-               | "voxelAvg" "(" <u-expr> ")"
-               | "voxelMin" "(" <u-expr> ")"
-               | "voxelMax" "(" <u-expr> ")"
-               | "voxelSum" "(" <u-expr> ")"
-               | "swatchAvg" "(" <u-expr> ")"
-               | "swatchMin" "(" <u-expr> ")"
-               | "swatchMax" "(" <u-expr> ")"
-               | "swatchSum" "(" <u-expr> ")"
-               | "swatch" "(" <u-expr> ")"
-               | "voxel" "(" <u-expr> ")"
-               | "face" "(" <u-expr> ")"
-               | "corner" "(" <u-expr> ")"
-               | "default" "(" <name> "," <u-expr> ")"
+<u-prim>      ::= <num>
+                | "true"
+                | "false"
+                | <string-lit>
+                | <name>
+                | "(" <u-expr> ")"
+                | "r"    "(" <u-expr> ")"
+                | "rg"   "(" <u-expr> "," <u-expr> ")"
+                | "rgb"  "(" <u-expr> "," <u-expr> "," <u-expr> ")"
+                | "rgba" "(" <u-expr> "," <u-expr> "," <u-expr> "," <u-expr> ")"
+                | "min"  "(" <u-expr> ")"
+                | "min"  "(" <u-expr> "," <u-expr> ")"
+                | "max"  "(" <u-expr> ")"
+                | "max"  "(" <u-expr> "," <u-expr> ")"
+                | "sum"  "(" <u-expr> ")"
+                | "avg"  "(" <u-expr> ")"
+                | "any"  "(" <u-expr> ")"
+                | "all"  "(" <u-expr> ")"
+                | "abs"  "(" <u-expr> ")"
+                | "pow"  "(" <u-expr> "," <u-expr> ")"
+                | "mod"  "(" <u-expr> "," <u-expr> ")"
+                | "clamp" "(" <u-expr> "," <u-expr> "," <u-expr> ")"
+                | "lerp" "(" <u-expr> "," <u-expr> "," <u-expr> ")"
+                | "mix"  "(" <u-expr> "," <u-expr> "," <u-expr> ")"
+                | "step" "(" <u-expr> "," <u-expr> ")"
+                | "smoothstep" "(" <u-expr> "," <u-expr> "," <u-expr> ")"
+                | "floor" "(" <u-expr> ")"
+                | "ceil" "(" <u-expr> ")"
+                | "round" "(" <u-expr> ")"
+                | "dot" "(" <u-expr> "," <u-expr> ")"
+                | "length" "(" <u-expr> ")"
+                | "distance" "(" <u-expr> "," <u-expr> ")"
+                | "normalize" "(" <u-expr> ")"
+                | "cross" "(" <u-expr> "," <u-expr> ")"
+                | "oklabFromRgb" "(" <u-expr> ")"
+                | "rgbFromOklab" "(" <u-expr> ")"
+                | "oklchFromRgb" "(" <u-expr> ")"
+                | "rgbFromOklch" "(" <u-expr> ")"
+                | "faceAvg" "(" <u-expr> ")"
+                | "faceMin" "(" <u-expr> ")"
+                | "faceMax" "(" <u-expr> ")"
+                | "faceSum" "(" <u-expr> ")"
+                | "voxelAvg" "(" <u-expr> ")"
+                | "voxelMin" "(" <u-expr> ")"
+                | "voxelMax" "(" <u-expr> ")"
+                | "voxelSum" "(" <u-expr> ")"
+                | "swatchAvg" "(" <u-expr> ")"
+                | "swatchMin" "(" <u-expr> ")"
+                | "swatchMax" "(" <u-expr> ")"
+                | "swatchSum" "(" <u-expr> ")"
+                | "swatch" "(" <u-expr> ")"
+                | "voxel" "(" <u-expr> ")"
+                | "face" "(" <u-expr> ")"
+                | "corner" "(" <u-expr> ")"
+                | "default" "(" <name> "," <u-expr> ")"
 
 ; A member is always a swizzle: 1-4 components over one alphabet,
 ; {r,g,b,a} or {x,y,z,w}, repeats allowed. Every value is a
 ; vector, so there is nothing else it could be.
-<member>     ::= <ident>
+<member>      ::= <ident>
 ```
 
 Dimension rules for an expression `e` with dimension written `dim(e)`:
@@ -1333,8 +1379,8 @@ sides share one dimension exactly.
 Shape rules, with a value either plain or an array over the effective palette
 (see [Shapes](#shapes)):
 
-1. A property name is an array; a literal is plain; a `--value` name has
-   its definition's shape.
+1. A property name is an array; a literal is plain; a bound name has its
+   definition's shape.
 2. The elementwise constructs, the operators, the constructors, swizzles,
    binary `min`/`max`, `abs`, `pow`, `mod`, `clamp`, `lerp`, `step`,
    `smoothstep`, `floor`/`ceil`/`round`, `default()`, `dot`, `length`,
@@ -1583,9 +1629,9 @@ One item per function. Dimensions and shapes follow the tables above.
     ```
 
 26. `default(name, fallback)` evaluates to `name` where it has a value
-    and to `fallback` where it does not: a `--value` name not yet
-    defined, a property no layer supplies, or a material that leaves it
-    unset, filled per element. `name` is bare or backtick-quoted, and
+    and to `fallback` where it does not: a name not yet bound, a
+    property no layer supplies, or a material that leaves it unset,
+    filled per element. `name` is bare or backtick-quoted, and
     `fallback` is any expression of the same dimension. Nothing
     auto-defaults, and an unbound name is an error, so a robust
     expression spells the spec default itself:
@@ -1667,7 +1713,9 @@ are all errors. Numbers use maximal munch: `1.5` is a single number token,
 and `.5` where an expression is expected is a number. Since numbers are vec1
 values, literals can be swizzled too. In `2.rr` the munch stops at `2`,
 since `2.` followed by a letter is not a number; the attached dot then
-begins a swizzle, giving a vec2 splat. `2.5.rr` works the same way.
+begins a swizzle, giving a vec2 splat. `2.5.rr` works the same way. The
+multi-character operators are single tokens under the same munch, `==`,
+`<=`, `>=`, and `!=`, so a binding's `=` is never carved out of one.
 
 **Linear evaluation.** Every expression evaluates in linear space over
 floats. A color property decodes its stored form to linear on read; a
@@ -1718,8 +1766,8 @@ has one: a PNG requires every component in `0..1`, so `1.5` into a PNG
 errors while `1.5` into a JSON field is fine, which is how an unbounded
 property like `emissiveStrength` travels.
 
-**Redefinition.** `--value` may redefine any name, a property or an earlier
-value. The right side is evaluated against the bindings visible at that
-point, so `--value roughnessFactor "pow(roughnessFactor, 2)"` reads the
+**Redefinition.** A binding may redefine any name, a property or an
+earlier value. The right side is evaluated against the bindings visible
+at that point, so `roughnessFactor = pow(roughnessFactor, 2)` reads the
 property and rebinds the name, and later expressions see the new value.
 There is no recursion.

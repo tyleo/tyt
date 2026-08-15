@@ -112,7 +112,7 @@ default taken:
 // .vxlconfig
 {
   "mesh": {
-    "outputProfiles": {
+    "profiles": {
       "geometry": {},
     },
   },
@@ -125,7 +125,7 @@ vxl mesh lamp.voxj
 
 # the same file
 vxl mesh lamp.voxj
-  --output-profile geometry
+  --profile geometry
 ```
 
 Either writes `lamp.glb`, geometry only. No flag mentions a material,
@@ -171,15 +171,15 @@ normals at twelve bytes each, sixty `u16` indices at two, 1080 bytes.
 
 ## The pbr bake
 
-The `pbr` output profile ships
+The `pbr` profile ships
 [built in](profile-language.md#built-in-profiles), so no `.vxlconfig`
 is involved:
 
 ```jsonc
-// the built-in output profiles, the map the binary embeds
+// the built-in profiles, the map the binary embeds
 {
   "pbr": {
-    "valueProfiles": ["albedo", "orm", "emissive"],
+    "valuesFrom": ["albedo", "orm", "emissive"],
     "materials": [
       {
         "slots": {
@@ -199,7 +199,7 @@ is involved:
 
 ```sh
 vxl mesh lamp.voxj
-  --output-profile pbr
+  --profile pbr
 ```
 
 or expanded into its flags, the material count deriving from the
@@ -207,9 +207,9 @@ mentions of material 0:
 
 ```sh
 vxl mesh lamp.voxj
-  --value-profile albedo
-  --value-profile orm
-  --value-profile emissive
+  --values-from albedo
+  --values-from orm
+  --values-from emissive
   --write-material-slot-value 0 baseColorTexture albedo
   --write-material-slot-value 0 occlusionTexture orm
   --write-material-slot-value 0 metallicRoughnessTexture orm
@@ -298,23 +298,18 @@ unwritten and defaults to `OPAQUE`, so the bulb draws solid; the
 
 ## A referenced file
 
-A `.vxlconfig` beside the model defines a profile pair of its own,
-a matte look that references its albedo map as a file instead of
+A `.vxlconfig` beside the model defines a profile of its own, a
+matte look that references its albedo map as a file instead of
 embedding it, with the geometry riding the config too:
 
 ```jsonc
 {
   "mesh": {
-    "valueProfiles": {
+    "profiles": {
       "matte": {
-        "basedOn": ["defaults"],
-        "values": [["albedo", "baseColorFactor"]],
-      },
-    },
-    "outputProfiles": {
-      "matte": {
+        "valuesFrom": ["defaults"],
+        "values": ["albedo = baseColorFactor"],
         "voxelSize": 0.1,
-        "valueProfiles": ["matte"],
         "files": {
           "png": {
             "{file-stem}-albedo.png": { "transfer": "srgb", "value": "albedo" },
@@ -339,7 +334,7 @@ embedding it, with the geometry riding the config too:
 ```sh
 vxl mesh lamp.voxj
   --to gltf
-  --output-profile matte
+  --profile matte
 ```
 
 or expanded into its flags, the file templates already filled:
@@ -348,7 +343,7 @@ or expanded into its flags, the file templates already filled:
 vxl mesh lamp.voxj
   --to gltf
   --voxel-size 0.1
-  --value-profile matte
+  --values-from matte
   --write-file-png-value lamp-albedo.png albedo srgb
   --write-material-slot-file 0 baseColorTexture lamp-albedo.png
 ```
@@ -412,9 +407,9 @@ they are read by on the primitive, no materials at all.
 // .vxlconfig
 {
   "mesh": {
-    "outputProfiles": {
+    "profiles": {
       "palette": {
-        "valueProfiles": ["albedo"],
+        "valuesFrom": ["albedo"],
         "primitives": [{ "indices": { "_PALETTE": "u8" } }],
         "meshExtras": {
           "albedo": {
@@ -431,7 +426,7 @@ they are read by on the primitive, no materials at all.
 
 ```sh
 vxl mesh lamp.voxj
-  --output-profile palette
+  --profile palette
 ```
 
 or expanded into its flags, the primitives entry firing the explicit
@@ -439,14 +434,14 @@ no-material primitive:
 
 ```sh
 vxl mesh lamp.voxj
-  --value-profile albedo
+  --values-from albedo
   --primitive none true
   --write-mesh-extra-json-value albedo albedo linear
   --write-primitive-index 0 _PALETTE u8
 ```
 
-The built-in `albedo` value profile reduces to one value here: a bare
-`--value albedo "baseColorFactor"` serves the same, the lamp's
+The built-in `albedo` profile reduces to one value here: a bare
+`--value "albedo = baseColorFactor"` serves the same, the lamp's
 palette supplying every base color.
 
 ```jsonc
@@ -508,19 +503,13 @@ the flat form, and `step.voxj` has the inside corner that makes it
 visible:
 
 ```jsonc
-// .vxlconfig: one name in both kinds; the value profile binds the
-// computation, the output profile bakes it
+// .vxlconfig: one profile binds the computation and bakes it
 {
   "mesh": {
-    "valueProfiles": {
+    "profiles": {
       "flat-ao": {
         "computeOcclusion": "computedOcclusion",
-        "values": [["ao", "faceAvg(computedOcclusion)"]],
-      },
-    },
-    "outputProfiles": {
-      "flat-ao": {
-        "valueProfiles": ["flat-ao"],
+        "values": ["ao = faceAvg(computedOcclusion)"],
         "materials": [
           {
             "slots": {
@@ -536,7 +525,7 @@ visible:
 
 ```sh
 vxl mesh step.voxj
-  --output-profile flat-ao
+  --profile flat-ao
 ```
 
 or by hand:
@@ -544,7 +533,7 @@ or by hand:
 ```sh
 vxl mesh step.voxj
   --compute-occlusion computedOcclusion
-  --value ao "faceAvg(computedOcclusion)"
+  --value "ao = faceAvg(computedOcclusion)"
   --write-material-slot-value 0 occlusionTexture ao
 ```
 
@@ -658,9 +647,9 @@ map reads, and the face entry stays textureless:
 // .vxlconfig
 {
   "mesh": {
-    "outputProfiles": {
+    "profiles": {
       "lightmap": {
-        "valueProfiles": ["albedo"],
+        "valuesFrom": ["albedo"],
         "materials": [
           {
             "slots": {
@@ -677,14 +666,14 @@ map reads, and the face entry stays textureless:
 
 ```sh
 vxl mesh step.voxj
-  --output-profile lightmap
+  --profile lightmap
 ```
 
 or expanded into its flags:
 
 ```sh
 vxl mesh step.voxj
-  --value-profile albedo
+  --values-from albedo
   --primitive 0 true
   --write-material-slot-value 0 baseColorTexture albedo
   --write-primitive-uv 0 swatch
@@ -764,17 +753,12 @@ palette itself:
 // .vxlconfig; JSON escapes the inner quotes
 {
   "mesh": {
-    "valueProfiles": {
+    "profiles": {
       "glass": {
-        "basedOn": ["albedo"],
+        "valuesFrom": ["albedo"],
         "values": [
-          ["mode", "mix(\"OPAQUE\", \"BLEND\", min(baseColorFactor.a) < 1)"],
+          "mode = mix(\"OPAQUE\", \"BLEND\", min(baseColorFactor.a) < 1)",
         ],
-      },
-    },
-    "outputProfiles": {
-      "glass": {
-        "valueProfiles": ["glass"],
         "materials": [
           {
             "slots": {
@@ -791,17 +775,17 @@ palette itself:
 
 ```sh
 vxl mesh lamp.voxj
-  --output-profile glass
+  --profile glass
 ```
 
-or expanded into its flags, the `glass` values spelled over the
-built-in `albedo` value profile they build on, the shell's single
-quotes carrying the inner double quotes through:
+or expanded into its flags, the `glass` values over the built-in
+`albedo` profile they build on, the shell's single quotes carrying
+the inner double quotes through:
 
 ```sh
 vxl mesh lamp.voxj
-  --value-profile albedo
-  --value mode 'mix("OPAQUE", "BLEND", min(baseColorFactor.a) < 1)'
+  --values-from albedo
+  --value 'mode = mix("OPAQUE", "BLEND", min(baseColorFactor.a) < 1)'
   --write-material-slot-value 0 baseColorTexture albedo
   --write-material-slot-value 0 alphaMode mode
 ```
