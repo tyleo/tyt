@@ -122,18 +122,18 @@ with one object. See
    at `vxl.name` in the primitive's `extras`. A primitive without the flag
    carries no name.
 
-10. `--uv <corner | face | row>`
+10. `--uv <corner | face | swatch>`
     - Default: derives from use
     - Repeatable: yes
 
     Declares the mesh's stream list in `TEXCOORD` order, one stream per flag,
     a domain listed twice erroring. The list is the bake contract: each texture
     bakes at the lowest listed domain at or above its value's domain, so
-    `--uv face` alone bakes row maps per face. A texture whose domain sits above
-    every listed entry errors, since stepping down is never implicit.
+    `--uv face` alone bakes swatch maps per face. A texture whose domain sits
+    above every listed entry errors, since stepping down is never implicit.
     The derived list holds each texture's own domain and each domain
-    `--write-primitive-uv` names. The derived order is the ladder: row, then
-    face, then corner. Each primitive writes the list filtered to its
+    `--write-primitive-uv` names. The derived order is the ladder: swatch,
+    then face, then corner. Each primitive writes the list filtered to its
     material's need unless `--write-primitive-uv` spells its streams; see
     [UV streams](#uv-streams).
 
@@ -166,7 +166,7 @@ with one object. See
 14. `--write-file-png-value <dst-file> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
-    Writes a [row, face, or corner](value-language.md#domains) array to an
+    Writes a [swatch, face, or corner](value-language.md#domains) array to an
     8-bit PNG beside the mesh, one texel per entry, a corner array in the
     [corner atlas](#the-corner-atlas)'s block layout. The image is sized to
     its value: vec1 through vec4 write grey, grey-alpha, RGB, and RGBA, and
@@ -253,7 +253,7 @@ with one object. See
 
     Writes a value's numbers into a mesh `extras.vxl.values.<name>` entry. A
     plain value writes as its numbers. An array writes as rows, one row per
-    flattened material; see [Palettes](#palettes).
+    swatch; see [Palettes](#palettes).
 
 25. `--write-primitive-builtin-value <primitive-index> <dst-attribute> <src-expr>`
     - Repeatable: yes
@@ -276,14 +276,14 @@ with one object. See
 27. `--write-primitive-index <primitive-index> <dst-name> <u8 | u16>`
     - Repeatable: yes
 
-    Writes the per-vertex palette index as its own custom attribute on the
+    Writes the per-vertex swatch index as its own custom attribute on the
     indexed primitive. The name is underscore-typed. A palette the width
-    cannot index errors. The numbers are the effective palette's own rows
-    under any select. The flag is independent of every other flag. Alone it
-    is the bare index, and beside extras rows it is the join key a shader
-    reads them by; see [Palettes](#palettes).
-    1. `u8`: 256 rows.
-    2. `u16`: 65536 rows.
+    cannot index errors. The numbers are the effective palette's own swatch
+    numbers under any select. The flag is independent of every other flag.
+    Alone it is the bare index, and beside extras rows it is the join key a
+    shader reads them by; see [Palettes](#palettes).
+    1. `u8`: 256 swatches.
+    2. `u16`: 65536 swatches.
 
 28. `--write-primitive-normal <primitive-index> <false | true>`
     - Default: `true`
@@ -295,7 +295,7 @@ with one object. See
     a conforming viewer draws the same pixels either way. `false` drops the
     stream, bytes a data primitive never reads.
 
-29. `--write-primitive-uv <primitive-index> <corner | face | row>`
+29. `--write-primitive-uv <primitive-index> <corner | face | swatch>`
     - Default: the mesh's stream list filtered to the material's need
     - Repeatable: yes
 
@@ -355,7 +355,7 @@ one exists. The order is an assignment: the location before what fills it,
 is part of the destination, so it rides ahead of the rest: which object, then
 what on it. A writer's name ends in its source kind. `-value` takes an
 expression and writes its value. `-file` takes an existing file. `-index` takes
-the palette row number. `-normal` takes the mesher's computed normal; source and
+the swatch number. `-normal` takes the mesher's computed normal; source and
 destination are both fixed, so the flag carries only whether the write happens.
 `-uv` takes the mesher's computed coordinates the same way; the flag carries
 only which streams write. A `<src-expr>` is any expression of the
@@ -404,23 +404,23 @@ legal and emits unused.
 
 The select routes the faces. It names a [bool](value-language.md#booleans) value
 read at the [face domain](value-language.md#domains), lower domains climbing the
-ladder, and the primitive takes every face whose entry is true. A row bool
-routes whole rows: every face takes its row's answer. A face bool routes faces
-one by one, reaching below the palette to what only the mesh knows. A plain bool
-takes every face or none, and `true` is the whole-mesh select on any material.
-The selects partition the faces. A face no select takes would be a silent drop,
-so it errors. A face two selects take is two flags claiming one destination, the
-error the rest of the flag surface already throws. The partition covers the
-faces the mesher emits. A row-bool partition of the used rows holds under every
-`--method`, while a face-bool gap can open under one method and not another. The
-complement select is whole under all of them, and a `false` select takes
-nothing, legal wherever the rest cover the mesh. Selects only route; they never
-change what geometry exists.
+ladder, and the primitive takes every face whose entry is true. A swatch bool
+routes whole swatches: every face takes its swatch's answer. A face bool routes
+faces one by one, reaching below the palette to what only the mesh knows. A
+plain bool takes every face or none, and `true` is the whole-mesh select on any
+material. The selects partition the faces. A face no select takes would be a
+silent drop, so it errors. A face two selects take is two flags claiming one
+destination, the error the rest of the flag surface already throws. The
+partition covers the faces the mesher emits. A swatch-bool partition of the
+used swatches holds under every `--method`, while a face-bool gap can open
+under one method and not another. The complement select is whole under all of
+them, and a `false` select takes nothing, legal wherever the rest cover the
+mesh. Selects only route; they never change what geometry exists.
 
-The selects split the model. Every face draws once with its row's material:
+The selects split the model. Every face draws once with its swatch's material:
 
 ```sh
-# split: solid rows with material 0, glowing rows with material 1
+# split: solid swatches with material 0, glowing swatches with material 1
 vxl mesh turret.voxj
   --value glowing "emissiveStrength > 0"
   --value solid "!glowing"
@@ -455,8 +455,8 @@ vxl mesh turret.voxj
 }
 ```
 
-A face select splits inside a row. Occlusion lives on the mesh, not the palette,
-so a crevice mask sends one row's seam faces to their own material:
+A face select splits inside a swatch. Occlusion lives on the mesh, not the
+palette, so a crevice mask sends one swatch's seam faces to their own material:
 
 ```sh
 # dirt in the creases: material 1 takes the occluded faces
@@ -477,7 +477,7 @@ name field, so `--primitive-name` rides the primitive's `extras` at `vxl.name`.
 
 ## The palette atlas
 
-Every row map of one bake shares a single layout: one texel per distinct
+Every swatch map of one bake shares a single layout: one texel per distinct
 flattened material. The object's layers merge per property name by the format's
 layer-override resolution. Each property reads through the last layer whose
 palette supplies its name. A voxel's texel is therefore keyed by the tuple of
@@ -512,7 +512,7 @@ surface: the language's [face domain](value-language.md#domains).
 [Computed occlusion](value-language.md#computed-occlusion), reduced from its
 corners, is the first face value. The layout packs the face cells into the
 canvas and generates the face stream's UVs. `--uv face` alone lays every texture
-out per face, row values climbing in; see [UV streams](#uv-streams).
+out per face, swatch values climbing in; see [UV streams](#uv-streams).
 
 ## The corner atlas
 
@@ -544,31 +544,33 @@ route for a shader of your own.
 ## UV streams
 
 A sampled texture is texels plus the coordinates faces read them by, and the two
-must agree. Each texture-capable domain therefore has its own arrangement. A row
-texture holds one texel per palette row, and every face of the row reads the
-same texel. A face texture holds one texel per face, each face its own. A corner
-texture holds a 2x2 block per face, each corner its own texel. One mesh can
-carry several kinds at once, one face then reading a different spot in each, so
-a primitive carries one UV stream per layout its faces read, glTF's numbered
-`TEXCOORD_<n>` attributes. A row or face texture samples nearest; a corner
+must agree. Each texture-capable domain therefore has its own arrangement. A
+swatch texture holds one texel per swatch, and every face of the swatch reads
+the same texel. A face texture holds one texel per face, each face its own. A
+corner texture holds a 2x2 block per face, each corner its own texel. One mesh
+can carry several kinds at once, one face then reading a different spot in
+each, so a primitive carries one UV stream per layout its faces read, glTF's
+numbered
+`TEXCOORD_<n>` attributes. A swatch or face texture samples nearest; a corner
 texture samples linear, the interpolation its point.
 
 The stream list derives from use when nothing spells it: each texture bakes at
 its value's own domain, a `--write-primitive-uv` mention joins, and the list
-holds the domains in use in ladder order, `[row]` through `[row, face, corner]`,
-empty when nothing writes a texture. `--uv <corner | face | row>`, repeatable,
+holds the domains in use in ladder order, `[swatch]` through
+`[swatch, face, corner]`, empty when nothing writes a texture.
+`--uv <corner | face | swatch>`, repeatable,
 spells the list instead, one stream per flag in `TEXCOORD` order, and a
 profile's `uvs` key is the same list in config, any `--uv` replacing all of it.
 The spelled list is the whole contract: each texture bakes at the lowest listed
 domain at or above its value's domain, climbing in, so `--uv face` alone bakes
-the row maps per face, one stream for a consumer that reads one UV set, and a
+the swatch maps per face, one stream for a consumer that reads one UV set, and
 `--write-primitive-uv` domain outside the list errors. A texture whose domain
 sits above every listed entry errors, since stepping down is never implicit;
 `faceAvg` spells the step. The order pins the relative numbers: an engine that
-wants its face maps ahead of its row maps spells `--uv face --uv row`.
+wants its face maps ahead of its swatch maps spells `--uv face --uv swatch`.
 
 The streams land per primitive. An unspelled primitive writes the list filtered
-to the domains its material samples: a primitive of row maps carries one stream,
+to the domains its material samples: a primitive of swatch maps carries one
 and a `none` primitive carries none. `--write-primitive-uv` spells a primitive's
 streams instead, in the primitive's own `TEXCOORD` order, and a spelled stream
 no texture bakes at emits anyway, the coordinates an externally-baked texture,
@@ -586,7 +588,7 @@ flags claiming one destination, the usual error. No flag hand-wires a slot:
 //   --compute-occlusion computedOcclusion
 //   --value ao "faceAvg(computedOcclusion)"
 //   --write-material-slot-value 0 occlusionTexture ao
-// row and face both write, so the streams derive [row, face]
+// swatch and face both write, so the streams derive [swatch, face]
 {
   "asset": { "version": "2.0" },
   "textures": [
@@ -596,7 +598,7 @@ flags claiming one destination, the usual error. No flag hand-wires a slot:
   "materials": [
     {
       "pbrMetallicRoughness": {
-        "baseColorTexture": { "index": 0, "texCoord": 0 }, // the row stream
+        "baseColorTexture": { "index": 0, "texCoord": 0 }, // the swatch stream
       },
       "occlusionTexture": { "index": 1, "texCoord": 1 }, // the face stream
     },
@@ -631,7 +633,7 @@ that swaps team colors or ramps a glow per damage state without re-exporting the
 mesh. The four `--write-mesh-extra-*` flags write named entries under the mesh's
 `extras.vxl.values`, the same grid the material extras take. `json-value` puts a
 value's numbers in the entry, a plain value as its numbers and an array as rows,
-one per flattened material in [shape order](value-language.md#shapes).
+one per swatch in [shape order](value-language.md#shapes).
 `json-file` points the entry at an existing JSON file. `image-value` embeds an
 array as a PNG and stores its texture index. `image-file` references an existing
 image the same way. The entry shapes cannot be confused: numbers and rows are
@@ -642,9 +644,9 @@ usual error.
 The palette pattern is rows beside their join key.
 `--write-mesh-extra-json-value` writes the rows. `--write-primitive-index`
 writes the attribute they are read by, one integer per vertex naming the
-flattened material its face samples. The attribute is yours to spell: the name,
+swatch its face samples. The attribute is yours to spell: the name,
 typed with its underscore like any custom attribute, and the width, `u8` holding
-256 rows and `u16` holding 65536. A palette the width cannot index errors rather
+256 swatches and `u16` holding 65536. A palette the width cannot index errors
 than truncates. Every array value runs over the one effective palette, so every
 entry of rows shares the one index. A shader reads `values.albedo[_PALETTE]`
 against as many entries as the line writes, and each is plain data the runtime
@@ -701,10 +703,10 @@ encoding, so the flag declares it.
 The flags stay independent, so each half of the pattern stands alone.
 `--write-primitive-index` by itself is the bare index, an attribute with no
 rows, for a runtime that ships its own tables keyed to the effective palette's
-row order. Rows by themselves are legal too, data a build step reads in material
-order with no per-vertex join. Nothing checks the pairing, so a runtime that
-needs both spells both. The index is a custom attribute like any other, so a
-`--write-primitive-custom-value` spelling its name is two flags claiming one
+swatch order. Rows by themselves are legal too, data a build step reads in
+swatch order with no per-vertex join. Nothing checks the pairing, so a runtime
+that needs both spells both. The index is a custom attribute like any other, so
+a `--write-primitive-custom-value` spelling its name is two flags claiming one
 destination.
 
 A storage choice is a flag combination. Embedded rows are

@@ -218,7 +218,7 @@ vxl mesh lamp.voxj
   --write-material-slot-value 0 emissiveStrength maxStrength
 ```
 
-The profile evaluates its values over the two palette rows: `albedo`
+The profile evaluates its values over the two swatches: `albedo`
 is the two base colors, `orm` packs occlusion 1 with roughness 0.9
 and 0.4 and metallic 1 and 0, `emissive` is black for the steel and
 `[1, 0.9, 0.6]` for the bulb, its strength 4 over the palette's
@@ -226,11 +226,11 @@ and 0.4 and metallic 1 and 0, `emissive` is black for the steel and
 black default.
 
 The [palette atlas](mesh.md#the-palette-atlas) lays one texel per
-row. The default `pot` canvas is the smallest square power of two
+swatch. The default `pot` canvas is the smallest square power of two
 holding two texels, 2 by 2, two cells used and two transparent black
-the mesh never samples. Only row values write textures, so the
-streams derive `[row]`, one `TEXCOORD_0`, each face's UVs at its
-row's texel center: `(0.25, 0.25)` for the steel, `(0.75, 0.25)` for
+the mesh never samples. Only swatch values write textures, so
+the streams derive `[swatch]`, one `TEXCOORD_0`, each face's UVs at
+its swatch's texel center: `(0.25, 0.25)` for the steel, `(0.75, 0.25)` for
 the bulb.
 
 ```jsonc
@@ -500,7 +500,7 @@ is the explicit `--write-primitive-normal 0 false`.
 
 ## Baked occlusion
 
-Occlusion varies across a surface, not per palette row, so its
+Occlusion varies across a surface, not per swatch, so its
 textures leave the palette layout: flat per face through the
 [unwrap atlas](mesh.md#the-unwrap-atlas), or smooth per corner
 through the [corner atlas](mesh.md#the-corner-atlas). This run bakes
@@ -650,7 +650,8 @@ run's config spelling, a `0.2` floor added.
 
 A stream can exist for texels the run never writes. An engine that
 bakes its own lightmap wants per-face coordinates in the file, so
-the primitive spells a face stream beside the row stream its albedo
+the primitive spells a face stream beside the swatch stream its
+albedo
 map reads, and the face entry stays textureless:
 
 ```jsonc
@@ -667,7 +668,7 @@ map reads, and the face entry stays textureless:
             },
           },
         ],
-        "primitives": [{ "material": 0, "uvs": ["row", "face"] }],
+        "primitives": [{ "material": 0, "uvs": ["swatch", "face"] }],
       },
     },
   },
@@ -686,17 +687,18 @@ vxl mesh step.voxj
   --value-profile albedo
   --primitive 0 true
   --write-material-slot-value 0 baseColorTexture albedo
-  --write-primitive-uv 0 row
+  --write-primitive-uv 0 swatch
   --write-primitive-uv 0 face
 ```
 
 No `--uv` is spelled, so the stream list derives: the albedo texture
-puts `row` in use, and the `face` mention joins it. The primitive
-spells its streams, row then face, so `TEXCOORD_0` is the row stream
-the material reads and `TEXCOORD_1` is the
+puts `swatch` in use, and the `face` mention joins it. The
+primitive spells its streams, swatch then face, so `TEXCOORD_0` is
+the swatch stream the material reads and `TEXCOORD_1` is the
 [unwrap atlas](mesh.md#the-unwrap-atlas) layout, ten face cells in a
 4-by-4 canvas with no image behind them. Unspelled, the primitive
-would filter to the row stream alone and no face stream would exist:
+would filter to the swatch stream alone and no face stream would
+exist:
 
 ```jsonc
 {
@@ -804,7 +806,7 @@ vxl mesh lamp.voxj
   --write-material-slot-value 0 alphaMode mode
 ```
 
-`baseColorFactor.a` is the rows `[1, 0.6]`, `min` folds them to 0.6,
+`baseColorFactor.a` is the entries `[1, 0.6]`, `min` folds them to 0.6,
 the comparison answers true, and `mix` picks `"BLEND"`. The writer
 checks the token against glTF's own `alphaMode` list at the edge, so
 a typo errors with the format named rather than landing in the file:

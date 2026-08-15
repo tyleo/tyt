@@ -52,12 +52,12 @@ an out-of-range index, or an array index (a gather) errors. Indexing and
 swizzling commute: `baseColorFactor[0].rgb` and `baseColorFactor.rgb[0]` are
 the same value.
 
-A PNG writes a [row, face, or corner](#domains) array, one texel per entry;
+A PNG writes a [swatch, face, or corner](#domains) array, one texel per entry;
 a plain value has no texels and cannot be written to a PNG. In JSON an
 array field writes as a JSON array and a plain field as a single literal.
 
 The plain-or-array split is half an axis: an array also has a
-[domain](#domains) saying what its entries run over, the palette rows here
+[domain](#domains) saying what its entries run over, the palette's swatches here
 and the mesh's faces or corners elsewhere. A [bool](#booleans) value shares
 the axis, though it is no vector: it has no components and takes no
 swizzle. A [string](#strings) rides the axes the same way, no vector
@@ -66,66 +66,69 @@ either, the type an enum slot and a palette tag speak.
 ## Domains
 
 A value's domain is what it has one entry per. There are four. A plain
-value has one entry. A row value has one entry per distinct flattened
-material of the effective palette, the arrays every property starts as. A
-face value has one entry per face the mesher emits. A corner value has one
-entry per face corner, exactly four per face, and
+value has one entry. A swatch value has one entry per swatch, a distinct
+flattened material of the effective palette, the arrays every property
+starts as. A face value has one entry per face the mesher emits. A corner
+value has one entry per face corner, exactly four per face, and
 [computed occlusion](#computed-occlusion) is the domain's producer. Domain
-is orthogonal to dimension: `albedo` is a row vec3, occlusion a corner
+is orthogonal to dimension: `albedo` is a swatch vec3, occlusion a corner
 vec1.
 
 ```sh
-# a four-row palette meshed into ten faces
+# a four-swatch palette meshed into ten faces
 plain    1 entry
-row      4 entries    # one per palette row
+swatch   4 entries    # one per swatch
 face    10 entries    # one per face
 corner  40 entries    # four corners per face
 ```
 
-The domains ladder, plain to row to face to corner, and every step up is a
-lossless duplication: a plain value broadcasts everywhere, a row value
-reads per face through the face's own row, and a face value duplicates onto
-its four corners. Climbing is implicit because nothing is lost, the same
-rule that broadcasts a scalar across an array, so `albedo * ao` is legal,
-`albedo` climbing to the corners before the multiply pairs entries.
-`row(e)`, `face(e)`, and `corner(e)` spell the same climb where the domain
-is the point: each lifts its value to the named domain, the identity on a
-value already there, and a step down through one errors. `face(albedo)`
-bakes one row map per face while the others stay compact, `face(0.5)`
-gives a plain value the texels a texture needs, and `face(1)` under
-`rowSum` counts a row's faces. A climb moves entries and never touches
-them, so it takes a bool or a [string](#strings) as readily as a number.
+The domains ladder, plain to swatch to face to corner, and every step up
+is a lossless duplication: a plain value broadcasts everywhere, a swatch
+value reads per face through the face's own swatch, and a face value
+duplicates onto its four corners. Climbing is implicit because nothing is
+lost, the same rule that broadcasts a scalar across an array, so
+`albedo * ao` is legal, `albedo` climbing to the corners before the
+multiply pairs entries. `swatch(e)`, `face(e)`, and `corner(e)` spell the
+same climb where the domain is the point: each lifts its value to the
+named domain, the identity on a value already there, and a step down
+through one errors. `face(albedo)` bakes one swatch map per face while
+the others stay compact, `face(0.5)` gives a plain value the texels a
+texture needs, and `face(1)` under `swatchSum` counts a swatch's faces. A
+climb moves entries and never touches them, so it takes a bool or a
+[string](#strings) as readily as a number.
 
 A step down loses entries, so it is spelled, one rung per function.
 `faceAvg(e)`, `faceMin(e)`, `faceMax(e)`, and `faceSum(e)` take a corner
 array to a face array, each face's four corners reduced per component.
-`rowAvg(e)`, `rowMin(e)`, `rowMax(e)`, and `rowSum(e)` take a face array
-to a row array, each row's faces reduced. The unary reductions,
-`min`/`max`/`sum`/`avg`, take any array to plain across its whole domain.
-A corner value meeting a face destination without a reduction is an error,
-never an implicit average. Two rungs are two calls, and the compositions
-are exact: every face has four corners, so `rowAvg(faceAvg(e))` is the
-grand mean of a row's corners and `rowMin(faceMin(e))` its grand min.
+`swatchAvg(e)`, `swatchMin(e)`, `swatchMax(e)`, and `swatchSum(e)` take
+a face array to a swatch array, each swatch's faces reduced. The unary
+reductions, `min`/`max`/`sum`/`avg`, take any array to plain across its
+whole domain. A corner value meeting a face destination without a
+reduction is an error, never an implicit average. Two rungs are two
+calls, and the compositions are exact: every face has four corners, so
+`swatchAvg(faceAvg(e))` is the grand mean of a swatch's corners and
+`swatchMin(faceMin(e))` its grand min.
 
-A row can own no faces: a material whose voxels sit fully enclosed emits
-nothing under `greedy` or `culled`, though everything under `naive`. The
-face domain itself is never empty, a voxel set always having a boundary,
-and a face always has its four corners, so the hole opens only per row.
-`rowAvg`, `rowMin`, and `rowMax` error there, naming the material and the
-method, and `rowSum` answers `0`, the empty sum. The guard is spelled
-through the sums, so a buried row takes the author's own answer:
+A swatch can own no faces: a material whose voxels sit fully enclosed
+emits nothing under `greedy` or `culled`, though everything under
+`naive`. The face domain itself is never empty, a voxel set always having
+a boundary, and a face always has its four corners, so the hole opens
+only per swatch. `swatchAvg`, `swatchMin`, and `swatchMax` error there,
+naming the material and the method, and `swatchSum` answers `0`, the
+empty sum. The guard is spelled through the sums, so a buried swatch
+takes the author's own answer:
 
 ```sh
 --compute-occlusion computedOcclusion
 --value aoFace "faceAvg(computedOcclusion)"
---value faceCount "rowSum(face(1))"
---value ao "rowSum(aoFace) / max(faceCount, 1)"   # buried row: 0
+--value faceCount "swatchSum(face(1))"
+--value ao "swatchSum(aoFace) / max(faceCount, 1)"   # buried swatch: 0
 ```
 
 The destinations read by domain. A texture holds one texel per entry, so
-it takes a row, face, or corner array, its layout and UV stream following
+it takes a swatch, face, or corner array, its layout and UV stream following
 the domain it bakes at; see [UV streams](mesh.md#uv-streams). A select reads
-at the faces, plain and row bools climbing in; see
+at the faces, plain and swatch bools climbing in; see
 [Primitives and materials](mesh.md#primitives-and-materials). The
 [vertex attributes](#vertex-attributes) live on the corners, the ladder's
 top, so any domain climbs in, a corner value landing exactly. A material
@@ -154,7 +157,7 @@ a bool never mixes with a number, so there is no `0`/`1` coercion,
 function rejects one except `mix` and the domain climbs. `mix(x, y,
 cond)` is the spelled bridge out: it picks `x` or `y` per entry by
 the bool, so `mix(0, 1, glowing)` is the deliberate `0`/`1` mask; see
-[Functions](#functions). The climbs, `row`/`face`/`corner`, move a
+[Functions](#functions). The climbs, `swatch`/`face`/`corner`, move a
 bool's entries and never touch them. Beyond these only grouping
 parentheses and `e[i]` apply, sampling a bool array at an entry. The
 type reaches three destinations: the select of
@@ -197,7 +200,7 @@ array, and no other comparison applies, strings holding no order.
 `mix(x, y, cond)` picks between two strings by a bool, the bridge
 numbers already have. `e[i]` samples a string array at an entry.
 `default(name, fallback)` fills a string hole. The domain climbs,
-`row`/`face`/`corner`, lift a string's entries untouched. The
+`swatch`/`face`/`corner`, lift a string's entries untouched. The
 equality is the routing tool, an authored tag turning into a select:
 
 ```sh
@@ -479,7 +482,7 @@ share, the form spelled in the name.
 `--write-material-extra-json-value <material-index> <dst-name>
 <src-expr> <linear | srgb>` puts the value's numbers in the entry
 itself, a plain vec1 as one number, a vecN as an array of N, and an
-array value as rows, one per flattened material.
+array value as rows, one per swatch.
 `--write-material-extra-image-value <material-index> <dst-name>
 <src-expr> <linear | srgb>` embeds an array as an image, the entry
 holding its texture index; a plain value errors, an image needing
@@ -549,10 +552,10 @@ the transfer the stored floats take.
 
 The attributes live on the corners, the [ladder](#domains)'s top, so a
 value of any domain climbs in: a plain value broadcasts to every corner,
-a row value gives each corner its face's row's entry, a merged greedy
-quad staying uniform since it is single-row, a face value duplicates
-onto its four corners, and a corner value writes each corner exactly,
-which is what [computed occlusion](#computed-occlusion) wants.
+a swatch value gives each corner its face's swatch's entry, a merged
+greedy quad staying uniform since it is single-swatch, a face value
+duplicates onto its four corners, and a corner value writes each corner
+exactly, which is what [computed occlusion](#computed-occlusion) wants.
 
 A format without vertex attributes rejects both flags. Each flag
 writes its indexed primitive alone, so two primitives carry exactly
@@ -567,7 +570,7 @@ Occlusion computed from the voxel geometry, each face corner reading the
 voxels that meet there. A corner is where neighbors crowd in, so the
 result is a [corner](#domains) value, the domain's producer, and the
 first value that varies across a surface: every palette property is per
-row, which is why the unwrap and corner atlases exist.
+swatch, which is why the unwrap and corner atlases exist.
 
 `--compute-occlusion <dst-name>` requests the computation and binds the
 result under the name, a corner vec1 in `0..1`, `1` fully open,
@@ -596,9 +599,9 @@ Three texture routes carry it. Written whole, the value bakes the
 [corner atlas](mesh.md#the-corner-atlas), a texel per corner sampled
 bilinear, so the standard `occlusionTexture` slot shades smooth creases
 in a stock viewer. Stepped down, `faceAvg` or its siblings, it bakes a
-face texture, one flat texel per face. Stepped to the rows,
-`rowAvg(faceAvg(computedOcclusion))`, it lands in the palette layout,
-one value per material beside the other row maps, no extra stream at
+face texture, one flat texel per face. Stepped to the swatches,
+`swatchAvg(faceAvg(computedOcclusion))`, it lands in the palette layout,
+one value per material beside the other swatch maps, no extra stream at
 all. Each route rides the [UV stream](mesh.md#uv-streams) of the
 domain it bakes at. A sampled neighborhood model, a radius and a
 falloff curve, is a possible extension beyond the discrete corner
@@ -672,13 +675,13 @@ associativity for `+ - * / && ^ ||`.
                   | <name>
                   | "(" <vec1-expr> ")"
                   | "r" "(" <vec1-expr> ")"
-                  | "min" "(" <vec1-expr> ")"                  ; palette minimum
+                  | "min" "(" <vec1-expr> ")"                 ; palette minimum
                   | "min" "(" <vec1-expr> "," <vec1-expr> ")"
-                  | "max" "(" <vec1-expr> ")"                  ; palette maximum
+                  | "max" "(" <vec1-expr> ")"                 ; palette maximum
                   | "max" "(" <vec1-expr> "," <vec1-expr> ")"
-                  | "sum" "(" <vec1-expr> ")"                  ; palette sum
-                  | "avg" "(" <vec1-expr> ")"                   ; palette mean
-                  | "dot" "(" <vec1-expr> "," <vec1-expr> ")"   ; component fold
+                  | "sum" "(" <vec1-expr> ")"                 ; palette sum
+                  | "avg" "(" <vec1-expr> ")"                  ; palette mean
+                  | "dot" "(" <vec1-expr> "," <vec1-expr> ")"  ; component fold
                   | "dot" "(" <vec2-expr> "," <vec2-expr> ")"
                   | "dot" "(" <vec3-expr> "," <vec3-expr> ")"
                   | "dot" "(" <vec4-expr> "," <vec4-expr> ")"
@@ -703,15 +706,15 @@ associativity for `+ - * / && ^ ||`.
                   | "floor" "(" <vec1-expr> ")"
                   | "ceil" "(" <vec1-expr> ")"
                   | "round" "(" <vec1-expr> ")"
-                  | "faceAvg" "(" <vec1-expr> ")"             ; corners to faces
+                  | "faceAvg" "(" <vec1-expr> ")"            ; corners to faces
                   | "faceMin" "(" <vec1-expr> ")"
                   | "faceMax" "(" <vec1-expr> ")"
                   | "faceSum" "(" <vec1-expr> ")"
-                  | "rowAvg" "(" <vec1-expr> ")"              ; faces to rows
-                  | "rowMin" "(" <vec1-expr> ")"
-                  | "rowMax" "(" <vec1-expr> ")"
-                  | "rowSum" "(" <vec1-expr> ")"
-                  | "row" "(" <vec1-expr> ")"                 ; domain climbs
+                  | "swatchAvg" "(" <vec1-expr> ")"          ; faces to swatches
+                  | "swatchMin" "(" <vec1-expr> ")"
+                  | "swatchMax" "(" <vec1-expr> ")"
+                  | "swatchSum" "(" <vec1-expr> ")"
+                  | "swatch" "(" <vec1-expr> ")"             ; domain climbs
                   | "face" "(" <vec1-expr> ")"
                   | "corner" "(" <vec1-expr> ")"
                   | "default" "(" <name> "," <vec1-expr> ")"
@@ -780,11 +783,11 @@ associativity for `+ - * / && ^ ||`.
                   | "faceMin" "(" <vec2-expr> ")"
                   | "faceMax" "(" <vec2-expr> ")"
                   | "faceSum" "(" <vec2-expr> ")"
-                  | "rowAvg" "(" <vec2-expr> ")"
-                  | "rowMin" "(" <vec2-expr> ")"
-                  | "rowMax" "(" <vec2-expr> ")"
-                  | "rowSum" "(" <vec2-expr> ")"
-                  | "row" "(" <vec2-expr> ")"
+                  | "swatchAvg" "(" <vec2-expr> ")"
+                  | "swatchMin" "(" <vec2-expr> ")"
+                  | "swatchMax" "(" <vec2-expr> ")"
+                  | "swatchSum" "(" <vec2-expr> ")"
+                  | "swatch" "(" <vec2-expr> ")"
                   | "face" "(" <vec2-expr> ")"
                   | "corner" "(" <vec2-expr> ")"
                   | "default" "(" <name> "," <vec2-expr> ")"
@@ -852,11 +855,11 @@ associativity for `+ - * / && ^ ||`.
                   | "faceMin" "(" <vec3-expr> ")"
                   | "faceMax" "(" <vec3-expr> ")"
                   | "faceSum" "(" <vec3-expr> ")"
-                  | "rowAvg" "(" <vec3-expr> ")"
-                  | "rowMin" "(" <vec3-expr> ")"
-                  | "rowMax" "(" <vec3-expr> ")"
-                  | "rowSum" "(" <vec3-expr> ")"
-                  | "row" "(" <vec3-expr> ")"
+                  | "swatchAvg" "(" <vec3-expr> ")"
+                  | "swatchMin" "(" <vec3-expr> ")"
+                  | "swatchMax" "(" <vec3-expr> ")"
+                  | "swatchSum" "(" <vec3-expr> ")"
+                  | "swatch" "(" <vec3-expr> ")"
                   | "face" "(" <vec3-expr> ")"
                   | "corner" "(" <vec3-expr> ")"
                   | "oklabFromRgb" "(" <vec3-expr> ")"          ; color spaces
@@ -928,11 +931,11 @@ associativity for `+ - * / && ^ ||`.
                   | "faceMin" "(" <vec4-expr> ")"
                   | "faceMax" "(" <vec4-expr> ")"
                   | "faceSum" "(" <vec4-expr> ")"
-                  | "rowAvg" "(" <vec4-expr> ")"
-                  | "rowMin" "(" <vec4-expr> ")"
-                  | "rowMax" "(" <vec4-expr> ")"
-                  | "rowSum" "(" <vec4-expr> ")"
-                  | "row" "(" <vec4-expr> ")"
+                  | "swatchAvg" "(" <vec4-expr> ")"
+                  | "swatchMin" "(" <vec4-expr> ")"
+                  | "swatchMax" "(" <vec4-expr> ")"
+                  | "swatchSum" "(" <vec4-expr> ")"
+                  | "swatch" "(" <vec4-expr> ")"
                   | "face" "(" <vec4-expr> ")"
                   | "corner" "(" <vec4-expr> ")"
                   | "default" "(" <name> "," <vec4-expr> ")"
@@ -966,7 +969,7 @@ associativity for `+ - * / && ^ ||`.
                   | <string-expr> <eq-op> <string-expr>   ; equality alone
                   | "any" "(" <comparison> ")"        ; or-fold of components
                   | "all" "(" <comparison> ")"        ; and-fold of components
-                  | "row" "(" <bool-expr> ")"         ; domain climbs
+                  | "swatch" "(" <bool-expr> ")"      ; domain climbs
                   | "face" "(" <bool-expr> ")"
                   | "corner" "(" <bool-expr> ")"
 
@@ -1003,7 +1006,7 @@ associativity for `+ - * / && ^ ||`.
                   | "(" <string-expr> ")"
                   | "mix" "(" <string-expr> "," <string-expr> ","
                              <bool-expr> ")"
-                  | "row" "(" <string-expr> ")"       ; domain climbs
+                  | "swatch" "(" <string-expr> ")"    ; domain climbs
                   | "face" "(" <string-expr> ")"
                   | "corner" "(" <string-expr> ")"
                   | "default" "(" <name> "," <string-expr> ")"
@@ -1171,11 +1174,11 @@ run a checker over the AST using the dimension and shape rules that follow.
                | "faceMin" "(" <u-expr> ")"
                | "faceMax" "(" <u-expr> ")"
                | "faceSum" "(" <u-expr> ")"
-               | "rowAvg" "(" <u-expr> ")"
-               | "rowMin" "(" <u-expr> ")"
-               | "rowMax" "(" <u-expr> ")"
-               | "rowSum" "(" <u-expr> ")"
-               | "row" "(" <u-expr> ")"
+               | "swatchAvg" "(" <u-expr> ")"
+               | "swatchMin" "(" <u-expr> ")"
+               | "swatchMax" "(" <u-expr> ")"
+               | "swatchSum" "(" <u-expr> ")"
+               | "swatch" "(" <u-expr> ")"
                | "face" "(" <u-expr> ")"
                | "corner" "(" <u-expr> ")"
                | "default" "(" <name> "," <u-expr> ")"
@@ -1231,9 +1234,9 @@ Dimension rules for an expression `e` with dimension written `dim(e)`:
   `dim(a)`.
 - `faceAvg(e)`, `faceMin(e)`, `faceMax(e)`, `faceSum(e)`: any dimension;
   result `dim(e)`.
-- `rowAvg(e)`, `rowMin(e)`, `rowMax(e)`, `rowSum(e)`: any dimension;
+- `swatchAvg(e)`, `swatchMin(e)`, `swatchMax(e)`, `swatchSum(e)`: any dimension;
   result `dim(e)`.
-- `row(e)`, `face(e)`, `corner(e)`: any dimension, or bool, or string;
+- `swatch(e)`, `face(e)`, `corner(e)`: any dimension, or bool, or string;
   result `dim(e)`, a bool or string keeping its type.
 - `dot(a, b)`: `dim(a) = dim(b)`; result 1.
 - `length(e)`: any dimension; result 1.
@@ -1266,7 +1269,7 @@ Shape rules, with a value either plain or an array over the effective palette
    yield a plain value, computed per component across its whole domain.
 4. `e[i]` requires `e` an array and `i` a plain exact non-negative integer
    below the array's entry count, and yields a plain value.
-5. A writer takes whatever shape its destination holds: a PNG a row,
+5. A writer takes whatever shape its destination holds: a PNG a swatch,
    face, or corner array, a `--write-material-slot-value` factor a plain
    value, JSON either shape.
 6. The comparisons and logical operators follow rule 2 over their bool
@@ -1277,8 +1280,8 @@ Shape rules, with a value either plain or an array over the effective palette
    chooser; nothing else takes one.
 7. An array carries its [domain](#domains), and rule 2 pairs entries
    after the lower domain climbs onto the higher; the climb is implicit,
-   `row`/`face`/`corner` spell it, and a step down is one rung per
-   function, the `face*` reductions from the corners, the `row*`
+   `swatch`/`face`/`corner` spell it, and a step down is one rung per
+   function, the `face*` reductions from the corners, the `swatch*`
    reductions from the faces, or a reduction to plain, never implicit.
 8. `mix(a, b, cond)` follows rule 2 across `a`, `b`, and `cond`, the
    result's shape from any operand array.
@@ -1462,26 +1465,27 @@ One item per function. Dimensions and shapes follow the tables above.
     faceAvg(computedOcclusion)   # one occlusion per face
     ```
 
-23. `rowAvg(e)`, `rowMin(e)`, `rowMax(e)`, and `rowSum(e)` step a face
-    array down to a row array, each row's faces reduced per component;
-    any other domain errors. A row owning no faces, a material buried
-    under `greedy` or `culled`, errors in `rowAvg`, `rowMin`, and
-    `rowMax`, the error naming the material and the method, and sums
-    to `0` in `rowSum`, so a guard is spelled through the sums:
+23. `swatchAvg(e)`, `swatchMin(e)`, `swatchMax(e)`, and `swatchSum(e)`
+    step a face array down to a swatch array, each swatch's faces
+    reduced per component; any other domain errors. A swatch owning no
+    faces, a material buried under `greedy` or `culled`, errors in
+    `swatchAvg`, `swatchMin`, and `swatchMax`, the error naming the
+    material and the method, and sums to `0` in `swatchSum`, so a guard
+    is spelled through the sums:
 
     ```
-    rowAvg(faceAvg(computedOcclusion))             # occlusion per material
-    rowSum(faceAvg(computedOcclusion)) / max(rowSum(face(1)), 1)
+    swatchAvg(faceAvg(computedOcclusion))             # occlusion per material
+    swatchSum(faceAvg(computedOcclusion)) / max(swatchSum(face(1)), 1)
     ```
 
-24. `row(e)`, `face(e)`, and `corner(e)` lift a value to the named
+24. `swatch(e)`, `face(e)`, and `corner(e)` lift a value to the named
     domain, the spelled form of the implicit climb: the identity on a
     value already there, an error on a step down, and any type
     carried, a bool or [string](#strings) as readily as a number:
 
     ```
-    face(albedo)   # one row map baked per face
-    face(1)        # the counting seed under rowSum
+    face(albedo)   # one swatch map baked per face
+    face(1)        # the counting seed under swatchSum
     ```
 
 25. `default(name, fallback)` evaluates to `name` where it has a value
@@ -1511,8 +1515,9 @@ strip.
 `lerp`, `mix`, `step`, `smoothstep`, `floor`, `ceil`, `round`, `dot`,
 `length`, `distance`, `normalize`, `cross`, `oklabFromRgb`,
 `rgbFromOklab`, `oklchFromRgb`, `rgbFromOklch`, `faceAvg`, `faceMin`,
-`faceMax`, `faceSum`, `rowAvg`, `rowMin`, `rowMax`, `rowSum`, `row`,
-`face`, `corner`, and `default` are keywords, and the literals
+`faceMax`, `faceSum`, `swatchAvg`, `swatchMin`, `swatchMax`,
+`swatchSum`, `swatch`, `face`, `corner`, and `default` are keywords,
+and the literals
 `true` and `false` are reserved with them. A
 property sharing one is reached by backtick-quoting: `` `min` `` is the
 name, `min(...)` the function.

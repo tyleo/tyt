@@ -70,7 +70,7 @@ element expands to the flag it fires as:
         // UV streams in TEXCOORD order, the --uv list; omitted, the
         // list derives from use, each texture at its value's own
         // domain
-        "uvs": ["row", "face"],
+        "uvs": ["swatch", "face"],
 
         // files written beside the mesh; a file's transfer lives
         // here and nowhere else
@@ -130,7 +130,7 @@ element expands to the flag it fires as:
             // optional; the primitive's UV streams in its own
             // TEXCOORD order; omitted, the mesh list filtered to the
             // material's need
-            "uvs": ["row", "face"],
+            "uvs": ["swatch", "face"],
             "builtins": { "<ATTRIBUTE>": "<expr>" },
             "customs": {
               "<_NAME>": {
@@ -273,7 +273,7 @@ interface OutputProfile {
   /** Value profiles applied first, in order. */
   valueProfiles?: string[];
   /** UV streams in TEXCOORD order; omitted, the list derives from use. */
-  uvs?: ("corner" | "face" | "row")[];
+  uvs?: ("corner" | "face" | "swatch")[];
 
   files?: {
     png?: Record<FileTemplate, { transfer: Transfer; value: Expr }>;
@@ -316,7 +316,7 @@ interface PrimitiveEntry {
   /** Omitted: `true`, the `NORMAL` stream written. */
   normal?: boolean;
   /** Streams in the primitive's own order; omitted, filtered to need. */
-  uvs?: ("corner" | "face" | "row")[];
+  uvs?: ("corner" | "face" | "swatch")[];
   /** Attributes glTF defines, `COLOR_0`, to expressions. */
   builtins?: Record<string, Expr>;
   /** Underscore-typed attribute names, `_MY_COLOR`. */
@@ -352,7 +352,7 @@ context: the schema's shape, an unknown key erroring rather than
 skipping, every expression parsing, every `basedOn`
 and `valueProfiles` name resolving without a cycle, every `material`
 inside its profile's material count, every `file` reference naming a
-written file, every `uvs` entry `corner`, `face`, or `row` named once,
+written file, every `uvs` entry `corner`, `face`, or `swatch` named once,
 and no element claiming one destination twice. The rest
 wait for the run that decides them: dimensions and shapes need the
 effective palette, slot names and their encodings need the resolved
@@ -507,7 +507,7 @@ through the material extras; `palette` writes the
 `vertex-colors` skips textures and rides base color on the vertices;
 `baked-ao` bakes
 [computed occlusion](value-language.md#computed-occlusion) into the
-standard slot; `glow-split` routes the glowing rows to a second
+standard slot; `glow-split` routes the glowing swatches to a second
 material through
 [primitives](mesh.md#primitives-and-materials):
 
@@ -598,7 +598,7 @@ material through
         ],
       },
 
-      // A per-row heat mask and one accent color, entries a
+      // A per-swatch heat mask and one accent color, entries a
       // runtime of your own looks up under extras.vxl.values. The
       // heat png writes and its extra references it; the plain accent
       // inlines its numbers.
@@ -659,8 +659,8 @@ material through
         ],
       },
 
-      // Two materials, two primitives: the solid rows drawn plain,
-      // the glowing rows with the emissive surface.
+      // Two materials, two primitives: the solid swatches drawn plain,
+      // the glowing swatches with the emissive surface.
       "glow-split": {
         "valueProfiles": ["glow"],
         "materials": [
