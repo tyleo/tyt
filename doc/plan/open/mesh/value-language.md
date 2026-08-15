@@ -52,71 +52,84 @@ an out-of-range index, or an array index (a gather) errors. Indexing and
 swizzling commute: `baseColorFactor[0].rgb` and `baseColorFactor.rgb[0]` are
 the same value.
 
-A PNG writes a [swatch, face, or corner](#domains) array, one texel per entry;
-a plain value has no texels and cannot be written to a PNG. In JSON an
-array field writes as a JSON array and a plain field as a single literal.
+A PNG writes a [swatch, voxel, face, or corner](#domains) array, one texel
+per entry; a plain value has no texels and cannot be written to a PNG. In
+JSON an array field writes as a JSON array and a plain field as a single
+literal.
 
 The plain-or-array split is half an axis: an array also has a
-[domain](#domains) saying what its entries run over, the palette's swatches here
-and the mesh's faces or corners elsewhere. A [bool](#booleans) value shares
-the axis, though it is no vector: it has no components and takes no
+[domain](#domains) saying what its entries run over, the palette's swatches
+here and the mesh's voxels, faces, or corners elsewhere. A
+[bool](#booleans) value shares the axis, though it is no vector: it has
+no components and takes no
 swizzle. A [string](#strings) rides the axes the same way, no vector
 either, the type an enum slot and a palette tag speak.
 
 ## Domains
 
-A value's domain is what it has one entry per. There are four. A plain
+A value's domain is what it has one entry per. There are five. A plain
 value has one entry. A swatch value has one entry per swatch, a distinct
 flattened material of the effective palette, the arrays every property
-starts as. A face value has one entry per face the mesher emits. A corner
+starts as. A voxel value has one entry per solid voxel, and
+[computed voxel position](#computed-voxel-position) is the domain's
+producer. A face value has one entry per face the mesher emits. A corner
 value has one entry per face corner, exactly four per face, and
 [computed occlusion](#computed-occlusion) is the domain's producer. Domain
 is orthogonal to dimension: `albedo` is a swatch vec3, occlusion a corner
 vec1.
 
 ```sh
-# a four-swatch palette meshed into ten faces
+# a four-swatch palette, six solid voxels, meshed into ten faces
 plain    1 entry
 swatch   4 entries    # one per swatch
+voxel    6 entries    # one per solid voxel
 face    10 entries    # one per face
 corner  40 entries    # four corners per face
 ```
 
-The domains ladder, plain to swatch to face to corner, and every step up
-is a lossless duplication: a plain value broadcasts everywhere, a swatch
-value reads per face through the face's own swatch, and a face value
+The domains ladder, plain to swatch to voxel to face to corner, and every
+step up is a lossless duplication: a plain value broadcasts everywhere, a
+swatch value reads per voxel through the voxel's own swatch, a voxel
+value reads per face through the face's own voxel, and a face value
 duplicates onto its four corners. Climbing is implicit because nothing is
 lost, the same rule that broadcasts a scalar across an array, so
 `albedo * ao` is legal, `albedo` climbing to the corners before the
-multiply pairs entries. `swatch(e)`, `face(e)`, and `corner(e)` spell the
-same climb where the domain is the point: each lifts its value to the
-named domain, the identity on a value already there, and a step down
-through one errors. `face(albedo)` bakes one swatch map per face while
-the others stay compact, `face(0.5)` gives a plain value the texels a
-texture needs, and `face(1)` under `swatchSum` counts a swatch's faces. A
-climb moves entries and never touches them, so it takes a bool or a
-[string](#strings) as readily as a number.
+multiply pairs entries. `swatch(e)`, `voxel(e)`, `face(e)`, and
+`corner(e)` spell the same climb where the domain is the point: each
+lifts its value to the named domain, the identity on a value already
+there, and a step down through one errors. `face(albedo)` bakes one
+swatch map per face while the others stay compact, `face(0.5)` gives a
+plain value the texels a texture needs, and `face(1)` under `swatchSum`
+counts a swatch's faces. A climb moves entries and never touches them,
+so it takes a bool or a [string](#strings) as readily as a number.
 
-A step down loses entries, so it is spelled, one rung per function.
-`faceAvg(e)`, `faceMin(e)`, `faceMax(e)`, and `faceSum(e)` take a corner
-array to a face array, each face's four corners reduced per component.
-`swatchAvg(e)`, `swatchMin(e)`, `swatchMax(e)`, and `swatchSum(e)` take
-a face array to a swatch array, each swatch's faces reduced. The unary
-reductions, `min`/`max`/`sum`/`avg`, take any array to plain across its
-whole domain. A corner value meeting a face destination without a
-reduction is an error, never an implicit average. Two rungs are two
-calls, and the compositions are exact: every face has four corners, so
-`swatchAvg(faceAvg(e))` is the grand mean of a swatch's corners and
-`swatchMin(faceMin(e))` its grand min.
+A step down loses entries, so it is spelled, a reduction naming its
+destination and taking any array above it. `faceAvg(e)`, `faceMin(e)`,
+`faceMax(e)`, and `faceSum(e)` take a corner array to a face array, each
+face's four corners reduced per component. `voxelAvg(e)` and its
+siblings take a face or corner array to a voxel array, each voxel's own
+boundary reduced: a merged face reads in piecewise, one piece per voxel
+it covers, each piece carrying the face's entry. `swatchAvg(e)` and its
+siblings take a voxel, face, or corner array to a swatch array, each
+swatch's entries reduced. The unary reductions, `min`/`max`/`sum`/`avg`,
+take any array to plain across its whole domain. A corner value meeting
+a face destination without a reduction is an error, never an implicit
+average. `min` and `max` compose exactly across the rungs, so
+`swatchMin(voxelMin(e))` is `swatchMin(e)`. The means and sums weigh
+their own rung: `swatchAvg(voxelAvg(e))` weighs voxels evenly where
+`swatchAvg(e)` weighs entries. The corner rung is uniform, every face
+owning exactly four, so `swatchAvg(faceAvg(e))` is still the grand mean
+of a swatch's corners. The spelling chooses the weighting.
 
-A swatch can own no faces: a material whose voxels sit fully enclosed
-emits nothing under `greedy` or `culled`, though everything under
-`naive`. The face domain itself is never empty, a voxel set always having
-a boundary, and a face always has its four corners, so the hole opens
-only per swatch. `swatchAvg`, `swatchMin`, and `swatchMax` error there,
-naming the material and the method, and `swatchSum` answers `0`, the
-empty sum. The guard is spelled through the sums, so a buried swatch
-takes the author's own answer:
+A voxel or a swatch can own no faces: a voxel fully enclosed, or a
+material whose voxels all are, emits nothing under `greedy` or `culled`,
+though everything under `naive`. The face domain itself is never empty, a
+voxel set always having a boundary, and a face always has its four
+corners, so the holes open only there; a swatch always owns voxels, so a
+reduction from the voxel domain never meets one. The avg, min, and max
+reductions error on an empty destination entry, naming it and the
+method, and the sums answer `0`, the empty sum. The guard is spelled
+through the sums, so a buried swatch takes the author's own answer:
 
 ```sh
 --compute-occlusion computedOcclusion
@@ -126,9 +139,9 @@ takes the author's own answer:
 ```
 
 The destinations read by domain. A texture holds one texel per entry, so
-it takes a swatch, face, or corner array, its layout and UV stream following
-the domain it bakes at; see [UV streams](mesh.md#uv-streams). A select reads
-at the faces, plain and swatch bools climbing in; see
+it takes a swatch, voxel, face, or corner array, its layout and UV stream
+following the domain it bakes at; see [UV streams](mesh.md#uv-streams). A
+select reads at the faces, plain, swatch, and voxel bools climbing in; see
 [Primitives and materials](mesh.md#primitives-and-materials). The
 [vertex attributes](#vertex-attributes) live on the corners, the ladder's
 top, so any domain climbs in, a corner value landing exactly. A material
@@ -157,7 +170,7 @@ a bool never mixes with a number, so there is no `0`/`1` coercion,
 function rejects one except `mix` and the domain climbs. `mix(x, y,
 cond)` is the spelled bridge out: it picks `x` or `y` per entry by
 the bool, so `mix(0, 1, glowing)` is the deliberate `0`/`1` mask; see
-[Functions](#functions). The climbs, `swatch`/`face`/`corner`, move a
+[Functions](#functions). The climbs, `swatch`/`voxel`/`face`/`corner`, move a
 bool's entries and never touch them. Beyond these only grouping
 parentheses and `e[i]` apply, sampling a bool array at an entry. The
 type reaches three destinations: the select of
@@ -200,7 +213,7 @@ array, and no other comparison applies, strings holding no order.
 `mix(x, y, cond)` picks between two strings by a bool, the bridge
 numbers already have. `e[i]` samples a string array at an entry.
 `default(name, fallback)` fills a string hole. The domain climbs,
-`swatch`/`face`/`corner`, lift a string's entries untouched. The
+`swatch`/`voxel`/`face`/`corner`, lift a string's entries untouched. The
 equality is the routing tool, an authored tag turning into a select:
 
 ```sh
@@ -553,9 +566,11 @@ the transfer the stored floats take.
 The attributes live on the corners, the [ladder](#domains)'s top, so a
 value of any domain climbs in: a plain value broadcasts to every corner,
 a swatch value gives each corner its face's swatch's entry, a merged
-greedy quad staying uniform since it is single-swatch, a face value
-duplicates onto its four corners, and a corner value writes each corner
-exactly, which is what [computed occlusion](#computed-occlusion) wants.
+greedy quad staying uniform since it is single-swatch, a voxel value
+reads through the face's voxel, a span its entries disagree across
+splitting first, a face value duplicates onto its four corners, and a
+corner value writes each corner exactly, which is what
+[computed occlusion](#computed-occlusion) wants.
 
 A format without vertex attributes rejects both flags. Each flag
 writes its indexed primitive alone, so two primitives carry exactly
@@ -611,6 +626,40 @@ A profile requests occlusion through its `computeOcclusion` key, the
 flag's argument as its value: the `baked-ao` example in the
 [profile language](profile-language.md#user-defined-profiles) binds the
 name and bakes it into the standard occlusion slot.
+
+## Computed voxel position
+
+Each voxel's grid coordinates, read straight off the voxel geometry. The
+result is a [voxel](#domains) value, the domain's producer: every palette
+property is per swatch and occlusion lives at the corners, so this is the
+first value that varies per voxel.
+
+`--compute-voxel-position <dst-name>` requests the computation and binds
+the result under the name, a voxel vec3 of whole numbers, each voxel's
+coordinates in the object's own grid, bound ahead of every `--value` the
+way palette properties are. Nothing computes unrequested: without the
+flag the name does not exist, and an expression naming one is the
+ordinary unknown-name error. The request is explicit because it can
+change the geometry: read at the faces or above, through a select, a
+vertex attribute, or a face or corner texture, a voxel value splits a
+merged greedy quad where its entries disagree, the corner-occlusion rule
+one rung down, and a texture baked at the voxel itself caps merging at
+the voxel outright; see [the voxel atlas](mesh.md#the-voxel-atlas).
+Several requests bind their names to one computation, aliases rather
+than a collision.
+
+The value mixes like any other, so a per-voxel pattern is one expression
+each:
+
+```sh
+--compute-voxel-position voxelPosition
+--value height "voxelPosition.y / max(voxelPosition.y)"   # 0..1 up the object
+--value bands "mod(voxelPosition.y, 2)"                   # alternating layers
+```
+
+A profile requests the value through its `computeVoxelPosition` key, the
+flag's argument as its value, the `computeOcclusion` pattern again; see
+the [profile language](profile-language.md#value-profiles).
 
 ## Grammar
 
@@ -710,11 +759,16 @@ associativity for `+ - * / && ^ ||`.
                   | "faceMin" "(" <vec1-expr> ")"
                   | "faceMax" "(" <vec1-expr> ")"
                   | "faceSum" "(" <vec1-expr> ")"
-                  | "swatchAvg" "(" <vec1-expr> ")"          ; faces to swatches
+                  | "voxelAvg" "(" <vec1-expr> ")"           ; down to voxels
+                  | "voxelMin" "(" <vec1-expr> ")"
+                  | "voxelMax" "(" <vec1-expr> ")"
+                  | "voxelSum" "(" <vec1-expr> ")"
+                  | "swatchAvg" "(" <vec1-expr> ")"          ; down to swatches
                   | "swatchMin" "(" <vec1-expr> ")"
                   | "swatchMax" "(" <vec1-expr> ")"
                   | "swatchSum" "(" <vec1-expr> ")"
                   | "swatch" "(" <vec1-expr> ")"             ; domain climbs
+                  | "voxel" "(" <vec1-expr> ")"
                   | "face" "(" <vec1-expr> ")"
                   | "corner" "(" <vec1-expr> ")"
                   | "default" "(" <name> "," <vec1-expr> ")"
@@ -783,11 +837,16 @@ associativity for `+ - * / && ^ ||`.
                   | "faceMin" "(" <vec2-expr> ")"
                   | "faceMax" "(" <vec2-expr> ")"
                   | "faceSum" "(" <vec2-expr> ")"
+                  | "voxelAvg" "(" <vec2-expr> ")"
+                  | "voxelMin" "(" <vec2-expr> ")"
+                  | "voxelMax" "(" <vec2-expr> ")"
+                  | "voxelSum" "(" <vec2-expr> ")"
                   | "swatchAvg" "(" <vec2-expr> ")"
                   | "swatchMin" "(" <vec2-expr> ")"
                   | "swatchMax" "(" <vec2-expr> ")"
                   | "swatchSum" "(" <vec2-expr> ")"
                   | "swatch" "(" <vec2-expr> ")"
+                  | "voxel" "(" <vec2-expr> ")"
                   | "face" "(" <vec2-expr> ")"
                   | "corner" "(" <vec2-expr> ")"
                   | "default" "(" <name> "," <vec2-expr> ")"
@@ -855,11 +914,16 @@ associativity for `+ - * / && ^ ||`.
                   | "faceMin" "(" <vec3-expr> ")"
                   | "faceMax" "(" <vec3-expr> ")"
                   | "faceSum" "(" <vec3-expr> ")"
+                  | "voxelAvg" "(" <vec3-expr> ")"
+                  | "voxelMin" "(" <vec3-expr> ")"
+                  | "voxelMax" "(" <vec3-expr> ")"
+                  | "voxelSum" "(" <vec3-expr> ")"
                   | "swatchAvg" "(" <vec3-expr> ")"
                   | "swatchMin" "(" <vec3-expr> ")"
                   | "swatchMax" "(" <vec3-expr> ")"
                   | "swatchSum" "(" <vec3-expr> ")"
                   | "swatch" "(" <vec3-expr> ")"
+                  | "voxel" "(" <vec3-expr> ")"
                   | "face" "(" <vec3-expr> ")"
                   | "corner" "(" <vec3-expr> ")"
                   | "oklabFromRgb" "(" <vec3-expr> ")"          ; color spaces
@@ -931,11 +995,16 @@ associativity for `+ - * / && ^ ||`.
                   | "faceMin" "(" <vec4-expr> ")"
                   | "faceMax" "(" <vec4-expr> ")"
                   | "faceSum" "(" <vec4-expr> ")"
+                  | "voxelAvg" "(" <vec4-expr> ")"
+                  | "voxelMin" "(" <vec4-expr> ")"
+                  | "voxelMax" "(" <vec4-expr> ")"
+                  | "voxelSum" "(" <vec4-expr> ")"
                   | "swatchAvg" "(" <vec4-expr> ")"
                   | "swatchMin" "(" <vec4-expr> ")"
                   | "swatchMax" "(" <vec4-expr> ")"
                   | "swatchSum" "(" <vec4-expr> ")"
                   | "swatch" "(" <vec4-expr> ")"
+                  | "voxel" "(" <vec4-expr> ")"
                   | "face" "(" <vec4-expr> ")"
                   | "corner" "(" <vec4-expr> ")"
                   | "default" "(" <name> "," <vec4-expr> ")"
@@ -970,6 +1039,7 @@ associativity for `+ - * / && ^ ||`.
                   | "any" "(" <comparison> ")"        ; or-fold of components
                   | "all" "(" <comparison> ")"        ; and-fold of components
                   | "swatch" "(" <bool-expr> ")"      ; domain climbs
+                  | "voxel" "(" <bool-expr> ")"
                   | "face" "(" <bool-expr> ")"
                   | "corner" "(" <bool-expr> ")"
 
@@ -1007,6 +1077,7 @@ associativity for `+ - * / && ^ ||`.
                   | "mix" "(" <string-expr> "," <string-expr> ","
                              <bool-expr> ")"
                   | "swatch" "(" <string-expr> ")"    ; domain climbs
+                  | "voxel" "(" <string-expr> ")"
                   | "face" "(" <string-expr> ")"
                   | "corner" "(" <string-expr> ")"
                   | "default" "(" <name> "," <string-expr> ")"
@@ -1174,11 +1245,16 @@ run a checker over the AST using the dimension and shape rules that follow.
                | "faceMin" "(" <u-expr> ")"
                | "faceMax" "(" <u-expr> ")"
                | "faceSum" "(" <u-expr> ")"
+               | "voxelAvg" "(" <u-expr> ")"
+               | "voxelMin" "(" <u-expr> ")"
+               | "voxelMax" "(" <u-expr> ")"
+               | "voxelSum" "(" <u-expr> ")"
                | "swatchAvg" "(" <u-expr> ")"
                | "swatchMin" "(" <u-expr> ")"
                | "swatchMax" "(" <u-expr> ")"
                | "swatchSum" "(" <u-expr> ")"
                | "swatch" "(" <u-expr> ")"
+               | "voxel" "(" <u-expr> ")"
                | "face" "(" <u-expr> ")"
                | "corner" "(" <u-expr> ")"
                | "default" "(" <name> "," <u-expr> ")"
@@ -1234,10 +1310,12 @@ Dimension rules for an expression `e` with dimension written `dim(e)`:
   `dim(a)`.
 - `faceAvg(e)`, `faceMin(e)`, `faceMax(e)`, `faceSum(e)`: any dimension;
   result `dim(e)`.
+- `voxelAvg(e)`, `voxelMin(e)`, `voxelMax(e)`, `voxelSum(e)`: any
+  dimension; result `dim(e)`.
 - `swatchAvg(e)`, `swatchMin(e)`, `swatchMax(e)`, `swatchSum(e)`: any dimension;
   result `dim(e)`.
-- `swatch(e)`, `face(e)`, `corner(e)`: any dimension, or bool, or string;
-  result `dim(e)`, a bool or string keeping its type.
+- `swatch(e)`, `voxel(e)`, `face(e)`, `corner(e)`: any dimension, or bool,
+  or string; result `dim(e)`, a bool or string keeping its type.
 - `dot(a, b)`: `dim(a) = dim(b)`; result 1.
 - `length(e)`: any dimension; result 1.
 - `distance(a, b)`: `dim(a) = dim(b)`; result 1.
@@ -1270,7 +1348,7 @@ Shape rules, with a value either plain or an array over the effective palette
 4. `e[i]` requires `e` an array and `i` a plain exact non-negative integer
    below the array's entry count, and yields a plain value.
 5. A writer takes whatever shape its destination holds: a PNG a swatch,
-   face, or corner array, a `--write-material-slot-value` factor a plain
+   voxel, face, or corner array, a `--write-material-slot-value` factor a plain
    value, JSON either shape.
 6. The comparisons and logical operators follow rule 2 over their bool
    results, `any`/`all` fold each entry's component answers and keep
@@ -1280,9 +1358,9 @@ Shape rules, with a value either plain or an array over the effective palette
    chooser; nothing else takes one.
 7. An array carries its [domain](#domains), and rule 2 pairs entries
    after the lower domain climbs onto the higher; the climb is implicit,
-   `swatch`/`face`/`corner` spell it, and a step down is one rung per
-   function, the `face*` reductions from the corners, the `swatch*`
-   reductions from the faces, or a reduction to plain, never implicit.
+   `swatch`/`voxel`/`face`/`corner` spell it, and a step down is
+   spelled, a reduction naming its destination and taking any array
+   above it, or a reduction to plain, never implicit.
 8. `mix(a, b, cond)` follows rule 2 across `a`, `b`, and `cond`, the
    result's shape from any operand array.
 9. A string rides the same axes: a literal is plain, a string property
@@ -1465,30 +1543,46 @@ One item per function. Dimensions and shapes follow the tables above.
     faceAvg(computedOcclusion)   # one occlusion per face
     ```
 
-23. `swatchAvg(e)`, `swatchMin(e)`, `swatchMax(e)`, and `swatchSum(e)`
-    step a face array down to a swatch array, each swatch's faces
-    reduced per component; any other domain errors. A swatch owning no
-    faces, a material buried under `greedy` or `culled`, errors in
-    `swatchAvg`, `swatchMin`, and `swatchMax`, the error naming the
-    material and the method, and sums to `0` in `swatchSum`, so a guard
-    is spelled through the sums:
+23. `voxelAvg(e)`, `voxelMin(e)`, `voxelMax(e)`, and `voxelSum(e)` step
+    a face or corner array down to a voxel array, each voxel's own
+    boundary reduced per component; any other domain errors. A merged
+    face reads in piecewise, one piece per voxel it covers carrying the
+    face's entry, so `voxelSum(face(1))` is a voxel's own face count
+    under `greedy` and `culled` alike. A buried voxel owns no faces
+    under either, erroring in `voxelAvg`, `voxelMin`, and `voxelMax`
+    with the voxel and the method named, and summing to `0` in
+    `voxelSum`:
+
+    ```
+    voxelAvg(faceAvg(computedOcclusion))   # occlusion per voxel
+    voxelSum(face(1))                      # a voxel's face count
+    ```
+
+24. `swatchAvg(e)`, `swatchMin(e)`, `swatchMax(e)`, and `swatchSum(e)`
+    step a voxel, face, or corner array down to a swatch array, each
+    swatch's entries reduced per component; a plain or swatch value
+    errors. A swatch owning no faces, a material buried under `greedy`
+    or `culled`, errors in `swatchAvg`, `swatchMin`, and `swatchMax`,
+    the error naming the material and the method, and sums to `0` in
+    `swatchSum`, so a guard is spelled through the sums; a voxel array
+    never meets the hole, every swatch owning voxels:
 
     ```
     swatchAvg(faceAvg(computedOcclusion))             # occlusion per material
     swatchSum(faceAvg(computedOcclusion)) / max(swatchSum(face(1)), 1)
     ```
 
-24. `swatch(e)`, `face(e)`, and `corner(e)` lift a value to the named
-    domain, the spelled form of the implicit climb: the identity on a
-    value already there, an error on a step down, and any type
-    carried, a bool or [string](#strings) as readily as a number:
+25. `swatch(e)`, `voxel(e)`, `face(e)`, and `corner(e)` lift a value to
+    the named domain, the spelled form of the implicit climb: the
+    identity on a value already there, an error on a step down, and any
+    type carried, a bool or [string](#strings) as readily as a number:
 
     ```
     face(albedo)   # one swatch map baked per face
     face(1)        # the counting seed under swatchSum
     ```
 
-25. `default(name, fallback)` evaluates to `name` where it has a value
+26. `default(name, fallback)` evaluates to `name` where it has a value
     and to `fallback` where it does not: a `--value` name not yet
     defined, a property no layer supplies, or a material that leaves it
     unset, filled per element. `name` is bare or backtick-quoted, and
@@ -1515,9 +1609,9 @@ strip.
 `lerp`, `mix`, `step`, `smoothstep`, `floor`, `ceil`, `round`, `dot`,
 `length`, `distance`, `normalize`, `cross`, `oklabFromRgb`,
 `rgbFromOklab`, `oklchFromRgb`, `rgbFromOklch`, `faceAvg`, `faceMin`,
-`faceMax`, `faceSum`, `swatchAvg`, `swatchMin`, `swatchMax`,
-`swatchSum`, `swatch`, `face`, `corner`, and `default` are keywords,
-and the literals
+`faceMax`, `faceSum`, `voxelAvg`, `voxelMin`, `voxelMax`, `voxelSum`,
+`swatchAvg`, `swatchMin`, `swatchMax`, `swatchSum`, `swatch`, `voxel`,
+`face`, `corner`, and `default` are keywords, and the literals
 `true` and `false` are reserved with them. A
 property sharing one is reached by backtick-quoting: `` `min` `` is the
 name, `min(...)` the function.

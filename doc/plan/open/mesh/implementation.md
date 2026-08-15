@@ -24,10 +24,10 @@ To the crate an array is a length, so the palette is vxl's
 interpretation: vxl binds the effective palette into the environment in
 atlas-texel order and keeps the edges, the transfer encoding, the png
 sizing, and the slot cross-checks, which is where the linear-floats
-rule already puts them. The face and corner
+rule already puts them. The voxel, face, and corner
 [domains](value-language.md#domains) are more lengths to evaluate
-over, vxl supplying the four-per-face grouping the face reductions
-read, so the crate never learns what a domain means.
+over, vxl supplying the groupings the reductions read, so the crate
+never learns what a domain means.
 
 The tree stays internal; `parse`, `check`, and `eval` are the API.
 Exporting the tree would split the semantics from the grammar, every

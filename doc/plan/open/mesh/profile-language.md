@@ -20,9 +20,10 @@ would bake `metallicSmoothness`.
 
 ## Value profiles
 
-A value profile holds `values`, an optional `basedOn` list, and an
-optional `computeOcclusion` key, and nothing else: it can define every
-name a run needs and still writes nothing.
+A value profile holds `values`, an optional `basedOn` list, and the
+optional `computeOcclusion` and `computeVoxelPosition` keys, and
+nothing else: it can define every name a run needs and still writes
+nothing.
 `--value-profile <profile>` applies the profile's values as if each
 were a `--value` at the flag's own position, `basedOn` first:
 depth-first in list order, every profile visited once, cycles an
@@ -39,8 +40,10 @@ and every later expression sees the override.
 
 A value profile requests
 [computed occlusion](value-language.md#computed-occlusion) through its
-`computeOcclusion` key, the flag's argument as its value, binding the
-name the way `--compute-occlusion` does. Every request across
+`computeOcclusion` key and
+[computed voxel position](value-language.md#computed-voxel-position)
+through its `computeVoxelPosition` key, each the flag's argument as
+its value, binding the name the way the flag does. Every request across
 profiles and flags binds its name to the one computation, so
 requests alias rather than collide. The binding rides `basedOn` with
 the values, since an inherited expression needs its name.
@@ -260,6 +263,8 @@ interface ValueProfile {
   basedOn?: string[];
   /** Binds computed occlusion under the name. */
   computeOcclusion?: string;
+  /** Binds computed voxel position under the name. */
+  computeVoxelPosition?: string;
   values?: [name: string, expr: Expr][];
 }
 
@@ -273,7 +278,7 @@ interface OutputProfile {
   /** Value profiles applied first, in order. */
   valueProfiles?: string[];
   /** UV streams in TEXCOORD order; omitted, the list derives from use. */
-  uvs?: ("corner" | "face" | "swatch")[];
+  uvs?: ("corner" | "face" | "swatch" | "voxel")[];
 
   files?: {
     png?: Record<FileTemplate, { transfer: Transfer; value: Expr }>;
@@ -316,7 +321,7 @@ interface PrimitiveEntry {
   /** Omitted: `true`, the `NORMAL` stream written. */
   normal?: boolean;
   /** Streams in the primitive's own order; omitted, filtered to need. */
-  uvs?: ("corner" | "face" | "swatch")[];
+  uvs?: ("corner" | "face" | "swatch" | "voxel")[];
   /** Attributes glTF defines, `COLOR_0`, to expressions. */
   builtins?: Record<string, Expr>;
   /** Underscore-typed attribute names, `_MY_COLOR`. */
@@ -352,8 +357,8 @@ context: the schema's shape, an unknown key erroring rather than
 skipping, every expression parsing, every `basedOn`
 and `valueProfiles` name resolving without a cycle, every `material`
 inside its profile's material count, every `file` reference naming a
-written file, every `uvs` entry `corner`, `face`, or `swatch` named once,
-and no element claiming one destination twice. The rest
+written file, every `uvs` entry `corner`, `face`, `swatch`, or `voxel`
+named once, and no element claiming one destination twice. The rest
 wait for the run that decides them: dimensions and shapes need the
 effective palette, slot names and their encodings need the resolved
 output format, and name bindings need the command line.

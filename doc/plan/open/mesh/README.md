@@ -5,9 +5,8 @@ textures. The plan keeps the geometry core and redoes everything around it: the
 shipped map surface retires wholesale and will be deleted from the codebase. The
 new surface is a small expression language. A material map is a value that you
 write. A value profile names a reusable set of values. An output profile
-describes a full run in `.vxlconfig`. The plan also adds new parts `vxl mesh`
-never had: unwrap and corner atlases, computed occlusion, primitives and
-materials, vertex attributes, and mesh palettes.
+describes a full run in `.vxlconfig`. The plan also adds parts `vxl mesh`
+never had.
 
 1. [`vxl mesh`](mesh.md): the command reference, from its arguments to the
    glTF a run emits.
