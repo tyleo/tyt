@@ -1,6 +1,6 @@
 # Worked examples
 
-_Part of the [mesh plan](README.md): seven runs, each a profile, the
+_Part of the [mesh plan](README.md): runs, each a profile, the
 command line that fires it, its expansion into flags, and the glTF it
 produces._
 
@@ -741,6 +741,386 @@ exist:
 The material's one texture names `texCoord: 0`, and nothing in the
 file points at `TEXCOORD_1`: the engine bakes its lightmap into the
 face layout and samples it by the stream the mesh already carries.
+
+## One UV set
+
+A consumer that reads one UV set wants one stream. `--uv` is the
+bake contract, and listing `face` alone re-bakes every texture there.
+The swatch albedo climbs, since the lowest listed domain at or above
+swatch is face. The occlusion already lives there:
+
+```jsonc
+// .vxlconfig
+{
+  "mesh": {
+    "profiles": {
+      "one-uv": {
+        "valuesFrom": ["albedo"],
+        "computeOcclusion": "computedOcclusion",
+        "values": ["ao = faceAvg(computedOcclusion)"],
+        "uvs": ["face"],
+        "materials": [
+          {
+            "slots": {
+              "baseColorTexture": { "kind": "value", "value": "albedo" },
+              "occlusionTexture": { "kind": "value", "value": "ao" },
+            },
+          },
+        ],
+      },
+    },
+  },
+}
+```
+
+```sh
+vxl mesh step.voxj
+  --profile one-uv
+```
+
+or expanded into its flags:
+
+```sh
+vxl mesh step.voxj
+  --values-from albedo
+  --compute-occlusion computedOcclusion
+  --value "ao = faceAvg(computedOcclusion)"
+  --uv face
+  --write-material-slot-value 0 baseColorTexture albedo
+  --write-material-slot-value 0 occlusionTexture ao
+```
+
+With `--uv face`, both textures share the unwrap atlas layout, ten
+cells in a 4 by 4. The albedo that filled a 1x1 palette canvas now
+spends ten face texels saying the same stone color. That waste is the
+price of the one stream:
+
+```jsonc
+{
+  "asset": { "version": "2.0" },
+  "accessors": [
+    /* ... */
+  ], // POSITION, NORMAL, TEXCOORD_0, indices
+  "images": [
+    { "mimeType": "image/png", "bufferView": 4 }, // albedo per face, sRGB
+    { "mimeType": "image/png", "bufferView": 5 }, // ao, linear
+  ],
+  "textures": [
+    { "sampler": 0, "source": 0 },
+    { "sampler": 0, "source": 1 },
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorTexture": { "index": 0, "texCoord": 0 },
+      },
+      "occlusionTexture": { "index": 1, "texCoord": 0 },
+    },
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": { "POSITION": 0, "NORMAL": 1, "TEXCOORD_0": 2 },
+          "indices": 3,
+          "material": 0,
+        },
+      ],
+    },
+  ],
+  "nodes": [{ "mesh": 0 }],
+  "scenes": [{ "nodes": [0] }],
+  "scene": 0,
+  /* ... */
+}
+```
+
+Both slots name `texCoord: 0`, the collapse the flag bought.
+
+Without `--uv face`, the profile's `uvs` list, the streams derive
+`[swatch, face]`, each texture at its value's own domain:
+
+```jsonc
+{
+  "asset": { "version": "2.0" },
+  "accessors": [
+    /* ... */
+  ], // POSITION, NORMAL, TEXCOORD_0, TEXCOORD_1, indices
+  "images": [
+    { "mimeType": "image/png", "bufferView": 5 }, // albedo, 1x1
+    { "mimeType": "image/png", "bufferView": 6 }, // ao, 4x4
+  ],
+  "textures": [
+    { "sampler": 0, "source": 0 },
+    { "sampler": 0, "source": 1 },
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorTexture": { "index": 0, "texCoord": 0 }, // the swatch stream
+      },
+      "occlusionTexture": { "index": 1, "texCoord": 1 }, // the face stream
+    },
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2, // swatch
+            "TEXCOORD_1": 3, // face
+          },
+          "indices": 4,
+          "material": 0,
+        },
+      ],
+    },
+  ],
+  "nodes": [{ "mesh": 0 }],
+  "scenes": [{ "nodes": [0] }],
+  "scene": 0,
+  /* ... */
+}
+```
+
+The albedo returns to its 1x1 palette canvas, each slot samples its
+own stream, and the consumer that reads one UV set is back to two.
+
+## A crevice split
+
+A runtime that draws weathering into the creases itself wants the
+creased faces in their own primitive, bare of any material. Its
+convention also pins face coordinates to `TEXCOORD_0`. The `--uv`
+list orders the mesh's streams, and `--write-primitive-uv` gives the
+bare primitive a stream its missing material would never pull in:
+
+```jsonc
+// .vxlconfig
+{
+  "mesh": {
+    "profiles": {
+      "crevice-split": {
+        "valuesFrom": ["albedo"],
+        "computeOcclusion": "computedOcclusion",
+        "values": [
+          "ao = faceAvg(computedOcclusion)",
+          "crevice = ao < 0.9",
+          "open = !crevice",
+        ],
+        "uvs": ["face", "swatch"],
+        "materials": [
+          {
+            "slots": {
+              "baseColorTexture": { "kind": "value", "value": "albedo" },
+              "occlusionTexture": { "kind": "value", "value": "ao" },
+            },
+          },
+        ],
+        "primitives": [
+          { "material": 0, "select": "open" },
+          { "select": "crevice", "uvs": ["face"] },
+        ],
+      },
+    },
+  },
+}
+```
+
+```sh
+vxl mesh step.voxj
+  --profile crevice-split
+```
+
+or expanded into its flags:
+
+```sh
+vxl mesh step.voxj
+  --values-from albedo
+  --compute-occlusion computedOcclusion
+  --value "ao = faceAvg(computedOcclusion)"
+  --value "crevice = ao < 0.9"
+  --value "open = !crevice"
+  --uv face
+  --uv swatch
+  --write-material-slot-value 0 baseColorTexture albedo
+  --write-material-slot-value 0 occlusionTexture ao
+  --primitive 0 open
+  --primitive none crevice
+  --write-primitive-uv 1 face
+```
+
+The tread and the riser meeting the inside corner average below one
+and the other eight faces read one, so `crevice` takes exactly those
+two faces and `open` the rest. The `[face, swatch]` list changes no
+bake, since the lowest listed domain at or above swatch is still
+swatch. It pins the order instead. Primitive 0 has no
+`--write-primitive-uv`, so it filters the list to its material's
+need, both domains. Face seats at `TEXCOORD_0`, swatch at
+`TEXCOORD_1`, and the material's `texCoord`s derive to match.
+Primitive 1 names its streams, so it writes exactly the face stream.
+Its `none` material samples nothing, which makes the omitted swatch
+legal. Both primitives' face UVs index the
+one unwrap atlas, ten cells the mesh lays out once:
+
+```jsonc
+{
+  "asset": { "version": "2.0" },
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 32,
+      "type": "VEC3",
+      "min": [0, 0, 0],
+      "max": [2, 2, 1],
+    }, // POSITION
+    { "bufferView": 1, "componentType": 5126, "count": 32, "type": "VEC3" }, // NORMAL
+    { "bufferView": 2, "componentType": 5126, "count": 32, "type": "VEC2" }, // face
+    { "bufferView": 3, "componentType": 5126, "count": 32, "type": "VEC2" }, // swatch
+    { "bufferView": 4, "componentType": 5123, "count": 48, "type": "SCALAR" }, // indices
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC3",
+      "min": [1, 1, 0],
+      "max": [2, 2, 1],
+    }, // POSITION
+    { "bufferView": 6, "componentType": 5126, "count": 8, "type": "VEC3" }, // NORMAL
+    { "bufferView": 7, "componentType": 5126, "count": 8, "type": "VEC2" }, // face
+    { "bufferView": 8, "componentType": 5123, "count": 12, "type": "SCALAR" }, // indices
+  ],
+  "images": [
+    { "mimeType": "image/png", "bufferView": 9 }, // albedo, 1x1
+    { "mimeType": "image/png", "bufferView": 10 }, // ao, 4x4
+  ],
+  "textures": [
+    { "sampler": 0, "source": 0 },
+    { "sampler": 0, "source": 1 },
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorTexture": { "index": 0, "texCoord": 1 }, // the swatch stream
+      },
+      "occlusionTexture": { "index": 1, "texCoord": 0 }, // the face stream
+    },
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2, // face
+            "TEXCOORD_1": 3, // swatch
+          },
+          "indices": 4,
+          "material": 0,
+        },
+        {
+          "attributes": {
+            "POSITION": 5,
+            "NORMAL": 6,
+            "TEXCOORD_0": 7, // face, spelled for the runtime
+          },
+          "indices": 8,
+        },
+      ],
+    },
+  ],
+  "nodes": [{ "mesh": 0 }],
+  "scenes": [{ "nodes": [0] }],
+  "scene": 0,
+  /* ... */
+}
+```
+
+The two primitives partition the ten faces: thirty-two vertices draw
+as stone, eight ride bare for the runtime's own pass, and every
+face's `TEXCOORD_0` points into the same ten-cell layout.
+
+Without the three UV flags, the profile's two `uvs` lists, the
+defaults answer:
+
+```jsonc
+{
+  "asset": { "version": "2.0" },
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 32,
+      "type": "VEC3",
+      "min": [0, 0, 0],
+      "max": [2, 2, 1],
+    }, // POSITION
+    { "bufferView": 1, "componentType": 5126, "count": 32, "type": "VEC3" }, // NORMAL
+    { "bufferView": 2, "componentType": 5126, "count": 32, "type": "VEC2" }, // swatch
+    { "bufferView": 3, "componentType": 5126, "count": 32, "type": "VEC2" }, // face
+    { "bufferView": 4, "componentType": 5123, "count": 48, "type": "SCALAR" }, // indices
+    {
+      "bufferView": 5,
+      "componentType": 5126,
+      "count": 8,
+      "type": "VEC3",
+      "min": [1, 1, 0],
+      "max": [2, 2, 1],
+    }, // POSITION
+    { "bufferView": 6, "componentType": 5126, "count": 8, "type": "VEC3" }, // NORMAL
+    { "bufferView": 7, "componentType": 5123, "count": 12, "type": "SCALAR" }, // indices
+  ],
+  "images": [
+    { "mimeType": "image/png", "bufferView": 8 }, // albedo, 1x1
+    { "mimeType": "image/png", "bufferView": 9 }, // ao, 4x4
+  ],
+  "textures": [
+    { "sampler": 0, "source": 0 },
+    { "sampler": 0, "source": 1 },
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorTexture": { "index": 0, "texCoord": 0 }, // the swatch stream
+      },
+      "occlusionTexture": { "index": 1, "texCoord": 1 }, // the face stream
+    },
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TEXCOORD_0": 2, // swatch
+            "TEXCOORD_1": 3, // face
+          },
+          "indices": 4,
+          "material": 0,
+        },
+        {
+          "attributes": { "POSITION": 5, "NORMAL": 6 }, // no UV stream
+          "indices": 7,
+        },
+      ],
+    },
+  ],
+  "nodes": [{ "mesh": 0 }],
+  "scenes": [{ "nodes": [0] }],
+  "scene": 0,
+  /* ... */
+}
+```
+
+The derived list is `[swatch, face]`, ladder order, so face sits at
+`TEXCOORD_1` and the runtime's `TEXCOORD_0` convention breaks. The
+bare primitive's default filters to nothing, so the pass that wanted
+face coordinates has none to read. The `--uv` pair pins the order,
+and `--write-primitive-uv` writes the stream anyway.
 
 ## A computed enum
 
