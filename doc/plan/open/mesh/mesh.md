@@ -80,7 +80,7 @@ with one object. See
    5. `<n>`: an exact `n`x`n` canvas of cells, and a canvas too small errors.
 
 6. `--material-count <count>`
-   - Default: derives from use
+   - Default: derived from use
    - Repeatable: no
 
    How many materials the mesh carries, numbered from `0`. Every material flag
@@ -121,11 +121,11 @@ with one object. See
    no name.
 
 10. `--uv <corner | face | swatch | voxel>`
-    - Default: derives from use
+    - Default: derived from use
     - Repeatable: yes
 
-    Declares the mesh's stream list. Each flag adds one stream, and the
-    flag order sets the `TEXCOORD` numbers. A domain listed twice errors.
+    Declares the mesh's stream list. Each `--uv` adds one stream, and the flag
+    order sets the `TEXCOORD` numbers. A domain listed twice errors.
 
     The `--uv` list sets the bake contract. Each texture bakes at the lowest
     listed domain at or above its value's domain. Take `--uv face`. An albedo
@@ -152,20 +152,18 @@ with one object. See
 11. `--compute-occlusion <dst-name>`
     - Repeatable: yes
 
-    Computes occlusion from the voxel geometry and binds it under the name. The
-    value is a per-corner vec1 in `0..1`, one entry per face corner, and `1`
-    is fully open. Every expression can read it the way it reads a palette
-    property. Without the flag nothing computes and the name does not exist;
-    see [Computed occlusion](value-language.md#computed-occlusion).
+    Computes occlusion from the voxel geometry and binds it to `dst-name`. The
+    value is a per-corner vec1 in `[0, 1]`, one entry per face corner: `0` is
+    fully occluded and `1` is fully open. See
+    [Computed occlusion](value-language.md#computed-occlusion).
 
 12. `--compute-voxel-position <dst-name>`
     - Repeatable: yes
 
-    Computes each voxel's grid position and binds it under the name. The
-    value is a per-voxel vec3 of whole numbers, the voxel's coordinates in
-    the object's own grid. Every expression can read it the way it reads a
-    palette property. Without the flag nothing computes and the name does
-    not exist; see
+    Computes each voxel's grid position and binds it under the name. The value
+    is a per-voxel vec3 of whole numbers, the voxel's coordinates in the
+    object's own grid. Every expression can read it the way it reads a palette
+    property. Without the flag nothing computes and the name does not exist; see
     [Computed voxel position](value-language.md#computed-voxel-position).
 
 13. `--value <bindings>`
@@ -198,7 +196,7 @@ with one object. See
     components map to channels by position. Grey-alpha is PNG's only
     two-channel form, so a vec2's second component lands in the alpha
     channel. Pad with `rgb(u, v, 0)` where a viewer should read opaque color.
-    A component outside `0..1` errors. The token names the encoding, and the
+    A component outside `[0, 1]` errors. The token names the encoding, and the
     file also declares its transfer in its own chunks; see the
     [notes](value-language.md#notes).
     1. `linear`: applies no transfer, for the data channels glTF wants
@@ -613,8 +611,8 @@ each, so a primitive carries one UV stream per layout its faces read, glTF's
 numbered `TEXCOORD_<n>` attributes. A swatch, voxel, or face texture samples
 nearest; a corner texture samples linear, the interpolation its point.
 
-The stream list derives from use when nothing spells it: each texture bakes at
-its value's own domain, a `--write-primitive-uv` mention joins, and the list
+The stream list is derived from use when nothing spells it: each texture bakes
+at its value's own domain, a `--write-primitive-uv` mention joins, and the list
 holds the domains in use in ladder order, `[swatch]` through
 `[swatch, voxel, face, corner]`, empty when nothing writes a texture.
 `--uv <corner | face | swatch | voxel>`, repeatable, spells the list
@@ -635,8 +633,8 @@ streams instead, in the primitive's own `TEXCOORD` order, and a spelled stream
 no texture bakes at emits anyway, the coordinates an externally-baked texture,
 an engine lightmap, samples by.
 
-Every texture's `texCoord` then derives: the domain it bakes at looks up in the
-stream order of each primitive drawing its material, and the position is the
+Every texture's `texCoord` then is derived: the domain it bakes at looks up in
+the stream order of each primitive drawing its material, and the position is the
 number. Filtered defaults always agree, primitives sharing a material sharing
 its need; two spellings seating one material's domain at two positions are two
 flags claiming one destination, the usual error. No flag hand-wires a slot:

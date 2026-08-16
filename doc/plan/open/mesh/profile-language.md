@@ -468,15 +468,15 @@ profile and the `mse` example both normalize by the palette's strongest
 strength and send that strength to the `emissiveStrength` slot. Packing
 it raw would put an unbounded value in an 8-bit channel, which errors
 on the first material above 1 rather than clamping. Normalizing is also
-the convention the packed maps target, a `0..1` mask in the image and
+the convention the packed maps target, a `[0, 1]` mask in the image and
 the intensity on the material. The two agree on this deliberately, and
 merging them is harmless, since each binds the slot to the same
 `maxStrength`.
 
 The emissive trio is the whole profile: the image carries each
-material's color scaled into `0..1` of the palette's strongest
+material's color scaled into `[0, 1]` of the palette's strongest
 strength, the strength slot carries that strength back, so absolute
-brightness survives a `0..1` image, and the white `emissiveFactor`
+brightness survives a `[0, 1]` image, and the white `emissiveFactor`
 leaves the image untinted where glTF would otherwise multiply it by
 black.
 

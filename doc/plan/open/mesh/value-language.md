@@ -64,7 +64,7 @@ elementwise like the operators. The emissive bake is the canonical use:
 --value "emissive = emissiveFactor * emissiveStrength / max(emissiveStrength)"
 ```
 
-Each material's emissive color, scaled into `0..1` of the palette's strongest
+Each material's emissive color, scaled into `[0, 1]` of the palette's strongest
 strength. An all-zero palette divides `0 / 0`, an error; guard with
 `max(max(emissiveStrength), 0.001)`.
 
@@ -308,11 +308,11 @@ with colorfulness, `.z` hue. Hue as a plain number is the form's
 power: `mod(lch.z + 0.1, 1)` turns every material a tenth of the
 way around the wheel with lightness and chroma held.
 
-Hue is a turn in `0..1`, and a gray has none, `oklchFromRgb`
+Hue is a turn in `[0, 1]`, and a gray has none, `oklchFromRgb`
 answering hue 0 at zero chroma. `rgbFromOklch` errors on a hue
-outside `0..1`, the wrap staying the author's own `mod(h, 1)`, and
+outside `[0, 1]`, the wrap staying the author's own `mod(h, 1)`, and
 on a negative chroma. A converted-back color can leave the gamut,
-components outside `0..1`, and no conversion clamps: an image
+components outside `[0, 1]`, and no conversion clamps: an image
 writer already errors there, and the bound stays the author's
 `clamp`.
 
@@ -363,7 +363,7 @@ per material when the value is one. A vec1 writes `0.4`, a vec4 writes
 `[1, 0, 0, 1]`, and either over the palette writes an array of those. The
 token names the transfer those numbers take: `linear` writes them as
 evaluated, and `srgb` transfer-encodes them under the image rules, so an
-alpha component stays linear and a component outside `0..1` errors. Both
+alpha component stays linear and a component outside `[0, 1]` errors. Both
 write full floats, so an `srgb` JSON is display-encoded floats where an
 `srgb` PNG is display-encoded bytes. The token rides each flag, so one file
 mixes encodings the way one glb does, each key taking its own. Encoding
@@ -611,7 +611,7 @@ first value that varies across a surface: every palette property is per
 swatch, which is why the unwrap and corner atlases exist.
 
 `--compute-occlusion <dst-name>` requests the computation and binds the
-result under the name, a corner vec1 in `0..1`, `1` fully open, bound
+result under the name, a corner vec1 in `[0, 1]`, `1` fully open, bound
 ahead of the program the way palette properties are. Nothing computes
 unrequested: without the flag the name does not exist, and an expression
 naming one is the ordinary unknown-name error. The request is explicit
@@ -1530,7 +1530,7 @@ One item per function. Dimensions and shapes follow the tables above.
     ```
 
 16. `lerp(a, b, t)` is `a + (b - a) * t`. `t` is unrestricted, so it
-    extrapolates outside `0..1`. The name is HLSL's, because it says
+    extrapolates outside `[0, 1]`. The name is HLSL's, because it says
     what the blend does; `mix` names the [bool chooser](#booleans)
     instead:
 
@@ -1762,7 +1762,7 @@ disturbing any of this.
 **Write-time errors.** A non-finite component (NaN or infinity, as from
 `0 / 0`) is an error wherever it appears. Clamping is always the author's,
 written `clamp()`. The destination decides the range, and only an image
-has one: a PNG requires every component in `0..1`, so `1.5` into a PNG
+has one: a PNG requires every component in `[0, 1]`, so `1.5` into a PNG
 errors while `1.5` into a JSON field is fine, which is how an unbounded
 property like `emissiveStrength` travels.
 
