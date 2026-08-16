@@ -360,27 +360,8 @@ with one object. See
     texture bakes at is legal and emits for an outside sampler; see
     [UV streams](#uv-streams).
 
-A writer's arguments read destination first, then source, then the token
-when one exists. The order is an assignment: the location before what
-fills it, a binding's `name = expr` order with the encoding trailing. A
-material or primitive index is part of the destination, so it rides
-ahead of the rest: which object, then what on it. A writer's name ends
-in its source kind. `-value` takes an expression and writes its value.
-`-file` takes an existing file. `-normal` takes the mesher's computed
-normal; source and destination are both fixed, so the flag carries only
-whether the write happens. `-uv` takes the mesher's computed coordinates
-the same way; the flag carries only which streams write. A `<src-expr>`
-is any expression of the [value language](value-language.md), a defined
-name the simplest. A `<src-file>` names an existing file.
-
-Every destination takes one claim. A second flag claiming it errors, an
-identical spelling included, so writing the same thing twice never passes as
-agreement: a slot filled twice, a material or primitive named twice, one JSON
-key written twice. A profile element is no second claim, since an explicit flag
-replaces it; see the [profile language](profile-language.md). The two exceptions
-bind names rather than write destinations: value bindings redefine let-style,
-and compute requests alias, each binding its name to the one
-computation.
+In every writer, `<src-expr>` holds any expression of the
+[value language](value-language.md), and `<src-file>` names an existing file.
 
 ## Primitives and materials
 
