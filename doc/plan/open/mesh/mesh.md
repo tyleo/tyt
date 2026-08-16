@@ -140,8 +140,8 @@ with one object. See
     Without the `--uv` flag the list is derived automatically. Every texture
     value and every `--write-primitive-uv` puts its value's domain on the list.
     The duplicates collapse, and the survivors sort up the ladder: `swatch`,
-    then `voxel`, then `face`, then `corner`. Every texture finds its own domain
-    on the list, so nothing climbs.
+    then `voxel`, then `face`, then `corner`. Every texture finds its exact
+    domain on the list, so nothing climbs.
 
     Every primitive shares the one list, but not every primitive writes every
     stream. Each keeps the listed domains its material samples and writes only
@@ -152,10 +152,10 @@ with one object. See
 11. `--compute-index <corner | face | swatch | voxel> <dst-name>`
     - Repeatable: yes
 
-    Computes each entry's own index in the domain and binds it to `dst-name` as
-    a [`u32`](value-language.md#numbers) vec1 array over the domain. Every entry
-    holds its own position: the first entry reads `0`, the next `1`, and so on.
-    See [Computed index](value-language.md#computed-index).
+    Computes each entry's index in the domain and binds it to `dst-name` as a
+    [`u32`](value-language.md#numbers) vec1 array over the domain. Every entry
+    holds its position: the first entry reads `0`, the next `1`, and so on. See
+    [Computed index](value-language.md#computed-index).
 
 12. `--compute-occlusion <dst-name>`
     - Repeatable: yes
@@ -223,100 +223,93 @@ with one object. See
 20. `--write-file-json-value <dst-file> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
-    Writes a value to a JSON file under `dst-name` with the specified transfer.
-    Repeats on one path merge, so the file is always an object; see
-    [JSON files](value-language.md#json-files).
+    Writes a value to a JSON file under `<dst-name>` with the specified
+    transfer. The output is one object per file so repeating the flag on one
+    path merges into that file; see [JSON files](value-language.md#json-files).
 
 21. `--write-file-png-value <dst-file> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
-    Writes a [swatch, voxel, face, or corner](value-language.md#domains)
-    array to an 8-bit PNG beside the mesh, one texel per entry, a corner
-    array in the [corner atlas](#the-corner-atlas)'s block layout. The image
-    is sized to its value: vec1 through vec4 write grey, grey-alpha, RGB,
-    and RGBA, and
-    components map to channels by position. Grey-alpha is PNG's only
-    two-channel form, so a vec2's second component lands in the alpha
-    channel. Pad with `rgb(u, v, 0)` where a viewer should read opaque color.
-    A component outside `[0, 1]` errors. The token names the encoding, and the
-    file also declares its transfer in its own chunks; see the
-    [notes](value-language.md#notes).
-    1. `linear`: applies no transfer, for the data channels glTF wants
-       linear.
-    2. `srgb`: applies the sRGB transfer, for an image a viewer reads as
-       color.
+    Writes a [swatch, voxel, face, or corner](value-language.md#domains) array
+    to an 8-bit PNG beside the mesh, one texel per entry. A corner array takes
+    the [corner atlas](#the-corner-atlas)'s block layout. The value's width sets
+    the channel format: vec1 writes grey; vec2, grey-alpha; vec3, RGB; vec4,
+    RGBA. A component outside `[0, 1]` errors. The file declares its transfer in
+    its chunks; see the [notes](value-language.md#notes).
+    1. `linear`: applies no transfer.
+    2. `srgb`: applies the sRGB transfer, for an image a viewer reads as color.
 
 22. `--write-material-extra-image-file <material-index> <dst-name> <src-file>`
     - Repeatable: yes
 
-    Sets a custom `extras.vxl.values.<name>` entry on the indexed material to
-    an image reference. The entry holds a texture index, and the texture
-    points at the named file by relative path; see
+    Sets a custom `extras.vxl.values.<dst-name>` entry on the indexed material
+    to an image reference. The entry holds a texture index, and the texture
+    points at `<src-file>` by relative path; see
     [Material slots](value-language.md#material-slots).
 
 23. `--write-material-extra-image-value <material-index> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes an array value as an embedded image. The custom
-    `extras.vxl.values.<name>` entry on the indexed material holds its
-    texture index. A plain value errors, because an image needs texels; see
+    `extras.vxl.values.<dst-name>` entry on the indexed material holds its
+    texture index. A plain value errors; see
     [Material slots](value-language.md#material-slots).
 
 24. `--write-material-extra-json-file <material-index> <dst-name> <src-file>`
     - Repeatable: yes
 
-    Sets a custom `extras.vxl.values.<name>` entry on the indexed material to
-    a `{"uri"}` pointer at the named JSON file by relative path; see
+    Sets a custom `extras.vxl.values.<dst-name>` entry on the indexed material
+    to a `{ "uri": "<src-file>" }` pointer, the path relative; see
     [Material slots](value-language.md#material-slots).
 
 25. `--write-material-extra-json-value <material-index> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
-    Writes a value's numbers into a custom `extras.vxl.values.<name>` entry
-    on the indexed material. A plain value writes as its numbers, and an
-    array writes as rows; see
-    [Material slots](value-language.md#material-slots).
+    Writes a value's numbers into a custom `extras.vxl.values.<dst-name>` entry
+    on the indexed material. A plain value writes as its numbers, and an array
+    writes as rows; see [Material slots](value-language.md#material-slots).
 
 26. `--write-material-slot-file <material-index> <dst-property> <src-file>`
     - Repeatable: yes
 
-    Sets a texture property of the indexed material to reference an existing
-    file by relative path. The file can come from `--write-file-png-value` or
-    from anywhere else; see
+    Sets the texture property `<dst-property>` of the indexed material to
+    reference `<src-file>` by relative path. The file can come from
+    `--write-file-png-value` or from anywhere else; see
     [Material slots](value-language.md#material-slots).
 
 27. `--write-material-slot-value <material-index> <dst-property> <src-expr>`
     - Repeatable: yes
 
-    Sets one property of the indexed material. A plain value becomes a
-    material field. An array value embeds as an image, in the glb binary
-    chunk or as a data URI in a `.gltf`; see
+    Sets the property `<dst-property>` of the indexed material. A plain value
+    becomes a material field. An array value embeds as an image, in the glb
+    binary chunk or as a data URI in a `.gltf`; see
     [Material slots](value-language.md#material-slots).
 
 28. `--write-mesh-extra-image-file <dst-name> <src-file>`
     - Repeatable: yes
 
-    Sets a mesh `extras.vxl.values.<name>` entry to an image reference. The
-    entry holds a texture index, and the texture points at the named file by
+    Sets a mesh `extras.vxl.values.<dst-name>` entry to an image reference. The
+    entry holds a texture index, and the texture points at `<src-file>` by
     relative path; see [Palettes](#palettes).
 
 29. `--write-mesh-extra-image-value <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes an array value as an embedded image. The mesh
-    `extras.vxl.values.<name>` entry holds its texture index. A plain value
+    `extras.vxl.values.<dst-name>` entry holds its texture index. A plain value
     errors; see [Palettes](#palettes).
 
 30. `--write-mesh-extra-json-file <dst-name> <src-file>`
     - Repeatable: yes
 
-    Sets a mesh `extras.vxl.values.<name>` entry to a `{"uri"}` pointer at
-    the named JSON file by relative path; see [Palettes](#palettes).
+    Sets a mesh `extras.vxl.values.<dst-name>` entry to a
+    `{ "uri": "<src-file>" }` pointer, the path relative; see
+    [Palettes](#palettes).
 
 31. `--write-mesh-extra-json-value <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
-    Writes a value's numbers into a mesh `extras.vxl.values.<name>` entry. A
+    Writes a value's numbers into a mesh `extras.vxl.values.<dst-name>` entry. A
     plain value writes as its numbers. An array writes as rows, one row per
     swatch; see [Palettes](#palettes).
 
@@ -325,20 +318,20 @@ with one object. See
 
     Writes a value to an attribute glTF defines, `COLOR_0`, on the indexed
     primitive. The corners take the value by
-    [domain](value-language.md#domains), and a corner value lands exactly.
-    The defined vocabulary fixes the encoding, so the flag carries no token.
-    An underscore name errors; the custom flag is its home; see
+    [domain](value-language.md#domains) so a corner value lands exactly.
+    The flag carries no token because the defined vocabulary fixes the encoding.
+    An underscore name errors; see
     [Vertex attributes](value-language.md#vertex-attributes).
 
 33. `--write-primitive-custom-value <primitive-index> <dst-name> <src-expr> <linear | srgb | u8 | u16>`
     - Repeatable: yes
 
-    Writes a value to a custom vertex attribute on the indexed primitive. The
-    name is typed with the underscore glTF requires of application-specific
-    attributes. `_MY_COLOR` lands exactly as written, and a bare name errors.
-    An `f32` value takes `linear` or `srgb`, the transfer the stored floats
-    take. A `u8` or `u16` value takes its own width as the token, the two
-    cross-checked, and writes an integer accessor. A `u32` value errors, glTF
+    Writes a value to a custom vertex attribute on the indexed primitive.
+    `<dst-name>` carries the leading underscore glTF requires of
+    application-specific attributes: `_MY_COLOR` lands exactly as written, and a
+    bare name errors. The last argument depends on the value's type: `f32` takes
+    `linear` or `srgb`, `u8` takes `u8`, and `u16` takes `u16`; a mismatch
+    errors. `u8` and `u16` write integer accessors. A `u32` value errors, glTF
     forbidding the width on an attribute; see
     [Vertex attributes](value-language.md#vertex-attributes).
 
@@ -350,20 +343,22 @@ with one object. See
     normal, beside `POSITION`. glTF leaves the attribute optional, and a
     viewer derives flat normals from the triangles. A voxel face is flat, so
     a conforming viewer draws the same pixels either way. `false` drops the
-    stream, bytes a data primitive never reads.
+    stream.
 
 35. `--write-primitive-uv <primitive-index> <corner | face | swatch | voxel>`
     - Default: the mesh's stream list filtered to the material's need
     - Repeatable: yes
 
-    Writes a UV stream on the indexed primitive. The source is the mesher's
-    own coordinates, so the flag carries only which streams write, repeats
-    stacking in the primitive's `TEXCOORD` order. A domain twice on one
-    primitive errors. A spelled primitive writes exactly its spelled streams,
-    a `none` primitive's default filtering to nothing. A spelling that omits a
-    domain the material samples errors, a draw reading a missing attribute. A
-    spelled stream no texture bakes at is legal and emits for an outside
-    sampler; see [UV streams](#uv-streams).
+    Writes one UV stream on the indexed primitive. The mesher computes the
+    coordinates, and the flag order sets the primitive's `TEXCOORD` numbers. A
+    domain listed twice on a primitive errors.
+
+    With the flag the primitive writes exactly the named streams; without it the
+    default filters the mesh's list to the material's need, a `none` primitive
+    writing nothing. The list must include every domain the material samples;
+    omitting one errors, because the draw would read a missing attribute. A
+    named stream no texture bakes at is legal and emits for an outside sampler;
+    see [UV streams](#uv-streams).
 
 A writer's arguments read destination first, then source, then the token
 when one exists. The order is an assignment: the location before what
