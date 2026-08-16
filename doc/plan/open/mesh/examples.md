@@ -238,8 +238,18 @@ the bulb.
   "asset": { "version": "2.0" },
   "extensionsUsed": ["KHR_materials_emissive_strength"],
   "accessors": [
-    /* ... */
-  ], // POSITION, NORMAL, TEXCOORD_0, indices
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 40,
+      "type": "VEC3",
+      "min": [0, 0, 0],
+      "max": [1, 2, 1],
+    }, // POSITION
+    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 3, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+  ],
   "images": [
     { "mimeType": "image/png", "bufferView": 4 }, // albedo, sRGB
     { "mimeType": "image/png", "bufferView": 5 }, // orm, linear
@@ -547,8 +557,18 @@ streams derive `[face]` and the one `TEXCOORD_0` is the face stream:
 {
   "asset": { "version": "2.0" },
   "accessors": [
-    /* ... */
-  ], // POSITION, NORMAL, TEXCOORD_0, indices
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 40,
+      "type": "VEC3",
+      "min": [0, 0, 0],
+      "max": [2, 2, 1],
+    }, // POSITION
+    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 3, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+  ],
   "images": [{ "mimeType": "image/png", "bufferView": 4 }],
   "textures": [{ "sampler": 0, "source": 0 }],
   "materials": [
@@ -596,8 +616,18 @@ face instead of flat:
 {
   "asset": { "version": "2.0" },
   "accessors": [
-    /* ... */
-  ], // POSITION, NORMAL, TEXCOORD_0, indices
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 40,
+      "type": "VEC3",
+      "min": [0, 0, 0],
+      "max": [2, 2, 1],
+    }, // POSITION
+    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 3, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+  ],
   "images": [{ "mimeType": "image/png", "bufferView": 4 }], // 8x8, a block per face
   "samplers": [
     {
@@ -799,8 +829,18 @@ price of the one stream:
 {
   "asset": { "version": "2.0" },
   "accessors": [
-    /* ... */
-  ], // POSITION, NORMAL, TEXCOORD_0, indices
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 40,
+      "type": "VEC3",
+      "min": [0, 0, 0],
+      "max": [2, 2, 1],
+    }, // POSITION
+    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 3, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+  ],
   "images": [
     { "mimeType": "image/png", "bufferView": 4 }, // albedo per face, sRGB
     { "mimeType": "image/png", "bufferView": 5 }, // ao, linear
@@ -844,8 +884,19 @@ Without `--uv face`, the profile's `uvs` list, the streams derive
 {
   "asset": { "version": "2.0" },
   "accessors": [
-    /* ... */
-  ], // POSITION, NORMAL, TEXCOORD_0, TEXCOORD_1, indices
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 40,
+      "type": "VEC3",
+      "min": [0, 0, 0],
+      "max": [2, 2, 1],
+    }, // POSITION
+    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
+    { "bufferView": 2, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_0
+    { "bufferView": 3, "componentType": 5126, "count": 40, "type": "VEC2" }, // TEXCOORD_1
+    { "bufferView": 4, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+  ],
   "images": [
     { "mimeType": "image/png", "bufferView": 5 }, // albedo, 1x1
     { "mimeType": "image/png", "bufferView": 6 }, // ao, 4x4
