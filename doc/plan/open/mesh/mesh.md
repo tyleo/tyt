@@ -365,53 +365,40 @@ In every writer, `<src-expr>` holds any expression of the
 
 ## Primitives and materials
 
-A glTF mesh holds primitives. A primitive is one draw: its own vertex data, its
-own triangle list, and at most one material. Two materials on one mesh means two
-primitives, each holding the faces it draws. By default a run carries no
-materials and one primitive, index 0, holding every face and addressable like
-any other. Each `--primitive <material-index | none> <src-expr>` declares a
-primitive: the material it draws with and the select that routes its faces. The
-first flag replaces the implicit primitive. The implicit primitive draws with
-material 0 when the mesh carries materials, and with no material when it carries
-none. Everything is 0-indexed, and a primitive flag naming an index at or above
-the declared primitives errors rather than growing the count.
+A glTF mesh holds primitives. A primitive is one draw with its own vertex data,
+its own triangle list, and at most one material. Two materials on one mesh means
+two primitives, each holding the faces it draws. `vxl mesh` starts with an
+implicit whole-mesh primitive. The first `--primitive` replaces it, and each
+further flag adds another. Everything is 0-indexed, and a primitive flag naming
+an index at or above the count errors rather than growing it.
 
-The materials declare by use. Every material flag names its material by index,
-and the mentions are the declaration: the count is the highest mention plus one,
-and a skipped index errors. `--material-count` spells the count instead, the
-whole contract: an index at or above it errors rather than growing the count,
-and an unmentioned index below it is a deliberate placeholder, an empty material
-holding its spot for an index-stable layout. A profile's `materials` list spells
-its length the same way, so a hand flag beside a profile still errors rather
-than growing the profile's count.
+A material is the surface a primitive draws with; material flags fill it by
+index. Materials are declared by use, with `--material-count` setting the
+count outright. At count `0` the glTF carries no `materials` array. A declared
+material no primitive draws is legal and emits unused.
 
-A primitive can carry no material. `none` in the material position declares one
-beside any count, so a data primitive rides beside drawn ones. glTF leaves
-`primitive.material` optional. A viewer draws such a primitive with the spec's
-default material, every field at its default, the pixels an empty material
-produces. `COLOR_0` multiplies into base color, so a mesh of vertex values alone
-still shows its colors. At count `0` the glTF carries no `materials` array,
-because the spec forbids an empty one. A declared material no primitive draws is
-legal and emits unused.
+`--primitive none` declares a primitive with no material. glTF leaves `primitive.material`
+optional, and a viewer draws such a primitive with the spec's default material,
+rendering the pixels an empty material produces. `COLOR_0` multiplies into base
+color, so a mesh of vertex values alone still shows its colors.
 
-The select routes the faces. It names a [bool](value-language.md#booleans) value
-read at the [face domain](value-language.md#domains), lower domains climbing the
-ladder, and the primitive takes every face whose entry is true. A swatch bool
-routes whole swatches: every face takes its swatch's answer. A voxel bool
-routes whole voxels, a merged span its entries disagree across splitting
-first; see
-[computed voxel position](value-language.md#computed-voxel-position). A face
-bool routes faces one by one, reaching below the palette to what only the
-mesh knows. A plain bool takes every face or none, and `true` is the
-whole-mesh select on any material. The selects partition the faces. A face no
-select takes would be a silent drop, so it errors. A face two selects take is
-two flags claiming one destination, the error the rest of the flag surface
-already throws. The partition covers the faces the mesher emits. A
-swatch-bool or voxel-bool partition of the used swatches or voxels holds
-under every `--method`, while a face-bool gap can open under one method and
-not another. The complement select is whole under all of
-them, and a `false` select takes nothing, legal wherever the rest cover the
-mesh. Selects only route; they never change what geometry exists.
+The `--primitive` select routes the faces: a
+[bool](value-language.md#booleans) read at the
+[face domain](value-language.md#domains) takes every true face into the
+primitive. A lower-domain bool can route whole swatches or whole voxels. A
+greedy quad can cover several voxels, and when their answers differ the quad
+splits, so each piece follows its voxel; see
+[computed voxel position](value-language.md#computed-voxel-position). The
+selects partition the faces: a face no select takes
+would be a silent drop, and a face two selects take would be claimed twice, so
+both error. The partition covers the faces the mesher emits. A swatch or voxel
+partition covers faces through the used swatches and solid voxels, which no
+method changes, so it is the same under every method. A face bool answers per
+emitted face, so a face partition that holds under one method can leave
+another's faces unclaimed. The fix is a complement: `rest = !(metal || glass)`
+covers whatever the mesher emits. A `false` select takes nothing, which is legal
+wherever the rest cover the mesh. Selects only route and never change what
+geometry exists.
 
 The selects split the model. Every face draws once with its swatch's material:
 
@@ -451,8 +438,10 @@ vxl mesh turret.voxj
 }
 ```
 
-A face select splits inside a swatch. Occlusion lives on the mesh, not the
-palette, so a crevice mask sends one swatch's seam faces to their own material:
+A face select can split faces that share a swatch. The palette cannot tell
+these faces apart, since each reads the same material, but occlusion comes from
+the geometry, so a threshold on it sends the crevice faces to a second
+material:
 
 ```sh
 # dirt in the creases: material 1 takes the occluded faces
@@ -464,14 +453,17 @@ vxl mesh statue.vox
   --primitive 1 crevice
 ```
 
-A styled catch-all is an explicit complement. The last primitive selects
-what the others do not, `--value "rest = !(metal || glass)"`, so the
-partition stays whole and every face still names its material.
+## Atlases
 
-`--material-name` lands as the glTF `material.name`. glTF primitives carry no
-name field, so `--primitive-name` rides the primitive's `extras` at `vxl.name`.
+Each texture-capable [domain](value-language.md#domains) arranges texels
+differently, so the bake has four atlases, one per domain up the ladder, and a
+texture takes the atlas of the domain it bakes at. Every atlas sits on the
+`--texture-shape` canvas and puts each face's UVs at texel centers. The
+palette, voxel, and unwrap atlases sample nearest with clamped wrapping, so a
+face reads exactly its texels. The corner atlas samples linear, because
+interpolation is its point.
 
-## The palette atlas
+### The palette atlas
 
 Every swatch map of one bake shares a single layout: one texel per distinct
 flattened material. The object's layers merge per property name by the format's
@@ -488,28 +480,24 @@ vxl mesh turret.voxj
 ```
 
 writes `turret.gltf` with embedded albedo, orm, and emissive maps. Every map is
-the same size, with the same flattened material at the same texel. Every face's
-UVs sit at its texel center, read with a nearest-neighbor sampler and clamped
-wrapping, so a face samples exactly its texel. The atlas depends on the
-materials the object uses, so it is per-mesh, not shared across meshes.
+the same size, with the same flattened material at the same texel, and every
+face's UVs sit at its texel's center. The atlas depends on the materials the
+object uses, so it is per-mesh.
 
-Nothing auto-defaults. A profile spells the glTF spec defaults through the
+Nothing auto-defaults. A profile supplies the glTF spec defaults through the
 `defaults` mixin, and a hand-written `--value` reads `default()` for a property
 no layer supplies; see the
 [profile language](profile-language.md#built-in-profiles). Once maps bake,
 greedy meshing merges only faces that share a flattened material, since a merged
 quad samples one texel. Pure geometry merges on shape alone.
 
-## The voxel atlas
+### The voxel atlas
 
-The voxel atlas is a per-mesh layout with a texel per solid voxel, in the
-object's own raster order, the layout of every texture that bakes at the
-voxel domain. Each face's UVs sit at its voxel's texel center, read with a
-nearest-neighbor sampler and clamped wrapping, so a face samples exactly its
-voxel's texel. A texel needs whole faces, so a voxel stream in the run caps
-merging at the voxel. Every face is then a per-voxel quad under any
-`--method`, `greedy` collapsing to `culled`. A buried voxel's texel is
-transparent black like any unused cell, and the mesh never samples it.
+The voxel atlas gives each solid voxel one texel, in the object's raster order.
+Each face's UVs sit at its voxel's texel center. A texel needs whole faces, so
+a voxel stream in the run caps merging at the voxel: every face is then a
+per-voxel quad under any `--method`, and `greedy` collapses to `culled`. A
+buried voxel's texel is an unused cell.
 
 The layout serves values that vary per voxel, and
 [computed voxel position](value-language.md#computed-voxel-position) is the
@@ -525,30 +513,27 @@ vxl mesh turret.voxj
 ```
 
 The swatch value climbs to the voxels through the multiply, so the map holds
-one texel per voxel, its swatch's color dimmed on alternating layers.
+one texel per voxel: the swatch's color, dimmed on alternating layers.
 
-## The unwrap atlas
+### The unwrap atlas
 
-The unwrap atlas is a per-mesh UV unwrap with a texel per face, the layout of
-every texture that bakes at the face domain. It serves values that vary across a
+The unwrap atlas gives each face one texel. It serves values that vary across a
 surface: the language's [face domain](value-language.md#domains).
 [Computed occlusion](value-language.md#computed-occlusion), reduced from its
 corners, is the first face value. The layout packs the face cells into the
 canvas and generates the face stream's UVs. `--material-uv 0 face` alone lays
-material 0's textures out per face, swatch values climbing in; see
+material 0's textures out per face, with swatch values climbing in; see
 [UV streams](#uv-streams).
 
-## The corner atlas
+### The corner atlas
 
-The corner atlas is a per-mesh unwrap with a 2x2 texel block per face, one texel
-per corner, the layout of every texture that bakes at the corner domain. The
+The corner atlas gives each face a 2x2 texel block, one texel per corner. The
 block's texels sit in the face's corner order, and the face's UVs sit at the
 four texel centers, so bilinear interpolation between the centers blends only
-the block's own texels and reproduces the per-corner gradient. No gutter padding
-is needed, since the UVs never leave the block. A corner texture samples linear
-without mipmaps where the other layouts sample nearest, so minification cannot
-bleed across blocks. A merged greedy face still carries one block, so corner
-occlusion disagreeing inside a span splits the quad; see
+the block's texels and reproduces the per-corner gradient. No gutter padding is
+needed, since the UVs never leave the block. The linear sampling skips mipmaps,
+so minification cannot bleed across blocks. A merged greedy face still carries
+one block, so a span whose corner occlusion disagrees splits; see
 [computed occlusion](value-language.md#computed-occlusion).
 
 The layout exists for corner values written whole, and computed occlusion is the
@@ -561,50 +546,35 @@ vxl mesh statue.vox
 ```
 
 The standard `occlusionTexture` slot then shades smooth creases in a stock
-viewer, no custom shader involved. The
+viewer with no custom shader. The
 [vertex attributes](value-language.md#vertex-attributes) stay the textureless
 route for a shader of your own.
 
 ## UV streams
 
-A sampled texture is texels plus the coordinates faces read them by, and the two
-must agree. Each texture-capable domain therefore has its own arrangement. A
-swatch texture holds one texel per swatch, and every face of the swatch reads
-the same texel. A voxel texture holds one texel per voxel, the voxel's faces
-sharing it. A face texture holds one texel per face, each face its own. A
-corner texture holds a 2x2 block per face, each corner its own texel. One mesh
-can carry several kinds at once, one face then reading a different spot in
-each, so a primitive carries one UV stream per layout its faces read, glTF's
-numbered `TEXCOORD_<n>` attributes. A swatch, voxel, or face texture samples
-nearest; a corner texture samples linear, the interpolation its point.
+A sampled texture is texels plus the coordinates faces read them by, and the
+two must agree. One mesh can carry several [atlases](#atlases) at once, and a
+face then reads a different spot in each, so a primitive carries one UV stream
+per atlas its faces read. The streams are glTF's numbered `TEXCOORD_<n>`
+attributes.
 
-The stream list is per material. Without `--material-uv` it derives from use:
-each of the material's textures bakes at its value's exact domain, and the list
-holds those domains in ladder order, `[swatch]` through
-`[swatch, voxel, face, corner]`, empty for a material with no textures.
-`--material-uv <material-index> <corner | face | swatch | voxel>`, repeatable,
-declares the list instead, one stream per flag in `TEXCOORD` order, and a
-profile material entry's `uvs` key is the same list in config, any
-`--material-uv` naming the material replacing all of it. The declared list is
-the whole contract: each texture bakes at the lowest listed domain at or above
-its value's domain, climbing in, so `--material-uv 0 face` alone bakes material
-0's swatch maps per face, one stream for a consumer that reads one UV set. A
-texture whose domain sits above every listed entry errors, since stepping down
-is never implicit; `faceAvg` takes the step. The order pins the numbers: an
-engine that wants its face maps ahead of its swatch maps lists `face` first.
+The stream list is per material, and the rules live at `--material-uv`: the
+declaration, the derived default, and the bake contract. The contract serves the
+consumer. `--material-uv 0 face` alone bakes material 0's swatch maps per face,
+so an engine that reads one UV set gets one stream. An engine that wants its
+face maps ahead of its swatch maps lists `face` first, since the flag order
+sets the numbers.
 
-The streams land per primitive. A primitive writes its material's list, and a
-primitive with no material writes nothing. `--write-primitive-uv` names a
-primitive's streams instead, in the primitive's flag order, and a named stream
-no texture bakes at emits anyway, the coordinates an externally-baked texture,
-an engine lightmap, samples by.
+The streams land per primitive. A primitive writes its material's list, a
+primitive with no material writes nothing, and `--write-primitive-uv` names a
+primitive's streams instead.
 
-Every texture's `texCoord` then is derived: the domain it bakes at looks up in
-the stream order of each primitive drawing its material, and the position is the
-number. Defaults always agree, primitives sharing a material sharing its list;
-two `--write-primitive-uv` orders seating one material's domain at two positions
-are two flags claiming one destination, the usual error. No flag hand-wires a
-slot:
+Every texture's `texCoord` is derived: the domain it bakes at finds its
+position in the stream order of each primitive drawing the material, and that
+position is the number. Defaults always agree, since primitives sharing a
+material share its list. Two `--write-primitive-uv` orders seating one
+material's domain at two positions claim one destination twice, so they error.
+No flag hand-wires a slot:
 
 ```jsonc
 // vxl mesh turret.voxj
@@ -655,20 +625,16 @@ slot:
 The mesh extras flags serve a runtime that resolves materials itself: a game
 that swaps team colors or ramps a glow per damage state without re-exporting the
 mesh. The four `--write-mesh-extra-*` flags write named entries under the mesh's
-`extras.vxl.values`, the same grid the material extras take. `json-value` puts a
-value's numbers in the entry, a plain value as its numbers and an array as rows,
-one per swatch in [shape order](value-language.md#shapes).
-`json-file` points the entry at an existing JSON file. `image-value` embeds an
-array as a PNG and stores its texture index. `image-file` references an existing
-image the same way. The entry shapes cannot be confused: numbers and rows are
-themselves, an image is an `{"index"}`, and a file pointer is a `{"uri"}`. The
-same name twice, in any two forms, is two flags claiming one destination, the
-usual error.
+`extras.vxl.values`, the same grid the material extras take. The entry shapes
+cannot be confused: numbers and rows are themselves, an image is an
+`{"index"}`, and a file pointer is a `{"uri"}`. The same name twice, in any two
+forms, errors.
 
 The palette pattern is rows beside their join key.
-`--write-mesh-extra-json-value` writes the rows. The key is the
-[computed swatch index](value-language.md#computed-index) landing through
-`--write-primitive-custom-value`, one integer per vertex naming the
+`--write-mesh-extra-json-value` writes the rows, one per swatch in
+[shape order](value-language.md#shapes). The key is the
+[computed swatch index](value-language.md#computed-index), which lands through
+`--write-primitive-custom-value` as one integer per vertex naming the
 swatch its face samples, under any custom attribute name. The narrowing
 is the width check: `u8(e)` holds 256 swatches, `u16(e)` 65536, and a
 palette the width cannot index errors rather than truncates. Every array
@@ -721,17 +687,16 @@ replace at will:
 }
 ```
 
-A vec1 value's rows are numbers, and a vecN value's rows are arrays of N, the
-`--write-file-json-value` shapes. The token is that writer's token for the same
-reason: the rows are numbers your own runtime reads, nothing fixes their
-encoding, so the flag declares it.
+A vec1 value's rows are numbers, and a vecN value's rows are arrays of N, as
+`--write-file-json-value` writes them. The encoding argument is that writer's,
+for the same reason: the rows are numbers your runtime reads, so nothing but
+the flag fixes their encoding.
 
-The halves stay independent, so each stands alone. The index attribute by
-itself is the bare join key, for a runtime that ships its own tables
-keyed to the effective palette's swatch order. Rows by themselves are
-legal too, data a build step reads in swatch order with no per-vertex
-join. Nothing checks the pairing, so a runtime that needs both writes
-both.
+The halves stay independent. The index attribute alone is the bare join
+key, for a runtime that ships its own tables keyed to the effective
+palette's swatch order. Rows alone are legal too: a build step reads them
+in swatch order with no per-vertex join. Nothing checks the pairing, so a
+runtime that needs both writes both.
 
 A storage choice is a flag combination. Embedded rows are
 `--write-mesh-extra-json-value`. A sidecar is `--write-file-json-value` with a
