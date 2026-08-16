@@ -96,7 +96,36 @@ with one object. See
    Names a material. The name lands as the glTF `material.name`. A material
    without the flag carries no name.
 
-8. `--primitive <material-index | none> <src-expr>`
+8. `--material-uv <material-index> <corner | face | swatch | voxel>`
+   - Default: derived from use
+   - Repeatable: yes
+
+   Declares the indexed material's stream list. Each `--material-uv` adds one
+   stream, and the flag order sets the `TEXCOORD` numbers. A domain listed twice
+   on a material errors.
+
+   The list sets the material's bake contract. Each of its textures bakes at the
+   lowest listed domain at or above its value's domain. Take
+   `--material-uv 0 face`. An albedo texture reads a `swatch` value from
+   `baseColorFactor`. `face` sits above `swatch`, so the albedo bakes per `face`
+   with each `face` repeating its `swatch`'s texel. An occlusion texture reads a
+   `corner` value from `--compute-occlusion`. `face` sits below `corner`, so the
+   list cannot hold it, and the texture errors. The bake never steps a value
+   down, because stepping down loses detail. The value can take the step itself.
+   For example, `faceAvg` turns the `corner` value into a `face` value.
+
+   Without the flag the list is derived automatically. Every texture of the
+   material puts its value's domain on the list. The duplicates collapse, and
+   the survivors sort up the ladder: `swatch`, then `voxel`, then `face`, then
+   `corner`. Every texture finds its exact domain on the list, so nothing
+   climbs.
+
+   A primitive writes the list of the material it draws with, and a primitive
+   with no material writes no streams. `--write-primitive-uv` replaces that
+   default: the primitive then writes exactly the streams the flag names; see
+   [UV streams](#uv-streams).
+
+9. `--primitive <material-index | none> <src-expr>`
    - Default: the implicit primitive
    - Repeatable: yes
 
@@ -113,41 +142,12 @@ with one object. See
    The first `--primitive` replaces it, so the declared primitives are exactly
    the mesh's; see [Primitives and materials](#primitives-and-materials).
 
-9. `--primitive-name <primitive-index> <name>`
-   - Repeatable: yes
-
-   Names a primitive. glTF primitives carry no name field, so the name lands at
-   `vxl.name` in the primitive's `extras`. A primitive without the flag carries
-   no name.
-
-10. `--uv <corner | face | swatch | voxel>`
-    - Default: derived from use
+10. `--primitive-name <primitive-index> <name>`
     - Repeatable: yes
 
-    Declares the mesh's stream list. Each `--uv` adds one stream, and the flag
-    order sets the `TEXCOORD` numbers. A domain listed twice errors.
-
-    The `--uv` list sets the bake contract. Each texture bakes at the lowest
-    listed domain at or above its value's domain. Take `--uv face`. An albedo
-    texture reads a `swatch` value from `baseColorFactor`. `face` sits above
-    `swatch`, so the albedo bakes per `face` with each `face` repeating its
-    `swatch`'s texel. An occlusion texture reads a `corner` value from
-    `--compute-occlusion`. `face` sits below `corner`, so `--uv` alone cannot
-    hold it, and the texture errors. The bake never steps a value down, because
-    stepping down loses detail. The value can take the step itself. For example,
-    `faceAvg` turns the `corner` value into a `face` value.
-
-    Without the `--uv` flag the list is derived automatically. Every texture
-    value and every `--write-primitive-uv` puts its value's domain on the list.
-    The duplicates collapse, and the survivors sort up the ladder: `swatch`,
-    then `voxel`, then `face`, then `corner`. Every texture finds its exact
-    domain on the list, so nothing climbs.
-
-    Every primitive shares the one list, but not every primitive writes every
-    stream. Each keeps the listed domains its material samples and writes only
-    those. A primitive with no material writes no streams.
-    `--write-primitive-uv` replaces the filter: the primitive then writes
-    exactly the streams the flag names; see [UV streams](#uv-streams).
+    Names a primitive. glTF primitives carry no name field, so the name lands at
+    `vxl.name` in the primitive's `extras`. A primitive without the flag carries
+    no name.
 
 11. `--compute-index <corner | face | swatch | voxel> <dst-name>`
     - Repeatable: yes
@@ -346,7 +346,7 @@ with one object. See
     stream.
 
 35. `--write-primitive-uv <primitive-index> <corner | face | swatch | voxel>`
-    - Default: the mesh's stream list filtered to the material's need
+    - Default: the material's stream list
     - Repeatable: yes
 
     Writes one UV stream on the indexed primitive. The mesher computes the
@@ -354,11 +354,11 @@ with one object. See
     domain listed twice on a primitive errors.
 
     With the flag the primitive writes exactly the named streams; without it the
-    default filters the mesh's list to the material's need, a `none` primitive
-    writing nothing. The list must include every domain the material samples;
-    omitting one errors, because the draw would read a missing attribute. A
-    named stream no texture bakes at is legal and emits for an outside sampler;
-    see [UV streams](#uv-streams).
+    primitive writes its material's list, a `none` primitive writing nothing.
+    The list must include every domain the material samples; omitting one
+    errors, because the draw would read a missing attribute. A named stream no
+    texture bakes at is legal and emits for an outside sampler; see
+    [UV streams](#uv-streams).
 
 A writer's arguments read destination first, then source, then the token
 when one exists. The order is an assignment: the location before what
@@ -553,8 +553,9 @@ every texture that bakes at the face domain. It serves values that vary across a
 surface: the language's [face domain](value-language.md#domains).
 [Computed occlusion](value-language.md#computed-occlusion), reduced from its
 corners, is the first face value. The layout packs the face cells into the
-canvas and generates the face stream's UVs. `--uv face` alone lays every texture
-out per face, swatch values climbing in; see [UV streams](#uv-streams).
+canvas and generates the face stream's UVs. `--material-uv 0 face` alone lays
+material 0's textures out per face, swatch values climbing in; see
+[UV streams](#uv-streams).
 
 ## The corner atlas
 
@@ -596,33 +597,33 @@ each, so a primitive carries one UV stream per layout its faces read, glTF's
 numbered `TEXCOORD_<n>` attributes. A swatch, voxel, or face texture samples
 nearest; a corner texture samples linear, the interpolation its point.
 
-The stream list is derived from use when nothing spells it: each texture bakes
-at its value's own domain, a `--write-primitive-uv` mention joins, and the list
-holds the domains in use in ladder order, `[swatch]` through
-`[swatch, voxel, face, corner]`, empty when nothing writes a texture.
-`--uv <corner | face | swatch | voxel>`, repeatable, spells the list
-instead, one stream per flag in `TEXCOORD` order, and a
-profile's `uvs` key is the same list in config, any `--uv` replacing all of it.
-The spelled list is the whole contract: each texture bakes at the lowest listed
-domain at or above its value's domain, climbing in, so `--uv face` alone bakes
-the swatch maps per face, one stream for a consumer that reads one UV set, and
-`--write-primitive-uv` domain outside the list errors. A texture whose domain
-sits above every listed entry errors, since stepping down is never implicit;
-`faceAvg` spells the step. The order pins the relative numbers: an engine that
-wants its face maps ahead of its swatch maps spells `--uv face --uv swatch`.
+The stream list is per material. Without `--material-uv` it derives from use:
+each of the material's textures bakes at its value's exact domain, and the list
+holds those domains in ladder order, `[swatch]` through
+`[swatch, voxel, face, corner]`, empty for a material with no textures.
+`--material-uv <material-index> <corner | face | swatch | voxel>`, repeatable,
+declares the list instead, one stream per flag in `TEXCOORD` order, and a
+profile material entry's `uvs` key is the same list in config, any
+`--material-uv` naming the material replacing all of it. The declared list is
+the whole contract: each texture bakes at the lowest listed domain at or above
+its value's domain, climbing in, so `--material-uv 0 face` alone bakes material
+0's swatch maps per face, one stream for a consumer that reads one UV set. A
+texture whose domain sits above every listed entry errors, since stepping down
+is never implicit; `faceAvg` takes the step. The order pins the numbers: an
+engine that wants its face maps ahead of its swatch maps lists `face` first.
 
-The streams land per primitive. An unspelled primitive writes the list filtered
-to the domains its material samples: a primitive of swatch maps carries one
-and a `none` primitive carries none. `--write-primitive-uv` spells a primitive's
-streams instead, in the primitive's own `TEXCOORD` order, and a spelled stream
+The streams land per primitive. A primitive writes its material's list, and a
+primitive with no material writes nothing. `--write-primitive-uv` names a
+primitive's streams instead, in the primitive's flag order, and a named stream
 no texture bakes at emits anyway, the coordinates an externally-baked texture,
 an engine lightmap, samples by.
 
 Every texture's `texCoord` then is derived: the domain it bakes at looks up in
 the stream order of each primitive drawing its material, and the position is the
-number. Filtered defaults always agree, primitives sharing a material sharing
-its need; two spellings seating one material's domain at two positions are two
-flags claiming one destination, the usual error. No flag hand-wires a slot:
+number. Defaults always agree, primitives sharing a material sharing its list;
+two `--write-primitive-uv` orders seating one material's domain at two positions
+are two flags claiming one destination, the usual error. No flag hand-wires a
+slot:
 
 ```jsonc
 // vxl mesh turret.voxj

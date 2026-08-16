@@ -86,9 +86,9 @@ as rows. `--palette-storage` retires into flag combinations:
 `embedded` is `--write-mesh-extra-json-value`, `external` is
 `--write-file-json-value` beside a `--write-mesh-extra-json-file`
 pointer, and `both` is the two side by side. `--atlas` retires into
-the `--uv` contract: the stream list chooses each texture's layout,
-`unwrap` respells as `--uv face`, and the palette bake is the
-derived default.
+the `--material-uv` contract: a material's stream list chooses its
+textures' layouts, `unwrap` becomes a `face`-only list per material,
+and the palette bake is the derived default.
 
 ## Code deletions
 

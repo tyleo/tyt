@@ -718,14 +718,14 @@ vxl mesh step.voxj
   --write-primitive-uv 0 face
 ```
 
-No `--uv` is spelled, so the stream list derives: the albedo texture
-puts `swatch` in use, and the `face` mention joins it. The
-primitive spells its streams, swatch then face, so `TEXCOORD_0` is
-the swatch stream the material reads and `TEXCOORD_1` is the
+No `--material-uv` names the material, so its list derives to
+`[swatch]`, the albedo's domain. The primitive names its streams,
+swatch then face, so `TEXCOORD_0` is the swatch stream the material
+reads and `TEXCOORD_1` is the
 [unwrap atlas](mesh.md#the-unwrap-atlas) layout, ten face cells in a
-4-by-4 canvas with no image behind them. Unspelled, the primitive
-would filter to the swatch stream alone and no face stream would
-exist:
+4-by-4 canvas with no image behind them. Without its `uvs` entry, the
+primitive would write the material's list, the swatch stream alone,
+and no face stream would exist:
 
 ```jsonc
 {
@@ -782,10 +782,10 @@ face layout and samples it by the stream the mesh already carries.
 
 ## One UV set
 
-A consumer that reads one UV set wants one stream. `--uv` is the
-bake contract, and listing `face` alone re-bakes every texture there.
-The swatch albedo climbs, since the lowest listed domain at or above
-swatch is face. The occlusion already lives there:
+A consumer that reads one UV set wants one stream. `--material-uv` is
+the bake contract, and listing `face` alone re-bakes every texture of
+the material there. The swatch albedo climbs, since the lowest listed
+domain at or above swatch is face. The occlusion already lives there:
 
 ```jsonc
 // .vxlconfig
@@ -796,9 +796,9 @@ swatch is face. The occlusion already lives there:
         "valuesFrom": ["albedo"],
         "computeOcclusion": "computedOcclusion",
         "values": ["ao = faceAvg(computedOcclusion)"],
-        "uvs": ["face"],
         "materials": [
           {
+            "uvs": ["face"],
             "slots": {
               "baseColorTexture": { "kind": "value", "value": "albedo" },
               "occlusionTexture": { "kind": "value", "value": "ao" },
@@ -823,13 +823,13 @@ vxl mesh step.voxj
   --values-from albedo
   --compute-occlusion computedOcclusion
   --value "ao = faceAvg(computedOcclusion)"
-  --uv face
+  --material-uv 0 face
   --write-material-slot-value 0 baseColorTexture albedo
   --write-material-slot-value 0 occlusionTexture ao
 ```
 
-With `--uv face`, both textures share the unwrap atlas layout, ten
-cells in a 4 by 4. The albedo that filled a 1x1 palette canvas now
+With `--material-uv 0 face`, both textures share the unwrap atlas
+layout, ten cells in a 4 by 4. The albedo that filled a 1x1 palette canvas now
 spends ten face texels saying the same stone color. That waste is the
 price of the one stream:
 
@@ -885,8 +885,9 @@ price of the one stream:
 
 Both slots name `texCoord: 0`, the collapse the flag bought.
 
-Without `--uv face`, the profile's `uvs` list, the streams derive
-`[swatch, face]`, each texture at its value's own domain:
+Without `--material-uv 0 face`, the material entry's `uvs` list, the
+streams derive `[swatch, face]`, each texture at its value's exact
+domain:
 
 ```jsonc
 {
@@ -951,9 +952,10 @@ own stream, and the consumer that reads one UV set is back to two.
 
 A runtime that draws weathering into the creases itself wants the
 creased faces in their own primitive, bare of any material. Its
-convention also pins face coordinates to `TEXCOORD_0`. The `--uv`
-list orders the mesh's streams, and `--write-primitive-uv` gives the
-bare primitive a stream its missing material would never pull in:
+convention also pins face coordinates to `TEXCOORD_0`. The
+`--material-uv` list orders the material's streams, and
+`--write-primitive-uv` gives the bare primitive a stream its missing
+material would never pull in:
 
 ```jsonc
 // .vxlconfig
@@ -968,9 +970,9 @@ bare primitive a stream its missing material would never pull in:
           "crevice = ao < 0.9",
           "open = !crevice",
         ],
-        "uvs": ["face", "swatch"],
         "materials": [
           {
+            "uvs": ["face", "swatch"],
             "slots": {
               "baseColorTexture": { "kind": "value", "value": "albedo" },
               "occlusionTexture": { "kind": "value", "value": "ao" },
@@ -1001,8 +1003,8 @@ vxl mesh step.voxj
   --value "ao = faceAvg(computedOcclusion)"
   --value "crevice = ao < 0.9"
   --value "open = !crevice"
-  --uv face
-  --uv swatch
+  --material-uv 0 face
+  --material-uv 0 swatch
   --write-material-slot-value 0 baseColorTexture albedo
   --write-material-slot-value 0 occlusionTexture ao
   --primitive 0 open
@@ -1015,8 +1017,8 @@ and the other eight faces read one, so `crevice` takes exactly those
 two faces and `open` the rest. The `[face, swatch]` list changes no
 bake, since the lowest listed domain at or above swatch is still
 swatch. It pins the order instead. Primitive 0 has no
-`--write-primitive-uv`, so it filters the list to its material's
-need, both domains. Face seats at `TEXCOORD_0`, swatch at
+`--write-primitive-uv`, so it writes its material's list, both
+domains. Face seats at `TEXCOORD_0`, swatch at
 `TEXCOORD_1`, and the material's `texCoord`s derive to match.
 Primitive 1 names its streams, so it writes exactly the face stream.
 Its `none` material samples nothing, which makes the omitted swatch
@@ -1177,9 +1179,9 @@ defaults answer:
 
 The derived list is `[swatch, face]`, ladder order, so face sits at
 `TEXCOORD_1` and the runtime's `TEXCOORD_0` convention breaks. The
-bare primitive's default filters to nothing, so the pass that wanted
-face coordinates has none to read. The `--uv` pair pins the order,
-and `--write-primitive-uv` writes the stream anyway.
+bare primitive's default writes nothing, so the pass that wanted
+face coordinates has none to read. The `--material-uv` pair pins the
+order, and `--write-primitive-uv` writes the stream anyway.
 
 ## A computed enum
 

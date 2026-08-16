@@ -79,11 +79,6 @@ every element expands to the flag it fires as:
         "method": "<culled | greedy | naive>",
         "textureShape": "<fit | line | pot | square | n>",
 
-        // UV streams in TEXCOORD order, the --uv list; omitted, the
-        // list derives from use, each texture at its value's own
-        // domain
-        "uvs": ["swatch", "face"],
-
         // files written beside the mesh; a file's transfer lives
         // here and nowhere else
         "files": {
@@ -110,6 +105,10 @@ every element expands to the flag it fires as:
         "materials": [
           {
             "name": "<name>", // optional, the glTF material.name
+            // UV streams in TEXCOORD order, the --material-uv list;
+            // omitted, the list derives from use, each texture at
+            // its value's exact domain
+            "uvs": ["swatch", "face"],
             "slots": {
               // kind value embeds or inlines an expression; kind
               // file carries a file field referencing a written file
@@ -140,8 +139,7 @@ every element expands to the flag it fires as:
             // optional, true omitted; false drops the NORMAL stream
             "normal": true,
             // optional; the primitive's UV streams in its own
-            // TEXCOORD order; omitted, the mesh list filtered to the
-            // material's need
+            // TEXCOORD order; omitted, the material's list
             "uvs": ["swatch", "face"],
             "builtins": { "<ATTRIBUTE>": "<expr>" },
             "customs": {
@@ -177,18 +175,18 @@ sits; a primitives entry fires `--primitive` in list order, its
 `material` and `select` the flag's arguments, an omitted `material`
 firing `none` and an omitted `select` `true`, its `normal` firing
 `--write-primitive-normal`, omitted `true`, its `uvs` firing
-`--write-primitive-uv` per entry in order, omitted the mesh list
-filtered to the material's need, its `builtins` firing
+`--write-primitive-uv` per entry in order, omitted the material's
+list, its `builtins` firing
 `--write-primitive-builtin-value` tokenless like the flag, and its
 `customs` `--write-primitive-custom-value` with their transfers or
 widths; `files.png` and `files.json` entries fire
 `--write-file-png-value` and `--write-file-json-value` per key; and
-each geometry key fires the flag it is named for. The `uvs` list spells
-the `--uv` flags in order. The defaults mirror the flags': an omitted
-geometry key takes its flag's default, an omitted or empty
-`materials` carries no materials, an omitted or empty `primitives`
-the implicit primitive holding every face, and an omitted `uvs`
-derives from use the way the bare line does; see
+each geometry key fires the flag it is named for. A material entry's
+`uvs` fires `--material-uv` per entry in order. The defaults mirror
+the flags': an omitted geometry key takes its flag's default, an
+omitted or empty `materials` carries no materials, an omitted or
+empty `primitives` the implicit primitive holding every face, and an
+omitted `uvs` derives from use the way the bare line does; see
 [Primitives and materials](mesh.md#primitives-and-materials) and
 [UV streams](mesh.md#uv-streams).
 
@@ -208,10 +206,10 @@ An explicit flag beats the profile: a hand-written flag replaces the
 element claiming its destination, wherever it sits on the line, while
 two hand-written flags colliding stays the error it always was, and a
 hand flag naming a material or primitive index the run never declared
-still errors rather than growing the count. The `uvs` list is one
-element, so any `--uv` flag replaces all of it, and a geometry flag
-replaces its key the same way: `--method culled` beside a profile
-spelling `greedy` meshes culled.
+still errors rather than growing the count. A material's `uvs` list
+is one element, so any `--material-uv` naming the material replaces
+all of it, and a geometry flag replaces its key the same way:
+`--method culled` beside a profile spelling `greedy` meshes culled.
 
 So with the output `turret.glb`, `--profile orm` expands to
 
@@ -293,9 +291,6 @@ interface Profile {
   /** A number is the exact `n`x`n` canvas of cells. */
   textureShape?: "fit" | "line" | "pot" | "square" | number;
 
-  /** UV streams in TEXCOORD order; omitted, the list derives from use. */
-  uvs?: ("corner" | "face" | "swatch" | "voxel")[];
-
   files?: {
     png?: Record<FileTemplate, { transfer: Transfer; value: Expr }>;
     json?: Record<
@@ -313,6 +308,8 @@ interface Profile {
 
 interface MaterialEntry {
   name?: string;
+  /** UV streams in TEXCOORD order; omitted, the list derives from use. */
+  uvs?: ("corner" | "face" | "swatch" | "voxel")[];
   /** The resolved output format's own property names. */
   slots?: Record<string, SlotEntry>;
   extras?: Record<string, ExtraEntry>;
@@ -336,7 +333,7 @@ interface PrimitiveEntry {
   material?: number;
   /** Omitted: `true`, the `NORMAL` stream written. */
   normal?: boolean;
-  /** Streams in the primitive's own order; omitted, filtered to need. */
+  /** Streams in the primitive's own order; omitted, the material's list. */
   uvs?: ("corner" | "face" | "swatch" | "voxel")[];
   /** Attributes glTF defines, `COLOR_0`, to expressions. */
   builtins?: Record<string, Expr>;
