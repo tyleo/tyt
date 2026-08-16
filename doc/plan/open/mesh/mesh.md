@@ -223,10 +223,9 @@ with one object. See
 20. `--write-file-json-value <dst-file> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
-    Writes a value to a JSON file under `dst-name` as its key. The token names
-    the transfer the written numbers take. A bool value writes `true`/`false`
-    under `linear` alone. Repeats on one path merge, so the file is always an
-    object; see [JSON files](value-language.md#json-files).
+    Writes a value to a JSON file under `dst-name` with the specified transfer.
+    Repeats on one path merge, so the file is always an object; see
+    [JSON files](value-language.md#json-files).
 
 21. `--write-file-png-value <dst-file> <src-expr> <linear | srgb>`
     - Repeatable: yes
