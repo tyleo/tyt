@@ -19,8 +19,8 @@ subtraction in the [value language](value-language.md): a
 ## Profile values
 
 A profile's values are its `values` list, an optional `valuesFrom`
-list, and the optional `computeOcclusion` and `computeVoxelPosition`
-keys. Each `values` entry is a fragment of the
+list, and the optional `computeIndex`, `computeOcclusion`, and
+`computeVoxelPosition` keys. Each `values` entry is a fragment of the
 [program](value-language.md#programs), one or more `name = expr`
 bindings, the trailing `;` optional. A profile can define every name a
 run needs and still write nothing. `--values-from <profile>` appends a
@@ -44,10 +44,13 @@ A profile requests
 `computeOcclusion` key and
 [computed voxel position](value-language.md#computed-voxel-position)
 through its `computeVoxelPosition` key, each the flag's argument as
-its value, binding the name the way the flag does. Every request across
-profiles and flags binds its name to the one computation, so
-requests alias rather than collide. The binding rides `valuesFrom`
-with the values, since an inherited expression needs its name.
+its value, binding the name the way the flag does.
+[Computed indexes](value-language.md#computed-index) ride the
+`computeIndex` map, each domain key holding its bound name. Every
+request across profiles and flags binds its name to the one
+computation, so requests alias rather than collide. The bindings ride
+`valuesFrom` with the values, since an inherited expression needs its
+name.
 
 ## The output surface
 
@@ -66,6 +69,7 @@ every element expands to the flag it fires as:
         // --profile flag's position
         "valuesFrom": ["<profile>"],
         "values": ["<name> = <expr>"],
+        "computeIndex": { "<domain>": "<dst-name>" },
         "computeOcclusion": "<dst-name>",
         "computeVoxelPosition": "<dst-name>",
 
@@ -143,10 +147,11 @@ every element expands to the flag it fires as:
             "customs": {
               "<_NAME>": {
                 "value": "<expr>",
+                // an f32 value; a u8 or u16 value carries
+                // "width": "<u8 | u16>" instead
                 "transfer": "<linear | srgb>",
               },
             },
-            "indices": { "<_NAME>": "<u8 | u16>" },
           },
         ],
 
@@ -174,10 +179,9 @@ firing `none` and an omitted `select` `true`, its `normal` firing
 `--write-primitive-normal`, omitted `true`, its `uvs` firing
 `--write-primitive-uv` per entry in order, omitted the mesh list
 filtered to the material's need, its `builtins` firing
-`--write-primitive-builtin-value` tokenless like the flag, its
-`customs` `--write-primitive-custom-value` with their transfers, and
-its `indices` `--write-primitive-index` with their widths;
-`files.png` and `files.json` entries fire
+`--write-primitive-builtin-value` tokenless like the flag, and its
+`customs` `--write-primitive-custom-value` with their transfers or
+widths; `files.png` and `files.json` entries fire
 `--write-file-png-value` and `--write-file-json-value` per key; and
 each geometry key fires the flag it is named for. The `uvs` list spells
 the `--uv` flags in order. The defaults mirror the flags': an omitted
@@ -196,10 +200,9 @@ nothing can fight it; a referenced png still cross-checks its
 transfer against each slot's fixed encoding, the
 `--write-material-slot-file` rule spelled in config, and no built-in
 writes a file, so none can hit it. And the destination dicts make a
-double claim unspellable where a key is the destination, the
-remaining cross-dict collisions erroring at load: one custom
-attribute spelled in both `customs` and `indices`, or one template
-under both `png` and `json`.
+double claim unwritable where a key is the destination, the one
+remaining cross-dict collision erroring at load: one template under
+both `png` and `json`.
 
 An explicit flag beats the profile: a hand-written flag replaces the
 element claiming its destination, wherever it sits on the line, while
@@ -266,9 +269,18 @@ type FileTemplate = string;
 
 type Transfer = "linear" | "srgb";
 
+type Width = "u8" | "u16";
+
 interface Profile {
   /** Values imported first, in order; writers never travel. */
   valuesFrom?: string[];
+  /** Binds each listed domain's computed index under its name. */
+  computeIndex?: {
+    corner?: string;
+    face?: string;
+    swatch?: string;
+    voxel?: string;
+  };
   /** Binds computed occlusion under the name. */
   computeOcclusion?: string;
   /** Binds computed voxel position under the name. */
@@ -328,10 +340,11 @@ interface PrimitiveEntry {
   uvs?: ("corner" | "face" | "swatch" | "voxel")[];
   /** Attributes glTF defines, `COLOR_0`, to expressions. */
   builtins?: Record<string, Expr>;
-  /** Underscore-typed attribute names, `_MY_COLOR`. */
-  customs?: Record<string, { value: Expr; transfer: Transfer }>;
-  /** Underscore-typed attribute names to index widths. */
-  indices?: Record<string, "u8" | "u16">;
+  /** Underscore-typed attribute names, `_MY_COLOR`; u8/u16 carry widths. */
+  customs?: Record<
+    string,
+    { value: Expr; transfer: Transfer } | { value: Expr; width: Width }
+  >;
 }
 ```
 
@@ -583,7 +596,14 @@ material through
       // all.
       "palette": {
         "valuesFrom": ["albedo"],
-        "primitives": [{ "indices": { "_PALETTE": "u8" } }],
+        "computeIndex": { "swatch": "swatchIndex" },
+        "primitives": [
+          {
+            "customs": {
+              "_PALETTE": { "value": "u8(swatchIndex)", "width": "u8" },
+            },
+          },
+        ],
         "meshExtras": {
           "albedo": {
             "kind": "json-value",

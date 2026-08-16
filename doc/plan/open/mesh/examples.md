@@ -420,7 +420,14 @@ they are read by on the primitive, no materials at all.
     "profiles": {
       "palette": {
         "valuesFrom": ["albedo"],
-        "primitives": [{ "indices": { "_PALETTE": "u8" } }],
+        "computeIndex": { "swatch": "swatchIndex" },
+        "primitives": [
+          {
+            "customs": {
+              "_PALETTE": { "value": "u8(swatchIndex)", "width": "u8" },
+            },
+          },
+        ],
         "meshExtras": {
           "albedo": {
             "kind": "json-value",
@@ -445,9 +452,10 @@ no-material primitive:
 ```sh
 vxl mesh lamp.voxj
   --values-from albedo
+  --compute-index swatch swatchIndex
   --primitive none true
   --write-mesh-extra-json-value albedo albedo linear
-  --write-primitive-index 0 _PALETTE u8
+  --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" u8
 ```
 
 The built-in `albedo` profile reduces to one value here: a bare

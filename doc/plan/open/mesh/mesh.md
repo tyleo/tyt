@@ -149,35 +149,78 @@ with one object. See
     `--write-primitive-uv` replaces the filter: the primitive then writes
     exactly the streams the flag names; see [UV streams](#uv-streams).
 
-11. `--compute-occlusion <dst-name>`
+11. `--compute-index <corner | face | swatch | voxel> <dst-name>`
     - Repeatable: yes
 
-    Computes occlusion from the voxel geometry and binds it to `dst-name`. The
-    value is a per-corner vec1 in `[0, 1]`, one entry per face corner: `0` is
-    fully occluded and `1` is fully open. See
-    [Computed occlusion](value-language.md#computed-occlusion).
+    Computes each entry's own index in the domain and binds it to `dst-name` as
+    a [`u32`](value-language.md#numbers) vec1 array over the domain. Every entry
+    holds its own position: the first entry reads `0`, the next `1`, and so on.
+    See [Computed index](value-language.md#computed-index).
 
-12. `--compute-voxel-position <dst-name>`
+12. `--compute-occlusion <dst-name>`
     - Repeatable: yes
 
-    Computes each voxel's grid position and binds it under the name. The value
-    is a per-voxel vec3 of whole numbers, the voxel's coordinates in the
-    object's own grid. Every expression can read it the way it reads a palette
-    property. Without the flag nothing computes and the name does not exist; see
+    Computes occlusion from the voxel geometry and binds it to `dst-name` as a
+    per-corner `f32` vec1 in `[0, 1]`: `0` is fully occluded and `1` is fully
+    open. See [Computed occlusion](value-language.md#computed-occlusion).
+
+13. `--compute-voxel-position <dst-name>`
+    - Repeatable: yes
+
+    Computes each voxel's grid position and binds it to `dst-name` as a
+    per-voxel `u32` vec3. Every expression can read it the way it reads a
+    palette property. Without the flag nothing computes and the name does not
+    exist; see
     [Computed voxel position](value-language.md#computed-voxel-position).
 
-13. `--value <bindings>`
+14. `--file-stem <file-stem>`
+    - Default: the output mesh's stem
+    - Repeatable: no
+
+    Replaces `{file-stem}` in profile file templates. The default resolves
+    based on the output path, so an output of `turret.glb` fills
+    `{file-stem}-mse.png` as `turret-mse.png`.
+
+15. `--profile <profile>`
+    - Repeatable: no
+
+    Applies a profile. The profile expands to its flags, the `valuesFrom` values
+    applying first. An explicit flag replaces the element it collides with; see
+    the [profile language](profile-language.md).
+
+16. `--select <glob>`
+    - Default: `*`, selecting every object
+    - Repeatable: yes
+
+    Chooses the object by hierarchy path, with a node path selecting its
+    subtree. Unions with `--select-index`. Any explicit selector replaces
+    the default, so `--select-index` alone never unions with `*`. See
+    [Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
+
+17. `--select-index <index>`
+    - Repeatable: yes
+
+    Chooses the object by position, an integer or an `a-b` range. Unions
+    with `--select`.
+
+18. `--value <bindings>`
     - Repeatable: yes
 
     Defines values the writers and slots can name. The argument holds one
-    or more `name = expr` bindings, `;` between them and optional at the
-    end; an all-whitespace argument errors. Every property of the
-    effective palette is a name. The run joins every `--value` and
+    or more well-formed statements of the value language. Every property
+    of the effective palette is a name. The run joins every `--value` and
     profile values entry into one program, bindings evaluating in order
     with let-style redefinition; see
     [Programs](value-language.md#programs).
 
-14. `--write-file-json-value <dst-file> <dst-name> <src-expr> <linear | srgb>`
+19. `--values-from <profile>`
+    - Repeatable: yes
+
+    Appends a profile's bindings to the program at the flag's position, the
+    profile's `valuesFrom` imports first. Any writer elements the profile holds
+    stay behind. See [profile language](profile-language.md).
+
+20. `--write-file-json-value <dst-file> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes a value to a JSON file under the name as its key. The token names
@@ -185,7 +228,7 @@ with one object. See
     under `linear` alone. Repeats on one path merge, so the file is always an
     object; see [JSON files](value-language.md#json-files).
 
-15. `--write-file-png-value <dst-file> <src-expr> <linear | srgb>`
+21. `--write-file-png-value <dst-file> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes a [swatch, voxel, face, or corner](value-language.md#domains)
@@ -204,7 +247,7 @@ with one object. See
     2. `srgb`: applies the sRGB transfer, for an image a viewer reads as
        color.
 
-16. `--write-material-extra-image-file <material-index> <dst-name> <src-file>`
+22. `--write-material-extra-image-file <material-index> <dst-name> <src-file>`
     - Repeatable: yes
 
     Sets a custom `extras.vxl.values.<name>` entry on the indexed material to
@@ -212,7 +255,7 @@ with one object. See
     points at the named file by relative path; see
     [Material slots](value-language.md#material-slots).
 
-17. `--write-material-extra-image-value <material-index> <dst-name> <src-expr> <linear | srgb>`
+23. `--write-material-extra-image-value <material-index> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes an array value as an embedded image. The custom
@@ -220,14 +263,14 @@ with one object. See
     texture index. A plain value errors, because an image needs texels; see
     [Material slots](value-language.md#material-slots).
 
-18. `--write-material-extra-json-file <material-index> <dst-name> <src-file>`
+24. `--write-material-extra-json-file <material-index> <dst-name> <src-file>`
     - Repeatable: yes
 
     Sets a custom `extras.vxl.values.<name>` entry on the indexed material to
     a `{"uri"}` pointer at the named JSON file by relative path; see
     [Material slots](value-language.md#material-slots).
 
-19. `--write-material-extra-json-value <material-index> <dst-name> <src-expr> <linear | srgb>`
+25. `--write-material-extra-json-value <material-index> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes a value's numbers into a custom `extras.vxl.values.<name>` entry
@@ -235,7 +278,7 @@ with one object. See
     array writes as rows; see
     [Material slots](value-language.md#material-slots).
 
-20. `--write-material-slot-file <material-index> <dst-property> <src-file>`
+26. `--write-material-slot-file <material-index> <dst-property> <src-file>`
     - Repeatable: yes
 
     Sets a texture property of the indexed material to reference an existing
@@ -243,7 +286,7 @@ with one object. See
     from anywhere else; see
     [Material slots](value-language.md#material-slots).
 
-21. `--write-material-slot-value <material-index> <dst-property> <src-expr>`
+27. `--write-material-slot-value <material-index> <dst-property> <src-expr>`
     - Repeatable: yes
 
     Sets one property of the indexed material. A plain value becomes a
@@ -251,34 +294,34 @@ with one object. See
     chunk or as a data URI in a `.gltf`; see
     [Material slots](value-language.md#material-slots).
 
-22. `--write-mesh-extra-image-file <dst-name> <src-file>`
+28. `--write-mesh-extra-image-file <dst-name> <src-file>`
     - Repeatable: yes
 
     Sets a mesh `extras.vxl.values.<name>` entry to an image reference. The
     entry holds a texture index, and the texture points at the named file by
     relative path; see [Palettes](#palettes).
 
-23. `--write-mesh-extra-image-value <dst-name> <src-expr> <linear | srgb>`
+29. `--write-mesh-extra-image-value <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes an array value as an embedded image. The mesh
     `extras.vxl.values.<name>` entry holds its texture index. A plain value
     errors; see [Palettes](#palettes).
 
-24. `--write-mesh-extra-json-file <dst-name> <src-file>`
+30. `--write-mesh-extra-json-file <dst-name> <src-file>`
     - Repeatable: yes
 
     Sets a mesh `extras.vxl.values.<name>` entry to a `{"uri"}` pointer at
     the named JSON file by relative path; see [Palettes](#palettes).
 
-25. `--write-mesh-extra-json-value <dst-name> <src-expr> <linear | srgb>`
+31. `--write-mesh-extra-json-value <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes a value's numbers into a mesh `extras.vxl.values.<name>` entry. A
     plain value writes as its numbers. An array writes as rows, one row per
     swatch; see [Palettes](#palettes).
 
-26. `--write-primitive-builtin-value <primitive-index> <dst-attribute> <src-expr>`
+32. `--write-primitive-builtin-value <primitive-index> <dst-attribute> <src-expr>`
     - Repeatable: yes
 
     Writes a value to an attribute glTF defines, `COLOR_0`, on the indexed
@@ -288,27 +331,19 @@ with one object. See
     An underscore name errors; the custom flag is its home; see
     [Vertex attributes](value-language.md#vertex-attributes).
 
-27. `--write-primitive-custom-value <primitive-index> <dst-name> <src-expr> <linear | srgb>`
+33. `--write-primitive-custom-value <primitive-index> <dst-name> <src-expr> <linear | srgb | u8 | u16>`
     - Repeatable: yes
 
     Writes a value to a custom vertex attribute on the indexed primitive. The
     name is typed with the underscore glTF requires of application-specific
-    attributes. `_MY_COLOR` lands exactly as written, and a bare name errors;
-    see [Vertex attributes](value-language.md#vertex-attributes).
+    attributes. `_MY_COLOR` lands exactly as written, and a bare name errors.
+    An `f32` value takes `linear` or `srgb`, the transfer the stored floats
+    take. A `u8` or `u16` value takes its own width as the token, the two
+    cross-checked, and writes an integer accessor. A `u32` value errors, glTF
+    forbidding the width on an attribute; see
+    [Vertex attributes](value-language.md#vertex-attributes).
 
-28. `--write-primitive-index <primitive-index> <dst-name> <u8 | u16>`
-    - Repeatable: yes
-
-    Writes the per-vertex swatch index as its own custom attribute on the
-    indexed primitive. The name is underscore-typed. A palette the width
-    cannot index errors. The numbers are the effective palette's own swatch
-    numbers under any select. The flag is independent of every other flag.
-    Alone it is the bare index, and beside extras rows it is the join key a
-    shader reads them by; see [Palettes](#palettes).
-    1. `u8`: 256 swatches.
-    2. `u16`: 65536 swatches.
-
-29. `--write-primitive-normal <primitive-index> <false | true>`
+34. `--write-primitive-normal <primitive-index> <false | true>`
     - Default: `true`
     - Repeatable: yes
 
@@ -318,7 +353,7 @@ with one object. See
     a conforming viewer draws the same pixels either way. `false` drops the
     stream, bytes a data primitive never reads.
 
-30. `--write-primitive-uv <primitive-index> <corner | face | swatch | voxel>`
+35. `--write-primitive-uv <primitive-index> <corner | face | swatch | voxel>`
     - Default: the mesh's stream list filtered to the material's need
     - Repeatable: yes
 
@@ -331,62 +366,18 @@ with one object. See
     spelled stream no texture bakes at is legal and emits for an outside
     sampler; see [UV streams](#uv-streams).
 
-31. `--values-from <profile>`
-    - Repeatable: yes
-
-    Appends a profile's bindings to the program at the flag's own
-    position, the profile's own `valuesFrom` imports first. Any writer
-    elements the profile holds stay behind; only `--profile` fires them. The
-    built-ins ship in the binary, and the rest come from `.vxlconfig`; see
-    the [profile language](profile-language.md).
-
-32. `--profile <profile>`
-    - Repeatable: no
-
-    Applies a profile whole, a run's full surface: the geometry options,
-    materials, primitives, files, and extras. The profile expands to its
-    flags, the `valuesFrom` values applying first. An explicit flag replaces
-    the element it collides with; see the
-    [profile language](profile-language.md).
-
-33. `--file-stem <file-stem>`
-    - Default: the output mesh's stem
-    - Repeatable: no
-
-    Replaces `{file-stem}` in profile file templates. The default resolves
-    after the output path does, so an output of `turret.glb`, named or
-    derived from the input, fills `{file-stem}-mse.png` as `turret-mse.png`
-    with no flag at all. Renaming the mesh renames every templated file with
-    it.
-
-34. `--select <glob>`
-    - Default: `*`, selecting every object
-    - Repeatable: yes
-
-    Chooses the object by hierarchy path, a node path selecting its subtree.
-    Unions with `--select-index`. The default is one element any explicit
-    selector replaces, so `--select-index` alone never unions with `*`. See
-    [Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
-
-35. `--select-index <index>`
-    - Repeatable: yes
-
-    Chooses the object by position, an integer or an `a-b` range. Unions
-    with `--select`.
-
 A writer's arguments read destination first, then source, then the token
 when one exists. The order is an assignment: the location before what
 fills it, a binding's `name = expr` order with the encoding trailing. A
 material or primitive index is part of the destination, so it rides
 ahead of the rest: which object, then what on it. A writer's name ends
 in its source kind. `-value` takes an expression and writes its value.
-`-file` takes an existing file. `-index` takes the swatch number.
-`-normal` takes the mesher's computed normal; source and destination are
-both fixed, so the flag carries only whether the write happens. `-uv`
-takes the mesher's computed coordinates the same way; the flag carries
-only which streams write. A `<src-expr>` is any expression of the
-[value language](value-language.md), a defined name the simplest. A
-`<src-file>` names an existing file.
+`-file` takes an existing file. `-normal` takes the mesher's computed
+normal; source and destination are both fixed, so the flag carries only
+whether the write happens. `-uv` takes the mesher's computed coordinates
+the same way; the flag carries only which streams write. A `<src-expr>`
+is any expression of the [value language](value-language.md), a defined
+name the simplest. A `<src-file>` names an existing file.
 
 Every destination takes one claim. A second flag claiming it errors, an
 identical spelling included, so writing the same thing twice never passes as
@@ -394,7 +385,7 @@ agreement: a slot filled twice, a material or primitive named twice, one JSON
 key written twice. A profile element is no second claim, since an explicit flag
 replaces it; see the [profile language](profile-language.md). The two exceptions
 bind names rather than write destinations: value bindings redefine let-style,
-and computed-occlusion requests alias, each binding its name to the one
+and compute requests alias, each binding its name to the one
 computation.
 
 ## Primitives and materials
@@ -554,7 +545,7 @@ domain's producer:
 vxl mesh turret.voxj
   --compute-voxel-position voxelPosition
   --value "bands = mod(voxelPosition.y, 2)"
-  --value "albedo = baseColorFactor * lerp(0.8, 1, bands)"
+  --value "albedo = baseColorFactor * lerp(0.8, 1, f32(bands))"
   --write-material-slot-value 0 baseColorTexture albedo
 ```
 
@@ -699,22 +690,24 @@ same name twice, in any two forms, is two flags claiming one destination, the
 usual error.
 
 The palette pattern is rows beside their join key.
-`--write-mesh-extra-json-value` writes the rows. `--write-primitive-index`
-writes the attribute they are read by, one integer per vertex naming the
-swatch its face samples. The attribute is yours to spell: the name,
-typed with its underscore like any custom attribute, and the width, `u8` holding
-256 swatches and `u16` holding 65536. A palette the width cannot index errors
-than truncates. Every array value runs over the one effective palette, so every
-entry of rows shares the one index. A shader reads `values.albedo[_PALETTE]`
-against as many entries as the line writes, and each is plain data the runtime
-can replace at will:
+`--write-mesh-extra-json-value` writes the rows. The key is the
+[computed swatch index](value-language.md#computed-index) landing through
+`--write-primitive-custom-value`, one integer per vertex naming the
+swatch its face samples, under any custom attribute name. The narrowing
+is the width check: `u8(e)` holds 256 swatches, `u16(e)` 65536, and a
+palette the width cannot index errors rather than truncates. Every array
+value runs over the one effective palette, so every entry of rows shares
+the one index. A shader reads `values.albedo[_PALETTE]` against as many
+entries as the line writes, and each is plain data the runtime can
+replace at will:
 
 ```jsonc
 // vxl mesh turret.voxj
 //   --profile pbr
 //   --write-mesh-extra-json-value albedo albedo linear
 //   --write-mesh-extra-json-value emissive emissive linear
-//   --write-primitive-index 0 _PALETTE u8
+//   --compute-index swatch swatchIndex
+//   --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" u8
 {
   "asset": { "version": "2.0" },
   "extensionsUsed": ["KHR_materials_emissive_strength"],
@@ -757,14 +750,12 @@ A vec1 value's rows are numbers, and a vecN value's rows are arrays of N, the
 reason: the rows are numbers your own runtime reads, nothing fixes their
 encoding, so the flag declares it.
 
-The flags stay independent, so each half of the pattern stands alone.
-`--write-primitive-index` by itself is the bare index, an attribute with no
-rows, for a runtime that ships its own tables keyed to the effective palette's
-swatch order. Rows by themselves are legal too, data a build step reads in
-swatch order with no per-vertex join. Nothing checks the pairing, so a runtime
-that needs both spells both. The index is a custom attribute like any other, so
-a `--write-primitive-custom-value` spelling its name is two flags claiming one
-destination.
+The halves stay independent, so each stands alone. The index attribute by
+itself is the bare join key, for a runtime that ships its own tables
+keyed to the effective palette's swatch order. Rows by themselves are
+legal too, data a build step reads in swatch order with no per-vertex
+join. Nothing checks the pairing, so a runtime that needs both writes
+both.
 
 A storage choice is a flag combination. Embedded rows are
 `--write-mesh-extra-json-value`. A sidecar is `--write-file-json-value` with a
@@ -776,7 +767,8 @@ the json:
 //   --profile pbr
 //   --write-file-json-value turret-values.json albedo albedo linear
 //   --write-mesh-extra-json-file albedo turret-values.json
-//   --write-primitive-index 0 _PALETTE u8
+//   --compute-index swatch swatchIndex
+//   --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" u8
 {
   "asset": { "version": "2.0" },
   "extensionsUsed": ["KHR_materials_emissive_strength"],
@@ -860,7 +852,8 @@ keyed by the group:
 vxl mesh turret.voxj
   --profile pbr
   --write-mesh-extra-json-value colorId colorId linear
-  --write-primitive-index 0 _PALETTE u8
+  --compute-index swatch swatchIndex
+  --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" u8
 ```
 
 The shader reads `myColors[values.colorId[_PALETTE]]`, and swapping the

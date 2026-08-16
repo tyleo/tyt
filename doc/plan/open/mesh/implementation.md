@@ -16,7 +16,7 @@ in through an environment the caller supplies:
 ```rust
 let tree = parse("rgb(occlusionStrength, roughnessFactor, metallicFactor)")?;
 
-let ty = check(&tree, &env)?; // env: name -> Option<Type>, shape x dimension
+let ty = check(&tree, &env)?; // env: name -> Option<Type>, shape, dimension, numeric type
 
 let value = eval(&tree, &env)?; // env: name -> Option<Value>, plain or array
 ```
