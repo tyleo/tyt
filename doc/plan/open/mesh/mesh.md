@@ -44,18 +44,7 @@ with one object. See
 
    The source voxel format.
 
-3. `--voxel-size <meters>`
-   - Default: `1.0`
-   - Repeatable: no
-
-   The real-world edge length of one voxel in meters. The voxel grid is
-   unitless, so this flag gives a voxel its physical size. The flag is always
-   meters; the writer converts into the target format's native unit. glTF is
-   meter-native, so the size passes through. `1.0` opens at one meter per voxel,
-   and `0.01` opens at one centimeter. The size applies as a uniform scale to
-   vertex positions.
-
-4. `--method <culled | greedy | naive>`
+3. `--method <culled | greedy | naive>`
    - Default: `greedy`
    - Repeatable: no
 
@@ -66,7 +55,7 @@ with one object. See
    3. `naive`: emits all six faces of every solid voxel, hidden interior
       faces included.
 
-5. `--texture-shape <fit | line | pot | square | n>`
+4. `--texture-shape <fit | line | pot | square | n>`
    - Default: `pot`
    - Repeatable: no
 
@@ -78,6 +67,17 @@ with one object. See
    3. `pot`: the smallest square power of two.
    4. `square`: the smallest square.
    5. `<n>`: an exact `n`x`n` canvas of cells, and a canvas too small errors.
+
+5. `--voxel-size <meters>`
+   - Default: `1.0`
+   - Repeatable: no
+
+   The real-world edge length of one voxel in meters. The voxel grid is
+   unitless, so this flag gives a voxel its physical size. The flag is always
+   meters; the writer converts into the target format's native unit. glTF is
+   meter-native, so the size passes through. `1.0` opens at one meter per voxel,
+   and `0.01` opens at one centimeter. The size applies as a uniform scale to
+   vertex positions.
 
 6. `--material-count <count>`
    - Default: derived from use
@@ -188,22 +188,7 @@ with one object. See
     applying first. An explicit flag replaces the element it collides with; see
     the [profile language](profile-language.md).
 
-16. `--select <glob>`
-    - Default: `*`, selecting every object
-    - Repeatable: yes
-
-    Chooses the object by hierarchy path, with a node path selecting its
-    subtree. Unions with `--select-index`. Any explicit selector replaces
-    the default, so `--select-index` alone never unions with `*`. See
-    [Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
-
-17. `--select-index <index>`
-    - Repeatable: yes
-
-    Chooses the object by position, an integer or an `a-b` range. Unions
-    with `--select`.
-
-18. `--value <bindings>`
+16. `--value <bindings>`
     - Repeatable: yes
 
     Defines values the writers and slots can name. The argument holds one
@@ -213,17 +198,32 @@ with one object. See
     with let-style redefinition; see
     [Programs](value-language.md#programs).
 
-19. `--values-from <profile>`
+17. `--values-from <profile>`
     - Repeatable: yes
 
     Appends a profile's bindings to the program at the flag's position, the
     profile's `valuesFrom` imports first. Any writer elements the profile holds
     stay behind. See [profile language](profile-language.md).
 
+18. `--select <glob>`
+    - Default: `*`, selecting every object
+    - Repeatable: yes
+
+    Chooses the object by hierarchy path, with a node path selecting its
+    subtree. Unions with `--select-index`. Any explicit selector replaces
+    the default, so `--select-index` alone never unions with `*`. See
+    [Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
+
+19. `--select-index <index>`
+    - Repeatable: yes
+
+    Chooses the object by position, an integer or an `a-b` range. Unions
+    with `--select`.
+
 20. `--write-file-json-value <dst-file> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
-    Writes a value to a JSON file under the name as its key. The token names
+    Writes a value to a JSON file under `dst-name` as its key. The token names
     the transfer the written numbers take. A bool value writes `true`/`false`
     under `linear` alone. Repeats on one path merge, so the file is always an
     object; see [JSON files](value-language.md#json-files).
