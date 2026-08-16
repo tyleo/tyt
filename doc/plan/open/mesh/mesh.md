@@ -51,9 +51,9 @@ with one object. See
    The real-world edge length of one voxel in meters. The voxel grid is
    unitless, so this flag gives a voxel its physical size. The flag is always
    meters; the writer converts into the target format's native unit. glTF is
-   meter-native, so the size passes through. `1.0` opens at one meter per
-   voxel, and `0.01` opens at one centimeter. The size applies as a uniform
-   scale to vertex positions.
+   meter-native, so the size passes through. `1.0` opens at one meter per voxel,
+   and `0.01` opens at one centimeter. The size applies as a uniform scale to
+   vertex positions.
 
 4. `--method <culled | greedy | naive>`
    - Default: `greedy`
@@ -83,13 +83,12 @@ with one object. See
    - Default: derives from use
    - Repeatable: no
 
-   How many materials the mesh carries, numbered from `0`. Every material
-   flag names one material by index, and the derived count is the highest
-   mentioned index plus one, a skipped index erroring. When defined, the count
-   is the whole contract: an index at or above it errors rather than growing the
-   count, and an unmentioned index below it is a deliberate placeholder
-   emitting an empty material; see
-   [Primitives and materials](#primitives-and-materials).
+   How many materials the mesh carries, numbered from `0`. Every material flag
+   names one material by index, and the derived count is the highest mentioned
+   index plus one, a skipped index erroring. When defined, the count is the
+   whole contract: an index at or above it errors rather than growing the count,
+   and an unmentioned index below it is a deliberate placeholder emitting an
+   empty material; see [Primitives and materials](#primitives-and-materials).
 
 7. `--material-name <material-index> <name>`
    - Repeatable: yes
@@ -101,50 +100,63 @@ with one object. See
    - Default: the implicit primitive
    - Repeatable: yes
 
-   Declares a primitive. The first argument is the material the primitive
-   draws with, and `none` is no material at all. The expression is the select
-   that routes the primitive's faces. Primitives number from `0` in flag
-   order. The select is a [bool](value-language.md#booleans) read at the
-   [face domain](value-language.md#domains), lower domains climbing in, and
-   the primitive takes every face whose entry is true. The selects partition
-   the faces: a face no select takes errors, and a face two selects take
-   errors too. Without the flag the mesh has one primitive, index 0, holding
-   every face and addressable like any other. That implicit primitive draws
-   with material 0 when the mesh carries materials, and with no material when
-   it carries none. The first `--primitive` replaces it, so the declared
-   primitives are exactly the mesh's; see
-   [Primitives and materials](#primitives-and-materials).
+   Declares a primitive. The first argument is the material the primitive draws
+   with, and `none` is no material at all. The expression is the select that
+   routes the primitive's faces. Primitives number from `0` in flag order. The
+   select is a [bool](value-language.md#booleans) read at the
+   [face domain](value-language.md#domains), lower domains climbing in, and the
+   primitive takes every face whose entry is true. The selects partition the
+   faces: a face no select takes errors, and a face two selects take errors too.
+   Without the flag the mesh has one primitive, index 0, holding every face and
+   addressable like any other. That implicit primitive draws with material 0
+   when the mesh carries materials, and with no material when it carries none.
+   The first `--primitive` replaces it, so the declared primitives are exactly
+   the mesh's; see [Primitives and materials](#primitives-and-materials).
 
 9. `--primitive-name <primitive-index> <name>`
    - Repeatable: yes
 
-   Names a primitive. glTF primitives carry no name field, so the name lands
-   at `vxl.name` in the primitive's `extras`. A primitive without the flag
-   carries no name.
+   Names a primitive. glTF primitives carry no name field, so the name lands at
+   `vxl.name` in the primitive's `extras`. A primitive without the flag carries
+   no name.
 
 10. `--uv <corner | face | swatch | voxel>`
     - Default: derives from use
     - Repeatable: yes
 
-    Declares the mesh's stream list in `TEXCOORD` order, one stream per flag,
-    a domain listed twice erroring. The list is the bake contract: each texture
-    bakes at the lowest listed domain at or above its value's domain, so
-    `--uv face` alone bakes swatch maps per face. A texture whose domain sits
-    above every listed entry errors, since stepping down is never implicit.
-    The derived list holds each texture's own domain and each domain
-    `--write-primitive-uv` names. The derived order is the ladder: swatch,
-    then voxel, then face, then corner. Each primitive writes the list
-    filtered to its material's need unless `--write-primitive-uv` spells
-    its streams; see [UV streams](#uv-streams).
+    Declares the mesh's stream list. Each flag adds one stream, and the
+    flag order sets the `TEXCOORD` numbers. A domain listed twice errors.
+
+    The `--uv` list sets the bake contract. Each texture bakes at the lowest
+    listed domain at or above its value's domain. Take `--uv face`. An albedo
+    texture reads a `swatch` value from `baseColorFactor`. `face` sits above
+    `swatch`, so the albedo bakes per `face` with each `face` repeating its
+    `swatch`'s texel. An occlusion texture reads a `corner` value from
+    `--compute-occlusion`. `face` sits below `corner`, so `--uv` alone cannot
+    hold it, and the texture errors. The bake never steps a value down, because
+    stepping down loses detail. The value can take the step itself. For example,
+    `faceAvg` turns the `corner` value into a `face` value.
+
+    Without the `--uv` flag the list is derived automatically. Every texture
+    value and every `--write-primitive-uv` puts its value's domain on the list.
+    The duplicates collapse, and the survivors sort up the ladder: `swatch`,
+    then `voxel`, then `face`, then `corner`. Every texture finds its own domain
+    on the list, so nothing climbs.
+
+    Every primitive shares the one list, but not every primitive writes every
+    stream. Each keeps the listed domains its material samples and writes only
+    those. A primitive with no material writes no streams.
+    `--write-primitive-uv` replaces the filter: the primitive then writes
+    exactly the streams the flag names; see [UV streams](#uv-streams).
 
 11. `--compute-occlusion <dst-name>`
     - Repeatable: yes
 
-    Computes occlusion from the voxel geometry and binds it under the name.
-    The value is a per-corner vec1 in `0..1`, one entry per face corner, and
-    `1` is fully open. Every expression can read it the way it reads a
-    palette property. Without the flag nothing computes and the name does not
-    exist; see [Computed occlusion](value-language.md#computed-occlusion).
+    Computes occlusion from the voxel geometry and binds it under the name. The
+    value is a per-corner vec1 in `0..1`, one entry per face corner, and `1`
+    is fully open. Every expression can read it the way it reads a palette
+    property. Without the flag nothing computes and the name does not exist;
+    see [Computed occlusion](value-language.md#computed-occlusion).
 
 12. `--compute-voxel-position <dst-name>`
     - Repeatable: yes
