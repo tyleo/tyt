@@ -455,23 +455,25 @@ vxl mesh statue.vox
 
 ## Atlases
 
-Each texture-capable [domain](value-language.md#domains) arranges texels
-differently, so the bake has four atlases, one per domain up the ladder, and a
-texture takes the atlas of the domain it bakes at. Every atlas sits on the
-`--texture-shape` canvas and puts each face's UVs at texel centers. The
-palette, voxel, and unwrap atlases sample nearest with clamped wrapping, so a
-face reads exactly its texels. The corner atlas samples linear, because
-interpolation is its point.
+Each [domain](value-language.md#domains) arranges texels into its own texture
+atlas: swatch values land in the palette atlas; voxel values, the voxel
+atlas; face values, the unwrap atlas; corner values, the corner atlas.
+Every atlas sits on the `--texture-shape` canvas and puts each face's
+UVs at texel centers. The palette, voxel, and unwrap atlases sample nearest with
+clamped wrapping, so a face reads exactly its texels. The corner atlas samples
+linear: its blocks are the one layout where blending stays inside a face.
 
 ### The palette atlas
 
-Every swatch map of one bake shares a single layout: one texel per distinct
-flattened material. The object's layers merge per property name by the format's
-layer-override resolution. Each property reads through the last layer whose
-palette supplies its name. A voxel's texel is therefore keyed by the tuple of
-materials it samples in those winning layers, deduplicated in first-seen raster
-order. A single-layer object reduces to one texel per material its voxels use.
-Each map fills the same layout from its own value, so
+The palette atlas gives each flattened material one texel. An object stacks
+layers, and each layer paints the voxels with its palette's materials. Layers
+are combined by reading each property through the last layer whose palette
+supplies it. This combination is the object's effective palette. A voxel samples
+one material per layer, and that combination is its flattened material, one
+entry of the effective palette. Voxels with the same flattened material share a
+texel. The texels sit in first-seen raster order. A single-layer object has
+nothing to combine, so it gets one texel per material its voxels use. Each
+swatch map bakes its own value into the same texels, so
 
 ```sh
 vxl mesh turret.voxj
@@ -489,22 +491,24 @@ Nothing auto-defaults. A profile supplies the glTF spec defaults through the
 no layer supplies; see the
 [profile language](profile-language.md#built-in-profiles). Once maps bake,
 greedy meshing merges only faces that share a flattened material, since a merged
-quad samples one texel. Pure geometry merges on shape alone.
+quad samples one texel. A run that bakes no maps drops that limit, and greedy
+merges coplanar faces across materials.
 
 ### The voxel atlas
 
-The voxel atlas gives each solid voxel one texel, in the object's raster order.
-Each face's UVs sit at its voxel's texel center. A texel needs whole faces, so
-a voxel stream in the run caps merging at the voxel: every face is then a
-per-voxel quad under any `--method`, and `greedy` collapses to `culled`. A
+The voxel atlas gives each solid voxel one texel, in the object's raster order. Each
+face's UVs sit at its voxel's texel center. A face cannot straddle two voxels'
+texels, so a voxel stream in the run prevents merging across voxels. Every face
+is then a per-voxel quad under any `--method`, and `greedy` collapses to
+`culled`. A
 buried voxel's texel is an unused cell.
 
 The layout serves values that vary per voxel, and
-[computed voxel position](value-language.md#computed-voxel-position) is the
-domain's producer:
+[computed voxel position](value-language.md#computed-voxel-position) supplies
+them:
 
 ```sh
-# alternating layers, baked into the albedo
+# horizontal bands, baked into the albedo
 vxl mesh turret.voxj
   --compute-voxel-position voxelPosition
   --value "bands = mod(voxelPosition.y, 2)"
@@ -512,32 +516,27 @@ vxl mesh turret.voxj
   --write-material-slot-value 0 baseColorTexture albedo
 ```
 
-The swatch value climbs to the voxels through the multiply, so the map holds
-one texel per voxel: the swatch's color, dimmed on alternating layers.
+The swatch value climbs to the voxels through the multiply, so each voxel's
+texel shows its swatch's color, dimmed where its `y` is even.
 
 ### The unwrap atlas
 
-The unwrap atlas gives each face one texel. It serves values that vary across a
-surface: the language's [face domain](value-language.md#domains).
-[Computed occlusion](value-language.md#computed-occlusion), reduced from its
-corners, is the first face value. The layout packs the face cells into the
-canvas and generates the face stream's UVs. `--material-uv 0 face` alone lays
-material 0's textures out per face, with swatch values climbing in; see
-[UV streams](#uv-streams).
+The unwrap atlas gives each face one texel. It serves values that vary across
+a surface, such as [computed occlusion](value-language.md#computed-occlusion)
+reduced from its corners. The layout packs the face cells into the
+canvas and generates the face stream's UVs.
 
 ### The corner atlas
 
-The corner atlas gives each face a 2x2 texel block, one texel per corner. The
-block's texels sit in the face's corner order, and the face's UVs sit at the
-four texel centers, so bilinear interpolation between the centers blends only
-the block's texels and reproduces the per-corner gradient. No gutter padding is
-needed, since the UVs never leave the block. The linear sampling skips mipmaps,
-so minification cannot bleed across blocks. A merged greedy face still carries
-one block, so a span whose corner occlusion disagrees splits; see
+The corner atlas gives each face a 2x2 texel block, one texel per corner in the
+face's corner order. The face's UVs sit at the four texel centers, so bilinear
+interpolation stays inside the block and reproduces the per-corner gradient. The
+linear sampling skips mipmaps, so minification stays inside the block too, and
+the atlas needs no gutter padding. A merged greedy face still carries one block,
+and when corner occlusion disagrees inside it, the face splits; see
 [computed occlusion](value-language.md#computed-occlusion).
 
-The layout exists for corner values written whole, and computed occlusion is the
-first:
+The layout serves corner values written whole, such as computed occlusion:
 
 ```sh
 vxl mesh statue.vox
@@ -547,8 +546,8 @@ vxl mesh statue.vox
 
 The standard `occlusionTexture` slot then shades smooth creases in a stock
 viewer with no custom shader. The
-[vertex attributes](value-language.md#vertex-attributes) stay the textureless
-route for a shader of your own.
+[vertex attributes](value-language.md#vertex-attributes) are the textureless
+route for custom shaders.
 
 ## UV streams
 
