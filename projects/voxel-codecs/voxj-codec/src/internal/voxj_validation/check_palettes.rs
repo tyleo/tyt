@@ -113,7 +113,7 @@ fn check_materials(
             else {
                 continue;
             };
-            let value_pool_len = value_pool.values_len();
+            let value_pool_len = value_pool.len();
             if value_index >= value_pool_len {
                 failures.report(
                     Check::Palettes,

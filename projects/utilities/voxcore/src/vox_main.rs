@@ -1505,7 +1505,7 @@ mod tests {
             Some(VoxValuePoolKind::Vec4Float(..))
         ));
         assert_eq!(
-            state.value_pool(metallic_id).map(VoxValuePool::values_len),
+            state.value_pool(metallic_id).map(VoxValuePool::len),
             Some(2)
         );
         // An id past the value pool is not one of this state's.
@@ -1745,10 +1745,7 @@ mod tests {
 
         state.prune_value_pools();
 
-        assert_eq!(
-            state.value_pool(ints_id).map(VoxValuePool::values_len),
-            Some(2)
-        );
+        assert_eq!(state.value_pool(ints_id).map(VoxValuePool::len), Some(2));
     }
 
     #[test]

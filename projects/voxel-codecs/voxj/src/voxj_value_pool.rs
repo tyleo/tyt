@@ -65,8 +65,8 @@ pub enum VoxjValuePool {
 
 impl VoxjValuePool {
     /// The number of values in the value pool, across every kind. A palette's
-    /// value-indices must fall in `[0, values_len)`.
-    pub fn values_len(&self) -> usize {
+    /// value-indices must fall in `[0, len)`.
+    pub fn len(&self) -> usize {
         match self {
             VoxjValuePool::Bool(values) => values.len(),
             VoxjValuePool::Float(values) => values.len(),
@@ -80,6 +80,12 @@ impl VoxjValuePool {
             VoxjValuePool::Vec4Float(values) => values.len(),
             VoxjValuePool::Vec4Int(values) => values.len(),
         }
+    }
+
+    /// Whether the value pool holds no values. Spec rule 9 rejects an empty
+    /// value pool.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

@@ -10,7 +10,7 @@ pub fn check_value_pools(main: &VoxjMain, failures: &mut Failures) {
             return;
         }
 
-        if value_pool.values_len() == 0 {
+        if value_pool.is_empty() {
             failures.report(
                 Check::ValuePools,
                 format!("value pool {value_pool_index} has no values"),

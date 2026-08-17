@@ -726,7 +726,7 @@ mod tests {
         assert_eq!(palette.iter_materials().count(), 2);
         let property_id = palette.property_id_by_name(EMISSIVE_STRENGTH).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-        assert_eq!(state.value_pool(value_pool_id).unwrap().values_len(), 1);
+        assert_eq!(state.value_pool(value_pool_id).unwrap().len(), 1);
         assert_eq!(sampled_strength(&state, TyVector3U32::new(0, 0, 0)), 2.0);
         assert_eq!(sampled_strength(&state, TyVector3U32::new(1, 0, 0)), 2.0);
     }
@@ -847,7 +847,7 @@ mod tests {
         let property_id = palette.property_id_by_name(BASE_COLOR).unwrap();
         let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
         let value_pool = state.value_pool(value_pool_id).unwrap();
-        assert_eq!(value_pool.values_len(), 1);
+        assert_eq!(value_pool.len(), 1);
         let (value_id, _) = value_pool.iter_values().next().unwrap();
         assert_eq!(
             value_pool.value(value_id),

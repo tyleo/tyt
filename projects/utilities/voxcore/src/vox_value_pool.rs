@@ -172,7 +172,7 @@ impl VoxValuePool {
     /// later is a voxcore bug;
     /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
     pub(crate) fn first_flaw(&self) -> Option<VoxValuePoolFlaw> {
-        if self.value_ids.is_empty() {
+        if self.is_empty() {
             return Some(VoxValuePoolFlaw::Empty);
         }
         for (value_id, value) in self.iter_values() {
@@ -203,8 +203,14 @@ impl VoxValuePool {
     }
 
     /// The number of values in the value pool, across every kind.
-    pub fn values_len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.value_ids.len()
+    }
+
+    /// Whether the value pool holds no values. Only a flawed value pool is
+    /// empty.
+    pub fn is_empty(&self) -> bool {
+        self.value_ids.is_empty()
     }
 
     /// Whether `id` is one of this value pool's values.
@@ -236,7 +242,7 @@ impl VoxValuePool {
     /// Moves value `id` to listing position `index`, shifting the values
     /// between its old and new positions one slot. Errors, changing nothing, if
     /// `id` is not one of this value pool's values or `index` is at or past
-    /// [`values_len`](Self::values_len).
+    /// [`len`](Self::len).
     pub fn move_value(&mut self, id: U32Id<BVoxValuePoolValue>, index: usize) -> Result<()> {
         if !self.value_ids.is_retained(id) {
             return Err(Error::UnknownValuePoolValue { value_id: id });
@@ -475,7 +481,7 @@ mod tests {
     fn float_value_pool_reads_back_in_order() {
         let value_pool = VoxValuePool::float(vec![0.0, 0.5, 1.0]).unwrap();
 
-        assert_eq!(value_pool.values_len(), 3);
+        assert_eq!(value_pool.len(), 3);
         let values: Vec<_> = value_pool.iter_values().collect();
         assert_eq!(values.len(), 3);
         assert_eq!(
@@ -493,7 +499,7 @@ mod tests {
     fn vector_value_pool_holds_typed_components() {
         let value_pool = VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
 
-        assert_eq!(value_pool.values_len(), 1);
+        assert_eq!(value_pool.len(), 1);
         assert_eq!(
             value_pool.value(U32Id::from_u32(0)),
             Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0]))

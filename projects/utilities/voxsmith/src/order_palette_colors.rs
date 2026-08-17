@@ -28,9 +28,8 @@ pub fn order_palette_colors(state: &mut VoxMain, palette_id: U32Id<BVoxPalette>)
 
     // The used color value ids in material order, then the unused ones in their
     // current order, forming a permutation of the value pool.
-    let mut new_order: Vec<U32Id<BVoxValuePoolValue>> = Vec::with_capacity(value_pool.values_len());
-    let mut seen: HashSet<U32Id<BVoxValuePoolValue>> =
-        HashSet::with_capacity(value_pool.values_len());
+    let mut new_order: Vec<U32Id<BVoxValuePoolValue>> = Vec::with_capacity(value_pool.len());
+    let mut seen: HashSet<U32Id<BVoxValuePoolValue>> = HashSet::with_capacity(value_pool.len());
     for material_id in palette_ref.iter_materials() {
         let Some(value_id) = palette_ref.value_id(material_id, color_id) else {
             continue;

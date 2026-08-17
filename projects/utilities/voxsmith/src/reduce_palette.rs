@@ -1213,7 +1213,7 @@ mod tests {
         for (_, palette) in state.iter_palettes() {
             if let Some(property_id) = palette.property_id_by_name(name) {
                 let value_pool_id = palette.property(property_id).unwrap().value_pool_id;
-                return state.value_pool(value_pool_id).unwrap().values_len();
+                return state.value_pool(value_pool_id).unwrap().len();
             }
         }
         panic!("no palette carries {name}");
