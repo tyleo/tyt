@@ -551,29 +551,27 @@ route for custom shaders.
 
 ## UV streams
 
-A sampled texture is texels plus the coordinates faces read them by, and the
-two must agree. One mesh can carry several [atlases](#atlases) at once, and a
-face then reads a different spot in each, so a primitive carries one UV stream
-per atlas its faces read. The streams are glTF's numbered `TEXCOORD_<n>`
-attributes.
+The UVs place each face on the atlas's texel grid. A primitive carries one UV
+stream per [atlas](#atlases) its faces read: the face's cell is in a different
+location in each. Each stream writes a glTF `TEXCOORD_<n>` attribute.
 
-The stream list is per material, and the rules live at `--material-uv`: the
-declaration, the derived default, and the bake contract. The contract serves the
-consumer. `--material-uv 0 face` alone bakes material 0's swatch maps per face,
-so an engine that reads one UV set gets one stream. An engine that wants its
-face maps ahead of its swatch maps lists `face` first, since the flag order
-sets the numbers.
+Each material declares its stream list with `--material-uv`. Without the flag
+the list derives from the material's textures. The list follows what the
+consumer reads. For example, an engine that reads one UV set takes
+`--material-uv 0 face` alone. Material 0's swatch maps then bake per face into
+that one stream. An engine can set its face maps ahead of its swatch maps by
+listing `face` first because the flag order sets the `TEXCOORD` numbers.
 
-The streams land per primitive. A primitive writes its material's list, a
-primitive with no material writes nothing, and `--write-primitive-uv` names a
-primitive's streams instead.
+The streams land per primitive. A primitive with a material writes that
+material's list and one without writes nothing. `--write-primitive-uv` replaces
+that default with the streams the flag names.
 
-Every texture's `texCoord` is derived: the domain it bakes at finds its
-position in the stream order of each primitive drawing the material, and that
-position is the number. Defaults always agree, since primitives sharing a
-material share its list. Two `--write-primitive-uv` orders seating one
-material's domain at two positions claim one destination twice, so they error.
-No flag hand-wires a slot:
+Every texture's `texCoord` derives. The domain it bakes at finds its position in
+the stream order of each primitive that draws the material. That position
+becomes the `texCoord`. Defaults always agree: primitives sharing a material
+share its list. Two `--write-primitive-uv` orders that put one material's domain
+at two positions claim one destination twice and error. No flag sets a
+`texCoord` by hand:
 
 ```jsonc
 // vxl mesh turret.voxj
