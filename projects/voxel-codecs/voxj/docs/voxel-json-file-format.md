@@ -147,7 +147,7 @@ A sample block holds one channel per layer, in `layers` order. Each channel give
 
 1. `raw-json`: one channel per layer, each a plain array of that layer's material index for every voxel: `[[l0v0, l0v1, ...], [l1v0, l1v1, ...], ...]`.
 2. `rle-json`: one channel per layer; each channel is a flat run-length encoding `[value1, count1, value2, count2, ...]`. Counts are positive integers and, in every channel, sum to the number of voxels.
-3. `packed-base64`: one bit-packed channel per layer. For the channel of a layer whose palette has `M` materials, each voxel's material index is packed at fixed width `b = max(1, bitLength(M - 1))` bits, MSB-first, 8 per byte, with the final byte zero-padded; the width is derived from `M` and not stored. `data` is one base64 string per layer, in `layers` order, each encoding exactly `ceil(voxelCount * b / 8)` bytes. This is the same packing scheme as the `bitmap-base64` position encoding, which is its `b = 1` special case. An empty object has one `""` per layer. Best for incoherent or many-material objects, where `rle-json` would approach one run per voxel.
+3. `packed-base64`: one bit-packed channel per layer. For the channel of a layer whose palette has `M` materials, each voxel's material index is packed at fixed width `b = max(1, bitLength(max(1, M) - 1))` bits, MSB-first, 8 per byte, with the final byte zero-padded; the width is derived from `M` and not stored. At `M = 0` no sample can exist, so the layer's object has no voxels and its channel is `""`. `data` is one base64 string per layer, in `layers` order, each encoding exactly `ceil(voxelCount * b / 8)` bytes. This is the same packing scheme as the `bitmap-base64` position encoding, which is its `b = 1` special case. An empty object has one `""` per layer. Best for incoherent or many-material objects, where `rle-json` would approach one run per voxel.
 
 #### Example: two layers over four voxels; layer 0 material indices `0, 0, 0, 1` (palette `M = 2`) and layer 1 material indices `2, 2, 3, 3` (palette `M = 4`), in the position block's voxel order
 
@@ -267,7 +267,7 @@ Notes:
 
 A palette binds property names to shared [value pools](#value-pools), then lists the distinct materials it uses as rows over those value pools. A voxel samples a material in each layer by its index in that layer's palette. A palette may be referenced by any number of layers and objects (see [Objects](#objects)).
 
-A material is one row of value-indices, one per property, so with no properties every row is empty. A palette holds at least one material, and the material count `M` is `materials.length`:
+A material is one row of value-indices, one per property, and with no properties every row is empty. The material count `M` is `materials.length`. A palette with no materials offers nothing to sample, so only a layer of an empty object can reference it:
 
 ```jsonc
 {
@@ -484,7 +484,7 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
    2. `voxelPositions` and `voxelSamples` are present; the Positions and Samples rules check their structure.
 9. **Value pools** (`runtimeState.valuePools`): an array, possibly empty. Each value pool has exactly the keys `kind` and `values`.
    1. `kind` is present and recognized.
-   2. `values` is present, a non-empty array, with no `null` entry unless `kind` is `json`. Every entry is the shape `kind` declares (see [Value Pool Kinds](#value-pool-kinds)):
+   2. `values` is present, an array, possibly empty, with no `null` entry unless `kind` is `json`. Every entry is the shape `kind` declares (see [Value Pool Kinds](#value-pool-kinds)):
       1. `bool`: a JSON boolean.
       2. `float`: a float value.
       3. `int`: an int value.
@@ -495,7 +495,7 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 10. **Palettes** (`runtimeState.palettes`): an array, possibly empty. Each palette's keys are drawn only from { `properties`, `materials` }.
     1. `properties` is an array, possibly empty; each property has exactly the keys `name`, a non-empty string, and `valuePool`, an integer.
     2. no two properties share a `name`.
-    3. `materials` is an array of `M >= 1` rows, the material count; every row is an array of exactly `properties.length` integers, one value-index per property in property order.
+    3. `materials` is an array, possibly empty, of `M` rows, the material count; every row is an array of exactly `properties.length` integers, one value-index per property in property order.
     4. every `materials[m][b]` is an integer in `[0, valuePools[properties[b].valuePool].values.length)`.
 11. **Samples**: let `V` be the voxel count from the position block. `voxelSamples.data` has exactly `layers.length` channels, one per layer in `layers` order. For channel `c`, let `M` be the material count of palette `layers[c]`, and by encoding:
     1. `raw-json`: each channel is a `number[]` of length exactly `V`, every entry an integer in `[0, M)`.
@@ -787,16 +787,16 @@ type SampleBlock =
   // `[value1, count1, value2, count2, ...]`.
   | { encoding: "rle-json"; data: number[][] }
   // One channel per layer: each voxel's material index bit-packed at width
-  // `b = max(1, bitLength(M - 1))` for that layer's palette material count
-  // `M`, MSB-first, base64-encoded (same packing as the `bitmap-base64`
-  // position encoding).
+  // `b = max(1, bitLength(max(1, M) - 1))` for that layer's palette material
+  // count `M`, MSB-first, base64-encoded (same packing as the
+  // `bitmap-base64` position encoding).
   | { encoding: "packed-base64"; data: string[] };
 
 // ## Palettes
 
 // A palette binds property names to value pools, then lists its materials:
-// one row per material (at least one), a value-index per property in
-// property order, so the material count `M` is `materials.length`. A voxel
+// one row per material, a value-index per property in property order, so
+// the material count `M` is `materials.length`. A voxel
 // samples material `m`; property `properties[b].name` takes
 // `valuePools[properties[b].valuePool].values[materials[m][b]]`.
 interface Palette {

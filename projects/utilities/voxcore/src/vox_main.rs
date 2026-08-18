@@ -2,7 +2,7 @@ use crate::{
     BVoxEffectiveProperty, BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette,
     BVoxProperty, BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxEffectivePalette,
     VoxEffectiveProperty, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState,
-    VoxValue, VoxValuePool, VoxValuePoolFlaw,
+    VoxValue, VoxValuePool,
 };
 use branded_id::{IdVec, U32Id, UsizeId, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
@@ -242,14 +242,10 @@ impl VoxMain {
     /// Adds a shared palette at the end of the listing, returning its id.
     /// Errors, changing nothing, if:
     ///
-    /// 1. the palette holds no materials
-    /// 2. a property names a value pool that is not one of this state's
-    /// 3. a material draws a value that is not one of its property's
+    /// 1. a property names a value pool that is not one of this state's
+    /// 2. a material draws a value that is not one of its property's
     ///    value pool's
     pub fn add_palette(&mut self, palette: VoxPalette) -> Result<U32Id<BVoxPalette>> {
-        if palette.material_count() == 0 {
-            return Err(Error::NoPaletteMaterials);
-        }
         for (property_id, property) in palette.iter_properties() {
             let Some(value_pool) = self.value_pool(property.value_pool_id) else {
                 return Err(Error::PropertyValuePoolRef {
@@ -1054,8 +1050,7 @@ impl VoxMain {
     ///
     /// 1. references union across palettes, so a shared entry survives while
     ///    any one material uses it
-    /// 2. a value pool nothing references is left whole, since
-    ///    [`validate`](Self::validate) requires every value pool non-empty
+    /// 2. a value pool nothing references is emptied
     /// 3. the state stays referentially valid
     pub fn prune_value_pools(&mut self) {
         // The value ids each value pool still has a material referencing.
@@ -1082,13 +1077,9 @@ impl VoxMain {
             }
         }
 
-        // Release each value pool's unreferenced entries. A value pool nothing
-        // references is left whole.
+        // Release each value pool's unreferenced entries.
         for &value_pool_id in &value_pool_ids {
             let keep_ids = &referenced_ids[&value_pool_id];
-            if keep_ids.is_empty() {
-                continue;
-            }
             // Safety: retained value-pool ids have a value.
             let value_pool = unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) };
             let doomed_ids: Vec<_> = value_pool
@@ -1131,13 +1122,11 @@ impl VoxMain {
     /// voxcore bug, never a caller error. The checks stay as the specification
     /// of what the mutations preserve:
     ///
-    /// 1. every value pool is non-empty and every value within its kind's
-    ///    value domain
+    /// 1. every value pool value is within its kind's value domain
     /// 2. per palette:
     ///    1. every property names a live value pool
     ///    2. no property name repeats
     ///    3. every material value id is within its property's value pool
-    ///    4. there is at least one material
     /// 3. every object layer references a live palette (two layers may share
     ///    one), and every live-voxel sample material is within its layer's
     ///    palette
@@ -1152,21 +1141,15 @@ impl VoxMain {
     /// A node may have several parents, since the hierarchy is a DAG; that
     /// sharing is not a cycle.
     pub fn validate(&self) -> Result<()> {
-        // Value pools are non-empty and their values within their kind's value
-        // domain. This runs first, so a palette that reads a malformed value
-        // pool is reported after the value pool it reads.
+        // Value pool values are within their kind's value domain. This runs
+        // first, so a palette that reads a malformed value pool is reported
+        // after the value pool it reads.
         for (value_pool_id, value_pool) in self.iter_value_pools() {
-            match value_pool.first_flaw() {
-                None => {}
-                Some(VoxValuePoolFlaw::Empty) => {
-                    return Err(Error::EmptyValuePool { value_pool_id });
-                }
-                Some(VoxValuePoolFlaw::Value(value_id)) => {
-                    return Err(Error::ValuePoolValue {
-                        value_pool_id,
-                        value_id,
-                    });
-                }
+            if let Some(value_id) = value_pool.first_out_of_domain_value() {
+                return Err(Error::ValuePoolValue {
+                    value_pool_id,
+                    value_id,
+                });
             }
         }
 
@@ -1199,11 +1182,6 @@ impl VoxMain {
                         });
                     }
                 }
-            }
-
-            // Every palette is sampled, so it needs a material to sample.
-            if palette.material_count() == 0 {
-                return Err(Error::PaletteWithoutMaterials { palette_id });
             }
         }
 
@@ -1536,7 +1514,7 @@ mod tests {
         );
 
         // Mutating the original must not touch the copy.
-        state.add_value_pool(VoxValuePool::boolean(vec![true]).unwrap());
+        state.add_value_pool(VoxValuePool::boolean(vec![true]));
         assert_eq!(state.value_pool_count(), 2);
         assert_eq!(copy.value_pool_count(), 1);
     }
@@ -1749,6 +1727,17 @@ mod tests {
     }
 
     #[test]
+    fn prune_value_pools_empties_an_unreferenced_value_pool() {
+        let mut state = VoxMain::default();
+        let ints_id = int_value_pool(&mut state, vec![10, 20]);
+
+        state.prune_value_pools();
+
+        assert_eq!(state.value_pool(ints_id).map(VoxValuePool::len), Some(0));
+        state.validate().unwrap();
+    }
+
+    #[test]
     fn validate_accepts_a_shared_child_dag() {
         let mut state = VoxMain::default();
         let leaf_id = state
@@ -1835,15 +1824,16 @@ mod tests {
     }
 
     #[test]
-    fn add_palette_rejects_an_empty_palette() {
+    fn add_palette_accepts_an_empty_palette() {
         let mut state = VoxMain::default();
-        // Every palette is sampled, so even a property-less palette needs a
-        // material.
+        // A palette with no materials samples nothing, so no layer can use
+        // it, but it is a valid entity.
+        let palette_id = state.add_palette(VoxPalette::default()).unwrap();
         assert_eq!(
-            state.add_palette(VoxPalette::default()),
-            Err(Error::NoPaletteMaterials)
+            state.palette(palette_id).map(VoxPalette::material_count),
+            Some(0)
         );
-        assert_eq!(state.palette_count(), 0);
+        state.validate().unwrap();
     }
 
     #[test]
@@ -3316,7 +3306,6 @@ mod tests {
         state.validate().unwrap();
 
         // Insertions.
-        assert_rejects_unchanged(&mut state, |s| s.add_palette(VoxPalette::default()));
         assert_rejects_unchanged(&mut state, |s| {
             s.add_palette(one_material_palette(value_pool_id(9), 0))
         });

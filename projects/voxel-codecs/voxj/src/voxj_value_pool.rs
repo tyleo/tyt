@@ -82,8 +82,7 @@ impl VoxjValuePool {
         }
     }
 
-    /// Whether the value pool holds no values. Spec rule 9 rejects an empty
-    /// value pool.
+    /// Whether the value pool holds no values.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

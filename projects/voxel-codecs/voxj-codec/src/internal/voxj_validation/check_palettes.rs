@@ -5,8 +5,8 @@ use voxj::{VoxjMain, VoxjPalette, VoxjRuntimeState};
 /// Per palette:
 /// 1. every property has a non-empty name, distinct within the palette, and
 ///    an in-range value pool;
-/// 2. materials hold at least one row, one per material, each of exactly
-///    one value-index per property, within the value pool that property binds.
+/// 2. materials hold one row per material, each of exactly one value-index
+///    per property, within the value pool that property binds.
 pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
     for (palette_index, palette) in state.palettes.iter().enumerate() {
@@ -35,18 +35,6 @@ pub fn check_palettes(main: &VoxjMain, failures: &mut Failures) {
                     ),
                 );
             }
-            if !failures.go() {
-                return;
-            }
-        }
-
-        // Every palette is sampled, so it needs a material to sample (rule
-        // 10.3).
-        if palette.materials.is_empty() {
-            failures.report(
-                Check::Palettes,
-                format!("palette {palette_index} has no materials"),
-            );
             if !failures.go() {
                 return;
             }

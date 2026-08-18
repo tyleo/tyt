@@ -9,31 +9,30 @@ use voxj::VoxjFile;
 ///
 /// The checks, in report order, are:
 /// 1. `version`: the version is recognized.
-/// 2. `value-pools`: every value pool has non-empty values.
-/// 3. `palettes`:
+/// 2. `palettes`:
 ///    1. every property has a non-empty name, distinct within the palette,
 ///       and an in-range value pool;
-///    2. materials hold at least one row, one per material, each of
-///       exactly one in-range value-index per property.
-/// 4. `indices`:
+///    2. materials hold one row per material, each of exactly one in-range
+///       value-index per property.
+/// 3. `indices`:
 ///    1. object layers, node children, child objects, and roots resolve;
 ///    2. node children, child objects, and roots each appear at most once; a
 ///       palette may back two layers, so a repeated layer entry is allowed.
-/// 5. `blocks`: each object's position and sample blocks decode:
+/// 4. `blocks`: each object's position and sample blocks decode:
 ///    1. canonical base64;
 ///    2. exact bitmap and packed byte counts with zero pad bits;
 ///    3. well-formed run streams and varints;
 ///    4. the Hilbert bits cap;
 ///    5. one channel per layer with one value per voxel.
-/// 6. `unique-positions`: voxel positions within an object are unique.
-/// 7. `bounds`: positions lie within bounds and bounds are exactly tight.
-/// 8. `sample-materials`: each sample indexes a real material of its layer's
+/// 5. `unique-positions`: voxel positions within an object are unique.
+/// 6. `bounds`: positions lie within bounds and bounds are exactly tight.
+/// 7. `sample-materials`: each sample indexes a real material of its layer's
 ///    palette.
-/// 9. `acyclic`: the hierarchy has no cycle.
-/// 10. `scale`: no transform scale component is zero.
-/// 11. `rotation`: every transform rotation is a unit quaternion within `1e-6`.
-/// 12. `edit-state`: when present, each edit grid contains its runtime grid.
-/// 13. `sample-order`: always unverifiable, an authoring invariant no document
+/// 8. `acyclic`: the hierarchy has no cycle.
+/// 9. `scale`: no transform scale component is zero.
+/// 10. `rotation`: every transform rotation is a unit quaternion within `1e-6`.
+/// 11. `edit-state`: when present, each edit grid contains its runtime grid.
+/// 12. `sample-order`: always unverifiable, an authoring invariant no document
 ///     can witness.
 ///
 /// A check whose work an earlier failure made moot reports no failure rather
@@ -138,7 +137,6 @@ mod tests {
             names,
             [
                 "version",
-                "value-pools",
                 "palettes",
                 "indices",
                 "blocks",
@@ -223,40 +221,22 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_palette_without_materials() {
+    fn passes_an_empty_value_pool_and_a_material_less_palette() {
         let mut file = valid_file();
-        // An extra, unreferenced palette with no materials fails only the
-        // palettes check.
-        file.main.runtime_state.palettes.push(VoxjPalette {
-            properties: vec![VoxjProperty {
-                name: "baseColor".to_owned(),
-                value_pool: 0,
-            }],
-            materials: vec![],
-        });
-        let checks = check_voxj_file(&file);
-        assert!(matches!(
-            status(&checks, "palettes"),
-            VoxjCheckStatus::Failed(_)
-        ));
-    }
-
-    #[test]
-    fn reports_empty_value_pool_failure() {
-        let mut file = valid_file();
-        // An extra, unreferenced empty value pool, so the value-pools check is
-        // the only one that fails.
+        // A palette with no materials samples nothing, and its property may
+        // bind an empty value pool: no material row indexes into it.
         file.main
             .runtime_state
             .value_pools
             .push(VoxjValuePool::Float(vec![]));
+        file.main.runtime_state.palettes.push(VoxjPalette {
+            properties: vec![VoxjProperty {
+                name: "baseColor".to_owned(),
+                value_pool: 2,
+            }],
+            materials: vec![],
+        });
         let checks = check_voxj_file(&file);
-        assert!(matches!(
-            status(&checks, "value-pools"),
-            VoxjCheckStatus::Failed(_)
-        ));
-        // The referenced palette's own value pool is untouched, so palettes
-        // still pass: the report is attributed to the right check.
         assert_eq!(*status(&checks, "palettes"), VoxjCheckStatus::Passed);
     }
 

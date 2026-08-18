@@ -146,9 +146,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             })
             .collect();
         let (distinct_types, type_indices) = intern(&types, |token| token.clone());
-        let type_value_pool_id = state.add_value_pool(
-            VoxValuePool::string(distinct_types).expect("every palette cell yields a type token"),
-        );
+        let type_value_pool_id = state.add_value_pool(VoxValuePool::string(distinct_types));
         palette
             .add_property("type".to_owned(), type_value_pool_id, U32Id::from_u32(0))
             .expect("the property names are distinct");

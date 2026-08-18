@@ -107,14 +107,14 @@ mod tests {
     }
 
     #[test]
-    fn rejects_empty_value_pool() {
+    fn accepts_an_empty_value_pool() {
         let mut file = valid_file();
-        // Unreferenced, so the empty value pool is the document's only fault.
+        // Nothing indexes into it, so the empty value pool is valid.
         file.main
             .runtime_state
             .value_pools
             .push(VoxjValuePool::Float(vec![]));
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&file).is_ok());
     }
 
     #[test]
@@ -161,15 +161,14 @@ mod tests {
     }
 
     #[test]
-    fn rejects_a_palette_without_materials() {
+    fn accepts_a_palette_without_materials() {
         let mut file = valid_file();
-        // An extra, unreferenced palette with no materials; the missing
-        // materials are the document's only fault.
+        // No layer references it, so the material-less palette is valid.
         file.main.runtime_state.palettes.push(VoxjPalette {
             properties: vec![property("baseColor", 0)],
             materials: vec![],
         });
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&file).is_ok());
     }
 
     #[test]

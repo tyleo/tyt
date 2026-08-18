@@ -526,8 +526,7 @@ mod tests {
     #[test]
     fn a_string_value_pool_has_no_texel_value() {
         let mut state = VoxMain::default();
-        let tag_value_pool_id =
-            state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]).unwrap());
+        let tag_value_pool_id = state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]));
         let mut palette = VoxPalette::default();
         palette
             .add_property("tag".to_owned(), tag_value_pool_id, U32Id::from_u32(0))

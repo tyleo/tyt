@@ -11,12 +11,6 @@ use std::{
 /// An error from voxcore.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
-    /// A value pool has no values.
-    EmptyValuePool { value_pool_id: U32Id<BVoxValuePool> },
-
-    /// A value pool was given no values at construction.
-    EmptyValuePoolValues,
-
     /// A value pool was given a value outside its kind's value domain: a NaN
     /// float value or component, or an int beyond `2^53 - 1` in magnitude.
     MalformedValuePoolValue { value_id: U32Id<BVoxValuePoolValue> },
@@ -70,9 +64,6 @@ pub enum Error {
 
     /// A property was given a name the palette already uses.
     DuplicatePropertyName { name: String },
-
-    /// An inserted palette holds no materials.
-    NoPaletteMaterials,
 
     /// An inserted palette's property names a value pool that is not one of
     /// the state's.
@@ -154,9 +145,6 @@ pub enum Error {
         material_id: U32Id<BVoxMaterial>,
     },
 
-    /// A palette has no materials.
-    PaletteWithoutMaterials { palette_id: U32Id<BVoxPalette> },
-
     /// An object references a palette that does not exist.
     PaletteRef {
         object_id: U32Id<BVoxObject>,
@@ -218,12 +206,6 @@ impl Display for Error {
         // Ids print as their bare `u32`: a branded id's own `Display` carries
         // the brand name, which the surrounding wording already gives.
         match self {
-            Error::EmptyValuePool { value_pool_id } => {
-                write!(f, "value pool {} has no values", value_pool_id.to_u32())
-            }
-            Error::EmptyValuePoolValues => {
-                write!(f, "a value pool needs at least one value")
-            }
             Error::MalformedValuePoolValue { value_id } => write!(
                 f,
                 "value {} is outside its kind's value domain",
@@ -306,9 +288,6 @@ impl Display for Error {
             ),
             Error::DuplicatePropertyName { name } => {
                 write!(f, "a property named \"{name}\" already exists")
-            }
-            Error::NoPaletteMaterials => {
-                write!(f, "an inserted palette needs at least one material")
             }
             Error::PropertyValuePoolRef {
                 property_id,
@@ -415,9 +394,6 @@ impl Display for Error {
                 material_id.to_u32(),
                 property_id.to_u32()
             ),
-            Error::PaletteWithoutMaterials { palette_id } => {
-                write!(f, "palette {} has no materials", palette_id.to_u32())
-            }
             Error::PaletteRef {
                 object_id,
                 palette_id,

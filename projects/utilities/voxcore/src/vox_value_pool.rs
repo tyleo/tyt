@@ -1,7 +1,4 @@
-use crate::{
-    BVoxValuePoolValue, Error, Result, VoxValue, VoxValuePoolFlaw, VoxValuePoolKind,
-    VoxValuePoolValueRef,
-};
+use crate::{BVoxValuePoolValue, Error, Result, VoxValue, VoxValuePoolKind, VoxValuePoolValueRef};
 use branded_id::{
     U32Id,
     soa::{IdField, IdRemap, IdStruct},
@@ -28,18 +25,16 @@ pub struct VoxValuePool {
 
 impl VoxValuePool {
     /// Creates a `bool` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty.
-    pub fn boolean(values: Vec<bool>) -> Result<Self> {
+    pub fn boolean(values: Vec<bool>) -> Self {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
             kind: VoxValuePoolKind::Bool(values),
         }
-        .checked()
     }
 
     /// Creates a `float` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty or a value is NaN.
+    /// Errors, building nothing, if a value is NaN.
     pub fn float(values: Vec<f64>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -50,8 +45,7 @@ impl VoxValuePool {
     }
 
     /// Creates an `int` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty or a value's magnitude
-    /// exceeds `2^53 - 1`.
+    /// Errors, building nothing, if a value's magnitude exceeds `2^53 - 1`.
     pub fn int(values: Vec<i64>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -62,30 +56,25 @@ impl VoxValuePool {
     }
 
     /// Creates a `json` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty.
-    pub fn json(values: Vec<VoxValue>) -> Result<Self> {
+    pub fn json(values: Vec<VoxValue>) -> Self {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
             kind: VoxValuePoolKind::Json(values),
         }
-        .checked()
     }
 
     /// Creates a `string` value pool holding `values`, retaining ids in order.
-    /// Errors, building nothing, if `values` is empty.
-    pub fn string(values: Vec<String>) -> Result<Self> {
+    pub fn string(values: Vec<String>) -> Self {
         let (value_ids, values) = columns(values);
         Self {
             value_ids,
             kind: VoxValuePoolKind::String(values),
         }
-        .checked()
     }
 
     /// Creates a `vec-2-float` value pool holding `values`, retaining ids in
-    /// order. Errors, building nothing, if `values` is empty or a component is
-    /// NaN.
+    /// order. Errors, building nothing, if a component is NaN.
     pub fn vec_2_float(values: Vec<[f64; 2]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -96,8 +85,8 @@ impl VoxValuePool {
     }
 
     /// Creates a `vec-2-int` value pool holding `values`, retaining ids in
-    /// order. Errors, building nothing, if `values` is empty or a component's
-    /// magnitude exceeds `2^53 - 1`.
+    /// order. Errors, building nothing, if a component's magnitude exceeds
+    /// `2^53 - 1`.
     pub fn vec_2_int(values: Vec<[i64; 2]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -108,8 +97,7 @@ impl VoxValuePool {
     }
 
     /// Creates a `vec-3-float` value pool holding `values`, retaining ids in
-    /// order. Errors, building nothing, if `values` is empty or a component is
-    /// NaN.
+    /// order. Errors, building nothing, if a component is NaN.
     pub fn vec_3_float(values: Vec<[f64; 3]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -120,8 +108,8 @@ impl VoxValuePool {
     }
 
     /// Creates a `vec-3-int` value pool holding `values`, retaining ids in
-    /// order. Errors, building nothing, if `values` is empty or a component's
-    /// magnitude exceeds `2^53 - 1`.
+    /// order. Errors, building nothing, if a component's magnitude exceeds
+    /// `2^53 - 1`.
     pub fn vec_3_int(values: Vec<[i64; 3]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -132,8 +120,7 @@ impl VoxValuePool {
     }
 
     /// Creates a `vec-4-float` value pool holding `values`, retaining ids in
-    /// order. Errors, building nothing, if `values` is empty or a component is
-    /// NaN.
+    /// order. Errors, building nothing, if a component is NaN.
     pub fn vec_4_float(values: Vec<[f64; 4]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -144,8 +131,8 @@ impl VoxValuePool {
     }
 
     /// Creates a `vec-4-int` value pool holding `values`, retaining ids in
-    /// order. Errors, building nothing, if `values` is empty or a component's
-    /// magnitude exceeds `2^53 - 1`.
+    /// order. Errors, building nothing, if a component's magnitude exceeds
+    /// `2^53 - 1`.
     pub fn vec_4_int(values: Vec<[i64; 4]>) -> Result<Self> {
         let (value_ids, values) = columns(values);
         Self {
@@ -155,26 +142,20 @@ impl VoxValuePool {
         .checked()
     }
 
-    /// Maps a freshly built value pool's first flaw onto the creation errors.
+    /// Maps a freshly built value pool's first out-of-domain value onto the
+    /// creation error.
     fn checked(self) -> Result<Self> {
-        match self.first_flaw() {
+        match self.first_out_of_domain_value() {
             None => Ok(self),
-            Some(VoxValuePoolFlaw::Empty) => Err(Error::EmptyValuePoolValues),
-            Some(VoxValuePoolFlaw::Value(value_id)) => {
-                Err(Error::MalformedValuePoolValue { value_id })
-            }
+            Some(value_id) => Err(Error::MalformedValuePoolValue { value_id }),
         }
     }
 
-    /// The value pool's first well-formedness flaw, or `None` if it is well
-    /// formed: the value pool is non-empty and every value is within its
-    /// kind's value domain. The constructors gate on this, so a flaw found
-    /// later is a voxcore bug;
+    /// The id of the first value outside its kind's value domain, or `None`
+    /// if every value is within it. The checked constructors gate on this, so
+    /// a flaw found later is a voxcore bug;
     /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
-    pub(crate) fn first_flaw(&self) -> Option<VoxValuePoolFlaw> {
-        if self.is_empty() {
-            return Some(VoxValuePoolFlaw::Empty);
-        }
+    pub(crate) fn first_out_of_domain_value(&self) -> Option<U32Id<BVoxValuePoolValue>> {
         for (value_id, value) in self.iter_values() {
             let in_domain = match value {
                 VoxValuePoolValueRef::Float(value) => float_in_domain(value),
@@ -190,7 +171,7 @@ impl VoxValuePool {
                 | VoxValuePoolValueRef::String(_) => true,
             };
             if !in_domain {
-                return Some(VoxValuePoolFlaw::Value(value_id));
+                return Some(value_id);
             }
         }
         None
@@ -207,8 +188,7 @@ impl VoxValuePool {
         self.value_ids.len()
     }
 
-    /// Whether the value pool holds no values. Only a flawed value pool is
-    /// empty.
+    /// Whether the value pool holds no values.
     pub fn is_empty(&self) -> bool {
         self.value_ids.is_empty()
     }
@@ -525,7 +505,7 @@ mod tests {
     #[test]
     fn move_value_reorders_the_listing_and_validates() {
         let mut value_pool =
-            VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]).unwrap();
+            VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]);
         let b_id = U32Id::from_u32(1);
 
         assert_eq!(value_pool.move_value(b_id, 2), Ok(()));
@@ -555,7 +535,7 @@ mod tests {
     #[test]
     fn clone_value_pool_is_an_independent_deep_copy() {
         let mut value_pool =
-            VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]).unwrap();
+            VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]);
         // Hole the value pool first: equality compares values in listing order,
         // so only reading back by id catches a clone that relabels.
         value_pool.release_value_stable(U32Id::from_u32(1));
@@ -573,15 +553,9 @@ mod tests {
     }
 
     #[test]
-    fn constructors_reject_an_empty_value_list() {
-        assert_eq!(
-            VoxValuePool::boolean(vec![]).unwrap_err(),
-            Error::EmptyValuePoolValues
-        );
-        assert_eq!(
-            VoxValuePool::vec_4_float(vec![]).unwrap_err(),
-            Error::EmptyValuePoolValues
-        );
+    fn constructors_accept_an_empty_value_list() {
+        assert!(VoxValuePool::boolean(vec![]).is_empty());
+        assert!(VoxValuePool::vec_4_float(vec![]).unwrap().is_empty());
     }
 
     #[test]

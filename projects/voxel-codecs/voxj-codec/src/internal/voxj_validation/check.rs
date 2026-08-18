@@ -5,14 +5,11 @@ pub enum Check {
     /// The version is recognized.
     Version,
 
-    /// Every value pool has non-empty `values`.
-    ValuePools,
-
     /// Per palette:
     /// 1. every property has a non-empty name, distinct within the palette,
     ///    and an in-range value pool;
-    /// 2. materials hold at least one row, one per material, each of
-    ///    exactly one in-range value-index per property.
+    /// 2. materials hold one row per material, each of exactly one in-range
+    ///    value-index per property.
     Palettes,
 
     /// Object layers, node children, child objects, and roots resolve; node
@@ -56,7 +53,6 @@ impl Check {
     pub fn name(self) -> &'static str {
         match self {
             Check::Version => "version",
-            Check::ValuePools => "value-pools",
             Check::Palettes => "palettes",
             Check::Indices => "indices",
             Check::Blocks => "blocks",

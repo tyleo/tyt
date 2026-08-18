@@ -397,7 +397,7 @@ fn folded_palette(
 
         let shadows_value_pool_id = state.add_value_pool(VoxValuePool::boolean(
             materials.iter().map(|m| m.sh).collect(),
-        )?);
+        ));
         palette
             .add_property(
                 SHADOWS.to_owned(),

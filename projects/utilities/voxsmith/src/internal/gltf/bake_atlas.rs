@@ -363,8 +363,7 @@ mod tests {
     #[test]
     fn a_bool_packing_reads_one_or_zero() {
         let mut state = VoxMain::default();
-        let flag_value_pool_id =
-            state.add_value_pool(VoxValuePool::boolean(vec![true, false]).unwrap());
+        let flag_value_pool_id = state.add_value_pool(VoxValuePool::boolean(vec![true, false]));
 
         let mut palette = VoxPalette::default();
         palette

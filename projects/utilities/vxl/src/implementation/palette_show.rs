@@ -905,8 +905,7 @@ mod tests {
     #[test]
     fn swatch_spaces_values_with_no_swatch() {
         let mut state = VoxMain::default();
-        let shadows_value_pool_id =
-            state.add_value_pool(VoxValuePool::boolean(vec![true, false]).unwrap());
+        let shadows_value_pool_id = state.add_value_pool(VoxValuePool::boolean(vec![true, false]));
         let mut palette = VoxPalette::default();
         palette
             .add_property(
@@ -1696,13 +1695,11 @@ mod tests {
     #[test]
     fn a_json_value_pool_renders_arrays_rather_than_null() {
         let mut state = VoxMain::default();
-        let extra_value_pool_id = state.add_value_pool(
-            VoxValuePool::json(vec![VoxValue::Array(vec![
+        let extra_value_pool_id =
+            state.add_value_pool(VoxValuePool::json(vec![VoxValue::Array(vec![
                 VoxValue::Number(1.0),
                 VoxValue::Number(2.0),
-            ])])
-            .unwrap(),
-        );
+            ])]));
         let mut palette = VoxPalette::default();
         palette
             .add_property("extra".to_owned(), extra_value_pool_id, U32Id::from_u32(0))
@@ -1731,7 +1728,7 @@ mod tests {
     #[test]
     fn an_empty_property_name_is_quoted_in_the_label_but_raw_in_json() {
         let mut state = VoxMain::default();
-        let value_pool_id = state.add_value_pool(VoxValuePool::boolean(vec![true]).unwrap());
+        let value_pool_id = state.add_value_pool(VoxValuePool::boolean(vec![true]));
         let mut palette = VoxPalette::default();
         // A binding with no property name, reached through the `*` property.
         palette

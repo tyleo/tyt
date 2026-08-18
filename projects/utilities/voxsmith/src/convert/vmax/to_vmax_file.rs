@@ -1278,7 +1278,7 @@ mod tests {
             let metallic = state.add_value_pool(float(0.5));
             let roughness = state.add_value_pool(float(0.25));
             let emissive = state.add_value_pool(float(2.0));
-            let shadows = state.add_value_pool(VoxValuePool::boolean(vec![true]).unwrap());
+            let shadows = state.add_value_pool(VoxValuePool::boolean(vec![true]));
             let mut palette = VoxPalette::default();
             palette
                 .add_property("baseColor".to_owned(), color, U32Id::from_u32(0))
