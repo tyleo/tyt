@@ -10,11 +10,11 @@ use serde::{Deserialize, Deserializer, Serialize};
     serde(rename_all = "camelCase", deny_unknown_fields)
 )]
 pub struct VoxjMain {
-    /// The runtime scene: objects, palettes, hierarchy, and roots.
+    /// The runtime scene.
     pub runtime_state: VoxjRuntimeState,
 
-    /// Optional editor state, aligned by index with the runtime objects.
-    /// Absent in fully-runtime documents.
+    /// Optional editor state, aligned by index with the runtime objects. Absent
+    /// in fully-runtime documents.
     #[cfg_attr(
         feature = "serde",
         serde(

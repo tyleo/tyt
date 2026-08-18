@@ -2,11 +2,7 @@ use crate::{VoxjHierarchyNode, VoxjObject, VoxjPalette, VoxjValuePool};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// The runtime scene of a Voxel Json document: the voxel objects, the shared
-/// value pools their palettes draw from, the palettes they sample, the
-/// hierarchy that places them, and the roots of that hierarchy. Held in
-/// [`VoxjMain::runtime_state`](crate::VoxjMain::runtime_state), separate from
-/// the optional editor `edit_state` and `ext`.
+/// The runtime scene of a Voxel Json document.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(
@@ -26,6 +22,6 @@ pub struct VoxjRuntimeState {
     /// The hierarchy nodes, referenced by array index.
     pub nodes: Vec<VoxjHierarchyNode>,
 
-    /// Indices into [`nodes`](Self::nodes); the scene's roots.
+    /// The scene's roots, as indices into [`nodes`](Self::nodes).
     pub root_nodes: Vec<usize>,
 }

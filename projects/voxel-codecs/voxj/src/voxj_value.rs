@@ -2,8 +2,7 @@ use crate::VoxjMap;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize, Serializer, ser::Error as SerError};
 
-/// An arbitrary Voxel Json value: the data model shared by palette cell values
-/// and the opaque `main.ext` namespace.
+/// An arbitrary Voxel Json value.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
@@ -35,7 +34,7 @@ impl Serialize for VoxjValue {
         S: Serializer,
     {
         match self {
-            // JSON spells no NaN and no infinity, and serde_json writes either
+            // JSON has no NaN and no infinity, and serde_json writes either
             // as `null`, so a non-finite number errors instead of silently
             // becoming one.
             VoxjValue::Number(n) if !n.is_finite() => Err(SerError::custom(format!(

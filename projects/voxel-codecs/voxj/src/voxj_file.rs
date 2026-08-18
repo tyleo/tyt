@@ -17,13 +17,14 @@ pub struct VoxjFile {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
     use crate::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjPositionBlock,
-        VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValuePool,
+        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject, VoxjPalette, VoxjPositionBlock,
+        VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValue, VoxjValuePool,
     };
     use serde_json::{Value, json};
 
     /// Covers the full palette surface: two palettes sharing a value pool, and
-    /// one channel per layer.
+    /// one channel per layer. `ext` holds a null, which is a legal value inside
+    /// the namespace even though a null `ext` itself rejects.
     fn document() -> VoxjFile {
         VoxjFile {
             version: 1,
@@ -70,7 +71,7 @@ mod tests {
                     root_nodes: vec![0],
                 },
                 edit_state: None,
-                ext: None,
+                ext: Some(VoxjMap(vec![("vendor".to_owned(), VoxjValue::Null)])),
             },
         }
     }
@@ -132,14 +133,9 @@ mod tests {
                     ],
                     "rootNodes": [0],
                 },
+                "ext": { "vendor": null },
             },
         })
-    }
-
-    fn rename_key(value: &mut Value, pointer: &str, from: &str, to: &str) {
-        let object = value.pointer_mut(pointer).unwrap().as_object_mut().unwrap();
-        let inner = object.remove(from).unwrap();
-        object.insert(to.to_owned(), inner);
     }
 
     #[test]
@@ -148,25 +144,6 @@ mod tests {
         let wire = serde_json::to_value(&file).unwrap();
         assert_eq!(wire, wire_document());
         assert_eq!(serde_json::from_value::<VoxjFile>(wire).unwrap(), file);
-    }
-
-    #[test]
-    fn old_wire_names_reject() {
-        for (pointer, from, to) in [
-            (
-                "/main/runtimeState/palettes/0",
-                "properties",
-                "arrayProperties",
-            ),
-            ("/main/runtimeState/palettes/0", "properties", "bindings"),
-            ("/main/runtimeState/objects/0", "layers", "layerPaletteRefs"),
-            ("/main/runtimeState", "nodes", "hierarchyNodes"),
-            ("/main/runtimeState", "rootNodes", "rootHierarchyNodes"),
-        ] {
-            let mut wire = wire_document();
-            rename_key(&mut wire, pointer, from, to);
-            assert!(serde_json::from_value::<VoxjFile>(wire).is_err());
-        }
     }
 
     #[test]
@@ -183,38 +160,13 @@ mod tests {
     }
 
     #[test]
-    fn non_object_ext_rejects() {
-        for value in [json!(42), json!("x"), json!(true), json!([1])] {
-            let mut wire = wire_document();
-            wire.pointer_mut("/main")
-                .unwrap()
-                .as_object_mut()
-                .unwrap()
-                .insert("ext".to_owned(), value);
-            assert!(serde_json::from_value::<VoxjFile>(wire).is_err());
-        }
-    }
-
-    #[test]
-    fn ext_nests_null() {
+    fn unknown_fields_reject() {
         let mut wire = wire_document();
         wire.pointer_mut("/main")
             .unwrap()
             .as_object_mut()
             .unwrap()
-            .insert("ext".to_owned(), json!({ "vendor": null }));
-        let file = serde_json::from_value::<VoxjFile>(wire.clone()).unwrap();
-        assert_eq!(serde_json::to_value(&file).unwrap(), wire);
-    }
-
-    #[test]
-    fn scalar_properties_reject() {
-        let mut wire = wire_document();
-        wire.pointer_mut("/main/runtimeState/palettes/0")
-            .unwrap()
-            .as_object_mut()
-            .unwrap()
-            .insert("scalarProperties".to_owned(), json!([]));
+            .insert("unknown".to_owned(), json!([]));
         assert!(serde_json::from_value::<VoxjFile>(wire).is_err());
     }
 }

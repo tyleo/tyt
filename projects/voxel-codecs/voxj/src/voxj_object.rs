@@ -2,8 +2,7 @@ use crate::{VoxjPositionBlock, VoxjSampleBlock};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// One object's voxel geometry and per-layer material samples, in encoded
-/// blocks.
+/// One voxel object.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(

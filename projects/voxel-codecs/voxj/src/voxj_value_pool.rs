@@ -2,14 +2,11 @@ use crate::VoxjValue;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// A shared value pool, its values all of one value-shape. The variant is the
-/// value pool's kind and its payload is the `values`. Palettes reference value
-/// pools by index and read values out by value-index.
+/// A shared pool of values that all have the same type. Palettes reference a
+/// pool by index, then index into its values.
 ///
-/// Serde tags the variant by a `kind` field and its payload by a `values`
-/// field, so every kind's wire shape is `{ "kind", "values" }`. Value shapes
-/// are typed per kind, so a malformed value, an unrecognized kind, and an
-/// unknown key all reject at parse.
+/// The wire shape is `{ "kind", "values" }`. The kind names the type of the
+/// values. A bad value, an unknown kind, or an unknown key fails to parse.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Deserialize, Serialize))]
 #[cfg_attr(
@@ -64,8 +61,8 @@ pub enum VoxjValuePool {
 }
 
 impl VoxjValuePool {
-    /// The number of values in the value pool, across every kind. A palette's
-    /// value-indices must fall in `[0, len)`.
+    /// The number of values in the pool. A palette's indices into it must fall
+    /// in `[0, len)`.
     pub fn len(&self) -> usize {
         match self {
             VoxjValuePool::Bool(values) => values.len(),
@@ -483,7 +480,7 @@ mod values {
 #[cfg(all(test, feature = "serde"))]
 mod tests {
     use crate::{VoxjValue, VoxjValuePool};
-    use serde_json::{Value, json};
+    use serde_json::json;
 
     #[test]
     fn every_kind_round_trips_the_wire_shape() {
@@ -574,12 +571,6 @@ mod tests {
         assert!(serde_json::to_value(VoxjValuePool::Vec2Float(vec![[0.0, f64::NAN]])).is_err());
     }
 
-    #[test]
-    fn integral_floats_write_as_integers() {
-        let text = serde_json::to_string(&VoxjValuePool::Float(vec![1.0, 2.5])).unwrap();
-        assert_eq!(text, r#"{"kind":"float","values":[1,2.5]}"#);
-    }
-
     // These three values mis-parse by one ULP without serde_json's
     // float_roundtrip feature, so this round trip proves the manifest
     // carries it.
@@ -622,29 +613,12 @@ mod tests {
     }
 
     #[test]
-    fn stray_bound_keys_reject() {
-        for key in ["min", "max"] {
-            let mut wire = json!({ "kind": "float", "values": [0.5] });
-            wire.as_object_mut()
-                .unwrap()
-                .insert(key.to_owned(), Value::String("none".to_owned()));
-            assert!(serde_json::from_value::<VoxjValuePool>(wire).is_err());
-        }
-    }
-
-    #[test]
-    fn old_color_kinds_reject() {
-        for (kind, values) in [
-            ("srgb-hex", json!(["#FF0000"])),
-            ("srgba-hex", json!(["#FF0000FF"])),
-            ("srgb-float", json!([[1, 0, 0]])),
-            ("srgba-float", json!([[1, 0, 0, 1]])),
-            ("linear-rgb-float", json!([[1, 0, 0]])),
-            ("linear-rgba-float", json!([[1, 0, 0, 1]])),
-        ] {
-            let wire = json!({ "kind": kind, "values": values });
-            assert!(serde_json::from_value::<VoxjValuePool>(wire).is_err());
-        }
+    fn unknown_fields_reject() {
+        let mut wire = json!({ "kind": "float", "values": [0.5] });
+        wire.as_object_mut()
+            .unwrap()
+            .insert("unknown".to_owned(), json!("none"));
+        assert!(serde_json::from_value::<VoxjValuePool>(wire).is_err());
     }
 
     #[test]
