@@ -145,8 +145,6 @@ every element expands to the flag it fires as:
             "customs": {
               "<_NAME>": {
                 "value": "<expr>",
-                // an f32 value; a u8 or u16 value carries
-                // "width": "<u8 | u16>" instead
                 "transfer": "<linear | srgb>",
               },
             },
@@ -178,8 +176,8 @@ firing `none` and an omitted `select` `true`, its `normal` firing
 `--write-primitive-uv` per entry in order, omitted the material's
 list, its `builtins` firing
 `--write-primitive-builtin-value` tokenless like the flag, and its
-`customs` `--write-primitive-custom-value` with their transfers or
-widths; `files.png` and `files.json` entries fire
+`customs` `--write-primitive-custom-value` with their transfers;
+`files.png` and `files.json` entries fire
 `--write-file-png-value` and `--write-file-json-value` per key; and
 each geometry key fires the flag it is named for. A material entry's
 `uvs` fires `--material-uv` per entry in order. The defaults mirror
@@ -267,8 +265,6 @@ type FileTemplate = string;
 
 type Transfer = "linear" | "srgb";
 
-type Width = "u8" | "u16";
-
 interface Profile {
   /** Values imported first, in order; writers never travel. */
   valuesFrom?: string[];
@@ -337,11 +333,8 @@ interface PrimitiveEntry {
   uvs?: ("corner" | "face" | "swatch" | "voxel")[];
   /** Attributes glTF defines, `COLOR_0`, to expressions. */
   builtins?: Record<string, Expr>;
-  /** Underscore-typed attribute names, `_MY_COLOR`; u8/u16 carry widths. */
-  customs?: Record<
-    string,
-    { value: Expr; transfer: Transfer } | { value: Expr; width: Width }
-  >;
+  /** Underscore-typed attribute names, `_MY_COLOR`. */
+  customs?: Record<string, { value: Expr; transfer: Transfer }>;
 }
 ```
 
@@ -597,7 +590,7 @@ material through
         "primitives": [
           {
             "customs": {
-              "_PALETTE": { "value": "u8(swatchIndex)", "width": "u8" },
+              "_PALETTE": { "value": "u8(swatchIndex)", "transfer": "linear" },
             },
           },
         ],

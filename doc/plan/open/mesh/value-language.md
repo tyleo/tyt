@@ -619,16 +619,17 @@ home. Dimension picks the accessor type, vec1 through vec4 writing
 SCALAR, VEC2, VEC3, and VEC4 floats.
 
 `--write-primitive-custom-value <primitive-index> <dst-name>
-<src-expr> <linear | srgb | u8 | u16>` is the custom twin: glTF requires
+<src-expr> <linear | srgb>` is the custom twin: glTF requires
 the underscore prefix of application-specific attributes, so the name is
 typed with it, `_MY_COLOR` landing exactly as written and a bare name
 erroring, an attribute only your own shader reads that can never collide
-with a defined name. Nothing fixes its encoding, so the token declares
-it. An `f32` value takes `linear` or `srgb`, the transfer the stored
-floats take. A `u8` or `u16` value takes its own width as the token,
-the two cross-checked, and writes an integer accessor. A `u32` value
-errors, glTF forbidding the width on an attribute; narrow with `u16(e)`
-first; see [Numbers](#numbers).
+with a defined name. Nothing fixes its encoding, so the value's type
+picks the accessor and the token picks the transfer. An `f32` value
+takes `linear` or `srgb`, the transfer the stored floats take. A `u8`
+or `u16` value takes `linear` and writes an integer accessor of its
+width; `srgb` on an integer errors. A `u32` value errors, glTF
+forbidding the width on an attribute; narrow with `u16(e)` first; see
+[Numbers](#numbers).
 
 The attributes live on the corners, the [ladder](#domains)'s top, so a
 value of any domain climbs in: a plain value broadcasts to every corner,
@@ -669,7 +670,7 @@ already has and changes nothing.
 
 ```sh
 --compute-index swatch swatchIndex
---write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" u8
+--write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" linear
 ```
 
 The pair is the palette pattern's per-vertex half, the `u8(e)`

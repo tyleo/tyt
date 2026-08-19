@@ -323,17 +323,16 @@ with one object. See
     An underscore name errors; see
     [Vertex attributes](value-language.md#vertex-attributes).
 
-33. `--write-primitive-custom-value <primitive-index> <dst-name> <src-expr> <linear | srgb | u8 | u16>`
+33. `--write-primitive-custom-value <primitive-index> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes a value to a custom vertex attribute on the indexed primitive.
     `<dst-name>` carries the leading underscore glTF requires of
     application-specific attributes: `_MY_COLOR` lands exactly as written, and a
-    bare name errors. The last argument depends on the value's type: `f32` takes
-    `linear` or `srgb`, `u8` takes `u8`, and `u16` takes `u16`; a mismatch
-    errors. `u8` and `u16` write integer accessors. A `u32` value errors, glTF
-    forbidding the width on an attribute; see
-    [Vertex attributes](value-language.md#vertex-attributes).
+    bare name errors. An `f32` value takes `linear` or `srgb`. A `u8` or `u16`
+    value takes `linear` and writes an integer accessor of its width; `srgb` on
+    an integer errors. A `u32` value errors, glTF forbidding the width on an
+    attribute; see [Vertex attributes](value-language.md#vertex-attributes).
 
 34. `--write-primitive-normal <primitive-index> <false | true>`
     - Default: `true`
@@ -642,7 +641,7 @@ plain data the runtime can replace at will:
 //   --write-mesh-extra-json-value albedo albedo linear
 //   --write-mesh-extra-json-value emissive emissive linear
 //   --compute-index swatch swatchIndex
-//   --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" u8
+//   --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" linear
 {
   "asset": { "version": "2.0" },
   "extensionsUsed": ["KHR_materials_emissive_strength"],
@@ -701,7 +700,7 @@ file beside the mesh:
 //   --write-file-json-value turret-values.json albedo albedo linear
 //   --write-mesh-extra-json-file albedo turret-values.json
 //   --compute-index swatch swatchIndex
-//   --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" u8
+//   --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" linear
 {
   "asset": { "version": "2.0" },
   "extensionsUsed": ["KHR_materials_emissive_strength"],
@@ -785,7 +784,7 @@ vxl mesh turret.voxj
   --profile pbr
   --write-mesh-extra-json-value colorId colorId linear
   --compute-index swatch swatchIndex
-  --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" u8
+  --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" linear
 ```
 
 `values.colorId[_PALETTE]` reads a face's group. Swapping one group's color
