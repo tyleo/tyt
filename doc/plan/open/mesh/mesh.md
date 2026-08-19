@@ -619,26 +619,22 @@ at two positions claim one destination twice and error. No flag sets a
 
 ## Palettes
 
-The mesh extras flags serve a runtime that resolves materials itself: a game
-that swaps team colors or ramps a glow per damage state without re-exporting the
-mesh. The four `--write-mesh-extra-*` flags write named entries under the mesh's
-`extras.vxl.values`, the same grid the material extras take. The entry shapes
-cannot be confused: numbers and rows are themselves, an image is an
-`{"index"}`, and a file pointer is a `{"uri"}`. The same name twice, in any two
-forms, errors.
+The palette can ride the mesh as rows of values beside a per-vertex join key.
+The data serves a runtime that resolves materials: a game that swaps team colors
+or ramps a glow per damage state without re-exporting the mesh. The
+`--write-mesh-extra-*` flags carry the data as named entries under the mesh's
+`extras.vxl.values`. The same name twice, in any two forms, errors.
 
-The palette pattern is rows beside their join key.
 `--write-mesh-extra-json-value` writes the rows, one per swatch in
 [shape order](value-language.md#shapes). The key is the
-[computed swatch index](value-language.md#computed-index), which lands through
-`--write-primitive-custom-value` as one integer per vertex naming the
-swatch its face samples, under any custom attribute name. The narrowing
-is the width check: `u8(e)` holds 256 swatches, `u16(e)` 65536, and a
-palette the width cannot index errors rather than truncates. Every array
-value runs over the one effective palette, so every entry of rows shares
-the one index. A shader reads `values.albedo[_PALETTE]` against as many
-entries as the line writes, and each is plain data the runtime can
-replace at will:
+[computed swatch index](value-language.md#computed-index).
+`--write-primitive-custom-value` lands the key under any custom attribute as one
+integer per vertex naming the swatch its face samples. Narrowing the key to `u8`
+or `u16` doubles as the width check: `u8(e)` holds 256 swatches, `u16(e)` 65536,
+and a palette the width cannot index errors. Every array value runs over the one
+effective palette, so every rows entry shares the one index. A shader reads
+`values.albedo[_PALETTE]` against as many rows as the flag writes. Each entry is
+plain data the runtime can replace at will:
 
 ```jsonc
 // vxl mesh turret.voxj
@@ -684,21 +680,20 @@ replace at will:
 }
 ```
 
-A vec1 value's rows are numbers, and a vecN value's rows are arrays of N, as
-`--write-file-json-value` writes them. The encoding argument is that writer's,
-for the same reason: the rows are numbers your runtime reads, so nothing but
-the flag fixes their encoding.
+`--write-mesh-extra-json-value` and `--write-file-json-value` write the same
+shapes: numbers for a vec1 value, arrays of N for a vecN. The encoding argument
+means the same in both: the rows are numbers the runtime reads, and only the
+flag fixes their encoding.
 
-The halves stay independent. The index attribute alone is the bare join
-key, for a runtime that ships its own tables keyed to the effective
-palette's swatch order. Rows alone are legal too: a build step reads them
-in swatch order with no per-vertex join. Nothing checks the pairing, so a
-runtime that needs both writes both.
+The key and the rows stay independent. The key alone serves a runtime that ships
+its own tables in the effective palette's swatch order. Rows alone are legal
+too: a build step reads them in swatch order with no per-vertex join. Nothing
+checks the pairing.
 
-A storage choice is a flag combination. Embedded rows are
-`--write-mesh-extra-json-value`. A sidecar is `--write-file-json-value` with a
-`--write-mesh-extra-json-file` pointer at it. Both at once are the rows beside
-the json:
+The flags set the storage. `--write-mesh-extra-json-value` embeds the rows,
+while a sidecar pairs `--write-file-json-value` with a
+`--write-mesh-extra-json-file` pointer at it. The pair puts the rows in a json
+file beside the mesh:
 
 ```jsonc
 // vxl mesh turret.voxj
@@ -735,18 +730,17 @@ the json:
 }
 ```
 
-A mesh entry contests nothing a slot writes.
+A mesh entry never collides with a material slot.
 `--write-material-slot-file 0 baseColorTexture skin.png` fills the material
 while `--write-mesh-extra-json-value baseColor baseColorFactor linear` writes
 the rows: two destinations serving two readers. A stock viewer renders the slots
 and never reads the extras. A runtime that reads the extras draws its own
-pixels. The mesh therefore carries the baked look and the swappable data side by
-side.
+pixels. The mesh carries the baked look and the swappable data side by side.
 
-Layers end at the flatten. A runtime grouping is authored data instead. An int
-property on the palette entries groups materials, flattens like any property,
-and writes like any value. The engine then swaps one compact palette of its own
-keyed by the group:
+The layers do not survive flattening, so a runtime cannot group materials by
+layer. An int property on the palette entries defines the group: it flattens
+like any property and writes like any value. A runtime then swaps per group
+instead of per swatch:
 
 ```jsonc
 // turret.voxj: colorId groups materials by color
@@ -794,5 +788,5 @@ vxl mesh turret.voxj
   --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" u8
 ```
 
-The shader reads `myColors[values.colorId[_PALETTE]]`, and swapping the
-two-entry `myColors` recolors every material in the group, dull and shiny alike.
+`values.colorId[_PALETTE]` reads a face's group. Swapping one group's color
+recolors every material in it, dull and shiny alike.
