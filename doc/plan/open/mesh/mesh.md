@@ -22,10 +22,9 @@ vxl mesh turret.voxj
 ```
 
 `mesh` writes one object as pure geometry with no hierarchy-node transform.
-`--select` and `--select-index` choose the object, the default `--select *`
+`--select` and `--select-index` choose the object. The default `--select *`
 takes every object. The selection must resolve to exactly one object, so a
-multi-object document needs a selector and `--select *` only works for documents
-with one object. See
+multi-object document needs a selector. See
 [Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
 
 ## Options
@@ -48,25 +47,24 @@ with one object. See
    - Default: `greedy`
    - Repeatable: no
 
-   The meshing strategy. Choose `culled` or `naive` only when you need stable
-   per-voxel topology.
+   The meshing strategy. Stable per-voxel topology needs `culled` or `naive`.
    1. `culled`: emits one unmerged quad per solid-empty boundary face.
    2. `greedy`: merges coplanar, same-material faces into the fewest quads.
-   3. `naive`: emits all six faces of every solid voxel, hidden interior
-      faces included.
+   3. `naive`: emits all six faces of every solid voxel, hidden interior faces
+      included.
 
 4. `--texture-shape <fit | line | pot | square | n>`
    - Default: `pot`
    - Repeatable: no
 
    The atlas canvas, counted in cells. A cell is one texel, and in a
-   [corner texture](#the-corner-atlas) a 2x2 texel block. Unused cells are
+   [corner atlas](#the-corner-atlas) a 2x2 texel block. Unused cells are
    transparent black, and the mesh never samples them.
    1. `fit`: the near-square packing.
    2. `line`: a single row of cells.
    3. `pot`: the smallest square power of two.
    4. `square`: the smallest square.
-   5. `<n>`: an exact `n`x`n` canvas of cells, and a canvas too small errors.
+   5. `<n>`: an exact `n`x`n` canvas of cells; a canvas too small errors.
 
 5. `--voxel-size <meters>`
    - Default: `1.0`
@@ -84,11 +82,11 @@ with one object. See
    - Repeatable: no
 
    How many materials the mesh carries, numbered from `0`. Every material flag
-   names one material by index, and the derived count is the highest mentioned
-   index plus one, a skipped index erroring. When defined, the count is the
-   whole contract: an index at or above it errors rather than growing the count,
-   and an unmentioned index below it is a deliberate placeholder emitting an
-   empty material; see [Primitives and materials](#primitives-and-materials).
+   names one material by index. The derived count is the highest mentioned index
+   plus one; a skipped index errors. When defined, the count is the whole
+   contract: an index at or above it errors rather than growing the count, and
+   an unmentioned index below it is a deliberate placeholder emitting an empty
+   material; see [Primitives and materials](#primitives-and-materials).
 
 7. `--material-name <material-index> <name>`
    - Repeatable: yes
@@ -105,8 +103,8 @@ with one object. See
    on a material errors.
 
    The list sets the material's bake contract. Each of its textures bakes at the
-   lowest listed domain at or above its value's domain. Take
-   `--material-uv 0 face`. An albedo texture reads a `swatch` value from
+   lowest listed domain at or above its value's domain. With
+   `--material-uv 0 face`, an albedo texture reads a `swatch` value from
    `baseColorFactor`. `face` sits above `swatch`, so the albedo bakes per `face`
    with each `face` repeating its `swatch`'s texel. An occlusion texture reads a
    `corner` value from `--compute-occlusion`. `face` sits below `corner`, so the
@@ -114,7 +112,7 @@ with one object. See
    down, because stepping down loses detail. The value can take the step itself.
    For example, `faceAvg` turns the `corner` value into a `face` value.
 
-   Without the flag the list is derived automatically. Every texture of the
+   Without the flag the list derives automatically. Every texture of the
    material puts its value's domain on the list. The duplicates collapse, and
    the survivors sort up the ladder: `swatch`, then `voxel`, then `face`, then
    `corner`. Every texture finds its exact domain on the list, so nothing
@@ -133,7 +131,7 @@ with one object. See
    with, and `none` is no material at all. The expression is the select that
    routes the primitive's faces. Primitives number from `0` in flag order. The
    select is a [bool](value-language.md#booleans) read at the
-   [face domain](value-language.md#domains), lower domains climbing in, and the
+   [face domain](value-language.md#domains), lower domains climbing in. The
    primitive takes every face whose entry is true. The selects partition the
    faces: a face no select takes errors, and a face two selects take errors too.
    Without the flag the mesh has one primitive, index 0, holding every face and
@@ -169,17 +167,15 @@ with one object. See
 
     Computes each voxel's grid position and binds it to `dst-name` as a
     per-voxel `u32` vec3. Every expression can read it the way it reads a
-    palette property. Without the flag nothing computes and the name does not
-    exist; see
+    palette property. Without the flag the name does not exist; see
     [Computed voxel position](value-language.md#computed-voxel-position).
 
 14. `--file-stem <file-stem>`
     - Default: the output mesh's stem
     - Repeatable: no
 
-    Replaces `{file-stem}` in profile file templates. The default resolves
-    based on the output path, so an output of `turret.glb` fills
-    `{file-stem}-mse.png` as `turret-mse.png`.
+    Replaces `{file-stem}` in profile file templates. An output of `turret.glb`
+    fills `{file-stem}-mse.png` as `turret-mse.png`.
 
 15. `--profile <profile>`
     - Repeatable: no
@@ -191,12 +187,11 @@ with one object. See
 16. `--value <bindings>`
     - Repeatable: yes
 
-    Defines values the writers and slots can name. The argument holds one
-    or more well-formed statements of the value language. Every property
-    of the effective palette is a name. The run joins every `--value` and
-    profile values entry into one program, bindings evaluating in order
-    with let-style redefinition; see
-    [Programs](value-language.md#programs).
+    Defines values the writers and slots can name. The argument holds one or
+    more statements of the value language. Every property of the effective
+    palette enters the program as a name. The run joins every `--value` and
+    profile values entry into one program, bindings evaluating in order with
+    let-style redefinition; see [Programs](value-language.md#programs).
 
 17. `--values-from <profile>`
     - Repeatable: yes
@@ -210,22 +205,22 @@ with one object. See
     - Repeatable: yes
 
     Chooses the object by hierarchy path, with a node path selecting its
-    subtree. Unions with `--select-index`. Any explicit selector replaces
-    the default, so `--select-index` alone never unions with `*`. See
+    subtree. Unions with `--select-index`. Any explicit selector replaces the
+    default, so `--select-index` alone never unions with `*`. See
     [Object selectors](../vxl-commands/reference/conventions.md#object-selectors).
 
 19. `--select-index <index>`
     - Repeatable: yes
 
-    Chooses the object by position, an integer or an `a-b` range. Unions
-    with `--select`.
+    Chooses the object by position, an integer or an `a-b` range. Unions with
+    `--select`.
 
 20. `--write-file-json-value <dst-file> <dst-name> <src-expr> <linear | srgb>`
     - Repeatable: yes
 
     Writes a value to a JSON file under `<dst-name>` with the specified
-    transfer. The output is one object per file so repeating the flag on one
-    path merges into that file; see [JSON files](value-language.md#json-files).
+    transfer. Each file holds one object, so repeating the flag on one path
+    merges into that file; see [JSON files](value-language.md#json-files).
 
 21. `--write-file-png-value <dst-file> <src-expr> <linear | srgb>`
     - Repeatable: yes
@@ -318,9 +313,9 @@ with one object. See
 
     Writes a value to an attribute glTF defines, `COLOR_0`, on the indexed
     primitive. The corners take the value by
-    [domain](value-language.md#domains) so a corner value lands exactly.
-    The flag carries no token because the defined vocabulary fixes the encoding.
-    An underscore name errors; see
+    [domain](value-language.md#domains), so a corner value lands exactly. The
+    flag carries no `linear | srgb` argument because the defined vocabulary
+    fixes the encoding. An underscore name errors; see
     [Vertex attributes](value-language.md#vertex-attributes).
 
 33. `--write-primitive-custom-value <primitive-index> <dst-name> <src-expr> <linear | srgb>`
@@ -338,11 +333,10 @@ with one object. See
     - Default: `true`
     - Repeatable: yes
 
-    Whether the indexed primitive writes `NORMAL`, the mesher's computed
-    normal, beside `POSITION`. glTF leaves the attribute optional, and a
-    viewer derives flat normals from the triangles. A voxel face is flat, so
-    a conforming viewer draws the same pixels either way. `false` drops the
-    stream.
+    Whether the indexed primitive writes `NORMAL`, the mesher's computed normal,
+    beside `POSITION`. glTF leaves the attribute optional, and a viewer derives
+    flat normals from the triangles. A voxel face is flat, so a conforming
+    viewer draws the same pixels either way. `false` drops the stream.
 
 35. `--write-primitive-uv <primitive-index> <corner | face | swatch | voxel>`
     - Default: the material's stream list
@@ -354,9 +348,9 @@ with one object. See
 
     With the flag the primitive writes exactly the named streams; without it the
     primitive writes its material's list, a `none` primitive writing nothing.
-    The list must include every domain the material samples; omitting one
-    errors, because the draw would read a missing attribute. A named stream no
-    texture bakes at is legal and emits for an outside sampler; see
+    The list must include every domain the material samples; omitting one errors
+    because the draw would read a missing attribute. A named stream no texture
+    bakes at is legal and emits for an outside sampler; see
     [UV streams](#uv-streams).
 
 In every writer, `<src-expr>` holds any expression of the
@@ -368,36 +362,35 @@ A glTF mesh holds primitives. A primitive is one draw with its own vertex data,
 its own triangle list, and at most one material. Two materials on one mesh means
 two primitives, each holding the faces it draws. `vxl mesh` starts with an
 implicit whole-mesh primitive. The first `--primitive` replaces it, and each
-further flag adds another. Everything is 0-indexed, and a primitive flag naming
-an index at or above the count errors rather than growing it.
+further flag adds another. Everything is 0-indexed. A primitive flag naming an
+index at or above the count errors rather than growing it.
 
 A material is the surface a primitive draws with; material flags fill it by
-index. Materials are declared by use, with `--material-count` setting the
-count outright. At count `0` the glTF carries no `materials` array. A declared
+index. Materials are declared by use, with `--material-count` setting the count
+outright. At count `0` the glTF carries no `materials` array. A declared
 material no primitive draws is legal and emits unused.
 
-`--primitive none` declares a primitive with no material. glTF leaves `primitive.material`
-optional, and a viewer draws such a primitive with the spec's default material,
-rendering the pixels an empty material produces. `COLOR_0` multiplies into base
-color, so a mesh of vertex values alone still shows its colors.
+`--primitive none` declares a primitive with no material. glTF leaves
+`primitive.material` optional, and a viewer draws such a primitive with the
+spec's default material, rendering the pixels an empty material produces.
+`COLOR_0` multiplies into base color, so a mesh of vertex values alone still
+shows its colors.
 
-The `--primitive` select routes the faces: a
-[bool](value-language.md#booleans) read at the
-[face domain](value-language.md#domains) takes every true face into the
-primitive. A lower-domain bool can route whole swatches or whole voxels. A
-greedy quad can cover several voxels, and when their answers differ the quad
-splits, so each piece follows its voxel; see
+The `--primitive` select routes the faces: a [bool](value-language.md#booleans)
+read at the [face domain](value-language.md#domains) takes every true face into
+the primitive. A lower-domain bool can route whole swatches or whole voxels. A
+greedy quad can cover several voxels. When their answers differ, the quad splits
+and each piece follows its voxel; see
 [computed voxel position](value-language.md#computed-voxel-position). The
-selects partition the faces: a face no select takes
-would be a silent drop, and a face two selects take would be claimed twice, so
-both error. The partition covers the faces the mesher emits. A swatch or voxel
-partition covers faces through the used swatches and solid voxels, which no
-method changes, so it is the same under every method. A face bool answers per
-emitted face, so a face partition that holds under one method can leave
-another's faces unclaimed. The fix is a complement: `rest = !(metal || glass)`
-covers whatever the mesher emits. A `false` select takes nothing, which is legal
-wherever the rest cover the mesh. Selects only route and never change what
-geometry exists.
+selects partition the faces: a face no select takes would be a silent drop, and
+a face two selects take would be claimed twice, so both error. The partition
+covers the faces the mesher emits. A swatch or voxel partition is the same under
+every method: it covers faces through the used swatches and solid voxels, which
+no method changes. A face bool answers per emitted face, so a face partition
+that holds under one method can leave another's faces unclaimed. The fix is a
+complement: `rest = !(metal || glass)` covers whatever the mesher emits. A
+`false` select takes nothing, which is legal wherever the rest cover the mesh.
+Selects only route and never change what geometry exists.
 
 The selects split the model. Every face draws once with its swatch's material:
 
@@ -437,10 +430,9 @@ vxl mesh turret.voxj
 }
 ```
 
-A face select can split faces that share a swatch. The palette cannot tell
-these faces apart, since each reads the same material, but occlusion comes from
-the geometry, so a threshold on it sends the crevice faces to a second
-material:
+A face select can split faces that share a swatch. The palette cannot tell these
+faces apart because each reads the same material. Occlusion comes from the
+geometry, so a threshold on it sends the crevice faces to a second material:
 
 ```sh
 # dirt in the creases: material 1 takes the occluded faces
@@ -455,12 +447,12 @@ vxl mesh statue.vox
 ## Atlases
 
 Each [domain](value-language.md#domains) arranges texels into its own texture
-atlas: swatch values land in the palette atlas; voxel values, the voxel
-atlas; face values, the unwrap atlas; corner values, the corner atlas.
-Every atlas sits on the `--texture-shape` canvas and puts each face's
-UVs at texel centers. The palette, voxel, and unwrap atlases sample nearest with
-clamped wrapping, so a face reads exactly its texels. The corner atlas samples
-linear: its blocks are the one layout where blending stays inside a face.
+atlas: swatch values land in the palette atlas; voxel values, the voxel atlas;
+face values, the unwrap atlas; corner values, the corner atlas. Every atlas sits
+on the `--texture-shape` canvas and puts each face's UVs at texel centers. The
+palette, voxel, and unwrap atlases sample nearest with clamped wrapping, so a
+face reads exactly its texels. The corner atlas samples linear: its blocks are
+the one layout where blending stays inside a face.
 
 ### The palette atlas
 
@@ -470,9 +462,9 @@ are combined by reading each property through the last layer whose palette
 supplies it. This combination is the object's effective palette. A voxel samples
 one material per layer, and that combination is its flattened material, one
 entry of the effective palette. Voxels with the same flattened material share a
-texel. The texels sit in first-seen raster order. A single-layer object has
-nothing to combine, so it gets one texel per material its voxels use. Each
-swatch map bakes its own value into the same texels, so
+texel. The texels sit in first-seen raster order. A single-layer object, with
+nothing to combine, gets one texel per material its voxels use. Each swatch map
+bakes its own value into the same texels, so
 
 ```sh
 vxl mesh turret.voxj
@@ -482,25 +474,24 @@ vxl mesh turret.voxj
 
 writes `turret.gltf` with embedded albedo, orm, and emissive maps. Every map is
 the same size, with the same flattened material at the same texel, and every
-face's UVs sit at its texel's center. The atlas depends on the materials the
-object uses, so it is per-mesh.
+face's UVs sit at its texel's center. The atlas is per-mesh: it depends on the
+materials the object uses.
 
 Nothing auto-defaults. A profile supplies the glTF spec defaults through the
 `defaults` mixin, and a hand-written `--value` reads `default()` for a property
 no layer supplies; see the
 [profile language](profile-language.md#built-in-profiles). Once maps bake,
-greedy meshing merges only faces that share a flattened material, since a merged
-quad samples one texel. A run that bakes no maps drops that limit, and greedy
-merges coplanar faces across materials.
+greedy meshing merges only faces that share a flattened material because a
+merged quad samples one texel. A run that bakes no maps drops that limit, and
+greedy merges coplanar faces across materials.
 
 ### The voxel atlas
 
-The voxel atlas gives each solid voxel one texel, in the object's raster order. Each
-face's UVs sit at its voxel's texel center. A face cannot straddle two voxels'
-texels, so a voxel stream in the run prevents merging across voxels. Every face
-is then a per-voxel quad under any `--method`, and `greedy` collapses to
-`culled`. A
-buried voxel's texel is an unused cell.
+The voxel atlas gives each solid voxel one texel, in the object's raster order.
+Each face's UVs sit at its voxel's texel center. A face cannot straddle two
+voxels' texels, so a voxel stream in the run prevents merging across voxels.
+Every face is then a per-voxel quad under any `--method`, and `greedy` collapses
+to `culled`. A buried voxel's texel is an unused cell.
 
 The layout serves values that vary per voxel, and
 [computed voxel position](value-language.md#computed-voxel-position) supplies
@@ -520,19 +511,19 @@ texel shows its swatch's color, dimmed where its `y` is even.
 
 ### The unwrap atlas
 
-The unwrap atlas gives each face one texel. It serves values that vary across
-a surface, such as [computed occlusion](value-language.md#computed-occlusion)
-reduced from its corners. The layout packs the face cells into the
-canvas and generates the face stream's UVs.
+The unwrap atlas gives each face one texel. It serves values that vary across a
+surface, such as [computed occlusion](value-language.md#computed-occlusion)
+reduced from its corners. The layout packs the face cells into the canvas and
+generates the face stream's UVs.
 
 ### The corner atlas
 
 The corner atlas gives each face a 2x2 texel block, one texel per corner in the
 face's corner order. The face's UVs sit at the four texel centers, so bilinear
-interpolation stays inside the block and reproduces the per-corner gradient. The
-linear sampling skips mipmaps, so minification stays inside the block too, and
-the atlas needs no gutter padding. A merged greedy face still carries one block,
-and when corner occlusion disagrees inside it, the face splits; see
+interpolation stays inside the block and reproduces the per-corner gradient.
+Because the linear sampling skips mipmaps, minification stays inside the block
+too, and the atlas needs no gutter padding. A merged greedy face still carries
+one block, and when corner occlusion disagrees inside it, the face splits; see
 [computed occlusion](value-language.md#computed-occlusion).
 
 The layout serves corner values written whole, such as computed occlusion:
@@ -551,7 +542,7 @@ route for custom shaders.
 ## UV streams
 
 The UVs place each face on the atlas's texel grid. A primitive carries one UV
-stream per [atlas](#atlases) its faces read: the face's cell is in a different
+stream per [atlas](#atlases) its faces read: the face's cell sits at a different
 location in each. Each stream writes a glTF `TEXCOORD_<n>` attribute.
 
 Each material declares its stream list with `--material-uv`. Without the flag
@@ -562,7 +553,7 @@ that one stream. An engine can set its face maps ahead of its swatch maps by
 listing `face` first because the flag order sets the `TEXCOORD` numbers.
 
 The streams land per primitive. A primitive with a material writes that
-material's list and one without writes nothing. `--write-primitive-uv` replaces
+material's list, and one without writes nothing. `--write-primitive-uv` replaces
 that default with the streams the flag names.
 
 Every texture's `texCoord` derives. The domain it bakes at finds its position in
@@ -691,8 +682,8 @@ checks the pairing.
 
 The flags set the storage. `--write-mesh-extra-json-value` embeds the rows,
 while a sidecar pairs `--write-file-json-value` with a
-`--write-mesh-extra-json-file` pointer at it. The pair puts the rows in a json
-file beside the mesh:
+`--write-mesh-extra-json-file` pointer at the file. The pair puts the rows in a
+JSON file beside the mesh:
 
 ```jsonc
 // vxl mesh turret.voxj
