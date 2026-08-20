@@ -14,6 +14,105 @@ a new name with `valuesFrom`. Hyphenated profile names take camel-case value
 names because `-` is subtraction in the [value language](value-language.md): a
 `metallic-smoothness` profile would bake `metallicSmoothness`.
 
+## Schema
+
+The whole config shape in one block, TypeScript as the notation: a union of
+literals names a token set, `?` marks a key whose omission takes its default,
+and a `kind` field picks which sibling fields exist. Nothing compiles it;
+[Loading](#loading) holds the checks that enforce it.
+
+```ts
+/** The `.vxlconfig` shape `vxl mesh` reads. */
+interface VxlConfig {
+  mesh?: {
+    profiles?: Record<string, Profile>;
+  };
+}
+
+/** A fragment of the value program, one or more `name = expr` bindings. */
+type Bindings = string;
+
+/** An expression of the value language. */
+type Expr = string;
+
+/** A file name, `{file-stem}` replaced before use. */
+type FileTemplate = string;
+
+type Transfer = "linear" | "srgb";
+
+interface Profile {
+  /** Values imported first, in order; writers never travel. */
+  valuesFrom?: string[];
+  /** Binds each listed domain's computed index under its name. */
+  computeIndex?: {
+    corner?: string;
+    face?: string;
+    swatch?: string;
+    voxel?: string;
+  };
+  /** Binds computed occlusion under the name. */
+  computeOcclusion?: string;
+  /** Binds computed voxel position under the name. */
+  computeVoxelPosition?: string;
+  values?: Bindings[];
+
+  // the geometry options, each key its flag's argument
+  voxelSize?: number;
+  method?: "culled" | "greedy" | "naive";
+  /** A number is the exact `n`x`n` canvas of cells. */
+  textureShape?: "fit" | "line" | "pot" | "square" | number;
+
+  files?: {
+    png?: Record<FileTemplate, { transfer: Transfer; value: Expr }>;
+    json?: Record<
+      FileTemplate,
+      Record<string, { transfer: Transfer; value: Expr }>
+    >;
+  };
+
+  /** The list's length is the material count; omitted, count 0. */
+  materials?: MaterialEntry[];
+  /** Omitted, the implicit primitive holds every face. */
+  primitives?: PrimitiveEntry[];
+  meshExtras?: Record<string, ExtraEntry>;
+}
+
+interface MaterialEntry {
+  name?: string;
+  /** UV streams in TEXCOORD order; omitted, the list derives from use. */
+  uvs?: ("corner" | "face" | "swatch" | "voxel")[];
+  /** The resolved output format's property names. */
+  slots?: Record<string, SlotEntry>;
+  extras?: Record<string, ExtraEntry>;
+}
+
+type SlotEntry =
+  | { kind: "value"; value: Expr }
+  | { kind: "file"; file: FileTemplate };
+
+type ExtraEntry =
+  | { kind: "image-file"; file: FileTemplate }
+  | { kind: "image-value"; value: Expr; transfer: Transfer }
+  | { kind: "json-file"; file: FileTemplate }
+  | { kind: "json-value"; value: Expr; transfer: Transfer };
+
+interface PrimitiveEntry {
+  name?: string;
+  /** Omitted: `"true"`, every face. */
+  select?: Expr;
+  /** Omitted: no material. */
+  material?: number;
+  /** Omitted: `true`, the `NORMAL` stream written. */
+  normal?: boolean;
+  /** Streams in the primitive's own order; omitted, the material's list. */
+  uvs?: ("corner" | "face" | "swatch" | "voxel")[];
+  /** Attributes glTF defines, `COLOR_0`, to expressions. */
+  builtins?: Record<string, Expr>;
+  /** Underscore-typed attribute names, `_MY_COLOR`. */
+  customs?: Record<string, { value: Expr; transfer: Transfer }>;
+}
+```
+
 ## Profile values
 
 A profile's values are its `values` list, an optional `valuesFrom` list, and the
@@ -230,105 +329,6 @@ default, the output mesh's stem. A template spells its file name literally, so a
 hyphenated profile keeps its hyphens: a `metallic-smoothness` profile writes
 `turret-metallic-smoothness.png` even though the value it bakes is
 `metallicSmoothness`.
-
-## Schema
-
-The whole config shape in one block, TypeScript as the notation: a union of
-literals names a token set, `?` marks a key whose omission takes its default,
-and a `kind` field picks which sibling fields exist. Nothing compiles it;
-[Loading](#loading) holds the checks that enforce it.
-
-```ts
-/** The `.vxlconfig` shape `vxl mesh` reads. */
-interface VxlConfig {
-  mesh?: {
-    profiles?: Record<string, Profile>;
-  };
-}
-
-/** A fragment of the value program, one or more `name = expr` bindings. */
-type Bindings = string;
-
-/** An expression of the value language. */
-type Expr = string;
-
-/** A file name, `{file-stem}` replaced before use. */
-type FileTemplate = string;
-
-type Transfer = "linear" | "srgb";
-
-interface Profile {
-  /** Values imported first, in order; writers never travel. */
-  valuesFrom?: string[];
-  /** Binds each listed domain's computed index under its name. */
-  computeIndex?: {
-    corner?: string;
-    face?: string;
-    swatch?: string;
-    voxel?: string;
-  };
-  /** Binds computed occlusion under the name. */
-  computeOcclusion?: string;
-  /** Binds computed voxel position under the name. */
-  computeVoxelPosition?: string;
-  values?: Bindings[];
-
-  // the geometry options, each key its flag's argument
-  voxelSize?: number;
-  method?: "culled" | "greedy" | "naive";
-  /** A number is the exact `n`x`n` canvas of cells. */
-  textureShape?: "fit" | "line" | "pot" | "square" | number;
-
-  files?: {
-    png?: Record<FileTemplate, { transfer: Transfer; value: Expr }>;
-    json?: Record<
-      FileTemplate,
-      Record<string, { transfer: Transfer; value: Expr }>
-    >;
-  };
-
-  /** The list's length is the material count; omitted, count 0. */
-  materials?: MaterialEntry[];
-  /** Omitted, the implicit primitive holds every face. */
-  primitives?: PrimitiveEntry[];
-  meshExtras?: Record<string, ExtraEntry>;
-}
-
-interface MaterialEntry {
-  name?: string;
-  /** UV streams in TEXCOORD order; omitted, the list derives from use. */
-  uvs?: ("corner" | "face" | "swatch" | "voxel")[];
-  /** The resolved output format's property names. */
-  slots?: Record<string, SlotEntry>;
-  extras?: Record<string, ExtraEntry>;
-}
-
-type SlotEntry =
-  | { kind: "value"; value: Expr }
-  | { kind: "file"; file: FileTemplate };
-
-type ExtraEntry =
-  | { kind: "image-file"; file: FileTemplate }
-  | { kind: "image-value"; value: Expr; transfer: Transfer }
-  | { kind: "json-file"; file: FileTemplate }
-  | { kind: "json-value"; value: Expr; transfer: Transfer };
-
-interface PrimitiveEntry {
-  name?: string;
-  /** Omitted: `"true"`, every face. */
-  select?: Expr;
-  /** Omitted: no material. */
-  material?: number;
-  /** Omitted: `true`, the `NORMAL` stream written. */
-  normal?: boolean;
-  /** Streams in the primitive's own order; omitted, the material's list. */
-  uvs?: ("corner" | "face" | "swatch" | "voxel")[];
-  /** Attributes glTF defines, `COLOR_0`, to expressions. */
-  builtins?: Record<string, Expr>;
-  /** Underscore-typed attribute names, `_MY_COLOR`. */
-  customs?: Record<string, { value: Expr; transfer: Transfer }>;
-}
-```
 
 ## Loading
 
