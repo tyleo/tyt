@@ -2,62 +2,54 @@
 
 _Part of the [mesh plan](README.md)._
 
-A profile is a named piece of configuration: the values it defines
-beside a run's output surface, the geometry options, materials,
-primitives, files, and extras. `--profile` applies one whole, and
-`--values-from` applies only a profile's values, so a profile holding
-values alone is a mixin. Five ship in the binary, the `defaults`
-mixin and the `albedo`, `orm`, `emissive`, and `pbr` profiles, so
-`--profile pbr` works before any `.vxlconfig` exists. The rest are
-user-defined under `.vxlconfig`'s `mesh.profiles` key. A config
-profile sharing a built-in's name replaces it wholesale, and
-extending a profile's values is a new name with `valuesFrom`.
-Hyphenated profile names take camel-case value names, since `-` is
-subtraction in the [value language](value-language.md): a
+A profile is a named piece of configuration: the values it defines beside a
+run's output surface, the geometry options, materials, primitives, files, and
+extras. `--profile` applies one whole, and `--values-from` applies only a
+profile's values, so a profile holding values alone is a mixin. Five ship in the
+binary, the `defaults` mixin and the `albedo`, `orm`, `emissive`, and `pbr`
+profiles, so `--profile pbr` works before any `.vxlconfig` exists. The rest are
+user-defined under `.vxlconfig`'s `mesh.profiles` key. A config profile sharing
+a built-in's name replaces it wholesale, and extending a profile's values takes
+a new name with `valuesFrom`. Hyphenated profile names take camel-case value
+names because `-` is subtraction in the [value language](value-language.md): a
 `metallic-smoothness` profile would bake `metallicSmoothness`.
 
 ## Profile values
 
-A profile's values are its `values` list, an optional `valuesFrom`
-list, and the optional `computeIndex`, `computeOcclusion`, and
-`computeVoxelPosition` keys. Each `values` entry is a fragment of the
-[program](value-language.md#programs), one or more `name = expr`
-bindings, the trailing `;` optional. A profile can define every name a
-run needs and still write nothing. `--values-from <profile>` appends a
-profile's bindings to the program at the flag's own position,
-`valuesFrom` first: depth-first in list order, every profile visited
-once, cycles an error, the profile's own values last. Only values and
-the compute bindings travel; a writer element applies through
-`--profile` alone. So
+A profile's values are its `values` list, an optional `valuesFrom` list, and the
+optional `computeIndex`, `computeOcclusion`, and `computeVoxelPosition` keys.
+Each `values` entry is a fragment of the [program](value-language.md#programs),
+one or more `name = expr` bindings, the trailing `;` optional. A profile can
+define every name a run needs and still write nothing. `--values-from <profile>`
+appends a profile's bindings to the program at the flag's position, `valuesFrom`
+first: depth-first in list order, every profile visited once, cycles an error,
+the profile's own values last. Only values and the compute bindings travel; a
+writer element applies through `--profile` alone. So
 
 ```sh
 --value "a = 0.5" --values-from albedo --value "b = a * 2"
 ```
 
-defines `a`, then the `defaults` mixin `albedo` imports, then
-`albedo`'s own values, then `b`, and redefinition stays let-style
-throughout, so a `--value` after the flag overrides a profile value
-and every later expression sees the override.
+defines `a`, then the `defaults` mixin `albedo` imports, then `albedo`'s own
+values, then `b`. Redefinition stays let-style throughout, so a `--value` after
+the flag overrides a profile value and every later expression sees the override.
 
-A profile requests
-[computed occlusion](value-language.md#computed-occlusion) through its
-`computeOcclusion` key and
-[computed voxel position](value-language.md#computed-voxel-position)
-through its `computeVoxelPosition` key, each the flag's argument as
-its value, binding the name the way the flag does.
-[Computed indexes](value-language.md#computed-index) ride the
-`computeIndex` map, each domain key holding its bound name. Every
-request across profiles and flags binds its name to the one
-computation, so requests alias rather than collide. The bindings ride
-`valuesFrom` with the values, since an inherited expression needs its
-name.
+A profile requests [computed occlusion](value-language.md#computed-occlusion)
+through its `computeOcclusion` key and
+[computed voxel position](value-language.md#computed-voxel-position) through its
+`computeVoxelPosition` key, each holding the flag's argument as its value and
+binding the name the way the flag does.
+[Computed indexes](value-language.md#computed-index) ride the `computeIndex`
+map, each domain key holding its bound name. Every request across profiles and
+flags binds its name to the one computation, so requests alias rather than
+collide. The bindings ride `valuesFrom` with the values because an inherited
+expression needs its name.
 
 ## The output surface
 
-`--profile <profile>` applies a profile whole, at most one per run.
-Beyond its values, a profile is the run's surface, the geometry
-options ahead of an output shaped like the glTF it produces, and
-every element expands to the flag it fires as:
+`--profile <profile>` applies a profile whole, at most one per run. Beyond its
+values, a profile is the run's surface, the geometry options ahead of an output
+shaped like the glTF it produces. Every element expands to the flag it fires as:
 
 ```jsonc
 {
@@ -165,48 +157,49 @@ every element expands to the flag it fires as:
 }
 ```
 
-The kinds are the flag grid's tails. A slot's `value` kind fires
-`--write-material-slot-value`, the `file` kind
-`--write-material-slot-file`; an extras entry's four kinds fire the
-four extras flags, on the material or the mesh by where the entry
-sits; a primitives entry fires `--primitive` in list order, its
-`material` and `select` the flag's arguments, an omitted `material`
-firing `none` and an omitted `select` `true`, its `normal` firing
-`--write-primitive-normal`, omitted `true`, its `uvs` firing
-`--write-primitive-uv` per entry in order, omitted the material's
-list, its `builtins` firing
-`--write-primitive-builtin-value` tokenless like the flag, and its
-`customs` `--write-primitive-custom-value` with their transfers;
-`files.png` and `files.json` entries fire
-`--write-file-png-value` and `--write-file-json-value` per key; and
-each geometry key fires the flag it is named for. A material entry's
-`uvs` fires `--material-uv` per entry in order. The defaults mirror
-the flags': an omitted geometry key takes its flag's default, an
-omitted or empty `materials` carries no materials, an omitted or
-empty `primitives` the implicit primitive holding every face, and an
-omitted `uvs` derives from use the way the bare line does; see
+The kinds are the flag grid's tails.
+
+1. A slot's `value` kind fires `--write-material-slot-value`, the `file` kind
+   `--write-material-slot-file`
+2. An extras entry's four kinds fire the four extras flags, on the material or
+   the mesh by where the entry sits
+3. A primitives entry fires `--primitive` in list order, its `material` and
+   `select` the flag's arguments, an omitted `material` firing `none` and an
+   omitted `select` `true`
+4. A primitive's `normal` fires `--write-primitive-normal`, omitted `true`
+5. A primitive's `uvs` fires `--write-primitive-uv` per entry in order, omitted
+   the material's list
+6. A primitive's `builtins` fires `--write-primitive-builtin-value` tokenless
+   like the flag, its `customs` `--write-primitive-custom-value` with their
+   transfers
+7. A material entry's `uvs` fires `--material-uv` per entry in order
+8. `files.png` and `files.json` entries fire `--write-file-png-value` and
+   `--write-file-json-value` per key
+9. Each geometry key fires the flag it is named for
+
+The defaults mirror the flags': an omitted geometry key takes its flag's
+default, an omitted or empty `materials` carries no materials, an omitted or
+empty `primitives` the implicit primitive holding every face, and an omitted
+`uvs` derives from use the way the bare line does; see
 [Primitives and materials](mesh.md#primitives-and-materials) and
 [UV streams](mesh.md#uv-streams).
 
-Three rules keep a profile honest. A `file` field names a file the
-profile's own `files` writes, so a slot or extras reference always
-has bytes behind it, and a foreign file stays a hand-written flag. A
-transfer lives on the file entry alone, referencers carrying none, so
-nothing can fight it; a referenced png still cross-checks its
-transfer against each slot's fixed encoding, the
-`--write-material-slot-file` rule spelled in config, and no built-in
-writes a file, so none can hit it. And the destination dicts make a
-double claim unwritable where a key is the destination, the one
-remaining cross-dict collision erroring at load: one template under
-both `png` and `json`.
+Three rules keep a profile honest. A `file` field names a file the profile's own
+`files` writes: a slot or extras reference always has bytes behind it, and a
+foreign file stays a hand-written flag. A transfer lives on the file entry
+alone, referencers carrying none, so nothing can fight it. A referenced png
+still cross-checks its transfer against each slot's fixed encoding, the
+`--write-material-slot-file` rule spelled in config; no built-in writes a file,
+so none can trip the check. The destination dicts make a double claim unwritable
+where a key is the destination, the one remaining cross-dict collision erroring
+at load: one template under both `png` and `json`.
 
-An explicit flag beats the profile: a hand-written flag replaces the
-element claiming its destination, wherever it sits on the line, while
-two hand-written flags colliding stays the error it always was, and a
-hand flag naming a material or primitive index the run never declared
-still errors rather than growing the count. A material's `uvs` list
-is one element, so any `--material-uv` naming the material replaces
-all of it, and a geometry flag replaces its key the same way:
+An explicit flag beats the profile: a hand-written flag replaces the element
+claiming its destination, wherever it sits on the line. Two hand-written flags
+colliding stays the error it always was, and a hand flag naming a material or
+primitive index the run never declared still errors rather than growing the
+count. A material's `uvs` list is one element, so any `--material-uv` naming the
+material replaces all of it, and a geometry flag replaces its key the same way:
 `--method culled` beside a profile spelling `greedy` meshes culled.
 
 So with the output `turret.glb`, `--profile orm` expands to
@@ -222,8 +215,8 @@ So with the output `turret.glb`, `--profile orm` expands to
 ```
 
 with the unused defaults elided. The
-[`orm-files` variant](#user-defined-profiles) moves the image to a
-written file the slots reference:
+[`orm-files` variant](#user-defined-profiles) moves the image to a written file
+the slots reference:
 
 ```sh
 # the values as above
@@ -232,19 +225,18 @@ written file the slots reference:
 --write-material-slot-file 0 metallicRoughnessTexture turret-orm.png
 ```
 
-Files take their names from `{file-stem}` templates, `--file-stem`
-replacing the default, the output mesh's own stem. A template spells
-its file name literally, so a hyphenated profile keeps its hyphens: a
-`metallic-smoothness` profile writes `turret-metallic-smoothness.png`
-even though the value it bakes is `metallicSmoothness`.
+Files take their names from `{file-stem}` templates, `--file-stem` replacing the
+default, the output mesh's stem. A template spells its file name literally, so a
+hyphenated profile keeps its hyphens: a `metallic-smoothness` profile writes
+`turret-metallic-smoothness.png` even though the value it bakes is
+`metallicSmoothness`.
 
 ## Schema
 
-The whole config shape in one block, TypeScript as the notation: a
-union of literals is a token set, `?` marks a key whose omission
-takes its default, and a `kind` field picks which sibling fields
-exist. Nothing compiles it; [Loading](#loading) holds the checks
-that enforce it.
+The whole config shape in one block, TypeScript as the notation: a union of
+literals names a token set, `?` marks a key whose omission takes its default,
+and a `kind` field picks which sibling fields exist. Nothing compiles it;
+[Loading](#loading) holds the checks that enforce it.
 
 ```ts
 /** The `.vxlconfig` shape `vxl mesh` reads. */
@@ -306,7 +298,7 @@ interface MaterialEntry {
   name?: string;
   /** UV streams in TEXCOORD order; omitted, the list derives from use. */
   uvs?: ("corner" | "face" | "swatch" | "voxel")[];
-  /** The resolved output format's own property names. */
+  /** The resolved output format's property names. */
   slots?: Record<string, SlotEntry>;
   extras?: Record<string, ExtraEntry>;
 }
@@ -340,43 +332,44 @@ interface PrimitiveEntry {
 
 ## Loading
 
-User-defined profiles live in `.vxlconfig` files, one in the home
-directory and one at the git root, read as jsonc: comments are stripped
-ahead of the JSON parse, and a trailing comma stays the error strict
-JSON makes it. The crate work behind the loading lives in the
+User-defined profiles live in `.vxlconfig` files, one in the home directory and
+one at the git root, read as jsonc: comments are stripped ahead of the JSON
+parse, and a trailing comma stays the error strict JSON makes it. The crate work
+behind the loading lives in the
 [implementation notes](implementation.md#ty-preferences).
 
-The profiles resolve as a three-layer stack: the built-ins, then
-`~/.vxlconfig`, then `<git-root>/.vxlconfig`. Each profile name is read
-from the last layer that supplies it, wholesale, the rule the effective
-palette already follows per property: a layer that redefines a profile
-redefines all of it, so an override never inherits stray elements from
-the layer below. The layers merge into one namespace before
-`valuesFrom` resolves, so a repo that overrides `defaults` changes
-every profile built on it, including one from the home config.
+The profiles resolve as a three-layer stack: the built-ins, then `~/.vxlconfig`,
+then `<git-root>/.vxlconfig`. Each profile name is read from the last layer that
+supplies it, wholesale, the rule the effective palette already follows per
+property: a layer that redefines a profile redefines all of it, and an override
+never inherits stray elements from the layer below. The layers merge into one
+namespace before `valuesFrom` resolves, so a repo that overrides `defaults`
+changes every profile built on it, including one from the home config.
 
-Loading checks every profile in the merged namespaces, so a broken
-config fails the first run after the edit rather than the run that
-first names the profile. Load-time checks are the ones that need no run
-context: the schema's shape, an unknown key erroring rather than
-skipping, every expression and every `values` fragment parsing,
-every `valuesFrom` name resolving without a cycle, every `material`
-inside its profile's material count, every `file` reference naming a
-written file, every `uvs` entry `corner`, `face`, `swatch`, or `voxel`
-named once, and no element claiming one destination twice. The rest
-wait for the run that decides them: dimensions and shapes need the
-effective palette, slot names and their encodings need the resolved
-output format, and name bindings need the command line.
+Loading checks every profile in the merged namespace, so a broken config fails
+the first run after the edit rather than the run that first names the profile.
+Load-time checks are the ones that need no run context:
+
+1. the schema's shape, an unknown key erroring rather than skipping
+2. every expression and every `values` fragment parsing
+3. every `valuesFrom` name resolving without a cycle
+4. every `material` inside its profile's material count
+5. every `file` reference naming a written file
+6. every `uvs` entry `corner`, `face`, `swatch`, or `voxel` named once
+7. no element claiming one destination twice
+
+The rest wait for the run that decides them: dimensions and shapes need the
+effective palette, slot names and their encodings need the resolved output
+format, and name bindings need the command line.
 
 ## Built-in profiles
 
-The built-ins are the bottom layer of the [stack](#loading). The
-binary embeds this section's map as data and parses it at startup
-with the config deserializer, so the built-ins take the same schema by
-construction and every run exercises the parse path. Every profile
-with materials omits `primitives`, taking the implicit primitive that
-holds every face on material `0`, and embeds, so a slot fixes each
-encoding and no entry carries a transfer:
+The built-ins are the bottom layer of the [stack](#loading). The binary embeds
+this section's map as data and parses it at startup with the config
+deserializer: the built-ins take the same schema by construction and every run
+exercises the parse path. Every profile with materials omits `primitives`,
+taking the implicit primitive that holds every face on material `0`, and embeds
+its textures, so a slot fixes each encoding and no entry carries a transfer:
 
 ```jsonc
 {
@@ -460,44 +453,42 @@ encoding and no entry carries a transfer:
 }
 ```
 
-Every profile spells its own defaults through the `defaults` mixin,
-which is what makes a profile never fail on a missing property: a
-property no layer supplies, or a material that leaves it unset, takes
-the spec default the mixin names. A hand-written `--value` gets no such
-guarantee, since nothing auto-defaults.
+Every profile spells its own defaults through the `defaults` mixin, so a profile
+never fails on a missing property: a property no layer supplies, or a material
+that leaves it unset, takes the spec default the mixin names. A hand-written
+`--value` gets no such guarantee because nothing auto-defaults.
 
-`emissiveStrength` has a minimum of 0 and no maximum, so the `emissive`
-profile and the `mse` example both normalize by the palette's strongest
-strength and send that strength to the `emissiveStrength` slot. Packing
-it raw would put an unbounded value in an 8-bit channel, which errors
-on the first material above 1 rather than clamping. Normalizing is also
-the convention the packed maps target, a `[0, 1]` mask in the image and
-the intensity on the material. The two agree on this deliberately, and
-merging them is harmless, since each binds the slot to the same
-`maxStrength`.
+`emissiveStrength` has a minimum of 0 and no maximum, so the `emissive` profile
+and the `mse` example both normalize by the palette's strongest strength and
+send that strength to the `emissiveStrength` slot. Packing it raw would put an
+unbounded value in an 8-bit channel, which errors on the first material above 1
+rather than clamping. Normalizing is also the convention the packed maps target,
+a `[0, 1]` mask in the image and the intensity on the material. The two agree on
+this deliberately, and merging them is harmless because each binds the slot to
+the same `maxStrength`.
 
-The emissive trio is the whole profile: the image carries each
-material's color scaled into `[0, 1]` of the palette's strongest
-strength, the strength slot carries that strength back, so absolute
-brightness survives a `[0, 1]` image, and the white `emissiveFactor`
-leaves the image untinted where glTF would otherwise multiply it by
-black.
+The emissive trio is the whole profile. The image carries each material's color
+scaled into `[0, 1]` of the palette's strongest strength, and the strength slot
+carries that strength back, so absolute brightness survives a `[0, 1]` image.
+The white `emissiveFactor` leaves the image untinted where glTF would otherwise
+multiply it by black.
 
 ## User-defined profiles
 
-Every other profile lives under `.vxlconfig`'s `mesh.profiles` key,
-in the same schema, and may build on the built-ins. `mse` packs
-metallic, smoothness, and normalized emissive strength into one
-mask; `orm-files` flips a built-in's slots from embedding to
-referencing; `heat` feeds a runtime of your own
-through the material extras; `palette` writes the
-[palette pattern](mesh.md#palettes) whole, rows beside their index;
-`vertex-colors` skips textures and rides base color on the vertices;
-`baked-ao` bakes
-[computed occlusion](value-language.md#computed-occlusion) into the
-standard slot; `glow-split` routes the glowing swatches to a second
-material through
-[primitives](mesh.md#primitives-and-materials):
+Every other profile lives under `.vxlconfig`'s `mesh.profiles` key, in the same
+schema, and may build on the built-ins. Seven examples follow:
+
+1. `mse` packs metallic, smoothness, and normalized emissive strength into one
+   mask
+2. `orm-files` flips a built-in's slots from embedding to referencing
+3. `heat` feeds a runtime of your own through the material extras
+4. `palette` writes the [palette pattern](mesh.md#palettes) whole, rows beside
+   their index
+5. `vertex-colors` skips textures and rides base color on the vertices
+6. `baked-ao` bakes [computed occlusion](value-language.md#computed-occlusion)
+   into the standard slot
+7. `glow-split` routes the glowing swatches to a second material through
+   [primitives](mesh.md#primitives-and-materials)
 
 ```jsonc
 {

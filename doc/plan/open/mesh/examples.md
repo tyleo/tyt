@@ -1,21 +1,19 @@
 # Worked examples
 
-_Part of the [mesh plan](README.md): runs, each a profile, the
-command line that fires it, its expansion into flags, and the glTF it
-produces._
+_Part of the [mesh plan](README.md): runs, each showing a profile, the command
+line that fires it, its expansion into flags, and the glTF it produces._
 
-Two small models carry every example. Every snippet spells its file
-from the root down to the leaf it shows, the untouched keys folded
-into one ellipsis comment, a large leaf collapsed to its own, and the
-numbers are real: counts match the model and indices match the arrays
-they point into. A `.glb`'s snippet is its JSON chunk, the binary
-chunk riding behind it. A built-in profile lives in no file, so its
-snippet roots at the map the binary embeds.
+Two small models carry every example. Every snippet spells its file from the
+root down to the leaf it shows, the untouched keys folded into one ellipsis
+comment and a large leaf collapsed to its own. The numbers are real: counts
+match the model and indices match the arrays they point into. A `.glb`'s snippet
+is its JSON chunk, the binary chunk riding behind it. A built-in profile lives
+in no file, so its snippet roots at the map the binary embeds.
 
 ## The models
 
-`lamp.voxj` is two voxels, a steel base with a glowing glass bulb on
-top, the bulb above the base along glTF's `+Y`:
+`lamp.voxj` is two voxels, a glowing glass bulb stacked on a steel base along
+glTF's `+Y`:
 
 ```jsonc
 // lamp.voxj
@@ -64,15 +62,14 @@ top, the bulb above the base along glTF's `+Y`:
 }
 ```
 
-Greedy meshing merges only faces that share a material, so the stack
-is ten faces: the bulb's top, the base's bottom, and each of the four
-sides split at the seam. Ten quads are twenty triangles, and no face
-shares corners with another, so the streams run forty vertices and
-sixty indices.
+Greedy meshing merges only faces that share a material, so the stack is ten
+faces: the bulb's top, the base's bottom, and each of the four sides split at
+the seam. Ten quads are twenty triangles, and because no face shares corners
+with another, the streams run forty vertices and sixty indices.
 
-`step.voxj` is three voxels of one stone material in an L, two on the
-ground and one stacked on the left end, an inside corner where the
-riser meets the tread:
+`step.voxj` is three voxels of one stone material in an L, two on the ground and
+one stacked on the left end, with an inside corner where the riser meets the
+tread:
 
 ```jsonc
 // step.voxj
@@ -98,15 +95,14 @@ riser meets the tread:
 }
 ```
 
-Greedy meshing emits ten faces here too, by a different split: one
-merged bottom, one merged left side, two quads each for the L-shaped
-front and back, and two apiece for the tops and right sides the step
-offsets from each other.
+Greedy meshing emits ten faces here too, by a different split: one merged
+bottom, one merged left side, two quads each for the L-shaped front and back,
+and two apiece for the tops and right sides the step offsets from each other.
 
 ## Geometry alone
 
-The bare run's profile is the empty one, every key omitted and every
-default taken:
+The bare run's profile is the empty one, every key omitted and every default
+taken:
 
 ```jsonc
 // .vxlconfig
@@ -128,11 +124,10 @@ vxl mesh lamp.voxj
   --profile geometry
 ```
 
-Either writes `lamp.glb`, geometry only. No flag mentions a material,
-so the file carries no `materials` array at all, and the implicit
-primitive holds every face with no material, a viewer drawing it with
-the spec's default. `NORMAL` writes by default beside
-`POSITION`:
+Either writes `lamp.glb`, geometry only. No flag mentions a material, so the
+file carries no `materials` array at all. The implicit primitive holds every
+face with no material, and a viewer draws it with the spec's default. `NORMAL`
+writes by default beside `POSITION`:
 
 ```jsonc
 {
@@ -164,16 +159,14 @@ the spec's default. `NORMAL` writes by default beside
 }
 ```
 
-The buffer is the three streams packed: forty positions and forty
-normals at twelve bytes each, sixty `u16` indices at two, 1080 bytes.
-`--voxel-size` defaults to one meter, so positions run zero to
-`[1, 2, 1]`.
+The buffer is the three streams packed: forty positions and forty normals at
+twelve bytes each, sixty `u16` indices at two, 1080 bytes. `--voxel-size`
+defaults to one meter, so positions run zero to `[1, 2, 1]`.
 
 ## The pbr bake
 
-The `pbr` profile ships
-[built in](profile-language.md#built-in-profiles), so no `.vxlconfig`
-is involved:
+The `pbr` profile ships [built in](profile-language.md#built-in-profiles), so no
+`.vxlconfig` is involved:
 
 ```jsonc
 // the built-in profiles, the map the binary embeds
@@ -202,8 +195,8 @@ vxl mesh lamp.voxj
   --profile pbr
 ```
 
-or expanded into its flags, the material count deriving from the
-mentions of material 0:
+or expanded into its flags, the material count deriving from the mentions of
+material 0:
 
 ```sh
 vxl mesh lamp.voxj
@@ -218,20 +211,20 @@ vxl mesh lamp.voxj
   --write-material-slot-value 0 emissiveStrength maxStrength
 ```
 
-The profile evaluates its values over the two swatches: `albedo`
-is the two base colors, `orm` packs occlusion 1 with roughness 0.9
-and 0.4 and metallic 1 and 0, `emissive` is black for the steel and
-`[1, 0.9, 0.6]` for the bulb, its strength 4 over the palette's
-`maxStrength` of 4, and `white` pins `emissiveFactor` against glTF's
-black default.
+The profile evaluates its values over the two swatches:
 
-The [palette atlas](mesh.md#the-palette-atlas) lays one texel per
-swatch. The default `pot` canvas is the smallest square power of two
-holding two texels, 2 by 2, two cells used and two transparent black
-the mesh never samples. Only swatch values write textures, so
-the streams derive `[swatch]`, one `TEXCOORD_0`, each face's UVs at
-its swatch's texel center: `(0.25, 0.25)` for the steel, `(0.75, 0.25)` for
-the bulb.
+1. `albedo` is the two base colors
+2. `orm` packs occlusion 1 with roughness 0.9 and 0.4 and metallic 1 and 0
+3. `emissive` is black for the steel and `[1, 0.9, 0.6]` for the bulb, its
+   strength 4 over the palette's `maxStrength` of 4
+4. `white` pins `emissiveFactor` against glTF's black default
+
+The [palette atlas](mesh.md#the-palette-atlas) lays one texel per swatch. The
+default `pot` canvas is the smallest square power of two holding two texels, 2
+by 2, two cells used and two transparent black the mesh never samples. Only
+swatch values write textures, so the streams derive `[swatch]`, one
+`TEXCOORD_0`, each face's UVs at its swatch's texel center: `(0.25, 0.25)` for
+the steel, `(0.75, 0.25)` for the bulb.
 
 ```jsonc
 {
@@ -300,17 +293,16 @@ the bulb.
 }
 ```
 
-The orm image fills two slots from one embedded copy, and the
-`emissiveStrength` slot lands as the extension with its use declared.
-The bulb's 0.6 alpha rides the albedo texels, but `alphaMode` is
-unwritten and defaults to `OPAQUE`, so the bulb draws solid; the
-[computed enum](#a-computed-enum) below lifts it.
+The orm image fills two slots from one embedded copy. The `emissiveStrength`
+slot lands as the extension with its use declared. The bulb's 0.6 alpha rides
+the albedo texels, but `alphaMode` is unwritten and defaults to `OPAQUE`, so the
+bulb draws solid. The [computed enum](#a-computed-enum) below lifts it.
 
 ## A referenced file
 
-A `.vxlconfig` beside the model defines a profile of its own, a
-matte look that references its albedo map as a file instead of
-embedding it, with the geometry riding the config too:
+A `.vxlconfig` beside the model defines a profile of its own, a matte look that
+references its albedo map as a file instead of embedding it, with the geometry
+riding the config too:
 
 ```jsonc
 {
@@ -358,10 +350,10 @@ vxl mesh lamp.voxj
   --write-material-slot-file 0 baseColorTexture lamp-albedo.png
 ```
 
-The output resolves to `lamp.gltf`, so `{file-stem}` fills as `lamp`
-and the run writes `lamp-albedo.png` beside the mesh. The writer's
-`srgb` token cross-checks against `baseColorTexture`'s own sRGB
-requirement, and the slot references the file by relative path:
+The output resolves to `lamp.gltf`, so `{file-stem}` fills as `lamp` and the run
+writes `lamp-albedo.png` beside the mesh. The writer's `srgb` token cross-checks
+against `baseColorTexture`'s sRGB requirement. The slot references the file by
+relative path:
 
 ```jsonc
 {
@@ -404,14 +396,14 @@ requirement, and the slot references the file by relative path:
 }
 ```
 
-`voxelSize` scales vertex positions alone, so the same forty vertices
-now run to `[0.1, 0.2, 0.1]`.
+`voxelSize` scales vertex positions alone, so the same forty vertices now run to
+`[0.1, 0.2, 0.1]`.
 
 ## The palette pattern
 
-The [palette pattern](mesh.md#palettes) serves a runtime that
-resolves materials itself: rows under the mesh's extras, the index
-they are read by on the primitive, no materials at all.
+The [palette pattern](mesh.md#palettes) serves a runtime that resolves materials
+itself: rows under the mesh's extras, the index they are read by on the
+primitive, no materials at all.
 
 ```jsonc
 // .vxlconfig
@@ -446,8 +438,8 @@ vxl mesh lamp.voxj
   --profile palette
 ```
 
-or expanded into its flags, the primitives entry firing the explicit
-no-material primitive:
+or expanded into its flags, the primitives entry firing the explicit no-material
+primitive:
 
 ```sh
 vxl mesh lamp.voxj
@@ -459,8 +451,8 @@ vxl mesh lamp.voxj
 ```
 
 The built-in `albedo` profile reduces to one value here: a bare
-`--value "albedo = baseColorFactor"` serves the same, the lamp's
-palette supplying every base color.
+`--value "albedo = baseColorFactor"` serves the same, the lamp's palette
+supplying every base color.
 
 ```jsonc
 {
@@ -505,20 +497,18 @@ palette supplying every base color.
 }
 ```
 
-The base's vertices hold index 0 and the bulb's hold 1, and a shader
-reads `values.albedo[_PALETTE]` against rows the runtime can replace
-at will. `NORMAL` stays: the runtime draws this
-mesh itself, so it wants the lighting data, and dropping the stream
-is the explicit `--write-primitive-normal 0 false`.
+The base's vertices hold index 0 and the bulb's hold 1. A shader reads
+`values.albedo[_PALETTE]` against rows the runtime can replace at will. `NORMAL`
+stays: the runtime draws this mesh itself and wants the lighting data. Dropping
+the stream takes the explicit `--write-primitive-normal 0 false`.
 
 ## Baked occlusion
 
-Occlusion varies across a surface, not per swatch, so its
-textures leave the palette layout: flat per face through the
-[unwrap atlas](mesh.md#the-unwrap-atlas), or smooth per corner
-through the [corner atlas](mesh.md#the-corner-atlas). This run bakes
-the flat form, and `step.voxj` has the inside corner that makes it
-visible:
+Occlusion varies across a surface, not per swatch, so its textures leave the
+palette layout: flat per face through the
+[unwrap atlas](mesh.md#the-unwrap-atlas), or smooth per corner through the
+[corner atlas](mesh.md#the-corner-atlas). This run bakes the flat form on
+`step.voxj`, whose inside corner makes it visible:
 
 ```jsonc
 // .vxlconfig: one profile binds the computation and bakes it
@@ -555,11 +545,11 @@ vxl mesh step.voxj
   --write-material-slot-value 0 occlusionTexture ao
 ```
 
-The corners along the riser's foot read below one, the open corners
-read one, and `faceAvg` steps the corner value down to the ten
-faces, one texel each, packed into the smallest power-of-two square
-holding ten, 4 by 4. Only a face value writes a texture, so the
-streams derive `[face]` and the one `TEXCOORD_0` is the face stream:
+The corners along the riser's foot read below one, the open corners read one,
+and `faceAvg` steps the corner value down to the ten faces, one texel each,
+packed into the smallest power-of-two square holding ten, 4 by 4. Only a face
+value writes a texture, so the streams derive `[face]` and the one `TEXCOORD_0`
+is the face stream:
 
 ```jsonc
 {
@@ -602,9 +592,9 @@ streams derive `[face]` and the one `TEXCOORD_0` is the face stream:
 }
 ```
 
-The material carries exactly the one slot the run wrote, base color
-falling to the spec's white default, so the mesh renders as lit stone
-with darkened creases.
+The material carries exactly the one slot the run wrote, base color falling to
+the spec's white default, so the mesh renders as lit stone with darkened
+creases.
 
 Written whole, the corner value skips the reduction and bakes the
 [corner atlas](mesh.md#the-corner-atlas) instead:
@@ -615,10 +605,9 @@ vxl mesh step.voxj
   --write-material-slot-value 0 occlusionTexture computedOcclusion
 ```
 
-Ten faces are ten 2x2 blocks, forty texels in a 4-by-4 canvas of
-cells, 8 by 8. The texture samples linear instead of nearest, the
-streams derive `[corner]`, and each crease shades smooth across its
-face instead of flat:
+Ten faces are ten 2x2 blocks, forty texels in a 4-by-4 canvas of cells, 8 by 8.
+The texture samples linear instead of nearest, the streams derive `[corner]`,
+and each crease shades smooth across its face instead of flat:
 
 ```jsonc
 {
@@ -670,16 +659,15 @@ face instead of flat:
 ```
 
 The `baked-ao` profile in the
-[profile language](profile-language.md#user-defined-profiles) is this
-run's config spelling, a `0.2` floor added.
+[profile language](profile-language.md#user-defined-profiles) is this run's
+config spelling, a `0.2` floor added.
 
 ## A lightmap stream
 
-A stream can exist for texels the run never writes. An engine that
-bakes its own lightmap wants per-face coordinates in the file, so
-the primitive spells a face stream beside the swatch stream its
-albedo
-map reads, and the face entry stays textureless:
+A stream can exist for texels the run never writes. An engine that bakes its own
+lightmap wants per-face coordinates in the file, so the primitive spells a face
+stream beside the swatch stream its albedo map reads. The face entry stays
+textureless:
 
 ```jsonc
 // .vxlconfig
@@ -718,14 +706,13 @@ vxl mesh step.voxj
   --write-primitive-uv 0 face
 ```
 
-No `--material-uv` names the material, so its list derives to
-`[swatch]`, the albedo's domain. The primitive names its streams,
-swatch then face, so `TEXCOORD_0` is the swatch stream the material
-reads and `TEXCOORD_1` is the
-[unwrap atlas](mesh.md#the-unwrap-atlas) layout, ten face cells in a
-4-by-4 canvas with no image behind them. Without its `uvs` entry, the
-primitive would write the material's list, the swatch stream alone,
-and no face stream would exist:
+No `--material-uv` names the material, so its list derives to `[swatch]`, the
+albedo's domain. The primitive names its streams, swatch then face: `TEXCOORD_0`
+is the swatch stream the material reads and `TEXCOORD_1` is the
+[unwrap atlas](mesh.md#the-unwrap-atlas) layout, ten face cells in a 4-by-4
+canvas with no image behind them. Without its `uvs` entry, the primitive would
+write the material's list, the swatch stream alone, and no face stream would
+exist:
 
 ```jsonc
 {
@@ -776,16 +763,16 @@ and no face stream would exist:
 }
 ```
 
-The material's one texture names `texCoord: 0`, and nothing in the
-file points at `TEXCOORD_1`: the engine bakes its lightmap into the
-face layout and samples it by the stream the mesh already carries.
+The material's one texture names `texCoord: 0`, and nothing in the file points
+at `TEXCOORD_1`: the engine bakes its lightmap into the face layout and samples
+it by the stream the mesh already carries.
 
 ## One UV set
 
-A consumer that reads one UV set wants one stream. `--material-uv` is
-the bake contract, and listing `face` alone re-bakes every texture of
-the material there. The swatch albedo climbs, since the lowest listed
-domain at or above swatch is face. The occlusion already lives there:
+A consumer that reads one UV set wants one stream. `--material-uv` sets the bake
+contract, and listing `face` alone re-bakes every texture of the material there.
+The swatch albedo climbs because the lowest listed domain at or above swatch is
+face. The occlusion already lives there:
 
 ```jsonc
 // .vxlconfig
@@ -828,10 +815,10 @@ vxl mesh step.voxj
   --write-material-slot-value 0 occlusionTexture ao
 ```
 
-With `--material-uv 0 face`, both textures share the unwrap atlas
-layout, ten cells in a 4 by 4. The albedo that filled a 1x1 palette canvas now
-spends ten face texels saying the same stone color. That waste is the
-price of the one stream:
+With `--material-uv 0 face`, both textures share the unwrap atlas layout, ten
+cells in a 4 by 4. The albedo that filled a 1x1 palette canvas now spends ten
+face texels saying the same stone color. That waste is the price of the one
+stream:
 
 ```jsonc
 {
@@ -885,9 +872,8 @@ price of the one stream:
 
 Both slots name `texCoord: 0`, the collapse the flag bought.
 
-Without `--material-uv 0 face`, the material entry's `uvs` list, the
-streams derive `[swatch, face]`, each texture at its value's exact
-domain:
+Without `--material-uv 0 face`, the flag the material entry's `uvs` list fires,
+the streams derive `[swatch, face]`, each texture at its value's exact domain:
 
 ```jsonc
 {
@@ -945,17 +931,16 @@ domain:
 }
 ```
 
-The albedo returns to its 1x1 palette canvas, each slot samples its
-own stream, and the consumer that reads one UV set is back to two.
+The albedo returns to its 1x1 palette canvas, each slot samples its own stream,
+and the consumer that reads one UV set is back to two.
 
 ## A crevice split
 
-A runtime that draws weathering into the creases itself wants the
-creased faces in their own primitive, bare of any material. Its
-convention also pins face coordinates to `TEXCOORD_0`. The
-`--material-uv` list orders the material's streams, and
-`--write-primitive-uv` gives the bare primitive a stream its missing
-material would never pull in:
+A runtime that draws weathering into the creases itself wants the creased faces
+in their own primitive, bare of any material. Its convention also pins face
+coordinates to `TEXCOORD_0`. The `--material-uv` list orders the material's
+streams, and `--write-primitive-uv` gives the bare primitive a stream its
+missing material would never pull in:
 
 ```jsonc
 // .vxlconfig
@@ -1012,18 +997,16 @@ vxl mesh step.voxj
   --write-primitive-uv 1 face
 ```
 
-The tread and the riser meeting the inside corner average below one
-and the other eight faces read one, so `crevice` takes exactly those
-two faces and `open` the rest. The `[face, swatch]` list changes no
-bake, since the lowest listed domain at or above swatch is still
-swatch. It pins the order instead. Primitive 0 has no
-`--write-primitive-uv`, so it writes its material's list, both
-domains. Face seats at `TEXCOORD_0`, swatch at
-`TEXCOORD_1`, and the material's `texCoord`s derive to match.
-Primitive 1 names its streams, so it writes exactly the face stream.
-Its `none` material samples nothing, which makes the omitted swatch
-legal. Both primitives' face UVs index the
-one unwrap atlas, ten cells the mesh lays out once:
+The tread and the riser meeting the inside corner average below one and the
+other eight faces read one, so `crevice` takes exactly those two faces and
+`open` the rest. The `[face, swatch]` list changes no bake because the lowest
+listed domain at or above swatch is still swatch. It pins the order instead.
+Primitive 0 has no `--write-primitive-uv` and writes its material's list, both
+domains. Face seats at `TEXCOORD_0`, swatch at `TEXCOORD_1`, and the material's
+`texCoord`s derive to match. Primitive 1 names its streams and writes exactly
+the face stream. Its `none` material samples nothing, which makes the omitted
+swatch legal. Both primitives' face UVs index the one unwrap atlas, ten cells
+the mesh lays out once:
 
 ```jsonc
 {
@@ -1100,12 +1083,12 @@ one unwrap atlas, ten cells the mesh lays out once:
 }
 ```
 
-The two primitives partition the ten faces: thirty-two vertices draw
-as stone, eight ride bare for the runtime's own pass, and every
-face's `TEXCOORD_0` points into the same ten-cell layout.
+The two primitives partition the ten faces: thirty-two vertices draw as stone,
+eight ride bare for the runtime's own pass, and every face's `TEXCOORD_0` points
+into the same ten-cell layout.
 
-Without the three UV flags, the profile's two `uvs` lists, the
-defaults answer:
+Without the three UV flags the profile's two `uvs` lists fire, the defaults
+answer:
 
 ```jsonc
 {
@@ -1177,18 +1160,17 @@ defaults answer:
 }
 ```
 
-The derived list is `[swatch, face]`, ladder order, so face sits at
-`TEXCOORD_1` and the runtime's `TEXCOORD_0` convention breaks. The
-bare primitive's default writes nothing, so the pass that wanted
-face coordinates has none to read. The `--material-uv` pair pins the
-order, and `--write-primitive-uv` writes the stream anyway.
+The derived list is `[swatch, face]`, ladder order: face sits at `TEXCOORD_1`
+and the runtime's `TEXCOORD_0` convention breaks. The bare primitive's default
+writes nothing, so the pass that wanted face coordinates has none to read. The
+`--material-uv` pair pins the order, and `--write-primitive-uv` writes the
+stream anyway.
 
 ## A computed enum
 
-The lamp's bulb carries a 0.6 alpha the [pbr bake](#the-pbr-bake)
-leaves opaque. An enum property takes a plain
-[string](value-language.md#strings), so the mode is computed from the
-palette itself:
+The lamp's bulb carries a 0.6 alpha the [pbr bake](#the-pbr-bake) leaves opaque.
+An enum property takes a plain [string](value-language.md#strings), so the
+profile computes the mode from the palette itself:
 
 ```jsonc
 // .vxlconfig; JSON escapes the inner quotes
@@ -1219,9 +1201,9 @@ vxl mesh lamp.voxj
   --profile glass
 ```
 
-or expanded into its flags, the `glass` values over the built-in
-`albedo` profile they build on, the shell's single quotes carrying
-the inner double quotes through:
+or expanded into its flags, the `glass` values over the built-in `albedo`
+profile they build on, the shell's single quotes carrying the inner double
+quotes through:
 
 ```sh
 vxl mesh lamp.voxj
@@ -1231,10 +1213,10 @@ vxl mesh lamp.voxj
   --write-material-slot-value 0 alphaMode mode
 ```
 
-`baseColorFactor.a` is the entries `[1, 0.6]`, `min` folds them to 0.6,
-the comparison answers true, and `mix` picks `"BLEND"`. The writer
-checks the token against glTF's own `alphaMode` list at the edge, so
-a typo errors with the format named rather than landing in the file:
+`baseColorFactor.a` is the entries `[1, 0.6]`, `min` folds them to 0.6, the
+comparison answers true, and `mix` picks `"BLEND"`. The writer checks the token
+against glTF's `alphaMode` list at the edge, so a typo errors with the format
+named rather than landing in the file:
 
 ```jsonc
 {
@@ -1255,5 +1237,5 @@ a typo errors with the format named rather than landing in the file:
 }
 ```
 
-The albedo texels carry the alpha, `BLEND` makes the viewer honor
-it, and the bulb finally reads as glass.
+The albedo texels carry the alpha, `BLEND` makes the viewer honor it, and the
+bulb finally reads as glass.
