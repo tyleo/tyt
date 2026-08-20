@@ -85,17 +85,17 @@ fn render_markdown(checks: &[VoxjCheck], name: &str) -> String {
 /// `failures` child.
 fn build_json_grid(checks: &[VoxjCheck], name: &str) -> TreeGrid<TreeGridJsonValueCells> {
     let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
-    let name_root_id = grid.add_root(TreeGridLabel::bare("name"));
+    let name_root_id = grid.retain_root(TreeGridLabel::bare("name"));
     grid.push_value(name_root_id, TreeGridJsonValue::new(name));
-    let valid_root_id = grid.add_root(TreeGridLabel::bare("valid"));
+    let valid_root_id = grid.retain_root(TreeGridLabel::bare("valid"));
     grid.push_value(
         valid_root_id,
         TreeGridJsonValue::bool(failed_count(checks) == 0),
     );
 
-    let root_id = grid.add_root(TreeGridLabel::bare("checks"));
+    let root_id = grid.retain_root(TreeGridLabel::bare("checks"));
     for check in checks {
-        let node_id = grid.add_child(root_id, TreeGridLabel::bare(check.name));
+        let node_id = grid.retain_child(root_id, TreeGridLabel::bare(check.name));
         match &check.status {
             VoxjCheckStatus::Passed => {
                 grid.push_value(node_id, TreeGridJsonValue::new("passed"));
@@ -105,7 +105,7 @@ fn build_json_grid(checks: &[VoxjCheck], name: &str) -> TreeGrid<TreeGridJsonVal
             }
             VoxjCheckStatus::Failed(messages) => {
                 grid.push_value(node_id, TreeGridJsonValue::new("failed"));
-                let failures_id = grid.add_child(node_id, TreeGridLabel::bare("failures"));
+                let failures_id = grid.retain_child(node_id, TreeGridLabel::bare("failures"));
                 for message in messages {
                     grid.push_value(failures_id, TreeGridJsonValue::new(message.clone()));
                 }

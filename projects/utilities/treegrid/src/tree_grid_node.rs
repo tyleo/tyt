@@ -6,7 +6,7 @@ use branded_id::U32Id;
 ///
 /// A node with at least one value is a data node; a node may have both
 /// values and children. Children attach at creation through
-/// [`TreeGrid::add_child`](crate::TreeGrid::add_child) and are never
+/// [`TreeGrid::retain_child`](crate::TreeGrid::retain_child) and are never
 /// re-parented, so the forest cannot cycle.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TreeGridNode<V> {

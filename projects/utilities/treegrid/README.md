@@ -6,13 +6,13 @@ nodes, then render it under a chosen layout and label mode.
 ```rust
 let mut grid = TreeGrid::new();
 
-let palette = grid.add_root(TreeGridLabel::bare("0"));
+let palette = grid.retain_root(TreeGridLabel::bare("0"));
 
-let base = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
+let base = grid.retain_child(palette, TreeGridLabel::quoted("baseColorFactor"));
 grid.push_value(base, TreeGridValue::new("#FF0000FF"));
 grid.push_value(base, TreeGridValue::new("#00FF0080"));
 
-let metallic = grid.add_child(palette, TreeGridLabel::quoted("metallicFactor"));
+let metallic = grid.retain_child(palette, TreeGridLabel::quoted("metallicFactor"));
 grid.push_value(metallic, TreeGridValue::new("1"));
 grid.push_value(metallic, TreeGridValue::new("0.2"));
 
@@ -78,7 +78,7 @@ impl TreeGridCells for TextCells {
 }
 
 let mut grid = TreeGrid::with_cells(TextCells);
-let position = grid.add_root(TreeGridLabel::bare("position"));
+let position = grid.retain_root(TreeGridLabel::bare("position"));
 grid.push_value(position, "[12.5, 0.5, 10.0]".to_owned());
 
 let tree = grid.render_hierarchy(&TreeGridHierarchyOptions::default());
@@ -97,7 +97,7 @@ value with a native JSON form when its text and JSON diverge:
 
 ```rust
 let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
-let metallic = grid.add_root(TreeGridLabel::quoted("metallicFactor"));
+let metallic = grid.retain_root(TreeGridLabel::quoted("metallicFactor"));
 grid.push_value(metallic, TreeGridJsonValue::new("1.00").with_json(json!(1.0)));
 
 let json = grid.render_json_compact();

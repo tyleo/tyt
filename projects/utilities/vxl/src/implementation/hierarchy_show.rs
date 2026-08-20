@@ -514,17 +514,19 @@ impl Walk<'_> {
         instance_index
     }
 
-    /// Adds a node under `parent_id`, or as a grid root when there is none.
-    fn add_node(&mut self, parent_id: Option<GridNodeId>, label: TreeGridLabel) -> GridNodeId {
+    /// Retains a node under `parent_id`, or as a grid root when there is none.
+    fn retain_node(&mut self, parent_id: Option<GridNodeId>, label: TreeGridLabel) -> GridNodeId {
         match parent_id {
-            Some(parent_id) => self.grid.add_child(parent_id, label),
-            None => self.grid.add_root(label),
+            Some(parent_id) => self.grid.retain_child(parent_id, label),
+            None => self.grid.retain_root(label),
         }
     }
 
-    /// Adds a leaf under `parent_id` carrying one pre-formatted value.
-    fn add_value_leaf(&mut self, parent_id: GridNodeId, label: impl Into<String>, text: String) {
-        let leaf_id = self.grid.add_child(parent_id, TreeGridLabel::bare(label));
+    /// Retains a leaf under `parent_id` carrying one pre-formatted value.
+    fn retain_value_leaf(&mut self, parent_id: GridNodeId, label: impl Into<String>, text: String) {
+        let leaf_id = self
+            .grid
+            .retain_child(parent_id, TreeGridLabel::bare(label));
         self.grid.push_value(leaf_id, TreeGridValue::new(text));
     }
 
@@ -561,7 +563,7 @@ impl Walk<'_> {
             let parent_id = placement
                 .path
                 .contains('/')
-                .then(|| self.grid.add_root(TreeGridLabel::bare("ancestors")));
+                .then(|| self.grid.retain_root(TreeGridLabel::bare("ancestors")));
 
             self.build_placement(placement, parent_id);
         }
@@ -611,7 +613,7 @@ impl Walk<'_> {
             return;
         }
 
-        let section_id = self.grid.add_root(TreeGridLabel::bare(header));
+        let section_id = self.grid.retain_root(TreeGridLabel::bare(header));
 
         // A section root has no parent, so it starts from the identity.
         let identity = TyTransformF64::default();
@@ -659,7 +661,7 @@ impl Walk<'_> {
         let scene = self.scene;
 
         let Some(node) = scene.state.hierarchy_node(id) else {
-            self.add_node(
+            self.retain_node(
                 parent_id,
                 TreeGridLabel::bare(format!("missing node {}", id.to_u32())),
             );
@@ -687,7 +689,7 @@ impl Walk<'_> {
             tag.push_str(", cycle: true");
         }
 
-        let grid_node_id = self.add_node(parent_id, TreeGridLabel::quoted(node.name.as_str()));
+        let grid_node_id = self.retain_node(parent_id, TreeGridLabel::quoted(node.name.as_str()));
 
         self.grid
             .push_value(grid_node_id, TreeGridValue::new(format!("{{{tag}}}")));
@@ -736,7 +738,7 @@ impl Walk<'_> {
 
         if self.collapse_descendants() && self.is_root(path) && has_children {
             self.grid
-                .add_child(grid_node_id, TreeGridLabel::bare("descendants"));
+                .retain_child(grid_node_id, TreeGridLabel::bare("descendants"));
         } else {
             for (child_id, child_path) in visible_child_nodes {
                 self.build_node(child_id, Some(grid_node_id), &child_path, world, branch);
@@ -766,7 +768,7 @@ impl Walk<'_> {
 
         let subtree_id = self
             .grid
-            .add_child(parent_id, TreeGridLabel::bare("transform"));
+            .retain_child(parent_id, TreeGridLabel::bare("transform"));
 
         let mut rotation = transform.rotation.to_euler_radians();
 
@@ -776,19 +778,19 @@ impl Walk<'_> {
 
         let precision = view.precision;
 
-        self.add_value_leaf(
+        self.retain_value_leaf(
             subtree_id,
             "position",
             format!("[{}]", format_vec3(transform.position, precision)),
         );
 
-        self.add_value_leaf(
+        self.retain_value_leaf(
             subtree_id,
             "rotation",
             format!("[{}]", format_vec3(rotation, precision)),
         );
 
-        self.add_value_leaf(
+        self.retain_value_leaf(
             subtree_id,
             "scale",
             format!("[{}]", format_vec3(transform.scale, precision)),
@@ -806,7 +808,7 @@ impl Walk<'_> {
         let scene = self.scene;
 
         let Some(object) = scene.state.object(id) else {
-            self.add_node(
+            self.retain_node(
                 parent_id,
                 TreeGridLabel::bare(format!("missing object {}", id.to_u32())),
             );
@@ -821,7 +823,7 @@ impl Walk<'_> {
             tag.push_str(&format!(", instance: {instance_index}"));
         }
 
-        let grid_node_id = self.add_node(parent_id, TreeGridLabel::quoted(object.name()));
+        let grid_node_id = self.retain_node(parent_id, TreeGridLabel::quoted(object.name()));
 
         self.grid
             .push_value(grid_node_id, TreeGridValue::new(format!("{{{tag}}}")));
@@ -910,33 +912,35 @@ impl Walk<'_> {
                     None => "null".to_string(),
                 };
 
-                self.add_value_leaf(parent_id, *label, text);
+                self.retain_value_leaf(parent_id, *label, text);
             }
 
             ObjectRow::Count { label, value } => {
-                self.add_value_leaf(parent_id, *label, value.to_string())
+                self.retain_value_leaf(parent_id, *label, value.to_string())
             }
 
             ObjectRow::Bounds {
                 label,
                 corners: None,
                 ..
-            } => self.add_value_leaf(parent_id, *label, "null".to_string()),
+            } => self.retain_value_leaf(parent_id, *label, "null".to_string()),
 
             ObjectRow::Bounds {
                 label,
                 corners: Some((min, max)),
                 precision,
             } => {
-                let subtree_id = self.grid.add_child(parent_id, TreeGridLabel::bare(*label));
+                let subtree_id = self
+                    .grid
+                    .retain_child(parent_id, TreeGridLabel::bare(*label));
 
-                self.add_value_leaf(
+                self.retain_value_leaf(
                     subtree_id,
                     "min",
                     format!("[{}]", format_vec3(*min, *precision)),
                 );
 
-                self.add_value_leaf(
+                self.retain_value_leaf(
                     subtree_id,
                     "max",
                     format!("[{}]", format_vec3(*max, *precision)),
@@ -949,19 +953,19 @@ impl Walk<'_> {
     /// object has none.
     fn build_layers(&mut self, parent_id: GridNodeId, object: &VoxObject) {
         if object.layer_count() == 0 {
-            self.add_value_leaf(parent_id, "layers", "[]".to_string());
+            self.retain_value_leaf(parent_id, "layers", "[]".to_string());
             return;
         }
 
         let subtree_id = self
             .grid
-            .add_child(parent_id, TreeGridLabel::bare("layers"));
+            .retain_child(parent_id, TreeGridLabel::bare("layers"));
 
         for (_, palette_id) in object.iter_layers() {
             match self.scene.state.palette(palette_id) {
                 Some(palette) => {
                     let materials = palette.material_count();
-                    self.add_value_leaf(
+                    self.retain_value_leaf(
                         subtree_id,
                         palette_id.to_u32().to_string(),
                         format!("{{materials: {materials}}}"),
@@ -969,7 +973,7 @@ impl Walk<'_> {
                 }
 
                 None => {
-                    self.grid.add_child(
+                    self.grid.retain_child(
                         subtree_id,
                         TreeGridLabel::bare(format!("missing palette {}", palette_id.to_u32())),
                     );

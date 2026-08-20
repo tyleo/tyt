@@ -5,11 +5,11 @@ use std::fmt::{Debug, Formatter, Result as FmtResult};
 /// An ordered forest of labeled, data-bearing nodes in an append-only
 /// arena, rendered through a cell policy.
 ///
-/// Populate with [`add_root`](Self::add_root) and
-/// [`add_child`](Self::add_child), then attach data with
+/// Populate with [`retain_root`](Self::retain_root) and
+/// [`retain_child`](Self::retain_child), then attach data with
 /// [`push_value`](Self::push_value) and edit nodes through
 /// [`node_mut`](Self::node_mut). Nodes attach to their parent at
-/// creation and are never removed or re-parented, so the forest cannot
+/// creation and are never released or re-parented, so the forest cannot
 /// cycle. Ids are dense indices into this grid and are meaningful only
 /// within it.
 ///
@@ -52,19 +52,19 @@ impl<C: TreeGridCells> TreeGrid<C> {
         &self.cells
     }
 
-    /// Appends a root node and returns its id.
-    pub fn add_root(&mut self, label: TreeGridLabel) -> U32Id<BTreeGridNode> {
+    /// Retains a root node and returns its id.
+    pub fn retain_root(&mut self, label: TreeGridLabel) -> U32Id<BTreeGridNode> {
         let id = self.push_node(label);
         self.roots.push(id);
         id
     }
 
-    /// Appends a child under `parent` and returns its id.
+    /// Retains a child under `parent` and returns its id.
     ///
     /// # Panics
     ///
     /// Panics if `parent` is not an id of this grid.
-    pub fn add_child(
+    pub fn retain_child(
         &mut self,
         parent: U32Id<BTreeGridNode>,
         label: TreeGridLabel,
@@ -165,10 +165,10 @@ mod tests {
     use std::borrow::Cow;
 
     #[test]
-    fn adds_roots_in_insertion_order() {
+    fn retains_roots_in_insertion_order() {
         let mut grid = TreeGrid::new();
-        let first = grid.add_root(TreeGridLabel::bare("0"));
-        let second = grid.add_root(TreeGridLabel::bare("1"));
+        let first = grid.retain_root(TreeGridLabel::bare("0"));
+        let second = grid.retain_root(TreeGridLabel::bare("1"));
 
         assert_eq!(grid.roots(), &[first, second]);
         assert_eq!(grid.node(first).label, TreeGridLabel::bare("0"));
@@ -178,10 +178,10 @@ mod tests {
     #[test]
     fn attaches_children_in_insertion_order() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("root"));
-        let first = grid.add_child(root, TreeGridLabel::quoted("energy-tank-1"));
-        let second = grid.add_child(root, TreeGridLabel::quoted("energy-tank-2"));
-        let grandchild = grid.add_child(first, TreeGridLabel::bare("transform"));
+        let root = grid.retain_root(TreeGridLabel::bare("root"));
+        let first = grid.retain_child(root, TreeGridLabel::quoted("energy-tank-1"));
+        let second = grid.retain_child(root, TreeGridLabel::quoted("energy-tank-2"));
+        let grandchild = grid.retain_child(first, TreeGridLabel::bare("transform"));
 
         assert_eq!(grid.node(root).children(), &[first, second]);
         assert_eq!(grid.node(first).children(), &[grandchild]);
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn a_new_node_is_empty_with_no_format() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("root"));
+        let root = grid.retain_root(TreeGridLabel::bare("root"));
         let node = grid.node(root);
 
         assert_eq!(node.annotation, None);
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn pushes_values_in_order() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("0"));
+        let root = grid.retain_root(TreeGridLabel::bare("0"));
         grid.push_value(root, TreeGridValue::new("255"));
         grid.push_value(root, TreeGridValue::new("128"));
 
@@ -219,7 +219,7 @@ mod tests {
     #[test]
     fn node_mut_edits_annotation_format_and_values() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("energy-tank"));
+        let root = grid.retain_root(TreeGridLabel::bare("energy-tank"));
         let node = grid.node_mut(root);
         node.annotation = Some("(Group)".to_owned());
         node.format = Some(TreeGridCellFormat::Text);
@@ -231,9 +231,9 @@ mod tests {
     #[test]
     fn ids_are_distinct_across_the_forest() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("root"));
-        let child = grid.add_child(root, TreeGridLabel::bare("transform"));
-        let sibling_root = grid.add_root(TreeGridLabel::bare("unplaced"));
+        let root = grid.retain_root(TreeGridLabel::bare("root"));
+        let child = grid.retain_child(root, TreeGridLabel::bare("transform"));
+        let sibling_root = grid.retain_root(TreeGridLabel::bare("unplaced"));
 
         assert_ne!(root, child);
         assert_ne!(root, sibling_root);
@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn a_custom_policy_stores_its_own_value_type() {
         let mut grid = TreeGrid::with_cells(StringCells);
-        let root = grid.add_root(TreeGridLabel::bare("position"));
+        let root = grid.retain_root(TreeGridLabel::bare("position"));
         grid.push_value(root, "[12.5, 0.5, 10.0]".to_owned());
 
         let value = &grid.node(root).values[0];

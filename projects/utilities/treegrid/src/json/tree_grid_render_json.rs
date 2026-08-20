@@ -84,16 +84,16 @@ mod tests {
     /// policy.
     fn worked_example() -> TreeGrid<TreeGridJsonValueCells> {
         let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let base = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let base = grid.retain_child(palette, TreeGridLabel::quoted("baseColorFactor"));
         grid.push_value(base, TreeGridJsonValue::srgba8([255, 0, 0, 255]));
         grid.push_value(base, TreeGridJsonValue::srgba8([0, 255, 0, 128]));
-        let metallic = grid.add_child(palette, TreeGridLabel::quoted("metallicFactor"));
+        let metallic = grid.retain_child(palette, TreeGridLabel::quoted("metallicFactor"));
         grid.push_value(metallic, TreeGridJsonValue::unorm(1.0));
         grid.push_value(metallic, TreeGridJsonValue::unorm(0.2));
-        let second = grid.add_root(TreeGridLabel::bare("1"));
-        let attribute = grid.add_child(second, TreeGridLabel::quoted("baseColorFactor"));
-        let component = grid.add_child(attribute, TreeGridLabel::bare("a"));
+        let second = grid.retain_root(TreeGridLabel::bare("1"));
+        let attribute = grid.retain_child(second, TreeGridLabel::quoted("baseColorFactor"));
+        let component = grid.retain_child(attribute, TreeGridLabel::bare("a"));
         grid.push_value(component, TreeGridJsonValue::unorm8(255));
         grid
     }
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn pretty_indents_the_same_envelope() {
         let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
-        let root = grid.add_root(TreeGridLabel::bare("0"));
+        let root = grid.retain_root(TreeGridLabel::bare("0"));
         grid.push_value(root, TreeGridJsonValue::unorm8(255));
 
         assert_eq!(
@@ -132,10 +132,10 @@ mod tests {
     #[test]
     fn a_record_carries_label_annotation_values_and_children() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::quoted("energy-tank"));
+        let root = grid.retain_root(TreeGridLabel::quoted("energy-tank"));
         grid.node_mut(root).annotation = Some("(Group)".to_owned());
         grid.push_value(root, TreeGridValue::new("{node: 0}"));
-        let child = grid.add_child(root, TreeGridLabel::bare("transform"));
+        let child = grid.retain_child(root, TreeGridLabel::bare("transform"));
         grid.push_value(child, TreeGridValue::new("[12.5, 0.5, 10.0]"));
 
         assert_eq!(
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn labels_emit_raw_text_without_quote_wrapping() {
         let mut grid = TreeGrid::new();
-        grid.add_root(TreeGridLabel::quoted("has \"quotes\""));
+        grid.retain_root(TreeGridLabel::quoted("has \"quotes\""));
 
         assert_eq!(
             grid.render_json_compact(),
@@ -160,9 +160,9 @@ mod tests {
     #[test]
     fn duplicate_sibling_labels_survive() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("root"));
+        let root = grid.retain_root(TreeGridLabel::bare("root"));
         for _ in 0..2 {
-            let door = grid.add_child(root, TreeGridLabel::quoted("door"));
+            let door = grid.retain_child(root, TreeGridLabel::quoted("door"));
             grid.push_value(door, TreeGridValue::new("open"));
         }
 
@@ -177,7 +177,7 @@ mod tests {
     #[test]
     fn values_carry_their_native_json_forms() {
         let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
-        let root = grid.add_root(TreeGridLabel::bare("values"));
+        let root = grid.retain_root(TreeGridLabel::bare("values"));
         grid.push_value(root, TreeGridJsonValue::int(-3));
         grid.push_value(root, TreeGridJsonValue::bool(true));
         grid.push_value(root, TreeGridJsonValue::json(json!({"node": 0})));

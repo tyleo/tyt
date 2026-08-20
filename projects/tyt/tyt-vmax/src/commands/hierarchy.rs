@@ -361,7 +361,7 @@ impl Builder<'_> {
         for node in self.collect_match_roots() {
             let parent = self.parent_of[node]
                 .is_some()
-                .then(|| self.grid.add_root(TreeGridLabel::bare("ancestors")));
+                .then(|| self.grid.retain_root(TreeGridLabel::bare("ancestors")));
             self.build_node(node, parent);
         }
     }
@@ -395,7 +395,7 @@ impl Builder<'_> {
             (node.name.clone(), node.is_group)
         };
 
-        let grid_node = self.add_node(parent, TreeGridLabel::bare(name));
+        let grid_node = self.retain_node(parent, TreeGridLabel::bare(name));
         let kind = if is_group { "(Group)" } else { "(Object)" };
         self.grid.node_mut(grid_node).annotation = Some(kind.to_owned());
 
@@ -420,7 +420,7 @@ impl Builder<'_> {
 
             if self.collapse_descendants && self.is_match_root(index) && !kids.is_empty() {
                 self.grid
-                    .add_child(grid_node, TreeGridLabel::bare("descendants"));
+                    .retain_child(grid_node, TreeGridLabel::bare("descendants"));
             } else {
                 for kid in kids {
                     self.build_node(kid, Some(grid_node));
@@ -429,17 +429,17 @@ impl Builder<'_> {
         }
     }
 
-    /// Adds a node under `parent`, or as a grid root when there is none.
-    fn add_node(&mut self, parent: Option<GridNodeId>, label: TreeGridLabel) -> GridNodeId {
+    /// Retains a node under `parent`, or as a grid root when there is none.
+    fn retain_node(&mut self, parent: Option<GridNodeId>, label: TreeGridLabel) -> GridNodeId {
         match parent {
-            Some(parent) => self.grid.add_child(parent, label),
-            None => self.grid.add_root(label),
+            Some(parent) => self.grid.retain_child(parent, label),
+            None => self.grid.retain_root(label),
         }
     }
 
-    /// Adds a leaf under `parent` carrying one pre-formatted value.
-    fn add_value_leaf(&mut self, parent: GridNodeId, label: &str, text: String) {
-        let leaf = self.grid.add_child(parent, TreeGridLabel::bare(label));
+    /// Retains a leaf under `parent` carrying one pre-formatted value.
+    fn retain_value_leaf(&mut self, parent: GridNodeId, label: &str, text: String) {
+        let leaf = self.grid.retain_child(parent, TreeGridLabel::bare(label));
         self.grid.push_value(leaf, TreeGridValue::new(text));
     }
 
@@ -488,10 +488,10 @@ impl Builder<'_> {
         let precision = view.precision;
         let subtree = self
             .grid
-            .add_child(parent, TreeGridLabel::bare("transform"));
-        self.add_value_leaf(subtree, "position", fmt3(resolved.position, precision));
-        self.add_value_leaf(subtree, "rotation", fmt3(rotation, precision));
-        self.add_value_leaf(subtree, "scale", fmt3(resolved.scale, precision));
+            .retain_child(parent, TreeGridLabel::bare("transform"));
+        self.retain_value_leaf(subtree, "position", fmt3(resolved.position, precision));
+        self.retain_value_leaf(subtree, "rotation", fmt3(rotation, precision));
+        self.retain_value_leaf(subtree, "scale", fmt3(resolved.scale, precision));
     }
 
     fn build_bounds(&mut self, index: usize, parent: GridNodeId) {
@@ -500,9 +500,11 @@ impl Builder<'_> {
             return;
         };
 
-        let subtree = self.grid.add_child(parent, TreeGridLabel::bare("bounds"));
-        self.add_value_leaf(subtree, "min", fmt3(min, precision));
-        self.add_value_leaf(subtree, "max", fmt3(max, precision));
+        let subtree = self
+            .grid
+            .retain_child(parent, TreeGridLabel::bare("bounds"));
+        self.retain_value_leaf(subtree, "min", fmt3(min, precision));
+        self.retain_value_leaf(subtree, "max", fmt3(max, precision));
     }
 }
 

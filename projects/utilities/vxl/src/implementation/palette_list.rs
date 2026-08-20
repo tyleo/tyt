@@ -85,14 +85,14 @@ fn build_grid(
     fields: PaletteListFields,
 ) -> TreeGrid<TreeGridJsonValueCells> {
     let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
-    let root_id = grid.add_root(TreeGridLabel::bare("palettes"));
+    let root_id = grid.retain_root(TreeGridLabel::bare("palettes"));
     for (palette_id, palette) in palettes {
-        let branch_id = grid.add_child(
+        let branch_id = grid.retain_child(
             root_id,
             TreeGridLabel::bare(palette_id.to_u32().to_string()),
         );
         if fields.materials {
-            let materials_id = grid.add_child(branch_id, TreeGridLabel::bare("materials"));
+            let materials_id = grid.retain_child(branch_id, TreeGridLabel::bare("materials"));
             grid.push_value(
                 materials_id,
                 TreeGridJsonValue::int(palette.material_count() as i64),
@@ -103,14 +103,14 @@ fn build_grid(
                 .into_iter()
                 .map(|name| TreeGridLabel::quoted(name.to_owned()))
                 .collect();
-            add_names_subtree(&mut grid, branch_id, "properties", names);
+            retain_names_subtree(&mut grid, branch_id, "properties", names);
         }
         if fields.objects {
             let names = referencing_names(state, *palette_id)
                 .into_iter()
                 .map(TreeGridLabel::quoted)
                 .collect();
-            add_names_subtree(&mut grid, branch_id, "objects", names);
+            retain_names_subtree(&mut grid, branch_id, "objects", names);
         }
     }
     grid
@@ -122,26 +122,26 @@ fn build_grid(
 /// column appears in every row.
 fn build_records_grid(state: &VoxMain, palettes: &[Entry], fields: PaletteListFields) -> TreeGrid {
     let mut grid = TreeGrid::new();
-    let root_id = grid.add_root(TreeGridLabel::bare("palettes"));
+    let root_id = grid.retain_root(TreeGridLabel::bare("palettes"));
     for (palette_id, palette) in palettes {
-        let row_id = grid.add_child(
+        let row_id = grid.retain_child(
             root_id,
             TreeGridLabel::bare(palette_id.to_u32().to_string()),
         );
         if fields.properties {
             let cell = implementation::property_names(palette).join(", ");
-            let node_id = grid.add_child(row_id, TreeGridLabel::bare("properties"));
+            let node_id = grid.retain_child(row_id, TreeGridLabel::bare("properties"));
             grid.push_value(node_id, TreeGridValue::new(cell));
         }
         if fields.materials {
-            let node_id = grid.add_child(row_id, TreeGridLabel::bare("materials"));
+            let node_id = grid.retain_child(row_id, TreeGridLabel::bare("materials"));
             grid.push_value(
                 node_id,
                 TreeGridValue::new(palette.material_count().to_string()),
             );
         }
         if fields.objects {
-            let node_id = grid.add_child(row_id, TreeGridLabel::bare("objects"));
+            let node_id = grid.retain_child(row_id, TreeGridLabel::bare("objects"));
             grid.push_value(
                 node_id,
                 TreeGridValue::new(referencing_names(state, *palette_id).join(", ")),
@@ -151,21 +151,21 @@ fn build_records_grid(state: &VoxMain, palettes: &[Entry], fields: PaletteListFi
     grid
 }
 
-/// Adds a `header` subtree under `parent_id` with one child per label, or a
+/// Retains a `header` subtree under `parent_id` with one child per label, or a
 /// `header: []` leaf when `labels` is empty.
-fn add_names_subtree(
+fn retain_names_subtree(
     grid: &mut TreeGrid<TreeGridJsonValueCells>,
     parent_id: U32Id<BTreeGridNode>,
     header: &str,
     labels: Vec<TreeGridLabel>,
 ) {
-    let subtree_id = grid.add_child(parent_id, TreeGridLabel::bare(header));
+    let subtree_id = grid.retain_child(parent_id, TreeGridLabel::bare(header));
     if labels.is_empty() {
         grid.push_value(subtree_id, TreeGridJsonValue::new("[]"));
         return;
     }
     for label in labels {
-        grid.add_child(subtree_id, label);
+        grid.retain_child(subtree_id, label);
     }
 }
 

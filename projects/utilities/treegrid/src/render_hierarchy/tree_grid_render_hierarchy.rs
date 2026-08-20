@@ -135,18 +135,18 @@ mod tests {
     #[test]
     fn a_bare_root_prints_alone_above_its_connectored_subtree() {
         let mut grid = TreeGrid::new();
-        let palettes = grid.add_root(TreeGridLabel::bare("palettes"));
-        let first = grid.add_child(palettes, TreeGridLabel::bare("0"));
-        let count = grid.add_child(first, TreeGridLabel::bare("materialCount"));
+        let palettes = grid.retain_root(TreeGridLabel::bare("palettes"));
+        let first = grid.retain_child(palettes, TreeGridLabel::bare("0"));
+        let count = grid.retain_child(first, TreeGridLabel::bare("materialCount"));
         grid.push_value(count, TreeGridValue::int(2));
-        let attributes = grid.add_child(first, TreeGridLabel::bare("attributes"));
-        grid.add_child(attributes, TreeGridLabel::bare("baseColorFactor"));
-        grid.add_child(attributes, TreeGridLabel::bare("metallicFactor"));
-        let objects = grid.add_child(first, TreeGridLabel::bare("objects"));
-        grid.add_child(objects, TreeGridLabel::bare("a"));
-        grid.add_child(objects, TreeGridLabel::bare("b"));
-        let second = grid.add_child(palettes, TreeGridLabel::bare("1"));
-        let count = grid.add_child(second, TreeGridLabel::bare("materialCount"));
+        let attributes = grid.retain_child(first, TreeGridLabel::bare("attributes"));
+        grid.retain_child(attributes, TreeGridLabel::bare("baseColorFactor"));
+        grid.retain_child(attributes, TreeGridLabel::bare("metallicFactor"));
+        let objects = grid.retain_child(first, TreeGridLabel::bare("objects"));
+        grid.retain_child(objects, TreeGridLabel::bare("a"));
+        grid.retain_child(objects, TreeGridLabel::bare("b"));
+        let second = grid.retain_child(palettes, TreeGridLabel::bare("1"));
+        let count = grid.retain_child(second, TreeGridLabel::bare("materialCount"));
         grid.push_value(count, TreeGridValue::int(1));
 
         let options = TreeGridHierarchyOptions::default().with_bare_roots(true);
@@ -169,11 +169,11 @@ mod tests {
     #[test]
     fn connectored_roots_render_as_annotated_siblings() {
         let mut grid = TreeGrid::new();
-        let group = grid.add_root(TreeGridLabel::bare("energy-tank"));
+        let group = grid.retain_root(TreeGridLabel::bare("energy-tank"));
         grid.node_mut(group).annotation = Some("(Group)".to_owned());
-        let object = grid.add_child(group, TreeGridLabel::bare("energy-tank-1"));
+        let object = grid.retain_child(group, TreeGridLabel::bare("energy-tank-1"));
         grid.node_mut(object).annotation = Some("(Object)".to_owned());
-        let reactor = grid.add_root(TreeGridLabel::bare("energy-reactor"));
+        let reactor = grid.retain_root(TreeGridLabel::bare("energy-reactor"));
         grid.node_mut(reactor).annotation = Some("(Object)".to_owned());
 
         assert_eq!(
@@ -187,10 +187,10 @@ mod tests {
     #[test]
     fn a_marker_root_takes_a_connector_like_a_collapsed_ancestors_list() {
         let mut grid = TreeGrid::new();
-        let ancestors = grid.add_root(TreeGridLabel::bare("ancestors"));
-        let hand = grid.add_child(ancestors, TreeGridLabel::quoted("hand"));
+        let ancestors = grid.retain_root(TreeGridLabel::bare("ancestors"));
+        let hand = grid.retain_child(ancestors, TreeGridLabel::quoted("hand"));
         grid.push_value(hand, TreeGridValue::new("{node: 0}"));
-        let mesh = grid.add_child(hand, TreeGridLabel::quoted("handMesh"));
+        let mesh = grid.retain_child(hand, TreeGridLabel::quoted("handMesh"));
         grid.push_value(mesh, TreeGridValue::new("{object: 0}"));
 
         assert_eq!(
@@ -204,17 +204,17 @@ mod tests {
     #[test]
     fn bare_root_sections_separate_with_a_blank_line() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("root"));
-        let node = grid.add_child(root, TreeGridLabel::quoted("root"));
+        let root = grid.retain_root(TreeGridLabel::bare("root"));
+        let node = grid.retain_child(root, TreeGridLabel::quoted("root"));
         grid.push_value(node, TreeGridValue::new("{node: 0}"));
-        let body = grid.add_child(node, TreeGridLabel::quoted("body"));
+        let body = grid.retain_child(node, TreeGridLabel::quoted("body"));
         grid.push_value(body, TreeGridValue::new("{object: 0}"));
-        let unplaced = grid.add_root(TreeGridLabel::bare("unplaced"));
-        let spare = grid.add_child(unplaced, TreeGridLabel::quoted("spareNode"));
+        let unplaced = grid.retain_root(TreeGridLabel::bare("unplaced"));
+        let spare = grid.retain_child(unplaced, TreeGridLabel::quoted("spareNode"));
         grid.push_value(spare, TreeGridValue::new("{node: 1}"));
-        let spare_child = grid.add_child(spare, TreeGridLabel::quoted("spareChild"));
+        let spare_child = grid.retain_child(spare, TreeGridLabel::quoted("spareChild"));
         grid.push_value(spare_child, TreeGridValue::new("{object: 2}"));
-        let loose = grid.add_child(unplaced, TreeGridLabel::quoted("looseMesh"));
+        let loose = grid.retain_child(unplaced, TreeGridLabel::quoted("looseMesh"));
         grid.push_value(loose, TreeGridValue::new("{object: 1}"));
 
         let options = TreeGridHierarchyOptions::default().with_bare_roots(true);
@@ -234,15 +234,15 @@ mod tests {
     #[test]
     fn a_branch_with_values_keeps_its_children_beneath() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("root"));
-        let tank = grid.add_child(root, TreeGridLabel::quoted("energy-tank-1"));
+        let root = grid.retain_root(TreeGridLabel::bare("root"));
+        let tank = grid.retain_child(root, TreeGridLabel::quoted("energy-tank-1"));
         grid.push_value(tank, TreeGridValue::new("{node: 0}"));
-        let transform = grid.add_child(tank, TreeGridLabel::bare("transform"));
-        let position = grid.add_child(transform, TreeGridLabel::bare("position"));
+        let transform = grid.retain_child(tank, TreeGridLabel::bare("transform"));
+        let position = grid.retain_child(transform, TreeGridLabel::bare("position"));
         grid.push_value(position, TreeGridValue::new("[12.5, 0.5, 10.0]"));
-        let scale = grid.add_child(transform, TreeGridLabel::bare("scale"));
+        let scale = grid.retain_child(transform, TreeGridLabel::bare("scale"));
         grid.push_value(scale, TreeGridValue::new("[1.0, 1.0, 1.0]"));
-        let object = grid.add_child(tank, TreeGridLabel::quoted("energy-tank-1"));
+        let object = grid.retain_child(tank, TreeGridLabel::quoted("energy-tank-1"));
         grid.push_value(object, TreeGridValue::new("{object: 0, instance: 0}"));
 
         let options = TreeGridHierarchyOptions::default().with_bare_roots(true);
@@ -260,12 +260,12 @@ mod tests {
     #[test]
     fn value_children_print_one_cell_per_line_before_the_child_nodes() {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let attribute = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let attribute = grid.retain_child(palette, TreeGridLabel::quoted("baseColorFactor"));
         grid.node_mut(attribute).format = Some(TreeGridCellFormat::Text);
         grid.push_value(attribute, TreeGridValue::srgba8([255, 0, 0, 255]));
         grid.push_value(attribute, TreeGridValue::srgba8([0, 255, 0, 128]));
-        let component = grid.add_child(attribute, TreeGridLabel::bare("a"));
+        let component = grid.retain_child(attribute, TreeGridLabel::bare("a"));
         grid.node_mut(component).format = Some(TreeGridCellFormat::Text);
         grid.push_value(component, TreeGridValue::unorm8(255));
 
@@ -284,7 +284,7 @@ mod tests {
     #[test]
     fn an_annotated_data_node_renders_label_annotation_then_cells() {
         let mut grid = TreeGrid::new();
-        let node = grid.add_root(TreeGridLabel::bare("energy-tank"));
+        let node = grid.retain_root(TreeGridLabel::bare("energy-tank"));
         grid.node_mut(node).annotation = Some("(Group)".to_owned());
         grid.push_value(node, TreeGridValue::int(3));
 
@@ -297,7 +297,7 @@ mod tests {
     #[test]
     fn an_inline_visual_series_abuts_into_a_strip() {
         let mut grid = TreeGrid::new();
-        let attribute = grid.add_root(TreeGridLabel::quoted("baseColorFactor"));
+        let attribute = grid.retain_root(TreeGridLabel::quoted("baseColorFactor"));
         grid.node_mut(attribute).format = Some(TreeGridCellFormat::Visual);
         grid.push_value(attribute, TreeGridValue::srgba8([255, 0, 0, 255]));
         grid.push_value(attribute, TreeGridValue::srgba8([0, 255, 0, 128]));

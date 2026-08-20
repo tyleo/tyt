@@ -74,47 +74,47 @@ fn render_tables(state: &VoxMain, format: Format, voxj_version: Option<u32>, nam
 fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>) -> TreeGrid {
     let mut grid = TreeGrid::new();
 
-    let document_root_id = grid.add_root(TreeGridLabel::bare("document"));
-    add_cell(
+    let document_root_id = grid.retain_root(TreeGridLabel::bare("document"));
+    retain_cell(
         &mut grid,
         document_root_id,
         "format",
         format.name().to_string(),
     );
     if let Some(version) = voxj_version {
-        add_cell(
+        retain_cell(
             &mut grid,
             document_root_id,
             "voxj_version",
             version.to_string(),
         );
     }
-    add_cell(
+    retain_cell(
         &mut grid,
         document_root_id,
         "has_ext",
         yes_no(state.ext().is_some()).to_string(),
     );
-    add_cell(
+    retain_cell(
         &mut grid,
         document_root_id,
         "has_edit",
         yes_no(has_edit(state)).to_string(),
     );
 
-    let palettes_root_id = grid.add_root(TreeGridLabel::bare("palettes"));
+    let palettes_root_id = grid.retain_root(TreeGridLabel::bare("palettes"));
     for (palette_id, palette) in state.iter_palettes() {
-        let row_id = grid.add_child(
+        let row_id = grid.retain_child(
             palettes_root_id,
             TreeGridLabel::bare(palette_id.to_u32().to_string()),
         );
-        add_cell(
+        retain_cell(
             &mut grid,
             row_id,
             "properties",
             implementation::property_names(palette).join(", "),
         );
-        add_cell(
+        retain_cell(
             &mut grid,
             row_id,
             "materials",
@@ -122,9 +122,9 @@ fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>
         );
     }
 
-    let objects_root_id = grid.add_root(TreeGridLabel::bare("objects"));
+    let objects_root_id = grid.retain_root(TreeGridLabel::bare("objects"));
     for (object_id, object) in state.iter_objects() {
-        let row_id = grid.add_child(
+        let row_id = grid.retain_child(
             objects_root_id,
             TreeGridLabel::bare(object_id.to_u32().to_string()),
         );
@@ -133,22 +133,22 @@ fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>
             Some(edit) => dimensions(edit),
             None => "-".to_string(),
         };
-        add_cell(&mut grid, row_id, "name", object.name().to_string());
-        add_cell(
+        retain_cell(&mut grid, row_id, "name", object.name().to_string());
+        retain_cell(
             &mut grid,
             row_id,
             "bounds",
             dimensions(content_bounds(object)),
         );
-        add_cell(&mut grid, row_id, "edit_bounds", edit);
-        add_cell(
+        retain_cell(&mut grid, row_id, "edit_bounds", edit);
+        retain_cell(
             &mut grid,
             row_id,
             "origin",
             format!("{}, {}, {}", origin.x, origin.y, origin.z),
         );
-        add_cell(&mut grid, row_id, "voxels", object.live_count().to_string());
-        add_cell(
+        retain_cell(&mut grid, row_id, "voxels", object.live_count().to_string());
+        retain_cell(
             &mut grid,
             row_id,
             "layers",
@@ -158,10 +158,10 @@ fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>
     grid
 }
 
-/// Adds a `label` node bearing `value` as one pre-formatted cell under
+/// Retains a `label` node bearing `value` as one pre-formatted cell under
 /// `parent_id`.
-fn add_cell(grid: &mut TreeGrid, parent_id: U32Id<BTreeGridNode>, label: &str, value: String) {
-    let node_id = grid.add_child(parent_id, TreeGridLabel::bare(label));
+fn retain_cell(grid: &mut TreeGrid, parent_id: U32Id<BTreeGridNode>, label: &str, value: String) {
+    let node_id = grid.retain_child(parent_id, TreeGridLabel::bare(label));
     grid.push_value(node_id, TreeGridValue::new(value));
 }
 
@@ -175,45 +175,45 @@ fn build_json_grid(
 ) -> TreeGrid<TreeGridJsonValueCells> {
     let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
 
-    let document_root_id = grid.add_root(TreeGridLabel::bare("document"));
-    add_field(
+    let document_root_id = grid.retain_root(TreeGridLabel::bare("document"));
+    retain_field(
         &mut grid,
         document_root_id,
         "format",
         TreeGridJsonValue::new(format.name()),
     );
     if let Some(version) = voxj_version {
-        add_field(
+        retain_field(
             &mut grid,
             document_root_id,
             "voxj_version",
             TreeGridJsonValue::int(i64::from(version)),
         );
     }
-    add_field(
+    retain_field(
         &mut grid,
         document_root_id,
         "has_ext",
         TreeGridJsonValue::bool(state.ext().is_some()),
     );
-    add_field(
+    retain_field(
         &mut grid,
         document_root_id,
         "has_edit",
         TreeGridJsonValue::bool(has_edit(state)),
     );
 
-    let palettes_root_id = grid.add_root(TreeGridLabel::bare("palettes"));
+    let palettes_root_id = grid.retain_root(TreeGridLabel::bare("palettes"));
     for (palette_id, palette) in state.iter_palettes() {
-        let branch_id = grid.add_child(
+        let branch_id = grid.retain_child(
             palettes_root_id,
             TreeGridLabel::bare(palette_id.to_u32().to_string()),
         );
-        let properties_id = grid.add_child(branch_id, TreeGridLabel::bare("properties"));
+        let properties_id = grid.retain_child(branch_id, TreeGridLabel::bare("properties"));
         for name in implementation::property_names(palette) {
-            grid.add_child(properties_id, TreeGridLabel::quoted(name.to_owned()));
+            grid.retain_child(properties_id, TreeGridLabel::quoted(name.to_owned()));
         }
-        add_field(
+        retain_field(
             &mut grid,
             branch_id,
             "materials",
@@ -221,21 +221,21 @@ fn build_json_grid(
         );
     }
 
-    let objects_root_id = grid.add_root(TreeGridLabel::bare("objects"));
+    let objects_root_id = grid.retain_root(TreeGridLabel::bare("objects"));
     for (object_id, object) in state.iter_objects() {
-        let branch_id = grid.add_child(
+        let branch_id = grid.retain_child(
             objects_root_id,
             TreeGridLabel::bare(object_id.to_u32().to_string()),
         );
         let bounds = content_bounds(object);
         let origin = object.origin();
-        add_field(
+        retain_field(
             &mut grid,
             branch_id,
             "name",
             TreeGridJsonValue::new(object.name()),
         );
-        add_triple(
+        retain_triple(
             &mut grid,
             branch_id,
             "bounds",
@@ -246,14 +246,14 @@ fn build_json_grid(
             ],
         );
         if let Some(edit) = edit_bounds(object) {
-            add_triple(
+            retain_triple(
                 &mut grid,
                 branch_id,
                 "edit_bounds",
                 [i64::from(edit.0), i64::from(edit.1), i64::from(edit.2)],
             );
         }
-        add_triple(
+        retain_triple(
             &mut grid,
             branch_id,
             "origin",
@@ -263,13 +263,13 @@ fn build_json_grid(
                 i64::from(origin.z),
             ],
         );
-        add_field(
+        retain_field(
             &mut grid,
             branch_id,
             "voxels",
             TreeGridJsonValue::int(object.live_count() as i64),
         );
-        add_field(
+        retain_field(
             &mut grid,
             branch_id,
             "layers",
@@ -279,25 +279,25 @@ fn build_json_grid(
     grid
 }
 
-/// Adds a `label` node bearing one typed `value` under `parent_id`.
-fn add_field(
+/// Retains a `label` node bearing one typed `value` under `parent_id`.
+fn retain_field(
     grid: &mut TreeGrid<TreeGridJsonValueCells>,
     parent_id: U32Id<BTreeGridNode>,
     label: &str,
     value: TreeGridJsonValue,
 ) {
-    let node_id = grid.add_child(parent_id, TreeGridLabel::bare(label));
+    let node_id = grid.retain_child(parent_id, TreeGridLabel::bare(label));
     grid.push_value(node_id, value);
 }
 
-/// Adds a `label` node whose series is an integer triple under `parent_id`.
-fn add_triple(
+/// Retains a `label` node whose series is an integer triple under `parent_id`.
+fn retain_triple(
     grid: &mut TreeGrid<TreeGridJsonValueCells>,
     parent_id: U32Id<BTreeGridNode>,
     label: &str,
     triple: [i64; 3],
 ) {
-    let node_id = grid.add_child(parent_id, TreeGridLabel::bare(label));
+    let node_id = grid.retain_child(parent_id, TreeGridLabel::bare(label));
     for component in triple {
         grid.push_value(node_id, TreeGridJsonValue::int(component));
     }

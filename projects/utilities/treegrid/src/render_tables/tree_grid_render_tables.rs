@@ -274,18 +274,18 @@ mod tests {
     /// The rendering spec's worked example.
     fn worked_example() -> TreeGrid {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let base = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let base = grid.retain_child(palette, TreeGridLabel::quoted("baseColorFactor"));
         grid.node_mut(base).format = Some(TreeGridCellFormat::Text);
         grid.push_value(base, TreeGridValue::srgba8([255, 0, 0, 255]));
         grid.push_value(base, TreeGridValue::srgba8([0, 255, 0, 128]));
-        let metallic = grid.add_child(palette, TreeGridLabel::quoted("metallicFactor"));
+        let metallic = grid.retain_child(palette, TreeGridLabel::quoted("metallicFactor"));
         grid.node_mut(metallic).format = Some(TreeGridCellFormat::Text);
         grid.push_value(metallic, TreeGridValue::unorm(1.0));
         grid.push_value(metallic, TreeGridValue::unorm(0.2));
-        let second = grid.add_root(TreeGridLabel::bare("1"));
-        let attribute = grid.add_child(second, TreeGridLabel::quoted("baseColorFactor"));
-        let component = grid.add_child(attribute, TreeGridLabel::bare("a"));
+        let second = grid.retain_root(TreeGridLabel::bare("1"));
+        let attribute = grid.retain_child(second, TreeGridLabel::quoted("baseColorFactor"));
+        let component = grid.retain_child(attribute, TreeGridLabel::bare("a"));
         grid.node_mut(component).format = Some(TreeGridCellFormat::Text);
         grid.push_value(component, TreeGridValue::unorm8(255));
         grid
@@ -295,19 +295,19 @@ mod tests {
     /// full scene node and one tag-only sibling.
     fn hierarchy_example() -> TreeGrid {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("root"));
-        let tank = grid.add_child(root, TreeGridLabel::quoted("energy-tank-1"));
+        let root = grid.retain_root(TreeGridLabel::bare("root"));
+        let tank = grid.retain_child(root, TreeGridLabel::quoted("energy-tank-1"));
         grid.push_value(tank, TreeGridValue::new("{node: 0}"));
-        let transform = grid.add_child(tank, TreeGridLabel::bare("transform"));
-        let position = grid.add_child(transform, TreeGridLabel::bare("position"));
+        let transform = grid.retain_child(tank, TreeGridLabel::bare("transform"));
+        let position = grid.retain_child(transform, TreeGridLabel::bare("position"));
         grid.push_value(position, TreeGridValue::new("[12.50, 0.50, 10.00]"));
-        let rotation = grid.add_child(transform, TreeGridLabel::bare("rotation"));
+        let rotation = grid.retain_child(transform, TreeGridLabel::bare("rotation"));
         grid.push_value(rotation, TreeGridValue::new("[0.00, 0.00, 0.00]"));
-        let scale = grid.add_child(transform, TreeGridLabel::bare("scale"));
+        let scale = grid.retain_child(transform, TreeGridLabel::bare("scale"));
         grid.push_value(scale, TreeGridValue::new("[1.00, 1.00, 1.00]"));
-        let object = grid.add_child(tank, TreeGridLabel::quoted("energy-tank-1"));
+        let object = grid.retain_child(tank, TreeGridLabel::quoted("energy-tank-1"));
         grid.push_value(object, TreeGridValue::new("{object: 0, instance: 0}"));
-        let second = grid.add_child(root, TreeGridLabel::quoted("energy-tank-2"));
+        let second = grid.retain_child(root, TreeGridLabel::quoted("energy-tank-2"));
         grid.push_value(second, TreeGridValue::new("{node: 1}"));
         grid
     }
@@ -426,10 +426,10 @@ mod tests {
     #[test]
     fn root_level_data_tables_first_with_no_heading() {
         let mut grid = TreeGrid::new();
-        let count = grid.add_root(TreeGridLabel::bare("materialCount"));
+        let count = grid.retain_root(TreeGridLabel::bare("materialCount"));
         grid.push_value(count, TreeGridValue::int(2));
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let metallic = grid.add_child(palette, TreeGridLabel::quoted("metallicFactor"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let metallic = grid.retain_child(palette, TreeGridLabel::quoted("metallicFactor"));
         grid.node_mut(metallic).format = Some(TreeGridCellFormat::Text);
         grid.push_value(metallic, TreeGridValue::unorm(0.2));
 
@@ -450,17 +450,17 @@ mod tests {
     #[test]
     fn annotations_suffix_column_headers_and_headings() {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let strength = grid.add_child(palette, TreeGridLabel::quoted("emissiveStrength"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let strength = grid.retain_child(palette, TreeGridLabel::quoted("emissiveStrength"));
         grid.node_mut(strength).annotation = Some("(scalar)".to_string());
         grid.push_value(strength, TreeGridValue::float(2.0));
-        let tint = grid.add_child(palette, TreeGridLabel::quoted("tint"));
+        let tint = grid.retain_child(palette, TreeGridLabel::quoted("tint"));
         grid.node_mut(tint).annotation = Some("(scalar)".to_string());
-        let alpha = grid.add_child(tint, TreeGridLabel::bare("a"));
+        let alpha = grid.retain_child(tint, TreeGridLabel::bare("a"));
         grid.node_mut(alpha).format = Some(TreeGridCellFormat::Text);
         grid.push_value(alpha, TreeGridValue::unorm8(128));
-        let sub = grid.add_child(tint, TreeGridLabel::bare("sub"));
-        let leaf = grid.add_child(sub, TreeGridLabel::bare("b"));
+        let sub = grid.retain_child(tint, TreeGridLabel::bare("sub"));
+        let leaf = grid.retain_child(sub, TreeGridLabel::bare("b"));
         grid.push_value(leaf, TreeGridValue::int(7));
 
         // The heading path stack stays bare, so `sub`'s concat
@@ -490,8 +490,8 @@ mod tests {
     #[test]
     fn flat_headers_carry_annotations() {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let strength = grid.add_child(palette, TreeGridLabel::quoted("emissiveStrength"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let strength = grid.retain_child(palette, TreeGridLabel::quoted("emissiveStrength"));
         grid.node_mut(strength).annotation = Some("(scalar)".to_string());
         grid.push_value(strength, TreeGridValue::float(2.0));
 
@@ -541,8 +541,8 @@ mod tests {
     #[test]
     fn labels_and_cells_escape_pipes() {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let attribute = grid.add_child(palette, TreeGridLabel::quoted("a|b"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let attribute = grid.retain_child(palette, TreeGridLabel::quoted("a|b"));
         grid.node_mut(attribute).format = Some(TreeGridCellFormat::Text);
         grid.push_value(attribute, TreeGridValue::new("x|y"));
 
@@ -574,15 +574,15 @@ mod tests {
     #[test]
     fn records_list_one_row_per_root_child() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("palettes"));
+        let root = grid.retain_root(TreeGridLabel::bare("palettes"));
         for (index, count, properties) in [
             ("0", 2, &["baseColorFactor", "metallicFactor"][..]),
             ("1", 1, &["baseColorFactor"][..]),
         ] {
-            let palette = grid.add_child(root, TreeGridLabel::bare(index));
-            let materials = grid.add_child(palette, TreeGridLabel::bare("materialCount"));
+            let palette = grid.retain_child(root, TreeGridLabel::bare(index));
+            let materials = grid.retain_child(palette, TreeGridLabel::bare("materialCount"));
             grid.push_value(materials, TreeGridValue::int(count));
-            let names = grid.add_child(palette, TreeGridLabel::bare("properties"));
+            let names = grid.retain_child(palette, TreeGridLabel::bare("properties"));
             for property in properties {
                 grid.push_value(names, TreeGridValue::new(*property));
             }
@@ -604,10 +604,10 @@ mod tests {
     #[test]
     fn single_valued_rows_make_a_property_table() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("Document"));
-        let format = grid.add_child(root, TreeGridLabel::bare("Format"));
+        let root = grid.retain_root(TreeGridLabel::bare("Document"));
+        let format = grid.retain_child(root, TreeGridLabel::bare("Format"));
         grid.push_value(format, TreeGridValue::new("voxj"));
-        let ext = grid.add_child(root, TreeGridLabel::bare("Has ext"));
+        let ext = grid.retain_child(root, TreeGridLabel::bare("Has ext"));
         grid.push_value(ext, TreeGridValue::new("no"));
 
         assert_eq!(
@@ -626,13 +626,13 @@ mod tests {
     #[test]
     fn data_roots_row_a_leading_table_and_consume_their_subtrees() {
         let mut grid = TreeGrid::new();
-        let stats = grid.add_root(TreeGridLabel::bare("stats"));
+        let stats = grid.retain_root(TreeGridLabel::bare("stats"));
         grid.push_value(stats, TreeGridValue::int(5));
-        let deep = grid.add_child(stats, TreeGridLabel::bare("deep"));
+        let deep = grid.retain_child(stats, TreeGridLabel::bare("deep"));
         grid.push_value(deep, TreeGridValue::int(9));
-        let palettes = grid.add_root(TreeGridLabel::bare("palettes"));
-        let palette = grid.add_child(palettes, TreeGridLabel::bare("0"));
-        let materials = grid.add_child(palette, TreeGridLabel::bare("materialCount"));
+        let palettes = grid.retain_root(TreeGridLabel::bare("palettes"));
+        let palette = grid.retain_child(palettes, TreeGridLabel::bare("0"));
+        let materials = grid.retain_child(palette, TreeGridLabel::bare("materialCount"));
         grid.push_value(materials, TreeGridValue::int(1));
 
         assert_eq!(
@@ -654,8 +654,8 @@ mod tests {
     #[test]
     fn a_multi_valued_cell_joins_with_the_separator_rule() {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let base = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let base = grid.retain_child(palette, TreeGridLabel::quoted("baseColorFactor"));
         grid.node_mut(base).format = Some(TreeGridCellFormat::Visual);
         grid.push_value(base, TreeGridValue::srgba8([255, 0, 0, 255]));
         grid.push_value(base, TreeGridValue::srgba8([0, 255, 0, 128]));
@@ -675,11 +675,11 @@ mod tests {
     #[test]
     fn records_labels_carry_annotations() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("palettes"));
-        let tint = grid.add_child(root, TreeGridLabel::quoted("tint"));
+        let root = grid.retain_root(TreeGridLabel::bare("palettes"));
+        let tint = grid.retain_child(root, TreeGridLabel::quoted("tint"));
         grid.node_mut(tint).annotation = Some("(scalar)".to_string());
         grid.push_value(tint, TreeGridValue::float(2.0));
-        let alpha = grid.add_child(tint, TreeGridLabel::bare("a"));
+        let alpha = grid.retain_child(tint, TreeGridLabel::bare("a"));
         grid.node_mut(alpha).annotation = Some("(alpha)".to_string());
         grid.node_mut(alpha).format = Some(TreeGridCellFormat::Text);
         grid.push_value(alpha, TreeGridValue::unorm8(128));
@@ -699,11 +699,11 @@ mod tests {
     #[test]
     fn same_path_descendants_merge_into_one_column() {
         let mut grid = TreeGrid::new();
-        let root = grid.add_root(TreeGridLabel::bare("r"));
-        let entity = grid.add_child(root, TreeGridLabel::bare("e"));
-        let first = grid.add_child(entity, TreeGridLabel::bare("x"));
+        let root = grid.retain_root(TreeGridLabel::bare("r"));
+        let entity = grid.retain_child(root, TreeGridLabel::bare("e"));
+        let first = grid.retain_child(entity, TreeGridLabel::bare("x"));
         grid.push_value(first, TreeGridValue::int(1));
-        let second = grid.add_child(entity, TreeGridLabel::bare("x"));
+        let second = grid.retain_child(entity, TreeGridLabel::bare("x"));
         grid.push_value(second, TreeGridValue::int(2));
 
         assert_eq!(
@@ -721,8 +721,8 @@ mod tests {
     #[test]
     fn a_visual_cell_pads_by_its_declared_width() {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let color = grid.add_child(palette, TreeGridLabel::quoted("c"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let color = grid.retain_child(palette, TreeGridLabel::quoted("c"));
         grid.push_value(color, TreeGridValue::srgba8([255, 0, 0, 255]));
 
         assert_eq!(

@@ -264,7 +264,7 @@ impl Builder<'_> {
 
             let marker = parent
                 .is_some()
-                .then(|| self.grid.add_root(TreeGridLabel::bare("(ANCESTORS)")));
+                .then(|| self.grid.retain_root(TreeGridLabel::bare("(ANCESTORS)")));
             self.build_node(index, marker, true);
         }
     }
@@ -276,8 +276,10 @@ impl Builder<'_> {
         let node = match parent {
             Some(parent) => self
                 .grid
-                .add_child(parent, TreeGridLabel::bare(entry.name.as_str())),
-            None => self.grid.add_root(TreeGridLabel::bare(entry.name.as_str())),
+                .retain_child(parent, TreeGridLabel::bare(entry.name.as_str())),
+            None => self
+                .grid
+                .retain_root(TreeGridLabel::bare(entry.name.as_str())),
         };
         self.grid.node_mut(node).annotation = Some(format!("({})", entry.object_type));
 
@@ -290,7 +292,7 @@ impl Builder<'_> {
             self.build_transform(transform, node);
         }
         if let Some(extents) = &entry.extents {
-            self.add_vector(node, extents, "(EXTENTS)");
+            self.retain_vector(node, extents, "(EXTENTS)");
         }
         if let Some(bounds) = &entry.bounds {
             self.build_bounds(bounds, node);
@@ -299,7 +301,7 @@ impl Builder<'_> {
         let kids = &self.children[index];
         if in_match && self.collapse_descendants && !kids.is_empty() {
             self.grid
-                .add_child(node, TreeGridLabel::bare("(DESCENDANTS)"));
+                .retain_child(node, TreeGridLabel::bare("(DESCENDANTS)"));
             return;
         }
 
@@ -318,21 +320,23 @@ impl Builder<'_> {
     fn build_transform(&mut self, transform: &HierarchyTransform, parent: GridNodeId) {
         let subtree = self
             .grid
-            .add_child(parent, TreeGridLabel::bare("(TRANSFORM)"));
-        self.add_vector(subtree, &transform.position, "(POSITION)");
-        self.add_vector(subtree, &transform.rotation, "(ROTATION)");
-        self.add_vector(subtree, &transform.scale, "(SCALE)");
+            .retain_child(parent, TreeGridLabel::bare("(TRANSFORM)"));
+        self.retain_vector(subtree, &transform.position, "(POSITION)");
+        self.retain_vector(subtree, &transform.rotation, "(ROTATION)");
+        self.retain_vector(subtree, &transform.scale, "(SCALE)");
     }
 
     /// Adds the `(BOUNDS)` subtree with one min/max line per axis.
     fn build_bounds(&mut self, bounds: &HierarchyBounds, parent: GridNodeId) {
-        let subtree = self.grid.add_child(parent, TreeGridLabel::bare("(BOUNDS)"));
+        let subtree = self
+            .grid
+            .retain_child(parent, TreeGridLabel::bare("(BOUNDS)"));
         let axes = ["X", "Y", "Z"]
             .into_iter()
             .zip(&bounds.min)
             .zip(&bounds.max);
         for ((axis, min), max) in axes {
-            let line = self.grid.add_child(
+            let line = self.grid.retain_child(
                 subtree,
                 TreeGridLabel::bare(format!("{{ \"Min{axis}\": {min}, \"Max{axis}\": {max} }}")),
             );
@@ -340,11 +344,11 @@ impl Builder<'_> {
         }
     }
 
-    /// Adds a vector line under `parent`: the component text as the
+    /// Retains a vector line under `parent`: the component text as the
     /// label, `tag` as the annotation.
-    fn add_vector(&mut self, parent: GridNodeId, components: &[String; 3], tag: &str) {
+    fn retain_vector(&mut self, parent: GridNodeId, components: &[String; 3], tag: &str) {
         let [x, y, z] = components;
-        let line = self.grid.add_child(
+        let line = self.grid.retain_child(
             parent,
             TreeGridLabel::bare(format!("{{ \"X\": {x}, \"Y\": {y}, \"Z\": {z} }}")),
         );

@@ -638,7 +638,7 @@ fn build_grid(value_collections: Vec<ValueCollection>) -> TreeGrid<TreeGridJsonV
                 node_id
             }
             _ => {
-                let node_id = grid.add_root(TreeGridLabel::bare(
+                let node_id = grid.retain_root(TreeGridLabel::bare(
                     value_collection.palette_index.to_string(),
                 ));
                 palette_node = Some((value_collection.palette_index, node_id));
@@ -650,19 +650,19 @@ fn build_grid(value_collections: Vec<ValueCollection>) -> TreeGrid<TreeGridJsonV
             Some(component) => {
                 let property_node_id = match &property_node {
                     Some((key, node_id)) if *key == value_collection.key => *node_id,
-                    _ => grid.add_child(
+                    _ => grid.retain_child(
                         palette_node_id,
                         TreeGridLabel::quoted(value_collection.key.as_str()),
                     ),
                 };
                 property_node = Some((value_collection.key, property_node_id));
                 let letter = component.letter().to_string();
-                grid.add_child(property_node_id, TreeGridLabel::bare(letter))
+                grid.retain_child(property_node_id, TreeGridLabel::bare(letter))
             }
             None => {
                 // A data node is always fresh, so a property selected twice
                 // keeps one value collection per selector.
-                let node_id = grid.add_child(
+                let node_id = grid.retain_child(
                     palette_node_id,
                     TreeGridLabel::quoted(value_collection.key.as_str()),
                 );

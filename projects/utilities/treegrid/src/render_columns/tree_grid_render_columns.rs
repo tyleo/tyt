@@ -123,18 +123,18 @@ mod tests {
     /// The rendering spec's worked example.
     fn worked_example() -> TreeGrid {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let base = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let base = grid.retain_child(palette, TreeGridLabel::quoted("baseColorFactor"));
         grid.node_mut(base).format = Some(TreeGridCellFormat::Text);
         grid.push_value(base, TreeGridValue::srgba8([255, 0, 0, 255]));
         grid.push_value(base, TreeGridValue::srgba8([0, 255, 0, 128]));
-        let metallic = grid.add_child(palette, TreeGridLabel::quoted("metallicFactor"));
+        let metallic = grid.retain_child(palette, TreeGridLabel::quoted("metallicFactor"));
         grid.node_mut(metallic).format = Some(TreeGridCellFormat::Text);
         grid.push_value(metallic, TreeGridValue::unorm(1.0));
         grid.push_value(metallic, TreeGridValue::unorm(0.2));
-        let second = grid.add_root(TreeGridLabel::bare("1"));
-        let attribute = grid.add_child(second, TreeGridLabel::quoted("baseColorFactor"));
-        let component = grid.add_child(attribute, TreeGridLabel::bare("a"));
+        let second = grid.retain_root(TreeGridLabel::bare("1"));
+        let attribute = grid.retain_child(second, TreeGridLabel::quoted("baseColorFactor"));
+        let component = grid.retain_child(attribute, TreeGridLabel::bare("a"));
         grid.node_mut(component).format = Some(TreeGridCellFormat::Text);
         grid.push_value(component, TreeGridValue::unorm8(255));
         grid
@@ -143,15 +143,15 @@ mod tests {
     /// Two alpha-component columns, the first one value longer.
     fn component_columns() -> TreeGrid {
         let mut grid = TreeGrid::new();
-        let first = grid.add_root(TreeGridLabel::bare("0"));
-        let attribute = grid.add_child(first, TreeGridLabel::quoted("baseColorFactor"));
-        let component = grid.add_child(attribute, TreeGridLabel::bare("a"));
+        let first = grid.retain_root(TreeGridLabel::bare("0"));
+        let attribute = grid.retain_child(first, TreeGridLabel::quoted("baseColorFactor"));
+        let component = grid.retain_child(attribute, TreeGridLabel::bare("a"));
         grid.node_mut(component).format = Some(TreeGridCellFormat::Text);
         grid.push_value(component, TreeGridValue::unorm8(255));
         grid.push_value(component, TreeGridValue::unorm8(128));
-        let second = grid.add_root(TreeGridLabel::bare("1"));
-        let attribute = grid.add_child(second, TreeGridLabel::quoted("baseColorFactor"));
-        let component = grid.add_child(attribute, TreeGridLabel::bare("a"));
+        let second = grid.retain_root(TreeGridLabel::bare("1"));
+        let attribute = grid.retain_child(second, TreeGridLabel::quoted("baseColorFactor"));
+        let component = grid.retain_child(attribute, TreeGridLabel::bare("a"));
         grid.node_mut(component).format = Some(TreeGridCellFormat::Text);
         grid.push_value(component, TreeGridValue::unorm8(255));
         grid
@@ -219,11 +219,11 @@ mod tests {
     #[test]
     fn an_annotation_suffixes_and_widens_the_column_label() {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let strength = grid.add_child(palette, TreeGridLabel::quoted("emissiveStrength"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let strength = grid.retain_child(palette, TreeGridLabel::quoted("emissiveStrength"));
         grid.node_mut(strength).annotation = Some("(scalar)".to_string());
         grid.push_value(strength, TreeGridValue::float(2.0));
-        let base = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
+        let base = grid.retain_child(palette, TreeGridLabel::quoted("baseColorFactor"));
         grid.node_mut(base).format = Some(TreeGridCellFormat::Text);
         grid.push_value(base, TreeGridValue::srgba8([255, 0, 0, 255]));
 
@@ -237,12 +237,12 @@ mod tests {
     #[test]
     fn an_annotation_suffixes_the_header_label_and_heading() {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let tint = grid.add_child(palette, TreeGridLabel::quoted("tint"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let tint = grid.retain_child(palette, TreeGridLabel::quoted("tint"));
         grid.node_mut(tint).annotation = Some("(scalar)".to_string());
         grid.node_mut(tint).format = Some(TreeGridCellFormat::Text);
         grid.push_value(tint, TreeGridValue::srgba8([0, 255, 0, 128]));
-        let alpha = grid.add_child(tint, TreeGridLabel::bare("a"));
+        let alpha = grid.retain_child(tint, TreeGridLabel::bare("a"));
         grid.node_mut(alpha).format = Some(TreeGridCellFormat::Text);
         grid.push_value(alpha, TreeGridValue::unorm8(128));
 
@@ -265,11 +265,11 @@ mod tests {
     #[test]
     fn swatch_columns_align_past_ansi_escapes() {
         let mut grid = TreeGrid::new();
-        let palette = grid.add_root(TreeGridLabel::bare("0"));
-        let base = grid.add_child(palette, TreeGridLabel::quoted("baseColorFactor"));
+        let palette = grid.retain_root(TreeGridLabel::bare("0"));
+        let base = grid.retain_child(palette, TreeGridLabel::quoted("baseColorFactor"));
         grid.push_value(base, TreeGridValue::srgba8([255, 0, 0, 255]));
         grid.push_value(base, TreeGridValue::srgba8([0, 255, 0, 128]));
-        let metallic = grid.add_child(palette, TreeGridLabel::quoted("metallicFactor"));
+        let metallic = grid.retain_child(palette, TreeGridLabel::quoted("metallicFactor"));
         grid.push_value(metallic, TreeGridValue::float(1.0));
         grid.push_value(metallic, TreeGridValue::float(0.2));
 
