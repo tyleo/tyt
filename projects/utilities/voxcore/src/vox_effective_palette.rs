@@ -27,17 +27,17 @@ pub struct VoxEffectivePalette<'a> {
 }
 
 impl<'a> VoxEffectivePalette<'a> {
-    /// Number of properties.
-    pub fn property_count(&self) -> usize {
-        self.properties.len()
-    }
-
     /// The property `id`, or `None` if not one of this palette's.
     pub fn property(
         &self,
         id: UsizeId<BVoxEffectiveProperty>,
     ) -> Option<&VoxEffectiveProperty<'a>> {
         self.properties.get(id)
+    }
+
+    /// Number of properties.
+    pub fn property_count(&self) -> usize {
+        self.properties.len()
     }
 
     /// The property named `name`, or `None` when no layer supplies it. O(1)

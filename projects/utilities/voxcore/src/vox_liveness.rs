@@ -30,9 +30,12 @@ impl VoxLiveness {
         }
     }
 
-    /// The number of grid cells the map covers.
-    pub fn len(&self) -> usize {
-        self.len
+    /// The number of live cells.
+    pub fn count_live(&self) -> usize {
+        self.words
+            .iter()
+            .map(|word| word.count_ones() as usize)
+            .sum()
     }
 
     /// Whether the map covers no cells.
@@ -52,6 +55,18 @@ impl VoxLiveness {
             self.len
         );
         (self.words[i / 64] >> (i % 64)) & 1 == 1
+    }
+
+    /// Iterates the ids of the live cells in ascending raster order.
+    pub fn iter_live(&self) -> impl Iterator<Item = U32Id<BVoxVoxel>> + '_ {
+        self.words.iter().enumerate().flat_map(|(word, &bits)| {
+            BitIndices { bits }.map(move |bit| U32Id::from_u32((word * 64 + bit) as u32))
+        })
+    }
+
+    /// The number of grid cells the map covers.
+    pub fn len(&self) -> usize {
+        self.len
     }
 
     /// Sets whether the cell at `id` is live.
@@ -74,21 +89,6 @@ impl VoxLiveness {
         } else {
             self.words[i / 64] &= !mask;
         }
-    }
-
-    /// The number of live cells.
-    pub fn count_live(&self) -> usize {
-        self.words
-            .iter()
-            .map(|word| word.count_ones() as usize)
-            .sum()
-    }
-
-    /// Iterates the ids of the live cells in ascending raster order.
-    pub fn iter_live(&self) -> impl Iterator<Item = U32Id<BVoxVoxel>> + '_ {
-        self.words.iter().enumerate().flat_map(|(word, &bits)| {
-            BitIndices { bits }.map(move |bit| U32Id::from_u32((word * 64 + bit) as u32))
-        })
     }
 }
 

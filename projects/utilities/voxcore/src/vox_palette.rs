@@ -32,176 +32,6 @@ pub struct VoxPalette {
 }
 
 impl VoxPalette {
-    /// Retains a property after any existing ones and returns its id, back-filling
-    /// existing materials with `default_value_id` so every material keeps one
-    /// value id per property. Errors, changing nothing, if a property already
-    /// has this name. `default_value_id` must be one of `value_pool_id`'s
-    /// values, which [`VoxMain::retain_palette`](crate::VoxMain::retain_palette)
-    /// checks on insert.
-    pub fn retain_property(
-        &mut self,
-        name: String,
-        value_pool_id: U32Id<BVoxValuePool>,
-        default_value_id: U32Id<BVoxValuePoolValue>,
-    ) -> Result<U32Id<BVoxProperty>> {
-        if self.property_id_by_name.contains_key(&name) {
-            return Err(Error::DuplicatePropertyName { name });
-        }
-
-        let property_id = self.property_ids.retain();
-
-        self.property_id_by_name.insert(name.clone(), property_id);
-
-        self.properties.retain(
-            property_id,
-            VoxProperty {
-                name,
-                value_pool_id,
-            },
-        );
-
-        for material_id in self.material_ids.iter() {
-            // Safety: retained material ids have a value row.
-            let row = unsafe { self.materials.get_mut(material_id) };
-            row.retain(property_id, default_value_id);
-        }
-
-        Ok(property_id)
-    }
-
-    /// Number of properties.
-    pub fn property_count(&self) -> usize {
-        self.property_ids.len()
-    }
-
-    /// The property `id`, or `None` if not one of this palette's.
-    pub fn property(&self, id: U32Id<BVoxProperty>) -> Option<&VoxProperty> {
-        // Safety: retained ids have a value.
-        self.property_ids
-            .is_retained(id)
-            .then(|| unsafe { self.properties.get(id) })
-    }
-
-    /// The property named `name`, or `None` if none has that name. O(1)
-    /// through the name index.
-    pub fn property_id_by_name(&self, name: &str) -> Option<U32Id<BVoxProperty>> {
-        self.property_id_by_name.get(name).copied()
-    }
-
-    /// Properties in listing order, as `(id, property)`. Property order is the
-    /// value-id order of each material row.
-    pub fn iter_properties(
-        &self,
-    ) -> impl Iterator<Item = (U32Id<BVoxProperty>, &VoxProperty)> + '_ {
-        // Safety: retained ids have a value.
-        self.property_ids
-            .iter()
-            .map(move |property_id| (property_id, unsafe { self.properties.get(property_id) }))
-    }
-
-    /// Retains a material with one value id per property, in
-    /// [`iter_properties`](Self::iter_properties) order, and returns its id.
-    /// Errors, changing nothing, if `value_ids` has the wrong length. Each
-    /// value id must be one of its property's value pool's values, which
-    /// [`VoxMain::retain_palette`](crate::VoxMain::retain_palette) checks on insert.
-    pub fn retain_material(
-        &mut self,
-        value_ids: Vec<U32Id<BVoxValuePoolValue>>,
-    ) -> Result<U32Id<BVoxMaterial>> {
-        if value_ids.len() != self.property_ids.len() {
-            return Err(Error::MaterialValueArity {
-                values: value_ids.len(),
-                properties: self.property_ids.len(),
-            });
-        }
-        let material_id = self.material_ids.retain();
-        let mut row = IdField::new();
-        for (property_id, value_id) in self.property_ids.iter().zip(value_ids) {
-            row.retain(property_id, value_id);
-        }
-        self.materials.retain(material_id, row);
-        Ok(material_id)
-    }
-
-    /// Number of materials.
-    pub fn material_count(&self) -> usize {
-        self.material_ids.len()
-    }
-
-    /// Whether `id` is one of this palette's materials.
-    pub fn contains_material(&self, id: U32Id<BVoxMaterial>) -> bool {
-        self.material_ids.is_retained(id)
-    }
-
-    /// The value id `material_id` draws for `property_id`, identifying a value
-    /// in the value pool that property draws from, or `None` if either id is
-    /// not this palette's. Read the value pool a [`VoxMain`](crate::VoxMain)
-    /// holds by that id for the value.
-    pub fn value_id(
-        &self,
-        material_id: U32Id<BVoxMaterial>,
-        property_id: U32Id<BVoxProperty>,
-    ) -> Option<U32Id<BVoxValuePoolValue>> {
-        if !self.material_ids.is_retained(material_id)
-            || !self.property_ids.is_retained(property_id)
-        {
-            return None;
-        }
-        // Safety: a retained material has a value id for every property.
-        let row = unsafe { self.materials.get(material_id) };
-        Some(*unsafe { row.get(property_id) })
-    }
-
-    /// Material ids in listing order; read value ids with
-    /// [`value_id`](Self::value_id).
-    pub fn iter_materials(&self) -> impl Iterator<Item = U32Id<BVoxMaterial>> + '_ {
-        self.material_ids.iter()
-    }
-
-    /// Moves property `id` to position `index` in the property order, shifting
-    /// the properties between its old and new positions one slot. Errors,
-    /// changing nothing, if `id` is not one of this palette's properties or
-    /// `index` is at or past [`property_count`](Self::property_count).
-    pub fn move_property(&mut self, id: U32Id<BVoxProperty>, index: usize) -> Result<()> {
-        if !self.property_ids.is_retained(id) {
-            return Err(Error::UnknownProperty { property_id: id });
-        }
-        let count = self.property_ids.len();
-        if index >= count {
-            return Err(Error::IndexPastCount { index, count });
-        }
-        self.property_ids.move_to(id, index);
-        Ok(())
-    }
-
-    /// The position of property `id` in the property order, or `None` if `id`
-    /// is not one of this palette's properties.
-    pub fn property_index(&self, id: U32Id<BVoxProperty>) -> Option<usize> {
-        self.property_ids.index_of(id)
-    }
-
-    /// Moves material `id` to position `index` in the material order, shifting
-    /// the materials between its old and new positions one slot. Errors,
-    /// changing nothing, if `id` is not one of this palette's materials or
-    /// `index` is at or past [`material_count`](Self::material_count).
-    pub fn move_material(&mut self, id: U32Id<BVoxMaterial>, index: usize) -> Result<()> {
-        if !self.material_ids.is_retained(id) {
-            return Err(Error::UnknownMaterial { material_id: id });
-        }
-        let count = self.material_ids.len();
-        if index >= count {
-            return Err(Error::IndexPastCount { index, count });
-        }
-        self.material_ids.move_to(id, index);
-        Ok(())
-    }
-
-    /// The position of material `id` in the material order, or `None` if `id`
-    /// is not one of this palette's materials.
-    pub fn material_index(&self, id: U32Id<BVoxMaterial>) -> Option<usize> {
-        self.material_ids.index_of(id)
-    }
-
     /// Deep copy. Liveness lives in the id pools, so the columns can't derive
     /// `Clone`; rebuild them against the cloned id pools.
     pub fn clone_palette(&self) -> Self {
@@ -228,47 +58,6 @@ impl VoxPalette {
             materials,
             property_id_by_name: self.property_id_by_name.clone(),
         }
-    }
-
-    /// Releases property `id`. Errors, changing nothing, if `id` is not one of
-    /// this palette's properties. Each material row keeps filler at the
-    /// released slot until [`VoxMain::gc`](crate::VoxMain::gc) compacts the rows
-    /// and renumbers.
-    pub fn release_property(&mut self, id: U32Id<BVoxProperty>) -> Result<()> {
-        if !self.property_ids.is_retained(id) {
-            return Err(Error::UnknownProperty { property_id: id });
-        }
-
-        // Drop the index entry still pointing here; a duplicate name may have
-        // overwritten it.
-        // Safety: a retained property has a value.
-        let name = unsafe { self.properties.get(id) }.name.clone();
-        if self.property_id_by_name.get(&name) == Some(&id) {
-            self.property_id_by_name.remove(&name);
-        }
-
-        // A value id is Copy, so releasing each material's slot at `id`
-        // would be a no-op; leave it for gc to compact and only free the
-        // property.
-        // Safety: a retained property has a value.
-        unsafe { self.properties.release(id) };
-        self.property_ids.release_stable(id);
-        Ok(())
-    }
-
-    /// Drops material `id` and its value-id row. The caller must first ensure
-    /// no live voxel still samples it. Leaves a hole until [`gc`](Self::gc)
-    /// renumbers.
-    pub(crate) fn release_material(&mut self, id: U32Id<BVoxMaterial>) -> Option<()> {
-        if !self.material_ids.is_retained(id) {
-            return None;
-        }
-        // The row holds Copy value ids, so dropping the inner IdField frees
-        // its buffer with nothing to release per property.
-        // Safety: a retained material has a row.
-        unsafe { self.materials.release(id) };
-        self.material_ids.release_stable(id);
-        Some(())
     }
 
     /// Compacts the property and material id pools back to a contiguous
@@ -312,40 +101,215 @@ impl VoxPalette {
         material_remap
     }
 
-    /// Repoints each material's cell for a property on `value_pool_id` that
-    /// draws `old_id` to `new_id`. Used by [`release_value_pool_value`] before
-    /// `old_id` is released.
-    ///
-    /// [`release_value_pool_value`]: crate::VoxMain::release_value_pool_value
-    pub(crate) fn repoint_value_pool_value(
+    /// Retains a material with one value id per property, in
+    /// [`iter_properties`](Self::iter_properties) order, and returns its id.
+    /// Errors, changing nothing, if `value_ids` has the wrong length. Each
+    /// value id must be one of its property's value pool's values, which
+    /// [`VoxMain::retain_palette`](crate::VoxMain::retain_palette) checks on insert.
+    pub fn retain_material(
         &mut self,
-        value_pool_id: U32Id<BVoxValuePool>,
-        old_id: U32Id<BVoxValuePoolValue>,
-        new_id: U32Id<BVoxValuePoolValue>,
-    ) {
-        // The properties on `value_pool_id`, found once so each material's row
-        // is visited once for all of them.
-        let value_pool_property_ids: Vec<_> = self
-            .property_ids
-            .iter()
-            .filter(|&property_id| {
-                // Safety: retained property ids have a value.
-                unsafe { self.properties.get(property_id) }.value_pool_id == value_pool_id
-            })
-            .collect();
-        if !value_pool_property_ids.is_empty() {
-            for material_id in self.material_ids.iter() {
-                // Safety: a retained material holds a value id for every
-                // property, and the row is keyed by property id.
-                let row = unsafe { self.materials.get_mut(material_id) };
-                for &property_id in &value_pool_property_ids {
-                    let slot = unsafe { row.get_mut(property_id) };
-                    if *slot == old_id {
-                        *slot = new_id;
-                    }
-                }
-            }
+        value_ids: Vec<U32Id<BVoxValuePoolValue>>,
+    ) -> Result<U32Id<BVoxMaterial>> {
+        if value_ids.len() != self.property_ids.len() {
+            return Err(Error::MaterialValueArity {
+                values: value_ids.len(),
+                properties: self.property_ids.len(),
+            });
         }
+        let material_id = self.material_ids.retain();
+        let mut row = IdField::new();
+        for (property_id, value_id) in self.property_ids.iter().zip(value_ids) {
+            row.retain(property_id, value_id);
+        }
+        self.materials.retain(material_id, row);
+        Ok(material_id)
+    }
+
+    /// Drops material `id` and its value-id row. The caller must first ensure
+    /// no live voxel still samples it. Leaves a hole until [`gc`](Self::gc)
+    /// renumbers.
+    pub(crate) fn release_material(&mut self, id: U32Id<BVoxMaterial>) -> Option<()> {
+        if !self.material_ids.is_retained(id) {
+            return None;
+        }
+        // The row holds Copy value ids, so dropping the inner IdField frees
+        // its buffer with nothing to release per property.
+        // Safety: a retained material has a row.
+        unsafe { self.materials.release(id) };
+        self.material_ids.release_stable(id);
+        Some(())
+    }
+
+    /// Whether `id` is one of this palette's materials.
+    pub fn contains_material(&self, id: U32Id<BVoxMaterial>) -> bool {
+        self.material_ids.is_retained(id)
+    }
+
+    /// Material ids in listing order; read value ids with
+    /// [`value_id`](Self::value_id).
+    pub fn iter_materials(&self) -> impl Iterator<Item = U32Id<BVoxMaterial>> + '_ {
+        self.material_ids.iter()
+    }
+
+    /// Number of materials.
+    pub fn material_count(&self) -> usize {
+        self.material_ids.len()
+    }
+
+    /// The position of material `id` in the material order, or `None` if `id`
+    /// is not one of this palette's materials.
+    pub fn material_index(&self, id: U32Id<BVoxMaterial>) -> Option<usize> {
+        self.material_ids.index_of(id)
+    }
+
+    /// Moves material `id` to position `index` in the material order, shifting
+    /// the materials between its old and new positions one slot. Errors,
+    /// changing nothing, if `id` is not one of this palette's materials or
+    /// `index` is at or past [`material_count`](Self::material_count).
+    pub fn move_material(&mut self, id: U32Id<BVoxMaterial>, index: usize) -> Result<()> {
+        if !self.material_ids.is_retained(id) {
+            return Err(Error::UnknownMaterial { material_id: id });
+        }
+        let count = self.material_ids.len();
+        if index >= count {
+            return Err(Error::IndexPastCount { index, count });
+        }
+        self.material_ids.move_to(id, index);
+        Ok(())
+    }
+
+    /// Retains a property after any existing ones and returns its id, back-filling
+    /// existing materials with `default_value_id` so every material keeps one
+    /// value id per property. Errors, changing nothing, if a property already
+    /// has this name. `default_value_id` must be one of `value_pool_id`'s
+    /// values, which [`VoxMain::retain_palette`](crate::VoxMain::retain_palette)
+    /// checks on insert.
+    pub fn retain_property(
+        &mut self,
+        name: String,
+        value_pool_id: U32Id<BVoxValuePool>,
+        default_value_id: U32Id<BVoxValuePoolValue>,
+    ) -> Result<U32Id<BVoxProperty>> {
+        if self.property_id_by_name.contains_key(&name) {
+            return Err(Error::DuplicatePropertyName { name });
+        }
+
+        let property_id = self.property_ids.retain();
+
+        self.property_id_by_name.insert(name.clone(), property_id);
+
+        self.properties.retain(
+            property_id,
+            VoxProperty {
+                name,
+                value_pool_id,
+            },
+        );
+
+        for material_id in self.material_ids.iter() {
+            // Safety: retained material ids have a value row.
+            let row = unsafe { self.materials.get_mut(material_id) };
+            row.retain(property_id, default_value_id);
+        }
+
+        Ok(property_id)
+    }
+
+    /// Releases property `id`. Errors, changing nothing, if `id` is not one of
+    /// this palette's properties. Each material row keeps filler at the
+    /// released slot until [`VoxMain::gc`](crate::VoxMain::gc) compacts the rows
+    /// and renumbers.
+    pub fn release_property(&mut self, id: U32Id<BVoxProperty>) -> Result<()> {
+        if !self.property_ids.is_retained(id) {
+            return Err(Error::UnknownProperty { property_id: id });
+        }
+
+        // Drop the index entry still pointing here; a duplicate name may have
+        // overwritten it.
+        // Safety: a retained property has a value.
+        let name = unsafe { self.properties.get(id) }.name.clone();
+        if self.property_id_by_name.get(&name) == Some(&id) {
+            self.property_id_by_name.remove(&name);
+        }
+
+        // A value id is Copy, so releasing each material's slot at `id`
+        // would be a no-op; leave it for gc to compact and only free the
+        // property.
+        // Safety: a retained property has a value.
+        unsafe { self.properties.release(id) };
+        self.property_ids.release_stable(id);
+        Ok(())
+    }
+
+    /// Properties in listing order, as `(id, property)`. Property order is the
+    /// value-id order of each material row.
+    pub fn iter_properties(
+        &self,
+    ) -> impl Iterator<Item = (U32Id<BVoxProperty>, &VoxProperty)> + '_ {
+        // Safety: retained ids have a value.
+        self.property_ids
+            .iter()
+            .map(move |property_id| (property_id, unsafe { self.properties.get(property_id) }))
+    }
+
+    /// Moves property `id` to position `index` in the property order, shifting
+    /// the properties between its old and new positions one slot. Errors,
+    /// changing nothing, if `id` is not one of this palette's properties or
+    /// `index` is at or past [`property_count`](Self::property_count).
+    pub fn move_property(&mut self, id: U32Id<BVoxProperty>, index: usize) -> Result<()> {
+        if !self.property_ids.is_retained(id) {
+            return Err(Error::UnknownProperty { property_id: id });
+        }
+        let count = self.property_ids.len();
+        if index >= count {
+            return Err(Error::IndexPastCount { index, count });
+        }
+        self.property_ids.move_to(id, index);
+        Ok(())
+    }
+
+    /// The property `id`, or `None` if not one of this palette's.
+    pub fn property(&self, id: U32Id<BVoxProperty>) -> Option<&VoxProperty> {
+        // Safety: retained ids have a value.
+        self.property_ids
+            .is_retained(id)
+            .then(|| unsafe { self.properties.get(id) })
+    }
+
+    /// Number of properties.
+    pub fn property_count(&self) -> usize {
+        self.property_ids.len()
+    }
+
+    /// The property named `name`, or `None` if none has that name. O(1)
+    /// through the name index.
+    pub fn property_id_by_name(&self, name: &str) -> Option<U32Id<BVoxProperty>> {
+        self.property_id_by_name.get(name).copied()
+    }
+
+    /// The position of property `id` in the property order, or `None` if `id`
+    /// is not one of this palette's properties.
+    pub fn property_index(&self, id: U32Id<BVoxProperty>) -> Option<usize> {
+        self.property_ids.index_of(id)
+    }
+
+    /// The value id `material_id` draws for `property_id`, identifying a value
+    /// in the value pool that property draws from, or `None` if either id is
+    /// not this palette's. Read the value pool a [`VoxMain`](crate::VoxMain)
+    /// holds by that id for the value.
+    pub fn value_id(
+        &self,
+        material_id: U32Id<BVoxMaterial>,
+        property_id: U32Id<BVoxProperty>,
+    ) -> Option<U32Id<BVoxValuePoolValue>> {
+        if !self.material_ids.is_retained(material_id)
+            || !self.property_ids.is_retained(property_id)
+        {
+            return None;
+        }
+        // Safety: a retained material has a value id for every property.
+        let row = unsafe { self.materials.get(material_id) };
+        Some(*unsafe { row.get(property_id) })
     }
 
     /// Translates each material's cells through the value relabeling of the
@@ -394,6 +358,42 @@ impl VoxPalette {
             property.value_pool_id = remap
                 .new_id(property.value_pool_id)
                 .expect("a property names a live value pool in a valid state");
+        }
+    }
+
+    /// Repoints each material's cell for a property on `value_pool_id` that
+    /// draws `old_id` to `new_id`. Used by [`release_value_pool_value`] before
+    /// `old_id` is released.
+    ///
+    /// [`release_value_pool_value`]: crate::VoxMain::release_value_pool_value
+    pub(crate) fn repoint_value_pool_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        old_id: U32Id<BVoxValuePoolValue>,
+        new_id: U32Id<BVoxValuePoolValue>,
+    ) {
+        // The properties on `value_pool_id`, found once so each material's row
+        // is visited once for all of them.
+        let value_pool_property_ids: Vec<_> = self
+            .property_ids
+            .iter()
+            .filter(|&property_id| {
+                // Safety: retained property ids have a value.
+                unsafe { self.properties.get(property_id) }.value_pool_id == value_pool_id
+            })
+            .collect();
+        if !value_pool_property_ids.is_empty() {
+            for material_id in self.material_ids.iter() {
+                // Safety: a retained material holds a value id for every
+                // property, and the row is keyed by property id.
+                let row = unsafe { self.materials.get_mut(material_id) };
+                for &property_id in &value_pool_property_ids {
+                    let slot = unsafe { row.get_mut(property_id) };
+                    if *slot == old_id {
+                        *slot = new_id;
+                    }
+                }
+            }
         }
     }
 }

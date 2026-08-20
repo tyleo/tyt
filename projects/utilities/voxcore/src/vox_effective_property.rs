@@ -29,30 +29,19 @@ pub struct VoxEffectiveProperty<'a> {
 }
 
 impl<'a> VoxEffectiveProperty<'a> {
-    /// The property name.
-    pub fn name(&self) -> &'a str {
-        self.name
-    }
-
     /// The winning layer.
     pub fn layer_id(&self) -> U32Id<BVoxLayer> {
         self.layer_id
     }
 
+    /// The property name.
+    pub fn name(&self) -> &'a str {
+        self.name
+    }
+
     /// The palette the winning layer references.
     pub fn palette_id(&self) -> U32Id<BVoxPalette> {
         self.palette_id
-    }
-
-    /// The value pool the property draws values from.
-    pub fn value_pool(&self) -> &'a VoxValuePool {
-        self.value_pool
-    }
-
-    /// The value id `material` draws, or `None` if `material` is not one of
-    /// the winning palette's.
-    pub fn value_id(&self, material_id: U32Id<BVoxMaterial>) -> Option<U32Id<BVoxValuePoolValue>> {
-        self.palette.value_id(material_id, self.property_id)
     }
 
     /// The winning palette's materials with the value id each draws, in
@@ -74,5 +63,16 @@ impl<'a> VoxEffectiveProperty<'a> {
     pub fn value(&self, material_id: U32Id<BVoxMaterial>) -> Option<VoxValuePoolValueRef<'_>> {
         let value_id = self.value_id(material_id)?;
         self.value_pool.value(value_id)
+    }
+
+    /// The value id `material` draws, or `None` if `material` is not one of
+    /// the winning palette's.
+    pub fn value_id(&self, material_id: U32Id<BVoxMaterial>) -> Option<U32Id<BVoxValuePoolValue>> {
+        self.palette.value_id(material_id, self.property_id)
+    }
+
+    /// The value pool the property draws values from.
+    pub fn value_pool(&self) -> &'a VoxValuePool {
+        self.value_pool
     }
 }

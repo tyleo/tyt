@@ -91,221 +91,6 @@ impl VoxObject {
             .saturating_mul(bounds.z as u64)
     }
 
-    /// Display name.
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    /// Grid size in voxels.
-    pub fn bounds(&self) -> TyVector3U32 {
-        self.bounds
-    }
-
-    /// Translation from the placing hierarchy node to the grid's min corner, in
-    /// voxels. `[0, 0, 0]` places the grid's min corner at the node origin.
-    pub fn origin(&self) -> TyVector3I32 {
-        self.origin
-    }
-
-    /// Sets the grid [`origin`](Self::origin).
-    pub fn set_origin(&mut self, origin: TyVector3I32) {
-        self.origin = origin;
-    }
-
-    /// Number of live (filled) voxels.
-    pub fn live_count(&self) -> usize {
-        self.liveness.count_live()
-    }
-
-    /// Voxel id at grid `position`, or `None` if outside
-    /// [`bounds`](Self::bounds).
-    pub fn voxel_id(&self, position: TyVector3U32) -> Option<U32Id<BVoxVoxel>> {
-        if position.x >= self.bounds.x || position.y >= self.bounds.y || position.z >= self.bounds.z
-        {
-            return None;
-        }
-
-        let plane = self.bounds.y as u64 * self.bounds.z as u64;
-        let raster = (position.x as u64)
-            .saturating_mul(plane)
-            .saturating_add(position.y as u64 * self.bounds.z as u64)
-            .saturating_add(position.z as u64);
-        (raster <= u32::MAX as u64).then(|| U32Id::from_u32(raster as u32))
-    }
-
-    /// Grid position of `id`, or `None` if outside the grid. Inverse of
-    /// [`voxel_id`](Self::voxel_id).
-    pub fn voxel_position(&self, id: U32Id<BVoxVoxel>) -> Option<TyVector3U32> {
-        let raster = id.to_u32() as u64;
-        if raster >= Self::volume_of(self.bounds) {
-            return None;
-        }
-
-        // A non-zero volume guarantees both extents below are non-zero.
-        let plane = self.bounds.y as u64 * self.bounds.z as u64;
-        Some(TyVector3U32::new(
-            (raster / plane) as u32,
-            ((raster % plane) / self.bounds.z as u64) as u32,
-            (raster % self.bounds.z as u64) as u32,
-        ))
-    }
-
-    /// Whether the voxel at `id` is live. `false` if outside the grid.
-    pub fn is_live(&self, id: U32Id<BVoxVoxel>) -> bool {
-        (id.to_u32() as usize) < self.liveness.len() && self.liveness.is_live(id)
-    }
-
-    /// Material the live voxel `id` samples in `layer_id`, or `None` if the
-    /// voxel is not live or `layer_id` is not one of this object's layers.
-    pub fn voxel_material(
-        &self,
-        id: U32Id<BVoxVoxel>,
-        layer_id: U32Id<BVoxLayer>,
-    ) -> Option<U32Id<BVoxMaterial>> {
-        if !self.is_live(id) || !self.layer_ids.is_retained(layer_id) {
-            return None;
-        }
-
-        // Safety: the dense grid gives every layer a slot for every voxel id.
-        let column = unsafe { self.samples.get(layer_id) };
-        Some(*unsafe { column.get(id) })
-    }
-
-    /// Live voxel ids in ascending raster order. Recover positions with
-    /// [`voxel_position`](Self::voxel_position) and materials with
-    /// [`voxel_material`](Self::voxel_material).
-    pub fn iter_live(&self) -> impl Iterator<Item = U32Id<BVoxVoxel>> + '_ {
-        self.liveness.iter_live()
-    }
-
-    /// Live voxels' samples in `layer_id`, as `(voxel id, material id)`, in
-    /// ascending raster order, or `None` if `layer_id` is not one of this
-    /// object's layers. Reads the layer's sample column once, so a full scan
-    /// skips [`voxel_material`](Self::voxel_material)'s per-call lookups.
-    pub fn iter_live_samples(
-        &self,
-        layer_id: U32Id<BVoxLayer>,
-    ) -> Option<impl Iterator<Item = (U32Id<BVoxVoxel>, U32Id<BVoxMaterial>)> + '_> {
-        if !self.layer_ids.is_retained(layer_id) {
-            return None;
-        }
-        // Safety: retained layer ids have a sample column.
-        let column = unsafe { self.samples.get(layer_id) };
-        Some(self.liveness.iter_live().map(move |voxel_id| {
-            // Safety: the dense grid gives every layer a slot for every voxel
-            // id.
-            (voxel_id, *unsafe { column.get(voxel_id) })
-        }))
-    }
-
-    /// The tight live-voxel extent as `(min_corner, [X, Y, Z] size)` in this
-    /// object's grid, or `None` when it has no live voxels. The object stores
-    /// the wider build volume in [`bounds`](Self::bounds).
-    pub fn live_extent(&self) -> Option<(TyVector3U32, TyVector3U32)> {
-        let mut live = self.iter_live().map(|voxel_id| {
-            self.voxel_position(voxel_id)
-                .expect("a live voxel is within the grid")
-        });
-
-        let first = live.next()?;
-        let (mut min, mut max) = (first, first);
-        for p in live {
-            min = min.min(p);
-            max = max.max(p);
-        }
-
-        Some((
-            min,
-            TyVector3U32::new(max.x - min.x + 1, max.y - min.y + 1, max.z - min.z + 1),
-        ))
-    }
-
-    /// Number of layers.
-    pub fn layer_count(&self) -> usize {
-        self.layer_ids.len()
-    }
-
-    /// The palette id layer `id` references, or `None` if `id` is not one of
-    /// this object's layers.
-    pub fn layer_palette_id(&self, id: U32Id<BVoxLayer>) -> Option<U32Id<BVoxPalette>> {
-        // Safety: retained layer ids have a `layer_palette_ids` value.
-        self.layer_ids
-            .is_retained(id)
-            .then(|| *unsafe { self.layer_palette_ids.get(id) })
-    }
-
-    /// Layers in layer order, as `(layer id, palette)`. Pair a layer id with
-    /// [`voxel_material`](Self::voxel_material) to read its samples.
-    pub fn iter_layers(&self) -> impl Iterator<Item = (U32Id<BVoxLayer>, U32Id<BVoxPalette>)> + '_ {
-        // Safety: retained layer ids have a `layer_palette_ids` value.
-        self.layer_ids
-            .iter()
-            .map(move |layer_id| (layer_id, *unsafe { self.layer_palette_ids.get(layer_id) }))
-    }
-
-    /// Retains a layer referencing `palette_id` after any existing ones and
-    /// returns its id, back-filling every voxel with `default_material_id`.
-    /// Live voxels keep `default_material_id` until
-    /// [`retain_voxel`](Self::retain_voxel) overwrites it, so widening the
-    /// layer set never requires re-retaining voxels. The same palette may back
-    /// several layers. `default_material_id` should be one of `palette_id`'s
-    /// materials; a live voxel keeping it is checked by
-    /// [`VoxMain::retain_object`](crate::VoxMain::retain_object) on insert.
-    pub fn retain_layer(
-        &mut self,
-        palette_id: U32Id<BVoxPalette>,
-        default_material_id: U32Id<BVoxMaterial>,
-    ) -> U32Id<BVoxLayer> {
-        let layer_id = self.layer_ids.retain();
-        self.layer_palette_ids.retain(layer_id, palette_id);
-
-        let mut column = IdField::new();
-        for voxel_id in &self.voxel_ids {
-            column.retain(voxel_id, default_material_id);
-        }
-
-        self.samples.retain(layer_id, column);
-
-        layer_id
-    }
-
-    /// Makes the voxel at `id` live with one `sample_ids` material per layer,
-    /// in [`iter_layers`](Self::iter_layers) order. Errors, changing nothing,
-    /// if `id` is outside the grid or `sample_ids` has the wrong length.
-    pub fn retain_voxel(
-        &mut self,
-        id: U32Id<BVoxVoxel>,
-        sample_ids: &[U32Id<BVoxMaterial>],
-    ) -> Result<()> {
-        if (id.to_u32() as usize) >= self.liveness.len() {
-            return Err(Error::UnknownVoxel { voxel_id: id });
-        }
-        if sample_ids.len() != self.layer_ids.len() {
-            return Err(Error::SampleArity {
-                samples: sample_ids.len(),
-                layers: self.layer_ids.len(),
-            });
-        }
-
-        self.liveness.set_live(id, true);
-        for (layer_id, &material_id) in self.layer_ids.iter().zip(sample_ids) {
-            // Safety: the dense grid gives every layer a slot for `id`.
-            let column = unsafe { self.samples.get_mut(layer_id) };
-            unsafe { column.set(id, material_id) };
-        }
-        Ok(())
-    }
-
-    /// Makes the voxel at `id` empty, leaving its samples in place but ignored.
-    /// Errors, changing nothing, if `id` is outside the grid.
-    pub fn release_voxel(&mut self, id: U32Id<BVoxVoxel>) -> Result<()> {
-        if (id.to_u32() as usize) >= self.liveness.len() {
-            return Err(Error::UnknownVoxel { voxel_id: id });
-        }
-        self.liveness.set_live(id, false);
-        Ok(())
-    }
-
     /// Deep copy. Liveness lives in the id pools, so the columns can't derive
     /// `Clone`; rebuild them against the cloned id pools.
     pub fn clone_object(&self) -> Self {
@@ -327,93 +112,6 @@ impl VoxObject {
             layer_ids: self.layer_ids.clone(),
             layer_palette_ids: self.layer_palette_ids.clone(),
             samples,
-        }
-    }
-
-    /// Releases layer `id`, dropping its per-voxel sample column so every voxel
-    /// keeps one fewer sample. The remaining layers keep their order. Errors,
-    /// changing nothing, if `id` is not one of this object's layers. Leaves a
-    /// hole until [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
-    pub fn release_layer(&mut self, id: U32Id<BVoxLayer>) -> Result<()> {
-        if !self.layer_ids.is_retained(id) {
-            return Err(Error::UnknownLayer { layer_id: id });
-        }
-
-        // Safety: a retained layer id has a value in both columns. Sample
-        // materials are Copy, so dropping the inner column frees its storage
-        // with nothing to release per voxel.
-        unsafe { self.layer_palette_ids.release(id) };
-        unsafe { self.samples.release(id) };
-        self.layer_ids.release_stable(id);
-        Ok(())
-    }
-
-    /// Moves layer `id` to position `index` in the layer order, shifting the
-    /// layers between its old and new positions one slot. Errors, changing
-    /// nothing, if `id` is not one of this object's layers or `index` is at or
-    /// past [`layer_count`](Self::layer_count).
-    pub fn move_layer(&mut self, id: U32Id<BVoxLayer>, index: usize) -> Result<()> {
-        if !self.layer_ids.is_retained(id) {
-            return Err(Error::UnknownLayer { layer_id: id });
-        }
-        let count = self.layer_ids.len();
-        if index >= count {
-            return Err(Error::IndexPastCount { index, count });
-        }
-        self.layer_ids.move_to(id, index);
-        Ok(())
-    }
-
-    /// The position of layer `id` in the layer order, or `None` if `id` is not
-    /// one of this object's layers.
-    pub fn layer_index(&self, id: U32Id<BVoxLayer>) -> Option<usize> {
-        self.layer_ids.index_of(id)
-    }
-
-    /// Releases every layer referencing `palette_id`. Two layers may reference
-    /// the same palette, so this releases every match. Used by
-    /// [`VoxMain::release_palette`](crate::VoxMain::release_palette) to detach an
-    /// object from a palette being released.
-    pub(crate) fn release_layers_to(&mut self, palette_id: U32Id<BVoxPalette>) {
-        let doomed_ids: Vec<_> = self
-            .iter_layers()
-            .filter(|&(_, layer_palette_id)| layer_palette_id == palette_id)
-            .map(|(layer_id, _)| layer_id)
-            .collect();
-
-        for layer_id in doomed_ids {
-            self.release_layer(layer_id)
-                .expect("an iterated layer is one of the object's");
-        }
-    }
-
-    /// Repoints every live voxel that samples a keyed material of
-    /// `replacement_ids` through a layer referencing `palette_id` to the
-    /// material it pairs with. Used by
-    /// [`VoxMain::release_materials`](crate::VoxMain::release_materials) before
-    /// the old materials are dropped.
-    pub(crate) fn repaint_materials(
-        &mut self,
-        palette_id: U32Id<BVoxPalette>,
-        replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
-    ) {
-        let layer_ids: Vec<_> = self.layer_ids.iter().collect();
-        for layer_id in layer_ids {
-            // Safety: retained layer ids have a `layer_palette_ids` value.
-            if *unsafe { self.layer_palette_ids.get(layer_id) } != palette_id {
-                continue;
-            }
-
-            // Safety: retained layer ids have a sample column.
-            let column = unsafe { self.samples.get_mut(layer_id) };
-            for voxel_id in self.liveness.iter_live() {
-                // Safety: the dense grid gives every layer a slot for every
-                // voxel id.
-                let sample = unsafe { column.get_mut(voxel_id) };
-                if let Some(&replacement_id) = replacement_ids.get(sample) {
-                    *sample = replacement_id;
-                }
-            }
         }
     }
 
@@ -464,6 +162,308 @@ impl VoxObject {
         // nothing has retained or released since.
         unsafe { self.samples.gc(&layer_remap) };
         unsafe { self.layer_palette_ids.gc(&layer_remap) };
+    }
+
+    /// Grid size in voxels.
+    pub fn bounds(&self) -> TyVector3U32 {
+        self.bounds
+    }
+
+    /// Retains a layer referencing `palette_id` after any existing ones and
+    /// returns its id, back-filling every voxel with `default_material_id`.
+    /// Live voxels keep `default_material_id` until
+    /// [`retain_voxel`](Self::retain_voxel) overwrites it, so widening the
+    /// layer set never requires re-retaining voxels. The same palette may back
+    /// several layers. `default_material_id` should be one of `palette_id`'s
+    /// materials; a live voxel keeping it is checked by
+    /// [`VoxMain::retain_object`](crate::VoxMain::retain_object) on insert.
+    pub fn retain_layer(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        default_material_id: U32Id<BVoxMaterial>,
+    ) -> U32Id<BVoxLayer> {
+        let layer_id = self.layer_ids.retain();
+        self.layer_palette_ids.retain(layer_id, palette_id);
+
+        let mut column = IdField::new();
+        for voxel_id in &self.voxel_ids {
+            column.retain(voxel_id, default_material_id);
+        }
+
+        self.samples.retain(layer_id, column);
+
+        layer_id
+    }
+
+    /// Releases layer `id`, dropping its per-voxel sample column so every voxel
+    /// keeps one fewer sample. The remaining layers keep their order. Errors,
+    /// changing nothing, if `id` is not one of this object's layers. Leaves a
+    /// hole until [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
+    pub fn release_layer(&mut self, id: U32Id<BVoxLayer>) -> Result<()> {
+        if !self.layer_ids.is_retained(id) {
+            return Err(Error::UnknownLayer { layer_id: id });
+        }
+
+        // Safety: a retained layer id has a value in both columns. Sample
+        // materials are Copy, so dropping the inner column frees its storage
+        // with nothing to release per voxel.
+        unsafe { self.layer_palette_ids.release(id) };
+        unsafe { self.samples.release(id) };
+        self.layer_ids.release_stable(id);
+        Ok(())
+    }
+
+    /// Releases every layer referencing `palette_id`. Two layers may reference
+    /// the same palette, so this releases every match. Used by
+    /// [`VoxMain::release_palette`](crate::VoxMain::release_palette) to detach an
+    /// object from a palette being released.
+    pub(crate) fn release_layers_to(&mut self, palette_id: U32Id<BVoxPalette>) {
+        let doomed_ids: Vec<_> = self
+            .iter_layers()
+            .filter(|&(_, layer_palette_id)| layer_palette_id == palette_id)
+            .map(|(layer_id, _)| layer_id)
+            .collect();
+
+        for layer_id in doomed_ids {
+            self.release_layer(layer_id)
+                .expect("an iterated layer is one of the object's");
+        }
+    }
+
+    /// Layers in layer order, as `(layer id, palette)`. Pair a layer id with
+    /// [`voxel_material`](Self::voxel_material) to read its samples.
+    pub fn iter_layers(&self) -> impl Iterator<Item = (U32Id<BVoxLayer>, U32Id<BVoxPalette>)> + '_ {
+        // Safety: retained layer ids have a `layer_palette_ids` value.
+        self.layer_ids
+            .iter()
+            .map(move |layer_id| (layer_id, *unsafe { self.layer_palette_ids.get(layer_id) }))
+    }
+
+    /// Number of layers.
+    pub fn layer_count(&self) -> usize {
+        self.layer_ids.len()
+    }
+
+    /// The position of layer `id` in the layer order, or `None` if `id` is not
+    /// one of this object's layers.
+    pub fn layer_index(&self, id: U32Id<BVoxLayer>) -> Option<usize> {
+        self.layer_ids.index_of(id)
+    }
+
+    /// The palette id layer `id` references, or `None` if `id` is not one of
+    /// this object's layers.
+    pub fn layer_palette_id(&self, id: U32Id<BVoxLayer>) -> Option<U32Id<BVoxPalette>> {
+        // Safety: retained layer ids have a `layer_palette_ids` value.
+        self.layer_ids
+            .is_retained(id)
+            .then(|| *unsafe { self.layer_palette_ids.get(id) })
+    }
+
+    /// Moves layer `id` to position `index` in the layer order, shifting the
+    /// layers between its old and new positions one slot. Errors, changing
+    /// nothing, if `id` is not one of this object's layers or `index` is at or
+    /// past [`layer_count`](Self::layer_count).
+    pub fn move_layer(&mut self, id: U32Id<BVoxLayer>, index: usize) -> Result<()> {
+        if !self.layer_ids.is_retained(id) {
+            return Err(Error::UnknownLayer { layer_id: id });
+        }
+        let count = self.layer_ids.len();
+        if index >= count {
+            return Err(Error::IndexPastCount { index, count });
+        }
+        self.layer_ids.move_to(id, index);
+        Ok(())
+    }
+
+    /// Repoints every live voxel that samples a keyed material of
+    /// `replacement_ids` through a layer referencing `palette_id` to the
+    /// material it pairs with. Used by
+    /// [`VoxMain::release_materials`](crate::VoxMain::release_materials) before
+    /// the old materials are dropped.
+    pub(crate) fn repaint_materials(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
+    ) {
+        let layer_ids: Vec<_> = self.layer_ids.iter().collect();
+        for layer_id in layer_ids {
+            // Safety: retained layer ids have a `layer_palette_ids` value.
+            if *unsafe { self.layer_palette_ids.get(layer_id) } != palette_id {
+                continue;
+            }
+
+            // Safety: retained layer ids have a sample column.
+            let column = unsafe { self.samples.get_mut(layer_id) };
+            for voxel_id in self.liveness.iter_live() {
+                // Safety: the dense grid gives every layer a slot for every
+                // voxel id.
+                let sample = unsafe { column.get_mut(voxel_id) };
+                if let Some(&replacement_id) = replacement_ids.get(sample) {
+                    *sample = replacement_id;
+                }
+            }
+        }
+    }
+
+    /// Display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Translation from the placing hierarchy node to the grid's min corner, in
+    /// voxels. `[0, 0, 0]` places the grid's min corner at the node origin.
+    pub fn origin(&self) -> TyVector3I32 {
+        self.origin
+    }
+
+    /// Sets the grid [`origin`](Self::origin).
+    pub fn set_origin(&mut self, origin: TyVector3I32) {
+        self.origin = origin;
+    }
+
+    /// Makes the voxel at `id` live with one `sample_ids` material per layer,
+    /// in [`iter_layers`](Self::iter_layers) order. Errors, changing nothing,
+    /// if `id` is outside the grid or `sample_ids` has the wrong length.
+    pub fn retain_voxel(
+        &mut self,
+        id: U32Id<BVoxVoxel>,
+        sample_ids: &[U32Id<BVoxMaterial>],
+    ) -> Result<()> {
+        if (id.to_u32() as usize) >= self.liveness.len() {
+            return Err(Error::UnknownVoxel { voxel_id: id });
+        }
+        if sample_ids.len() != self.layer_ids.len() {
+            return Err(Error::SampleArity {
+                samples: sample_ids.len(),
+                layers: self.layer_ids.len(),
+            });
+        }
+
+        self.liveness.set_live(id, true);
+        for (layer_id, &material_id) in self.layer_ids.iter().zip(sample_ids) {
+            // Safety: the dense grid gives every layer a slot for `id`.
+            let column = unsafe { self.samples.get_mut(layer_id) };
+            unsafe { column.set(id, material_id) };
+        }
+        Ok(())
+    }
+
+    /// Makes the voxel at `id` empty, leaving its samples in place but ignored.
+    /// Errors, changing nothing, if `id` is outside the grid.
+    pub fn release_voxel(&mut self, id: U32Id<BVoxVoxel>) -> Result<()> {
+        if (id.to_u32() as usize) >= self.liveness.len() {
+            return Err(Error::UnknownVoxel { voxel_id: id });
+        }
+        self.liveness.set_live(id, false);
+        Ok(())
+    }
+
+    /// Whether the voxel at `id` is live. `false` if outside the grid.
+    pub fn is_live(&self, id: U32Id<BVoxVoxel>) -> bool {
+        (id.to_u32() as usize) < self.liveness.len() && self.liveness.is_live(id)
+    }
+
+    /// Live voxel ids in ascending raster order. Recover positions with
+    /// [`voxel_position`](Self::voxel_position) and materials with
+    /// [`voxel_material`](Self::voxel_material).
+    pub fn iter_live(&self) -> impl Iterator<Item = U32Id<BVoxVoxel>> + '_ {
+        self.liveness.iter_live()
+    }
+
+    /// Live voxels' samples in `layer_id`, as `(voxel id, material id)`, in
+    /// ascending raster order, or `None` if `layer_id` is not one of this
+    /// object's layers. Reads the layer's sample column once, so a full scan
+    /// skips [`voxel_material`](Self::voxel_material)'s per-call lookups.
+    pub fn iter_live_samples(
+        &self,
+        layer_id: U32Id<BVoxLayer>,
+    ) -> Option<impl Iterator<Item = (U32Id<BVoxVoxel>, U32Id<BVoxMaterial>)> + '_> {
+        if !self.layer_ids.is_retained(layer_id) {
+            return None;
+        }
+        // Safety: retained layer ids have a sample column.
+        let column = unsafe { self.samples.get(layer_id) };
+        Some(self.liveness.iter_live().map(move |voxel_id| {
+            // Safety: the dense grid gives every layer a slot for every voxel
+            // id.
+            (voxel_id, *unsafe { column.get(voxel_id) })
+        }))
+    }
+
+    /// Number of live (filled) voxels.
+    pub fn live_count(&self) -> usize {
+        self.liveness.count_live()
+    }
+
+    /// The tight live-voxel extent as `(min_corner, [X, Y, Z] size)` in this
+    /// object's grid, or `None` when it has no live voxels. The object stores
+    /// the wider build volume in [`bounds`](Self::bounds).
+    pub fn live_extent(&self) -> Option<(TyVector3U32, TyVector3U32)> {
+        let mut live = self.iter_live().map(|voxel_id| {
+            self.voxel_position(voxel_id)
+                .expect("a live voxel is within the grid")
+        });
+
+        let first = live.next()?;
+        let (mut min, mut max) = (first, first);
+        for p in live {
+            min = min.min(p);
+            max = max.max(p);
+        }
+
+        Some((
+            min,
+            TyVector3U32::new(max.x - min.x + 1, max.y - min.y + 1, max.z - min.z + 1),
+        ))
+    }
+
+    /// Voxel id at grid `position`, or `None` if outside
+    /// [`bounds`](Self::bounds).
+    pub fn voxel_id(&self, position: TyVector3U32) -> Option<U32Id<BVoxVoxel>> {
+        if position.x >= self.bounds.x || position.y >= self.bounds.y || position.z >= self.bounds.z
+        {
+            return None;
+        }
+
+        let plane = self.bounds.y as u64 * self.bounds.z as u64;
+        let raster = (position.x as u64)
+            .saturating_mul(plane)
+            .saturating_add(position.y as u64 * self.bounds.z as u64)
+            .saturating_add(position.z as u64);
+        (raster <= u32::MAX as u64).then(|| U32Id::from_u32(raster as u32))
+    }
+
+    /// Material the live voxel `id` samples in `layer_id`, or `None` if the
+    /// voxel is not live or `layer_id` is not one of this object's layers.
+    pub fn voxel_material(
+        &self,
+        id: U32Id<BVoxVoxel>,
+        layer_id: U32Id<BVoxLayer>,
+    ) -> Option<U32Id<BVoxMaterial>> {
+        if !self.is_live(id) || !self.layer_ids.is_retained(layer_id) {
+            return None;
+        }
+
+        // Safety: the dense grid gives every layer a slot for every voxel id.
+        let column = unsafe { self.samples.get(layer_id) };
+        Some(*unsafe { column.get(id) })
+    }
+
+    /// Grid position of `id`, or `None` if outside the grid. Inverse of
+    /// [`voxel_id`](Self::voxel_id).
+    pub fn voxel_position(&self, id: U32Id<BVoxVoxel>) -> Option<TyVector3U32> {
+        let raster = id.to_u32() as u64;
+        if raster >= Self::volume_of(self.bounds) {
+            return None;
+        }
+
+        // A non-zero volume guarantees both extents below are non-zero.
+        let plane = self.bounds.y as u64 * self.bounds.z as u64;
+        Some(TyVector3U32::new(
+            (raster / plane) as u32,
+            ((raster % plane) / self.bounds.z as u64) as u32,
+            (raster % self.bounds.z as u64) as u32,
+        ))
     }
 }
 

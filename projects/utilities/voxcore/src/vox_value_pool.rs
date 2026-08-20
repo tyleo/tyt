@@ -151,90 +151,6 @@ impl VoxValuePool {
         }
     }
 
-    /// The id of the first value outside its kind's value domain, or `None`
-    /// if every value is within it. The checked constructors gate on this, so
-    /// a flaw found later is a voxcore bug;
-    /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
-    pub(crate) fn first_out_of_domain_value(&self) -> Option<U32Id<BVoxValuePoolValue>> {
-        for (value_id, value) in self.iter_values() {
-            let in_domain = match value {
-                VoxValuePoolValueRef::Float(value) => float_in_domain(value),
-                VoxValuePoolValueRef::Int(value) => int_in_domain(value),
-                VoxValuePoolValueRef::Vec2Float(components) => floats_in_domain(components),
-                VoxValuePoolValueRef::Vec2Int(components) => ints_in_domain(components),
-                VoxValuePoolValueRef::Vec3Float(components) => floats_in_domain(components),
-                VoxValuePoolValueRef::Vec3Int(components) => ints_in_domain(components),
-                VoxValuePoolValueRef::Vec4Float(components) => floats_in_domain(components),
-                VoxValuePoolValueRef::Vec4Int(components) => ints_in_domain(components),
-                VoxValuePoolValueRef::Bool(_)
-                | VoxValuePoolValueRef::Json(_)
-                | VoxValuePoolValueRef::String(_) => true,
-            };
-            if !in_domain {
-                return Some(value_id);
-            }
-        }
-        None
-    }
-
-    /// The kind, for matching. Read the values through [`value`](Self::value)
-    /// and [`iter_values`](Self::iter_values).
-    pub fn kind(&self) -> &VoxValuePoolKind {
-        &self.kind
-    }
-
-    /// The number of values in the value pool, across every kind.
-    pub fn len(&self) -> usize {
-        self.value_ids.len()
-    }
-
-    /// Whether the value pool holds no values.
-    pub fn is_empty(&self) -> bool {
-        self.value_ids.is_empty()
-    }
-
-    /// Whether `id` is one of this value pool's values.
-    pub fn contains_value(&self, id: U32Id<BVoxValuePoolValue>) -> bool {
-        self.value_ids.is_retained(id)
-    }
-
-    /// The value at `id`, typed by the value pool's kind, or `None` if `id` is
-    /// not one of this value pool's values.
-    pub fn value(&self, id: U32Id<BVoxValuePoolValue>) -> Option<VoxValuePoolValueRef<'_>> {
-        self.value_ids.is_retained(id).then(|| self.value_ref(id))
-    }
-
-    /// Values in listing order, as `(id, value)`.
-    pub fn iter_values(
-        &self,
-    ) -> impl Iterator<Item = (U32Id<BVoxValuePoolValue>, VoxValuePoolValueRef<'_>)> + '_ {
-        self.value_ids
-            .iter()
-            .map(move |value_id| (value_id, self.value_ref(value_id)))
-    }
-
-    /// The listing position of value `id`, or `None` if `id` is not one of this
-    /// value pool's values.
-    pub fn value_index(&self, id: U32Id<BVoxValuePoolValue>) -> Option<usize> {
-        self.value_ids.index_of(id)
-    }
-
-    /// Moves value `id` to listing position `index`, shifting the values
-    /// between its old and new positions one slot. Errors, changing nothing, if
-    /// `id` is not one of this value pool's values or `index` is at or past
-    /// [`len`](Self::len).
-    pub fn move_value(&mut self, id: U32Id<BVoxValuePoolValue>, index: usize) -> Result<()> {
-        if !self.value_ids.is_retained(id) {
-            return Err(Error::UnknownValuePoolValue { value_id: id });
-        }
-        let count = self.value_ids.len();
-        if index >= count {
-            return Err(Error::IndexPastCount { index, count });
-        }
-        self.value_ids.move_to(id, index);
-        Ok(())
-    }
-
     /// Deep copy. Liveness lives in the id pool, so the column can't derive
     /// `Clone`. Rebuild it against the cloned id pool.
     pub fn clone_value_pool(&self) -> Self {
@@ -278,6 +194,12 @@ impl VoxValuePool {
         }
     }
 
+    /// The kind, for matching. Read the values through [`value`](Self::value)
+    /// and [`iter_values`](Self::iter_values).
+    pub fn kind(&self) -> &VoxValuePoolKind {
+        &self.kind
+    }
+
     /// Releases value `id`, keeping the surviving values' listing order. The id
     /// must be one of this value pool's values. The caller repoints any palette
     /// cell drawing it first.
@@ -301,13 +223,35 @@ impl VoxValuePool {
         self.value_ids.release_stable(id);
     }
 
-    /// Rewrites the listing order to `new_order_ids`. `None`, changing nothing,
-    /// if `new_order_ids` does not list every value id exactly once.
-    pub(crate) fn set_value_order(
-        &mut self,
-        new_order_ids: &[U32Id<BVoxValuePoolValue>],
-    ) -> Option<()> {
-        self.value_ids.try_set_order(new_order_ids)
+    /// Whether `id` is one of this value pool's values.
+    pub fn contains_value(&self, id: U32Id<BVoxValuePoolValue>) -> bool {
+        self.value_ids.is_retained(id)
+    }
+
+    /// The id of the first value outside its kind's value domain, or `None`
+    /// if every value is within it. The checked constructors gate on this, so
+    /// a flaw found later is a voxcore bug;
+    /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
+    pub(crate) fn first_out_of_domain_value(&self) -> Option<U32Id<BVoxValuePoolValue>> {
+        for (value_id, value) in self.iter_values() {
+            let in_domain = match value {
+                VoxValuePoolValueRef::Float(value) => float_in_domain(value),
+                VoxValuePoolValueRef::Int(value) => int_in_domain(value),
+                VoxValuePoolValueRef::Vec2Float(components) => floats_in_domain(components),
+                VoxValuePoolValueRef::Vec2Int(components) => ints_in_domain(components),
+                VoxValuePoolValueRef::Vec3Float(components) => floats_in_domain(components),
+                VoxValuePoolValueRef::Vec3Int(components) => ints_in_domain(components),
+                VoxValuePoolValueRef::Vec4Float(components) => floats_in_domain(components),
+                VoxValuePoolValueRef::Vec4Int(components) => ints_in_domain(components),
+                VoxValuePoolValueRef::Bool(_)
+                | VoxValuePoolValueRef::Json(_)
+                | VoxValuePoolValueRef::String(_) => true,
+            };
+            if !in_domain {
+                return Some(value_id);
+            }
+        }
+        None
     }
 
     /// Compacts the value id pool back to a contiguous `0..len` in listing
@@ -333,6 +277,62 @@ impl VoxValuePool {
             }
         }
         remap
+    }
+
+    /// Whether the value pool holds no values.
+    pub fn is_empty(&self) -> bool {
+        self.value_ids.is_empty()
+    }
+
+    /// Values in listing order, as `(id, value)`.
+    pub fn iter_values(
+        &self,
+    ) -> impl Iterator<Item = (U32Id<BVoxValuePoolValue>, VoxValuePoolValueRef<'_>)> + '_ {
+        self.value_ids
+            .iter()
+            .map(move |value_id| (value_id, self.value_ref(value_id)))
+    }
+
+    /// The number of values in the value pool, across every kind.
+    pub fn len(&self) -> usize {
+        self.value_ids.len()
+    }
+
+    /// Moves value `id` to listing position `index`, shifting the values
+    /// between its old and new positions one slot. Errors, changing nothing, if
+    /// `id` is not one of this value pool's values or `index` is at or past
+    /// [`len`](Self::len).
+    pub fn move_value(&mut self, id: U32Id<BVoxValuePoolValue>, index: usize) -> Result<()> {
+        if !self.value_ids.is_retained(id) {
+            return Err(Error::UnknownValuePoolValue { value_id: id });
+        }
+        let count = self.value_ids.len();
+        if index >= count {
+            return Err(Error::IndexPastCount { index, count });
+        }
+        self.value_ids.move_to(id, index);
+        Ok(())
+    }
+
+    /// Rewrites the listing order to `new_order_ids`. `None`, changing nothing,
+    /// if `new_order_ids` does not list every value id exactly once.
+    pub(crate) fn set_value_order(
+        &mut self,
+        new_order_ids: &[U32Id<BVoxValuePoolValue>],
+    ) -> Option<()> {
+        self.value_ids.try_set_order(new_order_ids)
+    }
+
+    /// The value at `id`, typed by the value pool's kind, or `None` if `id` is
+    /// not one of this value pool's values.
+    pub fn value(&self, id: U32Id<BVoxValuePoolValue>) -> Option<VoxValuePoolValueRef<'_>> {
+        self.value_ids.is_retained(id).then(|| self.value_ref(id))
+    }
+
+    /// The listing position of value `id`, or `None` if `id` is not one of this
+    /// value pool's values.
+    pub fn value_index(&self, id: U32Id<BVoxValuePoolValue>) -> Option<usize> {
+        self.value_ids.index_of(id)
     }
 
     /// The typed ref for a retained `id`.
