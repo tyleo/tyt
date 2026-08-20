@@ -1,6 +1,5 @@
-/// Generates a concrete axis-aligned bounding box (a center and per-axis
-/// half-extents) over a glam vector and its scalar. glam has no AABB type, so the
-/// box stays a hand-rolled struct whose bodies run on glam vector ops.
+/// Generates a concrete axis-aligned bounding box over a glam vector and its
+/// scalar.
 macro_rules! impl_ty_bounds {
     ($name:ident, $vec:ty, $scalar:ty) => {
         /// An axis-aligned bounding box: a center and per-axis half-extents.

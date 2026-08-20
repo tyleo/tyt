@@ -2,9 +2,9 @@ use crate::{TyCielabColorF64, TyOklabColorF64, TySrgbF64, TyVector3F64};
 
 /// Bridges a color's three spatial channels to a [`TyVector3F64`] for distance
 /// math, dropping alpha where present. palette cannot know the vector type, so
-/// this glue lives in ty-math; it reads the channels through palette's fields
-/// (the alpha types reach `l` / `a` / `b` by `Deref`). Only `f64` colors are used
-/// for clustering, so the bridge is `f64`-only.
+/// this glue lives in ty-math. It reads the channels through palette's fields;
+/// the alpha types reach `l` / `a` / `b` by `Deref`. The bridge is `f64`-only
+/// because clustering runs on `f64` colors.
 pub trait TyColorToVector3 {
     /// The color's three channels as a [`TyVector3F64`].
     fn to_vector3(&self) -> TyVector3F64;

@@ -6,7 +6,7 @@ pub trait TyFloatExt {
     fn quantize(self, low: Self, high: Self, buckets: u32) -> u32;
 
     /// True when `self` and `other` are within `tolerance` of each other.
-    // `self` by value matches the float convention (`f64::is_nan`); the trait
+    // `self` by value matches the float convention of `f64::is_nan`; the trait
     // cannot express `Self: Copy` for the lint to see it.
     #[allow(clippy::wrong_self_convention)]
     fn is_approximately_equal(self, other: Self, tolerance: Self) -> bool;

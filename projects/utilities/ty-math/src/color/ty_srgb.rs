@@ -1,8 +1,8 @@
 use palette::Srgb;
 
 /// An sRGB color without alpha, backed by [`palette::Srgb`]. The color space is
-/// the type identity and `T` is the storage axis (`u8` bytes or `f32` / `f64`
-/// normalized `[0, 1]`).
+/// the type identity; `T` is the storage axis: `u8` is the byte form, `f32` /
+/// `f64` are normalized `[0, 1]`.
 pub type TySrgb<T> = Srgb<T>;
 
 #[cfg(test)]

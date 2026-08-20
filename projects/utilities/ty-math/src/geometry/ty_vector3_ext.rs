@@ -74,7 +74,6 @@ pub trait TyVector3Ext {
     fn catmull_rom_tangent(p0: Self, p1: Self, p2: Self, p3: Self, t: Self::Scalar) -> Self;
 }
 
-/// Implements [`TyVector3Ext`] for a concrete glam vector, scalar, and quaternion.
 macro_rules! impl_ty_vector3_ext {
     ($vec:ty, $scalar:ty, $quat:ty) => {
         impl TyVector3Ext for $vec {

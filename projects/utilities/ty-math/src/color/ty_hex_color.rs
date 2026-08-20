@@ -1,9 +1,8 @@
 use crate::TySrgbaU8;
 
-/// Hex-string glue for the byte sRGBA color. palette's own `FromStr` takes only
-/// 4/8-digit RGBA and drops the `#`, so this preserves tyt's contract: an
-/// `Option`, `#RRGGBB` (opaque default) or `#RRGGBBAA`, `#` optional on input
-/// and always emitted uppercase.
+/// Hex-string glue for the byte sRGBA color. palette's `FromStr` takes only
+/// 4/8-digit RGBA and drops the `#`, so this trait carries tyt's hex contract
+/// instead.
 pub trait TyHexColor: Sized {
     /// Parses a `#RRGGBB` or `#RRGGBBAA` hex string, with or without the leading
     /// `#`. A missing alpha defaults to opaque. Returns `None` when the value is
@@ -46,7 +45,7 @@ mod tests {
 
     #[test]
     fn hex_round_trips_and_defaults_alpha() {
-        // Eight digits carry alpha; six default it to opaque; the `#` is
+        // Eight digits carry alpha, six default it to opaque, and the `#` is
         // optional either way.
         assert_eq!(
             TySrgbaU8::from_hex("#01020304"),

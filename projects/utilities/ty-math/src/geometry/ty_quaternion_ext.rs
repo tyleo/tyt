@@ -28,8 +28,8 @@ pub trait TyQuaternionExt {
     /// A rotation from `right` and `up`, deriving `forward` in a left-handed frame.
     fn from_right_up(right: TyVector3F64, up: TyVector3F64) -> TyQuaternionF64;
 
-    /// This rotation with a further rotation of `angle` radians about `axis`, which
-    /// is normalized first, applied after it.
+    /// This rotation with a rotation of `angle` radians about `axis` applied after
+    /// it. The axis is normalized first.
     fn rotate_around_axis(self, axis: TyVector3F64, angle: f64) -> TyQuaternionF64;
 
     /// `extents` rotated by this quaternion using the absolute values of the
@@ -45,8 +45,8 @@ pub trait TyQuaternionExt {
     #[allow(clippy::wrong_self_convention)]
     fn is_approximately_equal(self, other: TyQuaternionF64, tolerance: f64) -> bool;
 
-    /// True when the squared length is within `tolerance` of `1`. A custom
-    /// tolerance where glam's `is_normalized` fixes its own.
+    /// True when the squared length is within `tolerance` of `1`. glam's
+    /// `is_normalized` fixes its tolerance; this takes the caller's.
     #[allow(clippy::wrong_self_convention)]
     fn is_normalized_within(self, tolerance: f64) -> bool;
 

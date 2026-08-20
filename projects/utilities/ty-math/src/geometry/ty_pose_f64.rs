@@ -85,9 +85,9 @@ mod tests {
 
     #[test]
     fn relative_pose_undoes_the_parent_frame() {
-        // A parent rotated a quarter turn about z at +x; a target one unit along
-        // world +x sits, in the parent's frame, one unit along the parent's local
-        // -y (world +x is the parent's local -y after a +90 z turn).
+        // The parent sits at +x, rotated a quarter turn about z. The turn carries
+        // world +x onto the parent's local -y, so the target lands one unit
+        // along -y.
         let parent = TyPoseF64::new(
             TyVector3F64::new(1.0, 0.0, 0.0),
             TyQuaternionF64::from_axis_angle(TyVector3F64::new(0.0, 0.0, 1.0), PI / 2.0),

@@ -10,7 +10,6 @@ pub trait TyVector2Ext {
     fn to_vector3(self) -> Self::Vector3;
 }
 
-/// Implements [`TyVector2Ext`] for a concrete glam 2D vector and its 3D form.
 macro_rules! impl_ty_vector2_ext {
     ($vec2:ty, $vec3:ty) => {
         impl TyVector2Ext for $vec2 {

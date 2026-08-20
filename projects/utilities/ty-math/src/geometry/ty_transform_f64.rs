@@ -2,12 +2,10 @@ use crate::{TyPoseF64, TyUniformTrsF64};
 use glam::{DQuat, DVec3};
 
 /// A node transform with `f64` components, composing as
-/// `Translation * Rotation * Scale`. glam has no lossless
-/// TRS-with-per-axis-scale, so this stays a hand-rolled struct whose bodies run
-/// on glam ops.
+/// `Translation * Rotation * Scale`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TyTransformF64 {
-    /// The translation, which may be fractional.
+    /// The translation.
     pub position: DVec3,
 
     /// The rotation, a unit quaternion.
@@ -132,9 +130,8 @@ mod tests {
 
     #[test]
     fn compose_places_a_child_in_the_parent_frame() {
-        // Parent: a quarter turn about z, then translate +x. Its own +x child sits
-        // one unit along the parent's rotated x, which is world +y, plus the parent
-        // translation.
+        // The parent rotates a quarter turn about z and sits at +x. The child at
+        // local +x lands one unit along world +y from the parent, at (1, 1, 0).
         let parent = TyTransformF64::new(
             TyVector3F64::new(1.0, 0.0, 0.0),
             TyQuaternionF64::from_axis_angle(TyVector3F64::new(0.0, 0.0, 1.0), PI / 2.0),
