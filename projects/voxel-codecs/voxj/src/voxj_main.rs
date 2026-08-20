@@ -13,8 +13,8 @@ pub struct VoxjMain {
     /// The runtime scene.
     pub runtime_state: VoxjRuntimeState,
 
-    /// Optional editor state, aligned by index with the runtime objects. Absent
-    /// in fully-runtime documents.
+    /// Editor state, aligned by index with the runtime objects. Absent in
+    /// fully-runtime documents.
     #[cfg_attr(
         feature = "serde",
         serde(
@@ -25,8 +25,8 @@ pub struct VoxjMain {
     )]
     pub edit_state: Option<VoxjEditState>,
 
-    /// Optional namespace for user-defined extensions, conventionally
-    /// vendor-keyed. The core format assigns it no meaning.
+    /// Namespace for user-defined extensions, conventionally vendor-keyed. The
+    /// core format assigns it no meaning.
     #[cfg_attr(
         feature = "serde",
         serde(

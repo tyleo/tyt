@@ -97,10 +97,10 @@ mod values {
         };
         use std::fmt::{Formatter, Result as FmtResult};
 
-        /// Serializes a `float` value pool payload: an infinity as its
-        /// `"inf"` or `"-inf"` sentinel, an integral number as a JSON integer
-        /// so `1` does not round-trip as `1.0`, and NaN as an error because
-        /// JSON cannot spell it.
+        /// Serializes a `float` value pool payload: an infinity as its `"inf"`
+        /// or `"-inf"` sentinel, an integral number as a JSON integer so `1`
+        /// does not round-trip as `1.0`, and NaN as an error because JSON has
+        /// no NaN.
         pub fn serialize<S>(values: &[f64], serializer: S) -> Result<S::Ok, S::Error>
         where
             S: Serializer,

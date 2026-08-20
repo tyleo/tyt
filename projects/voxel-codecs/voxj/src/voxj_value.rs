@@ -34,9 +34,9 @@ impl Serialize for VoxjValue {
         S: Serializer,
     {
         match self {
-            // JSON has no NaN and no infinity, and serde_json writes either
-            // as `null`, so a non-finite number errors instead of silently
-            // becoming one.
+            // JSON has no NaN or infinity; serde_json writes either as
+            // `null`. A non-finite number errors instead of silently becoming
+            // one.
             VoxjValue::Number(n) if !n.is_finite() => Err(SerError::custom(format!(
                 "json value number must be finite, not {n}"
             ))),
@@ -83,8 +83,8 @@ mod tests {
 
     #[test]
     fn non_finite_numbers_error_on_write() {
-        // serde_json spells a non-finite number `null`, so writing one would
-        // destroy the value the caller held.
+        // serde_json writes a non-finite number as `null`, which would destroy
+        // the value the caller held.
         for number in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             assert!(serde_json::to_value(VoxjValue::Number(number)).is_err());
         }
