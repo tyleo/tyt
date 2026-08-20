@@ -63,7 +63,7 @@ impl<C: TreeGridCells> TreeGrid<C> {
         self.render_under(output, id, &format!("{prefix}{extension}"), options);
     }
 
-    /// Appends the lines below `id`'s own: its value lines then its
+    /// Appends the lines below `id`'s line: its value lines then its
     /// child subtrees, the last of the combined list taking the
     /// last-child connector.
     fn render_under(

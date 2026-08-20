@@ -16,8 +16,8 @@ pub struct TreeSelection {
 impl TreeSelection {
     /// Resolves `matched` flags over the tree described by `parents`, a
     /// per-node parent index (`None` at a root). Each matched node's ancestor
-    /// chain becomes visible, and a matched node whose parent is unmatched is
-    /// a match root, so a deselected middle node starts fresh roots below it.
+    /// chain becomes visible. A matched node whose parent is unmatched is a
+    /// match root, so a deselected middle node starts fresh roots below it.
     /// The inputs line up by node; their lengths must match.
     pub fn from_matches(matched: Vec<bool>, parents: &[Option<usize>]) -> Self {
         assert_eq!(
@@ -26,8 +26,8 @@ impl TreeSelection {
             "matched and parents must line up"
         );
 
-        // Each walk stops at the first already-visible ancestor, whose own
-        // chain is complete or pending its own walk, so marking stays linear.
+        // Each walk stops at the first already-visible ancestor, whose chain
+        // is complete or pending its own walk, so marking stays linear.
         let mut visible = matched.clone();
         for index in 0..matched.len() {
             if !matched[index] {

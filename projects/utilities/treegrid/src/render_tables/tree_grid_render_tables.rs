@@ -37,7 +37,7 @@ impl<C: TreeGridCells> TreeGrid<C> {
         // depth-indexed stack of cumulative paths recovers each
         // branch's dot-joined path without parent links in the arena.
         // The stacked segments stay bare; the annotation joins only
-        // the branch's own heading.
+        // the branch's heading.
         let mut paths: Vec<String> = Vec::new();
         for group in self.groups() {
             if let Some(branch) = group.branch {

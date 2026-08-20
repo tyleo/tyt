@@ -118,9 +118,9 @@ impl TreeGridJsonValue {
 }
 
 /// A number as JSON: an integer when it is integral and fits `i64`,
-/// else a float, so it reads as it does in the text layouts. JSON spells no
-/// infinity and serde_json writes one as `null`, so an infinite value carries
-/// its `Display` text instead, the same text the cell shows.
+/// else a float, so it reads as it does in the text layouts. JSON has
+/// no infinity and serde_json writes one as `null`; an infinite value
+/// carries its `Display` text instead, the same text the cell shows.
 pub(crate) fn number_json(value: f64) -> Value {
     if value.is_infinite() {
         Value::String(value.to_string())

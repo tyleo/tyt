@@ -11,7 +11,7 @@ use crate::{TreeGridHeaderOptions, TreeGridLabelMode};
 use crate::{TreeGridLabelKind, TreeGridTableShapeKind};
 use std::num::NonZeroU8;
 
-/// Loose render options: every option as its own independent field.
+/// Loose render options: every option as its own field.
 ///
 /// The per-layout `resolve_*` methods map them into the payload the
 /// matching render method consumes, rejecting any option that render

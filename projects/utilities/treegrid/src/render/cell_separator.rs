@@ -2,8 +2,7 @@ use crate::render::Cell;
 
 impl Cell {
     /// The separator a node's cells join with: none when every cell is a bare
-    /// visual, so they abut into a continuous strip, else one space so values
-    /// stay legible.
+    /// visual, so they abut into a continuous strip, else one space.
     pub(crate) fn separator(cells: &[Cell]) -> &'static str {
         if cells.iter().all(|cell| cell.bare_visual) {
             ""

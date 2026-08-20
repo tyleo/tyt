@@ -14,8 +14,8 @@ pub struct TreeGridNode<V> {
     pub label: TreeGridLabel,
 
     /// A verbatim suffix joined with one space to the label wherever
-    /// a layout labels this node; the caller supplies its own
-    /// brackets (for example `(Group)`).
+    /// a layout labels this node; the caller supplies the brackets
+    /// (for example `(Group)`).
     pub annotation: Option<String>,
 
     /// How this node's values render to cells; unset defers to the
