@@ -52,8 +52,8 @@ mod tests {
     #[test]
     fn writes_a_property_less_palette_as_empty_rows() {
         let mut palette = VoxPalette::default();
-        palette.add_material(vec![]).unwrap();
-        palette.add_material(vec![]).unwrap();
+        palette.retain_material(vec![]).unwrap();
+        palette.retain_material(vec![]).unwrap();
 
         let out = voxj_palette_from_vox_palette(&palette);
         assert!(out.properties.is_empty());

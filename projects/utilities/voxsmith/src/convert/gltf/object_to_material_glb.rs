@@ -53,29 +53,29 @@ mod tests {
     fn red_blue_bar() -> (VoxMain, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        let base_value_pool_id = state.add_value_pool(
+        let base_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        let red_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let blue_id = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let red_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let blue_id = palette.retain_material(vec![U32Id::from_u32(1)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_layer(palette_id, red_id);
+        object.retain_layer(palette_id, red_id);
         for (x, material_id) in [(0, red_id), (1, blue_id)] {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
 
         (state, object_id)
     }
@@ -140,34 +140,35 @@ mod tests {
         // check before anything is written.
         let mut state = VoxMain::default();
         let base_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
-        let metallic_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let metallic_value_pool_id =
+            state.retain_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_property(
+            .retain_property(
                 METALLIC.to_owned(),
                 metallic_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         let material_id = palette
-            .add_material(vec![U32Id::from_u32(0), U32Id::from_u32(0)])
+            .retain_material(vec![U32Id::from_u32(0), U32Id::from_u32(0)])
             .unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("bar".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, material_id);
+        object.retain_layer(palette_id, material_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[material_id]).unwrap();
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
 
         let result = object_to_material_glb(
             &state,

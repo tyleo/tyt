@@ -24,7 +24,7 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, file);
-    let palette_id = state.add_palette(palette)?;
+    let palette_id = state.retain_palette(palette)?;
 
     let mut matrices = Vec::with_capacity(file.matrices.len());
     let mut root_ids = Vec::with_capacity(file.matrices.len());
@@ -34,14 +34,14 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
         // read from that same grid.
         let object = build_object(matrix, palette_id, &material_ids)?;
         let visibility = visibility_of(&object, matrix);
-        let object_id = state.add_object(object)?;
+        let object_id = state.retain_object(object)?;
         let node = VoxHierarchyNode {
             name: matrix.name.clone(),
             child_node_ids: Vec::new(),
             child_object_ids: vec![object_id],
             transform: translation(matrix.position),
         };
-        root_ids.push(state.add_hierarchy_node(node)?);
+        root_ids.push(state.retain_hierarchy_node(node)?);
         matrices.push(QubicleQbMatrix {
             name: matrix.name.clone(),
             position: matrix.position,
@@ -94,19 +94,19 @@ fn build_palette(
     // A Qubicle voxel carries no alpha, so colors decode to linear light and
     // ride in a shared `vec-3-float` value pool. Each material draws one value
     // id into it.
-    let value_pool_id = state.add_value_pool(
+    let value_pool_id = state.retain_value_pool(
         VoxValuePool::vec_3_float(order.iter().map(|&color| color_floats(color)).collect())
             .expect("byte-derived components are finite and the list is non-empty"),
     );
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+        .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
         .expect("the property names are distinct");
     let mut material_ids = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
         let material_id = palette
-            .add_material(vec![U32Id::from_u32(index as u32)])
+            .retain_material(vec![U32Id::from_u32(index as u32)])
             .expect("one value id for the one property");
         material_ids.insert(*color, material_id);
     }
@@ -131,7 +131,7 @@ fn build_object(
             ))
         })?;
 
-    object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+    object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
 
     for z in 0..size_z {
         for y in 0..size_y {

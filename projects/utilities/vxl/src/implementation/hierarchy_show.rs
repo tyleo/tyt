@@ -1276,9 +1276,9 @@ mod tests {
     /// A root placing one object under one node.
     fn simple_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let body_id = state.add_object(object("body")).unwrap();
+        let body_id = state.retain_object(object("body")).unwrap();
         let root_id = state
-            .add_hierarchy_node(node("root", vec![], vec![body_id]))
+            .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
@@ -1288,18 +1288,18 @@ mod tests {
     /// places one object: the leaf is instanced.
     fn instanced_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let head_id = state.add_object(object("head")).unwrap();
+        let head_id = state.retain_object(object("head")).unwrap();
         let leaf_id = state
-            .add_hierarchy_node(node("leaf", vec![], vec![head_id]))
+            .retain_hierarchy_node(node("leaf", vec![], vec![head_id]))
             .unwrap();
         let arm_a_id = state
-            .add_hierarchy_node(node("armA", vec![leaf_id], vec![]))
+            .retain_hierarchy_node(node("armA", vec![leaf_id], vec![]))
             .unwrap();
         let arm_b_id = state
-            .add_hierarchy_node(node("armB", vec![leaf_id], vec![]))
+            .retain_hierarchy_node(node("armB", vec![leaf_id], vec![]))
             .unwrap();
         let root_id = state
-            .add_hierarchy_node(node("root", vec![arm_a_id, arm_b_id], vec![]))
+            .retain_hierarchy_node(node("root", vec![arm_a_id, arm_b_id], vec![]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
@@ -1310,22 +1310,22 @@ mod tests {
     /// armA 2, armB 3, root 4; object ids: handMesh 0, footMesh 1.
     fn pattern_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let hand_mesh_id = state.add_object(object("handMesh")).unwrap();
-        let foot_mesh_id = state.add_object(object("footMesh")).unwrap();
+        let hand_mesh_id = state.retain_object(object("handMesh")).unwrap();
+        let foot_mesh_id = state.retain_object(object("footMesh")).unwrap();
         let hand_id = state
-            .add_hierarchy_node(node("hand", vec![], vec![hand_mesh_id]))
+            .retain_hierarchy_node(node("hand", vec![], vec![hand_mesh_id]))
             .unwrap();
         let foot_id = state
-            .add_hierarchy_node(node("foot", vec![], vec![foot_mesh_id]))
+            .retain_hierarchy_node(node("foot", vec![], vec![foot_mesh_id]))
             .unwrap();
         let arm_a_id = state
-            .add_hierarchy_node(node("armA", vec![hand_id], vec![]))
+            .retain_hierarchy_node(node("armA", vec![hand_id], vec![]))
             .unwrap();
         let arm_b_id = state
-            .add_hierarchy_node(node("armB", vec![foot_id], vec![]))
+            .retain_hierarchy_node(node("armB", vec![foot_id], vec![]))
             .unwrap();
         let root_id = state
-            .add_hierarchy_node(node("root", vec![arm_a_id, arm_b_id], vec![]))
+            .retain_hierarchy_node(node("root", vec![arm_a_id, arm_b_id], vec![]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
@@ -1333,21 +1333,21 @@ mod tests {
 
     /// Adds a palette with `count` `baseColor` materials to `state`; only
     /// the material count matters to the tree, so every color is the same.
-    fn add_palette_with_materials(state: &mut VoxMain, count: usize) -> U32Id<BVoxPalette> {
+    fn retain_palette_with_materials(state: &mut VoxMain, count: usize) -> U32Id<BVoxPalette> {
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[0.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[0.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "baseColor".to_owned(),
                 colors_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         for _ in 0..count {
-            palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
+            palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
         }
-        state.add_palette(palette).unwrap()
+        state.retain_palette(palette).unwrap()
     }
 
     /// A root placing one object `body` that carries a layer on palette 0 (two
@@ -1355,14 +1355,14 @@ mod tests {
     fn palette_ref_state() -> VoxMain {
         let mut state = VoxMain::default();
 
-        let first_palette_id = add_palette_with_materials(&mut state, 2);
+        let first_palette_id = retain_palette_with_materials(&mut state, 2);
         let first_material_id = state
             .palette(first_palette_id)
             .unwrap()
             .iter_materials()
             .next()
             .unwrap();
-        let second_palette_id = add_palette_with_materials(&mut state, 3);
+        let second_palette_id = retain_palette_with_materials(&mut state, 3);
         let second_material_id = state
             .palette(second_palette_id)
             .unwrap()
@@ -1371,12 +1371,12 @@ mod tests {
             .unwrap();
 
         let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        body.add_layer(first_palette_id, first_material_id);
-        body.add_layer(second_palette_id, second_material_id);
-        let body_id = state.add_object(body).unwrap();
+        body.retain_layer(first_palette_id, first_material_id);
+        body.retain_layer(second_palette_id, second_material_id);
+        let body_id = state.retain_object(body).unwrap();
 
         let root_id = state
-            .add_hierarchy_node(node("root", vec![], vec![body_id]))
+            .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
@@ -1388,7 +1388,7 @@ mod tests {
     fn geometry_state() -> VoxMain {
         let mut state = VoxMain::default();
         let body_id = state
-            .add_object(object_live(
+            .retain_object(object_live(
                 "body",
                 (6, 6, 6),
                 (-1, -1, -1),
@@ -1397,7 +1397,7 @@ mod tests {
             ))
             .unwrap();
         let root_id = state
-            .add_hierarchy_node(node("root", vec![], vec![body_id]))
+            .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
         state
@@ -1494,16 +1494,16 @@ mod tests {
     #[test]
     fn markdown_lists_unplaced_nodes_and_orphan_objects() {
         let mut state = VoxMain::default();
-        let body_id = state.add_object(object("body")).unwrap();
+        let body_id = state.retain_object(object("body")).unwrap();
         // `looseMesh` (object 1) is placed by no node: an orphan object.
-        state.add_object(object("looseMesh")).unwrap();
-        let spare_child_id = state.add_object(object("spareChild")).unwrap();
+        state.retain_object(object("looseMesh")).unwrap();
+        let spare_child_id = state.retain_object(object("spareChild")).unwrap();
         let root_id = state
-            .add_hierarchy_node(node("root", vec![], vec![body_id]))
+            .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         // `spareNode` is neither a root nor a child: an unplaced library node.
         state
-            .add_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
+            .retain_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
@@ -1592,15 +1592,15 @@ mod tests {
     #[test]
     fn an_orphan_object_is_selectable_by_name() {
         let mut state = VoxMain::default();
-        let body_id = state.add_object(object("body")).unwrap();
+        let body_id = state.retain_object(object("body")).unwrap();
         // `looseMesh` (object 1) is placed by no node: an orphan object.
-        state.add_object(object("looseMesh")).unwrap();
-        let spare_child_id = state.add_object(object("spareChild")).unwrap();
+        state.retain_object(object("looseMesh")).unwrap();
+        let spare_child_id = state.retain_object(object("spareChild")).unwrap();
         let root_id = state
-            .add_hierarchy_node(node("root", vec![], vec![body_id]))
+            .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         state
-            .add_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
+            .retain_hierarchy_node(node("spareNode", vec![], vec![spare_child_id]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
@@ -1655,9 +1655,9 @@ mod tests {
         // Empty names collapse the object's path onto its parent node's, so
         // match-rootness must come from the parent link, not the path.
         let mut state = VoxMain::default();
-        let body_id = state.add_object(object("")).unwrap();
+        let body_id = state.retain_object(object("")).unwrap();
         let root_id = state
-            .add_hierarchy_node(node("", vec![], vec![body_id]))
+            .retain_hierarchy_node(node("", vec![], vec![body_id]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
@@ -1679,9 +1679,9 @@ mod tests {
     #[test]
     fn transforms_local_prepend_the_node_transform() {
         let mut state = VoxMain::default();
-        let body_id = state.add_object(object("body")).unwrap();
+        let body_id = state.retain_object(object("body")).unwrap();
         let root_id = state
-            .add_hierarchy_node(node_xf(
+            .retain_hierarchy_node(node_xf(
                 "root",
                 xf((1.0, 2.0, 3.0), 90.0, (1.0, 1.0, 1.0)),
                 vec![],
@@ -1759,7 +1759,7 @@ mod tests {
         // extent, so it has no distinct edit grid and every edit row is `null`.
         let mut state = VoxMain::default();
         let body_id = state
-            .add_object(object_live(
+            .retain_object(object_live(
                 "body",
                 (2, 2, 2),
                 (0, 0, 0),
@@ -1768,7 +1768,7 @@ mod tests {
             ))
             .unwrap();
         let root_id = state
-            .add_hierarchy_node(node("root", vec![], vec![body_id]))
+            .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
@@ -1809,9 +1809,9 @@ mod tests {
         let mut state = VoxMain::default();
         let mut body = VoxObject::new("body".to_owned(), TyVector3U32::new(3, 3, 3)).unwrap();
         body.set_origin(TyVector3I32::new(-1, -1, -1));
-        let body_id = state.add_object(body).unwrap();
+        let body_id = state.retain_object(body).unwrap();
         let root_id = state
-            .add_hierarchy_node(node("root", vec![], vec![body_id]))
+            .retain_hierarchy_node(node("root", vec![], vec![body_id]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 
@@ -1846,7 +1846,7 @@ mod tests {
         // +10x. Its runtime origin is (0, 0, 0) locally, (10, 0, 0) in world.
         let mut state = VoxMain::default();
         let body_id = state
-            .add_object(object_live(
+            .retain_object(object_live(
                 "body",
                 (1, 1, 1),
                 (0, 0, 0),
@@ -1855,7 +1855,7 @@ mod tests {
             ))
             .unwrap();
         let root_id = state
-            .add_hierarchy_node(node_xf(
+            .retain_hierarchy_node(node_xf(
                 "root",
                 xf((10.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
                 vec![],
@@ -1900,9 +1900,9 @@ mod tests {
         // A child at local +1x under a parent translated to +10x sits at world
         // +11x.
         let mut state = VoxMain::default();
-        let body_id = state.add_object(object("body")).unwrap();
+        let body_id = state.retain_object(object("body")).unwrap();
         let child_id = state
-            .add_hierarchy_node(node_xf(
+            .retain_hierarchy_node(node_xf(
                 "child",
                 xf((1.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
                 vec![],
@@ -1910,7 +1910,7 @@ mod tests {
             ))
             .unwrap();
         let root_id = state
-            .add_hierarchy_node(node_xf(
+            .retain_hierarchy_node(node_xf(
                 "root",
                 xf((10.0, 0.0, 0.0), 0.0, (1.0, 1.0, 1.0)),
                 vec![child_id],
@@ -2051,9 +2051,9 @@ mod tests {
         // A nameless node and an object whose name carries a space both print
         // quoted; the `root` section header stays unquoted.
         let mut state = VoxMain::default();
-        let mesh_id = state.add_object(object("my mesh")).unwrap();
+        let mesh_id = state.retain_object(object("my mesh")).unwrap();
         let root_id = state
-            .add_hierarchy_node(node("", vec![], vec![mesh_id]))
+            .retain_hierarchy_node(node("", vec![], vec![mesh_id]))
             .unwrap();
         state.set_root_hierarchy_node_ids(vec![root_id]).unwrap();
 

@@ -49,7 +49,7 @@ pub enum Error {
     /// A move targeted a listing position at or past the listing's count.
     IndexPastCount { index: usize, count: usize },
 
-    /// A removal named its own removed id as the replacement.
+    /// A release named its own released id as the replacement.
     SelfReplacement,
 
     /// A reorder did not list each of the value pool's value ids exactly once.
@@ -273,7 +273,7 @@ impl Display for Error {
                 write!(f, "index {index} is at or past the listing count {count}")
             }
             Error::SelfReplacement => {
-                write!(f, "the replacement is the id being removed")
+                write!(f, "the replacement is the id being released")
             }
             Error::ValuePoolValueOrder => write!(
                 f,

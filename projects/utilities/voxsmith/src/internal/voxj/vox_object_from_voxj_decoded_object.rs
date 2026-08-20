@@ -15,7 +15,7 @@ use voxj_codec::VoxjDecodedObject;
 /// Each `layers` entry becomes a layer over that palette. A decoded sample
 /// row holds one material index per layer. Errors on an oversized grid, a
 /// position outside the grid, or ragged sample rows. Cross-references are
-/// checked on insert by [`VoxMain::add_object`](voxcore::VoxMain::add_object).
+/// checked on insert by [`VoxMain::retain_object`](voxcore::VoxMain::retain_object).
 pub fn vox_object_from_voxj_decoded_object(
     object: &VoxjDecodedObject,
     edit: Option<([u32; 3], [i32; 3])>,
@@ -51,7 +51,7 @@ pub fn vox_object_from_voxj_decoded_object(
     // their cells below.
     let filler = 0u32.to_u32_id::<BVoxMaterial>();
     for &palette_index in &object.layers {
-        out.add_layer((palette_index as u32).to_u32_id::<BVoxPalette>(), filler);
+        out.retain_layer((palette_index as u32).to_u32_id::<BVoxPalette>(), filler);
     }
 
     if object.samples.len() != object.positions.len() {

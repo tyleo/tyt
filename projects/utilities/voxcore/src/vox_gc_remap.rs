@@ -16,7 +16,7 @@ pub struct VoxGcRemap {
     pub palettes: IdRemap<BVoxPalette, u32>,
 
     /// Each palette's material relabeling, indexed by the palette's old id,
-    /// empty where a palette was removed.
+    /// empty where a palette was released.
     pub materials: IdVec<BVoxPalette, IdRemap<BVoxMaterial, u32>>,
 
     /// The object id-pool relabeling.

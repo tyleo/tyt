@@ -79,7 +79,7 @@ pub fn voxelize_mesh(
     let (palette, sample_ids, default_material_id) =
         build_palette(&mut state, &cell_materials, out_of_range)?;
 
-    let palette_id = state.add_palette(palette)?;
+    let palette_id = state.retain_palette(palette)?;
 
     // The object name: an explicit override, else the mesh's own name, else the
     // caller's fallback.
@@ -90,7 +90,7 @@ pub fn voxelize_mesh(
 
     let mut object = VoxObject::new(object_name, counts).map_err(|_| grid_too_large(counts))?;
 
-    object.add_layer(palette_id, default_material_id);
+    object.retain_layer(palette_id, default_material_id);
 
     for (index, sample_id) in sample_ids.iter().enumerate() {
         if let Some(material_id) = sample_id {
@@ -101,7 +101,7 @@ pub fn voxelize_mesh(
         }
     }
 
-    let object_id = state.add_object(object)?;
+    let object_id = state.retain_object(object)?;
 
     // One root node placing the object and carrying the real-world scale.
     let transform = TyTransformF64 {
@@ -115,7 +115,7 @@ pub fn voxelize_mesh(
         ..Default::default()
     };
 
-    let node_id = state.add_hierarchy_node(node)?;
+    let node_id = state.retain_hierarchy_node(node)?;
 
     state.push_root_hierarchy_node_id(node_id)?;
 
@@ -314,67 +314,67 @@ fn build_palette(
     // any material, so no material carries a back-fill placeholder value id.
     let scalars = |values, key| property_value_pool(values, key, out_of_range);
     let base_color_value_pool_id =
-        state.add_value_pool(VoxValuePool::vec_4_float(base_color.values)?);
-    let metallic_value_pool_id = state.add_value_pool(scalars(metallic.values, METALLIC)?);
-    let roughness_value_pool_id = state.add_value_pool(scalars(roughness.values, ROUGHNESS)?);
+        state.retain_value_pool(VoxValuePool::vec_4_float(base_color.values)?);
+    let metallic_value_pool_id = state.retain_value_pool(scalars(metallic.values, METALLIC)?);
+    let roughness_value_pool_id = state.retain_value_pool(scalars(roughness.values, ROUGHNESS)?);
     let emissive_color_value_pool_id =
-        state.add_value_pool(VoxValuePool::vec_3_float(emissive_color.values)?);
+        state.retain_value_pool(VoxValuePool::vec_3_float(emissive_color.values)?);
     let emissive_strength_value_pool_id =
-        state.add_value_pool(scalars(emissive_strength.values, EMISSIVE_STRENGTH)?);
+        state.retain_value_pool(scalars(emissive_strength.values, EMISSIVE_STRENGTH)?);
     let occlusion_value_pool_id =
-        state.add_value_pool(scalars(occlusion.values, OCCLUSION_STRENGTH)?);
-    let ior_value_pool_id = state.add_value_pool(scalars(ior.values, IOR)?);
+        state.retain_value_pool(scalars(occlusion.values, OCCLUSION_STRENGTH)?);
+    let ior_value_pool_id = state.retain_value_pool(scalars(ior.values, IOR)?);
     let transmission_value_pool_id =
-        state.add_value_pool(scalars(transmission.values, TRANSMISSION)?);
+        state.retain_value_pool(scalars(transmission.values, TRANSMISSION)?);
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(
+        .retain_property(
             BASE_COLOR.to_owned(),
             base_color_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
-        .add_property(
+        .retain_property(
             METALLIC.to_owned(),
             metallic_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
-        .add_property(
+        .retain_property(
             ROUGHNESS.to_owned(),
             roughness_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
-        .add_property(
+        .retain_property(
             EMISSIVE_COLOR.to_owned(),
             emissive_color_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
-        .add_property(
+        .retain_property(
             EMISSIVE_STRENGTH.to_owned(),
             emissive_strength_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
-        .add_property(
+        .retain_property(
             OCCLUSION_STRENGTH.to_owned(),
             occlusion_value_pool_id,
             U32Id::from_u32(0),
         )
         .expect("the property names are distinct");
     palette
-        .add_property(IOR.to_owned(), ior_value_pool_id, U32Id::from_u32(0))
+        .retain_property(IOR.to_owned(), ior_value_pool_id, U32Id::from_u32(0))
         .expect("the property names are distinct");
     palette
-        .add_property(
+        .retain_property(
             TRANSMISSION.to_owned(),
             transmission_value_pool_id,
             U32Id::from_u32(0),
@@ -386,7 +386,7 @@ fn build_palette(
     let material_ids: Vec<U32Id<BVoxMaterial>> = (0..distinct.len())
         .map(|index| {
             palette
-                .add_material(vec![
+                .retain_material(vec![
                     base_color.value_ids[index],
                     metallic.value_ids[index],
                     roughness.value_ids[index],

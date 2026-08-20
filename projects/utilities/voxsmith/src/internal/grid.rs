@@ -35,7 +35,7 @@ pub fn tighten(object: &VoxObject) -> (VoxObject, (TyVector3U32, TyVector3I32)) 
 /// an empty voxel, so a uniform filler suffices.
 fn copy_layers(from: &VoxObject, to: &mut VoxObject) {
     for (_, palette_id) in from.iter_layers() {
-        to.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+        to.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
     }
 }
 

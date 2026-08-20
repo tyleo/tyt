@@ -228,7 +228,7 @@ mod tests {
         // Colors and metallic values back the properties; only the property
         // names and material counts reach the listing, so the values are
         // arbitrary.
-        let colors_value_pool_id = state.add_value_pool(
+        let colors_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0],
                 [0.0, 1.0, 0.0, 1.0],
@@ -237,49 +237,52 @@ mod tests {
             .unwrap(),
         );
         let metallic_value_pool_id =
-            state.add_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
+            state.retain_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
 
         let mut zero = VoxPalette::default();
-        zero.add_property(
+        zero.retain_property(
             "baseColor".to_owned(),
             colors_value_pool_id,
             U32Id::from_u32(0),
         )
         .unwrap();
-        zero.add_property(
+        zero.retain_property(
             "metallic".to_owned(),
             metallic_value_pool_id,
             U32Id::from_u32(0),
         )
         .unwrap();
-        let zero_material_id = zero.add_material(vec![value_id(0), value_id(0)]).unwrap();
-        zero.add_material(vec![value_id(1), value_id(1)]).unwrap();
-        let zero_palette_id = state.add_palette(zero).unwrap();
+        let zero_material_id = zero
+            .retain_material(vec![value_id(0), value_id(0)])
+            .unwrap();
+        zero.retain_material(vec![value_id(1), value_id(1)])
+            .unwrap();
+        let zero_palette_id = state.retain_palette(zero).unwrap();
 
         let mut one = VoxPalette::default();
-        one.add_property(
+        one.retain_property(
             "baseColor".to_owned(),
             colors_value_pool_id,
             U32Id::from_u32(0),
         )
         .unwrap();
-        one.add_property(
+        one.retain_property(
             "emissiveStrength".to_owned(),
             metallic_value_pool_id,
             U32Id::from_u32(0),
         )
         .unwrap();
-        let one_material_id = one.add_material(vec![value_id(2), value_id(1)]).unwrap();
-        let one_palette_id = state.add_palette(one).unwrap();
+        let one_material_id = one.retain_material(vec![value_id(2), value_id(1)]).unwrap();
+        let one_palette_id = state.retain_palette(one).unwrap();
 
         let mut a = VoxObject::new("a".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        a.add_layer(zero_palette_id, zero_material_id);
-        state.add_object(a).unwrap();
+        a.retain_layer(zero_palette_id, zero_material_id);
+        state.retain_object(a).unwrap();
 
         let mut b = VoxObject::new("b".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        b.add_layer(zero_palette_id, zero_material_id);
-        b.add_layer(one_palette_id, one_material_id);
-        state.add_object(b).unwrap();
+        b.retain_layer(zero_palette_id, zero_material_id);
+        b.retain_layer(one_palette_id, one_material_id);
+        state.retain_object(b).unwrap();
 
         state
     }
@@ -437,17 +440,17 @@ mod tests {
     fn an_unreferenced_palette_lists_no_users() {
         let mut state = VoxMain::default();
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "baseColor".to_owned(),
                 colors_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Tables),
@@ -471,17 +474,17 @@ mod tests {
     fn an_unreferenced_palette_shows_an_empty_objects_branch() {
         let mut state = VoxMain::default();
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 1.0, 1.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "baseColor".to_owned(),
                 colors_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         assert_eq!(
             render_all(&state, PaletteListLayout::Hierarchy),

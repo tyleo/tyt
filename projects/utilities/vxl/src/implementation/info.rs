@@ -361,23 +361,23 @@ mod tests {
     fn tight_state() -> VoxMain {
         let mut state = VoxMain::default();
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "baseColor".to_owned(),
                 colors_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let material_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, material_id);
+        object.retain_layer(palette_id, material_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[material_id]).unwrap();
-        state.add_object(object).unwrap();
+        state.retain_object(object).unwrap();
         state
     }
 
@@ -493,7 +493,7 @@ mod tests {
         let mut object = VoxObject::new("margin".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
         let voxel_id = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[]).unwrap();
-        state.add_object(object).unwrap();
+        state.retain_object(object).unwrap();
 
         let tables = render(
             &state,
@@ -527,33 +527,34 @@ mod tests {
     #[test]
     fn reports_two_layers_over_two_palettes() {
         let mut state = VoxMain::default();
-        let strengths_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
+        let strengths_value_pool_id =
+            state.retain_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
         let mut glow = VoxPalette::default();
-        glow.add_property(
+        glow.retain_property(
             "emissiveStrength".to_owned(),
             strengths_value_pool_id,
             U32Id::from_u32(0),
         )
         .unwrap();
-        let glow_material_id = glow.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let glow_palette_id = state.add_palette(glow).unwrap();
+        let glow_material_id = glow.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let glow_palette_id = state.retain_palette(glow).unwrap();
 
         let colors_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut base = VoxPalette::default();
-        base.add_property(
+        base.retain_property(
             "baseColor".to_owned(),
             colors_value_pool_id,
             U32Id::from_u32(0),
         )
         .unwrap();
-        let material_id = base.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let base_palette_id = state.add_palette(base).unwrap();
+        let material_id = base.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let base_palette_id = state.retain_palette(base).unwrap();
 
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(base_palette_id, material_id);
-        object.add_layer(glow_palette_id, glow_material_id);
-        state.add_object(object).unwrap();
+        object.retain_layer(base_palette_id, material_id);
+        object.retain_layer(glow_palette_id, glow_material_id);
+        state.retain_object(object).unwrap();
 
         let tables = render(
             &state,

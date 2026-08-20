@@ -148,7 +148,7 @@ mod tests {
 
     /// Adds a `float` value pool holding `values` and returns its id.
     fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> U32Id<BVoxValuePool> {
-        state.add_value_pool(VoxValuePool::float(values).unwrap())
+        state.retain_value_pool(VoxValuePool::float(values).unwrap())
     }
 
     /// Adds a palette binding each `(name, value id)` entry on `value_pool_id`
@@ -161,13 +161,13 @@ mod tests {
         let mut palette = VoxPalette::default();
         for &(name, _) in entries {
             palette
-                .add_property(name.to_owned(), value_pool_id, value_id(0))
+                .retain_property(name.to_owned(), value_pool_id, value_id(0))
                 .unwrap();
         }
         palette
-            .add_material(entries.iter().map(|&(_, index)| value_id(index)).collect())
+            .retain_material(entries.iter().map(|&(_, index)| value_id(index)).collect())
             .unwrap();
-        state.add_palette(palette).unwrap()
+        state.retain_palette(palette).unwrap()
     }
 
     /// A one-voxel object layering the given palettes in order, its voxel
@@ -175,7 +175,7 @@ mod tests {
     fn object_over(palette_ids: &[U32Id<BVoxPalette>]) -> VoxObject {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         for &palette_id in palette_ids {
-            object.add_layer(palette_id, U32Id::from_u32(0));
+            object.retain_layer(palette_id, U32Id::from_u32(0));
         }
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         let sample_ids = vec![U32Id::from_u32(0); palette_ids.len()];
@@ -243,13 +243,13 @@ mod tests {
         let supplying_id = palette_over(&mut state, value_pool_id, &[("a", 0)]);
 
         let mut plain = VoxPalette::default();
-        plain.add_material(vec![]).unwrap();
-        plain.add_material(vec![]).unwrap();
-        let plain_id = state.add_palette(plain).unwrap();
+        plain.retain_material(vec![]).unwrap();
+        plain.retain_material(vec![]).unwrap();
+        let plain_id = state.retain_palette(plain).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_layer(supplying_id, U32Id::from_u32(0));
-        object.add_layer(plain_id, U32Id::from_u32(0));
+        object.retain_layer(supplying_id, U32Id::from_u32(0));
+        object.retain_layer(plain_id, U32Id::from_u32(0));
         for (x, plain_material) in [(0, 0), (1, 1)] {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object
@@ -296,23 +296,23 @@ mod tests {
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property("a".to_owned(), value_pool_id, value_id(0))
+            .retain_property("a".to_owned(), value_pool_id, value_id(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        palette.add_material(vec![value_id(1)]).unwrap();
-        let first_id = state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        palette.retain_material(vec![value_id(1)]).unwrap();
+        let first_id = state.retain_palette(palette).unwrap();
 
         let mut second = VoxPalette::default();
         second
-            .add_property("b".to_owned(), value_pool_id, value_id(0))
+            .retain_property("b".to_owned(), value_pool_id, value_id(0))
             .unwrap();
-        second.add_material(vec![value_id(0)]).unwrap();
-        second.add_material(vec![value_id(1)]).unwrap();
-        let second_id = state.add_palette(second).unwrap();
+        second.retain_material(vec![value_id(0)]).unwrap();
+        second.retain_material(vec![value_id(1)]).unwrap();
+        let second_id = state.retain_palette(second).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
-        object.add_layer(first_id, U32Id::from_u32(0));
-        object.add_layer(second_id, U32Id::from_u32(0));
+        object.retain_layer(first_id, U32Id::from_u32(0));
+        object.retain_layer(second_id, U32Id::from_u32(0));
         // Samples per voxel: (0, 0), (0, 1), (0, 0), so two distinct tuples.
         for (x, second_material) in [(0, 0), (1, 1), (2, 0)] {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
@@ -348,7 +348,7 @@ mod tests {
     fn a_layer_over_an_unknown_palette_errors() {
         let state = VoxMain::default();
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(U32Id::from_u32(9), U32Id::from_u32(0));
+        object.retain_layer(U32Id::from_u32(9), U32Id::from_u32(0));
 
         assert!(resolve_used_materials(&state, &object).is_err());
     }

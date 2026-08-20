@@ -51,24 +51,24 @@ mod tests {
         let mut state = VoxMain::default();
 
         let base_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        let red_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let red_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("cube".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, red_id);
+        object.retain_layer(palette_id, red_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[red_id]).unwrap();
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
 
         let request = MaterialMeshRequest {
             method: MeshMethod::Greedy,

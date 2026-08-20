@@ -54,20 +54,20 @@ mod tests {
     #[test]
     fn a_supplier_reads_each_voxel_through_its_material() {
         let mut state = VoxMain::default();
-        let value_pool_id = state.add_value_pool(
+        let value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+            .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        let red_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let blue_id = palette.add_material(vec![U32Id::from_u32(1)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let red_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let blue_id = palette.retain_material(vec![U32Id::from_u32(1)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_layer(palette_id, red_id);
+        object.retain_layer(palette_id, red_id);
         for (x, material_id) in [(0, red_id), (1, blue_id)] {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
@@ -86,11 +86,11 @@ mod tests {
     fn none_when_no_layer_supplies_the_color() {
         let mut state = VoxMain::default();
         let mut palette = VoxPalette::default();
-        palette.add_material(vec![]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        palette.retain_material(vec![]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, U32Id::from_u32(0));
+        object.retain_layer(palette_id, U32Id::from_u32(0));
 
         assert!(resolve_cell_color(&state, &object).unwrap().is_none());
     }
@@ -98,17 +98,17 @@ mod tests {
     #[test]
     fn a_supplier_over_a_non_color_value_pool_errors() {
         let mut state = VoxMain::default();
-        let value_pool_id = state.add_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
+        let value_pool_id = state.retain_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+            .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let material_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, material_id);
+        object.retain_layer(palette_id, material_id);
 
         assert!(resolve_cell_color(&state, &object).is_err());
     }

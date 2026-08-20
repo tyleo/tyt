@@ -69,7 +69,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
         }
         let (vox_object, data, transform) =
             build_object(serde, object, &mut state, &mut palette_provenance)?;
-        let object_id = state.add_object(vox_object)?;
+        let object_id = state.retain_object(vox_object)?;
         object_data.push(data);
         object_transforms.push(transform);
         object_ids.push(object_id.to_u32() as usize);
@@ -81,7 +81,7 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
     // The scene nodes land as one batch: a group's children may sit after
     // it in the listing.
     let (nodes, roots) = build_hierarchy(scene, &object_transforms, &object_ids);
-    state.add_hierarchy_nodes(nodes)?;
+    state.retain_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(roots)?;
 
     // Each object's preserved editor state, aligned by object id with the
@@ -198,7 +198,7 @@ fn build_object(
     palette_provenance.push(Some(folded.provenance));
 
     // Back-fill the layer with material 0; the live voxels overwrite theirs.
-    vox_object.add_layer(folded.palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+    vox_object.retain_layer(folded.palette_id, U32Id::<BVoxMaterial>::from_u32(0));
 
     for voxel in &voxels {
         // Shift the voxel from its model position into the build volume; an
@@ -270,14 +270,14 @@ fn folded_palette(
     // one value id per property.
     let mut palette = VoxPalette::default();
     let mut color_axis: Vec<bool> = Vec::new();
-    let color_value_pool_id = state.add_value_pool(VoxValuePool::vec_4_float(
+    let color_value_pool_id = state.retain_value_pool(VoxValuePool::vec_4_float(
         colors
             .iter()
             .map(|color| <[f64; 4]>::from(lin_srgba_f64_from_srgba_u8(TySrgbaU8::from(*color))))
             .collect(),
     )?);
     palette
-        .add_property(
+        .retain_property(
             BASE_COLOR.to_owned(),
             color_value_pool_id,
             U32Id::from_u32(0),
@@ -300,7 +300,7 @@ fn folded_palette(
                 .collect(),
         )?;
         palette
-            .add_property(
+            .retain_property(
                 METALLIC.to_owned(),
                 metallic_value_pool_id,
                 U32Id::from_u32(0),
@@ -315,7 +315,7 @@ fn folded_palette(
                 .collect(),
         )?;
         palette
-            .add_property(
+            .retain_property(
                 ROUGHNESS.to_owned(),
                 roughness_value_pool_id,
                 U32Id::from_u32(0),
@@ -328,7 +328,7 @@ fn folded_palette(
         // emissive is then `emissiveFactor` times `emissiveStrength` per glTF, so
         // the color leads the strength that scales it.
         if materials.iter().any(|m| m.sic > 0.0) {
-            let emissive_color_value_pool_id = state.add_value_pool(VoxValuePool::vec_3_float(
+            let emissive_color_value_pool_id = state.retain_value_pool(VoxValuePool::vec_3_float(
                 colors
                     .iter()
                     .map(|color| {
@@ -338,7 +338,7 @@ fn folded_palette(
                     .collect(),
             )?);
             palette
-                .add_property(
+                .retain_property(
                     EMISSIVE_COLOR.to_owned(),
                     emissive_color_value_pool_id,
                     U32Id::from_u32(0),
@@ -349,7 +349,7 @@ fn folded_palette(
         let emissive_value_pool_id =
             float_value_pool(state, materials.iter().map(|m| m.sic).collect())?;
         palette
-            .add_property(
+            .retain_property(
                 EMISSIVE_STRENGTH.to_owned(),
                 emissive_value_pool_id,
                 U32Id::from_u32(0),
@@ -370,13 +370,13 @@ fn folded_palette(
                     .collect(),
             )?;
             palette
-                .add_property(IOR.to_owned(), ior_value_pool_id, U32Id::from_u32(0))
+                .retain_property(IOR.to_owned(), ior_value_pool_id, U32Id::from_u32(0))
                 .expect("the property names are distinct");
             color_axis.push(false);
             let transmission_value_pool_id =
                 float_value_pool(state, dispersion(&materials, |d| d.transmission))?;
             palette
-                .add_property(
+                .retain_property(
                     TRANSMISSION.to_owned(),
                     transmission_value_pool_id,
                     U32Id::from_u32(0),
@@ -386,7 +386,7 @@ fn folded_palette(
             let absorption_value_pool_id =
                 float_value_pool(state, dispersion(&materials, |d| d.absorption))?;
             palette
-                .add_property(
+                .retain_property(
                     ABSORPTION.to_owned(),
                     absorption_value_pool_id,
                     U32Id::from_u32(0),
@@ -395,11 +395,11 @@ fn folded_palette(
             color_axis.push(false);
         }
 
-        let shadows_value_pool_id = state.add_value_pool(VoxValuePool::boolean(
+        let shadows_value_pool_id = state.retain_value_pool(VoxValuePool::boolean(
             materials.iter().map(|m| m.sh).collect(),
         ));
         palette
-            .add_property(
+            .retain_property(
                 SHADOWS.to_owned(),
                 shadows_value_pool_id,
                 U32Id::from_u32(0),
@@ -434,12 +434,12 @@ fn folded_palette(
             })
             .collect();
         let material_id = palette
-            .add_material(value_ids)
+            .retain_material(value_ids)
             .expect("one value id per property");
         combo_material_ids.insert(key, material_id);
     }
 
-    let palette_id = state.add_palette(palette)?;
+    let palette_id = state.retain_palette(palette)?;
     let provenance = VoxelMaxPalette {
         name,
         materials: materials.iter().map(voxel_max_material).collect(),
@@ -506,7 +506,7 @@ fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> Result<U32Id<BVoxV
         .into_iter()
         .map(|v| if v.is_nan() { 0.0 } else { v })
         .collect();
-    Ok(state.add_value_pool(VoxValuePool::float(values)?))
+    Ok(state.retain_value_pool(VoxValuePool::float(values)?))
 }
 
 /// Each material's dispersion field `read`, or zero where dispersion is absent.

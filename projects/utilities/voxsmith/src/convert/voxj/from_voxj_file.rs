@@ -27,7 +27,7 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
     // untouched. Value pools land first, so palette properties resolve against
     // them.
     for value_pool in &main.runtime_state.value_pools {
-        state.add_value_pool(vox_value_pool_from_voxj_value_pool(value_pool)?);
+        state.retain_value_pool(vox_value_pool_from_voxj_value_pool(value_pool)?);
     }
 
     // An insertion names the entity it rejected by the ids it holds, which are
@@ -35,7 +35,7 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
     // into the document.
     for (index, palette) in main.runtime_state.palettes.iter().enumerate() {
         state
-            .add_palette(vox_palette_from_voxj_palette(palette)?)
+            .retain_palette(vox_palette_from_voxj_palette(palette)?)
             .map_err(|error| Error::invalid(format!("palette {index}: {error}")))?;
     }
 
@@ -53,7 +53,7 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
             .map(|edit| (edit.bounds, edit.origin));
         let vox_object = vox_object_from_voxj_decoded_object(&decoded, edit)?;
         state
-            .add_object(vox_object)
+            .retain_object(vox_object)
             .map_err(|error| Error::invalid(format!("object {index}: {error}")))?;
     }
 
@@ -63,7 +63,7 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
         .iter()
         .map(vox_hierarchy_node_from_voxj_hierarchy_node)
         .collect::<Result<Vec<_>>>()?;
-    state.add_hierarchy_nodes(nodes)?;
+    state.retain_hierarchy_nodes(nodes)?;
 
     state.set_root_hierarchy_node_ids(
         main.runtime_state
@@ -457,11 +457,11 @@ mod tests {
         // Remove the "tight" object and the palette only it referenced, then
         // compact so the save numbers entities by listing index again.
         assert_eq!(
-            state.remove_object(U32Id::<BVoxObject>::from_u32(1)),
+            state.release_object(U32Id::<BVoxObject>::from_u32(1)),
             Ok(())
         );
         assert_eq!(
-            state.remove_palette(U32Id::<BVoxPalette>::from_u32(1)),
+            state.release_palette(U32Id::<BVoxPalette>::from_u32(1)),
             Ok(())
         );
         state.gc();
@@ -511,7 +511,7 @@ mod tests {
         // Layer ids follow the listing on load, so the first layer is id 0.
         let object_id = U32Id::<BVoxObject>::from_u32(0);
         assert_eq!(
-            state.remove_layer(object_id, U32Id::<BVoxLayer>::from_u32(0)),
+            state.release_layer(object_id, U32Id::<BVoxLayer>::from_u32(0)),
             Ok(())
         );
         state.gc();

@@ -13,12 +13,12 @@ use voxj::VoxjPalette;
 /// Errors on a duplicate property name, a row whose length disagrees with the
 /// properties, or a value-index past the id space. Value-pool-reference and
 /// value-id ranges are checked when the palette is inserted by
-/// [`VoxMain::add_palette`](voxcore::VoxMain::add_palette).
+/// [`VoxMain::retain_palette`](voxcore::VoxMain::retain_palette).
 pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette> {
     let mut out = VoxPalette::default();
 
     for property in &palette.properties {
-        out.add_property(
+        out.retain_property(
             property.name.clone(),
             U32Id::from_u32(property.value_pool as u32),
             // The back-fill for materials the palette already holds. The loop
@@ -49,7 +49,7 @@ pub fn vox_palette_from_voxj_palette(palette: &VoxjPalette) -> Result<VoxPalette
                     })
             })
             .collect::<Result<Vec<_>>>()?;
-        out.add_material(value_ids).map_err(|_| {
+        out.retain_material(value_ids).map_err(|_| {
             Error::Invalid(format!(
                 "palette material {index} has {} value-indices but {} properties",
                 row.len(),

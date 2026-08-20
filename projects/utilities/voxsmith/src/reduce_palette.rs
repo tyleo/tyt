@@ -142,7 +142,7 @@ fn reduce_materials(
         .collect();
 
     state
-        .remove_materials(palette_id, &replacements)
+        .release_materials(palette_id, &replacements)
         .expect("the cluster's materials are live and distinct");
 
     state.gc();
@@ -840,29 +840,29 @@ mod tests {
 
         // baseColor draws from a linear `vec-4-float` value pool; tag draws
         // from a `float` one with a distinct value per material.
-        let base_value_pool_id = state.add_value_pool(
+        let base_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(colors.iter().map(|color| linear_rgba(color)).collect())
                 .unwrap(),
         );
-        let tag_value_pool_id = state.add_value_pool(
+        let tag_value_pool_id = state.retain_value_pool(
             VoxValuePool::float((0..colors.len()).map(|index| index as f64).collect()).unwrap(),
         );
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_property("tag".to_owned(), tag_value_pool_id, U32Id::from_u32(0))
+            .retain_property("tag".to_owned(), tag_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         let material_ids: Vec<_> = (0..colors.len())
             .map(|index| {
                 palette
-                    .add_material(vec![value_id(index), value_id(index)])
+                    .retain_material(vec![value_id(index), value_id(index)])
                     .unwrap()
             })
             .collect();
@@ -870,8 +870,8 @@ mod tests {
         let count: usize = colors.len() + repeats.iter().sum::<usize>();
         let mut object =
             VoxObject::new("o".to_owned(), TyVector3U32::new(count as u32, 1, 1)).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
-        object.add_layer(palette_id, material_ids[0]);
+        let palette_id = state.retain_palette(palette).unwrap();
+        object.retain_layer(palette_id, material_ids[0]);
 
         // One voxel per color, plus `repeats[i]` extra voxels sampling material
         // i.
@@ -888,7 +888,7 @@ mod tests {
                 retain(&mut object, material_id);
             }
         }
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
         (state, palette_id, object_id)
     }
 
@@ -916,26 +916,26 @@ mod tests {
     ) -> (VoxMain, U32Id<BVoxPalette>, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        let base_value_pool_id = state.add_value_pool(
+        let base_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(colors.iter().map(|color| linear_rgba(color)).collect())
                 .unwrap(),
         );
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         let material_ids: Vec<_> = (0..colors.len())
-            .map(|index| palette.add_material(vec![value_id(index)]).unwrap())
+            .map(|index| palette.retain_material(vec![value_id(index)]).unwrap())
             .collect();
 
         let mut object = VoxObject::new("o".to_owned(), bounds).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
-        object.add_layer(palette_id, material_ids[0]);
+        let palette_id = state.retain_palette(palette).unwrap();
+        object.retain_layer(palette_id, material_ids[0]);
 
         for &(position, color_index) in voxels {
             let voxel_id = object.voxel_id(position).unwrap();
@@ -944,7 +944,7 @@ mod tests {
                 .unwrap();
         }
 
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
         (state, palette_id, object_id)
     }
 
@@ -1254,26 +1254,26 @@ mod tests {
         // The palette carries no `baseColor`, so every material counts
         // as colorless and the reduction no-ops even over the cap.
         let mut state = VoxMain::default();
-        let tag_value_pool_id = state.add_value_pool(
+        let tag_value_pool_id = state.retain_value_pool(
             VoxValuePool::float((0..3).map(|index| index as f64).collect()).unwrap(),
         );
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tag".to_owned(), tag_value_pool_id, U32Id::from_u32(0))
+            .retain_property("tag".to_owned(), tag_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         let material_ids: Vec<_> = (0..3)
-            .map(|index| palette.add_material(vec![value_id(index)]).unwrap())
+            .map(|index| palette.retain_material(vec![value_id(index)]).unwrap())
             .collect();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
-        object.add_layer(palette_id, material_ids[0]);
+        let palette_id = state.retain_palette(palette).unwrap();
+        object.retain_layer(palette_id, material_ids[0]);
         for (x, &material_id) in material_ids.iter().enumerate() {
             let voxel_id = object.voxel_id(TyVector3U32::new(x as u32, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        state.add_object(object).unwrap();
+        state.retain_object(object).unwrap();
 
         let outcome = reduce_palette(
             &mut state,
@@ -1298,20 +1298,21 @@ mod tests {
         // lands.
         let (mut state, palette_id, object_id) =
             state_with_colors(&["#FF0000FF", "#00FF00FF", "#0000FFFF"], &[]);
-        let strength_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
+        let strength_value_pool_id =
+            state.retain_value_pool(VoxValuePool::float(vec![1.5]).unwrap());
 
         let mut glow_palette = VoxPalette::default();
         glow_palette
-            .add_property(
+            .retain_property(
                 "emissiveStrength".to_owned(),
                 strength_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        glow_palette.add_material(vec![value_id(0)]).unwrap();
-        let glow_palette_id = state.add_palette(glow_palette).unwrap();
+        glow_palette.retain_material(vec![value_id(0)]).unwrap();
+        let glow_palette_id = state.retain_palette(glow_palette).unwrap();
         state
-            .add_layer(object_id, glow_palette_id, U32Id::from_u32(0))
+            .retain_layer(object_id, glow_palette_id, U32Id::from_u32(0))
             .unwrap();
 
         let outcome = reduce_palette(

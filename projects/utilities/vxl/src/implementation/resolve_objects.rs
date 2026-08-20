@@ -205,7 +205,7 @@ mod tests {
     fn object_id(state: &mut VoxMain, name: &str) -> ObjectId {
         let object = VoxObject::new(name.to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
 
-        state.add_object(object).unwrap()
+        state.retain_object(object).unwrap()
     }
 
     /// Adds a hierarchy node placing the given child nodes and objects.
@@ -222,7 +222,7 @@ mod tests {
             ..Default::default()
         };
 
-        state.add_hierarchy_node(node).unwrap()
+        state.retain_hierarchy_node(node).unwrap()
     }
 
     /// The path globs as the owned `String`s the resolver takes.

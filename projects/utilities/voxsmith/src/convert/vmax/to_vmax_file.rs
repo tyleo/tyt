@@ -252,22 +252,22 @@ mod tests {
         // A transparent stand-in would write a model Voxel Max renders as
         // entirely invisible, at exit 0.
         let mut state = VoxMain::default();
-        let value_pool_id = state.add_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
+        let value_pool_id = state.retain_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+            .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let material_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::splat(1)).unwrap();
-        object.add_layer(palette_id, material_id);
+        object.retain_layer(palette_id, material_id);
         object
             .retain_voxel(U32Id::from_u32(0), &[material_id])
             .unwrap();
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
         let node_id = state
-            .add_hierarchy_node(VoxHierarchyNode {
+            .retain_hierarchy_node(VoxHierarchyNode {
                 child_object_ids: vec![object_id],
                 ..Default::default()
             })
@@ -333,22 +333,22 @@ mod tests {
     fn errors_when_derived_materials_exceed_the_byte_budget() {
         let mut state = VoxMain::default();
         let color_value_pool_id = state
-            .add_value_pool(VoxValuePool::vec_4_float(vec![color_floats("#FF0000FF")]).unwrap());
+            .retain_value_pool(VoxValuePool::vec_4_float(vec![color_floats("#FF0000FF")]).unwrap());
         // 256 distinct metallic values give 256 distinct material signatures,
         // one past the byte budget; the color value pool stays a single
         // in-range color.
         let metallic_value_pool_id = state
-            .add_value_pool(VoxValuePool::float((0..256u32).map(f64::from).collect()).unwrap());
+            .retain_value_pool(VoxValuePool::float((0..256u32).map(f64::from).collect()).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "baseColor".to_owned(),
                 color_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_property(
+            .retain_property(
                 "metallic".to_owned(),
                 metallic_value_pool_id,
                 U32Id::from_u32(0),
@@ -356,19 +356,19 @@ mod tests {
             .unwrap();
         for index in 0..256u32 {
             palette
-                .add_material(vec![U32Id::from_u32(0), U32Id::from_u32(index)])
+                .retain_material(vec![U32Id::from_u32(0), U32Id::from_u32(index)])
                 .unwrap();
         }
-        let palette_id = state.add_palette(palette).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
         let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+        object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object
             .retain_voxel(voxel_id, &[U32Id::<BVoxMaterial>::from_u32(0)])
             .unwrap();
-        state.add_object(object).unwrap();
+        state.retain_object(object).unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -388,13 +388,13 @@ mod tests {
         let mut state = VoxMain::default();
 
         // One palette whose first real color is material 0: red, green, blue.
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF", "#0000FFFF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF", "#0000FFFF"]);
         let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Object 0: a red (material 0) then a green (material 1) voxel along x.
         let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
             .expect("a 2x1x1 grid is within the dense limit");
-        wide.add_layer(palette_id, material_id(0));
+        wide.retain_layer(palette_id, material_id(0));
         for (x, material_index) in [(0u32, 0u32), (1, 1)] {
             let voxel_id = wide
                 .voxel_id(TyVector3U32::new(x, 0, 0))
@@ -402,18 +402,18 @@ mod tests {
             wide.retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
         }
-        state.add_object(wide).unwrap();
+        state.retain_object(wide).unwrap();
 
         // Object 1: a single blue (material 2) voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
             .expect("a 1x1x1 grid is within the dense limit");
-        unit.add_layer(palette_id, material_id(0));
+        unit.retain_layer(palette_id, material_id(0));
         let voxel_id = unit
             .voxel_id(TyVector3U32::new(0, 0, 0))
             .expect("a position within the grid");
         unit.retain_voxel(voxel_id, &[material_id(2)])
             .expect("one sample for the one layer");
-        state.add_object(unit).unwrap();
+        state.retain_object(unit).unwrap();
 
         let object_id = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node_id = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
@@ -428,7 +428,7 @@ mod tests {
         // node 0 groups node 1, which places object 0 at +5x; node 2 places
         // object 1 at +3y. Nodes 0 and 2 are the roots.
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 VoxHierarchyNode {
                     name: "group".to_owned(),
                     child_node_ids: vec![node_id(1)],
@@ -549,16 +549,16 @@ mod tests {
     #[test]
     fn synthesizes_distinct_node_ind() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
             ))
             .unwrap();
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
@@ -566,7 +566,7 @@ mod tests {
             .unwrap();
         // A root group parenting two object nodes.
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 group_node("g", &[1, 2], at(0.0, 0.0, 0.0)),
                 object_node("a", 0, at(0.0, 0.0, 0.0)),
                 object_node("b", 1, at(5.0, 0.0, 0.0)),
@@ -599,21 +599,21 @@ mod tests {
     fn synthesizes_a_node_placing_several_objects() {
         let mut state = VoxMain::default();
 
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
         let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Two unit objects, a red one (material 0) and a green one (material 1).
         for material_index in [0u32, 1] {
             let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
                 .expect("a 1x1x1 grid is within the dense limit");
-            object.add_layer(palette_id, material_id(0));
+            object.retain_layer(palette_id, material_id(0));
             let voxel_id = object
                 .voxel_id(TyVector3U32::new(0, 0, 0))
                 .expect("a position within the grid");
             object
                 .retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
-            state.add_object(object).unwrap();
+            state.retain_object(object).unwrap();
         }
 
         // One node placing both objects at the same offset, so they coincide in
@@ -621,7 +621,7 @@ mod tests {
         let object_id = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node_id = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
         state
-            .add_hierarchy_node(VoxHierarchyNode {
+            .retain_hierarchy_node(VoxHierarchyNode {
                 name: "layer".to_owned(),
                 child_node_ids: Vec::new(),
                 child_object_ids: vec![object_id(0), object_id(1)],
@@ -655,20 +655,20 @@ mod tests {
     /// Adds a folded palette binding `baseColor` to a value pool of the
     /// given colors, with one material per color so a material's index is its
     /// color index, and returns the palette id.
-    fn add_rgba_palette(state: &mut VoxMain, hexes: &[&str]) -> U32Id<BVoxPalette> {
-        let value_pool_id = state.add_value_pool(
+    fn retain_rgba_palette(state: &mut VoxMain, hexes: &[&str]) -> U32Id<BVoxPalette> {
+        let value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(hexes.iter().map(|hex| color_floats(hex)).collect()).unwrap(),
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColor".to_owned(), value_pool_id, U32Id::from_u32(0))
+            .retain_property("baseColor".to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         for index in 0..hexes.len() {
             palette
-                .add_material(vec![U32Id::from_u32(index as u32)])
+                .retain_material(vec![U32Id::from_u32(index as u32)])
                 .expect("one value id per property");
         }
-        state.add_palette(palette).unwrap()
+        state.retain_palette(palette).unwrap()
     }
 
     /// An object of `bounds` whose live voxels each sample one material, given as
@@ -679,7 +679,7 @@ mod tests {
         voxels: &[([u32; 3], u32)],
     ) -> VoxObject {
         let mut object = VoxObject::new(String::new(), bounds).expect("within the dense limit");
-        object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+        object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
         for &([x, y, z], material_index) in voxels {
             let voxel_id = object
                 .voxel_id(TyVector3U32::new(x, y, z))
@@ -734,16 +734,16 @@ mod tests {
     #[test]
     fn synthesizes_colors_zero_based_with_a_terminator() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(2, 1, 1),
                 &[([0, 0, 0], 0), ([1, 0, 0], 1)],
             ))
             .unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -776,17 +776,17 @@ mod tests {
         hexes.extend((0..253).map(|_| "#00FF00FF".to_owned()));
         hexes.push("#0000FFFF".to_owned());
         let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
-        let palette_id = add_rgba_palette(&mut state, &refs);
+        let palette_id = retain_rgba_palette(&mut state, &refs);
         // A voxel on the first color (cell 0) and one on the last (cell 254).
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(2, 1, 1),
                 &[([0, 0, 0], 0), ([1, 0, 0], 254)],
             ))
             .unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -832,17 +832,17 @@ mod tests {
             let mut state = VoxMain::default();
             let hexes: Vec<String> = (0..count).map(|i| format!("#{:06X}FF", i)).collect();
             let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
-            let palette_id = add_rgba_palette(&mut state, &refs);
+            let palette_id = retain_rgba_palette(&mut state, &refs);
             let voxels: Vec<([u32; 3], u32)> = (0..count).map(|i| ([i, 0, 0], i)).collect();
             state
-                .add_object(color_object(
+                .retain_object(color_object(
                     palette_id,
                     TyVector3U32::new(count, 1, 1),
                     &voxels,
                 ))
                 .unwrap();
             state
-                .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+                .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
                 .unwrap();
             state
                 .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -866,21 +866,21 @@ mod tests {
     #[test]
     fn synthesizes_a_colorless_object_sharing_the_default_palette() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         // Object 0: a single red voxel. Object 1: an empty, colorless object,
         // whose tight grid is [0, 0, 0].
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
             ))
             .unwrap();
         state
-            .add_object(VoxObject::new(String::new(), TyVector3U32::new(0, 0, 0)).unwrap())
+            .retain_object(VoxObject::new(String::new(), TyVector3U32::new(0, 0, 0)).unwrap())
             .unwrap();
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 object_node("colored", 0, at(0.0, 0.0, 0.0)),
                 object_node("colorless", 1, at(10.0, 0.0, 0.0)),
             ])
@@ -917,11 +917,11 @@ mod tests {
     #[test]
     fn synthesizes_colorless_voxels_on_a_non_empty_index() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         // Object 0: a colored voxel, so a `palette.png` exists to borrow.
         // Object 1: a colorless object that nonetheless has a live voxel.
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
@@ -930,9 +930,9 @@ mod tests {
         let mut colorless = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
         let voxel_id = colorless.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         colorless.retain_voxel(voxel_id, &[]).unwrap();
-        state.add_object(colorless).unwrap();
+        state.retain_object(colorless).unwrap();
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 object_node("colored", 0, at(0.0, 0.0, 0.0)),
                 object_node("colorless", 1, at(10.0, 0.0, 0.0)),
             ])
@@ -963,10 +963,10 @@ mod tests {
     #[test]
     fn synthesizes_a_node_placing_objects_and_child_nodes() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF", "#0000FFFF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF", "#0000FFFF"]);
         for cell in 0..3 {
             state
-                .add_object(color_object(
+                .retain_object(color_object(
                     palette_id,
                     TyVector3U32::new(1, 1, 1),
                     &[([0, 0, 0], cell)],
@@ -976,7 +976,7 @@ mod tests {
         // A fourth object placed by a child node, to confirm it hangs off the
         // first object of the multi-object parent.
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
@@ -985,7 +985,7 @@ mod tests {
         // node 0 places objects 0, 1, 2 at +10x and parents node 1; node 1
         // places object 3 at +1y of the first object.
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 VoxHierarchyNode {
                     name: "layer".to_owned(),
                     child_node_ids: vec![U32Id::<BVoxHierarchyNode>::from_u32(1)],
@@ -1047,16 +1047,16 @@ mod tests {
     #[test]
     fn synthesizes_instances_sharing_one_contents_file() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
             ))
             .unwrap();
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 object_node("a", 0, at(0.0, 0.0, 0.0)),
                 object_node("b", 0, at(20.0, 0.0, 0.0)),
             ])
@@ -1087,9 +1087,9 @@ mod tests {
     #[test]
     fn synthesizes_a_shared_subtree_at_every_parent() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
@@ -1098,7 +1098,7 @@ mod tests {
         // node 2 places object 0 at +1x and is a child of both group node 0 (at
         // the origin) and group node 1 (at +100x).
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 group_node("a", &[2], at(0.0, 0.0, 0.0)),
                 group_node("b", &[2], at(100.0, 0.0, 0.0)),
                 object_node("c", 0, at(1.0, 0.0, 0.0)),
@@ -1127,9 +1127,9 @@ mod tests {
     #[test]
     fn synthesizes_a_node_that_is_root_and_child() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
@@ -1138,7 +1138,7 @@ mod tests {
         // node 1 places object 0 at +1x; it is both a root and a child of group
         // node 0 at +100x.
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 group_node("a", &[1], at(100.0, 0.0, 0.0)),
                 object_node("c", 0, at(1.0, 0.0, 0.0)),
             ])
@@ -1165,16 +1165,16 @@ mod tests {
     #[test]
     fn drops_a_node_unreachable_from_the_roots() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
             ))
             .unwrap();
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
@@ -1183,7 +1183,7 @@ mod tests {
         // node 0 is a root placing object 0; node 1 places object 1 but is
         // neither a root nor anyone's child.
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 object_node("rooted", 0, at(0.0, 0.0, 0.0)),
                 object_node("orphan", 1, at(50.0, 0.0, 0.0)),
             ])
@@ -1206,9 +1206,9 @@ mod tests {
     #[test]
     fn keeps_rotation_scale_and_translation() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
@@ -1222,7 +1222,7 @@ mod tests {
             TyVector3F64::new(2.0, 1.0, 1.0),
         );
         state
-            .add_hierarchy_node(object_node("o", 0, transform))
+            .retain_hierarchy_node(object_node("o", 0, transform))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -1271,41 +1271,43 @@ mod tests {
             // One folded palette binding a color plus the four material
             // attributes, with a single material. No ext, so the writer derives
             // the Voxel Max material from the value pools.
-            let color = state.add_value_pool(
+            let color = state.retain_value_pool(
                 VoxValuePool::vec_4_float(vec![color_floats("#FF0000FF")]).unwrap(),
             );
             let float = |value: f64| VoxValuePool::float(vec![value]).unwrap();
-            let metallic = state.add_value_pool(float(0.5));
-            let roughness = state.add_value_pool(float(0.25));
-            let emissive = state.add_value_pool(float(2.0));
-            let shadows = state.add_value_pool(VoxValuePool::boolean(vec![true]));
+            let metallic = state.retain_value_pool(float(0.5));
+            let roughness = state.retain_value_pool(float(0.25));
+            let emissive = state.retain_value_pool(float(2.0));
+            let shadows = state.retain_value_pool(VoxValuePool::boolean(vec![true]));
             let mut palette = VoxPalette::default();
             palette
-                .add_property("baseColor".to_owned(), color, U32Id::from_u32(0))
+                .retain_property("baseColor".to_owned(), color, U32Id::from_u32(0))
                 .unwrap();
             palette
-                .add_property("metallic".to_owned(), metallic, U32Id::from_u32(0))
+                .retain_property("metallic".to_owned(), metallic, U32Id::from_u32(0))
                 .unwrap();
             palette
-                .add_property("roughness".to_owned(), roughness, U32Id::from_u32(0))
+                .retain_property("roughness".to_owned(), roughness, U32Id::from_u32(0))
                 .unwrap();
             palette
-                .add_property("emissiveStrength".to_owned(), emissive, U32Id::from_u32(0))
+                .retain_property("emissiveStrength".to_owned(), emissive, U32Id::from_u32(0))
                 .unwrap();
             palette
-                .add_property("shadows".to_owned(), shadows, U32Id::from_u32(0))
+                .retain_property("shadows".to_owned(), shadows, U32Id::from_u32(0))
                 .unwrap();
-            palette.add_material(vec![U32Id::from_u32(0); 5]).unwrap();
-            let palette_id = state.add_palette(palette).unwrap();
+            palette
+                .retain_material(vec![U32Id::from_u32(0); 5])
+                .unwrap();
+            let palette_id = state.retain_palette(palette).unwrap();
             let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
-            object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+            object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
             let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
             object
                 .retain_voxel(voxel_id, &[U32Id::<BVoxMaterial>::from_u32(0)])
                 .unwrap();
-            state.add_object(object).unwrap();
+            state.retain_object(object).unwrap();
             state
-                .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+                .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
                 .unwrap();
             state
                 .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -1369,35 +1371,37 @@ mod tests {
     fn derives_emissive_relative_to_the_base_color() {
         let mut state = VoxMain::default();
         let color = state
-            .add_value_pool(VoxValuePool::vec_4_float(vec![color_floats("#808080FF")]).unwrap());
+            .retain_value_pool(VoxValuePool::vec_4_float(vec![color_floats("#808080FF")]).unwrap());
         let emissive_color =
-            state.add_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 1.0, 1.0]]).unwrap());
-        let strength = state.add_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 1.0, 1.0]]).unwrap());
+        let strength = state.retain_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("baseColor".to_owned(), color, U32Id::from_u32(0))
+            .retain_property("baseColor".to_owned(), color, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property(
+            .retain_property(
                 "emissiveColor".to_owned(),
                 emissive_color,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_property("emissiveStrength".to_owned(), strength, U32Id::from_u32(0))
+            .retain_property("emissiveStrength".to_owned(), strength, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![U32Id::from_u32(0); 3]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        palette
+            .retain_material(vec![U32Id::from_u32(0); 3])
+            .unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
         let mut object = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+        object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object
             .retain_voxel(voxel_id, &[U32Id::<BVoxMaterial>::from_u32(0)])
             .unwrap();
-        state.add_object(object).unwrap();
+        state.retain_object(object).unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -1446,16 +1450,16 @@ mod tests {
     #[test]
     fn widens_rgb_source_to_opaque() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#3366CC"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#3366CC"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
             ))
             .unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -1480,16 +1484,16 @@ mod tests {
     #[test]
     fn is_idempotent_for_a_colored_object() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(2, 1, 1),
                 &[([0, 0, 0], 0), ([1, 0, 0], 1)],
             ))
             .unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(3.0, 4.0, 5.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(3.0, 4.0, 5.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -1507,16 +1511,16 @@ mod tests {
     #[test]
     fn synthesizes_a_deep_hierarchy() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
             ))
             .unwrap();
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 1)],
@@ -1525,7 +1529,7 @@ mod tests {
         // root group 0 -> group 1 -> group 2 -> object node 3, plus object node
         // 4 hanging off group 1, so leaves sit at different depths.
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 group_node("r", &[1], at(1.0, 0.0, 0.0)),
                 group_node("g1", &[2, 4], at(0.0, 2.0, 0.0)),
                 group_node("g2", &[3], at(0.0, 0.0, 3.0)),
@@ -1555,12 +1559,12 @@ mod tests {
     #[test]
     fn derives_a_group_content_box_from_its_subtree() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         // Two [2, 2, 2] objects, each tight (voxels reach both ends of every
         // axis).
         for _ in 0..2 {
             state
-                .add_object(color_object(
+                .retain_object(color_object(
                     palette_id,
                     TyVector3U32::new(2, 2, 2),
                     &[([0, 0, 0], 0), ([1, 1, 1], 0)],
@@ -1569,7 +1573,7 @@ mod tests {
         }
         // A root group parenting two object nodes, the second offset +10x.
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 group_node("g", &[1, 2], at(0.0, 0.0, 0.0)),
                 object_node("a", 0, at(0.0, 0.0, 0.0)),
                 object_node("b", 1, at(10.0, 0.0, 0.0)),
@@ -1606,9 +1610,9 @@ mod tests {
         // An empty object holds no voxels; its grid is the [3, 4, 5] build
         // volume.
         let object = VoxObject::new(String::new(), TyVector3U32::new(3, 4, 5)).unwrap();
-        state.add_object(object).unwrap();
+        state.retain_object(object).unwrap();
         state
-            .add_hierarchy_node(object_node("empty", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("empty", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -1641,16 +1645,16 @@ mod tests {
     #[test]
     fn round_trips_a_transparent_color() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#11223300"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#11223300"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
             ))
             .unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -1685,17 +1689,17 @@ mod tests {
         let mut state = VoxMain::default();
         let hexes: Vec<String> = (0..256).map(|i| format!("#{:06X}FF", i)).collect();
         let refs: Vec<&str> = hexes.iter().map(String::as_str).collect();
-        let palette_id = add_rgba_palette(&mut state, &refs);
+        let palette_id = retain_rgba_palette(&mut state, &refs);
         // One voxel references a low cell; the other 255 cells are padding.
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 5)],
             ))
             .unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -1716,16 +1720,16 @@ mod tests {
     #[test]
     fn synthesizes_a_color_only_object_in_plist() {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF", "#00FF00FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(2, 1, 1),
                 &[([0, 0, 0], 0), ([1, 0, 0], 1)],
             ))
             .unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])
@@ -1750,16 +1754,16 @@ mod tests {
     /// input the synthesis path takes.
     fn one_object_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let palette_id = add_rgba_palette(&mut state, &["#FF0000FF"]);
+        let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         state
-            .add_object(color_object(
+            .retain_object(color_object(
                 palette_id,
                 TyVector3U32::new(1, 1, 1),
                 &[([0, 0, 0], 0)],
             ))
             .unwrap();
         state
-            .add_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
+            .retain_hierarchy_node(object_node("o", 0, at(0.0, 0.0, 0.0)))
             .unwrap();
         state
             .set_root_hierarchy_node_ids(vec![U32Id::<BVoxHierarchyNode>::from_u32(0)])

@@ -781,7 +781,7 @@ mod tests {
                 [linear.red, linear.green, linear.blue, linear.alpha]
             })
             .collect();
-        state.add_value_pool(VoxValuePool::vec_4_float(values).unwrap())
+        state.retain_value_pool(VoxValuePool::vec_4_float(values).unwrap())
     }
 
     /// A document with two palettes: palette 0 has `baseColor` and
@@ -793,38 +793,42 @@ mod tests {
         let colors_zero_value_pool_id =
             lin_srgba_f64_value_pool(&mut state, &[[255, 0, 0, 255], [0, 255, 0, 128]]);
         let metallic_value_pool_id =
-            state.add_value_pool(VoxValuePool::float(vec![1.0, 0.2]).unwrap());
+            state.retain_value_pool(VoxValuePool::float(vec![1.0, 0.2]).unwrap());
         let colors_one_value_pool_id = lin_srgba_f64_value_pool(&mut state, &[[0, 0, 255, 255]]);
 
         let mut first = VoxPalette::default();
         first
-            .add_property(
+            .retain_property(
                 "baseColor".to_owned(),
                 colors_zero_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         first
-            .add_property(
+            .retain_property(
                 "metallic".to_owned(),
                 metallic_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        first.add_material(vec![value_id(0), value_id(0)]).unwrap();
-        first.add_material(vec![value_id(1), value_id(1)]).unwrap();
-        state.add_palette(first).unwrap();
+        first
+            .retain_material(vec![value_id(0), value_id(0)])
+            .unwrap();
+        first
+            .retain_material(vec![value_id(1), value_id(1)])
+            .unwrap();
+        state.retain_palette(first).unwrap();
 
         let mut second = VoxPalette::default();
         second
-            .add_property(
+            .retain_property(
                 "baseColor".to_owned(),
                 colors_one_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        second.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(second).unwrap();
+        second.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(second).unwrap();
 
         state
     }
@@ -905,18 +909,19 @@ mod tests {
     #[test]
     fn swatch_spaces_values_with_no_swatch() {
         let mut state = VoxMain::default();
-        let shadows_value_pool_id = state.add_value_pool(VoxValuePool::boolean(vec![true, false]));
+        let shadows_value_pool_id =
+            state.retain_value_pool(VoxValuePool::boolean(vec![true, false]));
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "shadows".to_owned(),
                 shadows_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        palette.add_material(vec![value_id(1)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        palette.retain_material(vec![value_id(1)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         // Bools have no swatch, so swatch format spaces them rather than
         // abutting them into `truefalse`.
@@ -1366,17 +1371,17 @@ mod tests {
     fn three_component_state() -> VoxMain {
         let mut state = VoxMain::default();
         let emissive_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "emissiveColor".to_owned(),
                 emissive_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
         state
     }
 
@@ -1417,17 +1422,17 @@ mod tests {
         // The vocabulary bounds a glTF color at [0, 1], so auto errors on the
         // HDR red and an explicit reading spells the exact stored values.
         let emissive_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "emissiveColor".to_owned(),
                 emissive_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         assert!(
             resolve_value_collections(
@@ -1450,27 +1455,28 @@ mod tests {
         // `baseColor` names a glTF color, so a binding no color reading
         // spells is an error under auto, whatever the shape holds.
         let base_color_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_3_int(vec![[1, 0, 0]]).unwrap());
-        let strength_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_3_int(vec![[1, 0, 0]]).unwrap());
+        let strength_value_pool_id =
+            state.retain_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "baseColor".to_owned(),
                 base_color_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_property(
+            .retain_property(
                 "emissiveColor".to_owned(),
                 strength_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_material(vec![value_id(0), value_id(0)])
+            .retain_material(vec![value_id(0), value_id(0)])
             .unwrap();
-        state.add_palette(palette).unwrap();
+        state.retain_palette(palette).unwrap();
 
         for key in ["baseColor", "emissiveColor"] {
             assert!(
@@ -1485,13 +1491,13 @@ mod tests {
     fn custom_vector_state() -> VoxMain {
         let mut state = VoxMain::default();
         let tint_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_3_float(vec![[1.0, 0.0, 0.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
+            .retain_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
         state
     }
 
@@ -1557,14 +1563,14 @@ mod tests {
     /// holding `[1, 0, 0.25, 0.5]`, the design page's worked example.
     fn custom_tint_vec_4_state() -> VoxMain {
         let mut state = VoxMain::default();
-        let tint_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.25, 0.5]]).unwrap());
+        let tint_value_pool_id = state
+            .retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.25, 0.5]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
+            .retain_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
         state
     }
 
@@ -1613,13 +1619,13 @@ mod tests {
         // The sRGB readings never clamp: the HDR red errors under both, and
         // the auto fallback stays available through linear-float.
         let tint_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.0, 1.0, 0.5, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
+            .retain_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         for reading in ["srgb-hex", "srgb-float"] {
             assert!(
@@ -1639,17 +1645,17 @@ mod tests {
     fn a_component_reads_any_vector_shape() {
         let mut state = VoxMain::default();
         let position_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_3_int(vec![[3, 7, 2]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_3_int(vec![[3, 7, 2]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "position".to_owned(),
                 position_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         // An int vector's component reads its stored int; the width still
         // bounds the index, and no color reading spells an int vector.
@@ -1675,14 +1681,14 @@ mod tests {
     #[test]
     fn an_int_value_pool_renders_integers() {
         let mut state = VoxMain::default();
-        let count_value_pool_id = state.add_value_pool(VoxValuePool::int(vec![3, 7]).unwrap());
+        let count_value_pool_id = state.retain_value_pool(VoxValuePool::int(vec![3, 7]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("count".to_owned(), count_value_pool_id, U32Id::from_u32(0))
+            .retain_property("count".to_owned(), count_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        palette.add_material(vec![value_id(1)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        palette.retain_material(vec![value_id(1)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         let output = show(
             &state,
@@ -1695,17 +1701,15 @@ mod tests {
     #[test]
     fn a_json_value_pool_renders_arrays_rather_than_null() {
         let mut state = VoxMain::default();
-        let extra_value_pool_id =
-            state.add_value_pool(VoxValuePool::json(vec![VoxValue::Array(vec![
-                VoxValue::Number(1.0),
-                VoxValue::Number(2.0),
-            ])]));
+        let extra_value_pool_id = state.retain_value_pool(VoxValuePool::json(vec![
+            VoxValue::Array(vec![VoxValue::Number(1.0), VoxValue::Number(2.0)]),
+        ]));
         let mut palette = VoxPalette::default();
         palette
-            .add_property("extra".to_owned(), extra_value_pool_id, U32Id::from_u32(0))
+            .retain_property("extra".to_owned(), extra_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         // The array survives into both the text and JSON layouts.
         let text = show(
@@ -1728,14 +1732,14 @@ mod tests {
     #[test]
     fn an_empty_property_name_is_quoted_in_the_label_but_raw_in_json() {
         let mut state = VoxMain::default();
-        let value_pool_id = state.add_value_pool(VoxValuePool::boolean(vec![true]));
+        let value_pool_id = state.retain_value_pool(VoxValuePool::boolean(vec![true]));
         let mut palette = VoxPalette::default();
         // A binding with no property name, reached through the `*` property.
         palette
-            .add_property(String::new(), value_pool_id, U32Id::from_u32(0))
+            .retain_property(String::new(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         // An empty name prints quoted as `""` rather than vanishing after the
         // `0.` prefix.
@@ -1762,18 +1766,19 @@ mod tests {
         // Both material rows draw the strength value pool's one value, so the
         // column shows it twice.
         let mut state = VoxMain::default();
-        let strengths_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
+        let strengths_value_pool_id =
+            state.retain_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 "emissiveStrength".to_owned(),
                 strengths_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         let output = show(
             &state,

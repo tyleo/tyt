@@ -26,7 +26,7 @@ pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, &file.root);
-    let palette_id = state.add_palette(palette)?;
+    let palette_id = state.retain_palette(palette)?;
 
     let mut nodes = Vec::new();
     let root_id = build_node(
@@ -72,14 +72,14 @@ fn build_node(
             // may carry empty margin. The masks are read from that same grid.
             let object = build_object(matrix, palette_id, material_ids)?;
             let masks = masks_of(&object, matrix);
-            let object_id = state.add_object(object)?;
+            let object_id = state.retain_object(object)?;
             let hierarchy = VoxHierarchyNode {
                 name: matrix.name.clone(),
                 child_node_ids: Vec::new(),
                 child_object_ids: vec![object_id],
                 transform: translation(matrix.position),
             };
-            let node_id = state.add_hierarchy_node(hierarchy)?;
+            let node_id = state.retain_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Matrix {
                 name: matrix.name.clone(),
                 position: matrix.position,
@@ -100,7 +100,7 @@ fn build_node(
                 child_object_ids: Vec::new(),
                 transform: TyTransformF64::default(),
             };
-            let node_id = state.add_hierarchy_node(hierarchy)?;
+            let node_id = state.retain_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Model);
             node_id
         }
@@ -113,14 +113,14 @@ fn build_node(
             // may carry empty margin. The masks are read from that same grid.
             let object = build_object(&compound.matrix, palette_id, material_ids)?;
             let masks = masks_of(&object, &compound.matrix);
-            let object_id = state.add_object(object)?;
+            let object_id = state.retain_object(object)?;
             let hierarchy = VoxHierarchyNode {
                 name: compound.matrix.name.clone(),
                 child_node_ids,
                 child_object_ids: vec![object_id],
                 transform: translation(compound.matrix.position),
             };
-            let node_id = state.add_hierarchy_node(hierarchy)?;
+            let node_id = state.retain_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Compound {
                 name: compound.matrix.name.clone(),
                 position: compound.matrix.position,
@@ -137,7 +137,7 @@ fn build_node(
                 child_object_ids: Vec::new(),
                 transform: TyTransformF64::default(),
             };
-            let node_id = state.add_hierarchy_node(hierarchy)?;
+            let node_id = state.retain_hierarchy_node(hierarchy)?;
             nodes.push(QubicleQbtNode::Unknown {
                 type_id: unknown.type_id,
                 data: unknown.data.clone(),
@@ -168,19 +168,19 @@ fn build_palette(
     // A Qubicle voxel carries no alpha, so colors decode to linear light and
     // ride in a shared `vec-3-float` value pool. Each material draws one value
     // id into it.
-    let value_pool_id = state.add_value_pool(
+    let value_pool_id = state.retain_value_pool(
         VoxValuePool::vec_3_float(order.iter().map(|&color| color_floats(color)).collect())
             .expect("byte-derived components are finite and the list is non-empty"),
     );
 
     let mut palette = VoxPalette::default();
     palette
-        .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+        .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
         .expect("the property names are distinct");
     let mut material_ids = HashMap::with_capacity(order.len());
     for (index, color) in order.iter().enumerate() {
         let material_id = palette
-            .add_material(vec![U32Id::from_u32(index as u32)])
+            .retain_material(vec![U32Id::from_u32(index as u32)])
             .expect("one value id for the one property");
         material_ids.insert(*color, material_id);
     }
@@ -237,7 +237,7 @@ fn build_object(
             ))
         })?;
 
-    object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+    object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
 
     for x in 0..size_x {
         for y in 0..size_y {

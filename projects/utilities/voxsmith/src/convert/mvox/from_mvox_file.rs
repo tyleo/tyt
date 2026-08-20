@@ -50,18 +50,18 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
     let mut state = VoxMain::default();
 
     let palette = build_palette(&mut state, file)?;
-    let palette_id = state.add_palette(palette)?;
+    let palette_id = state.retain_palette(palette)?;
 
     for model in &file.models {
         // The model grid becomes the object's build volume directly; it may
         // carry empty margin around the live voxels.
-        state.add_object(build_object(model, palette_id)?)?;
+        state.retain_object(build_object(model, palette_id)?)?;
     }
 
     // The scene graph lands as one batch: a transform node lists its child by
     // listing position, which may lie ahead of it.
     let (nodes, roots) = build_hierarchy(file)?;
-    state.add_hierarchy_nodes(nodes)?;
+    state.retain_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(roots)?;
 
     let ext = MagicaVoxelExtWrapper {
@@ -105,7 +105,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
 
     let color_bytes: Vec<[u8; 4]> = colors.iter().map(|c| [c.r, c.g, c.b, c.a]).collect();
     let (distinct_colors, color_indices) = intern(&color_bytes, |&color| color);
-    let color_value_pool_id = state.add_value_pool(
+    let color_value_pool_id = state.retain_value_pool(
         VoxValuePool::vec_4_float(
             distinct_colors
                 .iter()
@@ -115,7 +115,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
         .expect("byte-derived components are finite and the palette is non-empty"),
     );
     palette
-        .add_property(
+        .retain_property(
             BASE_COLOR.to_owned(),
             color_value_pool_id,
             U32Id::from_u32(0),
@@ -146,9 +146,9 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             })
             .collect();
         let (distinct_types, type_indices) = intern(&types, |token| token.clone());
-        let type_value_pool_id = state.add_value_pool(VoxValuePool::string(distinct_types));
+        let type_value_pool_id = state.retain_value_pool(VoxValuePool::string(distinct_types));
         palette
-            .add_property("type".to_owned(), type_value_pool_id, U32Id::from_u32(0))
+            .retain_property("type".to_owned(), type_value_pool_id, U32Id::from_u32(0))
             .expect("the property names are distinct");
         attribute_indices.push(type_indices);
 
@@ -167,12 +167,12 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
                 })
                 .collect();
             let (distinct, indices) = intern(&values, |value| value.to_bits());
-            let value_pool_id = state.add_value_pool(
+            let value_pool_id = state.retain_value_pool(
                 VoxValuePool::float(distinct)
                     .expect("the scalars are finite and every palette cell yields one"),
             );
             palette
-                .add_property(name.to_owned(), value_pool_id, U32Id::from_u32(0))
+                .retain_property(name.to_owned(), value_pool_id, U32Id::from_u32(0))
                 .expect("the property names are distinct");
             attribute_indices.push(indices);
         }
@@ -184,7 +184,7 @@ fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
             value_ids.push(U32Id::from_u32(column[index]));
         }
         palette
-            .add_material(value_ids)
+            .retain_material(value_ids)
             .expect("one value id per property");
     }
 
@@ -236,7 +236,7 @@ fn build_object(model: &MVoxModel, palette_id: U32Id<BVoxPalette>) -> Result<Vox
         })?;
 
     // The single layer is the color index; live voxels overwrite material 0.
-    object.add_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
+    object.retain_layer(palette_id, U32Id::<BVoxMaterial>::from_u32(0));
 
     for voxel in &model.voxels {
         let position = TyVector3U32::new(voxel.x as u32, voxel.y as u32, voxel.z as u32);
@@ -708,7 +708,7 @@ mod tests {
 
         // One baseColor palette: a transparent placeholder, then red,
         // green, blue.
-        let value_pool_id = state.add_value_pool(
+        let value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(
                 ["#00000000", "#FF0000FF", "#00FF00FF", "#0000FFFF"]
                     .iter()
@@ -719,20 +719,20 @@ mod tests {
         );
         let mut palette = VoxPalette::default();
         palette
-            .add_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
+            .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         for index in 0..4 {
             palette
-                .add_material(vec![U32Id::from_u32(index)])
+                .retain_material(vec![U32Id::from_u32(index)])
                 .expect("one value-index for the one binding");
         }
-        let palette_id = state.add_palette(palette).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
         let material_id = |index: u32| U32Id::<BVoxMaterial>::from_u32(index);
 
         // Object 0: a red then a green voxel along x.
         let mut wide = VoxObject::new(String::new(), TyVector3U32::new(2, 1, 1))
             .expect("a 2x1x1 grid is within the dense limit");
-        wide.add_layer(palette_id, material_id(0));
+        wide.retain_layer(palette_id, material_id(0));
         for (x, material_index) in [(0u32, 1u32), (1, 2)] {
             let voxel_id = wide
                 .voxel_id(TyVector3U32::new(x, 0, 0))
@@ -740,18 +740,18 @@ mod tests {
             wide.retain_voxel(voxel_id, &[material_id(material_index)])
                 .expect("one sample for the one layer");
         }
-        state.add_object(wide).unwrap();
+        state.retain_object(wide).unwrap();
 
         // Object 1: a single blue voxel.
         let mut unit = VoxObject::new(String::new(), TyVector3U32::new(1, 1, 1))
             .expect("a 1x1x1 grid is within the dense limit");
-        unit.add_layer(palette_id, material_id(0));
+        unit.retain_layer(palette_id, material_id(0));
         let voxel_id = unit
             .voxel_id(TyVector3U32::new(0, 0, 0))
             .expect("a position within the grid");
         unit.retain_voxel(voxel_id, &[material_id(3)])
             .expect("one sample for the one layer");
-        state.add_object(unit).unwrap();
+        state.retain_object(unit).unwrap();
 
         let object_id = |index: u32| U32Id::<BVoxObject>::from_u32(index);
         let node_id = |index: u32| U32Id::<BVoxHierarchyNode>::from_u32(index);
@@ -766,7 +766,7 @@ mod tests {
         // node 0 groups node 1, which places object 0 at +5x; node 2 places
         // object 1 at +3y. Nodes 0 and 2 are the roots.
         state
-            .add_hierarchy_nodes(vec![
+            .retain_hierarchy_nodes(vec![
                 VoxHierarchyNode {
                     name: "group".to_owned(),
                     child_node_ids: vec![node_id(1)],

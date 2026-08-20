@@ -76,14 +76,14 @@ mod tests {
     /// A state whose one palette binds `name` to a one-material value pool.
     fn state_with(name: &str, value_pool: VoxValuePool) -> VoxMain {
         let mut state = VoxMain::default();
-        let value_pool_id = state.add_value_pool(value_pool);
+        let value_pool_id = state.retain_value_pool(value_pool);
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(name.to_owned(), value_pool_id, U32Id::from_u32(0))
+            .retain_property(name.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        state.add_palette(palette).unwrap();
+        palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        state.retain_palette(palette).unwrap();
 
         state
     }

@@ -329,26 +329,26 @@ mod tests {
         let mut state = VoxMain::default();
 
         let tint_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let glow_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_3_float(vec![[0.0, 1.0, 0.0]]).unwrap());
-        let gloss_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_3_float(vec![[0.0, 1.0, 0.0]]).unwrap());
+        let gloss_value_pool_id = state.retain_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
+            .retain_property("tint".to_owned(), tint_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property("glow".to_owned(), glow_value_pool_id, U32Id::from_u32(0))
+            .retain_property("glow".to_owned(), glow_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_property("gloss".to_owned(), gloss_value_pool_id, U32Id::from_u32(0))
+            .retain_property("gloss".to_owned(), gloss_value_pool_id, U32Id::from_u32(0))
             .unwrap();
         palette
-            .add_material(vec![value_id(0), value_id(0), value_id(0)])
+            .retain_material(vec![value_id(0), value_id(0), value_id(0)])
             .unwrap();
 
-        let palette_id = state.add_palette(palette).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         (state, palette_id)
     }
@@ -363,7 +363,7 @@ mod tests {
     ) -> bool {
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         for &palette_id in palette_ids {
-            object.add_layer(palette_id, U32Id::from_u32(0));
+            object.retain_layer(palette_id, U32Id::from_u32(0));
         }
         let effective = state.effective_palette(&object).unwrap();
         validate_channel(&effective, key, component).is_ok()
@@ -459,13 +459,13 @@ mod tests {
         // scalar on a vec-4-float value pool.
         let mut state = VoxMain::default();
         let value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("metallic".to_owned(), value_pool_id, U32Id::from_u32(0))
+            .retain_property("metallic".to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         assert!(validates(&state, &[palette_id], "metallic", None));
         assert!(!validates(
@@ -499,7 +499,7 @@ mod tests {
     ) -> (bool, bool) {
         let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         for &palette_id in palette_ids {
-            object.add_layer(palette_id, U32Id::from_u32(0));
+            object.retain_layer(palette_id, U32Id::from_u32(0));
         }
         let effective = state.effective_palette(&object).unwrap();
         (
@@ -526,13 +526,14 @@ mod tests {
     #[test]
     fn a_string_value_pool_has_no_texel_value() {
         let mut state = VoxMain::default();
-        let tag_value_pool_id = state.add_value_pool(VoxValuePool::string(vec!["low".to_owned()]));
+        let tag_value_pool_id =
+            state.retain_value_pool(VoxValuePool::string(vec!["low".to_owned()]));
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tag".to_owned(), tag_value_pool_id, U32Id::from_u32(0))
+            .retain_property("tag".to_owned(), tag_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         assert!(!validates(&state, &[palette_id], "tag", None));
     }
@@ -541,13 +542,13 @@ mod tests {
     fn an_int_vector_value_pool_has_no_texel_value() {
         let mut state = VoxMain::default();
         let cell_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_3_int(vec![[1, 2, 3]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_3_int(vec![[1, 2, 3]]).unwrap());
         let mut palette = VoxPalette::default();
         palette
-            .add_property("cell".to_owned(), cell_value_pool_id, U32Id::from_u32(0))
+            .retain_property("cell".to_owned(), cell_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        palette.retain_material(vec![value_id(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         assert!(!validates(&state, &[palette_id], "cell", None));
         assert!(!validates(
@@ -564,27 +565,27 @@ mod tests {
         // four-component color. The last layer's palette wins, so the layer
         // order flips which component rule applies.
         let mut state = VoxMain::default();
-        let scalar_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
+        let scalar_value_pool_id = state.retain_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
         let color_value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut scalar_palette = VoxPalette::default();
         scalar_palette
-            .add_property(
+            .retain_property(
                 "finish".to_owned(),
                 scalar_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
-        scalar_palette.add_material(vec![value_id(0)]).unwrap();
-        let scalar_palette_id = state.add_palette(scalar_palette).unwrap();
+        scalar_palette.retain_material(vec![value_id(0)]).unwrap();
+        let scalar_palette_id = state.retain_palette(scalar_palette).unwrap();
 
         let mut color_palette = VoxPalette::default();
         color_palette
-            .add_property("finish".to_owned(), color_value_pool_id, U32Id::from_u32(0))
+            .retain_property("finish".to_owned(), color_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        color_palette.add_material(vec![value_id(0)]).unwrap();
-        let color_palette_id = state.add_palette(color_palette).unwrap();
+        color_palette.retain_material(vec![value_id(0)]).unwrap();
+        let color_palette_id = state.retain_palette(color_palette).unwrap();
 
         // Color wins: a component is required and `.a` allowed.
         assert!(!validates(

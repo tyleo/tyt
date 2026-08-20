@@ -224,7 +224,7 @@ pub(crate) fn material_scalar(used: &UsedMaterials, index: usize, key: &str) -> 
         return default_scalar(key).ok_or_else(|| unbound(key));
     };
 
-    // `VoxMain::add_palette` checks every material's value against its
+    // `VoxMain::retain_palette` checks every material's value against its
     // property's value pool, so a bound attribute always resolves.
     let value = value_pool
         .value(value_id)
@@ -272,31 +272,31 @@ mod tests {
     fn single_layer_state() -> (VoxMain, U32Id<BVoxObject>) {
         let mut state = VoxMain::default();
 
-        let base_value_pool_id = state.add_value_pool(
+        let base_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
         let metallic_value_pool_id =
-            state.add_value_pool(VoxValuePool::float(vec![1.0, 0.0]).unwrap());
+            state.retain_value_pool(VoxValuePool::float(vec![1.0, 0.0]).unwrap());
         let roughness_value_pool_id =
-            state.add_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
+            state.retain_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_property(
+            .retain_property(
                 METALLIC.to_owned(),
                 metallic_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_property(
+            .retain_property(
                 ROUGHNESS.to_owned(),
                 roughness_value_pool_id,
                 U32Id::from_u32(0),
@@ -305,25 +305,25 @@ mod tests {
         // Value ids: base 0 = red, 1 = blue; metallic 0 = 1.0, 1 = 0.0;
         // roughness 0 = 0.0, 1 = 1.0.
         let red_shiny_id = palette
-            .add_material(vec![value_id(0), value_id(0), value_id(0)])
+            .retain_material(vec![value_id(0), value_id(0), value_id(0)])
             .unwrap();
         let red_matte_id = palette
-            .add_material(vec![value_id(0), value_id(1), value_id(1)])
+            .retain_material(vec![value_id(0), value_id(1), value_id(1)])
             .unwrap();
         let blue_matte_id = palette
-            .add_material(vec![value_id(1), value_id(1), value_id(1)])
+            .retain_material(vec![value_id(1), value_id(1), value_id(1)])
             .unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
-        object.add_layer(palette_id, red_shiny_id);
+        object.retain_layer(palette_id, red_shiny_id);
 
         for (x, material_id) in [(0, red_shiny_id), (1, red_matte_id), (2, blue_matte_id)] {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
 
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
 
         (state, object_id)
     }
@@ -363,23 +363,23 @@ mod tests {
     #[test]
     fn a_bool_packing_reads_one_or_zero() {
         let mut state = VoxMain::default();
-        let flag_value_pool_id = state.add_value_pool(VoxValuePool::boolean(vec![true, false]));
+        let flag_value_pool_id = state.retain_value_pool(VoxValuePool::boolean(vec![true, false]));
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property("flag".to_owned(), flag_value_pool_id, U32Id::from_u32(0))
+            .retain_property("flag".to_owned(), flag_value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        let on_id = palette.add_material(vec![value_id(0)]).unwrap();
-        let off_id = palette.add_material(vec![value_id(1)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let on_id = palette.retain_material(vec![value_id(0)]).unwrap();
+        let off_id = palette.retain_material(vec![value_id(1)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_layer(palette_id, on_id);
+        object.retain_layer(palette_id, on_id);
         for (x, material_id) in [(0, on_id), (1, off_id)] {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
 
         let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
@@ -396,41 +396,42 @@ mod tests {
         // Both material rows repeat the strength value pool's one cell, so both
         // bake the same half strength.
         let mut state = VoxMain::default();
-        let base_value_pool_id = state.add_value_pool(
+        let base_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
-        let strength_value_pool_id = state.add_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
+        let strength_value_pool_id =
+            state.retain_value_pool(VoxValuePool::float(vec![0.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 BASE_COLOR.to_owned(),
                 base_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_property(
+            .retain_property(
                 EMISSIVE_STRENGTH.to_owned(),
                 strength_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         let red_id = palette
-            .add_material(vec![value_id(0), value_id(0)])
+            .retain_material(vec![value_id(0), value_id(0)])
             .unwrap();
         let blue_id = palette
-            .add_material(vec![value_id(1), value_id(0)])
+            .retain_material(vec![value_id(1), value_id(0)])
             .unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_layer(palette_id, red_id);
+        object.retain_layer(palette_id, red_id);
         for (x, material_id) in [(0, red_id), (1, blue_id)] {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
 
         let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
@@ -493,20 +494,20 @@ mod tests {
         // no vocabulary range, so this guard is the only one it meets.
         let mut state = VoxMain::default();
         let value_pool_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[2.5, 0.0, 0.0, 1.0]]).unwrap());
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.5, 0.0, 0.0, 1.0]]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property("tint".to_owned(), value_pool_id, U32Id::from_u32(0))
+            .retain_property("tint".to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
-        let material_id = palette.add_material(vec![U32Id::from_u32(0)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let material_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, material_id);
+        object.retain_layer(palette_id, material_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[material_id]).unwrap();
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
 
         let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
@@ -537,42 +538,42 @@ mod tests {
 
         // emissiveColor is sRGB; strengths 1.0 and 0.5 fold into the texels as
         // fractions of the mesh max, 1.0.
-        let emissive_color_value_pool_id = state.add_value_pool(
+        let emissive_color_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_3_float(vec![[0.0, 0.0, 1.0], [1.0, 1.0, 1.0]]).unwrap(),
         );
         let strength_value_pool_id =
-            state.add_value_pool(VoxValuePool::float(vec![1.0, 0.5]).unwrap());
+            state.retain_value_pool(VoxValuePool::float(vec![1.0, 0.5]).unwrap());
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(
+            .retain_property(
                 EMISSIVE_COLOR.to_owned(),
                 emissive_color_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         palette
-            .add_property(
+            .retain_property(
                 EMISSIVE_STRENGTH.to_owned(),
                 strength_value_pool_id,
                 U32Id::from_u32(0),
             )
             .unwrap();
         let full_blue_id = palette
-            .add_material(vec![value_id(0), value_id(0)])
+            .retain_material(vec![value_id(0), value_id(0)])
             .unwrap();
         let dim_white_id = palette
-            .add_material(vec![value_id(1), value_id(1)])
+            .retain_material(vec![value_id(1), value_id(1)])
             .unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.add_layer(palette_id, full_blue_id);
+        object.retain_layer(palette_id, full_blue_id);
         for (x, material_id) in [(0, full_blue_id), (1, dim_white_id)] {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
             object.retain_voxel(voxel_id, &[material_id]).unwrap();
         }
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
 
         let used = resolve_used_materials(&state, state.object(object_id).unwrap()).unwrap();
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit).unwrap();
@@ -592,20 +593,20 @@ mod tests {
     /// `value_pool`.
     fn bake_one(key: &str, value_pool: VoxValuePool, bake: &MaterialBake) -> Result<Vec<u8>> {
         let mut state = VoxMain::default();
-        let value_pool_id = state.add_value_pool(value_pool);
+        let value_pool_id = state.retain_value_pool(value_pool);
 
         let mut palette = VoxPalette::default();
         palette
-            .add_property(key.to_owned(), value_pool_id, value_id(0))
+            .retain_property(key.to_owned(), value_pool_id, value_id(0))
             .unwrap();
-        let material_id = palette.add_material(vec![value_id(0)]).unwrap();
-        let palette_id = state.add_palette(palette).unwrap();
+        let material_id = palette.retain_material(vec![value_id(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
-        object.add_layer(palette_id, material_id);
+        object.retain_layer(palette_id, material_id);
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         object.retain_voxel(voxel_id, &[material_id]).unwrap();
-        let object_id = state.add_object(object).unwrap();
+        let object_id = state.retain_object(object).unwrap();
 
         let used = resolve_used_materials(&state, state.object(object_id).unwrap())?;
         let (width, height) = atlas_dimensions(used.len(), AtlasShape::Fit)?;
