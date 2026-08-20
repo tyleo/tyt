@@ -2,16 +2,14 @@
 
 _Part of the [mesh plan](README.md)._
 
-A profile is a named piece of configuration: the values it defines beside a
-run's output surface, the geometry options, materials, primitives, files, and
-extras. `--profile` applies one whole, and `--values-from` applies only a
-profile's values, so a profile holding values alone is a mixin. Five ship in the
-binary, the `defaults` mixin and the `albedo`, `orm`, `emissive`, and `pbr`
-profiles, so `--profile pbr` works before any `.vxlconfig` exists. The rest are
-user-defined under `.vxlconfig`'s `mesh.profiles` key. A config profile sharing
-a built-in's name replaces it wholesale, and extending a profile's values takes
-a new name with `valuesFrom`. Hyphenated profile names take camel-case value
-names because `-` is subtraction in the [value language](value-language.md): a
+A profile is a named piece of configuration whose elements stand for `vxl mesh`
+flags. `--profile` applies one whole, and `--values-from` applies only a
+profile's values. [Built-in profiles](#built-in-profiles) ship in the binary, so
+`--profile pbr` works before any `.vxlconfig` exists. The rest are user-defined
+under `.vxlconfig`'s `mesh.profiles` key. A config profile sharing a built-in's
+name replaces it wholesale, and extending a profile's values takes a new name
+with `valuesFrom`. Hyphenated profile names take camel-case value names because
+`-` is subtraction in the [value language](value-language.md): a
 `metallic-smoothness` profile would bake `metallicSmoothness`.
 
 ## Schema
@@ -401,9 +399,7 @@ its textures, so a slot fixes each encoding and no entry carries a transfer:
   // One value may fill several slots.
   "orm": {
     "valuesFrom": ["defaults"],
-    "values": [
-      "orm = rgb(occlusionStrength, roughnessFactor, metallicFactor)",
-    ],
+    "values": ["orm = rgb(occlusionStrength, roughnessFactor, metallicFactor)"],
     "materials": [
       {
         "slots": {
