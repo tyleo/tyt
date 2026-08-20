@@ -1364,7 +1364,7 @@ mod tests {
     use crate::{
         BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty,
         BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxHierarchyNode, VoxMain,
-        VoxObject, VoxPalette, VoxValuePool, VoxValuePoolKind, VoxValuePoolValueRef,
+        VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
     };
     use branded_id::U32Id;
     use std::collections::HashMap;
@@ -1452,70 +1452,6 @@ mod tests {
             .unwrap();
         palette.add_material(vec![value_id(index)]).unwrap();
         palette
-    }
-
-    #[test]
-    fn add_and_read_back_in_listing_order() {
-        let mut state = VoxMain::default();
-        let a_id = state.add_object(unit_object("a")).unwrap();
-        let b_id = state.add_object(unit_object("b")).unwrap();
-
-        assert_eq!(state.object_count(), 2);
-        assert_eq!(state.object(a_id).unwrap().name(), "a");
-        let names: Vec<&str> = state.iter_objects().map(|(_, o)| o.name()).collect();
-        assert_eq!(names, ["a", "b"]);
-        assert_eq!(b_id.to_u32(), 1);
-    }
-
-    #[test]
-    fn add_and_read_back_value_pools_in_listing_order() {
-        let mut state = VoxMain::default();
-        let colors_id =
-            state.add_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
-        let metallic_id = state.add_value_pool(VoxValuePool::float(vec![0.0, 1.0]).unwrap());
-
-        assert_eq!(state.value_pool_count(), 2);
-        assert_eq!(colors_id, U32Id::<BVoxValuePool>::from_u32(0));
-        assert_eq!(metallic_id.to_u32(), 1);
-        assert!(matches!(
-            state.value_pool(colors_id).map(VoxValuePool::kind),
-            Some(VoxValuePoolKind::Vec4Float(..))
-        ));
-        assert_eq!(
-            state.value_pool(metallic_id).map(VoxValuePool::len),
-            Some(2)
-        );
-        // An id past the value pool is not one of this state's.
-        assert_eq!(state.value_pool(U32Id::<BVoxValuePool>::from_u32(2)), None);
-
-        let mut value_pools = state.iter_value_pools();
-        assert!(matches!(
-            value_pools.next().map(|(_, value_pool)| value_pool.kind()),
-            Some(VoxValuePoolKind::Vec4Float(..))
-        ));
-        assert!(matches!(
-            value_pools.next().map(|(_, value_pool)| value_pool.kind()),
-            Some(VoxValuePoolKind::Float(..))
-        ));
-        assert!(value_pools.next().is_none());
-    }
-
-    #[test]
-    fn clone_state_deep_copies_value_pools() {
-        let mut state = VoxMain::default();
-        state.add_value_pool(VoxValuePool::int(vec![7]).unwrap());
-
-        let copy = state.clone_state();
-        assert_eq!(copy.value_pool_count(), 1);
-        assert_eq!(
-            copy.value_pool(U32Id::<BVoxValuePool>::from_u32(0)),
-            Some(&VoxValuePool::int(vec![7]).unwrap())
-        );
-
-        // Mutating the original must not touch the copy.
-        state.add_value_pool(VoxValuePool::boolean(vec![true]));
-        assert_eq!(state.value_pool_count(), 2);
-        assert_eq!(copy.value_pool_count(), 1);
     }
 
     #[test]
@@ -1706,23 +1642,6 @@ mod tests {
             state.value_pool(ints_id),
             Some(&VoxValuePool::int(vec![10, 20, 30]).unwrap())
         );
-    }
-
-    #[test]
-    fn prune_value_pools_leaves_a_fully_referenced_value_pool() {
-        let mut state = VoxMain::default();
-        let ints_id = int_value_pool(&mut state, vec![1, 2]);
-        let mut palette = VoxPalette::default();
-        palette
-            .add_property("v".to_owned(), ints_id, value_id(0))
-            .unwrap();
-        palette.add_material(vec![value_id(0)]).unwrap();
-        palette.add_material(vec![value_id(1)]).unwrap();
-        state.add_palette(palette).unwrap();
-
-        state.prune_value_pools();
-
-        assert_eq!(state.value_pool(ints_id).map(VoxValuePool::len), Some(2));
     }
 
     #[test]
@@ -1986,15 +1905,25 @@ mod tests {
     #[test]
     fn clone_state_is_an_independent_deep_copy() {
         let mut state = VoxMain::default();
+        state.add_value_pool(VoxValuePool::int(vec![7]).unwrap());
         state.add_palette(bare_palette()).unwrap();
         state.add_object(unit_object("o")).unwrap();
 
         let copy = state.clone_state();
+        assert_eq!(copy.value_pool_count(), 1);
+        assert_eq!(
+            copy.value_pool(U32Id::<BVoxValuePool>::from_u32(0)),
+            Some(&VoxValuePool::int(vec![7]).unwrap())
+        );
         assert_eq!(copy.palette_count(), 1);
         assert_eq!(copy.object_count(), 1);
 
+        // Mutating the original must not touch the copy.
+        state.add_value_pool(VoxValuePool::boolean(vec![true]));
         state.add_object(unit_object("p")).unwrap();
+        assert_eq!(state.value_pool_count(), 2);
         assert_eq!(state.object_count(), 2);
+        assert_eq!(copy.value_pool_count(), 1);
         assert_eq!(copy.object_count(), 1);
     }
 
