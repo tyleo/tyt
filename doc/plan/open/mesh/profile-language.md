@@ -15,15 +15,16 @@ value names because `-` is subtraction in the
 
 ## Schema
 
-The whole config shape in one block, TypeScript as the notation: a union of
-literals names a token set, `?` marks a key whose omission takes its default,
-and a `kind` field picks which sibling fields exist. Nothing compiles it;
-[Loading](#loading) holds the checks that enforce it.
+This section defines the schema. Profiles are written in JSON; the block below
+describes their shape in TypeScript notation. [Loading](#loading) holds the
+checks that enforce the schema.
 
 ```ts
 /** The `.vxlconfig` shape `vxl mesh` reads. */
 interface VxlConfig {
+  /** The `mesh` command's slice of `.vxlconfig`. */
   mesh?: {
+    /** The user-defined profiles, by name. */
     profiles?: Record<string, Profile>;
   };
 }
@@ -37,77 +38,110 @@ type Expr = string;
 /** A file name, `{file-stem}` replaced before use. */
 type FileTemplate = string;
 
+/** The writer flags' `<linear | srgb>` argument. */
 type Transfer = "linear" | "srgb";
 
+/** A profile; each element mirrors a `vxl mesh` flag. */
 interface Profile {
-  /** Values imported first, in order; writers never travel. */
+  /** Mirrors `--values-from` per entry; writers never travel. */
   valuesFrom?: string[];
-  /** Binds each listed domain's computed index under its name. */
+
+  /** Mirrors `--compute-index`, each domain key holding its bound name. */
   computeIndex?: {
     corner?: string;
     face?: string;
     swatch?: string;
     voxel?: string;
   };
-  /** Binds computed occlusion under the name. */
+
+  /** Mirrors `--compute-occlusion`, the value the bound name. */
   computeOcclusion?: string;
-  /** Binds computed voxel position under the name. */
+
+  /** Mirrors `--compute-voxel-position`, the value the bound name. */
   computeVoxelPosition?: string;
+
+  /** Mirrors `--value` per entry. */
   values?: Bindings[];
 
-  // the geometry options, each key its flag's argument
+  /** Mirrors `--voxel-size`. */
   voxelSize?: number;
+
+  /** Mirrors `--method`. */
   method?: "culled" | "greedy" | "naive";
-  /** A number is the exact `n`x`n` canvas of cells. */
+
+  /** Mirrors `--texture-shape`, a number the flag's `<n>` form. */
   textureShape?: "fit" | "line" | "pot" | "square" | number;
 
+  /** The files written beside the mesh. */
   files?: {
+    /** Mirrors `--write-file-png-value` per template. */
     png?: Record<FileTemplate, { transfer: Transfer; value: Expr }>;
+
+    /** Mirrors `--write-file-json-value` per template and key. */
     json?: Record<
       FileTemplate,
       Record<string, { transfer: Transfer; value: Expr }>
     >;
   };
 
-  /** The list's length is the material count; omitted, count 0. */
+  /** Mirrors `--material-count` by length; omitted, count 0. */
   materials?: MaterialEntry[];
-  /** Omitted, the implicit primitive holds every face. */
+
+  /** Mirrors `--primitive` per entry; omitted, the implicit primitive. */
   primitives?: PrimitiveEntry[];
+
+  /** Mirrors the `--write-mesh-extra-*` flags, one entry per name. */
   meshExtras?: Record<string, ExtraEntry>;
 }
 
+/** A material, its list position the flags' `<material-index>`. */
 interface MaterialEntry {
+  /** Mirrors `--material-name`. */
   name?: string;
-  /** UV streams in TEXCOORD order; omitted, the list derives from use. */
+
+  /** Mirrors `--material-uv` per entry; omitted, the list derives from use. */
   uvs?: ("corner" | "face" | "swatch" | "voxel")[];
-  /** The resolved output format's property names. */
+
+  /** Mirrors the `--write-material-slot-*` flags, a property per key. */
   slots?: Record<string, SlotEntry>;
+
+  /** Mirrors the `--write-material-extra-*` flags, one entry per name. */
   extras?: Record<string, ExtraEntry>;
 }
 
+/** A slot's source, the kind naming the `--write-material-slot-*` tail. */
 type SlotEntry =
   | { kind: "value"; value: Expr }
   | { kind: "file"; file: FileTemplate };
 
+/** An extras entry, the kind naming the extras flag's tail. */
 type ExtraEntry =
   | { kind: "image-file"; file: FileTemplate }
   | { kind: "image-value"; value: Expr; transfer: Transfer }
   | { kind: "json-file"; file: FileTemplate }
   | { kind: "json-value"; value: Expr; transfer: Transfer };
 
+/** A primitive, its list position the flags' `<primitive-index>`. */
 interface PrimitiveEntry {
+  /** Mirrors `--primitive-name`. */
   name?: string;
-  /** Omitted: `"true"`, every face. */
+
+  /** Mirrors the `--primitive` select argument; omitted, `"true"`. */
   select?: Expr;
-  /** Omitted: no material. */
+
+  /** Mirrors the `--primitive` material index; omitted, `none`. */
   material?: number;
-  /** Omitted: `true`, the `NORMAL` stream written. */
+
+  /** Mirrors `--write-primitive-normal`; omitted, `true`. */
   normal?: boolean;
-  /** Streams in the primitive's own order; omitted, the material's list. */
+
+  /** Mirrors `--write-primitive-uv` per entry; omitted, the material's list. */
   uvs?: ("corner" | "face" | "swatch" | "voxel")[];
-  /** Attributes glTF defines, `COLOR_0`, to expressions. */
+
+  /** Mirrors `--write-primitive-builtin-value` per attribute. */
   builtins?: Record<string, Expr>;
-  /** Underscore-typed attribute names, `_MY_COLOR`. */
+
+  /** Mirrors `--write-primitive-custom-value` per underscore name. */
   customs?: Record<string, { value: Expr; transfer: Transfer }>;
 }
 ```
