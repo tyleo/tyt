@@ -25,904 +25,13 @@ pub struct VoxMain {
 }
 
 impl VoxMain {
-    /// Adds an object at the end of the listing, returning its id. Errors,
-    /// changing nothing, if a layer references a palette that is not one of
-    /// this state's or a live voxel samples a material that is not one of its
-    /// layer's palette's.
-    pub fn add_object(&mut self, object: VoxObject) -> Result<U32Id<BVoxObject>> {
-        for (layer_id, palette_id) in object.iter_layers() {
-            let Some(palette) = self.palette(palette_id) else {
-                return Err(Error::LayerPaletteRef {
-                    layer_id,
-                    palette_id,
-                });
-            };
-            let samples = object
-                .iter_live_samples(layer_id)
-                .expect("an iterated layer is one of the object's layers");
-            for (voxel_id, material_id) in samples {
-                if !palette.contains_material(material_id) {
-                    return Err(Error::LayerSampleMaterial {
-                        layer_id,
-                        voxel_id,
-                        material_id,
-                    });
-                }
-            }
+    /// Deep copy. The runtime scene rebuilds its columns against fresh
+    /// id pools.
+    pub fn clone_state(&self) -> Self {
+        Self {
+            runtime_state: self.runtime_state.clone_runtime_state(),
+            ext: self.ext.clone(),
         }
-        let object_id = self.runtime_state.object_ids.retain();
-        self.runtime_state.objects.retain(object_id, object);
-        Ok(object_id)
-    }
-
-    /// Number of objects.
-    pub fn object_count(&self) -> usize {
-        self.runtime_state.object_ids.len()
-    }
-
-    /// The object `id`, or `None` if not one of this state's.
-    pub fn object(&self, id: U32Id<BVoxObject>) -> Option<&VoxObject> {
-        // Safety: retained ids have a value.
-        self.runtime_state
-            .object_ids
-            .is_retained(id)
-            .then(|| unsafe { self.runtime_state.objects.get(id) })
-    }
-
-    /// Objects in listing order, as `(id, object)`.
-    pub fn iter_objects(&self) -> impl Iterator<Item = (U32Id<BVoxObject>, &VoxObject)> + '_ {
-        // Safety: retained ids have a value.
-        self.runtime_state.object_ids.iter().map(move |object_id| {
-            (object_id, unsafe {
-                self.runtime_state.objects.get(object_id)
-            })
-        })
-    }
-
-    /// Adds a layer referencing `palette_id` to object `object_id`, after its
-    /// existing layers, back-filling every voxel with `default_material_id`
-    /// and returning the layer's id. Errors, changing nothing, if:
-    ///
-    /// 1. `object_id` is not one of this state's
-    /// 2. `palette_id` is not one of this state's
-    /// 3. `default_material_id` is not one of `palette_id`'s materials
-    pub fn add_layer(
-        &mut self,
-        object_id: U32Id<BVoxObject>,
-        palette_id: U32Id<BVoxPalette>,
-        default_material_id: U32Id<BVoxMaterial>,
-    ) -> Result<U32Id<BVoxLayer>> {
-        if !self.runtime_state.object_ids.is_retained(object_id) {
-            return Err(Error::UnknownObject { object_id });
-        }
-        let Some(palette_ref) = self.palette(palette_id) else {
-            return Err(Error::UnknownPalette { palette_id });
-        };
-        if !palette_ref.contains_material(default_material_id) {
-            return Err(Error::UnknownMaterial {
-                material_id: default_material_id,
-            });
-        }
-        // Safety: the object id is retained.
-        Ok(unsafe { self.runtime_state.objects.get_mut(object_id) }
-            .add_layer(palette_id, default_material_id))
-    }
-
-    /// Removes layer `layer_id` from object `object_id`, dropping its
-    /// per-voxel sample column. Errors, changing nothing, if `object_id` is
-    /// not one of this state's or `layer_id` is not one of the object's.
-    pub fn remove_layer(
-        &mut self,
-        object_id: U32Id<BVoxObject>,
-        layer_id: U32Id<BVoxLayer>,
-    ) -> Result<()> {
-        if !self.runtime_state.object_ids.is_retained(object_id) {
-            return Err(Error::UnknownObject { object_id });
-        }
-        // Safety: the object id is retained.
-        unsafe { self.runtime_state.objects.get_mut(object_id) }.remove_layer(layer_id)
-    }
-
-    /// Moves layer `layer_id` of object `object_id` to position `index` in
-    /// its layer order. Errors, changing nothing, if:
-    ///
-    /// 1. `object_id` is not one of this state's
-    /// 2. `layer_id` is not one of the object's
-    /// 3. `index` is at or past its layer count
-    pub fn move_layer(
-        &mut self,
-        object_id: U32Id<BVoxObject>,
-        layer_id: U32Id<BVoxLayer>,
-        index: usize,
-    ) -> Result<()> {
-        if !self.runtime_state.object_ids.is_retained(object_id) {
-            return Err(Error::UnknownObject { object_id });
-        }
-        // Safety: the object id is retained.
-        unsafe { self.runtime_state.objects.get_mut(object_id) }.move_layer(layer_id, index)
-    }
-
-    /// Makes the voxel at `voxel_id` in object `object_id` live with one
-    /// `sample_ids` material per layer, in layer order. Errors, changing
-    /// nothing, if:
-    ///
-    /// 1. `object_id` is not one of this state's
-    /// 2. `voxel_id` is outside its grid
-    /// 3. `sample_ids` has the wrong length
-    /// 4. a sample is not one of its layer's palette's materials
-    pub fn retain_voxel(
-        &mut self,
-        object_id: U32Id<BVoxObject>,
-        voxel_id: U32Id<BVoxVoxel>,
-        sample_ids: &[U32Id<BVoxMaterial>],
-    ) -> Result<()> {
-        if !self.runtime_state.object_ids.is_retained(object_id) {
-            return Err(Error::UnknownObject { object_id });
-        }
-        // Safety: the object id is retained.
-        let object_ref = unsafe { self.runtime_state.objects.get(object_id) };
-        if object_ref.voxel_position(voxel_id).is_none() {
-            return Err(Error::UnknownVoxel { voxel_id });
-        }
-        if sample_ids.len() != object_ref.layer_count() {
-            return Err(Error::SampleArity {
-                samples: sample_ids.len(),
-                layers: object_ref.layer_count(),
-            });
-        }
-        for ((layer_id, palette_id), &material_id) in object_ref.iter_layers().zip(sample_ids) {
-            let palette = self
-                .palette(palette_id)
-                .expect("a layer references a live palette");
-            if !palette.contains_material(material_id) {
-                return Err(Error::LayerSampleMaterial {
-                    layer_id,
-                    voxel_id,
-                    material_id,
-                });
-            }
-        }
-        // Safety: the object id is retained; the grid and arity were checked.
-        unsafe { self.runtime_state.objects.get_mut(object_id) }.retain_voxel(voxel_id, sample_ids)
-    }
-
-    /// Makes the voxel at `voxel_id` in object `object_id` empty, leaving its
-    /// samples in place but ignored. Errors, changing nothing, if `object_id`
-    /// is not one of this state's or `voxel_id` is outside its grid.
-    pub fn release_voxel(
-        &mut self,
-        object_id: U32Id<BVoxObject>,
-        voxel_id: U32Id<BVoxVoxel>,
-    ) -> Result<()> {
-        if !self.runtime_state.object_ids.is_retained(object_id) {
-            return Err(Error::UnknownObject { object_id });
-        }
-        // Safety: the object id is retained.
-        unsafe { self.runtime_state.objects.get_mut(object_id) }.release_voxel(voxel_id)
-    }
-
-    /// Sets the grid origin of object `object_id`. Errors, changing nothing,
-    /// if `object_id` is not one of this state's.
-    pub fn set_object_origin(
-        &mut self,
-        object_id: U32Id<BVoxObject>,
-        origin: TyVector3I32,
-    ) -> Result<()> {
-        if !self.runtime_state.object_ids.is_retained(object_id) {
-            return Err(Error::UnknownObject { object_id });
-        }
-        // Safety: the object id is retained.
-        unsafe { self.runtime_state.objects.get_mut(object_id) }.set_origin(origin);
-        Ok(())
-    }
-
-    /// Moves object `id` to position `index` in the listing, shifting the
-    /// objects between its old and new positions one slot. Errors, changing
-    /// nothing, if `id` is not one of this state's objects or `index` is at or
-    /// past [`object_count`](Self::object_count).
-    pub fn move_object(&mut self, id: U32Id<BVoxObject>, index: usize) -> Result<()> {
-        if !self.runtime_state.object_ids.is_retained(id) {
-            return Err(Error::UnknownObject { object_id: id });
-        }
-        let count = self.runtime_state.object_ids.len();
-        if index >= count {
-            return Err(Error::IndexPastCount { index, count });
-        }
-        self.runtime_state.object_ids.move_to(id, index);
-        Ok(())
-    }
-
-    /// The listing position of object `id`, or `None` if `id` is not one of
-    /// this state's objects.
-    pub fn object_index(&self, id: U32Id<BVoxObject>) -> Option<usize> {
-        self.runtime_state.object_ids.index_of(id)
-    }
-
-    /// Adds a shared palette at the end of the listing, returning its id.
-    /// Errors, changing nothing, if:
-    ///
-    /// 1. a property names a value pool that is not one of this state's
-    /// 2. a material draws a value that is not one of its property's
-    ///    value pool's
-    pub fn add_palette(&mut self, palette: VoxPalette) -> Result<U32Id<BVoxPalette>> {
-        for (property_id, property) in palette.iter_properties() {
-            let Some(value_pool) = self.value_pool(property.value_pool_id) else {
-                return Err(Error::PropertyValuePoolRef {
-                    property_id,
-                    value_pool_id: property.value_pool_id,
-                });
-            };
-            for material_id in palette.iter_materials() {
-                let value_id = palette
-                    .value_id(material_id, property_id)
-                    .expect("a material has a value id for every property");
-                if !value_pool.contains_value(value_id) {
-                    return Err(Error::MaterialValueRef {
-                        property_id,
-                        material_id,
-                    });
-                }
-            }
-        }
-        let palette_id = self.runtime_state.palette_ids.retain();
-        self.runtime_state.palettes.retain(palette_id, palette);
-        Ok(palette_id)
-    }
-
-    /// Number of shared palettes.
-    pub fn palette_count(&self) -> usize {
-        self.runtime_state.palette_ids.len()
-    }
-
-    /// The palette `id`, or `None` if not one of this state's.
-    pub fn palette(&self, id: U32Id<BVoxPalette>) -> Option<&VoxPalette> {
-        // Safety: retained ids have a value.
-        self.runtime_state
-            .palette_ids
-            .is_retained(id)
-            .then(|| unsafe { self.runtime_state.palettes.get(id) })
-    }
-
-    /// Palettes in listing order, as `(id, palette)`.
-    pub fn iter_palettes(&self) -> impl Iterator<Item = (U32Id<BVoxPalette>, &VoxPalette)> + '_ {
-        // Safety: retained ids have a value.
-        self.runtime_state
-            .palette_ids
-            .iter()
-            .map(move |palette_id| {
-                (palette_id, unsafe {
-                    self.runtime_state.palettes.get(palette_id)
-                })
-            })
-    }
-
-    /// Moves palette `id` to position `index` in the listing, shifting the
-    /// palettes between its old and new positions one slot. Errors, changing
-    /// nothing, if `id` is not one of this state's palettes or `index` is at
-    /// or past [`palette_count`](Self::palette_count).
-    pub fn move_palette(&mut self, id: U32Id<BVoxPalette>, index: usize) -> Result<()> {
-        if !self.runtime_state.palette_ids.is_retained(id) {
-            return Err(Error::UnknownPalette { palette_id: id });
-        }
-        let count = self.runtime_state.palette_ids.len();
-        if index >= count {
-            return Err(Error::IndexPastCount { index, count });
-        }
-        self.runtime_state.palette_ids.move_to(id, index);
-        Ok(())
-    }
-
-    /// The listing position of palette `id`, or `None` if `id` is not one of
-    /// this state's palettes.
-    pub fn palette_index(&self, id: U32Id<BVoxPalette>) -> Option<usize> {
-        self.runtime_state.palette_ids.index_of(id)
-    }
-
-    /// Adds a property named `name` on `value_pool_id` to palette `palette_id`,
-    /// back-filling its existing materials with `default_value_id`, and returns
-    /// the property's id. Errors, changing nothing, if:
-    ///
-    /// 1. `palette_id` is not one of this state's
-    /// 2. `value_pool_id` is not one of this state's
-    /// 3. `default_value_id` is not one of `value_pool_id`'s values
-    /// 4. the palette already has a property named `name`
-    pub fn add_property(
-        &mut self,
-        palette_id: U32Id<BVoxPalette>,
-        name: String,
-        value_pool_id: U32Id<BVoxValuePool>,
-        default_value_id: U32Id<BVoxValuePoolValue>,
-    ) -> Result<U32Id<BVoxProperty>> {
-        if !self.runtime_state.palette_ids.is_retained(palette_id) {
-            return Err(Error::UnknownPalette { palette_id });
-        }
-        let Some(value_pool) = self.value_pool(value_pool_id) else {
-            return Err(Error::UnknownValuePool { value_pool_id });
-        };
-        if !value_pool.contains_value(default_value_id) {
-            return Err(Error::UnknownValuePoolValue {
-                value_id: default_value_id,
-            });
-        }
-        // Safety: the palette id is retained.
-        unsafe { self.runtime_state.palettes.get_mut(palette_id) }.add_property(
-            name,
-            value_pool_id,
-            default_value_id,
-        )
-    }
-
-    /// Adds a material with one value id per property, in property order, to
-    /// palette `palette_id` and returns its id. Errors, changing nothing, if:
-    ///
-    /// 1. `palette_id` is not one of this state's
-    /// 2. `value_ids` has the wrong length
-    /// 3. a value id is not one of its property's value pool's
-    pub fn add_material(
-        &mut self,
-        palette_id: U32Id<BVoxPalette>,
-        value_ids: Vec<U32Id<BVoxValuePoolValue>>,
-    ) -> Result<U32Id<BVoxMaterial>> {
-        if !self.runtime_state.palette_ids.is_retained(palette_id) {
-            return Err(Error::UnknownPalette { palette_id });
-        }
-        // Safety: the palette id is retained.
-        let palette_ref = unsafe { self.runtime_state.palettes.get(palette_id) };
-        if value_ids.len() != palette_ref.property_count() {
-            return Err(Error::MaterialValueArity {
-                values: value_ids.len(),
-                properties: palette_ref.property_count(),
-            });
-        }
-        for ((_, property), &value_id) in palette_ref.iter_properties().zip(&value_ids) {
-            let value_pool = self
-                .value_pool(property.value_pool_id)
-                .expect("a property names a live value pool");
-            if !value_pool.contains_value(value_id) {
-                return Err(Error::UnknownValuePoolValue { value_id });
-            }
-        }
-        // Safety: the palette id is retained; the arity was checked.
-        unsafe { self.runtime_state.palettes.get_mut(palette_id) }.add_material(value_ids)
-    }
-
-    /// Removes property `property_id` from palette `palette_id`. Errors,
-    /// changing nothing, if `palette_id` is not one of this state's or
-    /// `property_id` is not one of the palette's.
-    pub fn remove_property(
-        &mut self,
-        palette_id: U32Id<BVoxPalette>,
-        property_id: U32Id<BVoxProperty>,
-    ) -> Result<()> {
-        if !self.runtime_state.palette_ids.is_retained(palette_id) {
-            return Err(Error::UnknownPalette { palette_id });
-        }
-        // Safety: the palette id is retained.
-        unsafe { self.runtime_state.palettes.get_mut(palette_id) }.remove_property(property_id)
-    }
-
-    /// Adds a shared value pool at the end of the listing, returning its id.
-    pub fn add_value_pool(&mut self, value_pool: VoxValuePool) -> U32Id<BVoxValuePool> {
-        let value_pool_id = self.runtime_state.value_pool_ids.retain();
-        self.runtime_state
-            .value_pools
-            .retain(value_pool_id, value_pool);
-        value_pool_id
-    }
-
-    /// Number of shared value pools.
-    pub fn value_pool_count(&self) -> usize {
-        self.runtime_state.value_pool_ids.len()
-    }
-
-    /// The value pool `id`, or `None` if not one of this state's.
-    pub fn value_pool(&self, id: U32Id<BVoxValuePool>) -> Option<&VoxValuePool> {
-        // Safety: retained ids have a value.
-        self.runtime_state
-            .value_pool_ids
-            .is_retained(id)
-            .then(|| unsafe { self.runtime_state.value_pools.get(id) })
-    }
-
-    /// Value pools in listing order, as `(id, value_pool)`.
-    pub fn iter_value_pools(
-        &self,
-    ) -> impl Iterator<Item = (U32Id<BVoxValuePool>, &VoxValuePool)> + '_ {
-        // Safety: retained ids have a value.
-        self.runtime_state
-            .value_pool_ids
-            .iter()
-            .map(move |value_pool_id| {
-                (value_pool_id, unsafe {
-                    self.runtime_state.value_pools.get(value_pool_id)
-                })
-            })
-    }
-
-    /// Moves value pool `id` to position `index` in the listing, shifting the
-    /// value pools between its old and new positions one slot. Errors, changing
-    /// nothing, if `id` is not one of this state's value pools or `index` is at
-    /// or past [`value_pool_count`](Self::value_pool_count).
-    pub fn move_value_pool(&mut self, id: U32Id<BVoxValuePool>, index: usize) -> Result<()> {
-        if !self.runtime_state.value_pool_ids.is_retained(id) {
-            return Err(Error::UnknownValuePool { value_pool_id: id });
-        }
-        let count = self.runtime_state.value_pool_ids.len();
-        if index >= count {
-            return Err(Error::IndexPastCount { index, count });
-        }
-        self.runtime_state.value_pool_ids.move_to(id, index);
-        Ok(())
-    }
-
-    /// The listing position of value pool `id`, or `None` if `id` is not one of
-    /// this state's value pools.
-    pub fn value_pool_index(&self, id: U32Id<BVoxValuePool>) -> Option<usize> {
-        self.runtime_state.value_pool_ids.index_of(id)
-    }
-
-    /// Resolves what `material_id` in `palette_id` draws for `property_id`: the
-    /// value pool the property draws from and the value id it holds in that
-    /// value pool. `None` if any id is not this state's, `property_id` is not
-    /// `palette_id`'s, or the property names a value pool this state does not
-    /// hold. Read the value at that id out of the returned value pool by the
-    /// value pool's kind.
-    pub fn material_value(
-        &self,
-        palette_id: U32Id<BVoxPalette>,
-        material_id: U32Id<BVoxMaterial>,
-        property_id: U32Id<BVoxProperty>,
-    ) -> Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)> {
-        let palette = self.palette(palette_id)?;
-        let value_id = palette.value_id(material_id, property_id)?;
-        let value_pool = self.value_pool(palette.property(property_id)?.value_pool_id)?;
-        Some((value_pool, value_id))
-    }
-
-    /// The effective palette of `object`, resolving its layer override rule
-    /// once. Layers are walked front to back, each palette property landing
-    /// at its name's entry, so the last supplying layer wins while the first
-    /// fixes the entry's position. Errors if a layer references a palette
-    /// that is not one of this state's.
-    pub fn effective_palette<'a>(
-        &'a self,
-        object: &'a VoxObject,
-    ) -> Result<VoxEffectivePalette<'a>> {
-        let mut properties: IdVec<BVoxEffectiveProperty, VoxEffectiveProperty<'a>> =
-            IdVec::default();
-        let mut property_id_by_name: HashMap<&'a str, UsizeId<BVoxEffectiveProperty>> =
-            HashMap::new();
-
-        for (layer_id, palette_id) in object.iter_layers() {
-            let Some(palette) = self.palette(palette_id) else {
-                return Err(Error::LayerPaletteRef {
-                    layer_id,
-                    palette_id,
-                });
-            };
-
-            for (property_id, property) in palette.iter_properties() {
-                let value_pool = self
-                    .value_pool(property.value_pool_id)
-                    .expect("a property names a live value pool");
-
-                let entry = VoxEffectiveProperty {
-                    name: property.name.as_str(),
-                    layer_id,
-                    palette_id,
-                    palette,
-                    property_id,
-                    value_pool,
-                };
-
-                match property_id_by_name.get(property.name.as_str()) {
-                    Some(&effective_id) => properties[effective_id] = entry,
-                    None => {
-                        let effective_id = properties.push(entry);
-                        property_id_by_name.insert(property.name.as_str(), effective_id);
-                    }
-                }
-            }
-        }
-
-        Ok(VoxEffectivePalette {
-            object,
-            properties,
-            property_id_by_name,
-        })
-    }
-
-    /// Adds a hierarchy node at the end of the listing, returning its id. The
-    /// node's id is fresh to every existing child list, so a node whose
-    /// children are already live can never close a cycle. For a batch whose
-    /// nodes reference each other, use
-    /// [`add_hierarchy_nodes`](Self::add_hierarchy_nodes). Errors, changing
-    /// nothing, if:
-    ///
-    /// 1. a child node or child object is not one of this state's
-    /// 2. a child repeats
-    /// 3. the transform is malformed
-    pub fn add_hierarchy_node(
-        &mut self,
-        node: VoxHierarchyNode,
-    ) -> Result<U32Id<BVoxHierarchyNode>> {
-        self.check_inserted_node(&node, 0, &HashSet::new())?;
-        let node_id = self.runtime_state.hierarchy_node_ids.retain();
-        self.runtime_state.hierarchy_nodes.retain(node_id, node);
-        Ok(node_id)
-    }
-
-    /// Adds a batch of hierarchy nodes at the end of the listing, assigning
-    /// ids in listing order and returning them. A node's children may
-    /// reference any already-live node or any node in the batch by the id it
-    /// will take, so a listing with forward references loads in one call.
-    /// Errors, changing nothing, if:
-    ///
-    /// 1. a child resolves to neither
-    /// 2. a child repeats within a node
-    /// 3. a transform is malformed
-    /// 4. the batch's `child_node_ids` edges form a cycle
-    pub fn add_hierarchy_nodes(
-        &mut self,
-        nodes: Vec<VoxHierarchyNode>,
-    ) -> Result<Vec<U32Id<BVoxHierarchyNode>>> {
-        // The ids the batch will take, named before any of it is inserted so
-        // every check runs before any mutation.
-        let prospective_ids: Vec<U32Id<BVoxHierarchyNode>> = (0..nodes.len())
-            .map(|index| self.runtime_state.hierarchy_node_ids.peek_nth(index))
-            .collect();
-
-        let batch_ids: HashSet<U32Id<BVoxHierarchyNode>> =
-            prospective_ids.iter().copied().collect();
-        for (node_index, node) in nodes.iter().enumerate() {
-            self.check_inserted_node(node, node_index, &batch_ids)?;
-        }
-
-        // An edge leaving the batch lands on an already-live node, whose
-        // children are frozen and reference only other live nodes, so it can
-        // never lead back in. Only the batch-internal edges can cycle.
-        let index_of: HashMap<U32Id<BVoxHierarchyNode>, usize> = prospective_ids
-            .iter()
-            .enumerate()
-            .map(|(node_index, &node_id)| (node_id, node_index))
-            .collect();
-        let children: Vec<&[U32Id<BVoxHierarchyNode>]> = nodes
-            .iter()
-            .map(|node| node.child_node_ids.as_slice())
-            .collect();
-        if let Some(node_index) = first_cycle_node_index(&children, &index_of) {
-            return Err(Error::InsertedCycle { index: node_index });
-        }
-
-        let ids: Vec<U32Id<BVoxHierarchyNode>> = nodes
-            .into_iter()
-            .map(|node| {
-                let node_id = self.runtime_state.hierarchy_node_ids.retain();
-                self.runtime_state.hierarchy_nodes.retain(node_id, node);
-                node_id
-            })
-            .collect();
-        debug_assert_eq!(
-            ids, prospective_ids,
-            "the id pool assigned the predicted ids"
-        );
-        Ok(ids)
-    }
-
-    /// Checks a node about to be inserted at listing position `node_index` of
-    /// its batch: every child node resolves against this state or the batch's
-    /// prospective ids, every child object is live, no child repeats, and the
-    /// transform is finite with a non-zero scale and a unit rotation.
-    fn check_inserted_node(
-        &self,
-        node: &VoxHierarchyNode,
-        node_index: usize,
-        batch_ids: &HashSet<U32Id<BVoxHierarchyNode>>,
-    ) -> Result<()> {
-        let mut seen_child_node_ids = HashSet::with_capacity(node.child_node_ids.len());
-        for &child_id in &node.child_node_ids {
-            if self.hierarchy_node(child_id).is_none() && !batch_ids.contains(&child_id) {
-                return Err(Error::UnknownHierarchyNode { node_id: child_id });
-            }
-            if !seen_child_node_ids.insert(child_id) {
-                return Err(Error::InsertedDuplicateChildNode {
-                    index: node_index,
-                    child_id,
-                });
-            }
-        }
-        let mut seen_child_object_ids = HashSet::with_capacity(node.child_object_ids.len());
-        for &object_id in &node.child_object_ids {
-            if self.object(object_id).is_none() {
-                return Err(Error::UnknownObject { object_id });
-            }
-            if !seen_child_object_ids.insert(object_id) {
-                return Err(Error::InsertedDuplicateChildObject {
-                    index: node_index,
-                    object_id,
-                });
-            }
-        }
-
-        // The rotation needs no finiteness guard of its own: a non-finite
-        // component fails the unit-length check.
-        let position = node.transform.position;
-        let scale = node.transform.scale;
-        if !position.is_finite() || !scale.is_finite() {
-            return Err(Error::InsertedNonFiniteTransform { index: node_index });
-        }
-        if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
-            return Err(Error::InsertedZeroScale { index: node_index });
-        }
-        if !node
-            .transform
-            .rotation
-            .is_normalized_within(UNIT_ROTATION_TOLERANCE)
-        {
-            return Err(Error::InsertedNonUnitRotation { index: node_index });
-        }
-        Ok(())
-    }
-
-    /// Number of hierarchy nodes.
-    pub fn hierarchy_node_count(&self) -> usize {
-        self.runtime_state.hierarchy_node_ids.len()
-    }
-
-    /// The hierarchy node `id`, or `None` if not one of this state's.
-    pub fn hierarchy_node(&self, id: U32Id<BVoxHierarchyNode>) -> Option<&VoxHierarchyNode> {
-        // Safety: retained ids have a value.
-        self.runtime_state
-            .hierarchy_node_ids
-            .is_retained(id)
-            .then(|| unsafe { self.runtime_state.hierarchy_nodes.get(id) })
-    }
-
-    /// Hierarchy nodes in listing order, as `(id, node)`.
-    pub fn iter_hierarchy_nodes(
-        &self,
-    ) -> impl Iterator<Item = (U32Id<BVoxHierarchyNode>, &VoxHierarchyNode)> + '_ {
-        // Safety: retained ids have a value.
-        self.runtime_state
-            .hierarchy_node_ids
-            .iter()
-            .map(move |node_id| {
-                (node_id, unsafe {
-                    self.runtime_state.hierarchy_nodes.get(node_id)
-                })
-            })
-    }
-
-    /// The scene's roots: hierarchy node ids.
-    pub fn root_hierarchy_node_ids(&self) -> &[U32Id<BVoxHierarchyNode>] {
-        &self.runtime_state.root_hierarchy_node_ids
-    }
-
-    /// Replaces the scene's roots. Errors, changing nothing, if a root is not
-    /// one of this state's nodes or repeats.
-    pub fn set_root_hierarchy_node_ids(
-        &mut self,
-        root_ids: Vec<U32Id<BVoxHierarchyNode>>,
-    ) -> Result<()> {
-        let mut seen_ids = HashSet::with_capacity(root_ids.len());
-        for &root_id in &root_ids {
-            if self.hierarchy_node(root_id).is_none() {
-                return Err(Error::Root { root_id });
-            }
-            if !seen_ids.insert(root_id) {
-                return Err(Error::DuplicateRoot { root_id });
-            }
-        }
-        self.runtime_state.root_hierarchy_node_ids = root_ids;
-        Ok(())
-    }
-
-    /// Appends a root. Errors, changing nothing, if `root_id` is not one of
-    /// this state's nodes or is already a root.
-    pub fn push_root_hierarchy_node_id(&mut self, root_id: U32Id<BVoxHierarchyNode>) -> Result<()> {
-        if self.hierarchy_node(root_id).is_none() {
-            return Err(Error::Root { root_id });
-        }
-        if self
-            .runtime_state
-            .root_hierarchy_node_ids
-            .contains(&root_id)
-        {
-            return Err(Error::DuplicateRoot { root_id });
-        }
-        self.runtime_state.root_hierarchy_node_ids.push(root_id);
-        Ok(())
-    }
-
-    /// The user-extension value, or `None` if unset.
-    pub fn ext(&self) -> Option<&VoxValue> {
-        self.ext.as_ref()
-    }
-
-    /// Sets or clears the user-extension value.
-    pub fn set_ext(&mut self, ext: Option<VoxValue>) {
-        self.ext = ext;
-    }
-
-    /// Removes object `id`, detaching it from every node's `child_object_ids`.
-    /// Errors, changing nothing, if `id` is not one of this state's objects.
-    /// Leaves a hole until [`gc`](Self::gc) renumbers for a deterministic
-    /// save.
-    pub fn remove_object(&mut self, id: U32Id<BVoxObject>) -> Result<()> {
-        if !self.runtime_state.object_ids.is_retained(id) {
-            return Err(Error::UnknownObject { object_id: id });
-        }
-        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
-        for node_id in node_ids {
-            // Safety: retained node ids have a value.
-            let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
-            node.child_object_ids.retain(|&object_id| object_id != id);
-        }
-        // Safety: a retained object id has a value.
-        unsafe { self.runtime_state.objects.release(id) };
-        self.runtime_state.object_ids.release_stable(id);
-        Ok(())
-    }
-
-    /// Removes palette `id`, detaching every object reference to it (along with
-    /// that reference's per-voxel sample column). Errors, changing nothing, if
-    /// `id` is not one of this state's palettes. Leaves a hole until
-    /// [`gc`](Self::gc) renumbers.
-    pub fn remove_palette(&mut self, id: U32Id<BVoxPalette>) -> Result<()> {
-        if !self.runtime_state.palette_ids.is_retained(id) {
-            return Err(Error::UnknownPalette { palette_id: id });
-        }
-        let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
-        for object_id in object_ids {
-            // Safety: retained object ids have a value.
-            let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
-            object.remove_layers_to(id);
-        }
-        // Safety: a retained palette id has a value; its Drop frees its cells.
-        unsafe { self.runtime_state.palettes.release(id) };
-        self.runtime_state.palette_ids.release_stable(id);
-        Ok(())
-    }
-
-    /// Removes hierarchy node `id`, detaching it from every `child_node_ids`
-    /// list and from the roots. Errors, changing nothing, if `id` is not one of
-    /// this state's nodes. Leaves a hole until [`gc`](Self::gc) renumbers.
-    pub fn remove_hierarchy_node(&mut self, id: U32Id<BVoxHierarchyNode>) -> Result<()> {
-        if !self.runtime_state.hierarchy_node_ids.is_retained(id) {
-            return Err(Error::UnknownHierarchyNode { node_id: id });
-        }
-        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
-        for node_id in node_ids {
-            // Safety: retained node ids have a value.
-            let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
-            node.child_node_ids.retain(|&child_id| child_id != id);
-        }
-        self.runtime_state
-            .root_hierarchy_node_ids
-            .retain(|&root_id| root_id != id);
-        // Safety: a retained node id has a value.
-        unsafe { self.runtime_state.hierarchy_nodes.release(id) };
-        self.runtime_state.hierarchy_node_ids.release_stable(id);
-        Ok(())
-    }
-
-    /// Removes `material_id` from `palette_id`, first repainting every live
-    /// voxel that samples it onto `replacement_id` so no voxel is left
-    /// without a material. Leaves a hole until [`gc`](Self::gc) renumbers.
-    /// Errors, changing nothing, under the
-    /// [`remove_materials`](Self::remove_materials) rules.
-    pub fn remove_material(
-        &mut self,
-        palette_id: U32Id<BVoxPalette>,
-        material_id: U32Id<BVoxMaterial>,
-        replacement_id: U32Id<BVoxMaterial>,
-    ) -> Result<()> {
-        self.remove_materials(palette_id, &HashMap::from([(material_id, replacement_id)]))
-    }
-
-    /// Removes every keyed material of `replacement_ids` from `palette_id`,
-    /// first repainting each live voxel that samples one onto the material it
-    /// pairs with so no voxel is left without a material. The whole batch
-    /// repaints in one pass over the voxels, so merging a palette down costs
-    /// what removing a single material does. Leaves holes until
-    /// [`gc`](Self::gc) renumbers. Errors, changing nothing, if:
-    ///
-    /// 1. `palette_id` is not one of this state's palettes
-    /// 2. a material id or a replacement id is not one of that palette's
-    ///    materials
-    /// 3. a replacement is itself removed, which covers a material named as
-    ///    its own replacement
-    pub fn remove_materials(
-        &mut self,
-        palette_id: U32Id<BVoxPalette>,
-        replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
-    ) -> Result<()> {
-        if !self.runtime_state.palette_ids.is_retained(palette_id) {
-            return Err(Error::UnknownPalette { palette_id });
-        }
-        // Safety: the palette id is retained.
-        let palette_ref = unsafe { self.runtime_state.palettes.get(palette_id) };
-        for (&material_id, &replacement_id) in replacement_ids {
-            for checked_material_id in [material_id, replacement_id] {
-                if !palette_ref.contains_material(checked_material_id) {
-                    return Err(Error::UnknownMaterial {
-                        material_id: checked_material_id,
-                    });
-                }
-            }
-            if replacement_ids.contains_key(&replacement_id) {
-                return Err(Error::SelfReplacement);
-            }
-        }
-
-        // The doomed materials in listing order, so the removal below can walk
-        // them back to front.
-        let doomed_ids: Vec<_> = palette_ref
-            .iter_materials()
-            .filter(|material_id| replacement_ids.contains_key(material_id))
-            .collect();
-
-        let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
-        for object_id in object_ids {
-            // Safety: retained object ids have a value.
-            let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
-            object.repaint_materials(palette_id, replacement_ids);
-        }
-
-        // Safety: the palette id is retained; each material is one of its
-        // materials.
-        let palette_ref = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
-        // Back to front: a removal shifts the materials listed after it, so
-        // dropping the last one first leaves nothing to shift and keeps the
-        // batch linear where front-to-back removal is quadratic.
-        for material_id in doomed_ids.into_iter().rev() {
-            palette_ref.remove_material(material_id);
-        }
-        Ok(())
-    }
-
-    /// Removes `value_id` from `value_pool_id`, first repointing every palette
-    /// cell that draws it onto `replacement_id` so no material is left without
-    /// a value. Leaves a hole until [`gc`](Self::gc) renumbers. Errors,
-    /// changing nothing, if:
-    ///
-    /// 1. `value_pool_id` is not one of this state's value pools
-    /// 2. `value_id` or `replacement_id` is not one of that value pool's values
-    /// 3. `replacement_id` is `value_id` itself
-    pub fn remove_value_pool_value(
-        &mut self,
-        value_pool_id: U32Id<BVoxValuePool>,
-        value_id: U32Id<BVoxValuePoolValue>,
-        replacement_id: U32Id<BVoxValuePoolValue>,
-    ) -> Result<()> {
-        if !self.runtime_state.value_pool_ids.is_retained(value_pool_id) {
-            return Err(Error::UnknownValuePool { value_pool_id });
-        }
-        // Safety: the value pool id is retained.
-        let value_pool = unsafe { self.runtime_state.value_pools.get(value_pool_id) };
-        if !value_pool.contains_value(value_id) {
-            return Err(Error::UnknownValuePoolValue { value_id });
-        }
-        if !value_pool.contains_value(replacement_id) {
-            return Err(Error::UnknownValuePoolValue {
-                value_id: replacement_id,
-            });
-        }
-        if value_id == replacement_id {
-            return Err(Error::SelfReplacement);
-        }
-
-        for palette_id in self.runtime_state.palette_ids.iter() {
-            // Safety: retained palette ids have a value.
-            let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
-            palette.repoint_value_pool_value(value_pool_id, value_id, replacement_id);
-        }
-
-        // Safety: the value pool id is retained and the value is one of its
-        // values.
-        unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) }
-            .release_value_stable(value_id);
-        Ok(())
     }
 
     /// Compacts every id pool back to a contiguous `0..len` in listing order
@@ -1040,79 +149,6 @@ impl VoxMain {
             hierarchy_nodes: node_remap,
             materials: material_remaps,
         }
-    }
-
-    /// Releases value-pool entries no material references, keeping the
-    /// survivors' listing order and their ids. The value-pool-value counterpart
-    /// to the entity `remove_*` methods. [`gc`](Self::gc) renumbers. Requires a
-    /// referentially valid state, which [`validate`](Self::validate) checks.
-    ///
-    /// 1. references union across palettes, so a shared entry survives while
-    ///    any one material uses it
-    /// 2. a value pool nothing references is emptied
-    /// 3. the state stays referentially valid
-    pub fn prune_value_pools(&mut self) {
-        // The value ids each value pool still has a material referencing.
-        let value_pool_ids: Vec<_> = self.runtime_state.value_pool_ids.iter().collect();
-        let mut referenced_ids: HashMap<U32Id<BVoxValuePool>, HashSet<U32Id<BVoxValuePoolValue>>> =
-            value_pool_ids
-                .iter()
-                .map(|&value_pool_id| (value_pool_id, HashSet::new()))
-                .collect();
-
-        for palette_id in self.runtime_state.palette_ids.iter() {
-            // Safety: retained palette ids have a value.
-            let palette = unsafe { self.runtime_state.palettes.get(palette_id) };
-            for (property_id, property) in palette.iter_properties() {
-                let used_ids = referenced_ids
-                    .get_mut(&property.value_pool_id)
-                    .expect("a property names a live value pool in a valid state");
-                for material_id in palette.iter_materials() {
-                    let value_id = palette
-                        .value_id(material_id, property_id)
-                        .expect("a retained material has a value id for every property");
-                    used_ids.insert(value_id);
-                }
-            }
-        }
-
-        // Release each value pool's unreferenced entries.
-        for &value_pool_id in &value_pool_ids {
-            let keep_ids = &referenced_ids[&value_pool_id];
-            // Safety: retained value-pool ids have a value.
-            let value_pool = unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) };
-            let doomed_ids: Vec<_> = value_pool
-                .iter_values()
-                .map(|(value_id, _)| value_id)
-                .filter(|value_id| !keep_ids.contains(value_id))
-                .collect();
-            // Back to front: a release shifts the values listed after it, so
-            // dropping the last one first leaves nothing to shift and keeps
-            // the prune linear where front-to-back release is quadratic.
-            for value_id in doomed_ids.into_iter().rev() {
-                value_pool.release_value_stable(value_id);
-            }
-        }
-    }
-
-    /// Reorders `value_pool_id`'s values to `new_order_ids`, which lists the
-    /// value pool's value ids in their new listing order. Value ids are stable,
-    /// so what every material resolves to is unchanged. Errors, changing
-    /// nothing, if `value_pool_id` is not one of this state's or
-    /// `new_order_ids` does not list each of the value pool's value ids exactly
-    /// once.
-    pub fn reorder_value_pool(
-        &mut self,
-        value_pool_id: U32Id<BVoxValuePool>,
-        new_order_ids: &[U32Id<BVoxValuePoolValue>],
-    ) -> Result<()> {
-        if !self.runtime_state.value_pool_ids.is_retained(value_pool_id) {
-            return Err(Error::UnknownValuePool { value_pool_id });
-        }
-        // Safety: the id is retained, so it has a value.
-        unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) }
-            .set_value_order(new_order_ids)
-            .ok_or(Error::ValuePoolValueOrder)
     }
 
     /// Audits the full rule set. Every rule here is also enforced at a mutation
@@ -1293,13 +329,977 @@ impl VoxMain {
         Ok(())
     }
 
-    /// Deep copy. The runtime scene rebuilds its columns against fresh
-    /// id pools.
-    pub fn clone_state(&self) -> Self {
-        Self {
-            runtime_state: self.runtime_state.clone_runtime_state(),
-            ext: self.ext.clone(),
+    /// The user-extension value, or `None` if unset.
+    pub fn ext(&self) -> Option<&VoxValue> {
+        self.ext.as_ref()
+    }
+
+    /// Sets or clears the user-extension value.
+    pub fn set_ext(&mut self, ext: Option<VoxValue>) {
+        self.ext = ext;
+    }
+
+    /// Adds a hierarchy node at the end of the listing, returning its id. The
+    /// node's id is fresh to every existing child list, so a node whose
+    /// children are already live can never close a cycle. For a batch whose
+    /// nodes reference each other, use
+    /// [`add_hierarchy_nodes`](Self::add_hierarchy_nodes). Errors, changing
+    /// nothing, if:
+    ///
+    /// 1. a child node or child object is not one of this state's
+    /// 2. a child repeats
+    /// 3. the transform is malformed
+    pub fn add_hierarchy_node(
+        &mut self,
+        node: VoxHierarchyNode,
+    ) -> Result<U32Id<BVoxHierarchyNode>> {
+        self.check_inserted_node(&node, 0, &HashSet::new())?;
+        let node_id = self.runtime_state.hierarchy_node_ids.retain();
+        self.runtime_state.hierarchy_nodes.retain(node_id, node);
+        Ok(node_id)
+    }
+
+    /// Adds a batch of hierarchy nodes at the end of the listing, assigning
+    /// ids in listing order and returning them. A node's children may
+    /// reference any already-live node or any node in the batch by the id it
+    /// will take, so a listing with forward references loads in one call.
+    /// Errors, changing nothing, if:
+    ///
+    /// 1. a child resolves to neither
+    /// 2. a child repeats within a node
+    /// 3. a transform is malformed
+    /// 4. the batch's `child_node_ids` edges form a cycle
+    pub fn add_hierarchy_nodes(
+        &mut self,
+        nodes: Vec<VoxHierarchyNode>,
+    ) -> Result<Vec<U32Id<BVoxHierarchyNode>>> {
+        // The ids the batch will take, named before any of it is inserted so
+        // every check runs before any mutation.
+        let prospective_ids: Vec<U32Id<BVoxHierarchyNode>> = (0..nodes.len())
+            .map(|index| self.runtime_state.hierarchy_node_ids.peek_nth(index))
+            .collect();
+
+        let batch_ids: HashSet<U32Id<BVoxHierarchyNode>> =
+            prospective_ids.iter().copied().collect();
+        for (node_index, node) in nodes.iter().enumerate() {
+            self.check_inserted_node(node, node_index, &batch_ids)?;
         }
+
+        // An edge leaving the batch lands on an already-live node, whose
+        // children are frozen and reference only other live nodes, so it can
+        // never lead back in. Only the batch-internal edges can cycle.
+        let index_of: HashMap<U32Id<BVoxHierarchyNode>, usize> = prospective_ids
+            .iter()
+            .enumerate()
+            .map(|(node_index, &node_id)| (node_id, node_index))
+            .collect();
+        let children: Vec<&[U32Id<BVoxHierarchyNode>]> = nodes
+            .iter()
+            .map(|node| node.child_node_ids.as_slice())
+            .collect();
+        if let Some(node_index) = first_cycle_node_index(&children, &index_of) {
+            return Err(Error::InsertedCycle { index: node_index });
+        }
+
+        let ids: Vec<U32Id<BVoxHierarchyNode>> = nodes
+            .into_iter()
+            .map(|node| {
+                let node_id = self.runtime_state.hierarchy_node_ids.retain();
+                self.runtime_state.hierarchy_nodes.retain(node_id, node);
+                node_id
+            })
+            .collect();
+        debug_assert_eq!(
+            ids, prospective_ids,
+            "the id pool assigned the predicted ids"
+        );
+        Ok(ids)
+    }
+
+    /// Checks a node about to be inserted at listing position `node_index` of
+    /// its batch: every child node resolves against this state or the batch's
+    /// prospective ids, every child object is live, no child repeats, and the
+    /// transform is finite with a non-zero scale and a unit rotation.
+    fn check_inserted_node(
+        &self,
+        node: &VoxHierarchyNode,
+        node_index: usize,
+        batch_ids: &HashSet<U32Id<BVoxHierarchyNode>>,
+    ) -> Result<()> {
+        let mut seen_child_node_ids = HashSet::with_capacity(node.child_node_ids.len());
+        for &child_id in &node.child_node_ids {
+            if self.hierarchy_node(child_id).is_none() && !batch_ids.contains(&child_id) {
+                return Err(Error::UnknownHierarchyNode { node_id: child_id });
+            }
+            if !seen_child_node_ids.insert(child_id) {
+                return Err(Error::InsertedDuplicateChildNode {
+                    index: node_index,
+                    child_id,
+                });
+            }
+        }
+        let mut seen_child_object_ids = HashSet::with_capacity(node.child_object_ids.len());
+        for &object_id in &node.child_object_ids {
+            if self.object(object_id).is_none() {
+                return Err(Error::UnknownObject { object_id });
+            }
+            if !seen_child_object_ids.insert(object_id) {
+                return Err(Error::InsertedDuplicateChildObject {
+                    index: node_index,
+                    object_id,
+                });
+            }
+        }
+
+        // The rotation needs no finiteness guard of its own: a non-finite
+        // component fails the unit-length check.
+        let position = node.transform.position;
+        let scale = node.transform.scale;
+        if !position.is_finite() || !scale.is_finite() {
+            return Err(Error::InsertedNonFiniteTransform { index: node_index });
+        }
+        if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
+            return Err(Error::InsertedZeroScale { index: node_index });
+        }
+        if !node
+            .transform
+            .rotation
+            .is_normalized_within(UNIT_ROTATION_TOLERANCE)
+        {
+            return Err(Error::InsertedNonUnitRotation { index: node_index });
+        }
+        Ok(())
+    }
+
+    /// Removes hierarchy node `id`, detaching it from every `child_node_ids`
+    /// list and from the roots. Errors, changing nothing, if `id` is not one of
+    /// this state's nodes. Leaves a hole until [`gc`](Self::gc) renumbers.
+    pub fn remove_hierarchy_node(&mut self, id: U32Id<BVoxHierarchyNode>) -> Result<()> {
+        if !self.runtime_state.hierarchy_node_ids.is_retained(id) {
+            return Err(Error::UnknownHierarchyNode { node_id: id });
+        }
+        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
+        for node_id in node_ids {
+            // Safety: retained node ids have a value.
+            let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
+            node.child_node_ids.retain(|&child_id| child_id != id);
+        }
+        self.runtime_state
+            .root_hierarchy_node_ids
+            .retain(|&root_id| root_id != id);
+        // Safety: a retained node id has a value.
+        unsafe { self.runtime_state.hierarchy_nodes.release(id) };
+        self.runtime_state.hierarchy_node_ids.release_stable(id);
+        Ok(())
+    }
+
+    /// The hierarchy node `id`, or `None` if not one of this state's.
+    pub fn hierarchy_node(&self, id: U32Id<BVoxHierarchyNode>) -> Option<&VoxHierarchyNode> {
+        // Safety: retained ids have a value.
+        self.runtime_state
+            .hierarchy_node_ids
+            .is_retained(id)
+            .then(|| unsafe { self.runtime_state.hierarchy_nodes.get(id) })
+    }
+
+    /// Number of hierarchy nodes.
+    pub fn hierarchy_node_count(&self) -> usize {
+        self.runtime_state.hierarchy_node_ids.len()
+    }
+
+    /// Hierarchy nodes in listing order, as `(id, node)`.
+    pub fn iter_hierarchy_nodes(
+        &self,
+    ) -> impl Iterator<Item = (U32Id<BVoxHierarchyNode>, &VoxHierarchyNode)> + '_ {
+        // Safety: retained ids have a value.
+        self.runtime_state
+            .hierarchy_node_ids
+            .iter()
+            .map(move |node_id| {
+                (node_id, unsafe {
+                    self.runtime_state.hierarchy_nodes.get(node_id)
+                })
+            })
+    }
+
+    /// Adds a layer referencing `palette_id` to object `object_id`, after its
+    /// existing layers, back-filling every voxel with `default_material_id`
+    /// and returning the layer's id. Errors, changing nothing, if:
+    ///
+    /// 1. `object_id` is not one of this state's
+    /// 2. `palette_id` is not one of this state's
+    /// 3. `default_material_id` is not one of `palette_id`'s materials
+    pub fn add_layer(
+        &mut self,
+        object_id: U32Id<BVoxObject>,
+        palette_id: U32Id<BVoxPalette>,
+        default_material_id: U32Id<BVoxMaterial>,
+    ) -> Result<U32Id<BVoxLayer>> {
+        if !self.runtime_state.object_ids.is_retained(object_id) {
+            return Err(Error::UnknownObject { object_id });
+        }
+        let Some(palette_ref) = self.palette(palette_id) else {
+            return Err(Error::UnknownPalette { palette_id });
+        };
+        if !palette_ref.contains_material(default_material_id) {
+            return Err(Error::UnknownMaterial {
+                material_id: default_material_id,
+            });
+        }
+        // Safety: the object id is retained.
+        Ok(unsafe { self.runtime_state.objects.get_mut(object_id) }
+            .add_layer(palette_id, default_material_id))
+    }
+
+    /// Removes layer `layer_id` from object `object_id`, dropping its
+    /// per-voxel sample column. Errors, changing nothing, if `object_id` is
+    /// not one of this state's or `layer_id` is not one of the object's.
+    pub fn remove_layer(
+        &mut self,
+        object_id: U32Id<BVoxObject>,
+        layer_id: U32Id<BVoxLayer>,
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object_id) {
+            return Err(Error::UnknownObject { object_id });
+        }
+        // Safety: the object id is retained.
+        unsafe { self.runtime_state.objects.get_mut(object_id) }.remove_layer(layer_id)
+    }
+
+    /// Moves layer `layer_id` of object `object_id` to position `index` in
+    /// its layer order. Errors, changing nothing, if:
+    ///
+    /// 1. `object_id` is not one of this state's
+    /// 2. `layer_id` is not one of the object's
+    /// 3. `index` is at or past its layer count
+    pub fn move_layer(
+        &mut self,
+        object_id: U32Id<BVoxObject>,
+        layer_id: U32Id<BVoxLayer>,
+        index: usize,
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object_id) {
+            return Err(Error::UnknownObject { object_id });
+        }
+        // Safety: the object id is retained.
+        unsafe { self.runtime_state.objects.get_mut(object_id) }.move_layer(layer_id, index)
+    }
+
+    /// Adds a material with one value id per property, in property order, to
+    /// palette `palette_id` and returns its id. Errors, changing nothing, if:
+    ///
+    /// 1. `palette_id` is not one of this state's
+    /// 2. `value_ids` has the wrong length
+    /// 3. a value id is not one of its property's value pool's
+    pub fn add_material(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        value_ids: Vec<U32Id<BVoxValuePoolValue>>,
+    ) -> Result<U32Id<BVoxMaterial>> {
+        if !self.runtime_state.palette_ids.is_retained(palette_id) {
+            return Err(Error::UnknownPalette { palette_id });
+        }
+        // Safety: the palette id is retained.
+        let palette_ref = unsafe { self.runtime_state.palettes.get(palette_id) };
+        if value_ids.len() != palette_ref.property_count() {
+            return Err(Error::MaterialValueArity {
+                values: value_ids.len(),
+                properties: palette_ref.property_count(),
+            });
+        }
+        for ((_, property), &value_id) in palette_ref.iter_properties().zip(&value_ids) {
+            let value_pool = self
+                .value_pool(property.value_pool_id)
+                .expect("a property names a live value pool");
+            if !value_pool.contains_value(value_id) {
+                return Err(Error::UnknownValuePoolValue { value_id });
+            }
+        }
+        // Safety: the palette id is retained; the arity was checked.
+        unsafe { self.runtime_state.palettes.get_mut(palette_id) }.add_material(value_ids)
+    }
+
+    /// Removes `material_id` from `palette_id`, first repainting every live
+    /// voxel that samples it onto `replacement_id` so no voxel is left
+    /// without a material. Leaves a hole until [`gc`](Self::gc) renumbers.
+    /// Errors, changing nothing, under the
+    /// [`remove_materials`](Self::remove_materials) rules.
+    pub fn remove_material(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        material_id: U32Id<BVoxMaterial>,
+        replacement_id: U32Id<BVoxMaterial>,
+    ) -> Result<()> {
+        self.remove_materials(palette_id, &HashMap::from([(material_id, replacement_id)]))
+    }
+
+    /// Removes every keyed material of `replacement_ids` from `palette_id`,
+    /// first repainting each live voxel that samples one onto the material it
+    /// pairs with so no voxel is left without a material. The whole batch
+    /// repaints in one pass over the voxels, so merging a palette down costs
+    /// what removing a single material does. Leaves holes until
+    /// [`gc`](Self::gc) renumbers. Errors, changing nothing, if:
+    ///
+    /// 1. `palette_id` is not one of this state's palettes
+    /// 2. a material id or a replacement id is not one of that palette's
+    ///    materials
+    /// 3. a replacement is itself removed, which covers a material named as
+    ///    its own replacement
+    pub fn remove_materials(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
+    ) -> Result<()> {
+        if !self.runtime_state.palette_ids.is_retained(palette_id) {
+            return Err(Error::UnknownPalette { palette_id });
+        }
+        // Safety: the palette id is retained.
+        let palette_ref = unsafe { self.runtime_state.palettes.get(palette_id) };
+        for (&material_id, &replacement_id) in replacement_ids {
+            for checked_material_id in [material_id, replacement_id] {
+                if !palette_ref.contains_material(checked_material_id) {
+                    return Err(Error::UnknownMaterial {
+                        material_id: checked_material_id,
+                    });
+                }
+            }
+            if replacement_ids.contains_key(&replacement_id) {
+                return Err(Error::SelfReplacement);
+            }
+        }
+
+        // The doomed materials in listing order, so the removal below can walk
+        // them back to front.
+        let doomed_ids: Vec<_> = palette_ref
+            .iter_materials()
+            .filter(|material_id| replacement_ids.contains_key(material_id))
+            .collect();
+
+        let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
+        for object_id in object_ids {
+            // Safety: retained object ids have a value.
+            let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
+            object.repaint_materials(palette_id, replacement_ids);
+        }
+
+        // Safety: the palette id is retained; each material is one of its
+        // materials.
+        let palette_ref = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
+        // Back to front: a removal shifts the materials listed after it, so
+        // dropping the last one first leaves nothing to shift and keeps the
+        // batch linear where front-to-back removal is quadratic.
+        for material_id in doomed_ids.into_iter().rev() {
+            palette_ref.remove_material(material_id);
+        }
+        Ok(())
+    }
+
+    /// Resolves what `material_id` in `palette_id` draws for `property_id`: the
+    /// value pool the property draws from and the value id it holds in that
+    /// value pool. `None` if any id is not this state's, `property_id` is not
+    /// `palette_id`'s, or the property names a value pool this state does not
+    /// hold. Read the value at that id out of the returned value pool by the
+    /// value pool's kind.
+    pub fn material_value(
+        &self,
+        palette_id: U32Id<BVoxPalette>,
+        material_id: U32Id<BVoxMaterial>,
+        property_id: U32Id<BVoxProperty>,
+    ) -> Option<(&VoxValuePool, U32Id<BVoxValuePoolValue>)> {
+        let palette = self.palette(palette_id)?;
+        let value_id = palette.value_id(material_id, property_id)?;
+        let value_pool = self.value_pool(palette.property(property_id)?.value_pool_id)?;
+        Some((value_pool, value_id))
+    }
+
+    /// Adds an object at the end of the listing, returning its id. Errors,
+    /// changing nothing, if a layer references a palette that is not one of
+    /// this state's or a live voxel samples a material that is not one of its
+    /// layer's palette's.
+    pub fn add_object(&mut self, object: VoxObject) -> Result<U32Id<BVoxObject>> {
+        for (layer_id, palette_id) in object.iter_layers() {
+            let Some(palette) = self.palette(palette_id) else {
+                return Err(Error::LayerPaletteRef {
+                    layer_id,
+                    palette_id,
+                });
+            };
+            let samples = object
+                .iter_live_samples(layer_id)
+                .expect("an iterated layer is one of the object's layers");
+            for (voxel_id, material_id) in samples {
+                if !palette.contains_material(material_id) {
+                    return Err(Error::LayerSampleMaterial {
+                        layer_id,
+                        voxel_id,
+                        material_id,
+                    });
+                }
+            }
+        }
+        let object_id = self.runtime_state.object_ids.retain();
+        self.runtime_state.objects.retain(object_id, object);
+        Ok(object_id)
+    }
+
+    /// Removes object `id`, detaching it from every node's `child_object_ids`.
+    /// Errors, changing nothing, if `id` is not one of this state's objects.
+    /// Leaves a hole until [`gc`](Self::gc) renumbers for a deterministic
+    /// save.
+    pub fn remove_object(&mut self, id: U32Id<BVoxObject>) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(id) {
+            return Err(Error::UnknownObject { object_id: id });
+        }
+        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
+        for node_id in node_ids {
+            // Safety: retained node ids have a value.
+            let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
+            node.child_object_ids.retain(|&object_id| object_id != id);
+        }
+        // Safety: a retained object id has a value.
+        unsafe { self.runtime_state.objects.release(id) };
+        self.runtime_state.object_ids.release_stable(id);
+        Ok(())
+    }
+
+    /// Objects in listing order, as `(id, object)`.
+    pub fn iter_objects(&self) -> impl Iterator<Item = (U32Id<BVoxObject>, &VoxObject)> + '_ {
+        // Safety: retained ids have a value.
+        self.runtime_state.object_ids.iter().map(move |object_id| {
+            (object_id, unsafe {
+                self.runtime_state.objects.get(object_id)
+            })
+        })
+    }
+
+    /// Moves object `id` to position `index` in the listing, shifting the
+    /// objects between its old and new positions one slot. Errors, changing
+    /// nothing, if `id` is not one of this state's objects or `index` is at or
+    /// past [`object_count`](Self::object_count).
+    pub fn move_object(&mut self, id: U32Id<BVoxObject>, index: usize) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(id) {
+            return Err(Error::UnknownObject { object_id: id });
+        }
+        let count = self.runtime_state.object_ids.len();
+        if index >= count {
+            return Err(Error::IndexPastCount { index, count });
+        }
+        self.runtime_state.object_ids.move_to(id, index);
+        Ok(())
+    }
+
+    /// The object `id`, or `None` if not one of this state's.
+    pub fn object(&self, id: U32Id<BVoxObject>) -> Option<&VoxObject> {
+        // Safety: retained ids have a value.
+        self.runtime_state
+            .object_ids
+            .is_retained(id)
+            .then(|| unsafe { self.runtime_state.objects.get(id) })
+    }
+
+    /// Number of objects.
+    pub fn object_count(&self) -> usize {
+        self.runtime_state.object_ids.len()
+    }
+
+    /// The listing position of object `id`, or `None` if `id` is not one of
+    /// this state's objects.
+    pub fn object_index(&self, id: U32Id<BVoxObject>) -> Option<usize> {
+        self.runtime_state.object_ids.index_of(id)
+    }
+
+    /// Sets the grid origin of object `object_id`. Errors, changing nothing,
+    /// if `object_id` is not one of this state's.
+    pub fn set_object_origin(
+        &mut self,
+        object_id: U32Id<BVoxObject>,
+        origin: TyVector3I32,
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object_id) {
+            return Err(Error::UnknownObject { object_id });
+        }
+        // Safety: the object id is retained.
+        unsafe { self.runtime_state.objects.get_mut(object_id) }.set_origin(origin);
+        Ok(())
+    }
+
+    /// Adds a shared palette at the end of the listing, returning its id.
+    /// Errors, changing nothing, if:
+    ///
+    /// 1. a property names a value pool that is not one of this state's
+    /// 2. a material draws a value that is not one of its property's
+    ///    value pool's
+    pub fn add_palette(&mut self, palette: VoxPalette) -> Result<U32Id<BVoxPalette>> {
+        for (property_id, property) in palette.iter_properties() {
+            let Some(value_pool) = self.value_pool(property.value_pool_id) else {
+                return Err(Error::PropertyValuePoolRef {
+                    property_id,
+                    value_pool_id: property.value_pool_id,
+                });
+            };
+            for material_id in palette.iter_materials() {
+                let value_id = palette
+                    .value_id(material_id, property_id)
+                    .expect("a material has a value id for every property");
+                if !value_pool.contains_value(value_id) {
+                    return Err(Error::MaterialValueRef {
+                        property_id,
+                        material_id,
+                    });
+                }
+            }
+        }
+        let palette_id = self.runtime_state.palette_ids.retain();
+        self.runtime_state.palettes.retain(palette_id, palette);
+        Ok(palette_id)
+    }
+
+    /// Removes palette `id`, detaching every object reference to it (along with
+    /// that reference's per-voxel sample column). Errors, changing nothing, if
+    /// `id` is not one of this state's palettes. Leaves a hole until
+    /// [`gc`](Self::gc) renumbers.
+    pub fn remove_palette(&mut self, id: U32Id<BVoxPalette>) -> Result<()> {
+        if !self.runtime_state.palette_ids.is_retained(id) {
+            return Err(Error::UnknownPalette { palette_id: id });
+        }
+        let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
+        for object_id in object_ids {
+            // Safety: retained object ids have a value.
+            let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
+            object.remove_layers_to(id);
+        }
+        // Safety: a retained palette id has a value; its Drop frees its cells.
+        unsafe { self.runtime_state.palettes.release(id) };
+        self.runtime_state.palette_ids.release_stable(id);
+        Ok(())
+    }
+
+    /// The effective palette of `object`, resolving its layer override rule
+    /// once. Layers are walked front to back, each palette property landing
+    /// at its name's entry, so the last supplying layer wins while the first
+    /// fixes the entry's position. Errors if a layer references a palette
+    /// that is not one of this state's.
+    pub fn effective_palette<'a>(
+        &'a self,
+        object: &'a VoxObject,
+    ) -> Result<VoxEffectivePalette<'a>> {
+        let mut properties: IdVec<BVoxEffectiveProperty, VoxEffectiveProperty<'a>> =
+            IdVec::default();
+        let mut property_id_by_name: HashMap<&'a str, UsizeId<BVoxEffectiveProperty>> =
+            HashMap::new();
+
+        for (layer_id, palette_id) in object.iter_layers() {
+            let Some(palette) = self.palette(palette_id) else {
+                return Err(Error::LayerPaletteRef {
+                    layer_id,
+                    palette_id,
+                });
+            };
+
+            for (property_id, property) in palette.iter_properties() {
+                let value_pool = self
+                    .value_pool(property.value_pool_id)
+                    .expect("a property names a live value pool");
+
+                let entry = VoxEffectiveProperty {
+                    name: property.name.as_str(),
+                    layer_id,
+                    palette_id,
+                    palette,
+                    property_id,
+                    value_pool,
+                };
+
+                match property_id_by_name.get(property.name.as_str()) {
+                    Some(&effective_id) => properties[effective_id] = entry,
+                    None => {
+                        let effective_id = properties.push(entry);
+                        property_id_by_name.insert(property.name.as_str(), effective_id);
+                    }
+                }
+            }
+        }
+
+        Ok(VoxEffectivePalette {
+            object,
+            properties,
+            property_id_by_name,
+        })
+    }
+
+    /// Palettes in listing order, as `(id, palette)`.
+    pub fn iter_palettes(&self) -> impl Iterator<Item = (U32Id<BVoxPalette>, &VoxPalette)> + '_ {
+        // Safety: retained ids have a value.
+        self.runtime_state
+            .palette_ids
+            .iter()
+            .map(move |palette_id| {
+                (palette_id, unsafe {
+                    self.runtime_state.palettes.get(palette_id)
+                })
+            })
+    }
+
+    /// Moves palette `id` to position `index` in the listing, shifting the
+    /// palettes between its old and new positions one slot. Errors, changing
+    /// nothing, if `id` is not one of this state's palettes or `index` is at
+    /// or past [`palette_count`](Self::palette_count).
+    pub fn move_palette(&mut self, id: U32Id<BVoxPalette>, index: usize) -> Result<()> {
+        if !self.runtime_state.palette_ids.is_retained(id) {
+            return Err(Error::UnknownPalette { palette_id: id });
+        }
+        let count = self.runtime_state.palette_ids.len();
+        if index >= count {
+            return Err(Error::IndexPastCount { index, count });
+        }
+        self.runtime_state.palette_ids.move_to(id, index);
+        Ok(())
+    }
+
+    /// The palette `id`, or `None` if not one of this state's.
+    pub fn palette(&self, id: U32Id<BVoxPalette>) -> Option<&VoxPalette> {
+        // Safety: retained ids have a value.
+        self.runtime_state
+            .palette_ids
+            .is_retained(id)
+            .then(|| unsafe { self.runtime_state.palettes.get(id) })
+    }
+
+    /// Number of shared palettes.
+    pub fn palette_count(&self) -> usize {
+        self.runtime_state.palette_ids.len()
+    }
+
+    /// The listing position of palette `id`, or `None` if `id` is not one of
+    /// this state's palettes.
+    pub fn palette_index(&self, id: U32Id<BVoxPalette>) -> Option<usize> {
+        self.runtime_state.palette_ids.index_of(id)
+    }
+
+    /// Adds a property named `name` on `value_pool_id` to palette `palette_id`,
+    /// back-filling its existing materials with `default_value_id`, and returns
+    /// the property's id. Errors, changing nothing, if:
+    ///
+    /// 1. `palette_id` is not one of this state's
+    /// 2. `value_pool_id` is not one of this state's
+    /// 3. `default_value_id` is not one of `value_pool_id`'s values
+    /// 4. the palette already has a property named `name`
+    pub fn add_property(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        name: String,
+        value_pool_id: U32Id<BVoxValuePool>,
+        default_value_id: U32Id<BVoxValuePoolValue>,
+    ) -> Result<U32Id<BVoxProperty>> {
+        if !self.runtime_state.palette_ids.is_retained(palette_id) {
+            return Err(Error::UnknownPalette { palette_id });
+        }
+        let Some(value_pool) = self.value_pool(value_pool_id) else {
+            return Err(Error::UnknownValuePool { value_pool_id });
+        };
+        if !value_pool.contains_value(default_value_id) {
+            return Err(Error::UnknownValuePoolValue {
+                value_id: default_value_id,
+            });
+        }
+        // Safety: the palette id is retained.
+        unsafe { self.runtime_state.palettes.get_mut(palette_id) }.add_property(
+            name,
+            value_pool_id,
+            default_value_id,
+        )
+    }
+
+    /// Removes property `property_id` from palette `palette_id`. Errors,
+    /// changing nothing, if `palette_id` is not one of this state's or
+    /// `property_id` is not one of the palette's.
+    pub fn remove_property(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        property_id: U32Id<BVoxProperty>,
+    ) -> Result<()> {
+        if !self.runtime_state.palette_ids.is_retained(palette_id) {
+            return Err(Error::UnknownPalette { palette_id });
+        }
+        // Safety: the palette id is retained.
+        unsafe { self.runtime_state.palettes.get_mut(palette_id) }.remove_property(property_id)
+    }
+
+    /// Appends a root. Errors, changing nothing, if `root_id` is not one of
+    /// this state's nodes or is already a root.
+    pub fn push_root_hierarchy_node_id(&mut self, root_id: U32Id<BVoxHierarchyNode>) -> Result<()> {
+        if self.hierarchy_node(root_id).is_none() {
+            return Err(Error::Root { root_id });
+        }
+        if self
+            .runtime_state
+            .root_hierarchy_node_ids
+            .contains(&root_id)
+        {
+            return Err(Error::DuplicateRoot { root_id });
+        }
+        self.runtime_state.root_hierarchy_node_ids.push(root_id);
+        Ok(())
+    }
+
+    /// The scene's roots: hierarchy node ids.
+    pub fn root_hierarchy_node_ids(&self) -> &[U32Id<BVoxHierarchyNode>] {
+        &self.runtime_state.root_hierarchy_node_ids
+    }
+
+    /// Replaces the scene's roots. Errors, changing nothing, if a root is not
+    /// one of this state's nodes or repeats.
+    pub fn set_root_hierarchy_node_ids(
+        &mut self,
+        root_ids: Vec<U32Id<BVoxHierarchyNode>>,
+    ) -> Result<()> {
+        let mut seen_ids = HashSet::with_capacity(root_ids.len());
+        for &root_id in &root_ids {
+            if self.hierarchy_node(root_id).is_none() {
+                return Err(Error::Root { root_id });
+            }
+            if !seen_ids.insert(root_id) {
+                return Err(Error::DuplicateRoot { root_id });
+            }
+        }
+        self.runtime_state.root_hierarchy_node_ids = root_ids;
+        Ok(())
+    }
+
+    /// Adds a shared value pool at the end of the listing, returning its id.
+    pub fn add_value_pool(&mut self, value_pool: VoxValuePool) -> U32Id<BVoxValuePool> {
+        let value_pool_id = self.runtime_state.value_pool_ids.retain();
+        self.runtime_state
+            .value_pools
+            .retain(value_pool_id, value_pool);
+        value_pool_id
+    }
+
+    /// Removes `value_id` from `value_pool_id`, first repointing every palette
+    /// cell that draws it onto `replacement_id` so no material is left without
+    /// a value. Leaves a hole until [`gc`](Self::gc) renumbers. Errors,
+    /// changing nothing, if:
+    ///
+    /// 1. `value_pool_id` is not one of this state's value pools
+    /// 2. `value_id` or `replacement_id` is not one of that value pool's values
+    /// 3. `replacement_id` is `value_id` itself
+    pub fn remove_value_pool_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+        replacement_id: U32Id<BVoxValuePoolValue>,
+    ) -> Result<()> {
+        if !self.runtime_state.value_pool_ids.is_retained(value_pool_id) {
+            return Err(Error::UnknownValuePool { value_pool_id });
+        }
+        // Safety: the value pool id is retained.
+        let value_pool = unsafe { self.runtime_state.value_pools.get(value_pool_id) };
+        if !value_pool.contains_value(value_id) {
+            return Err(Error::UnknownValuePoolValue { value_id });
+        }
+        if !value_pool.contains_value(replacement_id) {
+            return Err(Error::UnknownValuePoolValue {
+                value_id: replacement_id,
+            });
+        }
+        if value_id == replacement_id {
+            return Err(Error::SelfReplacement);
+        }
+
+        for palette_id in self.runtime_state.palette_ids.iter() {
+            // Safety: retained palette ids have a value.
+            let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
+            palette.repoint_value_pool_value(value_pool_id, value_id, replacement_id);
+        }
+
+        // Safety: the value pool id is retained and the value is one of its
+        // values.
+        unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) }
+            .release_value_stable(value_id);
+        Ok(())
+    }
+
+    /// Value pools in listing order, as `(id, value_pool)`.
+    pub fn iter_value_pools(
+        &self,
+    ) -> impl Iterator<Item = (U32Id<BVoxValuePool>, &VoxValuePool)> + '_ {
+        // Safety: retained ids have a value.
+        self.runtime_state
+            .value_pool_ids
+            .iter()
+            .map(move |value_pool_id| {
+                (value_pool_id, unsafe {
+                    self.runtime_state.value_pools.get(value_pool_id)
+                })
+            })
+    }
+
+    /// Moves value pool `id` to position `index` in the listing, shifting the
+    /// value pools between its old and new positions one slot. Errors, changing
+    /// nothing, if `id` is not one of this state's value pools or `index` is at
+    /// or past [`value_pool_count`](Self::value_pool_count).
+    pub fn move_value_pool(&mut self, id: U32Id<BVoxValuePool>, index: usize) -> Result<()> {
+        if !self.runtime_state.value_pool_ids.is_retained(id) {
+            return Err(Error::UnknownValuePool { value_pool_id: id });
+        }
+        let count = self.runtime_state.value_pool_ids.len();
+        if index >= count {
+            return Err(Error::IndexPastCount { index, count });
+        }
+        self.runtime_state.value_pool_ids.move_to(id, index);
+        Ok(())
+    }
+
+    /// Releases value-pool entries no material references, keeping the
+    /// survivors' listing order and their ids. The value-pool-value counterpart
+    /// to the entity `remove_*` methods. [`gc`](Self::gc) renumbers. Requires a
+    /// referentially valid state, which [`validate`](Self::validate) checks.
+    ///
+    /// 1. references union across palettes, so a shared entry survives while
+    ///    any one material uses it
+    /// 2. a value pool nothing references is emptied
+    /// 3. the state stays referentially valid
+    pub fn prune_value_pools(&mut self) {
+        // The value ids each value pool still has a material referencing.
+        let value_pool_ids: Vec<_> = self.runtime_state.value_pool_ids.iter().collect();
+        let mut referenced_ids: HashMap<U32Id<BVoxValuePool>, HashSet<U32Id<BVoxValuePoolValue>>> =
+            value_pool_ids
+                .iter()
+                .map(|&value_pool_id| (value_pool_id, HashSet::new()))
+                .collect();
+
+        for palette_id in self.runtime_state.palette_ids.iter() {
+            // Safety: retained palette ids have a value.
+            let palette = unsafe { self.runtime_state.palettes.get(palette_id) };
+            for (property_id, property) in palette.iter_properties() {
+                let used_ids = referenced_ids
+                    .get_mut(&property.value_pool_id)
+                    .expect("a property names a live value pool in a valid state");
+                for material_id in palette.iter_materials() {
+                    let value_id = palette
+                        .value_id(material_id, property_id)
+                        .expect("a retained material has a value id for every property");
+                    used_ids.insert(value_id);
+                }
+            }
+        }
+
+        // Release each value pool's unreferenced entries.
+        for &value_pool_id in &value_pool_ids {
+            let keep_ids = &referenced_ids[&value_pool_id];
+            // Safety: retained value-pool ids have a value.
+            let value_pool = unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) };
+            let doomed_ids: Vec<_> = value_pool
+                .iter_values()
+                .map(|(value_id, _)| value_id)
+                .filter(|value_id| !keep_ids.contains(value_id))
+                .collect();
+            // Back to front: a release shifts the values listed after it, so
+            // dropping the last one first leaves nothing to shift and keeps
+            // the prune linear where front-to-back release is quadratic.
+            for value_id in doomed_ids.into_iter().rev() {
+                value_pool.release_value_stable(value_id);
+            }
+        }
+    }
+
+    /// Reorders `value_pool_id`'s values to `new_order_ids`, which lists the
+    /// value pool's value ids in their new listing order. Value ids are stable,
+    /// so what every material resolves to is unchanged. Errors, changing
+    /// nothing, if `value_pool_id` is not one of this state's or
+    /// `new_order_ids` does not list each of the value pool's value ids exactly
+    /// once.
+    pub fn reorder_value_pool(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        new_order_ids: &[U32Id<BVoxValuePoolValue>],
+    ) -> Result<()> {
+        if !self.runtime_state.value_pool_ids.is_retained(value_pool_id) {
+            return Err(Error::UnknownValuePool { value_pool_id });
+        }
+        // Safety: the id is retained, so it has a value.
+        unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) }
+            .set_value_order(new_order_ids)
+            .ok_or(Error::ValuePoolValueOrder)
+    }
+
+    /// The value pool `id`, or `None` if not one of this state's.
+    pub fn value_pool(&self, id: U32Id<BVoxValuePool>) -> Option<&VoxValuePool> {
+        // Safety: retained ids have a value.
+        self.runtime_state
+            .value_pool_ids
+            .is_retained(id)
+            .then(|| unsafe { self.runtime_state.value_pools.get(id) })
+    }
+
+    /// Number of shared value pools.
+    pub fn value_pool_count(&self) -> usize {
+        self.runtime_state.value_pool_ids.len()
+    }
+
+    /// The listing position of value pool `id`, or `None` if `id` is not one of
+    /// this state's value pools.
+    pub fn value_pool_index(&self, id: U32Id<BVoxValuePool>) -> Option<usize> {
+        self.runtime_state.value_pool_ids.index_of(id)
+    }
+
+    /// Makes the voxel at `voxel_id` in object `object_id` live with one
+    /// `sample_ids` material per layer, in layer order. Errors, changing
+    /// nothing, if:
+    ///
+    /// 1. `object_id` is not one of this state's
+    /// 2. `voxel_id` is outside its grid
+    /// 3. `sample_ids` has the wrong length
+    /// 4. a sample is not one of its layer's palette's materials
+    pub fn retain_voxel(
+        &mut self,
+        object_id: U32Id<BVoxObject>,
+        voxel_id: U32Id<BVoxVoxel>,
+        sample_ids: &[U32Id<BVoxMaterial>],
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object_id) {
+            return Err(Error::UnknownObject { object_id });
+        }
+        // Safety: the object id is retained.
+        let object_ref = unsafe { self.runtime_state.objects.get(object_id) };
+        if object_ref.voxel_position(voxel_id).is_none() {
+            return Err(Error::UnknownVoxel { voxel_id });
+        }
+        if sample_ids.len() != object_ref.layer_count() {
+            return Err(Error::SampleArity {
+                samples: sample_ids.len(),
+                layers: object_ref.layer_count(),
+            });
+        }
+        for ((layer_id, palette_id), &material_id) in object_ref.iter_layers().zip(sample_ids) {
+            let palette = self
+                .palette(palette_id)
+                .expect("a layer references a live palette");
+            if !palette.contains_material(material_id) {
+                return Err(Error::LayerSampleMaterial {
+                    layer_id,
+                    voxel_id,
+                    material_id,
+                });
+            }
+        }
+        // Safety: the object id is retained; the grid and arity were checked.
+        unsafe { self.runtime_state.objects.get_mut(object_id) }.retain_voxel(voxel_id, sample_ids)
+    }
+
+    /// Makes the voxel at `voxel_id` in object `object_id` empty, leaving its
+    /// samples in place but ignored. Errors, changing nothing, if `object_id`
+    /// is not one of this state's or `voxel_id` is outside its grid.
+    pub fn release_voxel(
+        &mut self,
+        object_id: U32Id<BVoxObject>,
+        voxel_id: U32Id<BVoxVoxel>,
+    ) -> Result<()> {
+        if !self.runtime_state.object_ids.is_retained(object_id) {
+            return Err(Error::UnknownObject { object_id });
+        }
+        // Safety: the object id is retained.
+        unsafe { self.runtime_state.objects.get_mut(object_id) }.release_voxel(voxel_id)
     }
 }
 
