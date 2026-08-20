@@ -2,16 +2,16 @@
 
 _Part of the [mesh plan](README.md)._
 
-A profile is a named piece of configuration whose elements stand for `vxl mesh`
-flags. `--profile` applies a profile whole, and `--values-from` applies only a
-profile's values. [Built-in profiles](#built-in-profiles) ship in the binary.
-Default profiles like `--profile pbr` work before any `.vxlconfig` exists. The
-rest are user-defined under `.vxlconfig`'s `mesh.profiles` key. A config profile
-sharing a built-in's name replaces it wholesale. A profile can include another
-profile's values with `valuesFrom`. Hyphenated profile names take camel-case
-value names because `-` is subtraction in the
-[value language](value-language.md): a `metallic-smoothness` profile would bake
-`metallicSmoothness`.
+A profile is a named piece of configuration whose elements stand for
+[`vxl mesh`](mesh.md) flags. `--profile` applies a profile whole, and
+`--values-from` applies only a profile's values.
+[Built-in profiles](#built-in-profiles) ship in the binary. Default profiles
+like `--profile pbr` work before any `.vxlconfig` exists. The rest are
+user-defined under `.vxlconfig`'s `mesh.profiles` key. A config profile sharing
+a built-in's name replaces it wholesale. A profile can include another profile's
+values with `valuesFrom`. Hyphenated profile names take camel-case value names
+because `-` is subtraction in the [value language](value-language.md): a
+`metallic-smoothness` profile would bake `metallicSmoothness`.
 
 ## Schema
 
@@ -148,34 +148,13 @@ interface PrimitiveEntry {
 
 ## Profile values
 
-A profile's values are its `values` list, an optional `valuesFrom` list, and the
-optional `computeIndex`, `computeOcclusion`, and `computeVoxelPosition` keys.
-Each `values` entry is a fragment of the [program](value-language.md#programs),
-one or more `name = expr` bindings, the trailing `;` optional. A profile can
-define every name a run needs and still write nothing. `--values-from <profile>`
-appends a profile's bindings to the program at the flag's position, `valuesFrom`
-first: depth-first in list order, every profile visited once, cycles an error,
-the profile's own values last. Only values and the compute bindings travel; a
-writer element applies through `--profile` alone. So
-
-```sh
---value "a = 0.5" --values-from albedo --value "b = a * 2"
-```
-
-defines `a`, then the `defaults` mixin `albedo` imports, then `albedo`'s own
-values, then `b`. Redefinition stays let-style throughout, so a `--value` after
-the flag overrides a profile value and every later expression sees the override.
-
-A profile requests [computed occlusion](value-language.md#computed-occlusion)
-through its `computeOcclusion` key and
-[computed voxel position](value-language.md#computed-voxel-position) through its
-`computeVoxelPosition` key, each holding the flag's argument as its value and
-binding the name the way the flag does.
-[Computed indexes](value-language.md#computed-index) ride the `computeIndex`
-map, each domain key holding its bound name. Every request across profiles and
-flags binds its name to the one computation, so requests alias rather than
-collide. The bindings ride `valuesFrom` with the values because an inherited
-expression needs its name.
+A profile's values are its `values` list, its `valuesFrom` list, and the
+`computeIndex`, `computeOcclusion`, and `computeVoxelPosition` keys. The compute
+keys count as values because an inherited expression needs a name. The mirrored
+[`vxl mesh` flags](mesh.md#options) define how bindings join the
+[program](value-language.md#programs). `valuesFrom` imports append depth-first
+in list order, ahead of the profile's own values. A profile imported twice lands
+once.
 
 ## The output surface
 
