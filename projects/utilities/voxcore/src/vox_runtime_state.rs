@@ -7,9 +7,8 @@ use branded_id::{
     soa::{IdField, IdStruct},
 };
 
-/// The runtime scene of a voxel model: its objects, the shared palettes they
-/// sample, the scene hierarchy, and the roots of that hierarchy. Held by
-/// [`VoxMain`](crate::VoxMain) alongside the ext.
+/// The runtime scene of a voxel model, held by [`VoxMain`](crate::VoxMain)
+/// alongside the ext.
 ///
 /// This is the struct-of-arrays backing store. [`VoxMain`](crate::VoxMain) owns
 /// mutation logic over these fields; they are crate-private so the id pools and
@@ -45,8 +44,8 @@ pub struct VoxRuntimeState {
 }
 
 impl VoxRuntimeState {
-    /// Deep copy, rebuilding every column against fresh id pools since the SoA
-    /// types can't derive `Clone`.
+    /// Deep copy, rebuilding every column against fresh id pools because the
+    /// SoA types can't derive `Clone`.
     pub(crate) fn clone_runtime_state(&self) -> Self {
         let mut value_pools = IdField::new();
         for value_pool_id in self.value_pool_ids.iter() {

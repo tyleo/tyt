@@ -52,8 +52,8 @@ pub struct VoxObject {
 
 impl VoxObject {
     /// Largest dense grid an object may allocate, in cells. The grid stores
-    /// every cell whether live or not, so this caps memory. Always
-    /// `<= u32::MAX`, so a voxel id is always a valid raster index.
+    /// every cell whether live or not, so this caps memory. Because the cap is
+    /// `<= u32::MAX`, a voxel id is always a valid raster index.
     pub const MAX_GRID_CELLS: u64 = 1 << 27;
 
     /// Creates an empty grid of size `bounds`: every cell has a voxel id, none

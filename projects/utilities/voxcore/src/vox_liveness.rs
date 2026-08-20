@@ -7,8 +7,8 @@ use branded_id::U32Id;
 /// clear bit marks empty space.
 ///
 /// The grid allocates a voxel id for every cell, so the sample columns always
-/// have a value to return; this map is what distinguishes a filled cell from
-/// empty space, since a sample is always a valid cell reference and so cannot
+/// have a value to return. This map is what distinguishes a filled cell from
+/// empty space, because a sample is always a valid cell reference and cannot
 /// by itself mark a cell empty.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VoxLiveness {
@@ -60,8 +60,7 @@ impl VoxLiveness {
     /// Panics if `id` is outside the covered range (`>= len`). Enforcing this
     /// keeps every bit at an index `>= len` clear, which the derived equality,
     /// [`count_live`](Self::count_live), and [`iter_live`](Self::iter_live)
-    /// rely on (the trailing bits of the final word are never part of the live
-    /// set).
+    /// rely on.
     pub fn set_live(&mut self, id: U32Id<BVoxVoxel>, live: bool) {
         let i = id.to_u32() as usize;
         assert!(
@@ -85,7 +84,7 @@ impl VoxLiveness {
             .sum()
     }
 
-    /// Iterates the ids of the live cells in ascending (raster index) order.
+    /// Iterates the ids of the live cells in ascending raster order.
     pub fn iter_live(&self) -> impl Iterator<Item = U32Id<BVoxVoxel>> + '_ {
         self.words.iter().enumerate().flat_map(|(word, &bits)| {
             BitIndices { bits }.map(move |bit| U32Id::from_u32((word * 64 + bit) as u32))

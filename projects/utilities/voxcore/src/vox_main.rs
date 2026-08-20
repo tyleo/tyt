@@ -8,8 +8,7 @@ use branded_id::{IdVec, U32Id, UsizeId, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TyQuaternionExt, TyVector3I32, UNIT_ROTATION_TOLERANCE};
 
-/// The in-memory state of a voxel model: its objects, shared palettes, scene
-/// hierarchy, and roots.
+/// The in-memory state of a voxel model.
 ///
 /// Ids are meaningful only within this state. Every mutation checks the
 /// cross-references it could break, so a state reached through the public API
@@ -17,7 +16,7 @@ use ty_math::{TyQuaternionExt, TyVector3I32, UNIT_ROTATION_TOLERANCE};
 /// them.
 #[derive(Debug, Default)]
 pub struct VoxMain {
-    /// The runtime scene: objects.
+    /// The runtime scene.
     runtime_state: VoxRuntimeState,
 
     /// Optional user-extension namespace; the core format assigns it no
@@ -959,8 +958,8 @@ impl VoxMain {
 
         // Compact the shared value-pool store, then relabel every palette
         // property's value pool, so the value-pool ids are settled before
-        // palettes are compacted. Value-pool ids follow the listing, so a
-        // value pool moved before gc is renumbered here and every property's
+        // palettes are compacted. Value-pool ids follow the listing: a
+        // value pool moved before gc is renumbered here, and every property's
         // value-pool id is rewritten to match.
         let value_pool_remap = self.runtime_state.value_pool_ids.gc();
         // Safety: the value-pool column was in sync with the pre-gc id pool,
@@ -968,10 +967,10 @@ impl VoxMain {
         unsafe { self.runtime_state.value_pools.gc(&value_pool_remap) };
 
         // Compact each palette's own id pools, so the material relabelings are
-        // ready when object samples are translated below. They are indexed by
-        // old palette id, so the column covers the palette id pool's whole id
-        // space. Cells translate through the value relabelings first, while
-        // each property still names its value pool's pre-gc id.
+        // ready when object samples are translated below. Because they are
+        // indexed by old palette id, the column covers the palette id pool's
+        // whole id space. Cells translate through the value relabelings
+        // first, while each property still names its value pool's pre-gc id.
         let palette_id_space = self.runtime_state.palette_ids.peek_next_fresh().to_u32() as usize;
         let mut material_remaps: IdVec<BVoxPalette, IdRemap<BVoxMaterial, u32>> =
             IdVec::from_vec((0..palette_id_space).map(|_| IdRemap::default()).collect());
@@ -1138,7 +1137,7 @@ impl VoxMain {
     ///    within `1e-6`
     /// 7. the `child_node_ids` graph is acyclic
     ///
-    /// A node may have several parents, since the hierarchy is a DAG; that
+    /// A node may have several parents because the hierarchy is a DAG; that
     /// sharing is not a cycle.
     pub fn validate(&self) -> Result<()> {
         // Value pool values are within their kind's value domain. This runs
@@ -1187,8 +1186,8 @@ impl VoxMain {
 
         // Object layer palette refs and live-voxel sample materials. Checks are
         // by id retention, not index range, so they hold whether or not
-        // removals have left the id pools with holes. Two layers may reference
-        // the same palette, so there is no duplicate-layer rule.
+        // removals have left the id pools with holes. Because two layers may
+        // reference the same palette, there is no duplicate-layer rule.
         for (object_id, object) in self.iter_objects() {
             let mut layer_palettes = Vec::with_capacity(object.layer_count());
             for (layer_id, palette_id) in object.iter_layers() {
@@ -2353,8 +2352,6 @@ mod tests {
     /// samples through it.
     #[test]
     fn two_layer_object_sharing_a_palette_gcs_and_resolves() {
-        // The Phase 3 gate: build a two-layer object that shares one palette,
-        // validate it, gc it, and read a material's resolved values back.
         let mut state = VoxMain::default();
         let colors_id = state.add_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]]).unwrap(),

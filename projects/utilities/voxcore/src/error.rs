@@ -203,7 +203,7 @@ pub enum Error {
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        // Ids print as their bare `u32`: a branded id's own `Display` carries
+        // Ids print as their bare `u32`: a branded id's `Display` carries
         // the brand name, which the surrounding wording already gives.
         match self {
             Error::MalformedValuePoolValue { value_id } => write!(
