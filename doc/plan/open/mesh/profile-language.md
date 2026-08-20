@@ -3,14 +3,15 @@
 _Part of the [mesh plan](README.md)._
 
 A profile is a named piece of configuration whose elements stand for `vxl mesh`
-flags. `--profile` applies one whole, and `--values-from` applies only a
-profile's values. [Built-in profiles](#built-in-profiles) ship in the binary, so
-`--profile pbr` works before any `.vxlconfig` exists. The rest are user-defined
-under `.vxlconfig`'s `mesh.profiles` key. A config profile sharing a built-in's
-name replaces it wholesale, and extending a profile's values takes a new name
-with `valuesFrom`. Hyphenated profile names take camel-case value names because
-`-` is subtraction in the [value language](value-language.md): a
-`metallic-smoothness` profile would bake `metallicSmoothness`.
+flags. `--profile` applies a profile whole, and `--values-from` applies only a
+profile's values. [Built-in profiles](#built-in-profiles) ship in the binary.
+Default profiles like `--profile pbr` work before any `.vxlconfig` exists. The
+rest are user-defined under `.vxlconfig`'s `mesh.profiles` key. A config profile
+sharing a built-in's name replaces it wholesale. A profile can include another
+profile's values with `valuesFrom`. Hyphenated profile names take camel-case
+value names because `-` is subtraction in the
+[value language](value-language.md): a `metallic-smoothness` profile would bake
+`metallicSmoothness`.
 
 ## Schema
 
