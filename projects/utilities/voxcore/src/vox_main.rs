@@ -12,8 +12,7 @@ use ty_math::{TyQuaternionExt, TyVector3I32, UNIT_ROTATION_TOLERANCE};
 ///
 /// Ids are meaningful only within this state. Every mutation checks the
 /// cross-references it could break, so a state reached through the public API
-/// never violates a referential rule; [`validate`](Self::validate) audits
-/// them.
+/// never violates a referential rule.
 #[derive(Debug, Default)]
 pub struct VoxMain {
     /// The runtime scene.
@@ -39,11 +38,6 @@ impl VoxMain {
     /// does and saves stay deterministic. Call it once before saving, not after
     /// each release or move.
     ///
-    /// Requires a referentially valid state. The `remove_*` methods preserve it
-    /// by detaching what they release, and [`validate`](Self::validate) checks
-    /// it. The voxel grids are dense and never compacted, so voxel ids keep
-    /// equaling their raster index.
-    ///
     /// Returns the [`VoxGcRemap`] recording where each id moved, so any ids
     /// held outside the state can be translated to their compacted values.
     pub fn gc(&mut self) -> VoxGcRemap {
@@ -52,12 +46,13 @@ impl VoxMain {
         // can translate its cells before value-pool ids move.
         let value_pool_id_space =
             self.runtime_state.value_pool_ids.peek_next_fresh().to_u32() as usize;
-        let mut value_pool_value_remaps: IdVec<BVoxValuePool, IdRemap<BVoxValuePoolValue, u32>> =
-            IdVec::from_vec(
-                (0..value_pool_id_space)
-                    .map(|_| IdRemap::default())
-                    .collect(),
-            );
+
+        let mut value_pool_value_remaps = IdVec::from_vec(
+            (0..value_pool_id_space)
+                .map(|_| IdRemap::default())
+                .collect(),
+        );
+
         for value_pool_id in self.runtime_state.value_pool_ids.iter() {
             // Safety: retained value-pool ids have a value.
             let value_pool = unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) };
@@ -80,7 +75,7 @@ impl VoxMain {
         // whole id space. Cells translate through the value relabelings
         // first, while each property still names its value pool's pre-gc id.
         let palette_id_space = self.runtime_state.palette_ids.peek_next_fresh().to_u32() as usize;
-        let mut material_remaps: IdVec<BVoxPalette, IdRemap<BVoxMaterial, u32>> =
+        let mut material_remaps =
             IdVec::from_vec((0..palette_id_space).map(|_| IdRemap::default()).collect());
         for palette_id in self.runtime_state.palette_ids.iter().collect::<Vec<_>>() {
             // Safety: retained palette ids have a value.
@@ -127,6 +122,7 @@ impl VoxMain {
                     .new_id(*child_id)
                     .expect("a child node is live in a valid state");
             }
+
             for object_id in &mut node.child_object_ids {
                 *object_id = object_remap
                     .new_id(*object_id)
@@ -1151,8 +1147,7 @@ impl VoxMain {
 
     /// Releases value-pool entries no material references, keeping the
     /// survivors' listing order and their ids. The value-pool-value counterpart
-    /// to the entity `remove_*` methods. [`gc`](Self::gc) renumbers. Requires a
-    /// referentially valid state, which [`validate`](Self::validate) checks.
+    /// to the entity `release_*` methods. [`gc`](Self::gc) renumbers.
     ///
     /// 1. references union across palettes, so a shared entry survives while
     ///    any one material uses it
