@@ -33,9 +33,6 @@ pub struct VoxObject {
     /// corner, in voxels.
     origin: TyVector3I32,
 
-    /// One id per grid cell; id equals the raster index.
-    voxel_ids: IdStruct<BVoxVoxel>,
-
     /// Which cells are filled, one bit per voxel id.
     liveness: VoxLiveness,
 
@@ -45,9 +42,9 @@ pub struct VoxObject {
     /// The palette each layer references, in layer order.
     layer_palette_ids: IdField<BVoxLayer, U32Id<BVoxPalette>>,
 
-    /// Per layer, the material each voxel samples. Cells of non-live voxels
-    /// are ignored filler.
-    samples: IdField<BVoxLayer, IdField<BVoxVoxel, U32Id<BVoxMaterial>>>,
+    /// Per layer, the material each voxel samples, one slot per grid cell.
+    /// Cells of non-live voxels are ignored filler.
+    samples: IdField<BVoxLayer, IdVec<BVoxVoxel, U32Id<BVoxMaterial>>>,
 }
 
 impl VoxObject {
@@ -67,16 +64,10 @@ impl VoxObject {
             return Err(Error::GridCellCap { cells: volume });
         }
 
-        let mut voxel_ids = IdStruct::new();
-        for _ in 0..volume {
-            voxel_ids.retain();
-        }
-
         Ok(Self {
             name,
             bounds,
             origin: TyVector3I32::default(),
-            voxel_ids,
             liveness: VoxLiveness::new(volume as usize),
             layer_ids: IdStruct::new(),
             layer_palette_ids: IdField::new(),
@@ -91,8 +82,8 @@ impl VoxObject {
             .saturating_mul(bounds.z as u64)
     }
 
-    /// Deep copy. Liveness lives in the id pools, so the columns can't derive
-    /// `Clone`; rebuild them against the cloned id pools.
+    /// Deep copy. Liveness lives in the layer id pool, so the columns can't
+    /// derive `Clone`; rebuild them against the cloned pool.
     pub fn clone_object(&self) -> Self {
         // The inner sample columns own storage, so clone them one by one;
         // `layer_palette_ids` is Copy-valued and clones wholesale below.
@@ -107,7 +98,6 @@ impl VoxObject {
             name: self.name.clone(),
             bounds: self.bounds,
             origin: self.origin,
-            voxel_ids: self.voxel_ids.clone(),
             liveness: self.liveness.clone(),
             layer_ids: self.layer_ids.clone(),
             layer_palette_ids: self.layer_palette_ids.clone(),
@@ -144,14 +134,10 @@ impl VoxObject {
             // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };
             for &voxel_id in &live_ids {
-                // Safety: the dense grid gives every layer a slot for every
-                // voxel id.
-                let material_id = *unsafe { column.get(voxel_id) };
                 let new_material_id = material_remap
-                    .new_id(material_id)
+                    .new_id(column[voxel_id.to_usize_id()])
                     .expect("a live voxel samples a live material in a valid state");
-                // Safety: same dense slot.
-                *unsafe { column.get_mut(voxel_id) } = new_material_id;
+                column[voxel_id.to_usize_id()] = new_material_id;
             }
         }
 
@@ -185,12 +171,10 @@ impl VoxObject {
         let layer_id = self.layer_ids.retain();
         self.layer_palette_ids.retain(layer_id, palette_id);
 
-        let mut column = IdField::new();
-        for voxel_id in &self.voxel_ids {
-            column.retain(voxel_id, default_material_id);
-        }
-
-        self.samples.retain(layer_id, column);
+        self.samples.retain(
+            layer_id,
+            IdVec::from_vec(vec![default_material_id; self.liveness.len()]),
+        );
 
         layer_id
     }
@@ -204,9 +188,7 @@ impl VoxObject {
             return Err(Error::UnknownLayer { layer_id: id });
         }
 
-        // Safety: a retained layer id has a value in both columns. Sample
-        // materials are Copy, so dropping the inner column frees its storage
-        // with nothing to release per voxel.
+        // Safety: a retained layer id has a value in both columns.
         unsafe { self.layer_palette_ids.release(id) };
         unsafe { self.samples.release(id) };
         self.layer_ids.release_stable(id);
@@ -295,9 +277,7 @@ impl VoxObject {
             // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };
             for voxel_id in self.liveness.iter_live() {
-                // Safety: the dense grid gives every layer a slot for every
-                // voxel id.
-                let sample = unsafe { column.get_mut(voxel_id) };
+                let sample = &mut column[voxel_id.to_usize_id()];
                 if let Some(&replacement_id) = replacement_ids.get(sample) {
                     *sample = replacement_id;
                 }
@@ -341,9 +321,9 @@ impl VoxObject {
 
         self.liveness.set_live(id, true);
         for (layer_id, &material_id) in self.layer_ids.iter().zip(sample_ids) {
-            // Safety: the dense grid gives every layer a slot for `id`.
+            // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };
-            unsafe { column.set(id, material_id) };
+            column[id.to_usize_id()] = material_id;
         }
         Ok(())
     }
@@ -383,11 +363,11 @@ impl VoxObject {
         }
         // Safety: retained layer ids have a sample column.
         let column = unsafe { self.samples.get(layer_id) };
-        Some(self.liveness.iter_live().map(move |voxel_id| {
-            // Safety: the dense grid gives every layer a slot for every voxel
-            // id.
-            (voxel_id, *unsafe { column.get(voxel_id) })
-        }))
+        Some(
+            self.liveness
+                .iter_live()
+                .map(move |voxel_id| (voxel_id, column[voxel_id.to_usize_id()])),
+        )
     }
 
     /// Number of live (filled) voxels.
@@ -444,9 +424,9 @@ impl VoxObject {
             return None;
         }
 
-        // Safety: the dense grid gives every layer a slot for every voxel id.
+        // Safety: retained layer ids have a sample column.
         let column = unsafe { self.samples.get(layer_id) };
-        Some(*unsafe { column.get(id) })
+        Some(column[id.to_usize_id()])
     }
 
     /// Grid position of `id`, or `None` if outside the grid. Inverse of
@@ -469,9 +449,7 @@ impl VoxObject {
 
 impl Drop for VoxObject {
     fn drop(&mut self) {
-        // Safety: every `layer_ids` id has a value in both columns. Sample
-        // materials are Copy, so dropping the inner columns frees their storage
-        // and the voxel id pool needs no part here.
+        // Safety: every `layer_ids` id has a value in both columns.
         unsafe {
             self.layer_palette_ids.release_all(&self.layer_ids);
             self.samples.release_all(&self.layer_ids);
@@ -510,10 +488,7 @@ mod tests {
         );
     }
 
-    // Retaining 512^3 voxel ids is far too slow under Miri; the other tests
-    // here cover the same unsafe paths on a small grid.
     #[test]
-    #[cfg_attr(miri, ignore)]
     fn new_accepts_a_grid_at_the_cell_cap() {
         assert!(VoxObject::new("max".to_owned(), TyVector3U32::new(512, 512, 512)).is_ok());
     }
