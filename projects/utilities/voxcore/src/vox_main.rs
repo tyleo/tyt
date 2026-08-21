@@ -388,10 +388,12 @@ impl VoxMain {
             .enumerate()
             .map(|(node_index, &node_id)| (node_id, node_index))
             .collect();
+
         let children: Vec<&[U32Id<BVoxHierarchyNode>]> = nodes
             .iter()
             .map(|node| node.child_node_ids.as_slice())
             .collect();
+
         if let Some(node_index) = first_cycle_node_index(&children, &index_of) {
             return Err(Error::InsertedCycle { index: node_index });
         }
@@ -404,10 +406,12 @@ impl VoxMain {
                 node_id
             })
             .collect();
+
         debug_assert_eq!(
             ids, prospective_ids,
             "the id pool assigned the predicted ids"
         );
+
         Ok(ids)
     }
 
@@ -422,10 +426,12 @@ impl VoxMain {
         batch_ids: &HashSet<U32Id<BVoxHierarchyNode>>,
     ) -> Result<()> {
         let mut seen_child_node_ids = HashSet::with_capacity(node.child_node_ids.len());
+
         for &child_id in &node.child_node_ids {
             if self.hierarchy_node(child_id).is_none() && !batch_ids.contains(&child_id) {
                 return Err(Error::UnknownHierarchyNode { node_id: child_id });
             }
+
             if !seen_child_node_ids.insert(child_id) {
                 return Err(Error::InsertedDuplicateChildNode {
                     index: node_index,
@@ -433,11 +439,14 @@ impl VoxMain {
                 });
             }
         }
+
         let mut seen_child_object_ids = HashSet::with_capacity(node.child_object_ids.len());
+
         for &object_id in &node.child_object_ids {
             if self.object(object_id).is_none() {
                 return Err(Error::UnknownObject { object_id });
             }
+
             if !seen_child_object_ids.insert(object_id) {
                 return Err(Error::InsertedDuplicateChildObject {
                     index: node_index,
@@ -453,9 +462,11 @@ impl VoxMain {
         if !position.is_finite() || !scale.is_finite() {
             return Err(Error::InsertedNonFiniteTransform { index: node_index });
         }
+
         if scale.x == 0.0 || scale.y == 0.0 || scale.z == 0.0 {
             return Err(Error::InsertedZeroScale { index: node_index });
         }
+
         if !node
             .transform
             .rotation
@@ -463,6 +474,7 @@ impl VoxMain {
         {
             return Err(Error::InsertedNonUnitRotation { index: node_index });
         }
+
         Ok(())
     }
 
@@ -473,18 +485,23 @@ impl VoxMain {
         if !self.runtime_state.hierarchy_node_ids.is_retained(id) {
             return Err(Error::UnknownHierarchyNode { node_id: id });
         }
+
         let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
+
         for node_id in node_ids {
             // Safety: retained node ids have a value.
             let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
             node.child_node_ids.retain(|&child_id| child_id != id);
         }
+
         self.runtime_state
             .root_hierarchy_node_ids
             .retain(|&root_id| root_id != id);
+
         // Safety: a retained node id has a value.
         unsafe { self.runtime_state.hierarchy_nodes.release(id) };
         self.runtime_state.hierarchy_node_ids.release_stable(id);
+
         Ok(())
     }
 
@@ -533,14 +550,17 @@ impl VoxMain {
         if !self.runtime_state.object_ids.is_retained(object_id) {
             return Err(Error::UnknownObject { object_id });
         }
+
         let Some(palette_ref) = self.palette(palette_id) else {
             return Err(Error::UnknownPalette { palette_id });
         };
+
         if !palette_ref.contains_material(default_material_id) {
             return Err(Error::UnknownMaterial {
                 material_id: default_material_id,
             });
         }
+
         // Safety: the object id is retained.
         Ok(unsafe { self.runtime_state.objects.get_mut(object_id) }
             .retain_layer(palette_id, default_material_id))
@@ -557,6 +577,7 @@ impl VoxMain {
         if !self.runtime_state.object_ids.is_retained(object_id) {
             return Err(Error::UnknownObject { object_id });
         }
+
         // Safety: the object id is retained.
         unsafe { self.runtime_state.objects.get_mut(object_id) }.release_layer(layer_id)
     }
@@ -576,6 +597,7 @@ impl VoxMain {
         if !self.runtime_state.object_ids.is_retained(object_id) {
             return Err(Error::UnknownObject { object_id });
         }
+
         // Safety: the object id is retained.
         unsafe { self.runtime_state.objects.get_mut(object_id) }.move_layer(layer_id, index)
     }
@@ -594,6 +616,7 @@ impl VoxMain {
         if !self.runtime_state.palette_ids.is_retained(palette_id) {
             return Err(Error::UnknownPalette { palette_id });
         }
+
         // Safety: the palette id is retained.
         let palette_ref = unsafe { self.runtime_state.palettes.get(palette_id) };
         if value_ids.len() != palette_ref.property_count() {
@@ -602,14 +625,17 @@ impl VoxMain {
                 properties: palette_ref.property_count(),
             });
         }
+
         for ((_, property), &value_id) in palette_ref.iter_properties().zip(&value_ids) {
             let value_pool = self
                 .value_pool(property.value_pool_id)
                 .expect("a property names a live value pool");
+
             if !value_pool.contains_value(value_id) {
                 return Err(Error::UnknownValuePoolValue { value_id });
             }
         }
+
         // Safety: the palette id is retained; the arity was checked.
         unsafe { self.runtime_state.palettes.get_mut(palette_id) }.retain_material(value_ids)
     }
