@@ -25,8 +25,7 @@ pub struct VoxMain {
 }
 
 impl VoxMain {
-    /// Deep copy. The runtime scene rebuilds its columns against fresh
-    /// id pools.
+    /// Deep copy. Every id stays valid in the clone.
     pub fn clone_state(&self) -> Self {
         Self {
             runtime_state: self.runtime_state.clone_runtime_state(),

@@ -44,8 +44,7 @@ pub struct VoxRuntimeState {
 }
 
 impl VoxRuntimeState {
-    /// Deep copy, rebuilding every column against fresh id pools because the
-    /// SoA types can't derive `Clone`.
+    /// Deep copy, hand-rolled because the SoA types can't derive `Clone`.
     pub(crate) fn clone_runtime_state(&self) -> Self {
         let mut value_pools = IdField::new();
         for value_pool_id in self.value_pool_ids.iter() {
