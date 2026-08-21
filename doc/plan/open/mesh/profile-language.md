@@ -15,9 +15,9 @@ because `-` is subtraction in the [value language](value-language.md): a
 
 ## Schema
 
-This section defines the schema. Profiles are written in JSON; the block below
-describes their shape in TypeScript notation. [Loading](#loading) holds the
-checks that enforce the schema.
+Profiles are written as jsonc; the block below gives their shape in TypeScript
+notation, and the doc comments tie each element to the flag it mirrors.
+[Loading](#loading) holds the checks that enforce the schema.
 
 ```ts
 /** The `.vxlconfig` shape `vxl mesh` reads. */
@@ -146,44 +146,31 @@ interface PrimitiveEntry {
 }
 ```
 
-## Profile values
+The defaults mirror the flags', and an empty `materials` or `primitives` list
+counts as omitted; see
+[Primitives and materials](mesh.md#primitives-and-materials) for the implicit
+primitive and [UV streams](mesh.md#uv-streams) for the derived `uvs` lists.
 
-A profile's values are its `values` list, its `valuesFrom` list, and the
-`computeIndex`, `computeOcclusion`, and `computeVoxelPosition` keys. The compute
-keys count as values because an inherited expression needs a name. The mirrored
-[`vxl mesh` flags](mesh.md#options) define how bindings join the
-[program](value-language.md#programs). `valuesFrom` imports append depth-first
-in list order, ahead of the profile's own values. A profile imported twice lands
-once.
+### Example
 
-## The output surface
-
-`--profile <profile>` applies a profile whole, at most one per run. Beyond its
-values, a profile is the run's surface, the geometry options ahead of an output
-shaped like the glTF it produces. Every element expands to the flag it fires as:
+The block below shows the schema as a jsonc example: a placeholder marks where
+a profile writes its names and expressions.
 
 ```jsonc
 {
   "mesh": {
     "profiles": {
       "<name>": {
-        // the values; valuesFrom imports another profile's bindings
-        // ahead of this profile's own, appended to the program at the
-        // --profile flag's position
         "valuesFrom": ["<profile>"],
         "values": ["<name> = <expr>"],
         "computeIndex": { "<domain>": "<dst-name>" },
         "computeOcclusion": "<dst-name>",
         "computeVoxelPosition": "<dst-name>",
 
-        // the geometry options, each key the flag it is named for;
-        // omitted, a key leaves the flag's default
         "voxelSize": 1.0,
         "method": "<culled | greedy | naive>",
         "textureShape": "<fit | line | pot | square | n>",
 
-        // files written beside the mesh; a file's transfer lives
-        // here and nowhere else
         "files": {
           "png": {
             "<template>": {
@@ -192,7 +179,6 @@ shaped like the glTF it produces. Every element expands to the flag it fires as:
             },
           },
           "json": {
-            // the file's whole object, one { transfer, value } per key
             "<template>": {
               "<key>": {
                 "transfer": "<linear | srgb>",
@@ -202,26 +188,14 @@ shaped like the glTF it produces. Every element expands to the flag it fires as:
           },
         },
 
-        // one entry per material; the list's length is the material
-        // count, the --material-count mirror, an omitted or empty
-        // list count 0
         "materials": [
           {
-            "name": "<name>", // optional, the glTF material.name
-            // UV streams in TEXCOORD order, the --material-uv list;
-            // omitted, the list derives from use, each texture at
-            // its value's exact domain
+            "name": "<name>",
             "uvs": ["swatch", "face"],
             "slots": {
-              // kind value embeds or inlines an expression; kind
-              // file carries a file field referencing a written file
-              // instead
               "<property>": { "kind": "value", "value": "<expr>" },
             },
             "extras": {
-              // kinds image-file, image-value, json-file,
-              // json-value: the -file kinds carry file, the -value
-              // kinds value and transfer
               "<name>": {
                 "kind": "image-value",
                 "value": "<expr>",
@@ -231,18 +205,12 @@ shaped like the glTF it produces. Every element expands to the flag it fires as:
           },
         ],
 
-        // one entry per primitive
         "primitives": [
           {
-            "name": "<name>", // optional, rides the primitive's extras
-            // optional, "true" omitted; the selects partition the faces
+            "name": "<name>",
             "select": "<expr>",
-            // optional; omitted, the primitive carries no material
             "material": 0,
-            // optional, true omitted; false drops the NORMAL stream
             "normal": true,
-            // optional; the primitive's UV streams in its own
-            // TEXCOORD order; omitted, the material's list
             "uvs": ["swatch", "face"],
             "builtins": { "<ATTRIBUTE>": "<expr>" },
             "customs": {
@@ -254,7 +222,6 @@ shaped like the glTF it produces. Every element expands to the flag it fires as:
           },
         ],
 
-        // the mesh's own extras, the same four kinds as a material's
         "meshExtras": {
           "<name>": {
             "kind": "json-value",
@@ -268,52 +235,18 @@ shaped like the glTF it produces. Every element expands to the flag it fires as:
 }
 ```
 
-The kinds are the flag grid's tails.
+## Profile values
 
-1. A slot's `value` kind fires `--write-material-slot-value`, the `file` kind
-   `--write-material-slot-file`
-2. An extras entry's four kinds fire the four extras flags, on the material or
-   the mesh by where the entry sits
-3. A primitives entry fires `--primitive` in list order, its `material` and
-   `select` the flag's arguments, an omitted `material` firing `none` and an
-   omitted `select` `true`
-4. A primitive's `normal` fires `--write-primitive-normal`, omitted `true`
-5. A primitive's `uvs` fires `--write-primitive-uv` per entry in order, omitted
-   the material's list
-6. A primitive's `builtins` fires `--write-primitive-builtin-value` tokenless
-   like the flag, its `customs` `--write-primitive-custom-value` with their
-   transfers
-7. A material entry's `uvs` fires `--material-uv` per entry in order
-8. `files.png` and `files.json` entries fire `--write-file-png-value` and
-   `--write-file-json-value` per key
-9. Each geometry key fires the flag it is named for
+A profile's values come from its `values` list, its `valuesFrom` list, and the
+`computeIndex`, `computeOcclusion`, and `computeVoxelPosition` keys. The compute
+keys define new values. The mirrored [`vxl mesh` flags](mesh.md#options) define
+how bindings join the [program](value-language.md#programs). `valuesFrom`
+imports append depth-first in list order, ahead of the profile's own values. A
+profile imported twice lands once.
 
-The defaults mirror the flags': an omitted geometry key takes its flag's
-default, an omitted or empty `materials` carries no materials, an omitted or
-empty `primitives` the implicit primitive holding every face, and an omitted
-`uvs` derives from use the way the bare line does; see
-[Primitives and materials](mesh.md#primitives-and-materials) and
-[UV streams](mesh.md#uv-streams).
+## Expansion
 
-Three rules keep a profile honest. A `file` field names a file the profile's own
-`files` writes: a slot or extras reference always has bytes behind it, and a
-foreign file stays a hand-written flag. A transfer lives on the file entry
-alone, referencers carrying none, so nothing can fight it. A referenced png
-still cross-checks its transfer against each slot's fixed encoding, the
-`--write-material-slot-file` rule spelled in config; no built-in writes a file,
-so none can trip the check. The destination dicts make a double claim unwritable
-where a key is the destination, the one remaining cross-dict collision erroring
-at load: one template under both `png` and `json`.
-
-An explicit flag beats the profile: a hand-written flag replaces the element
-claiming its destination, wherever it sits on the line. Two hand-written flags
-colliding stays the error it always was, and a hand flag naming a material or
-primitive index the run never declared still errors rather than growing the
-count. A material's `uvs` list is one element, so any `--material-uv` naming the
-material replaces all of it, and a geometry flag replaces its key the same way:
-`--method culled` beside a profile spelling `greedy` meshes culled.
-
-So with the output `turret.glb`, `--profile orm` expands to
+With the output `turret.glb`, `--profile orm` expands to
 
 ```sh
 --value "occlusionStrength = default(occlusionStrength, 1)"   # defaults mixin
@@ -342,6 +275,14 @@ hyphenated profile keeps its hyphens: a `metallic-smoothness` profile writes
 `turret-metallic-smoothness.png` even though the value it bakes is
 `metallicSmoothness`.
 
+An explicit flag beats the profile: a hand-written flag replaces the element
+claiming its destination, wherever it sits on the line. Two hand-written flags
+colliding stays the error it always was, and a hand flag naming a material or
+primitive index the run never declared still errors rather than growing the
+count. A material's `uvs` list is one element, so any `--material-uv` naming the
+material replaces all of it, and a geometry flag replaces its key the same way:
+`--method culled` beside a profile spelling `greedy` meshes culled.
+
 ## Loading
 
 User-defined profiles live in `.vxlconfig` files, one in the home directory and
@@ -357,6 +298,16 @@ property: a layer that redefines a profile redefines all of it, and an override
 never inherits stray elements from the layer below. The layers merge into one
 namespace before `valuesFrom` resolves, so a repo that overrides `defaults`
 changes every profile built on it, including one from the home config.
+
+Three rules keep a profile honest. A `file` field names a file the profile's own
+`files` writes: a slot or extras reference always has bytes behind it, and a
+foreign file stays a hand-written flag. A transfer lives on the file entry
+alone, referencers carrying none, so nothing can fight it. A referenced png
+still cross-checks its transfer against each slot's fixed encoding, the
+`--write-material-slot-file` rule spelled in config; no built-in writes a file,
+so none can trip the check. The destination dicts make a double claim unwritable
+where a key is the destination, the one remaining cross-dict collision erroring
+at load: one template under both `png` and `json`.
 
 Loading checks every profile in the merged namespace, so a broken config fails
 the first run after the edit rather than the run that first names the profile.
@@ -443,8 +394,8 @@ its textures, so a slot fixes each encoding and no entry carries a transfer:
     ],
   },
 
-  // Output surfaces do not compose, so pbr is no bundle: it imports
-  // the three profiles' values and writes the whole material itself.
+  // Writers never travel with valuesFrom, so pbr is no bundle: it
+  // imports the three profiles' values and writes the whole material itself.
   "pbr": {
     "valuesFrom": ["albedo", "orm", "emissive"],
     "materials": [
