@@ -405,12 +405,11 @@ impl VoxObject {
             return None;
         }
 
-        let plane = self.bounds.y as u64 * self.bounds.z as u64;
-        let raster = (position.x as u64)
-            .saturating_mul(plane)
-            .saturating_add(position.y as u64 * self.bounds.z as u64)
-            .saturating_add(position.z as u64);
-        (raster <= u32::MAX as u64).then(|| U32Id::from_u32(raster as u32))
+        // The volume cap in `new` keeps the arithmetic below within u32.
+        let plane = self.bounds.y * self.bounds.z;
+        Some(U32Id::from_u32(
+            position.x * plane + position.y * self.bounds.z + position.z,
+        ))
     }
 
     /// Material the live voxel `id` samples in `layer_id`, or `None` if the
@@ -432,17 +431,18 @@ impl VoxObject {
     /// Grid position of `id`, or `None` if outside the grid. Inverse of
     /// [`voxel_id`](Self::voxel_id).
     pub fn voxel_position(&self, id: U32Id<BVoxVoxel>) -> Option<TyVector3U32> {
-        let raster = id.to_u32() as u64;
-        if raster >= Self::volume_of(self.bounds) {
+        let raster = id.to_u32();
+        if (raster as u64) >= Self::volume_of(self.bounds) {
             return None;
         }
 
-        // A non-zero volume guarantees both extents below are non-zero.
-        let plane = self.bounds.y as u64 * self.bounds.z as u64;
+        // The volume cap in `new` keeps `plane` within u32. A non-zero volume
+        // guarantees both divisors below are non-zero.
+        let plane = self.bounds.y * self.bounds.z;
         Some(TyVector3U32::new(
-            (raster / plane) as u32,
-            ((raster % plane) / self.bounds.z as u64) as u32,
-            (raster % self.bounds.z as u64) as u32,
+            raster / plane,
+            (raster % plane) / self.bounds.z,
+            raster % self.bounds.z,
         ))
     }
 }
