@@ -244,45 +244,6 @@ how bindings join the [program](value-language.md#programs). `valuesFrom`
 imports append depth-first in list order, ahead of the profile's own values. A
 profile imported twice lands once.
 
-## Expansion
-
-With the output `turret.glb`, `--profile orm` expands to
-
-```sh
---value "occlusionStrength = default(occlusionStrength, 1)"   # defaults mixin
---value "roughnessFactor = default(roughnessFactor, 1)"
---value "metallicFactor = default(metallicFactor, 1)"
---value "orm = rgb(occlusionStrength, roughnessFactor, metallicFactor)"
---material-count 1
---write-material-slot-value 0 occlusionTexture orm          # slots: kind value
---write-material-slot-value 0 metallicRoughnessTexture orm
-```
-
-with the unused defaults elided. The
-[`orm-files` variant](#user-defined-profiles) moves the image to a written file
-the slots reference:
-
-```sh
-# the values as above
---write-file-png-value turret-orm.png orm linear              # files.png
---write-material-slot-file 0 occlusionTexture turret-orm.png  # slots: kind file
---write-material-slot-file 0 metallicRoughnessTexture turret-orm.png
-```
-
-Files take their names from `{file-stem}` templates, `--file-stem` replacing the
-default, the output mesh's stem. A template spells its file name literally, so a
-hyphenated profile keeps its hyphens: a `metallic-smoothness` profile writes
-`turret-metallic-smoothness.png` even though the value it bakes is
-`metallicSmoothness`.
-
-An explicit flag beats the profile: a hand-written flag replaces the element
-claiming its destination, wherever it sits on the line. Two hand-written flags
-colliding stays the error it always was, and a hand flag naming a material or
-primitive index the run never declared still errors rather than growing the
-count. A material's `uvs` list is one element, so any `--material-uv` naming the
-material replaces all of it, and a geometry flag replaces its key the same way:
-`--method culled` beside a profile spelling `greedy` meshes culled.
-
 ## Loading
 
 User-defined profiles live in `.vxlconfig` files, one in the home directory and
@@ -636,3 +597,42 @@ With the output `turret.glb`, `--profile glow-split` expands to
 ```
 
 with the defaults elided.
+
+## Expansion
+
+With the output `turret.glb`, `--profile orm` expands to
+
+```sh
+--value "occlusionStrength = default(occlusionStrength, 1)"   # defaults mixin
+--value "roughnessFactor = default(roughnessFactor, 1)"
+--value "metallicFactor = default(metallicFactor, 1)"
+--value "orm = rgb(occlusionStrength, roughnessFactor, metallicFactor)"
+--material-count 1
+--write-material-slot-value 0 occlusionTexture orm          # slots: kind value
+--write-material-slot-value 0 metallicRoughnessTexture orm
+```
+
+with the unused defaults elided. The
+[`orm-files` variant](#user-defined-profiles) moves the image to a written file
+the slots reference:
+
+```sh
+# the values as above
+--write-file-png-value turret-orm.png orm linear              # files.png
+--write-material-slot-file 0 occlusionTexture turret-orm.png  # slots: kind file
+--write-material-slot-file 0 metallicRoughnessTexture turret-orm.png
+```
+
+Files take their names from `{file-stem}` templates, `--file-stem` replacing the
+default, the output mesh's stem. A template spells its file name literally, so a
+hyphenated profile keeps its hyphens: a `metallic-smoothness` profile writes
+`turret-metallic-smoothness.png` even though the value it bakes is
+`metallicSmoothness`.
+
+An explicit flag beats the profile: a hand-written flag replaces the element
+claiming its destination, wherever it sits on the line. Two hand-written flags
+colliding stays the error it always was, and a hand flag naming a material or
+primitive index the run never declared still errors rather than growing the
+count. A material's `uvs` list is one element, so any `--material-uv` naming the
+material replaces all of it, and a geometry flag replaces its key the same way:
+`--method culled` beside a profile spelling `greedy` meshes culled.
