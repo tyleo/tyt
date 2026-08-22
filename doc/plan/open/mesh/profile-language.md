@@ -390,7 +390,8 @@ schema, and may build on the built-ins. Seven examples follow:
     "profiles": {
       // emissiveStrength is unbounded, so the mask normalizes by the
       // palette's strongest strength and the raw intensity rides the
-      // material slot.
+      // material slot. No slot samples the mask, so the material names
+      // the swatch stream for the engine that does.
       "mse": {
         "valuesFrom": ["defaults"],
         "values": [
@@ -405,6 +406,7 @@ schema, and may build on the built-ins. Seven examples follow:
         },
         "materials": [
           {
+            "uvs": ["swatch"],
             "slots": {
               "emissiveStrength": { "kind": "value", "value": "maxStrength" },
             },
