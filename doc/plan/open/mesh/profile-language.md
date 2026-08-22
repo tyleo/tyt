@@ -246,54 +246,36 @@ profile imported twice lands once.
 
 ## Loading
 
-User-defined profiles live in `.vxlconfig` files, one in the home directory and
-one at the git root, read as jsonc: comments are stripped ahead of the JSON
-parse, and a trailing comma stays the error strict JSON makes it. The crate work
-behind the loading lives in the
-[implementation notes](implementation.md#ty-preferences).
-
 The profiles resolve as a three-layer stack: the built-ins, then `~/.vxlconfig`,
 then `<git-root>/.vxlconfig`. Each profile name is read from the last layer that
-supplies it, wholesale, the rule the effective palette already follows per
-property: a layer that redefines a profile redefines all of it, and an override
-never inherits stray elements from the layer below. The layers merge into one
-namespace before `valuesFrom` resolves, so a repo that overrides `defaults`
-changes every profile built on it, including one from the home config.
+supplies it, wholesale. The layers merge into one namespace before `valuesFrom`
+resolves, so a repo that overrides `defaults` changes every profile built on it,
+including one from the home config.
 
-Three rules keep a profile honest. A `file` field names a file the profile's own
-`files` writes: a slot or extras reference always has bytes behind it, and a
-foreign file stays a hand-written flag. A transfer lives on the file entry
-alone, referencers carrying none, so nothing can fight it. A referenced png
-still cross-checks its transfer against each slot's fixed encoding, the
-`--write-material-slot-file` rule spelled in config; no built-in writes a file,
-so none can trip the check. The destination dicts make a double claim unwritable
-where a key is the destination, the one remaining cross-dict collision erroring
-at load: one template under both `png` and `json`.
+The checks split by when they run:
 
-Loading checks every profile in the merged namespace, so a broken config fails
-the first run after the edit rather than the run that first names the profile.
-Load-time checks are the ones that need no run context:
-
-1. the schema's shape, an unknown key erroring rather than skipping
-2. every expression and every `values` fragment parsing
-3. every `valuesFrom` name resolving without a cycle
-4. every `material` inside its profile's material count
-5. every `file` reference naming a written file
-6. every `uvs` entry `corner`, `face`, `swatch`, or `voxel` named once
-7. no element claiming one destination twice
-
-The rest wait for the run that decides them: dimensions and shapes need the
-effective palette, slot names and their encodings need the resolved output
-format, and name bindings need the command line.
+1. every `.vxlconfig` load
+   1. the file parsing
+2. the first profile load
+   1. the schema's shape, an unknown key erroring rather than skipping
+3. each loaded profile
+   1. its `values` fragments parsing
+   2. its `valuesFrom` names resolving without a cycle
+4. the profile applied whole
+   1. its remaining expressions parsing
+   2. every `material` inside the material count
+   3. every `uvs` entry `corner`, `face`, `swatch`, or `voxel` named once
+   4. no element claiming one destination twice
+5. the run
+   1. dimensions and shapes against the effective palette
+   2. slot names and their encodings against the resolved output format
+   3. name bindings against the command line
 
 ## Built-in profiles
 
 The built-ins are the bottom layer of the [stack](#loading). The binary embeds
-this section's map as data and parses it at startup with the config
-deserializer: the built-ins take the same schema by construction and every run
-exercises the parse path. Every profile with materials omits `primitives`,
-taking the implicit primitive that holds every face on material `0`, and embeds
-its textures, so a slot fixes each encoding and no entry carries a transfer:
+this section's map as data and parses it with the config deserializer when a
+profile loads: the built-ins take the same schema by construction:
 
 ```jsonc
 {
@@ -380,20 +362,10 @@ never fails on a missing property: a property no layer supplies, or a material
 that leaves it unset, takes the spec default the mixin names. A hand-written
 `--value` gets no such guarantee because nothing auto-defaults.
 
-`emissiveStrength` has a minimum of 0 and no maximum, so the `emissive` profile
-and the `mse` example both normalize by the palette's strongest strength and
-send that strength to the `emissiveStrength` slot. Packing it raw would put an
-unbounded value in an 8-bit channel, which errors on the first material above 1
-rather than clamping. Normalizing is also the convention the packed maps target,
-a `[0, 1]` mask in the image and the intensity on the material. The two agree on
-this deliberately, and merging them is harmless because each binds the slot to
-the same `maxStrength`.
-
-The emissive trio is the whole profile. The image carries each material's color
-scaled into `[0, 1]` of the palette's strongest strength, and the strength slot
-carries that strength back, so absolute brightness survives a `[0, 1]` image.
-The white `emissiveFactor` leaves the image untinted where glTF would otherwise
-multiply it by black.
+`emissive` scales each material's color into `[0, 1]` of the palette's
+strongest strength and sends that strength to the `emissiveStrength` slot, so
+absolute brightness survives the 8-bit image. Packing the unbounded strength raw
+would error on the first material above 1.
 
 ## User-defined profiles
 
