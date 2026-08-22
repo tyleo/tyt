@@ -444,8 +444,8 @@ schema, and may build on the built-ins. Seven examples follow:
       "heat": {
         "valuesFrom": ["defaults"],
         "values": [
-          ["heat", "step(0.001, emissiveStrength)"],
-          ["accent", "avg(baseColorFactor.rgb)"],
+          "heat = step(0.001, emissiveStrength)",
+          "accent = avg(baseColorFactor.rgb)",
         ],
         "files": {
           "png": {
