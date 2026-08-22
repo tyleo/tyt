@@ -629,10 +629,12 @@ plain data the runtime can replace at will:
 ```jsonc
 // vxl mesh turret.voxj
 //   --profile pbr
+//   --value "rawEmissive = emissiveFactor * emissiveStrength"
 //   --write-mesh-extra-json-value albedo albedo linear
-//   --write-mesh-extra-json-value emissive emissive linear
+//   --write-mesh-extra-json-value emissive rawEmissive linear
 //   --compute-index swatch swatchIndex
 //   --write-primitive-custom-value 0 _PALETTE "u8(swatchIndex)" linear
+// the rows hold any number, so rawEmissive skips pbr's normalized emissive
 {
   "asset": { "version": "2.0" },
   "extensionsUsed": ["KHR_materials_emissive_strength"],
