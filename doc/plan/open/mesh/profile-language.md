@@ -245,16 +245,17 @@ A profile's values come from its `values` list, its `valuesFrom` list, and the
 keys define new values and bind ahead of the `values` list. The mirrored
 [`vxl mesh` flags](mesh.md#options) define how bindings join the
 [program](value-language.md#programs). `valuesFrom` imports append depth-first
-in list order, ahead of the profile's own values. A profile imported twice lands
-once.
+in list order, ahead of the profile's own values. A profile lands in the
+program once, at its first arrival, however many flags or imports name it.
 
 ## Loading
 
-The profiles resolve as a three-layer stack: the built-ins, then `~/.vxlconfig`,
-then `<git-root>/.vxlconfig`. Each profile name is read from the last layer that
-supplies it, wholesale. The layers merge into one namespace before `valuesFrom`
-resolves, so a repo that overrides `defaults` changes every profile built on it,
-including one from the home config.
+The profiles resolve as a stack: the built-ins, then each `.vxlconfig` in the
+cascade the [implementation notes](implementation.md#ty-preferences) lay out.
+Each profile name is read from the last layer that supplies it, wholesale. The
+layers merge into one namespace before `valuesFrom` resolves, so a config that
+overrides `defaults` changes every profile built on it, including one from an
+outer layer.
 
 The checks split by when they run:
 

@@ -200,14 +200,14 @@ vxl mesh lamp.voxj
   --profile pbr
 ```
 
-or expanded into its flags, the material count deriving from the mentions of
-material 0:
+or expanded into its flags:
 
 ```sh
 vxl mesh lamp.voxj
   --values-from albedo
   --values-from orm
   --values-from emissive
+  --material-count 1
   --write-material-slot-value 0 baseColorTexture albedo
   --write-material-slot-value 0 occlusionTexture orm
   --write-material-slot-value 0 metallicRoughnessTexture orm

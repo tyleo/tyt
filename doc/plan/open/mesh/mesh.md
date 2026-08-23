@@ -183,8 +183,9 @@ multi-object document needs a selector. See
 
     Applies a profile. The profile expands to its flags, the `valuesFrom` values
     applying first. Wherever the flag sits on the line, the profile's values
-    join the program after every `--value` and `--values-from` binding. An
-    explicit flag replaces the element it collides with; see the
+    join the program ahead of every `--value` and `--values-from` binding, so a
+    hand binding can read or redefine a profile value. An explicit flag
+    replaces the element it collides with; see the
     [profile language](profile-language.md).
 
 16. `--value <bindings>`
@@ -312,7 +313,7 @@ multi-object document needs a selector. See
 
     Writes a value's numbers into a mesh `extras.vxl.values.<dst-name>` entry. A
     plain value writes as its numbers. An array writes as rows, one row per
-    swatch; see [Palettes](#palettes).
+    entry in the domain's order; see [Palettes](#palettes).
 
 32. `--write-primitive-builtin-value <primitive-index> <dst-attribute> <src-expr>`
     - Repeatable: yes
@@ -534,7 +535,10 @@ face's corner order. The face's UVs sit at the four texel centers, so bilinear
 interpolation stays inside the block and reproduces the per-corner gradient.
 Because the linear sampling skips mipmaps, minification stays inside the block
 too, and the atlas needs no gutter padding. A merged greedy face still carries
-one block, and when corner occlusion disagrees inside it, the face splits; see
+one block holding its four outer corners, and the bilinear blend reconstructs
+every corner position the merge covers. The face splits where a corner it
+covers differs from the bilinear blend of the four outer corners. A gradient
+the blend reproduces keeps the merge; see
 [computed occlusion](value-language.md#computed-occlusion).
 
 The layout serves corner values written whole, such as computed occlusion:

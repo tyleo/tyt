@@ -22,9 +22,10 @@ let value = eval(&tree, &env)?; // env: name -> Option<Value>, plain or array
 ```
 
 vxl assembles the program: a `;` appended to every `--value` and
-profile values fragment, the fragments joined in flag order, each
-origin kept, so a parse error names the flag or the profile entry
-rather than a position in the joined text.
+profile values fragment, the fragments joined in flag order with a
+`--profile`'s values first, each origin kept, so a parse error names
+the flag or the profile entry rather than a position in the joined
+text.
 
 To the crate an array is a length, so the palette is vxl's
 interpretation: vxl binds the effective palette into the environment in
@@ -59,6 +60,12 @@ spells. And its reads strip comments with json_comments ahead of
 serde_json, so every config it loads is jsonc, `.tytconfig` included;
 json_comments handles comments alone, which is why a trailing comma
 stays an error.
+
+The `.vxlconfig` files form a cascade: the home `~/.vxlconfig`,
+then the repository's `<git-root>/.vxlconfig`, then the working
+directory's `.vxlconfig`. Outside a git repository the repository
+layer is absent. [Loading](profile-language.md#loading) sets how
+profiles read through the layers.
 
 ## Retired flags
 

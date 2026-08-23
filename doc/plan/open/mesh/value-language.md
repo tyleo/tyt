@@ -27,8 +27,8 @@ redefined let-style; see the [notes](#notes).
 
 No one writes a program whole. Each `--value` and each profile `values` entry is
 a fragment holding one or more bindings, with the trailing `;` optional. The run
-appends a `;` to every fragment, joins the fragments in flag order with profile
-values expanding at their flag's position, and parses the result once. The empty
+appends a `;` to every fragment, joins the fragments in flag order with a
+`--profile`'s values landing first, and parses the result once. The empty
 statement makes the appended `;` harmless after a fragment that already ends in
 one. An all-whitespace fragment errors at its flag, and a parse error names its
 fragment's origin, the flag or the profile entry.
@@ -364,15 +364,17 @@ Five rules cover it:
    images resolving to one file name
 5. The output is always an object, so one value and five produce the same shape
 
-The values come out one number per component, nested in an array per swatch when
-the value is one. A vec1 writes `0.4`, a vec4 writes `[1, 0, 0, 1]`, and either
-over the palette writes an array of those. The token names the transfer the
-numbers take: `linear` writes them as evaluated, and `srgb` transfer-encodes
-them under the image rules, so an alpha component stays linear and a component
-outside `[0, 1]` errors. Both write full floats: an `srgb` JSON holds
-display-encoded floats where an `srgb` PNG holds display-encoded bytes. The
-token rides each flag, so one file can mix encodings, each key taking its
-declared transfer, and nothing about the destination appears in an expression.
+The values come out one number per component, an array value nesting them in
+rows. A vec1 writes `0.4`, a vec4 writes `[1, 0, 0, 1]`, and either over the
+palette writes an array of those. An array of any [domain](#domains) lands, one
+row per entry in the order a [computed index](#computed-index) numbers. The
+token names the transfer the numbers take: `linear` writes them as evaluated,
+and `srgb` transfer-encodes them under the image rules, so an alpha component
+stays linear and a component outside `[0, 1]` errors. Both write full floats:
+an `srgb` JSON holds display-encoded floats where an `srgb` PNG holds
+display-encoded bytes. The token rides each flag, so one file can mix
+encodings, each key taking its declared transfer, and nothing about the
+destination appears in an expression.
 
 A bool writes as itself, `true` or `false`, an array of them per entry. Its
 token is `linear`, the identity; `srgb` on a bool errors because a transfer
@@ -492,7 +494,8 @@ the `vxl.values` namespace the mesh extras share.
 
 1. `--write-material-extra-json-value <material-index> <dst-name> <src-expr> <linear | srgb>`
    puts the value's numbers in the entry itself, a plain vec1 as one number, a
-   vecN as an array of N, and an array value as rows, one per swatch
+   vecN as an array of N, and an array value as rows, one per entry in its
+   domain's order
 2. `--write-material-extra-image-value <material-index> <dst-name> <src-expr> <linear | srgb>`
    embeds an array as an image, the entry holding its texture index; a plain
    value errors because an image needs texels
@@ -543,12 +546,14 @@ alike, and a format without `extras` rejects the whole grid.
 ## Vertex attributes
 
 `--write-primitive-builtin-value <primitive-index> <dst-attribute> <src-expr>`
-writes a value to an attribute glTF defines on the indexed primitive: `COLOR_0`,
-the vertex color. The defined vocabulary fixes each attribute's encoding the way
-the material schema fixes its slots', so the flag carries no token, and an
-unknown or underscore name errors; the custom flag is the underscore's home.
-Dimension picks the accessor type, vec1 through vec4 writing SCALAR, VEC2, VEC3,
-and VEC4 floats.
+writes a value to an attribute glTF defines on the indexed primitive. The
+vocabulary holds one attribute, `COLOR_0`, the vertex color: the mesher owns
+`POSITION` and `NORMAL`, and the [UV streams](mesh.md#uv-streams) own
+`TEXCOORD_n`. The defined vocabulary fixes each attribute's encoding the way
+the material schema fixes its slots', so the flag carries no token. A name
+outside the vocabulary errors; the custom flag is the underscore's home.
+`COLOR_0` takes a vec3 or vec4, writing VEC3 or VEC4 floats, because glTF
+forbids a narrower vertex color.
 
 `--write-primitive-custom-value <primitive-index> <dst-name> <src-expr> <linear | srgb>`
 is the custom twin. glTF requires the underscore prefix on application-specific
@@ -619,7 +624,8 @@ corner atlases exist.
 The request is explicit because it can change the geometry: written
 corner-exact, through a vertex attribute or a
 [corner texture](mesh.md#the-corner-atlas), the value makes greedy merging split
-a quad where its corner occlusion disagrees.
+a quad where a covered corner differs from the bilinear blend of the quad's
+four outer corners.
 
 The value mixes like any other, so tuning takes one expression each rather than
 a flag family:
@@ -648,7 +654,9 @@ extension beyond the discrete corner method.
 `--compute-voxel-position <dst-name>` binds each voxel's grid coordinates, a
 [voxel](#domains) [`u32`](#numbers) vec3 read straight off the geometry: every
 palette property is per swatch and occlusion lives at the corners, so this is
-the first value that varies per voxel.
+the first value that varies per voxel. The coordinates originate at the minimum
+corner of the object's solid bounds, every axis starting at zero; a model
+placed anywhere in the scene reads the same values.
 
 The request is explicit because it can change the geometry. Read at the faces or
 above, through a select, a vertex attribute, or a face or corner texture, a
@@ -662,7 +670,7 @@ each:
 ```sh
 --compute-voxel-position voxelPosition
 # height runs 0 to 1 up the object; bands alternates layers
---value "height = f32(voxelPosition.y) / f32(max(voxelPosition.y))"
+--value "height = f32(voxelPosition.y) / f32(max(max(voxelPosition.y), 1))"
 --value "bands = mod(voxelPosition.y, 2)"
 ```
 
