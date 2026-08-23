@@ -113,10 +113,10 @@ multi-object document needs a selector. See
    For example, `faceAvg` turns the `corner` value into a `face` value.
 
    Without the flag the list derives automatically. Every texture of the
-   material puts its value's domain on the list. The duplicates collapse, and
-   the survivors sort up the ladder: `swatch`, then `voxel`, then `face`, then
-   `corner`. Every texture finds its exact domain on the list, so nothing
-   climbs.
+   material, extras images included, puts its value's domain on the list. The
+   duplicates collapse, and the survivors sort up the ladder: `swatch`, then
+   `voxel`, then `face`, then `corner`. Each texture then bakes at its value's
+   domain; only a hand-written list makes a bake climb.
 
    A primitive writes the list of the material it draws with, and a primitive
    with no material writes no streams. `--write-primitive-uv` replaces that
@@ -181,8 +181,10 @@ multi-object document needs a selector. See
     - Repeatable: no
 
     Applies a profile. The profile expands to its flags, the `valuesFrom` values
-    applying first. An explicit flag replaces the element it collides with; see
-    the [profile language](profile-language.md).
+    applying first. Wherever the flag sits on the line, the profile's values
+    join the program after every `--value` and `--values-from` binding. An
+    explicit flag replaces the element it collides with; see the
+    [profile language](profile-language.md).
 
 16. `--value <bindings>`
     - Repeatable: yes
@@ -226,11 +228,15 @@ multi-object document needs a selector. See
     - Repeatable: yes
 
     Writes a [swatch, voxel, face, or corner](value-language.md#domains) array
-    to an 8-bit PNG beside the mesh, one texel per entry. A corner array takes
-    the [corner atlas](#the-corner-atlas)'s block layout. The value's width sets
-    the channel format: vec1 writes grey; vec2, grey-alpha; vec3, RGB; vec4,
-    RGBA. A component outside `[0, 1]` errors. The file declares its transfer in
-    its chunks; see the [notes](value-language.md#notes).
+    to an 8-bit PNG beside the mesh, one texel per entry. A file no material
+    references bakes at the value's domain. An image reference from a material
+    bakes the file at the domain the reference resolves through the material's
+    list. References resolving two domains claim the file twice and error. A
+    corner bake takes the [corner atlas](#the-corner-atlas)'s block layout. The
+    value's width sets the channel format: vec1 writes grey; vec2, grey-alpha;
+    vec3, RGB; vec4, RGBA. A component outside `[0, 1]` errors. The file
+    declares its transfer in its chunks; see the
+    [notes](value-language.md#notes).
     1. `linear`: applies no transfer.
     2. `srgb`: applies the sRGB transfer, for an image a viewer reads as color.
 
@@ -268,8 +274,7 @@ multi-object document needs a selector. See
     - Repeatable: yes
 
     Sets the texture property `<dst-property>` of the indexed material to
-    reference `<src-file>` by relative path. The file can come from
-    `--write-file-png-value` or from anywhere else; see
+    reference `<src-file>` by relative path; see
     [Material slots](value-language.md#material-slots).
 
 27. `--write-material-slot-value <material-index> <dst-property> <src-expr>`
@@ -354,7 +359,10 @@ multi-object document needs a selector. See
     [UV streams](#uv-streams).
 
 In every writer, `<src-expr>` holds any expression of the
-[value language](value-language.md), and `<src-file>` names an existing file.
+[value language](value-language.md). A json `<src-file>` names any existing
+file. An image `<src-file>` names a file the run writes with
+`--write-file-png-value`; any other path errors. The reference changes where
+the image lives and nothing else.
 
 ## Primitives and materials
 
@@ -449,10 +457,12 @@ vxl mesh statue.vox
 Each [domain](value-language.md#domains) arranges texels into its own texture
 atlas: swatch values land in the palette atlas; voxel values, the voxel atlas;
 face values, the unwrap atlas; corner values, the corner atlas. Every atlas sits
-on the `--texture-shape` canvas and puts each face's UVs at texel centers. The
-palette, voxel, and unwrap atlases sample nearest with clamped wrapping, so a
-face reads exactly its texels. The corner atlas samples linear: its blocks are
-the one layout where blending stays inside a face.
+on the `--texture-shape` canvas and puts each face's UVs at texel centers. A
+merged face sits at one cell per atlas and holds one entry per value, so greedy
+merges only faces that agree on every stream's cell and every value landing
+above its domain. The palette, voxel, and unwrap atlases sample nearest with
+clamped wrapping, so a face reads exactly its texels. The corner atlas samples
+linear: its blocks are the one layout where blending stays inside a face.
 
 ### The palette atlas
 
@@ -480,10 +490,10 @@ materials the object uses.
 Nothing auto-defaults. A profile supplies the glTF spec defaults through the
 `defaults` mixin, and a hand-written `--value` reads `default()` for a property
 no layer supplies; see the
-[profile language](profile-language.md#built-in-profiles). Once maps bake,
-greedy meshing merges only faces that share a flattened material because a
-merged quad samples one texel. A run that bakes no maps drops that limit, and
-greedy merges coplanar faces across materials.
+[profile language](profile-language.md#built-in-profiles). A swatch stream
+limits greedy meshing to faces that share a flattened material because a merged
+quad samples one texel. A swatch value baked above its domain limits merging
+the same way. A run carrying neither merges coplanar faces across materials.
 
 ### The voxel atlas
 
@@ -723,7 +733,7 @@ JSON file beside the mesh:
 ```
 
 A mesh entry never collides with a material slot.
-`--write-material-slot-file 0 baseColorTexture skin.png` fills the material
+`--write-material-slot-value 0 baseColorTexture albedo` fills the material
 while `--write-mesh-extra-json-value baseColor baseColorFactor linear` writes
 the rows: two destinations serving two readers. A stock viewer renders the slots
 and never reads the extras. A runtime that reads the extras draws its own

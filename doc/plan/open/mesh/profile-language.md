@@ -32,6 +32,9 @@ interface VxlConfig {
 /** A fragment of the value program, one or more `name = expr` bindings. */
 type Bindings = string;
 
+/** One bound name, or a list binding several. */
+type BoundNames = string | string[];
+
 /** An expression of the value language. */
 type Expr = string;
 
@@ -46,19 +49,19 @@ interface Profile {
   /** Mirrors `--values-from` per entry; writers never travel. */
   valuesFrom?: string[];
 
-  /** Mirrors `--compute-index`, each domain key holding its bound name. */
+  /** Mirrors `--compute-index`, each domain key holding its bound names. */
   computeIndex?: {
-    corner?: string;
-    face?: string;
-    swatch?: string;
-    voxel?: string;
+    corner?: BoundNames;
+    face?: BoundNames;
+    swatch?: BoundNames;
+    voxel?: BoundNames;
   };
 
-  /** Mirrors `--compute-occlusion`, the value the bound name. */
-  computeOcclusion?: string;
+  /** Mirrors `--compute-occlusion` per bound name. */
+  computeOcclusion?: BoundNames;
 
-  /** Mirrors `--compute-voxel-position`, the value the bound name. */
-  computeVoxelPosition?: string;
+  /** Mirrors `--compute-voxel-position` per bound name. */
+  computeVoxelPosition?: BoundNames;
 
   /** Mirrors `--value` per entry. */
   values?: Bindings[];
@@ -239,10 +242,11 @@ a profile writes its names and expressions.
 
 A profile's values come from its `values` list, its `valuesFrom` list, and the
 `computeIndex`, `computeOcclusion`, and `computeVoxelPosition` keys. The compute
-keys define new values. The mirrored [`vxl mesh` flags](mesh.md#options) define
-how bindings join the [program](value-language.md#programs). `valuesFrom`
-imports append depth-first in list order, ahead of the profile's own values. A
-profile imported twice lands once.
+keys define new values and bind ahead of the `values` list. The mirrored
+[`vxl mesh` flags](mesh.md#options) define how bindings join the
+[program](value-language.md#programs). `valuesFrom` imports append depth-first
+in list order, ahead of the profile's own values. A profile imported twice lands
+once.
 
 ## Loading
 
@@ -270,6 +274,7 @@ The checks split by when they run:
    1. dimensions and shapes against the effective palette
    2. slot names and their encodings against the resolved output format
    3. name bindings against the command line
+   4. image file references against the pngs the run writes
 
 ## Built-in profiles
 
