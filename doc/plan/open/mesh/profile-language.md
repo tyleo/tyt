@@ -288,12 +288,12 @@ profile loads: the built-ins take the same schema by construction:
   // entry shadows its property with a defaulted copy.
   "defaults": {
     "values": [
-      "baseColorFactor = default(baseColorFactor, rgba(1, 1, 1, 1))",
-      "occlusionStrength = default(occlusionStrength, 1)",
-      "roughnessFactor = default(roughnessFactor, 1)",
-      "metallicFactor = default(metallicFactor, 1)",
-      "emissiveFactor = default(emissiveFactor, rgb(0, 0, 0))",
-      "emissiveStrength = default(emissiveStrength, 1)",
+      "baseColorFactor = swatch(default(baseColorFactor, rgba(1, 1, 1, 1)))",
+      "occlusionStrength = swatch(default(occlusionStrength, 1))",
+      "roughnessFactor = swatch(default(roughnessFactor, 1))",
+      "metallicFactor = swatch(default(metallicFactor, 1))",
+      "emissiveFactor = swatch(default(emissiveFactor, rgb(0, 0, 0)))",
+      "emissiveStrength = swatch(default(emissiveStrength, 1))",
     ],
   },
 
@@ -362,10 +362,13 @@ profile loads: the built-ins take the same schema by construction:
 }
 ```
 
-Every profile spells its own defaults through the `defaults` mixin, so a profile
+Every profile writes its defaults through the `defaults` mixin, so a profile
 never fails on a missing property: a property no layer supplies, or a material
-that leaves it unset, takes the spec default the mixin names. A hand-written
-`--value` gets no such guarantee because nothing auto-defaults.
+that leaves it unset, takes the spec default the mixin names. The `swatch` climb
+pins each defaulted copy to a swatch array because a missing property would
+otherwise take the fallback's plain shape, which no reduction or texture
+accepts. A hand-written `--value` gets no such guarantee because nothing
+auto-defaults.
 
 `emissive` scales each material's color into `[0, 1]` of the palette's
 strongest strength and sends that strength to the `emissiveStrength` slot, so
@@ -526,6 +529,7 @@ schema, and may build on the built-ins. Seven examples follow:
           "glowing = emissiveStrength > 0",
           "solid = !glowing",
           "albedo = baseColorFactor",
+          "opaqueWhite = rgba(1, 1, 1, 1)",
         ],
         "materials": [
           {
@@ -537,8 +541,9 @@ schema, and may build on the built-ins. Seven examples follow:
           {
             "name": "glow",
             "slots": {
-              "baseColorFactor": { "kind": "value", "value": "white" },
+              "baseColorFactor": { "kind": "value", "value": "opaqueWhite" },
               "emissiveTexture": { "kind": "value", "value": "emissive" },
+              "emissiveFactor": { "kind": "value", "value": "white" },
               "emissiveStrength": { "kind": "value", "value": "maxStrength" },
             },
           },
@@ -562,6 +567,7 @@ With the output `turret.glb`, `--profile glow-split` expands to
 --value "glowing = emissiveStrength > 0"
 --value "solid = !glowing"
 --value "albedo = baseColorFactor"
+--value "opaqueWhite = rgba(1, 1, 1, 1)"
 --material-count 2
 --material-name 0 body
 --material-name 1 glow
@@ -570,8 +576,9 @@ With the output `turret.glb`, `--profile glow-split` expands to
 --primitive-name 0 body
 --primitive-name 1 glow
 --write-material-slot-value 0 baseColorTexture albedo
---write-material-slot-value 1 baseColorFactor white
+--write-material-slot-value 1 baseColorFactor opaqueWhite
 --write-material-slot-value 1 emissiveTexture emissive
+--write-material-slot-value 1 emissiveFactor white
 --write-material-slot-value 1 emissiveStrength maxStrength
 ```
 
@@ -582,9 +589,10 @@ with the defaults elided.
 With the output `turret.glb`, `--profile orm` expands to
 
 ```sh
---value "occlusionStrength = default(occlusionStrength, 1)"   # defaults mixin
---value "roughnessFactor = default(roughnessFactor, 1)"
---value "metallicFactor = default(metallicFactor, 1)"
+# the defaults mixin
+--value "occlusionStrength = swatch(default(occlusionStrength, 1))"
+--value "roughnessFactor = swatch(default(roughnessFactor, 1))"
+--value "metallicFactor = swatch(default(metallicFactor, 1))"
 --value "orm = rgb(occlusionStrength, roughnessFactor, metallicFactor)"
 --material-count 1
 --write-material-slot-value 0 occlusionTexture orm          # slots: kind value

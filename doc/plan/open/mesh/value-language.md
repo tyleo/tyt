@@ -116,17 +116,20 @@ destination, and the reduction accepts any array above it. `faceAvg(e)`,
 `faceMin(e)`, `faceMax(e)`, and `faceSum(e)` take a corner array to a face
 array, reducing each face's four corners per component. `voxelAvg(e)` and its
 siblings take a face or corner array to a voxel array, reducing each voxel's
-boundary: a merged face reads in piecewise, one piece per voxel it covers, each
-piece carrying the face's entry. `swatchAvg(e)` and its siblings take a voxel,
-face, or corner array to a swatch array, reducing each swatch's entries. The
-unary reductions, `min`/`max`/`sum`/`avg`, take any array to plain across its
-whole domain. A corner value meeting a face destination without a reduction is
-an error, never an implicit average. `min` and `max` compose exactly across the
-rungs, so `swatchMin(voxelMin(e))` is `swatchMin(e)`. The means and sums weigh
-their own rung: `swatchAvg(voxelAvg(e))` weighs voxels evenly where
-`swatchAvg(e)` weighs entries. The corner rung is uniform, every face owning
-exactly four, so `swatchAvg(faceAvg(e))` is still the grand mean of a swatch's
-corners. The written chain chooses the weighting.
+boundary: a merged face reads in piecewise, one piece per voxel it covers. A
+piece carries what its face holds, one entry from a face array and four from a
+corner array. `swatchAvg(e)` and its siblings take a voxel, face, or corner
+array to a swatch array, reducing each swatch's entries; a face or corner array
+reads in through the same voxel pieces. A face merged across two swatches
+counts toward both. The unary reductions, `min`/`max`/`sum`/`avg`, take any
+array to plain across its whole domain. A corner value meeting a face
+destination without a reduction is an error, never an implicit average. `min`
+and `max` compose exactly across the rungs, so `swatchMin(voxelMin(e))` is
+`swatchMin(e)`. The means and sums weigh their own rung:
+`swatchAvg(voxelAvg(e))` weighs voxels evenly where `swatchAvg(e)` weighs
+entries. The corner rung is uniform, every face owning exactly four, so
+`swatchAvg(faceAvg(e))` is still the grand mean of a swatch's corners. The
+written chain chooses the weighting.
 
 A destination entry can be empty. Under `greedy` and `culled` a fully enclosed
 voxel emits no faces, and a material whose voxels are all enclosed is a swatch
@@ -436,7 +439,7 @@ The property's type decides how its expression reads:
 --write-material-slot-value 0 alphaCutoff "cutoff / 2"   # plain vec1 expression
 --write-material-slot-value 0 doubleSided true           # plain bool
 --write-material-slot-value 0 alphaMode '"MASK"'         # enum, a plain string
---write-material-slot-file 0 baseColorTexture skin.png   # a file, referenced
+--write-material-slot-file 0 baseColorTexture albedo.png  # a written file
 ```
 
 A property that is not a texture stays uniform across the atlas's one material,
@@ -447,19 +450,21 @@ token list.
 A texture property takes its image from its argument. A value embeds: the bytes
 land in the mesh, the property points at them, and the slot's fixed requirement
 supplies the encoding. A `--write-material-slot-file` references the named file
-by relative path, whether this run's `--write-file-png-value` wrote it or a
-paint program did. A `--write-file-png-value` beside a
+by relative path. The file has to come from this run's `--write-file-png-value`
+because only its writer's value gives the image the domain that seats the
+reference on a UV stream. A paint-over edits the written file in place after the
+run, and the reference holds. A `--write-file-png-value` beside a
 `--write-material-slot-value` leaves the mesh referencing the embedded copy,
-with the loose file a working duplicate of the same bytes. Two slots naming one
-value share the one embedded image, which is how an ORM packing fills both of
-its slots; two slots demanding different encodings of one value error.
+with the loose file a working duplicate of the same bytes. Two slots
+naming one value share the one embedded image, which is how an ORM packing fills
+both of its slots; two slots demanding different encodings of one value error.
 
 A writer and a slot stay separate flags because each is whole alone. A writer
 alone makes a file the mesh never mentions. A factor is a slot with no bytes,
 `--write-material-slot-value 0 emissiveStrength maxStrength` writing a number
 straight into the material. A texture slot carries its own image, embedding a
-value or referencing a file, so the two families meet only when
-`--write-material-slot-file` names a file `--write-file-png-value` wrote.
+value or referencing a file, so the two families meet where
+`--write-material-slot-file` names the file `--write-file-png-value` writes.
 
 The writer sets only what a slot names. Today's bake breaks that rule in one
 place, injecting an `emissiveFactor` of `[1, 1, 1]` whenever it binds an
@@ -474,10 +479,8 @@ every other default.
 glTF fixes each texture slot's encoding: `baseColorTexture` and
 `emissiveTexture` are sRGB, and `metallicRoughnessTexture`, `occlusionTexture`,
 and `normalTexture` are linear. A value-form slot encodes to order, so it cannot
-mismatch. A `--write-material-slot-file` naming a file this run's
-`--write-file-png-value` wrote cross-checks that writer's token against the
-slot, an error rather than a mesh that renders wrong; a file from anywhere else
-is trusted to match because nothing knows its encoding.
+mismatch. A `--write-material-slot-file` cross-checks its writer's token
+against the slot, an error rather than a mesh that renders wrong.
 
 A map with no standard property has two homes: loose beside the mesh through
 `--write-file-png-value`, its transfer named by the writer and stamped in the
@@ -591,9 +594,10 @@ another layout's cells.
 
 The `voxel` index can change the geometry under the
 [computed voxel position](#computed-voxel-position) rules: read at the faces or
-above it splits merged spans, and baked at the voxel it caps merging. A
-`swatch`, `face`, or `corner` index numbers entries the mesh already has and
-changes nothing.
+above it splits merged spans, and baked at the voxel it caps merging. The
+`swatch` index limits merging the way any swatch value does; see
+[the palette atlas](mesh.md#the-palette-atlas). A `face` or `corner` index
+numbers entries the mesh already has and changes nothing.
 
 ```sh
 --compute-index swatch swatchIndex

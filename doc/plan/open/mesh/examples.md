@@ -62,10 +62,12 @@ glTF's `+Y`:
 }
 ```
 
-Greedy meshing merges only faces that share a material, so the stack is ten
-faces: the bulb's top, the base's bottom, and each of the four sides split at
-the seam. Ten quads are twenty triangles, and because no face shares corners
-with another, the streams run forty vertices and sixty indices.
+A swatch value on the mesh limits greedy merging to faces that share a
+material. Every run below but the bare run carries a swatch value, so the stack
+meshes as ten faces: the bulb's top, the base's bottom, and each of the four
+sides split at the seam. Ten quads are twenty triangles, and because no face
+shares corners with another, the streams run forty vertices and sixty indices.
+The bare run merges across the seam; see [Geometry alone](#geometry-alone).
 
 `step.voxj` is three voxels of one stone material in an L, two on the ground and
 one stacked on the left end, with an inside corner where the riser meets the
@@ -126,24 +128,27 @@ vxl mesh lamp.voxj
 
 Either writes `lamp.glb`, geometry only. No flag mentions a material, so the
 file carries no `materials` array at all. The implicit primitive holds every
-face with no material, and a viewer draws it with the spec's default. `NORMAL`
-writes by default beside `POSITION`:
+face with no material, and a viewer draws it with the spec's default. Greedy
+merging crosses the material seam because no value rides the mesh: each side
+merges into one 1x2 quad. With the bulb's top and the base's bottom, the stack
+is six faces, twelve triangles, twenty-four vertices, and thirty-six indices.
+`NORMAL` writes by default beside `POSITION`:
 
 ```jsonc
 {
   "asset": { "version": "2.0" },
-  "buffers": [{ "byteLength": 1080 }],
+  "buffers": [{ "byteLength": 648 }],
   "accessors": [
     {
       "bufferView": 0,
       "componentType": 5126,
-      "count": 40,
+      "count": 24,
       "type": "VEC3",
       "min": [0, 0, 0],
       "max": [1, 2, 1],
     }, // POSITION
-    { "bufferView": 1, "componentType": 5126, "count": 40, "type": "VEC3" }, // NORMAL
-    { "bufferView": 2, "componentType": 5123, "count": 60, "type": "SCALAR" }, // indices
+    { "bufferView": 1, "componentType": 5126, "count": 24, "type": "VEC3" }, // NORMAL
+    { "bufferView": 2, "componentType": 5123, "count": 36, "type": "SCALAR" }, // indices
   ],
   "meshes": [
     {
@@ -159,9 +164,9 @@ writes by default beside `POSITION`:
 }
 ```
 
-The buffer is the three streams packed: forty positions and forty normals at
-twelve bytes each, sixty `u16` indices at two, 1080 bytes. `--voxel-size`
-defaults to one meter, so positions run zero to `[1, 2, 1]`.
+The buffer is the three streams packed: twenty-four positions and twenty-four
+normals at twelve bytes each, thirty-six `u16` indices at two, 648 bytes.
+`--voxel-size` defaults to one meter, so positions run zero to `[1, 2, 1]`.
 
 ## The pbr bake
 

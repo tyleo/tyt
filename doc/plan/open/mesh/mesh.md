@@ -49,7 +49,8 @@ multi-object document needs a selector. See
 
    The meshing strategy. Stable per-voxel topology needs `culled` or `naive`.
    1. `culled`: emits one unmerged quad per solid-empty boundary face.
-   2. `greedy`: merges coplanar, same-material faces into the fewest quads.
+   2. `greedy`: merges coplanar faces into the fewest quads the run's values
+      allow; see [Atlases](#atlases).
    3. `naive`: emits all six faces of every solid voxel, hidden interior faces
       included.
 
