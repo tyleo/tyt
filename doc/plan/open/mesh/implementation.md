@@ -13,9 +13,9 @@ its tests green.
 Two seams keep the tracks parallel. The [record](#one-record) carries a whole
 run from vxl into voxsmith, and its shape settles early, so voxsmith's tests
 build records by hand and never wait on the flag or profile work.
-vox-value-language's API settles the same way, `parse`, `check`, and `eval` over
-environments the caller hands in as callbacks, so voxsmith codes against the
-signatures while the implementation fills in behind them.
+vox-value-language's pipeline shape settles the same way, each stage landing
+whole in its phase, so voxsmith waits on the language only from its evaluation
+phase on.
 
 The spine goes in early, across two tracks at once: vxl's new `mesh` builds a
 minimal record, and voxsmith's entry point meshes it, geometry only, through
@@ -46,25 +46,49 @@ every fragment's origin.
 ## vox-value-language
 
 The language ships as vox-value-language, its own crate in utilities,
-referencing none of the vxl crates. The crate owns the whole language: `parse`
-takes text to a syntax tree, a [program](value-language.md#programs) of bindings
-or a bare expression each through its own entry point, `check` takes the tree
-and each name's type to the result type, and `eval` takes the tree and each
-name's value to the result. The name information comes in through an environment
-the caller supplies:
+referencing none of the vxl crates. The crate owns the whole language as a
+one-way pipeline over whole [programs](value-language.md#programs):
+
+1. `parse` takes the program text to a syntax tree.
+2. `check` takes the tree to a checked program answering every binding's type.
+3. `eval` takes the checked program to an evaluated program answering every
+   binding's value.
+
+`eval` accepts only a checked program, so every type settles once in `check` and
+evaluation reads the settled types instead of re-deriving them. The tree stays
+internal; exporting it would split the semantics from the grammar, every new
+function landing in two crates. A caller stops at the stage it needs:
+[loading](profile-language.md#loading) stops after `parse`, and a hand-written
+flag stops after `check` for its shape and dimension errors before anything
+evaluates.
+
+The names a program reads but never defines come in through an environment the
+caller supplies, which is how the palette properties and the
+[computed values](value-language.md#computed-values) load as bindings ahead of
+the program:
 
 ```rust
-let tree = parse("rgb(occlusionStrength, roughnessFactor, metallicFactor)")?;
+let program = parse(&source)?;
 
-let ty = check(&tree, &env)?; // env: name -> Option<Type>, shape, dimension, numeric type
+let checked = check(program, &env)?; // env: name -> Option<Type>, shape, dimension, numeric type
+let ao_type = checked.get("ao");
 
-let value = eval(&tree, &env)?; // env: name -> Option<Value>, plain or array
+let evaluated = eval(&checked, &env)?; // env: name -> Option<Value>, plain or array
+let ao_value = evaluated.get("ao");
+
+let select = parse_expression("faceAvg(ao) < 0.7")?;
+let checked_select = check_expression(&select, &checked)?; // the scope at the program's end
+let select_value = eval_expression(&checked_select, &evaluated)?;
 ```
 
 vxl assembles the program: a `;` appended to every `--value` and profile values
 fragment, the fragments joined in flag order with a `--profile`'s values first,
 each origin kept, so a parse error names the flag or the profile entry rather
-than a position in the joined text.
+than a position in the joined text. A writer's `<src-expr>` and a `--primitive`
+select ride the [record](#one-record) as expression text and go through the
+expression siblings, checking and evaluating against the checked and the
+evaluated program, so an expression reads the scope at the program's end beside
+every name the environment supplies.
 
 To the crate an array is a length, so the palette is voxsmith's interpretation:
 voxsmith binds the effective palette into the environment in atlas-texel order
@@ -74,36 +98,29 @@ voxel, face, and corner [domains](value-language.md#domains) are more lengths to
 evaluate over, voxsmith supplying the groupings the reductions read, so the
 crate never learns what a domain means.
 
-### 1. The API
+### 1. The lexer
 
-The crate lands with `parse`, `check`, and `eval` settled and the environments
-they read, so its consumers code against the signatures while the later phases
-fill in behind them. The tree stays internal; `parse`, `check`, and `eval` are
-the API. Exporting the tree would split the semantics from the grammar, every
-new function landing in two crates. `check` stays public beside `eval`:
-[loading](profile-language.md#loading) wants `parse` alone, and a hand-written
-flag wants its shape and dimension errors before anything evaluates.
+The crate lands with the token rules: maximal munch over the numbers and
+operators, the attached postfixes, the backtick-quoted names, and the string
+literals; see the [notes](value-language.md#notes).
 
-### 2. The lexer
+### 2. The parser
 
-The token rules land: maximal munch over the numbers and operators, the attached
-postfixes, the backtick-quoted names, and the string literals; see the
-[notes](value-language.md#notes).
+`parse` lands over the [grammar](value-language.md#grammar)'s compact form, a
+program of `;`-terminated bindings down through the expression rules, and
+`parse_expression` starts where the expression rules do.
 
-### 3. The parser
+### 3. The checker
 
-`parse` fills in over the [grammar](value-language.md#grammar)'s compact form, a
-program of `;`-terminated bindings down through the expression rules.
+`check` lands over the grammar's checking rules, answering every binding's
+shape, dimension, and numeric type over the names the environment supplies, and
+`check_expression` runs the same rules in a checked program's end scope.
 
-### 4. The checker
+### 4. The evaluator
 
-`check` fills in over the grammar's checking rules, answering shape, dimension,
-and numeric type for every name the environment supplies.
-
-### 5. The evaluator
-
-`eval` fills in last, computing the operators, the functions, the reductions,
-and the climbs over the environment's values.
+`eval` lands last, computing the operators, the functions, the reductions, and
+the climbs over the environment's values, and `eval_expression` computes in an
+evaluated program's end scope.
 
 ## voxsmith
 
@@ -212,10 +229,12 @@ order. The tyt call sites track each change as it lands.
 
 ### 1. The jsonc read
 
-The crate's reads strip comments with json_comments ahead of serde_json, so
-every config it loads is jsonc, `.tytconfig` included; json_comments handles
-comments alone, which is why a trailing comma stays an error. The read lands
-first because vxl's built-in profiles parse through it.
+A `jsonc` feature adds a read that strips comments with json_comments ahead of
+serde_json and carries the json_comments dependency; json_comments handles
+comments alone, which is why a trailing comma stays an error. The `.tytconfig`
+loaders keep the plain json read; vxl enables the feature for everything it
+loads, and the phase lands first because the built-in profiles parse through its
+read.
 
 ### 2. The file name
 
