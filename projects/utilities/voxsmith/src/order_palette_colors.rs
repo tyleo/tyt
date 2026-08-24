@@ -138,7 +138,7 @@ mod tests {
         // Hole the value pool, so the live value ids the reorder walks are
         // sparse.
         state
-            .release_value_pool_value(value_pool_id, U32Id::from_u32(4), U32Id::from_u32(0))
+            .release_value_pool_value(value_pool_id, U32Id::from_u32(4))
             .unwrap();
         state.validate().unwrap();
 

@@ -49,8 +49,49 @@ pub enum Error {
     /// A move targeted a listing position at or past the listing's count.
     IndexPastCount { index: usize, count: usize },
 
-    /// A release named its own released id as the replacement.
-    SelfReplacement,
+    /// A release named a material a live voxel still samples; `object_ids`
+    /// lists the sampling objects, in listing order.
+    MaterialInUse {
+        material_id: U32Id<BVoxMaterial>,
+        object_ids: Vec<U32Id<BVoxObject>>,
+    },
+
+    /// A release named a value a palette cell still draws; `palette_ids` lists
+    /// the drawing palettes, in listing order.
+    ValuePoolValueInUse {
+        value_id: U32Id<BVoxValuePoolValue>,
+        palette_ids: Vec<U32Id<BVoxPalette>>,
+    },
+
+    /// A release named a palette an object layer still references;
+    /// `object_ids` lists the referencing objects, in listing order.
+    PaletteInUse {
+        palette_id: U32Id<BVoxPalette>,
+        object_ids: Vec<U32Id<BVoxObject>>,
+    },
+
+    /// A release named a value pool a palette property still references;
+    /// `palette_ids` lists the referencing palettes, in listing order.
+    ValuePoolInUse {
+        value_pool_id: U32Id<BVoxValuePool>,
+        palette_ids: Vec<U32Id<BVoxPalette>>,
+    },
+
+    /// A release named an object a hierarchy node still places; `node_ids`
+    /// lists the placing nodes, in listing order.
+    ObjectInUse {
+        object_id: U32Id<BVoxObject>,
+        node_ids: Vec<U32Id<BVoxHierarchyNode>>,
+    },
+
+    /// A release named a hierarchy node still referenced: `parent_ids` lists
+    /// its parents, in listing order, and `root` reports whether the roots
+    /// list it.
+    HierarchyNodeInUse {
+        node_id: U32Id<BVoxHierarchyNode>,
+        parent_ids: Vec<U32Id<BVoxHierarchyNode>>,
+        root: bool,
+    },
 
     /// A reorder did not list each of the value pool's value ids exactly once.
     ValuePoolValueOrder,
@@ -272,9 +313,62 @@ impl Display for Error {
             Error::IndexPastCount { index, count } => {
                 write!(f, "index {index} is at or past the listing count {count}")
             }
-            Error::SelfReplacement => {
-                write!(f, "the replacement is the id being released")
-            }
+            Error::MaterialInUse {
+                material_id,
+                object_ids,
+            } => write!(
+                f,
+                "material {} is still sampled by objects {:?}",
+                material_id.to_u32(),
+                id_u32s(object_ids)
+            ),
+            Error::ValuePoolValueInUse {
+                value_id,
+                palette_ids,
+            } => write!(
+                f,
+                "value {} is still drawn by palettes {:?}",
+                value_id.to_u32(),
+                id_u32s(palette_ids)
+            ),
+            Error::PaletteInUse {
+                palette_id,
+                object_ids,
+            } => write!(
+                f,
+                "palette {} is still referenced by objects {:?}",
+                palette_id.to_u32(),
+                id_u32s(object_ids)
+            ),
+            Error::ValuePoolInUse {
+                value_pool_id,
+                palette_ids,
+            } => write!(
+                f,
+                "value pool {} is still referenced by palettes {:?}",
+                value_pool_id.to_u32(),
+                id_u32s(palette_ids)
+            ),
+            Error::ObjectInUse {
+                object_id,
+                node_ids,
+            } => write!(
+                f,
+                "object {} is still placed by hierarchy nodes {:?}",
+                object_id.to_u32(),
+                id_u32s(node_ids)
+            ),
+            Error::HierarchyNodeInUse {
+                node_id,
+                parent_ids,
+                root,
+            } => write!(
+                f,
+                "hierarchy node {} is still referenced: parents {:?}, root {}",
+                node_id.to_u32(),
+                id_u32s(parent_ids),
+                root
+            ),
             Error::ValuePoolValueOrder => write!(
                 f,
                 "the new order does not list each of the value pool's value ids exactly once"
@@ -473,3 +567,8 @@ impl Display for Error {
 }
 
 impl StdError for Error {}
+
+/// The ids' bare `u32`s, for the in-use referrer listings.
+fn id_u32s<Brand>(ids: &[U32Id<Brand>]) -> Vec<u32> {
+    ids.iter().map(|id| id.to_u32()).collect()
+}

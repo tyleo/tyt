@@ -362,10 +362,9 @@ impl VoxPalette {
     }
 
     /// Repoints each material's cell for a property on `value_pool_id` that
-    /// draws `old_id` to `new_id`. Used by [`release_value_pool_value`] before
-    /// `old_id` is released.
+    /// draws `old_id` to `new_id`. Used by [`repoint_value_pool_value`].
     ///
-    /// [`release_value_pool_value`]: crate::VoxMain::release_value_pool_value
+    /// [`repoint_value_pool_value`]: crate::VoxMain::repoint_value_pool_value
     pub(crate) fn repoint_value_pool_value(
         &mut self,
         value_pool_id: U32Id<BVoxValuePool>,

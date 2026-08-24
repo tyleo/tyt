@@ -195,23 +195,6 @@ impl VoxObject {
         Ok(())
     }
 
-    /// Releases every layer referencing `palette_id`. Two layers may reference
-    /// the same palette, so this releases every match. Used by
-    /// [`VoxMain::release_palette`](crate::VoxMain::release_palette) to detach an
-    /// object from a palette being released.
-    pub(crate) fn release_layers_to(&mut self, palette_id: U32Id<BVoxPalette>) {
-        let doomed_ids: Vec<_> = self
-            .iter_layers()
-            .filter(|&(_, layer_palette_id)| layer_palette_id == palette_id)
-            .map(|(layer_id, _)| layer_id)
-            .collect();
-
-        for layer_id in doomed_ids {
-            self.release_layer(layer_id)
-                .expect("an iterated layer is one of the object's");
-        }
-    }
-
     /// Layers in layer order, as `(layer id, palette)`. Pair a layer id with
     /// [`voxel_material`](Self::voxel_material) to read its samples.
     pub fn iter_layers(&self) -> impl Iterator<Item = (U32Id<BVoxLayer>, U32Id<BVoxPalette>)> + '_ {
@@ -260,8 +243,7 @@ impl VoxObject {
     /// Repoints every live voxel that samples a keyed material of
     /// `replacement_ids` through a layer referencing `palette_id` to the
     /// material it pairs with. Used by
-    /// [`VoxMain::release_materials`](crate::VoxMain::release_materials) before
-    /// the old materials are dropped.
+    /// [`VoxMain::repaint_materials`](crate::VoxMain::repaint_materials).
     pub(crate) fn repaint_materials(
         &mut self,
         palette_id: U32Id<BVoxPalette>,

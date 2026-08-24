@@ -478,25 +478,32 @@ impl VoxMain {
         Ok(())
     }
 
-    /// Releases hierarchy node `id`, detaching it from every `child_node_ids`
-    /// list and from the roots. Errors, changing nothing, if `id` is not one of
-    /// this state's nodes. Leaves a hole until [`gc`](Self::gc) renumbers.
+    /// Releases hierarchy node `id`. Leaves a hole until [`gc`](Self::gc)
+    /// renumbers. Errors, changing nothing, if:
+    ///
+    /// 1. `id` is not one of this state's nodes
+    /// 2. a node still lists it as a child or the roots still list it;
+    ///    release the parents first and drop it from the roots with
+    ///    [`set_root_hierarchy_node_ids`](Self::set_root_hierarchy_node_ids)
     pub fn release_hierarchy_node(&mut self, id: U32Id<BVoxHierarchyNode>) -> Result<()> {
         if !self.runtime_state.hierarchy_node_ids.is_retained(id) {
             return Err(Error::UnknownHierarchyNode { node_id: id });
         }
 
-        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
+        let parent_ids: Vec<_> = self
+            .iter_hierarchy_nodes()
+            .filter(|(_, node)| node.child_node_ids.contains(&id))
+            .map(|(node_id, _)| node_id)
+            .collect();
+        let root = self.runtime_state.root_hierarchy_node_ids.contains(&id);
 
-        for node_id in node_ids {
-            // Safety: retained node ids have a value.
-            let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
-            node.child_node_ids.retain(|&child_id| child_id != id);
+        if !parent_ids.is_empty() || root {
+            return Err(Error::HierarchyNodeInUse {
+                node_id: id,
+                parent_ids,
+                root,
+            });
         }
-
-        self.runtime_state
-            .root_hierarchy_node_ids
-            .retain(|&root_id| root_id != id);
 
         // Safety: a retained node id has a value.
         unsafe { self.runtime_state.hierarchy_nodes.release(id) };
@@ -640,33 +647,111 @@ impl VoxMain {
         unsafe { self.runtime_state.palettes.get_mut(palette_id) }.retain_material(value_ids)
     }
 
-    /// Releases `material_id` from `palette_id`, first repainting every live
-    /// voxel that samples it onto `replacement_id` so no voxel is left
-    /// without a material. Leaves a hole until [`gc`](Self::gc) renumbers.
-    /// Errors, changing nothing, under the
-    /// [`release_materials`](Self::release_materials) rules.
+    /// Releases `material_id` from `palette_id`. Errors, changing nothing,
+    /// under the [`release_materials`](Self::release_materials) rules.
     pub fn release_material(
         &mut self,
         palette_id: U32Id<BVoxPalette>,
         material_id: U32Id<BVoxMaterial>,
-        replacement_id: U32Id<BVoxMaterial>,
     ) -> Result<()> {
-        self.release_materials(palette_id, &HashMap::from([(material_id, replacement_id)]))
+        self.release_materials(palette_id, &HashSet::from([material_id]))
     }
 
-    /// Releases every keyed material of `replacement_ids` from `palette_id`,
-    /// first repainting each live voxel that samples one onto the material it
-    /// pairs with so no voxel is left without a material. The whole batch
-    /// repaints in one pass over the voxels, so merging a palette down costs
+    /// Releases every material of `material_ids` from `palette_id`. The whole
+    /// batch checks in one pass over the voxels, so emptying a palette costs
     /// what releasing a single material does. Leaves holes until
     /// [`gc`](Self::gc) renumbers. Errors, changing nothing, if:
     ///
     /// 1. `palette_id` is not one of this state's palettes
+    /// 2. a material id is not one of that palette's materials
+    /// 3. a live voxel still samples one of the materials; repaint those
+    ///    samples first with [`repaint_materials`](Self::repaint_materials)
+    pub fn release_materials(
+        &mut self,
+        palette_id: U32Id<BVoxPalette>,
+        material_ids: &HashSet<U32Id<BVoxMaterial>>,
+    ) -> Result<()> {
+        if !self.runtime_state.palette_ids.is_retained(palette_id) {
+            return Err(Error::UnknownPalette { palette_id });
+        }
+
+        // Safety: the palette id is retained.
+        let palette_ref = unsafe { self.runtime_state.palettes.get(palette_id) };
+
+        for &material_id in material_ids {
+            if !palette_ref.contains_material(material_id) {
+                return Err(Error::UnknownMaterial { material_id });
+            }
+        }
+
+        // The doomed materials in listing order: the in-use error reports the
+        // first listed offender, and the release below walks them back to
+        // front.
+        let doomed_ids: Vec<_> = palette_ref
+            .iter_materials()
+            .filter(|material_id| material_ids.contains(material_id))
+            .collect();
+
+        // The objects with a live voxel still sampling each doomed material,
+        // in listing order. The outermost object loop lands an object's
+        // entries consecutively, so the last-entry check dedups.
+        let mut sampling_object_ids: HashMap<U32Id<BVoxMaterial>, Vec<U32Id<BVoxObject>>> =
+            HashMap::new();
+        for (object_id, object) in self.iter_objects() {
+            for (layer_id, layer_palette_id) in object.iter_layers() {
+                if layer_palette_id != palette_id {
+                    continue;
+                }
+
+                let samples = object
+                    .iter_live_samples(layer_id)
+                    .expect("an iterated layer is one of the object's layers");
+
+                for (_, material_id) in samples {
+                    if !material_ids.contains(&material_id) {
+                        continue;
+                    }
+
+                    let object_ids = sampling_object_ids.entry(material_id).or_default();
+                    if object_ids.last() != Some(&object_id) {
+                        object_ids.push(object_id);
+                    }
+                }
+            }
+        }
+
+        for &material_id in &doomed_ids {
+            if let Some(object_ids) = sampling_object_ids.remove(&material_id) {
+                return Err(Error::MaterialInUse {
+                    material_id,
+                    object_ids,
+                });
+            }
+        }
+
+        // Safety: the palette id is retained; each material is one of its
+        // materials.
+        let palette_ref = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
+
+        // Back to front: a release shifts the materials listed after it, so
+        // dropping the last one first leaves nothing to shift and keeps the
+        // batch linear where front-to-back release is quadratic.
+        for material_id in doomed_ids.into_iter().rev() {
+            palette_ref.release_material(material_id);
+        }
+        Ok(())
+    }
+
+    /// Repaints, in every live voxel of every layer referencing `palette_id`,
+    /// each sample keyed in `replacement_ids` onto the material it pairs
+    /// with. The whole map substitutes in one simultaneous pass, so each
+    /// sample repaints at most once even when a replacement is itself a key.
+    /// Errors, changing nothing, if:
+    ///
+    /// 1. `palette_id` is not one of this state's palettes
     /// 2. a material id or a replacement id is not one of that palette's
     ///    materials
-    /// 3. a replacement is itself released, which covers a material named as
-    ///    its own replacement
-    pub fn release_materials(
+    pub fn repaint_materials(
         &mut self,
         palette_id: U32Id<BVoxPalette>,
         replacement_ids: &HashMap<U32Id<BVoxMaterial>, U32Id<BVoxMaterial>>,
@@ -674,8 +759,10 @@ impl VoxMain {
         if !self.runtime_state.palette_ids.is_retained(palette_id) {
             return Err(Error::UnknownPalette { palette_id });
         }
+
         // Safety: the palette id is retained.
         let palette_ref = unsafe { self.runtime_state.palettes.get(palette_id) };
+
         for (&material_id, &replacement_id) in replacement_ids {
             for checked_material_id in [material_id, replacement_id] {
                 if !palette_ref.contains_material(checked_material_id) {
@@ -684,33 +771,13 @@ impl VoxMain {
                     });
                 }
             }
-            if replacement_ids.contains_key(&replacement_id) {
-                return Err(Error::SelfReplacement);
-            }
         }
-
-        // The doomed materials in listing order, so the release below can walk
-        // them back to front.
-        let doomed_ids: Vec<_> = palette_ref
-            .iter_materials()
-            .filter(|material_id| replacement_ids.contains_key(material_id))
-            .collect();
 
         let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
         for object_id in object_ids {
             // Safety: retained object ids have a value.
             let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
             object.repaint_materials(palette_id, replacement_ids);
-        }
-
-        // Safety: the palette id is retained; each material is one of its
-        // materials.
-        let palette_ref = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
-        // Back to front: a release shifts the materials listed after it, so
-        // dropping the last one first leaves nothing to shift and keeps the
-        // batch linear where front-to-back release is quadratic.
-        for material_id in doomed_ids.into_iter().rev() {
-            palette_ref.release_material(material_id);
         }
         Ok(())
     }
@@ -763,20 +830,29 @@ impl VoxMain {
         Ok(object_id)
     }
 
-    /// Releases object `id`, detaching it from every node's `child_object_ids`.
-    /// Errors, changing nothing, if `id` is not one of this state's objects.
-    /// Leaves a hole until [`gc`](Self::gc) renumbers for a deterministic
-    /// save.
+    /// Releases object `id`. Leaves a hole until [`gc`](Self::gc) renumbers
+    /// for a deterministic save. Errors, changing nothing, if:
+    ///
+    /// 1. `id` is not one of this state's objects
+    /// 2. a hierarchy node still places it; release those nodes first
     pub fn release_object(&mut self, id: U32Id<BVoxObject>) -> Result<()> {
         if !self.runtime_state.object_ids.is_retained(id) {
             return Err(Error::UnknownObject { object_id: id });
         }
-        let node_ids: Vec<_> = self.runtime_state.hierarchy_node_ids.iter().collect();
-        for node_id in node_ids {
-            // Safety: retained node ids have a value.
-            let node = unsafe { self.runtime_state.hierarchy_nodes.get_mut(node_id) };
-            node.child_object_ids.retain(|&object_id| object_id != id);
+
+        let node_ids: Vec<_> = self
+            .iter_hierarchy_nodes()
+            .filter(|(_, node)| node.child_object_ids.contains(&id))
+            .map(|(node_id, _)| node_id)
+            .collect();
+
+        if !node_ids.is_empty() {
+            return Err(Error::ObjectInUse {
+                object_id: id,
+                node_ids,
+            });
         }
+
         // Safety: a retained object id has a value.
         unsafe { self.runtime_state.objects.release(id) };
         self.runtime_state.object_ids.release_stable(id);
@@ -875,20 +951,30 @@ impl VoxMain {
         Ok(palette_id)
     }
 
-    /// Releases palette `id`, detaching every object reference to it (along with
-    /// that reference's per-voxel sample column). Errors, changing nothing, if
-    /// `id` is not one of this state's palettes. Leaves a hole until
-    /// [`gc`](Self::gc) renumbers.
+    /// Releases palette `id`. Leaves a hole until [`gc`](Self::gc) renumbers.
+    /// Errors, changing nothing, if:
+    ///
+    /// 1. `id` is not one of this state's palettes
+    /// 2. an object layer still references it; release those layers first
+    ///    with [`release_layer`](Self::release_layer)
     pub fn release_palette(&mut self, id: U32Id<BVoxPalette>) -> Result<()> {
         if !self.runtime_state.palette_ids.is_retained(id) {
             return Err(Error::UnknownPalette { palette_id: id });
         }
-        let object_ids: Vec<_> = self.runtime_state.object_ids.iter().collect();
-        for object_id in object_ids {
-            // Safety: retained object ids have a value.
-            let object = unsafe { self.runtime_state.objects.get_mut(object_id) };
-            object.release_layers_to(id);
+
+        let object_ids: Vec<_> = self
+            .iter_objects()
+            .filter(|(_, object)| object.iter_layers().any(|(_, palette_id)| palette_id == id))
+            .map(|(object_id, _)| object_id)
+            .collect();
+
+        if !object_ids.is_empty() {
+            return Err(Error::PaletteInUse {
+                palette_id: id,
+                object_ids,
+            });
         }
+
         // Safety: a retained palette id has a value; its Drop frees its cells.
         unsafe { self.runtime_state.palettes.release(id) };
         self.runtime_state.palette_ids.release_stable(id);
@@ -1096,15 +1182,96 @@ impl VoxMain {
         value_pool_id
     }
 
-    /// Releases `value_id` from `value_pool_id`, first repointing every palette
-    /// cell that draws it onto `replacement_id` so no material is left without
-    /// a value. Leaves a hole until [`gc`](Self::gc) renumbers. Errors,
-    /// changing nothing, if:
+    /// Releases value pool `id`. Leaves a hole until [`gc`](Self::gc)
+    /// renumbers. Errors, changing nothing, if:
+    ///
+    /// 1. `id` is not one of this state's value pools
+    /// 2. a palette property still references it; release those properties
+    ///    first with [`release_property`](Self::release_property)
+    pub fn release_value_pool(&mut self, id: U32Id<BVoxValuePool>) -> Result<()> {
+        if !self.runtime_state.value_pool_ids.is_retained(id) {
+            return Err(Error::UnknownValuePool { value_pool_id: id });
+        }
+
+        let palette_ids: Vec<_> = self
+            .iter_palettes()
+            .filter(|(_, palette)| {
+                palette
+                    .iter_properties()
+                    .any(|(_, property)| property.value_pool_id == id)
+            })
+            .map(|(palette_id, _)| palette_id)
+            .collect();
+
+        if !palette_ids.is_empty() {
+            return Err(Error::ValuePoolInUse {
+                value_pool_id: id,
+                palette_ids,
+            });
+        }
+
+        // Safety: a retained value pool id has a value.
+        unsafe { self.runtime_state.value_pools.release(id) };
+        self.runtime_state.value_pool_ids.release_stable(id);
+        Ok(())
+    }
+
+    /// Releases `value_id` from `value_pool_id`. Leaves a hole until
+    /// [`gc`](Self::gc) renumbers. Errors, changing nothing, if:
     ///
     /// 1. `value_pool_id` is not one of this state's value pools
-    /// 2. `value_id` or `replacement_id` is not one of that value pool's values
-    /// 3. `replacement_id` is `value_id` itself
+    /// 2. `value_id` is not one of that value pool's values
+    /// 3. a palette cell still draws the value; repoint those cells first
+    ///    with [`repoint_value_pool_value`](Self::repoint_value_pool_value)
     pub fn release_value_pool_value(
+        &mut self,
+        value_pool_id: U32Id<BVoxValuePool>,
+        value_id: U32Id<BVoxValuePoolValue>,
+    ) -> Result<()> {
+        if !self.runtime_state.value_pool_ids.is_retained(value_pool_id) {
+            return Err(Error::UnknownValuePool { value_pool_id });
+        }
+
+        // Safety: the value pool id is retained.
+        let value_pool = unsafe { self.runtime_state.value_pools.get(value_pool_id) };
+        if !value_pool.contains_value(value_id) {
+            return Err(Error::UnknownValuePoolValue { value_id });
+        }
+
+        let palette_ids: Vec<_> = self
+            .iter_palettes()
+            .filter(|(_, palette)| {
+                palette.iter_properties().any(|(property_id, property)| {
+                    property.value_pool_id == value_pool_id
+                        && palette.iter_materials().any(|material_id| {
+                            palette.value_id(material_id, property_id) == Some(value_id)
+                        })
+                })
+            })
+            .map(|(palette_id, _)| palette_id)
+            .collect();
+
+        if !palette_ids.is_empty() {
+            return Err(Error::ValuePoolValueInUse {
+                value_id,
+                palette_ids,
+            });
+        }
+
+        // Safety: the value pool id is retained and the value is one of its
+        // values.
+        unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) }
+            .release_value_stable(value_id);
+        Ok(())
+    }
+
+    /// Repoints every palette cell drawing `value_id` of `value_pool_id` onto
+    /// `replacement_id`. Errors, changing nothing, if:
+    ///
+    /// 1. `value_pool_id` is not one of this state's value pools
+    /// 2. `value_id` or `replacement_id` is not one of that value pool's
+    ///    values
+    pub fn repoint_value_pool_value(
         &mut self,
         value_pool_id: U32Id<BVoxValuePool>,
         value_id: U32Id<BVoxValuePoolValue>,
@@ -1113,18 +1280,16 @@ impl VoxMain {
         if !self.runtime_state.value_pool_ids.is_retained(value_pool_id) {
             return Err(Error::UnknownValuePool { value_pool_id });
         }
+
         // Safety: the value pool id is retained.
         let value_pool = unsafe { self.runtime_state.value_pools.get(value_pool_id) };
-        if !value_pool.contains_value(value_id) {
-            return Err(Error::UnknownValuePoolValue { value_id });
-        }
-        if !value_pool.contains_value(replacement_id) {
-            return Err(Error::UnknownValuePoolValue {
-                value_id: replacement_id,
-            });
-        }
-        if value_id == replacement_id {
-            return Err(Error::SelfReplacement);
+
+        for checked_value_id in [value_id, replacement_id] {
+            if !value_pool.contains_value(checked_value_id) {
+                return Err(Error::UnknownValuePoolValue {
+                    value_id: checked_value_id,
+                });
+            }
         }
 
         for palette_id in self.runtime_state.palette_ids.iter() {
@@ -1132,11 +1297,6 @@ impl VoxMain {
             let palette = unsafe { self.runtime_state.palettes.get_mut(palette_id) };
             palette.repoint_value_pool_value(value_pool_id, value_id, replacement_id);
         }
-
-        // Safety: the value pool id is retained and the value is one of its
-        // values.
-        unsafe { self.runtime_state.value_pools.get_mut(value_pool_id) }
-            .release_value_stable(value_id);
         Ok(())
     }
 
@@ -1387,7 +1547,7 @@ mod tests {
         VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
     };
     use branded_id::U32Id;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use ty_math::{TyQuaternionF64, TyVector3F64, TyVector3I32, TyVector3U32};
 
     fn node_id(index: u32) -> U32Id<BVoxHierarchyNode> {
@@ -1972,7 +2132,7 @@ mod tests {
         let object_b_id = state.retain_object(b).unwrap();
 
         let inner_id = state
-            .retain_hierarchy_node(node_with_objects(vec![object_a_id, object_b_id]))
+            .retain_hierarchy_node(node_with_objects(vec![object_b_id]))
             .unwrap();
         let outer_id = state
             .retain_hierarchy_node(node_with_children(vec![inner_id]))
@@ -1980,8 +2140,9 @@ mod tests {
         state.set_root_hierarchy_node_ids(vec![outer_id]).unwrap();
         assert_eq!(state.validate(), Ok(()));
 
-        // Release object `a` and palette A; the state stays clean (no dangling
-        // refs) even before gc, just with holes.
+        // Release the unplaced object `a`, then palette A, which the release
+        // left unreferenced. Even before gc the state holds no dangling refs,
+        // just holes.
         assert_eq!(state.release_object(object_a_id), Ok(()));
         assert_eq!(state.release_palette(palette_a_id), Ok(()));
         assert_eq!(state.validate(), Ok(()));
@@ -2020,8 +2181,7 @@ mod tests {
             Some(material_id(0))
         );
 
-        // The inner node dropped `a` and renumbered `b` to 0; the roots are
-        // intact.
+        // The inner node's `b` renumbered to 0; the roots are intact.
         let inner_id = U32Id::<BVoxHierarchyNode>::from_u32(0);
         assert_eq!(
             state.hierarchy_node(inner_id).unwrap().child_object_ids,
@@ -2055,7 +2215,7 @@ mod tests {
     }
 
     #[test]
-    fn release_hierarchy_node_detaches_children_and_roots() {
+    fn release_hierarchy_node_requires_detached_parents_and_roots() {
         let mut state = VoxMain::default();
         let leaf_id = state
             .retain_hierarchy_node(VoxHierarchyNode::default())
@@ -2070,26 +2230,43 @@ mod tests {
             .set_root_hierarchy_node_ids(vec![top_id, mid_id])
             .unwrap();
 
+        // `mid_id` is still a child of `top_id` and a root.
+        assert_eq!(
+            state.release_hierarchy_node(mid_id),
+            Err(Error::HierarchyNodeInUse {
+                node_id: mid_id,
+                parent_ids: vec![top_id],
+                root: true,
+            })
+        );
+
+        // Dropping it from the roots still leaves the parent.
+        state.set_root_hierarchy_node_ids(vec![top_id]).unwrap();
+        assert_eq!(
+            state.release_hierarchy_node(mid_id),
+            Err(Error::HierarchyNodeInUse {
+                node_id: mid_id,
+                parent_ids: vec![top_id],
+                root: false,
+            })
+        );
+
+        // Top-down: clear the roots, release `top_id`, then `mid_id`; the
+        // shared `leaf_id` survives.
+        state.set_root_hierarchy_node_ids(vec![]).unwrap();
+        assert_eq!(state.release_hierarchy_node(top_id), Ok(()));
         assert_eq!(state.release_hierarchy_node(mid_id), Ok(()));
         assert_eq!(
             state.release_hierarchy_node(mid_id),
             Err(Error::UnknownHierarchyNode { node_id: mid_id })
         ); // already gone
-
-        // `mid_id` is detached from `top_id` and the roots; the shared
-        // `leaf_id` survives.
-        assert_eq!(
-            state.hierarchy_node(top_id).unwrap().child_node_ids,
-            [leaf_id]
-        );
-        assert_eq!(state.root_hierarchy_node_ids(), [top_id]);
         assert!(state.hierarchy_node(mid_id).is_none());
         assert!(state.hierarchy_node(leaf_id).is_some());
         assert_eq!(state.validate(), Ok(()));
     }
 
     #[test]
-    fn release_material_repaints_live_voxels_onto_the_replacement() {
+    fn release_material_requires_unsampled_and_repaint_clears_the_way() {
         let mut state = VoxMain::default();
         let ints_id = int_value_pool(&mut state, vec![0, 1]);
         let mut palette = VoxPalette::default();
@@ -2106,12 +2283,21 @@ mod tests {
         object.retain_voxel(live_voxel_id, &[drop_id]).unwrap();
         let object_id = state.retain_object(object).unwrap();
 
-        // Releasing `drop_id` repaints the voxel that used it onto `keep_id`.
+        // The voxel still samples `drop_id`, so the release reports the
+        // sampling object.
         assert_eq!(
-            state.release_material(live_palette_id, drop_id, keep_id),
+            state.release_material(live_palette_id, drop_id),
+            Err(Error::MaterialInUse {
+                material_id: drop_id,
+                object_ids: vec![object_id],
+            })
+        );
+
+        // Repainting the voxel onto `keep_id` clears the way.
+        assert_eq!(
+            state.repaint_materials(live_palette_id, &HashMap::from([(drop_id, keep_id)])),
             Ok(())
         );
-        assert_eq!(state.validate(), Ok(()));
         assert_eq!(
             state
                 .object(object_id)
@@ -2119,6 +2305,8 @@ mod tests {
                 .voxel_material(live_voxel_id, layer_id),
             Some(keep_id)
         );
+        assert_eq!(state.release_material(live_palette_id, drop_id), Ok(()));
+        assert_eq!(state.validate(), Ok(()));
         assert!(
             !state
                 .palette(live_palette_id)
@@ -2126,13 +2314,9 @@ mod tests {
                 .contains_material(drop_id)
         );
 
-        // A no-op replacement and unknown ids are rejected.
+        // Unknown ids are rejected.
         assert_eq!(
-            state.release_material(live_palette_id, keep_id, keep_id),
-            Err(Error::SelfReplacement)
-        );
-        assert_eq!(
-            state.release_material(live_palette_id, drop_id, keep_id),
+            state.release_material(live_palette_id, drop_id),
             Err(Error::UnknownMaterial {
                 material_id: drop_id
             })
@@ -2143,7 +2327,7 @@ mod tests {
     }
 
     #[test]
-    fn release_materials_merges_a_batch_in_one_pass() {
+    fn repaint_materials_substitutes_once_and_release_materials_batches() {
         let mut state = VoxMain::default();
         let ints_id = int_value_pool(&mut state, vec![0, 1, 2, 3]);
         let mut palette = VoxPalette::default();
@@ -2166,27 +2350,56 @@ mod tests {
         }
         let object_id = state.retain_object(object).unwrap();
 
-        // A replacement that is itself released is rejected whole: the batch
-        // would leave the chained voxels pointing at a dropped material.
+        // A chained map substitutes simultaneously, not transitively: material
+        // 1's voxel repaints to 0, not through 0 to 3.
         let chained_ids = HashMap::from([
             (material_ids[1], material_ids[0]),
             (material_ids[0], material_ids[3]),
-            (material_ids[2], material_ids[3]),
         ]);
         assert_eq!(
-            state.release_materials(live_palette_id, &chained_ids),
-            Err(Error::SelfReplacement)
+            state.repaint_materials(live_palette_id, &chained_ids),
+            Ok(())
+        );
+        assert_eq!(
+            state
+                .object(object_id)
+                .unwrap()
+                .voxel_material(voxel_ids[1], layer_id),
+            Some(material_ids[0])
+        );
+        assert_eq!(
+            state
+                .object(object_id)
+                .unwrap()
+                .voxel_material(voxel_ids[0], layer_id),
+            Some(material_ids[3])
+        );
+
+        // A batch release refuses while any doomed material is still sampled,
+        // reporting the first listed offender.
+        let doomed_ids: HashSet<_> = material_ids[0..3].iter().copied().collect();
+        assert_eq!(
+            state.release_materials(live_palette_id, &doomed_ids),
+            Err(Error::MaterialInUse {
+                material_id: material_ids[0],
+                object_ids: vec![object_id],
+            })
         );
         assert_eq!(state.palette(live_palette_id).unwrap().material_count(), 4);
 
-        // The batch drops materials 0 through 2 onto 3 in one pass.
+        // Repaint everything onto material 3, then drop 0 through 2 in one
+        // batch.
         let merged_ids = HashMap::from([
             (material_ids[0], material_ids[3]),
             (material_ids[1], material_ids[3]),
             (material_ids[2], material_ids[3]),
         ]);
         assert_eq!(
-            state.release_materials(live_palette_id, &merged_ids),
+            state.repaint_materials(live_palette_id, &merged_ids),
+            Ok(())
+        );
+        assert_eq!(
+            state.release_materials(live_palette_id, &doomed_ids),
             Ok(())
         );
         assert_eq!(state.validate(), Ok(()));
@@ -2214,7 +2427,7 @@ mod tests {
             .retain_property("v".to_owned(), ints_id, value_id(0))
             .unwrap();
         let first_id = palette.retain_material(vec![value_id(0)]).unwrap();
-        let second_id = palette.retain_material(vec![value_id(1)]).unwrap();
+        let _second_id = palette.retain_material(vec![value_id(1)]).unwrap();
         let third_id = palette.retain_material(vec![value_id(2)]).unwrap();
         let live_palette_id = state.retain_palette(palette).unwrap();
 
@@ -2225,14 +2438,11 @@ mod tests {
         object.retain_voxel(live_voxel_id, &[third_id]).unwrap();
         let object_id = state.retain_object(object).unwrap();
 
-        // Release `first_id`; no live voxel used it, so the repaint is a no-op.
-        // The palette is now holed: the voxel still samples `third_id`, whose
-        // id exceeds the live material count. A range check would wrongly
-        // reject this; the retention check accepts it.
-        assert_eq!(
-            state.release_material(live_palette_id, first_id, second_id),
-            Ok(())
-        );
+        // Release `first_id`, which no live voxel samples. The palette is
+        // now holed: the voxel still samples
+        // `third_id`, whose id exceeds the live material count. A range check
+        // would wrongly reject this; the retention check accepts it.
+        assert_eq!(state.release_material(live_palette_id, first_id), Ok(()));
         assert_eq!(state.validate(), Ok(()));
 
         state.gc();
@@ -2428,7 +2638,7 @@ mod tests {
         let live_palette_id = state.retain_palette(palette).unwrap();
         state.validate().unwrap();
 
-        // Release the drawn value directly, skipping the cell rewrite
+        // Release the drawn value directly, bypassing the in-use check
         // release_value_pool_value performs, so the material's cell holds a
         // stale id. Safety: the value pool id is retained.
         let value_pool_ref = unsafe { state.runtime_state.value_pools.get_mut(ints_id) };
@@ -2488,23 +2698,23 @@ mod tests {
     }
 
     #[test]
-    fn release_palette_detaches_every_layer_drawing_it() {
+    fn release_palette_requires_detached_layers() {
         let mut state = VoxMain::default();
         let ints_id = int_value_pool(&mut state, vec![10, 20]);
         let a_id = state.retain_palette(two_material_palette(ints_id)).unwrap();
         let b_id = state.retain_palette(two_material_palette(ints_id)).unwrap();
         let c_id = state.retain_palette(two_material_palette(ints_id)).unwrap();
 
-        // Two of the four layers draw `a_id`, so the detach has to release
-        // both.
+        // Two of the four layers draw `a_id`, so both must be released before
+        // the palette.
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
-        object.retain_layer(a_id, material_id(0));
+        let on_a_first_id = object.retain_layer(a_id, material_id(0));
         let on_b_id = object.retain_layer(b_id, material_id(0));
-        object.retain_layer(a_id, material_id(0));
+        let on_a_second_id = object.retain_layer(a_id, material_id(0));
         let on_c_id = object.retain_layer(c_id, material_id(0));
 
-        // Each layer samples a different material per voxel, so a detach that
-        // drops the wrong sample column shows up below.
+        // Each layer samples a different material per voxel, so a layer
+        // release that drops the wrong sample column shows up below.
         let first_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         let second_id = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
         object
@@ -2532,6 +2742,19 @@ mod tests {
         let object_id = state.retain_object(object).unwrap();
         state.validate().unwrap();
 
+        // The object's layers still reference `a_id`, so the release reports
+        // it.
+        assert_eq!(
+            state.release_palette(a_id),
+            Err(Error::PaletteInUse {
+                palette_id: a_id,
+                object_ids: vec![object_id],
+            })
+        );
+
+        // Releasing both layers clears the way.
+        assert_eq!(state.release_layer(object_id, on_a_first_id), Ok(()));
+        assert_eq!(state.release_layer(object_id, on_a_second_id), Ok(()));
         assert_eq!(state.release_palette(a_id), Ok(()));
         state.validate().unwrap();
 
@@ -2685,7 +2908,7 @@ mod tests {
     }
 
     #[test]
-    fn release_value_pool_value_repoints_cells_preserves_order_and_validates() {
+    fn release_value_pool_value_requires_undrawn_and_repoint_clears_the_way() {
         let mut state = VoxMain::default();
         let ints_id = int_value_pool(&mut state, vec![10, 20, 30]);
         // Two palettes draw the doomed value, so both must be repointed.
@@ -2700,12 +2923,23 @@ mod tests {
         let b_id = state.retain_palette(b).unwrap();
         state.validate().unwrap();
 
-        // Releasing the first of three is the smallest case a swap-remove would
-        // get wrong, listing 30 before 20.
+        // Both palettes still draw the value, so the release reports them.
         assert_eq!(
-            state.release_value_pool_value(ints_id, value_id(0), value_id(2)),
+            state.release_value_pool_value(ints_id, value_id(0)),
+            Err(Error::ValuePoolValueInUse {
+                value_id: value_id(0),
+                palette_ids: vec![a_id, b_id],
+            })
+        );
+
+        // Repointing every drawing cell onto 30 clears the way. Releasing the
+        // first of three is then the smallest case a swap-remove would get
+        // wrong, listing 30 before 20.
+        assert_eq!(
+            state.repoint_value_pool_value(ints_id, value_id(0), value_id(2)),
             Ok(())
         );
+        assert_eq!(state.release_value_pool_value(ints_id, value_id(0)), Ok(()));
 
         // Every cell that drew 10 now draws 30, and the survivors keep their
         // order and ids.
@@ -2730,26 +2964,40 @@ mod tests {
         );
         state.validate().unwrap();
 
-        // A repeated id, an id not the value pool's, a released id, and an
-        // unknown value pool all reject.
+        // An id not the value pool's, a released id, and an unknown value
+        // pool all reject, on the release and the repoint alike.
         assert_eq!(
-            state.release_value_pool_value(ints_id, value_id(1), value_id(1)),
-            Err(Error::SelfReplacement)
-        );
-        assert_eq!(
-            state.release_value_pool_value(ints_id, value_id(9), value_id(1)),
+            state.release_value_pool_value(ints_id, value_id(9)),
             Err(Error::UnknownValuePoolValue {
                 value_id: value_id(9)
             })
         );
         assert_eq!(
-            state.release_value_pool_value(ints_id, value_id(1), value_id(0)),
+            state.release_value_pool_value(ints_id, value_id(0)),
             Err(Error::UnknownValuePoolValue {
                 value_id: value_id(0)
             })
         );
         assert_eq!(
-            state.release_value_pool_value(U32Id::from_u32(9), value_id(1), value_id(2)),
+            state.release_value_pool_value(U32Id::from_u32(9), value_id(1)),
+            Err(Error::UnknownValuePool {
+                value_pool_id: value_pool_id(9)
+            })
+        );
+        assert_eq!(
+            state.repoint_value_pool_value(ints_id, value_id(9), value_id(1)),
+            Err(Error::UnknownValuePoolValue {
+                value_id: value_id(9)
+            })
+        );
+        assert_eq!(
+            state.repoint_value_pool_value(ints_id, value_id(1), value_id(0)),
+            Err(Error::UnknownValuePoolValue {
+                value_id: value_id(0)
+            })
+        );
+        assert_eq!(
+            state.repoint_value_pool_value(U32Id::from_u32(9), value_id(1), value_id(2)),
             Err(Error::UnknownValuePool {
                 value_pool_id: value_pool_id(9)
             })
@@ -3160,7 +3408,7 @@ mod tests {
     }
 
     #[test]
-    fn release_material_cannot_empty_a_palette() {
+    fn release_material_can_empty_a_palette() {
         let mut state = VoxMain::default();
         let ints_id = int_value_pool(&mut state, vec![10]);
         let palette_id = state
@@ -3173,19 +3421,19 @@ mod tests {
             .next()
             .unwrap();
 
-        // The release needs a distinct live replacement, which a one-material
-        // palette cannot supply.
+        // No live voxel samples the material, so even the last one releases
+        // and the palette empties.
+        assert_eq!(state.release_material(palette_id, only_id), Ok(()));
+        assert_eq!(state.palette(palette_id).unwrap().material_count(), 0);
+        assert_eq!(state.validate(), Ok(()));
+
+        // An unknown material still rejects.
         assert_eq!(
-            state.release_material(palette_id, only_id, only_id),
-            Err(Error::SelfReplacement)
-        );
-        assert_eq!(
-            state.release_material(palette_id, only_id, material_id(1)),
+            state.release_material(palette_id, material_id(1)),
             Err(Error::UnknownMaterial {
                 material_id: material_id(1)
             })
         );
-        assert_eq!(state.palette(palette_id).unwrap().material_count(), 1);
     }
 
     /// Everything the readers expose, rendered so a half-applied mutation
@@ -3337,15 +3585,39 @@ mod tests {
             s.release_property(live_palette_id, U32Id::from_u32(9))
         });
 
-        // Releases.
+        // Releases of unknown ids.
         assert_rejects_unchanged(&mut state, |s| s.release_object(U32Id::from_u32(9)));
         assert_rejects_unchanged(&mut state, |s| s.release_palette(palette_id(9)));
         assert_rejects_unchanged(&mut state, |s| s.release_hierarchy_node(node_id(9)));
+        assert_rejects_unchanged(&mut state, |s| s.release_value_pool(value_pool_id(9)));
         assert_rejects_unchanged(&mut state, |s| {
-            s.release_material(live_palette_id, material_id(0), material_id(0))
+            s.release_material(live_palette_id, material_id(9))
         });
         assert_rejects_unchanged(&mut state, |s| {
-            s.release_value_pool_value(ints_id, value_id(0), value_id(0))
+            s.release_value_pool_value(ints_id, value_id(9))
+        });
+
+        // Releases of referenced entities.
+        assert_rejects_unchanged(&mut state, |s| s.release_object(object_id));
+        assert_rejects_unchanged(&mut state, |s| s.release_palette(live_palette_id));
+        assert_rejects_unchanged(&mut state, |s| s.release_hierarchy_node(live_node_id));
+        assert_rejects_unchanged(&mut state, |s| s.release_value_pool(ints_id));
+        assert_rejects_unchanged(&mut state, |s| {
+            s.release_material(live_palette_id, material_id(1))
+        });
+        assert_rejects_unchanged(&mut state, |s| {
+            s.release_value_pool_value(ints_id, value_id(0))
+        });
+
+        // Repaints and repoints of unknown ids.
+        assert_rejects_unchanged(&mut state, |s| {
+            s.repaint_materials(
+                live_palette_id,
+                &HashMap::from([(material_id(0), material_id(9))]),
+            )
+        });
+        assert_rejects_unchanged(&mut state, |s| {
+            s.repoint_value_pool_value(ints_id, value_id(0), value_id(9))
         });
 
         state.validate().unwrap();
@@ -3380,7 +3652,7 @@ mod tests {
         let wild_node_id = node_id(rng.below(8) as u32);
         let wild_material_id = material_id(rng.below(4) as u32);
         let wild_value_id = value_id(rng.below(4) as u32);
-        match rng.below(21) {
+        match rng.below(24) {
             0 => {
                 let values = (0..1 + rng.below(3)).map(|v| v as i64).collect();
                 state.retain_value_pool(VoxValuePool::int(values).unwrap());
@@ -3501,14 +3773,22 @@ mod tests {
                 let _ = state.release_hierarchy_node(wild_node_id);
             }
             18 => {
-                let _ = state.release_material(
-                    wild_palette_id,
-                    wild_material_id,
-                    material_id(rng.below(4) as u32),
-                );
+                let _ = state.release_material(wild_palette_id, wild_material_id);
             }
             19 => {
-                let _ = state.release_value_pool_value(
+                let _ = state.release_value_pool_value(wild_value_pool_id, wild_value_id);
+            }
+            20 => {
+                let _ = state.release_value_pool(wild_value_pool_id);
+            }
+            21 => {
+                let _ = state.repaint_materials(
+                    wild_palette_id,
+                    &HashMap::from([(wild_material_id, material_id(rng.below(4) as u32))]),
+                );
+            }
+            22 => {
+                let _ = state.repoint_value_pool_value(
                     wild_value_pool_id,
                     wild_value_id,
                     value_id(rng.below(4) as u32),

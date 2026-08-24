@@ -91,7 +91,7 @@ mod tests {
     };
     use branded_id::U32Id;
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
-    use voxcore::{BVoxLayer, BVoxObject, BVoxPalette};
+    use voxcore::{BVoxHierarchyNode, BVoxLayer, BVoxObject, BVoxPalette, VoxHierarchyNode};
     use voxj::{
         VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject,
         VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock,
@@ -454,6 +454,18 @@ mod tests {
     fn remove_then_gc_round_trips_through_bytes() {
         let mut state = from_voxj_file(&sample_file()).unwrap();
 
+        // The "leaf" node places the "tight" object. Nodes are frozen, so
+        // removing the object means rebuilding the hierarchy: clear the
+        // roots, release the nodes top-down, and re-retain them once the
+        // object is gone.
+        let group_id = U32Id::<BVoxHierarchyNode>::from_u32(0);
+        let leaf_id = U32Id::<BVoxHierarchyNode>::from_u32(1);
+        let group = state.hierarchy_node(group_id).unwrap().clone();
+        let leaf = state.hierarchy_node(leaf_id).unwrap().clone();
+        state.set_root_hierarchy_node_ids(Vec::new()).unwrap();
+        assert_eq!(state.release_hierarchy_node(group_id), Ok(()));
+        assert_eq!(state.release_hierarchy_node(leaf_id), Ok(()));
+
         // Remove the "tight" object and the palette only it referenced, then
         // compact so the save numbers entities by listing index again.
         assert_eq!(
@@ -465,6 +477,22 @@ mod tests {
             Ok(())
         );
         state.gc();
+
+        // Rebuild the nodes on the compacted pool: "group" keeps its child
+        // list, which names the rebuilt "leaf" by the id the batch assigns
+        // it, and "leaf" no longer places the removed object.
+        let node_ids = state
+            .retain_hierarchy_nodes(vec![
+                group,
+                VoxHierarchyNode {
+                    child_object_ids: Vec::new(),
+                    ..leaf
+                },
+            ])
+            .unwrap();
+        state
+            .set_root_hierarchy_node_ids(vec![node_ids[0]])
+            .unwrap();
 
         let bytes = to_voxj_bytes(&state).unwrap();
         let reloaded = from_voxj_bytes(&bytes).unwrap();

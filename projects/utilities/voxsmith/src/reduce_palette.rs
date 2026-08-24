@@ -1,6 +1,10 @@
 use crate::{BASE_COLOR, ColorSpace, Dither, ReductionMethod, Result, value_pool_color};
 use branded_id::U32Id;
-use std::{cmp::Ordering, collections::HashMap, mem};
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+    mem,
+};
 use ty_math::{
     FromColor, TyCielabColorF64, TyColorToVector3, TyLinSrgbaF64, TyOklabColorF64, TySrgbaU8,
     TyVector3Ext, TyVector3F64, TyVector3U32,
@@ -120,11 +124,11 @@ fn reduce_materials(
         dither_voxels(state, palette_id, &clusters, dither);
     }
 
-    // Drop every non-representative material onto its representative, then
-    // compact. After dithering no voxel samples a non-representative, so the
-    // repaint is a no-op and only the drop remains. One batched removal keeps
-    // the repaint to a single pass over the voxels, rather than one per
-    // dropped material.
+    // Repaint every non-representative material onto its representative,
+    // then drop the non-representatives and compact. After dithering no voxel
+    // samples a non-representative, so the repaint is a no-op and only the
+    // drop remains. One batched repaint keeps it to a single pass over the
+    // voxels, rather than one per dropped material.
     let replacements: HashMap<_, _> = clusters
         .iter()
         .flat_map(|cluster| {
@@ -142,8 +146,13 @@ fn reduce_materials(
         .collect();
 
     state
-        .release_materials(palette_id, &replacements)
-        .expect("the cluster's materials are live and distinct");
+        .repaint_materials(palette_id, &replacements)
+        .expect("the cluster's materials are live");
+
+    let doomed_ids: HashSet<_> = replacements.keys().copied().collect();
+    state
+        .release_materials(palette_id, &doomed_ids)
+        .expect("no voxel samples a repainted material");
 
     state.gc();
 

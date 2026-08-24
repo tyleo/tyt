@@ -208,9 +208,7 @@ mod tests {
         let doomed_id = palette.retain_material(vec![value_id(1)]).unwrap();
         let sparse_id = palette.retain_material(vec![value_id(2)]).unwrap();
         let palette_id = state.retain_palette(palette).unwrap();
-        state
-            .release_material(palette_id, doomed_id, keep_id)
-            .unwrap();
+        state.release_material(palette_id, doomed_id).unwrap();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(palette_id, sparse_id);
