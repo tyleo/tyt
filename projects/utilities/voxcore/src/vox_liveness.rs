@@ -2,14 +2,11 @@ use crate::BVoxVoxel;
 use branded_id::U32Id;
 
 /// A packed occupancy bitmap for a [`VoxObject`](crate::VoxObject)'s dense
-/// voxel grid: one bit per grid cell, keyed by the cell's voxel id (its raster
-/// index `x * Y * Z + y * Z + z`). A set bit marks a live (filled) voxel; a
-/// clear bit marks empty space.
+/// voxel grid: one bit per grid cell, keyed by the cell's voxel id. A set bit
+/// marks a live (filled) voxel; a clear bit marks empty space.
 ///
-/// The grid allocates a voxel id for every cell, so the sample columns always
-/// have a value to return. This map is what distinguishes a filled cell from
-/// empty space, because a sample is always a valid cell reference and cannot
-/// by itself mark a cell empty.
+/// A cell's id and samples exist whether or not the cell is filled; only this
+/// map separates filled cells from empty space.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VoxLiveness {
     /// Bit `i % 64` of word `i / 64`, counted from the least significant bit,
@@ -17,7 +14,7 @@ pub struct VoxLiveness {
     /// so two maps with the same length and live set compare equal.
     words: Vec<u64>,
 
-    /// The number of grid cells the map covers (`X * Y * Z`).
+    /// The number of grid cells the map covers.
     len: usize,
 }
 

@@ -35,7 +35,7 @@ impl VoxMain {
     /// Compacts every id pool back to a contiguous `0..len` in listing order
     /// and rewrites every cross-reference to match, so a state edited by
     /// releases and moves numbers its entities the way a freshly loaded one
-    /// does and saves stay deterministic. Call it once before saving, not after
+    /// does, keeping saves deterministic. Call it once before saving, not after
     /// each release or move.
     ///
     /// Returns the [`VoxGcRemap`] recording where each id moved, so any ids
@@ -416,9 +416,8 @@ impl VoxMain {
     }
 
     /// Checks a node about to be inserted at listing position `node_index` of
-    /// its batch: every child node resolves against this state or the batch's
-    /// prospective ids, every child object is live, no child repeats, and the
-    /// transform is finite with a non-zero scale and a unit rotation.
+    /// its batch, resolving child nodes against this state and the batch's
+    /// prospective `batch_ids`.
     fn check_inserted_node(
         &self,
         node: &VoxHierarchyNode,
@@ -1338,7 +1337,6 @@ impl VoxMain {
     /// 1. references union across palettes, so a shared entry survives while
     ///    any one material uses it
     /// 2. a value pool nothing references is emptied
-    /// 3. the state stays referentially valid
     pub fn prune_value_pools(&mut self) {
         // The value ids each value pool still has a material referencing.
         let value_pool_ids: Vec<_> = self.runtime_state.value_pool_ids.iter().collect();

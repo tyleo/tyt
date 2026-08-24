@@ -7,8 +7,7 @@ use branded_id::{
     soa::{IdField, IdStruct},
 };
 
-/// The runtime scene of a voxel model, held by [`VoxMain`](crate::VoxMain)
-/// alongside the ext.
+/// The runtime scene of a voxel model, held by [`VoxMain`](crate::VoxMain).
 ///
 /// This is the struct-of-arrays backing store. [`VoxMain`](crate::VoxMain) owns
 /// mutation logic over these fields; they are crate-private so the id pools and

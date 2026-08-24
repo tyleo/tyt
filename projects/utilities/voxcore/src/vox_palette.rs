@@ -64,9 +64,9 @@ impl VoxPalette {
     /// `0..len`, moving every value to its relabeled id, and returns the
     /// material relabeling so a [`VoxMain`](crate::VoxMain) can translate the
     /// samples that point at these materials. Properties are referenced only
-    /// within this palette, so their relabelings stay internal. Value ids point
-    /// into the referenced value pools, whose contents gc does not touch, so
-    /// they stay valid.
+    /// within this palette; their relabelings stay internal. Value ids stay
+    /// valid: they point into the referenced value pools, whose contents gc
+    /// does not touch.
     pub(crate) fn gc(&mut self) -> IdRemap<BVoxMaterial, u32> {
         let property_remap = self.property_ids.gc();
         // Safety: the property column was in sync with the pre-gc property
@@ -217,8 +217,7 @@ impl VoxPalette {
 
     /// Releases property `id`. Errors, changing nothing, if `id` is not one of
     /// this palette's properties. Each material row keeps filler at the
-    /// released slot until [`VoxMain::gc`](crate::VoxMain::gc) compacts the rows
-    /// and renumbers.
+    /// released slot until [`VoxMain::gc`](crate::VoxMain::gc) renumbers.
     pub fn release_property(&mut self, id: U32Id<BVoxProperty>) -> Result<()> {
         if !self.property_ids.is_retained(id) {
             return Err(Error::UnknownProperty { property_id: id });

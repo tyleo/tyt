@@ -1,8 +1,7 @@
 use crate::BVoxValuePool;
 use branded_id::U32Id;
 
-/// One property in a palette: it names a property and the
-/// [`VoxValuePool`](crate::VoxValuePool) that property's materials draw from.
+/// One property in a [`VoxPalette`](crate::VoxPalette).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VoxProperty {
     /// The property name: a neutral free string. A consumer ignores names it

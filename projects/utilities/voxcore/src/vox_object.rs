@@ -56,7 +56,7 @@ impl VoxObject {
     /// Creates an empty grid of size `bounds`: every cell has a voxel id, none
     /// is live, and no layers are referenced yet. Then use
     /// [`retain_layer`](Self::retain_layer) and [`retain_voxel`](Self::retain_voxel).
-    /// Errors if the grid would exceed
+    /// Errors, building nothing, if the grid would exceed
     /// [`MAX_GRID_CELLS`](Self::MAX_GRID_CELLS).
     pub fn new(name: String, bounds: TyVector3U32) -> Result<Self> {
         let volume = Self::volume_of(bounds);
@@ -195,7 +195,7 @@ impl VoxObject {
         Ok(())
     }
 
-    /// Layers in layer order, as `(layer id, palette)`. Pair a layer id with
+    /// Layers in layer order, as `(layer id, palette id)`. Pair a layer id with
     /// [`voxel_material`](Self::voxel_material) to read its samples.
     pub fn iter_layers(&self) -> impl Iterator<Item = (U32Id<BVoxLayer>, U32Id<BVoxPalette>)> + '_ {
         // Safety: retained layer ids have a `layer_palette_ids` value.
@@ -335,7 +335,8 @@ impl VoxObject {
     /// Live voxels' samples in `layer_id`, as `(voxel id, material id)`, in
     /// ascending raster order, or `None` if `layer_id` is not one of this
     /// object's layers. Reads the layer's sample column once, so a full scan
-    /// skips [`voxel_material`](Self::voxel_material)'s per-call lookups.
+    /// is cheaper than per-voxel [`voxel_material`](Self::voxel_material)
+    /// calls.
     pub fn iter_live_samples(
         &self,
         layer_id: U32Id<BVoxLayer>,

@@ -11,8 +11,7 @@ use std::{
 /// An error from voxcore.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Error {
-    /// A value pool was given a value outside its kind's value domain: a NaN
-    /// float value or component, or an int beyond `2^53 - 1` in magnitude.
+    /// A value pool was given a value outside its kind's value domain.
     MalformedValuePoolValue { value_id: U32Id<BVoxValuePoolValue> },
 
     /// An object grid of this many cells would exceed

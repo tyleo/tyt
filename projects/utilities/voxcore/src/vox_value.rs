@@ -4,8 +4,8 @@ use crate::VoxMap;
 ///
 /// This is the in-memory data model shared by palette cell values and the
 /// opaque extension namespace. Numbers, integral or not, are held as `f64`, so
-/// an integer past 2^53 loses precision and cannot round-trip; store such
-/// values in an `int` value pool, whose values are `i64`.
+/// an integer past 2^53 loses precision. Store such values in an `int` value
+/// pool.
 #[derive(Clone, Debug, PartialEq)]
 pub enum VoxValue {
     /// A boolean.

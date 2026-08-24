@@ -9,9 +9,8 @@ use std::mem;
 /// value ids.
 ///
 /// Build a value pool with the constructor for its kind (for example
-/// [`float`](Self::float) or [`vec_4_float`](Self::vec_4_float)), which checks
-/// its input and retains one id per value in the given order. Read values back
-/// by id with [`value`](Self::value) or in listing order with
+/// [`float`](Self::float) or [`vec_4_float`](Self::vec_4_float)). Read values
+/// back by id with [`value`](Self::value) or in listing order with
 /// [`iter_values`](Self::iter_values), and match [`kind`](Self::kind) for the
 /// kind.
 #[derive(Debug)]
@@ -194,8 +193,7 @@ impl VoxValuePool {
         }
     }
 
-    /// The kind, for matching. Read the values through [`value`](Self::value)
-    /// and [`iter_values`](Self::iter_values).
+    /// The kind, for matching.
     pub fn kind(&self) -> &VoxValuePoolKind {
         &self.kind
     }
@@ -230,7 +228,7 @@ impl VoxValuePool {
 
     /// The id of the first value outside its kind's value domain, or `None`
     /// if every value is within it. The checked constructors gate on this, so
-    /// a flaw found later is a voxcore bug;
+    /// a flaw found later is a voxcore bug.
     /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
     pub(crate) fn first_out_of_domain_value(&self) -> Option<U32Id<BVoxValuePoolValue>> {
         for (value_id, value) in self.iter_values() {
@@ -293,7 +291,7 @@ impl VoxValuePool {
             .map(move |value_id| (value_id, self.value_ref(value_id)))
     }
 
-    /// The number of values in the value pool, across every kind.
+    /// Number of values.
     pub fn len(&self) -> usize {
         self.value_ids.len()
     }
@@ -399,8 +397,7 @@ impl PartialEq for VoxValuePool {
 /// consumer reading numbers as doubles keeps exact.
 const MAX_INT_MAGNITUDE: i64 = (1 << 53) - 1;
 
-/// Whether `value` is within the float value domain: a finite number or an
-/// infinity.
+/// Whether `value` is within the float value domain.
 fn float_in_domain(value: f64) -> bool {
     !value.is_nan()
 }
@@ -412,8 +409,7 @@ fn floats_in_domain(components: &[f64]) -> bool {
         .all(|&component| float_in_domain(component))
 }
 
-/// Whether `value` is within the int value domain: magnitude at most
-/// [`MAX_INT_MAGNITUDE`].
+/// Whether `value` is within the int value domain.
 fn int_in_domain(value: i64) -> bool {
     (-MAX_INT_MAGNITUDE..=MAX_INT_MAGNITUDE).contains(&value)
 }

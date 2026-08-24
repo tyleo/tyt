@@ -1,3 +1,2 @@
-/// Brand marker for a single voxel within a [`VoxObject`](crate::VoxObject)'s
-/// voxel id pool.
+/// Brand marker for a voxel in a [`VoxObject`](crate::VoxObject).
 pub struct BVoxVoxel;

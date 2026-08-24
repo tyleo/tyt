@@ -58,15 +58,15 @@ impl<'a> VoxEffectiveProperty<'a> {
         })
     }
 
-    /// The value `material` draws, or `None` if `material` is not one of the
-    /// winning palette's.
+    /// The value `material_id` draws, or `None` if `material_id` is not one of
+    /// the winning palette's materials.
     pub fn value(&self, material_id: U32Id<BVoxMaterial>) -> Option<VoxValuePoolValueRef<'_>> {
         let value_id = self.value_id(material_id)?;
         self.value_pool.value(value_id)
     }
 
-    /// The value id `material` draws, or `None` if `material` is not one of
-    /// the winning palette's.
+    /// The value id `material_id` draws, or `None` if `material_id` is not one
+    /// of the winning palette's materials.
     pub fn value_id(&self, material_id: U32Id<BVoxMaterial>) -> Option<U32Id<BVoxValuePoolValue>> {
         self.palette.value_id(material_id, self.property_id)
     }
