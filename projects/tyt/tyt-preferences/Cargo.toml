@@ -5,3 +5,11 @@ edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
 description = "Preference loading from .tytconfig files for tyt sub-crates."
+
+[dependencies]
+serde = { version = "1", optional = true }
+serde_json = { version = "1", features = ["preserve_order"], optional = true }
+
+[features]
+default = ["impl"]
+impl = ["dep:serde", "dep:serde_json"]

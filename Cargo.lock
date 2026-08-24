@@ -1910,6 +1910,10 @@ dependencies = [
 [[package]]
 name = "tyt-preferences"
 version = "0.1.6"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "tyt-vmax"
