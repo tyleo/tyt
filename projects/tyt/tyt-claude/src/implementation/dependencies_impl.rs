@@ -8,6 +8,7 @@ use std::{
     io::{ErrorKind, Result as IOResult},
     path::{Path, PathBuf},
 };
+use tyt_injection::serde_json::Value;
 use tyt_preferences::{Dependencies as PrefsDependencies, read_section, write_section};
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -77,6 +78,16 @@ impl Dependencies for DependenciesImpl {
         Ok(PrefsDependencies::read_file(self, path)?)
     }
 
+    fn json_string_values(&self, json: &[u8]) -> Result<Vec<String>> {
+        let value: Value = tyt_injection::parse_json(json)?;
+
+        let mut out = Vec::new();
+
+        collect_string_values(&value, &mut out);
+
+        Ok(out)
+    }
+
     fn copy_file(&self, src: &Path, dst: &Path) -> Result<()> {
         if let Some(parent) = dst.parent() {
             fs::create_dir_all(parent)?;
@@ -101,5 +112,22 @@ impl PrefsDependencies for DependenciesImpl {
 
     fn write_file(&self, path: &Path, contents: &[u8]) -> IOResult<()> {
         tyt_injection::write_file_atomic(path, contents)
+    }
+}
+
+fn collect_string_values(value: &Value, out: &mut Vec<String>) {
+    match value {
+        Value::String(s) => out.push(s.clone()),
+        Value::Array(a) => {
+            for v in a {
+                collect_string_values(v, out);
+            }
+        }
+        Value::Object(o) => {
+            for v in o.values() {
+                collect_string_values(v, out);
+            }
+        }
+        _ => {}
     }
 }

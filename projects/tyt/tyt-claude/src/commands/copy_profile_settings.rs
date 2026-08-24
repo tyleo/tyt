@@ -1,7 +1,6 @@
 use crate::{Dependencies, Error, Result, normalize_separators};
 use clap::Parser;
 use std::path::{Path, PathBuf};
-use tyt_injection::{parse_json, serde_json::Value};
 
 /// Copies `settings.json` (and `settings.local.json`, if present) from one
 /// profile's directory to another, plus any files referenced by string
@@ -43,10 +42,7 @@ impl CopyProfileSettings {
             let Some(bytes) = dependencies.read_file(&src_settings)? else {
                 continue;
             };
-            let value: Value = parse_json(&bytes)?;
-
-            let mut refs: Vec<String> = Vec::new();
-            collect_string_values(&value, &mut refs);
+            let refs = dependencies.json_string_values(&bytes)?;
 
             for s in refs {
                 let trimmed = s.trim();
@@ -102,22 +98,5 @@ impl CopyProfileSettings {
         }
         dependencies.write_stdout(buf.as_bytes())?;
         Ok(())
-    }
-}
-
-fn collect_string_values(value: &Value, out: &mut Vec<String>) {
-    match value {
-        Value::String(s) => out.push(s.clone()),
-        Value::Array(a) => {
-            for v in a {
-                collect_string_values(v, out);
-            }
-        }
-        Value::Object(o) => {
-            for v in o.values() {
-                collect_string_values(v, out);
-            }
-        }
-        _ => {}
     }
 }
