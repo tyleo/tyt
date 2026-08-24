@@ -25,6 +25,7 @@ impl<T: Serialize> SerializePrefs for T {
             Some(bytes) => {
                 let parsed: Value = serde_json::from_slice(bytes)
                     .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
+
                 match parsed {
                     Value::Object(map) => map,
                     _ => {
@@ -37,10 +38,15 @@ impl<T: Serialize> SerializePrefs for T {
             }
             None => Map::new(),
         };
+
         let value = serde_json::to_value(self).map_err(IOError::other)?;
+
         root.insert(key.to_string(), value);
+
         let mut bytes = serde_json::to_vec_pretty(&Value::Object(root)).map_err(IOError::other)?;
+
         bytes.push(b'\n');
+
         Ok(bytes)
     }
 }

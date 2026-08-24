@@ -11,6 +11,8 @@ pub fn write_section<T: SerializePrefs>(
     value: &T,
 ) -> IOResult<()> {
     let existing = dependencies.read_file(path)?;
+
     let bytes = value.serialize_prefs(key, existing.as_deref())?;
+
     dependencies.write_file(path, &bytes)
 }

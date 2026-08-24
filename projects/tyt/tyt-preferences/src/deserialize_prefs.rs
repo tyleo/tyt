@@ -20,9 +20,11 @@ impl<T: DeserializeOwned> DeserializePrefs for T {
     fn deserialize_prefs(config_json: &[u8], key: &str) -> IOResult<Option<Self>> {
         let value: Value = serde_json::from_slice(config_json)
             .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
+
         let Some(section) = value.get(key) else {
             return Ok(None);
         };
+
         serde_json::from_value(section.clone())
             .map(Some)
             .map_err(|e| IOError::new(ErrorKind::InvalidData, e))

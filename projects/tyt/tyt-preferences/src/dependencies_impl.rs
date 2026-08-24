@@ -33,6 +33,7 @@ impl Dependencies for DependenciesImpl {
 
         let path = String::from_utf8(output.stdout)
             .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
+
         Ok(Some(PathBuf::from(path.trim())))
     }
 

@@ -12,5 +12,6 @@ pub fn read_section<T: DeserializePrefs>(
     let Some(bytes) = dependencies.read_file(path)? else {
         return Ok(None);
     };
+
     T::deserialize_prefs(&bytes, key)
 }

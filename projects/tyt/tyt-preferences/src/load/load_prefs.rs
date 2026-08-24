@@ -7,6 +7,8 @@ pub fn load_prefs<T: DeserializePrefs>(
     key: &str,
 ) -> IOResult<Prefs<T>> {
     let user = load_user_prefs(dependencies, key)?;
+
     let git_root = load_git_prefs(dependencies, key)?;
+
     Ok(Prefs { user, git_root })
 }
