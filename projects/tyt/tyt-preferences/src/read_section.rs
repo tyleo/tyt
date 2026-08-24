@@ -1,9 +1,9 @@
 use crate::{Dependencies, DeserializePrefs};
 use std::{io::Result as IOResult, path::Path};
 
-/// Reads a single section keyed by `key` from a `.tytconfig` / `.tytusrconfig`
-/// file at `path`. Returns `None` if the file does not exist or the section
-/// is absent.
+/// Reads the `key` section from a `.tytconfig` / `.tytusrconfig` file at
+/// `path`. Returns `None` if the file does not exist or the section is
+/// absent.
 pub fn read_section<T: DeserializePrefs>(
     dependencies: &impl Dependencies,
     path: &Path,

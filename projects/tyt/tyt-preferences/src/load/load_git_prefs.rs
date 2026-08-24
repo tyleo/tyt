@@ -1,7 +1,7 @@
-use crate::{Dependencies, DeserializePrefs};
+use crate::{Dependencies, DeserializePrefs, load_prefs_from_dir};
 use std::io::Result as IOResult;
 
-/// Loads preferences for the given key from `<git-root>/.tytconfig`.
+/// Loads preferences for `key` from `<git-root>/.tytconfig`.
 pub fn load_git_prefs<T: DeserializePrefs>(
     dependencies: &impl Dependencies,
     key: &str,
@@ -9,5 +9,5 @@ pub fn load_git_prefs<T: DeserializePrefs>(
     let Some(dir) = dependencies.git_root_dir()? else {
         return Ok(None);
     };
-    crate::load_prefs_from_dir(dependencies, &dir, ".tytconfig", key)
+    load_prefs_from_dir(dependencies, &dir, ".tytconfig", key)
 }
