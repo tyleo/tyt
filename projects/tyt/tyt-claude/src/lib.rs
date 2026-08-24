@@ -2,9 +2,9 @@ pub mod commands;
 
 mod claude_prefs;
 mod dependencies;
-#[cfg(feature = "impl")]
-mod dependencies_impl;
 mod error;
+#[cfg(feature = "impl")]
+mod implementation;
 mod normalize_separators;
 mod resolved_claude_prefs;
 mod result;
@@ -13,9 +13,9 @@ mod tyt_claude;
 
 pub use claude_prefs::*;
 pub use dependencies::*;
-#[cfg(feature = "impl")]
-pub use dependencies_impl::*;
 pub use error::*;
+#[cfg(feature = "impl")]
+pub use implementation::*;
 pub(crate) use normalize_separators::*;
 pub use resolved_claude_prefs::*;
 pub use result::*;

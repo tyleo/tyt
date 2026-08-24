@@ -1,5 +1,5 @@
 mod dependencies_impl;
 mod deserialize_prefs;
-mod openai;
+mod serialize_prefs;
 
 pub use dependencies_impl::*;

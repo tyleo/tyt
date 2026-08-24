@@ -4,21 +4,19 @@ use crate::{
 };
 use std::{
     env, fs,
-    io::{Error as IOError, ErrorKind},
+    io::{Error as IOError, ErrorKind, Result as IOResult},
     path::{Path, PathBuf},
     thread,
     time::Duration,
 };
-use tyt_preferences::load_user_git_prefs;
+use tyt_preferences::{Dependencies as PrefsDependencies, load_user_git_prefs};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn meshy_api_key(&self) -> Result<Option<String>> {
-        let prefs_deps = tyt_preferences::DependenciesImpl;
-        let prefs: Option<UsrPrefs> =
-            load_user_git_prefs(&prefs_deps, "meshy").map_err(Error::IO)?;
+        let prefs: Option<UsrPrefs> = load_user_git_prefs(self, "meshy").map_err(Error::IO)?;
         Ok(prefs.and_then(|prefs| prefs.api_key))
     }
 
@@ -109,5 +107,23 @@ impl Dependencies for DependenciesImpl {
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_stdout(contents)?)
+    }
+}
+
+impl PrefsDependencies for DependenciesImpl {
+    fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
+        Ok(tyt_injection::user_home_dir())
+    }
+
+    fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
+        tyt_injection::git_root_dir()
+    }
+
+    fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
+        tyt_injection::read_file_optional(path)
+    }
+
+    fn write_file(&self, path: &Path, contents: &[u8]) -> IOResult<()> {
+        tyt_injection::write_file_atomic(path, contents)
     }
 }

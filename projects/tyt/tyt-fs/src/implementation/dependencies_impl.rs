@@ -4,9 +4,10 @@ use std::{
     env,
     ffi::OsStr,
     fs::{self},
+    io::Result as IOResult,
     path::{Path, PathBuf},
 };
-use tyt_preferences::{Dependencies as _, DeserializePrefs as _};
+use tyt_preferences::{Dependencies as PrefsDependencies, DeserializePrefs as _};
 
 /// Concrete implementation of filesystem operations.
 #[derive(Clone, Copy, Debug, Default)]
@@ -30,8 +31,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn fs_prefs(&self) -> Result<Prefs> {
-        let prefs_deps = tyt_preferences::DependenciesImpl;
-        let mut prefs: Prefs = tyt_preferences::load_git_prefs(&prefs_deps, "fs")
+        let mut prefs: Prefs = tyt_preferences::load_git_prefs(self, "fs")
             .map_err(Error::IO)?
             .unwrap_or_default();
         if let Some(move_to_scratch) = prefs.move_to_scratch.as_mut()
@@ -39,7 +39,7 @@ impl Dependencies for DependenciesImpl {
         {
             let scratch_path = PathBuf::from(scratch_dir);
             if !scratch_path.is_absolute()
-                && let Some(git_root) = prefs_deps.git_root_dir().map_err(Error::IO)?
+                && let Some(git_root) = self.git_root_dir().map_err(Error::IO)?
             {
                 move_to_scratch.scratch_dir =
                     Some(git_root.join(scratch_path).to_string_lossy().into_owned());
@@ -49,15 +49,14 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn rel_config(&self) -> Result<Option<RelConfig>> {
-        let prefs_deps = tyt_preferences::DependenciesImpl;
-        let Some(git_root) = prefs_deps.git_root_dir().map_err(Error::IO)? else {
+        let Some(git_root) = self.git_root_dir().map_err(Error::IO)? else {
             return Ok(None);
         };
 
-        let config = prefs_deps
+        let config = self
             .read_file(&git_root.join(".tytconfig"))
             .map_err(Error::IO)?;
-        let usr_config = prefs_deps
+        let usr_config = self
             .read_file(&git_root.join(".tytusrconfig"))
             .map_err(Error::IO)?;
 
@@ -96,5 +95,23 @@ impl Dependencies for DependenciesImpl {
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_stdout(contents)?)
+    }
+}
+
+impl PrefsDependencies for DependenciesImpl {
+    fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
+        Ok(tyt_injection::user_home_dir())
+    }
+
+    fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
+        tyt_injection::git_root_dir()
+    }
+
+    fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
+        tyt_injection::read_file_optional(path)
+    }
+
+    fn write_file(&self, path: &Path, contents: &[u8]) -> IOResult<()> {
+        tyt_injection::write_file_atomic(path, contents)
     }
 }

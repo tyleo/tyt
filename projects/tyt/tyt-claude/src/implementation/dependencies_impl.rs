@@ -5,22 +5,13 @@ use crate::{
 use std::{
     ffi::OsString,
     fs,
-    io::ErrorKind,
+    io::{ErrorKind, Result as IOResult},
     path::{Path, PathBuf},
 };
-use tyt_preferences::{
-    Dependencies as PrefsDependencies, DependenciesImpl as PrefsDependenciesImpl, read_section,
-    write_section,
-};
+use tyt_preferences::{Dependencies as PrefsDependencies, read_section, write_section};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
-
-impl DependenciesImpl {
-    fn prefs_deps(&self) -> PrefsDependenciesImpl {
-        PrefsDependenciesImpl
-    }
-}
 
 impl Dependencies for DependenciesImpl {
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
@@ -28,17 +19,16 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn user_home_dir(&self) -> Result<Option<PathBuf>> {
-        Ok(self.prefs_deps().user_home_dir()?)
+        Ok(PrefsDependencies::user_home_dir(self)?)
     }
 
     fn git_root_dir(&self) -> Result<Option<PathBuf>> {
-        Ok(self.prefs_deps().git_root_dir()?)
+        Ok(PrefsDependencies::git_root_dir(self)?)
     }
 
     fn claude_prefs(&self) -> Result<ResolvedClaudePrefs> {
-        let prefs_deps = self.prefs_deps();
-        let user_path = prefs_deps.user_home_dir()?.map(|d| d.join(".tytconfig"));
-        let git_root = prefs_deps.git_root_dir()?;
+        let user_path = PrefsDependencies::user_home_dir(self)?.map(|d| d.join(".tytconfig"));
+        let git_root = PrefsDependencies::git_root_dir(self)?;
         let git_root_path = git_root.as_ref().map(|d| d.join(".tytconfig"));
         let git_user_path = git_root.as_ref().map(|d| d.join(".tytusrconfig"));
 
@@ -47,8 +37,7 @@ impl Dependencies for DependenciesImpl {
             .into_iter()
             .flatten()
         {
-            let Some(layer): Option<ClaudePrefs> =
-                read_section(&prefs_deps, &source, CLAUDE_PREFS_KEY)?
+            let Some(layer): Option<ClaudePrefs> = read_section(self, &source, CLAUDE_PREFS_KEY)?
             else {
                 continue;
             };
@@ -69,16 +58,11 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn read_claude_section(&self, path: &Path) -> Result<Option<ClaudePrefs>> {
-        Ok(read_section(&self.prefs_deps(), path, CLAUDE_PREFS_KEY)?)
+        Ok(read_section(self, path, CLAUDE_PREFS_KEY)?)
     }
 
     fn write_claude_section(&self, path: &Path, prefs: &ClaudePrefs) -> Result<()> {
-        Ok(write_section(
-            &self.prefs_deps(),
-            path,
-            CLAUDE_PREFS_KEY,
-            prefs,
-        )?)
+        Ok(write_section(self, path, CLAUDE_PREFS_KEY, prefs)?)
     }
 
     fn exec_claude_with_env(&self, env: &[(OsString, OsString)], args: &[OsString]) -> Result<i32> {
@@ -90,7 +74,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn read_file(&self, path: &Path) -> Result<Option<Vec<u8>>> {
-        Ok(self.prefs_deps().read_file(path)?)
+        Ok(PrefsDependencies::read_file(self, path)?)
     }
 
     fn copy_file(&self, src: &Path, dst: &Path) -> Result<()> {
@@ -99,5 +83,23 @@ impl Dependencies for DependenciesImpl {
         }
         fs::copy(src, dst)?;
         Ok(())
+    }
+}
+
+impl PrefsDependencies for DependenciesImpl {
+    fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
+        Ok(tyt_injection::user_home_dir())
+    }
+
+    fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
+        tyt_injection::git_root_dir()
+    }
+
+    fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
+        tyt_injection::read_file_optional(path)
+    }
+
+    fn write_file(&self, path: &Path, contents: &[u8]) -> IOResult<()> {
+        tyt_injection::write_file_atomic(path, contents)
     }
 }
