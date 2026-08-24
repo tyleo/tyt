@@ -102,9 +102,11 @@ mod tests {
                 .retain_property(name.to_owned(), value_pool_id, value_id(0))
                 .unwrap();
         }
+
         palette
             .retain_material(entries.iter().map(|&(_, index)| value_id(index)).collect())
             .unwrap();
+
         state.retain_palette(palette).unwrap()
     }
 
@@ -115,6 +117,7 @@ mod tests {
         for &palette_id in palette_ids {
             object.retain_layer(palette_id, U32Id::from_u32(0));
         }
+
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         let sample_ids = vec![U32Id::from_u32(0); palette_ids.len()];
         object.retain_voxel(voxel_id, &sample_ids).unwrap();
@@ -172,10 +175,13 @@ mod tests {
         let v = effective
             .property(effective.property_id_by_name("v").unwrap())
             .unwrap();
+
         assert_eq!((v.layer_id(), v.palette_id()), (layers[0].0, supplying_id));
+
         let w = effective
             .property(effective.property_id_by_name("w").unwrap())
             .unwrap();
+
         assert_eq!((w.layer_id(), w.palette_id()), (layers[1].0, plain_id));
     }
 
@@ -204,6 +210,7 @@ mod tests {
         palette
             .retain_property("v".to_owned(), value_pool_id, value_id(0))
             .unwrap();
+
         let keep_id = palette.retain_material(vec![value_id(0)]).unwrap();
         let doomed_id = palette.retain_material(vec![value_id(1)]).unwrap();
         let sparse_id = palette.retain_material(vec![value_id(2)]).unwrap();

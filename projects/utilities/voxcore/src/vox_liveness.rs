@@ -51,6 +51,7 @@ impl VoxLiveness {
             "voxel id {i} is outside the {}-cell grid",
             self.len
         );
+
         (self.words[i / 64] >> (i % 64)) & 1 == 1
     }
 
@@ -80,6 +81,7 @@ impl VoxLiveness {
             "voxel id {i} is outside the {}-cell grid",
             self.len
         );
+
         let mask = 1u64 << (i % 64);
         if live {
             self.words[i / 64] |= mask;
@@ -120,6 +122,7 @@ mod tests {
     #[test]
     fn sets_and_reads_bits_across_word_boundaries() {
         let mut liveness = VoxLiveness::new(130);
+
         assert_eq!(liveness.len(), 130);
         assert!(!liveness.is_empty());
 
@@ -143,10 +146,12 @@ mod tests {
         }
 
         assert_eq!(liveness.count_live(), live.len());
+
         let got: Vec<u32> = liveness
             .iter_live()
             .map(|voxel_id| voxel_id.to_u32())
             .collect();
+
         assert_eq!(got, live);
     }
 
@@ -163,6 +168,7 @@ mod tests {
     #[test]
     fn empty_map_has_no_live_cells() {
         let liveness = VoxLiveness::new(0);
+
         assert!(liveness.is_empty());
         assert_eq!(liveness.count_live(), 0);
         assert_eq!(liveness.iter_live().count(), 0);

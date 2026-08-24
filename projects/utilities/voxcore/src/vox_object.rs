@@ -125,6 +125,7 @@ impl VoxObject {
             let new_palette_id = palette_remap
                 .new_id(old_palette_id)
                 .expect("a layer references a live palette in a valid state");
+
             // Safety: same retained layer id.
             *unsafe { self.layer_palette_ids.get_mut(layer_id) } = new_palette_id;
 
@@ -144,6 +145,7 @@ impl VoxObject {
         // Compact the layer id pool; the values above were already translated,
         // so this only relabels layer keys.
         let layer_remap = self.layer_ids.gc();
+
         // Safety: both columns were in sync with the pre-gc layer id pool, and
         // nothing has retained or released since.
         unsafe { self.samples.gc(&layer_remap) };
@@ -232,10 +234,12 @@ impl VoxObject {
         if !self.layer_ids.is_retained(id) {
             return Err(Error::UnknownLayer { layer_id: id });
         }
+
         let count = self.layer_ids.len();
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
+
         self.layer_ids.move_to(id, index);
         Ok(())
     }
@@ -294,6 +298,7 @@ impl VoxObject {
         if (id.to_u32() as usize) >= self.liveness.len() {
             return Err(Error::UnknownVoxel { voxel_id: id });
         }
+
         if sample_ids.len() != self.layer_ids.len() {
             return Err(Error::SampleArity {
                 samples: sample_ids.len(),
@@ -302,11 +307,13 @@ impl VoxObject {
         }
 
         self.liveness.set_live(id, true);
+
         for (layer_id, &material_id) in self.layer_ids.iter().zip(sample_ids) {
             // Safety: retained layer ids have a sample column.
             let column = unsafe { self.samples.get_mut(layer_id) };
             column[id.to_usize_id()] = material_id;
         }
+
         Ok(())
     }
 
@@ -316,6 +323,7 @@ impl VoxObject {
         if (id.to_u32() as usize) >= self.liveness.len() {
             return Err(Error::UnknownVoxel { voxel_id: id });
         }
+
         self.liveness.set_live(id, false);
         Ok(())
     }
@@ -344,6 +352,7 @@ impl VoxObject {
         if !self.layer_ids.is_retained(layer_id) {
             return None;
         }
+
         // Safety: retained layer ids have a sample column.
         let column = unsafe { self.samples.get(layer_id) };
         Some(
@@ -455,8 +464,10 @@ mod tests {
         let object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 3, 4)).unwrap();
         let position = TyVector3U32::new(1, 2, 3);
         let voxel_id = object.voxel_id(position).unwrap();
+
         assert_eq!(voxel_id.to_u32(), 23); // 1*(3*4) + 2*4 + 3
         assert_eq!(object.voxel_position(voxel_id), Some(position));
+
         // Out of bounds yields None rather than erroring.
         assert_eq!(object.voxel_id(TyVector3U32::new(2, 0, 0)), None);
         assert_eq!(object.voxel_position(U32Id::from_u32(24)), None);
@@ -533,6 +544,7 @@ mod tests {
     #[test]
     fn iter_live_decodes_positions_in_raster_order() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 3, 4)).unwrap();
+
         // Retain out of order; iteration must still ascend by raster index.
         for position in [
             TyVector3U32::new(1, 2, 3),
@@ -550,6 +562,7 @@ mod tests {
                 (voxel_id.to_u32(), [position.x, position.y, position.z])
             })
             .collect();
+
         assert_eq!(live, [(0, [0, 0, 0]), (6, [0, 1, 2]), (23, [1, 2, 3])]);
     }
 
@@ -567,6 +580,7 @@ mod tests {
             samples,
             [(first_id, material_id(2)), (second_id, material_id(7))]
         );
+
         // A layer id the object never minted is rejected.
         assert!(object.iter_live_samples(U32Id::from_u32(9)).is_none());
     }
@@ -601,6 +615,7 @@ mod tests {
     fn two_layers_may_share_a_palette() {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         let palette_id = U32Id::<BVoxPalette>::from_u32(0);
+
         // Two layers referencing the same palette is allowed; layers do not
         // merge.
         let first_id = object.retain_layer(palette_id, material_id(0));
@@ -662,6 +677,7 @@ mod tests {
         let first_id = object.retain_layer(U32Id::<BVoxPalette>::from_u32(0), material_id(0));
         let second_id = object.retain_layer(U32Id::<BVoxPalette>::from_u32(1), material_id(0));
         let third_id = object.retain_layer(U32Id::<BVoxPalette>::from_u32(2), material_id(0));
+
         assert_eq!(object.layer_index(second_id), Some(1));
 
         assert_eq!(object.move_layer(third_id, 0), Ok(()));

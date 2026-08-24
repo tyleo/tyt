@@ -116,11 +116,13 @@ impl VoxPalette {
                 properties: self.property_ids.len(),
             });
         }
+
         let material_id = self.material_ids.retain();
         let mut row = IdField::new();
         for (property_id, value_id) in self.property_ids.iter().zip(value_ids) {
             row.retain(property_id, value_id);
         }
+
         self.materials.retain(material_id, row);
         Ok(material_id)
     }
@@ -132,6 +134,7 @@ impl VoxPalette {
         if !self.material_ids.is_retained(id) {
             return None;
         }
+
         // The row holds Copy value ids, so dropping the inner IdField frees
         // its buffer with nothing to release per property.
         // Safety: a retained material has a row.
@@ -170,10 +173,12 @@ impl VoxPalette {
         if !self.material_ids.is_retained(id) {
             return Err(Error::UnknownMaterial { material_id: id });
         }
+
         let count = self.material_ids.len();
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
+
         self.material_ids.move_to(id, index);
         Ok(())
     }
@@ -259,10 +264,12 @@ impl VoxPalette {
         if !self.property_ids.is_retained(id) {
             return Err(Error::UnknownProperty { property_id: id });
         }
+
         let count = self.property_ids.len();
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
+
         self.property_ids.move_to(id, index);
         Ok(())
     }
@@ -306,6 +313,7 @@ impl VoxPalette {
         {
             return None;
         }
+
         // Safety: a retained material has a value id for every property.
         let row = unsafe { self.materials.get(material_id) };
         Some(*unsafe { row.get(property_id) })
@@ -333,6 +341,7 @@ impl VoxPalette {
                 )
             })
             .collect();
+
         for material_id in self.material_ids.iter() {
             // Safety: a retained material holds a value id for every property,
             // and the row is keyed by property id.
@@ -380,6 +389,7 @@ impl VoxPalette {
                 unsafe { self.properties.get(property_id) }.value_pool_id == value_pool_id
             })
             .collect();
+
         if !value_pool_property_ids.is_empty() {
             for material_id in self.material_ids.iter() {
                 // Safety: a retained material holds a value id for every
@@ -429,6 +439,7 @@ mod tests {
         let metallic_id = palette
             .retain_property("metallic_id".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let ior_id = palette
             .retain_property("ior_id".to_owned(), value_pool_id(1), value_id(0))
             .unwrap();
@@ -438,6 +449,7 @@ mod tests {
         let matte_id = palette
             .retain_material(vec![value_id(0), value_id(3)])
             .unwrap();
+
         let shiny_id = palette
             .retain_material(vec![value_id(1), value_id(3)])
             .unwrap();
@@ -467,6 +479,7 @@ mod tests {
         palette
             .retain_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         // One property, but two value ids supplied.
         assert_eq!(
             palette.retain_material(vec![value_id(0), value_id(1)]),
@@ -484,6 +497,7 @@ mod tests {
         let color_id = palette
             .retain_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let metal_id = palette
             .retain_property("metallic".to_owned(), value_pool_id(1), value_id(0))
             .unwrap();
@@ -496,6 +510,7 @@ mod tests {
         // and the index follows.
         palette.release_property(color_id).unwrap();
         assert_eq!(palette.property_id_by_name("baseColor"), None);
+
         palette.gc();
         let metal_id = U32Id::<BVoxProperty>::from_u32(0);
         assert_eq!(palette.property_id_by_name("metallic"), Some(metal_id));
@@ -531,11 +546,13 @@ mod tests {
         let color_id = palette
             .retain_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let material_id = palette.retain_material(vec![value_id(7)]).unwrap();
 
         let added_id = palette
             .retain_property("metallic".to_owned(), value_pool_id(1), value_id(3))
             .unwrap();
+
         assert_eq!(palette.value_id(material_id, color_id), Some(value_id(7)));
         assert_eq!(palette.value_id(material_id, added_id), Some(value_id(3)));
     }
@@ -546,6 +563,7 @@ mod tests {
         let property_id = palette
             .retain_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let material_id = palette.retain_material(vec![value_id(2)]).unwrap();
 
         let copy = palette.clone_palette();
@@ -564,9 +582,11 @@ mod tests {
         let a_id = palette
             .retain_property("a".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let b_id = palette
             .retain_property("b".to_owned(), value_pool_id(1), value_id(0))
             .unwrap();
+
         let material_id = palette
             .retain_material(vec![value_id(1), value_id(2)])
             .unwrap();
@@ -582,6 +602,7 @@ mod tests {
         ); // already gone
 
         palette.gc();
+
         // The surviving property and material renumber to 0.
         let property_id = U32Id::<BVoxProperty>::from_u32(0);
         let material_id = U32Id::<BVoxMaterial>::from_u32(0);
@@ -598,9 +619,11 @@ mod tests {
         let a_id = palette
             .retain_property("a".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let b_id = palette
             .retain_property("b".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let c_id = palette
             .retain_property("c".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
@@ -620,6 +643,7 @@ mod tests {
         let d_id = palette
             .retain_property("d".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         assert_eq!(
             palette
                 .iter_properties()
@@ -658,12 +682,15 @@ mod tests {
         let a_id = palette
             .retain_property("a".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let b_id = palette
             .retain_property("b".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let c_id = palette
             .retain_property("c".to_owned(), value_pool_id(1), value_id(0))
             .unwrap();
+
         assert_eq!(palette.property_index(b_id), Some(1));
 
         assert_eq!(palette.move_property(c_id, 0), Ok(()));
@@ -736,6 +763,7 @@ mod tests {
         let property_id = palette
             .retain_property("v".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
+
         let keep_id = palette.retain_material(vec![value_id(0)]).unwrap();
         let drop_id = palette.retain_material(vec![value_id(1)]).unwrap();
         let last_id = palette.retain_material(vec![value_id(2)]).unwrap();
@@ -747,11 +775,13 @@ mod tests {
         assert_eq!(palette.release_material(drop_id), None); // already gone
 
         palette.gc();
+
         // The two survivors are contiguous; their value ids are intact.
         let value_ids: Vec<_> = palette
             .iter_materials()
             .map(|material_id| palette.value_id(material_id, property_id).unwrap())
             .collect();
+
         assert_eq!(palette.material_count(), 2);
         assert_eq!(value_ids, [value_id(0), value_id(2)]);
     }

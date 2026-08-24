@@ -218,6 +218,7 @@ impl VoxValuePool {
                 VoxValuePoolKind::Vec4Int(values) => values.release(id),
             }
         }
+
         self.value_ids.release_stable(id);
     }
 
@@ -245,10 +246,12 @@ impl VoxValuePool {
                 | VoxValuePoolValueRef::Json(_)
                 | VoxValuePoolValueRef::String(_) => true,
             };
+
             if !in_domain {
                 return Some(value_id);
             }
         }
+
         None
     }
 
@@ -274,6 +277,7 @@ impl VoxValuePool {
                 VoxValuePoolKind::Vec4Int(values) => values.gc(&remap),
             }
         }
+
         remap
     }
 
@@ -304,10 +308,12 @@ impl VoxValuePool {
         if !self.value_ids.is_retained(id) {
             return Err(Error::UnknownValuePoolValue { value_id: id });
         }
+
         let count = self.value_ids.len();
         if index >= count {
             return Err(Error::IndexPastCount { index, count });
         }
+
         self.value_ids.move_to(id, index);
         Ok(())
     }
@@ -428,6 +434,7 @@ fn columns<T>(values: Vec<T>) -> (IdStruct<BVoxValuePoolValue>, IdField<BVoxValu
         let value_id = ids.retain();
         column.retain(value_id, value);
     }
+
     (ids, column)
 }
 
@@ -441,6 +448,7 @@ fn cloned<T: Clone>(
         // Safety: retained ids have a value.
         copy.retain(value_id, unsafe { column.get(value_id) }.clone());
     }
+
     copy
 }
 
@@ -458,16 +466,20 @@ mod tests {
         let value_pool = VoxValuePool::float(vec![0.0, 0.5, 1.0]).unwrap();
 
         assert_eq!(value_pool.len(), 3);
+
         let values: Vec<_> = value_pool.iter_values().collect();
         assert_eq!(values.len(), 3);
+
         assert_eq!(
             values[1],
             (U32Id::from_u32(1), VoxValuePoolValueRef::Float(0.5))
         );
+
         assert_eq!(
             value_pool.value(U32Id::from_u32(2)),
             Some(VoxValuePoolValueRef::Float(1.0))
         );
+
         assert_eq!(value_pool.value(U32Id::from_u32(3)), None);
     }
 
@@ -476,6 +488,7 @@ mod tests {
         let value_pool = VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap();
 
         assert_eq!(value_pool.len(), 1);
+
         assert_eq!(
             value_pool.value(U32Id::from_u32(0)),
             Some(VoxValuePoolValueRef::Vec4Float(&[1.0, 0.0, 0.0, 1.0]))
@@ -502,9 +515,11 @@ mod tests {
     fn move_value_reorders_the_listing_and_validates() {
         let mut value_pool =
             VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]);
+
         let b_id = U32Id::from_u32(1);
 
         assert_eq!(value_pool.move_value(b_id, 2), Ok(()));
+
         let order: Vec<_> = value_pool
             .iter_values()
             .map(|(_, value)| match value {
@@ -512,6 +527,7 @@ mod tests {
                 other => panic!("unexpected value {other:?}"),
             })
             .collect();
+
         assert_eq!(order, ["a", "c", "b"]);
         assert_eq!(value_pool.value_index(b_id), Some(2));
 
@@ -532,6 +548,7 @@ mod tests {
     fn clone_value_pool_is_an_independent_deep_copy() {
         let mut value_pool =
             VoxValuePool::string(vec!["a".to_owned(), "b".to_owned(), "c".to_owned()]);
+
         // Hole the value pool first: equality compares values in listing order,
         // so only reading back by id catches a clone that relabels.
         value_pool.release_value_stable(U32Id::from_u32(1));
@@ -539,6 +556,7 @@ mod tests {
         let mut copy = value_pool.clone_value_pool();
         assert_eq!(value_pool, copy);
         assert_eq!(copy.value(U32Id::from_u32(1)), None);
+
         assert_eq!(
             copy.value(U32Id::from_u32(2)),
             Some(VoxValuePoolValueRef::String("c"))
@@ -584,12 +602,14 @@ mod tests {
     fn int_rejects_a_value_beyond_the_cap() {
         const MAX_MAGNITUDE: i64 = (1 << 53) - 1;
         assert!(VoxValuePool::int(vec![MAX_MAGNITUDE, -MAX_MAGNITUDE]).is_ok());
+
         assert_eq!(
             VoxValuePool::int(vec![0, MAX_MAGNITUDE + 1]).unwrap_err(),
             Error::MalformedValuePoolValue {
                 value_id: value_id(1)
             }
         );
+
         assert_eq!(
             VoxValuePool::int(vec![-MAX_MAGNITUDE - 1]).unwrap_err(),
             Error::MalformedValuePoolValue {
