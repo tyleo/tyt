@@ -4,7 +4,7 @@ version = "0.1.6"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "Preference loading from .tytconfig files for tyt sub-crates."
+description = "Layered preference loading from sectioned config files."
 
 [dependencies]
 serde = { version = "1", optional = true }
