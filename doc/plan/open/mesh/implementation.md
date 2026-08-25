@@ -70,16 +70,114 @@ the program:
 ```rust
 let program = parse(&source)?;
 
-let checked = check(program, &env)?; // env: name -> Option<Type>, shape, dimension, numeric type
+let checked = check(program, &type_environment)?; // the types by name: shape, dimension, numeric type
 let ao_type = checked.get("ao");
 
-let evaluated = eval(&checked, &env)?; // env: name -> Option<Value>, plain or array
+let evaluated = eval(&checked, &value_environment)?; // the values by name, plain or array
 let ao_value = evaluated.get("ao");
 
 let select = parse_expression("faceAvg(ao) < 0.7")?;
 let checked_select = check_expression(&select, &checked)?; // the scope at the program's end
 let select_value = eval_expression(&checked_select, &evaluated)?;
 ```
+
+Each environment is plain data the crate defines, filled by voxsmith from the
+effective palette and the computed values and written out by hand in the tests:
+
+```rust
+use branded_id::{IdVec, U32Id};
+use std::collections::HashMap;
+
+// The rung brands the grouping ids carry.
+pub struct BSwatch;
+pub struct BVoxel;
+pub struct BFace;
+
+/// What a value has one entry per, the ladder bottom to top.
+pub enum Domain {
+    Plain,
+    Swatch,
+    Voxel,
+    Face,
+    Corner,
+}
+
+/// The vec width.
+pub enum Dimension {
+    Vec1,
+    Vec2,
+    Vec3,
+    Vec4,
+}
+
+/// A component's type.
+pub enum Scalar {
+    F32,
+    U8,
+    U16,
+    U32,
+    Bool,
+    String,
+}
+
+/// A value's type.
+pub struct Type {
+    pub domain: Domain,
+    pub dimension: Dimension,
+    pub scalar: Scalar,
+}
+
+/// The types `check` reads.
+pub struct TypeEnvironment {
+    /// Each name's type.
+    pub types: HashMap<String, Type>,
+}
+
+/// A value's entries, flattened component by component; a plain value holds
+/// one entry.
+pub enum Components {
+    F32(Vec<f32>),
+    U8(Vec<u8>),
+    U16(Vec<u16>),
+    U32(Vec<u32>),
+    Bool(Vec<bool>),
+    String(Vec<String>),
+}
+
+/// A value. The constructor errors on a component count that disagrees with
+/// the domain and dimension and on a bool or string above vec1, so the fields
+/// stay private.
+pub struct Value {
+    domain: Domain,
+    dimension: Dimension,
+    components: Components,
+}
+
+/// The tables the reductions and climbs walk between the domains; the corner
+/// rung needs none because every face owns four corners, in face order.
+pub struct Groupings {
+    /// Each voxel entry's swatch entry.
+    pub voxel_swatches: IdVec<BVoxel, U32Id<BSwatch>>,
+
+    /// Each face entry's voxel pieces, several where a merged face spans
+    /// voxels.
+    pub face_voxels: IdVec<BFace, Vec<U32Id<BVoxel>>>,
+}
+
+/// The values `eval` reads.
+pub struct ValueEnvironment {
+    /// Each name's value.
+    pub values: HashMap<String, Value>,
+
+    /// The tables the reductions and climbs walk.
+    pub groupings: Groupings,
+}
+```
+
+The crate performs no side effects; parsing, checking, and evaluating stay in
+memory. It carries no `Dependencies` trait, no `impl` feature, and no default
+implementation, because an injection surface would claim an I/O boundary the
+crate does not have.
 
 vxl assembles the program: a `;` appended to every `--value` and profile values
 fragment, the fragments joined in flag order with a `--profile`'s values first,
