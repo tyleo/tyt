@@ -2,7 +2,7 @@ use std::io::Result as IOResult;
 
 /// Abstracts JSON serialization for preference types.
 ///
-/// The `impl` feature provides `serialize_prefs_json` as a ready-made
+/// The `impl-json` feature provides `serialize_prefs_json` as a ready-made
 /// implementation body.
 pub trait SerializePrefs {
     /// Builds the pretty-printed file bytes to write back: `key` maps to a

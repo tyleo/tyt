@@ -20,6 +20,11 @@ pub use serialize_prefs::*;
 pub use write_section::*;
 
 #[cfg(feature = "impl")]
-mod implementation;
+mod r#impl;
 #[cfg(feature = "impl")]
-pub use implementation::*;
+pub use r#impl::*;
+
+#[cfg(feature = "impl-json")]
+mod impl_json;
+#[cfg(feature = "impl-json")]
+pub use impl_json::*;
