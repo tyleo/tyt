@@ -31,8 +31,8 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn fs_prefs(&self) -> Result<Prefs> {
-        let Some(layer) =
-            tyt_preferences::load_git_prefs::<Prefs>(self, "fs").map_err(Error::IO)?
+        let Some(layer) = tyt_preferences::load_git_prefs::<Prefs>(self, ".tytconfig", "fs")
+            .map_err(Error::IO)?
         else {
             return Ok(Prefs::default());
         };

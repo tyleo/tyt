@@ -3,16 +3,17 @@ use crate::{
 };
 use std::io::Result as IOResult;
 
-/// Loads preferences for `key` from all `.tytconfig` locations.
+/// Loads preferences for `key` from every `file_name` location.
 pub fn load_prefs<T: DeserializePrefs>(
     dependencies: &impl Dependencies,
+    file_name: &str,
     key: &str,
 ) -> IOResult<Prefs<T>> {
-    let user = load_user_prefs(dependencies, key)?;
+    let user = load_user_prefs(dependencies, file_name, key)?;
 
-    let git_root = load_git_prefs(dependencies, key)?;
+    let git_root = load_git_prefs(dependencies, file_name, key)?;
 
-    let hierarchy = load_hierarchy_prefs(dependencies, key)?;
+    let hierarchy = load_hierarchy_prefs(dependencies, file_name, key)?;
 
     Ok(Prefs {
         user,

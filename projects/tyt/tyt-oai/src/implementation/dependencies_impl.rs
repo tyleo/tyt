@@ -15,7 +15,7 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn oai_api_key(&self) -> Result<Option<String>> {
-        let prefs: Option<UsrPrefs> = tyt_preferences::load_user_git_prefs(self, "oai")
+        let prefs: Option<UsrPrefs> = tyt_preferences::load_git_prefs(self, ".tytusrconfig", "oai")
             .map_err(Error::IO)?
             .and_then(|layer| layer.prefs);
 

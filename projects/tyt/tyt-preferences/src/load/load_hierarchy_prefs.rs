@@ -1,7 +1,7 @@
 use crate::{Dependencies, DeserializePrefs, DirPrefs, load_prefs_from_dir};
 use std::io::{Error as IOError, Result as IOResult};
 
-/// Loads preference layers for `key` from the `.tytconfig` in every directory
+/// Loads preference layers for `key` from the `file_name` in every directory
 /// from the git root down to cwd, furthest from cwd first. Directories that
 /// supply no prefs are omitted.
 ///
@@ -9,6 +9,7 @@ use std::io::{Error as IOError, Result as IOResult};
 /// under the git root.
 pub fn load_hierarchy_prefs<T: DeserializePrefs>(
     dependencies: &impl Dependencies,
+    file_name: &str,
     key: &str,
 ) -> IOResult<Vec<DirPrefs<T>>> {
     let Some(root) = dependencies.git_root_dir()? else {
@@ -38,7 +39,7 @@ pub fn load_hierarchy_prefs<T: DeserializePrefs>(
     let mut layers = Vec::new();
 
     for dir in dirs.into_iter().rev() {
-        let Some(prefs) = load_prefs_from_dir(dependencies, dir, ".tytconfig", key)? else {
+        let Some(prefs) = load_prefs_from_dir(dependencies, dir, file_name, key)? else {
             continue;
         };
 

@@ -5,11 +5,12 @@ use std::io::Result as IOResult;
 /// the hierarchy from the git root down to cwd.
 pub fn load_application_prefs<T: DeserializePrefs>(
     dependencies: &impl Dependencies,
+    file_name: &str,
     key: &str,
 ) -> IOResult<Vec<DirPrefs<T>>> {
-    let user = load_user_prefs(dependencies, key)?;
+    let user = load_user_prefs(dependencies, file_name, key)?;
 
-    let hierarchy = load_hierarchy_prefs(dependencies, key)?;
+    let hierarchy = load_hierarchy_prefs(dependencies, file_name, key)?;
 
     let mut layers = Vec::new();
 

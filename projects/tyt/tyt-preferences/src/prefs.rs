@@ -1,14 +1,14 @@
 use crate::{DirPrefs, OptionalDirPrefs};
 use std::path::Path;
 
-/// Preferences loaded from `.tytconfig` files.
+/// Preferences loaded from every location of a config file.
 #[derive(Clone, Debug)]
 pub struct Prefs<T> {
-    /// Layer from `~/.tytconfig`.
+    /// Layer from the user home directory.
     pub user: OptionalDirPrefs<T>,
 
-    /// Layer from `<git-root>/.tytconfig`, or `None` outside a repository.
-    /// When parsed, its prefs also appear as the first `hierarchy` entry.
+    /// Layer from the git root, or `None` outside a repository. When parsed,
+    /// its prefs also appear as the first `hierarchy` entry.
     pub git_root: Option<OptionalDirPrefs<T>>,
 
     /// Layers from the git root down to cwd that supplied prefs, furthest
