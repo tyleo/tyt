@@ -9,14 +9,13 @@ use ty_math::{TyVector3I32, TyVector3U32};
 /// One object's voxel volume: a dense grid, the ordered layers it references,
 /// and the material each voxel samples in each layer.
 ///
-/// Each layer references a shared [`VoxPalette`](crate::VoxPalette), and
-/// layers override back to front: each property takes its value from the
-/// last layer that supplies it.
+/// Each layer references a shared [`VoxPalette`](crate::VoxPalette), and layers
+/// override back to front: each property takes its value from the last layer
+/// that supplies it.
 ///
-/// Every grid cell has a voxel id equal to
-/// its raster index `x*Y*Z + y*Z + z`, so [`voxel_id`](Self::voxel_id) and
-/// [`voxel_position`](Self::voxel_position) interconvert.
-/// [`is_live`](Self::is_live) says which cells are filled.
+/// Every grid cell has a voxel id equal to its raster index `x*Y*Z + y*Z + z`,
+/// so [`voxel_id`](Self::voxel_id) and [`voxel_position`](Self::voxel_position)
+/// interconvert. [`is_live`](Self::is_live) says which cells are filled.
 #[derive(Debug, Default)]
 pub struct VoxObject {
     /// Display name.
@@ -55,9 +54,9 @@ impl VoxObject {
 
     /// Creates an empty grid of size `bounds`: every cell has a voxel id, none
     /// is live, and no layers are referenced yet. Then use
-    /// [`retain_layer`](Self::retain_layer) and [`retain_voxel`](Self::retain_voxel).
-    /// Errors, building nothing, if the grid would exceed
-    /// [`MAX_GRID_CELLS`](Self::MAX_GRID_CELLS).
+    /// [`retain_layer`](Self::retain_layer) and
+    /// [`retain_voxel`](Self::retain_voxel). Errors, building nothing, if the
+    /// grid would exceed [`MAX_GRID_CELLS`](Self::MAX_GRID_CELLS).
     pub fn new(name: String, bounds: TyVector3U32) -> Result<Self> {
         let volume = Self::volume_of(bounds);
         if volume > Self::MAX_GRID_CELLS {
@@ -342,9 +341,8 @@ impl VoxObject {
 
     /// Live voxels' samples in `layer_id`, as `(voxel id, material id)`, in
     /// ascending raster order, or `None` if `layer_id` is not one of this
-    /// object's layers. Reads the layer's sample column once, so a full scan
-    /// is cheaper than per-voxel [`voxel_material`](Self::voxel_material)
-    /// calls.
+    /// object's layers. Reads the layer's sample column once, so a full scan is
+    /// cheaper than per-voxel [`voxel_material`](Self::voxel_material) calls.
     pub fn iter_live_samples(
         &self,
         layer_id: U32Id<BVoxLayer>,

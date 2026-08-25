@@ -9,17 +9,16 @@ use std::collections::HashMap;
 /// reads through the last layer whose palette supplies its name.
 ///
 /// Build with
-/// [`VoxMain::effective_palette`](crate::VoxMain::effective_palette). Resolve
-/// a name to an id once with
-/// [`property_id_by_name`](Self::property_id_by_name), then read values by id
-/// inside voxel loops.
+/// [`VoxMain::effective_palette`](crate::VoxMain::effective_palette). Resolve a
+/// name to an id once with [`property_id_by_name`](Self::property_id_by_name),
+/// then read values by id inside voxel loops.
 #[derive(Debug)]
 pub struct VoxEffectivePalette<'a> {
     /// The object the view resolves.
     pub(crate) object: &'a VoxObject,
 
-    /// The resolved properties. An override keeps its first supplier's id,
-    /// so the listing is stable.
+    /// The resolved properties. An override keeps its first supplier's id, so
+    /// the listing is stable.
     pub(crate) properties: IdVec<BVoxEffectiveProperty, VoxEffectiveProperty<'a>>,
 
     /// Name index into `properties`.
@@ -46,8 +45,8 @@ impl<'a> VoxEffectivePalette<'a> {
         self.property_id_by_name.get(name).copied()
     }
 
-    /// The value `material_id` draws for property `property_id`, or `None`
-    /// if either id is unknown.
+    /// The value `material_id` draws for property `property_id`, or `None` if
+    /// either id is unknown.
     pub fn value(
         &self,
         property_id: UsizeId<BVoxEffectiveProperty>,
@@ -57,8 +56,8 @@ impl<'a> VoxEffectivePalette<'a> {
     }
 
     /// The value the voxel at `voxel_id` reads for property `property_id`,
-    /// through the material it samples in the winning layer. `None` for a
-    /// dead voxel or an unknown property id.
+    /// through the material it samples in the winning layer. `None` for a dead
+    /// voxel or an unknown property id.
     pub fn voxel_value(
         &self,
         voxel_id: U32Id<BVoxVoxel>,
@@ -110,8 +109,8 @@ mod tests {
         state.retain_palette(palette).unwrap()
     }
 
-    /// A one-voxel object layering the given palettes in order, its voxel
-    /// live and sampling material 0 in every layer.
+    /// A one-voxel object layering the given palettes in order, its voxel live
+    /// and sampling material 0 in every layer.
     fn object_over(palette_ids: &[U32Id<BVoxPalette>]) -> VoxObject {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         for &palette_id in palette_ids {

@@ -227,9 +227,9 @@ impl VoxValuePool {
         self.value_ids.is_retained(id)
     }
 
-    /// The id of the first value outside its kind's value domain, or `None`
-    /// if every value is within it. The checked constructors gate on this, so
-    /// a flaw found later is a voxcore bug.
+    /// The id of the first value outside its kind's value domain, or `None` if
+    /// every value is within it. The checked constructors gate on this, so a
+    /// flaw found later is a voxcore bug.
     /// [`VoxMain::validate`](crate::VoxMain::validate) audits for one anyway.
     pub(crate) fn first_out_of_domain_value(&self) -> Option<U32Id<BVoxValuePoolValue>> {
         for (value_id, value) in self.iter_values() {

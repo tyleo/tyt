@@ -62,8 +62,8 @@ pub enum Error {
         palette_ids: Vec<U32Id<BVoxPalette>>,
     },
 
-    /// A release named a palette an object layer still references;
-    /// `object_ids` lists the referencing objects, in listing order.
+    /// A release named a palette an object layer still references; `object_ids`
+    /// lists the referencing objects, in listing order.
     PaletteInUse {
         palette_id: U32Id<BVoxPalette>,
         object_ids: Vec<U32Id<BVoxObject>>,
@@ -84,8 +84,8 @@ pub enum Error {
     },
 
     /// A release named a hierarchy node still referenced: `parent_ids` lists
-    /// its parents, in listing order, and `root` reports whether the roots
-    /// list it.
+    /// its parents, in listing order, and `root` reports whether the roots list
+    /// it.
     HierarchyNodeInUse {
         node_id: U32Id<BVoxHierarchyNode>,
         parent_ids: Vec<U32Id<BVoxHierarchyNode>>,
@@ -98,15 +98,14 @@ pub enum Error {
     /// A voxel was given a sample count different from the layer count.
     SampleArity { samples: usize, layers: usize },
 
-    /// A material was given a value-id count different from the property
-    /// count.
+    /// A material was given a value-id count different from the property count.
     MaterialValueArity { values: usize, properties: usize },
 
     /// A property was given a name the palette already uses.
     DuplicatePropertyName { name: String },
 
-    /// An inserted palette's property names a value pool that is not one of
-    /// the state's.
+    /// An inserted palette's property names a value pool that is not one of the
+    /// state's.
     PropertyValuePoolRef {
         property_id: U32Id<BVoxProperty>,
         value_pool_id: U32Id<BVoxValuePool>,
@@ -126,8 +125,8 @@ pub enum Error {
         palette_id: U32Id<BVoxPalette>,
     },
 
-    /// A live voxel's sample for this layer is not one of the layer's
-    /// palette's materials.
+    /// A live voxel's sample for this layer is not one of the layer's palette's
+    /// materials.
     LayerSampleMaterial {
         layer_id: U32Id<BVoxLayer>,
         voxel_id: U32Id<BVoxVoxel>,
@@ -243,8 +242,8 @@ pub enum Error {
 
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        // Ids print as their bare `u32`: a branded id's `Display` carries
-        // the brand name, which the surrounding wording already gives.
+        // Ids print as their bare `u32`: a branded id's `Display` carries the
+        // brand name, which the surrounding wording already gives.
         match self {
             Error::MalformedValuePoolValue { value_id } => write!(
                 f,

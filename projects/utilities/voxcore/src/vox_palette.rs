@@ -8,8 +8,8 @@ use branded_id::{
 use std::collections::HashMap;
 
 /// A material palette: named properties bound to the
-/// [`VoxValuePool`](crate::VoxValuePool)s a [`VoxMain`](crate::VoxMain)
-/// holds, and the materials that draw from them.
+/// [`VoxValuePool`](crate::VoxValuePool)s a [`VoxMain`](crate::VoxMain) holds,
+/// and the materials that draw from them.
 #[derive(Debug, Default)]
 pub struct VoxPalette {
     /// Property id pool.
@@ -69,22 +69,22 @@ impl VoxPalette {
     /// does not touch.
     pub(crate) fn gc(&mut self) -> IdRemap<BVoxMaterial, u32> {
         let property_remap = self.property_ids.gc();
-        // Safety: the property column was in sync with the pre-gc property
-        // id pool, and nothing has retained or released since.
+        // Safety: the property column was in sync with the pre-gc property id
+        // pool, and nothing has retained or released since.
         unsafe { self.properties.gc(&property_remap) };
 
         let material_ids: Vec<_> = self.material_ids.iter().collect();
         for material_id in material_ids {
             // Safety: a retained material holds a value id for every pre-gc
-            // property id, and the remap came from this palette's property
-            // id pool.
+            // property id, and the remap came from this palette's property id
+            // pool.
             let row = unsafe { self.materials.get_mut(material_id) };
             unsafe { row.gc(&property_remap) };
         }
 
         let material_remap = self.material_ids.gc();
-        // Safety: the material column was in sync with the pre-gc material
-        // id pool, and nothing has retained or released since.
+        // Safety: the material column was in sync with the pre-gc material id
+        // pool, and nothing has retained or released since.
         unsafe { self.materials.gc(&material_remap) };
 
         // Rebuild the name index against the relabeled property ids.
@@ -105,7 +105,8 @@ impl VoxPalette {
     /// [`iter_properties`](Self::iter_properties) order, and returns its id.
     /// Errors, changing nothing, if `value_ids` has the wrong length. Each
     /// value id must be one of its property's value pool's values, which
-    /// [`VoxMain::retain_palette`](crate::VoxMain::retain_palette) checks on insert.
+    /// [`VoxMain::retain_palette`](crate::VoxMain::retain_palette) checks on
+    /// insert.
     pub fn retain_material(
         &mut self,
         value_ids: Vec<U32Id<BVoxValuePoolValue>>,
@@ -135,9 +136,9 @@ impl VoxPalette {
             return None;
         }
 
-        // The row holds Copy value ids, so dropping the inner IdField frees
-        // its buffer with nothing to release per property.
-        // Safety: a retained material has a row.
+        // The row holds Copy value ids, so dropping the inner IdField frees its
+        // buffer with nothing to release per property. Safety: a retained
+        // material has a row.
         unsafe { self.materials.release(id) };
         self.material_ids.release_stable(id);
         Some(())
@@ -183,12 +184,13 @@ impl VoxPalette {
         Ok(())
     }
 
-    /// Retains a property after any existing ones and returns its id, back-filling
-    /// existing materials with `default_value_id` so every material keeps one
-    /// value id per property. Errors, changing nothing, if a property already
-    /// has this name. `default_value_id` must be one of `value_pool_id`'s
-    /// values, which [`VoxMain::retain_palette`](crate::VoxMain::retain_palette)
-    /// checks on insert.
+    /// Retains a property after any existing ones and returns its id,
+    /// back-filling existing materials with `default_value_id` so every
+    /// material keeps one value id per property. Errors, changing nothing, if a
+    /// property already has this name. `default_value_id` must be one of
+    /// `value_pool_id`'s values, which
+    /// [`VoxMain::retain_palette`](crate::VoxMain::retain_palette) checks on
+    /// insert.
     pub fn retain_property(
         &mut self,
         name: String,
@@ -229,16 +231,14 @@ impl VoxPalette {
         }
 
         // Drop the index entry still pointing here; a duplicate name may have
-        // overwritten it.
-        // Safety: a retained property has a value.
+        // overwritten it. Safety: a retained property has a value.
         let name = unsafe { self.properties.get(id) }.name.clone();
         if self.property_id_by_name.get(&name) == Some(&id) {
             self.property_id_by_name.remove(&name);
         }
 
-        // A value id is Copy, so releasing each material's slot at `id`
-        // would be a no-op; leave it for gc to compact and only free the
-        // property.
+        // A value id is Copy, so releasing each material's slot at `id` would
+        // be a no-op; leave it for gc to compact and only free the property.
         // Safety: a retained property has a value.
         unsafe { self.properties.release(id) };
         self.property_ids.release_stable(id);
@@ -287,8 +287,8 @@ impl VoxPalette {
         self.property_ids.len()
     }
 
-    /// The property named `name`, or `None` if none has that name. O(1)
-    /// through the name index.
+    /// The property named `name`, or `None` if none has that name. O(1) through
+    /// the name index.
     pub fn property_id_by_name(&self, name: &str) -> Option<U32Id<BVoxProperty>> {
         self.property_id_by_name.get(name).copied()
     }
@@ -411,8 +411,8 @@ impl Drop for VoxPalette {
         // Each material's row is an IdField owning a heap buffer whose value
         // ids are Copy, so releasing the inner IdField frees the buffer with
         // nothing to release per property. The properties own name strings,
-        // freed by releasing them.
-        // Safety: each column holds a value for every id in its id pool.
+        // freed by releasing them. Safety: each column holds a value for every
+        // id in its id pool.
         unsafe {
             self.materials.release_all(&self.material_ids);
             self.properties.release_all(&self.property_ids);
@@ -444,8 +444,7 @@ mod tests {
             .retain_property("ior_id".to_owned(), value_pool_id(1), value_id(0))
             .unwrap();
 
-        // Two materials, each a value id per property, in property
-        // order.
+        // Two materials, each a value id per property, in property order.
         let matte_id = palette
             .retain_material(vec![value_id(0), value_id(3)])
             .unwrap();
@@ -524,8 +523,8 @@ mod tests {
             .retain_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
 
-        // A second property under the same name, even on a different
-        // value pool.
+        // A second property under the same name, even on a different value
+        // pool.
         assert_eq!(
             palette.retain_property("baseColor".to_owned(), value_pool_id(1), value_id(0)),
             Err(Error::DuplicatePropertyName {
@@ -639,7 +638,8 @@ mod tests {
             [(b_id, "b"), (c_id, "c")]
         );
 
-        // A property retained after the release appends at the end of the order.
+        // A property retained after the release appends at the end of the
+        // order.
         let d_id = palette
             .retain_property("d".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
@@ -668,7 +668,8 @@ mod tests {
             [middle_id, last_id]
         );
 
-        // A material retained after the release appends at the end of the order.
+        // A material retained after the release appends at the end of the
+        // order.
         let added_id = palette.retain_material(vec![]).unwrap();
         assert_eq!(
             palette.iter_materials().collect::<Vec<_>>(),

@@ -61,8 +61,8 @@ impl VoxMain {
 
         // Compact the shared value-pool store, then relabel every palette
         // property's value pool, so the value-pool ids are settled before
-        // palettes are compacted. Value-pool ids follow the listing: a
-        // value pool moved before gc is renumbered here, and every property's
+        // palettes are compacted. Value-pool ids follow the listing: a value
+        // pool moved before gc is renumbered here, and every property's
         // value-pool id is rewritten to match.
         let value_pool_remap = self.runtime_state.value_pool_ids.gc();
         // Safety: the value-pool column was in sync with the pre-gc id pool,
@@ -72,8 +72,8 @@ impl VoxMain {
         // Compact each palette's own id pools, so the material relabelings are
         // ready when object samples are translated below. Because they are
         // indexed by old palette id, the column covers the palette id pool's
-        // whole id space. Cells translate through the value relabelings
-        // first, while each property still names its value pool's pre-gc id.
+        // whole id space. Cells translate through the value relabelings first,
+        // while each property still names its value pool's pre-gc id.
         let palette_id_space = self.runtime_state.palette_ids.peek_next_fresh().to_u32() as usize;
         let mut material_remaps =
             IdVec::from_vec((0..palette_id_space).map(|_| IdRemap::default()).collect());
@@ -88,8 +88,8 @@ impl VoxMain {
 
         // Compact the palette id pool.
         let palette_remap = self.runtime_state.palette_ids.gc();
-        // Safety: the palette column was in sync with the pre-gc palette
-        // id pool, and nothing has retained or released since.
+        // Safety: the palette column was in sync with the pre-gc palette id
+        // pool, and nothing has retained or released since.
         unsafe { self.runtime_state.palettes.gc(&palette_remap) };
 
         // Rewrite each object's palette references and sample cells, then
@@ -232,9 +232,8 @@ impl VoxMain {
                 layer_palettes.push((layer_id, palette));
             }
 
-            // Every live voxel samples a material within each layer's
-            // palette. Layer-major so each layer's sample column is read
-            // once.
+            // Every live voxel samples a material within each layer's palette.
+            // Layer-major so each layer's sample column is read once.
             for &(layer_id, palette) in &layer_palettes {
                 let samples = object
                     .iter_live_samples(layer_id)
@@ -345,12 +344,12 @@ impl VoxMain {
         self.ext = ext;
     }
 
-    /// Retains a hierarchy node at the end of the listing, returning its id. The
-    /// node's id is fresh to every existing child list, so a node whose
+    /// Retains a hierarchy node at the end of the listing, returning its id.
+    /// The node's id is fresh to every existing child list, so a node whose
     /// children are already live can never close a cycle. For a batch whose
     /// nodes reference each other, use
-    /// [`retain_hierarchy_nodes`](Self::retain_hierarchy_nodes). Errors, changing
-    /// nothing, if:
+    /// [`retain_hierarchy_nodes`](Self::retain_hierarchy_nodes). Errors,
+    /// changing nothing, if:
     ///
     /// 1. a child node or child object is not one of this state's
     /// 2. a child repeats
@@ -367,10 +366,10 @@ impl VoxMain {
     }
 
     /// Retains a batch of hierarchy nodes at the end of the listing, assigning
-    /// ids in listing order and returning them. A node's children may
-    /// reference any already-live node or any node in the batch by the id it
-    /// will take, so a listing with forward references loads in one call.
-    /// Errors, changing nothing, if:
+    /// ids in listing order and returning them. A node's children may reference
+    /// any already-live node or any node in the batch by the id it will take,
+    /// so a listing with forward references loads in one call. Errors, changing
+    /// nothing, if:
     ///
     /// 1. a child resolves to neither
     /// 2. a child repeats within a node
@@ -494,8 +493,8 @@ impl VoxMain {
     /// renumbers. Errors, changing nothing, if:
     ///
     /// 1. `id` is not one of this state's nodes
-    /// 2. a node still lists it as a child or the roots still list it;
-    ///    release the parents first and drop it from the roots with
+    /// 2. a node still lists it as a child or the roots still list it; release
+    ///    the parents first and drop it from the roots with
     ///    [`set_root_hierarchy_node_ids`](Self::set_root_hierarchy_node_ids)
     pub fn release_hierarchy_node(&mut self, id: U32Id<BVoxHierarchyNode>) -> Result<()> {
         if !self.runtime_state.hierarchy_node_ids.is_retained(id) {
@@ -552,8 +551,8 @@ impl VoxMain {
             })
     }
 
-    /// Retains a layer referencing `palette_id` to object `object_id`, after its
-    /// existing layers, back-filling every voxel with `default_material_id`
+    /// Retains a layer referencing `palette_id` to object `object_id`, after
+    /// its existing layers, back-filling every voxel with `default_material_id`
     /// and returning the layer's id. Errors, changing nothing, if:
     ///
     /// 1. `object_id` is not one of this state's
@@ -585,8 +584,8 @@ impl VoxMain {
     }
 
     /// Releases layer `layer_id` from object `object_id`, dropping its
-    /// per-voxel sample column. Errors, changing nothing, if `object_id` is
-    /// not one of this state's or `layer_id` is not one of the object's.
+    /// per-voxel sample column. Errors, changing nothing, if `object_id` is not
+    /// one of this state's or `layer_id` is not one of the object's.
     pub fn release_layer(
         &mut self,
         object_id: U32Id<BVoxObject>,
@@ -600,8 +599,8 @@ impl VoxMain {
         unsafe { self.runtime_state.objects.get_mut(object_id) }.release_layer(layer_id)
     }
 
-    /// Moves layer `layer_id` of object `object_id` to position `index` in
-    /// its layer order. Errors, changing nothing, if:
+    /// Moves layer `layer_id` of object `object_id` to position `index` in its
+    /// layer order. Errors, changing nothing, if:
     ///
     /// 1. `object_id` is not one of this state's
     /// 2. `layer_id` is not one of the object's
@@ -703,9 +702,9 @@ impl VoxMain {
             .filter(|material_id| material_ids.contains(material_id))
             .collect();
 
-        // The objects with a live voxel still sampling each doomed material,
-        // in listing order. The outermost object loop lands an object's
-        // entries consecutively, so the last-entry check dedups.
+        // The objects with a live voxel still sampling each doomed material, in
+        // listing order. The outermost object loop lands an object's entries
+        // consecutively, so the last-entry check dedups.
         let mut sampling_object_ids: HashMap<U32Id<BVoxMaterial>, Vec<U32Id<BVoxObject>>> =
             HashMap::new();
 
@@ -756,10 +755,10 @@ impl VoxMain {
     }
 
     /// Repaints, in every live voxel of every layer referencing `palette_id`,
-    /// each sample keyed in `replacement_ids` onto the material it pairs
-    /// with. The whole map substitutes in one simultaneous pass, so each
-    /// sample repaints at most once even when a replacement is itself a key.
-    /// Errors, changing nothing, if:
+    /// each sample keyed in `replacement_ids` onto the material it pairs with.
+    /// The whole map substitutes in one simultaneous pass, so each sample
+    /// repaints at most once even when a replacement is itself a key. Errors,
+    /// changing nothing, if:
     ///
     /// 1. `palette_id` is not one of this state's palettes
     /// 2. a material id or a replacement id is not one of that palette's
@@ -847,8 +846,8 @@ impl VoxMain {
         Ok(object_id)
     }
 
-    /// Releases object `id`. Leaves a hole until [`gc`](Self::gc) renumbers
-    /// for a deterministic save. Errors, changing nothing, if:
+    /// Releases object `id`. Leaves a hole until [`gc`](Self::gc) renumbers for
+    /// a deterministic save. Errors, changing nothing, if:
     ///
     /// 1. `id` is not one of this state's objects
     /// 2. a hierarchy node still places it; release those nodes first
@@ -924,8 +923,8 @@ impl VoxMain {
         self.runtime_state.object_ids.index_of(id)
     }
 
-    /// Sets the grid origin of object `object_id`. Errors, changing nothing,
-    /// if `object_id` is not one of this state's.
+    /// Sets the grid origin of object `object_id`. Errors, changing nothing, if
+    /// `object_id` is not one of this state's.
     pub fn set_object_origin(
         &mut self,
         object_id: U32Id<BVoxObject>,
@@ -944,8 +943,8 @@ impl VoxMain {
     /// Errors, changing nothing, if:
     ///
     /// 1. a property names a value pool that is not one of this state's
-    /// 2. a material draws a value that is not one of its property's
-    ///    value pool's
+    /// 2. a material draws a value that is not one of its property's value
+    ///    pool's
     pub fn retain_palette(&mut self, palette: VoxPalette) -> Result<U32Id<BVoxPalette>> {
         for (property_id, property) in palette.iter_properties() {
             let Some(value_pool) = self.value_pool(property.value_pool_id) else {
@@ -977,8 +976,8 @@ impl VoxMain {
     /// Errors, changing nothing, if:
     ///
     /// 1. `id` is not one of this state's palettes
-    /// 2. an object layer still references it; release those layers first
-    ///    with [`release_layer`](Self::release_layer)
+    /// 2. an object layer still references it; release those layers first with
+    ///    [`release_layer`](Self::release_layer)
     pub fn release_palette(&mut self, id: U32Id<BVoxPalette>) -> Result<()> {
         if !self.runtime_state.palette_ids.is_retained(id) {
             return Err(Error::UnknownPalette { palette_id: id });
@@ -1004,10 +1003,10 @@ impl VoxMain {
     }
 
     /// The effective palette of `object`, resolving its layer override rule
-    /// once. Layers are walked front to back, each palette property landing
-    /// at its name's entry, so the last supplying layer wins while the first
-    /// fixes the entry's position. Errors if a layer references a palette
-    /// that is not one of this state's.
+    /// once. Layers are walked front to back, each palette property landing at
+    /// its name's entry, so the last supplying layer wins while the first fixes
+    /// the entry's position. Errors if a layer references a palette that is not
+    /// one of this state's.
     pub fn effective_palette<'a>(
         &'a self,
         object: &'a VoxObject,
@@ -1072,8 +1071,8 @@ impl VoxMain {
 
     /// Moves palette `id` to position `index` in the listing, shifting the
     /// palettes between its old and new positions one slot. Errors, changing
-    /// nothing, if `id` is not one of this state's palettes or `index` is at
-    /// or past [`palette_count`](Self::palette_count).
+    /// nothing, if `id` is not one of this state's palettes or `index` is at or
+    /// past [`palette_count`](Self::palette_count).
     pub fn move_palette(&mut self, id: U32Id<BVoxPalette>, index: usize) -> Result<()> {
         if !self.runtime_state.palette_ids.is_retained(id) {
             return Err(Error::UnknownPalette { palette_id: id });
@@ -1108,9 +1107,10 @@ impl VoxMain {
         self.runtime_state.palette_ids.index_of(id)
     }
 
-    /// Retains a property named `name` on `value_pool_id` to palette `palette_id`,
-    /// back-filling its existing materials with `default_value_id`, and returns
-    /// the property's id. Errors, changing nothing, if:
+    /// Retains a property named `name` on `value_pool_id` to palette
+    /// `palette_id`, back-filling its existing materials with
+    /// `default_value_id`, and returns the property's id. Errors, changing
+    /// nothing, if:
     ///
     /// 1. `palette_id` is not one of this state's
     /// 2. `value_pool_id` is not one of this state's
@@ -1254,8 +1254,8 @@ impl VoxMain {
     ///
     /// 1. `value_pool_id` is not one of this state's value pools
     /// 2. `value_id` is not one of that value pool's values
-    /// 3. a palette cell still draws the value; repoint those cells first
-    ///    with [`repoint_value_pool_value`](Self::repoint_value_pool_value)
+    /// 3. a palette cell still draws the value; repoint those cells first with
+    ///    [`repoint_value_pool_value`](Self::repoint_value_pool_value)
     pub fn release_value_pool_value(
         &mut self,
         value_pool_id: U32Id<BVoxValuePool>,
@@ -1303,8 +1303,7 @@ impl VoxMain {
     /// `replacement_id`. Errors, changing nothing, if:
     ///
     /// 1. `value_pool_id` is not one of this state's value pools
-    /// 2. `value_id` or `replacement_id` is not one of that value pool's
-    ///    values
+    /// 2. `value_id` or `replacement_id` is not one of that value pool's values
     pub fn repoint_value_pool_value(
         &mut self,
         value_pool_id: U32Id<BVoxValuePool>,
@@ -1411,8 +1410,8 @@ impl VoxMain {
                 .collect();
 
             // Back to front: a release shifts the values listed after it, so
-            // dropping the last one first leaves nothing to shift and keeps
-            // the prune linear where front-to-back release is quadratic.
+            // dropping the last one first leaves nothing to shift and keeps the
+            // prune linear where front-to-back release is quadratic.
             for value_id in doomed_ids.into_iter().rev() {
                 value_pool.release_value_stable(value_id);
             }
@@ -1988,9 +1987,9 @@ mod tests {
     fn validate_accepts_a_palette_with_no_properties() {
         let mut state = VoxMain::default();
 
-        // A palette with no properties still carries materials; each
-        // row is empty and every property resolves to its default. Voxels
-        // sample them like any other material.
+        // A palette with no properties still carries materials; each row is
+        // empty and every property resolves to its default. Voxels sample them
+        // like any other material.
         let mut palette = VoxPalette::default();
         palette.retain_material(vec![]).unwrap();
         let second_id = palette.retain_material(vec![]).unwrap();
@@ -2006,8 +2005,8 @@ mod tests {
     fn retain_palette_accepts_an_empty_palette() {
         let mut state = VoxMain::default();
 
-        // A palette with no materials samples nothing, so no layer can use
-        // it, but it is a valid entity.
+        // A palette with no materials samples nothing, so no layer can use it,
+        // but it is a valid entity.
         let palette_id = state.retain_palette(VoxPalette::default()).unwrap();
         assert_eq!(
             state.palette(palette_id).map(VoxPalette::material_count),
@@ -2570,10 +2569,10 @@ mod tests {
         object.retain_voxel(live_voxel_id, &[third_id]).unwrap();
         let object_id = state.retain_object(object).unwrap();
 
-        // Release `first_id`, which no live voxel samples. The palette is
-        // now holed: the voxel still samples
-        // `third_id`, whose id exceeds the live material count. A range check
-        // would wrongly reject this; the retention check accepts it.
+        // Release `first_id`, which no live voxel samples. The palette is now
+        // holed: the voxel still samples `third_id`, whose id exceeds the live
+        // material count. A range check would wrongly reject this; the
+        // retention check accepts it.
         assert_eq!(state.release_material(live_palette_id, first_id), Ok(()));
         assert_eq!(state.validate(), Ok(()));
 
@@ -2743,8 +2742,8 @@ mod tests {
     fn retain_palette_rejects_a_dangling_property_value_pool() {
         let mut state = VoxMain::default();
         let mut palette = VoxPalette::default();
-        // The property references value-pool id 0, but the state holds no
-        // value pools.
+        // The property references value-pool id 0, but the state holds no value
+        // pools.
         let property_id = palette
             .retain_property("baseColor".to_owned(), value_pool_id(0), value_id(0))
             .unwrap();
@@ -2826,8 +2825,8 @@ mod tests {
         let names: Vec<&str> = state.iter_objects().map(|(_, o)| o.name()).collect();
         assert_eq!(names, ["b", "c"]);
 
-        // An object retained after the release recycles the freed id but appends
-        // at the end of the order.
+        // An object retained after the release recycles the freed id but
+        // appends at the end of the order.
         let d_id = state.retain_object(unit_object("d")).unwrap();
         assert_eq!(d_id, a_id);
         let names: Vec<&str> = state.iter_objects().map(|(_, o)| o.name()).collect();
@@ -2873,8 +2872,8 @@ mod tests {
         let on_a_second_id = object.retain_layer(a_id, material_id(0));
         let on_c_id = object.retain_layer(c_id, material_id(0));
 
-        // Each layer samples a different material per voxel, so a layer
-        // release that drops the wrong sample column shows up below.
+        // Each layer samples a different material per voxel, so a layer release
+        // that drops the wrong sample column shows up below.
         let first_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
         let second_id = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
         object
@@ -3151,8 +3150,8 @@ mod tests {
 
         state.validate().unwrap();
 
-        // An id not the value pool's, a released id, and an unknown value
-        // pool all reject, on the release and the repoint alike.
+        // An id not the value pool's, a released id, and an unknown value pool
+        // all reject, on the release and the repoint alike.
         assert_eq!(
             state.release_value_pool_value(ints_id, value_id(9)),
             Err(Error::UnknownValuePoolValue {
@@ -3303,8 +3302,8 @@ mod tests {
 
         // Move the second value pool ahead of the first, so the value-pool
         // relabel is not the identity, and give the two value pools different
-        // value permutations, so a cell relabeled through the wrong
-        // value pool's remap lands on the wrong value.
+        // value permutations, so a cell relabeled through the wrong value
+        // pool's remap lands on the wrong value.
         state.move_value_pool(second_value_pool_id, 0).unwrap();
 
         state
@@ -3409,8 +3408,8 @@ mod tests {
             Some(material_id(0))
         );
 
-        // retain_voxel swaps the sample; a material beyond the layer's
-        // palette is rejected.
+        // retain_voxel swaps the sample; a material beyond the layer's palette
+        // is rejected.
         state
             .retain_voxel(object_id, voxel_id(0), &[material_id(1)])
             .unwrap();
@@ -3660,8 +3659,8 @@ mod tests {
             .next()
             .unwrap();
 
-        // No live voxel samples the material, so even the last one releases
-        // and the palette empties.
+        // No live voxel samples the material, so even the last one releases and
+        // the palette empties.
         assert_eq!(state.release_material(palette_id, only_id), Ok(()));
         assert_eq!(state.palette(palette_id).unwrap().material_count(), 0);
         assert_eq!(state.validate(), Ok(()));
@@ -3894,8 +3893,8 @@ mod tests {
         state.validate().unwrap();
     }
 
-    /// A deterministic linear-congruential generator, so the operation
-    /// sequence needs no randomness dependency and replays exactly.
+    /// A deterministic linear-congruential generator, so the operation sequence
+    /// needs no randomness dependency and replays exactly.
     struct Lcg(u64);
 
     impl Lcg {
@@ -4082,8 +4081,8 @@ mod tests {
 
     // Miri interprets the long operation sequence far too slowly; the unsafe
     // paths it exercises are covered by the focused tests above.
-    /// The payoff property: whatever mix of successes and rejections a
-    /// sequence of safe-API calls produces, the state always audits clean.
+    /// The payoff property: whatever mix of successes and rejections a sequence
+    /// of safe-API calls produces, the state always audits clean.
     #[test]
     #[cfg_attr(miri, ignore)]
     fn a_seeded_operation_sequence_keeps_the_state_valid() {

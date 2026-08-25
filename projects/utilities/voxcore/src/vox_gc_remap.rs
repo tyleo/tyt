@@ -3,8 +3,8 @@ use crate::{
 };
 use branded_id::{IdVec, soa::IdRemap};
 
-/// The id relabelings from a [`VoxMain::gc`](crate::VoxMain::gc), one per
-/// id pool, for translating ids held across the call.
+/// The id relabelings from a [`VoxMain::gc`](crate::VoxMain::gc), one per id
+/// pool, for translating ids held across the call.
 pub struct VoxGcRemap {
     /// The value-pool relabeling.
     pub value_pools: IdRemap<BVoxValuePool, u32>,
