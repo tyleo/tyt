@@ -1,10 +1,10 @@
 use std::io::Result as IOResult;
 
-/// Abstracts JSON deserialization for preference types.
+/// Abstracts config deserialization for preference types.
 ///
-/// The `impl-json` feature provides `deserialize_prefs_json` as a ready-made
-/// implementation body.
+/// The `impl-json` and `impl-jsonc` features provide `deserialize_prefs_json`
+/// and `deserialize_prefs_jsonc` as ready-made implementation bodies.
 pub trait DeserializePrefs: Sized {
-    /// Deserializes the `key` section from a config file's JSON bytes.
-    fn deserialize_prefs(config_json: &[u8], key: &str) -> IOResult<Option<Self>>;
+    /// Deserializes the `key` section from a config file's bytes.
+    fn deserialize_prefs(config: &[u8], key: &str) -> IOResult<Option<Self>>;
 }

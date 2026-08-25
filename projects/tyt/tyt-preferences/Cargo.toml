@@ -7,10 +7,12 @@ repository = "https://github.com/tyleo/tyt"
 description = "Layered preference loading from sectioned config files."
 
 [dependencies]
+jsonc-parser = { version = "0.33.1", features = ["cst", "serde"], optional = true }
 serde = { version = "1", optional = true }
 serde_json = { version = "1", features = ["preserve_order"], optional = true }
 
 [features]
-default = ["impl-json"]
+default = ["impl-jsonc"]
 impl = []
 impl-json = ["impl", "dep:serde", "dep:serde_json"]
+impl-jsonc = ["impl", "dep:serde", "dep:serde_json", "dep:jsonc-parser"]

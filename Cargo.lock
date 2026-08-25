@@ -842,6 +842,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "jsonc-parser"
+version = "0.33.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0560e3f9a9a03ea6b6e90b41138c5db9e21526c99eb192c1a26c68176593285"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1911,6 +1920,7 @@ dependencies = [
 name = "tyt-preferences"
 version = "0.1.6"
 dependencies = [
+ "jsonc-parser",
  "serde",
  "serde_json",
 ]

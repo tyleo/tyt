@@ -28,3 +28,8 @@ pub use r#impl::*;
 mod impl_json;
 #[cfg(feature = "impl-json")]
 pub use impl_json::*;
+
+#[cfg(feature = "impl-jsonc")]
+mod impl_jsonc;
+#[cfg(feature = "impl-jsonc")]
+pub use impl_jsonc::*;
