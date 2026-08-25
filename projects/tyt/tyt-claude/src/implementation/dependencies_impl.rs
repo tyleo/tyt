@@ -3,6 +3,7 @@ use crate::{
     normalize_separators,
 };
 use std::{
+    env,
     ffi::OsString,
     fs,
     io::{ErrorKind, Result as IOResult},
@@ -98,6 +99,10 @@ impl Dependencies for DependenciesImpl {
 }
 
 impl PrefsDependencies for DependenciesImpl {
+    fn current_dir(&self) -> IOResult<PathBuf> {
+        env::current_dir()
+    }
+
     fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
         Ok(tyt_injection::user_home_dir())
     }

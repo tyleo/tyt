@@ -31,18 +31,20 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn fs_prefs(&self) -> Result<Prefs> {
-        let mut prefs: Prefs = tyt_preferences::load_git_prefs(self, "fs")
-            .map_err(Error::IO)?
-            .unwrap_or_default();
+        let Some(layer) =
+            tyt_preferences::load_git_prefs::<Prefs>(self, "fs").map_err(Error::IO)?
+        else {
+            return Ok(Prefs::default());
+        };
+
+        let mut prefs = layer.prefs.unwrap_or_default();
         if let Some(move_to_scratch) = prefs.move_to_scratch.as_mut()
             && let Some(scratch_dir) = move_to_scratch.scratch_dir.clone()
         {
             let scratch_path = PathBuf::from(scratch_dir);
-            if !scratch_path.is_absolute()
-                && let Some(git_root) = self.git_root_dir().map_err(Error::IO)?
-            {
+            if !scratch_path.is_absolute() {
                 move_to_scratch.scratch_dir =
-                    Some(git_root.join(scratch_path).to_string_lossy().into_owned());
+                    Some(layer.dir.join(scratch_path).to_string_lossy().into_owned());
             }
         }
         Ok(prefs)
@@ -99,6 +101,10 @@ impl Dependencies for DependenciesImpl {
 }
 
 impl PrefsDependencies for DependenciesImpl {
+    fn current_dir(&self) -> IOResult<PathBuf> {
+        env::current_dir()
+    }
+
     fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
         Ok(tyt_injection::user_home_dir())
     }

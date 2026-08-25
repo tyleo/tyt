@@ -5,6 +5,9 @@ use std::{
 
 /// Dependency injection for preference I/O operations.
 pub trait Dependencies {
+    /// Returns the current working directory.
+    fn current_dir(&self) -> IOResult<PathBuf>;
+
     /// Returns the user home directory, or `None` if it cannot be determined.
     fn user_home_dir(&self) -> IOResult<Option<PathBuf>>;
 

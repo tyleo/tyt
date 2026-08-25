@@ -1,14 +1,18 @@
-use crate::{Dependencies, DeserializePrefs, load_prefs_from_dir};
-use std::io::Result as IOResult;
+use crate::{Dependencies, DeserializePrefs, DirPrefs, OptionalDirPrefs, load_prefs_from_dir};
+use std::io::{Error as IOError, Result as IOResult};
 
-/// Loads preferences for `key` from `~/.tytconfig`.
+/// Loads the preference layer for `key` from `~/.tytconfig`.
+///
+/// Errors when the user home directory cannot be determined.
 pub fn load_user_prefs<T: DeserializePrefs>(
     dependencies: &impl Dependencies,
     key: &str,
-) -> IOResult<Option<T>> {
+) -> IOResult<OptionalDirPrefs<T>> {
     let Some(dir) = dependencies.user_home_dir()? else {
-        return Ok(None);
+        return Err(IOError::other("user home directory cannot be determined"));
     };
 
-    load_prefs_from_dir(dependencies, &dir, ".tytconfig", key)
+    let prefs = load_prefs_from_dir(dependencies, &dir, ".tytconfig", key)?;
+
+    Ok(DirPrefs { dir, prefs })
 }

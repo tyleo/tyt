@@ -11,6 +11,10 @@ use std::{
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
+    fn current_dir(&self) -> IOResult<PathBuf> {
+        env::current_dir()
+    }
+
     fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
         Ok(env::var_os("HOME")
             .or_else(|| env::var_os("USERPROFILE"))

@@ -15,8 +15,10 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn oai_api_key(&self) -> Result<Option<String>> {
-        let prefs: Option<UsrPrefs> =
-            tyt_preferences::load_user_git_prefs(self, "oai").map_err(Error::IO)?;
+        let prefs: Option<UsrPrefs> = tyt_preferences::load_user_git_prefs(self, "oai")
+            .map_err(Error::IO)?
+            .and_then(|layer| layer.prefs);
+
         Ok(prefs.and_then(|p| p.api_key))
     }
 
@@ -109,6 +111,10 @@ impl Dependencies for DependenciesImpl {
 }
 
 impl PrefsDependencies for DependenciesImpl {
+    fn current_dir(&self) -> IOResult<PathBuf> {
+        env::current_dir()
+    }
+
     fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
         Ok(tyt_injection::user_home_dir())
     }
