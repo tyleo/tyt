@@ -9,7 +9,7 @@ use std::{
     thread,
     time::Duration,
 };
-use tyt_preferences::{DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, load_git_prefs};
+use ty_preferences::{DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, load_git_prefs};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;

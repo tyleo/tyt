@@ -13,7 +13,6 @@ members = [
     "projects/tyt/tyt-meshy",
     "projects/tyt/tyt-meta",
     "projects/tyt/tyt-oai",
-    "projects/tyt/tyt-preferences",
     "projects/tyt/tyt-vmax",
 
     "projects/utilities/pathspec",
@@ -21,6 +20,7 @@ members = [
     "projects/utilities/treeselect",
     "projects/utilities/ty-math",
     "projects/utilities/ty-math-serde",
+    "projects/utilities/ty-preferences",
     "projects/utilities/voxcore",
     "projects/utilities/voxsmith",
     "projects/utilities/vxl",
@@ -53,7 +53,6 @@ tyt-material = { path = "projects/tyt/tyt-material" }
 tyt-meshy = { path = "projects/tyt/tyt-meshy" }
 tyt-meta = { path = "projects/tyt/tyt-meta" }
 tyt-oai = { path = "projects/tyt/tyt-oai" }
-tyt-preferences = { path = "projects/tyt/tyt-preferences" }
 tyt-vmax = { path = "projects/tyt/tyt-vmax" }
 
 pathspec = { path = "projects/utilities/pathspec" }
@@ -61,6 +60,7 @@ treegrid = { path = "projects/utilities/treegrid" }
 treeselect = { path = "projects/utilities/treeselect" }
 ty-math = { path = "projects/utilities/ty-math" }
 ty-math-serde = { path = "projects/utilities/ty-math-serde" }
+ty-preferences = { path = "projects/utilities/ty-preferences" }
 voxcore = { path = "projects/utilities/voxcore" }
 voxsmith = { path = "projects/utilities/voxsmith" }
 vxl = { path = "projects/utilities/vxl" }

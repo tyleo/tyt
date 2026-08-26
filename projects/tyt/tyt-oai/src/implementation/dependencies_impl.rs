@@ -7,17 +7,17 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
 };
-use tyt_injection::serde_json;
-use tyt_preferences::{
+use ty_preferences::{
     Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _, JsoncCodec,
 };
+use tyt_injection::serde_json;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn oai_api_key(&self) -> Result<Option<String>> {
-        let prefs: Option<UsrPrefs> = tyt_preferences::load_git_prefs(
+        let prefs: Option<UsrPrefs> = ty_preferences::load_git_prefs(
             &PrefsDependenciesImpl,
             &JsoncCodec,
             ".tytusrconfig",

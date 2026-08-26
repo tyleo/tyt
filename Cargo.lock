@@ -1772,6 +1772,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ty-preferences"
+version = "0.2.0"
+dependencies = [
+ "jsonc-parser",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "tyt"
 version = "0.1.8"
 dependencies = [
@@ -1798,9 +1807,9 @@ dependencies = [
  "clap",
  "clap_complete",
  "serde",
+ "ty-preferences",
  "tyt-common",
  "tyt-injection",
- "tyt-preferences",
 ]
 
 [[package]]
@@ -1838,9 +1847,9 @@ dependencies = [
  "clap",
  "clap_complete",
  "serde",
+ "ty-preferences",
  "tyt-common",
  "tyt-injection",
- "tyt-preferences",
 ]
 
 [[package]]
@@ -1889,9 +1898,9 @@ dependencies = [
  "clap",
  "clap_complete",
  "serde",
+ "ty-preferences",
  "tyt-common",
  "tyt-injection",
- "tyt-preferences",
 ]
 
 [[package]]
@@ -1911,18 +1920,9 @@ dependencies = [
  "clap",
  "clap_complete",
  "serde",
+ "ty-preferences",
  "tyt-common",
  "tyt-injection",
- "tyt-preferences",
-]
-
-[[package]]
-name = "tyt-preferences"
-version = "0.1.6"
-dependencies = [
- "jsonc-parser",
- "serde",
- "serde_json",
 ]
 
 [[package]]

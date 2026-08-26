@@ -8,11 +8,11 @@ use std::{
     io::ErrorKind,
     path::{Path, PathBuf},
 };
-use tyt_injection::serde_json::Value;
-use tyt_preferences::{
+use ty_preferences::{
     Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, read_section,
     write_section,
 };
+use tyt_injection::serde_json::Value;
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;

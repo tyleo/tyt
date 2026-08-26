@@ -1,6 +1,6 @@
 [package]
-name = "tyt-preferences"
-version = "0.1.6"
+name = "ty-preferences"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"

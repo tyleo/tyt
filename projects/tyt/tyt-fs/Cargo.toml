@@ -16,11 +16,11 @@ required-features = ["bin"]
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
+ty-preferences = { version = "0.2.0", optional = true }
 tyt-common = { version = "0.1.0" }
 tyt-injection = { version = "0.1.0", optional = true }
-tyt-preferences = { version = "0.1.0", optional = true }
 
 [features]
 default = ["impl"]
-impl = ["dep:serde", "dep:tyt-injection", "dep:tyt-preferences"]
+impl = ["dep:serde", "dep:ty-preferences", "dep:tyt-injection"]
 bin = ["impl", "dep:clap_complete"]

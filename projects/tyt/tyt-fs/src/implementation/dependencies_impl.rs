@@ -6,7 +6,7 @@ use std::{
     fs::{self},
     path::{Path, PathBuf},
 };
-use tyt_preferences::{
+use ty_preferences::{
     Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _, JsoncCodec,
 };
 
@@ -32,7 +32,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn fs_prefs(&self) -> Result<Prefs> {
-        let Some(layer) = tyt_preferences::load_git_prefs::<Prefs>(
+        let Some(layer) = ty_preferences::load_git_prefs::<Prefs>(
             &PrefsDependenciesImpl,
             &JsoncCodec,
             ".tytconfig",

@@ -120,7 +120,7 @@ A few shared crates support the architecture:
 | ----------------- | ------------------------------------------------------------------------- |
 | `tyt-common`      | Shared types (e.g. `ExecFailed`) used across all crates                   |
 | `tyt-injection`   | Free-function helpers used by `DependenciesImpl`s (behind `impl` feature) |
-| `tyt-preferences` | Loads `.tytconfig` preferences from user home and git root                |
+| `ty-preferences`  | Loads `.tytconfig` preferences from user home and git root                |
 | `ty-math`         | Math types shared across crates                                           |
 | `ty-math-serde`   | Serde support for `ty-math` types                                         |
 | `tyt-meta`        | Scaffolding tools for adding new crates and commands (see below)          |
