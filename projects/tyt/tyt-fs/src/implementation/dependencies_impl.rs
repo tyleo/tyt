@@ -7,7 +7,7 @@ use std::{
     io::Result as IOResult,
     path::{Path, PathBuf},
 };
-use tyt_preferences::{Dependencies as PrefsDependencies, DeserializePrefs as _};
+use tyt_preferences::{Dependencies as PrefsDependencies, DeserializePrefs as _, JsoncCodec};
 
 /// Concrete implementation of filesystem operations.
 #[derive(Clone, Copy, Debug, Default)]
@@ -31,8 +31,9 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn fs_prefs(&self) -> Result<Prefs> {
-        let Some(layer) = tyt_preferences::load_git_prefs::<Prefs>(self, ".tytconfig", "fs")
-            .map_err(Error::IO)?
+        let Some(layer) =
+            tyt_preferences::load_git_prefs::<Prefs>(self, &JsoncCodec, ".tytconfig", "fs")
+                .map_err(Error::IO)?
         else {
             return Ok(Prefs::default());
         };
@@ -70,7 +71,9 @@ impl Dependencies for DependenciesImpl {
         // `.tytusrconfig` overwrites it.
         let mut bases = HashMap::new();
         for bytes in [config, usr_config].into_iter().flatten() {
-            let prefs: Option<Prefs> = Prefs::deserialize_prefs(&bytes, "fs").map_err(Error::IO)?;
+            let prefs: Option<Prefs> = JsoncCodec
+                .deserialize_prefs(&bytes, "fs")
+                .map_err(Error::IO)?;
             let Some(rel) = prefs.and_then(|prefs| prefs.rel) else {
                 continue;
             };

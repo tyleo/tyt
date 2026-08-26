@@ -5,8 +5,9 @@ use std::io::{Error as IOError, Result as IOResult};
 /// directory.
 ///
 /// Errors when the user home directory cannot be determined.
-pub fn load_user_prefs<T: DeserializePrefs>(
+pub fn load_user_prefs<T>(
     dependencies: &impl Dependencies,
+    codec: &impl DeserializePrefs<T>,
     file_name: &str,
     key: &str,
 ) -> IOResult<OptionalDirPrefs<T>> {
@@ -14,7 +15,7 @@ pub fn load_user_prefs<T: DeserializePrefs>(
         return Err(IOError::other("user home directory cannot be determined"));
     };
 
-    let prefs = load_prefs_from_dir(dependencies, &dir, file_name, key)?;
+    let prefs = load_prefs_from_dir(dependencies, codec, &dir, file_name, key)?;
 
     Ok(DirPrefs { dir, prefs })
 }

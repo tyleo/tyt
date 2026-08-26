@@ -9,14 +9,14 @@ use std::{
     thread,
     time::Duration,
 };
-use tyt_preferences::{Dependencies as PrefsDependencies, load_git_prefs};
+use tyt_preferences::{Dependencies as PrefsDependencies, JsoncCodec, load_git_prefs};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn meshy_api_key(&self) -> Result<Option<String>> {
-        let prefs: Option<UsrPrefs> = load_git_prefs(self, ".tytusrconfig", "meshy")
+        let prefs: Option<UsrPrefs> = load_git_prefs(self, &JsoncCodec, ".tytusrconfig", "meshy")
             .map_err(Error::IO)?
             .and_then(|layer| layer.prefs);
 

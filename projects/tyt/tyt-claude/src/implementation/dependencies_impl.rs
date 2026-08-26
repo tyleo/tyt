@@ -10,7 +10,7 @@ use std::{
     path::{Path, PathBuf},
 };
 use tyt_injection::serde_json::Value;
-use tyt_preferences::{Dependencies as PrefsDependencies, read_section, write_section};
+use tyt_preferences::{Dependencies as PrefsDependencies, JsoncCodec, read_section, write_section};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -39,7 +39,8 @@ impl Dependencies for DependenciesImpl {
             .into_iter()
             .flatten()
         {
-            let Some(layer): Option<ClaudePrefs> = read_section(self, &source, CLAUDE_PREFS_KEY)?
+            let Some(layer): Option<ClaudePrefs> =
+                read_section(self, &JsoncCodec, &source, CLAUDE_PREFS_KEY)?
             else {
                 continue;
             };
@@ -60,11 +61,17 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn read_claude_section(&self, path: &Path) -> Result<Option<ClaudePrefs>> {
-        Ok(read_section(self, path, CLAUDE_PREFS_KEY)?)
+        Ok(read_section(self, &JsoncCodec, path, CLAUDE_PREFS_KEY)?)
     }
 
     fn write_claude_section(&self, path: &Path, prefs: &ClaudePrefs) -> Result<()> {
-        Ok(write_section(self, path, CLAUDE_PREFS_KEY, prefs)?)
+        Ok(write_section(
+            self,
+            &JsoncCodec,
+            path,
+            CLAUDE_PREFS_KEY,
+            prefs,
+        )?)
     }
 
     fn exec_claude_with_env(&self, env: &[(OsString, OsString)], args: &[OsString]) -> Result<i32> {

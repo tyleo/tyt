@@ -1,8 +1,9 @@
 use crate::{Dependencies, DeserializePrefs};
 use std::{io::Result as IOResult, path::Path};
 
-pub(crate) fn load_prefs_from_dir<T: DeserializePrefs>(
+pub(crate) fn load_prefs_from_dir<T>(
     dependencies: &impl Dependencies,
+    codec: &impl DeserializePrefs<T>,
     dir: &Path,
     file_name: &str,
     key: &str,
@@ -13,5 +14,5 @@ pub(crate) fn load_prefs_from_dir<T: DeserializePrefs>(
         return Ok(None);
     };
 
-    T::deserialize_prefs(&bytes, key)
+    codec.deserialize_prefs(&bytes, key)
 }

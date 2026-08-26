@@ -4,8 +4,9 @@ use std::io::Result as IOResult;
 /// Loads the preference layer for `key` from `file_name` in the git root.
 ///
 /// Returns `None` outside a git repository.
-pub fn load_git_prefs<T: DeserializePrefs>(
+pub fn load_git_prefs<T>(
     dependencies: &impl Dependencies,
+    codec: &impl DeserializePrefs<T>,
     file_name: &str,
     key: &str,
 ) -> IOResult<Option<OptionalDirPrefs<T>>> {
@@ -13,7 +14,7 @@ pub fn load_git_prefs<T: DeserializePrefs>(
         return Ok(None);
     };
 
-    let prefs = load_prefs_from_dir(dependencies, &dir, file_name, key)?;
+    let prefs = load_prefs_from_dir(dependencies, codec, &dir, file_name, key)?;
 
     Ok(Some(DirPrefs { dir, prefs }))
 }

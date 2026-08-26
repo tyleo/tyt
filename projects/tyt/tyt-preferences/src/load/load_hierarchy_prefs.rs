@@ -5,10 +5,11 @@ use std::io::{Error as IOError, Result as IOResult};
 /// from the git root down to cwd, furthest from cwd first. Directories that
 /// supply no prefs are omitted.
 ///
-/// Returns an empty list outside a git repository. Errors when cwd is not
-/// under the git root.
-pub fn load_hierarchy_prefs<T: DeserializePrefs>(
+/// Returns an empty list outside a git repository. Errors when cwd is not under
+/// the git root.
+pub fn load_hierarchy_prefs<T>(
     dependencies: &impl Dependencies,
+    codec: &impl DeserializePrefs<T>,
     file_name: &str,
     key: &str,
 ) -> IOResult<Vec<DirPrefs<T>>> {
@@ -39,7 +40,7 @@ pub fn load_hierarchy_prefs<T: DeserializePrefs>(
     let mut layers = Vec::new();
 
     for dir in dirs.into_iter().rev() {
-        let Some(prefs) = load_prefs_from_dir(dependencies, dir, file_name, key)? else {
+        let Some(prefs) = load_prefs_from_dir(dependencies, codec, dir, file_name, key)? else {
             continue;
         };
 

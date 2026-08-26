@@ -11,14 +11,14 @@ pub struct Prefs<T> {
     /// its prefs also appear as the first `hierarchy` entry.
     pub git_root: Option<OptionalDirPrefs<T>>,
 
-    /// Layers from the git root down to cwd that supplied prefs, furthest
-    /// from cwd first.
+    /// Layers from the git root down to cwd that supplied prefs, furthest from
+    /// cwd first.
     pub hierarchy: Vec<DirPrefs<T>>,
 }
 
 impl<T> Prefs<T> {
-    /// Returns `(dir, prefs)` layers in application order: user first, then
-    /// the hierarchy from the git root down to cwd.
+    /// Returns `(dir, prefs)` layers in application order: user first, then the
+    /// hierarchy from the git root down to cwd.
     pub fn application_order(&self) -> impl Iterator<Item = (&Path, &T)> {
         let user = self
             .user

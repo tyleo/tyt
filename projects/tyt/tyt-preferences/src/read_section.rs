@@ -3,8 +3,9 @@ use std::{io::Result as IOResult, path::Path};
 
 /// Reads the `key` section from the config file at `path`. Returns `None` if
 /// the file does not exist or the section is absent.
-pub fn read_section<T: DeserializePrefs>(
+pub fn read_section<T>(
     dependencies: &impl Dependencies,
+    codec: &impl DeserializePrefs<T>,
     path: &Path,
     key: &str,
 ) -> IOResult<Option<T>> {
@@ -12,5 +13,5 @@ pub fn read_section<T: DeserializePrefs>(
         return Ok(None);
     };
 
-    T::deserialize_prefs(&bytes, key)
+    codec.deserialize_prefs(&bytes, key)
 }

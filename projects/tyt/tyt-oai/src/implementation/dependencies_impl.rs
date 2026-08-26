@@ -8,16 +8,17 @@ use std::{
     path::{Path, PathBuf},
 };
 use tyt_injection::serde_json;
-use tyt_preferences::{Dependencies as PrefsDependencies, DeserializePrefs as _};
+use tyt_preferences::{Dependencies as PrefsDependencies, DeserializePrefs as _, JsoncCodec};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn oai_api_key(&self) -> Result<Option<String>> {
-        let prefs: Option<UsrPrefs> = tyt_preferences::load_git_prefs(self, ".tytusrconfig", "oai")
-            .map_err(Error::IO)?
-            .and_then(|layer| layer.prefs);
+        let prefs: Option<UsrPrefs> =
+            tyt_preferences::load_git_prefs(self, &JsoncCodec, ".tytusrconfig", "oai")
+                .map_err(Error::IO)?
+                .and_then(|layer| layer.prefs);
 
         Ok(prefs.and_then(|p| p.api_key))
     }
@@ -46,8 +47,9 @@ impl Dependencies for DependenciesImpl {
         // overrides it.
         let mut dir = None;
         for bytes in [config, usr_config].into_iter().flatten() {
-            let prefs: Option<UsrPrefs> =
-                UsrPrefs::deserialize_prefs(&bytes, "oai").map_err(Error::IO)?;
+            let prefs: Option<UsrPrefs> = JsoncCodec
+                .deserialize_prefs(&bytes, "oai")
+                .map_err(Error::IO)?;
             if let Some(configured) = prefs
                 .and_then(|prefs| prefs.img)
                 .and_then(|img| img.system_prompts_dir)
