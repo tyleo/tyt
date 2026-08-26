@@ -2,7 +2,7 @@ use std::io::Result as IOResult;
 
 /// A codec that writes a preference type into a config file section.
 ///
-/// The `impl-json` and `impl-jsonc` features provide `JsonCodec` and
+/// The `json-codec` and `jsonc-codec` features provide `JsonCodec` and
 /// `JsoncCodec` as implementations.
 pub trait SerializePrefs<T> {
     /// Builds the file bytes to write back: `key` maps to an encoding of

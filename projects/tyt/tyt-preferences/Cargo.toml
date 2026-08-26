@@ -12,7 +12,6 @@ serde = { version = "1", optional = true }
 serde_json = { version = "1", features = ["preserve_order"], optional = true }
 
 [features]
-default = ["impl", "impl-jsonc"]
-impl = []
-impl-json = ["dep:serde", "dep:serde_json"]
-impl-jsonc = ["dep:serde", "dep:serde_json", "dep:jsonc-parser"]
+default = ["jsonc-codec"]
+json-codec = ["dep:serde", "dep:serde_json"]
+jsonc-codec = ["dep:serde", "dep:serde_json", "dep:jsonc-parser"]

@@ -2,6 +2,7 @@ mod load;
 pub use load::*;
 
 mod dependencies;
+mod dependencies_impl;
 mod deserialize_prefs;
 mod dir_prefs;
 mod optional_dir_prefs;
@@ -11,6 +12,7 @@ mod serialize_prefs;
 mod write_section;
 
 pub use dependencies::*;
+pub use dependencies_impl::*;
 pub use deserialize_prefs::*;
 pub use dir_prefs::*;
 pub use optional_dir_prefs::*;
@@ -19,17 +21,12 @@ pub use read_section::*;
 pub use serialize_prefs::*;
 pub use write_section::*;
 
-#[cfg(feature = "impl")]
-mod r#impl;
-#[cfg(feature = "impl")]
-pub use r#impl::*;
+#[cfg(feature = "json-codec")]
+mod json_codec;
+#[cfg(feature = "json-codec")]
+pub use json_codec::*;
 
-#[cfg(feature = "impl-json")]
-mod impl_json;
-#[cfg(feature = "impl-json")]
-pub use impl_json::*;
-
-#[cfg(feature = "impl-jsonc")]
-mod impl_jsonc;
-#[cfg(feature = "impl-jsonc")]
-pub use impl_jsonc::*;
+#[cfg(feature = "jsonc-codec")]
+mod jsonc_codec;
+#[cfg(feature = "jsonc-codec")]
+pub use jsonc_codec::*;
