@@ -4,10 +4,11 @@ use std::{
     env,
     ffi::OsStr,
     fs::{self},
-    io::Result as IOResult,
     path::{Path, PathBuf},
 };
-use tyt_preferences::{Dependencies as PrefsDependencies, DeserializePrefs as _, JsoncCodec};
+use tyt_preferences::{
+    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _, JsoncCodec,
+};
 
 /// Concrete implementation of filesystem operations.
 #[derive(Clone, Copy, Debug, Default)]
@@ -31,9 +32,13 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn fs_prefs(&self) -> Result<Prefs> {
-        let Some(layer) =
-            tyt_preferences::load_git_prefs::<Prefs>(self, &JsoncCodec, ".tytconfig", "fs")
-                .map_err(Error::IO)?
+        let Some(layer) = tyt_preferences::load_git_prefs::<Prefs>(
+            &PrefsDependenciesImpl,
+            &JsoncCodec,
+            ".tytconfig",
+            "fs",
+        )
+        .map_err(Error::IO)?
         else {
             return Ok(Prefs::default());
         };
@@ -52,14 +57,14 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn rel_config(&self) -> Result<Option<RelConfig>> {
-        let Some(git_root) = self.git_root_dir().map_err(Error::IO)? else {
+        let Some(git_root) = PrefsDependenciesImpl.git_root_dir().map_err(Error::IO)? else {
             return Ok(None);
         };
 
-        let config = self
+        let config = PrefsDependenciesImpl
             .read_file(&git_root.join(".tytconfig"))
             .map_err(Error::IO)?;
-        let usr_config = self
+        let usr_config = PrefsDependenciesImpl
             .read_file(&git_root.join(".tytusrconfig"))
             .map_err(Error::IO)?;
 
@@ -100,27 +105,5 @@ impl Dependencies for DependenciesImpl {
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_stdout(contents)?)
-    }
-}
-
-impl PrefsDependencies for DependenciesImpl {
-    fn current_dir(&self) -> IOResult<PathBuf> {
-        env::current_dir()
-    }
-
-    fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
-        Ok(tyt_injection::user_home_dir())
-    }
-
-    fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
-        tyt_injection::git_root_dir()
-    }
-
-    fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
-        tyt_injection::read_file_optional(path)
-    }
-
-    fn write_file(&self, path: &Path, contents: &[u8]) -> IOResult<()> {
-        tyt_injection::write_file_atomic(path, contents)
     }
 }

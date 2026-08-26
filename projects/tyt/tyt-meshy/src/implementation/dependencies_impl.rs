@@ -4,21 +4,26 @@ use crate::{
 };
 use std::{
     env, fs,
-    io::{Error as IOError, ErrorKind, Result as IOResult},
+    io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
     thread,
     time::Duration,
 };
-use tyt_preferences::{Dependencies as PrefsDependencies, JsoncCodec, load_git_prefs};
+use tyt_preferences::{DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, load_git_prefs};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn meshy_api_key(&self) -> Result<Option<String>> {
-        let prefs: Option<UsrPrefs> = load_git_prefs(self, &JsoncCodec, ".tytusrconfig", "meshy")
-            .map_err(Error::IO)?
-            .and_then(|layer| layer.prefs);
+        let prefs: Option<UsrPrefs> = load_git_prefs(
+            &PrefsDependenciesImpl,
+            &JsoncCodec,
+            ".tytusrconfig",
+            "meshy",
+        )
+        .map_err(Error::IO)?
+        .and_then(|layer| layer.prefs);
 
         Ok(prefs.and_then(|prefs| prefs.api_key))
     }
@@ -110,27 +115,5 @@ impl Dependencies for DependenciesImpl {
 
     fn write_stdout(&self, contents: &[u8]) -> Result<()> {
         Ok(tyt_injection::write_stdout(contents)?)
-    }
-}
-
-impl PrefsDependencies for DependenciesImpl {
-    fn current_dir(&self) -> IOResult<PathBuf> {
-        env::current_dir()
-    }
-
-    fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
-        Ok(tyt_injection::user_home_dir())
-    }
-
-    fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
-        tyt_injection::git_root_dir()
-    }
-
-    fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
-        tyt_injection::read_file_optional(path)
-    }
-
-    fn write_file(&self, path: &Path, contents: &[u8]) -> IOResult<()> {
-        tyt_injection::write_file_atomic(path, contents)
     }
 }

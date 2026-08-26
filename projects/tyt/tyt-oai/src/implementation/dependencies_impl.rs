@@ -4,21 +4,27 @@ use crate::{
 };
 use std::{
     env,
-    io::{Error as IOError, ErrorKind, Result as IOResult},
+    io::{Error as IOError, ErrorKind},
     path::{Path, PathBuf},
 };
 use tyt_injection::serde_json;
-use tyt_preferences::{Dependencies as PrefsDependencies, DeserializePrefs as _, JsoncCodec};
+use tyt_preferences::{
+    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _, JsoncCodec,
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn oai_api_key(&self) -> Result<Option<String>> {
-        let prefs: Option<UsrPrefs> =
-            tyt_preferences::load_git_prefs(self, &JsoncCodec, ".tytusrconfig", "oai")
-                .map_err(Error::IO)?
-                .and_then(|layer| layer.prefs);
+        let prefs: Option<UsrPrefs> = tyt_preferences::load_git_prefs(
+            &PrefsDependenciesImpl,
+            &JsoncCodec,
+            ".tytusrconfig",
+            "oai",
+        )
+        .map_err(Error::IO)?
+        .and_then(|layer| layer.prefs);
 
         Ok(prefs.and_then(|p| p.api_key))
     }
@@ -32,14 +38,14 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn system_prompts_dir(&self) -> Result<Option<PathBuf>> {
-        let Some(git_root) = self.git_root_dir().map_err(Error::IO)? else {
+        let Some(git_root) = PrefsDependenciesImpl.git_root_dir().map_err(Error::IO)? else {
             return Ok(None);
         };
 
-        let config = self
+        let config = PrefsDependenciesImpl
             .read_file(&git_root.join(".tytconfig"))
             .map_err(Error::IO)?;
-        let usr_config = self
+        let usr_config = PrefsDependenciesImpl
             .read_file(&git_root.join(".tytusrconfig"))
             .map_err(Error::IO)?;
 
@@ -69,7 +75,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn read_system_prompt(&self, path: &Path) -> Result<Option<String>> {
-        let Some(bytes) = self.read_file(path).map_err(Error::IO)? else {
+        let Some(bytes) = PrefsDependenciesImpl.read_file(path).map_err(Error::IO)? else {
             return Ok(None);
         };
         let text = String::from_utf8(bytes).map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
@@ -81,7 +87,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn read_conv(&self, path: &Path) -> Result<Option<Conv>> {
-        let Some(bytes) = self.read_file(path).map_err(Error::IO)? else {
+        let Some(bytes) = PrefsDependenciesImpl.read_file(path).map_err(Error::IO)? else {
             return Ok(None);
         };
         let conv =
@@ -109,27 +115,5 @@ impl Dependencies for DependenciesImpl {
 
     fn display_image_in_terminal(&self, path: &Path) -> Result<()> {
         Ok(tyt_injection::display_image_in_terminal(path)?)
-    }
-}
-
-impl PrefsDependencies for DependenciesImpl {
-    fn current_dir(&self) -> IOResult<PathBuf> {
-        env::current_dir()
-    }
-
-    fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
-        Ok(tyt_injection::user_home_dir())
-    }
-
-    fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
-        tyt_injection::git_root_dir()
-    }
-
-    fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
-        tyt_injection::read_file_optional(path)
-    }
-
-    fn write_file(&self, path: &Path, contents: &[u8]) -> IOResult<()> {
-        tyt_injection::write_file_atomic(path, contents)
     }
 }
