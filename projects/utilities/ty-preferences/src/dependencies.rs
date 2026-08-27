@@ -1,20 +1,7 @@
-use std::{
-    io::Result as IOResult,
-    path::{Path, PathBuf},
-};
+use std::{io::Result as IOResult, path::Path};
 
-/// Dependency injection for preference I/O operations.
+/// Dependency injection for preference file I/O.
 pub trait Dependencies {
-    /// Returns the current working directory.
-    fn current_dir(&self) -> IOResult<PathBuf>;
-
-    /// Returns the user home directory, or `None` if it cannot be determined.
-    fn user_home_dir(&self) -> IOResult<Option<PathBuf>>;
-
-    /// Returns the root directory of the current git repository, or `None` if
-    /// not in a repository.
-    fn git_root_dir(&self) -> IOResult<Option<PathBuf>>;
-
     /// Reads the contents of a file, or returns `None` if the file does not
     /// exist.
     fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>>;

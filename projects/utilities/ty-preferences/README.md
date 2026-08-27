@@ -21,31 +21,54 @@ struct MyPrefs {
     greeting: Option<String>,
 }
 
-let prefs: Prefs<MyPrefs> =
-    load_prefs(&DependenciesImpl, &JsoncCodec, ".appconfig", "my-tool")?;
+let paths = resolve_prefs_paths()?;
+
+let prefs: Prefs<MyPrefs> = load_prefs(
+    &DependenciesImpl,
+    &JsoncCodec,
+    &paths,
+    ".appconfig",
+    "my-tool",
+)?;
 
 for (dir, layer) in prefs.application_order() {
     // Later layers override earlier ones.
 }
 ```
 
+## Paths
+
+`resolve_prefs_paths` builds a `PrefsPaths`: the cwd, the root of the git
+repository containing it, and the user home directory. `git_root` and
+`user` can be `None`; `cwd` is always present. One `PrefsPaths` can serve
+many loads. `resolve_prefs_paths_from_cwd` takes the starting directory
+instead of reading the current one.
+
+`resolve_cwd`, `resolve_user_home_dir`, and `resolve_git_root_dir` resolve
+one location each; `resolve_git_root_dir` runs `git rev-parse`. Tests can
+skip resolution and build a `PrefsPaths` literally.
+
 ## Layers
 
-`load_prefs` reads the named file in every location and returns a `Prefs<T>`
-holding three layers:
+`load_prefs` reads the named file at every `PrefsPaths` location and returns
+a `Prefs<T>` holding three layers:
 
-1. `user`: the user home directory
-2. `git_root`: the git repository root, `None` outside a repository
-3. `hierarchy`: the directories from the git root down to cwd that supplied
-   prefs, furthest from cwd first
+1. `user`: the layer from the user home directory
+2. `git_root`: the layer from the git root
+3. `hierarchy`: the layers from the git root down to cwd, furthest from cwd
+   first
+
+Each layer is a `DirPrefs`: a directory paired with the prefs it supplied.
+Locations that supplied no prefs are absent.
 
 `application_order` yields `(dir, prefs)` pairs: the user layer first, then
 the hierarchy down to cwd. A caller merging in that order lets the layer
 nearest cwd win.
 
-Narrower loaders read a subset: `load_user_prefs`, `load_git_prefs`, and
-`load_hierarchy_prefs`. `load_application_prefs` returns the layers that
-supplied prefs in application order.
+Narrower loaders read a subset. `load_prefs_from_dir` reads one directory.
+`load_hierarchy_prefs` walks from a git root down to a cwd.
+`load_application_prefs` returns the layers that supplied prefs in
+application order.
 
 ## Sections
 
@@ -68,8 +91,8 @@ rebuilds the file pretty-printed.
 
 ## Dependencies
 
-Filesystem access rides the `Dependencies` trait. The built-in
-`DependenciesImpl` reads real files, resolves the git root with
-`git rev-parse`, and replaces files atomically through a sibling temp file.
-No feature gates it, and it pulls in no crates. Callers can supply their own
-implementation for tests or sandboxing.
+File access rides the `Dependencies` trait: `read_file` and `write_file`.
+The built-in `DependenciesImpl` reads real files and replaces them
+atomically through a sibling temp file. No feature gates it, and it pulls
+in no crates. Callers can supply their own implementation for tests or
+sandboxing.

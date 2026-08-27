@@ -10,7 +10,7 @@ use std::{
 };
 use ty_preferences::{
     Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, read_section,
-    write_section,
+    resolve_cwd, resolve_git_root_dir, resolve_prefs_paths, resolve_user_home_dir, write_section,
 };
 use tyt_injection::serde_json::Value;
 
@@ -23,20 +23,19 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn user_home_dir(&self) -> Result<Option<PathBuf>> {
-        Ok(PrefsDependenciesImpl.user_home_dir()?)
+        Ok(resolve_user_home_dir())
     }
 
     fn git_root_dir(&self) -> Result<Option<PathBuf>> {
-        Ok(PrefsDependenciesImpl.git_root_dir()?)
+        Ok(resolve_git_root_dir(&resolve_cwd()?)?)
     }
 
     fn claude_prefs(&self) -> Result<ResolvedClaudePrefs> {
-        let user_path = PrefsDependenciesImpl
-            .user_home_dir()?
-            .map(|d| d.join(".tytconfig"));
-        let git_root = PrefsDependenciesImpl.git_root_dir()?;
-        let git_root_path = git_root.as_ref().map(|d| d.join(".tytconfig"));
-        let git_user_path = git_root.as_ref().map(|d| d.join(".tytusrconfig"));
+        let paths = resolve_prefs_paths()?;
+
+        let user_path = paths.user.as_ref().map(|d| d.join(".tytconfig"));
+        let git_root_path = paths.git_root.as_ref().map(|d| d.join(".tytconfig"));
+        let git_user_path = paths.git_root.as_ref().map(|d| d.join(".tytusrconfig"));
 
         let mut resolved = ResolvedClaudePrefs::default();
         for source in [user_path, git_root_path, git_user_path]

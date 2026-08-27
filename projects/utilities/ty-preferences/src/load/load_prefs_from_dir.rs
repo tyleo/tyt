@@ -1,7 +1,10 @@
 use crate::{Dependencies, DeserializePrefs};
 use std::{io::Result as IOResult, path::Path};
 
-pub(crate) fn load_prefs_from_dir<T>(
+/// Loads the `key` prefs from `file_name` in `dir`.
+///
+/// Returns `None` when the file supplied no prefs.
+pub fn load_prefs_from_dir<T>(
     dependencies: &impl Dependencies,
     codec: &impl DeserializePrefs<T>,
     dir: &Path,

@@ -9,21 +9,28 @@ use std::{
     thread,
     time::Duration,
 };
-use ty_preferences::{DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, load_git_prefs};
+use ty_preferences::{
+    DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, load_prefs_from_dir,
+    resolve_git_root_dir,
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn meshy_api_key(&self) -> Result<Option<String>> {
-        let prefs: Option<UsrPrefs> = load_git_prefs(
+        let Some(git_root) = resolve_git_root_dir(&self.current_dir()?).map_err(Error::IO)? else {
+            return Ok(None);
+        };
+
+        let prefs: Option<UsrPrefs> = load_prefs_from_dir(
             &PrefsDependenciesImpl,
             &JsoncCodec,
+            &git_root,
             ".tytusrconfig",
             "meshy",
         )
-        .map_err(Error::IO)?
-        .and_then(|layer| layer.prefs);
+        .map_err(Error::IO)?;
 
         Ok(prefs.and_then(|prefs| prefs.api_key))
     }

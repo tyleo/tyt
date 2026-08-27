@@ -1,4 +1,6 @@
-use crate::{Dependencies, DeserializePrefs, DirPrefs, load_hierarchy_prefs, load_user_prefs};
+use crate::{
+    Dependencies, DeserializePrefs, DirPrefs, PrefsPaths, load_hierarchy_prefs, load_prefs_from_dir,
+};
 use std::io::Result as IOResult;
 
 /// Loads preference layers for `key` in application order: user first, then the
@@ -6,23 +8,31 @@ use std::io::Result as IOResult;
 pub fn load_application_prefs<T>(
     dependencies: &impl Dependencies,
     codec: &impl DeserializePrefs<T>,
+    paths: &PrefsPaths,
     file_name: &str,
     key: &str,
 ) -> IOResult<Vec<DirPrefs<T>>> {
-    let user = load_user_prefs(dependencies, codec, file_name, key)?;
-
-    let hierarchy = load_hierarchy_prefs(dependencies, codec, file_name, key)?;
-
     let mut layers = Vec::new();
 
-    if let Some(prefs) = user.prefs {
+    if let Some(user_dir) = &paths.user
+        && let Some(prefs) = load_prefs_from_dir(dependencies, codec, user_dir, file_name, key)?
+    {
         layers.push(DirPrefs {
-            dir: user.dir,
+            dir: user_dir.clone(),
             prefs,
         });
     }
 
-    layers.extend(hierarchy);
+    if let Some(git_root) = &paths.git_root {
+        layers.extend(load_hierarchy_prefs(
+            dependencies,
+            codec,
+            git_root,
+            &paths.cwd,
+            file_name,
+            key,
+        )?);
+    }
 
     Ok(layers)
 }

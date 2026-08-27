@@ -8,7 +8,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use ty_preferences::{
-    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _, JsoncCodec,
+    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _,
+    JsoncCodec, load_prefs_from_dir, resolve_git_root_dir,
 };
 use tyt_injection::serde_json;
 
@@ -17,14 +18,18 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn oai_api_key(&self) -> Result<Option<String>> {
-        let prefs: Option<UsrPrefs> = ty_preferences::load_git_prefs(
+        let Some(git_root) = resolve_git_root_dir(&self.current_dir()?).map_err(Error::IO)? else {
+            return Ok(None);
+        };
+
+        let prefs: Option<UsrPrefs> = load_prefs_from_dir(
             &PrefsDependenciesImpl,
             &JsoncCodec,
+            &git_root,
             ".tytusrconfig",
             "oai",
         )
-        .map_err(Error::IO)?
-        .and_then(|layer| layer.prefs);
+        .map_err(Error::IO)?;
 
         Ok(prefs.and_then(|p| p.api_key))
     }
@@ -38,7 +43,9 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn system_prompts_dir(&self) -> Result<Option<PathBuf>> {
-        let Some(git_root) = PrefsDependenciesImpl.git_root_dir().map_err(Error::IO)? else {
+        let cwd = self.current_dir()?;
+
+        let Some(git_root) = resolve_git_root_dir(&cwd).map_err(Error::IO)? else {
             return Ok(None);
         };
 

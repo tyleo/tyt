@@ -1,49 +1,18 @@
 use crate::Dependencies;
 use std::{
-    env,
     fs::{self, OpenOptions},
     io::{Error as IOError, ErrorKind, Result as IOResult, Write},
     path::{Path, PathBuf},
-    process::{self, Command},
+    process,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
-/// Concrete implementation of preference I/O operations.
+/// Concrete implementation of preference file I/O.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
-    fn current_dir(&self) -> IOResult<PathBuf> {
-        env::current_dir()
-    }
-
-    fn user_home_dir(&self) -> IOResult<Option<PathBuf>> {
-        Ok(env::var_os("HOME")
-            .or_else(|| env::var_os("USERPROFILE"))
-            .map(PathBuf::from))
-    }
-
-    fn git_root_dir(&self) -> IOResult<Option<PathBuf>> {
-        let output = match Command::new("git")
-            .args(["rev-parse", "--show-toplevel"])
-            .output()
-        {
-            Ok(output) => output,
-            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(e),
-        };
-
-        if !output.status.success() {
-            return Ok(None);
-        }
-
-        let path = String::from_utf8(output.stdout)
-            .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
-
-        Ok(Some(PathBuf::from(path.trim())))
-    }
-
     fn read_file(&self, path: &Path) -> IOResult<Option<Vec<u8>>> {
         match fs::read(path) {
             Ok(bytes) => Ok(Some(bytes)),

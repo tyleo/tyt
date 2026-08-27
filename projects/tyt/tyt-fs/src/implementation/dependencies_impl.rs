@@ -7,7 +7,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use ty_preferences::{
-    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _, JsoncCodec,
+    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _,
+    JsoncCodec, load_prefs_from_dir, resolve_git_root_dir,
 };
 
 /// Concrete implementation of filesystem operations.
@@ -32,9 +33,14 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn fs_prefs(&self) -> Result<Prefs> {
-        let Some(layer) = ty_preferences::load_git_prefs::<Prefs>(
+        let Some(git_root) = resolve_git_root_dir(&self.current_dir()?).map_err(Error::IO)? else {
+            return Ok(Prefs::default());
+        };
+
+        let Some(mut prefs) = load_prefs_from_dir::<Prefs>(
             &PrefsDependenciesImpl,
             &JsoncCodec,
+            &git_root,
             ".tytconfig",
             "fs",
         )
@@ -43,21 +49,22 @@ impl Dependencies for DependenciesImpl {
             return Ok(Prefs::default());
         };
 
-        let mut prefs = layer.prefs.unwrap_or_default();
         if let Some(move_to_scratch) = prefs.move_to_scratch.as_mut()
             && let Some(scratch_dir) = move_to_scratch.scratch_dir.clone()
         {
             let scratch_path = PathBuf::from(scratch_dir);
             if !scratch_path.is_absolute() {
                 move_to_scratch.scratch_dir =
-                    Some(layer.dir.join(scratch_path).to_string_lossy().into_owned());
+                    Some(git_root.join(scratch_path).to_string_lossy().into_owned());
             }
         }
         Ok(prefs)
     }
 
     fn rel_config(&self) -> Result<Option<RelConfig>> {
-        let Some(git_root) = PrefsDependenciesImpl.git_root_dir().map_err(Error::IO)? else {
+        let cwd = self.current_dir()?;
+
+        let Some(git_root) = resolve_git_root_dir(&cwd).map_err(Error::IO)? else {
             return Ok(None);
         };
 
