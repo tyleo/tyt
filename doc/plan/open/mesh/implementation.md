@@ -27,21 +27,277 @@ its jsonc deserializer. [The close](#the-close) waits on everything.
 
 Flags and profiles meet in one record. Every option of
 [`vxl mesh`](mesh.md#options) and every profile element lowers into the same
-element of the record, an explicit flag replacing the element it collides with,
-so vxl only combines: it parses the flags, loads and expands the profiles,
-resolves the `{file-stem}` templates, gathers the value fragments with their
-origins, and hands the record over. voxsmith defines the record beside the entry
-point that takes it, and the call pairs the record with the loaded document
-state and the selected object.
+element of the record. An explicit flag replaces the profile element it collides
+with. vxl only combines: it parses the flags, loads and expands the profiles,
+resolves the `{file-stem}` templates, joins the value fragments into the
+program, and hands the record over. voxsmith defines the record beside the entry
+point that takes it. The call pairs the record with the loaded document state
+and the selected object.
+
+The record is plain data. Expressions ride as text until the entry point parses
+them, and no element remembers the flag or the profile entry it came from:
+
+```rust
+use branded_id::{IdVec, U32Id};
+
+/// The material index brand.
+pub struct BMaterial;
+
+/// The primitive index brand.
+pub struct BPrimitive;
+
+/// The target container.
+pub enum Container {
+    /// Binary glTF, `.glb`.
+    Glb,
+
+    /// glTF text, `.gltf`.
+    Gltf,
+}
+
+/// The meshing strategy.
+pub enum Method {
+    /// One unmerged quad per boundary face.
+    Culled,
+
+    /// The fewest quads the run's values allow.
+    Greedy,
+
+    /// All six faces of every solid voxel.
+    Naive,
+}
+
+/// The atlas canvas, counted in cells.
+pub enum TextureShape {
+    /// The near-square packing.
+    Fit,
+
+    /// A single row of cells.
+    Line,
+
+    /// The smallest square power of two.
+    Pot,
+
+    /// The smallest square.
+    Square,
+
+    /// An exact `n`x`n` canvas of cells.
+    Exact(u32),
+}
+
+/// An array domain; the ladder runs bottom to top.
+pub enum ArrayDomain {
+    /// One entry per swatch.
+    Swatch,
+
+    /// One entry per solid voxel.
+    Voxel,
+
+    /// One entry per emitted face.
+    Face,
+
+    /// One entry per face corner.
+    Corner,
+}
+
+/// The transfer a written value declares.
+pub enum Transfer {
+    /// Applies no transfer.
+    Linear,
+
+    /// Applies the sRGB transfer.
+    Srgb,
+}
+
+/// A write's value.
+pub struct WrittenValue {
+    /// The expression the run evaluates.
+    pub expression: String,
+
+    /// The declared transfer.
+    pub transfer: Transfer,
+}
+
+/// What computes into a binding.
+pub enum Computation {
+    /// Each entry's index in the domain.
+    Index(ArrayDomain),
+
+    /// Occlusion from the voxel geometry.
+    Occlusion,
+
+    /// Each voxel's grid position.
+    VoxelPosition,
+}
+
+/// A binding the run computes into the environment.
+pub struct ComputedBinding {
+    /// The bound name.
+    pub name: String,
+
+    /// What computes into the name.
+    pub computation: Computation,
+}
+
+/// A file's form; entries of one JSON file merge by path.
+pub enum FileForm {
+    /// A JSON entry under its name.
+    Json { name: String },
+
+    /// An 8-bit PNG.
+    Png,
+}
+
+/// A loose file the run writes beside the mesh.
+pub struct FileWrite {
+    /// The file's relative name.
+    pub file: String,
+
+    /// The written value.
+    pub value: WrittenValue,
+
+    /// The file's form.
+    pub form: FileForm,
+}
+
+/// A slot's source.
+pub enum SlotSource {
+    /// A file the run writes.
+    File(String),
+
+    /// An expression the run evaluates.
+    Value(String),
+}
+
+/// A material slot write; the property resolves under the format's vocabulary.
+pub struct SlotWrite {
+    /// The destination property.
+    pub property: String,
+
+    /// What fills the property.
+    pub source: SlotSource,
+}
+
+/// An extras entry's form.
+pub enum ExtraForm {
+    /// The entry references a texture.
+    Image,
+
+    /// The entry holds JSON.
+    Json,
+}
+
+/// An extras entry's source.
+pub enum ExtraSource {
+    /// A referenced file.
+    File(String),
+
+    /// A written value.
+    Value(WrittenValue),
+}
+
+/// An `extras.vxl.values` entry, on a material or the mesh.
+pub struct ExtraWrite {
+    /// The entry's name.
+    pub name: String,
+
+    /// The entry's form.
+    pub form: ExtraForm,
+
+    /// The entry's source.
+    pub source: ExtraSource,
+}
+
+/// A vertex attribute write.
+pub enum AttributeWrite {
+    /// An attribute glTF defines; the vocabulary fixes its encoding.
+    Builtin { attribute: String, expression: String },
+
+    /// An underscore attribute.
+    Custom { name: String, value: WrittenValue },
+}
+
+/// One material's elements.
+pub struct MaterialRecord {
+    /// The glTF `material.name`.
+    pub name: Option<String>,
+
+    /// The declared stream list; when absent, the list derives from use.
+    pub uv_streams: Option<Vec<ArrayDomain>>,
+
+    /// The slot writes.
+    pub slots: Vec<SlotWrite>,
+
+    /// The `extras.vxl.values` entries.
+    pub extras: Vec<ExtraWrite>,
+}
+
+/// One primitive's elements.
+pub struct PrimitiveRecord {
+    /// The material the primitive draws with; `None` is no material.
+    pub material_id: Option<U32Id<BMaterial>>,
+
+    /// The select routing faces to the primitive.
+    pub select: String,
+
+    /// The `extras` `vxl.name`.
+    pub name: Option<String>,
+
+    /// Whether the primitive writes `NORMAL`.
+    pub normal: bool,
+
+    /// The declared stream list; when absent, the material's list applies.
+    pub uv_streams: Option<Vec<ArrayDomain>>,
+
+    /// The vertex attribute writes.
+    pub attributes: Vec<AttributeWrite>,
+}
+
+/// A whole meshing run, with every flag and profile lowered in.
+pub struct MeshRecord {
+    /// The target container.
+    pub container: Container,
+
+    /// The meshing strategy.
+    pub method: Method,
+
+    /// The atlas canvas.
+    pub texture_shape: TextureShape,
+
+    /// One voxel's edge length in meters.
+    pub voxel_size: f64,
+
+    /// The computed bindings.
+    pub computed_bindings: Vec<ComputedBinding>,
+
+    /// The joined value program.
+    pub program: String,
+
+    /// The materials by index; the material count sets the length.
+    pub materials: IdVec<BMaterial, MaterialRecord>,
+
+    /// The primitives by index; the implicit primitive lowers as an entry
+    /// whose `true` select takes every face, so the table holds at least one.
+    pub primitives: IdVec<BPrimitive, PrimitiveRecord>,
+
+    /// The loose files written beside the mesh.
+    pub files: Vec<FileWrite>,
+
+    /// The mesh's `extras.vxl.values` entries.
+    pub mesh_extras: Vec<ExtraWrite>,
+}
+```
+
+Attribution stays in vxl, which maps each record element to its origin as it
+lowers. A voxsmith error names the element it rose from, and vxl rewraps the
+error to name the flag or the profile entry.
 
 The entry point bears the run. It parses, checks, and evaluates the program
 through [vox-value-language](#vox-value-language), meshes the geometry, bakes
 the atlases, and emits an output-independent document holding everything but the
 container: the geometry streams, the primitives, the materials, the images, the
 JSON payloads, and the loose files. The container writers serialize that
-document, so `glb` and `gltf` differ only at this edge. An error deep in the run
-still names the flag or the profile entry it rose from because the record keeps
-every fragment's origin.
+document, so `glb` and `gltf` differ only at this edge.
 
 ## vox-value-language
 
@@ -88,42 +344,78 @@ effective palette and the computed values and written out by hand in the tests:
 use branded_id::{IdVec, U32Id};
 use std::collections::HashMap;
 
-// The rung brands the grouping ids carry.
+/// The swatch rung brand.
 pub struct BSwatch;
+
+/// The voxel rung brand.
 pub struct BVoxel;
+
+/// The face rung brand.
 pub struct BFace;
 
-/// What a value has one entry per, the ladder bottom to top.
+/// What a value has one entry per; the ladder runs bottom to top.
 pub enum Domain {
+    /// A single entry.
     Plain,
+
+    /// One entry per swatch.
     Swatch,
+
+    /// One entry per solid voxel.
     Voxel,
+
+    /// One entry per emitted face.
     Face,
+
+    /// One entry per face corner.
     Corner,
 }
 
 /// The vec width.
 pub enum Dimension {
+    /// One component.
     Vec1,
+
+    /// Two components.
     Vec2,
+
+    /// Three components.
     Vec3,
+
+    /// Four components.
     Vec4,
 }
 
 /// A component's type.
 pub enum Scalar {
+    /// A 32-bit float.
     F32,
+
+    /// An unsigned 8-bit integer.
     U8,
+
+    /// An unsigned 16-bit integer.
     U16,
+
+    /// An unsigned 32-bit integer.
     U32,
+
+    /// A boolean, vec1 only.
     Bool,
+
+    /// A string, vec1 only.
     String,
 }
 
 /// A value's type.
 pub struct Type {
+    /// What the value has one entry per.
     pub domain: Domain,
+
+    /// The vec width.
     pub dimension: Dimension,
+
+    /// The component type.
     pub scalar: Scalar,
 }
 
@@ -136,11 +428,22 @@ pub struct TypeEnvironment {
 /// A value's entries, flattened component by component; a plain value holds
 /// one entry.
 pub enum Components {
+    /// `f32` components.
     F32(Vec<f32>),
+
+    /// `u8` components.
     U8(Vec<u8>),
+
+    /// `u16` components.
     U16(Vec<u16>),
+
+    /// `u32` components.
     U32(Vec<u32>),
+
+    /// `bool` components.
     Bool(Vec<bool>),
+
+    /// `String` components.
     String(Vec<String>),
 }
 
@@ -148,8 +451,13 @@ pub enum Components {
 /// the domain and dimension and on a bool or string above vec1, so the fields
 /// stay private.
 pub struct Value {
+    /// What the value has one entry per.
     domain: Domain,
+
+    /// The vec width.
     dimension: Dimension,
+
+    /// The entries, flattened.
     components: Components,
 }
 
