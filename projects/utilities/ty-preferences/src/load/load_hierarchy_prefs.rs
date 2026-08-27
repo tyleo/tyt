@@ -1,4 +1,4 @@
-use crate::{Dependencies, DeserializePrefs, DirPrefs, load_prefs_from_dir};
+use crate::{Dependencies, DeserializePrefs, DirPrefs, load_sources_prefs};
 use std::{
     io::{Error as IOError, Result as IOResult},
     path::Path,
@@ -35,18 +35,7 @@ pub fn load_hierarchy_prefs<T>(
         )));
     }
 
-    let mut layers = Vec::new();
+    let sources: Vec<(&Path, &str)> = dirs.into_iter().rev().map(|dir| (dir, file_name)).collect();
 
-    for dir in dirs.into_iter().rev() {
-        let Some(prefs) = load_prefs_from_dir(dependencies, codec, dir, file_name, key)? else {
-            continue;
-        };
-
-        layers.push(DirPrefs {
-            dir: dir.to_path_buf(),
-            prefs,
-        });
-    }
-
-    Ok(layers)
+    load_sources_prefs(dependencies, codec, &sources, key)
 }

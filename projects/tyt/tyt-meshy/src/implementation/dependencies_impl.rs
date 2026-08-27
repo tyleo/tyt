@@ -11,7 +11,7 @@ use std::{
 };
 use ty_preferences::{
     DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, load_prefs_from_dir,
-    resolve_git_root_dir,
+    resolve_git_root_dir_from_cwd,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -19,7 +19,9 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn meshy_api_key(&self) -> Result<Option<String>> {
-        let Some(git_root) = resolve_git_root_dir(&self.current_dir()?).map_err(Error::IO)? else {
+        let Some(git_root) =
+            resolve_git_root_dir_from_cwd(&self.current_dir()?).map_err(Error::IO)?
+        else {
             return Ok(None);
         };
 

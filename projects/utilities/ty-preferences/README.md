@@ -41,12 +41,12 @@ for (dir, layer) in prefs.application_order() {
 `resolve_prefs_paths` builds a `PrefsPaths`: the cwd, the root of the git
 repository containing it, and the user home directory. `git_root` and
 `user` can be `None`; `cwd` is always present. One `PrefsPaths` can serve
-many loads. `resolve_prefs_paths_from_cwd` takes the starting directory
-instead of reading the current one.
+many loads.
 
 `resolve_cwd`, `resolve_user_home_dir`, and `resolve_git_root_dir` resolve
-one location each; `resolve_git_root_dir` runs `git rev-parse`. Tests can
-skip resolution and build a `PrefsPaths` literally.
+one location each; `resolve_git_root_dir` runs `git rev-parse`. The
+`_from_cwd` variants take the starting directory instead of reading the
+current one. Tests can skip resolution and build a `PrefsPaths` literally.
 
 ## Layers
 
@@ -66,7 +66,8 @@ the hierarchy down to cwd. A caller merging in that order lets the layer
 nearest cwd win.
 
 Narrower loaders read a subset. `load_prefs_from_dir` reads one directory.
-`load_hierarchy_prefs` walks from a git root down to a cwd.
+`load_sources_prefs` reads an ordered list of `(directory, file name)`
+sources. `load_hierarchy_prefs` walks from a git root down to a cwd.
 `load_application_prefs` returns the layers that supplied prefs in
 application order.
 

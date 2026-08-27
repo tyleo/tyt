@@ -9,8 +9,9 @@ use std::{
     path::{Path, PathBuf},
 };
 use ty_preferences::{
-    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, read_section,
-    resolve_cwd, resolve_git_root_dir, resolve_prefs_paths, resolve_user_home_dir, write_section,
+    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DirPrefs, JsoncCodec,
+    load_sources_prefs, read_section, resolve_git_root_dir, resolve_prefs_paths,
+    resolve_user_home_dir, write_section,
 };
 use tyt_injection::serde_json::Value;
 
@@ -27,40 +28,39 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn git_root_dir(&self) -> Result<Option<PathBuf>> {
-        Ok(resolve_git_root_dir(&resolve_cwd()?)?)
+        Ok(resolve_git_root_dir()?)
     }
 
     fn claude_prefs(&self) -> Result<ResolvedClaudePrefs> {
         let paths = resolve_prefs_paths()?;
 
-        let user_path = paths.user.as_ref().map(|d| d.join(".tytconfig"));
-        let git_root_path = paths.git_root.as_ref().map(|d| d.join(".tytconfig"));
-        let git_user_path = paths.git_root.as_ref().map(|d| d.join(".tytusrconfig"));
+        let sources: Vec<(&Path, &str)> = [
+            (paths.user.as_deref(), ".tytconfig"),
+            (paths.git_root.as_deref(), ".tytconfig"),
+            (paths.git_root.as_deref(), ".tytusrconfig"),
+        ]
+        .into_iter()
+        .filter_map(|(dir, file_name)| Some((dir?, file_name)))
+        .collect();
+
+        let layers = load_sources_prefs::<ClaudePrefs>(
+            &PrefsDependenciesImpl,
+            &JsoncCodec,
+            &sources,
+            CLAUDE_PREFS_KEY,
+        )?;
 
         let mut resolved = ResolvedClaudePrefs::default();
-        for source in [user_path, git_root_path, git_user_path]
-            .into_iter()
-            .flatten()
-        {
-            let Some(layer): Option<ClaudePrefs> = read_section(
-                &PrefsDependenciesImpl,
-                &JsoncCodec,
-                &source,
-                CLAUDE_PREFS_KEY,
-            )?
-            else {
-                continue;
-            };
-            for (k, v) in layer.profiles {
-                let resolved_path = match source.parent() {
-                    Some(base) if !Path::new(&v).is_absolute() => {
-                        normalize_separators(&base.join(&v).to_string_lossy())
-                    }
-                    _ => normalize_separators(&v),
+        for DirPrefs { dir, prefs } in layers {
+            for (k, v) in prefs.profiles {
+                let resolved_path = if Path::new(&v).is_absolute() {
+                    normalize_separators(&v)
+                } else {
+                    normalize_separators(&dir.join(&v).to_string_lossy())
                 };
                 resolved.profiles.insert(k, resolved_path);
             }
-            if let Some(active) = layer.active {
+            if let Some(active) = prefs.active {
                 resolved.active = Some(active);
             }
         }

@@ -8,8 +8,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use ty_preferences::{
-    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _,
-    JsoncCodec, load_prefs_from_dir, resolve_git_root_dir,
+    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, load_prefs_from_dir,
+    load_sources_prefs, resolve_git_root_dir_from_cwd,
 };
 use tyt_injection::serde_json;
 
@@ -18,7 +18,9 @@ pub struct DependenciesImpl;
 
 impl Dependencies for DependenciesImpl {
     fn oai_api_key(&self) -> Result<Option<String>> {
-        let Some(git_root) = resolve_git_root_dir(&self.current_dir()?).map_err(Error::IO)? else {
+        let Some(git_root) =
+            resolve_git_root_dir_from_cwd(&self.current_dir()?).map_err(Error::IO)?
+        else {
             return Ok(None);
         };
 
@@ -45,28 +47,23 @@ impl Dependencies for DependenciesImpl {
     fn system_prompts_dir(&self) -> Result<Option<PathBuf>> {
         let cwd = self.current_dir()?;
 
-        let Some(git_root) = resolve_git_root_dir(&cwd).map_err(Error::IO)? else {
+        let Some(git_root) = resolve_git_root_dir_from_cwd(&cwd).map_err(Error::IO)? else {
             return Ok(None);
         };
 
-        let config = PrefsDependenciesImpl
-            .read_file(&git_root.join(".tytconfig"))
-            .map_err(Error::IO)?;
-        let usr_config = PrefsDependenciesImpl
-            .read_file(&git_root.join(".tytusrconfig"))
-            .map_err(Error::IO)?;
-
         // `.tytconfig` is read first so a `systemPromptsDir` in `.tytusrconfig`
         // overrides it.
+        let sources = [
+            (git_root.as_path(), ".tytconfig"),
+            (git_root.as_path(), ".tytusrconfig"),
+        ];
+
         let mut dir = None;
-        for bytes in [config, usr_config].into_iter().flatten() {
-            let prefs: Option<UsrPrefs> = JsoncCodec
-                .deserialize_prefs(&bytes, "oai")
-                .map_err(Error::IO)?;
-            if let Some(configured) = prefs
-                .and_then(|prefs| prefs.img)
-                .and_then(|img| img.system_prompts_dir)
-            {
+        for layer in
+            load_sources_prefs::<UsrPrefs>(&PrefsDependenciesImpl, &JsoncCodec, &sources, "oai")
+                .map_err(Error::IO)?
+        {
+            if let Some(configured) = layer.prefs.img.and_then(|img| img.system_prompts_dir) {
                 dir = Some(configured);
             }
         }

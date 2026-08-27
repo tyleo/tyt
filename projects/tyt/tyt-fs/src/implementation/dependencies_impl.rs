@@ -7,8 +7,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use ty_preferences::{
-    Dependencies as _, DependenciesImpl as PrefsDependenciesImpl, DeserializePrefs as _,
-    JsoncCodec, load_prefs_from_dir, resolve_git_root_dir,
+    DependenciesImpl as PrefsDependenciesImpl, JsoncCodec, load_prefs_from_dir, load_sources_prefs,
+    resolve_git_root_dir_from_cwd,
 };
 
 /// Concrete implementation of filesystem operations.
@@ -33,7 +33,9 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn fs_prefs(&self) -> Result<Prefs> {
-        let Some(git_root) = resolve_git_root_dir(&self.current_dir()?).map_err(Error::IO)? else {
+        let Some(git_root) =
+            resolve_git_root_dir_from_cwd(&self.current_dir()?).map_err(Error::IO)?
+        else {
             return Ok(Prefs::default());
         };
 
@@ -64,29 +66,28 @@ impl Dependencies for DependenciesImpl {
     fn rel_config(&self) -> Result<Option<RelConfig>> {
         let cwd = self.current_dir()?;
 
-        let Some(git_root) = resolve_git_root_dir(&cwd).map_err(Error::IO)? else {
+        let Some(git_root) = resolve_git_root_dir_from_cwd(&cwd).map_err(Error::IO)? else {
             return Ok(None);
         };
 
-        let config = PrefsDependenciesImpl
-            .read_file(&git_root.join(".tytconfig"))
-            .map_err(Error::IO)?;
-        let usr_config = PrefsDependenciesImpl
-            .read_file(&git_root.join(".tytusrconfig"))
-            .map_err(Error::IO)?;
+        // `.tytconfig` is merged first so that any duplicate key in
+        // `.tytusrconfig` overwrites it.
+        let sources = [
+            (git_root.as_path(), ".tytconfig"),
+            (git_root.as_path(), ".tytusrconfig"),
+        ];
 
-        if config.is_none() && usr_config.is_none() {
+        let layers =
+            load_sources_prefs::<Prefs>(&PrefsDependenciesImpl, &JsoncCodec, &sources, "fs")
+                .map_err(Error::IO)?;
+
+        if layers.is_empty() {
             return Ok(None);
         }
 
-        // `.tytconfig` is merged first so that any duplicate key in
-        // `.tytusrconfig` overwrites it.
         let mut bases = HashMap::new();
-        for bytes in [config, usr_config].into_iter().flatten() {
-            let prefs: Option<Prefs> = JsoncCodec
-                .deserialize_prefs(&bytes, "fs")
-                .map_err(Error::IO)?;
-            let Some(rel) = prefs.and_then(|prefs| prefs.rel) else {
+        for layer in layers {
+            let Some(rel) = layer.prefs.rel else {
                 continue;
             };
             for (name, value) in rel {
