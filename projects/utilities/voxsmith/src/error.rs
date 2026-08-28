@@ -6,7 +6,6 @@ use goxl_codec::Error as GoxlError;
 use mvox_codec::Error as MVoxError;
 #[cfg(feature = "qbcl")]
 use qbcl_codec::Error as QbclError;
-use serde::{de::Error as DeError, ser::Error as SerError};
 use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
@@ -145,17 +144,5 @@ impl From<QbclError> for Error {
 impl From<GltfError> for Error {
     fn from(error: GltfError) -> Self {
         Error::Gltf(error)
-    }
-}
-
-impl SerError for Error {
-    fn custom<T: Display>(message: T) -> Self {
-        Error::invalid(message)
-    }
-}
-
-impl DeError for Error {
-    fn custom<T: Display>(message: T) -> Self {
-        Error::invalid(message)
     }
 }

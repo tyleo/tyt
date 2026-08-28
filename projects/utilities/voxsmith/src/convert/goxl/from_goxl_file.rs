@@ -1,7 +1,6 @@
 use crate::{
-    BASE_COLOR, Error, GoxelCamera, GoxelExt, GoxelExtWrapper, GoxelImage, GoxelLayer, GoxelLight,
-    GoxelMaterial, GoxelPreview, GoxelUnknownChunk, Result, lin_srgba_f64_from_srgba_u8,
-    to_vox_value,
+    BASE_COLOR, Error, GoxelCamera, GoxelExt, GoxelImage, GoxelLayer, GoxelLight, GoxelMaterial,
+    GoxelPreview, GoxelUnknownChunk, GoxelVoxMain, Result, lin_srgba_f64_from_srgba_u8,
 };
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
@@ -19,11 +18,11 @@ use voxcore::{
 /// blocks it stamps. The state with no native voxcore home, such as the image
 /// metadata, preview, materials, cameras, light, per-layer metadata, the clone
 /// and shape definitions, the exact block placements, and unknown chunks, rides
-/// in a `goxel` ext so the file can be written back exactly.
+/// in the [`GoxelExt`] so the file can be written back exactly.
 ///
 /// Errors on a layer placement that references a block outside the block
 /// list, or on a cross-reference the checked insertions reject.
-pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
+pub fn from_goxl_file(file: &GoxlFile) -> Result<GoxelVoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, file);
@@ -40,10 +39,7 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
     let root_ids = state.retain_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(root_ids)?;
 
-    let ext = GoxelExtWrapper {
-        goxel: goxel_ext(file),
-    };
-    state.set_ext(Some(to_vox_value(&ext)?));
+    state.set_ext(Some(goxel_ext(file)));
 
     Ok(state)
 }
@@ -54,7 +50,7 @@ pub fn from_goxl_file(file: &GoxlFile) -> Result<VoxMain> {
 /// value pool is added to `state`. A file with no solid voxels gets a single
 /// placeholder color so objects have a default material to sample.
 fn build_palette(
-    state: &mut VoxMain,
+    state: &mut GoxelVoxMain,
     file: &GoxlFile,
 ) -> (VoxPalette, HashMap<[u8; 4], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 4]> = Vec::new();
@@ -273,8 +269,8 @@ fn shape_token(shape: GoxlShape) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, from_goxl_bytes, from_goxl_file, lin_srgba_f64_from_srgba_u8, to_goxl_bytes,
-        to_goxl_file,
+        BASE_COLOR, GoxelVoxMain, from_goxl_bytes, from_goxl_file, lin_srgba_f64_from_srgba_u8,
+        to_goxl_bytes, to_goxl_file,
     };
     use branded_id::U32Id;
     use goxl::{
@@ -286,8 +282,8 @@ mod tests {
         TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
     };
     use voxcore::{
-        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
-        VoxPalette, VoxValue, VoxValuePool,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool,
     };
 
     /// The linear-light components of a `#RRGGBBAA` hex string.
@@ -452,7 +448,7 @@ mod tests {
     /// object and a blue object sharing one `rgba` palette, placed by a
     /// hierarchy of a nested group and two roots. This is the cross-format
     /// synthesis input.
-    fn source_state() -> VoxMain {
+    fn source_state() -> GoxelVoxMain {
         let mut state = VoxMain::default();
 
         // One baseColor palette: a transparent placeholder, then red,
@@ -636,19 +632,6 @@ mod tests {
         assert_eq!(file.blocks.len(), 2);
         let reloaded = from_goxl_file(&file).unwrap();
         assert_eq!(reloaded.object_count(), 2);
-    }
-
-    /// A foreign ext, here `voxel-max`, is ignored by the Goxel writer: it
-    /// synthesizes from the scene rather than failing to parse the wrong ext.
-    #[test]
-    fn synthesizes_past_a_foreign_ext() {
-        let mut state = source_state();
-        state.set_ext(Some(VoxValue::Object(VoxMap(vec![(
-            "voxel-max".to_owned(),
-            VoxValue::Null,
-        )]))));
-        let file = to_goxl_file(&state).unwrap();
-        assert_eq!(file.layers.len(), 2);
     }
 
     #[test]

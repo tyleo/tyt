@@ -79,8 +79,8 @@ impl<'a> UsedMaterials<'a> {
 /// Resolves the distinct flattened materials `object` uses, its layers merged
 /// per property name by the format's override rule, first seen in raster
 /// order. Errors when a layer references a palette `state` does not hold.
-pub(crate) fn resolve_used_materials<'a>(
-    state: &'a VoxMain,
+pub(crate) fn resolve_used_materials<'a, T>(
+    state: &'a VoxMain<T>,
     object: &'a VoxObject,
 ) -> Result<UsedMaterials<'a>> {
     let effective = state.effective_palette(object)?;
@@ -187,7 +187,7 @@ mod tests {
     fn each_property_reads_through_its_winning_layer() {
         // The worked flatten example: layers binding {a, b}, {c}, {b, c}. The
         // winners are a from the first layer, b and c from the third.
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let value_pool_id = float_value_pool(&mut state, vec![0.1, 0.2, 0.3, 0.4, 0.5]);
         let first_id = palette_over(&mut state, value_pool_id, &[("a", 0), ("b", 1)]);
         let second_id = palette_over(&mut state, value_pool_id, &[("c", 2)]);
@@ -211,7 +211,7 @@ mod tests {
     fn properties_pull_from_their_own_palettes_and_value_pools() {
         // Two layers on different palettes over different value pools: each
         // name resolves to its own palette's value pool and value.
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let first_value_pool_id = float_value_pool(&mut state, vec![0.25]);
         let second_value_pool_id = float_value_pool(&mut state, vec![0.75]);
         let first_id = palette_over(&mut state, first_value_pool_id, &[("a", 0)]);
@@ -238,7 +238,7 @@ mod tests {
         // The later layer's palette binds no properties, so it wins nothing
         // and its samples never split texels: two voxels differing only in it
         // share one texel, and the earlier layer keeps its name.
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let value_pool_id = float_value_pool(&mut state, vec![0.5]);
         let supplying_id = palette_over(&mut state, value_pool_id, &[("a", 0)]);
 
@@ -271,7 +271,7 @@ mod tests {
 
     #[test]
     fn a_layerless_object_shares_one_empty_key_texel() {
-        let state = VoxMain::default();
+        let state: VoxMain = VoxMain::default();
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap();
         for x in 0..2 {
             let voxel_id = object.voxel_id(TyVector3U32::new(x, 0, 0)).unwrap();
@@ -291,7 +291,7 @@ mod tests {
     fn distinct_winning_layer_tuples_split_texels() {
         // Two layers each binding a name over a two-material palette: voxels
         // share a texel exactly when they sample the same material in both.
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let value_pool_id = float_value_pool(&mut state, vec![0.0, 1.0]);
 
         let mut palette = VoxPalette::default();
@@ -346,7 +346,7 @@ mod tests {
 
     #[test]
     fn a_layer_over_an_unknown_palette_errors() {
-        let state = VoxMain::default();
+        let state: VoxMain = VoxMain::default();
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(U32Id::from_u32(9), U32Id::from_u32(0));
 

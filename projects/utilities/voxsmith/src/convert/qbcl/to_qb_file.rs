@@ -1,12 +1,9 @@
-use crate::{
-    Error, QubicleQbExtWrapper, QubicleQbMatrix, Result, from_vox_value,
-    resolve_cell_color_or_transparent,
-};
+use crate::{Error, QubicleQbMatrix, QubicleQbVoxMain, Result, resolve_cell_color_or_transparent};
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
-use voxcore::{VoxMain, VoxObject};
+use voxcore::VoxObject;
 
-/// Writes a [`VoxMain`] back to a decoded Qubicle Binary [`QbFile`], the
-/// inverse of [`from_qb_file`](crate::from_qb_file).
+/// Writes a [`QubicleQbVoxMain`] back to a decoded Qubicle Binary [`QbFile`],
+/// the inverse of [`from_qb_file`](crate::from_qb_file).
 ///
 /// Requires the `qubicle-qb` ext the forward path writes; without it the file
 /// cannot be rebuilt. Each object emits one matrix, taking its name, position,
@@ -17,9 +14,9 @@ use voxcore::{VoxMain, VoxObject};
 /// 1. the ext is missing
 /// 2. its matrix entries do not line up with the objects
 /// 3. a visibility list does not match its object
-pub fn to_qb_file(state: &VoxMain) -> Result<QbFile> {
+pub fn to_qb_file(state: &QubicleQbVoxMain) -> Result<QbFile> {
     let ext = match state.ext() {
-        Some(ext) => from_vox_value::<QubicleQbExtWrapper>(ext)?.qubicle_qb,
+        Some(ext) => ext.clone(),
         None => {
             return Err(Error::invalid(
                 "state has no qubicle-qb ext; cannot rebuild a Qubicle .qb file",
@@ -66,7 +63,7 @@ pub fn to_qb_file(state: &VoxMain) -> Result<QbFile> {
 /// list, placed in `.qb` storage order. Errors if the visibility count does not
 /// match the object's solid voxels.
 fn matrix_from_object(
-    state: &VoxMain,
+    state: &QubicleQbVoxMain,
     object: &VoxObject,
     provenance: &QubicleQbMatrix,
 ) -> Result<QbMatrix> {

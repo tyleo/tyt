@@ -1,8 +1,7 @@
 use crate::{
-    BASE_COLOR, Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
-    MagicaVoxelLayer, MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody,
-    MagicaVoxelShapeModel, MagicaVoxelUnknownChunk, Result, lin_srgba_f64_from_srgba_u8,
-    to_vox_value,
+    BASE_COLOR, Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelFrame, MagicaVoxelLayer,
+    MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody, MagicaVoxelShapeModel,
+    MagicaVoxelUnknownChunk, MagicaVoxelVoxMain, Result, lin_srgba_f64_from_srgba_u8,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -37,8 +36,8 @@ type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 /// become one shared palette of value pools, and the `nTRN` / `nGRP` / `nSHP`
 /// scene graph becomes the hierarchy nodes. The state with no native voxcore
 /// home, such as layers, cameras, render settings, the exact per-node frames,
-/// and each material's exact optional fields, rides in a `magica-voxel` ext so
-/// the file can be written back exactly.
+/// and each material's exact optional fields, rides in the [`MagicaVoxelExt`]
+/// so the file can be written back exactly.
 ///
 /// Errors if:
 ///
@@ -46,7 +45,7 @@ type ScalarField = fn(&MVoxMaterial) -> Option<f32>;
 /// 2. a material id is outside the palette range
 /// 3. a scene-node reference dangles
 /// 4. a checked insertion rejects a cross-reference
-pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
+pub fn from_mvox_file(file: &MVoxFile) -> Result<MagicaVoxelVoxMain> {
     let mut state = VoxMain::default();
 
     let palette = build_palette(&mut state, file)?;
@@ -64,10 +63,7 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
     state.retain_hierarchy_nodes(nodes)?;
     state.set_root_hierarchy_node_ids(roots)?;
 
-    let ext = MagicaVoxelExtWrapper {
-        magica_voxel: magica_voxel_ext(file),
-    };
-    state.set_ext(Some(to_vox_value(&ext)?));
+    state.set_ext(Some(magica_voxel_ext(file)));
 
     Ok(state)
 }
@@ -79,7 +75,7 @@ pub fn from_mvox_file(file: &MVoxFile) -> Result<VoxMain> {
 /// holds no null and a float value pool rejects NaN; the infinities carry
 /// across, and the exact optionals ride in the ext. Errors on a material id
 /// outside `0..=255` or a duplicate id.
-fn build_palette(state: &mut VoxMain, file: &MVoxFile) -> Result<VoxPalette> {
+fn build_palette(state: &mut MagicaVoxelVoxMain, file: &MVoxFile) -> Result<VoxPalette> {
     let colors = file.resolved_palette().colors;
     let has_materials = !file.materials.is_empty();
 
@@ -517,8 +513,8 @@ fn invalid(message: String) -> Error {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, IOR, from_mvox_bytes, from_mvox_file, lin_srgba_f64_from_srgba_u8,
-        to_mvox_bytes, to_mvox_file,
+        BASE_COLOR, IOR, MagicaVoxelVoxMain, from_mvox_bytes, from_mvox_file,
+        lin_srgba_f64_from_srgba_u8, to_mvox_bytes, to_mvox_file,
     };
     use branded_id::U32Id;
     use mvox::{
@@ -532,8 +528,8 @@ mod tests {
         TyHexColor, TyQuaternionF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32,
     };
     use voxcore::{
-        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
-        VoxPalette, VoxValue, VoxValuePool, VoxValuePoolValueRef,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool, VoxValuePoolValueRef,
     };
 
     fn pair(key: &str, value: &str) -> (String, String) {
@@ -703,7 +699,7 @@ mod tests {
     /// object and a blue object sharing one `rgba` palette, placed by a small
     /// hierarchy of a nested group and two roots. The writer must synthesize a
     /// MagicaVoxel file from this rather than read an ext.
-    fn source_state() -> VoxMain {
+    fn source_state() -> MagicaVoxelVoxMain {
         let mut state = VoxMain::default();
 
         // One baseColor palette: a transparent placeholder, then red,
@@ -897,20 +893,6 @@ mod tests {
         // The synthesized palette and scene graph read back into a valid state.
         let reloaded = from_mvox_file(&file).unwrap();
         assert_eq!(reloaded.object_count(), 2);
-    }
-
-    /// A foreign ext, here `voxel-max`, is ignored by the MagicaVoxel writer:
-    /// it synthesizes from the scene rather than failing to parse the wrong
-    /// ext.
-    #[test]
-    fn synthesizes_past_a_foreign_ext() {
-        let mut state = source_state();
-        state.set_ext(Some(VoxValue::Object(VoxMap(vec![(
-            "voxel-max".to_owned(),
-            VoxValue::Null,
-        )]))));
-        let file = to_mvox_file(&state).unwrap();
-        assert_eq!(file.models.len(), 2);
     }
 
     #[test]

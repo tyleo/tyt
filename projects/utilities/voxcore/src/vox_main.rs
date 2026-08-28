@@ -2,7 +2,7 @@ use crate::{
     BVoxEffectiveProperty, BVoxHierarchyNode, BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette,
     BVoxProperty, BVoxValuePool, BVoxValuePoolValue, BVoxVoxel, Error, Result, VoxEffectivePalette,
     VoxEffectiveProperty, VoxGcRemap, VoxHierarchyNode, VoxObject, VoxPalette, VoxRuntimeState,
-    VoxValue, VoxValuePool,
+    VoxValuePool,
 };
 use branded_id::{IdVec, U32Id, UsizeId, soa::IdRemap};
 use std::collections::{HashMap, HashSet};
@@ -13,22 +13,37 @@ use ty_math::{TyQuaternionExt, TyVector3I32, UNIT_ROTATION_TOLERANCE};
 /// Ids are meaningful only within this state. Every mutation checks the
 /// cross-references it could break, so a state reached through the public API
 /// never violates a referential rule.
+///
+/// `T` is the caller-chosen extension carried alongside the scene. The core
+/// model assigns it no meaning and never reads it.
 #[derive(Debug, Default)]
-pub struct VoxMain {
+pub struct VoxMain<T = ()> {
     /// The runtime scene.
     runtime_state: VoxRuntimeState,
 
-    /// Optional user-extension namespace; the core format assigns it no
-    /// meaning.
-    ext: Option<VoxValue>,
+    /// The user extension.
+    ext: T,
 }
 
-impl VoxMain {
+impl<T> VoxMain<T> {
     /// Deep copy. Every id stays valid in the clone.
-    pub fn clone_state(&self) -> Self {
+    pub fn clone_state(&self) -> Self
+    where
+        T: Clone,
+    {
         Self {
             runtime_state: self.runtime_state.clone_runtime_state(),
             ext: self.ext.clone(),
+        }
+    }
+
+    /// Maps the ext through `f`, moving the scene over unchanged. This is the
+    /// one way to change a state's ext type, so a conversion that drops or
+    /// replaces a foreign ext spells the drop out at the call site.
+    pub fn map_ext<U>(self, f: impl FnOnce(T) -> U) -> VoxMain<U> {
+        VoxMain {
+            runtime_state: self.runtime_state,
+            ext: f(self.ext),
         }
     }
 
@@ -334,13 +349,13 @@ impl VoxMain {
         Ok(())
     }
 
-    /// The user-extension value, or `None` if unset.
-    pub fn ext(&self) -> Option<&VoxValue> {
-        self.ext.as_ref()
+    /// The user extension.
+    pub fn ext(&self) -> &T {
+        &self.ext
     }
 
-    /// Sets or clears the user-extension value.
-    pub fn set_ext(&mut self, ext: Option<VoxValue>) {
+    /// Sets the user extension.
+    pub fn set_ext(&mut self, ext: T) {
         self.ext = ext;
     }
 
@@ -1683,7 +1698,7 @@ mod tests {
 
     #[test]
     fn prune_value_pools_releases_unreferenced_entries_keeping_ids() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         // Four colors; the palette references only the middle two.
         let colors_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![
@@ -1783,7 +1798,7 @@ mod tests {
 
     #[test]
     fn reorder_value_pool_permutes_the_listing_leaving_resolutions() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         // Three colors. Two palettes bind the value pool, each with materials
         // drawing scattered ids.
         let colors_id = state.retain_value_pool(
@@ -1906,7 +1921,7 @@ mod tests {
 
     #[test]
     fn validate_accepts_a_shared_child_dag() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let leaf_id = state
             .retain_hierarchy_node(VoxHierarchyNode::default())
             .unwrap();
@@ -1928,7 +1943,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_node_rejects_a_duplicate_child_node() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let leaf_id = state
             .retain_hierarchy_node(VoxHierarchyNode::default())
             .unwrap();
@@ -1946,7 +1961,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_node_rejects_a_duplicate_child_object() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let object_id = state.retain_object(unit_object("o")).unwrap();
         assert_eq!(
             state.retain_hierarchy_node(node_with_objects(vec![object_id, object_id])),
@@ -1961,7 +1976,7 @@ mod tests {
 
     #[test]
     fn root_setters_reject_a_duplicate_root() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let node_id = state
             .retain_hierarchy_node(VoxHierarchyNode::default())
             .unwrap();
@@ -1985,7 +2000,7 @@ mod tests {
 
     #[test]
     fn validate_accepts_a_palette_with_no_properties() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
 
         // A palette with no properties still carries materials; each row is
         // empty and every property resolves to its default. Voxels sample them
@@ -2003,7 +2018,7 @@ mod tests {
 
     #[test]
     fn retain_palette_accepts_an_empty_palette() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
 
         // A palette with no materials samples nothing, so no layer can use it,
         // but it is a valid entity.
@@ -2018,7 +2033,7 @@ mod tests {
 
     #[test]
     fn retain_object_rejects_a_dangling_layer_palette() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let mut object = unit_object("o");
 
         // Reference palette id 0, but the state has no palettes.
@@ -2062,7 +2077,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_node_rejects_a_dangling_child() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         assert_eq!(
             state.retain_hierarchy_node(node_with_children(vec![node_id(9)])),
             Err(Error::UnknownHierarchyNode {
@@ -2075,7 +2090,7 @@ mod tests {
 
     #[test]
     fn root_setters_reject_a_dangling_root() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         state
             .retain_hierarchy_node(VoxHierarchyNode::default())
             .unwrap();
@@ -2099,7 +2114,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_nodes_rejects_a_cycle() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         // node 0 -> child 1, node 1 -> child 0.
         assert!(matches!(
             state.retain_hierarchy_nodes(vec![
@@ -2114,7 +2129,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_nodes_accepts_forward_references() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         // node 0 lists node 1 before node 1 exists; the batch resolves it.
         let ids = state
             .retain_hierarchy_nodes(vec![
@@ -2130,7 +2145,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_node_rejects_a_zero_scale() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         node.transform.scale = TyVector3F64::new(1.0, 0.0, 1.0);
 
@@ -2142,7 +2157,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_node_rejects_a_non_finite_scale() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         // NaN slips past the zero-scale check (NaN == 0.0 is false), so the
         // finiteness check must catch it first.
@@ -2156,7 +2171,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_node_rejects_a_non_finite_position() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         node.transform.position = TyVector3F64::new(0.0, 0.0, f64::INFINITY);
 
@@ -2168,7 +2183,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_node_rejects_a_non_unit_rotation() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let mut node = VoxHierarchyNode::default();
         // Length squared 4, well outside the unit tolerance.
         node.transform.rotation = TyQuaternionF64::from_xyzw(0.0, 0.0, 0.0, 2.0);
@@ -2181,7 +2196,7 @@ mod tests {
 
     #[test]
     fn clone_state_is_an_independent_deep_copy() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         state.retain_value_pool(VoxValuePool::int(vec![7]).unwrap());
         state.retain_palette(bare_palette()).unwrap();
         state.retain_object(unit_object("o")).unwrap();
@@ -2324,7 +2339,7 @@ mod tests {
 
     #[test]
     fn release_hierarchy_node_requires_detached_parents_and_roots() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let leaf_id = state
             .retain_hierarchy_node(VoxHierarchyNode::default())
             .unwrap();
@@ -2602,7 +2617,7 @@ mod tests {
 
     #[test]
     fn release_object_rejects_an_unknown_id() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let object_id = state.retain_object(unit_object("o")).unwrap();
         assert_eq!(state.release_object(object_id), Ok(()));
 
@@ -2621,7 +2636,7 @@ mod tests {
 
     #[test]
     fn objects_with_build_volume_margin_validate_and_survive_gc() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let a_id = state
             .retain_object(VoxObject::new("a".to_owned(), TyVector3U32::new(2, 1, 1)).unwrap())
             .unwrap();
@@ -2655,7 +2670,7 @@ mod tests {
     /// samples through it.
     #[test]
     fn two_layer_object_sharing_a_palette_gcs_and_resolves() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let colors_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]]).unwrap(),
         );
@@ -2740,7 +2755,7 @@ mod tests {
 
     #[test]
     fn retain_palette_rejects_a_dangling_property_value_pool() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let mut palette = VoxPalette::default();
         // The property references value-pool id 0, but the state holds no value
         // pools.
@@ -2814,7 +2829,7 @@ mod tests {
 
     #[test]
     fn release_object_preserves_the_survivors_order() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let a_id = state.retain_object(unit_object("a")).unwrap();
         let b_id = state.retain_object(unit_object("b")).unwrap();
         let c_id = state.retain_object(unit_object("c")).unwrap();
@@ -2838,7 +2853,7 @@ mod tests {
 
     #[test]
     fn release_palette_preserves_the_survivors_order() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let a_id = state.retain_palette(bare_palette()).unwrap();
         let b_id = state.retain_palette(bare_palette()).unwrap();
         let c_id = state.retain_palette(bare_palette()).unwrap();
@@ -2961,7 +2976,7 @@ mod tests {
 
     #[test]
     fn release_hierarchy_node_preserves_the_survivors_order() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let a_id = state
             .retain_hierarchy_node(VoxHierarchyNode::default())
             .unwrap();
@@ -2988,7 +3003,7 @@ mod tests {
 
     #[test]
     fn move_object_reorders_the_listing_and_validates() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let a_id = state.retain_object(unit_object("a")).unwrap();
         let b_id = state.retain_object(unit_object("b")).unwrap();
         let c_id = state.retain_object(unit_object("c")).unwrap();
@@ -3019,7 +3034,7 @@ mod tests {
 
     #[test]
     fn move_palette_reorders_the_listing_and_validates() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let a_id = state.retain_palette(bare_palette()).unwrap();
         let b_id = state.retain_palette(bare_palette()).unwrap();
 
@@ -3633,7 +3648,7 @@ mod tests {
 
     #[test]
     fn retain_hierarchy_node_rejects_a_dangling_child_object() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         assert_eq!(
             state.retain_hierarchy_node(node_with_objects(vec![U32Id::from_u32(9)])),
             Err(Error::UnknownObject {

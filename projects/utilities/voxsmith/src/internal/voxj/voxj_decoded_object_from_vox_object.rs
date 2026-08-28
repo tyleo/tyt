@@ -15,8 +15,8 @@ use voxj_codec::VoxjDecodedObject;
 /// # Panics
 ///
 /// Panics if `object_id` is not one of `state`'s objects.
-pub fn voxj_decoded_object_from_vox_object(
-    state: &VoxMain,
+pub fn voxj_decoded_object_from_vox_object<T>(
+    state: &VoxMain<T>,
     object_id: U32Id<BVoxObject>,
 ) -> VoxjDecodedObject {
     let object = state.object(object_id).expect("the object is the state's");

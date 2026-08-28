@@ -37,7 +37,7 @@ pub fn to_vmax(
     color_format: ColorFormat,
     camera: Option<CameraView>,
 ) -> Result<()> {
-    let state = implementation::load_state(input, from)?;
+    let state = implementation::load_state_vmax(input, from)?;
     let mut builder =
         VmaxFileBuilder::new(&state).color_format(voxel_max_color_format(color_format));
     // Omitted, the path keeps its own camera: the ext's when present, else the

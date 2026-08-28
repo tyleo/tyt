@@ -5,7 +5,7 @@ use voxj_codec::{
     PositionEncoding, SampleEncoding, to_voxj_file_bytes, to_voxj_pretty_file_bytes,
     to_voxjz_file_bytes,
 };
-use voxsmith::{EditStateMode, VoxjFileBuilder};
+use voxsmith::{EditStateMode, VoxjExtSlot, VoxjFileBuilder};
 
 /// Encodes a voxel state into a Voxel Json document and writes it, shared by
 /// every command that produces a voxj document.
@@ -17,8 +17,8 @@ use voxsmith::{EditStateMode, VoxjFileBuilder};
 /// * `format` - the output container and printing form.
 /// * `ext` - when false, drops the user-defined `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-pub fn write_voxj_document(
-    state: &VoxMain,
+pub fn write_voxj_document<T: VoxjExtSlot>(
+    state: &VoxMain<T>,
     output: &Path,
     encoding: VoxjEncoding,
     format: VoxjFormat,

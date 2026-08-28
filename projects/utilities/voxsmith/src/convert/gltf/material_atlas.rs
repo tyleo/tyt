@@ -27,8 +27,8 @@ pub struct MaterialAtlas {
 /// Errors if a layer references a palette `state` does not hold, if a
 /// vocabulary property carries a value outside its glTF range, or if `shape`
 /// is too small to hold the materials.
-pub fn object_to_material_atlas(
-    state: &VoxMain,
+pub fn object_to_material_atlas<T>(
+    state: &VoxMain<T>,
     object: &VoxObject,
     bakes: &[MaterialBake],
     shape: AtlasShape,
@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn bakes_one_png_per_requested_map() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
 
         let base_value_pool_id =
             state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
@@ -133,7 +133,7 @@ mod tests {
     fn an_out_of_range_vocabulary_value_errors_before_the_bake() {
         // The atlas is a glTF boundary, so it runs the vocabulary check its
         // sibling mesh export runs rather than baking a lying texel.
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let value_pool_id = state.retain_value_pool(VoxValuePool::float(vec![2.5]).unwrap());
 
         let mut palette = VoxPalette::default();
@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn a_layerless_object_bakes_one_texel_of_spec_defaults() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
 
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();

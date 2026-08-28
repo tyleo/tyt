@@ -1,11 +1,11 @@
 use crate::{
-    EditStateMode, Error, Result, voxj_decoded_object_from_vox_object,
+    EditStateMode, Result, VoxjExtSlot, voxj_decoded_object_from_vox_object,
     voxj_hierarchy_node_from_vox_hierarchy_node, voxj_palette_from_vox_palette,
-    voxj_value_from_vox_value, voxj_value_pool_from_vox_value_pool,
+    voxj_value_pool_from_vox_value_pool,
 };
 use ty_math::TyVector3U32;
 use voxcore::{VoxMain, VoxObject};
-use voxj::{VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState, VoxjValue};
+use voxj::{VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState};
 use voxj_codec::{
     PositionEncoding, SampleEncoding, encode_voxj_object_optimized, voxj_palette_material_counts,
 };
@@ -30,8 +30,8 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// * `sample` - sample-block encoding, or `None` to search for the smallest.
 /// * `ext` - when false, omits the user-defined `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-pub fn write_voxj(
-    state: &VoxMain,
+pub fn write_voxj<T: VoxjExtSlot>(
+    state: &VoxMain<T>,
     position: Option<PositionEncoding>,
     sample: Option<SampleEncoding>,
     ext: bool,
@@ -84,15 +84,7 @@ pub fn write_voxj(
     });
 
     let ext = if ext {
-        match state.ext().map(voxj_value_from_vox_value) {
-            Some(VoxjValue::Object(map)) => Some(map),
-            Some(_) => {
-                return Err(Error::invalid(
-                    "a non-object ext cannot be written to voxel json",
-                ));
-            }
-            None => None,
-        }
+        state.ext().to_voxj_ext()?
     } else {
         None
     };
@@ -116,7 +108,7 @@ pub fn write_voxj(
 /// Whether the document records editor build volumes under `mode`. Auto records
 /// them only when some object carries margin around its live voxels, since an
 /// already-tight object recreates its build volume on load.
-fn emit_edit_state(state: &VoxMain, mode: EditStateMode) -> bool {
+fn emit_edit_state<T>(state: &VoxMain<T>, mode: EditStateMode) -> bool {
     match mode {
         EditStateMode::Always => true,
         EditStateMode::Never => false,

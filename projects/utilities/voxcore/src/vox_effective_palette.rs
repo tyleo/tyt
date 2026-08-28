@@ -240,7 +240,7 @@ mod tests {
 
     #[test]
     fn an_object_with_no_layers_yields_an_empty_palette() {
-        let state = VoxMain::default();
+        let state: VoxMain = VoxMain::default();
         let object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
 
         let effective = state.effective_palette(&object).unwrap();
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn a_layer_over_an_unknown_palette_errors() {
-        let state = VoxMain::default();
+        let state: VoxMain = VoxMain::default();
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         let layer_id = object.retain_layer(U32Id::from_u32(9), U32Id::from_u32(0));
 

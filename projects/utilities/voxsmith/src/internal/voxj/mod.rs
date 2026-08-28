@@ -1,3 +1,5 @@
+mod keyed_ext_from_voxj;
+mod keyed_voxj_ext;
 mod vox_hierarchy_node_from_voxj_hierarchy_node;
 mod vox_object_from_voxj_decoded_object;
 mod vox_palette_from_voxj_palette;
@@ -10,6 +12,8 @@ mod voxj_value_from_vox_value;
 mod voxj_value_pool_from_vox_value_pool;
 mod write_voxj;
 
+pub(crate) use keyed_ext_from_voxj::*;
+pub(crate) use keyed_voxj_ext::*;
 pub(crate) use vox_hierarchy_node_from_voxj_hierarchy_node::*;
 pub(crate) use vox_object_from_voxj_decoded_object::*;
 pub(crate) use vox_palette_from_voxj_palette::*;

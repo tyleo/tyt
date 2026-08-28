@@ -1,14 +1,13 @@
-use crate::{Result, VoxelMaxColorFormat, write_vmax};
+use crate::{Result, VoxelMaxColorFormat, VoxelMaxVoxMain, write_vmax};
 use vmax::VMaxFile;
-use voxcore::VoxMain;
 
-/// Writes a [`VoxMain`] back to a Voxel Max document with default settings, the
-/// inverse of [`from_vmax_file`](crate::from_vmax_file).
+/// Writes a [`VoxelMaxVoxMain`] back to a Voxel Max document with default
+/// settings, the inverse of [`from_vmax_file`](crate::from_vmax_file).
 /// `voxel_max_color_format` selects where each palette's colors are stored, as
 /// described on [`VoxelMaxColorFormat`]. For control over the scene camera, use
 /// [`VmaxFileBuilder`](crate::VmaxFileBuilder).
 pub fn to_vmax_file(
-    state: &VoxMain,
+    state: &VoxelMaxVoxMain,
     voxel_max_color_format: VoxelMaxColorFormat,
 ) -> Result<VMaxFile> {
     write_vmax(state, voxel_max_color_format, None)
@@ -18,8 +17,8 @@ pub fn to_vmax_file(
 mod tests {
     use crate::{
         BASE_COLOR, SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt,
-        VoxelMaxExtWrapper, from_vmax_file, lin_srgba_f64_from_srgba_u8,
-        resolve_cell_color_or_transparent, to_vmax_file, to_vox_value,
+        VoxelMaxVoxMain, from_vmax_file, lin_srgba_f64_from_srgba_u8,
+        resolve_cell_color_or_transparent, to_vmax_file,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
@@ -33,7 +32,7 @@ mod tests {
     use vmax_codec::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain,
-        VoxMap, VoxObject, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolValueRef,
+        VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
     };
 
     fn material(
@@ -384,7 +383,7 @@ mod tests {
     /// the `voxel-max` ext from this rather than read one. Red is cell 0, so a
     /// live voxel references the palette index Voxel Max reads as empty;
     /// synthesis must shift it past index 0 rather than drop the voxel.
-    fn source_state() -> VoxMain {
+    fn source_state() -> VoxelMaxVoxMain {
         let mut state = VoxMain::default();
 
         // One palette whose first real color is material 0: red, green, blue.
@@ -462,9 +461,9 @@ mod tests {
     /// Order-independent and resolved per voxel, so a state compares to one
     /// round-tripped through a synthesized document without depending on
     /// object, palette, or voxel order.
-    fn world_voxels(state: &VoxMain) -> BTreeSet<([i32; 3], [u8; 4])> {
+    fn world_voxels(state: &VoxelMaxVoxMain) -> BTreeSet<([i32; 3], [u8; 4])> {
         fn walk(
-            state: &VoxMain,
+            state: &VoxelMaxVoxMain,
             node_id: U32Id<BVoxHierarchyNode>,
             origin: [i32; 3],
             voxels: &mut BTreeSet<([i32; 3], [u8; 4])>,
@@ -523,21 +522,6 @@ mod tests {
     #[test]
     fn synthesizes_a_file_without_an_ext() {
         let source = source_state();
-        let file = to_vmax_file(&source, VoxelMaxColorFormat::Png).unwrap();
-        let reloaded = from_vmax_file(&file).unwrap();
-        assert_eq!(world_voxels(&reloaded), world_voxels(&source));
-    }
-
-    /// A foreign ext, here `magica-voxel`, is ignored by the Voxel Max writer:
-    /// it synthesizes from the scene rather than failing to parse the wrong
-    /// ext.
-    #[test]
-    fn synthesizes_past_a_foreign_ext() {
-        let mut source = source_state();
-        source.set_ext(Some(VoxValue::Object(VoxMap(vec![(
-            "magica-voxel".to_owned(),
-            VoxValue::Null,
-        )]))));
         let file = to_vmax_file(&source, VoxelMaxColorFormat::Png).unwrap();
         let reloaded = from_vmax_file(&file).unwrap();
         assert_eq!(world_voxels(&reloaded), world_voxels(&source));
@@ -655,7 +639,7 @@ mod tests {
     /// Adds a folded palette binding `baseColor` to a value pool of the
     /// given colors, with one material per color so a material's index is its
     /// color index, and returns the palette id.
-    fn retain_rgba_palette(state: &mut VoxMain, hexes: &[&str]) -> U32Id<BVoxPalette> {
+    fn retain_rgba_palette(state: &mut VoxelMaxVoxMain, hexes: &[&str]) -> U32Id<BVoxPalette> {
         let value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(hexes.iter().map(|hex| color_floats(hex)).collect()).unwrap(),
         );
@@ -1752,7 +1736,7 @@ mod tests {
 
     /// A minimal no-ext state: one red voxel placed by one object node, the
     /// input the synthesis path takes.
-    fn one_object_state() -> VoxMain {
+    fn one_object_state() -> VoxelMaxVoxMain {
         let mut state = VoxMain::default();
         let palette_id = retain_rgba_palette(&mut state, &["#FF0000FF"]);
         state
@@ -1774,7 +1758,7 @@ mod tests {
 
     /// Gives the state a `voxel-max` ext carrying `cam` as its scene camera, so
     /// the lossless path has a camera to keep or replace.
-    fn with_ext_scene_camera(state: &mut VoxMain, cam: VMaxSceneCamera) {
+    fn with_ext_scene_camera(state: &mut VoxelMaxVoxMain, cam: VMaxSceneCamera) {
         let voxel_max = VoxelMaxExt {
             scene: VMaxSceneJsonFile {
                 cam: Some(cam),
@@ -1783,8 +1767,7 @@ mod tests {
             palettes: vec![None; state.palette_count()],
             ..Default::default()
         };
-        let ext = to_vox_value(&VoxelMaxExtWrapper { voxel_max }).unwrap();
-        state.set_ext(Some(ext));
+        state.set_ext(Some(voxel_max));
         state.validate().unwrap();
     }
 

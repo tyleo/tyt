@@ -1,15 +1,12 @@
-use crate::{
-    Error, QubicleQbtExtWrapper, QubicleQbtNode, Result, from_vox_value,
-    resolve_cell_color_or_transparent,
-};
+use crate::{Error, QubicleQbtNode, QubicleQbtVoxMain, Result, resolve_cell_color_or_transparent};
 use branded_id::U32Id;
 use qbcl::qbt::{
     QbtColor, QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtUnknownNode, QbtVoxel,
 };
-use voxcore::{BVoxHierarchyNode, VoxHierarchyNode, VoxMain, VoxObject};
+use voxcore::{BVoxHierarchyNode, VoxHierarchyNode, VoxObject};
 
-/// Writes a [`VoxMain`] back to a decoded Qubicle Binary Tree [`QbtFile`], the
-/// inverse of [`from_qbt_file`](crate::from_qbt_file).
+/// Writes a [`QubicleQbtVoxMain`] back to a decoded Qubicle Binary Tree
+/// [`QbtFile`], the inverse of [`from_qbt_file`](crate::from_qbt_file).
 ///
 /// Requires the `qubicle-qbt` ext the forward path writes; without it the file
 /// cannot be rebuilt. The scene tree is walked from the single root, each
@@ -22,9 +19,9 @@ use voxcore::{BVoxHierarchyNode, VoxHierarchyNode, VoxMain, VoxObject};
 /// 2. its node entries do not line up with the hierarchy
 /// 3. the state does not have exactly one root
 /// 4. a mask list does not match its object
-pub fn to_qbt_file(state: &VoxMain) -> Result<QbtFile> {
+pub fn to_qbt_file(state: &QubicleQbtVoxMain) -> Result<QbtFile> {
     let ext = match state.ext() {
-        Some(ext) => from_vox_value::<QubicleQbtExtWrapper>(ext)?.qubicle_qbt,
+        Some(ext) => ext.clone(),
         None => {
             return Err(Error::invalid(
                 "state has no qubicle-qbt ext; cannot rebuild a Qubicle .qbt file",
@@ -66,7 +63,7 @@ pub fn to_qbt_file(state: &VoxMain) -> Result<QbtFile> {
 /// and its aligned ext provenance.
 fn rebuild_node(
     node_id: U32Id<BVoxHierarchyNode>,
-    state: &VoxMain,
+    state: &QubicleQbtVoxMain,
     nodes: &[QubicleQbtNode],
 ) -> Result<QbtNode> {
     let hierarchy = state.hierarchy_node(node_id).ok_or_else(|| {
@@ -134,7 +131,7 @@ fn rebuild_node(
 /// Rebuilds the child nodes of a hierarchy node, in stored order.
 fn rebuild_children(
     hierarchy: &VoxHierarchyNode,
-    state: &VoxMain,
+    state: &QubicleQbtVoxMain,
     nodes: &[QubicleQbtNode],
 ) -> Result<Vec<QbtNode>> {
     hierarchy
@@ -147,7 +144,10 @@ fn rebuild_children(
 /// The build-volume object a matrix or compound node places, or an error if it
 /// has none. The object is the author's build volume, so the written matrix
 /// keeps the original dimensions and voxel positions directly.
-fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result<&'a VoxObject> {
+fn matrix_object<'a>(
+    hierarchy: &VoxHierarchyNode,
+    state: &'a QubicleQbtVoxMain,
+) -> Result<&'a VoxObject> {
     let object_id = *hierarchy
         .child_object_ids
         .first()
@@ -163,7 +163,7 @@ fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result
 /// match the object's solid voxels.
 #[allow(clippy::too_many_arguments)]
 fn matrix_from_object(
-    state: &VoxMain,
+    state: &QubicleQbtVoxMain,
     object: &VoxObject,
     name: String,
     position: [i32; 3],

@@ -15,7 +15,7 @@ use voxcore::{VoxMain, VoxValuePoolValueRef};
 /// A name outside the vocabulary has no checkable range and passes, as does a
 /// value of a shape the name does not read. The boundary that reads the value
 /// errors on its shape.
-pub fn check_gltf_property_ranges(state: &VoxMain) -> Result<()> {
+pub fn check_gltf_property_ranges<T>(state: &VoxMain<T>) -> Result<()> {
     for (palette_id, palette) in state.iter_palettes() {
         for (property_id, property) in palette.iter_properties() {
             let name = &property.name;

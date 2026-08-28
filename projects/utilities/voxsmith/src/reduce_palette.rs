@@ -32,8 +32,8 @@ use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, Vo
 /// * `space` - the color space compared in.
 /// * `dither` - error diffusion when snapping samples.
 /// * `keep_unused_values` - keep value-pool values left unreferenced.
-pub fn reduce_palette(
-    state: &mut VoxMain,
+pub fn reduce_palette<T>(
+    state: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     max_materials: usize,
     method: ReductionMethod,
@@ -56,8 +56,8 @@ pub fn reduce_palette(
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
 /// palette already fit (leaving `method` / `space` / `dither` inert). The state
 /// is left compacted and valid.
-fn reduce_materials(
-    state: &mut VoxMain,
+fn reduce_materials<T>(
+    state: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     max_materials: usize,
     method: ReductionMethod,
@@ -173,8 +173,8 @@ struct Point {
 /// The sRGB bytes of a material's `baseColor`, or `None` if the value is
 /// absent or its bound value pool holds no float vectors. Resolves the bound
 /// value-pool value and encodes it with [`value_pool_color`].
-fn material_color(
-    state: &VoxMain,
+fn material_color<T>(
+    state: &VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     material_id: U32Id<BVoxMaterial>,
     property_id: U32Id<BVoxProperty>,
@@ -186,7 +186,10 @@ fn material_color(
 
 /// How many live voxels sample each material of `palette`, across every object
 /// referencing it.
-fn material_populations(state: &VoxMain, palette_id: U32Id<BVoxPalette>) -> HashMap<u32, u64> {
+fn material_populations<T>(
+    state: &VoxMain<T>,
+    palette_id: U32Id<BVoxPalette>,
+) -> HashMap<u32, u64> {
     let mut populations = HashMap::new();
 
     for (_, object) in state.iter_objects() {
@@ -551,8 +554,8 @@ fn to_space(rgba: [u8; 4], space: ColorSpace) -> TyVector3F64 {
 /// Snaps every live voxel sampling `palette` to a representative, diffusing the
 /// error per `dither`, so one merged color dithers across several
 /// representatives. Runs per referencing object in raster order.
-fn dither_voxels(
-    state: &mut VoxMain,
+fn dither_voxels<T>(
+    state: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
     clusters: &[Vec<Point>],
     dither: Dither,
@@ -603,8 +606,8 @@ fn dither_voxels(
 /// to the nearest representative, and reassign via
 /// [`VoxMain::retain_voxel`], swapping only this layer's material.
 #[allow(clippy::too_many_arguments)]
-fn dither_layer(
-    state: &mut VoxMain,
+fn dither_layer<T>(
+    state: &mut VoxMain<T>,
     object_id: U32Id<BVoxObject>,
     layer_id: U32Id<BVoxLayer>,
     coords_of: &HashMap<u32, TyVector3F64>,

@@ -3,8 +3,8 @@ use voxcore::{VoxMain, VoxObject};
 
 /// [`resolve_cell_color`], reading transparent black when no layer supplies
 /// `baseColor`.
-pub fn resolve_cell_color_or_transparent<'a>(
-    state: &VoxMain,
+pub fn resolve_cell_color_or_transparent<'a, T>(
+    state: &VoxMain<T>,
     object: &'a VoxObject,
 ) -> Result<CellColor<'a>> {
     Ok(resolve_cell_color(state, object)?.unwrap_or_else(|| CellColor::transparent(object)))
@@ -19,7 +19,7 @@ mod tests {
 
     #[test]
     fn an_unsupplied_object_reads_transparent_black() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         // A property-less palette: its one material supplies no
         // baseColor.
         let mut palette = VoxPalette::default();

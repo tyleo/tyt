@@ -8,8 +8,8 @@ use voxcore::{VoxMain, VoxObject};
 /// All decoding happens here. A supplier drawing from a non-color value pool
 /// errors, as does a layer referencing a palette the state does not hold.
 /// `Ok(None)` when no layer supplies `baseColor`.
-pub fn resolve_cell_color<'a>(
-    state: &VoxMain,
+pub fn resolve_cell_color<'a, T>(
+    state: &VoxMain<T>,
     object: &'a VoxObject,
 ) -> Result<Option<CellColor<'a>>> {
     let effective = state.effective_palette(object)?;
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn a_supplier_reads_each_voxel_through_its_material() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
@@ -84,7 +84,7 @@ mod tests {
 
     #[test]
     fn none_when_no_layer_supplies_the_color() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let mut palette = VoxPalette::default();
         palette.retain_material(vec![]).unwrap();
         let palette_id = state.retain_palette(palette).unwrap();
@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn a_supplier_over_a_non_color_value_pool_errors() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let value_pool_id = state.retain_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
 
         let mut palette = VoxPalette::default();

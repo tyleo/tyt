@@ -15,7 +15,7 @@ pub fn to_voxj(
     ext: bool,
     edit_state: EditState,
 ) -> Result<()> {
-    let state = implementation::load_state(input, from)?;
+    let state = implementation::load_state_voxj(input, from)?;
     implementation::write_voxj_document(
         &state,
         output,

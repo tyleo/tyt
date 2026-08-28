@@ -2116,6 +2116,7 @@ dependencies = [
  "treegrid",
  "treeselect",
  "ty-math",
+ "vmax",
  "vmax-codec",
  "voxcore",
  "voxj-codec",

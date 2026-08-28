@@ -9,8 +9,8 @@ use voxcore::{VoxMain, VoxObject};
 /// and embedded images embed as their own data URIs, so the document is a single
 /// self-contained file. An object with no live voxels writes a valid glTF with
 /// an empty scene.
-pub fn object_to_material_gltf(
-    state: &VoxMain,
+pub fn object_to_material_gltf<T>(
+    state: &VoxMain<T>,
     object: &VoxObject,
     request: &MaterialMeshRequest,
 ) -> Result<MeshFiles> {
@@ -48,7 +48,7 @@ mod tests {
     /// A one-voxel red cube through a single `baseColor` palette, and the
     /// request the test bakes; `maps` and `storage` vary per test.
     fn cube_gltf(maps: Vec<MaterialMap>, storage: ResourceStorage) -> Vec<u8> {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
 
         let base_value_pool_id =
             state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());

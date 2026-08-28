@@ -8,8 +8,8 @@ use voxcore::{VoxMain, VoxObject};
 /// `request.storage` asks for. `state` resolves the object's referenced
 /// palettes; embedded images share the GLB binary chunk with the geometry. An
 /// object with no live voxels writes a valid glTF with an empty scene.
-pub fn object_to_material_glb(
-    state: &VoxMain,
+pub fn object_to_material_glb<T>(
+    state: &VoxMain<T>,
     object: &VoxObject,
     request: &MaterialMeshRequest,
 ) -> Result<MeshFiles> {
@@ -51,7 +51,7 @@ mod tests {
     /// A 2x1x1 bar whose two voxels are red and blue through one
     /// `baseColor` palette, so the mesh uses two materials.
     fn red_blue_bar() -> (VoxMain, U32Id<BVoxObject>) {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
 
         let base_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
@@ -138,7 +138,7 @@ mod tests {
     fn an_out_of_range_vocabulary_value_fails_the_export() {
         // A metallic outside the glTF `[0, 1]` trips the vocabulary range
         // check before anything is written.
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let base_value_pool_id =
             state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
         let metallic_value_pool_id =

@@ -1,6 +1,6 @@
 use crate::{
-    Error, QubicleQbclExtWrapper, QubicleQbclNode, QubicleQbclNodeBody, Result, ext_for,
-    from_vox_value, resolve_cell_color_or_transparent,
+    Error, QubicleQbclNode, QubicleQbclNodeBody, QubicleQbclVoxMain, Result,
+    resolve_cell_color_or_transparent,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{
@@ -9,9 +9,10 @@ use qbcl::qbcl::{
 };
 use std::collections::HashSet;
 use ty_math::TyVector3I32;
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject};
+use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxObject};
 
-/// Writes a [`VoxMain`] to a decoded Qubicle Construction Library [`QbclFile`].
+/// Writes a [`QubicleQbclVoxMain`] to a decoded Qubicle Construction Library
+/// [`QbclFile`].
 ///
 /// When the state carries the `qubicle-qbcl` ext the forward path writes, the
 /// file is rebuilt from it exactly, the inverse of
@@ -25,10 +26,9 @@ use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxMain, VoxObjec
 /// up with the hierarchy, the state does not have exactly one root, or a mask
 /// list does not match its object, and when an object's `baseColor` draws
 /// from a non-color value pool.
-pub fn to_qbcl_file(state: &VoxMain) -> Result<QbclFile> {
-    let ext = match ext_for(state, "qubicle-qbcl") {
-        Some(ext) => from_vox_value::<QubicleQbclExtWrapper>(ext)?.qubicle_qbcl,
-        None => return synthesize_qbcl(state),
+pub fn to_qbcl_file(state: &QubicleQbclVoxMain) -> Result<QbclFile> {
+    let Some(ext) = state.ext().clone() else {
+        return synthesize_qbcl(state);
     };
 
     let node_count = state.hierarchy_node_count();
@@ -80,7 +80,7 @@ pub fn to_qbcl_file(state: &VoxMain) -> Result<QbclFile> {
 /// and its aligned ext provenance.
 fn rebuild_node(
     node_id: U32Id<BVoxHierarchyNode>,
-    state: &VoxMain,
+    state: &QubicleQbclVoxMain,
     nodes: &[QubicleQbclNode],
 ) -> Result<QbclNode> {
     let hierarchy = state.hierarchy_node(node_id).ok_or_else(|| {
@@ -142,7 +142,7 @@ fn rebuild_node(
 /// Rebuilds the child nodes of a hierarchy node, in stored order.
 fn rebuild_children(
     hierarchy: &VoxHierarchyNode,
-    state: &VoxMain,
+    state: &QubicleQbclVoxMain,
     nodes: &[QubicleQbclNode],
 ) -> Result<Vec<QbclNode>> {
     hierarchy
@@ -155,7 +155,10 @@ fn rebuild_children(
 /// The build-volume object a matrix or compound node places, or an error if it
 /// has none. The object is the author's build volume, so the written matrix
 /// keeps the original dimensions and voxel positions directly.
-fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result<&'a VoxObject> {
+fn matrix_object<'a>(
+    hierarchy: &VoxHierarchyNode,
+    state: &'a QubicleQbclVoxMain,
+) -> Result<&'a VoxObject> {
     let object_id = *hierarchy
         .child_object_ids
         .first()
@@ -170,7 +173,7 @@ fn matrix_object<'a>(hierarchy: &VoxHierarchyNode, state: &'a VoxMain) -> Result
 /// list, placed in `.qbcl` storage order. Errors if the mask count does not
 /// match the object's solid voxels.
 fn matrix_from_object(
-    state: &VoxMain,
+    state: &QubicleQbclVoxMain,
     object: &VoxObject,
     position: [i32; 3],
     pivot: [f32; 3],
@@ -246,7 +249,7 @@ const SOLID_MASK: u8 = 0x7e;
 /// stay per voxel with no palette merge, but a Qubicle voxel stores no alpha,
 /// so a color's alpha is dropped. Each matrix is pivoted at its grid origin, so
 /// its position is the world coordinate of the object's min corner.
-fn synthesize_qbcl(state: &VoxMain) -> Result<QbclFile> {
+fn synthesize_qbcl(state: &QubicleQbclVoxMain) -> Result<QbclFile> {
     let mut builder = QbclBuilder::default();
     let mut children: Vec<QbclNode> = state
         .root_hierarchy_node_ids()
@@ -287,7 +290,7 @@ impl QbclBuilder {
     /// further objects and the mapped child nodes become its children.
     fn emit_node(
         &mut self,
-        state: &VoxMain,
+        state: &QubicleQbclVoxMain,
         node_id: U32Id<BVoxHierarchyNode>,
         parent: TyVector3I32,
     ) -> Result<QbclNode> {
@@ -349,7 +352,7 @@ impl QbclBuilder {
     /// sweep.
     fn emit_object_node(
         &mut self,
-        state: &VoxMain,
+        state: &QubicleQbclVoxMain,
         object_id: U32Id<BVoxObject>,
         object: &VoxObject,
         world: [i32; 3],
@@ -372,7 +375,7 @@ impl QbclBuilder {
         object_id: U32Id<BVoxObject>,
         object: &VoxObject,
         position: [i32; 3],
-        state: &VoxMain,
+        state: &QubicleQbclVoxMain,
     ) -> Result<QbclMatrix> {
         self.placed.insert(object_id.to_u32());
 

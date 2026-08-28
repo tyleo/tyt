@@ -1,8 +1,8 @@
 use crate::{
     ABSORPTION, BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC, ROUGHNESS,
-    Result, SHADOWS, TRANSMISSION, VoxelMaxExt, VoxelMaxExtWrapper, VoxelMaxMaterial,
-    VoxelMaxMaterialDispersion, VoxelMaxNode, VoxelMaxObjectState, VoxelMaxPalette, default_scalar,
-    lin_srgba_f64_from_srgba_u8, to_vox_value, vm_coefficient_to_pbr_factor,
+    Result, SHADOWS, TRANSMISSION, VoxelMaxExt, VoxelMaxMaterial, VoxelMaxMaterialDispersion,
+    VoxelMaxNode, VoxelMaxObjectState, VoxelMaxPalette, VoxelMaxVoxMain, default_scalar,
+    lin_srgba_f64_from_srgba_u8, vm_coefficient_to_pbr_factor,
 };
 use branded_id::U32Id;
 use std::collections::HashMap;
@@ -33,7 +33,7 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 /// Loads a Voxel Max document into a [`VoxMain`].
 ///
 /// Geometry, palettes, and hierarchy become native voxcore entities. The Voxel
-/// Max state with no native voxcore home rides in a `voxel-max` ext so the
+/// Max state with no native voxcore home rides in the [`VoxelMaxExt`] so the
 /// document can be written back faithfully. Voxel snapshots are decoded to
 /// voxels on the fly and palette color tables unpacked as needed. Color indices
 /// are 1-based in Voxel Max, so a voxel's color cell is `color_idx - 1`; the
@@ -41,7 +41,7 @@ const PLACEHOLDER_COLOR: [u8; 4] = [255, 255, 255, 255];
 ///
 /// Errors on malformed geometry or on a cross-reference the checked
 /// insertions reject.
-pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
+pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxelMaxVoxMain> {
     let scene = &serde.scene_json_file;
     let mut state = VoxMain::default();
 
@@ -95,9 +95,11 @@ pub fn from_vmax_file(serde: &VMaxFile) -> Result<VoxMain> {
         })
         .collect();
 
-    let voxel_max = voxel_max_ext(scene, palette_provenance, &object_states);
-    let ext = to_vox_value(&VoxelMaxExtWrapper { voxel_max })?;
-    state.set_ext(Some(ext));
+    state.set_ext(Some(voxel_max_ext(
+        scene,
+        palette_provenance,
+        &object_states,
+    )));
 
     Ok(state)
 }
@@ -126,7 +128,7 @@ fn object_state_from_contents(data: &VMaxContentsVmaxbFile) -> VoxelMaxObjectSta
 fn build_object(
     serde: &VMaxFile,
     object: &VMaxObject,
-    state: &mut VoxMain,
+    state: &mut VoxelMaxVoxMain,
     palette_provenance: &mut Vec<Option<VoxelMaxPalette>>,
 ) -> Result<(VoxObject, Option<String>, TyTransformF64)> {
     // Voxels come from decoding the object's snapshot edit-log on the fly.
@@ -258,7 +260,7 @@ fn folded_palette(
     serde: &VMaxFile,
     object: &VMaxObject,
     voxels: &[VMaxVoxel],
-    state: &mut VoxMain,
+    state: &mut VoxelMaxVoxMain,
 ) -> Result<FoldedPalette> {
     let colors = color_cells(serde, object);
     let (name, materials) = material_list(serde, object);
@@ -501,7 +503,7 @@ fn material_list(serde: &VMaxFile, object: &VMaxObject) -> (String, Vec<VMaxMate
 /// A float value pool over `values`, defaulting a NaN coefficient to zero so
 /// the value pool builds. The infinities the wire spells carry across, and the
 /// exact value rides in the ext. Errors when `values` is empty.
-fn float_value_pool(state: &mut VoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
+fn float_value_pool(state: &mut VoxelMaxVoxMain, values: Vec<f64>) -> Result<U32Id<BVoxValuePool>> {
     let values = values
         .into_iter()
         .map(|v| if v.is_nan() { 0.0 } else { v })

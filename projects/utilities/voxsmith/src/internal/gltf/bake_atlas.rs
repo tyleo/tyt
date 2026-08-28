@@ -270,7 +270,7 @@ mod tests {
     /// three-voxel object whose voxels sample three materials in raster order:
     /// (red, shiny, smooth), (red, matte, rough), (blue, matte, rough).
     fn single_layer_state() -> (VoxMain, U32Id<BVoxObject>) {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
 
         let base_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn a_bool_packing_reads_one_or_zero() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let flag_value_pool_id = state.retain_value_pool(VoxValuePool::boolean(vec![true, false]));
 
         let mut palette = VoxPalette::default();
@@ -395,7 +395,7 @@ mod tests {
     fn a_shared_value_pool_cell_bakes_one_value_for_every_material() {
         // Both material rows repeat the strength value pool's one cell, so both
         // bake the same half strength.
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let base_value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]]).unwrap(),
         );
@@ -492,7 +492,7 @@ mod tests {
         // The sRGB quantize clamps, so a custom color component outside
         // `[0, 1]` would bake the same byte a legal 1.0 does. A custom key has
         // no vocabulary range, so this guard is the only one it meets.
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let value_pool_id =
             state.retain_value_pool(VoxValuePool::vec_4_float(vec![[2.5, 0.0, 0.0, 1.0]]).unwrap());
 
@@ -534,7 +534,7 @@ mod tests {
 
     #[test]
     fn emissive_color_folds_strength_toward_the_mesh_max() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
 
         // emissiveColor is sRGB; strengths 1.0 and 0.5 fold into the texels as
         // fractions of the mesh max, 1.0.
@@ -592,7 +592,7 @@ mod tests {
     /// Bakes `bake` over a one-voxel object whose one layer binds `key` to
     /// `value_pool`.
     fn bake_one(key: &str, value_pool: VoxValuePool, bake: &MaterialBake) -> Result<Vec<u8>> {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let value_pool_id = state.retain_value_pool(value_pool);
 
         let mut palette = VoxPalette::default();

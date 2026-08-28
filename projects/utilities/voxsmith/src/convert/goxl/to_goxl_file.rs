@@ -1,6 +1,4 @@
-use crate::{
-    GoxelExtWrapper, GoxelLayer, Result, ext_for, from_vox_value, resolve_cell_color_or_transparent,
-};
+use crate::{GoxelLayer, GoxelVoxMain, Result, resolve_cell_color_or_transparent};
 use branded_id::U32Id;
 use goxl::{
     GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
@@ -8,25 +6,23 @@ use goxl::{
 };
 use std::collections::{BTreeMap, HashSet};
 use ty_math::{TyVector3I32, TyVector3U32};
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
+use voxcore::{BVoxHierarchyNode, BVoxObject, VoxObject};
 
-/// Writes a [`VoxMain`] to a decoded Goxel [`GoxlFile`].
+/// Writes a [`GoxelVoxMain`] to a decoded Goxel [`GoxlFile`].
 ///
-/// When the state carries the `goxel` ext the forward path writes, the file is
-/// rebuilt losslessly from it, the inverse of
+/// When the state carries the [`GoxelExt`](crate::GoxelExt) the forward path
+/// writes, the file is rebuilt losslessly from it, the inverse of
 /// [`from_goxl_file`](crate::from_goxl_file): each object emits one
 /// `16 x 16 x 16` block, and the layers, materials, cameras, light, preview,
-/// and image come from the ext. When the ext is absent or names another format,
-/// the file is synthesized from the bare scene instead by `synthesize_goxl`, so
-/// any source can be written to Goxel. An empty voxel is written back as the
+/// and image come from the ext. When the ext is absent, the file is
+/// synthesized from the bare scene instead by `synthesize_goxl`, so any
+/// source can be written to Goxel. An empty voxel is written back as the
 /// transparent zero voxel.
 ///
-/// Errors when a `goxel` ext is present but cannot be deserialized, or when an
-/// object's `baseColor` draws from a non-color value pool.
-pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
-    let ext = match ext_for(state, "goxel") {
-        Some(ext) => from_vox_value::<GoxelExtWrapper>(ext)?.goxel,
-        None => return synthesize_goxl(state),
+/// Errors when an object's `baseColor` draws from a non-color value pool.
+pub fn to_goxl_file(state: &GoxelVoxMain) -> Result<GoxlFile> {
+    let Some(ext) = state.ext().clone() else {
+        return synthesize_goxl(state);
     };
 
     // Each object is the author's build volume (a fixed Goxel 16-cube), so a
@@ -113,7 +109,7 @@ pub fn to_goxl_file(state: &VoxMain) -> Result<GoxlFile> {
 /// alpha 0 as an absent cell, so a fully transparent live color is written
 /// opaque, and a voxel with no resolvable color is written opaque black; any
 /// other alpha is kept.
-fn synthesize_goxl(state: &VoxMain) -> Result<GoxlFile> {
+fn synthesize_goxl(state: &GoxelVoxMain) -> Result<GoxlFile> {
     let mut builder = GoxlBuilder::default();
     for &root_id in state.root_hierarchy_node_ids() {
         builder.emit_node(state, root_id, TyVector3I32::new(0, 0, 0))?;
@@ -153,7 +149,7 @@ impl GoxlBuilder {
     /// into its child nodes.
     fn emit_node(
         &mut self,
-        state: &VoxMain,
+        state: &GoxelVoxMain,
         node_id: U32Id<BVoxHierarchyNode>,
         parent: TyVector3I32,
     ) -> Result<()> {
@@ -188,7 +184,7 @@ impl GoxlBuilder {
     /// its lower corner; a tile holding no solid voxel is never emitted.
     fn emit_object(
         &mut self,
-        state: &VoxMain,
+        state: &GoxelVoxMain,
         object_id: U32Id<BVoxObject>,
         object: &VoxObject,
         world: TyVector3I32,
@@ -263,7 +259,7 @@ fn solid_voxel(rgba: [u8; 4]) -> GoxlVoxel {
 /// Rebuilds a `16 x 16 x 16` block from an object: each grid cell takes its
 /// color from the voxel's sampled material through the object's
 /// `baseColor` layer, or the transparent zero voxel when empty.
-fn block_from_object(state: &VoxMain, object: &VoxObject) -> Result<GoxlBlock> {
+fn block_from_object(state: &GoxelVoxMain, object: &VoxObject) -> Result<GoxlBlock> {
     let size = GoxlBlock::SIZE;
     let cell_color = resolve_cell_color_or_transparent(state, object)?;
     let mut voxels = Vec::with_capacity((size * size * size) as usize);

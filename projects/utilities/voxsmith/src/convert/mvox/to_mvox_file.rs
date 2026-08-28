@@ -1,7 +1,6 @@
 use crate::{
-    BASE_COLOR, Error, MagicaVoxelExt, MagicaVoxelExtWrapper, MagicaVoxelFrame,
-    MagicaVoxelNodeBody, Result, ext_for, from_vox_value, resolve_cell_color,
-    resolve_cell_color_or_transparent, value_pool_color,
+    BASE_COLOR, Error, MagicaVoxelExt, MagicaVoxelFrame, MagicaVoxelNodeBody, MagicaVoxelVoxMain,
+    Result, resolve_cell_color, resolve_cell_color_or_transparent, value_pool_color,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -12,13 +11,13 @@ use mvox::{
 };
 use std::collections::{BTreeMap, HashMap, HashSet};
 use ty_math::TyVector3F64;
-use voxcore::{BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxMain, VoxObject};
+use voxcore::{BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxObject};
 
-/// Writes a [`VoxMain`] back to a decoded MagicaVoxel [`MVoxFile`], the inverse
-/// of [`from_mvox_file`](crate::from_mvox_file).
+/// Writes a [`MagicaVoxelVoxMain`] back to a decoded MagicaVoxel [`MVoxFile`],
+/// the inverse of [`from_mvox_file`](crate::from_mvox_file).
 ///
-/// A state carrying the `magica-voxel` ext the forward path writes is rebuilt
-/// from it exactly. A state without that ext, such as one loaded from another
+/// A state carrying the [`MagicaVoxelExt`] the forward path writes is rebuilt
+/// from it exactly. A state without an ext, such as one loaded from another
 /// format, is synthesized from the bare voxcore scene by `synthesize_mvox`.
 /// Each object emits one model whose voxels are listed in ascending raster
 /// order, which need not match their original stored order.
@@ -26,10 +25,9 @@ use voxcore::{BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxMain,
 /// Errors if the ext is present but its per-node entries do not line up with
 /// the hierarchy, or if synthesis exceeds a MagicaVoxel limit such as the
 /// per-axis voxel cap.
-pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
-    let ext = match ext_for(state, "magica-voxel") {
-        Some(ext) => from_vox_value::<MagicaVoxelExtWrapper>(ext)?.magica_voxel,
-        None => return synthesize_mvox(state),
+pub fn to_mvox_file(state: &MagicaVoxelVoxMain) -> Result<MVoxFile> {
+    let Some(ext) = state.ext().clone() else {
+        return synthesize_mvox(state);
     };
 
     // The forward path adds exactly one palette and references it from every
@@ -123,7 +121,7 @@ pub fn to_mvox_file(state: &VoxMain) -> Result<MVoxFile> {
 /// gives color index `index`. Transparent where the palette or its color
 /// property is absent.
 fn colors_from_palette(
-    state: &VoxMain,
+    state: &MagicaVoxelVoxMain,
     palette_id: Option<U32Id<BVoxPalette>>,
 ) -> [MVoxColor; 256] {
     let mut colors = [MVoxColor::default(); 256];
@@ -234,7 +232,10 @@ fn model_byte(value: u32, label: &str) -> Result<u8> {
 /// references come from the ext, which holds the exact lists, so a shape that
 /// draws one model on several frames or any other repeated reference
 /// round-trips. Errors if the ext node count does not match the hierarchy.
-fn build_scene_nodes(state: &VoxMain, ext: &MagicaVoxelExt) -> Result<Vec<MVoxSceneNode>> {
+fn build_scene_nodes(
+    state: &MagicaVoxelVoxMain,
+    ext: &MagicaVoxelExt,
+) -> Result<Vec<MVoxSceneNode>> {
     let node_count = state.hierarchy_node_count();
     if node_count != ext.scene_nodes.len() {
         return Err(Error::Invalid(format!(
@@ -303,7 +304,7 @@ fn frame_from_provenance(frame: &MagicaVoxelFrame) -> MVoxFrame {
 /// carries only translation, so node rotation and scale are dropped. The
 /// palette is lossless up to 255 distinct colors; beyond that the table is full
 /// and the excess collapses onto the last slot.
-fn synthesize_mvox(state: &VoxMain) -> Result<MVoxFile> {
+fn synthesize_mvox(state: &MagicaVoxelVoxMain) -> Result<MVoxFile> {
     let (palette, color_index) = synthesize_palette(state)?;
     let models = state
         .iter_objects()
@@ -323,7 +324,7 @@ fn synthesize_mvox(state: &VoxMain) -> Result<MVoxFile> {
 /// table and the matching color-to-index map. Slot 0 is MagicaVoxel's reserved
 /// empty color, so real colors fill `1..=255`; a 256th distinct color and
 /// beyond reuse the last slot.
-fn synthesize_palette(state: &VoxMain) -> Result<(MVoxPalette, HashMap<[u8; 4], u8>)> {
+fn synthesize_palette(state: &MagicaVoxelVoxMain) -> Result<(MVoxPalette, HashMap<[u8; 4], u8>)> {
     let mut colors = [MVoxColor::default(); 256];
     let mut color_index: HashMap<[u8; 4], u8> = HashMap::new();
     let mut next = 1usize;
@@ -358,7 +359,7 @@ fn synthesize_palette(state: &VoxMain) -> Result<(MVoxPalette, HashMap<[u8; 4], 
 /// 256-voxel-per-axis limit, past which the byte voxel coordinates cannot
 /// address it.
 fn synthesize_model(
-    state: &VoxMain,
+    state: &MagicaVoxelVoxMain,
     object: &VoxObject,
     color_index: &HashMap<[u8; 4], u8>,
 ) -> Result<MVoxModel> {
@@ -403,7 +404,7 @@ fn synthesize_model(
 /// requires. An object no node places is emitted once at the origin so geometry
 /// is never dropped, and an object placed by several nodes is emitted once per
 /// placement.
-fn synthesize_scene(state: &VoxMain) -> Vec<MVoxSceneNode> {
+fn synthesize_scene(state: &MagicaVoxelVoxMain) -> Vec<MVoxSceneNode> {
     let mut builder = SceneBuilder::default();
     let root_transform = builder.allocate();
     let root_group = builder.allocate();
@@ -448,7 +449,7 @@ impl SceneBuilder {
 
     /// Emits the `nTRN` -> `nGRP` for a hierarchy node and its whole subtree,
     /// returning the transform node's id for a parent group to list.
-    fn emit_node(&mut self, state: &VoxMain, node_id: U32Id<BVoxHierarchyNode>) -> i32 {
+    fn emit_node(&mut self, state: &MagicaVoxelVoxMain, node_id: U32Id<BVoxHierarchyNode>) -> i32 {
         let transform = self.allocate();
         let group = self.allocate();
 

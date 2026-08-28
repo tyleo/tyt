@@ -17,11 +17,16 @@ const SECTION_LEVEL: NonZeroU8 = NonZeroU8::new(2).unwrap();
 /// The document is read into voxcore first; only the format and, for Voxel Json,
 /// the document version come from outside that model.
 pub fn info(input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()> {
-    let state = implementation::load_state(input, from)?;
-    // load_state resolved the format, so this inference cannot fail.
+    // The raw-voxj loader keeps any source's ext as a block, so the report
+    // can say whether the document carries one. The report reads the bare
+    // scene.
+    let state = implementation::load_state_voxj(input, from)?;
+    let has_ext = state.ext().is_some();
+    let state = state.map_ext(|_| ());
+    // load_state_voxj resolved the format, so this inference cannot fail.
     let format = from
         .or_else(|| Format::from_path(input))
-        .expect("load_state resolved the input format");
+        .expect("load_state_voxj resolved the input format");
     let voxj_version = match format {
         Format::Voxj => Some(read_voxj_version(input)?),
         _ => None,
@@ -31,7 +36,7 @@ pub fn info(input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()
         .and_then(|name| name.to_str())
         .map(str::to_string)
         .unwrap_or_else(|| input.display().to_string());
-    let output = render(&state, format, voxj_version, &name, layout);
+    let output = render(&state, has_ext, format, voxj_version, &name, layout);
     implementation::write_stdout(output.as_bytes())
 }
 
@@ -43,24 +48,33 @@ fn read_voxj_version(input: &Path) -> Result<u32> {
 /// Renders the report for `state` in `layout`, the testable core of [`info`].
 fn render(
     state: &VoxMain,
+    has_ext: bool,
     format: Format,
     voxj_version: Option<u32>,
     name: &str,
     layout: InfoLayout,
 ) -> String {
     match layout {
-        InfoLayout::Tables => render_tables(state, format, voxj_version, name),
-        InfoLayout::JsonPretty => build_json_grid(state, format, voxj_version).render_json_pretty(),
+        InfoLayout::Tables => render_tables(state, has_ext, format, voxj_version, name),
+        InfoLayout::JsonPretty => {
+            build_json_grid(state, has_ext, format, voxj_version).render_json_pretty()
+        }
         InfoLayout::JsonCompact => {
-            build_json_grid(state, format, voxj_version).render_json_compact()
+            build_json_grid(state, has_ext, format, voxj_version).render_json_compact()
         }
     }
 }
 
 /// The report as a file-name heading over three record-table sections:
 /// document, palettes, objects.
-fn render_tables(state: &VoxMain, format: Format, voxj_version: Option<u32>, name: &str) -> String {
-    let tables = build_records_grid(state, format, voxj_version).render_tables(
+fn render_tables(
+    state: &VoxMain,
+    has_ext: bool,
+    format: Format,
+    voxj_version: Option<u32>,
+    name: &str,
+) -> String {
+    let tables = build_records_grid(state, has_ext, format, voxj_version).render_tables(
         &TreeGridTableShape::Records(
             TreeGridRecordsTableOptions::default().with_level(SECTION_LEVEL),
         ),
@@ -71,7 +85,12 @@ fn render_tables(state: &VoxMain, format: Format, voxj_version: Option<u32>, nam
 /// The flat forest the markdown tables render: `document`, `palettes`, and
 /// `objects` section roots whose rows bake every cell as one pre-formatted
 /// value under its column's label.
-fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>) -> TreeGrid {
+fn build_records_grid(
+    state: &VoxMain,
+    has_ext: bool,
+    format: Format,
+    voxj_version: Option<u32>,
+) -> TreeGrid {
     let mut grid = TreeGrid::new();
 
     let document_root_id = grid.retain_root(TreeGridLabel::bare("document"));
@@ -93,7 +112,7 @@ fn build_records_grid(state: &VoxMain, format: Format, voxj_version: Option<u32>
         &mut grid,
         document_root_id,
         "has_ext",
-        yes_no(state.ext().is_some()).to_string(),
+        yes_no(has_ext).to_string(),
     );
     retain_cell(
         &mut grid,
@@ -170,6 +189,7 @@ fn retain_cell(grid: &mut TreeGrid, parent_id: U32Id<BTreeGridNode>, label: &str
 /// typed value under its label.
 fn build_json_grid(
     state: &VoxMain,
+    has_ext: bool,
     format: Format,
     voxj_version: Option<u32>,
 ) -> TreeGrid<TreeGridJsonValueCells> {
@@ -194,7 +214,7 @@ fn build_json_grid(
         &mut grid,
         document_root_id,
         "has_ext",
-        TreeGridJsonValue::bool(state.ext().is_some()),
+        TreeGridJsonValue::bool(has_ext),
     );
     retain_field(
         &mut grid,
@@ -385,6 +405,7 @@ mod tests {
     fn tables_lists_document_palette_and_object_sections() {
         let output = render(
             &tight_state(),
+            false,
             Format::Voxj,
             Some(2),
             "test.voxj",
@@ -415,6 +436,7 @@ mod tests {
     fn json_compact_nests_the_envelope_fields_under_each_section() {
         let output = render(
             &tight_state(),
+            false,
             Format::Voxj,
             Some(2),
             "test.voxj",
@@ -444,6 +466,7 @@ mod tests {
         let state = tight_state();
         let pretty = render(
             &state,
+            false,
             Format::Voxj,
             Some(2),
             "test.voxj",
@@ -451,6 +474,7 @@ mod tests {
         );
         let compact = render(
             &state,
+            false,
             Format::Voxj,
             Some(2),
             "test.voxj",
@@ -467,6 +491,7 @@ mod tests {
     fn omits_voxj_version_for_other_formats() {
         let tables = render(
             &tight_state(),
+            false,
             Format::MVox,
             None,
             "model.mvox",
@@ -477,6 +502,7 @@ mod tests {
 
         let json = render(
             &tight_state(),
+            false,
             Format::MVox,
             None,
             "model.mvox",
@@ -497,6 +523,7 @@ mod tests {
 
         let tables = render(
             &state,
+            false,
             Format::Voxj,
             Some(1),
             "sample.voxj",
@@ -512,6 +539,7 @@ mod tests {
 
         let json = render(
             &state,
+            false,
             Format::Voxj,
             Some(1),
             "sample.voxj",
@@ -558,6 +586,7 @@ mod tests {
 
         let tables = render(
             &state,
+            false,
             Format::Voxj,
             Some(1),
             "layered.voxj",
@@ -568,6 +597,7 @@ mod tests {
 
         let json = render(
             &state,
+            false,
             Format::Voxj,
             Some(1),
             "layered.voxj",

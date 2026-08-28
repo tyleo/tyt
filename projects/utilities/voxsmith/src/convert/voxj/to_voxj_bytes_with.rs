@@ -1,4 +1,4 @@
-use crate::{Result, VoxjFileBuilder};
+use crate::{Result, VoxjExtSlot, VoxjFileBuilder};
 use voxcore::VoxMain;
 use voxj_codec::{PositionEncoding, SampleEncoding, to_voxj_file_bytes};
 
@@ -6,8 +6,8 @@ use voxj_codec::{PositionEncoding, SampleEncoding, to_voxj_file_bytes};
 /// `sample` block encodings applied to every object. For the
 /// smallest-per-object search instead, see
 /// [`to_voxj_bytes`](crate::to_voxj_bytes).
-pub fn to_voxj_bytes_with(
-    state: &VoxMain,
+pub fn to_voxj_bytes_with<T: VoxjExtSlot>(
+    state: &VoxMain<T>,
     position: PositionEncoding,
     sample: SampleEncoding,
 ) -> Result<Vec<u8>> {

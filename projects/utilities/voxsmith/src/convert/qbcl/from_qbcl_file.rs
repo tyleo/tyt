@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR, Error, QubicleQbclExt, QubicleQbclExtWrapper, QubicleQbclMetadata, QubicleQbclNode,
-    QubicleQbclNodeBody, QubicleQbclThumbnail, Result, lin_srgba_f64_from_srgba_u8, to_vox_value,
+    BASE_COLOR, Error, QubicleQbclExt, QubicleQbclMetadata, QubicleQbclNode, QubicleQbclNodeBody,
+    QubicleQbclThumbnail, QubicleQbclVoxMain, Result, lin_srgba_f64_from_srgba_u8,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMatrix, QbclMetadata, QbclNode, QbclNodeBody};
@@ -23,7 +23,7 @@ use voxcore::{
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn from_qbcl_file(file: &QbclFile) -> Result<VoxMain> {
+pub fn from_qbcl_file(file: &QbclFile) -> Result<QubicleQbclVoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, &file.root);
@@ -39,26 +39,23 @@ pub fn from_qbcl_file(file: &QbclFile) -> Result<VoxMain> {
     )?;
     state.set_root_hierarchy_node_ids(vec![root_id])?;
 
-    let ext = QubicleQbclExtWrapper {
-        qubicle_qbcl: QubicleQbclExt {
-            program_version: file.program_version,
-            file_version: file.file_version,
-            thumbnail: QubicleQbclThumbnail {
-                width: file.thumbnail.width,
-                height: file.thumbnail.height,
-                pixels: file
-                    .thumbnail
-                    .pixels
-                    .iter()
-                    .map(|pixel| [pixel.r, pixel.g, pixel.b, pixel.a])
-                    .collect(),
-            },
-            metadata: metadata_provenance(&file.metadata),
-            guid: file.guid,
-            nodes,
+    state.set_ext(Some(QubicleQbclExt {
+        program_version: file.program_version,
+        file_version: file.file_version,
+        thumbnail: QubicleQbclThumbnail {
+            width: file.thumbnail.width,
+            height: file.thumbnail.height,
+            pixels: file
+                .thumbnail
+                .pixels
+                .iter()
+                .map(|pixel| [pixel.r, pixel.g, pixel.b, pixel.a])
+                .collect(),
         },
-    };
-    state.set_ext(Some(to_vox_value(&ext)?));
+        metadata: metadata_provenance(&file.metadata),
+        guid: file.guid,
+        nodes,
+    }));
 
     Ok(state)
 }
@@ -69,7 +66,7 @@ pub fn from_qbcl_file(file: &QbclFile) -> Result<VoxMain> {
 /// node's id.
 fn build_node(
     node: &QbclNode,
-    state: &mut VoxMain,
+    state: &mut QubicleQbclVoxMain,
     palette_id: U32Id<BVoxPalette>,
     material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
     nodes: &mut Vec<QubicleQbclNode>,
@@ -156,7 +153,7 @@ fn build_node(
 /// gets a single placeholder color so objects have a default material to
 /// sample.
 fn build_palette(
-    state: &mut VoxMain,
+    state: &mut QubicleQbclVoxMain,
     root: &QbclNode,
 ) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();
@@ -319,8 +316,8 @@ fn color_floats(color: [u8; 3]) -> [f64; 3] {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, from_qbcl_bytes, from_qbcl_file, lin_srgba_f64_from_srgba_u8, to_qbcl_bytes,
-        to_qbcl_file,
+        BASE_COLOR, QubicleQbclVoxMain, from_qbcl_bytes, from_qbcl_file,
+        lin_srgba_f64_from_srgba_u8, to_qbcl_bytes, to_qbcl_file,
     };
     use branded_id::U32Id;
     use qbcl::qbcl::{
@@ -330,8 +327,8 @@ mod tests {
     use std::collections::BTreeSet;
     use ty_math::{TyHexColor, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
-        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxMap, VoxObject,
-        VoxPalette, VoxValue, VoxValuePool,
+        BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
+        VoxPalette, VoxValuePool,
     };
 
     /// A matrix node with two solid voxels in a `[2, 1, 1]` grid.
@@ -419,7 +416,7 @@ mod tests {
     /// object and a blue object sharing one `baseColor` palette, placed by
     /// a hierarchy of a nested group and two roots. This is the cross-format
     /// synthesis input.
-    fn source_state() -> VoxMain {
+    fn source_state() -> QubicleQbclVoxMain {
         let mut state = VoxMain::default();
 
         // One baseColor palette: red, green, blue.
@@ -627,19 +624,6 @@ mod tests {
 
         let reloaded = from_qbcl_file(&file).unwrap();
         assert_eq!(reloaded.object_count(), 2);
-    }
-
-    /// A foreign ext, here `voxel-max`, is ignored by the Qubicle writer: it
-    /// synthesizes from the scene rather than failing to parse the wrong ext.
-    #[test]
-    fn synthesizes_past_a_foreign_ext() {
-        let mut state = source_state();
-        state.set_ext(Some(VoxValue::Object(VoxMap(vec![(
-            "voxel-max".to_owned(),
-            VoxValue::Null,
-        )]))));
-        let file = to_qbcl_file(&state).unwrap();
-        assert_eq!(world_voxels(&file).len(), 3);
     }
 
     #[test]

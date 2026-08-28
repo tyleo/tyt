@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR, Error, QubicleQbExt, QubicleQbExtWrapper, QubicleQbMatrix, Result,
-    lin_srgba_f64_from_srgba_u8, to_vox_value,
+    BASE_COLOR, Error, QubicleQbExt, QubicleQbMatrix, QubicleQbVoxMain, Result,
+    lin_srgba_f64_from_srgba_u8,
 };
 use branded_id::U32Id;
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbZAxisOrientation};
@@ -20,7 +20,7 @@ use voxcore::{
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
+pub fn from_qb_file(file: &QbFile) -> Result<QubicleQbVoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, file);
@@ -50,17 +50,14 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
     }
     state.set_root_hierarchy_node_ids(root_ids)?;
 
-    let ext = QubicleQbExtWrapper {
-        qubicle_qb: QubicleQbExt {
-            version: file.version,
-            bgra: matches!(file.color_format, QbColorFormat::Bgra),
-            right_handed: matches!(file.z_axis_orientation, QbZAxisOrientation::RightHanded),
-            compressed: file.compressed,
-            visibility_mask_encoded: file.visibility_mask_encoded,
-            matrices,
-        },
-    };
-    state.set_ext(Some(to_vox_value(&ext)?));
+    state.set_ext(Some(QubicleQbExt {
+        version: file.version,
+        bgra: matches!(file.color_format, QbColorFormat::Bgra),
+        right_handed: matches!(file.z_axis_orientation, QbZAxisOrientation::RightHanded),
+        compressed: file.compressed,
+        visibility_mask_encoded: file.visibility_mask_encoded,
+        matrices,
+    }));
 
     Ok(state)
 }
@@ -71,7 +68,7 @@ pub fn from_qb_file(file: &QbFile) -> Result<VoxMain> {
 /// value pool is added to `state`. A file with no solid voxels gets a single
 /// placeholder color so objects have a default material to sample.
 fn build_palette(
-    state: &mut VoxMain,
+    state: &mut QubicleQbVoxMain,
     file: &QbFile,
 ) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();

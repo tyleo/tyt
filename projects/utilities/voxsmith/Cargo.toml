@@ -39,12 +39,13 @@ default = ["goxl", "mvox", "qbcl", "vmax", "voxj"]
 # Each codec feature gates its format crate, its codec crate, and the
 # voxsmith modules that convert that format. The `qbcl` feature covers the
 # whole Qubicle family (`.qb`, `.qbt`, and `.qbcl`), since all three share the
-# `qbcl` / `qbcl-codec` crates.
-goxl = ["dep:goxl", "dep:goxl-codec", "_codec", "_ext", "_color"]
-mvox = ["dep:mvox", "dep:mvox-codec", "_codec", "_ext", "_color"]
-qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec", "_ext", "_color"]
-vmax = ["dep:vmax", "dep:vmax-codec", "_codec", "_ext", "_color"]
-voxj = ["dep:voxj", "dep:voxj-codec", "_codec"]
+# `qbcl` / `qbcl-codec` crates. The `voxj` feature adds `serde_json`, which
+# carries each format's typed ext into and out of the document `ext` block.
+goxl = ["dep:goxl", "dep:goxl-codec", "_codec", "_color"]
+mvox = ["dep:mvox", "dep:mvox-codec", "_codec", "_color"]
+qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec", "_color"]
+vmax = ["dep:vmax", "dep:vmax-codec", "_codec", "_color"]
+voxj = ["dep:voxj", "dep:voxj-codec", "dep:serde_json", "_codec"]
 
 # glTF meshing both ways. The reader (`dep:gltf`) loads a `Mesh` and the private
 # `_mesh` marker gates the format-independent `Mesh` type and the voxelizer; the
@@ -56,12 +57,10 @@ gltf = ["dep:gltf", "dep:base64", "dep:png", "dep:serde_json", "_mesh"]
 
 # Private, auto-enabled by the codecs that need them; not meant to be enabled
 # directly. `_codec` marks that at least one codec is on (voxsmith errors at
-# compile time otherwise). `_ext` gates the ext-block serde helpers shared by
-# every format that stashes a lossless ext (all but Voxel Json). `_color` gates
-# the palette-color sampling helpers shared by the formats that re-sample
-# colors per voxel (Goxel, MagicaVoxel, Qubicle, Voxel Max).
+# compile time otherwise). `_color` gates the palette-color sampling helpers
+# shared by the formats that re-sample colors per voxel (Goxel, MagicaVoxel,
+# Qubicle, Voxel Max).
 _codec = []
-_ext = []
 _color = []
 
 # Marks that a mesh-voxelization front end is on (`gltf`, and future mesh

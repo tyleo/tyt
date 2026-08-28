@@ -1,11 +1,11 @@
 use crate::{
-    Error, Result, vox_hierarchy_node_from_voxj_hierarchy_node,
-    vox_object_from_voxj_decoded_object, vox_palette_from_voxj_palette, vox_value_from_voxj_value,
+    Error, Result, VoxjExtSlot, vox_hierarchy_node_from_voxj_hierarchy_node,
+    vox_object_from_voxj_decoded_object, vox_palette_from_voxj_palette,
     vox_value_pool_from_voxj_value_pool,
 };
 use branded_id::U32Id;
 use voxcore::VoxMain;
-use voxj::{VoxjFile, VoxjValue};
+use voxj::VoxjFile;
 use voxj_codec::{decode_voxj_object, voxj_palette_material_counts};
 
 /// Loads a [`VoxjFile`] into a [`VoxMain`]. Each object's position and sample
@@ -19,7 +19,7 @@ use voxj_codec::{decode_voxj_object, voxj_palette_material_counts};
 /// 1. a block is malformed
 /// 2. object geometry is malformed
 /// 3. a checked insertion rejects a cross-reference
-pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
+pub fn from_voxj_file<T: VoxjExtSlot>(file: &VoxjFile) -> Result<VoxMain<T>> {
     let main = &file.main;
     let mut state = VoxMain::default();
 
@@ -73,12 +73,7 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
             .collect(),
     )?;
 
-    state.set_ext(
-        main.ext
-            .clone()
-            .map(|map| vox_value_from_voxj_value(&VoxjValue::Object(map)))
-            .transpose()?,
-    );
+    state.set_ext(T::from_voxj_ext(main.ext.as_ref())?);
 
     Ok(state)
 }
@@ -86,8 +81,8 @@ pub fn from_voxj_file(file: &VoxjFile) -> Result<VoxMain> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        EditStateMode, VoxjFileBuilder, from_voxj_bytes, from_voxj_file, to_voxj_bytes,
-        to_voxj_file, to_voxjz_bytes,
+        EditStateMode, VoxjFileBuilder, VoxjRawExt, VoxjRawVoxMain, from_voxj_bytes,
+        from_voxj_file, to_voxj_bytes, to_voxj_file, to_voxjz_bytes,
     };
     use branded_id::U32Id;
     use std::{collections::BTreeSet, f64::consts::FRAC_1_SQRT_2};
@@ -304,7 +299,7 @@ mod tests {
     #[test]
     fn round_trips_through_vox_state() {
         let file = sample_file();
-        let state = from_voxj_file(&file).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
@@ -343,14 +338,14 @@ mod tests {
     #[test]
     fn round_trips_edit_state() {
         let file = margin_file();
-        let state = from_voxj_file(&file).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
     /// The builder's defaults reproduce the document [`to_voxj_file`] writes.
     #[test]
     fn builder_default_matches_to_voxj_file() {
-        let state = from_voxj_file(&sample_file()).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&sample_file()).unwrap();
         assert_file_eq(
             &VoxjFileBuilder::new(&state).build().unwrap(),
             &to_voxj_file(&state).unwrap(),
@@ -361,7 +356,7 @@ mod tests {
     /// already tight, one entry per object holding its build volume.
     #[test]
     fn always_records_edit_state_when_tight() {
-        let state = from_voxj_file(&sample_file()).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&sample_file()).unwrap();
         // Auto omits it: every object in the fixture is already tight.
         assert_eq!(to_voxj_file(&state).unwrap().main.edit_state, None);
 
@@ -395,7 +390,7 @@ mod tests {
     #[test]
     fn never_discards_edit_state_with_margin() {
         let file = margin_file();
-        let state = from_voxj_file(&file).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
         // Auto would emit it, since the object carries margin.
         assert!(to_voxj_file(&state).unwrap().main.edit_state.is_some());
 
@@ -409,7 +404,7 @@ mod tests {
     /// `ext(false)` drops the user-defined ext block; the default keeps it.
     #[test]
     fn ext_false_drops_the_ext_block() {
-        let state = from_voxj_file(&sample_file()).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&sample_file()).unwrap();
         assert!(
             VoxjFileBuilder::new(&state)
                 .build()
@@ -425,25 +420,25 @@ mod tests {
     #[test]
     fn round_trips_through_voxj_bytes() {
         let file = sample_file();
-        let state = from_voxj_file(&file).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
         let bytes = to_voxj_bytes(&state).unwrap();
-        let reloaded = from_voxj_bytes(&bytes).unwrap();
+        let reloaded: VoxjRawVoxMain = from_voxj_bytes(&bytes).unwrap();
         assert_file_eq(&to_voxj_file(&reloaded).unwrap(), &file);
     }
 
     #[test]
     fn round_trips_through_voxjz_bytes() {
         let file = sample_file();
-        let state = from_voxj_file(&file).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
         let bytes = to_voxjz_bytes(&state).unwrap();
-        let reloaded = from_voxj_bytes(&bytes).unwrap();
+        let reloaded: VoxjRawVoxMain = from_voxj_bytes(&bytes).unwrap();
         assert_file_eq(&to_voxj_file(&reloaded).unwrap(), &file);
     }
 
     #[test]
     fn gc_on_a_loaded_state_preserves_the_round_trip() {
         let file = sample_file();
-        let mut state = from_voxj_file(&file).unwrap();
+        let mut state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
         // A freshly loaded state is already contiguous, so gc leaves the saved
         // document unchanged.
         state.gc();
@@ -452,7 +447,7 @@ mod tests {
 
     #[test]
     fn remove_then_gc_round_trips_through_bytes() {
-        let mut state = from_voxj_file(&sample_file()).unwrap();
+        let mut state: VoxjRawVoxMain = from_voxj_file(&sample_file()).unwrap();
 
         // The "leaf" node places the "tight" object. Nodes are frozen, so
         // removing the object means rebuilding the hierarchy: clear the
@@ -495,7 +490,7 @@ mod tests {
             .unwrap();
 
         let bytes = to_voxj_bytes(&state).unwrap();
-        let reloaded = from_voxj_bytes(&bytes).unwrap();
+        let reloaded: VoxjRawVoxMain = from_voxj_bytes(&bytes).unwrap();
         assert_file_eq(
             &to_voxj_file(&reloaded).unwrap(),
             &sample_file_without_tight(),
@@ -534,7 +529,7 @@ mod tests {
                 ext: None,
             },
         };
-        let mut state = from_voxj_file(&file).unwrap();
+        let mut state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
 
         // Layer ids follow the listing on load, so the first layer is id 0.
         let object_id = U32Id::<BVoxObject>::from_u32(0);
@@ -546,7 +541,7 @@ mod tests {
         state.validate().unwrap();
 
         let bytes = to_voxj_bytes(&state).unwrap();
-        let reloaded = from_voxj_bytes(&bytes).unwrap();
+        let reloaded: VoxjRawVoxMain = from_voxj_bytes(&bytes).unwrap();
         let expected = VoxjFile {
             version: 1,
             main: VoxjMain {
@@ -575,7 +570,7 @@ mod tests {
         let mut file = sample_file();
         file.main.runtime_state.objects[1].voxel_positions =
             VoxjPositionBlock::RawJson(vec![[9, 0, 0], [1, 0, 0]]);
-        assert!(from_voxj_file(&file).is_err());
+        assert!(from_voxj_file::<Option<VoxjRawExt>>(&file).is_err());
     }
 
     #[test]
@@ -585,7 +580,7 @@ mod tests {
         // material 99, out of range for palette 0's six materials.
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![99, 0, 5, 2]]);
-        assert!(from_voxj_file(&file).is_err());
+        assert!(from_voxj_file::<Option<VoxjRawExt>>(&file).is_err());
     }
 
     /// A voxelless object (tight bounds `[0, 0, 0]`) still carries one empty
@@ -613,7 +608,7 @@ mod tests {
                 ext: None,
             },
         };
-        let state = from_voxj_file(&file).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
@@ -646,7 +641,7 @@ mod tests {
                 ext: None,
             },
         };
-        let state = from_voxj_file(&file).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
         assert_file_eq(&to_voxj_file(&state).unwrap(), &file);
     }
 
@@ -655,7 +650,7 @@ mod tests {
     #[test]
     fn round_trips_vector_value_pools() {
         let file = vector_kind_file();
-        let state = from_voxj_file(&file).unwrap();
+        let state: VoxjRawVoxMain = from_voxj_file(&file).unwrap();
         let written = to_voxj_file(&state).unwrap();
         assert_eq!(
             written.main.runtime_state.value_pools,
@@ -731,6 +726,6 @@ mod tests {
                 ext: None,
             },
         };
-        assert!(from_voxj_file(&file).is_err());
+        assert!(from_voxj_file::<Option<VoxjRawExt>>(&file).is_err());
     }
 }

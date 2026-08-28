@@ -1,4 +1,4 @@
-use crate::{EditStateMode, Result, write_voxj};
+use crate::{EditStateMode, Result, VoxjExtSlot, write_voxj};
 use voxcore::VoxMain;
 use voxj::VoxjFile;
 use voxj_codec::{PositionEncoding, SampleEncoding};
@@ -7,17 +7,17 @@ use voxj_codec::{PositionEncoding, SampleEncoding};
 /// [`to_voxj_file`](crate::to_voxj_file). It defaults to the smallest
 /// per-object block encodings, keeps the user-defined ext block, and records
 /// the edit state automatically, the same document that function writes.
-pub struct VoxjFileBuilder<'a> {
-    state: &'a VoxMain,
+pub struct VoxjFileBuilder<'a, T> {
+    state: &'a VoxMain<T>,
     position_encoding: Option<PositionEncoding>,
     sample_encoding: Option<SampleEncoding>,
     ext: bool,
     edit_state: EditStateMode,
 }
 
-impl<'a> VoxjFileBuilder<'a> {
+impl<'a, T: VoxjExtSlot> VoxjFileBuilder<'a, T> {
     /// Starts a builder encoding `state` into a Voxel Json document.
-    pub fn new(state: &'a VoxMain) -> Self {
+    pub fn new(state: &'a VoxMain<T>) -> Self {
         Self {
             state,
             position_encoding: None,

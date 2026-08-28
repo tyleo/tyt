@@ -42,8 +42,8 @@ pub(crate) struct MaterialDocument {
 /// they are embedded, loose, or both. An object with no geometry yields an
 /// empty scene. Errors if a layer references a palette `state` does not hold,
 /// or if a vocabulary property's value is outside its glTF range.
-pub(crate) fn build_material_document(
-    state: &VoxMain,
+pub(crate) fn build_material_document<T>(
+    state: &VoxMain<T>,
     object: &VoxObject,
     request: &MaterialMeshRequest,
     target: MeshTarget,

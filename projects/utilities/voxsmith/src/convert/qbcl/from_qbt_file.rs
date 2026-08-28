@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR, Error, QubicleQbtExt, QubicleQbtExtWrapper, QubicleQbtNode, Result,
-    lin_srgba_f64_from_srgba_u8, to_vox_value,
+    BASE_COLOR, Error, QubicleQbtExt, QubicleQbtNode, QubicleQbtVoxMain, Result,
+    lin_srgba_f64_from_srgba_u8,
 };
 use branded_id::U32Id;
 use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
@@ -22,7 +22,7 @@ use voxcore::{
 ///
 /// Errors on a matrix grid that exceeds the dense limit, or on a
 /// cross-reference the checked insertions reject.
-pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
+pub fn from_qbt_file(file: &QbtFile) -> Result<QubicleQbtVoxMain> {
     let mut state = VoxMain::default();
 
     let (palette, material_ids) = build_palette(&mut state, &file.root);
@@ -38,19 +38,16 @@ pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
     )?;
     state.set_root_hierarchy_node_ids(vec![root_id])?;
 
-    let ext = QubicleQbtExtWrapper {
-        qubicle_qbt: QubicleQbtExt {
-            version: file.version,
-            global_scale: file.global_scale,
-            color_map: file
-                .color_map
-                .iter()
-                .map(|color| [color.r, color.g, color.b, color.a])
-                .collect(),
-            nodes,
-        },
-    };
-    state.set_ext(Some(to_vox_value(&ext)?));
+    state.set_ext(Some(QubicleQbtExt {
+        version: file.version,
+        global_scale: file.global_scale,
+        color_map: file
+            .color_map
+            .iter()
+            .map(|color| [color.r, color.g, color.b, color.a])
+            .collect(),
+        nodes,
+    }));
 
     Ok(state)
 }
@@ -61,7 +58,7 @@ pub fn from_qbt_file(file: &QbtFile) -> Result<VoxMain> {
 /// node's id.
 fn build_node(
     node: &QbtNode,
-    state: &mut VoxMain,
+    state: &mut QubicleQbtVoxMain,
     palette_id: U32Id<BVoxPalette>,
     material_ids: &HashMap<[u8; 3], U32Id<BVoxMaterial>>,
     nodes: &mut Vec<QubicleQbtNode>,
@@ -155,7 +152,7 @@ fn build_node(
 /// gets a single placeholder color so objects have a default material to
 /// sample.
 fn build_palette(
-    state: &mut VoxMain,
+    state: &mut QubicleQbtVoxMain,
     root: &QbtNode,
 ) -> (VoxPalette, HashMap<[u8; 3], U32Id<BVoxMaterial>>) {
     let mut order: Vec<[u8; 3]> = Vec::new();

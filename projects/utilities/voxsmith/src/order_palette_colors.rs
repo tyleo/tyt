@@ -9,7 +9,7 @@ use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain};
 ///
 /// Requires a referentially valid state, which
 /// [`VoxMain::validate`](voxcore::VoxMain::validate) checks.
-pub fn order_palette_colors(state: &mut VoxMain, palette_id: U32Id<BVoxPalette>) {
+pub fn order_palette_colors<T>(state: &mut VoxMain<T>, palette_id: U32Id<BVoxPalette>) {
     let Some(palette_ref) = state.palette(palette_id) else {
         return;
     };
@@ -57,7 +57,7 @@ mod tests {
 
     #[test]
     fn orders_colors_to_material_order() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         // Three colors; materials reference them out of order: blue, red,
         // green.
         let value_pool_id = state.retain_value_pool(
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn orders_colors_past_an_unused_color_and_a_hole() {
-        let mut state = VoxMain::default();
+        let mut state: VoxMain = VoxMain::default();
         let value_pool_id = state.retain_value_pool(
             VoxValuePool::vec_4_float(vec![
                 [1.0, 0.0, 0.0, 1.0], // 0 red
