@@ -13,7 +13,7 @@ parents, which is instancing, and the roots are exactly the nodes listed in
 unplaced library nodes, defined as nodes that are neither a root nor a child,
 so the structure stays visible rather than implying a strict tree. Each node
 shows its name and its referenced child objects. See
-[Hierarchy Nodes](../../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#hierarchy-nodes).
+[Hierarchy Nodes](../../../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#hierarchy-nodes).
 
 1. `pattern...`: optional gitignore-style patterns matched against the path of
    every node and object. When set, only selected nodes and objects and the

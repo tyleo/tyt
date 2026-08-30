@@ -50,4 +50,4 @@ the selected property's distinct values. The representative is an actual
 material, never an averaged one, so every kept material is a real one. This is the
 reduction [`voxelize`](../voxelize.md)'s `--max-palette-materials` applies inline,
 sharing this command's `--method`, `--space`, and `--dither`. See
-[Palettes](../../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).
+[Palettes](../../../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#palettes).

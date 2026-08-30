@@ -6,7 +6,7 @@ material textures, and inspects and validates voxel-json documents.
 
 This reference targets the voxel-json format. Its on-disk shape, encodings,
 palette model, hierarchy, and validation rules are defined in the
-[voxel-json file format spec](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md).
+[voxel-json file format spec](../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md).
 The pages below link into that spec rather than restating it, and any rule here
 must agree with it.
 
@@ -14,7 +14,7 @@ A voxel-json file comes in two interchangeable forms with identical content:
 `.voxj` (plain UTF-8 JSON) and `.voxjz` (a zip archive holding one `.voxj`
 member). Every command that reads a voxel file accepts either form, recognized
 by leading bytes (`{` versus `PK`) rather than by extension, as the spec
-requires in [File Extensions](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#file-extensions).
+requires in [File Extensions](../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#file-extensions).
 The reference writes `.voxj` for brevity.
 
 A document holds an ordered `palettes` array and a shared
@@ -27,7 +27,7 @@ material index per layer its object references through `layers`. Layers
 combine by overriding: contributions apply in `layers` order, back to front,
 and each property takes its value from the last layer that supplies it. This
 model is defined in
-[Palettes](../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#palettes).
+[Palettes](../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#palettes).
 The palette commands address a target their own way, described under
 [`vxl palette`](reference/palette/README.md); property keys are the glTF
 vocabulary names such as `baseColor`.

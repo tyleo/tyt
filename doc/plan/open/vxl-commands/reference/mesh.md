@@ -161,7 +161,7 @@ layer's palette, the last layer whose palette supplies the name: a float
 vector is a color, read one component at a time, and a `float`, `int`, or
 `bool` pool is a scalar, read whole and rejecting a component. A key no layer
 supplies follows the format's
-[unbound-default rule](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#properties):
+[unbound-default rule](../../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#properties):
 a glTF built-in bakes its spec default, a custom key errors.
 
 `--define-property <property> <name>` gives a custom voxel-json key a name a

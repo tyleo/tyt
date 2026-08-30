@@ -92,7 +92,7 @@ authored scales voxelize alike, mirroring [`vxl mesh`](mesh.md)'s
 `--voxel-size`. When `--voxel-size` is used, `voxelize` records
 `<meters>` as the placing node's scale so the assembled model keeps its source
 dimensions; `--resolution` has no real-world size to record. See
-[Coordinate System](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#coordinate-system).
+[Coordinate System](../../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#coordinate-system).
 
 `voxelize` writes a voxel-json document and shares `to voxj`'s encoding options:
 `--format`, `--encoding-preset`, `--position-encoding`, and

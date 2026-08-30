@@ -7,7 +7,7 @@ vxl validate <input> [options]
 ```
 
 Checks a voxel-json document against the spec's
-[Validation](../../../../../projects/voxel-codecs/voxj/docs/voxel-json-file-format.md#validation)
+[Validation](../../../../../projects/voxel-formats/voxj/docs/voxel-json-file-format.md#validation)
 checklist and exits non-zero on any failure. The checks include:
 
 1. a recognized `version`.

@@ -25,16 +25,16 @@ members = [
     "projects/utilities/voxsmith",
     "projects/utilities/vxl",
 
-    "projects/voxel-codecs/goxl",
-    "projects/voxel-codecs/goxl-codec",
-    "projects/voxel-codecs/mvox",
-    "projects/voxel-codecs/mvox-codec",
-    "projects/voxel-codecs/qbcl",
-    "projects/voxel-codecs/qbcl-codec",
-    "projects/voxel-codecs/vmax",
-    "projects/voxel-codecs/vmax-codec",
-    "projects/voxel-codecs/voxj",
-    "projects/voxel-codecs/voxj-codec",
+    "projects/voxel-formats/goxl",
+    "projects/voxel-formats/goxl-codec",
+    "projects/voxel-formats/mvox",
+    "projects/voxel-formats/mvox-codec",
+    "projects/voxel-formats/qbcl",
+    "projects/voxel-formats/qbcl-codec",
+    "projects/voxel-formats/vmax",
+    "projects/voxel-formats/vmax-codec",
+    "projects/voxel-formats/voxj",
+    "projects/voxel-formats/voxj-codec",
 ]
 
 resolver = "2"
@@ -65,13 +65,13 @@ voxcore = { path = "projects/utilities/voxcore" }
 voxsmith = { path = "projects/utilities/voxsmith" }
 vxl = { path = "projects/utilities/vxl" }
 
-goxl = { path = "projects/voxel-codecs/goxl" }
-goxl-codec = { path = "projects/voxel-codecs/goxl-codec" }
-mvox = { path = "projects/voxel-codecs/mvox" }
-mvox-codec = { path = "projects/voxel-codecs/mvox-codec" }
-qbcl = { path = "projects/voxel-codecs/qbcl" }
-qbcl-codec = { path = "projects/voxel-codecs/qbcl-codec" }
-vmax = { path = "projects/voxel-codecs/vmax" }
-vmax-codec = { path = "projects/voxel-codecs/vmax-codec" }
-voxj = { path = "projects/voxel-codecs/voxj" }
-voxj-codec = { path = "projects/voxel-codecs/voxj-codec" }
+goxl = { path = "projects/voxel-formats/goxl" }
+goxl-codec = { path = "projects/voxel-formats/goxl-codec" }
+mvox = { path = "projects/voxel-formats/mvox" }
+mvox-codec = { path = "projects/voxel-formats/mvox-codec" }
+qbcl = { path = "projects/voxel-formats/qbcl" }
+qbcl-codec = { path = "projects/voxel-formats/qbcl-codec" }
+vmax = { path = "projects/voxel-formats/vmax" }
+vmax-codec = { path = "projects/voxel-formats/vmax-codec" }
+voxj = { path = "projects/voxel-formats/voxj" }
+voxj-codec = { path = "projects/voxel-formats/voxj-codec" }
