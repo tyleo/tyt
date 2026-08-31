@@ -1,5 +1,11 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 
+#[cfg(feature = "objects")]
+pub mod objects;
+
+#[cfg(feature = "validation")]
+pub mod validation;
+
 mod voxj_edit_object;
 mod voxj_edit_state;
 mod voxj_file;

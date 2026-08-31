@@ -1,6 +1,6 @@
 [package]
 name = "voxj"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -9,10 +9,17 @@ keywords = ["voxel", "voxj", "json", "3d", "model"]
 categories = ["data-structures", "game-development", "graphics"]
 
 [dependencies]
+base64 = { version = "0.22", optional = true }
+flate2 = { version = "1", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 
 [dev-dependencies]
 serde_json = { version = "1", features = ["float_roundtrip"] }
 
 [features]
+default = ["objects", "optimize", "serde", "validation"]
+objects = ["dep:base64"]
+optimize = ["objects", "serde", "dep:flate2", "dep:serde_json"]
 serde = ["dep:serde"]
+validation = ["objects"]

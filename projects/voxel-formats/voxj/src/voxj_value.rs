@@ -7,15 +7,15 @@ use serde::{Deserialize, Serialize, Serializer, ser::Error as SerError};
 #[cfg_attr(feature = "serde", derive(Deserialize))]
 #[cfg_attr(feature = "serde", serde(untagged))]
 pub enum VoxjValue {
+    /// A boolean.
+    Bool(bool),
+
     /// A number, held as `f64` but serialized as a JSON integer when integral,
     /// so a value like `4` does not round-trip as `4.0`.
     Number(f64),
 
     /// A string.
     Text(String),
-
-    /// A boolean.
-    Bool(bool),
 
     /// An ordered list of values.
     Array(Vec<VoxjValue>),

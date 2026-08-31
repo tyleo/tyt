@@ -1,11 +1,12 @@
-use crate::{Result, VoxjExtSlot, from_voxj_file};
+use crate::{Result, VoxjExtSlot};
 use voxcore::VoxMain;
-use voxj_codec::from_voxj_or_voxjz_file_bytes;
+use voxj_voxcore::codec::from_voxj_bytes as raw_from_voxj_bytes;
 
-/// Loads a `.voxj` or `.voxjz` document into a [`VoxMain`]. The container form
-/// is detected from the leading bytes, then each object's encoded geometry is
-/// decoded and the result is loaded into voxcore's in-memory form.
+/// Loads a `.voxj` or `.voxjz` document into a [`VoxMain`], typing the
+/// document's `ext` block into the slot `T`. The container form is detected
+/// from the leading bytes.
 pub fn from_voxj_bytes<T: VoxjExtSlot>(bytes: &[u8]) -> Result<VoxMain<T>> {
-    let file = from_voxj_or_voxjz_file_bytes(bytes)?;
-    from_voxj_file(&file)
+    let state = raw_from_voxj_bytes(bytes)?;
+    let ext = T::from_voxj_ext(state.ext().as_ref())?;
+    Ok(state.map_ext(|_| ext))
 }

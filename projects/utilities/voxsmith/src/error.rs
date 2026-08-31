@@ -14,7 +14,7 @@ use std::{
 use vmax_codec::Error as VMaxError;
 use voxcore::Error as VoxError;
 #[cfg(feature = "voxj")]
-use voxj_codec::Error as VoxjError;
+use voxj_voxcore::Error as VoxjError;
 
 /// An error from voxsmith.
 #[derive(Debug)]
@@ -25,7 +25,7 @@ pub enum Error {
     /// A voxcore construction, mutation, or insertion was rejected.
     Vox(VoxError),
 
-    /// Encoding or decoding a Voxel Json document failed.
+    /// Converting a Voxel Json document failed.
     #[cfg(feature = "voxj")]
     Voxj(VoxjError),
 

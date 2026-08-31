@@ -7,13 +7,12 @@
 //! alias, whose ext slot holds the format's ext, the state with no native
 //! voxcore home, so the format's writer can rebuild the file exactly. A state
 //! converted across formats drops that ext explicitly through
-//! [`VoxMain::map_ext`](voxcore::VoxMain::map_ext). For Voxel Json it converts
-//! both at the document level ([`from_voxj_file`] / [`to_voxj_file`], with
-//! [`VoxjFileBuilder`] for control over the block encoding, ext block, and
-//! edit state) and straight to and from `.voxj` / `.voxjz` bytes
-//! ([`from_voxj_bytes`], [`to_voxj_bytes`], [`to_voxjz_bytes`]). Any format's
-//! ext rides in the document's `ext` block through its [`VoxjExtCodec`]. For
-//! Voxel Max it converts to and from the lossless `VMaxFile`
+//! [`VoxMain::map_ext`](voxcore::VoxMain::map_ext). For Voxel Json,
+//! voxj-voxcore converts the document and carries its `ext` block verbatim;
+//! here [`from_voxj_file`] and [`from_voxj_bytes`] type that block into the
+//! slot, each format's ext keyed into the block by its [`VoxjExtCodec`] and
+//! a whole slot handled through its [`VoxjExtSlot`]. For Voxel Max it
+//! converts to and from the lossless `VMaxFile`
 //! ([`from_vmax_file`] / [`to_vmax_file`]), carrying the [`VoxelMaxExt`]. For
 //! MagicaVoxel it converts to and from a decoded `MVoxFile`
 //! ([`from_mvox_file`] / [`to_mvox_file`]) and straight to and from `.vox`

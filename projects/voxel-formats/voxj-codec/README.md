@@ -1,7 +1,7 @@
 # voxj-codec
 
-Reads, writes, and validates Voxel Json `.voxj` / `.voxjz` documents. The `voxj`
-crate defines the data types; this crate is the logic over them.
+Reads and writes Voxel Json `.voxj` / `.voxjz` documents over the data types
+the `voxj` crate defines.
 
 ## Load and save
 
@@ -14,24 +14,7 @@ Load and save leave each object's position and sample blocks encoded.
 - `from_voxj_or_voxjz_file_bytes`: either form, detected by its leading bytes.
 - `to_voxj_pretty_file_bytes`: pretty-printed `.voxj` JSON.
 
-## Decode and encode blocks
-
-Flatten the encoded blocks on demand, then re-encode.
-
-- `decode_voxj_object`: flatten one object into per-voxel positions and one
-  sample channel per layer.
-- `encode_voxj_object`: re-encode with fixed block encodings.
-- `encode_voxj_object_optimized`: pin either block or leave it unset to search
-  its candidate encodings, keeping the smallest deflated pairing.
-- `voxj_palette_material_counts`: the material count per referenced palette,
-  the widths `packed-base64` needs.
-
-## Validate
-
-`validate_voxj_file` checks a parsed document against the format rules:
-value-pool content, palette property names and value-index resolution across
-the materials rows, reference resolution, unique in-bounds voxels, an acyclic
-hierarchy, and non-degenerate transforms, decoding each object to run the
-geometry checks.
+The `voxj` crate's `objects` module decodes and re-encodes the blocks, and
+its `validation` module checks a parsed document against the format rules.
 
 See the `voxj` crate for the format specification.

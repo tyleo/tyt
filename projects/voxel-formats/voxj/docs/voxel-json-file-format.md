@@ -251,7 +251,7 @@ Value pools live in `main.runtimeState.valuePools`, a shared array referenced by
 Notes:
 
 1. A kind is one value-shape, and the shape is the whole contract. What a value means, a color, a normal, a count, is the binding property's concern (see [Properties](#properties)).
-2. A float value is a finite JSON number, the string `"inf"`, or the string `"-inf"`. JSON has no infinity literal, so the sentinel strings spell the two infinities. `NaN` has no spelling and writers error on it.
+2. A float value is a finite JSON number, the string `"inf"`, or the string `"-inf"`. JSON has no infinity literal, so the sentinel strings stand in for the two infinities. `NaN` has no sentinel and writers error on it.
 3. An int value is a JSON number spelled as an integer, so `3.0` and `3e0` reject. Its magnitude is at most `2^53 - 1`, so a consumer reading numbers as doubles cannot silently lose one. `"inf"` and `"-inf"` reject as int values: an infinite integer means nothing.
 4. A vector kind's value is an array of exactly the kind's length: float values for the `vec-*-float` kinds, int values for the `vec-*-int` kinds. A scalar is not a one-element vector: `0.5` and `[0.5]` are different JSON, so `int` and `float` stand apart from the vector kinds.
 5. A kind carries no range. A range is a fact about the binding property and rides the property vocabulary (see [Properties](#properties)).
@@ -469,9 +469,9 @@ Validation is a hard contract, not best-effort. A validator rejects any file tha
 
 1. `version` is recognized.
 2. Every `encoding`, on both `voxelPositions` and `voxelSamples`, is recognized.
-3. Types are exact and nothing is coerced. A string where a number is expected, or the reverse, rejects. A number where an integer is expected is spelled as an integer. Every number is finite, so `NaN` and `+/-Infinity` reject; the sentinel strings `"inf"` and `"-inf"` are a float value's own spelling for the infinities (see [Value Pool Kinds](#value-pool-kinds)).
+3. Types are exact and nothing is coerced. A string where a number is expected, or the reverse, rejects. A number where an integer is expected is spelled as an integer. Every number is finite, so `NaN` and `+/-Infinity` reject; a float value writes the infinities as the sentinel strings `"inf"` and `"-inf"` (see [Value Pool Kinds](#value-pool-kinds)).
 4. `null` rejects everywhere except in a `json` value pool's `values` and inside `main.ext`.
-5. Unknown keys reject in every closed structure: file, `main`, `runtimeState`, `editState`, object, encoding block, palette, property, value pool, transform, hierarchy node, and edit object. The only open points are `main.ext` and property names.
+5. Unknown keys reject in every closed structure: file, `main`, `runtimeState`, `editState`, object, encoding block, palette, property, value pool, transform, hierarchy node, and edit object. The only open points are `main.ext` and property names. Keys are unique in every object: a repeated key rejects rather than resolving last-wins, `main.ext` and `json` pool values included.
 6. All indices are in range:
    1. each object `layers` entry indexes `runtimeState.palettes`.
    2. each property `valuePool` indexes `runtimeState.valuePools`.
@@ -816,7 +816,7 @@ interface Property {
 
 // A shared value pool: `values` all of the one value-shape `kind` names.
 
-// A float value: a finite number, "inf", or "-inf"; NaN has no spelling.
+// A float value: a finite number, "inf", or "-inf"; NaN has no sentinel.
 type FloatValue = number | "inf" | "-inf";
 
 // An int value: a number spelled as an integer, magnitude at most

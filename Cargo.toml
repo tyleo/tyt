@@ -35,6 +35,7 @@ members = [
     "projects/voxel-formats/vmax-codec",
     "projects/voxel-formats/voxj",
     "projects/voxel-formats/voxj-codec",
+    "projects/voxel-formats/voxj-voxcore",
 ]
 
 resolver = "2"
@@ -75,3 +76,4 @@ vmax = { path = "projects/voxel-formats/vmax" }
 vmax-codec = { path = "projects/voxel-formats/vmax-codec" }
 voxj = { path = "projects/voxel-formats/voxj" }
 voxj-codec = { path = "projects/voxel-formats/voxj-codec" }
+voxj-voxcore = { path = "projects/voxel-formats/voxj-voxcore" }

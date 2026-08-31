@@ -1,6 +1,6 @@
 use crate::{Format, Result, VoxjEncoding, VoxjFormat, commands::EditState, implementation};
 use std::path::Path;
-use voxsmith::EditStateMode;
+use voxj_voxcore::EditStateMode;
 
 /// Converts the voxel file at `input` into a Voxel Json document at `output`,
 /// round-tripping through voxcore: the input is loaded into a
@@ -17,7 +17,7 @@ pub fn to_voxj(
 ) -> Result<()> {
     let state = implementation::load_state_voxj(input, from)?;
     implementation::write_voxj_document(
-        &state,
+        state,
         output,
         encoding,
         format,
@@ -26,7 +26,7 @@ pub fn to_voxj(
     )
 }
 
-/// Maps a CLI edit-state choice to the voxsmith edit-state mode.
+/// Maps a CLI edit-state choice to the voxj-voxcore edit-state mode.
 fn edit_state_mode(edit_state: EditState) -> EditStateMode {
     match edit_state {
         EditState::Auto => EditStateMode::Auto,

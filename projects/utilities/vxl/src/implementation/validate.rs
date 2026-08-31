@@ -7,7 +7,8 @@ use std::{
 use treegrid::{
     TreeGrid, TreeGridJsonValue, TreeGridJsonValueCells, TreeGridLabel, TreeGridRenderJson,
 };
-use voxj_codec::{VoxjCheck, VoxjCheckStatus, check_voxj_file, from_voxj_or_voxjz_file_bytes};
+use voxj::validation::{VoxjCheck, VoxjCheckStatus, check_voxj_file};
+use voxj_codec::from_voxj_or_voxjz_file_bytes;
 
 /// Loads the Voxel Json document at `input`, runs every spec check, writes the
 /// report in `layout` to standard output, and fails when any check failed so
@@ -132,7 +133,7 @@ fn plural(count: usize) -> &'static str {
 mod tests {
     use crate::{commands::ValidateLayout, implementation::validate::render};
     use serde_json::Value;
-    use voxj_codec::{VoxjCheck, VoxjCheckStatus};
+    use voxj::validation::{VoxjCheck, VoxjCheckStatus};
 
     /// One passing, one failing (with a message), and the unverifiable check.
     fn checks() -> Vec<VoxjCheck> {

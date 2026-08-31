@@ -9,12 +9,12 @@ use crate::{
 use std::{fs, path::Path};
 use ty_math::{TyVector3F64, TyVector3U32};
 use voxcore::VoxMain;
+use voxj_voxcore::EditStateMode;
 use voxsmith::{
-    ColorSpace as VoxsmithColorSpace, Dither as VoxsmithDither, EditStateMode,
-    FillMode as VoxsmithFillMode, MaterialMode as VoxsmithMaterialMode,
-    OutOfRangeProperty as VoxsmithOutOfRangeProperty, ReductionMethod as VoxsmithReductionMethod,
-    SurfaceMode as VoxsmithSurfaceMode, from_gltf_bytes, order_palette_colors, reduce_palette,
-    voxelize_mesh,
+    ColorSpace as VoxsmithColorSpace, Dither as VoxsmithDither, FillMode as VoxsmithFillMode,
+    MaterialMode as VoxsmithMaterialMode, OutOfRangeProperty as VoxsmithOutOfRangeProperty,
+    ReductionMethod as VoxsmithReductionMethod, SurfaceMode as VoxsmithSurfaceMode,
+    from_gltf_bytes, order_palette_colors, reduce_palette, voxelize_mesh,
 };
 
 /// Voxelizes the glTF or GLB mesh at `input` into a Voxel Json document at
@@ -83,7 +83,7 @@ pub fn voxelize(
     state.gc();
 
     implementation::write_voxj_document(
-        &state,
+        state,
         output,
         encoding,
         format,

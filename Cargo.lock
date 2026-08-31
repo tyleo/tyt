@@ -1938,7 +1938,9 @@ dependencies = [
  "tyt-common",
  "tyt-injection",
  "vmax-codec",
+ "voxj",
  "voxj-codec",
+ "voxj-voxcore",
  "voxsmith",
 ]
 
@@ -2063,20 +2065,32 @@ dependencies = [
 
 [[package]]
 name = "voxj"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
+ "base64 0.22.1",
+ "flate2",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "voxj-codec"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
- "base64 0.22.1",
  "flate2",
  "serde_json",
  "voxj",
+]
+
+[[package]]
+name = "voxj-voxcore"
+version = "0.1.0"
+dependencies = [
+ "branded-id",
+ "ty-math",
+ "voxcore",
+ "voxj",
+ "voxj-codec",
 ]
 
 [[package]]
@@ -2100,7 +2114,7 @@ dependencies = [
  "vmax-codec",
  "voxcore",
  "voxj",
- "voxj-codec",
+ "voxj-voxcore",
 ]
 
 [[package]]
@@ -2119,7 +2133,9 @@ dependencies = [
  "vmax",
  "vmax-codec",
  "voxcore",
+ "voxj",
  "voxj-codec",
+ "voxj-voxcore",
  "voxsmith",
 ]
 

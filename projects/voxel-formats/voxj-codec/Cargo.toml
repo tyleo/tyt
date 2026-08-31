@@ -1,6 +1,6 @@
 [package]
 name = "voxj-codec"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -14,7 +14,6 @@ categories = [
 ]
 
 [dependencies]
-base64 = "0.22"
 flate2 = "1"
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
-voxj = { version = "0.1.1", features = ["serde"] }
+voxj = { version = "0.1.3", default-features = false, features = ["serde"] }
