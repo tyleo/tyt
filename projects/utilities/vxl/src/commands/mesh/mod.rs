@@ -1,6 +1,7 @@
 mod atlas;
 mod channel_packing;
 mod channel_source;
+mod material_slot;
 #[allow(clippy::module_inception)]
 mod mesh;
 mod mesh_method;
@@ -18,6 +19,7 @@ mod texture_shape;
 pub use atlas::*;
 pub use channel_packing::*;
 pub use channel_source::*;
+pub use material_slot::*;
 pub use mesh::*;
 pub use mesh_method::*;
 pub use mesh_texture_map::*;

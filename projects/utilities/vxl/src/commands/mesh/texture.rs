@@ -1,7 +1,6 @@
-use crate::commands::{ChannelPacking, ChannelSource, MeshTextureMap, TextureBake};
+use crate::commands::{ChannelPacking, ChannelSource, MaterialSlot, MeshTextureMap, TextureBake};
 use clap::ValueEnum;
 use voxcore::material::{EMISSIVE_STRENGTH, METALLIC, OCCLUSION_STRENGTH, ROUGHNESS};
-use voxsmith::MaterialSlot;
 
 /// A single-map material preset. The left side of `--texture-name` and each map
 /// a `--texture` bakes; the bundle-inclusive `--texture` value is
@@ -55,21 +54,21 @@ pub enum Texture {
 }
 
 impl Texture {
-    /// The glTF material slot this preset fills, or [`MaterialSlot::None`] for a
-    /// preset with no standard slot. Resolved here so the implementation never
-    /// sees the CLI preset.
-    pub fn slot(self) -> MaterialSlot {
+    /// The glTF material slot this preset fills, or `None` for a preset with no
+    /// standard slot. Resolved here so the implementation never sees the CLI
+    /// preset.
+    pub fn slot(self) -> Option<MaterialSlot> {
         match self {
-            Texture::Albedo => MaterialSlot::BaseColor,
-            Texture::Orm => MaterialSlot::OcclusionMetallicRoughness,
-            Texture::MetallicRoughness => MaterialSlot::MetallicRoughness,
-            Texture::Occlusion => MaterialSlot::Occlusion,
-            Texture::Emissive => MaterialSlot::Emissive,
+            Texture::Albedo => Some(MaterialSlot::BaseColor),
+            Texture::Orm => Some(MaterialSlot::OcclusionMetallicRoughness),
+            Texture::MetallicRoughness => Some(MaterialSlot::MetallicRoughness),
+            Texture::Occlusion => Some(MaterialSlot::Occlusion),
+            Texture::Emissive => Some(MaterialSlot::Emissive),
             Texture::MetallicSmoothness
             | Texture::Mse
             | Texture::ComputedOcclusion
             | Texture::Roughness
-            | Texture::Smoothness => MaterialSlot::None,
+            | Texture::Smoothness => None,
         }
     }
 
@@ -86,7 +85,7 @@ impl Texture {
     pub fn map(self, name: String) -> MeshTextureMap {
         MeshTextureMap {
             name,
-            slot: Some(self.slot()),
+            slot: self.slot(),
             bake: self.bake(),
         }
     }

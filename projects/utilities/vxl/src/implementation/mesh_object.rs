@@ -1,7 +1,8 @@
 use crate::{
     Error, Format, MeshFormat, Result, VectorComponent,
     commands::{
-        ChannelSource, MeshMethod, MeshTextureMap, ResourceStorage, TextureBake, TextureShape,
+        ChannelSource, MaterialSlot, MeshMethod, MeshTextureMap, ResourceStorage, TextureBake,
+        TextureShape,
     },
     implementation,
 };
@@ -16,8 +17,9 @@ use voxcore::{
 };
 use voxsmith::{
     AtlasShape, ColorChannel, MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest,
-    MaterialSlot, MeshMethod as VoxsmithMeshMethod, ResourceStorage as VoxsmithResourceStorage,
-    object_to_glb_bytes, object_to_gltf_bytes, object_to_material_glb, object_to_material_gltf,
+    MaterialSlot as VoxsmithMaterialSlot, MeshMethod as VoxsmithMeshMethod,
+    ResourceStorage as VoxsmithResourceStorage, object_to_glb_bytes, object_to_gltf_bytes,
+    object_to_material_glb, object_to_material_gltf,
 };
 
 /// Meshes the object at index `object_index` of the voxel file at `input` into
@@ -246,8 +248,21 @@ fn mesh_method(method: MeshMethod) -> VoxsmithMeshMethod {
 fn material_map(map: &MeshTextureMap) -> MaterialMap {
     MaterialMap {
         name: map.name.clone(),
-        slot: map.slot.unwrap_or(MaterialSlot::None),
+        slot: map.slot.map_or(VoxsmithMaterialSlot::None, material_slot),
         bake: material_bake(&map.bake),
+    }
+}
+
+/// Lowers a resolved slot into the voxsmith slot.
+fn material_slot(slot: MaterialSlot) -> VoxsmithMaterialSlot {
+    match slot {
+        MaterialSlot::BaseColor => VoxsmithMaterialSlot::BaseColor,
+        MaterialSlot::MetallicRoughness => VoxsmithMaterialSlot::MetallicRoughness,
+        MaterialSlot::Occlusion => VoxsmithMaterialSlot::Occlusion,
+        MaterialSlot::OcclusionMetallicRoughness => {
+            VoxsmithMaterialSlot::OcclusionMetallicRoughness
+        }
+        MaterialSlot::Emissive => VoxsmithMaterialSlot::Emissive,
     }
 }
 
