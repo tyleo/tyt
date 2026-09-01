@@ -22,8 +22,8 @@ mod to_qbcl_bytes;
 mod to_qbcl_file;
 mod to_qbt_bytes;
 mod to_qbt_file;
-#[cfg(feature = "voxj")]
-mod voxj_ext_codec;
+#[cfg(feature = "ext")]
+mod vox_ext_codec;
 
 pub use from_qb_bytes::*;
 pub use from_qb_file::*;

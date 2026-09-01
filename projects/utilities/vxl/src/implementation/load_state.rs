@@ -1,9 +1,8 @@
 use crate::{Format, Result, implementation};
 use std::{fs, path::Path};
 use voxcore::VoxMain;
-use voxsmith::{
-    from_goxl_bytes, from_mvox_bytes, from_qbcl_bytes, from_vmax_file, from_voxj_bytes,
-};
+use voxj_voxcore::codec::from_voxj_bytes;
+use voxsmith::{from_goxl_bytes, from_mvox_bytes, from_qbcl_bytes, from_vmax_file};
 
 /// Loads the voxel file at `input` into a [`VoxMain`] carrying no ext, the
 /// front half of every read-only command. `from` picks the source format,

@@ -1,6 +1,7 @@
 use crate::{Format, Result, implementation};
 use std::{fs, path::Path};
-use voxsmith::{GoxelVoxMain, from_goxl_bytes, from_voxj_bytes};
+use voxj_voxcore::codec::from_voxj_bytes;
+use voxsmith::{GoxelVoxMain, from_goxl_bytes};
 
 /// Loads the voxel file at `input` into a [`GoxelVoxMain`] for the Goxel
 /// `.gox` writer. A Goxel `.gox` input keeps its ext. A Voxel Json input

@@ -1,6 +1,8 @@
-use crate::{Error, Result};
+use crate::{
+    VoxMap, VoxValue,
+    ext::{Error, Result},
+};
 use serde_json::{Map, Number, Value};
-use voxcore::{VoxMap, VoxValue};
 
 /// Converts a [`VoxValue`] into the serde_json [`Value`] a format ext
 /// deserializes from, recursing into arrays and objects. An integral number
@@ -11,7 +13,7 @@ pub fn json_value_from_vox_value(value: &VoxValue) -> Result<Value> {
         VoxValue::Null => Value::Null,
         VoxValue::Bool(bool) => Value::Bool(*bool),
         VoxValue::Number(number) if !number.is_finite() => {
-            return Err(Error::invalid(format!("number {number} must be finite")));
+            return Err(Error::Invalid(format!("number {number} must be finite")));
         }
         // The bound is exclusive because `i64::MAX as f64` rounds up to
         // `2^63`, past what an i64 holds.
@@ -35,7 +37,7 @@ pub fn json_value_from_vox_value(value: &VoxValue) -> Result<Value> {
             for (key, value) in entries {
                 let value = json_value_from_vox_value(value)?;
                 if object.insert(key.clone(), value).is_some() {
-                    return Err(Error::invalid(format!(
+                    return Err(Error::Invalid(format!(
                         "json object key `{key}` must be unique"
                     )));
                 }

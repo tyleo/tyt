@@ -1,6 +1,7 @@
 use crate::{Format, Result, implementation};
 use std::{fs, path::Path};
-use voxsmith::{VoxelMaxVoxMain, from_vmax_file, from_voxj_bytes};
+use voxj_voxcore::codec::from_voxj_bytes;
+use voxsmith::{VoxelMaxVoxMain, from_vmax_file};
 
 /// Loads the voxel file at `input` into a [`VoxelMaxVoxMain`] for the Voxel
 /// Max writer. A Voxel Max input keeps its ext. A Voxel Json input reads the

@@ -1,6 +1,6 @@
 [package]
 name = "voxcore"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -8,4 +8,14 @@ description = "Core types for working with voxels."
 
 [dependencies]
 branded-id = "0.1.9"
+serde = { version = "1", optional = true }
+serde_json = { version = "1", optional = true }
 ty-math = { version = "0.2.0", default-features = false }
+
+[dev-dependencies]
+# Derives the ext structs the keyed-transcode tests round-trip.
+serde = { version = "1", features = ["derive"] }
+
+[features]
+default = ["json"]
+json = ["dep:serde", "dep:serde_json"]

@@ -1,6 +1,7 @@
 use crate::{Format, Result, implementation};
 use std::{fs, path::Path};
-use voxsmith::{MagicaVoxelVoxMain, from_mvox_bytes, from_voxj_bytes};
+use voxj_voxcore::codec::from_voxj_bytes;
+use voxsmith::{MagicaVoxelVoxMain, from_mvox_bytes};
 
 /// Loads the voxel file at `input` into a [`MagicaVoxelVoxMain`] for the
 /// MagicaVoxel `.vox` writer. A MagicaVoxel `.vox` input keeps its ext. A

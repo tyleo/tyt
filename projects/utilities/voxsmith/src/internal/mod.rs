@@ -38,8 +38,6 @@ mod gltf;
 // Per-codec internal modules.
 #[cfg(feature = "vmax")]
 mod vmax;
-#[cfg(feature = "voxj")]
-mod voxj;
 
 #[cfg(feature = "_color")]
 pub(crate) use cell_color::*;
@@ -68,5 +66,3 @@ pub(crate) use gltf::*;
 
 #[cfg(feature = "vmax")]
 pub(crate) use vmax::*;
-#[cfg(feature = "voxj")]
-pub(crate) use voxj::*;

@@ -12,8 +12,6 @@ mod qbcl;
 mod vmax;
 #[cfg(feature = "_mesh")]
 mod voxelize;
-#[cfg(feature = "voxj")]
-mod voxj;
 
 #[cfg(feature = "gltf")]
 pub use gltf::*;
@@ -29,5 +27,3 @@ pub use qbcl::*;
 pub use vmax::*;
 #[cfg(feature = "_mesh")]
 pub use voxelize::*;
-#[cfg(feature = "voxj")]
-pub use voxj::*;

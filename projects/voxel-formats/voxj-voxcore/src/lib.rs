@@ -2,13 +2,14 @@
 
 //! Converts between Voxel Json documents and the voxcore state.
 //!
-//! [`from_voxj_file`] loads a [`voxj::VoxjFile`] into a [`VoxjVoxMain`],
-//! and [`to_voxj_file`] encodes one back, with [`VoxjFileBuilder`] for
-//! control over the block encodings, ext block, and edit state. The [`codec`]
-//! module, behind the default `codec` feature, goes straight to and from
-//! `.voxj` / `.voxjz` bytes. The document's `ext` block is carried as a
-//! voxcore value tree, whichever format owns it; a caller that types the
-//! block maps it in and out of the slot itself.
+//! [`from_voxj_file`] loads a [`voxj::VoxjFile`] into a
+//! [`VoxMain`](voxcore::VoxMain), and [`to_voxj_file`] encodes one back, with
+//! [`VoxjFileBuilder`] for control over the block encodings, ext block, and
+//! edit state. The [`codec`] module, behind the default `codec` feature, goes
+//! straight to and from `.voxj` / `.voxjz` bytes. The document's `ext` block
+//! goes through the state's ext slot, typed by the slot's
+//! [`VoxExtSlot`](voxcore::ext::VoxExtSlot). A [`VoxjVoxMain`] carries the
+//! block verbatim, whichever format owns it.
 
 #[cfg(feature = "codec")]
 pub mod codec;

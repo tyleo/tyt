@@ -1,6 +1,7 @@
 use crate::{Format, Result, implementation};
 use std::{fs, path::Path};
-use voxsmith::{QubicleQbclVoxMain, from_qbcl_bytes, from_voxj_bytes};
+use voxj_voxcore::codec::from_voxj_bytes;
+use voxsmith::{QubicleQbclVoxMain, from_qbcl_bytes};
 
 /// Loads the voxel file at `input` into a [`QubicleQbclVoxMain`] for the
 /// Qubicle `.qbcl` writer. A Qubicle `.qbcl` input keeps its ext. A Voxel

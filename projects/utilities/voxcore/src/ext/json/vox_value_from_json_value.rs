@@ -1,5 +1,5 @@
+use crate::{VoxMap, VoxValue};
 use serde_json::Value;
-use voxcore::{VoxMap, VoxValue};
 
 /// Converts a serde_json [`Value`] into a [`VoxValue`], recursing into arrays
 /// and objects. The write half of the typed-ext transcode: a format ext

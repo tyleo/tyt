@@ -1,12 +1,13 @@
 use crate::{ColorFormat, Result};
 use std::{fs, path::Path};
 use vmax_codec::to_vmax_package;
-use voxsmith::{VoxelMaxColorFormat, from_voxj_bytes, to_vmax_file};
+use voxj_voxcore::codec::from_voxj_bytes;
+use voxsmith::{VoxelMaxColorFormat, to_vmax_file};
 
 /// Reconstructs a `.vmax` package directory at `output` from `.voxj` / `.voxjz`
-/// bytes, round-tripping through voxcore: voxsmith loads the document into a
-/// [`VoxMain`](voxcore::VoxMain) and back out to the lossless Voxel Max model,
-/// which is then written one file per entry.
+/// bytes, round-tripping through voxcore: voxj-voxcore loads the document into
+/// a [`VoxMain`](voxcore::VoxMain), voxsmith writes it back out to the lossless
+/// Voxel Max model, and the model lands one file per entry.
 ///
 /// `color_format` selects where each palette's colors live: a 256x1
 /// `palette*.png` image ([`ColorFormat::Png`]), the material

@@ -7,13 +7,12 @@
 //! alias, whose ext slot holds the format's ext, the state with no native
 //! voxcore home, so the format's writer can rebuild the file exactly. A state
 //! converted across formats drops that ext explicitly through
-//! [`VoxMain::map_ext`](voxcore::VoxMain::map_ext). For Voxel Json,
-//! voxj-voxcore converts the document and carries its `ext` block verbatim;
-//! here [`from_voxj_file`] and [`from_voxj_bytes`] type that block into the
-//! slot, each format's ext keyed into the block by its [`VoxjExtCodec`] and
-//! a whole slot handled through its [`VoxjExtSlot`]. For Voxel Max it
-//! converts to and from the lossless `VMaxFile`
-//! ([`from_vmax_file`] / [`to_vmax_file`]), carrying the [`VoxelMaxExt`]. For
+//! [`VoxMain::map_ext`](voxcore::VoxMain::map_ext). The `ext` feature keys
+//! each format's ext into a document's `ext` block through voxcore's
+//! [`VoxExtCodec`](voxcore::ext::VoxExtCodec). voxj-voxcore's typed loads and
+//! writes carry that block across formats. For Voxel Max the crate converts
+//! to and from the lossless `VMaxFile` ([`from_vmax_file`] /
+//! [`to_vmax_file`]), carrying the [`VoxelMaxExt`]. For
 //! MagicaVoxel it converts to and from a decoded `MVoxFile`
 //! ([`from_mvox_file`] / [`to_mvox_file`]) and straight to and from `.vox`
 //! bytes ([`from_mvox_bytes`] / [`to_mvox_bytes`]), carrying the
@@ -28,9 +27,7 @@
 //! [`QubicleQbclExt`].
 
 #[cfg(not(feature = "_codec"))]
-compile_error!(
-    "voxsmith needs at least one codec feature enabled: goxl, mvox, qbcl, vmax, or voxj"
-);
+compile_error!("voxsmith needs at least one codec feature enabled: goxl, mvox, qbcl, or vmax");
 
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
 mod internal;

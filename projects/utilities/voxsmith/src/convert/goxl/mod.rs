@@ -11,8 +11,8 @@ mod goxel_unknown_chunk;
 mod goxel_vox_main;
 mod to_goxl_bytes;
 mod to_goxl_file;
-#[cfg(feature = "voxj")]
-mod voxj_ext_codec;
+#[cfg(feature = "ext")]
+mod vox_ext_codec;
 
 pub use from_goxl_bytes::*;
 pub use from_goxl_file::*;

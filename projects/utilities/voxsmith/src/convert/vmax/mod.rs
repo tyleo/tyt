@@ -2,6 +2,8 @@ mod from_vmax_file;
 mod scene_camera_source;
 mod to_vmax_file;
 mod vmax_file_builder;
+#[cfg(feature = "ext")]
+mod vox_ext_codec;
 mod voxel_max_color_format;
 mod voxel_max_ext;
 mod voxel_max_material;
@@ -10,8 +12,6 @@ mod voxel_max_node;
 mod voxel_max_object_state;
 mod voxel_max_palette;
 mod voxel_max_vox_main;
-#[cfg(feature = "voxj")]
-mod voxj_ext_codec;
 
 pub use from_vmax_file::*;
 pub use scene_camera_source::*;

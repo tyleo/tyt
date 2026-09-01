@@ -2,6 +2,8 @@
 
 //! Core types for working with voxels.
 
+pub mod ext;
+
 mod b_vox_effective_property;
 mod b_vox_hierarchy_node;
 mod b_vox_layer;

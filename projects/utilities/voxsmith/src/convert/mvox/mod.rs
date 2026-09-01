@@ -12,8 +12,8 @@ mod magica_voxel_unknown_chunk;
 mod magica_voxel_vox_main;
 mod to_mvox_bytes;
 mod to_mvox_file;
-#[cfg(feature = "voxj")]
-mod voxj_ext_codec;
+#[cfg(feature = "ext")]
+mod vox_ext_codec;
 
 pub use from_mvox_bytes::*;
 pub use from_mvox_file::*;

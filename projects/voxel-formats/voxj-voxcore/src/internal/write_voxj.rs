@@ -1,10 +1,10 @@
 use crate::{
-    EditStateMode, Result, VoxjVoxMain, voxj_decoded_object_from_vox_object,
+    EditStateMode, Result, voxj_decoded_object_from_vox_object,
     voxj_hierarchy_node_from_vox_hierarchy_node, voxj_map_from_vox_map,
     voxj_palette_from_vox_palette, voxj_value_pool_from_vox_value_pool,
 };
 use ty_math::TyVector3U32;
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{VoxMain, VoxObject, ext::VoxExtSlot};
 use voxj::{
     VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState,
     objects::{
@@ -17,7 +17,7 @@ use voxj::{
 /// [`VoxMain`](voxcore::VoxMain), which does not itself carry a version.
 const VOXJ_FORMAT_VERSION: u32 = 1;
 
-/// Builds a [`VoxjFile`] from a [`VoxjVoxMain`], the workhorse behind
+/// Builds a [`VoxjFile`] from a [`VoxMain`], the workhorse behind
 /// [`to_voxj_file`](crate::to_voxj_file) and
 /// [`VoxjFileBuilder`](crate::VoxjFileBuilder).
 ///
@@ -31,10 +31,10 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// * `position` - position-block encoding, or `None` to search for the
 ///   smallest.
 /// * `sample` - sample-block encoding, or `None` to search for the smallest.
-/// * `ext` - when false, omits the carried `ext` extension block.
+/// * `ext` - when false, omits the slot's `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-pub fn write_voxj(
-    state: &VoxjVoxMain,
+pub fn write_voxj<T: VoxExtSlot>(
+    state: &VoxMain<T>,
     position: Option<PositionEncoding>,
     sample: Option<SampleEncoding>,
     ext: bool,
@@ -87,7 +87,11 @@ pub fn write_voxj(
     });
 
     let ext = if ext {
-        state.ext().as_ref().map(voxj_map_from_vox_map)
+        state
+            .ext()
+            .to_vox_ext()?
+            .as_ref()
+            .map(voxj_map_from_vox_map)
     } else {
         None
     };

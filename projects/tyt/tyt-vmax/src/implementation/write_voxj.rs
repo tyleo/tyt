@@ -7,12 +7,12 @@ use vmax_codec::from_vmax_package;
 use voxj::objects::{PositionEncoding, SampleEncoding};
 use voxj_codec::{to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes};
 use voxj_voxcore::VoxjFileBuilder;
-use voxsmith::{VoxjExtSlot, from_vmax_file};
+use voxsmith::from_vmax_file;
 
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
 /// stdout, round-tripping through voxcore: the package is loaded, voxsmith
-/// loads it into a [`VoxMain`](voxcore::VoxMain) and encodes it back to a voxj
-/// document, which is then serialized.
+/// loads it into a [`VoxMain`](voxcore::VoxMain), and voxj-voxcore encodes it
+/// into a voxj document, which is then serialized.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
     // Load: read the whole package into the lossless Voxel Max model.
     let serde = from_vmax_package(
@@ -45,11 +45,9 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
 
     // Translate through voxcore: vmax -> VoxMain, then encode the voxj document
     // with the chosen block encodings. The `voxel-max` ext carries the
-    // provenance with no native voxj home, keyed into the document block form
-    // before the build.
+    // provenance with no native voxj home. The builder keys it into the
+    // document's `ext` block.
     let state = from_vmax_file(&serde)?;
-    let ext = state.ext().to_voxj_ext()?;
-    let state = state.map_ext(|_| ext);
     let (position, sample) = block_encoding(encoding);
     let serialized = VoxjFileBuilder::new(&state)
         .position_encoding(position)

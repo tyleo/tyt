@@ -1,17 +1,14 @@
-use crate::{
-    Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding, implementation,
-};
+use crate::{Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding};
 use std::{fs, path::Path};
-use voxcore::VoxMain;
+use voxcore::{VoxMain, ext::VoxExtSlot};
 use voxj::objects::{PositionEncoding, SampleEncoding};
 use voxj_codec::{to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes};
 use voxj_voxcore::{EditStateMode, VoxjFileBuilder};
-use voxsmith::VoxjExtSlot;
 
 /// Encodes a voxel state into a Voxel Json document and writes it, shared by
-/// every command that produces a voxj document. The state's ext slot is
-/// encoded into the document block form first, so any format's ext rides the
-/// `ext` block.
+/// every command that produces a voxj document. The builder encodes the
+/// state's ext slot into the document's `ext` block, so any format's ext
+/// rides along.
 ///
 /// # Arguments
 /// * `state` - the voxel state to encode.
@@ -20,7 +17,7 @@ use voxsmith::VoxjExtSlot;
 /// * `format` - the output container and printing form.
 /// * `ext` - when false, drops the user-defined `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-pub fn write_voxj_document<T: VoxjExtSlot>(
+pub fn write_voxj_document<T: VoxExtSlot>(
     state: VoxMain<T>,
     output: &Path,
     encoding: VoxjEncoding,
@@ -28,7 +25,6 @@ pub fn write_voxj_document<T: VoxjExtSlot>(
     ext: bool,
     edit_state: EditStateMode,
 ) -> Result<()> {
-    let state = implementation::raw_ext_state(state)?;
     let file = VoxjFileBuilder::new(&state)
         .position_encoding(position_encoding(encoding.position))
         .sample_encoding(sample_encoding(encoding.sample))

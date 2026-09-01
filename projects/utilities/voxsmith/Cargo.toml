@@ -1,6 +1,6 @@
 [package]
 name = "voxsmith"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
@@ -29,24 +29,22 @@ serde_json = { version = "1", optional = true }
 ty-math = "0.2.0"
 vmax = { version = "0.1.7", features = ["serde"], optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
-voxcore = "0.2.0"
-voxj = { version = "0.1.1", features = ["serde"], optional = true }
-voxj-voxcore = { version = "0.1.0", features = ["codec"], optional = true }
+voxcore = "0.2.1"
 
 [features]
-default = ["goxl", "mvox", "qbcl", "vmax", "voxj"]
+default = ["ext", "goxl", "mvox", "qbcl", "vmax"]
 
 # Each codec feature gates its format crate, its codec crate, and the
 # voxsmith modules that convert that format. The `qbcl` feature covers the
-# whole Qubicle family (`.qb`, `.qbt`, and `.qbcl`), since all three share the
-# `qbcl` / `qbcl-codec` crates. The `voxj` feature gates the typed slot layer
-# over `voxj-voxcore`'s document conversion; it adds `serde_json`, which
-# carries each format's typed ext into and out of the block form.
+# whole Qubicle family (`.qb`, `.qbt`, and `.qbcl`) because all three share
+# the `qbcl` / `qbcl-codec` crates. The `ext` feature gates each format's
+# `VoxExtCodec` impl, keying its ext into a document `ext` block through
+# voxcore's serde transcode.
+ext = ["voxcore/json"]
 goxl = ["dep:goxl", "dep:goxl-codec", "_codec", "_color"]
 mvox = ["dep:mvox", "dep:mvox-codec", "_codec", "_color"]
 qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec", "_color"]
 vmax = ["dep:vmax", "dep:vmax-codec", "_codec", "_color"]
-voxj = ["dep:voxj", "dep:serde_json", "dep:voxj-voxcore", "_codec"]
 
 # glTF meshing both ways. The reader (`dep:gltf`) loads a `Mesh` and the private
 # `_mesh` marker gates the format-independent `Mesh` type and the voxelizer; the

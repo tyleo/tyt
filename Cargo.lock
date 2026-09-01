@@ -2057,9 +2057,11 @@ dependencies = [
 
 [[package]]
 name = "voxcore"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "branded-id",
+ "serde",
+ "serde_json",
  "ty-math",
 ]
 
@@ -2084,7 +2086,7 @@ dependencies = [
 
 [[package]]
 name = "voxj-voxcore"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "branded-id",
  "ty-math",
@@ -2095,7 +2097,7 @@ dependencies = [
 
 [[package]]
 name = "voxsmith"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "branded-id",
@@ -2113,8 +2115,6 @@ dependencies = [
  "vmax",
  "vmax-codec",
  "voxcore",
- "voxj",
- "voxj-voxcore",
 ]
 
 [[package]]
