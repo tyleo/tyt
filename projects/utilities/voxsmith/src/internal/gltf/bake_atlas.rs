@@ -1,10 +1,13 @@
 use crate::{
-    BASE_COLOR, ColorChannel, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, MaterialBake,
-    MaterialChannel, Result, UsedMaterials, default_lin_srgba_f64_color, default_scalar,
-    srgba_u8_from_lin_srgba_f64, value_pool_lin_srgba_f64_color,
+    ColorChannel, Error, MaterialBake, MaterialChannel, Result, UsedMaterials,
+    default_lin_srgba_f64_color,
 };
 use ty_math::{TyFloatExt, TyLinSrgbaF64, TySrgbaU8};
-use voxcore::VoxValuePoolValueRef;
+use voxcore::{
+    VoxValuePoolValueRef,
+    color::{srgba_u8_from_lin_srgba_f64, value_pool_lin_srgba_f64_color},
+    material::{BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, default_scalar},
+};
 
 /// Bakes `bake` over every material in `used` into an RGBA8 pixel buffer of
 /// `width` x `height` texels, one texel per material placed row-major from the
@@ -243,13 +246,17 @@ pub(crate) fn material_scalar(used: &UsedMaterials, index: usize, key: &str) -> 
 #[cfg(test)]
 mod tests {
     use crate::{
-        AtlasShape, BASE_COLOR, ColorChannel, EMISSIVE_COLOR, EMISSIVE_STRENGTH, METALLIC,
-        MaterialBake, MaterialChannel, OCCLUSION_STRENGTH, ROUGHNESS, Result, atlas_dimensions,
+        AtlasShape, ColorChannel, MaterialBake, MaterialChannel, Result, atlas_dimensions,
         bake_atlas_pixels, resolve_used_materials,
     };
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxObject, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{
+        BVoxObject, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool,
+        material::{
+            BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, METALLIC, OCCLUSION_STRENGTH, ROUGHNESS,
+        },
+    };
 
     /// The branded value id `index`.
     fn value_id(index: u32) -> U32Id<BVoxValuePoolValue> {

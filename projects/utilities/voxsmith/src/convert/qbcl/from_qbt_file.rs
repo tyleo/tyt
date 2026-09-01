@@ -1,14 +1,11 @@
-use crate::{
-    BASE_COLOR, Error, QubicleQbtExt, QubicleQbtNode, QubicleQbtVoxMain, Result,
-    lin_srgba_f64_from_srgba_u8,
-};
+use crate::{Error, QubicleQbtExt, QubicleQbtNode, QubicleQbtVoxMain, Result};
 use branded_id::U32Id;
 use qbcl::qbt::{QbtFile, QbtMatrix, QbtNode};
 use std::collections::{HashMap, HashSet};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
-    VoxValuePool,
+    VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
 };
 
 /// Loads a decoded Qubicle Binary Tree [`QbtFile`] into a [`VoxMain`].

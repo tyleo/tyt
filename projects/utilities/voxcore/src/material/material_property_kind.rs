@@ -1,13 +1,12 @@
-use crate::{
+use crate::material::{
     BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, OCCLUSION_STRENGTH, ROUGHNESS,
     TRANSMISSION,
 };
 
-/// The kind of a recommended glTF property: a four- or three-component color,
-/// or a scalar. The vocabulary the voxj unbound-default rule keys on: an absent
-/// glTF property takes its spec default, a custom one has none.
+/// The kind of a recommended material property: a four- or three-component
+/// color, or a scalar. A custom property outside the vocabulary has no kind.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GltfPropertyKind {
+pub enum MaterialPropertyKind {
     /// A four-component color with straight alpha: `baseColor`.
     ColorRgba,
 
@@ -19,8 +18,8 @@ pub enum GltfPropertyKind {
     Scalar,
 }
 
-impl GltfPropertyKind {
-    /// Classifies `key` against the recommended glTF vocabulary, or `None` for a
+impl MaterialPropertyKind {
+    /// Classifies `key` against the recommended vocabulary, or `None` for a
     /// custom key outside it.
     pub fn of(key: &str) -> Option<Self> {
         match key {
@@ -36,26 +35,26 @@ impl GltfPropertyKind {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR, EMISSIVE_COLOR, GltfPropertyKind, OCCLUSION_STRENGTH};
+    use crate::material::{BASE_COLOR, EMISSIVE_COLOR, MaterialPropertyKind, OCCLUSION_STRENGTH};
 
     #[test]
     fn classifies_the_two_colors_and_a_scalar() {
         assert_eq!(
-            GltfPropertyKind::of(BASE_COLOR),
-            Some(GltfPropertyKind::ColorRgba)
+            MaterialPropertyKind::of(BASE_COLOR),
+            Some(MaterialPropertyKind::ColorRgba)
         );
         assert_eq!(
-            GltfPropertyKind::of(EMISSIVE_COLOR),
-            Some(GltfPropertyKind::ColorRgb)
+            MaterialPropertyKind::of(EMISSIVE_COLOR),
+            Some(MaterialPropertyKind::ColorRgb)
         );
         assert_eq!(
-            GltfPropertyKind::of(OCCLUSION_STRENGTH),
-            Some(GltfPropertyKind::Scalar)
+            MaterialPropertyKind::of(OCCLUSION_STRENGTH),
+            Some(MaterialPropertyKind::Scalar)
         );
     }
 
     #[test]
     fn a_custom_key_is_outside_the_vocabulary() {
-        assert_eq!(GltfPropertyKind::of("subsurface"), None);
+        assert_eq!(MaterialPropertyKind::of("subsurface"), None);
     }
 }

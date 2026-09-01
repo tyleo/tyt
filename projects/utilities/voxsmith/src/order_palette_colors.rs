@@ -1,7 +1,6 @@
-use crate::BASE_COLOR;
 use branded_id::U32Id;
 use std::collections::HashSet;
-use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain};
+use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain, material::BASE_COLOR};
 
 /// Reorders `palette_id`'s `baseColor` colors to material order: each
 /// material's color in turn, then the colors no material uses. Rendering is
@@ -51,9 +50,9 @@ pub fn order_palette_colors<T>(state: &mut VoxMain<T>, palette_id: U32Id<BVoxPal
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR, order_palette_colors};
+    use crate::order_palette_colors;
     use branded_id::U32Id;
-    use voxcore::{VoxMain, VoxPalette, VoxValuePool};
+    use voxcore::{VoxMain, VoxPalette, VoxValuePool, material::BASE_COLOR};
 
     #[test]
     fn orders_colors_to_material_order() {

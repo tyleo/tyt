@@ -36,14 +36,17 @@ pub fn object_to_material_gltf<T>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        AtlasShape, BASE_COLOR, METALLIC, MaterialBake, MaterialChannel, MaterialMap,
-        MaterialMeshRequest, MaterialSlot, MeshMethod, ResourceStorage, object_to_material_gltf,
+        AtlasShape, MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest, MaterialSlot,
+        MeshMethod, ResourceStorage, object_to_material_gltf,
     };
     use branded_id::U32Id;
     use gltf::Gltf;
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{
+        VoxMain, VoxObject, VoxPalette, VoxValuePool,
+        material::{BASE_COLOR, METALLIC},
+    };
 
     /// A one-voxel red cube through a single `baseColor` palette, and the
     /// request the test bakes; `maps` and `storage` vary per test.

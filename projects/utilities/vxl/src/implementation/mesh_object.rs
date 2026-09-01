@@ -10,11 +10,13 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use voxcore::{VoxEffectivePalette, VoxMain, VoxObject, VoxValuePool, VoxValuePoolKind};
+use voxcore::{
+    VoxEffectivePalette, VoxMain, VoxObject, VoxValuePool, VoxValuePoolKind,
+    material::{BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, MaterialPropertyKind},
+};
 use voxsmith::{
-    AtlasShape, BASE_COLOR, ColorChannel, EMISSIVE_COLOR, EMISSIVE_STRENGTH, GltfPropertyKind,
-    MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest, MaterialSlot,
-    MeshMethod as VoxsmithMeshMethod, ResourceStorage as VoxsmithResourceStorage,
+    AtlasShape, ColorChannel, MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest,
+    MaterialSlot, MeshMethod as VoxsmithMeshMethod, ResourceStorage as VoxsmithResourceStorage,
     object_to_glb_bytes, object_to_gltf_bytes, object_to_material_glb, object_to_material_gltf,
 };
 
@@ -186,11 +188,11 @@ fn validate_channel(
 /// shape of its winning value pool, and errors when unbound: it has no spec
 /// default and no shape to read.
 fn channel_kind(effective: &VoxEffectivePalette, key: &str) -> Result<ChannelKind> {
-    if let Some(kind) = GltfPropertyKind::of(key) {
+    if let Some(kind) = MaterialPropertyKind::of(key) {
         return Ok(match kind {
-            GltfPropertyKind::ColorRgba => ChannelKind::Color { alpha: true },
-            GltfPropertyKind::ColorRgb => ChannelKind::Color { alpha: false },
-            GltfPropertyKind::Scalar => ChannelKind::Scalar,
+            MaterialPropertyKind::ColorRgba => ChannelKind::Color { alpha: true },
+            MaterialPropertyKind::ColorRgb => ChannelKind::Color { alpha: false },
+            MaterialPropertyKind::Scalar => ChannelKind::Scalar,
         });
     }
 

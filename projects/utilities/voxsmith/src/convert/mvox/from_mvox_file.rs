@@ -1,7 +1,7 @@
 use crate::{
-    BASE_COLOR, Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelFrame, MagicaVoxelLayer,
+    Error, MagicaVoxelCamera, MagicaVoxelExt, MagicaVoxelFrame, MagicaVoxelLayer,
     MagicaVoxelMaterial, MagicaVoxelNode, MagicaVoxelNodeBody, MagicaVoxelShapeModel,
-    MagicaVoxelUnknownChunk, MagicaVoxelVoxMain, Result, lin_srgba_f64_from_srgba_u8,
+    MagicaVoxelUnknownChunk, MagicaVoxelVoxMain, Result,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -18,7 +18,7 @@ use ty_math::{
 };
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject,
-    VoxPalette, VoxValuePool,
+    VoxPalette, VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
 };
 
 /// Color indices in a MagicaVoxel palette: one material per index `0..=255`.
@@ -512,10 +512,7 @@ fn invalid(message: String) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        BASE_COLOR, IOR, MagicaVoxelVoxMain, from_mvox_bytes, from_mvox_file,
-        lin_srgba_f64_from_srgba_u8, to_mvox_bytes, to_mvox_file,
-    };
+    use crate::{MagicaVoxelVoxMain, from_mvox_bytes, from_mvox_file, to_mvox_bytes, to_mvox_file};
     use branded_id::U32Id;
     use mvox::{
         MVoxCamera, MVoxColor, MVoxDict, MVoxFile, MVoxFrame, MVoxGroupNode, MVoxLayer,
@@ -530,6 +527,8 @@ mod tests {
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
         VoxPalette, VoxValuePool, VoxValuePoolValueRef,
+        color::lin_srgba_f64_from_srgba_u8,
+        material::{BASE_COLOR, IOR},
     };
 
     fn pair(key: &str, value: &str) -> (String, String) {

@@ -1,8 +1,7 @@
 use crate::{
-    ABSORPTION, BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, IOR, METALLIC, ROUGHNESS,
-    Result, SHADOWS, SceneCameraSource, TRANSMISSION, VoxelMaxColorFormat, VoxelMaxExt,
-    VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, VoxelMaxVoxMain, default_scalar,
-    pbr_factor_to_vm_coefficient, tighten, value_pool_color,
+    ABSORPTION, Error, Result, SHADOWS, SceneCameraSource, VoxelMaxColorFormat, VoxelMaxExt,
+    VoxelMaxMaterial, VoxelMaxNode, VoxelMaxPalette, VoxelMaxVoxMain, pbr_factor_to_vm_coefficient,
+    tighten,
 };
 use branded_id::U32Id;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -20,6 +19,11 @@ use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, BVoxValuePoolValue,
     VoxHierarchyNode, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
+    color::value_pool_color,
+    material::{
+        BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, ROUGHNESS, TRANSMISSION,
+        default_scalar,
+    },
 };
 
 /// Usable colors in a Voxel Max palette. Color indices are 1-based: `color_idx`

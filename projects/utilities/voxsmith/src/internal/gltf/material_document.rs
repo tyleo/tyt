@@ -1,13 +1,15 @@
 use crate::{
-    EMISSIVE_STRENGTH, IOR, MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage,
-    Result, TRANSMISSION, UsedMaterials, atlas_dimensions, bake_atlas_pixels,
-    check_gltf_property_ranges, default_scalar, encode_rgba8_png, material_scalar,
-    max_emissive_strength, mesh_slices, resolve_used_materials, texel_center,
+    MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage, Result, UsedMaterials,
+    atlas_dimensions, bake_atlas_pixels, check_gltf_property_ranges, encode_rgba8_png,
+    material_scalar, max_emissive_strength, mesh_slices, resolve_used_materials, texel_center,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
 use ty_math::{TyVector3Ext, TyVector3F32};
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{
+    VoxMain, VoxObject,
+    material::{EMISSIVE_STRENGTH, IOR, TRANSMISSION, default_scalar},
+};
 
 /// Which glTF container the document is assembled for, so images embed the way
 /// that container carries them.

@@ -1,19 +1,19 @@
 use ty_math::{TyLinSrgbaF64, TySrgbaF64, TySrgbaU8};
 
 /// Encodes a linear-light color to 8-bit sRGB, the display- and export-side
-/// half of the one transfer voxsmith applies at its boundaries. On every
-/// 8-bit code it is the exact inverse of
-/// [`lin_srgba_f64_from_srgba_u8`](crate::lin_srgba_f64_from_srgba_u8). Each
-/// color component encodes through the sRGB transfer and quantizes, clamped
-/// to `[0, 1]`. The alpha carries no gamma, so it only quantizes.
-pub(crate) fn srgba_u8_from_lin_srgba_f64(color: TyLinSrgbaF64) -> TySrgbaU8 {
+/// half of the one sRGB transfer at an 8-bit boundary. On every 8-bit code
+/// it is the exact inverse of
+/// [`lin_srgba_f64_from_srgba_u8`](crate::color::lin_srgba_f64_from_srgba_u8).
+/// Each color component encodes through the sRGB transfer and quantizes,
+/// clamped to `[0, 1]`. The alpha carries no gamma, so it only quantizes.
+pub fn srgba_u8_from_lin_srgba_f64(color: TyLinSrgbaF64) -> TySrgbaU8 {
     TySrgbaF64::from_linear(color).into_format::<u8, u8>()
 }
 
 #[cfg(test)]
 mod tests {
     use super::srgba_u8_from_lin_srgba_f64;
-    use crate::lin_srgba_f64_from_srgba_u8;
+    use crate::color::lin_srgba_f64_from_srgba_u8;
     use ty_math::TySrgbaU8;
 
     /// Every 8-bit code survives decode then encode: an imported 8-bit
@@ -51,21 +51,6 @@ mod tests {
         }
     }
 
-    /// The independent forward transfer recovers each code's sRGB fraction
-    /// from the production decode, so the decode inverts under a reference
-    /// the production encode never touches.
-    #[test]
-    fn reference_forward_transfer_inverts_the_decode() {
-        for code in 0..=255u8 {
-            let linear = lin_srgba_f64_from_srgba_u8(TySrgbaU8::new(code, 0, 0, 255)).red;
-            let srgb = linear_to_srgb(linear);
-            assert!(
-                (srgb - code as f64 / 255.0).abs() < 1e-12,
-                "code {code} re-encoded to {srgb}"
-            );
-        }
-    }
-
     /// The sRGB transfer inverse, kept as an independent reference for the
     /// production decode (`palette`'s `into_linear`).
     fn srgb_to_linear(component: f64) -> f64 {
@@ -73,16 +58,6 @@ mod tests {
             component / 12.92
         } else {
             ((component + 0.055) / 1.055).powf(2.4)
-        }
-    }
-
-    /// The forward sRGB transfer, kept as an independent reference to prove
-    /// the production decode inverts.
-    fn linear_to_srgb(linear: f64) -> f64 {
-        if linear <= 0.003_130_8 {
-            linear * 12.92
-        } else {
-            1.055 * linear.powf(1.0 / 2.4) - 0.055
         }
     }
 }

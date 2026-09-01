@@ -36,32 +36,40 @@ pub(crate) use internal::*;
 
 #[cfg(feature = "_mesh")]
 mod check_gltf_property_ranges;
+#[cfg(feature = "_mesh")]
+mod color_range;
 mod color_space;
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
 mod convert;
+#[cfg(feature = "gltf")]
+mod default_lin_srgba_f64_color;
 mod dither;
 mod error;
-mod gltf_properties;
-mod gltf_property_kind;
 #[cfg(feature = "_mesh")]
 mod gltf_range;
 mod order_palette_colors;
 mod reduce_palette;
 mod reduction_method;
 mod result;
+#[cfg(feature = "_mesh")]
+mod scalar_range;
 
 #[cfg(feature = "_mesh")]
 pub use check_gltf_property_ranges::*;
+#[cfg(feature = "_mesh")]
+pub(crate) use color_range::*;
 pub use color_space::*;
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
 pub use convert::*;
+#[cfg(feature = "gltf")]
+pub(crate) use default_lin_srgba_f64_color::*;
 pub use dither::*;
 pub use error::*;
-pub use gltf_properties::*;
-pub use gltf_property_kind::*;
 #[cfg(feature = "_mesh")]
 pub(crate) use gltf_range::*;
 pub use order_palette_colors::*;
 pub use reduce_palette::*;
 pub use reduction_method::*;
 pub use result::*;
+#[cfg(feature = "_mesh")]
+pub(crate) use scalar_range::*;

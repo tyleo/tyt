@@ -1,8 +1,7 @@
 use crate::{
-    BASE_COLOR, COLOR_RANGE, EMISSIVE_COLOR, EMISSIVE_STRENGTH, Error, FillMode, GltfRange, IOR,
-    METALLIC, MaterialMode, Mesh, MeshMaterial, OCCLUSION_STRENGTH, OutOfRangeProperty, ROUGHNESS,
-    Result, SurfaceMode, TRANSMISSION, VoxelGrid, check_gltf_property_ranges,
-    lin_srgba_f64_from_srgba_u8, sample_material, scalar_range, voxelize_triangles,
+    COLOR_RANGE, Error, FillMode, GltfRange, MaterialMode, Mesh, MeshMaterial, OutOfRangeProperty,
+    Result, SurfaceMode, VoxelGrid, check_gltf_property_ranges, sample_material, scalar_range,
+    voxelize_triangles,
 };
 use branded_id::U32Id;
 use std::{
@@ -13,6 +12,11 @@ use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U
 use voxcore::{
     BVoxMaterial, BVoxValuePoolValue, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
     VoxValuePool,
+    color::lin_srgba_f64_from_srgba_u8,
+    material::{
+        BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, OCCLUSION_STRENGTH,
+        ROUGHNESS, TRANSMISSION,
+    },
 };
 
 /// The color a body with no sampled surface falls back to when `fill_color` is
@@ -639,11 +643,14 @@ fn grid_too_large(counts: TyVector3U32) -> Error {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC, MaterialMode, Mesh, MeshMaterial,
-        MeshTriangle, MeshTriangleUvs, OutOfRangeProperty, Result, SurfaceMode, voxelize_mesh,
+        FillMode, MaterialMode, Mesh, MeshMaterial, MeshTriangle, MeshTriangleUvs,
+        OutOfRangeProperty, Result, SurfaceMode, voxelize_mesh,
     };
     use ty_math::{TyLinSrgbaF64, TyVector3F64, TyVector3U32};
-    use voxcore::{VoxMain, VoxValuePoolValueRef};
+    use voxcore::{
+        VoxMain, VoxValuePoolValueRef,
+        material::{BASE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC},
+    };
 
     /// A two-cell mesh over a `2x1x1` grid: one triangle inside each unit
     /// cell, the left tagged material `0` and the right material `1`.

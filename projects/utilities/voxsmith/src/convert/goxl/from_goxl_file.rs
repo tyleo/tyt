@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR, Error, GoxelCamera, GoxelExt, GoxelImage, GoxelLayer, GoxelLight, GoxelMaterial,
-    GoxelPreview, GoxelUnknownChunk, GoxelVoxMain, Result, lin_srgba_f64_from_srgba_u8,
+    Error, GoxelCamera, GoxelExt, GoxelImage, GoxelLayer, GoxelLight, GoxelMaterial, GoxelPreview,
+    GoxelUnknownChunk, GoxelVoxMain, Result,
 };
 use branded_id::U32Id;
 use goxl::{GoxlBlock, GoxlCamera, GoxlFile, GoxlLayer, GoxlLight, GoxlMaterial, GoxlShape};
@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3U32};
 use voxcore::{
     BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
-    VoxValuePool,
+    VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
 };
 
 /// Loads a decoded Goxel [`GoxlFile`] into a [`VoxMain`].
@@ -268,10 +268,7 @@ fn shape_token(shape: GoxlShape) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        BASE_COLOR, GoxelVoxMain, from_goxl_bytes, from_goxl_file, lin_srgba_f64_from_srgba_u8,
-        to_goxl_bytes, to_goxl_file,
-    };
+    use crate::{GoxelVoxMain, from_goxl_bytes, from_goxl_file, to_goxl_bytes, to_goxl_file};
     use branded_id::U32Id;
     use goxl::{
         GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
@@ -283,7 +280,7 @@ mod tests {
     };
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
-        VoxPalette, VoxValuePool,
+        VoxPalette, VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
     };
 
     /// The linear-light components of a `#RRGGBBAA` hex string.

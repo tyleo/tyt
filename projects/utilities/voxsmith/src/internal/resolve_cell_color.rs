@@ -1,6 +1,6 @@
-use crate::{BASE_COLOR, CellColor, Error, Result, value_pool_color};
+use crate::{CellColor, Error, Result};
 use branded_id::IdVec;
-use voxcore::{VoxMain, VoxObject};
+use voxcore::{VoxMain, VoxObject, color::value_pool_color, material::BASE_COLOR};
 
 /// The [`CellColor`] read for `object`, picked from its winning
 /// `baseColor` supplier in the effective palette: a table of per-material
@@ -46,10 +46,10 @@ fn non_color_value_pool(object: &VoxObject) -> Error {
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR, resolve_cell_color};
+    use crate::resolve_cell_color;
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool, material::BASE_COLOR};
 
     #[test]
     fn a_supplier_reads_each_voxel_through_its_material() {

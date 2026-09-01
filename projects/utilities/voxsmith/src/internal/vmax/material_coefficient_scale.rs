@@ -51,7 +51,8 @@ pub(crate) fn vm_coefficient_to_pbr_factor(coefficient: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{METALLIC, pbr_factor_to_vm_coefficient, vm_coefficient_to_pbr_factor};
+    use crate::{pbr_factor_to_vm_coefficient, vm_coefficient_to_pbr_factor};
+    use voxcore::material::METALLIC;
 
     /// Whether two coefficients agree within f64 rounding of the linear map.
     fn close(a: f64, b: f64) -> bool {

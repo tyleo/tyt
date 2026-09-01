@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR, Error, QubicleQbclExt, QubicleQbclMetadata, QubicleQbclNode, QubicleQbclNodeBody,
-    QubicleQbclThumbnail, QubicleQbclVoxMain, Result, lin_srgba_f64_from_srgba_u8,
+    Error, QubicleQbclExt, QubicleQbclMetadata, QubicleQbclNode, QubicleQbclNodeBody,
+    QubicleQbclThumbnail, QubicleQbclVoxMain, Result,
 };
 use branded_id::U32Id;
 use qbcl::qbcl::{QbclFile, QbclMatrix, QbclMetadata, QbclNode, QbclNodeBody};
@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use ty_math::{TySrgbaU8, TyTransformF64, TyVector3I32, TyVector3U32};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
-    VoxValuePool,
+    VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
 };
 
 /// Loads a decoded Qubicle Construction Library [`QbclFile`] into a
@@ -315,10 +315,7 @@ fn color_floats(color: [u8; 3]) -> [f64; 3] {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        BASE_COLOR, QubicleQbclVoxMain, from_qbcl_bytes, from_qbcl_file,
-        lin_srgba_f64_from_srgba_u8, to_qbcl_bytes, to_qbcl_file,
-    };
+    use crate::{QubicleQbclVoxMain, from_qbcl_bytes, from_qbcl_file, to_qbcl_bytes, to_qbcl_file};
     use branded_id::U32Id;
     use qbcl::qbcl::{
         QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode,
@@ -328,7 +325,7 @@ mod tests {
     use ty_math::{TyHexColor, TySrgbaU8, TyTransformF64, TyVector3F64, TyVector3U32};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, VoxHierarchyNode, VoxMain, VoxObject,
-        VoxPalette, VoxValuePool,
+        VoxPalette, VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
     };
 
     /// A matrix node with two solid voxels in a `[2, 1, 1]` grid.

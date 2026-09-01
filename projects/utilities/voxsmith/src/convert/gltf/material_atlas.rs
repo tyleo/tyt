@@ -58,13 +58,14 @@ pub fn object_to_material_atlas<T>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        AtlasShape, BASE_COLOR, MaterialBake, MaterialChannel, ROUGHNESS, object_to_material_atlas,
-    };
+    use crate::{AtlasShape, MaterialBake, MaterialChannel, object_to_material_atlas};
     use branded_id::U32Id;
     use std::io::Cursor;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{
+        VoxMain, VoxObject, VoxPalette, VoxValuePool,
+        material::{BASE_COLOR, ROUGHNESS},
+    };
 
     /// The 8-byte PNG signature.
     const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];

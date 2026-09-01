@@ -16,9 +16,8 @@ pub fn to_vmax_file(
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt,
-        VoxelMaxVoxMain, from_vmax_file, lin_srgba_f64_from_srgba_u8,
-        resolve_cell_color_or_transparent, to_vmax_file,
+        SceneCameraSource, VmaxFileBuilder, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxVoxMain,
+        from_vmax_file, resolve_cell_color_or_transparent, to_vmax_file,
     };
     use branded_id::U32Id;
     use std::collections::{BTreeMap, BTreeSet};
@@ -33,6 +32,7 @@ mod tests {
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain,
         VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,
+        color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
     };
 
     fn material(

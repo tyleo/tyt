@@ -1,6 +1,6 @@
 use crate::{
-    BASE_COLOR, Error, MagicaVoxelExt, MagicaVoxelFrame, MagicaVoxelNodeBody, MagicaVoxelVoxMain,
-    Result, resolve_cell_color, resolve_cell_color_or_transparent, value_pool_color,
+    Error, MagicaVoxelExt, MagicaVoxelFrame, MagicaVoxelNodeBody, MagicaVoxelVoxMain, Result,
+    resolve_cell_color, resolve_cell_color_or_transparent,
 };
 use branded_id::U32Id;
 use mvox::{
@@ -11,7 +11,10 @@ use mvox::{
 };
 use std::collections::{BTreeMap, HashMap, HashSet};
 use ty_math::TyVector3F64;
-use voxcore::{BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxObject};
+use voxcore::{
+    BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxObject, color::value_pool_color,
+    material::BASE_COLOR,
+};
 
 /// Writes a [`MagicaVoxelVoxMain`] back to a decoded MagicaVoxel [`MVoxFile`],
 /// the inverse of [`from_mvox_file`](crate::from_mvox_file).

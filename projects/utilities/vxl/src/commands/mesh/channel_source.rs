@@ -121,7 +121,7 @@ mod tests {
         VectorComponent,
         commands::{ChannelSource, PropertyBinding},
     };
-    use voxsmith::{BASE_COLOR, METALLIC, ROUGHNESS};
+    use voxcore::material::{BASE_COLOR, METALLIC, ROUGHNESS};
 
     fn property(key: &str, invert: bool) -> ChannelSource {
         ChannelSource::Property {

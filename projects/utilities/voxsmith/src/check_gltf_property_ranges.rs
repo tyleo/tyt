@@ -1,5 +1,5 @@
-use crate::{COLOR_RANGE, GltfPropertyKind, GltfRange, Result, scalar_range};
-use voxcore::{VoxMain, VoxValuePoolValueRef};
+use crate::{COLOR_RANGE, GltfRange, Result, scalar_range};
+use voxcore::{VoxMain, VoxValuePoolValueRef, material::MaterialPropertyKind};
 
 /// Checks every palette property named by the glTF vocabulary against that
 /// name's glTF schema range, erroring on the first value a material draws
@@ -19,12 +19,12 @@ pub fn check_gltf_property_ranges<T>(state: &VoxMain<T>) -> Result<()> {
     for (palette_id, palette) in state.iter_palettes() {
         for (property_id, property) in palette.iter_properties() {
             let name = &property.name;
-            let Some(kind) = GltfPropertyKind::of(name) else {
+            let Some(kind) = MaterialPropertyKind::of(name) else {
                 continue;
             };
             let range = match kind {
-                GltfPropertyKind::ColorRgb | GltfPropertyKind::ColorRgba => COLOR_RANGE,
-                GltfPropertyKind::Scalar => {
+                MaterialPropertyKind::ColorRgb | MaterialPropertyKind::ColorRgba => COLOR_RANGE,
+                MaterialPropertyKind::Scalar => {
                     scalar_range(name).expect("every scalar vocabulary property has a range")
                 }
             };
@@ -38,7 +38,8 @@ pub fn check_gltf_property_ranges<T>(state: &VoxMain<T>) -> Result<()> {
                 };
 
                 match kind {
-                    GltfPropertyKind::ColorRgb | GltfPropertyKind::ColorRgba => match value {
+                    MaterialPropertyKind::ColorRgb | MaterialPropertyKind::ColorRgba => match value
+                    {
                         VoxValuePoolValueRef::Vec3Float(components) => {
                             check_components(name, components, range)?
                         }
@@ -47,7 +48,7 @@ pub fn check_gltf_property_ranges<T>(state: &VoxMain<T>) -> Result<()> {
                         }
                         _ => {}
                     },
-                    GltfPropertyKind::Scalar => match value {
+                    MaterialPropertyKind::Scalar => match value {
                         VoxValuePoolValueRef::Float(number) => range.check(name, number)?,
                         VoxValuePoolValueRef::Int(number) => range.check(name, number as f64)?,
                         _ => {}
@@ -69,9 +70,12 @@ fn check_components(name: &str, components: &[f64], range: GltfRange) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use crate::{BASE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, check_gltf_property_ranges};
+    use crate::check_gltf_property_ranges;
     use branded_id::U32Id;
-    use voxcore::{VoxMain, VoxPalette, VoxValuePool};
+    use voxcore::{
+        VoxMain, VoxPalette, VoxValuePool,
+        material::{BASE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC},
+    };
 
     /// A state whose one palette binds `name` to a one-material value pool.
     fn state_with(name: &str, value_pool: VoxValuePool) -> VoxMain {

@@ -1,4 +1,4 @@
-use crate::{BASE_COLOR, ColorSpace, Dither, ReductionMethod, Result, value_pool_color};
+use crate::{ColorSpace, Dither, ReductionMethod, Result};
 use branded_id::U32Id;
 use std::{
     cmp::Ordering,
@@ -9,7 +9,10 @@ use ty_math::{
     FromColor, TyCielabColorF64, TyColorToVector3, TyLinSrgbaF64, TyOklabColorF64, TySrgbaU8,
     TyVector3Ext, TyVector3F64, TyVector3U32,
 };
-use voxcore::{BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxMain};
+use voxcore::{
+    BVoxLayer, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, VoxMain,
+    color::value_pool_color, material::BASE_COLOR,
+};
 
 /// Reduces `palette` in `state` to at most `max_materials` materials, then,
 /// unless `keep_unused_values`, prunes the value-pool values the reduction
@@ -786,15 +789,14 @@ fn bayer(x: u32, y: u32, z: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        BASE_COLOR, ColorSpace, Dither, ReductionMethod, lin_srgba_f64_from_srgba_u8,
-        reduce_palette, srgba_u8_from_lin_srgba_f64,
-    };
+    use crate::{ColorSpace, Dither, ReductionMethod, reduce_palette};
     use branded_id::U32Id;
     use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector3U32};
     use voxcore::{
         BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette,
         VoxValuePool, VoxValuePoolValueRef,
+        color::{lin_srgba_f64_from_srgba_u8, srgba_u8_from_lin_srgba_f64},
+        material::BASE_COLOR,
     };
 
     /// The branded value id `index`.

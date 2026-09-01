@@ -1,6 +1,8 @@
-use crate::{srgba_u8_from_lin_srgba_f64, value_pool_lin_srgba_f64_color};
+use crate::{
+    BVoxValuePoolValue, VoxValuePool,
+    color::{srgba_u8_from_lin_srgba_f64, value_pool_lin_srgba_f64_color},
+};
 use branded_id::U32Id;
-use voxcore::{BVoxValuePoolValue, VoxValuePool};
 
 /// Encodes the color at `value_id` in `value_pool` to sRGB `[r, g, b, a]`
 /// bytes: [`value_pool_lin_srgba_f64_color`]'s read re-encoded for an 8-bit

@@ -1,9 +1,9 @@
 use crate::{
     GridSpace, MeshBaseColorMap, MeshEmissiveMap, MeshMaterial, MeshMaterialMaps,
     MeshMetallicRoughnessMap, MeshOcclusionMap, MeshSampler, MeshTexture, MeshTriangle, VoxelGrid,
-    lin_srgba_f64_from_srgba_u8,
 };
 use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector2F64, TyVector3F64, TyVector3U32};
+use voxcore::color::lin_srgba_f64_from_srgba_u8;
 
 /// Barycentric samples per grid unit of a triangle's longest edge, so a triangle
 /// spanning `k` voxels is sampled about `2k` times along it.

@@ -37,13 +37,16 @@ pub fn object_to_material_glb<T>(
 #[cfg(test)]
 mod tests {
     use crate::{
-        AtlasShape, BASE_COLOR, METALLIC, MaterialBake, MaterialMap, MaterialMeshRequest,
-        MaterialSlot, MeshMethod, ResourceStorage, object_to_material_glb,
+        AtlasShape, MaterialBake, MaterialMap, MaterialMeshRequest, MaterialSlot, MeshMethod,
+        ResourceStorage, object_to_material_glb,
     };
     use branded_id::U32Id;
     use gltf::{Gltf, image::Source};
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxObject, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxcore::{
+        BVoxObject, VoxMain, VoxObject, VoxPalette, VoxValuePool,
+        material::{BASE_COLOR, METALLIC},
+    };
 
     /// The 8-byte PNG signature.
     const PNG_MAGIC: [u8; 8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];

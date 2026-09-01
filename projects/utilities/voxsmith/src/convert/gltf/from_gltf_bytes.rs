@@ -459,14 +459,20 @@ fn world_z_up(world: &TyMatrix4x4F64, point: [f64; 3]) -> TyVector3F64 {
 #[cfg(test)]
 mod tests {
     use crate::{
-        BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, FillMode, IOR, METALLIC, MaterialMode,
-        OCCLUSION_STRENGTH, OutOfRangeProperty, ROUGHNESS, Result, SurfaceMode, TRANSMISSION,
-        from_gltf_bytes, srgba_u8_from_lin_srgba_f64, voxelize_mesh,
+        FillMode, MaterialMode, OutOfRangeProperty, Result, SurfaceMode, from_gltf_bytes,
+        voxelize_mesh,
     };
     use branded_id::U32Id;
     use png::{BitDepth, ColorType, Encoder};
     use ty_math::{TyHexColor, TyLinSrgbaF64, TySrgbaU8, TyVector3U32};
-    use voxcore::{BVoxValuePoolValue, VoxMain, VoxValuePool, VoxValuePoolValueRef};
+    use voxcore::{
+        BVoxValuePoolValue, VoxMain, VoxValuePool, VoxValuePoolValueRef,
+        color::srgba_u8_from_lin_srgba_f64,
+        material::{
+            BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, IOR, METALLIC, OCCLUSION_STRENGTH,
+            ROUGHNESS, TRANSMISSION,
+        },
+    };
 
     /// A minimal binary glTF (GLB) of an axis-aligned box spanning `[0, sx]`,
     /// `[0, sy]`, `[0, sz]` in glTF Y-up space, indexed triangles. When
