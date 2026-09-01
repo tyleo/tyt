@@ -1,6 +1,6 @@
 use crate::validation::{Check, Failures};
 use crate::{
-    VoxjMain, VoxjObject,
+    DecodeBase64, VoxjMain, VoxjObject,
     objects::{VoxjDecodedObject, decode_voxj_object, voxj_palette_material_counts},
 };
 use std::collections::HashSet;
@@ -10,7 +10,7 @@ use std::collections::HashSet;
 /// unique, and bounds are tight. Objects with an out-of-range layer are
 /// skipped; [`check_indices`](crate::validation::check_indices()) already reported the
 /// layer.
-pub fn check_geometry(main: &VoxjMain, failures: &mut Failures) {
+pub fn check_geometry<D: DecodeBase64>(dependencies: &D, main: &VoxjMain, failures: &mut Failures) {
     let state = &main.runtime_state;
     for (object_index, object) in state.objects.iter().enumerate() {
         if !failures.go() {
@@ -20,7 +20,7 @@ pub fn check_geometry(main: &VoxjMain, failures: &mut Failures) {
         else {
             continue;
         };
-        let decoded = match decode_voxj_object(object, &material_counts) {
+        let decoded = match decode_voxj_object(dependencies, object, &material_counts) {
             Ok(decoded) => decoded,
             Err(error) => {
                 failures.report(

@@ -4,7 +4,10 @@ use std::{
     path::Path,
 };
 use vmax_codec::from_vmax_package;
-use voxj::objects::{PositionEncoding, SampleEncoding};
+use voxj::{
+    DependenciesImpl as VoxjDependenciesImpl,
+    objects::{PositionEncoding, SampleEncoding},
+};
 use voxj_codec::{to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes};
 use voxj_voxcore::VoxjFileBuilder;
 use voxsmith::from_vmax_file;
@@ -49,7 +52,7 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
     // document's `ext` block.
     let state = from_vmax_file(&serde)?;
     let (position, sample) = block_encoding(encoding);
-    let serialized = VoxjFileBuilder::new(&state)
+    let serialized = VoxjFileBuilder::new(&VoxjDependenciesImpl, &state)
         .position_encoding(position)
         .sample_encoding(sample)
         .build()?;

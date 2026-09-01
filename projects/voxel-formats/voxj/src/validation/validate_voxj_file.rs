@@ -1,25 +1,34 @@
-use crate::VoxjFile;
 use crate::validation::{Error, Result, collect_voxj_failures};
+use crate::{DecodeBase64, VoxjFile};
 
 /// Checks a [`VoxjFile`] against the format's document rules, returning the
 /// first failure. This is the fail-fast counterpart of
 /// [`check_voxj_file`](crate::validation::check_voxj_file()), which runs every check and
-/// reports each result; both share one set of checks, listed there.
-pub fn validate_voxj_file(file: &VoxjFile) -> Result<()> {
-    match collect_voxj_failures(file, true).into_iter().next() {
+/// reports each result; both share one set of checks, listed there. The
+/// geometry checks decode each object's blocks through `dependencies`.
+pub fn validate_voxj_file<D: DecodeBase64>(dependencies: &D, file: &VoxjFile) -> Result<()> {
+    match collect_voxj_failures(dependencies, file, true)
+        .into_iter()
+        .next()
+    {
         Some((_, message)) => Err(Error::Invalid(message)),
         None => Ok(()),
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::validation::validate_voxj_file;
     use crate::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjPositionBlock,
-        VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValuePool,
+        DependenciesImpl, EncodeBase64, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
+        VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock,
+        VoxjTransform, VoxjValuePool,
     };
-    use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+
+    /// Standard base64 of `bytes`, for hand-built blocks.
+    fn base64(bytes: &[u8]) -> String {
+        DependenciesImpl.encode_base64(bytes)
+    }
 
     /// A `vec-4-float` value pool of four colors backing the property's
     /// value-indices, and an unreferenced one-value `float` value pool.
@@ -96,14 +105,14 @@ mod tests {
 
     #[test]
     fn accepts_a_valid_document() {
-        assert!(validate_voxj_file(&valid_file()).is_ok());
+        assert!(validate_voxj_file(&DependenciesImpl, &valid_file()).is_ok());
     }
 
     #[test]
     fn rejects_unrecognized_version() {
         let mut file = valid_file();
         file.version = 2;
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -114,7 +123,7 @@ mod tests {
             .runtime_state
             .value_pools
             .push(VoxjValuePool::Float(vec![]));
-        assert!(validate_voxj_file(&file).is_ok());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_ok());
     }
 
     #[test]
@@ -126,14 +135,14 @@ mod tests {
             properties: vec![property("baseColor", 0), property("baseColor", 0)],
             materials: (0..4).map(|i| vec![i, i]).collect(),
         };
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
     fn rejects_empty_property_name() {
         let mut file = valid_file();
         file.main.runtime_state.palettes[0].properties = vec![property("", 0)];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -141,7 +150,7 @@ mod tests {
         let mut file = valid_file();
         // One property but rows of two value-indices.
         file.main.runtime_state.palettes[0].materials = (0..4).map(|i| vec![i, i]).collect();
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -149,7 +158,7 @@ mod tests {
         let mut file = valid_file();
         // Value pool 0 has four values, so value-index 9 is out of range.
         file.main.runtime_state.palettes[0].materials = vec![vec![0], vec![1], vec![2], vec![9]];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -157,7 +166,7 @@ mod tests {
         let mut file = valid_file();
         // The document has two value pools; value pool 9 is out of range.
         file.main.runtime_state.palettes[0].properties = vec![property("baseColor", 9)];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -168,7 +177,7 @@ mod tests {
             properties: vec![property("baseColor", 0)],
             materials: vec![],
         });
-        assert!(validate_voxj_file(&file).is_ok());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_ok());
     }
 
     #[test]
@@ -180,7 +189,7 @@ mod tests {
             properties: vec![property("baseColor", 0), property("metallic", 0)],
             materials: vec![vec![0, 1], vec![0]],
         };
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -193,7 +202,7 @@ mod tests {
             properties: vec![],
             materials: vec![vec![], vec![], vec![], vec![]],
         };
-        assert!(validate_voxj_file(&file).is_ok());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_ok());
     }
 
     #[test]
@@ -205,14 +214,14 @@ mod tests {
             properties: vec![],
             materials: vec![vec![0]; 4],
         };
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
     fn rejects_layer_out_of_range() {
         let mut file = valid_file();
         file.main.runtime_state.objects[0].layers = vec![5];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -223,7 +232,7 @@ mod tests {
         file.main.runtime_state.objects[0].layers = vec![0, 0];
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![1, 3], vec![0, 2]]);
-        assert!(validate_voxj_file(&file).is_ok());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_ok());
     }
 
     #[test]
@@ -231,7 +240,7 @@ mod tests {
         let mut file = valid_file();
         // Two layers but a single channel; every layer carries a channel.
         file.main.runtime_state.objects[0].layers = vec![0, 0];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -239,7 +248,7 @@ mod tests {
         let mut file = valid_file();
         // One channel for the one layer, but only one value for two voxels.
         file.main.runtime_state.objects[0].voxel_samples = VoxjSampleBlock::RawJson(vec![vec![1]]);
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -248,7 +257,7 @@ mod tests {
         // Two channels where the object has one layer.
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![1, 0], vec![3, 0]]);
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -258,7 +267,7 @@ mod tests {
         // two voxels: voxel 0 samples material 1, voxel 1 samples material 9.
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![1, 9]]);
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -266,7 +275,7 @@ mod tests {
         let mut file = valid_file();
         file.main.runtime_state.objects[0].voxel_positions =
             VoxjPositionBlock::RawJson(vec![[0, 0, 0], [5, 0, 0]]);
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -274,49 +283,49 @@ mod tests {
         let mut file = valid_file();
         file.main.runtime_state.objects[0].voxel_positions =
             VoxjPositionBlock::RawJson(vec![[0, 0, 0], [0, 0, 0]]);
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
     fn rejects_child_node_out_of_range() {
         let mut file = valid_file();
         file.main.runtime_state.nodes[0].child_nodes = vec![9];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_child_node() {
         let mut file = valid_file();
         file.main.runtime_state.nodes[0].child_nodes = vec![1, 1];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
     fn rejects_child_object_out_of_range() {
         let mut file = valid_file();
         file.main.runtime_state.nodes[0].child_objects = vec![9];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_child_object() {
         let mut file = valid_file();
         file.main.runtime_state.nodes[0].child_objects = vec![0, 0];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
     fn rejects_root_out_of_range() {
         let mut file = valid_file();
         file.main.runtime_state.root_nodes = vec![9];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
     fn rejects_duplicate_root() {
         let mut file = valid_file();
         file.main.runtime_state.root_nodes = vec![0, 0];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -325,7 +334,7 @@ mod tests {
         // node 0 -> node 1 -> node 0.
         file.main.runtime_state.nodes[0].child_nodes = vec![1];
         file.main.runtime_state.nodes[1].child_nodes = vec![0];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -338,14 +347,14 @@ mod tests {
             node(vec![], vec![]),
         ];
         file.main.runtime_state.root_nodes = vec![0, 1];
-        assert!(validate_voxj_file(&file).is_ok());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_ok());
     }
 
     #[test]
     fn rejects_zero_scale() {
         let mut file = valid_file();
         file.main.runtime_state.nodes[0].transform.scale = [1.0, 0.0, 1.0];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -353,7 +362,7 @@ mod tests {
         let mut file = valid_file();
         // Length squared 4, well outside the unit tolerance.
         file.main.runtime_state.nodes[0].transform.rotation = [0.0, 0.0, 0.0, 2.0];
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -362,8 +371,8 @@ mod tests {
         // Cells 0 and 1 of the [2, 1, 1] grid occupied: bits 11 then six zero
         // pad bits, byte 0xC0. Two voxels, so the raw samples still fit.
         file.main.runtime_state.objects[0].voxel_positions =
-            VoxjPositionBlock::BitmapBase64(BASE64.encode([0xC0]));
-        assert!(validate_voxj_file(&file).is_ok());
+            VoxjPositionBlock::BitmapBase64(base64(&[0xC0]));
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_ok());
     }
 
     #[test]
@@ -377,7 +386,7 @@ mod tests {
             VoxjPositionBlock::HilbertDeltaVarintBase64("AAMBAw==".to_owned());
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![0, 1, 2, 3]]);
-        assert!(validate_voxj_file(&file).is_ok());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_ok());
     }
 
     #[test]
@@ -385,8 +394,8 @@ mod tests {
         let mut file = valid_file();
         // Byte 0xC1 sets one of the six pad bits past the two occupied cells.
         file.main.runtime_state.objects[0].voxel_positions =
-            VoxjPositionBlock::BitmapBase64(BASE64.encode([0xC1]));
-        assert!(validate_voxj_file(&file).is_err());
+            VoxjPositionBlock::BitmapBase64(base64(&[0xC1]));
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -395,7 +404,7 @@ mod tests {
         // '_' is a base64url character, not in the standard alphabet.
         file.main.runtime_state.objects[0].voxel_positions =
             VoxjPositionBlock::BitmapBase64("w_==".to_owned());
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -407,7 +416,7 @@ mod tests {
             VoxjPositionBlock::HilbertDeltaVarintBase64(String::new());
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![Vec::new()]);
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -418,10 +427,10 @@ mod tests {
         // which is how the strictly-positive-delta rule is enforced.
         file.main.runtime_state.objects[0].bounds = [1, 1, 1];
         file.main.runtime_state.objects[0].voxel_positions =
-            VoxjPositionBlock::HilbertDeltaVarintBase64(BASE64.encode([0x00, 0x00]));
+            VoxjPositionBlock::HilbertDeltaVarintBase64(base64(&[0x00, 0x00]));
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RawJson(vec![vec![0, 0]]);
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -430,8 +439,8 @@ mod tests {
         // Palette 0 has four materials, so packed width is 2. Two values fill
         // the top four bits; 0x71 sets one of the four pad bits.
         file.main.runtime_state.objects[0].voxel_samples =
-            VoxjSampleBlock::PackedBase64(vec![BASE64.encode([0x71])]);
-        assert!(validate_voxj_file(&file).is_err());
+            VoxjSampleBlock::PackedBase64(vec![base64(&[0x71])]);
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 
     #[test]
@@ -440,6 +449,6 @@ mod tests {
         // A dangling value with no count.
         file.main.runtime_state.objects[0].voxel_samples =
             VoxjSampleBlock::RleJson(vec![vec![1, 2, 3]]);
-        assert!(validate_voxj_file(&file).is_err());
+        assert!(validate_voxj_file(&DependenciesImpl, &file).is_err());
     }
 }

@@ -1,14 +1,17 @@
 use crate::{EditStateMode, Result, write_voxj};
 use voxcore::{VoxMain, ext::VoxExtSlot};
-use voxj::VoxjFile;
-use voxj::objects::{PositionEncoding, SampleEncoding};
+use voxj::{
+    CostVoxjObject, EncodeBase64, VoxjFile,
+    objects::{PositionEncoding, SampleEncoding},
+};
 
 /// Builds a [`VoxjFile`] from a [`VoxMain`], the configurable form of
-/// [`to_voxj_file`](crate::to_voxj_file). It defaults to the smallest
-/// per-object block encodings, persists the slot's `ext` block, and records
-/// the edit state automatically, reproducing the document that function
-/// writes.
-pub struct VoxjFileBuilder<'a, T> {
+/// [`to_voxj_file`](crate::to_voxj_file). It defaults to searching each
+/// object's block encodings for the lowest cost, persists the slot's `ext`
+/// block, and records the edit state automatically, reproducing the document
+/// that function writes.
+pub struct VoxjFileBuilder<'a, T, D> {
+    dependencies: &'a D,
     state: &'a VoxMain<T>,
     position_encoding: Option<PositionEncoding>,
     sample_encoding: Option<SampleEncoding>,
@@ -16,10 +19,15 @@ pub struct VoxjFileBuilder<'a, T> {
     edit_state: EditStateMode,
 }
 
-impl<'a, T: VoxExtSlot> VoxjFileBuilder<'a, T> {
+impl<'a, T: VoxExtSlot, D: EncodeBase64 + CostVoxjObject> VoxjFileBuilder<'a, T, D> {
     /// Starts a builder encoding `state` into a Voxel Json document.
-    pub fn new(state: &'a VoxMain<T>) -> Self {
+    ///
+    /// # Arguments
+    /// * `dependencies` - encodes the base64 blocks and costs a searched
+    ///   block's candidates. A pinned pair is never costed.
+    pub fn new(dependencies: &'a D, state: &'a VoxMain<T>) -> Self {
         Self {
+            dependencies,
             state,
             position_encoding: None,
             sample_encoding: None,
@@ -28,15 +36,15 @@ impl<'a, T: VoxExtSlot> VoxjFileBuilder<'a, T> {
         }
     }
 
-    /// Sets the position-block encoding, or `None` to search for the smallest
-    /// paired with the sample encoding.
+    /// Sets the position-block encoding, or `None` to search for the lowest
+    /// cost paired with the sample encoding.
     pub fn position_encoding(mut self, position_encoding: Option<PositionEncoding>) -> Self {
         self.position_encoding = position_encoding;
         self
     }
 
-    /// Sets the sample-block encoding, or `None` to search for the smallest
-    /// paired with the position encoding.
+    /// Sets the sample-block encoding, or `None` to search for the lowest
+    /// cost paired with the position encoding.
     pub fn sample_encoding(mut self, sample_encoding: Option<SampleEncoding>) -> Self {
         self.sample_encoding = sample_encoding;
         self
@@ -58,6 +66,7 @@ impl<'a, T: VoxExtSlot> VoxjFileBuilder<'a, T> {
     /// Builds the [`VoxjFile`].
     pub fn build(self) -> Result<VoxjFile> {
         write_voxj(
+            self.dependencies,
             self.state,
             self.position_encoding,
             self.sample_encoding,

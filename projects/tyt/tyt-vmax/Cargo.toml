@@ -24,7 +24,7 @@ ty-math = { version = "0.2.0", optional = true }
 tyt-common = { version = "0.1.0" }
 tyt-injection = { version = "0.1.0", optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
-voxj = { version = "0.1.3", features = ["objects"], optional = true }
+voxj = { version = "0.1.3", default-features = false, features = ["impl"], optional = true }
 voxj-codec = { version = "0.2.0", optional = true }
 voxj-voxcore = { version = "0.2.0", optional = true }
 voxsmith = { version = "0.2.0", optional = true }

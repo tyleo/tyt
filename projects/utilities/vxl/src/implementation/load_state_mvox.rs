@@ -1,5 +1,6 @@
 use crate::{Format, Result, implementation};
 use std::{fs, path::Path};
+use voxj::DependenciesImpl as VoxjDependenciesImpl;
 use voxj_voxcore::codec::from_voxj_bytes;
 use voxsmith::{MagicaVoxelVoxMain, from_mvox_bytes};
 
@@ -12,7 +13,7 @@ use voxsmith::{MagicaVoxelVoxMain, from_mvox_bytes};
 pub fn load_state_mvox(input: &Path, from: Option<Format>) -> Result<MagicaVoxelVoxMain> {
     match implementation::resolve_format(input, from)? {
         Format::MVox => Ok(from_mvox_bytes(&fs::read(input)?)?),
-        Format::Voxj => Ok(from_voxj_bytes(&fs::read(input)?)?),
+        Format::Voxj => Ok(from_voxj_bytes(&VoxjDependenciesImpl, &fs::read(input)?)?),
         format => Ok(implementation::load_state(input, Some(format))?.map_ext(|_| None)),
     }
 }

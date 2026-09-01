@@ -2,14 +2,14 @@ use crate::objects::{
     Error, PositionEncoding, Result, SampleEncoding, VoxjDecodedObject, encode_hilbert,
     encode_varint, hilbert_bits, pack_bits, packed_width,
 };
-use crate::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use crate::{EncodeBase64, VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
 /// Encodes one [`VoxjDecodedObject`] into a [`VoxjObject`] with the given fixed
 /// position and sample encodings. `material_counts` comes from
 /// [`voxj_palette_material_counts`](crate::objects::voxj_palette_material_counts());
 /// the sample block carries one channel per layer.
-pub fn encode_voxj_object(
+pub fn encode_voxj_object<D: EncodeBase64>(
+    dependencies: &D,
     object: &VoxjDecodedObject,
     material_counts: &[usize],
     position: PositionEncoding,
@@ -26,9 +26,9 @@ pub fn encode_voxj_object(
             VoxjSampleBlock::RawJson(vec![Vec::new(); num_channels]),
         )
     } else {
-        let (order, position_block) = encode_positions(object, position);
+        let (order, position_block) = encode_positions(dependencies, object, position);
         let channels = channels_in_order(&object.samples, &order, num_channels);
-        let sample_block = encode_samples(&channels, sample, material_counts);
+        let sample_block = encode_samples(dependencies, &channels, sample, material_counts);
         (position_block, sample_block)
     };
 
@@ -67,14 +67,19 @@ fn validate_object_shape(object: &VoxjDecodedObject, num_channels: usize) -> Res
 
 /// Encodes the voxel positions with `encoding`, returning the canonical voxel
 /// order and the block.
-fn encode_positions(
+fn encode_positions<D: EncodeBase64>(
+    dependencies: &D,
     object: &VoxjDecodedObject,
     encoding: PositionEncoding,
 ) -> (Vec<usize>, VoxjPositionBlock) {
     match encoding {
         PositionEncoding::RawJson => raw_positions(&object.positions),
-        PositionEncoding::BitmapBase64 => bitmap_positions(&object.positions, object.bounds),
-        PositionEncoding::Hilbert => hilbert_positions(&object.positions, object.bounds),
+        PositionEncoding::BitmapBase64 => {
+            bitmap_positions(dependencies, &object.positions, object.bounds)
+        }
+        PositionEncoding::Hilbert => {
+            hilbert_positions(dependencies, &object.positions, object.bounds)
+        }
     }
 }
 
@@ -98,7 +103,11 @@ fn cell_index(pos: [u32; 3], bounds: [u32; 3]) -> u64 {
 /// voxel. Each cell index is computed exactly once, by sorting
 /// `(cell index, voxel index)` pairs, and shared between the order permutation
 /// and the packed bits.
-fn bitmap_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, VoxjPositionBlock) {
+fn bitmap_positions<D: EncodeBase64>(
+    dependencies: &D,
+    positions: &[[u32; 3]],
+    bounds: [u32; 3],
+) -> (Vec<usize>, VoxjPositionBlock) {
     let mut indexed: Vec<(u64, usize)> = positions
         .iter()
         .enumerate()
@@ -118,7 +127,7 @@ fn bitmap_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, Vo
         debug_assert!(c < cells, "voxel cell {c} outside {cells}-cell bounds");
         bytes[c / 8] |= 1 << (7 - (c % 8));
     }
-    let block = VoxjPositionBlock::BitmapBase64(BASE64.encode(bytes));
+    let block = VoxjPositionBlock::BitmapBase64(dependencies.encode_base64(&bytes));
     (order, block)
 }
 
@@ -126,7 +135,11 @@ fn bitmap_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, Vo
 /// position block. Each voxel's Hilbert index is computed exactly once and
 /// shared between the order permutation and the encoded deltas. Sorting
 /// `(Hilbert index, voxel index)` pairs yields both in a single pass.
-fn hilbert_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, VoxjPositionBlock) {
+fn hilbert_positions<D: EncodeBase64>(
+    dependencies: &D,
+    positions: &[[u32; 3]],
+    bounds: [u32; 3],
+) -> (Vec<usize>, VoxjPositionBlock) {
     let bits = hilbert_bits(bounds);
     let mut indexed: Vec<(u64, usize)> = positions
         .iter()
@@ -145,7 +158,9 @@ fn hilbert_positions(positions: &[[u32; 3]], bounds: [u32; 3]) -> (Vec<usize>, V
             d
         })
         .collect();
-    let block = VoxjPositionBlock::HilbertDeltaVarintBase64(BASE64.encode(encode_varint(&deltas)));
+    let block = VoxjPositionBlock::HilbertDeltaVarintBase64(
+        dependencies.encode_base64(&encode_varint(&deltas)),
+    );
     (order, block)
 }
 
@@ -158,7 +173,8 @@ fn channels_in_order(samples: &[Vec<u32>], order: &[usize], num_channels: usize)
 }
 
 /// Encodes the per-layer `channels` with `encoding`.
-fn encode_samples(
+fn encode_samples<D: EncodeBase64>(
+    dependencies: &D,
     channels: &[Vec<u32>],
     encoding: SampleEncoding,
     channel_counts: &[usize],
@@ -166,7 +182,7 @@ fn encode_samples(
     match encoding {
         SampleEncoding::RawJson => samples_raw(channels),
         SampleEncoding::RleJson => samples_rle(channels),
-        SampleEncoding::PackedBase64 => samples_packed(channels, channel_counts),
+        SampleEncoding::PackedBase64 => samples_packed(dependencies, channels, channel_counts),
     }
 }
 
@@ -205,22 +221,26 @@ fn samples_rle(channels: &[Vec<u32>]) -> VoxjSampleBlock {
     VoxjSampleBlock::RleJson(channels.iter().map(|ch| rle_encode(ch)).collect())
 }
 
-fn samples_packed(channels: &[Vec<u32>], channel_counts: &[usize]) -> VoxjSampleBlock {
+fn samples_packed<D: EncodeBase64>(
+    dependencies: &D,
+    channels: &[Vec<u32>],
+    channel_counts: &[usize],
+) -> VoxjSampleBlock {
     let packed = channels
         .iter()
         .enumerate()
         .map(|(c, ch)| {
             let width = packed_width(channel_counts[c]);
-            BASE64.encode(pack_bits(ch, width))
+            dependencies.encode_base64(&pack_bits(ch, width))
         })
         .collect();
     VoxjSampleBlock::PackedBase64(packed)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::objects::{PositionEncoding, SampleEncoding, VoxjDecodedObject, encode_voxj_object};
-    use crate::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
+    use crate::{DependenciesImpl, VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 
     /// The object's sample block carries zero channels under every encoding:
     /// there are no layers to carry, and the voxel count lives in the
@@ -237,6 +257,7 @@ mod tests {
     fn zero_layer_object_keeps_sample_arity() {
         assert_no_channels(
             &encode_voxj_object(
+                &DependenciesImpl,
                 &VoxjDecodedObject {
                     name: "o".to_owned(),
                     layers: Vec::new(),
@@ -265,6 +286,7 @@ mod tests {
             samples: vec![vec![1], vec![2]],
         };
         let object = encode_voxj_object(
+            &DependenciesImpl,
             &object,
             &[4],
             PositionEncoding::BitmapBase64,
@@ -296,6 +318,7 @@ mod tests {
         };
         assert!(
             encode_voxj_object(
+                &DependenciesImpl,
                 &wrong_row_arity,
                 &[4, 4],
                 PositionEncoding::RawJson,
@@ -314,6 +337,7 @@ mod tests {
         };
         assert!(
             encode_voxj_object(
+                &DependenciesImpl,
                 &wrong_sample_count,
                 &[4],
                 PositionEncoding::RawJson,

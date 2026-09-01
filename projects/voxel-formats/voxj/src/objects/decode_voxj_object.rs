@@ -2,8 +2,7 @@ use crate::objects::{
     Error, MAX_HILBERT_BITS, Result, VoxjDecodedObject, decode_hilbert, decode_varint,
     hilbert_bits, packed_width, unpack_bits,
 };
-use crate::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
-use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use crate::{DecodeBase64, VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
 use std::iter;
 
 /// Decodes one [`VoxjObject`] into a [`VoxjDecodedObject`], the inverse of
@@ -13,12 +12,18 @@ use std::iter;
 /// the sample block must carry one channel per layer.
 ///
 /// Each returned `positions[k]` pairs with `samples[k]`.
-pub fn decode_voxj_object(
+pub fn decode_voxj_object<D: DecodeBase64>(
+    dependencies: &D,
     object: &VoxjObject,
     material_counts: &[usize],
 ) -> Result<VoxjDecodedObject> {
-    let positions = decode_positions(&object.voxel_positions, object.bounds)?;
-    let channels = decode_samples(&object.voxel_samples, material_counts, positions.len())?;
+    let positions = decode_positions(dependencies, &object.voxel_positions, object.bounds)?;
+    let channels = decode_samples(
+        dependencies,
+        &object.voxel_samples,
+        material_counts,
+        positions.len(),
+    )?;
     let samples = (0..positions.len())
         .map(|k| channels.iter().map(|channel| channel[k]).collect())
         .collect();
@@ -35,6 +40,13 @@ pub fn decode_voxj_object(
 /// Wraps a message describing malformed input as invalid data.
 fn invalid_data(message: String) -> Error {
     Error::Invalid(message)
+}
+
+/// Decodes a base64 block, reporting `label` when the text is not base64.
+fn decode_base64<D: DecodeBase64>(dependencies: &D, text: &str, label: &str) -> Result<Vec<u8>> {
+    dependencies
+        .decode_base64(text)
+        .map_err(|reason| invalid_data(format!("{label} is not base64: {reason}")))
 }
 
 /// A bit-packed base64 block, either a `bitmap-base64` position bitmap or a
@@ -72,13 +84,17 @@ fn cell_to_position(cell: u64, bounds: [u32; 3]) -> [u32; 3] {
 }
 
 /// Decodes the position block into `[x, y, z]` positions.
-fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> Result<Vec<[u32; 3]>> {
+fn decode_positions<D: DecodeBase64>(
+    dependencies: &D,
+    block: &VoxjPositionBlock,
+    bounds: [u32; 3],
+) -> Result<Vec<[u32; 3]>> {
     Ok(match block {
         VoxjPositionBlock::RawJson(positions) => positions.clone(),
 
         VoxjPositionBlock::BitmapBase64(base64) => {
             let cells = bounds[0] as usize * bounds[1] as usize * bounds[2] as usize;
-            let bytes = BASE64.decode(base64).map_err(Error::Base64)?;
+            let bytes = decode_base64(dependencies, base64, "bitmap position block")?;
             check_packed_bytes(&bytes, cells, "bitmap position block")?;
             unpack_bits(&bytes, 1, cells)
                 .iter()
@@ -103,21 +119,25 @@ fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> Result<Vec<[
             // spelled.
             let extent = 1u64 << (3 * bits);
             let mut index = 0u64;
-            decode_varint(&BASE64.decode(base64).map_err(Error::Base64)?)?
-                .iter()
-                .map(|&delta| {
-                    index = index
-                        .checked_add(delta)
-                        .filter(|&index| index < extent)
-                        .ok_or_else(|| {
-                            invalid_data(format!(
-                                "hilbert position block's deltas run past {extent}, the cell \
-                                 count of a {bits}-bit-per-axis curve"
-                            ))
-                        })?;
-                    Ok(decode_hilbert(index, bits))
-                })
-                .collect::<Result<Vec<_>>>()?
+            decode_varint(&decode_base64(
+                dependencies,
+                base64,
+                "hilbert position block",
+            )?)?
+            .iter()
+            .map(|&delta| {
+                index = index
+                    .checked_add(delta)
+                    .filter(|&index| index < extent)
+                    .ok_or_else(|| {
+                        invalid_data(format!(
+                            "hilbert position block's deltas run past {extent}, the cell \
+                             count of a {bits}-bit-per-axis curve"
+                        ))
+                    })?;
+                Ok(decode_hilbert(index, bits))
+            })
+            .collect::<Result<Vec<_>>>()?
         }
     })
 }
@@ -125,7 +145,8 @@ fn decode_positions(block: &VoxjPositionBlock, bounds: [u32; 3]) -> Result<Vec<[
 /// Decodes the sample block into one channel (`Vec<u32>` of length `n`) per
 /// layer, in the position block's voxel order. `channel_counts` holds one
 /// material count per layer.
-fn decode_samples(
+fn decode_samples<D: DecodeBase64>(
+    dependencies: &D,
     block: &VoxjSampleBlock,
     channel_counts: &[usize],
     n: usize,
@@ -158,12 +179,9 @@ fn decode_samples(
             .enumerate()
             .map(|(c, base64)| {
                 let width = packed_width(channel_counts[c]);
-                let bytes = BASE64.decode(base64).map_err(Error::Base64)?;
-                check_packed_bytes(
-                    &bytes,
-                    n * width as usize,
-                    &format!("packed sample channel {c}"),
-                )?;
+                let label = format!("packed sample channel {c}");
+                let bytes = decode_base64(dependencies, base64, &label)?;
+                check_packed_bytes(&bytes, n * width as usize, &label)?;
                 Ok(unpack_bits(&bytes, width, n))
             })
             .collect::<Result<Vec<_>>>()?,
@@ -203,14 +221,18 @@ fn rle_decode(rle: &[u32]) -> Result<Vec<u32>> {
     Ok(out)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::objects::{
         PositionEncoding, SampleEncoding, VoxjDecodedObject, decode_voxj_object, encode_voxj_object,
     };
-    use crate::{VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
-    use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+    use crate::{DependenciesImpl, EncodeBase64, VoxjObject, VoxjPositionBlock, VoxjSampleBlock};
     use std::collections::BTreeSet;
+
+    /// Standard base64 of `bytes`, for hand-built blocks.
+    fn base64(bytes: &[u8]) -> String {
+        DependenciesImpl.encode_base64(bytes)
+    }
 
     /// A one-layer object over the given bounds, position, and sample blocks.
     fn object(
@@ -276,9 +298,16 @@ mod tests {
             for sample in SAMPLES {
                 let object = sample_object();
                 let (expected, bounds) = (voxel_set(&object), object.bounds);
-                let encoded =
-                    encode_voxj_object(&object, &MATERIAL_COUNTS, position, sample).unwrap();
-                let decoded = decode_voxj_object(&encoded, &MATERIAL_COUNTS).unwrap();
+                let encoded = encode_voxj_object(
+                    &DependenciesImpl,
+                    &object,
+                    &MATERIAL_COUNTS,
+                    position,
+                    sample,
+                )
+                .unwrap();
+                let decoded =
+                    decode_voxj_object(&DependenciesImpl, &encoded, &MATERIAL_COUNTS).unwrap();
                 assert_eq!(
                     voxel_set(&decoded),
                     expected,
@@ -300,13 +329,14 @@ mod tests {
             samples: Vec::new(),
         };
         let encoded = encode_voxj_object(
+            &DependenciesImpl,
             &object,
             &[],
             PositionEncoding::RawJson,
             SampleEncoding::RawJson,
         )
         .unwrap();
-        let decoded = decode_voxj_object(&encoded, &[]).unwrap();
+        let decoded = decode_voxj_object(&DependenciesImpl, &encoded, &[]).unwrap();
         assert!(decoded.positions.is_empty());
         assert!(decoded.samples.is_empty());
     }
@@ -322,9 +352,15 @@ mod tests {
                 positions: vec![[0, 0, 0], [1, 0, 0]],
                 samples: vec![Vec::new(), Vec::new()],
             };
-            let encoded =
-                encode_voxj_object(&object, &[], PositionEncoding::BitmapBase64, sample).unwrap();
-            let decoded = decode_voxj_object(&encoded, &[]).unwrap();
+            let encoded = encode_voxj_object(
+                &DependenciesImpl,
+                &object,
+                &[],
+                PositionEncoding::BitmapBase64,
+                sample,
+            )
+            .unwrap();
+            let decoded = decode_voxj_object(&DependenciesImpl, &encoded, &[]).unwrap();
             assert_eq!(decoded.positions.len(), 2, "sample {sample:?}");
             assert!(
                 decoded.samples.iter().all(Vec::is_empty),
@@ -342,7 +378,7 @@ mod tests {
             two_raw_positions(),
             VoxjSampleBlock::RawJson(vec![vec![1]]),
         );
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// A packed channel with fewer bytes than the voxel count and bit width
@@ -354,7 +390,7 @@ mod tests {
             two_raw_positions(),
             VoxjSampleBlock::PackedBase64(vec![String::new()]),
         );
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// A sample block carrying more channels than the object has layers is
@@ -366,51 +402,70 @@ mod tests {
             VoxjPositionBlock::RawJson(vec![[0, 0, 0]]),
             VoxjSampleBlock::RleJson(vec![vec![0, 1], vec![0, 1]]),
         );
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
+    }
+
+    #[test]
+    fn rejects_a_non_base64_block() {
+        let bitmap = VoxjPositionBlock::BitmapBase64("not base64!".to_owned());
+        let object = object(
+            [2, 1, 1],
+            bitmap,
+            VoxjSampleBlock::RawJson(vec![vec![0, 0]]),
+        );
+        let Err(error) = decode_voxj_object(&DependenciesImpl, &object, &[4]) else {
+            panic!("a non-base64 block decodes");
+        };
+        assert!(
+            error
+                .to_string()
+                .starts_with("bitmap position block is not base64"),
+            "{error}"
+        );
     }
 
     /// A bitmap over two cells needs exactly one byte; a second byte makes the
     /// block longer than its bounds allow (spec rule 13.2).
     #[test]
     fn rejects_bitmap_with_extra_bytes() {
-        let bitmap = VoxjPositionBlock::BitmapBase64(BASE64.encode([0xC0, 0x00]));
+        let bitmap = VoxjPositionBlock::BitmapBase64(base64(&[0xC0, 0x00]));
         let object = object(
             [2, 1, 1],
             bitmap,
             VoxjSampleBlock::RawJson(vec![vec![0, 0]]),
         );
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// The bitmap's two cells fill the top two bits; a set bit among the final
     /// byte's six pad bits is malformed (spec rule 13.2).
     #[test]
     fn rejects_bitmap_with_nonzero_pad_bits() {
-        let bitmap = VoxjPositionBlock::BitmapBase64(BASE64.encode([0xC1]));
+        let bitmap = VoxjPositionBlock::BitmapBase64(base64(&[0xC1]));
         let object = object(
             [2, 1, 1],
             bitmap,
             VoxjSampleBlock::RawJson(vec![vec![0, 0]]),
         );
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// A packed channel for two width-2 values needs exactly one byte; a second
     /// byte is too long (spec rule 11.3).
     #[test]
     fn rejects_packed_with_extra_bytes() {
-        let packed = VoxjSampleBlock::PackedBase64(vec![BASE64.encode([0x70, 0x00])]);
+        let packed = VoxjSampleBlock::PackedBase64(vec![base64(&[0x70, 0x00])]);
         let object = object([2, 1, 1], two_raw_positions(), packed);
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// Two width-2 values fill the top four bits; a set bit among the final
     /// byte's four pad bits is malformed (spec rule 11.3).
     #[test]
     fn rejects_packed_with_nonzero_pad_bits() {
-        let packed = VoxjSampleBlock::PackedBase64(vec![BASE64.encode([0x71])]);
+        let packed = VoxjSampleBlock::PackedBase64(vec![base64(&[0x71])]);
         let object = object([2, 1, 1], two_raw_positions(), packed);
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// An odd-length run stream leaves a trailing value with no count (spec rule
@@ -419,7 +474,7 @@ mod tests {
     fn rejects_odd_length_rle() {
         let rle = VoxjSampleBlock::RleJson(vec![vec![1, 2, 3]]);
         let object = object([2, 1, 1], two_raw_positions(), rle);
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// A zero count is not a run and must be rejected (spec rule 11.2).
@@ -427,7 +482,7 @@ mod tests {
     fn rejects_zero_count_rle() {
         let rle = VoxjSampleBlock::RleJson(vec![vec![1, 0, 3, 2]]);
         let object = object([2, 1, 1], two_raw_positions(), rle);
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// A grid whose largest axis exceeds 131072 needs more than 17 Hilbert bits,
@@ -440,7 +495,7 @@ mod tests {
             hilbert,
             VoxjSampleBlock::RawJson(vec![Vec::new()]),
         );
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// A delta that runs the index past the curve names no cell. Summing it
@@ -450,25 +505,25 @@ mod tests {
         // `u64::MAX` as a varint: nine 0x FF continuation bytes then 0x01.
         let mut varint = vec![0xFFu8; 9];
         varint.push(0x01);
-        let hilbert = VoxjPositionBlock::HilbertDeltaVarintBase64(BASE64.encode(&varint));
+        let hilbert = VoxjPositionBlock::HilbertDeltaVarintBase64(base64(&varint));
         let object = object(
             [2, 2, 2],
             hilbert,
             VoxjSampleBlock::RawJson(vec![Vec::new()]),
         );
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 
     /// A single continuation byte ends the varint stream mid-value, so the
     /// hilbert block does not decode (spec rule 13.3.1).
     #[test]
     fn rejects_truncated_hilbert_varint() {
-        let hilbert = VoxjPositionBlock::HilbertDeltaVarintBase64(BASE64.encode([0x80]));
+        let hilbert = VoxjPositionBlock::HilbertDeltaVarintBase64(base64(&[0x80]));
         let object = object(
             [2, 1, 1],
             hilbert,
             VoxjSampleBlock::RawJson(vec![Vec::new()]),
         );
-        assert!(decode_voxj_object(&object, &[4]).is_err());
+        assert!(decode_voxj_object(&DependenciesImpl, &object, &[4]).is_err());
     }
 }

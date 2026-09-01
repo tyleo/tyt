@@ -1,6 +1,6 @@
-//! Validates a parsed [`VoxjFile`](crate::VoxjFile) against the format rules,
-//! gated behind the `validation` feature. The geometry checks decode each
-//! object's blocks, so the feature builds on `objects`.
+//! Validates a parsed [`VoxjFile`](crate::VoxjFile) against the format rules.
+//! The geometry checks decode each object's blocks through the caller's
+//! [`DecodeBase64`](crate::DecodeBase64).
 
 mod internal;
 pub(crate) use internal::*;

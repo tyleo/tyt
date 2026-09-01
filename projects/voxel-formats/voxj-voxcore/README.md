@@ -8,21 +8,26 @@ voxcore's in-memory `VoxMain` and back.
 
 - `from_voxj_file` / `to_voxj_file`: between a parsed `VoxjFile` and a
   `VoxMain`, decoding and re-encoding each object's position and sample
-  blocks.
+  blocks. The writer searches each object's block encodings for the pairing
+  with the lowest cost.
 - `VoxjFileBuilder`: the configurable writer, with control over the block
   encodings, the ext block, and when the edit state records each object's
   editor build volume (`EditStateMode`).
 
+Each takes the caller's voxj dependencies: `DecodeBase64` to load,
+`EncodeBase64` and `CostVoxjObject` to write. `voxj::DependenciesImpl`
+supplies all three.
+
 ## Bytes conversion
 
-The `codec` module, behind the default `codec` feature, pulls in `voxj-codec`
-and goes straight to and from file bytes:
+The `codec` module, behind the default `codec` feature, goes straight to and
+from file bytes over `voxj-codec`:
 
-- `codec::from_voxj_bytes`: `.voxj` or `.voxjz` bytes into a `VoxMain`,
+- `codec::from_voxj_bytes`: `.voxj` or `.voxjz` bytes into a `VoxMain`, with
   the container form detected from the leading bytes.
 - `codec::to_voxj_bytes` / `codec::to_voxjz_bytes`: a state to compact `.voxj`
-  JSON or a `.voxjz` zip archive, choosing the smallest block encodings per
-  object; the `*_with` variants fix the encodings instead.
+  JSON or a `.voxjz` zip archive, choosing each object's block encodings by
+  the lowest cost. The `*_with` variants fix the encodings.
 
 ## The ext block
 

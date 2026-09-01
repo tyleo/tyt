@@ -1,5 +1,6 @@
 use crate::{Format, Result, implementation};
 use std::{fs, path::Path};
+use voxj::DependenciesImpl as VoxjDependenciesImpl;
 use voxj_voxcore::codec::from_voxj_bytes;
 use voxsmith::{GoxelVoxMain, from_goxl_bytes};
 
@@ -12,7 +13,7 @@ use voxsmith::{GoxelVoxMain, from_goxl_bytes};
 pub fn load_state_goxl(input: &Path, from: Option<Format>) -> Result<GoxelVoxMain> {
     match implementation::resolve_format(input, from)? {
         Format::Goxl => Ok(from_goxl_bytes(&fs::read(input)?)?),
-        Format::Voxj => Ok(from_voxj_bytes(&fs::read(input)?)?),
+        Format::Voxj => Ok(from_voxj_bytes(&VoxjDependenciesImpl, &fs::read(input)?)?),
         format => Ok(implementation::load_state(input, Some(format))?.map_ext(|_| None)),
     }
 }

@@ -6,7 +6,8 @@ use crate::{
 use ty_math::TyVector3U32;
 use voxcore::{VoxMain, VoxObject, ext::VoxExtSlot};
 use voxj::{
-    VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain, VoxjRuntimeState,
+    CostVoxjObject, EncodeBase64, VoxjEditObject, VoxjEditState, VoxjFile, VoxjMain,
+    VoxjRuntimeState,
     objects::{
         PositionEncoding, Result as ObjectsResult, SampleEncoding, encode_voxj_object_optimized,
         voxj_palette_material_counts,
@@ -27,13 +28,17 @@ const VOXJ_FORMAT_VERSION: u32 = 1;
 /// each id equals its listing index and the cross references land intact.
 ///
 /// # Arguments
+/// * `dependencies` - encodes the base64 blocks and costs a searched block's
+///   candidates. A pinned pair is never costed.
 /// * `state` - the voxel model to encode.
 /// * `position` - position-block encoding, or `None` to search for the
-///   smallest.
-/// * `sample` - sample-block encoding, or `None` to search for the smallest.
+///   lowest cost.
+/// * `sample` - sample-block encoding, or `None` to search for the lowest
+///   cost.
 /// * `ext` - when false, omits the slot's `ext` extension block.
 /// * `edit_state` - when to record each object's editor build volume.
-pub fn write_voxj<T: VoxExtSlot>(
+pub fn write_voxj<T: VoxExtSlot, D: EncodeBase64 + CostVoxjObject>(
+    dependencies: &D,
     state: &VoxMain<T>,
     position: Option<PositionEncoding>,
     sample: Option<SampleEncoding>,
@@ -55,7 +60,7 @@ pub fn write_voxj<T: VoxExtSlot>(
         .map(|(object_id, _)| {
             let decoded = voxj_decoded_object_from_vox_object(state, object_id);
             let material_counts = voxj_palette_material_counts(&decoded.layers, &palettes)?;
-            encode_voxj_object_optimized(&decoded, &material_counts, position, sample)
+            encode_voxj_object_optimized(dependencies, &decoded, &material_counts, position, sample)
         })
         .collect::<ObjectsResult<Vec<_>>>()?;
 

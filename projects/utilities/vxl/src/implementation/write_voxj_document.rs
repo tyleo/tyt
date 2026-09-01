@@ -1,7 +1,10 @@
 use crate::{Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding};
 use std::{fs, path::Path};
 use voxcore::{VoxMain, ext::VoxExtSlot};
-use voxj::objects::{PositionEncoding, SampleEncoding};
+use voxj::{
+    DependenciesImpl as VoxjDependenciesImpl,
+    objects::{PositionEncoding, SampleEncoding},
+};
 use voxj_codec::{to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes};
 use voxj_voxcore::{EditStateMode, VoxjFileBuilder};
 
@@ -25,7 +28,7 @@ pub fn write_voxj_document<T: VoxExtSlot>(
     ext: bool,
     edit_state: EditStateMode,
 ) -> Result<()> {
-    let file = VoxjFileBuilder::new(&state)
+    let file = VoxjFileBuilder::new(&VoxjDependenciesImpl, &state)
         .position_encoding(position_encoding(encoding.position))
         .sample_encoding(sample_encoding(encoding.sample))
         .ext(ext)

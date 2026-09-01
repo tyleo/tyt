@@ -1,5 +1,5 @@
-use crate::VoxjFile;
 use crate::validation::{VoxjCheck, build_voxj_report, collect_voxj_failures};
+use crate::{DecodeBase64, VoxjFile};
 
 /// Checks a [`VoxjFile`] against every one of the format's document rules and
 /// returns one [`VoxjCheck`] per check, in a fixed order, each marked passed,
@@ -38,19 +38,25 @@ use crate::validation::{VoxjCheck, build_voxj_report, collect_voxj_failures};
 /// A check whose work an earlier failure made moot reports no failure rather
 /// than a spurious one: an object's geometry checks are skipped when its layers
 /// do not resolve, so they may read as passed while `indices` carries the real
-/// fault.
-pub fn check_voxj_file(file: &VoxjFile) -> Vec<VoxjCheck> {
-    build_voxj_report(collect_voxj_failures(file, false))
+/// fault. The geometry checks decode each object's blocks through
+/// `dependencies`.
+pub fn check_voxj_file<D: DecodeBase64>(dependencies: &D, file: &VoxjFile) -> Vec<VoxjCheck> {
+    build_voxj_report(collect_voxj_failures(dependencies, file, false))
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::validation::{VoxjCheck, VoxjCheckStatus, check_voxj_file};
     use crate::{
-        VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject, VoxjPalette, VoxjPositionBlock,
-        VoxjProperty, VoxjRuntimeState, VoxjSampleBlock, VoxjTransform, VoxjValuePool,
+        DependenciesImpl, EncodeBase64, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjObject,
+        VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock,
+        VoxjTransform, VoxjValuePool,
     };
-    use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+
+    /// Standard base64 of `bytes`, for hand-built blocks.
+    fn base64(bytes: &[u8]) -> String {
+        DependenciesImpl.encode_base64(bytes)
+    }
 
     /// A `vec-4-float` value pool of four colors backing the property's
     /// value-indices, and an unreferenced one-value `float` value pool.
@@ -131,7 +137,7 @@ mod tests {
 
     #[test]
     fn reports_every_check_in_order() {
-        let checks = check_voxj_file(&valid_file());
+        let checks = check_voxj_file(&DependenciesImpl, &valid_file());
         let names: Vec<&str> = checks.iter().map(|check| check.name).collect();
         assert_eq!(
             names,
@@ -154,7 +160,7 @@ mod tests {
 
     #[test]
     fn passes_every_check_for_a_valid_document() {
-        let checks = check_voxj_file(&valid_file());
+        let checks = check_voxj_file(&DependenciesImpl, &valid_file());
         for check in &checks {
             let expected = if check.name == "sample-order" {
                 VoxjCheckStatus::Unverifiable
@@ -173,7 +179,7 @@ mod tests {
         file.main.runtime_state.objects[0].layers = vec![5];
         file.main.runtime_state.nodes[0].transform.scale = [1.0, 0.0, 1.0];
         file.main.runtime_state.nodes[1].transform.rotation = [0.0, 0.0, 0.0, 2.0];
-        let checks = check_voxj_file(&file);
+        let checks = check_voxj_file(&DependenciesImpl, &file);
 
         assert!(matches!(
             status(&checks, "indices"),
@@ -200,7 +206,7 @@ mod tests {
         // root.
         file.main.runtime_state.objects[0].layers = vec![5];
         file.main.runtime_state.root_nodes = vec![0, 0];
-        let checks = check_voxj_file(&file);
+        let checks = check_voxj_file(&DependenciesImpl, &file);
         match status(&checks, "indices") {
             VoxjCheckStatus::Failed(messages) => assert_eq!(messages.len(), 2),
             other => panic!("expected indices to fail, got {other:?}"),
@@ -213,7 +219,7 @@ mod tests {
         // Value pool 0 has four values, so value-index 9 in material 3's row
         // is out of range.
         file.main.runtime_state.palettes[0].materials = vec![vec![0], vec![1], vec![2], vec![9]];
-        let checks = check_voxj_file(&file);
+        let checks = check_voxj_file(&DependenciesImpl, &file);
         assert!(matches!(
             status(&checks, "palettes"),
             VoxjCheckStatus::Failed(_)
@@ -236,7 +242,7 @@ mod tests {
             }],
             materials: vec![],
         });
-        let checks = check_voxj_file(&file);
+        let checks = check_voxj_file(&DependenciesImpl, &file);
         assert_eq!(*status(&checks, "palettes"), VoxjCheckStatus::Passed);
     }
 
@@ -247,8 +253,8 @@ mod tests {
         // block-internal fault reports through `blocks`. The later geometry
         // checks are skipped for the object, so they still read as passed.
         file.main.runtime_state.objects[0].voxel_positions =
-            VoxjPositionBlock::BitmapBase64(BASE64.encode([0xC1]));
-        let checks = check_voxj_file(&file);
+            VoxjPositionBlock::BitmapBase64(base64(&[0xC1]));
+        let checks = check_voxj_file(&DependenciesImpl, &file);
         assert!(matches!(
             status(&checks, "blocks"),
             VoxjCheckStatus::Failed(_)
@@ -261,7 +267,7 @@ mod tests {
 
     #[test]
     fn sample_order_is_always_unverifiable() {
-        let checks = check_voxj_file(&valid_file());
+        let checks = check_voxj_file(&DependenciesImpl, &valid_file());
         assert_eq!(
             *status(&checks, "sample-order"),
             VoxjCheckStatus::Unverifiable

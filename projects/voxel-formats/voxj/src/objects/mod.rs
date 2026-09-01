@@ -1,12 +1,14 @@
 //! Decodes and encodes the voxel-position and voxel-sample blocks of a
-//! [`VoxjObject`](crate::VoxjObject), gated behind the `objects` feature.
+//! [`VoxjObject`](crate::VoxjObject). The `*-base64` encodings transcode
+//! through the caller's [`EncodeBase64`](crate::EncodeBase64) and
+//! [`DecodeBase64`](crate::DecodeBase64). The encoding search ranks its
+//! candidates through [`CostVoxjObject`](crate::CostVoxjObject).
 
 mod internal;
 pub(crate) use internal::*;
 
 mod decode_voxj_object;
 mod encode_voxj_object;
-#[cfg(feature = "optimize")]
 mod encode_voxj_object_optimized;
 mod error;
 mod hilbert_bits;
@@ -19,7 +21,6 @@ mod voxj_palette_material_counts;
 
 pub use decode_voxj_object::*;
 pub use encode_voxj_object::*;
-#[cfg(feature = "optimize")]
 pub use encode_voxj_object_optimized::*;
 pub use error::*;
 pub use hilbert_bits::*;

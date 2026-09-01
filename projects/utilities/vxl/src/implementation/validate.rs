@@ -7,7 +7,10 @@ use std::{
 use treegrid::{
     TreeGrid, TreeGridJsonValue, TreeGridJsonValueCells, TreeGridLabel, TreeGridRenderJson,
 };
-use voxj::validation::{VoxjCheck, VoxjCheckStatus, check_voxj_file};
+use voxj::{
+    DependenciesImpl as VoxjDependenciesImpl,
+    validation::{VoxjCheck, VoxjCheckStatus, check_voxj_file},
+};
 use voxj_codec::from_voxj_or_voxjz_file_bytes;
 
 /// Loads the Voxel Json document at `input`, runs every spec check, writes the
@@ -16,7 +19,7 @@ use voxj_codec::from_voxj_or_voxjz_file_bytes;
 /// than through voxcore, since the checks inspect the on-disk encoding.
 pub fn validate(input: &Path, layout: ValidateLayout) -> Result<()> {
     let file = from_voxj_or_voxjz_file_bytes(&fs::read(input)?)?;
-    let checks = check_voxj_file(&file);
+    let checks = check_voxj_file(&VoxjDependenciesImpl, &file);
     let output = render(&checks, &file_name(input), layout);
     implementation::write_stdout(output.as_bytes())?;
 
