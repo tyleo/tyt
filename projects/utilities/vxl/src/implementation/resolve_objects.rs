@@ -5,7 +5,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain};
+use voxsmith::voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain};
 
 /// A hierarchy-node id.
 type NodeId = U32Id<BVoxHierarchyNode>;
@@ -199,7 +199,7 @@ mod tests {
     use super::{NodeId, ObjectId, select_objects};
     use crate::SelectIndex;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxHierarchyNode, VoxMain, VoxObject};
+    use voxsmith::voxcore::{VoxHierarchyNode, VoxMain, VoxObject};
 
     /// Adds an empty named object and returns its id.
     fn object_id(state: &mut VoxMain, name: &str) -> ObjectId {

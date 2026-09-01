@@ -21,7 +21,7 @@ use treegrid::{
     TreeGridRenderTables, TreeGridSwatch, TreeGridTableShapeKind,
 };
 use ty_math::{TyLinSrgbF64, TyLinSrgbaF64, TySrgbF64, TySrgbaF64};
-use voxcore::{
+use voxsmith::voxcore::{
     BVoxValuePoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool, VoxValuePoolKind,
     VoxValuePoolValueRef, material::MaterialPropertyKind,
 };
@@ -761,7 +761,9 @@ mod tests {
     use std::num::NonZeroU8;
     use treegrid::{TreeGrid, TreeGridJsonValueCells};
     use ty_math::TySrgbaU8;
-    use voxcore::{BVoxValuePool, BVoxValuePoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool};
+    use voxsmith::voxcore::{
+        BVoxValuePool, BVoxValuePoolValue, VoxMain, VoxPalette, VoxValue, VoxValuePool,
+    };
 
     /// The branded value id `index`.
     fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {

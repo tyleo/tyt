@@ -13,6 +13,10 @@ use std::{
 #[cfg(feature = "vmax")]
 use vmax_codec::Error as VMaxError;
 use voxcore::Error as VoxError;
+#[cfg(feature = "voxj")]
+use voxj_codec::Error as VoxjCodecError;
+#[cfg(feature = "voxj")]
+use voxj_voxcore::Error as VoxjError;
 
 /// An error from voxsmith.
 #[derive(Debug)]
@@ -22,6 +26,10 @@ pub enum Error {
 
     /// A voxcore construction, mutation, or insertion was rejected.
     Vox(VoxError),
+
+    /// Converting a Voxel Json document failed.
+    #[cfg(feature = "voxj")]
+    Voxj(VoxjError),
 
     /// Decoding a MagicaVoxel `.vox` file failed.
     #[cfg(feature = "mvox")]
@@ -56,6 +64,8 @@ impl Display for Error {
         match self {
             Error::Invalid(message) => write!(f, "{message}"),
             Error::Vox(error) => error.fmt(f),
+            #[cfg(feature = "voxj")]
+            Error::Voxj(error) => error.fmt(f),
             #[cfg(feature = "mvox")]
             Error::MVox(error) => error.fmt(f),
             #[cfg(feature = "vmax")]
@@ -75,6 +85,8 @@ impl StdError for Error {
         match self {
             Error::Invalid(_) => None,
             Error::Vox(error) => Some(error),
+            #[cfg(feature = "voxj")]
+            Error::Voxj(error) => Some(error),
             #[cfg(feature = "mvox")]
             Error::MVox(error) => Some(error),
             #[cfg(feature = "vmax")]
@@ -92,6 +104,21 @@ impl StdError for Error {
 impl From<VoxError> for Error {
     fn from(error: VoxError) -> Self {
         Error::Vox(error)
+    }
+}
+
+#[cfg(feature = "voxj")]
+impl From<VoxjError> for Error {
+    fn from(error: VoxjError) -> Self {
+        Error::Voxj(error)
+    }
+}
+
+/// A document byte codec failure is the codec case of the Voxel Json error.
+#[cfg(feature = "voxj")]
+impl From<VoxjCodecError> for Error {
+    fn from(error: VoxjCodecError) -> Self {
+        Error::Voxj(VoxjError::from(error))
     }
 }
 

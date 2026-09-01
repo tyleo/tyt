@@ -11,7 +11,7 @@ use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use voxcore::{
+use voxsmith::voxcore::{
     VoxEffectivePalette, VoxMain, VoxObject, VoxValuePool, VoxValuePoolKind,
     material::{BASE_COLOR, EMISSIVE_COLOR, EMISSIVE_STRENGTH, MaterialPropertyKind},
 };
@@ -333,7 +333,9 @@ mod tests {
     use crate::VectorComponent;
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxsmith::voxcore::{
+        BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool,
+    };
 
     /// The branded value id `index`.
     fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {

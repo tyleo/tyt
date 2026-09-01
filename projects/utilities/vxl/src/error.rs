@@ -57,27 +57,6 @@ impl From<vmax_codec::Error> for Error {
 }
 
 #[cfg(feature = "impl")]
-impl From<voxcore::ext::Error> for Error {
-    fn from(e: voxcore::ext::Error) -> Self {
-        Error::IO(IOError::other(e))
-    }
-}
-
-#[cfg(feature = "impl")]
-impl From<voxj_codec::Error> for Error {
-    fn from(e: voxj_codec::Error) -> Self {
-        Error::IO(IOError::other(e))
-    }
-}
-
-#[cfg(feature = "impl")]
-impl From<voxj_voxcore::Error> for Error {
-    fn from(e: voxj_voxcore::Error) -> Self {
-        Error::IO(IOError::other(e))
-    }
-}
-
-#[cfg(feature = "impl")]
 impl From<voxsmith::Error> for Error {
     fn from(e: voxsmith::Error) -> Self {
         Error::IO(IOError::other(e))

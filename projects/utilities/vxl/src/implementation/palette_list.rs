@@ -13,7 +13,7 @@ use treegrid::{
     TreeGridLabel, TreeGridRecordsTableOptions, TreeGridRenderHierarchy, TreeGridRenderJson,
     TreeGridRenderTables, TreeGridTableShape, TreeGridValue,
 };
-use voxcore::{BVoxPalette, VoxMain, VoxPalette};
+use voxsmith::voxcore::{BVoxPalette, VoxMain, VoxPalette};
 
 /// A selected palette paired with its id, the working unit the renderers walk.
 type Entry<'a> = (U32Id<BVoxPalette>, &'a VoxPalette);
@@ -202,7 +202,7 @@ mod tests {
     use branded_id::U32Id;
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxsmith::voxcore::{BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// The branded value id `index`.
     fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {

@@ -7,19 +7,14 @@ use std::{
 use treegrid::{
     TreeGrid, TreeGridJsonValue, TreeGridJsonValueCells, TreeGridLabel, TreeGridRenderJson,
 };
-use voxj::{
-    DependenciesImpl as VoxjDependenciesImpl,
-    validation::{VoxjCheck, VoxjCheckStatus, check_voxj_file},
-};
-use voxj_codec::from_voxj_or_voxjz_file_bytes;
+use voxsmith::{VoxjCheck, VoxjCheckStatus, check_voxj_bytes};
 
 /// Loads the Voxel Json document at `input`, runs every spec check, writes the
 /// report in `layout` to standard output, and fails when any check failed so
 /// the process exits non-zero. The document is read as raw Voxel Json rather
 /// than through voxcore, since the checks inspect the on-disk encoding.
 pub fn validate(input: &Path, layout: ValidateLayout) -> Result<()> {
-    let file = from_voxj_or_voxjz_file_bytes(&fs::read(input)?)?;
-    let checks = check_voxj_file(&VoxjDependenciesImpl, &file);
+    let checks = check_voxj_bytes(&fs::read(input)?)?;
     let output = render(&checks, &file_name(input), layout);
     implementation::write_stdout(output.as_bytes())?;
 
@@ -136,7 +131,7 @@ fn plural(count: usize) -> &'static str {
 mod tests {
     use crate::{commands::ValidateLayout, implementation::validate::render};
     use serde_json::Value;
-    use voxj::validation::{VoxjCheck, VoxjCheckStatus};
+    use voxsmith::{VoxjCheck, VoxjCheckStatus};
 
     /// One passing, one failing (with a message), and the unverifiable check.
     fn checks() -> Vec<VoxjCheck> {

@@ -1,21 +1,12 @@
 use crate::{Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding};
-use std::{
-    io::{Error as IOError, ErrorKind},
-    path::Path,
-};
+use std::{io::ErrorKind, path::Path};
 use vmax_codec::from_vmax_package;
-use voxj::{
-    DependenciesImpl as VoxjDependenciesImpl,
-    objects::{PositionEncoding, SampleEncoding},
-};
-use voxj_codec::{to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes};
-use voxj_voxcore::VoxjFileBuilder;
-use voxsmith::from_vmax_file;
+use voxsmith::{PositionEncoding, SampleEncoding, VoxjFileBuilder, from_vmax_file};
 
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
 /// stdout, round-tripping through voxcore: the package is loaded, voxsmith
-/// loads it into a [`VoxMain`](voxcore::VoxMain), and voxj-voxcore encodes it
-/// into a voxj document, which is then serialized.
+/// loads it into a [`VoxMain`](voxsmith::voxcore::VoxMain) and encodes it into
+/// a voxj document, which is then serialized.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
     // Load: read the whole package into the lossless Voxel Max model.
     let serde = from_vmax_package(
@@ -52,16 +43,14 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
     // document's `ext` block.
     let state = from_vmax_file(&serde)?;
     let (position, sample) = block_encoding(encoding);
-    let serialized = VoxjFileBuilder::new(&VoxjDependenciesImpl, &state)
+    let builder = VoxjFileBuilder::new(&state)
         .position_encoding(position)
-        .sample_encoding(sample)
-        .build()?;
+        .sample_encoding(sample);
     let bytes = match format {
-        VoxjFormat::Json => to_voxj_file_bytes(&serialized),
-        VoxjFormat::PrettyJson => to_voxj_pretty_file_bytes(&serialized),
-        VoxjFormat::Zip => to_voxjz_file_bytes(&serialized),
-    }
-    .map_err(|e| IOError::new(ErrorKind::InvalidData, e))?;
+        VoxjFormat::Json => builder.to_voxj_bytes()?,
+        VoxjFormat::PrettyJson => builder.to_voxj_pretty_bytes()?,
+        VoxjFormat::Zip => builder.to_voxjz_bytes()?,
+    };
 
     tyt_injection::write_stdout(&bytes)?;
     Ok(())

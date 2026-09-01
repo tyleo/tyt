@@ -4,7 +4,7 @@ use voxsmith::to_goxl_bytes;
 
 /// Converts the voxel file at `input` into a Goxel `.gox` file at `output`,
 /// round-tripping through voxcore: the input is loaded into a
-/// [`VoxMain`](voxcore::VoxMain), then encoded back to `.gox` bytes.
+/// [`VoxMain`](voxsmith::voxcore::VoxMain), then encoded back to `.gox` bytes.
 pub fn to_goxl(input: &Path, from: Option<Format>, output: &Path) -> Result<()> {
     let state = implementation::load_state_goxl(input, from)?;
     let bytes = to_goxl_bytes(&state)?;

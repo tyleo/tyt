@@ -6,8 +6,10 @@ use treegrid::{
     TreeGridRecordsTableOptions, TreeGridRenderJson, TreeGridRenderTables, TreeGridTableShape,
     TreeGridValue,
 };
-use voxcore::{VoxMain, VoxObject};
-use voxj_codec::from_voxj_or_voxjz_file_bytes;
+use voxsmith::{
+    voxcore::{VoxMain, VoxObject},
+    voxj_version_from_bytes,
+};
 
 /// The record sections' heading level, beneath the `# {input}` title the
 /// command prints itself.
@@ -42,7 +44,7 @@ pub fn info(input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()
 
 /// The Voxel Json document version of `input`; voxcore does not carry it.
 fn read_voxj_version(input: &Path) -> Result<u32> {
-    Ok(from_voxj_or_voxjz_file_bytes(&fs::read(input)?)?.version)
+    Ok(voxj_version_from_bytes(&fs::read(input)?)?)
 }
 
 /// Renders the report for `state` in `layout`, the testable core of [`info`].
@@ -374,7 +376,7 @@ mod tests {
     use branded_id::U32Id;
     use serde_json::Value;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
+    use voxsmith::voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
 
     /// One `baseColor` palette and one tight 1x1x1 object sampling its one
     /// material.

@@ -17,7 +17,7 @@ use treegrid::{
 };
 use treeselect::TreeSelection;
 use ty_math::{TyQuaternionExt, TyTransformF64, TyVector3F64};
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
+use voxsmith::voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain, VoxObject};
 
 /// A hierarchy-node id in the loaded [`VoxMain`], aliased so signatures stay
 /// short and a node id never mixes with an object id.
@@ -1089,7 +1089,7 @@ mod tests {
     };
     use branded_id::U32Id;
     use ty_math::{TyQuaternionF64, TyTransformF64, TyVector3F64, TyVector3I32, TyVector3U32};
-    use voxcore::{
+    use voxsmith::voxcore::{
         BVoxHierarchyNode, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain, VoxObject,
         VoxPalette, VoxValuePool,
     };

@@ -9,8 +9,12 @@
 //! converted across formats drops that ext explicitly through
 //! [`VoxMain::map_ext`](voxcore::VoxMain::map_ext). The `ext` feature keys
 //! each format's ext into a document's `ext` block through voxcore's
-//! [`VoxExtCodec`](voxcore::ext::VoxExtCodec). voxj-voxcore's typed loads and
-//! writes carry that block across formats. For Voxel Max the crate converts
+//! [`VoxExtCodec`](voxcore::ext::VoxExtCodec). For Voxel Json the crate
+//! fronts voxj-voxcore's typed loads and writes, which carry that block
+//! across formats ([`from_voxj_bytes`] / [`to_voxj_bytes`], with
+//! [`VoxjFileBuilder`] over the block encodings, the ext block, and the
+//! edit state), and runs the spec checks over a document
+//! ([`check_voxj_bytes`]). For Voxel Max the crate converts
 //! to and from the lossless `VMaxFile` ([`from_vmax_file`] /
 //! [`to_vmax_file`]), carrying the [`VoxelMaxExt`]. For
 //! MagicaVoxel it converts to and from a decoded `MVoxFile`
@@ -27,7 +31,13 @@
 //! [`QubicleQbclExt`].
 
 #[cfg(not(feature = "_codec"))]
-compile_error!("voxsmith needs at least one codec feature enabled: goxl, mvox, qbcl, or vmax");
+compile_error!(
+    "voxsmith needs at least one codec feature enabled: goxl, mvox, qbcl, vmax, or voxj"
+);
+
+// Re-exported so a consumer names the state types every converter here
+// exchanges through this crate.
+pub use voxcore;
 
 #[cfg(any(feature = "_codec", feature = "_mesh"))]
 mod internal;

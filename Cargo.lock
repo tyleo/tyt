@@ -1938,9 +1938,6 @@ dependencies = [
  "tyt-common",
  "tyt-injection",
  "vmax-codec",
- "voxj",
- "voxj-codec",
- "voxj-voxcore",
  "voxsmith",
 ]
 
@@ -2115,6 +2112,9 @@ dependencies = [
  "vmax",
  "vmax-codec",
  "voxcore",
+ "voxj",
+ "voxj-codec",
+ "voxj-voxcore",
 ]
 
 [[package]]
@@ -2133,9 +2133,6 @@ dependencies = [
  "vmax",
  "vmax-codec",
  "voxcore",
- "voxj",
- "voxj-codec",
- "voxj-voxcore",
  "voxsmith",
 ]
 

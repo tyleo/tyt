@@ -26,7 +26,7 @@ const TOP_CORNER_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
 
 /// Converts the voxel file at `input` into a Voxel Max `.vmax` package
 /// directory at `output`, round-tripping through voxcore: the input is loaded
-/// into a [`VoxMain`](voxcore::VoxMain), written back out to the lossless Voxel
+/// into a [`VoxMain`](voxsmith::voxcore::VoxMain), written back out to the lossless Voxel
 /// Max model, then emitted one file per package entry. `color_format` selects
 /// where each palette's colors live and `camera` the scene camera the document
 /// opens with.

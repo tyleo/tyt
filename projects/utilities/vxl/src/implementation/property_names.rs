@@ -1,4 +1,4 @@
-use voxcore::VoxPalette;
+use voxsmith::voxcore::VoxPalette;
 
 /// A palette's property keys, in id order.
 pub(crate) fn property_names(palette: &VoxPalette) -> Vec<&str> {

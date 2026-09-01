@@ -8,18 +8,17 @@ use crate::{
 };
 use std::{fs, path::Path};
 use ty_math::{TyVector3F64, TyVector3U32};
-use voxcore::VoxMain;
-use voxj_voxcore::EditStateMode;
 use voxsmith::{
-    ColorSpace as VoxsmithColorSpace, Dither as VoxsmithDither, FillMode as VoxsmithFillMode,
-    MaterialMode as VoxsmithMaterialMode, OutOfRangeProperty as VoxsmithOutOfRangeProperty,
-    ReductionMethod as VoxsmithReductionMethod, SurfaceMode as VoxsmithSurfaceMode,
-    from_gltf_bytes, order_palette_colors, reduce_palette, voxelize_mesh,
+    ColorSpace as VoxsmithColorSpace, Dither as VoxsmithDither, EditStateMode,
+    FillMode as VoxsmithFillMode, MaterialMode as VoxsmithMaterialMode,
+    OutOfRangeProperty as VoxsmithOutOfRangeProperty, ReductionMethod as VoxsmithReductionMethod,
+    SurfaceMode as VoxsmithSurfaceMode, from_gltf_bytes, order_palette_colors, reduce_palette,
+    voxcore::VoxMain, voxelize_mesh,
 };
 
 /// Voxelizes the glTF or GLB mesh at `input` into a Voxel Json document at
 /// `output`. The mesh extent is read once to resolve the grid counts here, then
-/// voxsmith rasterizes the mesh into a [`VoxMain`](voxcore::VoxMain) that the
+/// voxsmith rasterizes the mesh into a [`VoxMain`](voxsmith::voxcore::VoxMain) that the
 /// shared writer encodes. No `ext` block or edit state is recorded: a voxelized
 /// mesh has neither a source `ext` to carry nor an editor build volume.
 #[allow(clippy::too_many_arguments)]

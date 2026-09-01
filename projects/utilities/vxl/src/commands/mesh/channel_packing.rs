@@ -111,7 +111,7 @@ impl FromStr for ChannelPacking {
 #[cfg(test)]
 mod tests {
     use crate::commands::{ChannelPacking, ChannelSource};
-    use voxcore::material::{EMISSIVE_STRENGTH, METALLIC, ROUGHNESS};
+    use voxsmith::voxcore::material::{EMISSIVE_STRENGTH, METALLIC, ROUGHNESS};
 
     fn property(key: &str, invert: bool) -> ChannelSource {
         ChannelSource::Property {

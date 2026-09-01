@@ -160,7 +160,7 @@ fn packing(
 #[cfg(test)]
 mod tests {
     use crate::commands::{ChannelPacking, ChannelSource, Texture, TextureBake};
-    use voxcore::material::{METALLIC, ROUGHNESS};
+    use voxsmith::voxcore::material::{METALLIC, ROUGHNESS};
 
     fn property(key: &str, invert: bool) -> ChannelSource {
         ChannelSource::Property {

@@ -1,12 +1,9 @@
 use crate::{Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding};
 use std::{fs, path::Path};
-use voxcore::{VoxMain, ext::VoxExtSlot};
-use voxj::{
-    DependenciesImpl as VoxjDependenciesImpl,
-    objects::{PositionEncoding, SampleEncoding},
+use voxsmith::{
+    EditStateMode, PositionEncoding, SampleEncoding, VoxjFileBuilder,
+    voxcore::{VoxMain, ext::VoxExtSlot},
 };
-use voxj_codec::{to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes};
-use voxj_voxcore::{EditStateMode, VoxjFileBuilder};
 
 /// Encodes a voxel state into a Voxel Json document and writes it, shared by
 /// every command that produces a voxj document. The builder encodes the
@@ -28,18 +25,20 @@ pub fn write_voxj_document<T: VoxExtSlot>(
     ext: bool,
     edit_state: EditStateMode,
 ) -> Result<()> {
-    let file = VoxjFileBuilder::new(&VoxjDependenciesImpl, &state)
+    let builder = VoxjFileBuilder::new(&state)
         .position_encoding(position_encoding(encoding.position))
         .sample_encoding(sample_encoding(encoding.sample))
         .ext(ext)
-        .edit_state(edit_state)
-        .build()?;
+        .edit_state(edit_state);
+
     let bytes = match format {
-        VoxjFormat::Json => to_voxj_file_bytes(&file)?,
-        VoxjFormat::PrettyJson => to_voxj_pretty_file_bytes(&file)?,
-        VoxjFormat::Zip => to_voxjz_file_bytes(&file)?,
+        VoxjFormat::Json => builder.to_voxj_bytes()?,
+        VoxjFormat::PrettyJson => builder.to_voxj_pretty_bytes()?,
+        VoxjFormat::Zip => builder.to_voxjz_bytes()?,
     };
+
     fs::write(output, &bytes)?;
+
     Ok(())
 }
 
