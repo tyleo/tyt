@@ -27,6 +27,10 @@ mod gltf;
 #[cfg(feature = "vmax")]
 mod vmax;
 
+// Shared by the inspection reports.
+#[cfg(feature = "report")]
+mod property_names;
+
 #[cfg(feature = "_color")]
 pub(crate) use cell_color::*;
 #[cfg(feature = "_color")]
@@ -45,3 +49,6 @@ pub(crate) use gltf::*;
 
 #[cfg(feature = "vmax")]
 pub(crate) use vmax::*;
+
+#[cfg(feature = "report")]
+pub(crate) use property_names::*;

@@ -44,5 +44,6 @@ impl = [
     "dep:vmax-codec",
     "dep:voxsmith",
     "voxsmith/gltf",
+    "voxsmith/report",
 ]
 bin = ["impl", "dep:clap_complete"]

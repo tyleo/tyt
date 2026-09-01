@@ -1,0 +1,515 @@
+use crate::{InfoDocument, InfoLayout, property_names};
+use branded_id::U32Id;
+use std::num::NonZeroU8;
+use treegrid::{
+    BTreeGridNode, TreeGrid, TreeGridJsonValue, TreeGridJsonValueCells, TreeGridLabel,
+    TreeGridRecordsTableOptions, TreeGridRenderJson, TreeGridRenderTables, TreeGridTableShape,
+    TreeGridValue,
+};
+use voxcore::{VoxMain, VoxObject};
+
+/// The record sections' heading level, beneath the `# {name}` title.
+const SECTION_LEVEL: NonZeroU8 = NonZeroU8::new(2).unwrap();
+
+/// Renders the report on what `state` contains, in `layout`: the facts in
+/// `document`, then the state's palettes and objects.
+pub fn render_info<T>(
+    state: &VoxMain<T>,
+    document: &InfoDocument<'_>,
+    layout: InfoLayout,
+) -> String {
+    match layout {
+        InfoLayout::Tables => render_tables(state, document),
+        InfoLayout::JsonPretty => build_json_grid(state, document).render_json_pretty(),
+        InfoLayout::JsonCompact => build_json_grid(state, document).render_json_compact(),
+    }
+}
+
+/// The report as a file-name heading over three record-table sections:
+/// document, palettes, objects.
+fn render_tables<T>(state: &VoxMain<T>, document: &InfoDocument<'_>) -> String {
+    let tables = build_records_grid(state, document).render_tables(&TreeGridTableShape::Records(
+        TreeGridRecordsTableOptions::default().with_level(SECTION_LEVEL),
+    ));
+    format!("# {}\n\n{tables}", document.name)
+}
+
+/// The flat forest the markdown tables render: `document`, `palettes`, and
+/// `objects` section roots whose rows bake every cell as one pre-formatted
+/// value under its column's label.
+fn build_records_grid<T>(state: &VoxMain<T>, document: &InfoDocument<'_>) -> TreeGrid {
+    let mut grid = TreeGrid::new();
+
+    let document_root_id = grid.retain_root(TreeGridLabel::bare("document"));
+    retain_cell(
+        &mut grid,
+        document_root_id,
+        "format",
+        document.format.name().to_string(),
+    );
+    if let Some(version) = document.voxj_version {
+        retain_cell(
+            &mut grid,
+            document_root_id,
+            "voxj_version",
+            version.to_string(),
+        );
+    }
+    retain_cell(
+        &mut grid,
+        document_root_id,
+        "has_ext",
+        yes_no(document.has_ext).to_string(),
+    );
+    retain_cell(
+        &mut grid,
+        document_root_id,
+        "has_edit",
+        yes_no(has_edit(state)).to_string(),
+    );
+
+    let palettes_root_id = grid.retain_root(TreeGridLabel::bare("palettes"));
+    for (palette_id, palette) in state.iter_palettes() {
+        let row_id = grid.retain_child(
+            palettes_root_id,
+            TreeGridLabel::bare(palette_id.to_u32().to_string()),
+        );
+        retain_cell(
+            &mut grid,
+            row_id,
+            "properties",
+            property_names(palette).join(", "),
+        );
+        retain_cell(
+            &mut grid,
+            row_id,
+            "materials",
+            palette.material_count().to_string(),
+        );
+    }
+
+    let objects_root_id = grid.retain_root(TreeGridLabel::bare("objects"));
+    for (object_id, object) in state.iter_objects() {
+        let row_id = grid.retain_child(
+            objects_root_id,
+            TreeGridLabel::bare(object_id.to_u32().to_string()),
+        );
+        let origin = object.origin();
+        let edit = match edit_bounds(object) {
+            Some(edit) => dimensions(edit),
+            None => "-".to_string(),
+        };
+        retain_cell(&mut grid, row_id, "name", object.name().to_string());
+        retain_cell(
+            &mut grid,
+            row_id,
+            "bounds",
+            dimensions(content_bounds(object)),
+        );
+        retain_cell(&mut grid, row_id, "edit_bounds", edit);
+        retain_cell(
+            &mut grid,
+            row_id,
+            "origin",
+            format!("{}, {}, {}", origin.x, origin.y, origin.z),
+        );
+        retain_cell(&mut grid, row_id, "voxels", object.live_count().to_string());
+        retain_cell(
+            &mut grid,
+            row_id,
+            "layers",
+            object.layer_count().to_string(),
+        );
+    }
+    grid
+}
+
+/// Retains a `label` node bearing `value` as one pre-formatted cell under
+/// `parent_id`.
+fn retain_cell(grid: &mut TreeGrid, parent_id: U32Id<BTreeGridNode>, label: &str, value: String) {
+    let node_id = grid.retain_child(parent_id, TreeGridLabel::bare(label));
+    grid.push_value(node_id, TreeGridValue::new(value));
+}
+
+/// The report tree the JSON layouts render as the shared envelope:
+/// `document`, `palettes`, and `objects` roots carrying each field as a
+/// typed value under its label.
+fn build_json_grid<T>(
+    state: &VoxMain<T>,
+    document: &InfoDocument<'_>,
+) -> TreeGrid<TreeGridJsonValueCells> {
+    let mut grid = TreeGrid::with_cells(TreeGridJsonValueCells);
+
+    let document_root_id = grid.retain_root(TreeGridLabel::bare("document"));
+    retain_field(
+        &mut grid,
+        document_root_id,
+        "format",
+        TreeGridJsonValue::new(document.format.name()),
+    );
+    if let Some(version) = document.voxj_version {
+        retain_field(
+            &mut grid,
+            document_root_id,
+            "voxj_version",
+            TreeGridJsonValue::int(i64::from(version)),
+        );
+    }
+    retain_field(
+        &mut grid,
+        document_root_id,
+        "has_ext",
+        TreeGridJsonValue::bool(document.has_ext),
+    );
+    retain_field(
+        &mut grid,
+        document_root_id,
+        "has_edit",
+        TreeGridJsonValue::bool(has_edit(state)),
+    );
+
+    let palettes_root_id = grid.retain_root(TreeGridLabel::bare("palettes"));
+    for (palette_id, palette) in state.iter_palettes() {
+        let branch_id = grid.retain_child(
+            palettes_root_id,
+            TreeGridLabel::bare(palette_id.to_u32().to_string()),
+        );
+        let properties_id = grid.retain_child(branch_id, TreeGridLabel::bare("properties"));
+        for name in property_names(palette) {
+            grid.retain_child(properties_id, TreeGridLabel::quoted(name.to_owned()));
+        }
+        retain_field(
+            &mut grid,
+            branch_id,
+            "materials",
+            TreeGridJsonValue::int(palette.material_count() as i64),
+        );
+    }
+
+    let objects_root_id = grid.retain_root(TreeGridLabel::bare("objects"));
+    for (object_id, object) in state.iter_objects() {
+        let branch_id = grid.retain_child(
+            objects_root_id,
+            TreeGridLabel::bare(object_id.to_u32().to_string()),
+        );
+        let bounds = content_bounds(object);
+        let origin = object.origin();
+        retain_field(
+            &mut grid,
+            branch_id,
+            "name",
+            TreeGridJsonValue::new(object.name()),
+        );
+        retain_triple(
+            &mut grid,
+            branch_id,
+            "bounds",
+            [
+                i64::from(bounds.0),
+                i64::from(bounds.1),
+                i64::from(bounds.2),
+            ],
+        );
+        if let Some(edit) = edit_bounds(object) {
+            retain_triple(
+                &mut grid,
+                branch_id,
+                "edit_bounds",
+                [i64::from(edit.0), i64::from(edit.1), i64::from(edit.2)],
+            );
+        }
+        retain_triple(
+            &mut grid,
+            branch_id,
+            "origin",
+            [
+                i64::from(origin.x),
+                i64::from(origin.y),
+                i64::from(origin.z),
+            ],
+        );
+        retain_field(
+            &mut grid,
+            branch_id,
+            "voxels",
+            TreeGridJsonValue::int(object.live_count() as i64),
+        );
+        retain_field(
+            &mut grid,
+            branch_id,
+            "layers",
+            TreeGridJsonValue::int(object.layer_count() as i64),
+        );
+    }
+    grid
+}
+
+/// Retains a `label` node bearing one typed `value` under `parent_id`.
+fn retain_field(
+    grid: &mut TreeGrid<TreeGridJsonValueCells>,
+    parent_id: U32Id<BTreeGridNode>,
+    label: &str,
+    value: TreeGridJsonValue,
+) {
+    let node_id = grid.retain_child(parent_id, TreeGridLabel::bare(label));
+    grid.push_value(node_id, value);
+}
+
+/// Retains a `label` node whose series is an integer triple under `parent_id`.
+fn retain_triple(
+    grid: &mut TreeGrid<TreeGridJsonValueCells>,
+    parent_id: U32Id<BTreeGridNode>,
+    label: &str,
+    triple: [i64; 3],
+) {
+    let node_id = grid.retain_child(parent_id, TreeGridLabel::bare(label));
+    for component in triple {
+        grid.push_value(node_id, TreeGridJsonValue::int(component));
+    }
+}
+
+/// Whether any object has an [`edit_bounds`] build volume.
+fn has_edit<T>(state: &VoxMain<T>) -> bool {
+    state
+        .iter_objects()
+        .any(|(_, object)| edit_bounds(object).is_some())
+}
+
+/// The size of an object's tight live-voxel extent. `(0, 0, 0)` when empty.
+fn content_bounds(object: &VoxObject) -> (u32, u32, u32) {
+    match object.live_extent() {
+        Some((_, size)) => (size.x, size.y, size.z),
+        None => (0, 0, 0),
+    }
+}
+
+/// The object's build volume, but only when it has margin: wider than the tight
+/// content or offset from the min corner. `None` when it matches the content.
+fn edit_bounds(object: &VoxObject) -> Option<(u32, u32, u32)> {
+    let build = object.bounds();
+    let has_margin = match object.live_extent() {
+        // Off the min corner or short of the build volume on any axis.
+        Some((min, size)) => {
+            min.x != 0
+                || min.y != 0
+                || min.z != 0
+                || size.x != build.x
+                || size.y != build.y
+                || size.z != build.z
+        }
+        // No live voxels: a non-empty build volume is all margin.
+        None => build.x != 0 || build.y != 0 || build.z != 0,
+    };
+    has_margin.then_some((build.x, build.y, build.z))
+}
+
+/// `XxYxZ` for a size triple.
+fn dimensions(size: (u32, u32, u32)) -> String {
+    format!("{}x{}x{}", size.0, size.1, size.2)
+}
+
+/// `yes` or `no` for a flag.
+fn yes_no(flag: bool) -> &'static str {
+    if flag { "yes" } else { "no" }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{InfoDocument, InfoLayout, VoxelFormat, render_info};
+    use branded_id::U32Id;
+    use serde_json::Value;
+    use ty_math::TyVector3U32;
+    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool};
+
+    /// One `baseColor` palette and one tight 1x1x1 object sampling its one
+    /// material.
+    fn tight_state() -> VoxMain {
+        let mut state: VoxMain = VoxMain::default();
+        let colors_value_pool_id =
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let mut palette = VoxPalette::default();
+        palette
+            .retain_property(
+                "baseColor".to_owned(),
+                colors_value_pool_id,
+                U32Id::from_u32(0),
+            )
+            .unwrap();
+        let material_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let palette_id = state.retain_palette(palette).unwrap();
+
+        let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.retain_layer(palette_id, material_id);
+        let voxel_id = object.voxel_id(TyVector3U32::new(0, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[material_id]).unwrap();
+        state.retain_object(object).unwrap();
+        state
+    }
+
+    /// A Voxel Json source stamped `voxj_version`, carrying no ext block.
+    fn voxj_document(name: &str, voxj_version: u32) -> InfoDocument<'_> {
+        InfoDocument {
+            name,
+            format: VoxelFormat::VoxelJson,
+            voxj_version: Some(voxj_version),
+            has_ext: false,
+        }
+    }
+
+    #[test]
+    fn tables_lists_document_palette_and_object_sections() {
+        let output = render_info(
+            &tight_state(),
+            &voxj_document("test.voxj", 2),
+            InfoLayout::Tables,
+        );
+        assert_eq!(
+            output,
+            "# test.voxj\n\n\
+             ## document\n\n\
+             | label        | value |\n\
+             | ------------ | ----- |\n\
+             | format       | voxj  |\n\
+             | voxj_version | 2     |\n\
+             | has_ext      | no    |\n\
+             | has_edit     | no    |\n\
+             \n## palettes\n\n\
+             | label | properties | materials |\n\
+             | ----- | ---------- | --------- |\n\
+             | 0     | baseColor  | 1         |\n\
+             \n## objects\n\n\
+             | label | name | bounds | edit_bounds | origin  | voxels | layers |\n\
+             | ----- | ---- | ------ | ----------- | ------- | ------ | ------ |\n\
+             | 0     | body | 1x1x1  | -           | 0, 0, 0 | 1      | 1      |\n"
+        );
+    }
+
+    #[test]
+    fn json_compact_nests_the_envelope_fields_under_each_section() {
+        let output = render_info(
+            &tight_state(),
+            &voxj_document("test.voxj", 2),
+            InfoLayout::JsonCompact,
+        );
+        assert_eq!(
+            output,
+            "[{\"label\":\"document\",\"children\":[\
+             {\"label\":\"format\",\"values\":[\"voxj\"]},\
+             {\"label\":\"voxj_version\",\"values\":[2]},\
+             {\"label\":\"has_ext\",\"values\":[false]},\
+             {\"label\":\"has_edit\",\"values\":[false]}]},\
+             {\"label\":\"palettes\",\"children\":[{\"label\":\"0\",\"children\":[\
+             {\"label\":\"properties\",\"children\":[{\"label\":\"baseColor\"}]},\
+             {\"label\":\"materials\",\"values\":[1]}]}]},\
+             {\"label\":\"objects\",\"children\":[{\"label\":\"0\",\"children\":[\
+             {\"label\":\"name\",\"values\":[\"body\"]},\
+             {\"label\":\"bounds\",\"values\":[1,1,1]},\
+             {\"label\":\"origin\",\"values\":[0,0,0]},\
+             {\"label\":\"voxels\",\"values\":[1]},\
+             {\"label\":\"layers\",\"values\":[1]}]}]}]\n"
+        );
+    }
+
+    #[test]
+    fn json_pretty_is_multiline_and_matches_compact() {
+        let state = tight_state();
+        let document = voxj_document("test.voxj", 2);
+        let pretty = render_info(&state, &document, InfoLayout::JsonPretty);
+        let compact = render_info(&state, &document, InfoLayout::JsonCompact);
+        assert!(pretty.starts_with("[\n"));
+        assert!(pretty.contains("\"label\": \"document\""));
+        let pretty_value: Value = serde_json::from_str(&pretty).unwrap();
+        let compact_value: Value = serde_json::from_str(&compact).unwrap();
+        assert_eq!(pretty_value, compact_value);
+    }
+
+    #[test]
+    fn omits_voxj_version_for_other_formats() {
+        let document = InfoDocument {
+            name: "model.mvox",
+            format: VoxelFormat::MagicaVoxel,
+            voxj_version: None,
+            has_ext: false,
+        };
+        let tables = render_info(&tight_state(), &document, InfoLayout::Tables);
+        assert!(tables.contains("| format   | mvox  |\n"));
+        assert!(!tables.contains("voxj_version"));
+
+        let json = render_info(&tight_state(), &document, InfoLayout::JsonCompact);
+        assert!(!json.contains("voxj_version"));
+    }
+
+    #[test]
+    fn reports_edit_bounds_when_an_object_carries_margin() {
+        // 3x1x1 build volume, one voxel off the min corner: 1x1x1 content with
+        // margin.
+        let mut state: VoxMain = VoxMain::default();
+        let mut object = VoxObject::new("margin".to_owned(), TyVector3U32::new(3, 1, 1)).unwrap();
+        let voxel_id = object.voxel_id(TyVector3U32::new(1, 0, 0)).unwrap();
+        object.retain_voxel(voxel_id, &[]).unwrap();
+        state.retain_object(object).unwrap();
+
+        let document = voxj_document("sample.voxj", 1);
+        let tables = render_info(&state, &document, InfoLayout::Tables);
+        assert!(tables.contains("| has_edit     | yes   |\n"));
+        // Content 1x1x1, edit build volume 3x1x1, origin spaced.
+        assert!(
+            tables.contains(
+                "| 0     | margin | 1x1x1  | 3x1x1       | 0, 0, 0 | 1      | 0      |\n"
+            )
+        );
+
+        let json = render_info(&state, &document, InfoLayout::JsonCompact);
+        assert!(json.contains("{\"label\":\"has_edit\",\"values\":[true]}"));
+        assert!(json.contains(
+            "{\"label\":\"bounds\",\"values\":[1,1,1]},\
+             {\"label\":\"edit_bounds\",\"values\":[3,1,1]}"
+        ));
+    }
+
+    #[test]
+    fn reports_two_layers_over_two_palettes() {
+        let mut state: VoxMain = VoxMain::default();
+        let strengths_value_pool_id =
+            state.retain_value_pool(VoxValuePool::float(vec![2.0]).unwrap());
+        let mut glow = VoxPalette::default();
+        glow.retain_property(
+            "emissiveStrength".to_owned(),
+            strengths_value_pool_id,
+            U32Id::from_u32(0),
+        )
+        .unwrap();
+        let glow_material_id = glow.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let glow_palette_id = state.retain_palette(glow).unwrap();
+
+        let colors_value_pool_id =
+            state.retain_value_pool(VoxValuePool::vec_4_float(vec![[1.0, 0.0, 0.0, 1.0]]).unwrap());
+        let mut base = VoxPalette::default();
+        base.retain_property(
+            "baseColor".to_owned(),
+            colors_value_pool_id,
+            U32Id::from_u32(0),
+        )
+        .unwrap();
+        let material_id = base.retain_material(vec![U32Id::from_u32(0)]).unwrap();
+        let base_palette_id = state.retain_palette(base).unwrap();
+
+        let mut object = VoxObject::new("body".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
+        object.retain_layer(base_palette_id, material_id);
+        object.retain_layer(glow_palette_id, glow_material_id);
+        state.retain_object(object).unwrap();
+
+        let document = voxj_document("layered.voxj", 1);
+        let tables = render_info(&state, &document, InfoLayout::Tables);
+        assert!(tables.contains("| 0     | emissiveStrength | 1         |\n"));
+        assert!(tables.contains("| 1     | baseColor        | 1         |\n"));
+
+        let json = render_info(&state, &document, InfoLayout::JsonCompact);
+        assert!(json.contains(
+            "{\"label\":\"0\",\"children\":[{\"label\":\"properties\",\"children\":[\
+             {\"label\":\"emissiveStrength\"}]},\
+             {\"label\":\"materials\",\"values\":[1]}]}"
+        ));
+        assert!(json.contains("{\"label\":\"layers\",\"values\":[2]}"));
+    }
+}

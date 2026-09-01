@@ -54,6 +54,7 @@ pub enum Error {
 
 impl Error {
     /// Builds an [`Error::Invalid`] from a message.
+    #[cfg(any(feature = "_color", feature = "_mesh"))]
     pub(crate) fn invalid(message: impl Display) -> Self {
         Error::Invalid(message.to_string())
     }

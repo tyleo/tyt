@@ -39,9 +39,9 @@ compile_error!(
 // exchanges through this crate.
 pub use voxcore;
 
-#[cfg(any(feature = "_codec", feature = "_mesh"))]
+#[cfg(any(feature = "_color", feature = "_mesh", feature = "report"))]
 mod internal;
-#[cfg(any(feature = "_codec", feature = "_mesh"))]
+#[cfg(any(feature = "_color", feature = "_mesh", feature = "report"))]
 pub(crate) use internal::*;
 
 #[cfg(feature = "_mesh")]
@@ -60,9 +60,12 @@ mod gltf_range;
 mod order_palette_colors;
 mod reduce_palette;
 mod reduction_method;
+#[cfg(feature = "report")]
+mod report;
 mod result;
 #[cfg(feature = "_mesh")]
 mod scalar_range;
+mod voxel_format;
 
 #[cfg(feature = "_mesh")]
 pub use check_gltf_property_ranges::*;
@@ -80,6 +83,9 @@ pub(crate) use gltf_range::*;
 pub use order_palette_colors::*;
 pub use reduce_palette::*;
 pub use reduction_method::*;
+#[cfg(feature = "report")]
+pub use report::*;
 pub use result::*;
 #[cfg(feature = "_mesh")]
 pub(crate) use scalar_range::*;
+pub use voxel_format::*;
