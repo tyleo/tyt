@@ -3,4 +3,3 @@ mod info;
 mod info_layout;
 
 pub use info::*;
-pub use info_layout::*;

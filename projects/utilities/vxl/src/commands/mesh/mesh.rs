@@ -1,16 +1,17 @@
 use crate::{
-    Dependencies, Error, Format, MeshFormat, PositiveF64, Result, SelectIndex,
+    Dependencies, Error, Format, MeshFormat, PositiveF64, Result,
     commands::{
         Atlas, ChannelSource, MeshMethod, MeshTextureMap, PropertyBinding, ResourceStorage,
         Texture, TextureArg, TextureMap, TextureName, TextureShape,
     },
-    require_file_name,
+    parse_index_range, require_file_name,
 };
 use clap::Parser;
 use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
+use voxsmith::IndexRange;
 
 /// Triangulates one object's voxels into a glTF or GLB mesh, optionally baking
 /// its palette materials into textures the mesh's UVs sample.
@@ -137,8 +138,8 @@ pub struct Mesh {
 
     /// Choose the object by index, an integer or an `a-b` range. Repeatable;
     /// unions with `--select`.
-    #[arg(value_name = "select-index", long)]
-    select_index: Vec<SelectIndex>,
+    #[arg(value_name = "select-index", long, value_parser = parse_index_range)]
+    select_index: Vec<IndexRange>,
 }
 
 impl Mesh {

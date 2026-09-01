@@ -1,9 +1,7 @@
-use crate::{
-    Dependencies, Format, Result, SelectIndex,
-    commands::{PaletteListFields, PaletteListLayout},
-};
+use crate::{Dependencies, Format, Result, cli_value_parser, parse_index_range};
 use clap::{ArgAction, Parser};
 use std::path::PathBuf;
+use voxsmith::{IndexRange, PaletteListFields, PaletteListLayout};
 
 /// Lists every palette in a document, one row apiece.
 #[derive(Clone, Debug, Parser)]
@@ -15,15 +13,20 @@ pub struct PaletteList {
 
     /// Palette-index filters, each a single index `1` or an inclusive range
     /// `1-5`, unioned over all values. Given none, every palette is listed.
-    #[arg(value_name = "filter")]
-    filters: Vec<SelectIndex>,
+    #[arg(value_name = "filter", value_parser = parse_index_range)]
+    filters: Vec<IndexRange>,
 
     /// Source format of the input. Inferred from its extension when omitted.
     #[arg(value_name = "from", long)]
     from: Option<Format>,
 
     /// How to lay out the listing.
-    #[arg(value_name = "layout", long, default_value = "hierarchy")]
+    #[arg(
+        value_name = "layout",
+        long,
+        default_value = "hierarchy",
+        value_parser = cli_value_parser::<PaletteListLayout>()
+    )]
     layout: PaletteListLayout,
 
     /// Show each palette's property keys. `--show-properties false` drops them.
@@ -68,6 +71,7 @@ impl PaletteList {
             materials: self.show_materials,
             objects: self.show_objects,
         };
+
         dependencies.palette_list(&self.input, self.from, &self.filters, fields, self.layout)
     }
 }

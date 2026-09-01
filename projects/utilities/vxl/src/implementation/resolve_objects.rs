@@ -1,11 +1,14 @@
-use crate::{Format, Result, SelectIndex, implementation};
+use crate::{Format, Result, implementation};
 use branded_id::U32Id;
 use pathspec::{GitIgnoreRegex, is_file_path_match};
 use std::{
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use voxsmith::voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain};
+use voxsmith::{
+    IndexRange,
+    voxcore::{BVoxHierarchyNode, BVoxObject, VoxMain},
+};
 
 /// A hierarchy-node id.
 type NodeId = U32Id<BVoxHierarchyNode>;
@@ -23,7 +26,7 @@ pub fn resolve_objects(
     input: &Path,
     from: Option<Format>,
     select: &[String],
-    select_index: &[SelectIndex],
+    select_index: &[IndexRange],
 ) -> Result<Vec<usize>> {
     let state = implementation::load_state(input, from)?;
 
@@ -37,7 +40,7 @@ pub fn resolve_objects(
 fn select_objects(
     state: &VoxMain,
     select: &[String],
-    select_index: &[SelectIndex],
+    select_index: &[IndexRange],
 ) -> Result<Vec<usize>> {
     let object_ids: Vec<ObjectId> = state
         .iter_objects()
@@ -197,9 +200,12 @@ fn object_paths(
 #[cfg(test)]
 mod tests {
     use super::{NodeId, ObjectId, select_objects};
-    use crate::SelectIndex;
+    use crate::parse_index_range;
     use ty_math::TyVector3U32;
-    use voxsmith::voxcore::{VoxHierarchyNode, VoxMain, VoxObject};
+    use voxsmith::{
+        IndexRange,
+        voxcore::{VoxHierarchyNode, VoxMain, VoxObject},
+    };
 
     /// Adds an empty named object and returns its id.
     fn object_id(state: &mut VoxMain, name: &str) -> ObjectId {
@@ -230,8 +236,8 @@ mod tests {
         patterns.iter().map(|pattern| pattern.to_string()).collect()
     }
 
-    fn index(spec: &str) -> SelectIndex {
-        spec.parse().unwrap()
+    fn index(spec: &str) -> IndexRange {
+        parse_index_range(spec).unwrap()
     }
 
     #[test]

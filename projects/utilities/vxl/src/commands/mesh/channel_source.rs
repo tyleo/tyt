@@ -1,5 +1,6 @@
-use crate::{Error, Result, VectorComponent, commands::PropertyBinding};
+use crate::{CliValue, Error, Result, commands::PropertyBinding};
 use std::{result::Result as StdResult, str::FromStr};
+use voxsmith::VectorComponent;
 
 /// One channel's value in a material map: a property by name, optionally one
 /// color component of it, optionally inverted as `1-<property>`, the constant
@@ -95,7 +96,7 @@ impl FromStr for ChannelSource {
             Some((head, tail))
                 if tail.len() == 1 && tail.chars().all(|c| c.is_ascii_alphabetic()) =>
             {
-                (head, Some(tail.parse::<VectorComponent>()?))
+                (head, Some(VectorComponent::parse(tail)?))
             }
             _ => (body, None),
         };
@@ -117,10 +118,8 @@ impl FromStr for ChannelSource {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        VectorComponent,
-        commands::{ChannelSource, PropertyBinding},
-    };
+    use crate::commands::{ChannelSource, PropertyBinding};
+    use voxsmith::VectorComponent;
     use voxsmith::voxcore::material::{BASE_COLOR, METALLIC, ROUGHNESS};
 
     fn property(key: &str, invert: bool) -> ChannelSource {

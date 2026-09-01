@@ -1,14 +1,16 @@
 use crate::{
-    Format, MeshFormat, Result, SelectIndex, VoxjEncoding, VoxjFormat, Width,
+    Format, MeshFormat, Result, VoxjEncoding, VoxjFormat, Width,
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
-        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeProperty,
-        PaletteListFields, PaletteListLayout, PaletteReduction, PaletteShowLabel,
-        PaletteShowLayout, PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage,
-        SurfaceMode, TextureShape, ValidateLayout,
+        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeProperty,
+        PaletteReduction, PatternView, ResourceStorage, SurfaceMode, TextureShape,
     },
 };
 use std::{num::NonZeroU8, path::Path};
+use voxsmith::{
+    IndexRange, InfoLayout, PaletteListFields, PaletteListLayout, PaletteShowLabel,
+    PaletteShowLayout, PaletteShowTableShape, PropertySelector, ValidateLayout,
+};
 
 /// Dependencies for this crate's operations.
 pub trait Dependencies {
@@ -137,7 +139,7 @@ pub trait Dependencies {
         input: &Path,
         from: Option<Format>,
         select: &[String],
-        select_index: &[SelectIndex],
+        select_index: &[IndexRange],
     ) -> Result<Vec<usize>>;
 
     /// Meshes the object at index `object_index` of the voxel file at `input`
@@ -213,7 +215,7 @@ pub trait Dependencies {
         &self,
         input: &Path,
         from: Option<Format>,
-        filters: &[SelectIndex],
+        filters: &[IndexRange],
         fields: PaletteListFields,
         layout: PaletteListLayout,
     ) -> Result<()>;

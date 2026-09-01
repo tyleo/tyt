@@ -1,15 +1,17 @@
 use crate::{
-    Dependencies, Format, MeshFormat, Result, SelectIndex, VoxjEncoding, VoxjFormat, Width,
+    Dependencies, Format, MeshFormat, Result, VoxjEncoding, VoxjFormat, Width,
     commands::{
         CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
-        HierarchyViews, InfoLayout, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeProperty,
-        PaletteListFields, PaletteListLayout, PaletteReduction, PaletteShowLabel,
-        PaletteShowLayout, PaletteShowTableShape, PatternView, PropertySelector, ResourceStorage,
-        SurfaceMode, TextureShape, ValidateLayout,
+        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeProperty,
+        PaletteReduction, PatternView, ResourceStorage, SurfaceMode, TextureShape,
     },
     implementation,
 };
 use std::{num::NonZeroU8, path::Path};
+use voxsmith::{
+    IndexRange, InfoLayout, PaletteListFields, PaletteListLayout, PaletteShowLabel,
+    PaletteShowLayout, PaletteShowTableShape, PropertySelector, ValidateLayout,
+};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DependenciesImpl;
@@ -91,7 +93,7 @@ impl Dependencies for DependenciesImpl {
         input: &Path,
         from: Option<Format>,
         select: &[String],
-        select_index: &[SelectIndex],
+        select_index: &[IndexRange],
     ) -> Result<Vec<usize>> {
         implementation::resolve_objects(input, from, select, select_index)
     }
@@ -136,7 +138,7 @@ impl Dependencies for DependenciesImpl {
         &self,
         input: &Path,
         from: Option<Format>,
-        filters: &[SelectIndex],
+        filters: &[IndexRange],
         fields: PaletteListFields,
         layout: PaletteListLayout,
     ) -> Result<()> {

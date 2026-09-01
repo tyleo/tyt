@@ -1,22 +1,33 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::PaletteListLayout;
 
-/// How `palette list` renders the listing.
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum PaletteListLayout {
-    /// Indented tree, one palette per branch, like `hierarchy show`.
-    #[value(name = "hierarchy")]
-    Hierarchy,
+impl CliValue for PaletteListLayout {
+    const VARIANTS: &'static [Self] = &[
+        PaletteListLayout::Hierarchy,
+        PaletteListLayout::Tables,
+        PaletteListLayout::JsonPretty,
+        PaletteListLayout::JsonCompact,
+    ];
 
-    /// A `# palettes` heading over one aligned record table, one row per
-    /// palette.
-    #[value(name = "tables")]
-    Tables,
+    fn name(self) -> &'static str {
+        match self {
+            PaletteListLayout::Hierarchy => "hierarchy",
+            PaletteListLayout::Tables => "tables",
+            PaletteListLayout::JsonPretty => "json-pretty",
+            PaletteListLayout::JsonCompact => "json-compact",
+        }
+    }
 
-    /// Pretty-printed, multi-line JSON.
-    #[value(name = "json-pretty")]
-    JsonPretty,
-
-    /// Compact, single-line JSON.
-    #[value(name = "json-compact")]
-    JsonCompact,
+    fn help(self) -> &'static str {
+        match self {
+            PaletteListLayout::Hierarchy => {
+                "Indented tree, one palette per branch, like `hierarchy show`"
+            }
+            PaletteListLayout::Tables => {
+                "A `# palettes` heading over one aligned record table, one row per palette"
+            }
+            PaletteListLayout::JsonPretty => "Pretty-printed, multi-line JSON",
+            PaletteListLayout::JsonCompact => "Compact, single-line JSON",
+        }
+    }
 }

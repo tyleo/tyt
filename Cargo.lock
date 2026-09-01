@@ -2127,7 +2127,6 @@ dependencies = [
  "clap_complete",
  "libc",
  "pathspec",
- "serde_json",
  "treegrid",
  "treeselect",
  "ty-math",

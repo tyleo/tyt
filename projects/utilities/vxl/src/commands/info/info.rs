@@ -1,6 +1,7 @@
-use crate::{Dependencies, Format, Result, commands::InfoLayout};
+use crate::{Dependencies, Format, Result, cli_value_parser};
 use clap::Parser;
 use std::path::PathBuf;
+use voxsmith::InfoLayout;
 
 /// Reports what a document contains, surfacing the format internals.
 #[derive(Clone, Debug, Parser)]
@@ -15,7 +16,12 @@ pub struct Info {
     from: Option<Format>,
 
     /// How to lay out the report.
-    #[arg(value_name = "layout", long, default_value = "tables")]
+    #[arg(
+        value_name = "layout",
+        long,
+        default_value = "tables",
+        value_parser = cli_value_parser::<InfoLayout>()
+    )]
     layout: InfoLayout,
 }
 

@@ -18,14 +18,13 @@ clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
 libc = { version = "0.2", optional = true }
 pathspec = { version = "0.1.0", optional = true }
-serde_json = { version = "1", features = ["preserve_order"], optional = true }
 treegrid = { version = "0.1.0", features = ["json", "ty-math"], optional = true }
 treeselect = { version = "0.1.0", optional = true }
 ty-math = { version = "0.2.0", optional = true }
 vmax = { version = "0.1.7", optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
 voxcore = { version = "0.2.1", default-features = false }
-voxsmith = { version = "0.2.0", optional = true }
+voxsmith = { version = "0.2.0", features = ["report"] }
 
 [dev-dependencies]
 ty-math = "0.2.0"
@@ -36,14 +35,11 @@ impl = [
     "dep:branded-id",
     "dep:libc",
     "dep:pathspec",
-    "dep:serde_json",
     "dep:treegrid",
     "dep:treeselect",
     "dep:ty-math",
     "dep:vmax",
     "dep:vmax-codec",
-    "dep:voxsmith",
     "voxsmith/gltf",
-    "voxsmith/report",
 ]
 bin = ["impl", "dep:clap_complete"]

@@ -1,18 +1,31 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::PaletteShowTableShape;
 
-/// How the `tables` layout shapes its tables.
-#[derive(Clone, Copy, Debug, PartialEq, ValueEnum)]
-pub enum PaletteShowTableShape {
-    /// One table per palette group, under nested headings.
-    #[value(name = "nested")]
-    Nested,
+impl CliValue for PaletteShowTableShape {
+    const VARIANTS: &'static [Self] = &[
+        PaletteShowTableShape::Nested,
+        PaletteShowTableShape::Flat,
+        PaletteShowTableShape::Records,
+    ];
 
-    /// One table over every value collection, the cross-palette comparison view.
-    #[value(name = "flat")]
-    Flat,
+    fn name(self) -> &'static str {
+        match self {
+            PaletteShowTableShape::Nested => "nested",
+            PaletteShowTableShape::Flat => "flat",
+            PaletteShowTableShape::Records => "records",
+        }
+    }
 
-    /// One row per property under each palette's heading, component
-    /// values in relative-path columns.
-    #[value(name = "records")]
-    Records,
+    fn help(self) -> &'static str {
+        match self {
+            PaletteShowTableShape::Nested => "One table per palette group, under nested headings",
+            PaletteShowTableShape::Flat => {
+                "One table over every value collection, the cross-palette comparison view"
+            }
+            PaletteShowTableShape::Records => {
+                "One row per property under each palette's heading, component values in \
+                 relative-path columns"
+            }
+        }
+    }
 }

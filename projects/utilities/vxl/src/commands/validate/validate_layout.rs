@@ -1,18 +1,28 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::ValidateLayout;
 
-/// How `validate` renders the report.
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum ValidateLayout {
-    /// A file-name heading over one line per check and a closing pass/fail
-    /// summary.
-    #[value(name = "tables")]
-    Tables,
+impl CliValue for ValidateLayout {
+    const VARIANTS: &'static [Self] = &[
+        ValidateLayout::Tables,
+        ValidateLayout::JsonPretty,
+        ValidateLayout::JsonCompact,
+    ];
 
-    /// Pretty-printed, multi-line JSON.
-    #[value(name = "json-pretty")]
-    JsonPretty,
+    fn name(self) -> &'static str {
+        match self {
+            ValidateLayout::Tables => "tables",
+            ValidateLayout::JsonPretty => "json-pretty",
+            ValidateLayout::JsonCompact => "json-compact",
+        }
+    }
 
-    /// Compact, single-line JSON.
-    #[value(name = "json-compact")]
-    JsonCompact,
+    fn help(self) -> &'static str {
+        match self {
+            ValidateLayout::Tables => {
+                "A file-name heading over one line per check and a closing pass/fail summary"
+            }
+            ValidateLayout::JsonPretty => "Pretty-printed, multi-line JSON",
+            ValidateLayout::JsonCompact => "Compact, single-line JSON",
+        }
+    }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    Error, Format, MeshFormat, Result, VectorComponent,
+    Error, Format, MeshFormat, Result,
     commands::{
         ChannelSource, MaterialSlot, MeshMethod, MeshTextureMap, ResourceStorage, TextureBake,
         TextureShape,
@@ -18,8 +18,8 @@ use voxsmith::voxcore::{
 use voxsmith::{
     AtlasShape, ColorChannel, MaterialBake, MaterialChannel, MaterialMap, MaterialMeshRequest,
     MaterialSlot as VoxsmithMaterialSlot, MeshMethod as VoxsmithMeshMethod,
-    ResourceStorage as VoxsmithResourceStorage, object_to_glb_bytes, object_to_gltf_bytes,
-    object_to_material_glb, object_to_material_gltf,
+    ResourceStorage as VoxsmithResourceStorage, VectorComponent, object_to_glb_bytes,
+    object_to_gltf_bytes, object_to_material_glb, object_to_material_gltf,
 };
 
 /// Meshes the object at index `object_index` of the voxel file at `input` into
@@ -330,9 +330,9 @@ fn atlas_shape(shape: TextureShape) -> AtlasShape {
 #[cfg(test)]
 mod tests {
     use super::{validate_channel, validate_color, validate_scalar};
-    use crate::VectorComponent;
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
+    use voxsmith::VectorComponent;
     use voxsmith::voxcore::{
         BVoxPalette, BVoxValuePoolValue, VoxMain, VoxObject, VoxPalette, VoxValuePool,
     };

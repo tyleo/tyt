@@ -1,8 +1,6 @@
-use crate::{Format, Result, commands::InfoLayout, implementation};
+use crate::{Format, Result, implementation};
 use std::{fs, path::Path};
-use voxsmith::{
-    InfoDocument, InfoLayout as VoxsmithInfoLayout, render_info, voxj_version_from_bytes,
-};
+use voxsmith::{InfoDocument, InfoLayout, render_info, voxj_version_from_bytes};
 
 /// Loads the voxel file at `input` and reports what it contains in `layout`.
 /// The document is read into voxcore first; only the format and, for Voxel Json,
@@ -35,7 +33,7 @@ pub fn info(input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()
         has_ext: state.ext().is_some(),
     };
 
-    let output = render_info(&state, &document, info_layout(layout));
+    let output = render_info(&state, &document, layout);
 
     implementation::write_stdout(output.as_bytes())
 }
@@ -43,13 +41,4 @@ pub fn info(input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()
 /// The Voxel Json document version of `input`; voxcore does not carry it.
 fn read_voxj_version(input: &Path) -> Result<u32> {
     Ok(voxj_version_from_bytes(&fs::read(input)?)?)
-}
-
-/// Maps the CLI [`InfoLayout`] to voxsmith's.
-fn info_layout(layout: InfoLayout) -> VoxsmithInfoLayout {
-    match layout {
-        InfoLayout::Tables => VoxsmithInfoLayout::Tables,
-        InfoLayout::JsonPretty => VoxsmithInfoLayout::JsonPretty,
-        InfoLayout::JsonCompact => VoxsmithInfoLayout::JsonCompact,
-    }
 }

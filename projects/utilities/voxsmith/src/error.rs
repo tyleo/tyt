@@ -10,6 +10,8 @@ use std::{
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
 };
+#[cfg(feature = "report")]
+use treegrid::TreeGridError;
 #[cfg(feature = "vmax")]
 use vmax_codec::Error as VMaxError;
 use voxcore::Error as VoxError;
@@ -50,11 +52,14 @@ pub enum Error {
     /// Reading a glTF or GLB mesh failed.
     #[cfg(feature = "gltf")]
     Gltf(GltfError),
+
+    /// A report layout rejected an option it does not consume.
+    #[cfg(feature = "report")]
+    TreeGrid(TreeGridError),
 }
 
 impl Error {
     /// Builds an [`Error::Invalid`] from a message.
-    #[cfg(any(feature = "_color", feature = "_mesh"))]
     pub(crate) fn invalid(message: impl Display) -> Self {
         Error::Invalid(message.to_string())
     }
@@ -77,6 +82,8 @@ impl Display for Error {
             Error::Qbcl(error) => error.fmt(f),
             #[cfg(feature = "gltf")]
             Error::Gltf(error) => error.fmt(f),
+            #[cfg(feature = "report")]
+            Error::TreeGrid(error) => error.fmt(f),
         }
     }
 }
@@ -98,6 +105,8 @@ impl StdError for Error {
             Error::Qbcl(error) => Some(error),
             #[cfg(feature = "gltf")]
             Error::Gltf(error) => Some(error),
+            #[cfg(feature = "report")]
+            Error::TreeGrid(error) => Some(error),
         }
     }
 }
@@ -155,5 +164,12 @@ impl From<QbclError> for Error {
 impl From<GltfError> for Error {
     fn from(error: GltfError) -> Self {
         Error::Gltf(error)
+    }
+}
+
+#[cfg(feature = "report")]
+impl From<TreeGridError> for Error {
+    fn from(error: TreeGridError) -> Self {
+        Error::TreeGrid(error)
     }
 }

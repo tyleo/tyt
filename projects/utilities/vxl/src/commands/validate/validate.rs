@@ -1,6 +1,7 @@
-use crate::{Dependencies, Result, commands::ValidateLayout};
+use crate::{Dependencies, Result, cli_value_parser};
 use clap::Parser;
 use std::path::PathBuf;
+use voxsmith::ValidateLayout;
 
 /// Checks a Voxel Json document against the format spec.
 #[derive(Clone, Debug, Parser)]
@@ -11,7 +12,12 @@ pub struct Validate {
     input: PathBuf,
 
     /// How to lay out the report.
-    #[arg(value_name = "layout", long, default_value = "tables")]
+    #[arg(
+        value_name = "layout",
+        long,
+        default_value = "tables",
+        value_parser = cli_value_parser::<ValidateLayout>()
+    )]
     layout: ValidateLayout,
 }
 

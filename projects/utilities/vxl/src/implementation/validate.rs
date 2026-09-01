@@ -1,13 +1,10 @@
-use crate::{Result, commands::ValidateLayout, implementation};
+use crate::{Result, implementation};
 use std::{
     fs,
     io::{Error as IOError, ErrorKind},
     path::Path,
 };
-use voxsmith::{
-    ValidateLayout as VoxsmithValidateLayout, check_voxj_bytes, failed_check_count,
-    render_validation,
-};
+use voxsmith::{ValidateLayout, check_voxj_bytes, failed_check_count, render_validation};
 
 /// Loads the Voxel Json document at `input`, runs every spec check, writes the
 /// report in `layout` to standard output, and fails when any check failed so
@@ -15,7 +12,7 @@ use voxsmith::{
 pub fn validate(input: &Path, layout: ValidateLayout) -> Result<()> {
     let checks = check_voxj_bytes(&fs::read(input)?)?;
 
-    let output = render_validation(&checks, &file_name(input), validate_layout(layout));
+    let output = render_validation(&checks, &file_name(input), layout);
 
     implementation::write_stdout(output.as_bytes())?;
 
@@ -41,15 +38,6 @@ fn file_name(input: &Path) -> String {
         .and_then(|name| name.to_str())
         .map(str::to_string)
         .unwrap_or_else(|| input.display().to_string())
-}
-
-/// Maps the CLI [`ValidateLayout`] to voxsmith's.
-fn validate_layout(layout: ValidateLayout) -> VoxsmithValidateLayout {
-    match layout {
-        ValidateLayout::Tables => VoxsmithValidateLayout::Tables,
-        ValidateLayout::JsonPretty => VoxsmithValidateLayout::JsonPretty,
-        ValidateLayout::JsonCompact => VoxsmithValidateLayout::JsonCompact,
-    }
 }
 
 /// The plural suffix for a count.

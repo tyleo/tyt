@@ -57,6 +57,7 @@ mod dither;
 mod error;
 #[cfg(feature = "_mesh")]
 mod gltf_range;
+mod index_range;
 mod order_palette_colors;
 mod reduce_palette;
 mod reduction_method;
@@ -65,6 +66,7 @@ mod report;
 mod result;
 #[cfg(feature = "_mesh")]
 mod scalar_range;
+mod vector_component;
 mod voxel_format;
 
 #[cfg(feature = "_mesh")]
@@ -80,6 +82,7 @@ pub use dither::*;
 pub use error::*;
 #[cfg(feature = "_mesh")]
 pub(crate) use gltf_range::*;
+pub use index_range::*;
 pub use order_palette_colors::*;
 pub use reduce_palette::*;
 pub use reduction_method::*;
@@ -88,4 +91,5 @@ pub use report::*;
 pub use result::*;
 #[cfg(feature = "_mesh")]
 pub(crate) use scalar_range::*;
+pub use vector_component::*;
 pub use voxel_format::*;
