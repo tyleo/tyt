@@ -1,5 +1,5 @@
-use voxj::DependenciesImpl as VoxjDependenciesImpl;
+use voxj_codec::DependenciesImpl as VoxjDependenciesImpl;
 
-/// The voxj dependencies every Voxel Json wrapper here binds: voxj's own
-/// base64 transcoding and deflate-size block cost.
+/// The dependencies every Voxel Json wrapper here binds. voxj-codec's cover
+/// voxj's too.
 pub(crate) const VOXJ_DEPENDENCIES: VoxjDependenciesImpl = VoxjDependenciesImpl;

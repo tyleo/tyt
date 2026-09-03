@@ -99,11 +99,12 @@ mod tests {
         BVoxHierarchyNode, BVoxLayer, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMap,
     };
     use voxj::{
-        DependenciesImpl, VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain,
-        VoxjMap, VoxjObject, VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState,
-        VoxjSampleBlock, VoxjTransform, VoxjValue, VoxjValuePool,
+        VoxjEditObject, VoxjEditState, VoxjFile, VoxjHierarchyNode, VoxjMain, VoxjMap, VoxjObject,
+        VoxjPalette, VoxjPositionBlock, VoxjProperty, VoxjRuntimeState, VoxjSampleBlock,
+        VoxjTransform, VoxjValue, VoxjValuePool,
         objects::{decode_voxj_object, voxj_palette_material_counts},
     };
+    use voxj_codec::DependenciesImpl;
 
     /// A `float` value pool of ascending values `0.0 ..= (n - 1)`, so a
     /// material reading value-index `m` resolves to `m` as a float.

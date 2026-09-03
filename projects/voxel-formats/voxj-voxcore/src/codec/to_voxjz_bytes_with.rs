@@ -4,13 +4,16 @@ use voxj::{
     CostVoxjObject, EncodeBase64,
     objects::{PositionEncoding, SampleEncoding},
 };
-use voxj_codec::to_voxjz_file_bytes;
+use voxj_codec::{Deflate, EncodeVoxjJson, to_voxjz_file_bytes};
 
 /// Writes a [`VoxMain`] to a `.voxjz` zip archive holding one compact
 /// `.voxj` member, with fixed `position` and `sample` block encodings applied
 /// to every object. For the lowest-cost search instead, see
 /// [`to_voxjz_bytes`](crate::codec::to_voxjz_bytes).
-pub fn to_voxjz_bytes_with<T: VoxExtSlot, D: EncodeBase64 + CostVoxjObject>(
+pub fn to_voxjz_bytes_with<
+    T: VoxExtSlot,
+    D: EncodeBase64 + CostVoxjObject + EncodeVoxjJson + Deflate,
+>(
     dependencies: &D,
     state: &VoxMain<T>,
     position: PositionEncoding,
@@ -20,5 +23,5 @@ pub fn to_voxjz_bytes_with<T: VoxExtSlot, D: EncodeBase64 + CostVoxjObject>(
         .position_encoding(Some(position))
         .sample_encoding(Some(sample))
         .build()?;
-    Ok(to_voxjz_file_bytes(&file)?)
+    Ok(to_voxjz_file_bytes(dependencies, &file))
 }

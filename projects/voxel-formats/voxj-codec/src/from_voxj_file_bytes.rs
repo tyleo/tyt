@@ -1,16 +1,16 @@
-use crate::{Error, Result};
+use crate::{DecodeVoxjJson, Error, Result};
 use voxj::VoxjFile;
 
-/// Decodes `.voxj` JSON bytes into a [`VoxjFile`].
-pub fn from_voxj_file_bytes(bytes: &[u8]) -> Result<VoxjFile> {
-    serde_json::from_slice(bytes).map_err(Error::Json)
+/// Decodes `.voxj` JSON bytes into a [`VoxjFile`] through `dependencies`.
+pub fn from_voxj_file_bytes<D: DecodeVoxjJson>(dependencies: &D, bytes: &[u8]) -> Result<VoxjFile> {
+    dependencies.decode_voxj_json(bytes).map_err(Error::Json)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use crate::{
-        from_voxj_file_bytes, from_voxj_or_voxjz_file_bytes, from_voxjz_file_bytes,
-        to_voxj_file_bytes, to_voxjz_file_bytes,
+        DependenciesImpl, from_voxj_file_bytes, from_voxj_or_voxjz_file_bytes,
+        from_voxjz_file_bytes, to_voxj_file_bytes, to_voxjz_file_bytes,
     };
     use serde_json::{Value, json};
     use voxj::{
@@ -60,20 +60,23 @@ mod tests {
     #[test]
     fn voxj_round_trips_document_and_ext() {
         let file = document_with_ext(json!({ "voxel-max": { "scene": { "v": 4 } } }));
-        let bytes = to_voxj_file_bytes(&file).unwrap();
-        assert_eq!(from_voxj_file_bytes(&bytes).unwrap(), file);
+        let bytes = to_voxj_file_bytes(&DependenciesImpl, &file);
+        assert_eq!(
+            from_voxj_file_bytes(&DependenciesImpl, &bytes).unwrap(),
+            file
+        );
     }
 
     #[test]
     fn voxj_without_ext_omits_the_field() {
         let file = document();
-        let bytes = to_voxj_file_bytes(&file).unwrap();
+        let bytes = to_voxj_file_bytes(&DependenciesImpl, &file);
         assert!(
             !String::from_utf8(bytes.clone())
                 .unwrap()
                 .contains("\"ext\"")
         );
-        let decoded = from_voxj_file_bytes(&bytes).unwrap();
+        let decoded = from_voxj_file_bytes(&DependenciesImpl, &bytes).unwrap();
         assert_eq!(decoded, file);
         assert!(decoded.main.ext.is_none());
     }
@@ -89,20 +92,36 @@ mod tests {
             0.21586050011389926,
             0.9734452903984125,
         ])];
-        let bytes = to_voxj_file_bytes(&file).unwrap();
-        let reloaded = from_voxj_file_bytes(&bytes).unwrap();
-        assert_eq!(to_voxj_file_bytes(&reloaded).unwrap(), bytes);
+        let bytes = to_voxj_file_bytes(&DependenciesImpl, &file);
+        let reloaded = from_voxj_file_bytes(&DependenciesImpl, &bytes).unwrap();
+        assert_eq!(to_voxj_file_bytes(&DependenciesImpl, &reloaded), bytes);
     }
 
     #[test]
     fn voxjz_round_trips_and_detection_dispatches() {
         let file = document_with_ext(json!({ "k": 1 }));
-        let zip = to_voxjz_file_bytes(&file).unwrap();
-        assert_eq!(from_voxjz_file_bytes(&zip).unwrap(), file);
+        let zip = to_voxjz_file_bytes(&DependenciesImpl, &file);
+        assert_eq!(
+            from_voxjz_file_bytes(&DependenciesImpl, &zip).unwrap(),
+            file
+        );
 
         // Detection: leading PK -> voxjz, leading { -> voxj.
-        assert_eq!(from_voxj_or_voxjz_file_bytes(&zip).unwrap(), file);
-        let json = to_voxj_file_bytes(&file).unwrap();
-        assert_eq!(from_voxj_or_voxjz_file_bytes(&json).unwrap(), file);
+        assert_eq!(
+            from_voxj_or_voxjz_file_bytes(&DependenciesImpl, &zip).unwrap(),
+            file
+        );
+        let json = to_voxj_file_bytes(&DependenciesImpl, &file);
+        assert_eq!(
+            from_voxj_or_voxjz_file_bytes(&DependenciesImpl, &json).unwrap(),
+            file
+        );
+    }
+
+    #[test]
+    fn undecodable_json_reports_the_parse_failure() {
+        let error = from_voxj_file_bytes(&DependenciesImpl, b"not a document").unwrap_err();
+        assert!(matches!(error, crate::Error::Json(_)));
+        assert!(!error.to_string().is_empty());
     }
 }

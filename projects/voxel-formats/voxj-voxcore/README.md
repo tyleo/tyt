@@ -29,6 +29,10 @@ from file bytes over `voxj-codec`:
   JSON or a `.voxjz` zip archive, choosing each object's block encodings by
   the lowest cost. The `*_with` variants fix the encodings.
 
+Each also takes the codec's dependencies: `DecodeVoxjJson` and `Inflate` to
+load, `EncodeVoxjJson` and `Deflate` to write. `voxj_codec::DependenciesImpl`
+supplies those and voxj's.
+
 ## The ext block
 
 The loaders and writers are generic over the state's ext slot through

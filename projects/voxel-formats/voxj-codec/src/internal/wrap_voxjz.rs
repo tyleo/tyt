@@ -1,5 +1,4 @@
-use flate2::{Compression, Crc, write::DeflateEncoder};
-use std::io::Write;
+use crate::{Deflate, crc32};
 
 /// Conventional name of the single `.voxj` member inside a `.voxjz` archive.
 const MEMBER_NAME: &[u8] = b"main.voxj";
@@ -25,29 +24,22 @@ const DOS_TIME: u16 = 0x0000;
 const DOS_DATE: u16 = 0x0021;
 
 /// Wraps a `.voxj` byte payload in a single-member, deflate-compressed `.voxjz`
-/// zip archive. The common case uses classic 32-bit framing; the writer
-/// transparently switches to zip64 when the member's compressed or uncompressed
-/// size, or the central-directory offset, would overflow a 32-bit field
-/// (>= 4 GiB), so a large payload still yields a valid archive instead of one
-/// with silently truncated sizes.
-pub fn wrap_voxjz(member: &[u8]) -> Vec<u8> {
-    wrap_voxjz_with(member, u64::from(ZIP64_SENTINEL))
+/// zip archive through `dependencies`. The common case uses classic 32-bit
+/// framing; the writer transparently switches to zip64 when the member's
+/// compressed or uncompressed size, or the central-directory offset, would
+/// overflow a 32-bit field (>= 4 GiB), so a large payload still yields a valid
+/// archive instead of one with silently truncated sizes.
+pub fn wrap_voxjz<D: Deflate>(dependencies: &D, member: &[u8]) -> Vec<u8> {
+    wrap_voxjz_with(dependencies, member, u64::from(ZIP64_SENTINEL))
 }
 
 /// Builds the archive, routing any size or offset that reaches `zip64_at`
 /// through zip64 framing. Production passes `0xFFFFFFFF` (the one value a
 /// 32-bit field can never store inline); tests pass a small value to drive the
 /// zip64 path with a tiny payload.
-fn wrap_voxjz_with(member: &[u8], zip64_at: u64) -> Vec<u8> {
-    let mut crc = Crc::new();
-    crc.update(member);
-    let crc = crc.sum();
-
-    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::best());
-    encoder
-        .write_all(member)
-        .expect("write to Vec is infallible");
-    let compressed = encoder.finish().expect("flush to Vec is infallible");
+fn wrap_voxjz_with<D: Deflate>(dependencies: &D, member: &[u8], zip64_at: u64) -> Vec<u8> {
+    let crc = crc32(member);
+    let compressed = dependencies.deflate(member);
 
     let uncompressed_size = member.len() as u64;
     let compressed_size = compressed.len() as u64;
@@ -175,12 +167,13 @@ fn zip64_size_extra(uncompressed_size: u64, compressed_size: u64) -> Vec<u8> {
     extra
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use super::{
         DOS_DATE, MEMBER_NAME, ZIP64_SENTINEL, ZIP64_VERSION, wrap_voxjz, wrap_voxjz_with,
     };
-    use crate::unwrap_voxjz;
+    use crate::{DependenciesImpl, unwrap_voxjz};
+    use flate2::Crc;
 
     const EOCD_SIG: [u8; 4] = [0x50, 0x4b, 0x05, 0x06];
     const ZIP64_EOCD_SIG: [u8; 4] = [0x50, 0x4b, 0x06, 0x06];
@@ -198,7 +191,7 @@ mod tests {
     #[test]
     fn classic_archive_round_trips_without_zip64() {
         let member = br#"{"version":1,"main":{}}"#;
-        let bytes = wrap_voxjz(member);
+        let bytes = wrap_voxjz(&DependenciesImpl, member);
 
         // The common path stays classic: a single 22-byte end record, with no
         // zip64 locator preceding it.
@@ -208,14 +201,19 @@ mod tests {
         assert_eq!(u16_at(&bytes, 28), 0); // local extra length: none
         assert_eq!(u16_at(&bytes, 12), DOS_DATE); // valid 1980-01-01 mod date
 
-        assert_eq!(unwrap_voxjz(&bytes).unwrap(), member);
+        // The in-crate CRC matches flate2's.
+        let mut expected = Crc::new();
+        expected.update(member);
+        assert_eq!(u32_at(&bytes, 14), expected.sum());
+
+        assert_eq!(unwrap_voxjz(&DependenciesImpl, &bytes).unwrap(), member);
     }
 
     #[test]
     fn zip64_archive_round_trips_and_is_well_formed() {
         let member = br#"{"version":1,"main":{"note":"forced zip64"}}"#;
         // Force the zip64 path on a tiny payload by lowering the threshold.
-        let bytes = wrap_voxjz_with(member, 1);
+        let bytes = wrap_voxjz_with(&DependenciesImpl, member, 1);
 
         // The local header advertises zip64 and sends both sizes to the
         // sentinel, with the real sizes in a zip64 extra field after the name.
@@ -240,6 +238,6 @@ mod tests {
         assert_eq!(bytes[zip64_eocd..zip64_eocd + 4], ZIP64_EOCD_SIG);
         assert_eq!(u32_at(&bytes, eocd + 16), ZIP64_SENTINEL); // offset of CD
 
-        assert_eq!(unwrap_voxjz(&bytes).unwrap(), member);
+        assert_eq!(unwrap_voxjz(&DependenciesImpl, &bytes).unwrap(), member);
     }
 }

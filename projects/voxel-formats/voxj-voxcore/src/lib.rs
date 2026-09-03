@@ -10,9 +10,11 @@
 //! and [`CostVoxjObject`](voxj::CostVoxjObject) to write.
 //! `voxj::DependenciesImpl` supplies all three. The [`codec`] module, behind
 //! the default `codec` feature, goes straight to and from `.voxj` / `.voxjz`
-//! bytes. The document's `ext` block goes through the state's ext slot, typed
-//! by the slot's [`VoxExtSlot`](voxcore::ext::VoxExtSlot). A [`VoxjVoxMain`]
-//! carries the block verbatim, whichever format owns it.
+//! bytes and takes the codec's dependencies too.
+//! `voxj_codec::DependenciesImpl` supplies those and voxj's. The document's
+//! `ext` block goes through the state's ext slot, typed by the slot's
+//! [`VoxExtSlot`](voxcore::ext::VoxExtSlot). A [`VoxjVoxMain`] carries the
+//! block verbatim, whichever format owns it.
 
 // Public API
 

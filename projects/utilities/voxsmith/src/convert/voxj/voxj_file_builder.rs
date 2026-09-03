@@ -1,7 +1,10 @@
 use crate::{EditStateMode, PositionEncoding, Result, SampleEncoding, VOXJ_DEPENDENCIES};
 use voxcore::{VoxMain, ext::VoxExtSlot};
-use voxj::{DependenciesImpl as VoxjDependenciesImpl, VoxjFile};
-use voxj_codec::{to_voxj_file_bytes, to_voxj_pretty_file_bytes, to_voxjz_file_bytes};
+use voxj::VoxjFile;
+use voxj_codec::{
+    DependenciesImpl as VoxjDependenciesImpl, to_voxj_file_bytes, to_voxj_pretty_file_bytes,
+    to_voxjz_file_bytes,
+};
 use voxj_voxcore::VoxjFileBuilder as RawVoxjFileBuilder;
 
 /// Builds a Voxel Json document from a [`VoxMain`], the configurable form of
@@ -49,28 +52,31 @@ impl<'a, T: VoxExtSlot> VoxjFileBuilder<'a, T> {
 
     /// Builds the document and serializes it to compact `.voxj` JSON bytes.
     pub fn to_voxj_bytes(self) -> Result<Vec<u8>> {
-        Ok(to_voxj_file_bytes(&self.build()?)?)
+        Ok(to_voxj_file_bytes(&VOXJ_DEPENDENCIES, &self.build()?))
     }
 
     /// Builds the document and serializes it to pretty-printed `.voxj` JSON
     /// bytes.
     pub fn to_voxj_pretty_bytes(self) -> Result<Vec<u8>> {
-        Ok(to_voxj_pretty_file_bytes(&self.build()?)?)
+        Ok(to_voxj_pretty_file_bytes(
+            &VOXJ_DEPENDENCIES,
+            &self.build()?,
+        ))
     }
 
     /// Builds the document and serializes it to a `.voxjz` zip archive
     /// holding one compact `.voxj` member.
     pub fn to_voxjz_bytes(self) -> Result<Vec<u8>> {
-        Ok(to_voxjz_file_bytes(&self.build()?)?)
+        Ok(to_voxjz_file_bytes(&VOXJ_DEPENDENCIES, &self.build()?))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::{
-        EditStateMode, PositionEncoding, SampleEncoding, VoxjCheckStatus, VoxjFileBuilder,
-        VoxjVoxMain, check_voxj_bytes, from_voxj_bytes, to_voxj_bytes, to_voxj_vox_main,
-        to_voxjz_bytes, voxj_version_from_bytes,
+        EditStateMode, PositionEncoding, SampleEncoding, VOXJ_DEPENDENCIES, VoxjCheckStatus,
+        VoxjFileBuilder, VoxjVoxMain, check_voxj_bytes, from_voxj_bytes, to_voxj_bytes,
+        to_voxj_vox_main, to_voxjz_bytes, voxj_version_from_bytes,
     };
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
@@ -187,7 +193,10 @@ mod tests {
 
         assert!(pretty.starts_with(b"{\n"));
 
-        assert_eq!(from_voxj_file_bytes(&pretty).unwrap(), compact);
+        assert_eq!(
+            from_voxj_file_bytes(&VOXJ_DEPENDENCIES, &pretty).unwrap(),
+            compact
+        );
     }
 
     /// A written document passes every check and reports the version it was

@@ -8,7 +8,7 @@ use voxj_codec::from_voxj_or_voxjz_file_bytes;
 /// from the leading bytes. Undecodable bytes are an error; a document that
 /// breaks a rule reports the failed check.
 pub fn check_voxj_bytes(bytes: &[u8]) -> Result<Vec<VoxjCheck>> {
-    let file = from_voxj_or_voxjz_file_bytes(bytes)?;
+    let file = from_voxj_or_voxjz_file_bytes(&VOXJ_DEPENDENCIES, bytes)?;
 
     Ok(check_voxj_file(&VOXJ_DEPENDENCIES, &file))
 }
