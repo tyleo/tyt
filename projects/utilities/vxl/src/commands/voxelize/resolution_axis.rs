@@ -1,25 +1,32 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::ResolutionAxis;
 
-/// Which axis a `--resolution` count sizes; the other axes preserve aspect.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
-pub enum ResolutionAxis {
-    /// The mesh's longest extent.
-    #[value(name = "long")]
-    Long,
+impl CliValue for ResolutionAxis {
+    const VARIANTS: &'static [Self] = &[
+        ResolutionAxis::Long,
+        ResolutionAxis::Short,
+        ResolutionAxis::X,
+        ResolutionAxis::Y,
+        ResolutionAxis::Z,
+    ];
 
-    /// The mesh's shortest extent.
-    #[value(name = "short")]
-    Short,
+    fn name(self) -> &'static str {
+        match self {
+            ResolutionAxis::Long => "long",
+            ResolutionAxis::Short => "short",
+            ResolutionAxis::X => "x",
+            ResolutionAxis::Y => "y",
+            ResolutionAxis::Z => "z",
+        }
+    }
 
-    /// The x axis.
-    #[value(name = "x")]
-    X,
-
-    /// The y axis.
-    #[value(name = "y")]
-    Y,
-
-    /// The z axis.
-    #[value(name = "z")]
-    Z,
+    fn help(self) -> &'static str {
+        match self {
+            ResolutionAxis::Long => "The mesh's longest extent",
+            ResolutionAxis::Short => "The mesh's shortest extent",
+            ResolutionAxis::X => "The x axis",
+            ResolutionAxis::Y => "The y axis",
+            ResolutionAxis::Z => "The z axis",
+        }
+    }
 }

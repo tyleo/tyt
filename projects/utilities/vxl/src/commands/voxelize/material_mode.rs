@@ -1,23 +1,33 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::MaterialMode;
 
-/// Where each voxel's color and material come from when `voxelize` rasterizes a
-/// mesh. Independent of [`FillMode`](crate::commands::FillMode), which sets
-/// the geometry.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
-pub enum MaterialMode {
-    /// Sample per-texel when the mesh carries textures, else per-primitive.
-    #[value(name = "auto")]
-    Auto,
+impl CliValue for MaterialMode {
+    const VARIANTS: &'static [Self] = &[
+        MaterialMode::Auto,
+        MaterialMode::PerPrimitive,
+        MaterialMode::PerTexel,
+        MaterialMode::Flat,
+    ];
 
-    /// One material per glTF material, read from its flat PBR factors.
-    #[value(name = "per-primitive")]
-    PerPrimitive,
+    fn name(self) -> &'static str {
+        match self {
+            MaterialMode::Auto => "auto",
+            MaterialMode::PerPrimitive => "per-primitive",
+            MaterialMode::PerTexel => "per-texel",
+            MaterialMode::Flat => "flat",
+        }
+    }
 
-    /// Sample the material maps at each voxel's surface point.
-    #[value(name = "per-texel")]
-    PerTexel,
-
-    /// Ignore the mesh's materials and paint the one `--fill-color`.
-    #[value(name = "flat")]
-    Flat,
+    fn help(self) -> &'static str {
+        match self {
+            MaterialMode::Auto => {
+                "Sample per-texel when the mesh carries textures, else per-primitive"
+            }
+            MaterialMode::PerPrimitive => {
+                "One material per glTF material, read from its flat PBR factors"
+            }
+            MaterialMode::PerTexel => "Sample the material maps at each voxel's surface point",
+            MaterialMode::Flat => "Ignore the mesh's materials and paint the one `--fill-color`",
+        }
+    }
 }

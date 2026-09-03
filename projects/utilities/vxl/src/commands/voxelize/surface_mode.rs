@@ -1,16 +1,25 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::SurfaceMode;
 
-/// How `voxelize` decides which cells the surface occupies, independent of
-/// `--fill-mode`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
-pub enum SurfaceMode {
-    /// Fill a cell when its center lies inside the surface. Expects a closed
-    /// mesh.
-    #[value(name = "center-inside")]
-    CenterInside,
+impl CliValue for SurfaceMode {
+    const VARIANTS: &'static [Self] = &[SurfaceMode::CenterInside, SurfaceMode::TriangleCover];
 
-    /// Fill a cell when any triangle passes through it. Handles an open mesh,
-    /// but marks both sides of a face that lands on a cell boundary.
-    #[value(name = "triangle-cover")]
-    TriangleCover,
+    fn name(self) -> &'static str {
+        match self {
+            SurfaceMode::CenterInside => "center-inside",
+            SurfaceMode::TriangleCover => "triangle-cover",
+        }
+    }
+
+    fn help(self) -> &'static str {
+        match self {
+            SurfaceMode::CenterInside => {
+                "Fill a cell when its center lies inside the surface. Expects a closed mesh"
+            }
+            SurfaceMode::TriangleCover => {
+                "Fill a cell when any triangle passes through it. Handles an open mesh, but marks \
+                 both sides of a face that lands on a cell boundary"
+            }
+        }
+    }
 }

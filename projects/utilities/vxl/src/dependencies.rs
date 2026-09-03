@@ -1,16 +1,12 @@
 use crate::{
-    Format, MeshFormat, Result, VoxjEncoding, VoxjFormat, Width,
-    commands::{
-        CameraView, ColorFormat, EditState, FillMode, GridResolution, MaterialMode, MeshMethod,
-        MeshTextureMap, OutOfRangeProperty, PaletteReduction, ResourceStorage, SurfaceMode,
-        TextureShape,
-    },
+    Format, Result, VoxjEncoding, VoxjFormat, Width,
+    commands::{CameraView, ColorFormat, EditState},
 };
 use std::{num::NonZeroU8, path::Path};
 use voxsmith::{
-    HierarchyShowLayout, HierarchyViews, IndexRange, InfoLayout, PaletteListFields,
-    PaletteListLayout, PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PatternView,
-    PropertySelector, ValidateLayout,
+    HierarchyShowLayout, HierarchyViews, IndexRange, InfoLayout, MaterialMeshRequest, MeshFormat,
+    PaletteListFields, PaletteListLayout, PaletteShowLabel, PaletteShowLayout,
+    PaletteShowTableShape, PatternView, PropertySelector, ValidateLayout, VoxelizeOptions,
 };
 
 /// Dependencies for this crate's operations.
@@ -82,44 +78,24 @@ pub trait Dependencies {
         edit_state: EditState,
     ) -> Result<()>;
 
-    /// Voxelizes the mesh at `input` into a Voxel Json document at `output`,
-    /// reading the mesh extent to size the grid, then rasterizing into it.
+    /// Voxelizes the mesh at `input` into a Voxel Json document at `output`.
     ///
     /// # Arguments
     /// * `input` - the glTF or GLB mesh to read.
     /// * `from` - source mesh format, inferred from `input`'s extension when
     ///   `None`.
     /// * `output` - the `.voxj` or `.voxjz` document to write.
-    /// * `resolution` - how the grid is sized: a voxel count along the longest
-    ///   axis, or a real-world voxel size (recorded as the placing node's
-    ///   scale).
-    /// * `fill_mode` - a solid body (flood-filled) or a hollow surface shell.
-    /// * `material_mode` - where each voxel's color and material come from.
-    /// * `fill_color` - the color of voxels a mode cannot sample, or `None`
-    ///   when the flag is omitted.
-    /// * `name` - object-name override; `None` uses the mesh's name, else the
-    ///   input stem.
-    /// * `reduction` - the palette material cap and its clustering controls.
+    /// * `options` - how the mesh is voxelized.
     /// * `encoding` - the per-object block encodings.
     /// * `format` - the output container and printing form.
-    /// * `out_of_range_property` - whether a source material value outside its
-    ///   property's glTF range errors or clamps.
-    #[allow(clippy::too_many_arguments)]
     fn voxelize(
         &self,
         input: &Path,
         from: Option<MeshFormat>,
         output: &Path,
-        resolution: GridResolution,
-        surface_mode: SurfaceMode,
-        fill_mode: FillMode,
-        material_mode: MaterialMode,
-        fill_color: Option<[u8; 4]>,
-        name: Option<&str>,
-        reduction: PaletteReduction,
+        options: &VoxelizeOptions,
         encoding: VoxjEncoding,
         format: VoxjFormat,
-        out_of_range_property: OutOfRangeProperty,
     ) -> Result<()>;
 
     /// Resolves the object selectors against the voxel file at `input` to the
@@ -145,10 +121,10 @@ pub trait Dependencies {
 
     /// Meshes the object at index `object_index` of the voxel file at `input`
     /// into a glTF or GLB mesh at `output`, with no hierarchy-node transform.
-    /// With no `maps` it is pure geometry. Otherwise it bakes the object's
-    /// flattened layer materials, merged per property name by the format's
-    /// layer-override rule, into textures the mesh's UVs sample, writing any
-    /// loose images beside `output`.
+    /// With no maps in `request` it is pure geometry. Otherwise it bakes the
+    /// object's flattened layer materials, merged per property name by the
+    /// format's layer-override rule, into textures the mesh's UVs sample,
+    /// writing any loose images beside `output`.
     ///
     /// # Arguments
     /// * `input` - the voxel file to read, in any supported format.
@@ -156,29 +132,17 @@ pub trait Dependencies {
     ///   `None`.
     /// * `output` - the `.gltf` or `.glb` mesh to write.
     /// * `format` - the target mesh container.
-    /// * `scale` - meters per voxel, applied as a uniform scale to every
-    ///   vertex.
-    /// * `method` - the meshing strategy.
     /// * `object_index` - the object's index into the document, as
     ///   [`resolve_objects`](Self::resolve_objects) returns.
-    /// * `maps` - the material maps to bake, each its own image, in order;
-    ///   empty for pure geometry.
-    /// * `storage` - where the baked images go.
-    /// * `texture_shape` - how the baked atlas canvas is shaped around the
-    ///   material texels; ignored for pure geometry.
-    #[allow(clippy::too_many_arguments)]
+    /// * `request` - the meshing and bake settings.
     fn mesh_object(
         &self,
         input: &Path,
         from: Option<Format>,
         output: &Path,
         format: MeshFormat,
-        scale: f64,
-        method: MeshMethod,
         object_index: usize,
-        maps: &[MeshTextureMap],
-        storage: ResourceStorage,
-        texture_shape: TextureShape,
+        request: &MaterialMeshRequest,
     ) -> Result<()>;
 
     /// Reports what the voxel file at `input` contains: a document summary, its

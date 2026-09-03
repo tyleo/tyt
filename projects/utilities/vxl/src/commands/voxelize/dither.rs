@@ -1,17 +1,22 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::Dither;
 
-/// Error-diffusion method when snapping voxel samples to new palette values.
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum Dither {
-    /// No diffusion; snap each sample to the nearest value.
-    #[value(name = "none")]
-    None,
+impl CliValue for Dither {
+    const VARIANTS: &'static [Self] = &[Dither::None, Dither::FloydSteinberg, Dither::Ordered];
 
-    /// Floyd-Steinberg diffusion in 3D voxel order.
-    #[value(name = "floyd-steinberg")]
-    FloydSteinberg,
+    fn name(self) -> &'static str {
+        match self {
+            Dither::None => "none",
+            Dither::FloydSteinberg => "floyd-steinberg",
+            Dither::Ordered => "ordered",
+        }
+    }
 
-    /// Ordered, threshold-matrix dithering.
-    #[value(name = "ordered")]
-    Ordered,
+    fn help(self) -> &'static str {
+        match self {
+            Dither::None => "No diffusion; snap each sample to the nearest value",
+            Dither::FloydSteinberg => "Floyd-Steinberg diffusion in 3D voxel order",
+            Dither::Ordered => "Ordered, threshold-matrix dithering",
+        }
+    }
 }

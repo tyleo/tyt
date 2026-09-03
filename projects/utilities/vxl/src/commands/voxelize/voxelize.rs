@@ -1,12 +1,12 @@
 use crate::{
-    Dependencies, Error, MeshFormat, NoneOr, Result, Rgba, VoxjEncodingOptions,
-    commands::{
-        FillMode, GridResolutionOptions, MaterialMode, OutOfRangeProperty, QuantizeOptions,
-        SurfaceMode,
-    },
+    Dependencies, Error, NoneOr, Result, Rgba, VoxjEncodingOptions, cli_value_parser,
+    commands::{GridResolutionOptions, QuantizeOptions},
 };
 use clap::Parser;
 use std::path::PathBuf;
+use voxsmith::{
+    FillMode, MaterialMode, MeshFormat, OutOfRangeProperty, SurfaceMode, VoxelizeOptions,
+};
 
 /// Rasterizes a mesh into a voxel grid, the inverse of `mesh`.
 #[derive(Clone, Debug, Parser)]
@@ -22,25 +22,40 @@ pub struct Voxelize {
     output: Option<PathBuf>,
 
     /// Source mesh format. Inferred from the input extension when omitted.
-    #[arg(value_name = "from", long)]
+    #[arg(value_name = "from", long, value_parser = cli_value_parser::<MeshFormat>())]
     from: Option<MeshFormat>,
 
     #[command(flatten)]
     resolution_options: GridResolutionOptions,
 
     /// How the mesh fills the grid, independent of `--material-mode`.
-    #[arg(value_name = "fill-mode", long, default_value = "solid")]
+    #[arg(
+        value_name = "fill-mode",
+        long,
+        default_value = "solid",
+        value_parser = cli_value_parser::<FillMode>()
+    )]
     fill_mode: FillMode,
 
     /// Whether a cell is occupied by its center lying inside the surface or by
     /// any triangle passing through it, independent of `--fill-mode`.
     /// `center-inside` expects a closed mesh; `triangle-cover` handles an open
     /// one.
-    #[arg(value_name = "surface-mode", long, default_value = "center-inside")]
+    #[arg(
+        value_name = "surface-mode",
+        long,
+        default_value = "center-inside",
+        value_parser = cli_value_parser::<SurfaceMode>()
+    )]
     surface_mode: SurfaceMode,
 
     /// Where each voxel's color comes from, independent of `--fill-mode`.
-    #[arg(value_name = "material-mode", long, default_value = "auto")]
+    #[arg(
+        value_name = "material-mode",
+        long,
+        default_value = "auto",
+        value_parser = cli_value_parser::<MaterialMode>()
+    )]
     material_mode: MaterialMode,
 
     /// Fill color as a `#RRGGBBAA` hex, or `none`. Under `--material-mode flat`
@@ -58,7 +73,12 @@ pub struct Voxelize {
     /// What a source material value outside its property's glTF range does,
     /// such as a `metallic` above `1`. `error` names the property and refuses
     /// the mesh. `clamp` clamps onto the range and voxelizes on.
-    #[arg(value_name = "out-of-range-property", long, default_value = "error")]
+    #[arg(
+        value_name = "out-of-range-property",
+        long,
+        default_value = "error",
+        value_parser = cli_value_parser::<OutOfRangeProperty>()
+    )]
     out_of_range_property: OutOfRangeProperty,
 
     #[command(flatten)]
@@ -80,23 +100,18 @@ impl Voxelize {
 
         let encoding = self.encoding_options.encoding();
 
-        let reduction = self.quantize_options.resolve();
-
-        dependencies.voxelize(
-            &self.input,
-            self.from,
-            &output,
+        let options = VoxelizeOptions {
             resolution,
-            self.surface_mode,
-            self.fill_mode,
-            self.material_mode,
-            self.fill_color.value().map(|color| color.0),
-            self.name.as_deref(),
-            reduction,
-            encoding,
-            format,
-            self.out_of_range_property,
-        )
+            surface_mode: self.surface_mode,
+            fill_mode: self.fill_mode,
+            material_mode: self.material_mode,
+            fill_color: self.fill_color.value().map(|color| color.0),
+            name: self.name,
+            out_of_range_property: self.out_of_range_property,
+            reduction: self.quantize_options.resolve(),
+        };
+
+        dependencies.voxelize(&self.input, self.from, &output, &options, encoding, format)
     }
 
     /// Rejects a `--fill-color` that a sampling-mode surface shell would drop.

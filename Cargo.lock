@@ -2124,11 +2124,9 @@ dependencies = [
 name = "vxl"
 version = "0.1.0"
 dependencies = [
- "branded-id",
  "clap",
  "clap_complete",
  "libc",
- "ty-math",
  "vmax",
  "vmax-codec",
  "voxcore",

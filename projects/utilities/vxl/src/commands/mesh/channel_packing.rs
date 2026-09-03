@@ -1,26 +1,28 @@
 use crate::{
     Result,
-    commands::{ChannelSource, PropertyBinding},
+    commands::{PropertyBinding, parse_material_channel, resolve_material_channel},
 };
 use std::{result::Result as StdResult, str::FromStr};
+use voxsmith::{MaterialBake, MaterialChannel};
 
-/// A material-map channel packing: a [`ChannelSource`] per named RGBA channel.
+/// A material-map channel packing: a [`MaterialChannel`] per named RGBA
+/// channel.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChannelPacking {
-    r: Option<ChannelSource>,
-    g: Option<ChannelSource>,
-    b: Option<ChannelSource>,
-    a: Option<ChannelSource>,
+    r: Option<MaterialChannel>,
+    g: Option<MaterialChannel>,
+    b: Option<MaterialChannel>,
+    a: Option<MaterialChannel>,
 }
 
 impl ChannelPacking {
     /// A packing from per-channel sources, each `None` when the channel is not
     /// part of the image; see [`channel_count`](Self::channel_count).
     pub fn new(
-        r: Option<ChannelSource>,
-        g: Option<ChannelSource>,
-        b: Option<ChannelSource>,
-        a: Option<ChannelSource>,
+        r: Option<MaterialChannel>,
+        g: Option<MaterialChannel>,
+        b: Option<MaterialChannel>,
+        a: Option<MaterialChannel>,
     ) -> Self {
         ChannelPacking { r, g, b, a }
     }
@@ -41,32 +43,25 @@ impl ChannelPacking {
 
     /// The source feeding each channel up to [`channel_count`](Self::channel_count),
     /// in `R`, `G`, `B`, `A` order, with an unnamed channel below the highest
-    /// filled by [`ChannelSource::Zero`].
-    pub fn sources(&self) -> Vec<ChannelSource> {
+    /// filled by [`MaterialChannel::Zero`].
+    pub fn sources(&self) -> Vec<MaterialChannel> {
         [&self.r, &self.g, &self.b, &self.a]
             .into_iter()
             .take(self.channel_count())
-            .map(|slot| slot.clone().unwrap_or(ChannelSource::Zero))
+            .map(|slot| slot.clone().unwrap_or(MaterialChannel::Zero))
             .collect()
     }
 
-    /// Resolves every channel against the `--define-property` bindings into a
-    /// packing with concrete property keys.
-    pub(crate) fn resolve(&self, bindings: &[PropertyBinding]) -> Result<ChannelPacking> {
-        let resolved = self
+    /// Resolves every channel against the `--define-property` bindings into
+    /// the packing bake with concrete property keys.
+    pub(crate) fn resolve(&self, bindings: &[PropertyBinding]) -> Result<MaterialBake> {
+        let channels = self
             .sources()
             .iter()
-            .map(|source| source.resolve(bindings))
+            .map(|channel| resolve_material_channel(channel, bindings))
             .collect::<Result<Vec<_>>>()?;
 
-        let channel = |index: usize| resolved.get(index).cloned();
-
-        Ok(ChannelPacking::new(
-            channel(0),
-            channel(1),
-            channel(2),
-            channel(3),
-        ))
+        Ok(MaterialBake::Packing(channels))
     }
 }
 
@@ -83,11 +78,14 @@ impl FromStr for ChannelPacking {
             b: None,
             a: None,
         };
+
         for part in value.split(',') {
             let (channel, expr) = part
                 .split_once('=')
                 .ok_or_else(|| format!("`{part}` is not `R=<expr>`"))?;
-            let source = expr.parse::<ChannelSource>()?;
+
+            let source = parse_material_channel(expr)?;
+
             let slot = match channel {
                 "R" => &mut packing.r,
                 "G" => &mut packing.g,
@@ -95,26 +93,33 @@ impl FromStr for ChannelPacking {
                 "A" => &mut packing.a,
                 _ => return Err(format!("`{channel}` is not a channel; use R, G, B, or A")),
             };
+
             if slot.is_some() {
                 return Err(format!("channel `{channel}` is set twice"));
             }
+
             *slot = Some(source);
         }
+
         if packing.r.is_none() && packing.g.is_none() && packing.b.is_none() && packing.a.is_none()
         {
             return Err("a packing names no channels".to_string());
         }
+
         Ok(packing)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::commands::{ChannelPacking, ChannelSource};
-    use voxsmith::voxcore::material::{EMISSIVE_STRENGTH, METALLIC, ROUGHNESS};
+    use crate::commands::ChannelPacking;
+    use voxsmith::{
+        MaterialChannel,
+        voxcore::material::{EMISSIVE_STRENGTH, METALLIC, ROUGHNESS},
+    };
 
-    fn property(key: &str, invert: bool) -> ChannelSource {
-        ChannelSource::Property {
+    fn property(key: &str, invert: bool) -> MaterialChannel {
+        MaterialChannel::Property {
             key: key.to_string(),
             component: None,
             invert,
@@ -147,8 +152,8 @@ mod tests {
             packing.sources(),
             vec![
                 property(METALLIC, false),
-                ChannelSource::Zero,
-                ChannelSource::Zero,
+                MaterialChannel::Zero,
+                MaterialChannel::Zero,
                 property(ROUGHNESS, true),
             ]
         );
@@ -158,7 +163,7 @@ mod tests {
     fn parses_single_channel() {
         let packing = "R=computed-occlusion".parse::<ChannelPacking>().unwrap();
         assert_eq!(packing.channel_count(), 1);
-        assert_eq!(packing.sources(), vec![ChannelSource::ComputedOcclusion]);
+        assert_eq!(packing.sources(), vec![MaterialChannel::ComputedOcclusion]);
     }
 
     #[test]

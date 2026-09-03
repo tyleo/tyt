@@ -1,6 +1,7 @@
-use crate::commands::{ChannelPacking, ChannelSource, MaterialSlot, MeshTextureMap, TextureBake};
+use crate::commands::ChannelPacking;
 use clap::ValueEnum;
 use voxcore::material::{EMISSIVE_STRENGTH, METALLIC, OCCLUSION_STRENGTH, ROUGHNESS};
+use voxsmith::{MaterialBake, MaterialChannel, MaterialMap, MaterialSlot};
 
 /// A single-map material preset. The left side of `--texture-name` and each map
 /// a `--texture` bakes; the bundle-inclusive `--texture` value is
@@ -54,21 +55,20 @@ pub enum Texture {
 }
 
 impl Texture {
-    /// The glTF material slot this preset fills, or `None` for a preset with no
-    /// standard slot. Resolved here so the implementation never sees the CLI
-    /// preset.
-    pub fn slot(self) -> Option<MaterialSlot> {
+    /// The glTF material slot this preset fills, [`MaterialSlot::None`] for a
+    /// preset with no standard slot.
+    pub fn slot(self) -> MaterialSlot {
         match self {
-            Texture::Albedo => Some(MaterialSlot::BaseColor),
-            Texture::Orm => Some(MaterialSlot::OcclusionMetallicRoughness),
-            Texture::MetallicRoughness => Some(MaterialSlot::MetallicRoughness),
-            Texture::Occlusion => Some(MaterialSlot::Occlusion),
-            Texture::Emissive => Some(MaterialSlot::Emissive),
+            Texture::Albedo => MaterialSlot::BaseColor,
+            Texture::Orm => MaterialSlot::OcclusionMetallicRoughness,
+            Texture::MetallicRoughness => MaterialSlot::MetallicRoughness,
+            Texture::Occlusion => MaterialSlot::Occlusion,
+            Texture::Emissive => MaterialSlot::Emissive,
             Texture::MetallicSmoothness
             | Texture::Mse
             | Texture::ComputedOcclusion
             | Texture::Roughness
-            | Texture::Smoothness => None,
+            | Texture::Smoothness => MaterialSlot::None,
         }
     }
 
@@ -81,19 +81,19 @@ impl Texture {
             .to_owned()
     }
 
-    /// The resolved map this preset bakes under the file `name`.
-    pub fn map(self, name: String) -> MeshTextureMap {
-        MeshTextureMap {
+    /// The map this preset bakes under the file `name`.
+    pub fn map(self, name: String) -> MaterialMap {
+        MaterialMap {
             name,
             slot: self.slot(),
             bake: self.bake(),
         }
     }
 
-    /// Lowers this preset to the map the bake writes.
-    pub fn bake(self) -> TextureBake {
+    /// What this preset's map writes into its image.
+    pub fn bake(self) -> MaterialBake {
         match self {
-            Texture::Albedo => TextureBake::RgbaColor,
+            Texture::Albedo => MaterialBake::RgbaColor,
 
             Texture::Orm => packing(
                 property(OCCLUSION_STRENGTH, false),
@@ -103,7 +103,7 @@ impl Texture {
             ),
 
             Texture::MetallicRoughness => packing(
-                Some(ChannelSource::Zero),
+                Some(MaterialChannel::Zero),
                 property(ROUGHNESS, false),
                 property(METALLIC, false),
                 None,
@@ -111,8 +111,8 @@ impl Texture {
 
             Texture::MetallicSmoothness => packing(
                 property(METALLIC, false),
-                Some(ChannelSource::Zero),
-                Some(ChannelSource::Zero),
+                Some(MaterialChannel::Zero),
+                Some(MaterialChannel::Zero),
                 property(ROUGHNESS, true),
             ),
 
@@ -123,12 +123,12 @@ impl Texture {
                 None,
             ),
 
-            Texture::Emissive => TextureBake::EmissiveColor,
+            Texture::Emissive => MaterialBake::EmissiveColor,
 
             Texture::Occlusion => packing(property(OCCLUSION_STRENGTH, false), None, None, None),
 
             Texture::ComputedOcclusion => {
-                packing(Some(ChannelSource::ComputedOcclusion), None, None, None)
+                packing(Some(MaterialChannel::ComputedOcclusion), None, None, None)
             }
 
             Texture::Roughness => packing(property(ROUGHNESS, false), None, None, None),
@@ -138,32 +138,35 @@ impl Texture {
     }
 }
 
-/// A property channel source by voxj key, inverted when `invert` is set.
-fn property(key: &str, invert: bool) -> Option<ChannelSource> {
-    Some(ChannelSource::Property {
+/// A property channel by voxj key, inverted when `invert` is set.
+fn property(key: &str, invert: bool) -> Option<MaterialChannel> {
+    Some(MaterialChannel::Property {
         key: key.to_string(),
         component: None,
         invert,
     })
 }
 
-/// A `TextureBake::Packing` from per-channel sources.
+/// A packing bake from per-channel sources.
 fn packing(
-    r: Option<ChannelSource>,
-    g: Option<ChannelSource>,
-    b: Option<ChannelSource>,
-    a: Option<ChannelSource>,
-) -> TextureBake {
-    TextureBake::Packing(ChannelPacking::new(r, g, b, a))
+    r: Option<MaterialChannel>,
+    g: Option<MaterialChannel>,
+    b: Option<MaterialChannel>,
+    a: Option<MaterialChannel>,
+) -> MaterialBake {
+    MaterialBake::Packing(ChannelPacking::new(r, g, b, a).sources())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::commands::{ChannelPacking, ChannelSource, Texture, TextureBake};
-    use voxsmith::voxcore::material::{METALLIC, ROUGHNESS};
+    use crate::commands::{ChannelPacking, Texture};
+    use voxsmith::{
+        MaterialBake, MaterialChannel,
+        voxcore::material::{METALLIC, ROUGHNESS},
+    };
 
-    fn property(key: &str, invert: bool) -> ChannelSource {
-        ChannelSource::Property {
+    fn property(key: &str, invert: bool) -> MaterialChannel {
+        MaterialChannel::Property {
             key: key.to_string(),
             component: None,
             invert,
@@ -172,7 +175,7 @@ mod tests {
 
     #[test]
     fn albedo_is_the_rgba_color() {
-        assert_eq!(Texture::Albedo.bake(), TextureBake::RgbaColor);
+        assert_eq!(Texture::Albedo.bake(), MaterialBake::RgbaColor);
     }
 
     #[test]
@@ -180,21 +183,20 @@ mod tests {
         let manual = "R=metallic,G=1-roughness,B=emissiveStrength"
             .parse::<ChannelPacking>()
             .unwrap();
-        assert_eq!(Texture::Mse.bake(), TextureBake::Packing(manual));
+        assert_eq!(Texture::Mse.bake(), MaterialBake::Packing(manual.sources()));
     }
 
     #[test]
     fn metallic_smoothness_is_four_channels_with_gaps() {
-        let TextureBake::Packing(packing) = Texture::MetallicSmoothness.bake() else {
+        let MaterialBake::Packing(channels) = Texture::MetallicSmoothness.bake() else {
             panic!("expected a packing");
         };
-        assert_eq!(packing.channel_count(), 4);
         assert_eq!(
-            packing.sources(),
+            channels,
             vec![
                 property(METALLIC, false),
-                ChannelSource::Zero,
-                ChannelSource::Zero,
+                MaterialChannel::Zero,
+                MaterialChannel::Zero,
                 property(ROUGHNESS, true),
             ]
         );
@@ -202,16 +204,16 @@ mod tests {
 
     #[test]
     fn computed_occlusion_is_a_single_geometry_channel() {
-        let TextureBake::Packing(packing) = Texture::ComputedOcclusion.bake() else {
+        let MaterialBake::Packing(channels) = Texture::ComputedOcclusion.bake() else {
             panic!("expected a packing");
         };
-        assert_eq!(packing.sources(), vec![ChannelSource::ComputedOcclusion]);
+        assert_eq!(channels, vec![MaterialChannel::ComputedOcclusion]);
     }
 
     #[test]
     fn emissive_is_the_tinted_emissive_color() {
         // The preset lowers to the emissive-color bake (emissiveColor x
         // emissiveStrength), so a surface glows in its own emissive color.
-        assert_eq!(Texture::Emissive.bake(), TextureBake::EmissiveColor);
+        assert_eq!(Texture::Emissive.bake(), MaterialBake::EmissiveColor);
     }
 }

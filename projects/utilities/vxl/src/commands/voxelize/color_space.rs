@@ -1,17 +1,22 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::ColorSpace;
 
-/// Distance metric for comparing palette colors.
-#[derive(Clone, Copy, Debug, ValueEnum)]
-pub enum ColorSpace {
-    /// OKLab perceptual distance.
-    #[value(name = "oklab")]
-    Oklab,
+impl CliValue for ColorSpace {
+    const VARIANTS: &'static [Self] = &[ColorSpace::Oklab, ColorSpace::Lab, ColorSpace::Srgb];
 
-    /// CIELAB distance.
-    #[value(name = "lab")]
-    Lab,
+    fn name(self) -> &'static str {
+        match self {
+            ColorSpace::Oklab => "oklab",
+            ColorSpace::Lab => "lab",
+            ColorSpace::Srgb => "srgb",
+        }
+    }
 
-    /// sRGB distance.
-    #[value(name = "srgb")]
-    Srgb,
+    fn help(self) -> &'static str {
+        match self {
+            ColorSpace::Oklab => "OKLab perceptual distance",
+            ColorSpace::Lab => "CIELAB distance",
+            ColorSpace::Srgb => "sRGB distance",
+        }
+    }
 }

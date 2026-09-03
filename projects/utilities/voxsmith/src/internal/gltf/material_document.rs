@@ -1,7 +1,8 @@
 use crate::{
     MaterialMap, MaterialMeshRequest, MaterialSlot, ResourceStorage, Result, UsedMaterials,
-    atlas_dimensions, bake_atlas_pixels, check_gltf_property_ranges, encode_rgba8_png,
-    material_scalar, max_emissive_strength, mesh_slices, resolve_used_materials, texel_center,
+    atlas_dimensions, bake_atlas_pixels, check_gltf_property_ranges, check_material_maps,
+    encode_rgba8_png, material_scalar, max_emissive_strength, mesh_slices, resolve_used_materials,
+    texel_center,
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use serde_json::{Map, Value, json};
@@ -53,6 +54,10 @@ pub(crate) fn build_material_document<T>(
     // Nothing out of range reaches a mesh file: the vocabulary range check
     // gates the export before anything is written.
     check_gltf_property_ranges(state)?;
+
+    // Every map reads its properties as the kinds the object's layers bind
+    // them to, checked once here before the bake reads texel by texel.
+    check_material_maps(state, object, &request.maps)?;
 
     let used = resolve_used_materials(state, object)?;
 

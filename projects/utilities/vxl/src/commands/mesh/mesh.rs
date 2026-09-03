@@ -1,8 +1,8 @@
 use crate::{
-    Dependencies, Error, Format, MeshFormat, PositiveF64, Result,
+    Dependencies, Error, Format, PositiveF64, Result, cli_value_parser,
     commands::{
-        Atlas, ChannelSource, MeshMethod, MeshTextureMap, PropertyBinding, ResourceStorage,
-        Texture, TextureArg, TextureMap, TextureName, TextureShape,
+        Atlas, PropertyBinding, Texture, TextureArg, TextureMap, TextureName,
+        computed_occlusion_unsupported, parse_atlas_shape,
     },
     parse_index_range, require_file_name,
 };
@@ -11,7 +11,10 @@ use std::{
     collections::{HashMap, HashSet},
     path::{Path, PathBuf},
 };
-use voxsmith::IndexRange;
+use voxsmith::{
+    AtlasShape, IndexRange, MaterialMap, MaterialMeshRequest, MeshFormat, MeshMethod,
+    ResourceStorage,
+};
 
 /// Triangulates one object's voxels into a glTF or GLB mesh, optionally baking
 /// its palette materials into textures the mesh's UVs sample.
@@ -28,7 +31,7 @@ pub struct Mesh {
 
     /// Target mesh format, glTF text (`.gltf`) or binary (`.glb`). Inferred from
     /// the output extension when omitted, defaulting to `.glb`.
-    #[arg(value_name = "to", long)]
+    #[arg(value_name = "to", long, value_parser = cli_value_parser::<MeshFormat>())]
     to: Option<MeshFormat>,
 
     /// Source voxel format. Inferred from the input extension when omitted.
@@ -41,7 +44,12 @@ pub struct Mesh {
     voxel_size: PositiveF64,
 
     /// Meshing strategy.
-    #[arg(value_name = "method", long, default_value = "greedy")]
+    #[arg(
+        value_name = "method",
+        long,
+        default_value = "greedy",
+        value_parser = cli_value_parser::<MeshMethod>()
+    )]
     method: MeshMethod,
 
     /// Material-map atlas layout. Only `palette` is supported for now.
@@ -60,9 +68,10 @@ pub struct Mesh {
         value_name = "texture-shape",
         long,
         default_value = "pot",
+        value_parser = parse_atlas_shape,
         verbatim_doc_comment
     )]
-    texture_shape: TextureShape,
+    texture_shape: AtlasShape,
 
     /// Bake a preset material map or bundle, repeatable, as `--texture albedo
     /// --texture orm` or `--texture pbr`. A bundle expands to several single
@@ -127,7 +136,11 @@ pub struct Mesh {
 
     /// Where the baked images go. Defaults to `embedded` for `.glb` and
     /// `external` for `.gltf`.
-    #[arg(value_name = "texture-storage", long)]
+    #[arg(
+        value_name = "texture-storage",
+        long,
+        value_parser = cli_value_parser::<ResourceStorage>()
+    )]
     texture_storage: Option<ResourceStorage>,
 
     /// Choose the object by hierarchy-path glob, matched as `hierarchy show`
@@ -146,7 +159,10 @@ impl Mesh {
     pub fn execute(self, dependencies: impl Dependencies) -> Result<()> {
         let format = self
             .to
-            .or_else(|| self.output.as_deref().and_then(MeshFormat::from_path))
+            .or_else(|| {
+                let extension = self.output.as_deref()?.extension()?.to_str()?;
+                MeshFormat::from_extension(extension)
+            })
             .unwrap_or(MeshFormat::Glb);
 
         let output = self
@@ -201,17 +217,21 @@ impl Mesh {
             }
         };
 
+        let request = MaterialMeshRequest {
+            method: self.method,
+            scale: self.voxel_size.0,
+            maps,
+            storage,
+            shape: self.texture_shape,
+        };
+
         dependencies.mesh_object(
             &self.input,
             self.from,
             &output,
             format,
-            self.voxel_size.0,
-            self.method,
             object_index,
-            &maps,
-            storage,
-            self.texture_shape,
+            &request,
         )
     }
 
@@ -220,7 +240,7 @@ impl Mesh {
     /// / `--texture-name-prefix` precedence; custom names are given. Errors on
     /// two maps with the same file name, so the presets-first order is only a
     /// layout, not a flag-order guarantee.
-    fn resolve_maps(&self, output: &Path) -> Result<Vec<MeshTextureMap>> {
+    fn resolve_maps(&self, output: &Path) -> Result<Vec<MaterialMap>> {
         let stem = output
             .file_stem()
             .and_then(|stem| stem.to_str())
@@ -237,7 +257,7 @@ impl Mesh {
     /// Resolves the `--texture` presets into their maps, naming each by the
     /// three-level precedence and rejecting a `--texture-name` that is unbaked or
     /// repeated.
-    fn resolve_presets(&self, stem: &str) -> Result<Vec<MeshTextureMap>> {
+    fn resolve_presets(&self, stem: &str) -> Result<Vec<MaterialMap>> {
         if let Some(prefix) = &self.texture_name_prefix {
             require_file_name(prefix).map_err(Error::usage)?;
         }
@@ -286,7 +306,7 @@ impl Mesh {
             .into_iter()
             .map(|preset| {
                 if let Texture::ComputedOcclusion = preset {
-                    return Err(ChannelSource::computed_occlusion_unsupported());
+                    return Err(computed_occlusion_unsupported());
                 }
                 Ok(preset.map(self.preset_name(&names, preset, stem)))
             })
@@ -310,7 +330,7 @@ impl Mesh {
     /// Resolves the `--texture-map` custom maps, pairing each occurrence into a
     /// typed value and resolving its channels against the `--define-property`
     /// bindings.
-    fn resolve_custom_maps(&self) -> Result<Vec<MeshTextureMap>> {
+    fn resolve_custom_maps(&self) -> Result<Vec<MaterialMap>> {
         let bindings = self.property_bindings()?;
 
         // clap's `num_args = 2` guarantees an even length, so each chunk is a
@@ -336,7 +356,7 @@ impl Mesh {
 
     /// Rejects two maps that resolve to the same file name, which would race to
     /// write one image beside the mesh.
-    fn check_unique_names(&self, maps: &[MeshTextureMap]) -> Result<()> {
+    fn check_unique_names(&self, maps: &[MaterialMap]) -> Result<()> {
         let mut seen = HashSet::new();
         for map in maps {
             if seen.insert(map.name.as_str()) {
@@ -357,9 +377,9 @@ impl Mesh {
 #[cfg(test)]
 mod tests {
     use super::Mesh;
-    use crate::commands::TextureShape;
     use clap::{CommandFactory, Parser};
     use std::path::Path;
+    use voxsmith::AtlasShape;
 
     /// The resolved map file names for `args`, meshed to `output`, in order.
     fn names(args: &[&str], output: &str) -> Vec<String> {
@@ -593,14 +613,14 @@ mod tests {
     #[test]
     fn the_texture_shape_defaults_to_pot_and_parses_keywords_and_a_pixel_size() {
         let default = Mesh::try_parse_from(["mesh", "model.vox"]).unwrap();
-        assert_eq!(default.texture_shape, TextureShape::Pot);
+        assert_eq!(default.texture_shape, AtlasShape::Pot);
 
         for (value, expected) in [
-            ("line", TextureShape::Line),
-            ("fit", TextureShape::Fit),
-            ("square", TextureShape::Square),
-            ("pot", TextureShape::Pot),
-            ("256", TextureShape::Exact(256)),
+            ("line", AtlasShape::Line),
+            ("fit", AtlasShape::Fit),
+            ("square", AtlasShape::Square),
+            ("pot", AtlasShape::Pot),
+            ("256", AtlasShape::Exact(256)),
         ] {
             let parsed =
                 Mesh::try_parse_from(["mesh", "model.vox", "--texture-shape", value]).unwrap();

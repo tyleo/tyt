@@ -1,8 +1,9 @@
 use crate::{
     Error, Result,
-    commands::{ChannelPacking, MeshTextureMap, PropertyBinding, TextureBake},
+    commands::{ChannelPacking, PropertyBinding},
     require_file_name,
 };
+use voxsmith::{MaterialMap, MaterialSlot};
 
 /// A `--texture-map` value: a custom map's file name paired with its channel
 /// packing. Pairing the flag's two flat tokens into this typed value at parse
@@ -26,28 +27,27 @@ impl TextureMap {
 
     /// Resolves this custom map against the `--define-property` bindings into
     /// the map the writer bakes. A custom packing has no standard glTF slot.
-    pub fn resolve(&self, bindings: &[PropertyBinding]) -> Result<MeshTextureMap> {
-        let packing = self.channels.resolve(bindings)?;
-
-        Ok(MeshTextureMap {
+    pub fn resolve(&self, bindings: &[PropertyBinding]) -> Result<MaterialMap> {
+        Ok(MaterialMap {
             name: self.name.clone(),
-            slot: None,
-            bake: TextureBake::Packing(packing),
+            slot: MaterialSlot::None,
+            bake: self.channels.resolve(bindings)?,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::commands::{TextureBake, TextureMap};
+    use crate::commands::TextureMap;
+    use voxsmith::{MaterialBake, MaterialSlot};
 
     #[test]
     fn pairs_a_name_and_channels() {
         let map = TextureMap::new("skin.png", "R=metallic").unwrap();
         let resolved = map.resolve(&[]).unwrap();
         assert_eq!(resolved.name, "skin.png");
-        assert_eq!(resolved.slot, None);
-        assert!(matches!(resolved.bake, TextureBake::Packing(_)));
+        assert_eq!(resolved.slot, MaterialSlot::None);
+        assert!(matches!(resolved.bake, MaterialBake::Packing(_)));
     }
 
     #[test]

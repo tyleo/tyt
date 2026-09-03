@@ -16,23 +16,12 @@ required-features = ["bin"]
 clap = { version = "4.5.58", features = ["derive"] }
 clap_complete = { version = "4.5", optional = true }
 libc = { version = "0.2", optional = true }
-ty-math = { version = "0.2.0", optional = true }
 vmax = { version = "0.1.7", optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
 voxcore = { version = "0.2.1", default-features = false }
-voxsmith = { version = "0.2.0", features = ["report"] }
-
-[dev-dependencies]
-branded-id = "0.1.7"
-ty-math = "0.2.0"
+voxsmith = { version = "0.2.0", features = ["gltf", "report"] }
 
 [features]
 default = ["impl"]
-impl = [
-    "dep:libc",
-    "dep:ty-math",
-    "dep:vmax",
-    "dep:vmax-codec",
-    "voxsmith/gltf",
-]
+impl = ["dep:libc", "dep:vmax", "dep:vmax-codec"]
 bin = ["impl", "dep:clap_complete"]

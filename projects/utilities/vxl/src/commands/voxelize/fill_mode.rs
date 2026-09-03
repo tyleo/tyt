@@ -1,15 +1,25 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::FillMode;
 
-/// How `voxelize` fills the grid from the mesh.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
-pub enum FillMode {
-    /// Rasterize the surface and flood-fill the volume it encloses, producing a
-    /// filled body. Expects a watertight mesh.
-    #[value(name = "solid")]
-    Solid,
+impl CliValue for FillMode {
+    const VARIANTS: &'static [Self] = &[FillMode::Solid, FillMode::Surface];
 
-    /// Rasterize only the voxels the triangles pass through, leaving a hollow
-    /// shell.
-    #[value(name = "surface")]
-    Surface,
+    fn name(self) -> &'static str {
+        match self {
+            FillMode::Solid => "solid",
+            FillMode::Surface => "surface",
+        }
+    }
+
+    fn help(self) -> &'static str {
+        match self {
+            FillMode::Solid => {
+                "Rasterize the surface and flood-fill the volume it encloses, producing a filled \
+                 body. Expects a watertight mesh"
+            }
+            FillMode::Surface => {
+                "Rasterize only the voxels the triangles pass through, leaving a hollow shell"
+            }
+        }
+    }
 }

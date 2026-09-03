@@ -1,8 +1,6 @@
-use crate::{
-    NoneOr, PositiveCount,
-    commands::{ColorSpace, Dither, PaletteReduction, PaletteReductionOptions, QuantizeMethod},
-};
+use crate::{NoneOr, PositiveCount, cli_value_parser, commands::PaletteReductionOptions};
 use clap::{ArgAction, Args};
+use voxsmith::{ColorSpace, Dither, PaletteReduction, ReductionMethod};
 
 /// `voxelize`'s color-quantization controls: the shared method, space, and
 /// dither under a `--quantize-*` prefix, plus its own material cap. Maps onto
@@ -13,15 +11,17 @@ pub struct QuantizeOptions {
     #[arg(
         value_name = "quantize-method",
         long = "quantize-method",
-        default_value = "median-cut"
+        default_value = "median-cut",
+        value_parser = cli_value_parser::<ReductionMethod>()
     )]
-    method: QuantizeMethod,
+    method: ReductionMethod,
 
     /// Color space the reduction compares colors in.
     #[arg(
         value_name = "quantize-space",
         long = "quantize-space",
-        default_value = "oklab"
+        default_value = "oklab",
+        value_parser = cli_value_parser::<ColorSpace>()
     )]
     space: ColorSpace,
 
@@ -29,7 +29,8 @@ pub struct QuantizeOptions {
     #[arg(
         value_name = "quantize-dither",
         long = "quantize-dither",
-        default_value = "none"
+        default_value = "none",
+        value_parser = cli_value_parser::<Dither>()
     )]
     dither: Dither,
 
@@ -60,8 +61,8 @@ pub struct QuantizeOptions {
 
 impl QuantizeOptions {
     /// Maps the shared controls onto [`PaletteReductionOptions`] and resolves
-    /// them with the material cap.
-    pub fn resolve(&self) -> PaletteReduction {
+    /// them with the material cap, `None` under `--quantize-max-materials none`.
+    pub fn resolve(&self) -> Option<PaletteReduction> {
         PaletteReductionOptions {
             method: self.method,
             space: self.space,

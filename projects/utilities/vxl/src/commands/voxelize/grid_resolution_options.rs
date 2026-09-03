@@ -1,8 +1,6 @@
-use crate::{
-    Error, PositiveF64, Result,
-    commands::{GridResolution, ResolutionAxis},
-};
-use clap::{ArgGroup, Args, ValueEnum};
+use crate::{CliValue, Error, PositiveF64, Result};
+use clap::{ArgGroup, Args};
+use voxsmith::{GridResolution, ResolutionAxis};
 
 /// The `voxelize` grid-resolution controls. Flattened onto the command, which
 /// takes at most one of the two flags and defaults to one voxel per meter when
@@ -38,11 +36,8 @@ impl GridResolutionOptions {
                 return Err(Error::usage("--resolution takes an axis and a count"));
             };
 
-            let axis = ResolutionAxis::from_str(axis, false).map_err(|_| {
-                Error::usage(format!(
-                    "--resolution axis `{axis}` must be one of long, short, x, y, z"
-                ))
-            })?;
+            let axis = ResolutionAxis::parse(axis)
+                .map_err(|message| Error::usage(format!("--resolution axis: {message}")))?;
 
             let count = match count.parse::<u32>() {
                 Ok(count) if count >= 1 => count,
@@ -66,8 +61,9 @@ impl GridResolutionOptions {
 
 #[cfg(test)]
 mod tests {
-    use crate::commands::{GridResolution, GridResolutionOptions, ResolutionAxis};
+    use crate::commands::GridResolutionOptions;
     use clap::Parser;
+    use voxsmith::{GridResolution, ResolutionAxis};
 
     /// A throwaway command flattening the grid-resolution options, so their flags
     /// parse as they do on `voxelize`.

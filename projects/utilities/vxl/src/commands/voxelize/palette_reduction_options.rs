@@ -1,5 +1,6 @@
-use crate::commands::{ColorSpace, Dither, PaletteReduction, QuantizeMethod};
+use crate::cli_value_parser;
 use clap::{ArgAction, Args};
+use voxsmith::{ColorSpace, Dither, PaletteReduction, ReductionMethod};
 
 /// The shared palette-reduction controls: clustering method, color space,
 /// dither, and unused-value policy. Voxelize maps its own `--quantize-*` flags
@@ -7,15 +8,30 @@ use clap::{ArgAction, Args};
 #[derive(Clone, Debug, Args)]
 pub struct PaletteReductionOptions {
     /// Clustering algorithm for the reduction.
-    #[arg(value_name = "method", long, default_value = "median-cut")]
-    pub(crate) method: QuantizeMethod,
+    #[arg(
+        value_name = "method",
+        long,
+        default_value = "median-cut",
+        value_parser = cli_value_parser::<ReductionMethod>()
+    )]
+    pub(crate) method: ReductionMethod,
 
     /// Color space the reduction compares colors in.
-    #[arg(value_name = "space", long, default_value = "oklab")]
+    #[arg(
+        value_name = "space",
+        long,
+        default_value = "oklab",
+        value_parser = cli_value_parser::<ColorSpace>()
+    )]
     pub(crate) space: ColorSpace,
 
     /// Error diffusion applied when snapping samples to the reduced palette.
-    #[arg(value_name = "dither", long, default_value = "none")]
+    #[arg(
+        value_name = "dither",
+        long,
+        default_value = "none",
+        value_parser = cli_value_parser::<Dither>()
+    )]
     pub(crate) dither: Dither,
 
     /// Keep palette values the reduction leaves unreferenced. Off by default, so
@@ -34,15 +50,18 @@ pub struct PaletteReductionOptions {
 }
 
 impl PaletteReductionOptions {
-    /// Pairs these controls with a material cap into a [`PaletteReduction`].
-    pub fn resolve(&self, max_materials: Option<usize>) -> PaletteReduction {
-        PaletteReduction {
+    /// Pairs these controls with a material cap into a [`PaletteReduction`],
+    /// `None` when there is no cap to reduce to.
+    pub fn resolve(&self, max_materials: Option<usize>) -> Option<PaletteReduction> {
+        let max_materials = max_materials?;
+
+        Some(PaletteReduction {
             max_materials,
             method: self.method,
             space: self.space,
             dither: self.dither,
             keep_unused_values: self.keep_unused_values,
-        }
+        })
     }
 }
 
@@ -67,7 +86,14 @@ mod tests {
             .unwrap()
             .options
             .resolve(Some(256))
+            .unwrap()
             .keep_unused_values
+    }
+
+    #[test]
+    fn no_cap_resolves_to_no_reduction() {
+        let harness = Harness::try_parse_from(["test"]).unwrap();
+        assert_eq!(harness.options.resolve(None), None);
     }
 
     #[test]

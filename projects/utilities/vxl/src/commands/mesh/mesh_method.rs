@@ -1,19 +1,27 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::MeshMethod;
 
-/// The strategy `mesh` uses to turn a voxel grid into quads.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum MeshMethod {
-    /// Merge coplanar, same-material faces into the fewest quads. Lowest
-    /// triangle count.
-    #[value(name = "greedy")]
-    Greedy,
+impl CliValue for MeshMethod {
+    const VARIANTS: &'static [Self] = &[MeshMethod::Greedy, MeshMethod::Culled, MeshMethod::Naive];
 
-    /// One quad per solid-empty boundary face, with no merging.
-    #[value(name = "culled")]
-    Culled,
+    fn name(self) -> &'static str {
+        match self {
+            MeshMethod::Greedy => "greedy",
+            MeshMethod::Culled => "culled",
+            MeshMethod::Naive => "naive",
+        }
+    }
 
-    /// All six faces of every solid voxel, including hidden interior faces.
-    /// Highest triangle count.
-    #[value(name = "naive")]
-    Naive,
+    fn help(self) -> &'static str {
+        match self {
+            MeshMethod::Greedy => {
+                "Merge coplanar, same-material faces into the fewest quads. Lowest triangle count"
+            }
+            MeshMethod::Culled => "One quad per solid-empty boundary face, with no merging",
+            MeshMethod::Naive => {
+                "All six faces of every solid voxel, including hidden interior faces. Highest \
+                 triangle count"
+            }
+        }
+    }
 }

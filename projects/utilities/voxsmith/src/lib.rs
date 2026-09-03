@@ -59,6 +59,7 @@ mod error;
 mod gltf_range;
 mod index_range;
 mod order_palette_colors;
+mod palette_reduction;
 mod reduce_palette;
 mod reduction_method;
 #[cfg(feature = "report")]
@@ -86,6 +87,7 @@ pub use error::*;
 pub(crate) use gltf_range::*;
 pub use index_range::*;
 pub use order_palette_colors::*;
+pub use palette_reduction::*;
 pub use reduce_palette::*;
 pub use reduction_method::*;
 #[cfg(feature = "report")]

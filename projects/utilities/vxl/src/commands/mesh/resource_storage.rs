@@ -1,20 +1,32 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::ResourceStorage;
 
-/// Where a mesh's baked resources go: embedded in the mesh, in loose files
-/// beside it, or both. Backs `--texture-storage`; the default follows the target
-/// (embedded for `.glb`, external for `.gltf`) and is resolved by the command.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-pub enum ResourceStorage {
-    /// Packed into the mesh: a GLB binary chunk or a `.gltf` data URI.
-    #[value(name = "embedded")]
-    Embedded,
+impl CliValue for ResourceStorage {
+    const VARIANTS: &'static [Self] = &[
+        ResourceStorage::Embedded,
+        ResourceStorage::External,
+        ResourceStorage::Both,
+    ];
 
-    /// Written as loose files beside the mesh, which references them.
-    #[value(name = "external")]
-    External,
+    fn name(self) -> &'static str {
+        match self {
+            ResourceStorage::Embedded => "embedded",
+            ResourceStorage::External => "external",
+            ResourceStorage::Both => "both",
+        }
+    }
 
-    /// Both: the mesh references its embedded copy and the loose files are
-    /// working copies.
-    #[value(name = "both")]
-    Both,
+    fn help(self) -> &'static str {
+        match self {
+            ResourceStorage::Embedded => {
+                "Packed into the mesh: a GLB binary chunk or a `.gltf` data URI"
+            }
+            ResourceStorage::External => {
+                "Written as loose files beside the mesh, which references them"
+            }
+            ResourceStorage::Both => {
+                "Both: the mesh references its embedded copy and the loose files are working copies"
+            }
+        }
+    }
 }

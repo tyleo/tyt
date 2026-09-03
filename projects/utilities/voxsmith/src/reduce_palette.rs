@@ -1,4 +1,4 @@
-use crate::{ColorSpace, Dither, ReductionMethod, Result};
+use crate::{ColorSpace, Dither, PaletteReduction, ReductionMethod, Result};
 use branded_id::U32Id;
 use std::{
     cmp::Ordering,
@@ -14,38 +14,32 @@ use voxcore::{
     color::value_pool_color, material::BASE_COLOR,
 };
 
-/// Reduces `palette` in `state` to at most `max_materials` materials, then,
-/// unless `keep_unused_values`, prunes the value-pool values the reduction
-/// leaves unreferenced. The prune runs state-wide through
-/// [`VoxMain::prune_value_pools`]. Either way the state stays valid, with the
-/// surviving value ids left for [`VoxMain::gc`] to compact.
+/// Reduces `palette_id` in `state` to at most `reduction.max_materials`
+/// materials, then, unless `reduction.keep_unused_values`, prunes the
+/// value-pool values the reduction leaves unreferenced. The prune runs
+/// state-wide through [`VoxMain::prune_value_pools`]. Either way the state
+/// stays valid, with the surviving value ids left for [`VoxMain::gc`] to
+/// compact. Every object referencing the palette is remapped.
 ///
 /// Materials cluster by the `baseColor` property and each cluster
 /// collapses onto one real representative, so a merged voxel takes the
 /// representative's whole material. Colorless materials are left untouched.
 /// Returns `Some((before, after))` when the reduction fired, `None` when the
 /// palette already fit.
-///
-/// # Arguments
-/// * `state` - the document, reduced in place.
-/// * `palette_id` - the palette to reduce; every referencing object is
-///   remapped.
-/// * `max_materials` - the material cap.
-/// * `method` - the clustering algorithm.
-/// * `space` - the color space compared in.
-/// * `dither` - error diffusion when snapping samples.
-/// * `keep_unused_values` - keep value-pool values left unreferenced.
 pub fn reduce_palette<T>(
     state: &mut VoxMain<T>,
     palette_id: U32Id<BVoxPalette>,
-    max_materials: usize,
-    method: ReductionMethod,
-    space: ColorSpace,
-    dither: Dither,
-    keep_unused_values: bool,
+    reduction: PaletteReduction,
 ) -> Result<Option<(usize, usize)>> {
-    let outcome = reduce_materials(state, palette_id, max_materials, method, space, dither)?;
-    if !keep_unused_values {
+    let outcome = reduce_materials(
+        state,
+        palette_id,
+        reduction.max_materials,
+        reduction.method,
+        reduction.space,
+        reduction.dither,
+    )?;
+    if !reduction.keep_unused_values {
         state.prune_value_pools();
     }
     Ok(outcome)
@@ -789,7 +783,7 @@ fn bayer(x: u32, y: u32, z: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ColorSpace, Dither, ReductionMethod, reduce_palette};
+    use crate::{ColorSpace, Dither, PaletteReduction, ReductionMethod, reduce_palette};
     use branded_id::U32Id;
     use ty_math::{TyLinSrgbaF64, TySrgbaU8, TyVector3U32};
     use voxcore::{
@@ -802,6 +796,18 @@ mod tests {
     /// The branded value id `index`.
     fn value_id(index: usize) -> U32Id<BVoxValuePoolValue> {
         U32Id::from_u32(index as u32)
+    }
+
+    /// A median-cut reduction in OKLab with no dither, dropping unused values,
+    /// capped at `max_materials`.
+    fn reduction(max_materials: usize) -> PaletteReduction {
+        PaletteReduction {
+            max_materials,
+            method: ReductionMethod::MedianCut,
+            space: ColorSpace::Oklab,
+            dither: Dither::None,
+            keep_unused_values: false,
+        }
     }
 
     /// The linear-light components of a `#RRGGBBAA` hex string.
@@ -980,16 +986,7 @@ mod tests {
     #[test]
     fn no_op_when_already_within_the_cap() {
         let (mut state, palette_id, _) = state_with_colors(&["#FF0000FF", "#00FF00FF"], &[]);
-        let outcome = reduce_palette(
-            &mut state,
-            palette_id,
-            5,
-            ReductionMethod::MedianCut,
-            ColorSpace::Oklab,
-            Dither::None,
-            false,
-        )
-        .unwrap();
+        let outcome = reduce_palette(&mut state, palette_id, reduction(5)).unwrap();
         assert_eq!(outcome, None);
         assert_eq!(material_count(&state, palette_id), 2);
     }
@@ -1000,16 +997,7 @@ mod tests {
         // second red, whose whole material (tag 1) survives.
         let (mut state, palette_id, object_id) =
             state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
-        let outcome = reduce_palette(
-            &mut state,
-            palette_id,
-            2,
-            ReductionMethod::MedianCut,
-            ColorSpace::Oklab,
-            Dither::None,
-            false,
-        )
-        .unwrap();
+        let outcome = reduce_palette(&mut state, palette_id, reduction(2)).unwrap();
         assert_eq!(outcome, Some((3, 2)));
         assert_eq!(material_count(&state, palette_id), 2);
         assert_eq!(state.validate(), Ok(()));
@@ -1043,11 +1031,10 @@ mod tests {
             let outcome = reduce_palette(
                 &mut state,
                 palette_id,
-                2,
-                method,
-                ColorSpace::Oklab,
-                Dither::None,
-                false,
+                PaletteReduction {
+                    method,
+                    ..reduction(2)
+                },
             )
             .unwrap();
             let (before, after) = outcome.expect("the reduction fired");
@@ -1073,11 +1060,10 @@ mod tests {
             reduce_palette(
                 &mut state,
                 palette_id,
-                5,
-                ReductionMethod::MedianCut,
-                ColorSpace::Oklab,
-                Dither::FloydSteinberg,
-                false
+                PaletteReduction {
+                    dither: Dither::FloydSteinberg,
+                    ..reduction(5)
+                }
             )
             .unwrap()
             .is_none()
@@ -1090,11 +1076,10 @@ mod tests {
             let outcome = reduce_palette(
                 &mut state,
                 palette_id,
-                2,
-                ReductionMethod::MedianCut,
-                ColorSpace::Oklab,
-                dither,
-                false,
+                PaletteReduction {
+                    dither,
+                    ..reduction(2)
+                },
             )
             .unwrap();
             assert_eq!(outcome, Some((3, 2)), "dither {dither:?}");
@@ -1111,11 +1096,10 @@ mod tests {
             let outcome = reduce_palette(
                 &mut state,
                 palette_id,
-                2,
-                ReductionMethod::MedianCut,
-                space,
-                Dither::None,
-                false,
+                PaletteReduction {
+                    space,
+                    ..reduction(2)
+                },
             )
             .unwrap();
             assert_eq!(outcome, Some((4, 2)), "space {space:?}");
@@ -1152,11 +1136,11 @@ mod tests {
         let outcome = reduce_palette(
             &mut state,
             palette_id,
-            2,
-            ReductionMethod::MedianCut,
-            ColorSpace::Srgb,
-            Dither::Ordered,
-            false,
+            PaletteReduction {
+                space: ColorSpace::Srgb,
+                dither: Dither::Ordered,
+                ..reduction(2)
+            },
         )
         .unwrap();
         assert_eq!(outcome, Some((3, 2)));
@@ -1199,11 +1183,11 @@ mod tests {
         let outcome = reduce_palette(
             &mut state,
             palette_id,
-            2,
-            ReductionMethod::MedianCut,
-            ColorSpace::Srgb,
-            Dither::FloydSteinberg,
-            false,
+            PaletteReduction {
+                space: ColorSpace::Srgb,
+                dither: Dither::FloydSteinberg,
+                ..reduction(2)
+            },
         )
         .unwrap();
         assert_eq!(outcome, Some((3, 2)));
@@ -1241,16 +1225,7 @@ mod tests {
             state_with_colors(&["#FE0000FF", "#FF0000FF", "#0000FFFF"], &[0, 3, 0]);
         assert_eq!(value_pool_len(&state, BASE_COLOR), 3);
 
-        let outcome = reduce_palette(
-            &mut state,
-            palette_id,
-            2,
-            ReductionMethod::MedianCut,
-            ColorSpace::Oklab,
-            Dither::None,
-            false,
-        )
-        .unwrap();
+        let outcome = reduce_palette(&mut state, palette_id, reduction(2)).unwrap();
         assert_eq!(outcome, Some((3, 2)));
 
         // Both value pools now carry only the two survivors' values.
@@ -1289,16 +1264,7 @@ mod tests {
         }
         state.retain_object(object).unwrap();
 
-        let outcome = reduce_palette(
-            &mut state,
-            palette_id,
-            2,
-            ReductionMethod::MedianCut,
-            ColorSpace::Oklab,
-            Dither::None,
-            false,
-        )
-        .unwrap();
+        let outcome = reduce_palette(&mut state, palette_id, reduction(2)).unwrap();
 
         assert_eq!(outcome, None);
         assert_eq!(material_count(&state, palette_id), 3);
@@ -1332,11 +1298,10 @@ mod tests {
         let outcome = reduce_palette(
             &mut state,
             palette_id,
-            2,
-            ReductionMethod::MedianCut,
-            ColorSpace::Oklab,
-            Dither::FloydSteinberg,
-            false,
+            PaletteReduction {
+                dither: Dither::FloydSteinberg,
+                ..reduction(2)
+            },
         )
         .unwrap();
 
@@ -1359,11 +1324,10 @@ mod tests {
         reduce_palette(
             &mut state,
             palette_id,
-            2,
-            ReductionMethod::MedianCut,
-            ColorSpace::Oklab,
-            Dither::None,
-            true,
+            PaletteReduction {
+                keep_unused_values: true,
+                ..reduction(2)
+            },
         )
         .unwrap();
         assert_eq!(material_count(&state, palette_id), 2);

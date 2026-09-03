@@ -1,15 +1,20 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::OutOfRangeProperty;
 
-/// What `voxelize` does with a source material value outside the range the
-/// glTF spec gives its property, such as a `metallic` above `1`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
-pub enum OutOfRangeProperty {
-    /// Reject the mesh, naming the property and its value.
-    #[default]
-    #[value(name = "error")]
-    Error,
+impl CliValue for OutOfRangeProperty {
+    const VARIANTS: &'static [Self] = &[OutOfRangeProperty::Error, OutOfRangeProperty::Clamp];
 
-    /// Clamp the value onto the range and voxelize on.
-    #[value(name = "clamp")]
-    Clamp,
+    fn name(self) -> &'static str {
+        match self {
+            OutOfRangeProperty::Error => "error",
+            OutOfRangeProperty::Clamp => "clamp",
+        }
+    }
+
+    fn help(self) -> &'static str {
+        match self {
+            OutOfRangeProperty::Error => "Reject the mesh, naming the property and its value",
+            OutOfRangeProperty::Clamp => "Clamp the value onto the range and voxelize on",
+        }
+    }
 }

@@ -1,17 +1,13 @@
 use crate::{
-    Dependencies, Format, MeshFormat, Result, VoxjEncoding, VoxjFormat, Width,
-    commands::{
-        CameraView, ColorFormat, EditState, FillMode, GridResolution, MaterialMode, MeshMethod,
-        MeshTextureMap, OutOfRangeProperty, PaletteReduction, ResourceStorage, SurfaceMode,
-        TextureShape,
-    },
+    Dependencies, Format, Result, VoxjEncoding, VoxjFormat, Width,
+    commands::{CameraView, ColorFormat, EditState},
     implementation,
 };
 use std::{num::NonZeroU8, path::Path};
 use voxsmith::{
-    HierarchyShowLayout, HierarchyViews, IndexRange, InfoLayout, PaletteListFields,
-    PaletteListLayout, PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PatternView,
-    PropertySelector, ValidateLayout,
+    HierarchyShowLayout, HierarchyViews, IndexRange, InfoLayout, MaterialMeshRequest, MeshFormat,
+    PaletteListFields, PaletteListLayout, PaletteShowLabel, PaletteShowLayout,
+    PaletteShowTableShape, PatternView, PropertySelector, ValidateLayout, VoxelizeOptions,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -55,38 +51,16 @@ impl Dependencies for DependenciesImpl {
         implementation::to_voxj(input, from, output, encoding, format, ext, edit_state)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn voxelize(
         &self,
         input: &Path,
         from: Option<MeshFormat>,
         output: &Path,
-        resolution: GridResolution,
-        surface_mode: SurfaceMode,
-        fill_mode: FillMode,
-        material_mode: MaterialMode,
-        fill_color: Option<[u8; 4]>,
-        name: Option<&str>,
-        reduction: PaletteReduction,
+        options: &VoxelizeOptions,
         encoding: VoxjEncoding,
         format: VoxjFormat,
-        out_of_range_property: OutOfRangeProperty,
     ) -> Result<()> {
-        implementation::voxelize(
-            input,
-            from,
-            output,
-            resolution,
-            surface_mode,
-            fill_mode,
-            material_mode,
-            fill_color,
-            name,
-            reduction,
-            encoding,
-            format,
-            out_of_range_property,
-        )
+        implementation::voxelize(input, from, output, options, encoding, format)
     }
 
     fn resolve_objects(
@@ -99,32 +73,16 @@ impl Dependencies for DependenciesImpl {
         implementation::resolve_objects(input, from, select, select_index)
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn mesh_object(
         &self,
         input: &Path,
         from: Option<Format>,
         output: &Path,
         format: MeshFormat,
-        scale: f64,
-        method: MeshMethod,
         object_index: usize,
-        maps: &[MeshTextureMap],
-        storage: ResourceStorage,
-        texture_shape: TextureShape,
+        request: &MaterialMeshRequest,
     ) -> Result<()> {
-        implementation::mesh_object(
-            input,
-            from,
-            output,
-            format,
-            scale,
-            method,
-            object_index,
-            maps,
-            storage,
-            texture_shape,
-        )
+        implementation::mesh_object(input, from, output, format, object_index, request)
     }
 
     fn info(&self, input: &Path, from: Option<Format>, layout: InfoLayout) -> Result<()> {
