@@ -1,15 +1,16 @@
 use crate::{
     Format, MeshFormat, Result, VoxjEncoding, VoxjFormat, Width,
     commands::{
-        CameraView, ColorFormat, EditState, FillMode, GridResolution, HierarchyShowLayout,
-        HierarchyViews, MaterialMode, MeshMethod, MeshTextureMap, OutOfRangeProperty,
-        PaletteReduction, PatternView, ResourceStorage, SurfaceMode, TextureShape,
+        CameraView, ColorFormat, EditState, FillMode, GridResolution, MaterialMode, MeshMethod,
+        MeshTextureMap, OutOfRangeProperty, PaletteReduction, ResourceStorage, SurfaceMode,
+        TextureShape,
     },
 };
 use std::{num::NonZeroU8, path::Path};
 use voxsmith::{
-    IndexRange, InfoLayout, PaletteListFields, PaletteListLayout, PaletteShowLabel,
-    PaletteShowLayout, PaletteShowTableShape, PropertySelector, ValidateLayout,
+    HierarchyShowLayout, HierarchyViews, IndexRange, InfoLayout, PaletteListFields,
+    PaletteListLayout, PaletteShowLabel, PaletteShowLayout, PaletteShowTableShape, PatternView,
+    PropertySelector, ValidateLayout,
 };
 
 /// Dependencies for this crate's operations.

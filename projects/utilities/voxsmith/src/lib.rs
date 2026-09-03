@@ -66,6 +66,8 @@ mod report;
 mod result;
 #[cfg(feature = "_mesh")]
 mod scalar_range;
+#[cfg(feature = "select")]
+mod select;
 mod vector_component;
 mod voxel_format;
 
@@ -91,5 +93,7 @@ pub use report::*;
 pub use result::*;
 #[cfg(feature = "_mesh")]
 pub(crate) use scalar_range::*;
+#[cfg(feature = "select")]
+pub use select::*;
 pub use vector_component::*;
 pub use voxel_format::*;

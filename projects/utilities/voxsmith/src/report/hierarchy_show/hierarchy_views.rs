@@ -1,8 +1,8 @@
-use crate::commands::{OriginView, TransformView};
+use crate::{OriginView, TransformView};
 
-/// The per-node and per-object subtree views `hierarchy show` can append, bundled
-/// into one value so the render entry point takes a single argument instead of a
-/// long list. Each field is off by default; a `None` or `false` omits its subtree.
+/// The per-node and per-object subtree views
+/// [`render_hierarchy_show`](crate::render_hierarchy_show) can append, all off
+/// by default.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HierarchyViews {
     /// Prepend each node's transform subtree.
@@ -17,7 +17,8 @@ pub struct HierarchyViews {
     /// Append each object's edit-grid extents at this precision.
     pub edit_extents: Option<usize>,
 
-    /// Append each object's runtime-grid origin, the tight live box's min corner.
+    /// Append each object's runtime-grid origin, the tight live box's min
+    /// corner.
     pub runtime_origins: Option<OriginView>,
 
     /// Append each object's runtime-grid bounds subtree at this precision.

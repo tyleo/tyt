@@ -4,6 +4,8 @@ use gltf::Error as GltfError;
 use goxl_codec::Error as GoxlError;
 #[cfg(feature = "mvox")]
 use mvox_codec::Error as MVoxError;
+#[cfg(feature = "select")]
+use pathspec::Error as PathSpecError;
 #[cfg(feature = "qbcl")]
 use qbcl_codec::Error as QbclError;
 use std::{
@@ -56,6 +58,10 @@ pub enum Error {
     /// A report layout rejected an option it does not consume.
     #[cfg(feature = "report")]
     TreeGrid(TreeGridError),
+
+    /// A hierarchy-path pattern is not a valid gitignore-style glob.
+    #[cfg(feature = "select")]
+    PathSpec(PathSpecError),
 }
 
 impl Error {
@@ -84,6 +90,8 @@ impl Display for Error {
             Error::Gltf(error) => error.fmt(f),
             #[cfg(feature = "report")]
             Error::TreeGrid(error) => error.fmt(f),
+            #[cfg(feature = "select")]
+            Error::PathSpec(error) => error.fmt(f),
         }
     }
 }
@@ -107,6 +115,8 @@ impl StdError for Error {
             Error::Gltf(error) => Some(error),
             #[cfg(feature = "report")]
             Error::TreeGrid(error) => Some(error),
+            #[cfg(feature = "select")]
+            Error::PathSpec(error) => Some(error),
         }
     }
 }
@@ -171,5 +181,12 @@ impl From<GltfError> for Error {
 impl From<TreeGridError> for Error {
     fn from(error: TreeGridError) -> Self {
         Error::TreeGrid(error)
+    }
+}
+
+#[cfg(feature = "select")]
+impl From<PathSpecError> for Error {
+    fn from(error: PathSpecError) -> Self {
+        Error::PathSpec(error)
     }
 }

@@ -1,18 +1,29 @@
-use clap::ValueEnum;
+use crate::CliValue;
+use voxsmith::HierarchyShowLayout;
 
-/// How `hierarchy show` renders the scene graph.
-#[derive(Clone, Copy, Debug, PartialEq, ValueEnum)]
-pub enum HierarchyShowLayout {
-    /// The scene graph as a box-glyph tree, each entity's tag and view rows
-    /// inline on its nodes.
-    #[value(name = "hierarchy")]
-    Hierarchy,
+impl CliValue for HierarchyShowLayout {
+    const VARIANTS: &'static [Self] = &[
+        HierarchyShowLayout::Hierarchy,
+        HierarchyShowLayout::JsonPretty,
+        HierarchyShowLayout::JsonCompact,
+    ];
 
-    /// The scene graph as indented JSON records.
-    #[value(name = "json-pretty")]
-    JsonPretty,
+    fn name(self) -> &'static str {
+        match self {
+            HierarchyShowLayout::Hierarchy => "hierarchy",
+            HierarchyShowLayout::JsonPretty => "json-pretty",
+            HierarchyShowLayout::JsonCompact => "json-compact",
+        }
+    }
 
-    /// The scene graph as single-line JSON records.
-    #[value(name = "json-compact")]
-    JsonCompact,
+    fn help(self) -> &'static str {
+        match self {
+            HierarchyShowLayout::Hierarchy => {
+                "The scene graph as a box-glyph tree, each entity's tag and view rows inline on \
+                 its nodes"
+            }
+            HierarchyShowLayout::JsonPretty => "The scene graph as indented JSON records",
+            HierarchyShowLayout::JsonCompact => "The scene graph as single-line JSON records",
+        }
+    }
 }

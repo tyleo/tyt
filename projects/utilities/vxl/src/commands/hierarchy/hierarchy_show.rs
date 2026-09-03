@@ -1,12 +1,10 @@
-use crate::{
-    Dependencies, Error, Format, Result,
-    commands::{HierarchyShowLayout, HierarchyViews, OriginView, PatternView, TransformView},
-};
+use crate::{Dependencies, Error, Format, Result, cli_value_parser};
 use clap::Parser;
 use std::{
     io::{Error as IOError, ErrorKind},
     path::PathBuf,
 };
+use voxsmith::{HierarchyShowLayout, HierarchyViews, OriginView, PatternView, TransformView};
 
 /// Prints the scene graph as a box-glyph tree or as JSON records, marking
 /// instanced nodes and listing unplaced nodes and orphan objects.
@@ -29,7 +27,12 @@ pub struct HierarchyShow {
     from: Option<Format>,
 
     /// How to render the scene graph, and the serialization to emit.
-    #[arg(value_name = "layout", long, default_value = "hierarchy")]
+    #[arg(
+        value_name = "layout",
+        long,
+        default_value = "hierarchy",
+        value_parser = cli_value_parser::<HierarchyShowLayout>()
+    )]
     layout: HierarchyShowLayout,
 
     /// Collapse repeat instances: expand a shared node's first placement and
@@ -230,10 +233,11 @@ fn invalid(message: String) -> Error {
 #[cfg(test)]
 mod tests {
     use crate::commands::{
-        HierarchyShow, HierarchyShowLayout,
+        HierarchyShow,
         hierarchy::hierarchy_show::{parse_origin_view, parse_precision_arg, parse_transform_view},
     };
     use clap::Parser;
+    use voxsmith::HierarchyShowLayout;
 
     fn strings(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| value.to_string()).collect()

@@ -21,12 +21,17 @@ goxl = { version = "0.1.0", optional = true }
 goxl-codec = { version = "0.1.0", optional = true }
 mvox = { version = "0.1.0", optional = true }
 mvox-codec = { version = "0.1.0", optional = true }
+pathspec = { version = "0.1.0", optional = true }
 png = { version = "0.18.1", optional = true }
 qbcl = { version = "0.1.0", optional = true }
 qbcl-codec = { version = "0.1.0", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", optional = true }
-treegrid = { version = "0.1.0", features = ["json", "ty-math"], optional = true }
+treegrid = { version = "0.1.0", features = [
+    "json",
+    "ty-math",
+], optional = true }
+treeselect = { version = "0.1.0", optional = true }
 ty-math = "0.2.0"
 vmax = { version = "0.1.7", features = ["serde"], optional = true }
 vmax-codec = { version = "0.1.0", optional = true }
@@ -61,10 +66,15 @@ voxj = ["dep:voxj", "dep:voxj-codec", "dep:voxj-voxcore", "_codec"]
 gltf = ["dep:gltf", "dep:base64", "dep:png", "dep:serde_json", "_mesh"]
 
 # The inspection reports over a loaded state, rendered to text, markdown, or
-# JSON through treegrid; `serde_json` carries json-pool values into the
-# palette report. A report over a Voxel Json document's spec checks also
-# needs `voxj`.
-report = ["dep:treegrid", "dep:serde_json"]
+# JSON through treegrid. `serde_json` carries json-pool values into the
+# palette report. `select` filters the hierarchy report by pattern. A report
+# over a Voxel Json document's spec checks also needs `voxj`.
+report = ["dep:treegrid", "dep:serde_json", "select"]
+
+# Selecting a state's nodes and objects by hierarchy path: gitignore-style
+# globs through pathspec, propagated over the scene tree through treeselect.
+select = ["dep:pathspec", "dep:treeselect"]
+
 
 # Private, auto-enabled by the codecs that need them; not meant to be enabled
 # directly. `_codec` marks that at least one codec is on (voxsmith errors at
