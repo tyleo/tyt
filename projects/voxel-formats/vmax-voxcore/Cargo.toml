@@ -18,10 +18,5 @@ voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
 
 [features]
 default = ["codec", "ext"]
-
-# Reads and writes a `.vmax` package's files over `vmax-codec`.
 codec = ["dep:vmax-codec"]
-
-# Keys the Voxel Max ext into a document `ext` block through voxcore's serde
-# transcode, which needs the ext types to derive `serde`.
 ext = ["dep:serde", "voxcore/json", "vmax/serde"]

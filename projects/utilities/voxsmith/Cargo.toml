@@ -46,16 +46,12 @@ voxj-voxcore = { version = "0.2.0", features = ["codec"], optional = true }
 [features]
 default = ["ext", "goxl", "mvox", "qbcl", "vmax", "voxj"]
 
-# Each codec feature gates its format crate, its codec crate, and the
-# voxsmith modules that convert that format. The `qbcl` feature covers the
-# whole Qubicle family (`.qb`, `.qbt`, and `.qbcl`) because all three share
-# the `qbcl` / `qbcl-codec` crates. The `vmax` feature fronts `vmax-voxcore`'s
-# typed loads and writes, to and from the `vmax` crate's lossless model and
-# straight to and from a package's files. The `voxj` feature fronts
-# `voxj-voxcore`'s typed loads and writes, the `voxj-codec` byte forms, and
-# the `voxj` spec checks. The `ext` feature gates each format's
-# `VoxExtCodec` impl, keying its ext into a document `ext` block through
-# voxcore's serde transcode.
+# Each codec feature gates its format crates and the voxsmith modules that
+# convert that format. `qbcl` covers `.qb`, `.qbt`, and `.qbcl` because all
+# three share the `qbcl` / `qbcl-codec` crates. `vmax` and `voxj` front their
+# `-voxcore` bridge crates, which own the conversion. `ext` gates each
+# format's `VoxExtCodec` impl, which keys its ext into a document `ext` block
+# through voxcore's serde transcode.
 ext = ["voxcore/json", "vmax-voxcore?/ext"]
 goxl = ["dep:goxl", "dep:goxl-codec", "_codec", "_color"]
 mvox = ["dep:mvox", "dep:mvox-codec", "_codec", "_color"]
@@ -63,12 +59,11 @@ qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec", "_color"]
 vmax = ["dep:vmax", "dep:vmax-codec", "dep:vmax-voxcore", "_codec"]
 voxj = ["dep:voxj", "dep:voxj-codec", "dep:voxj-voxcore", "_codec"]
 
-# glTF meshing both ways. The reader (`dep:gltf`) loads a `Mesh` and the private
-# `_mesh` marker gates the format-independent `Mesh` type and the voxelizer; the
-# `VoxObject`-to-glTF mesher and its `.gltf` / `.glb` writer add `serde_json` to
-# build the document, `base64` to embed the buffer in text glTF, and `png` to
-# encode the baked material atlas images. Unlike the codec features it is a
-# front/back end, not a load/save converter, so it does not turn on `_codec`.
+# glTF meshing both ways. The reader loads a `Mesh` for the voxelizer. The
+# `VoxObject`-to-glTF mesher and its `.gltf` / `.glb` writer add `serde_json`
+# to build the document, `base64` to embed the buffer in text glTF, and `png`
+# to encode the baked material atlas images. Because meshing is no voxel
+# codec, it leaves `_codec` off.
 gltf = ["dep:gltf", "dep:base64", "dep:png", "dep:serde_json", "_mesh"]
 
 # The inspection reports over a loaded state, rendered to text, markdown, or
@@ -83,16 +78,15 @@ report = ["dep:treegrid", "dep:serde_json", "dep:treeselect", "select"]
 select = ["dep:pathspec"]
 
 
-# Private, auto-enabled by the codecs that need them; not meant to be enabled
-# directly. `_codec` marks that at least one codec is on (voxsmith errors at
-# compile time otherwise). `_color` gates the palette-color sampling helpers
-# shared by the formats that re-sample colors per voxel (Goxel, MagicaVoxel,
-# Qubicle).
+# Private markers the codec features enable. `_codec` marks that at least one
+# codec is on, which voxsmith checks at compile time. `_color` gates the
+# palette-color sampling helpers shared by Goxel, MagicaVoxel, and Qubicle,
+# which re-sample colors per voxel.
 _codec = []
 _color = []
 
-# Marks that a mesh-voxelization front end is on (`gltf`, and future mesh
-# formats); gates the generic `Mesh` type and the voxelizer.
+# Marks that a mesh front end such as `gltf` is on. It gates the generic
+# `Mesh` type and the voxelizer.
 _mesh = []
 
 [dev-dependencies]
