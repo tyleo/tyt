@@ -1,5 +1,7 @@
-use crate::{Error, Result};
-use vmax::VMaxPaletteSettingsVmaxpsbFile;
+use crate::{
+    VMaxPaletteSettingsVmaxpsbFile,
+    palette::{Error, Result},
+};
 
 /// Unpacks a palette settings file's embedded `colors` table into one
 /// `[r, g, b, a]` cell per entry. Voxel Max stores this packed table only when

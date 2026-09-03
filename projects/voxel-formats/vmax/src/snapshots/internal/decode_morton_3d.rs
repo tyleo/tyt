@@ -20,7 +20,7 @@ fn compact_bits(mut n: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::decode_morton_3d;
+    use crate::snapshots::decode_morton_3d;
 
     #[test]
     fn decodes_known_codes() {

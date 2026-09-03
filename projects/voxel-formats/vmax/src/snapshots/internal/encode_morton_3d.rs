@@ -1,7 +1,8 @@
 /// Encodes `[x, y, z]` into a 3D Morton (Z-order) code by spreading each axis's
 /// bits to every third position, the inverse of
-/// [`decode_morton_3d`](crate::decode_morton_3d). Each component must fit in 10
-/// bits (`0..=1023`), far above the 32-per-axis chunk extent it is used for.
+/// [`decode_morton_3d`](crate::snapshots::decode_morton_3d). Each component
+/// must fit in 10 bits (`0..=1023`), far above the 32-per-axis chunk extent
+/// it is used for.
 pub fn encode_morton_3d(coords: [u32; 3]) -> u32 {
     spread_bits(coords[0]) | (spread_bits(coords[1]) << 1) | (spread_bits(coords[2]) << 2)
 }
@@ -18,7 +19,7 @@ fn spread_bits(mut n: u32) -> u32 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{decode_morton_3d, encode_morton_3d};
+    use crate::snapshots::{decode_morton_3d, encode_morton_3d};
 
     #[test]
     fn encodes_known_codes() {

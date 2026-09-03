@@ -1,10 +1,10 @@
 [package]
 name = "vmax-codec"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 license-file = "LICENSE"
 repository = "https://github.com/tyleo/tyt"
-description = "Reads and writes Voxel Max (.vmax) package files and their voxel/palette payloads."
+description = "Reads and writes Voxel Max (.vmax) package files."
 keywords = ["voxelmax", "vmax", "voxel", "3d", "codec"]
 categories = ["parser-implementations", "encoding", "game-development", "graphics"]
 
@@ -13,4 +13,4 @@ lzfse = "0.2"
 plist = "1"
 png = "0.18"
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
-vmax = { version = "0.1.7", features = ["serde"] }
+vmax = { version = "0.1.8", features = ["serde"] }

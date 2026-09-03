@@ -14,8 +14,8 @@ use vmax::{
     VMaxFile, VMaxFlag, VMaxFlagValue, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxMode,
     VMaxObject, VMaxPalettePngFile, VMaxPaletteSettingsVmaxpsbFile, VMaxSceneCamera,
     VMaxSceneJsonFile, VMaxToolMode, VMaxTools, VMaxViewBox,
+    snapshots::{VMaxVoxel, encode_vmax_snapshots},
 };
-use vmax_codec::{VMaxVoxel, encode_vmax_snapshots};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxProperty, BVoxValuePoolValue,
     VoxHierarchyNode, VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,

@@ -14,11 +14,8 @@ unmodeled key) instead of dropping it, so nothing is lost on a round trip.
 The codec is a dumb load/save: a `VMaxFile` is the parsed package in its
 on-disk shape, and `from_vmax_package` then `to_vmax_package` reproduces it. Voxel
 geometry stays as the per-chunk snapshot edit log and palette colors stay packed
-or in their PNG; decode them on demand with the free functions:
-
-- `decode_vmax_snapshots` replays a `contents*.vmaxb`'s snapshots into voxels,
-  and `encode_vmax_snapshots` / `encode_contents_vmaxb_file_from_voxels` go back.
-- `decode_palette_colors` unpacks a palette settings file's embedded color table.
+or in their PNG. The `vmax` crate's `snapshots` and `palette` modules decode
+them on demand.
 
 The QuickLook thumbnails decode to `vmax::VMaxImage` pixel grids, split by role
 into `thumbnail_png` (the package preview), `contents_vmax_pngs` (per object),
@@ -34,7 +31,8 @@ filesystem, so the same flow works against a zip or an in-memory package.
 
 ```rust
 use std::{fs, io, path::Path};
-use vmax_codec::{decode_vmax_snapshots, from_vmax_package, to_vmax_package};
+use vmax::snapshots::decode_vmax_snapshots;
+use vmax_codec::{from_vmax_package, to_vmax_package};
 
 fn round_trip(src: &Path, dst: &Path) -> io::Result<()> {
     let file = from_vmax_package(

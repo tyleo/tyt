@@ -12,8 +12,8 @@ use ty_math::{
 use vmax::{
     VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion, VMaxObject,
     VMaxSceneJsonFile, VMaxViewBox,
+    snapshots::{VMaxVoxel, decode_vmax_snapshots},
 };
-use vmax_codec::{VMaxVoxel, decode_vmax_snapshots};
 use voxcore::{
     BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, BVoxValuePool, VoxHierarchyNode,
     VoxMain, VoxObject, VoxPalette, VoxValuePool,
@@ -139,7 +139,8 @@ fn build_object(
     let voxels: Vec<VMaxVoxel> = if object.data.is_empty() {
         Vec::new()
     } else {
-        decode_vmax_snapshots(&serde.contents_files[&object.data].snapshots)?
+        decode_vmax_snapshots(&serde.contents_files[&object.data].snapshots)
+            .map_err(Error::invalid)?
     };
 
     // The runtime grid is exactly tight: the occupied voxel extent, re-based so
@@ -802,8 +803,7 @@ fn invalid(message: String) -> Error {
 mod tests {
     use super::*;
     use std::collections::BTreeMap;
-    use vmax::{VMaxTools, VMaxViewBox};
-    use vmax_codec::encode_vmax_snapshots;
+    use vmax::{VMaxTools, VMaxViewBox, snapshots::encode_vmax_snapshots};
 
     /// An empty object (zero voxels) with no authored content box
     /// (`e_mi`/`e_ma` absent) but a `tools.vp` build volume away from the

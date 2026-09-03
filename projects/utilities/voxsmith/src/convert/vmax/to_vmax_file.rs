@@ -27,8 +27,8 @@ mod tests {
     use vmax::{
         VMaxContentsVmaxbFile, VMaxFile, VMaxGroup, VMaxMaterial, VMaxMaterialDispersion,
         VMaxObject, VMaxPalettePngFile, VMaxSceneCamera, VMaxSceneJsonFile,
+        snapshots::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots},
     };
-    use vmax_codec::{VMaxVoxel, decode_vmax_snapshots, encode_vmax_snapshots};
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, BVoxObject, BVoxPalette, VoxHierarchyNode, VoxMain,
         VoxObject, VoxPalette, VoxValuePool, VoxValuePoolValueRef,

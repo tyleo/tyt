@@ -1,5 +1,8 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 
+pub mod palette;
+pub mod snapshots;
+
 mod common;
 mod contents_vmaxb;
 mod history_vmaxhb;

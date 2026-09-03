@@ -1,6 +1,8 @@
-use crate::{VMaxVoxel, decode_morton_3d, encode_morton_3d};
+use crate::{
+    VMaxExtent, VMaxSnapshot, VMaxSnapshotId, VMaxStats, VMaxStorage,
+    snapshots::{VMaxVoxel, decode_morton_3d, encode_morton_3d},
+};
 use std::collections::BTreeMap;
-use vmax::{VMaxExtent, VMaxSnapshot, VMaxSnapshotId, VMaxStats, VMaxStorage};
 
 /// Chunk voxel pitch per axis; an 8x8x8 grid of chunks tiles a 256^3 model.
 const CHUNK_PITCH: i32 = 32;
@@ -15,7 +17,8 @@ const CHUNK_ORDER: i64 = 5;
 const CHECKPOINT: i64 = 4;
 
 /// Encodes voxels into a `VMaxContentsVmaxbFile`'s `snapshots` array, the
-/// inverse of [`decode_vmax_snapshots`](crate::decode_vmax_snapshots). Emits
+/// inverse of
+/// [`decode_vmax_snapshots`](crate::snapshots::decode_vmax_snapshots). Emits
 /// one checkpoint snapshot per occupied chunk.
 pub fn encode_vmax_snapshots(voxels: &[VMaxVoxel]) -> Vec<VMaxSnapshot> {
     let mut chunks: BTreeMap<u32, BTreeMap<u32, (u8, u8)>> = BTreeMap::new();
@@ -117,7 +120,7 @@ fn morton_stat(morton: u32) -> Vec<i64> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VMaxVoxel, encode_vmax_snapshots};
+    use crate::snapshots::{VMaxVoxel, encode_vmax_snapshots};
 
     fn voxel(x: i32, y: i32, z: i32, color_idx: u8) -> VMaxVoxel {
         VMaxVoxel {

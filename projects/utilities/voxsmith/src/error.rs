@@ -14,8 +14,6 @@ use std::{
 };
 #[cfg(feature = "report")]
 use treegrid::TreeGridError;
-#[cfg(feature = "vmax")]
-use vmax_codec::Error as VMaxError;
 use voxcore::Error as VoxError;
 #[cfg(feature = "voxj")]
 use voxj_codec::Error as VoxjCodecError;
@@ -38,10 +36,6 @@ pub enum Error {
     /// Decoding a MagicaVoxel `.vox` file failed.
     #[cfg(feature = "mvox")]
     MVox(MVoxError),
-
-    /// Decoding or encoding a Voxel Max payload failed.
-    #[cfg(feature = "vmax")]
-    VMax(VMaxError),
 
     /// Decoding a Goxel `.gox` file failed.
     #[cfg(feature = "goxl")]
@@ -80,8 +74,6 @@ impl Display for Error {
             Error::Voxj(error) => error.fmt(f),
             #[cfg(feature = "mvox")]
             Error::MVox(error) => error.fmt(f),
-            #[cfg(feature = "vmax")]
-            Error::VMax(error) => error.fmt(f),
             #[cfg(feature = "goxl")]
             Error::Goxl(error) => error.fmt(f),
             #[cfg(feature = "qbcl")]
@@ -105,8 +97,6 @@ impl StdError for Error {
             Error::Voxj(error) => Some(error),
             #[cfg(feature = "mvox")]
             Error::MVox(error) => Some(error),
-            #[cfg(feature = "vmax")]
-            Error::VMax(error) => Some(error),
             #[cfg(feature = "goxl")]
             Error::Goxl(error) => Some(error),
             #[cfg(feature = "qbcl")]
@@ -146,13 +136,6 @@ impl From<VoxjCodecError> for Error {
 impl From<MVoxError> for Error {
     fn from(error: MVoxError) -> Self {
         Error::MVox(error)
-    }
-}
-
-#[cfg(feature = "vmax")]
-impl From<VMaxError> for Error {
-    fn from(error: VMaxError) -> Self {
-        Error::VMax(error)
     }
 }
 

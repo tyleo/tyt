@@ -109,12 +109,13 @@ fn strip_contents_suffix(name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::from_vmax_package;
-    use crate::{VMaxVoxel, encode_contents_vmaxb_file_from_voxels, to_vmax_package};
+    use crate::to_vmax_package;
     use std::collections::{BTreeMap, HashMap};
     use vmax::{
         VMaxFile, VMaxHistorySession, VMaxHistoryVmaxhbFile, VMaxHistoryVmaxhvsbFile,
         VMaxHistoryVmaxhvscFile, VMaxImage, VMaxObject, VMaxPalettePngFile,
         VMaxPaletteSettingsVmaxpsbFile, VMaxSceneJsonFile, VMaxSelectionVmaxbFile, VMaxValue,
+        snapshots::{VMaxVoxel, encode_contents_vmaxb_file_from_voxels},
     };
 
     fn object(name: &str, data: &str, palette: &str) -> VMaxObject {

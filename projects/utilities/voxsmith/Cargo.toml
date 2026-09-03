@@ -33,8 +33,7 @@ treegrid = { version = "0.1.0", features = [
 ], optional = true }
 treeselect = { version = "0.1.0", optional = true }
 ty-math = "0.2.0"
-vmax = { version = "0.1.7", features = ["serde"], optional = true }
-vmax-codec = { version = "0.1.0", optional = true }
+vmax = { version = "0.1.8", features = ["serde"], optional = true }
 voxcore = { version = "0.2.1", features = ["color"] }
 voxj = { version = "0.1.3", optional = true }
 voxj-codec = { version = "0.2.0", optional = true }
@@ -46,15 +45,17 @@ default = ["ext", "goxl", "mvox", "qbcl", "vmax", "voxj"]
 # Each codec feature gates its format crate, its codec crate, and the
 # voxsmith modules that convert that format. The `qbcl` feature covers the
 # whole Qubicle family (`.qb`, `.qbt`, and `.qbcl`) because all three share
-# the `qbcl` / `qbcl-codec` crates. The `voxj` feature fronts `voxj-voxcore`'s
-# typed loads and writes, the `voxj-codec` byte forms, and the `voxj` spec
-# checks. The `ext` feature gates each format's `VoxExtCodec` impl, keying
-# its ext into a document `ext` block through voxcore's serde transcode.
+# the `qbcl` / `qbcl-codec` crates. Voxel Max converts to and from the `vmax`
+# crate's lossless model, so it needs no codec crate. The `voxj` feature
+# fronts `voxj-voxcore`'s typed loads and writes, the `voxj-codec` byte
+# forms, and the `voxj` spec checks. The `ext` feature gates each format's
+# `VoxExtCodec` impl, keying its ext into a document `ext` block through
+# voxcore's serde transcode.
 ext = ["voxcore/json"]
 goxl = ["dep:goxl", "dep:goxl-codec", "_codec", "_color"]
 mvox = ["dep:mvox", "dep:mvox-codec", "_codec", "_color"]
 qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec", "_color"]
-vmax = ["dep:vmax", "dep:vmax-codec", "_codec", "_color"]
+vmax = ["dep:vmax", "_codec", "_color"]
 voxj = ["dep:voxj", "dep:voxj-codec", "dep:voxj-voxcore", "_codec"]
 
 # glTF meshing both ways. The reader (`dep:gltf`) loads a `Mesh` and the private

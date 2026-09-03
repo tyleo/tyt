@@ -11,7 +11,7 @@ categories = ["data-structures", "game-development", "graphics"]
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
 serde_bytes = { version = "0.11", optional = true }
-serde_json = { version = "1", features = ["preserve_order"], optional = true }
 
 [features]
-serde = ["dep:serde", "dep:serde_bytes", "dep:serde_json"]
+default = ["serde"]
+serde = ["dep:serde", "dep:serde_bytes"]

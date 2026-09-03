@@ -1,5 +1,7 @@
-use crate::{VMaxVoxel, encode_vmax_snapshots};
-use vmax::VMaxContentsVmaxbFile;
+use crate::{
+    VMaxContentsVmaxbFile,
+    snapshots::{VMaxVoxel, encode_vmax_snapshots},
+};
 
 /// Encodes voxels into a minimal `VMaxContentsVmaxbFile` payload. Used as
 /// the fallback when no preserved object state is available (e.g. a voxel
@@ -18,7 +20,9 @@ pub fn encode_contents_vmaxb_file_from_voxels(
 
 #[cfg(test)]
 mod tests {
-    use crate::{VMaxVoxel, decode_vmax_snapshots, encode_contents_vmaxb_file_from_voxels};
+    use crate::snapshots::{
+        VMaxVoxel, decode_vmax_snapshots, encode_contents_vmaxb_file_from_voxels,
+    };
 
     fn voxel(x: i32, y: i32, z: i32, material_idx: u8, color_idx: u8) -> VMaxVoxel {
         VMaxVoxel {
