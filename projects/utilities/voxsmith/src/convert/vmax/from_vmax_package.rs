@@ -1,4 +1,4 @@
-use crate::{Result, VoxelMaxVoxMain};
+use crate::{Result, VMAX_DEPENDENCIES, VoxelMaxVoxMain};
 use std::io::Result as IOResult;
 use vmax_voxcore::codec::from_vmax_package as raw_from_vmax_package;
 
@@ -17,6 +17,7 @@ where
     R: FnMut(&str) -> IOResult<Option<Vec<u8>>>,
 {
     Ok(raw_from_vmax_package(
+        &VMAX_DEPENDENCIES,
         || list().map_err(Into::into),
         |name| resolve(name).map_err(Into::into),
     )?)

@@ -1,5 +1,6 @@
 use crate::{
-    Error, Result, from_contents_vmaxb_file_bytes, from_history_vmaxhb_file_bytes,
+    DecodePng, DecodeVMaxPlist, DecodeVMaxSceneJson, DecompressLzfse, Error, Result,
+    from_contents_vmaxb_file_bytes, from_history_vmaxhb_file_bytes,
     from_history_vmaxhvsb_file_bytes, from_history_vmaxhvsc_file_bytes, from_image_png_file_bytes,
     from_palette_png_file_bytes, from_palette_settings_vmaxpsb_file_bytes,
     from_scene_json_file_bytes, from_selection_vmaxb_file_bytes,
@@ -13,19 +14,24 @@ const THUMBNAIL_PATH: &str = "QuickLook/Thumbnail.png";
 /// Prefix every `QuickLook/` entry shares.
 const QUICK_LOOK_PREFIX: &str = "QuickLook/";
 
-/// Reads a whole `.vmax` package into a [`VMaxFile`]. `list` returns the
-/// package-relative path of every file (so `QuickLook/` entries keep their
-/// subdirectory prefix); `resolve` returns a file's bytes by that path, or
-/// `Ok(None)` if it has since vanished. `scene.json` is required, and a
-/// filename matching no known kind is an error rather than a silent loss.
-pub fn from_vmax_package<L, R>(list: L, mut resolve: R) -> Result<VMaxFile>
+/// Reads a whole `.vmax` package into a [`VMaxFile`], decoding each file
+/// through `dependencies`. `scene.json` is required. A filename matching no
+/// known kind is an error.
+///
+/// # Arguments
+/// * `list` - returns the package-relative path of every file, so `QuickLook/`
+///   entries keep their subdirectory prefix.
+/// * `resolve` - returns a file's bytes by that path, or `Ok(None)` if it has
+///   since vanished.
+pub fn from_vmax_package<D, L, R>(dependencies: &D, list: L, mut resolve: R) -> Result<VMaxFile>
 where
+    D: DecompressLzfse + DecodeVMaxPlist + DecodePng + DecodeVMaxSceneJson,
     L: FnOnce() -> Result<Vec<String>>,
     R: FnMut(&str) -> Result<Option<Vec<u8>>>,
 {
     let scene_bytes =
         resolve("scene.json")?.ok_or_else(|| Error::Invalid("scene.json is missing".to_owned()))?;
-    let scene_json_file = from_scene_json_file_bytes(&scene_bytes)?;
+    let scene_json_file = from_scene_json_file_bytes(dependencies, &scene_bytes)?;
 
     let mut contents_files = BTreeMap::new();
     let mut palette_settings_files = BTreeMap::new();
@@ -54,11 +60,14 @@ where
         };
         if let Some(name) = path.strip_prefix(QUICK_LOOK_PREFIX) {
             if path == THUMBNAIL_PATH {
-                thumbnail_png = Some(from_image_png_file_bytes(&bytes)?);
+                thumbnail_png = Some(from_image_png_file_bytes(dependencies, &bytes)?);
             } else if let Some(data) = name.strip_suffix(".png").and_then(strip_contents_suffix) {
-                contents_vmax_pngs.insert(data, from_image_png_file_bytes(&bytes)?);
+                contents_vmax_pngs.insert(data, from_image_png_file_bytes(dependencies, &bytes)?);
             } else if let Some(id) = name.strip_suffix(".png") {
-                group_pngs.insert(id.to_owned(), from_image_png_file_bytes(&bytes)?);
+                group_pngs.insert(
+                    id.to_owned(),
+                    from_image_png_file_bytes(dependencies, &bytes)?,
+                );
             } else {
                 return Err(Error::Invalid(format!(
                     "unrecognized QuickLook file in .vmax package: {path}"
@@ -67,17 +76,27 @@ where
         } else if path.ends_with(".selection.vmaxb") {
             selection_vmaxb_files.insert(path, from_selection_vmaxb_file_bytes(&bytes)?);
         } else if path.ends_with(".vmaxb") {
-            contents_files.insert(path, from_contents_vmaxb_file_bytes(&bytes)?);
+            contents_files.insert(path, from_contents_vmaxb_file_bytes(dependencies, &bytes)?);
         } else if path.ends_with(".settings.vmaxpsb") {
-            palette_settings_files.insert(path, from_palette_settings_vmaxpsb_file_bytes(&bytes)?);
+            palette_settings_files.insert(
+                path,
+                from_palette_settings_vmaxpsb_file_bytes(dependencies, &bytes)?,
+            );
         } else if path.ends_with(".png") {
-            palette_png_files.insert(path, from_palette_png_file_bytes(&bytes)?);
+            palette_png_files.insert(path, from_palette_png_file_bytes(dependencies, &bytes)?);
         } else if path.ends_with(".vmaxhb") {
-            history_vmaxhb_files.insert(path, from_history_vmaxhb_file_bytes(&bytes)?);
+            history_vmaxhb_files
+                .insert(path, from_history_vmaxhb_file_bytes(dependencies, &bytes)?);
         } else if path.ends_with(".vmaxhvsb") {
-            history_vmaxhvsb_files.insert(path, from_history_vmaxhvsb_file_bytes(&bytes)?);
+            history_vmaxhvsb_files.insert(
+                path,
+                from_history_vmaxhvsb_file_bytes(dependencies, &bytes)?,
+            );
         } else if path.ends_with(".vmaxhvsc") {
-            history_vmaxhvsc_files.insert(path, from_history_vmaxhvsc_file_bytes(&bytes)?);
+            history_vmaxhvsc_files.insert(
+                path,
+                from_history_vmaxhvsc_file_bytes(dependencies, &bytes)?,
+            );
         } else {
             return Err(Error::Invalid(format!(
                 "unrecognized file in .vmax package: {path}"
@@ -106,10 +125,10 @@ fn strip_contents_suffix(name: &str) -> Option<String> {
     name.ends_with(".vmaxb").then(|| name.to_owned())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
     use super::from_vmax_package;
-    use crate::to_vmax_package;
+    use crate::{DependenciesImpl, to_vmax_package};
     use std::collections::{BTreeMap, HashMap};
     use vmax::{
         VMaxFile, VMaxHistorySession, VMaxHistoryVmaxhbFile, VMaxHistoryVmaxhvsbFile,
@@ -254,7 +273,7 @@ mod tests {
 
         // `to_vmax_package` writes into an in-memory directory.
         let mut dir: HashMap<String, Vec<u8>> = HashMap::new();
-        to_vmax_package(&file, |name, bytes| {
+        to_vmax_package(&DependenciesImpl, &file, |name, bytes| {
             dir.insert(name.to_owned(), bytes.to_vec());
             Ok(())
         })
@@ -263,6 +282,7 @@ mod tests {
         // Every kind, including the history / selection / QuickLook files no
         // scene object names, is written and read back through the same map.
         let read = from_vmax_package(
+            &DependenciesImpl,
             || Ok(dir.keys().cloned().collect()),
             |name| Ok(dir.get(name).cloned()),
         )

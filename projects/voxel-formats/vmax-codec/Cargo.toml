@@ -9,8 +9,23 @@ keywords = ["voxelmax", "vmax", "voxel", "3d", "codec"]
 categories = ["parser-implementations", "encoding", "game-development", "graphics"]
 
 [dependencies]
-lzfse = "0.2"
-plist = "1"
-png = "0.18"
-serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
-vmax = { version = "0.1.8", features = ["serde"] }
+lzfse = { version = "0.2", optional = true }
+plist = { version = "1", optional = true }
+png = { version = "0.18", optional = true }
+serde = { version = "1", optional = true }
+serde_json = { version = "1", features = [
+    "float_roundtrip",
+    "preserve_order",
+], optional = true }
+vmax = { version = "0.1.8", default-features = false }
+
+[features]
+default = ["impl"]
+impl = [
+    "dep:lzfse",
+    "dep:plist",
+    "dep:png",
+    "dep:serde",
+    "dep:serde_json",
+    "vmax/serde",
+]

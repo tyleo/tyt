@@ -1,4 +1,4 @@
-use crate::{Result, VoxelMaxColorFormat, VoxelMaxVoxMain};
+use crate::{Result, VMAX_DEPENDENCIES, VoxelMaxColorFormat, VoxelMaxVoxMain};
 use std::io::Result as IOResult;
 use vmax_voxcore::codec::to_vmax_package as raw_to_vmax_package;
 
@@ -20,7 +20,10 @@ pub fn to_vmax_package<W>(
 where
     W: FnMut(&str, &[u8]) -> IOResult<()>,
 {
-    Ok(raw_to_vmax_package(state, color_format, |name, bytes| {
-        write(name, bytes).map_err(Into::into)
-    })?)
+    Ok(raw_to_vmax_package(
+        &VMAX_DEPENDENCIES,
+        state,
+        color_format,
+        |name, bytes| write(name, bytes).map_err(Into::into),
+    )?)
 }

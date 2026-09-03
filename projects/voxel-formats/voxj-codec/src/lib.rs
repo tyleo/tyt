@@ -1,6 +1,3 @@
-mod internal;
-pub(crate) use internal::*;
-
 // Public API
 
 mod decode_voxj_json;
@@ -36,3 +33,8 @@ mod dependencies_impl;
 
 #[cfg(feature = "impl")]
 pub use dependencies_impl::*;
+
+// Internal API
+
+mod internal;
+pub(crate) use internal::*;

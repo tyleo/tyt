@@ -2047,6 +2047,7 @@ dependencies = [
  "lzfse",
  "plist",
  "png",
+ "serde",
  "serde_json",
  "vmax",
 ]

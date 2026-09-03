@@ -10,7 +10,7 @@ use ty_math::{
     TyQuaternionExt, TyQuaternionF64, TyTransformF64, TyVector3F64, ZERO_LENGTH_TOLERANCE,
 };
 use tyt_injection::serde_json::Value;
-use vmax_codec::from_scene_json_file_bytes;
+use vmax_codec::{DependenciesImpl as VMaxDependenciesImpl, from_scene_json_file_bytes};
 
 /// Fallback `hist` reference for objects without a recognizable `contents`
 /// reference. Voxel Max refuses to open a scene whose objects have an empty
@@ -138,7 +138,7 @@ impl Dependencies for DependenciesImpl {
     }
 
     fn scene_nodes(&self, scene_bytes: &[u8]) -> Result<Vec<VoxelMaxSceneNode>> {
-        let scene = from_scene_json_file_bytes(scene_bytes)?;
+        let scene = from_scene_json_file_bytes(&VMaxDependenciesImpl, scene_bytes)?;
         let mut nodes = Vec::with_capacity(scene.groups.len() + scene.objects.len());
         for group in &scene.groups {
             nodes.push(VoxelMaxSceneNode {

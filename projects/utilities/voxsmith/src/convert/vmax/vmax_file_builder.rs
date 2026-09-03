@@ -1,4 +1,6 @@
-use crate::{Result, SceneCameraSource, VMaxFile, VoxelMaxColorFormat, VoxelMaxVoxMain};
+use crate::{
+    Result, SceneCameraSource, VMAX_DEPENDENCIES, VMaxFile, VoxelMaxColorFormat, VoxelMaxVoxMain,
+};
 use std::io::Result as IOResult;
 use vmax_codec::to_vmax_package as write_vmax_package;
 use vmax_voxcore::VmaxFileBuilder as RawVmaxFileBuilder;
@@ -43,7 +45,9 @@ impl<'a> VmaxFileBuilder<'a> {
         W: FnMut(&str, &[u8]) -> IOResult<()>,
     {
         let file = self.build()?;
-        write_vmax_package(&file, |name, bytes| write(name, bytes).map_err(Into::into))?;
+        write_vmax_package(&VMAX_DEPENDENCIES, &file, |name, bytes| {
+            write(name, bytes).map_err(Into::into)
+        })?;
         Ok(())
     }
 }

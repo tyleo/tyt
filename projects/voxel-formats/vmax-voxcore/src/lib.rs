@@ -10,8 +10,9 @@
 //! exactly. A state without one, such as one loaded from another format, has
 //! its document synthesized from the bare scene. The [`codec`] module, behind
 //! the default `codec` feature, goes straight to and from a package's files.
-//! The `ext` feature keys the ext into a document's `ext` block through
-//! voxcore's [`VoxExtCodec`](voxcore::ext::VoxExtCodec).
+//! It takes the codec's dependencies, which `vmax_codec::DependenciesImpl`
+//! supplies. The `ext` feature keys the ext into a document's `ext` block
+//! through voxcore's [`VoxExtCodec`](voxcore::ext::VoxExtCodec).
 
 // Public API
 

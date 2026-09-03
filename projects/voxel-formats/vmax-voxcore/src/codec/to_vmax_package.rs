@@ -1,8 +1,11 @@
 use crate::{Result, VoxelMaxColorFormat, VoxelMaxVoxMain, to_vmax_file};
-use vmax_codec::{Result as CodecResult, to_vmax_package as write_vmax_package};
+use vmax_codec::{
+    CompressLzfse, EncodePng, EncodeVMaxPlist, EncodeVMaxSceneJson, Result as CodecResult,
+    to_vmax_package as write_vmax_package,
+};
 
-/// Writes a [`VoxelMaxVoxMain`] to a `.vmax` package, the package form of
-/// [`to_vmax_file`] and the inverse of
+/// Writes a [`VoxelMaxVoxMain`] to a `.vmax` package through `dependencies`,
+/// the package form of [`to_vmax_file`] and the inverse of
 /// [`from_vmax_package`](crate::codec::from_vmax_package). For control over
 /// the scene camera, build the file with
 /// [`VmaxFileBuilder`](crate::VmaxFileBuilder) and write it through
@@ -13,16 +16,18 @@ use vmax_codec::{Result as CodecResult, to_vmax_package as write_vmax_package};
 /// * `write` - receives each file's package-relative name and bytes and
 ///   performs the actual write, creating any subdirectory a `QuickLook/` name
 ///   implies.
-pub fn to_vmax_package<W>(
+pub fn to_vmax_package<D, W>(
+    dependencies: &D,
     state: &VoxelMaxVoxMain,
     voxel_max_color_format: VoxelMaxColorFormat,
     write: W,
 ) -> Result<()>
 where
+    D: CompressLzfse + EncodeVMaxPlist + EncodePng + EncodeVMaxSceneJson,
     W: FnMut(&str, &[u8]) -> CodecResult<()>,
 {
     let file = to_vmax_file(state, voxel_max_color_format)?;
-    Ok(write_vmax_package(&file, write)?)
+    Ok(write_vmax_package(dependencies, &file, write)?)
 }
 
 #[cfg(test)]
@@ -34,6 +39,7 @@ mod tests {
     use branded_id::U32Id;
     use std::collections::HashMap;
     use ty_math::{TySrgbaU8, TyVector3U32};
+    use vmax_codec::DependenciesImpl;
     use voxcore::{
         BVoxHierarchyNode, BVoxMaterial, VoxHierarchyNode, VoxMain, VoxObject, VoxPalette,
         VoxValuePool, color::lin_srgba_f64_from_srgba_u8, material::BASE_COLOR,
@@ -80,6 +86,7 @@ mod tests {
     fn round_trips_through_an_in_memory_package() {
         let mut package: HashMap<String, Vec<u8>> = HashMap::new();
         to_vmax_package(
+            &DependenciesImpl,
             &red_voxel_state(),
             VoxelMaxColorFormat::Png,
             |name, bytes| {
@@ -93,6 +100,7 @@ mod tests {
         assert!(package.contains_key("palette1.png"));
 
         let reloaded = from_vmax_package(
+            &DependenciesImpl,
             || Ok(package.keys().cloned().collect()),
             |name| Ok(package.get(name).cloned()),
         )
