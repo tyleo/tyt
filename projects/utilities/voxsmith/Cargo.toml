@@ -67,13 +67,14 @@ gltf = ["dep:gltf", "dep:base64", "dep:png", "dep:serde_json", "_mesh"]
 
 # The inspection reports over a loaded state, rendered to text, markdown, or
 # JSON through treegrid. `serde_json` carries json-pool values into the
-# palette report. `select` filters the hierarchy report by pattern. A report
-# over a Voxel Json document's spec checks also needs `voxj`.
-report = ["dep:treegrid", "dep:serde_json", "select"]
+# palette report. `select` filters the hierarchy report by pattern, and
+# treeselect propagates that filter over the scene tree. A report over a
+# Voxel Json document's spec checks also needs `voxj`.
+report = ["dep:treegrid", "dep:serde_json", "dep:treeselect", "select"]
 
 # Selecting a state's nodes and objects by hierarchy path: gitignore-style
-# globs through pathspec, propagated over the scene tree through treeselect.
-select = ["dep:pathspec", "dep:treeselect"]
+# globs through pathspec.
+select = ["dep:pathspec"]
 
 
 # Private, auto-enabled by the codecs that need them; not meant to be enabled
