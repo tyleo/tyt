@@ -17,6 +17,6 @@ ty-math = { version = "0.2.0", default-features = false }
 serde = { version = "1", features = ["derive"] }
 
 [features]
-default = ["json"]
+default = ["color", "json"]
 color = ["ty-math/color"]
 json = ["dep:serde", "dep:serde_json"]
