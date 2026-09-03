@@ -11,7 +11,7 @@ categories = ["encoding", "game-development", "graphics"]
 [dependencies]
 branded-id = "0.1.7"
 ty-math = "0.2.0"
-voxcore = "0.2.1"
+voxcore = { version = "0.2.1", default-features = false }
 voxj = { version = "0.1.3", default-features = false }
 voxj-codec = { version = "0.2.0", default-features = false, optional = true }
 
