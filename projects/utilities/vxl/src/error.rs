@@ -50,13 +50,6 @@ impl From<IOError> for Error {
 }
 
 #[cfg(feature = "impl")]
-impl From<vmax_codec::Error> for Error {
-    fn from(e: vmax_codec::Error) -> Self {
-        Error::IO(IOError::other(e))
-    }
-}
-
-#[cfg(feature = "impl")]
 impl From<voxsmith::Error> for Error {
     fn from(e: voxsmith::Error) -> Self {
         Error::IO(IOError::other(e))

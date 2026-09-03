@@ -1,4 +1,5 @@
 use crate::VoxelMaxMaterial;
+#[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
 
 /// Per-palette Voxel Max provenance preserved in the `voxel-max` ext, kept
@@ -10,13 +11,14 @@ use serde::{Deserialize, Serialize};
 /// distinct color-plus-material combination, and its value pools carry a
 /// finite-defaulted neutral copy of the materials, so the exact list is kept
 /// here for a byte-exact write-back. It is empty for a color-only palette.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct VoxelMaxPalette {
     /// Display name (Voxel Max `name`).
     pub name: String,
 
     /// The exact materials, aligned by index with the material list a voxel's
     /// `material_idx` selects. Empty for a color-only palette.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub materials: Vec<VoxelMaxMaterial>,
 }

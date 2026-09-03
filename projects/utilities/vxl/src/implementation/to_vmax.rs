@@ -4,7 +4,6 @@ use crate::{
     implementation,
 };
 use std::{fs, path::Path};
-use vmax_codec::to_vmax_package;
 use voxsmith::{SceneCameraSource, VMaxSceneCamera, VmaxFileBuilder, VoxelMaxColorFormat};
 
 /// The top-corner scene camera `--camera corner` writes: the empty camera's
@@ -25,11 +24,9 @@ const TOP_CORNER_CAMERA: VMaxSceneCamera = VMaxSceneCamera {
 };
 
 /// Converts the voxel file at `input` into a Voxel Max `.vmax` package
-/// directory at `output`, round-tripping through voxcore: the input is loaded
-/// into a [`VoxMain`](voxsmith::voxcore::VoxMain), written back out to the lossless Voxel
-/// Max model, then emitted one file per package entry. `color_format` selects
-/// where each palette's colors live and `camera` the scene camera the document
-/// opens with.
+/// directory at `output`, round-tripping through voxcore. `color_format`
+/// selects where each palette's colors live and `camera` the scene camera the
+/// document opens with.
 pub fn to_vmax(
     input: &Path,
     from: Option<Format>,
@@ -49,13 +46,12 @@ pub fn to_vmax(
             CameraView::Corner => SceneCameraSource::Camera(TOP_CORNER_CAMERA),
         });
     }
-    let serde = builder.build()?;
-    to_vmax_package(&serde, |name, bytes| {
+    builder.to_vmax_package(|name, bytes| {
         let path = output.join(name);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        Ok(fs::write(&path, bytes)?)
+        fs::write(&path, bytes)
     })?;
     Ok(())
 }

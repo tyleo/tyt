@@ -4,14 +4,13 @@ use std::{
     io::{self, ErrorKind},
     path::{Path, PathBuf},
 };
-use vmax::VMaxFile;
-use vmax_codec::from_vmax_package;
+use voxsmith::{VoxelMaxVoxMain, from_vmax_package};
 
-/// Reads the whole `.vmax` package directory at `input` into the lossless
-/// Voxel Max model. The listing covers every package-relative path,
+/// Loads the whole `.vmax` package directory at `input` into a
+/// [`VoxelMaxVoxMain`]. The listing covers every package-relative path,
 /// descending one level into subdirectories (only `QuickLook/`) so its
 /// thumbnails keep their prefix. The resolver reads each path's bytes.
-pub fn read_vmax_file(input: &Path) -> Result<VMaxFile> {
+pub fn load_vmax_package(input: &Path) -> Result<VoxelMaxVoxMain> {
     Ok(from_vmax_package(
         || {
             let mut paths = Vec::new();
@@ -34,7 +33,7 @@ pub fn read_vmax_file(input: &Path) -> Result<VMaxFile> {
         |name| match fs::read(input.join(name)) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         },
     )?)
 }

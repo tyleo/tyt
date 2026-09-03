@@ -2052,6 +2052,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "vmax-voxcore"
+version = "0.1.0"
+dependencies = [
+ "branded-id",
+ "serde",
+ "ty-math",
+ "vmax",
+ "vmax-codec",
+ "voxcore",
+]
+
+[[package]]
 name = "voxcore"
 version = "0.2.1"
 dependencies = [
@@ -2112,6 +2124,8 @@ dependencies = [
  "treeselect",
  "ty-math",
  "vmax",
+ "vmax-codec",
+ "vmax-voxcore",
  "voxcore",
  "voxj",
  "voxj-codec",
@@ -2125,8 +2139,6 @@ dependencies = [
  "clap",
  "clap_complete",
  "libc",
- "vmax",
- "vmax-codec",
  "voxcore",
  "voxsmith",
 ]

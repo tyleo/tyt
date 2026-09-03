@@ -14,10 +14,13 @@
 //! across formats ([`from_voxj_bytes`] / [`to_voxj_bytes`], with
 //! [`VoxjFileBuilder`] over the block encodings, the ext block, and the
 //! edit state), and runs the spec checks over a document
-//! ([`check_voxj_bytes`]). For Voxel Max the crate converts
-//! to and from the lossless `VMaxFile` ([`from_vmax_file`] /
-//! [`to_vmax_file`]), carrying the [`VoxelMaxExt`]. For
-//! MagicaVoxel it converts to and from a decoded `MVoxFile`
+//! ([`check_voxj_bytes`]). For Voxel Max it fronts vmax-voxcore's typed
+//! loads and writes, to and from the lossless `VMaxFile` ([`from_vmax_file`]
+//! / [`to_vmax_file`]) and straight to and from a package's files
+//! ([`from_vmax_package`] / [`to_vmax_package`], with [`VmaxFileBuilder`]
+//! over the color format and the scene camera), carrying the
+//! [`VoxelMaxExt`]. For MagicaVoxel it converts to and from a decoded
+//! `MVoxFile`
 //! ([`from_mvox_file`] / [`to_mvox_file`]) and straight to and from `.vox`
 //! bytes ([`from_mvox_bytes`] / [`to_mvox_bytes`]), carrying the
 //! [`MagicaVoxelExt`]. For Goxel it converts to and from a decoded `GoxlFile`

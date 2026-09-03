@@ -1,15 +1,12 @@
 use crate::{Result, VoxjEncoding, VoxjFormat, VoxjPositionEncoding, VoxjSampleEncoding};
 use std::{io::ErrorKind, path::Path};
-use vmax_codec::from_vmax_package;
-use voxsmith::{PositionEncoding, SampleEncoding, VoxjFileBuilder, from_vmax_file};
+use voxsmith::{PositionEncoding, SampleEncoding, VoxjFileBuilder, from_vmax_package};
 
 /// Converts the `.vmax` package at `input` into a Voxel Json document written to
-/// stdout, round-tripping through voxcore: the package is loaded, voxsmith
-/// loads it into a [`VoxMain`](voxsmith::voxcore::VoxMain) and encodes it into
-/// a voxj document, which is then serialized.
+/// stdout, round-tripping through voxcore.
 pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjFormat) -> Result<()> {
-    // Load: read the whole package into the lossless Voxel Max model.
-    let serde = from_vmax_package(
+    // The `voxel-max` ext carries the provenance with no native voxj home.
+    let state = from_vmax_package(
         // List every package-relative file path, descending one level into
         // subdirectories (only `QuickLook/`) so its thumbnails keep their prefix.
         || {
@@ -33,15 +30,11 @@ pub(crate) fn write_voxj(input: &Path, encoding: VoxjEncoding, format: VoxjForma
         |name| match tyt_injection::read_file(&input.join(name)) {
             Ok(bytes) => Ok(Some(bytes)),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         },
     )?;
 
-    // Translate through voxcore: vmax -> VoxMain, then encode the voxj document
-    // with the chosen block encodings. The `voxel-max` ext carries the
-    // provenance with no native voxj home. The builder keys it into the
-    // document's `ext` block.
-    let state = from_vmax_file(&serde)?;
+    // The builder keys the ext into the document's `ext` block.
     let (position, sample) = block_encoding(encoding);
     let builder = VoxjFileBuilder::new(&state)
         .position_encoding(position)

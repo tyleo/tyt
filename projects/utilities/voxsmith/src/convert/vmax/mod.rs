@@ -1,31 +1,19 @@
 mod from_vmax_file;
-mod scene_camera_source;
+mod from_vmax_package;
 mod to_vmax_file;
+mod to_vmax_package;
 mod vmax_file_builder;
-#[cfg(feature = "ext")]
-mod vox_ext_codec;
-mod voxel_max_color_format;
-mod voxel_max_ext;
-mod voxel_max_material;
-mod voxel_max_material_dispersion;
-mod voxel_max_node;
-mod voxel_max_object_state;
-mod voxel_max_palette;
-mod voxel_max_vox_main;
 
 pub use from_vmax_file::*;
-pub use scene_camera_source::*;
+pub use from_vmax_package::*;
 pub use to_vmax_file::*;
+pub use to_vmax_package::*;
 pub use vmax_file_builder::*;
-pub use voxel_max_color_format::*;
-pub use voxel_max_ext::*;
-pub use voxel_max_material::*;
-pub use voxel_max_material_dispersion::*;
-pub use voxel_max_node::*;
-pub use voxel_max_object_state::*;
-pub use voxel_max_palette::*;
-pub use voxel_max_vox_main::*;
 
-// Re-exported so callers can name the camera passed to
-// `SceneCameraSource::Camera`.
-pub use ::vmax::VMaxSceneCamera;
+// Re-exported so callers can name the lossless model the file conversions
+// exchange and the camera `SceneCameraSource` carries.
+pub use ::vmax::{VMaxFile, VMaxSceneCamera};
+
+// Re-exported so callers can name the state the Voxel Max conversions
+// exchange, its ext, and the options `VmaxFileBuilder` takes.
+pub use ::vmax_voxcore::{SceneCameraSource, VoxelMaxColorFormat, VoxelMaxExt, VoxelMaxVoxMain};

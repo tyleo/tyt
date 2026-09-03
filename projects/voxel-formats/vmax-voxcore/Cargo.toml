@@ -1,0 +1,27 @@
+[package]
+name = "vmax-voxcore"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Converts between Voxel Max packages and the voxcore state."
+keywords = ["voxelmax", "vmax", "voxel", "3d", "conversion"]
+categories = ["encoding", "game-development", "graphics"]
+
+[dependencies]
+branded-id = "0.1.7"
+serde = { version = "1", features = ["derive"], optional = true }
+ty-math = "0.2.0"
+vmax = { version = "0.1.8", default-features = false }
+vmax-codec = { version = "0.2.0", optional = true }
+voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
+
+[features]
+default = ["codec", "ext"]
+
+# Reads and writes a `.vmax` package's files over `vmax-codec`.
+codec = ["dep:vmax-codec"]
+
+# Keys the Voxel Max ext into a document `ext` block through voxcore's serde
+# transcode, which needs the ext types to derive `serde`.
+ext = ["dep:serde", "voxcore/json", "vmax/serde"]
