@@ -1,13 +1,14 @@
 use crate::{
-    BLOCK_IMAGE_SIZE, ByteWriter, encode_png_rgba, push_bool, push_bytes, push_color, push_f32,
-    push_i32, push_marker, push_mat4, push_str, push_vec3f, push_vec4f,
+    BLOCK_IMAGE_SIZE, ByteWriter, EncodePng, GoxlRgbaImage, push_bool, push_bytes, push_color,
+    push_f32, push_i32, push_marker, push_mat4, push_str, push_vec3f, push_vec4f,
 };
 use goxl::{
     GoxlBlock, GoxlCamera, GoxlFile, GoxlImage, GoxlLayer, GoxlLight, GoxlMaterial, GoxlPreview,
     GoxlShape, GoxlVoxel,
 };
 
-/// Serializes a [`GoxlFile`] to the bytes of a Goxel `.gox` file, the inverse of
+/// Serializes a [`GoxlFile`] to the bytes of a Goxel `.gox` file through
+/// `dependencies`, the inverse of
 /// [`from_gox_file_bytes`](crate::from_gox_file_bytes).
 ///
 /// Chunks are written in Goxel's order: `IMG `, the `PREV` preview, the shared
@@ -23,17 +24,17 @@ use goxl::{
 /// [`GoxlBlock::SIZE`]`^3` voxels and the preview as `width * height` pixels,
 /// padding with empty cells or truncating a mis-sized array.
 /// [`validate_gox_file`](crate::validate_gox_file) checks these invariants.
-pub fn to_gox_file_bytes(file: &GoxlFile) -> Vec<u8> {
+pub fn to_gox_file_bytes<D: EncodePng>(dependencies: &D, file: &GoxlFile) -> Vec<u8> {
     let mut out = ByteWriter::new();
     out.write_bytes(b"GOX ");
     out.write_i32(file.version);
 
     write_image(&mut out, &file.image);
     if let Some(preview) = &file.preview {
-        write_preview(&mut out, preview);
+        write_preview(dependencies, &mut out, preview);
     }
     for block in &file.blocks {
-        write_block(&mut out, block);
+        write_block(dependencies, &mut out, block);
     }
     for material in &file.materials {
         write_material(&mut out, material);
@@ -73,26 +74,35 @@ fn write_image(out: &mut ByteWriter, image: &GoxlImage) {
 /// keep that comparison itself overflow-free.
 /// [`validate_gox_file`](crate::validate_gox_file) rejects such a preview, so this
 /// skip is not reached for a validated file.
-fn write_preview(out: &mut ByteWriter, preview: &GoxlPreview) {
+fn write_preview<D: EncodePng>(dependencies: &D, out: &mut ByteWriter, preview: &GoxlPreview) {
     let count = preview.width as u64 * preview.height as u64;
     if preview.width == 0 || preview.height == 0 || preview.pixels.len() as u64 != count {
         return;
     }
-    let rgba: Vec<u8> = preview.pixels.iter().flatten().copied().collect();
-    let png = encode_png_rgba(preview.width, preview.height, &rgba);
+
+    let png = dependencies.encode_png(&GoxlRgbaImage {
+        width: preview.width,
+        height: preview.height,
+        pixels: preview.pixels.clone(),
+    });
     out.write_chunk(b"PREV", &png);
 }
 
 /// Writes one `BL16` block chunk as a `64 x 64` PNG, one pixel per voxel.
-fn write_block(out: &mut ByteWriter, block: &GoxlBlock) {
+fn write_block<D: EncodePng>(dependencies: &D, out: &mut ByteWriter, block: &GoxlBlock) {
     let count = (BLOCK_IMAGE_SIZE * BLOCK_IMAGE_SIZE) as usize;
-    let mut rgba = Vec::with_capacity(count * 4);
-    for index in 0..count {
-        let voxel = block.voxels.get(index).copied().unwrap_or_default();
-        let GoxlVoxel { r, g, b, a } = voxel;
-        rgba.extend_from_slice(&[r, g, b, a]);
-    }
-    let png = encode_png_rgba(BLOCK_IMAGE_SIZE, BLOCK_IMAGE_SIZE, &rgba);
+    let pixels = (0..count)
+        .map(|index| {
+            let GoxlVoxel { r, g, b, a } = block.voxels.get(index).copied().unwrap_or_default();
+            [r, g, b, a]
+        })
+        .collect();
+
+    let png = dependencies.encode_png(&GoxlRgbaImage {
+        width: BLOCK_IMAGE_SIZE,
+        height: BLOCK_IMAGE_SIZE,
+        pixels,
+    });
     out.write_chunk(b"BL16", &png);
 }
 

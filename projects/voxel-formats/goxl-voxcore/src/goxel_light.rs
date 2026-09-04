@@ -1,8 +1,10 @@
+#[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
 
 /// The `LIGH` light-and-shading settings preserved in the `goxel` ext. They
 /// have no native voxcore home, so they ride here verbatim.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct GoxelLight {
     /// Light pitch, in radians.
     pub pitch: f32,
@@ -23,6 +25,6 @@ pub struct GoxelLight {
     pub shadow: f32,
 
     /// Any further light-dictionary keys, preserved verbatim as raw bytes.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub extra: Vec<(String, Vec<u8>)>,
 }

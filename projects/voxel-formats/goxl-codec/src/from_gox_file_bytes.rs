@@ -1,5 +1,5 @@
 use crate::{
-    BLOCK_IMAGE_SIZE, ByteReader, Result, decode_png_rgba, invalid, read_chunk, read_dict, take,
+    BLOCK_IMAGE_SIZE, ByteReader, DecodePng, Error, Result, invalid, read_chunk, read_dict, take,
     take_bool, take_color, take_f32, take_i32, take_mat4, take_string, take_vec3f, take_vec4f,
 };
 use goxl::{
@@ -7,7 +7,8 @@ use goxl::{
     GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
 };
 
-/// Parses the bytes of a Goxel `.gox` file into a [`GoxlFile`].
+/// Parses the bytes of a Goxel `.gox` file into a [`GoxlFile`] through
+/// `dependencies`.
 ///
 /// The `"GOX "` magic and version are read, then every chunk is dispatched into
 /// typed fields: `IMG ` image metadata, the `PREV` preview, shared `BL16` voxel
@@ -21,7 +22,7 @@ use goxl::{
 /// shift Goxel applies at load time is not performed, so a file round-trips
 /// byte-for-byte through [`to_gox_file_bytes`](crate::to_gox_file_bytes)
 /// (modulo PNG re-compression, which is lossless for the pixels).
-pub fn from_gox_file_bytes(bytes: &[u8]) -> Result<GoxlFile> {
+pub fn from_gox_file_bytes<D: DecodePng>(dependencies: &D, bytes: &[u8]) -> Result<GoxlFile> {
     let mut reader = ByteReader::new(bytes);
 
     let magic = reader.read_array::<4>()?;
@@ -41,8 +42,8 @@ pub fn from_gox_file_bytes(bytes: &[u8]) -> Result<GoxlFile> {
         let chunk = read_chunk(&mut reader)?;
         match &chunk.id {
             b"IMG " => file.image = read_image(chunk.data)?,
-            b"PREV" => file.preview = Some(read_preview(chunk.data)?),
-            b"BL16" => file.blocks.push(read_block(chunk.data)?),
+            b"PREV" => file.preview = Some(read_preview(dependencies, chunk.data)?),
+            b"BL16" => file.blocks.push(read_block(dependencies, chunk.data)?),
             b"MATE" => file.materials.push(read_material(chunk.data)?),
             b"LAYR" => file.layers.push(read_layer(chunk.data)?),
             b"CAMR" => file.cameras.push(read_camera(chunk.data)?),
@@ -70,36 +71,30 @@ fn read_image(data: &[u8]) -> Result<GoxlImage> {
 }
 
 /// Reads a `PREV` chunk's preview PNG into `RGBA` pixels.
-fn read_preview(data: &[u8]) -> Result<GoxlPreview> {
-    let (width, height, rgba) = decode_png_rgba(data)?;
-    let pixels = rgba
-        .chunks_exact(4)
-        .map(|pixel| [pixel[0], pixel[1], pixel[2], pixel[3]])
-        .collect();
+fn read_preview<D: DecodePng>(dependencies: &D, data: &[u8]) -> Result<GoxlPreview> {
+    let image = dependencies.decode_png(data).map_err(Error::Png)?;
     Ok(GoxlPreview {
-        width,
-        height,
-        pixels,
+        width: image.width,
+        height: image.height,
+        pixels: image.pixels,
     })
 }
 
 /// Reads a `BL16` chunk's `64 x 64` PNG into a `16 x 16 x 16` voxel block. Each
 /// pixel maps directly to the voxel at the same index.
-fn read_block(data: &[u8]) -> Result<GoxlBlock> {
-    let (width, height, rgba) = decode_png_rgba(data)?;
+fn read_block<D: DecodePng>(dependencies: &D, data: &[u8]) -> Result<GoxlBlock> {
+    let image = dependencies.decode_png(data).map_err(Error::Png)?;
+    let (width, height) = (image.width, image.height);
     if width != BLOCK_IMAGE_SIZE || height != BLOCK_IMAGE_SIZE {
         return Err(invalid(format!(
             "BL16 block PNG is {width}x{height}, expected {BLOCK_IMAGE_SIZE}x{BLOCK_IMAGE_SIZE}"
         )));
     }
-    let voxels = rgba
-        .chunks_exact(4)
-        .map(|pixel| GoxlVoxel {
-            r: pixel[0],
-            g: pixel[1],
-            b: pixel[2],
-            a: pixel[3],
-        })
+
+    let voxels = image
+        .pixels
+        .into_iter()
+        .map(|[r, g, b, a]| GoxlVoxel { r, g, b, a })
         .collect();
     Ok(GoxlBlock { voxels })
 }
@@ -248,9 +243,9 @@ fn take_shape(dict: &mut Vec<(String, Vec<u8>)>) -> Option<GoxlShape> {
     Some(shape)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "impl"))]
 mod tests {
-    use crate::{from_gox_file_bytes, to_gox_file_bytes};
+    use crate::{DependenciesImpl, from_gox_file_bytes, to_gox_file_bytes};
     use goxl::{
         GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
         GoxlMaterial, GoxlPreview, GoxlShape, GoxlUnknownChunk, GoxlVoxel,
@@ -411,16 +406,19 @@ mod tests {
     #[test]
     fn round_trips_full_file() {
         let file = sample_file();
-        let bytes = to_gox_file_bytes(&file);
-        let decoded = from_gox_file_bytes(&bytes).unwrap();
+        let bytes = to_gox_file_bytes(&DependenciesImpl, &file);
+        let decoded = from_gox_file_bytes(&DependenciesImpl, &bytes).unwrap();
         assert_eq!(decoded, file);
     }
 
     #[test]
     fn round_trips_default_file() {
         let file = GoxlFile::default();
-        let bytes = to_gox_file_bytes(&file);
-        assert_eq!(from_gox_file_bytes(&bytes).unwrap(), file);
+        let bytes = to_gox_file_bytes(&DependenciesImpl, &file);
+        assert_eq!(
+            from_gox_file_bytes(&DependenciesImpl, &bytes).unwrap(),
+            file
+        );
     }
 
     #[test]
@@ -429,7 +427,11 @@ mod tests {
             blocks: vec![block()],
             ..Default::default()
         };
-        let decoded = from_gox_file_bytes(&to_gox_file_bytes(&file)).unwrap();
+        let decoded = from_gox_file_bytes(
+            &DependenciesImpl,
+            &to_gox_file_bytes(&DependenciesImpl, &file),
+        )
+        .unwrap();
         assert_eq!(decoded.blocks, file.blocks);
     }
 
@@ -444,7 +446,11 @@ mod tests {
             preview: Some(preview.clone()),
             ..Default::default()
         };
-        let decoded = from_gox_file_bytes(&to_gox_file_bytes(&file)).unwrap();
+        let decoded = from_gox_file_bytes(
+            &DependenciesImpl,
+            &to_gox_file_bytes(&DependenciesImpl, &file),
+        )
+        .unwrap();
         assert_eq!(decoded.preview, Some(preview));
     }
 
@@ -456,7 +462,11 @@ mod tests {
             preview: Some(GoxlPreview::default()),
             ..Default::default()
         };
-        let decoded = from_gox_file_bytes(&to_gox_file_bytes(&file)).unwrap();
+        let decoded = from_gox_file_bytes(
+            &DependenciesImpl,
+            &to_gox_file_bytes(&DependenciesImpl, &file),
+        )
+        .unwrap();
         assert_eq!(decoded.preview, None);
     }
 
@@ -472,7 +482,11 @@ mod tests {
             }),
             ..Default::default()
         };
-        let decoded = from_gox_file_bytes(&to_gox_file_bytes(&file)).unwrap();
+        let decoded = from_gox_file_bytes(
+            &DependenciesImpl,
+            &to_gox_file_bytes(&DependenciesImpl, &file),
+        )
+        .unwrap();
         assert_eq!(decoded.preview, None);
     }
 
@@ -480,13 +494,13 @@ mod tests {
     fn rejects_bad_magic() {
         let mut bytes = b"BOX ".to_vec();
         bytes.extend_from_slice(&2i32.to_le_bytes());
-        assert!(from_gox_file_bytes(&bytes).is_err());
+        assert!(from_gox_file_bytes(&DependenciesImpl, &bytes).is_err());
     }
 
     #[test]
     fn rejects_truncated_header() {
-        assert!(from_gox_file_bytes(b"").is_err());
-        assert!(from_gox_file_bytes(b"GOX ").is_err());
+        assert!(from_gox_file_bytes(&DependenciesImpl, b"").is_err());
+        assert!(from_gox_file_bytes(&DependenciesImpl, b"GOX ").is_err());
     }
 
     /// A chunk: id, data length, data, then a zero CRC word.
@@ -523,7 +537,7 @@ mod tests {
         data.extend(dict_entry("_x", &[1, 2]));
         let bytes = gox_file(&chunk(b"LIGH", &data));
 
-        let file = from_gox_file_bytes(&bytes).unwrap();
+        let file = from_gox_file_bytes(&DependenciesImpl, &bytes).unwrap();
         let light = file.light.unwrap();
         assert_eq!(light.pitch, 0.75);
         assert_eq!(light.extra.get("_x"), Some(&[1, 2][..]));
@@ -537,7 +551,7 @@ mod tests {
         data.extend(dict_entry("dist", &2.0f32.to_le_bytes()));
         let bytes = gox_file(&chunk(b"CAMR", &data));
 
-        let file = from_gox_file_bytes(&bytes).unwrap();
+        let file = from_gox_file_bytes(&DependenciesImpl, &bytes).unwrap();
         assert_eq!(file.cameras[0].distance, 2.0);
         // Both occurrences are consumed, so none lingers in `extra`.
         assert!(file.cameras[0].extra.get("dist").is_none());
@@ -551,7 +565,7 @@ mod tests {
         data.extend(dict_entry("shape", b"pyramid"));
         let bytes = gox_file(&chunk(b"LAYR", &data));
 
-        let file = from_gox_file_bytes(&bytes).unwrap();
+        let file = from_gox_file_bytes(&DependenciesImpl, &bytes).unwrap();
         let layer = &file.layers[0];
         assert_eq!(layer.shape, None);
         assert_eq!(layer.extra.get("shape"), Some(&b"pyramid"[..]));
@@ -563,7 +577,7 @@ mod tests {
         let mut bytes = gox_file(b"");
         bytes.extend_from_slice(b"IMG ");
         bytes.extend_from_slice(&100u32.to_le_bytes());
-        assert!(from_gox_file_bytes(&bytes).is_err());
+        assert!(from_gox_file_bytes(&DependenciesImpl, &bytes).is_err());
     }
 
     #[test]
@@ -571,7 +585,7 @@ mod tests {
         // A material "metallic" value that is not four bytes is malformed.
         let data = dict_entry("metallic", &[1, 2]);
         let bytes = gox_file(&chunk(b"MATE", &data));
-        assert!(from_gox_file_bytes(&bytes).is_err());
+        assert!(from_gox_file_bytes(&DependenciesImpl, &bytes).is_err());
     }
 
     /// The non-dict prefix of a LAYR chunk with `count` placed blocks omitted.
@@ -589,7 +603,7 @@ mod tests {
             let mut data = chunk_layer_prefix(0);
             data.extend(dict_entry("shape", name.as_bytes()));
             let bytes = gox_file(&chunk(b"LAYR", &data));
-            let file = from_gox_file_bytes(&bytes).unwrap();
+            let file = from_gox_file_bytes(&DependenciesImpl, &bytes).unwrap();
             assert_eq!(file.layers[0].shape, Some(shape));
         }
     }

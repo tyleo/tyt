@@ -1,6 +1,7 @@
 use crate::{
     GoxelCamera, GoxelImage, GoxelLayer, GoxelLight, GoxelMaterial, GoxelPreview, GoxelUnknownChunk,
 };
+#[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
 
 /// The `goxel` ext payload stashed on a [`VoxMain`](voxcore::VoxMain): the
@@ -11,40 +12,50 @@ use serde::{Deserialize, Serialize};
 /// placements that stamp them become the hierarchy nodes; this holds the rest,
 /// with the per-layer entries aligned by index with the hierarchy nodes so the
 /// file rebuilds exactly.
-#[derive(Clone, Debug, Default, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub struct GoxelExt {
     /// The format version from the header.
     pub version: i32,
 
     /// The `IMG ` image metadata.
-    #[serde(default)]
+    #[cfg_attr(feature = "ext", serde(default))]
     pub image: GoxelImage,
 
     /// The `PREV` preview thumbnail, or `None` when the file omits it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "ext",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub preview: Option<GoxelPreview>,
 
     /// The `MATE` materials, in stored order; a layer names one by index.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub materials: Vec<GoxelMaterial>,
 
     /// Per-layer provenance, aligned by index with the hierarchy nodes.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub layers: Vec<GoxelLayer>,
 
     /// The `CAMR` cameras, in stored order.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[cfg_attr(feature = "ext", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub cameras: Vec<GoxelCamera>,
 
     /// The `LIGH` light settings, or `None` when the file omits them.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[cfg_attr(
+        feature = "ext",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
     pub light: Option<GoxelLight>,
 
     /// Chunks the goxl crate does not model, preserved verbatim.
-    #[serde(
-        rename = "unknown-chunks",
-        default,
-        skip_serializing_if = "Vec::is_empty"
+    #[cfg_attr(
+        feature = "ext",
+        serde(
+            rename = "unknown-chunks",
+            default,
+            skip_serializing_if = "Vec::is_empty"
+        )
     )]
     pub unknown_chunks: Vec<GoxelUnknownChunk>,
 }

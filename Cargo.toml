@@ -27,6 +27,7 @@ members = [
 
     "projects/voxel-formats/goxl",
     "projects/voxel-formats/goxl-codec",
+    "projects/voxel-formats/goxl-voxcore",
     "projects/voxel-formats/mvox",
     "projects/voxel-formats/mvox-codec",
     "projects/voxel-formats/mvox-voxcore",
@@ -70,6 +71,7 @@ vxl = { path = "projects/utilities/vxl" }
 
 goxl = { path = "projects/voxel-formats/goxl" }
 goxl-codec = { path = "projects/voxel-formats/goxl-codec" }
+goxl-voxcore = { path = "projects/voxel-formats/goxl-voxcore" }
 mvox = { path = "projects/voxel-formats/mvox" }
 mvox-codec = { path = "projects/voxel-formats/mvox-codec" }
 mvox-voxcore = { path = "projects/voxel-formats/mvox-voxcore" }

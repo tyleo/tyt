@@ -1,7 +1,9 @@
 #[cfg(feature = "gltf")]
 use gltf::Error as GltfError;
 #[cfg(feature = "goxl")]
-use goxl_codec::Error as GoxlError;
+use goxl_codec::Error as GoxlCodecError;
+#[cfg(feature = "goxl")]
+use goxl_voxcore::Error as GoxlError;
 #[cfg(feature = "mvox")]
 use mvox_voxcore::Error as MVoxError;
 #[cfg(feature = "select")]
@@ -45,7 +47,7 @@ pub enum Error {
     #[cfg(feature = "mvox")]
     MVox(MVoxError),
 
-    /// Decoding a Goxel `.gox` file failed.
+    /// Converting a Goxel `.gox` file failed.
     #[cfg(feature = "goxl")]
     Goxl(GoxlError),
 
@@ -170,6 +172,14 @@ impl From<MVoxError> for Error {
 impl From<GoxlError> for Error {
     fn from(error: GoxlError) -> Self {
         Error::Goxl(error)
+    }
+}
+
+/// A file byte codec failure is the codec case of the Goxel error.
+#[cfg(feature = "goxl")]
+impl From<GoxlCodecError> for Error {
+    fn from(error: GoxlCodecError) -> Self {
+        Error::Goxl(GoxlError::from(error))
     }
 }
 

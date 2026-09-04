@@ -23,10 +23,11 @@
 //! and writes, to and from a decoded `MVoxFile` ([`from_mvox_file`] /
 //! [`to_mvox_file`]) and straight to and from `.vox` bytes
 //! ([`from_mvox_bytes`] / [`to_mvox_bytes`]), carrying the
-//! [`MagicaVoxelExt`]. For Goxel it converts to and from a decoded `GoxlFile`
-//! ([`from_goxl_file`] / [`to_goxl_file`]) and straight to and from `.gox`
-//! bytes ([`from_goxl_bytes`] / [`to_goxl_bytes`]), carrying the
-//! [`GoxelExt`]. For the three Qubicle formats it converts to and from their
+//! [`MagicaVoxelExt`]. For Goxel it fronts goxl-voxcore's typed loads and
+//! writes, to and from a decoded `GoxlFile` ([`from_goxl_file`] /
+//! [`to_goxl_file`]) and straight to and from `.gox` bytes
+//! ([`from_goxl_bytes`] / [`to_goxl_bytes`]), carrying the [`GoxelExt`].
+//! For the three Qubicle formats it converts to and from their
 //! decoded files ([`from_qb_file`] / [`to_qb_file`], [`from_qbt_file`] /
 //! [`to_qbt_file`], [`from_qbcl_file`] / [`to_qbcl_file`]) and straight to and
 //! from `.qb` / `.qbt` / `.qbcl` bytes (the matching `from_*_bytes` /

@@ -15,4 +15,8 @@ categories = [
 
 [dependencies]
 goxl = "0.1.0"
-png = "0.18"
+png = { version = "0.18", optional = true }
+
+[features]
+default = ["impl"]
+impl = ["dep:png"]

@@ -19,6 +19,9 @@ gltf = { version = "1.4.1", default-features = false, features = [
 ], optional = true }
 goxl = { version = "0.1.0", optional = true }
 goxl-codec = { version = "0.1.0", optional = true }
+goxl-voxcore = { version = "0.1.0", default-features = false, features = [
+    "codec",
+], optional = true }
 mvox = { version = "0.1.0", optional = true }
 mvox-voxcore = { version = "0.1.0", default-features = false, features = [
     "codec",
@@ -50,12 +53,17 @@ default = ["ext", "goxl", "mvox", "qbcl", "vmax", "voxj"]
 
 # Each codec feature gates its format crates and the voxsmith modules that
 # convert that format. `qbcl` covers `.qb`, `.qbt`, and `.qbcl` because all
-# three share the `qbcl` / `qbcl-codec` crates. `mvox`, `vmax`, and `voxj`
-# front their `-voxcore` bridge crates, which own the conversion. `ext` gates
-# each format's `VoxExtCodec` impl, which keys its ext into a document `ext`
-# block through voxcore's serde transcode.
-ext = ["voxcore/json", "mvox-voxcore?/ext", "vmax-voxcore?/ext"]
-goxl = ["dep:goxl", "dep:goxl-codec", "_codec"]
+# three share the `qbcl` / `qbcl-codec` crates. `goxl`, `mvox`, `vmax`, and
+# `voxj` front their `-voxcore` bridge crates, which own the conversion. `ext`
+# gates each format's `VoxExtCodec` impl, which keys its ext into a document
+# `ext` block through voxcore's serde transcode.
+ext = [
+    "voxcore/json",
+    "goxl-voxcore?/ext",
+    "mvox-voxcore?/ext",
+    "vmax-voxcore?/ext",
+]
+goxl = ["dep:goxl", "dep:goxl-codec", "dep:goxl-voxcore", "_codec"]
 mvox = ["dep:mvox", "dep:mvox-voxcore", "_codec"]
 qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec"]
 vmax = ["dep:vmax", "dep:vmax-codec", "dep:vmax-voxcore", "_codec"]

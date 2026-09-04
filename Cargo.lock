@@ -705,6 +705,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "goxl-voxcore"
+version = "0.1.0"
+dependencies = [
+ "branded-id",
+ "goxl",
+ "goxl-codec",
+ "serde",
+ "ty-math",
+ "voxcore",
+]
+
+[[package]]
 name = "half"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2125,6 +2137,7 @@ dependencies = [
  "gltf",
  "goxl",
  "goxl-codec",
+ "goxl-voxcore",
  "mvox",
  "mvox-voxcore",
  "pathspec",
