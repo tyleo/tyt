@@ -1,11 +1,13 @@
 use crate::{MagicaVoxelFrame, MagicaVoxelShapeModel};
+#[cfg(feature = "ext")]
 use serde::{Deserialize, Serialize};
 
 /// The per-kind body of a scene node in the `magica-voxel` ext, one variant per
 /// scene-graph chunk. The voxcore node keeps a deduplicated structural view of
 /// the same references; this holds their exact, possibly repeated form so the
 /// scene graph rebuilds unchanged.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "ext", derive(Deserialize, Serialize))]
 pub enum MagicaVoxelNodeBody {
     /// An `nTRN` transform node: the id of the child it places, its layer, and
     /// its animation frames.

@@ -1,5 +1,7 @@
-use crate::{CellColor, Result, resolve_cell_color};
-use voxcore::{VoxMain, VoxObject};
+use crate::{
+    Result, VoxMain, VoxObject,
+    color::{CellColor, resolve_cell_color},
+};
 
 /// [`resolve_cell_color`], reading transparent black when no layer supplies
 /// `baseColor`.
@@ -12,10 +14,9 @@ pub fn resolve_cell_color_or_transparent<'a, T>(
 
 #[cfg(test)]
 mod tests {
-    use crate::resolve_cell_color_or_transparent;
+    use crate::{VoxMain, VoxObject, VoxPalette, color::resolve_cell_color_or_transparent};
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette};
 
     #[test]
     fn an_unsupplied_object_reads_transparent_black() {

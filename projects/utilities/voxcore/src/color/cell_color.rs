@@ -1,9 +1,10 @@
+use crate::{BVoxLayer, BVoxMaterial, BVoxVoxel, VoxObject};
 use branded_id::{IdVec, U32Id};
-use voxcore::{BVoxLayer, BVoxMaterial, BVoxVoxel, VoxObject};
 
 /// A per-voxel color read, resolved once per object by
-/// [`resolve_cell_color`](crate::resolve_cell_color) so voxel loops carry no
-/// palette machinery.
+/// [`resolve_cell_color`](crate::color::resolve_cell_color) so voxel loops
+/// carry no palette machinery.
+#[derive(Debug)]
 pub struct CellColor<'a> {
     /// The object the colors read through.
     object: &'a VoxObject,

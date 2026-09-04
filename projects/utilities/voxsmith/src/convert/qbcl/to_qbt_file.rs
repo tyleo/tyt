@@ -1,9 +1,11 @@
-use crate::{Error, QubicleQbtNode, QubicleQbtVoxMain, Result, resolve_cell_color_or_transparent};
+use crate::{Error, QubicleQbtNode, QubicleQbtVoxMain, Result};
 use branded_id::U32Id;
 use qbcl::qbt::{
     QbtColor, QbtCompound, QbtFile, QbtMatrix, QbtModel, QbtNode, QbtUnknownNode, QbtVoxel,
 };
-use voxcore::{BVoxHierarchyNode, VoxHierarchyNode, VoxObject};
+use voxcore::{
+    BVoxHierarchyNode, VoxHierarchyNode, VoxObject, color::resolve_cell_color_or_transparent,
+};
 
 /// Writes a [`QubicleQbtVoxMain`] back to a decoded Qubicle Binary Tree
 /// [`QbtFile`], the inverse of [`from_qbt_file`](crate::from_qbt_file).

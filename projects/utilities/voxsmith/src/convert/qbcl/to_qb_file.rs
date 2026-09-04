@@ -1,6 +1,6 @@
-use crate::{Error, QubicleQbMatrix, QubicleQbVoxMain, Result, resolve_cell_color_or_transparent};
+use crate::{Error, QubicleQbMatrix, QubicleQbVoxMain, Result};
 use qbcl::qb::{QbColorFormat, QbFile, QbMatrix, QbVoxel, QbZAxisOrientation};
-use voxcore::VoxObject;
+use voxcore::{VoxObject, color::resolve_cell_color_or_transparent};
 
 /// Writes a [`QubicleQbVoxMain`] back to a decoded Qubicle Binary [`QbFile`],
 /// the inverse of [`from_qb_file`](crate::from_qb_file).

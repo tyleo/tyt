@@ -1,0 +1,22 @@
+[package]
+name = "mvox-voxcore"
+version = "0.1.0"
+edition = "2024"
+license-file = "LICENSE"
+repository = "https://github.com/tyleo/tyt"
+description = "Converts between MagicaVoxel files and the voxcore state."
+keywords = ["magicavoxel", "vox", "voxel", "3d", "conversion"]
+categories = ["encoding", "game-development", "graphics"]
+
+[dependencies]
+branded-id = "0.1.7"
+mvox = "0.1.0"
+mvox-codec = { version = "0.1.1", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+ty-math = "0.2.0"
+voxcore = { version = "0.2.1", default-features = false, features = ["color"] }
+
+[features]
+default = ["codec", "ext"]
+codec = ["dep:mvox-codec"]
+ext = ["dep:serde", "voxcore/json"]

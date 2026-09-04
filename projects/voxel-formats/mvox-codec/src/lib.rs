@@ -1,5 +1,4 @@
-mod internal;
-pub(crate) use internal::*;
+// Public API
 
 mod error;
 mod from_mvox_file_bytes;
@@ -12,3 +11,8 @@ pub use from_mvox_file_bytes::*;
 pub use result::*;
 pub use to_mvox_file_bytes::*;
 pub use validate_mvox_file::*;
+
+// Internal API
+
+mod internal;
+pub(crate) use internal::*;

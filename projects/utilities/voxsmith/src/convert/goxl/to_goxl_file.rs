@@ -1,4 +1,4 @@
-use crate::{GoxelLayer, GoxelVoxMain, Result, resolve_cell_color_or_transparent};
+use crate::{GoxelLayer, GoxelVoxMain, Result};
 use branded_id::U32Id;
 use goxl::{
     GoxlBlock, GoxlCamera, GoxlDict, GoxlFile, GoxlImage, GoxlLayer, GoxlLayerBlock, GoxlLight,
@@ -6,7 +6,7 @@ use goxl::{
 };
 use std::collections::{BTreeMap, HashSet};
 use ty_math::{TyVector3I32, TyVector3U32};
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxObject};
+use voxcore::{BVoxHierarchyNode, BVoxObject, VoxObject, color::resolve_cell_color_or_transparent};
 
 /// Writes a [`GoxelVoxMain`] to a decoded Goxel [`GoxlFile`].
 ///

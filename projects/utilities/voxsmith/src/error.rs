@@ -3,7 +3,7 @@ use gltf::Error as GltfError;
 #[cfg(feature = "goxl")]
 use goxl_codec::Error as GoxlError;
 #[cfg(feature = "mvox")]
-use mvox_codec::Error as MVoxError;
+use mvox_voxcore::Error as MVoxError;
 #[cfg(feature = "select")]
 use pathspec::Error as PathSpecError;
 #[cfg(feature = "qbcl")]
@@ -41,7 +41,7 @@ pub enum Error {
     #[cfg(feature = "vmax")]
     VMax(VMaxError),
 
-    /// Decoding a MagicaVoxel `.vox` file failed.
+    /// Converting a MagicaVoxel `.vox` file failed.
     #[cfg(feature = "mvox")]
     MVox(MVoxError),
 

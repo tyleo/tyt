@@ -1,31 +1,17 @@
 mod from_mvox_bytes;
 mod from_mvox_file;
-mod magica_voxel_camera;
-mod magica_voxel_ext;
-mod magica_voxel_frame;
-mod magica_voxel_layer;
-mod magica_voxel_material;
-mod magica_voxel_node;
-mod magica_voxel_node_body;
-mod magica_voxel_shape_model;
-mod magica_voxel_unknown_chunk;
-mod magica_voxel_vox_main;
 mod to_mvox_bytes;
 mod to_mvox_file;
-#[cfg(feature = "ext")]
-mod vox_ext_codec;
 
 pub use from_mvox_bytes::*;
 pub use from_mvox_file::*;
-pub use magica_voxel_camera::*;
-pub use magica_voxel_ext::*;
-pub use magica_voxel_frame::*;
-pub use magica_voxel_layer::*;
-pub use magica_voxel_material::*;
-pub use magica_voxel_node::*;
-pub use magica_voxel_node_body::*;
-pub use magica_voxel_shape_model::*;
-pub use magica_voxel_unknown_chunk::*;
-pub use magica_voxel_vox_main::*;
 pub use to_mvox_bytes::*;
 pub use to_mvox_file::*;
+
+// Re-exported so callers can name the decoded file the file conversions
+// exchange.
+pub use ::mvox::MVoxFile;
+
+// Re-exported so callers can name the state the MagicaVoxel conversions
+// exchange and its ext.
+pub use ::mvox_voxcore::{MagicaVoxelExt, MagicaVoxelVoxMain};

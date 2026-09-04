@@ -1,10 +1,8 @@
-use crate::{MagicaVoxelVoxMain, Result, from_mvox_file};
-use mvox_codec::from_mvox_file_bytes;
+use crate::{MagicaVoxelVoxMain, Result};
+use mvox_voxcore::codec::from_mvox_bytes as raw_from_mvox_bytes;
 
 /// Loads the bytes of a MagicaVoxel `.vox` file into a [`MagicaVoxelVoxMain`].
-/// The bytes are decoded with [`mvox_codec`] and the result is loaded into
-/// voxcore's in-memory form.
+/// The file is the one [`from_mvox_file`](crate::from_mvox_file) loads.
 pub fn from_mvox_bytes(bytes: &[u8]) -> Result<MagicaVoxelVoxMain> {
-    let file = from_mvox_file_bytes(bytes)?;
-    from_mvox_file(&file)
+    Ok(raw_from_mvox_bytes(bytes)?)
 }

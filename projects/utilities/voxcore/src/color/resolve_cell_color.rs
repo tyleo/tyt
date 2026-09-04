@@ -1,13 +1,19 @@
-use crate::{CellColor, Error, Result};
+use crate::{
+    Error, Result, VoxMain, VoxObject,
+    color::{CellColor, value_pool_color},
+    material::BASE_COLOR,
+};
 use branded_id::IdVec;
-use voxcore::{VoxMain, VoxObject, color::value_pool_color, material::BASE_COLOR};
 
-/// The [`CellColor`] read for `object`, picked from its winning
-/// `baseColor` supplier in the effective palette: a table of per-material
-/// colors, read through the material each voxel samples in the winning layer.
-/// All decoding happens here. A supplier drawing from a non-color value pool
-/// errors, as does a layer referencing a palette the state does not hold.
-/// `Ok(None)` when no layer supplies `baseColor`.
+/// The [`CellColor`] read for `object`, picked from its winning `baseColor`
+/// supplier in the effective palette: a table of per-material colors, read
+/// through the material each voxel samples in the winning layer. All decoding
+/// happens here. `Ok(None)` when no layer supplies `baseColor`.
+///
+/// Errors if:
+///
+/// 1. a layer references a palette the state does not hold
+/// 2. the supplier draws from a value pool that holds no colors
 pub fn resolve_cell_color<'a, T>(
     state: &VoxMain<T>,
     object: &'a VoxObject,
@@ -23,8 +29,10 @@ pub fn resolve_cell_color<'a, T>(
     let value_pool = property.value_pool();
     let mut colors = IdVec::default();
     for (material_id, value_id) in property.iter_values() {
-        let color =
-            value_pool_color(value_pool, value_id).ok_or_else(|| non_color_value_pool(object))?;
+        let color = value_pool_color(value_pool, value_id).ok_or(Error::NonColorProperty {
+            palette_id: property.palette_id(),
+            property_id: property.property_id,
+        })?;
         let slot_id = material_id.to_usize_id();
         if slot_id.to_usize() >= colors.len() {
             colors.resize(slot_id.to_usize() + 1, [0, 0, 0, 0]);
@@ -36,20 +44,14 @@ pub fn resolve_cell_color<'a, T>(
     Ok(Some(CellColor::new(object, property.layer_id(), colors)))
 }
 
-/// The error for a `baseColor` drawing from a non-color value pool.
-fn non_color_value_pool(object: &VoxObject) -> Error {
-    Error::invalid(format!(
-        "object {:?}: baseColor draws from a non-color value pool",
-        object.name()
-    ))
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::resolve_cell_color;
+    use crate::{
+        Error, VoxMain, VoxObject, VoxPalette, VoxValuePool, color::resolve_cell_color,
+        material::BASE_COLOR,
+    };
     use branded_id::U32Id;
     use ty_math::TyVector3U32;
-    use voxcore::{VoxMain, VoxObject, VoxPalette, VoxValuePool, material::BASE_COLOR};
 
     #[test]
     fn a_supplier_reads_each_voxel_through_its_material() {
@@ -101,7 +103,7 @@ mod tests {
         let value_pool_id = state.retain_value_pool(VoxValuePool::float(vec![1.0]).unwrap());
 
         let mut palette = VoxPalette::default();
-        palette
+        let property_id = palette
             .retain_property(BASE_COLOR.to_owned(), value_pool_id, U32Id::from_u32(0))
             .unwrap();
         let material_id = palette.retain_material(vec![U32Id::from_u32(0)]).unwrap();
@@ -110,6 +112,12 @@ mod tests {
         let mut object = VoxObject::new("o".to_owned(), TyVector3U32::new(1, 1, 1)).unwrap();
         object.retain_layer(palette_id, material_id);
 
-        assert!(resolve_cell_color(&state, &object).is_err());
+        assert_eq!(
+            resolve_cell_color(&state, &object).unwrap_err(),
+            Error::NonColorProperty {
+                palette_id,
+                property_id,
+            }
+        );
     }
 }

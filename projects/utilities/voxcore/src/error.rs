@@ -45,6 +45,13 @@ pub enum Error {
     /// A mutation named a voxel outside the object's grid.
     UnknownVoxel { voxel_id: U32Id<BVoxVoxel> },
 
+    /// A color read resolved `baseColor` to a property whose value pool holds
+    /// no colors.
+    NonColorProperty {
+        palette_id: U32Id<BVoxPalette>,
+        property_id: U32Id<BVoxProperty>,
+    },
+
     /// A move targeted a listing position at or past the listing's count.
     IndexPastCount { index: usize, count: usize },
 
@@ -308,6 +315,15 @@ impl Display for Error {
                     voxel_id.to_u32()
                 )
             }
+            Error::NonColorProperty {
+                palette_id,
+                property_id,
+            } => write!(
+                f,
+                "palette {} property {} draws from a value pool that holds no colors",
+                palette_id.to_u32(),
+                property_id.to_u32()
+            ),
             Error::IndexPastCount { index, count } => {
                 write!(f, "index {index} is at or past the listing count {count}")
             }

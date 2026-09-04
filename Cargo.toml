@@ -29,6 +29,7 @@ members = [
     "projects/voxel-formats/goxl-codec",
     "projects/voxel-formats/mvox",
     "projects/voxel-formats/mvox-codec",
+    "projects/voxel-formats/mvox-voxcore",
     "projects/voxel-formats/qbcl",
     "projects/voxel-formats/qbcl-codec",
     "projects/voxel-formats/vmax",
@@ -71,6 +72,7 @@ goxl = { path = "projects/voxel-formats/goxl" }
 goxl-codec = { path = "projects/voxel-formats/goxl-codec" }
 mvox = { path = "projects/voxel-formats/mvox" }
 mvox-codec = { path = "projects/voxel-formats/mvox-codec" }
+mvox-voxcore = { path = "projects/voxel-formats/mvox-voxcore" }
 qbcl = { path = "projects/voxel-formats/qbcl" }
 qbcl-codec = { path = "projects/voxel-formats/qbcl-codec" }
 vmax = { path = "projects/voxel-formats/vmax" }

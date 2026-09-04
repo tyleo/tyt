@@ -20,7 +20,9 @@ gltf = { version = "1.4.1", default-features = false, features = [
 goxl = { version = "0.1.0", optional = true }
 goxl-codec = { version = "0.1.0", optional = true }
 mvox = { version = "0.1.0", optional = true }
-mvox-codec = { version = "0.1.0", optional = true }
+mvox-voxcore = { version = "0.1.0", default-features = false, features = [
+    "codec",
+], optional = true }
 pathspec = { version = "0.1.0", optional = true }
 png = { version = "0.18.1", optional = true }
 qbcl = { version = "0.1.0", optional = true }
@@ -48,14 +50,14 @@ default = ["ext", "goxl", "mvox", "qbcl", "vmax", "voxj"]
 
 # Each codec feature gates its format crates and the voxsmith modules that
 # convert that format. `qbcl` covers `.qb`, `.qbt`, and `.qbcl` because all
-# three share the `qbcl` / `qbcl-codec` crates. `vmax` and `voxj` front their
-# `-voxcore` bridge crates, which own the conversion. `ext` gates each
-# format's `VoxExtCodec` impl, which keys its ext into a document `ext` block
-# through voxcore's serde transcode.
-ext = ["voxcore/json", "vmax-voxcore?/ext"]
-goxl = ["dep:goxl", "dep:goxl-codec", "_codec", "_color"]
-mvox = ["dep:mvox", "dep:mvox-codec", "_codec", "_color"]
-qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec", "_color"]
+# three share the `qbcl` / `qbcl-codec` crates. `mvox`, `vmax`, and `voxj`
+# front their `-voxcore` bridge crates, which own the conversion. `ext` gates
+# each format's `VoxExtCodec` impl, which keys its ext into a document `ext`
+# block through voxcore's serde transcode.
+ext = ["voxcore/json", "mvox-voxcore?/ext", "vmax-voxcore?/ext"]
+goxl = ["dep:goxl", "dep:goxl-codec", "_codec"]
+mvox = ["dep:mvox", "dep:mvox-voxcore", "_codec"]
+qbcl = ["dep:qbcl", "dep:qbcl-codec", "_codec"]
 vmax = ["dep:vmax", "dep:vmax-codec", "dep:vmax-voxcore", "_codec"]
 voxj = ["dep:voxj", "dep:voxj-codec", "dep:voxj-voxcore", "_codec"]
 
@@ -78,12 +80,9 @@ report = ["dep:treegrid", "dep:serde_json", "dep:treeselect", "select"]
 select = ["dep:pathspec"]
 
 
-# Private markers the codec features enable. `_codec` marks that at least one
-# codec is on, which voxsmith checks at compile time. `_color` gates the
-# palette-color sampling helpers shared by Goxel, MagicaVoxel, and Qubicle,
-# which re-sample colors per voxel.
+# A private marker every codec feature enables, so voxsmith can require at
+# least one codec at compile time.
 _codec = []
-_color = []
 
 # Marks that a mesh front end such as `gltf` is on. It gates the generic
 # `Mesh` type and the voxelizer.

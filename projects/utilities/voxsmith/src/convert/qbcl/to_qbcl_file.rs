@@ -1,7 +1,4 @@
-use crate::{
-    Error, QubicleQbclNode, QubicleQbclNodeBody, QubicleQbclVoxMain, Result,
-    resolve_cell_color_or_transparent,
-};
+use crate::{Error, QubicleQbclNode, QubicleQbclNodeBody, QubicleQbclVoxMain, Result};
 use branded_id::U32Id;
 use qbcl::qbcl::{
     QbclColor, QbclCompound, QbclFile, QbclMatrix, QbclMetadata, QbclModel, QbclNode, QbclNodeBody,
@@ -9,7 +6,10 @@ use qbcl::qbcl::{
 };
 use std::collections::HashSet;
 use ty_math::TyVector3I32;
-use voxcore::{BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxObject};
+use voxcore::{
+    BVoxHierarchyNode, BVoxObject, VoxHierarchyNode, VoxObject,
+    color::resolve_cell_color_or_transparent,
+};
 
 /// Writes a [`QubicleQbclVoxMain`] to a decoded Qubicle Construction Library
 /// [`QbclFile`].

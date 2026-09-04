@@ -992,6 +992,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "mvox-voxcore"
+version = "0.1.0"
+dependencies = [
+ "branded-id",
+ "mvox",
+ "mvox-codec",
+ "serde",
+ "ty-math",
+ "voxcore",
+]
+
+[[package]]
 name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2114,7 +2126,7 @@ dependencies = [
  "goxl",
  "goxl-codec",
  "mvox",
- "mvox-codec",
+ "mvox-voxcore",
  "pathspec",
  "png",
  "qbcl",

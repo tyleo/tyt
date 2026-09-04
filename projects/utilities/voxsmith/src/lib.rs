@@ -19,10 +19,10 @@
 //! / [`to_vmax_file`]) and straight to and from a package's files
 //! ([`from_vmax_package`] / [`to_vmax_package`], with [`VmaxFileBuilder`]
 //! over the color format and the scene camera), carrying the
-//! [`VoxelMaxExt`]. For MagicaVoxel it converts to and from a decoded
-//! `MVoxFile`
-//! ([`from_mvox_file`] / [`to_mvox_file`]) and straight to and from `.vox`
-//! bytes ([`from_mvox_bytes`] / [`to_mvox_bytes`]), carrying the
+//! [`VoxelMaxExt`]. For MagicaVoxel it fronts mvox-voxcore's typed loads
+//! and writes, to and from a decoded `MVoxFile` ([`from_mvox_file`] /
+//! [`to_mvox_file`]) and straight to and from `.vox` bytes
+//! ([`from_mvox_bytes`] / [`to_mvox_bytes`]), carrying the
 //! [`MagicaVoxelExt`]. For Goxel it converts to and from a decoded `GoxlFile`
 //! ([`from_goxl_file`] / [`to_goxl_file`]) and straight to and from `.gox`
 //! bytes ([`from_goxl_bytes`] / [`to_goxl_bytes`]), carrying the
@@ -42,9 +42,9 @@ compile_error!(
 // exchanges through this crate.
 pub use voxcore;
 
-#[cfg(any(feature = "_color", feature = "_mesh", feature = "report"))]
+#[cfg(any(feature = "_mesh", feature = "report"))]
 mod internal;
-#[cfg(any(feature = "_color", feature = "_mesh", feature = "report"))]
+#[cfg(any(feature = "_mesh", feature = "report"))]
 pub(crate) use internal::*;
 
 #[cfg(feature = "_mesh")]
